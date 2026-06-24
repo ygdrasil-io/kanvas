@@ -439,6 +439,9 @@ class GPUFirstRoutePlanner(
         /** Required capability fact for the scissor clip route. */
         const val firstScissorCapabilityName = "first_slice.scissor.native"
 
+        /** Required capability fact for the path fill native route. */
+        const val firstPathFillCapabilityName = "first_slice.path_fill.native"
+
         /** Transform classes supported by the first native FillRect route. */
         val acceptedTransformTypes = setOf(GPUTransformType.Identity, GPUTransformType.Translate)
 

@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "sceneId": "path-fill-stencil",
+  "status": "rendered",
+  "productRefusal": false,
+  "backend": "webgpu-offscreen",
+  "imagePath": "render.png",
+  "width": 320,
+  "height": 200,
+  "byteCount": 256000,
+  "nonTransparentPixels": 64000,
+  "diagnostics": ["rendered path-fill-stencil via WebGPU offscreen","adapter=Apple M2 Max","clearCommands=1","fillRectCommands=0","fillRRectCommands=0","linearGradientRectCommands=0","radialGradientRectCommands=0","sweepGradientRectCommands=0","clipCommands=0","bitmapRectCommands=0","pathFillStencilCommands=1","convexFanMeshCommands=0"]
+}

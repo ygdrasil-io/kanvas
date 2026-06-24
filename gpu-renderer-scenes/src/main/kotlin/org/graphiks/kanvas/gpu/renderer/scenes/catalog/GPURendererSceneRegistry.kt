@@ -2099,6 +2099,8 @@ object GPURendererSceneRegistry {
         scissorOverlayScene,
         radialSwatchScene,
         sweepDiskScene,
+        pathFillStencilScene,
+        convexFanMeshScene,
     )
 
     val registry: SceneRegistry<SceneCommand> = SceneRegistry(scenes)

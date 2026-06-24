@@ -11,6 +11,7 @@ data class GpuProductFlagConfig(
     val scissorEnabled: Boolean = true,
     val radialGradientEnabled: Boolean = true,
     val sweepGradientEnabled: Boolean = true,
+    val pathFillEnabled: Boolean = true,
 ) {
     /** Builds a GPUCapabilities instance from the current flag configuration. */
     fun buildCapabilities(
@@ -62,6 +63,15 @@ data class GpuProductFlagConfig(
                 evidenceLabel = "product-flag:sweepGradient",
             )
         }
+        if (pathFillEnabled) {
+            facts += GPUCapabilityFact(
+                name = "first_slice.path_fill.native",
+                source = "product-flag",
+                value = "true",
+                affectsValidity = true,
+                evidenceLabel = "product-flag:pathFill",
+            )
+        }
         return GPUCapabilities(
             implementation = implementation,
             facts = facts,
@@ -80,6 +90,8 @@ data class GpuProductFlagConfig(
         const val RadialGradientDisableProperty: String = "kanvas.gpu.renderer.product.radialGradient.disable"
         const val SweepGradientProperty: String = "kanvas.gpu.renderer.product.sweepGradient"
         const val SweepGradientDisableProperty: String = "kanvas.gpu.renderer.product.sweepGradient.disable"
+        const val PathFillProperty: String = "kanvas.gpu.renderer.product.pathFill"
+        const val PathFillDisableProperty: String = "kanvas.gpu.renderer.product.pathFill.disable"
 
         /** Returns the default GPU implementation identity for product flags. */
         fun defaultImplementation(): GPUImplementationIdentity =
@@ -99,12 +111,14 @@ data class GpuProductFlagConfig(
             val scissorDisabled = propertyReader(ScissorDisableProperty).toBoolean()
             val radialGradientDisabled = propertyReader(RadialGradientDisableProperty).toBoolean()
             val sweepGradientDisabled = propertyReader(SweepGradientDisableProperty).toBoolean()
+            val pathFillDisabled = propertyReader(PathFillDisableProperty).toBoolean()
             return GpuProductFlagConfig(
                 fillRRectEnabled = !fillRRectDisabled,
                 linearGradientEnabled = !linearGradientDisabled,
                 scissorEnabled = !scissorDisabled,
                 radialGradientEnabled = !radialGradientDisabled,
                 sweepGradientEnabled = !sweepGradientDisabled,
+                pathFillEnabled = !pathFillDisabled,
             )
         }
     }

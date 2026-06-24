@@ -438,6 +438,38 @@ sealed interface SceneCommand {
             require(paintOrder >= 0) { "SceneCommand.MeshRibbon.paintOrder must be non-negative" }
         }
     }
+
+    data class PathFillStencil(
+        override val label: String,
+        val fillColor: SceneColor,
+        val paintOrder: Int = 0,
+        val pathKind: String = "non-convex-star",
+    ) : SceneCommand {
+        override val family: String = "path-fill-stencil"
+
+        init {
+            requireSceneCommandLabel(label)
+            require(paintOrder >= 0) { "SceneCommand.PathFillStencil.paintOrder must be non-negative" }
+            require(pathKind.isNotBlank()) { "SceneCommand.PathFillStencil.pathKind must not be blank" }
+        }
+    }
+
+    data class ConvexFanMesh(
+        override val label: String,
+        val fillColor: SceneColor,
+        val paintOrder: Int = 0,
+        val pathKind: String = "convex-octagon",
+        val vertexCount: Int = 8,
+    ) : SceneCommand {
+        override val family: String = "convex-fan-mesh"
+
+        init {
+            requireSceneCommandLabel(label)
+            require(paintOrder >= 0) { "SceneCommand.ConvexFanMesh.paintOrder must be non-negative" }
+            require(pathKind.isNotBlank()) { "SceneCommand.ConvexFanMesh.pathKind must not be blank" }
+            require(vertexCount >= 3) { "SceneCommand.ConvexFanMesh.vertexCount must be >= 3" }
+        }
+    }
 }
 
 internal const val TEXT_DRAW_RUN_ROUTE_UNAVAILABLE: String = "unsupported.text.draw_run_route_unavailable"

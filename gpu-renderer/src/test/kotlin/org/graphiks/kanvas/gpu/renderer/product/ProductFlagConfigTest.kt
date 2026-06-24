@@ -8,7 +8,7 @@ import kotlin.test.assertTrue
 class ProductFlagConfigTest {
 
     @Test
-    fun `default config has all m13 and m14 flags enabled`() {
+    fun `default config has all m13 m14 and m15 flags enabled`() {
         val config = GpuProductFlagConfig()
 
         assertTrue(config.fillRRectEnabled)
@@ -16,10 +16,11 @@ class ProductFlagConfigTest {
         assertTrue(config.scissorEnabled)
         assertTrue(config.radialGradientEnabled)
         assertTrue(config.sweepGradientEnabled)
+        assertTrue(config.pathFillEnabled)
     }
 
     @Test
-    fun `default config builds capabilities with all m13 and m14 facts`() {
+    fun `default config builds capabilities with all m13 m14 and m15 facts`() {
         val config = GpuProductFlagConfig()
         val capabilities = config.buildCapabilities()
 
@@ -29,6 +30,7 @@ class ProductFlagConfigTest {
         assertTrue(factsByName.containsKey("first_slice.scissor.native"))
         assertTrue(factsByName.containsKey("first_slice.radial_gradient.native"))
         assertTrue(factsByName.containsKey("first_slice.sweep_gradient.native"))
+        assertTrue(factsByName.containsKey("first_slice.path_fill.native"))
         assertEquals("product-flags", capabilities.snapshotId)
     }
 
@@ -162,6 +164,39 @@ class ProductFlagConfigTest {
     }
 
     @Test
+    fun `disable property overrides path fill flag`() {
+        val config = GpuProductFlagConfig.fromSystemProperties(
+            propertyReader = { key ->
+                when (key) {
+                    GpuProductFlagConfig.PathFillDisableProperty -> "true"
+                    else -> null
+                }
+            },
+        )
+
+        assertTrue(config.fillRRectEnabled)
+        assertTrue(config.linearGradientEnabled)
+        assertTrue(config.scissorEnabled)
+        assertTrue(config.radialGradientEnabled)
+        assertTrue(config.sweepGradientEnabled)
+        assertFalse(config.pathFillEnabled)
+    }
+
+    @Test
+    fun `disabled path fill flag does not produce capability fact`() {
+        val config = GpuProductFlagConfig(pathFillEnabled = false)
+        val capabilities = config.buildCapabilities()
+
+        val factNames = capabilities.facts.map { it.name }
+        assertFalse("first_slice.path_fill.native" in factNames)
+        assertTrue("first_slice.fill_rrect.native" in factNames)
+        assertTrue("first_slice.linear_gradient.native" in factNames)
+        assertTrue("first_slice.scissor.native" in factNames)
+        assertTrue("first_slice.radial_gradient.native" in factNames)
+        assertTrue("first_slice.sweep_gradient.native" in factNames)
+    }
+
+    @Test
     fun `empty property reader leaves all flags enabled`() {
         val config = GpuProductFlagConfig.fromSystemProperties(
             propertyReader = { null },
@@ -172,5 +207,6 @@ class ProductFlagConfigTest {
         assertTrue(config.scissorEnabled)
         assertTrue(config.radialGradientEnabled)
         assertTrue(config.sweepGradientEnabled)
+        assertTrue(config.pathFillEnabled)
     }
 }

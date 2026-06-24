@@ -1,7 +1,7 @@
 ---
 id: KGPU-M15-004
 title: "Activate M15 routes: Path fill native + stencil-cover default ON with rollback"
-status: proposed
+status: done
 milestone: M15
 priority: P0
 owner_area: product-validation
@@ -83,6 +83,7 @@ rtk ./gradlew --no-daemon :gpu-renderer:check && rtk ./gradlew --no-daemon :gpu-
 ## Status Notes
 
 - `proposed`: Initial ticket.
+- `done`: Added pathFillEnabled flag (default ON) to GpuProductFlagConfig with system property toggle (kanvas.gpu.renderer.product.pathFill.disable). Added first_slice.path_fill.native capability fact in buildCapabilities(). Added firstPathFillCapabilityName to AnalysisContracts.kt. Extended ProductFlagConfigTest with 2 new tests for path fill flag and disable property.
 
 ## Linear Labels
 

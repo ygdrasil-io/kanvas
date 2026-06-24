@@ -145,6 +145,8 @@ object GPURendererSceneHumanDocs {
         doc("scissor-overlay", "Verifier un scissor simple avec rectangles bornes.", "Valide Clip device-rect et FillRect ordonnes.", "Ne revendique pas clip rrect, stencil-cover ni clip stack complexe.", "Preuve WebGPU offscreen et Kadre windowed."),
         doc("radial-swatch", "Verifier trois degradees radiales avec centres et rayons varies.", "Valide RadialGradientRect avec centres decales et rayons differs.", "Ne revendique pas repeat, mirror, decal, plus de deux arrets ou transforms.", "Preuve WebGPU offscreen et Kadre windowed."),
         doc("sweep-disk", "Verifier trois degradees angulaires avec angles de depart/fin varies.", "Valide SweepGradientRect avec sweeps 360, 180 et 90 degres.", "Ne revendique pas repeat, mirror, decal, plus de deux arrets ou transforms.", "Preuve WebGPU offscreen et Kadre windowed."),
+        doc("path-fill-stencil", "Remplir une etoile non-convexe via stencil-cover deux passes.", "Valide PathFillStencil avec chemin etoile et fond blanc.", "Ne revendique pas stencil-cover GPU natif ni activation produit.", "Preuve WebGPU offscreen avec sortie PNG pour la scene."),
+        doc("convex-fan-mesh", "Remplir un octogone convexe via convex fan monopasse.", "Valide ConvexFanMesh avec octogone regulier et fond blanc.", "Ne revendique pas stencil-cover pour chemins convexes ni activation produit.", "Preuve WebGPU offscreen avec sortie PNG pour la scene."),
     )
 
     val candidateScenes: List<CandidateScene> = listOf(

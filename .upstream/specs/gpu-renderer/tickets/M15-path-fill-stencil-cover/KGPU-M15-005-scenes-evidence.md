@@ -1,7 +1,7 @@
 ---
 id: KGPU-M15-005
 title: "Add gpu-renderer-scenes evidence: path-fill-stencil, convex-fan-mesh"
-status: proposed
+status: done
 milestone: M15
 priority: P0
 owner_area: scenes-evidence
@@ -88,6 +88,7 @@ rtk ./gradlew --no-daemon :gpu-renderer-scenes:renderGpuRendererSceneOffscreen -
 ## Status Notes
 
 - `proposed`: Initial ticket. Follows M14-004 pattern with offscreen render validation.
+- `done`: Added PathFillStencil and ConvexFanMesh SceneCommand variants. Created M15CandidatePromotionScenes.kt (path-fill-stencil star scene + convex-fan-mesh octagon scene). Extended RectOnlyOffscreenRenderer to handle path fill families. Added human documentation. Registered scenes in GPURendererSceneRegistry.
 
 ## Linear Labels
 
