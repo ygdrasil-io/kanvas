@@ -8,16 +8,18 @@ import kotlin.test.assertTrue
 class ProductFlagConfigTest {
 
     @Test
-    fun `default config has all m13 flags enabled`() {
+    fun `default config has all m13 and m14 flags enabled`() {
         val config = GpuProductFlagConfig()
 
         assertTrue(config.fillRRectEnabled)
         assertTrue(config.linearGradientEnabled)
         assertTrue(config.scissorEnabled)
+        assertTrue(config.radialGradientEnabled)
+        assertTrue(config.sweepGradientEnabled)
     }
 
     @Test
-    fun `default config builds capabilities with all m13 facts`() {
+    fun `default config builds capabilities with all m13 and m14 facts`() {
         val config = GpuProductFlagConfig()
         val capabilities = config.buildCapabilities()
 
@@ -25,6 +27,8 @@ class ProductFlagConfigTest {
         assertTrue(factsByName.containsKey("first_slice.fill_rrect.native"))
         assertTrue(factsByName.containsKey("first_slice.linear_gradient.native"))
         assertTrue(factsByName.containsKey("first_slice.scissor.native"))
+        assertTrue(factsByName.containsKey("first_slice.radial_gradient.native"))
+        assertTrue(factsByName.containsKey("first_slice.sweep_gradient.native"))
         assertEquals("product-flags", capabilities.snapshotId)
     }
 
@@ -42,6 +46,8 @@ class ProductFlagConfigTest {
         assertFalse(config.fillRRectEnabled)
         assertTrue(config.linearGradientEnabled)
         assertTrue(config.scissorEnabled)
+        assertTrue(config.radialGradientEnabled)
+        assertTrue(config.sweepGradientEnabled)
     }
 
     @Test
@@ -58,6 +64,8 @@ class ProductFlagConfigTest {
         assertTrue(config.fillRRectEnabled)
         assertFalse(config.linearGradientEnabled)
         assertTrue(config.scissorEnabled)
+        assertTrue(config.radialGradientEnabled)
+        assertTrue(config.sweepGradientEnabled)
     }
 
     @Test
@@ -74,6 +82,44 @@ class ProductFlagConfigTest {
         assertTrue(config.fillRRectEnabled)
         assertTrue(config.linearGradientEnabled)
         assertFalse(config.scissorEnabled)
+        assertTrue(config.radialGradientEnabled)
+        assertTrue(config.sweepGradientEnabled)
+    }
+
+    @Test
+    fun `disable property overrides radial gradient flag`() {
+        val config = GpuProductFlagConfig.fromSystemProperties(
+            propertyReader = { key ->
+                when (key) {
+                    GpuProductFlagConfig.RadialGradientDisableProperty -> "true"
+                    else -> null
+                }
+            },
+        )
+
+        assertTrue(config.fillRRectEnabled)
+        assertTrue(config.linearGradientEnabled)
+        assertTrue(config.scissorEnabled)
+        assertFalse(config.radialGradientEnabled)
+        assertTrue(config.sweepGradientEnabled)
+    }
+
+    @Test
+    fun `disable property overrides sweep gradient flag`() {
+        val config = GpuProductFlagConfig.fromSystemProperties(
+            propertyReader = { key ->
+                when (key) {
+                    GpuProductFlagConfig.SweepGradientDisableProperty -> "true"
+                    else -> null
+                }
+            },
+        )
+
+        assertTrue(config.fillRRectEnabled)
+        assertTrue(config.linearGradientEnabled)
+        assertTrue(config.scissorEnabled)
+        assertTrue(config.radialGradientEnabled)
+        assertFalse(config.sweepGradientEnabled)
     }
 
     @Test
@@ -85,6 +131,34 @@ class ProductFlagConfigTest {
         assertFalse("first_slice.fill_rrect.native" in factNames)
         assertTrue("first_slice.linear_gradient.native" in factNames)
         assertTrue("first_slice.scissor.native" in factNames)
+        assertTrue("first_slice.radial_gradient.native" in factNames)
+        assertTrue("first_slice.sweep_gradient.native" in factNames)
+    }
+
+    @Test
+    fun `disabled radial flag does not produce radial capability fact`() {
+        val config = GpuProductFlagConfig(radialGradientEnabled = false)
+        val capabilities = config.buildCapabilities()
+
+        val factNames = capabilities.facts.map { it.name }
+        assertTrue("first_slice.fill_rrect.native" in factNames)
+        assertTrue("first_slice.linear_gradient.native" in factNames)
+        assertTrue("first_slice.scissor.native" in factNames)
+        assertFalse("first_slice.radial_gradient.native" in factNames)
+        assertTrue("first_slice.sweep_gradient.native" in factNames)
+    }
+
+    @Test
+    fun `disabled sweep flag does not produce sweep capability fact`() {
+        val config = GpuProductFlagConfig(sweepGradientEnabled = false)
+        val capabilities = config.buildCapabilities()
+
+        val factNames = capabilities.facts.map { it.name }
+        assertTrue("first_slice.fill_rrect.native" in factNames)
+        assertTrue("first_slice.linear_gradient.native" in factNames)
+        assertTrue("first_slice.scissor.native" in factNames)
+        assertTrue("first_slice.radial_gradient.native" in factNames)
+        assertFalse("first_slice.sweep_gradient.native" in factNames)
     }
 
     @Test
@@ -96,5 +170,7 @@ class ProductFlagConfigTest {
         assertTrue(config.fillRRectEnabled)
         assertTrue(config.linearGradientEnabled)
         assertTrue(config.scissorEnabled)
+        assertTrue(config.radialGradientEnabled)
+        assertTrue(config.sweepGradientEnabled)
     }
 }

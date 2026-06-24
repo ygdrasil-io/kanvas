@@ -106,6 +106,10 @@ enum class GPUMaterialKind {
     SolidColor,
     /** Linear gradient source material. */
     LinearGradient,
+    /** Radial gradient source material. */
+    RadialGradient,
+    /** Sweep gradient source material. */
+    SweepGradient,
 }
 
 /** Rectangle geometry in local command coordinates. */
@@ -345,6 +349,43 @@ sealed interface GPUMaterialDescriptor {
         val tileMode: String = "clamp",
     ) : GPUMaterialDescriptor {
         override val kind: GPUMaterialKind = GPUMaterialKind.LinearGradient
+    }
+
+    /** Radial gradient descriptor with center, radius, and tile mode for M14. */
+    data class RadialGradient(
+        val centerX: Float,
+        val centerY: Float,
+        val radius: Float,
+        val startR: Float,
+        val startG: Float,
+        val startB: Float,
+        val startA: Float,
+        val endR: Float,
+        val endG: Float,
+        val endB: Float,
+        val endA: Float,
+        val tileMode: String = "clamp",
+    ) : GPUMaterialDescriptor {
+        override val kind: GPUMaterialKind = GPUMaterialKind.RadialGradient
+    }
+
+    /** Sweep gradient descriptor with center, start/end angles, and tile mode for M14. */
+    data class SweepGradient(
+        val centerX: Float,
+        val centerY: Float,
+        val startAngle: Float,
+        val endAngle: Float,
+        val startR: Float,
+        val startG: Float,
+        val startB: Float,
+        val startA: Float,
+        val endR: Float,
+        val endG: Float,
+        val endB: Float,
+        val endA: Float,
+        val tileMode: String = "clamp",
+    ) : GPUMaterialDescriptor {
+        override val kind: GPUMaterialKind = GPUMaterialKind.SweepGradient
     }
 }
 

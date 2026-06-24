@@ -1,7 +1,7 @@
 ---
 id: KGPU-M14-001
 title: "Add RadialGradient WGSL: distance-from-center math + tile mode"
-status: proposed
+status: done
 milestone: M14
 priority: P0
 owner_area: materials-wgsl
@@ -82,6 +82,7 @@ rtk ./gradlew --no-daemon :gpu-renderer:test --tests '*RadialGradient*'
 ## Status Notes
 
 - `proposed`: Initial ticket.
+- `done`: Implemented in KGPU-M14. RadialGradientSnippet.kt with compute_t_radial, sample_stops_at, clamp-only entry point. Material lowering with dictionary, expandOrRefuse, planRadialGradient (clamp-only, ≤16 stops). Product flag radialGradientEnabled=true.
 
 ## Linear Labels
 

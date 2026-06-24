@@ -156,6 +156,64 @@ sealed interface SceneCommand {
         }
     }
 
+    data class RadialGradientRect(
+        override val label: String,
+        val rect: SceneRect,
+        val centerX: Float,
+        val centerY: Float,
+        val radius: Float,
+        val startColor: SceneColor,
+        val endColor: SceneColor,
+        val paintOrder: Int = 0,
+    ) : SceneCommand {
+        override val family: String = "radial-gradient-rect"
+
+        init {
+            requireSceneCommandLabel(label)
+            require(!centerX.isNaN() && !centerX.isInfinite()) {
+                "SceneCommand.RadialGradientRect.centerX must be finite"
+            }
+            require(!centerY.isNaN() && !centerY.isInfinite()) {
+                "SceneCommand.RadialGradientRect.centerY must be finite"
+            }
+            require(!radius.isNaN() && !radius.isInfinite() && radius > 0f) {
+                "SceneCommand.RadialGradientRect.radius must be finite and positive"
+            }
+            require(paintOrder >= 0) { "SceneCommand.RadialGradientRect.paintOrder must be non-negative" }
+        }
+    }
+
+    data class SweepGradientRect(
+        override val label: String,
+        val rect: SceneRect,
+        val centerX: Float,
+        val centerY: Float,
+        val startAngle: Float,
+        val endAngle: Float,
+        val startColor: SceneColor,
+        val endColor: SceneColor,
+        val paintOrder: Int = 0,
+    ) : SceneCommand {
+        override val family: String = "sweep-gradient-rect"
+
+        init {
+            requireSceneCommandLabel(label)
+            require(!centerX.isNaN() && !centerX.isInfinite()) {
+                "SceneCommand.SweepGradientRect.centerX must be finite"
+            }
+            require(!centerY.isNaN() && !centerY.isInfinite()) {
+                "SceneCommand.SweepGradientRect.centerY must be finite"
+            }
+            require(!startAngle.isNaN() && !startAngle.isInfinite()) {
+                "SceneCommand.SweepGradientRect.startAngle must be finite"
+            }
+            require(!endAngle.isNaN() && !endAngle.isInfinite()) {
+                "SceneCommand.SweepGradientRect.endAngle must be finite"
+            }
+            require(paintOrder >= 0) { "SceneCommand.SweepGradientRect.paintOrder must be non-negative" }
+        }
+    }
+
     data class Clip(
         override val label: String,
         val rect: SceneRect,

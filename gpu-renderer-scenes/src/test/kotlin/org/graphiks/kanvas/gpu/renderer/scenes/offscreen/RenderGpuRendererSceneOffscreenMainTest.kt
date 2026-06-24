@@ -209,7 +209,7 @@ class RenderGpuRendererSceneOffscreenMainTest {
             )
         }
 
-        assertContains(failure.message ?: "", "at least one FillRect, FillRRect, or LinearGradientRect")
+        assertContains(failure.message ?: "", "at least one FillRect, FillRRect, LinearGradientRect, RadialGradientRect, or SweepGradientRect")
     }
 
     @Test
@@ -223,7 +223,7 @@ class RenderGpuRendererSceneOffscreenMainTest {
             )
         }
 
-        assertContains(failure.message ?: "", "supports only clear, fill-rect, fill-rrect, linear-gradient-rect, and clip command families")
+        assertContains(failure.message ?: "", "supports only clear, fill-rect, fill-rrect, linear-gradient-rect, radial-gradient-rect, sweep-gradient-rect, and clip command families")
         assertContains(failure.message ?: "", "bitmap-rect")
     }
 
@@ -238,7 +238,7 @@ class RenderGpuRendererSceneOffscreenMainTest {
             )
         }
 
-        assertContains(failure.message ?: "", "supports only clear, fill-rect, fill-rrect, linear-gradient-rect, and clip command families")
+        assertContains(failure.message ?: "", "supports only clear, fill-rect, fill-rrect, linear-gradient-rect, radial-gradient-rect, sweep-gradient-rect, and clip command families")
         assertContains(failure.message ?: "", "filter-node")
     }
 
@@ -253,7 +253,7 @@ class RenderGpuRendererSceneOffscreenMainTest {
             )
         }
 
-        assertContains(failure.message ?: "", "supports only clear, fill-rect, fill-rrect, linear-gradient-rect, and clip command families")
+        assertContains(failure.message ?: "", "supports only clear, fill-rect, fill-rrect, linear-gradient-rect, radial-gradient-rect, sweep-gradient-rect, and clip command families")
         assertContains(failure.message ?: "", "save-layer")
     }
 
@@ -268,7 +268,7 @@ class RenderGpuRendererSceneOffscreenMainTest {
             )
         }
 
-        assertContains(failure.message ?: "", "supports only clear, fill-rect, fill-rrect, linear-gradient-rect, and clip command families")
+        assertContains(failure.message ?: "", "supports only clear, fill-rect, fill-rrect, linear-gradient-rect, radial-gradient-rect, sweep-gradient-rect, and clip command families")
         assertContains(failure.message ?: "", "runtime-effect")
     }
 
@@ -283,7 +283,7 @@ class RenderGpuRendererSceneOffscreenMainTest {
             )
         }
 
-        assertContains(failure.message ?: "", "supports only clear, fill-rect, fill-rrect, linear-gradient-rect, and clip command families")
+        assertContains(failure.message ?: "", "supports only clear, fill-rect, fill-rrect, linear-gradient-rect, radial-gradient-rect, sweep-gradient-rect, and clip command families")
         assertContains(failure.message ?: "", "vertices")
     }
 
@@ -306,7 +306,7 @@ class RenderGpuRendererSceneOffscreenMainTest {
             )
         }
 
-        assertContains(failure.message ?: "", "supports only clear, fill-rect, fill-rrect, linear-gradient-rect, and clip command families")
+        assertContains(failure.message ?: "", "supports only clear, fill-rect, fill-rrect, linear-gradient-rect, radial-gradient-rect, sweep-gradient-rect, and clip command families")
         assertContains(failure.message ?: "", "runtime-effect")
     }
 
@@ -348,7 +348,7 @@ class RenderGpuRendererSceneOffscreenMainTest {
             )
         }
 
-        assertContains(failure.message ?: "", "supports only clear, fill-rect, fill-rrect, linear-gradient-rect, and clip command families")
+        assertContains(failure.message ?: "", "supports only clear, fill-rect, fill-rrect, linear-gradient-rect, radial-gradient-rect, sweep-gradient-rect, and clip command families")
         assertContains(failure.message ?: "", "vertices")
     }
 
@@ -626,8 +626,8 @@ class RenderGpuRendererSceneOffscreenMainTest {
         assertContains(runJson, "\"status\": \"${OffscreenRunStatus.NotYetRendered.wireName}\"")
         assertContains(runJson, "\"productRefusal\": false")
         assertContains(runJson, "\"imagePath\": null")
-        assertContains(runJson, "supports only clear, fill-rect, fill-rrect, linear-gradient-rect, and clip command families")
-        assertContains(diagnostics, "supports only clear, fill-rect, fill-rrect, linear-gradient-rect, and clip command families")
+        assertContains(runJson, "supports only clear, fill-rect, fill-rrect, linear-gradient-rect, radial-gradient-rect, sweep-gradient-rect, and clip command families")
+        assertContains(diagnostics, "supports only clear, fill-rect, fill-rrect, linear-gradient-rect, radial-gradient-rect, sweep-gradient-rect, and clip command families")
         unsupportedFamilies.forEach { family ->
             assertContains(runJson, family, ignoreCase = false, message = sceneId)
             assertContains(diagnostics, family, ignoreCase = false, message = sceneId)

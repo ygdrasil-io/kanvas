@@ -1,7 +1,7 @@
 ---
 id: KGPU-M14-003
 title: "Activate M14 routes: Radial + Sweep gradients default ON with rollback"
-status: proposed
+status: done
 milestone: M14
 priority: P0
 owner_area: product-validation
@@ -84,6 +84,7 @@ rtk ./gradlew --no-daemon :gpu-renderer:check && rtk ./gradlew --no-daemon :gpu-
 ## Status Notes
 
 - `proposed`: Initial ticket.
+- `done`: Implemented in KGPU-M14. Added GpuProductFlagConfig.radialGradientEnabled and sweepGradientEnabled (default ON) with system property overrides. Capability facts first_slice.radial_gradient.native and first_slice.sweep_gradient.native emitted in buildCapabilities(). 11 unit tests in ProductFlagConfigTest.
 
 ## Linear Labels
 
