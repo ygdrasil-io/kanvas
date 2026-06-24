@@ -1,5 +1,13 @@
 package org.skia.foundation
 
+import org.graphiks.kanvas.font.TypefaceID
+import org.graphiks.kanvas.text.shaping.BasicOpenTypeShapingEngine
+import org.graphiks.kanvas.text.shaping.FeatureSet
+import org.graphiks.kanvas.text.shaping.GlyphCluster as PureKotlinGlyphCluster
+import org.graphiks.kanvas.text.shaping.ShapedGlyphRun as PureKotlinShapedGlyphRun
+import org.graphiks.kanvas.text.shaping.ShapingDiagnostic as PureKotlinShapingDiagnostic
+import org.graphiks.kanvas.text.shaping.ShapingRequest as PureKotlinShapingRequest
+import org.graphiks.kanvas.text.shaping.ShapingResult as PureKotlinShapingResult
 import org.graphiks.math.SkPoint
 import java.text.Bidi
 
@@ -14,6 +22,7 @@ import java.text.Bidi
 public class SkShaper private constructor(
     private val fallbackProvider: FontFallbackProvider?,
     private val positioningProvider: GlyphPositioningProvider?,
+    private val shapingEngine: BasicOpenTypeShapingEngine? = null,
 ) {
     public enum class Direction { Ltr, Rtl }
 
@@ -83,6 +92,110 @@ public class SkShaper private constructor(
         val diagnostics: List<Diagnostic>,
     ) {
         public val glyphCount: Int get() = runs.sumOf { it.glyphCount }
+    }
+
+    /**
+     * Captures the input parameters for a pure Kotlin shaping request
+     * through the SkShaper facade.
+     */
+    public data class SkShaperFacadeRequest(
+        val text: String,
+        val textRange: IntRange,
+        val typefaceId: TypefaceID? = null,
+        val script: String? = null,
+        val language: String? = null,
+        val direction: Direction = Direction.Ltr,
+        val features: Features = Features(),
+    )
+
+    /**
+     * Maps one logical text cluster to its glyph range in a shaped run.
+     */
+    public data class ShapedClusterRange(
+        val textRange: IntRange,
+        val glyphRange: IntRange,
+    )
+
+    /**
+     * Carries the full adapter evidence for one shaped request,
+     * matching the spec's [SkShaperAdapter] design sketch.
+     */
+    public data class SkShaperAdapter(
+        val request: SkShaperFacadeRequest,
+        val shapedRun: PureKotlinShapedGlyphRun? = null,
+        val facadeClusters: List<ShapedClusterRange> = emptyList(),
+        val diagnostics: List<String> = emptyList(),
+    )
+
+    /**
+     * Routes an explicit [PureKotlinShapingRequest] through the pure Kotlin
+     * shaping engine when one is configured.
+     *
+     * Returns the pure Kotlin [PureKotlinShapingResult] directly, including
+     * glyph runs with cluster data, script tags, bidi levels, and diagnostics.
+     * When no engine is configured, returns an empty result with a
+     * `text.shaping.facade-no-engine` diagnostic.
+     */
+    public fun shapeWithShapingRequest(request: PureKotlinShapingRequest): PureKotlinShapingResult {
+        val engine = shapingEngine
+        if (engine == null) {
+            return PureKotlinShapingResult(
+                diagnostics = listOf(
+                    PureKotlinShapingDiagnostic(
+                        code = "text.shaping.facade-no-engine",
+                        message = "Pure Kotlin shaping engine is not configured. Use MakeWithPureKotlinShaping to enable.",
+                        textRange = request.textRange,
+                    ),
+                ),
+            )
+        }
+        return engine.shape(request)
+    }
+
+    /**
+     * HarfBuzz-compatible shaping call that routes through the pure Kotlin
+     * shaping engine when [shapingEngine] is configured and the font's
+     * typeface is an [OpenTypeTypeface] with a [TypefaceID].
+     *
+     * Falls back to the legacy [shape] method when the pure Kotlin path is
+     * not available, emitting a diagnostic.
+     */
+    public fun hbShape(
+        text: String,
+        font: SkFont,
+        features: Features = Features(),
+    ): Result {
+        val engine = shapingEngine ?: return legacyShape(text, font, features)
+
+        val typefaceId = typefaceIdFor(font)
+        if (typefaceId == null) {
+            val diag = listOf(
+                Diagnostic(
+                    Diagnostic.Kind.UnsupportedFeature,
+                    "Pure Kotlin shaping engine requires an OpenTypeTypeface with a TypefaceID; falling back to legacy.",
+                ),
+            )
+            val result = legacyShape(text, font, features)
+            return result.copy(diagnostics = result.diagnostics + diag)
+        }
+
+        val request = PureKotlinShapingRequest(
+            text = text,
+            textRange = text.indices,
+            typefaceId = typefaceId,
+            fontSize = font.size,
+            features = features.toFeatureSet(),
+            paragraphDirection = if (features.scriptLanguage.script != null) {
+                when (features.scriptLanguage.script) {
+                    Character.UnicodeScript.ARABIC,
+                    Character.UnicodeScript.HEBREW,
+                    -> -1
+                    else -> 1
+                }
+            } else 0,
+        )
+        val result = engine.shape(request)
+        return mapPureKotlinResult(result, font, text)
     }
 
     public fun shape(
@@ -181,6 +294,85 @@ public class SkShaper private constructor(
         }
 
         return Result(applyPositioning(compactRuns(shaped), features, diagnostics), diagnostics)
+    }
+
+    /**
+     * Returns a facade parity evidence dump comparing the pure Kotlin shaping
+     * engine output (when configured) with the legacy shaping path.
+     *
+     * Returns null when no engine is configured.
+     */
+    internal fun facadeParityEvidence(): SkShaperFacadeParityDump? {
+        val engine = shapingEngine ?: return null
+        return SkShaperFacadeParityDump(
+            engineAvailable = true,
+            engineClassName = engine::class.qualifiedName ?: "unknown",
+        )
+    }
+
+    /**
+     * Evidence snapshot for the SkShaper pure Kotlin facade route.
+     */
+    public data class SkShaperFacadeParityDump(
+        val engineAvailable: Boolean,
+        val engineClassName: String,
+    )
+
+    private fun typefaceIdFor(font: SkFont): TypefaceID? =
+        (font.typeface as? org.skia.foundation.opentype.OpenTypeTypeface)?.typefaceId
+
+    private fun legacyShape(
+        text: String,
+        font: SkFont,
+        features: Features,
+    ): Result {
+        val fallback = SkShaper(fallbackProvider, positioningProvider)
+        return fallback.shape(text, font, features)
+    }
+
+    private fun mapPureKotlinResult(
+        result: PureKotlinShapingResult,
+        font: SkFont,
+        text: String,
+    ): Result {
+        val runs = result.glyphRuns.map { run ->
+            GlyphRun(
+                font = font,
+                glyphs = run.glyphIds.toIntArray(),
+                clusters = run.clusters.map { it.textRange.first }.toIntArray(),
+                positions = run.clusters.map { cluster ->
+                    SkPoint(
+                        cluster.advanceX + cluster.offsetX,
+                        cluster.offsetY,
+                    )
+                }.toTypedArray(),
+                utf16Start = run.clusters.firstOrNull()?.textRange?.first ?: 0,
+                utf16End = run.clusters.lastOrNull()?.textRange?.last ?: text.lastIndex.coerceAtLeast(0),
+                direction = if (run.bidiLevel % 2 == 1) Direction.Rtl else Direction.Ltr,
+                script = run.script.toUnicodeScript(),
+            )
+        }
+        val diagnostics = result.diagnostics.map { diag ->
+            Diagnostic(
+                kind = mapDiagnosticKind(diag.code),
+                message = diag.message,
+                utf16Index = diag.textRange?.first,
+            )
+        }
+        return Result(runs, diagnostics)
+    }
+
+    private fun mapDiagnosticKind(code: String): Diagnostic.Kind = when {
+        code.endsWith("missing") || code.endsWith("fallback-missing") -> Diagnostic.Kind.MissingGlyph
+        code.endsWith("fallback-used") -> Diagnostic.Kind.FallbackUsed
+        code.endsWith("feature-unsupported") ||
+            code.endsWith("arabic-cursive-unsupported") ||
+            code.endsWith("arabic-mark-unsupported") ||
+            code.endsWith("mark-positioning-unavailable") ||
+            code.endsWith("cursive-attachment-unavailable") -> Diagnostic.Kind.UnsupportedFeature
+        code.endsWith("gdef-required") -> Diagnostic.Kind.UnsupportedFeature
+        code.endsWith("no-engine") -> Diagnostic.Kind.UnsupportedFeature
+        else -> Diagnostic.Kind.UnsupportedFeature
     }
 
     private fun resolveGlyph(
@@ -461,6 +653,18 @@ public class SkShaper private constructor(
             fallbackProvider: FontFallbackProvider? = null,
             positioningProvider: GlyphPositioningProvider? = null,
         ): SkShaper = SkShaper(fallbackProvider, positioningProvider)
+
+        /**
+         * Creates an [SkShaper] that routes explicit shaping calls through the
+         * pure Kotlin [BasicOpenTypeShapingEngine] when the font's typeface
+         * is an [OpenTypeTypeface] with a [TypefaceID].
+         *
+         * The legacy [shape] method remains unchanged. Call [hbShape] or
+         * [shapeWithShapingRequest] to use the pure Kotlin path.
+         */
+        @Suppress("FunctionName")
+        public fun MakeWithPureKotlinShaping(engine: BasicOpenTypeShapingEngine): SkShaper =
+            SkShaper(fallbackProvider = null, positioningProvider = null, shapingEngine = engine)
     }
 }
 
@@ -475,6 +679,40 @@ private fun SkShaper.ScriptLanguage.appliesTo(script: Character.UnicodeScript): 
 private fun canJoinLeft(cp: Int): Boolean = ARABIC_PRESENTATION_FORMS.containsKey(cp)
 
 private fun canJoinRight(cp: Int): Boolean = ARABIC_PRESENTATION_FORMS[cp]?.dualJoining == true
+
+/**
+ * Converts a Kotlin [String] script tag (e.g. "Latn", "Arab") to a Java
+ * [Character.UnicodeScript] enum value. Falls back to COMMON for unknown tags.
+ */
+private fun String.toUnicodeScript(): Character.UnicodeScript =
+    when (this) {
+        "Latn" -> Character.UnicodeScript.LATIN
+        "Arab" -> Character.UnicodeScript.ARABIC
+        "Hebr" -> Character.UnicodeScript.HEBREW
+        "Deva" -> Character.UnicodeScript.DEVANAGARI
+        "Cyrl" -> Character.UnicodeScript.CYRILLIC
+        "Grek" -> Character.UnicodeScript.GREEK
+        "Zyyy", "Zinh", "Zsye" -> Character.UnicodeScript.COMMON
+        else -> Character.UnicodeScript.COMMON
+    }
+
+/**
+ * Maps [SkShaper.Features] to a pure Kotlin [FeatureSet].
+ */
+private fun SkShaper.Features.toFeatureSet(): FeatureSet {
+    val tags = mutableMapOf<String, Int>()
+    if (standardLigatures) tags["liga"] = 1
+    if (arabicJoining) {
+        tags["init"] = 1
+        tags["medi"] = 1
+        tags["fina"] = 1
+        tags["isol"] = 1
+    }
+    if (indicReordering) tags["akhn"] = 1
+    if (markPositioning) tags["mark"] = 1
+    if (cursiveAttachment) tags["curs"] = 1
+    return FeatureSet(values = tags)
+}
 
 private data class ArabicForms(
     val isolated: Int,
