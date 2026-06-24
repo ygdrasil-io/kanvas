@@ -478,6 +478,7 @@ data class GPUPipelineCacheTelemetry(
     val missCount: Long,
     val evictionCount: Long,
     val moduleCount: Long,
+    val pipelineCreationCountsByFamily: Map<String, Long> = emptyMap(),
 ) {
     init {
         require(sceneId.isNotBlank()) { "GPU pipeline cache telemetry sceneId must not be blank" }
@@ -485,15 +486,36 @@ data class GPUPipelineCacheTelemetry(
         require(missCount >= 0L) { "GPU pipeline cache telemetry missCount must not be negative" }
         require(evictionCount >= 0L) { "GPU pipeline cache telemetry evictionCount must not be negative" }
         require(moduleCount >= 0L) { "GPU pipeline cache telemetry moduleCount must not be negative" }
+        pipelineCreationCountsByFamily.forEach { (family, count) ->
+            require(family.isNotBlank()) { "GPU pipeline cache telemetry pipeline-creation family must not be blank" }
+            require(count >= 0L) {
+                "GPU pipeline cache telemetry pipeline-creation count must not be negative for $family"
+            }
+        }
     }
 
     val hitRate: Double
         get() = if (hitCount + missCount > 0L) hitCount.toDouble() / (hitCount + missCount) else 0.0
 
+    /** Total pipeline-creation events summed across draw families. */
+    val totalPipelineCreations: Long
+        get() = pipelineCreationCountsByFamily.values.sum()
+
+    /** Stable per-family creation field for dumps and reports. */
+    fun pipelineCreationsByFamilyField(): String =
+        if (pipelineCreationCountsByFamily.isEmpty()) {
+            "-"
+        } else {
+            pipelineCreationCountsByFamily.entries
+                .sortedBy { entry -> entry.key }
+                .joinToString(",") { entry -> "${entry.key}:${entry.value}" }
+        }
+
     /** Dumps a single-line telemetry snapshot. */
     fun dumpLine(): String =
         "pipeline-cache scene=$sceneId hitCount=$hitCount missCount=$missCount " +
-            "hitRate=${"%.4f".format(hitRate)} evictionCount=$evictionCount moduleCount=$moduleCount"
+            "hitRate=${"%.4f".format(hitRate)} evictionCount=$evictionCount moduleCount=$moduleCount " +
+            "pipelineCreations=$totalPipelineCreations pipelineCreationsByFamily=${pipelineCreationsByFamilyField()}"
 }
 
 /** Cache telemetry facts. */

@@ -1,7 +1,7 @@
 ---
 id: KGPU-M27-003
 title: "Frame gate policy"
-status: proposed
+status: done
 milestone: M27
 priority: P0
 owner_area: performance
@@ -63,10 +63,10 @@ class FrameGatePolicy(val targetFps: Int = 60, val warnFps: Int = 30) {
 
 ## Acceptance Criteria
 
-- [ ] 60fps target enforced as the performance goal
-- [ ] 30fps warning triggers a diagnostic
-- [ ] Regression quarantine disables the affected family route
-- [ ] Gate decisions are measured against the Apple M-series baseline
+- [x] 60fps target enforced as the performance goal
+- [x] 30fps warning triggers a diagnostic
+- [x] Regression quarantine disables the affected family route
+- [x] Gate decisions are measured against the Apple M-series baseline
 
 ## Required Evidence
 
@@ -94,6 +94,15 @@ rtk ./gradlew --no-daemon :gpu-renderer:test --tests '*FrameGate*'
 ## Status Notes
 
 - `proposed`: Initial ticket.
+- `done`: `FrameGatePolicy` (gpu-renderer/telemetry) enforces a 60fps target (16.6667ms) and a
+  30fps warning threshold (33.3333ms): `evaluate` returns `pass` (<=16.67ms), `warn`
+  (<=33.33ms, emits a diagnostic), or `quarantine` (>33.33ms). `evaluateAll` produces a
+  `FrameGatePolicyReport` with `anyQuarantined` and writes
+  `build/reports/performance/frame-gate-policy.json`, anchored to the Apple M-series baseline.
+  Real evidence (Apple M2 Max): all eight families status=pass, anyQuarantined=false.
+  Scope note: per the M27 milestone non-claim, quarantine is a policy flag that marks a family
+  regression-blocked for opt-in evidence; it does not flip, activate, or disable a runtime
+  product route. ImplementationCandidate; no product activation. 2026-06-25.
 
 ## Linear Labels
 

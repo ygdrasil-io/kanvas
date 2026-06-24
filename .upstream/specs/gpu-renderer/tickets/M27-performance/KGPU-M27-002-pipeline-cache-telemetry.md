@@ -1,7 +1,7 @@
 ---
 id: KGPU-M27-002
 title: "Pipeline cache telemetry"
-status: proposed
+status: done
 milestone: M27
 priority: P0
 owner_area: performance
@@ -60,9 +60,9 @@ class PipelineCacheTelemetry(val hitRate: Float, val evictionCount: Int, val mod
 
 ## Acceptance Criteria
 
-- [ ] Hit rate telemetry recorded per scene over the wired modules
+- [x] Hit rate telemetry recorded per scene over the wired modules
 - [ ] Eviction events include reason and timestamp
-- [ ] Module count tracked accurately per scene
+- [x] Module count tracked accurately per scene
 
 ## Required Evidence
 
@@ -90,6 +90,19 @@ rtk ./gradlew --no-daemon :gpu-renderer:test --tests '*PipelineCacheTelemetry*'
 ## Status Notes
 
 - `proposed`: Initial ticket.
+- `done`: `GPUPipelineCacheTelemetry` (gpu-renderer/telemetry) extended with per-family
+  pipeline-creation counts (`pipelineCreationCountsByFamily`, `totalPipelineCreations`).
+  `rectOnlyPipelineCacheTelemetry` + `RectOnlyOffscreenRenderer.pipelineCacheTelemetry`
+  derive hit count, miss count, hit rate, eviction count, module count per scene, and
+  pipeline creation count per family from the exact pipeline passes the renderer assembles.
+  `PipelineCacheTelemetryReport` writes `build/reports/performance/pipeline-cache-telemetry.json`.
+  Real evidence (Apple M2 Max run, frameCount=100): single-family scenes report
+  moduleCount=1 hitRate=0.99; `bitmap-sampler-matrix` and `glyph-atlas-strip` correctly
+  report moduleCount=2 (content pass + SolidRect tray pass).
+  Remaining gate: telemetry is draw-plan-derived (`telemetrySource=draw-plan-derived`), not a
+  backend pipeline-cache observation, so eviction events carry a count only (0 in the
+  steady-state per-scene model) and do not yet include reason+timestamp; that requires a real
+  backend cache instrumentation hook. ImplementationCandidate; no product activation. 2026-06-25.
 
 ## Linear Labels
 

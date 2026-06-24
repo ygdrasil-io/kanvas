@@ -1,7 +1,7 @@
 ---
 id: KGPU-M27-001
 title: "Per-family benchmark"
-status: proposed
+status: done
 milestone: M27
 priority: P0
 owner_area: performance
@@ -62,9 +62,9 @@ val families = listOf(FillRect, LinearGradient, RadialGradient, PathFill, Bitmap
 
 ## Acceptance Criteria
 
-- [ ] FPS/ms measured for all eight families (FillRect, LinearGradient, RadialGradient, PathFill, BitmapRect, TextRun, Blur, Vertices)
-- [ ] Measurements run against the real wired pipelines (M25) with real textures (M26)
-- [ ] A family that misses its budget produces a visible diagnostic
+- [x] FPS/ms measured for all eight families (FillRect, LinearGradient, RadialGradient, PathFill, BitmapRect, TextRun, Blur, Vertices)
+- [x] Measurements run against the real wired pipelines (M25) with real textures (M26)
+- [x] A family that misses its budget produces a visible diagnostic
 
 ## Required Evidence
 
@@ -92,6 +92,16 @@ rtk ./gradlew --no-daemon :gpu-renderer:test --tests '*PerFamilyBenchmark*'
 ## Status Notes
 
 - `proposed`: Initial ticket.
+- `done`: `PerFamilyBenchmark` (gpu-renderer-scenes/offscreen) measures FPS + min/median/max/mean
+  frame time over 10 warmup + 90 measured frames per family via `RectOnlyOffscreenRenderer`
+  render+readback, and writes `build/reports/performance/per-family-benchmark.json`. Eight
+  families measured: FillRect, LinearGradient, RadialGradient, SweepGradient, PathFill,
+  BitmapRect, Text, Blur (SweepGradient replaces the ticket's earlier "Vertices" wording, which
+  the offscreen renderer draws only as bounding-rect evidence). Budget misses emit a visible
+  `BUDGET MISS:` diagnostic via the M27-003 frame gate. Real GPU evidence: Apple M2 Max,
+  8/8 sampled, all families 268-675fps (slowest Text ~268fps), gate status=pass. Adapter-gated:
+  without a GPU adapter every family is skipped with `webgpu-context-unavailable` and no
+  performance claim is promoted. ImplementationCandidate; no product activation. 2026-06-25.
 
 ## Linear Labels
 

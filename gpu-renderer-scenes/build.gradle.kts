@@ -83,6 +83,30 @@ tasks.register<JavaExec>("sampleGpuRendererSceneFrames") {
     })
 }
 
+tasks.register<JavaExec>("runPerFamilyBenchmark") {
+    group = "verification"
+    description = "Runs the M27 per-family GPU benchmark and writes per-family, pipeline-cache, and frame-gate reports."
+
+    val warmupFrames = providers.gradleProperty("warmupFrames").orElse("10")
+    val measuredFrames = providers.gradleProperty("measuredFrames").orElse("90")
+    val outputDir = providers.gradleProperty("performanceOutput")
+        .map { value -> rootProject.layout.projectDirectory.file(value).asFile }
+        .orElse(layout.buildDirectory.dir("reports/performance").map { it.asFile })
+
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("org.graphiks.kanvas.gpu.renderer.scenes.offscreen.RunPerFamilyBenchmarkMainKt")
+    args(outputDir.get().absolutePath, warmupFrames.get(), measuredFrames.get())
+    outputs.dir(outputDir)
+    outputs.upToDateWhen { false }
+    jvmArgs(buildList {
+        add("--add-opens=java.base/java.lang=ALL-UNNAMED")
+        add("--enable-native-access=ALL-UNNAMED")
+        if (org.gradle.internal.os.OperatingSystem.current().isMacOsX) {
+            add("-XstartOnFirstThread")
+        }
+    })
+}
+
 tasks.register<JavaExec>("runGpuRendererSceneKadre") {
     group = "verification"
     description = "Opens one GPU renderer scene in the opt-in Kadre windowed runner."

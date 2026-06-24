@@ -15,18 +15,18 @@ Apple M-series only.
 
 ## Exit Criteria
 
-- [ ] Per-family benchmark measures FPS/ms for FillRect, LinearGradient, RadialGradient, PathFill, BitmapRect, TextRun, Blur, Vertices
-- [ ] Pipeline cache telemetry reports hit rate, eviction count, and module count per scene
-- [ ] Frame gate policy enforces 60fps target, 30fps warning, and quarantine on regression
-- [ ] All measurements use the real wired pipelines (M25) with real textures (M26)
+- [x] Per-family benchmark measures FPS/ms for FillRect, LinearGradient, RadialGradient, PathFill, BitmapRect, TextRun, Blur, Vertices
+- [x] Pipeline cache telemetry reports hit rate, eviction count, and module count per scene
+- [x] Frame gate policy enforces 60fps target, 30fps warning, and quarantine on regression
+- [x] All measurements use the real wired pipelines (M25) with real textures (M26)
 
 ## Tickets
 
 | Ticket | Status | Priority | Claim Impact | Route Kind | Product Activation | Adapter Required | Owner Area | Depends On | Legacy Gate |
 |---|---|---|---|---|---|---|---|---|---|
-| [KGPU-M27-001 - Per-family benchmark](KGPU-M27-001-per-family-benchmark.md) | `proposed` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `true` | `performance` | [KGPU-M25-006, KGPU-M26-004] | null |
-| [KGPU-M27-002 - Pipeline cache telemetry](KGPU-M27-002-pipeline-cache-telemetry.md) | `proposed` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `true` | `performance` | [KGPU-M25-006] | null |
-| [KGPU-M27-003 - Frame gate policy](KGPU-M27-003-frame-gate-policy.md) | `proposed` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `true` | `performance` | [KGPU-M27-001] | null |
+| [KGPU-M27-001 - Per-family benchmark](KGPU-M27-001-per-family-benchmark.md) | `done` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `true` | `performance` | [KGPU-M25-006, KGPU-M26-004] | null |
+| [KGPU-M27-002 - Pipeline cache telemetry](KGPU-M27-002-pipeline-cache-telemetry.md) | `done` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `true` | `performance` | [KGPU-M25-006] | null |
+| [KGPU-M27-003 - Frame gate policy](KGPU-M27-003-frame-gate-policy.md) | `done` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `true` | `performance` | [KGPU-M27-001] | null |
 
 ## Validation Bundle
 

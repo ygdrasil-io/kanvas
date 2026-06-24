@@ -389,6 +389,19 @@ class RectOnlyOffscreenRenderer {
         return target.readRgba()
     }
 
+    /**
+     * KGPU-M27-002: pipeline-cache telemetry for the passes this renderer emits
+     * for [drawPlan], modeled across [frameCount] steady-state frames. Derived
+     * from the draw plan (not a backend pipeline-cache observation), so it carries
+     * no GPU support or performance claim by itself.
+     */
+    internal fun pipelineCacheTelemetry(
+        drawPlan: RectOnlyDrawPlan,
+        sceneId: String,
+        frameCount: Int,
+    ): org.graphiks.kanvas.gpu.renderer.telemetry.GPUPipelineCacheTelemetry =
+        rectOnlyPipelineCacheTelemetry(drawPlan, sceneId, frameCount)
+
     private fun SceneColor.toGpuClearColor(): GPUClearColor =
         GPUClearColor(
             red = (r * a).toDouble(),
