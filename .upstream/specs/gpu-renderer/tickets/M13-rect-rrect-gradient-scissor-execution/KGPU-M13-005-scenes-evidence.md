@@ -29,7 +29,8 @@ M13 route activation needs scene evidence that exercises the three routes togeth
 - Add rrect-card scene: rounded card with gradient fill and scissor clip
 - Add gradient-swatch scene: linear gradient swatches with all tile modes
 - Add clipped-stack scene: overlapping rrects with scissor clips
-- Produce scene fixture dumps for PM evidence bundle
+- Extend `RectOnlyOffscreenRenderer` to support FillRRect and LinearGradientRect commands
+- Produce scene fixture dumps for PM evidence bundle (PNG via `renderGpuRendererSceneOffscreen`)
 
 ## Non-Goals
 
@@ -59,9 +60,10 @@ class M13Scenes { fun rrectCard(): Scene; fun gradientSwatch(): Scene; fun clipp
 
 ## Required Evidence
 
-- rrect-card GPU rendering fixture dump
-- gradient-swatch GPU rendering fixture dump
-- clipped-stack GPU rendering fixture dump
+- rrect-card GPU rendering fixture dump (PNG via `renderGpuRendererSceneOffscreen`)
+- gradient-swatch GPU rendering fixture dump (PNG via `renderGpuRendererSceneOffscreen`)
+- clipped-stack GPU rendering fixture dump (PNG via `renderGpuRendererSceneOffscreen`)
+- `run.json` with `status: rendered` and pixel count > 0 for each scene
 
 ## Fallback / Refusal Behavior
 
@@ -88,12 +90,19 @@ rtk ./gradlew --no-daemon :gpu-renderer-scenes:test --tests '*M13Scene*'
   - `scissor-overlay`: Clip rect + 3 FillRect commands inside scissor window
 - GPURendererSceneRegistryTest updated with 3 SceneExpectationRow entries
 - 41 scene tests pass including validation of the 3 new entries
+- `RectOnlyOffscreenRenderer` étendu pour supporter FillRRect et LinearGradientRect (commit `8a0cff9`)
+- Les 3 scènes produisent des PNG via `renderGpuRendererSceneOffscreen` (commit `c5de5f7`)
+- Rapports commit dans `reports/gpu-renderer-scenes/offscreen/<scene>/`
 
 ## Evidence
 
 - 41 GPURendererSceneRegistryTest tests pass
 - Scene IDs: `rounded-rect-solids`, `linear-gradient-lanes`, `scissor-overlay`
 - All scenes have SceneExpectation.ShouldRender, valid tags, and M10 milestone links
+- Offscreen renders: 3/3 scenes produce render.png with non-zero pixel count
+- `rounded-rect-solids`: 3 FillRRect commands, rendered as solid rects
+- `linear-gradient-lanes`: 3 LinearGradientRect commands, rendered as solid rects
+- `scissor-overlay`: 1 Clip + 3 FillRect commands, rendered correctly clipped
 
 ## Linear Labels
 

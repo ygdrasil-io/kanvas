@@ -30,9 +30,16 @@ Depends on M12 completion (wgsl4k evolution gate KGPU-M12-010). Parallel with M1
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :gpu-renderer:test --tests '*FillRRect*'
-rtk ./gradlew --no-daemon :gpu-renderer:test --tests '*LinearGradient*'
-rtk ./gradlew --no-daemon :gpu-renderer-scenes:test --tests '*M13Scene*'
+rtk ./gradlew --no-daemon :gpu-renderer:test
+rtk ./gradlew --no-daemon :gpu-renderer-scenes:test
+# Produire les PNGs de rendu (nécessite GPU Apple Metal)
+rtk ./gradlew --no-daemon :gpu-renderer-scenes:renderGpuRendererSceneOffscreen -PsceneId=rounded-rect-solids
+rtk ./gradlew --no-daemon :gpu-renderer-scenes:renderGpuRendererSceneOffscreen -PsceneId=linear-gradient-lanes
+rtk ./gradlew --no-daemon :gpu-renderer-scenes:renderGpuRendererSceneOffscreen -PsceneId=scissor-overlay
+# Verifier que les PNGs sont produits
+rtk ls reports/gpu-renderer-scenes/offscreen/rounded-rect-solids/render.png
+rtk ls reports/gpu-renderer-scenes/offscreen/linear-gradient-lanes/render.png
+rtk ls reports/gpu-renderer-scenes/offscreen/scissor-overlay/render.png
 ```
 
 ## Non-Claims
