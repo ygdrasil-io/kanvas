@@ -57,7 +57,7 @@ GPU evidence when a GPU route is claimed, and stable refusal diagnostics.
 | PKT-11 color/bitmap/SVG glyph plans | Current-supported | COLR/CPAL plan, PNG glyph plan, SVG subset plan, emoji dispatch, refusal diagnostics. | `font/glyph/src/main/.../color`, `font/glyph/src/test/.../color`. | COLR/PNG/SVG/emoji fixtures and precise unsupported diagnostics. |
 | PKT-12 `DrawTextRun` handoff contract | Dependency-gated but contract slice implementable | Dumpable normalized text command, artifact refs, upload/generation facts, no `Sk*`. | `font/gpu-api`, `gpu-renderer/commands`, `gpu-renderer/text`. | Handoff tests and refusal diagnostics; no actual GPU draw claim. |
 | PKT-13 validation fixture and evidence harness | Current-supported | Fixture manifest, deterministic dumps, golden update policy, drift label taxonomy. | `font/*/src/test`, `reports/pure-kotlin-text`, `scripts/`. | Golden update policy, fixture manifest, dump index, and no external normative oracle. |
-| PKT-14 text telemetry and cache counters | Skeleton implementable now | Cache keys, hit/miss/bytes/upload counters, advisory budget records. | `font/*`, `gpu-renderer/telemetry`. | Deterministic telemetry records; no blocking perf gate. |
+| PKT-14 text telemetry and cache counters | Current-supported | Cache keys, hit/miss/bytes/upload counters, advisory budget records. | `font/gpu-api`, `gpu-renderer/telemetry`. | Deterministic telemetry records; no blocking perf gate. |
 | PKT-15 GPU A8/SDF route registration | Dependency-gated | Artifact registry, A8/SDF route refusals, upload-before-sample ordering. | `gpu-renderer/text`, `gpu-renderer/resources`, `gpu-renderer/routing`. | Requires stable text artifacts plus GPU ABI route evidence. |
 | PKT-16 `:kanvas-skia` facade migration adapters | Dependency-gated; the M13 facade inventory slice is now checked in, while route implementation slices stay blocked on advanced shaping plus GPU handoff readiness gaps. | Delegate `SkFontMgr`, `SkTypeface`, `SkShaper`, `SkTextBlob` toward pure Kotlin dumps. | `kanvas-skia/src/main/kotlin/org/skia/foundation`. | Current gates preserved; no implicit complex `drawString`. |
 
@@ -5847,6 +5847,25 @@ rtk ./gradlew --no-daemon :font:gpu-api:test
 Remaining gate: this is telemetry scaffolding only. It does not measure actual
 runtime performance, promote indicative budgets into release gates, synthesize
 GPU upload evidence, or claim GPU text rendering support.
+
+### PKT-14: Text Telemetry and Cache Counters
+
+Status: implemented and independently reviewed.
+
+The PKT-14 vertical covers text artifact telemetry snapshots (PKT-14A)
+through typed GPU text artifact bundles with deterministic advisory counters.
+All sub-slices are reviewed and checked in.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:gpu-api:test --tests org.graphiks.kanvas.glyph.gpu.GPUTextTelemetrySurfaceTest
+rtk git diff --check
+```
+
+Remaining gate: telemetry scaffolding and advisory counters only. It does not
+measure actual runtime performance, promote indicative budgets into release
+gates, or claim GPU text rendering support.
 
 ### KFONT-M12-001: Define font telemetry schema
 
