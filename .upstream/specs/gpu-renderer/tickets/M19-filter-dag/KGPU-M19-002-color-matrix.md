@@ -90,6 +90,7 @@ Implementation evidence:
 - All unit tests pass
 - Product flags registered in ProductFlags.kt
 - Scenes registered in GPURendererSceneRegistry
+- ColorMatrixSnippet.kt deleted (WGSL deferred — see M19-002 review)
 
 ## Linear Labels
 

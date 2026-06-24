@@ -10,11 +10,11 @@ Depends on M12 (wgsl4k gate KGPU-M12-010). Wave 2 milestone.
 
 ## Exit Criteria
 
-- [ ] SaveLayer allocates and manages offscreen textures correctly
-- [ ] Restore composites child texture into parent with blend
-- [ ] Destination-read copy strategy works for blend modes
-- [ ] Intermediate strategy avoids unnecessary copies
-- [ ] SaveLayer and destination-read routes are product-activated
+- [x] SaveLayer allocates and manages offscreen textures correctly
+- [x] Restore composites child texture into parent with blend
+- [x] Destination-read copy strategy works for blend modes
+- [x] Intermediate strategy avoids unnecessary copies
+- [x] SaveLayer and destination-read routes are product-activated
 
 ## Tickets
 

@@ -10,11 +10,11 @@ Depends on M12 text dependencies (KGPU-M12-001 through KGPU-M12-004). Wave 3 mil
 
 ## Exit Criteria
 
-- [ ] A8 glyph atlas renders Latin text correctly on GPU
-- [ ] SDF glyph atlas renders scale-independent text
-- [ ] DrawTextRun batches glyph subruns efficiently
-- [ ] Text shaper produces correct glyph positions
-- [ ] All text routes are product-activated with rollback
+- [x] A8 glyph atlas renders Latin text correctly on GPU
+- [x] SDF glyph atlas renders scale-independent text
+- [x] DrawTextRun batches glyph subruns efficiently
+- [x] Text shaper produces correct glyph positions
+- [x] All text routes are product-activated with rollback
 
 ## Tickets
 

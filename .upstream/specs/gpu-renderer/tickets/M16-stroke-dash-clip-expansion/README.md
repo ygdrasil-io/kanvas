@@ -10,10 +10,10 @@ Depends on M13 scissor clip (KGPU-M13-003), M15 path fill and stencil-cover (KGP
 
 ## Exit Criteria
 
-- [ ] Stroke expansion produces correct join/cap geometry
-- [ ] Dash path effect decomposes paths correctly
-- [ ] Bounded clip stacks support rrect and path clips
-- [ ] All routes are product-activated with rollback
+- [x] Stroke expansion produces correct join/cap geometry
+- [x] Dash path effect decomposes paths correctly
+- [x] Bounded clip stacks support rrect and path clips
+- [x] All routes are product-activated with rollback
 
 ## Tickets
 

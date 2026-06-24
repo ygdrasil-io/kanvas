@@ -89,6 +89,7 @@ Implementation evidence:
 - All unit tests pass
 - Product flags registered in ProductFlags.kt
 - Scenes registered in GPURendererSceneRegistry
+- BlurSnippet.kt deleted (WGSL deferred — see M19-001 review)
 
 ## Linear Labels
 
