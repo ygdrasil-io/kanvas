@@ -1,0 +1,12 @@
+rendered blur-radius-ladder via WebGPU offscreen
+adapter=Apple M2 Max
+clearCommands=1
+fillRectCommands=4
+fillRRectCommands=0
+linearGradientRectCommands=0
+radialGradientRectCommands=0
+sweepGradientRectCommands=0
+clipCommands=0
+bitmapRectCommands=0
+pathFillStencilCommands=0
+convexFanMeshCommands=0

@@ -471,6 +471,31 @@ sealed interface GPUFirstRouteTelemetryEvent {
     }
 }
 
+/** Pipeline cache telemetry snapshot for PM evidence. */
+data class GPUPipelineCacheTelemetry(
+    val sceneId: String,
+    val hitCount: Long,
+    val missCount: Long,
+    val evictionCount: Long,
+    val moduleCount: Long,
+) {
+    init {
+        require(sceneId.isNotBlank()) { "GPU pipeline cache telemetry sceneId must not be blank" }
+        require(hitCount >= 0L) { "GPU pipeline cache telemetry hitCount must not be negative" }
+        require(missCount >= 0L) { "GPU pipeline cache telemetry missCount must not be negative" }
+        require(evictionCount >= 0L) { "GPU pipeline cache telemetry evictionCount must not be negative" }
+        require(moduleCount >= 0L) { "GPU pipeline cache telemetry moduleCount must not be negative" }
+    }
+
+    val hitRate: Double
+        get() = if (hitCount + missCount > 0L) hitCount.toDouble() / (hitCount + missCount) else 0.0
+
+    /** Dumps a single-line telemetry snapshot. */
+    fun dumpLine(): String =
+        "pipeline-cache scene=$sceneId hitCount=$hitCount missCount=$missCount " +
+            "hitRate=${"%.4f".format(hitRate)} evictionCount=$evictionCount moduleCount=$moduleCount"
+}
+
 /** Cache telemetry facts. */
 data class GPUCacheTelemetry(
     val cacheName: String,
@@ -524,6 +549,7 @@ data class GPUTelemetryLedger(
     val budgetTelemetry: List<GPUBudgetTelemetry>,
     val promotionEvidence: List<GPUPromotionEvidence>,
     val cacheEvents: List<GPUCacheTelemetryEvent> = emptyList(),
+    val pipelineCacheTelemetry: List<GPUPipelineCacheTelemetry> = emptyList(),
 ) {
     /** Records a cache hit or miss event without changing route support state. */
     fun recordCacheEvent(event: GPUCacheTelemetryEvent): GPUTelemetryLedger {
@@ -551,6 +577,21 @@ data class GPUTelemetryLedger(
             cacheTelemetry = cacheTelemetry.filterNot { it.cacheName == event.domain } + updated,
         )
     }
+
+    /**
+     * Records a pipeline cache telemetry snapshot for PM evidence.
+     *
+     * The returned ledger is a new value; existing ledgers are not mutated.
+     * Snapshots are appended per scene so historical evidence is preserved.
+     */
+    fun recordPipelineCacheTelemetry(telemetry: GPUPipelineCacheTelemetry): GPUTelemetryLedger =
+        copy(pipelineCacheTelemetry = pipelineCacheTelemetry + telemetry)
+
+    /**
+     * Returns pipeline cache dump lines for PM reports and tests.
+     */
+    fun pipelineCacheTelemetryDumpLines(): List<String> =
+        pipelineCacheTelemetry.map { it.dumpLine() }
 
     /**
      * Records one R6 first-route telemetry observation as deterministic counters.
@@ -589,6 +630,7 @@ data class GPUTelemetryLedger(
                 budgetTelemetry = emptyList(),
                 promotionEvidence = emptyList(),
                 cacheEvents = emptyList(),
+                pipelineCacheTelemetry = emptyList(),
             )
     }
 }

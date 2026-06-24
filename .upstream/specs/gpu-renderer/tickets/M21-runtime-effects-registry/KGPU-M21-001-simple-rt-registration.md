@@ -1,7 +1,7 @@
 ---
 id: KGPU-M21-001
 title: "Register SimpleRT: Kotlin CPU oracle + parser-validated WGSL + reflected uniforms"
-status: proposed
+status: done
 milestone: M21
 priority: P0
 owner_area: runtime-effects
@@ -82,7 +82,14 @@ rtk ./gradlew --no-daemon :gpu-renderer:test --tests '*SimpleRT*'
 
 ## Status Notes
 
-- `proposed`: Initial ticket.
+Status changed from `proposed` to `done` on 2026-06-24.
+
+Implementation evidence:
+- SimpleRT/LinearGradientRT/SpiralRT descriptors, GPURuntimeEffectExecutor
+- All source files created and committed
+- All unit tests pass
+- Product flags registered in ProductFlags.kt
+- Scenes registered in GPURendererSceneRegistry
 
 ## Linear Labels
 

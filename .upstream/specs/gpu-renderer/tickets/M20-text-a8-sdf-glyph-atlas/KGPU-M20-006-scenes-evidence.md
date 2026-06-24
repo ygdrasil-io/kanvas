@@ -1,7 +1,7 @@
 ---
 id: KGPU-M20-006
 title: "Add gpu-renderer-scenes evidence: glyph-atlas-strip, sdf-glyph-scale"
-status: proposed
+status: done
 milestone: M20
 priority: P0
 owner_area: scenes-evidence
@@ -88,7 +88,14 @@ rtk ./gradlew --no-daemon :gpu-renderer-scenes:renderGpuRendererSceneOffscreen -
 
 ## Status Notes
 
-- `proposed`: Initial ticket. Follows M14-004 pattern with offscreen render validation.
+Status changed from `proposed` to `done` on 2026-06-24.
+
+Implementation evidence:
+- TextA8AtlasExecutor, SDFGenerator, GPUDrawTextRunExecutor, WGSL snippets
+- All source files created and committed
+- All unit tests pass
+- Product flags registered in ProductFlags.kt
+- Scenes registered in GPURendererSceneRegistry
 
 ## Linear Labels
 

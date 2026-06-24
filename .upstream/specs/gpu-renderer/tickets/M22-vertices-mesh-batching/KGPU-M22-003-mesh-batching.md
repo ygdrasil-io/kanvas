@@ -1,7 +1,7 @@
 ---
 id: KGPU-M22-003
 title: "Add mesh batching: sort + merge draw calls by pipeline key"
-status: proposed
+status: done
 milestone: M22
 priority: P0
 owner_area: recording
@@ -82,7 +82,14 @@ rtk ./gradlew --no-daemon :gpu-renderer:test --tests '*MeshBatch*'
 
 ## Status Notes
 
-- `proposed`: Initial ticket.
+Status changed from `proposed` to `done` on 2026-06-24.
+
+Implementation evidence:
+- VerticesExecutor, GPUVertexBufferUploader, GPUMeshBatcher
+- All source files created and committed
+- All unit tests pass
+- Product flags registered in ProductFlags.kt
+- Scenes registered in GPURendererSceneRegistry
 
 ## Linear Labels
 

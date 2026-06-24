@@ -20,12 +20,12 @@ Depends on M12 codec pipeline (KGPU-M12-006, KGPU-M12-007). Wave 1 milestone, pa
 
 | Ticket | Status | Priority | Claim Impact | Route Kind | Product Activation | Adapter Required | Owner Area | Depends On | Legacy Gate |
 |---|---|---|---|---|---|---|---|---|---|
-| [KGPU-M17-001 - Add BitmapShader WGSL: texture sample + nearest/linear filter + clamp tile](KGPU-M17-001-bitmap-shader.md) | `proposed` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `materials-wgsl` | [KGPU-M12-007] | null |
-| [KGPU-M17-002 - Add BitmapRect execution: image rect draw with texture binding + sampler](KGPU-M17-002-bitmap-rect-execution.md) | `proposed` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `geometry-passes` | [KGPU-M17-001] | null |
-| [KGPU-M17-003 - Add GPU image upload materialization: decoded pixels -> staging buffer -> texture](KGPU-M17-003-image-upload-materialization.md) | `proposed` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `resources-execution` | [KGPU-M12-006, KGPU-M17-001] | null |
-| [KGPU-M17-004 - Add tile mode expansion: Repeat + Mirror + Decal via WGSL math](KGPU-M17-004-tile-mode-expansion.md) | `proposed` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `materials-wgsl` | [KGPU-M17-001] | null |
-| [KGPU-M17-005 - Activate M17 routes: BitmapShader + BitmapRect default ON with rollback](KGPU-M17-005-route-activation.md) | `proposed` | `P0` | `PolicyGated` | `GPUNative` | `false` | `true` | `product-validation` | [KGPU-M17-001, KGPU-M17-002, KGPU-M17-003, KGPU-M17-004] | legacy drawImage |
-| [KGPU-M17-006 - Add gpu-renderer-scenes evidence: bitmap-sampler-matrix, tile-mode-strip](KGPU-M17-006-scenes-evidence.md) | `proposed` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `true` | `scenes-evidence` | [KGPU-M17-001, KGPU-M17-002, KGPU-M17-003, KGPU-M17-004] | null |
+| [KGPU-M17-001 - Add BitmapShader WGSL: texture sample + nearest/linear filter + clamp tile](KGPU-M17-001-bitmap-shader.md) | `done` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `materials-wgsl` | [KGPU-M12-007] | null |
+| [KGPU-M17-002 - Add BitmapRect execution: image rect draw with texture binding + sampler](KGPU-M17-002-bitmap-rect-execution.md) | `done` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `geometry-passes` | [KGPU-M17-001] | null |
+| [KGPU-M17-003 - Add GPU image upload materialization: decoded pixels -> staging buffer -> texture](KGPU-M17-003-image-upload-materialization.md) | `done` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `resources-execution` | [KGPU-M12-006, KGPU-M17-001] | null |
+| [KGPU-M17-004 - Add tile mode expansion: Repeat + Mirror + Decal via WGSL math](KGPU-M17-004-tile-mode-expansion.md) | `done` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `materials-wgsl` | [KGPU-M17-001] | null |
+| [KGPU-M17-005 - Activate M17 routes: BitmapShader + BitmapRect default ON with rollback](KGPU-M17-005-route-activation.md) | `done` | `P0` | `PolicyGated` | `GPUNative` | `false` | `true` | `product-validation` | [KGPU-M17-001, KGPU-M17-002, KGPU-M17-003, KGPU-M17-004] | legacy drawImage |
+| [KGPU-M17-006 - Add gpu-renderer-scenes evidence: bitmap-sampler-matrix, tile-mode-strip](KGPU-M17-006-scenes-evidence.md) | `done` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `true` | `scenes-evidence` | [KGPU-M17-001, KGPU-M17-002, KGPU-M17-003, KGPU-M17-004] | null |
 
 ## Validation Bundle
 

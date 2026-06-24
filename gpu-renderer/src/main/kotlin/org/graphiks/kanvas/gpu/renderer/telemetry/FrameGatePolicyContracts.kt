@@ -3,6 +3,13 @@ package org.graphiks.kanvas.gpu.renderer.telemetry
 import java.util.Locale
 import kotlin.math.sqrt
 
+/** M23 baseline constants for frame gate policy. */
+const val M23_TARGET_FPS: Int = 60
+const val M23_WARNING_FPS: Int = 30
+const val M23_THRESHOLD_MS: Double = 1000.0 / M23_TARGET_FPS
+const val M23_WARNING_THRESHOLD_MS: Double = 1000.0 / M23_WARNING_FPS
+const val M23_APPLE_M_SERIES_ADAPTER: String = "apple-m-series"
+
 /** Target lifecycle state for a frame timing gate lane. */
 enum class GPUFrameGateState(val label: String) {
     /** Candidate evidence can be reported but cannot block a release. */
@@ -63,6 +70,21 @@ data class GPUFrameGateWarmupPolicy(
         }
         require(quarantineRule.isNotBlank()) { "GPU frame gate quarantineRule must not be blank" }
         require(rebaselineRule.isNotBlank()) { "GPU frame gate rebaselineRule must not be blank" }
+    }
+
+    companion object {
+        /** Returns the M23 baseline warmup policy: 60fps target, 30fps warning, Apple M-series quarantine. */
+        fun m23Baseline(): GPUFrameGateWarmupPolicy =
+            GPUFrameGateWarmupPolicy(
+                warmupFrameCount = 3,
+                stableFrameCount = 4,
+                metricName = "frame-time-ms",
+                metricSource = "wall-clock",
+                thresholdMs = M23_THRESHOLD_MS,
+                maxCoefficientOfVariation = 0.05,
+                quarantineRule = "regression-on-m-series-only",
+                rebaselineRule = "versioned-artifact-required",
+            )
     }
 }
 

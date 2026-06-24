@@ -18,6 +18,9 @@ class GPURendererSceneRegistryTest {
         assertTrue(roadmapLinks.mapNotNull { it.rStage }.containsAll(RStage.entries))
         assertTrue(scenes.any { scene -> scene.roadmapLinks.any { it.milestone == "M10" } })
         assertTrue(scenes.any { scene -> scene.roadmapLinks.any { it.milestone == "M14" } })
+        assertTrue(scenes.any { scene -> scene.roadmapLinks.any { it.milestone == "M19" } })
+        assertTrue(scenes.any { scene -> scene.roadmapLinks.any { it.milestone == "M20" } })
+        assertTrue(scenes.any { scene -> scene.roadmapLinks.any { it.milestone == "M21" } })
     }
 
     @Test
@@ -1728,6 +1731,114 @@ class GPURendererSceneRegistryTest {
                     RoadmapExpectation("M15"),
                     RoadmapExpectation("M15", ticketId = "KGPU-M15-003"),
                 ),
+            ),
+            SceneExpectationRow(
+                sceneId = "savelayer-isolated",
+                tags = setOf(SceneTag.Layer),
+                commandFamilies = listOf("clear", "fill-rect", "save-layer", "fill-rect"),
+                roadmapLinks = listOf(RoadmapExpectation("M18")),
+            ),
+            SceneExpectationRow(
+                sceneId = "dst-read-strategy",
+                tags = setOf(SceneTag.Layer, SceneTag.Blend),
+                commandFamilies = listOf("clear", "fill-rect", "fill-rect"),
+                roadmapLinks = listOf(RoadmapExpectation("M18")),
+            ),
+            SceneExpectationRow(
+                sceneId = "blur-radius-ladder",
+                tags = setOf(SceneTag.Filter),
+                commandFamilies = listOf("clear", "fill-rect", "fill-rect", "fill-rect", "fill-rect"),
+                roadmapLinks = listOf(RoadmapExpectation("M19")),
+            ),
+            SceneExpectationRow(
+                sceneId = "color-matrix-filter",
+                tags = setOf(SceneTag.Filter),
+                commandFamilies = listOf("clear", "fill-rect", "fill-rect", "fill-rect"),
+                roadmapLinks = listOf(RoadmapExpectation("M19")),
+            ),
+            SceneExpectationRow(
+                sceneId = "glyph-atlas-strip",
+                tags = setOf(SceneTag.Text),
+                commandFamilies = listOf("clear", "text-run", "fill-rect"),
+                roadmapLinks = listOf(RoadmapExpectation("M20")),
+            ),
+            SceneExpectationRow(
+                sceneId = "sdf-glyph-scale",
+                tags = setOf(SceneTag.Text),
+                commandFamilies = listOf("clear", "text-run", "text-run", "text-run", "fill-rect"),
+                roadmapLinks = listOf(RoadmapExpectation("M20")),
+            ),
+            SceneExpectationRow(
+                sceneId = "runtime-effect-uniform",
+                tags = setOf(SceneTag.RuntimeEffect),
+                commandFamilies = listOf("clear", "runtime-effect", "runtime-effect", "runtime-effect", "runtime-effect"),
+                roadmapLinks = listOf(RoadmapExpectation("M21")),
+            ),
+            SceneExpectationRow(
+                sceneId = "runtime-effect-child",
+                tags = setOf(SceneTag.RuntimeEffect),
+                commandFamilies = listOf("clear", "runtime-effect"),
+                roadmapLinks = listOf(RoadmapExpectation("M21")),
+            ),
+            SceneExpectationRow(
+                sceneId = "stroke-cap-join",
+                tags = setOf(SceneTag.Stroke),
+                commandFamilies = listOf("clear", "fill-rect", "fill-rect", "fill-rect", "fill-rect", "fill-rect"),
+                roadmapLinks = listOf(RoadmapExpectation("M16")),
+            ),
+            SceneExpectationRow(
+                sceneId = "dash-pattern-ladder",
+                tags = setOf(SceneTag.Stroke),
+                commandFamilies = listOf("clear", "fill-rect", "fill-rect", "fill-rect", "fill-rect", "fill-rect"),
+                roadmapLinks = listOf(RoadmapExpectation("M16")),
+            ),
+            SceneExpectationRow(
+                sceneId = "tile-mode-strip",
+                tags = setOf(SceneTag.Image),
+                commandFamilies = listOf("clear", "bitmap-rect", "bitmap-rect", "bitmap-rect", "bitmap-rect", "fill-rect"),
+                roadmapLinks = listOf(RoadmapExpectation("M17")),
+            ),
+            SceneExpectationRow(
+                sceneId = "vertices-color-mesh",
+                tags = setOf(SceneTag.Vertices),
+                commandFamilies = listOf("clear", "vertices"),
+                roadmapLinks = listOf(RoadmapExpectation("M22")),
+            ),
+            SceneExpectationRow(
+                sceneId = "mesh-ribbon-depth",
+                tags = setOf(SceneTag.Vertices),
+                commandFamilies = listOf("clear", "vertices", "vertices", "vertices"),
+                roadmapLinks = listOf(RoadmapExpectation("M22")),
+            ),
+            SceneExpectationRow(
+                sceneId = "performance-budget-review",
+                tags = setOf(SceneTag.Rect, SceneTag.Cache),
+                commandFamilies = listOf("clear", "fill-rect", "fill-rect", "fill-rect", "fill-rect", "fill-rect"),
+                roadmapLinks = listOf(RoadmapExpectation("M23", ticketId = "KGPU-M23-001")),
+            ),
+            SceneExpectationRow(
+                sceneId = "pipeline-cache-telemetry-review",
+                tags = setOf(SceneTag.Rect, SceneTag.Cache),
+                commandFamilies = listOf("clear", "fill-rect", "fill-rect", "fill-rect", "fill-rect", "fill-rect"),
+                roadmapLinks = listOf(RoadmapExpectation("M23", ticketId = "KGPU-M23-002")),
+            ),
+            SceneExpectationRow(
+                sceneId = "frame-gate-m23-baseline",
+                tags = setOf(SceneTag.Rect, SceneTag.Cache),
+                commandFamilies = listOf("clear", "fill-rect", "fill-rect", "fill-rect", "fill-rect", "fill-rect"),
+                roadmapLinks = listOf(RoadmapExpectation("M23", ticketId = "KGPU-M23-003")),
+            ),
+            SceneExpectationRow(
+                sceneId = "pm-evidence-m23-bundle",
+                tags = setOf(SceneTag.Rect, SceneTag.Cache),
+                commandFamilies = listOf("clear", "fill-rect", "fill-rect", "fill-rect", "fill-rect", "fill-rect"),
+                roadmapLinks = listOf(RoadmapExpectation("M23", ticketId = "KGPU-M23-004")),
+            ),
+            SceneExpectationRow(
+                sceneId = "performance-gates-product-flag",
+                tags = setOf(SceneTag.Rect),
+                commandFamilies = listOf("clear", "fill-rect"),
+                roadmapLinks = listOf(RoadmapExpectation("M23")),
             ),
         )
     }

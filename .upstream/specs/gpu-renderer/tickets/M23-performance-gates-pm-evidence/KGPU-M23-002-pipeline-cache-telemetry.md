@@ -1,7 +1,7 @@
 ---
 id: KGPU-M23-002
 title: "Add pipeline cache telemetry: hit rate, eviction, module count per scene"
-status: proposed
+status: done
 milestone: M23
 priority: P0
 owner_area: performance-validation
@@ -81,7 +81,14 @@ rtk ./gradlew --no-daemon :gpu-renderer:test --tests '*PipelineCacheTelemetry*'
 
 ## Status Notes
 
-- `proposed`: Initial ticket.
+Status changed from `proposed` to `done` on 2026-06-24.
+
+Implementation evidence:
+- PerformanceBudget, pipeline cache telemetry, frame gate policy, PM evidence bundle
+- All source files created and committed
+- All unit tests pass
+- Product flags registered in ProductFlags.kt
+- Scenes registered in GPURendererSceneRegistry
 
 ## Linear Labels
 

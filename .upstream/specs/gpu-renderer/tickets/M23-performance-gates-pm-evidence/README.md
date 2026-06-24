@@ -20,11 +20,11 @@ Depends on all preceding milestones (M12-M22) for route activation evidence. Fin
 
 | Ticket | Status | Priority | Claim Impact | Route Kind | Product Activation | Adapter Required | Owner Area | Depends On | Legacy Gate |
 |---|---|---|---|---|---|---|---|---|---|
-| [KGPU-M23-001 - Add per-family performance budgets: measured FPS/ms for each draw family](KGPU-M23-001-per-family-budgets.md) | `proposed` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `true` | `performance-validation` | [] | null |
-| [KGPU-M23-002 - Add pipeline cache telemetry: hit rate, eviction, module count per scene](KGPU-M23-002-pipeline-cache-telemetry.md) | `proposed` | `P0` | `ImplementationCandidate` | `CPUReferenceOnly` | `false` | `false` | `performance-validation` | [KGPU-M12-010] | null |
-| [KGPU-M23-003 - Add frame gate policy: 60fps target, 30fps warning, quarantine on regression](KGPU-M23-003-frame-gate-policy.md) | `proposed` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `true` | `performance-validation` | [KGPU-M23-001] | null |
-| [KGPU-M23-004 - Add final PM evidence bundle: all families activated, gates green, rollback tested](KGPU-M23-004-pm-evidence-bundle.md) | `proposed` | `P0` | `PolicyGated` | `CPUReferenceOnly` | `false` | `true` | `validation-pm` | [KGPU-M13-004, KGPU-M14-003, KGPU-M15-004, KGPU-M16-004, KGPU-M17-005, KGPU-M18-005, KGPU-M19-004, KGPU-M20-005, KGPU-M21-004, KGPU-M22-004] | pipelinePmBundle |
-| [KGPU-M23-005 - Add gpu-renderer-scenes final catalog: all 45+ scenes render offscreen + windowed](KGPU-M23-005-scenes-catalog.md) | `proposed` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `true` | `scenes-evidence` | [KGPU-M23-004] | null |
+| [KGPU-M23-001 - Add per-family performance budgets: measured FPS/ms for each draw family](KGPU-M23-001-per-family-budgets.md) | `done` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `true` | `performance-validation` | [] | null |
+| [KGPU-M23-002 - Add pipeline cache telemetry: hit rate, eviction, module count per scene](KGPU-M23-002-pipeline-cache-telemetry.md) | `done` | `P0` | `ImplementationCandidate` | `CPUReferenceOnly` | `false` | `false` | `performance-validation` | [KGPU-M12-010] | null |
+| [KGPU-M23-003 - Add frame gate policy: 60fps target, 30fps warning, quarantine on regression](KGPU-M23-003-frame-gate-policy.md) | `done` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `true` | `performance-validation` | [KGPU-M23-001] | null |
+| [KGPU-M23-004 - Add final PM evidence bundle: all families activated, gates green, rollback tested](KGPU-M23-004-pm-evidence-bundle.md) | `done` | `P0` | `PolicyGated` | `CPUReferenceOnly` | `false` | `true` | `validation-pm` | [KGPU-M13-004, KGPU-M14-003, KGPU-M15-004, KGPU-M16-004, KGPU-M17-005, KGPU-M18-005, KGPU-M19-004, KGPU-M20-005, KGPU-M21-004, KGPU-M22-004] | pipelinePmBundle |
+| [KGPU-M23-005 - Add gpu-renderer-scenes final catalog: all 45+ scenes render offscreen + windowed](KGPU-M23-005-scenes-catalog.md) | `done` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `true` | `scenes-evidence` | [KGPU-M23-004] | null |
 
 ## Validation Bundle
 

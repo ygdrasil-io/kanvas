@@ -1,0 +1,1 @@
+rect-only offscreen render supports only clear, fill-rect, fill-rrect, linear-gradient-rect, radial-gradient-rect, sweep-gradient-rect, clip, path-fill-stencil, and convex-fan-mesh command families: bitmap-rect

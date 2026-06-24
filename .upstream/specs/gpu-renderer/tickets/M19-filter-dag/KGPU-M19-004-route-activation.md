@@ -1,7 +1,7 @@
 ---
 id: KGPU-M19-004
 title: "Activate M19 routes: Blur + ColorMatrix + bounded filter DAG default ON"
-status: proposed
+status: done
 milestone: M19
 priority: P0
 owner_area: product-validation
@@ -83,7 +83,14 @@ rtk ./gradlew --no-daemon :gpu-renderer:check && rtk ./gradlew --no-daemon :gpu-
 
 ## Status Notes
 
-- `proposed`: Initial ticket.
+Status changed from `proposed` to `done` on 2026-06-24.
+
+Implementation evidence:
+- GaussianBlurFilter, ColorMatrixFilter, FilterDAGExecutor
+- All source files created and committed
+- All unit tests pass
+- Product flags registered in ProductFlags.kt
+- Scenes registered in GPURendererSceneRegistry
 
 ## Linear Labels
 

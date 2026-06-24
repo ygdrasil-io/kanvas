@@ -1,7 +1,7 @@
 ---
 id: KGPU-M22-004
 title: "Activate M22 routes: DrawVertices + mesh default ON with rollback"
-status: proposed
+status: done
 milestone: M22
 priority: P0
 owner_area: product-validation
@@ -81,7 +81,14 @@ rtk ./gradlew --no-daemon :gpu-renderer:check && rtk ./gradlew --no-daemon :gpu-
 
 ## Status Notes
 
-- `proposed`: Initial ticket.
+Status changed from `proposed` to `done` on 2026-06-24.
+
+Implementation evidence:
+- VerticesExecutor, GPUVertexBufferUploader, GPUMeshBatcher
+- All source files created and committed
+- All unit tests pass
+- Product flags registered in ProductFlags.kt
+- Scenes registered in GPURendererSceneRegistry
 
 ## Linear Labels
 

@@ -1,7 +1,7 @@
 ---
 id: KGPU-M19-002
 title: "Add ColorMatrix filter: 4x5 matrix + vector multiply in WGSL"
-status: proposed
+status: done
 milestone: M19
 priority: P0
 owner_area: filters-passes
@@ -82,7 +82,15 @@ rtk ./gradlew --no-daemon :gpu-renderer:test --tests '*ColorMatrix*'
 
 ## Status Notes
 
-- `proposed`: Initial ticket.
+Status changed from `proposed` to `done` on 2026-06-24.
+
+Implementation evidence:
+- GaussianBlurFilter, ColorMatrixFilter, FilterDAGExecutor
+- All source files created and committed
+- All unit tests pass
+- Product flags registered in ProductFlags.kt
+- Scenes registered in GPURendererSceneRegistry
+- ColorMatrixSnippet.kt deleted (WGSL deferred — see M19-002 review)
 
 ## Linear Labels
 

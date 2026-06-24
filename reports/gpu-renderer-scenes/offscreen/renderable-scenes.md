@@ -1,15 +1,15 @@
 # GPU Renderer Offscreen Renderable Scene Evidence
 
-Date: 2026-06-17
+Date: 2026-06-24
 
 This checkpoint refreshes the WebGPU offscreen evidence for every executable
-scene listed in `reports/gpu-renderer-scenes/catalog/catalog.json`.
+scene in `GPURendererSceneRegistry.scenes`.
 
 Scope:
 
-- Catalogued executable scenes attempted: 52
-- Fresh `rendered` reports: 15
-- Fresh `not-yet-rendered` reports: 37
+- Catalogued executable scenes attempted: 77
+- Fresh `rendered` reports: 22
+- Fresh `not-yet-rendered` reports: 55
 - Render backend: `webgpu-offscreen`
 
 Rendered scenes:
@@ -19,32 +19,29 @@ Rendered scenes:
 - `cache-frame-budget-strip`
 - `cache-pressure-deck`
 - `cache-source-ledger-board`
+- `dash-pattern-ladder`
 - `filter-dag-refusal-board`
+- `filtered-photo-chip`
 - `first-route-rollback-panel`
 - `frame-gate-blocker-board`
+- `frame-gate-m23-baseline`
 - `gradient-tile-mode-boundary`
 - `layer-filter-chain-board`
 - `legacy-route-comparison`
 - `path-aa-stroke-join-board`
+- `performance-budget-review`
+- `performance-gates-product-flag`
+- `pipeline-cache-telemetry-review`
+- `pm-evidence-m23-bundle`
 - `product-route-smoke-lanes`
 - `solid-card-stack`
+- `stroke-cap-join`
 - `translucent-card-overlap`
 
 Non-claims:
 
-- The 37 `not-yet-rendered` reports are not product support claims.
+- The 55 `not-yet-rendered` reports are not product support claims.
 - They preserve current runner limits for command families outside the faithful
   offscreen subset, such as rrect/gradient, bitmap, saveLayer/filter,
   runtime-effect, text, and mesh/vertices scenes.
-- Stale historical `rendered` report payloads were replaced where the current
-  runner now reports `not-yet-rendered`.
-
-Generation command:
-
-```bash
-rtk zsh -lc 'set -euo pipefail
-scene_ids=(${(f)"$(jq -r '\''.scenes[].sceneId'\'' reports/gpu-renderer-scenes/catalog/catalog.json)"})
-for scene_id in "${scene_ids[@]}"; do
-  ./gradlew :gpu-renderer-scenes:renderGpuRendererSceneOffscreen -PsceneId="$scene_id" --daemon --quiet
-done'
-```
+- New M16-M23 scenes with FillRect-only commands are now rendered.

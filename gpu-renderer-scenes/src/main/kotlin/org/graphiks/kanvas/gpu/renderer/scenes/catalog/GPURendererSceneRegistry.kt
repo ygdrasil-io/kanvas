@@ -2101,7 +2101,16 @@ object GPURendererSceneRegistry {
         sweepDiskScene,
         pathFillStencilScene,
         convexFanMeshScene,
-    )
+        savelayerIsolatedScene,
+        dstReadStrategyScene,
+        blurRadiusLadderScene,
+        colorMatrixFilterScene,
+        glyphAtlasStripScene,
+        sdfGlyphScaleScene,
+        runtimeEffectUniformScene,
+        runtimeEffectChildScene,
+    ) + m16CandidatePromotionScenes + m17CandidatePromotionScenes +
+        m22CandidatePromotionScenes + m23CandidatePromotionScenes
 
     val registry: SceneRegistry<SceneCommand> = SceneRegistry(scenes)
 

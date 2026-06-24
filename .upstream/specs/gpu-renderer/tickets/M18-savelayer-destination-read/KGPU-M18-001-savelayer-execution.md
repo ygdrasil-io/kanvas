@@ -1,7 +1,7 @@
 ---
 id: KGPU-M18-001
 title: "Add SaveLayer execution: offscreen target allocation + clear/load/store"
-status: proposed
+status: done
 milestone: M18
 priority: P0
 owner_area: layers-passes
@@ -82,7 +82,14 @@ rtk ./gradlew --no-daemon :gpu-renderer:test --tests '*SaveLayer*'
 
 ## Status Notes
 
-- `proposed`: Initial ticket.
+Status changed from `proposed` to `done` on 2026-06-24.
+
+Implementation evidence:
+- SaveLayerExecutor, layer composite WGSL, destination read executor
+- All source files created and committed
+- All unit tests pass
+- Product flags registered in ProductFlags.kt
+- Scenes registered in GPURendererSceneRegistry
 
 ## Linear Labels
 
