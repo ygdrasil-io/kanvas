@@ -22,7 +22,7 @@ Evidence-backed contracts from M1 through M12.
 | [KFONT-M13-002 - Route `SkTypeface` OpenType facts through pure Kotlin core](KFONT-M13-002-route-sktypeface-opentype-facts-through-pure-kotlin-core.md) | `ready` | `P1` | `tracked-gap` | `skia-facade` | `KFONT-M13-001`, `KFONT-M1-003`, `KFONT-M2-004` | `typeface` |
 | [KFONT-M13-003 - Route explicit `SkShaper` APIs through pure Kotlin shaping](KFONT-M13-003-route-explicit-skshaper-apis-through-pure-kotlin-shaping.md) | `ready` | `P1` | `tracked-gap` | `skia-facade` | `KFONT-M13-001`, `KFONT-M5-005`, `KFONT-M6-010`, `KFONT-M7-004` | `scaledemoji`, `scaledemoji_rendering` |
 | [KFONT-M13-004 - Route `SkTextBlob` glyph runs through typed descriptors](KFONT-M13-004-route-sktextblob-glyph-runs-through-typed-descriptors.md) | `ready` | `P1` | `tracked-gap` | `skia-facade` | `KFONT-M13-001`, `KFONT-M9-002`, `KFONT-M11-003` | `dftext` |
-| [KFONT-M13-005 - Retire stale font docs and stubs after evidence promotion](KFONT-M13-005-retire-stale-font-docs-and-stubs-after-evidence-promotion.md) | `blocked` | `P1` | `tracked-gap` | `docs-validation` | `KFONT-M13-001`, `KFONT-M13-002`, `KFONT-M13-003`, `KFONT-M13-004`, `KFONT-M12-005` | `coloremoji_blendmodes`, `scaledemoji`, `scaledemoji_rendering`, `dftext`, `fontations`, `fontations_ft_compare`, `pdf_never_embed` |
+| [KFONT-M13-005 - Retire stale font docs and stubs after evidence promotion](KFONT-M13-005-retire-stale-font-docs-and-stubs-after-evidence-promotion.md) | `done` | `P1` | `tracked-gap` | `docs-validation` | `KFONT-M13-001`, `KFONT-M13-002`, `KFONT-M13-003`, `KFONT-M13-004`, `KFONT-M12-005` | `coloremoji_blendmodes`, `scaledemoji`, `scaledemoji_rendering`, `dftext`, `fontations`, `fontations_ft_compare`, `pdf_never_embed` |
 
 ## Validation Bundle
 

@@ -1,0 +1,104 @@
+{
+  "schemaVersion": 1,
+  "reportId": "legacy-retirement-decisions",
+  "sourceSpec": {
+    "path": ".upstream/specs/pure-kotlin-text/09-migration-from-current-font-pack.md",
+    "section": "Legacy Gate Retirement"
+  },
+  "supportClaim": "retirement-coordination-no-support-claim",
+  "decisions": [
+    {
+      "legacyGate": "coloremoji_blendmodes",
+      "currentArtifact": "kanvas-skia coloremoji blend mode color filter routing",
+      "targetSpec": ".upstream/specs/pure-kotlin-text/05-color-fonts-bitmap-svg-emoji.md",
+      "replacementEvidenceRefs": [
+        "KFONT-M10-001 COLRv0 plan",
+        "KFONT-M10-002 COLRv1 solid/glyph/colr-glyph",
+        "KFONT-M10-006 PNG bitmap glyph artifacts"
+      ],
+      "requiredEvidenceSatisfied": true,
+      "action": "KeepCurrentGate",
+      "dashboardRow": "Color emoji blend modes",
+      "rationale": "Blend mode color routing for color fonts is partial. COLRv1 composite modes, PNG blend, and SVG blend remain gated. Keep visible until full COLR/bitmap/SVG blend evidence lands."
+    },
+    {
+      "legacyGate": "scaledemoji",
+      "currentArtifact": "SkFont scaledemoji paint/coverage routing",
+      "targetSpec": ".upstream/specs/pure-kotlin-text/04-glyph-representation-and-artifacts.md",
+      "replacementEvidenceRefs": [
+        "KFONT-M10-009 emoji sequence planner",
+        "KFONT-M10-010 color/emoji fixture manifest"
+      ],
+      "requiredEvidenceSatisfied": true,
+      "action": "KeepCurrentGate",
+      "dashboardRow": "scaledemoji pipeline routing",
+      "rationale": "Emoji sequence planning is implemented but the full scaledemoji route through SkFont paint remains on the legacy-compatibility path. Keep gate until the pure Kotlin emoji route has SkFont integration tests."
+    },
+    {
+      "legacyGate": "scaledemoji_rendering",
+      "currentArtifact": "SkFont scaledemoji rendering path",
+      "targetSpec": ".upstream/specs/pure-kotlin-text/05-color-fonts-bitmap-svg-emoji.md",
+      "replacementEvidenceRefs": [
+        "KFONT-M10-009 emoji sequence planner"
+      ],
+      "requiredEvidenceSatisfied": false,
+      "action": "KeepCurrentGate",
+      "dashboardRow": "scaledemoji rendering",
+      "rationale": "Emoji rendering through the pure Kotlin color glyph path needs GPU handoff evidence. Not yet supported in the pure Kotlin rendering pipeline."
+    },
+    {
+      "legacyGate": "dftext",
+      "currentArtifact": "SkFont dftext (Distance Field text) routing",
+      "targetSpec": ".upstream/specs/pure-kotlin-text/04-glyph-representation-and-artifacts.md",
+      "replacementEvidenceRefs": [
+        "KFONT-M11-004 A8 atlas route",
+        "KFONT-M11-010 MaterialKey leakage",
+        "KFONT-M13-004 SkTextBlob typed descriptors"
+      ],
+      "requiredEvidenceSatisfied": false,
+      "action": "KeepCurrentGate",
+      "dashboardRow": "Distance field text routing",
+      "rationale": "CPU SDF glyph artifacts are implemented (PKT-10H) but the GPU dftext route requires GPU A8/SDF handoff, runtime upload, and WGSL sampling evidence that are not yet claimed."
+    },
+    {
+      "legacyGate": "fontations",
+      "currentArtifact": "Fontations comparison/drift path",
+      "targetSpec": ".upstream/specs/pure-kotlin-text/07-validation-conformance-and-drift.md",
+      "replacementEvidenceRefs": [
+        "PKT-05 CFF/CFF2 scaler evidence",
+        "KFONT-M6-007/008/009 shaping fixtures"
+      ],
+      "requiredEvidenceSatisfied": false,
+      "action": "DriftOnly",
+      "dashboardRow": "Fontations comparison (drift-only)",
+      "rationale": "Fontations is an optional external comparison source only, never a normative oracle. Keep as drift-only per spec 07."
+    },
+    {
+      "legacyGate": "fontations_ft_compare",
+      "currentArtifact": "Fontations/FreeType comparison drift path",
+      "targetSpec": ".upstream/specs/pure-kotlin-text/07-validation-conformance-and-drift.md",
+      "replacementEvidenceRefs": [],
+      "requiredEvidenceSatisfied": false,
+      "action": "DriftOnly",
+      "dashboardRow": "Fontations/FreeType comparison (drift-only)",
+      "rationale": "Optional external comparison only. Keep as drift-only per spec 07."
+    },
+    {
+      "legacyGate": "pdf_never_embed",
+      "currentArtifact": "PDF font subset/embedding policy",
+      "targetSpec": ".upstream/specs/pure-kotlin-text/09-migration-from-current-font-pack.md",
+      "replacementEvidenceRefs": [],
+      "requiredEvidenceSatisfied": false,
+      "action": "ExpectedUnsupported",
+      "dashboardRow": "PDF never-embed policy (expected-unsupported)",
+      "rationale": "PDF subset/embedding is adjacent work outside the pure Kotlin font target scope. Keep as expected-unsupported."
+    }
+  ],
+  "nonClaims": [
+    "not-a-support-claim",
+    "retirement-coordination-only",
+    "no-complete-target-support-claim",
+    "no-gpu-text-route-claim"
+  ],
+  "validationCommand": "rtk git diff --check"
+}
