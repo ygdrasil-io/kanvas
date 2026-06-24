@@ -5,7 +5,7 @@
   "unicodeVersion": "16.0.0",
   "sourceTextHashAlgorithm": "sha256-utf16-code-units",
   "sourceDumpRefs": [
-    {"dumpId": "bidi-runs", "dumpSha256": "68aba48094b8a84deebbe92b48fe20b1b5dbfe6e80a28393b9334a8921783a9e"},
+    {"dumpId": "bidi-runs", "dumpSha256": "60514f322709b6dc772731baaf8ef981330c7013c0badaa11ff81169d48b7503"},
     {"dumpId": "script-runs", "dumpSha256": "44996de7238a5b2c880f0ab87e73cdd370d8fcb22af885b409521e935660055e"},
     {"dumpId": "unicode-segments", "dumpSha256": "3b6c162933e64d111fbf6f4115d088e34513b37341f07c8b8e90904a520d8e8f"}
   ],

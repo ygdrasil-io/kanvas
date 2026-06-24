@@ -5773,6 +5773,24 @@ private fun readCFFDictNumber(
                 nextOffset = offsetAfterFirstByte + 1,
             )
         }
+        30 -> {
+            requireCFFDictAvailable(data, offsetAfterFirstByte, 3, section, baseOffset, objectIndex)
+            CFFDictNumberReadResult(
+                value = ((data[offsetAfterFirstByte].toInt() and 0xff) shl 16) or
+                    ((data[offsetAfterFirstByte + 1].toInt() and 0xff) shl 8) or
+                    (data[offsetAfterFirstByte + 2].toInt() and 0xff),
+                nextOffset = offsetAfterFirstByte + 3,
+            )
+        }
+        31 -> {
+            requireCFFDictAvailable(data, offsetAfterFirstByte, 3, section, baseOffset, objectIndex)
+            CFFDictNumberReadResult(
+                value = -((data[offsetAfterFirstByte].toInt() and 0xff) shl 16) -
+                    ((data[offsetAfterFirstByte + 1].toInt() and 0xff) shl 8) -
+                    (data[offsetAfterFirstByte + 2].toInt() and 0xff),
+                nextOffset = offsetAfterFirstByte + 3,
+            )
+        }
         else -> throw CFFParseException(
             diagnosticCode = FontScalerDiagnosticCodes.CFF_DICT_OPERAND_MALFORMED,
             diagnosticDetail = "cff.dict-operand-malformed",
