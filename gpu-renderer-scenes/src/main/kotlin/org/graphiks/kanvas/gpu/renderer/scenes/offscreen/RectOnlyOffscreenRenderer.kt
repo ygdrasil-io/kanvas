@@ -30,6 +30,10 @@ import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneColor
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneCommand
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneFilterKind
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneRect
+import org.graphiks.kanvas.gpu.renderer.geometry.PathTessellator
+import org.graphiks.kanvas.gpu.renderer.geometry.StencilCoverExecutor
+import org.graphiks.kanvas.gpu.renderer.geometry.ConvexFanExecutor
+import org.graphiks.kanvas.gpu.renderer.geometry.isPathConvex
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.textRunRouteUnavailableReason
 
 private const val BYTES_PER_PIXEL: Int = 4
@@ -89,6 +93,7 @@ class RectOnlyOffscreenRenderer {
                 )
                 val diagnostics =
                     baseDiagnostics +
+                        drawPlan.tessellationDiagnostics +
                         scene.runtimeEffectRefusalGateDiagnostics() +
                         scene.a8GlyphAtlasGateDiagnostics() +
                         scene.textResourceBindingGateDiagnostics() +
@@ -300,6 +305,7 @@ internal data class RectOnlyDrawPlan(
     val clipCount: Int = 0,
     val filters: List<RectOnlyFilterNode> = emptyList(),
     val saveLayers: List<RectOnlySaveLayer> = emptyList(),
+    val tessellationDiagnostics: List<String> = emptyList(),
 ) {
     val fillRectCount: Int = fills.count { it.family == "fill-rect" }
     val fillRRectCount: Int = fills.count { it.family == "fill-rrect" }
@@ -478,6 +484,61 @@ internal fun prepareRectOnlyDrawPlan(
         "$sceneId rect-only offscreen render requires at least one FillRect command"
     }
 
+    val tessellationDiagnostics = buildList {
+        commands.forEach { command ->
+            when (command) {
+                is SceneCommand.PathFillStencil -> {
+                    val tessellator = PathTessellator()
+                    val vertices = generateStarVertices(160f, 100f, 80f, 35f, 5)
+                    val pathData = makeLineLoopPath(vertices)
+                    try {
+                        val flat = tessellator.flatten(pathData)
+                        val tri = tessellator.triangulate(flat)
+                        val executor = StencilCoverExecutor()
+                        val stats = executor.execute(tri)
+                        val convex = isPathConvex(flat)
+                        add("pathFillStencil:label=${command.label}")
+                        add("pathFillStencil:vertices=${stats.vertexCount}")
+                        add("pathFillStencil:triangles=${stats.triangleCount}")
+                        add("pathFillStencil:isConvex=$convex")
+                        add("pathFillStencil:stencilPasses=${stats.stencilPassCount}")
+                        add("pathFillStencil:coverPasses=${stats.coverPassCount}")
+                        add("pathFillStencil:totalDraws=${stats.totalDrawCalls}")
+                        addAll(executor.stencilStateDiagnostics())
+                    } catch (e: Exception) {
+                        add("pathFillStencil:error=${e.message}")
+                    }
+                }
+                is SceneCommand.ConvexFanMesh -> {
+                    val tessellator = PathTessellator()
+                    val vertices = generateOctagonVertices(160f, 100f, 80f, command.vertexCount)
+                    val pathData = makeLineLoopPath(vertices)
+                    try {
+                        val flat = tessellator.flatten(pathData)
+                        val tri = tessellator.triangulate(flat)
+                        val executor = ConvexFanExecutor()
+                        val stats = executor.execute(tri)
+                        val convex = isPathConvex(flat)
+                        add("convexFanMesh:label=${command.label}")
+                        add("convexFanMesh:vertices=${stats.vertexCount}")
+                        add("convexFanMesh:triangles=${stats.triangleCount}")
+                        add("convexFanMesh:isConvex=$convex")
+                        add("convexFanMesh:singlePass=${stats.singlePass}")
+                        add("convexFanMesh:drawCalls=${stats.drawCallCount}")
+                        if (convex) {
+                            val stencilExecutor = StencilCoverExecutor()
+                            val stencilStats = stencilExecutor.execute(tri)
+                            addAll(executor.performanceDiagnostics(stats, stencilStats))
+                        }
+                    } catch (e: Exception) {
+                        add("convexFanMesh:error=${e.message}")
+                    }
+                }
+                else -> Unit
+            }
+        }
+    }
+
     return RectOnlyDrawPlan(
         sceneId = sceneId,
         clearColor = commands.filterIsInstance<SceneCommand.Clear>().firstOrNull()?.color
@@ -487,6 +548,7 @@ internal fun prepareRectOnlyDrawPlan(
         clipCount = commands.count { it is SceneCommand.Clip },
         filters = emptyList(),
         saveLayers = emptyList(),
+        tessellationDiagnostics = tessellationDiagnostics,
     )
 }
 
@@ -895,6 +957,15 @@ private fun SceneRect.intersect(other: SceneRect?): SceneRect? {
     val right = minOf(right, other.right)
     val bottom = minOf(bottom, other.bottom)
     return if (right > left && bottom > top) SceneRect(left, top, right, bottom) else null
+}
+
+private fun makeLineLoopPath(vertices: List<Pair<Float, Float>>): org.graphiks.kanvas.gpu.renderer.geometry.PathData {
+    val pts = vertices.map { (x, y) -> org.graphiks.kanvas.gpu.renderer.geometry.Point(x, y) }
+    return org.graphiks.kanvas.gpu.renderer.geometry.PathData(
+        verbs = pts.map { org.graphiks.kanvas.gpu.renderer.geometry.PathVerb.LineTo(it) } +
+            listOf(org.graphiks.kanvas.gpu.renderer.geometry.PathVerb.Close),
+        points = emptyList(),
+    )
 }
 
 private fun SceneRect.isInsideTarget(width: Int, height: Int): Boolean =

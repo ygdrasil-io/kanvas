@@ -66,8 +66,8 @@ data class GpuProductFlagConfig(
         if (pathFillEnabled) {
             facts += GPUCapabilityFact(
                 name = "first_slice.path_fill.native",
-                source = "product-flag",
-                value = "true",
+                source = "product-flags",
+                value = "supported",
                 affectsValidity = true,
                 evidenceLabel = "product-flag:pathFill",
             )

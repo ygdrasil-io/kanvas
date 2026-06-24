@@ -10,3 +10,13 @@ clipCommands=0
 bitmapRectCommands=0
 pathFillStencilCommands=0
 convexFanMeshCommands=1
+convexFanMesh:label=octagon-fill
+convexFanMesh:vertices=9
+convexFanMesh:triangles=7
+convexFanMesh:isConvex=true
+convexFanMesh:singlePass=true
+convexFanMesh:drawCalls=1
+convex-fan:drawCalls=1 stencilCoverPasses=2 speedup=1x fewer passes
+convex-fan:singlePass=true
+convex-fan:triangles=7
+convex-fan:vertices=9

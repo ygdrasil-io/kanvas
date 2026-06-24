@@ -35,7 +35,7 @@ class ConvexFanExecutorTest {
         val fanStats = fanExecutor.execute(tri)
 
         val stencilExecutor = StencilCoverExecutor()
-        val stencilStats = stencilExecutor.execute(tri, Point(0f, 0f))
+        val stencilStats = stencilExecutor.execute(tri)
 
         assertTrue(fanStats.drawCallCount < stencilStats.totalDrawCalls,
             "Convex fan should use fewer draw calls than stencil-cover")

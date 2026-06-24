@@ -17,8 +17,8 @@ data class PathData(
 
 /** Sealed path verb hierarchy: MoveTo, LineTo, QuadTo, CubicTo, Close. */
 sealed interface PathVerb {
-    /** Moves the current contour start without drawing. */
-    data object MoveTo : PathVerb
+    /** Moves the current contour start to the given point without drawing. */
+    data class MoveTo(val p: Point) : PathVerb
     /** Draws a straight line segment to the given point. */
     data class LineTo(val p: Point) : PathVerb
     /** Draws a quadratic bezier curve to p using control point c. */
@@ -66,7 +66,8 @@ class PathTessellator(
         for (verb in path.verbs) {
             when (verb) {
                 is PathVerb.MoveTo -> {
-                    contourStart = current
+                    current = verb.p
+                    contourStart = verb.p
                     contourStartSet = true
                 }
                 is PathVerb.LineTo -> {
@@ -80,6 +81,7 @@ class PathTessellator(
                     }
                     val next = verb.p
                     if (next != current) {
+                        checkBudget(result)
                         result.add(next)
                         current = next
                     }
@@ -92,10 +94,7 @@ class PathTessellator(
                     if (result.isEmpty()) {
                         result.add(current)
                     }
-                    val segments = quadraticSegments(current, verb.c, verb.p)
-                    for (pt in segments.drop(1)) {
-                        result.add(pt)
-                    }
+                    emitQuadraticSegments(current, verb.c, verb.p, result)
                     current = verb.p
                 }
                 is PathVerb.CubicTo -> {
@@ -106,27 +105,56 @@ class PathTessellator(
                     if (result.isEmpty()) {
                         result.add(current)
                     }
-                    val segments = cubicSegments(current, verb.c1, verb.c2, verb.p)
-                    for (pt in segments.drop(1)) {
-                        result.add(pt)
-                    }
+                    emitCubicSegments(current, verb.c1, verb.c2, verb.p, result)
                     current = verb.p
                 }
                 is PathVerb.Close -> {
                     if (current != contourStart) {
+                        checkBudget(result)
                         result.add(contourStart)
                     }
                     current = contourStart
                 }
             }
-            if (result.size > maxVertices) {
-                throw IllegalStateException(
-                    "Path flattened to ${result.size} vertices, exceeds budget of $maxVertices"
-                )
-            }
         }
 
         return result
+    }
+
+    private fun checkBudget(result: List<Point>) {
+        if (result.size > maxVertices) {
+            throw IllegalStateException(
+                "Path flattened to ${result.size} vertices, exceeds budget of $maxVertices"
+            )
+        }
+    }
+
+    private fun emitQuadraticSegments(p0: Point, p1: Point, p2: Point, result: MutableList<Point>) {
+        val steps = quadraticStepCount(p0, p1, p2)
+        for (i in 1..steps) {
+            val t = i.toFloat() / steps
+            val x = (1 - t) * (1 - t) * p0.x + 2 * (1 - t) * t * p1.x + t * t * p2.x
+            val y = (1 - t) * (1 - t) * p0.y + 2 * (1 - t) * t * p1.y + t * t * p2.y
+            checkBudget(result)
+            result.add(Point(x, y))
+        }
+    }
+
+    private fun emitCubicSegments(p0: Point, p1: Point, p2: Point, p3: Point, result: MutableList<Point>) {
+        val steps = cubicStepCount(p0, p1, p2, p3)
+        for (i in 1..steps) {
+            val t = i.toFloat() / steps
+            val x = (1 - t).let { it * it * it } * p0.x +
+                3 * (1 - t) * (1 - t) * t * p1.x +
+                3 * (1 - t) * t * t * p2.x +
+                t * t * t * p3.x
+            val y = (1 - t).let { it * it * it } * p0.y +
+                3 * (1 - t) * (1 - t) * t * p1.y +
+                3 * (1 - t) * t * t * p2.y +
+                t * t * t * p3.y
+            checkBudget(result)
+            result.add(Point(x, y))
+        }
     }
 
     /**
@@ -150,38 +178,6 @@ class PathTessellator(
         }
 
         return TriangleList(vertices = points, indices = indices)
-    }
-
-    private fun quadraticSegments(p0: Point, p1: Point, p2: Point): List<Point> {
-        val result = mutableListOf(p0)
-        val steps = quadraticStepCount(p0, p1, p2)
-        for (i in 1 until steps) {
-            val t = i.toFloat() / steps
-            val x = (1 - t) * (1 - t) * p0.x + 2 * (1 - t) * t * p1.x + t * t * p2.x
-            val y = (1 - t) * (1 - t) * p0.y + 2 * (1 - t) * t * p1.y + t * t * p2.y
-            result.add(Point(x, y))
-        }
-        result.add(p2)
-        return result
-    }
-
-    private fun cubicSegments(p0: Point, p1: Point, p2: Point, p3: Point): List<Point> {
-        val result = mutableListOf(p0)
-        val steps = cubicStepCount(p0, p1, p2, p3)
-        for (i in 1 until steps) {
-            val t = i.toFloat() / steps
-            val x = (1 - t).let { it * it * it } * p0.x +
-                3 * (1 - t) * (1 - t) * t * p1.x +
-                3 * (1 - t) * t * t * p2.x +
-                t * t * t * p3.x
-            val y = (1 - t).let { it * it * it } * p0.y +
-                3 * (1 - t) * (1 - t) * t * p1.y +
-                3 * (1 - t) * t * t * p2.y +
-                t * t * t * p3.y
-            result.add(Point(x, y))
-        }
-        result.add(p3)
-        return result
     }
 
     private fun quadraticStepCount(p0: Point, p1: Point, p2: Point): Int {

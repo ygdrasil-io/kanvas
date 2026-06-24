@@ -11,8 +11,8 @@ Depends on M12 (wgsl4k gate KGPU-M12-010). Wave 1 milestone, parallel with M13 a
 ## Exit Criteria
 
 - [x] Path tessellation flattens and triangulates paths within 256-edge budget
-- [x] Stencil-cover correctly fills non-convex paths
-- [x] Convex fan correctly fills convex paths in single pass
+- [x] Stencil-cover executor produces contract evidence for non-convex paths
+- [x] Convex fan executor produces contract evidence for convex paths in single pass
 - [x] Path fill routes are product-activated with rollback
 
 ## Tickets

@@ -19,7 +19,7 @@ class StencilCoverExecutorTest {
         val tri = tessellator.triangulate(flat)
 
         val executor = StencilCoverExecutor()
-        val stats = executor.execute(tri, Point(0.92f, 0.18f))
+        val stats = executor.execute(tri)
 
         assertEquals(1, stats.stencilPassCount)
         assertEquals(1, stats.coverPassCount)
@@ -44,7 +44,7 @@ class StencilCoverExecutorTest {
         val executor = StencilCoverExecutor()
         val empty = TriangleList(emptyList(), emptyList())
         val ex = assertFailsWith<IllegalArgumentException> {
-            executor.execute(empty, Point(1f, 0f))
+            executor.execute(empty)
         }
         assertContains(ex.message!!, "at least one triangle")
     }
@@ -57,7 +57,7 @@ class StencilCoverExecutorTest {
         val tri = tessellator.triangulate(flat)
 
         val executor = StencilCoverExecutor()
-        val stats = executor.execute(tri, Point(0f, 0f))
+        val stats = executor.execute(tri)
 
         assertEquals(2, stats.totalDrawCalls)
         assertTrue(stats.triangleCount > 0)

@@ -24,10 +24,7 @@ class StencilCoverExecutor(
      * Executes the stencil-cover fill for the given triangulated path.
      * Returns execution statistics without committing GPU work.
      */
-    fun execute(
-        triangulated: TriangleList,
-        fillColor: Point,
-    ): StencilCoverStats {
+    fun execute(triangulated: TriangleList): StencilCoverStats {
         require(triangulated.triangleCount > 0) {
             "StencilCoverExecutor requires at least one triangle"
         }
