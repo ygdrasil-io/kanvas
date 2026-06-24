@@ -47,28 +47,18 @@ class RenderGpuRendererSceneOffscreenMainTest {
     }
 
     @Test
-    fun `receipt text run writes stable text route unavailable report under scene directory`() {
+    fun `receipt text run renders through updated faithful subset`() {
         val root = Files.createTempDirectory("gpu-renderer-scenes-offscreen-main")
 
         renderGpuRendererSceneOffscreen(arrayOf("receipt-text-run", root.toString()))
 
         val sceneOutput = root.resolve("receipt-text-run")
         val runJson = sceneOutput.resolve("run.json").readText()
-        val diagnostics = sceneOutput.resolve("diagnostics.txt").readText()
         assertContains(runJson, "\"sceneId\": \"receipt-text-run\"")
-        assertContains(runJson, "\"status\": \"not-yet-rendered\"")
-        assertContains(runJson, "\"productRefusal\": false")
-        assertContains(runJson, "\"imagePath\": null")
-        assertContains(runJson, "unsupported.text.draw_run_route_unavailable")
-        assertContains(runJson, "commandFamily=text-run")
-        assertContains(runJson, "fontFamily=Liberation Sans")
-        assertContains(runJson, "glyphRoute=font.glyph.outline-path")
-        assertContains(runJson, "lowerLevelTextRoutesAvailable=font.glyph.outline-path,webgpu.text.glyph-atlas.simple-latin")
-        assertContains(runJson, "sceneRoutePromoted=false")
-        assertContains(runJson, "nonClaims=no fake glyph substitute,no CPU-rendered text texture,no system font fallback,no broad shaping fallback emoji SDF LCD Kadre-windowed claim")
-        assertContains(diagnostics, "fallbackReason=unsupported.text.draw_run_route_unavailable")
-        assertFalse(runJson.contains("runner-subset:receipt-text-run"))
-        assertFalse(sceneOutput.resolve("render.png").exists())
+        assertTrue(
+            runJson.contains("\"status\": \"rendered\"") || runJson.contains("webgpu-context-unavailable"),
+            "Expected rendered status or webgpu-context-unavailable fallback, got: $runJson",
+        )
     }
 
     @Test
@@ -100,9 +90,7 @@ class RenderGpuRendererSceneOffscreenMainTest {
     fun `catalogued richer scenes stay not yet rendered offscreen until the faithful subset grows`() {
         val root = Files.createTempDirectory("gpu-renderer-scenes-offscreen-main")
         val unsupportedScenes = listOf(
-            "texture-swatch-board" to listOf("bitmap-rect"),
             "layered-shadow-card" to listOf("save-layer", "filter-node"),
-            "runtime-effect-color-tile" to listOf("runtime-effect"),
             "mesh-ribbon" to listOf("vertices"),
         )
 
@@ -213,21 +201,6 @@ class RenderGpuRendererSceneOffscreenMainTest {
     }
 
     @Test
-    fun `rect only command preparation rejects bitmap command families outside the faithful subset`() {
-        val failure = assertFailsWith<IllegalArgumentException> {
-            prepareRectOnlyDrawPlan(
-                sceneId = "bitmap-marker-only",
-                commands = listOf(SceneCommand.BitmapRect("marker")),
-                width = 320,
-                height = 200,
-            )
-        }
-
-        assertContains(failure.message ?: "", "supports only clear, fill-rect, fill-rrect, linear-gradient-rect, radial-gradient-rect, sweep-gradient-rect, clip, path-fill-stencil, and convex-fan-mesh command families")
-        assertContains(failure.message ?: "", "bitmap-rect")
-    }
-
-    @Test
     fun `rect only command preparation rejects filter command families outside the faithful subset`() {
         val failure = assertFailsWith<IllegalArgumentException> {
             prepareRectOnlyDrawPlan(
@@ -238,38 +211,8 @@ class RenderGpuRendererSceneOffscreenMainTest {
             )
         }
 
-        assertContains(failure.message ?: "", "supports only clear, fill-rect, fill-rrect, linear-gradient-rect, radial-gradient-rect, sweep-gradient-rect, clip, path-fill-stencil, and convex-fan-mesh command families")
+        assertContains(failure.message ?: "", "supports only clear, fill-rect, fill-rrect, linear-gradient-rect, radial-gradient-rect, sweep-gradient-rect, clip, path-fill-stencil, convex-fan-mesh, bitmap-rect, save-layer, runtime-effect, and text-run command families")
         assertContains(failure.message ?: "", "filter-node")
-    }
-
-    @Test
-    fun `rect only command preparation rejects save layer command families outside the faithful subset`() {
-        val failure = assertFailsWith<IllegalArgumentException> {
-            prepareRectOnlyDrawPlan(
-                sceneId = "save-layer-marker-only",
-                commands = listOf(SceneCommand.SaveLayer("marker")),
-                width = 320,
-                height = 200,
-            )
-        }
-
-        assertContains(failure.message ?: "", "supports only clear, fill-rect, fill-rrect, linear-gradient-rect, radial-gradient-rect, sweep-gradient-rect, clip, path-fill-stencil, and convex-fan-mesh command families")
-        assertContains(failure.message ?: "", "save-layer")
-    }
-
-    @Test
-    fun `rect only command preparation rejects runtime effect command families outside the faithful subset`() {
-        val failure = assertFailsWith<IllegalArgumentException> {
-            prepareRectOnlyDrawPlan(
-                sceneId = "runtime-effect-marker-only",
-                commands = listOf(SceneCommand.RuntimeEffectTile("marker")),
-                width = 320,
-                height = 200,
-            )
-        }
-
-        assertContains(failure.message ?: "", "supports only clear, fill-rect, fill-rrect, linear-gradient-rect, radial-gradient-rect, sweep-gradient-rect, clip, path-fill-stencil, and convex-fan-mesh command families")
-        assertContains(failure.message ?: "", "runtime-effect")
     }
 
     @Test
@@ -283,31 +226,8 @@ class RenderGpuRendererSceneOffscreenMainTest {
             )
         }
 
-        assertContains(failure.message ?: "", "supports only clear, fill-rect, fill-rrect, linear-gradient-rect, radial-gradient-rect, sweep-gradient-rect, clip, path-fill-stencil, and convex-fan-mesh command families")
+        assertContains(failure.message ?: "", "supports only clear, fill-rect, fill-rrect, linear-gradient-rect, radial-gradient-rect, sweep-gradient-rect, clip, path-fill-stencil, convex-fan-mesh, bitmap-rect, save-layer, runtime-effect, and text-run command families")
         assertContains(failure.message ?: "", "vertices")
-    }
-
-    @Test
-    fun `rect only command preparation rejects runtime effect scenes before descriptor-specific validation`() {
-        val failure = assertFailsWith<IllegalArgumentException> {
-            prepareRectOnlyDrawPlan(
-                sceneId = "runtime-effect-wrong-descriptor",
-                commands = listOf(
-                    SceneCommand.RuntimeEffectTile(
-                        label = "wrong-runtime-effect",
-                        rect = SceneRect(16f, 16f, 96f, 96f),
-                        stableId = "runtime.spiral_rt",
-                        wgslImplementationId = "wgsl/runtime_spiral_rt",
-                        uniformColor = SceneColor.blue(),
-                    ),
-                ),
-                width = 320,
-                height = 200,
-            )
-        }
-
-        assertContains(failure.message ?: "", "supports only clear, fill-rect, fill-rrect, linear-gradient-rect, radial-gradient-rect, sweep-gradient-rect, clip, path-fill-stencil, and convex-fan-mesh command families")
-        assertContains(failure.message ?: "", "runtime-effect")
     }
 
     @Test
@@ -348,7 +268,7 @@ class RenderGpuRendererSceneOffscreenMainTest {
             )
         }
 
-        assertContains(failure.message ?: "", "supports only clear, fill-rect, fill-rrect, linear-gradient-rect, radial-gradient-rect, sweep-gradient-rect, clip, path-fill-stencil, and convex-fan-mesh command families")
+        assertContains(failure.message ?: "", "supports only clear, fill-rect, fill-rrect, linear-gradient-rect, radial-gradient-rect, sweep-gradient-rect, clip, path-fill-stencil, convex-fan-mesh, bitmap-rect, save-layer, runtime-effect, and text-run command families")
         assertContains(failure.message ?: "", "vertices")
     }
 
@@ -626,8 +546,8 @@ class RenderGpuRendererSceneOffscreenMainTest {
         assertContains(runJson, "\"status\": \"${OffscreenRunStatus.NotYetRendered.wireName}\"")
         assertContains(runJson, "\"productRefusal\": false")
         assertContains(runJson, "\"imagePath\": null")
-        assertContains(runJson, "supports only clear, fill-rect, fill-rrect, linear-gradient-rect, radial-gradient-rect, sweep-gradient-rect, clip, path-fill-stencil, and convex-fan-mesh command families")
-        assertContains(diagnostics, "supports only clear, fill-rect, fill-rrect, linear-gradient-rect, radial-gradient-rect, sweep-gradient-rect, clip, path-fill-stencil, and convex-fan-mesh command families")
+        assertContains(runJson, "supports only clear, fill-rect, fill-rrect, linear-gradient-rect, radial-gradient-rect, sweep-gradient-rect, clip, path-fill-stencil, convex-fan-mesh, bitmap-rect, save-layer, runtime-effect, and text-run command families")
+        assertContains(diagnostics, "supports only clear, fill-rect, fill-rrect, linear-gradient-rect, radial-gradient-rect, sweep-gradient-rect, clip, path-fill-stencil, convex-fan-mesh, bitmap-rect, save-layer, runtime-effect, and text-run command families")
         unsupportedFamilies.forEach { family ->
             assertContains(runJson, family, ignoreCase = false, message = sceneId)
             assertContains(diagnostics, family, ignoreCase = false, message = sceneId)

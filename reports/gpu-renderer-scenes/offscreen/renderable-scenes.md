@@ -8,23 +8,28 @@ scene in `GPURendererSceneRegistry.scenes`.
 Scope:
 
 - Catalogued executable scenes attempted: 77
-- Fresh `rendered` reports: 22
-- Fresh `not-yet-rendered` reports: 55
+- Fresh `rendered` reports: 31
+- Fresh `not-yet-rendered` reports: 46
 - Render backend: `webgpu-offscreen`
 
 Rendered scenes:
 
 - `activation-candidate-boundary-board`
+- `bitmap-sampler-matrix`
 - `blend-mode-strip`
+- `blur-radius-ladder`
 - `cache-frame-budget-strip`
 - `cache-pressure-deck`
 - `cache-source-ledger-board`
+- `color-matrix-filter`
 - `dash-pattern-ladder`
+- `dst-read-strategy`
 - `filter-dag-refusal-board`
 - `filtered-photo-chip`
 - `first-route-rollback-panel`
 - `frame-gate-blocker-board`
 - `frame-gate-m23-baseline`
+- `glyph-atlas-strip`
 - `gradient-tile-mode-boundary`
 - `layer-filter-chain-board`
 - `legacy-route-comparison`
@@ -34,14 +39,18 @@ Rendered scenes:
 - `pipeline-cache-telemetry-review`
 - `pm-evidence-m23-bundle`
 - `product-route-smoke-lanes`
+- `runtime-effect-child`
+- `runtime-effect-uniform`
+- `savelayer-isolated`
+- `sdf-glyph-scale`
 - `solid-card-stack`
 - `stroke-cap-join`
+- `tile-mode-strip`
 - `translucent-card-overlap`
 
 Non-claims:
 
-- The 55 `not-yet-rendered` reports are not product support claims.
-- They preserve current runner limits for command families outside the faithful
-  offscreen subset, such as rrect/gradient, bitmap, saveLayer/filter,
-  runtime-effect, text, and mesh/vertices scenes.
-- New M16-M23 scenes with FillRect-only commands are now rendered.
+- The 46 `not-yet-rendered` reports are not product support claims.
+- M24 expands the faithful offscreen subset to include bitmap-rect, blur-rect,
+  color-matrix-rect, stroke-rect, text-run, runtime-effect, and save-layer
+  command families with procedural WGSL rendering.

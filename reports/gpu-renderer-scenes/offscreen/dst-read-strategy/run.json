@@ -9,5 +9,5 @@
   "height": 200,
   "byteCount": 256000,
   "nonTransparentPixels": 64000,
-  "diagnostics": ["rendered dst-read-strategy via WebGPU offscreen","adapter=Apple M2 Max","clearCommands=1","fillRectCommands=2","fillRRectCommands=0","linearGradientRectCommands=0","radialGradientRectCommands=0","sweepGradientRectCommands=0","clipCommands=0","bitmapRectCommands=0","pathFillStencilCommands=0","convexFanMeshCommands=0"]
+  "diagnostics": ["rendered dst-read-strategy via WebGPU offscreen","adapter=Apple M2 Max","clearCommands=1","fillRectCommands=2","fillRRectCommands=0","linearGradientRectCommands=0","radialGradientRectCommands=0","sweepGradientRectCommands=0","clipCommands=0","bitmapRectCommands=0","blurRectCommands=0","colorMatrixRectCommands=0","strokeRectCommands=0","textRunCommands=0","saveLayerRectCommands=0","pathFillStencilCommands=0","convexFanMeshCommands=0"]
 }
