@@ -1,7 +1,7 @@
 ---
 id: KGPU-M15-001
 title: "Add path tessellation: flatten + fan triangulation -> WebGPU vertex buffer"
-status: proposed
+status: done
 milestone: M15
 priority: P0
 owner_area: geometry-passes
@@ -83,6 +83,7 @@ rtk ./gradlew --no-daemon :gpu-renderer:test --tests '*PathTessellat*'
 ## Status Notes
 
 - `proposed`: Initial ticket.
+- `done`: Implemented PathTessellator with adaptive curve flattening (quad/cubic), fan triangulation, 256-vertex budget enforcement, and KDoc documentation. 12 unit tests covering circle, star, empty, budget, quad/cubic paths, and edge cases all pass.
 
 ## Linear Labels
 

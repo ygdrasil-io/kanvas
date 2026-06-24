@@ -1,7 +1,7 @@
 ---
 id: KGPU-M15-003
 title: "Add convex fan execution: single-pass analytic AA with triangle list"
-status: proposed
+status: done
 milestone: M15
 priority: P0
 owner_area: geometry-passes
@@ -82,6 +82,7 @@ rtk ./gradlew --no-daemon :gpu-renderer:test --tests '*ConvexFan*'
 ## Status Notes
 
 - `proposed`: Initial ticket.
+- `done`: Implemented ConvexFanExecutor (single-pass analytic AA), isPathConvex function (cross product sign consistency), and 7 unit tests covering circle fill, performance comparison, convexity detection (rectangle, star, octagon), and empty refusal.
 
 ## Linear Labels
 
