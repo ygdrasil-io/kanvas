@@ -15258,12 +15258,12 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
         val commandId = gpuRendererShadowCommandId++
         val transform = when {
             ctm.isIdentity -> GpuRendererShadowTransform.Identity
-            ctm.isTranslate -> GpuRendererShadowTransform.Translate(
-                dx = ctm[SkMatrix.kMTransX],
-                dy = ctm[SkMatrix.kMTransY],
+            ctm.isTranslate() -> GpuRendererShadowTransform.Translate(
+                dx = ctm.getTranslateX(),
+                dy = ctm.getTranslateY(),
             )
-            ctm.hasPerspective -> GpuRendererShadowTransform.Perspective
-            !ctm.isInvertable -> GpuRendererShadowTransform.Singular
+            ctm.hasPerspective() -> GpuRendererShadowTransform.Perspective
+            ctm.invert() == null -> GpuRendererShadowTransform.Singular
             else -> GpuRendererShadowTransform.Identity
         }
         val fillRule = when (path.fillType) {
