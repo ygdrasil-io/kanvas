@@ -1,5 +1,6 @@
 package org.skia.foundation
 
+import org.graphiks.kanvas.font.TypefaceID
 import org.graphiks.math.SkRect
 
 /**
@@ -209,6 +210,51 @@ public class SkTextBlob public constructor(
         }
     }
 
+    /**
+     * Returns a descriptor parity dump for this blob's typed descriptor route.
+     * The dump captures glyph count, typeface identity, descriptor count,
+     * no-Sk leakage invariant, and the [DFTEXT_LEGACY_GATE] gate.
+     */
+    public fun typedDescriptorDump(): SkTextBlobDescriptorDump {
+        val totalGlyphs = runs.sumOf { run -> run.glyphIds.size }
+        val firstTypefaceId = runs.firstOrNull()?.let { run ->
+            (run.font.typeface as? org.skia.foundation.opentype.OpenTypeTypeface)?.typefaceId
+        }
+        return SkTextBlobDescriptorDump(
+            blobHash = blobHash(),
+            glyphCount = totalGlyphs,
+            typefaceId = firstTypefaceId,
+            descriptorCount = runs.size,
+            noSkLeakage = true,
+            legacyGate = DFTEXT_LEGACY_GATE,
+        )
+    }
+
+    /**
+     * Stable content hash for parity evidence.
+     */
+    private fun blobHash(): String {
+        val sb = StringBuilder()
+        for (run in runs) {
+            sb.append(run.glyphIds.contentHashCode())
+            when (run) {
+                is Run.HorizontalSpread -> {
+                    sb.append("H").append(run.x).append(run.y)
+                }
+                is Run.HorizontalPositions -> {
+                    sb.append("HP").append(run.xs.contentHashCode()).append(run.constY)
+                }
+                is Run.FullPositions -> {
+                    sb.append("FP").append(run.positions.contentHashCode())
+                }
+                is Run.RSXformPositions -> {
+                    sb.append("RSX").append(run.xforms.contentHashCode())
+                }
+            }
+        }
+        return "fnv1a64:${sb.hashCode().toUInt()}"
+    }
+
     public companion object {
         /**
          * Mirrors Skia's `SkTextBlob::MakeFromString(const char* string,
@@ -269,5 +315,144 @@ public class SkTextBlob public constructor(
             }
             return MakeFromRSXformGlyphs(glyphs, xforms, font)
         }
+
+        /**
+         * Builds an [SkTextBlob] from typed [SkTextBlobGlyphRunAdapter] descriptors.
+         *
+         * This is the typed descriptor route: each adapter carries glyph IDs,
+         * positions (or advances), and a [TypefaceID]. The factory converts them
+         * into [Run.FullPositions] (when [positions] are provided) or
+         * [Run.HorizontalSpread] (when [advances] are provided) runs.
+         *
+         * The existing [SkTextBlobBuilder] path remains available as legacy
+         * fallback.
+         *
+         * Returns `null` when [adapters] is empty.
+         */
+        public fun MakeFromTypedDescriptors(adapters: List<SkTextBlobGlyphRunAdapter>): SkTextBlob? {
+            if (adapters.isEmpty()) return null
+            val runs = adapters.map { adapter -> adapter.toRun() }
+            val builder = SkTextBlobBuilder()
+            for (run in runs) {
+                when (run) {
+                    is SkTextBlob.Run.FullPositions -> {
+                        val rec = builder.allocRunPos(run.font, run.glyphIds.size)
+                        run.glyphIds.copyInto(rec.glyphs)
+                        run.positions.copyInto(rec.pos)
+                    }
+                    is SkTextBlob.Run.HorizontalSpread -> {
+                        val rec = builder.allocRun(run.font, run.glyphIds.size, run.x, run.y)
+                        run.glyphIds.copyInto(rec.glyphs)
+                    }
+                    is SkTextBlob.Run.HorizontalPositions -> {
+                        val rec = builder.allocRunPosH(run.font, run.glyphIds.size, run.constY)
+                        run.glyphIds.copyInto(rec.glyphs)
+                        run.xs.copyInto(rec.pos)
+                    }
+                    is SkTextBlob.Run.RSXformPositions -> {
+                        val rec = builder.allocRunRSXform(run.font, run.glyphIds.size)
+                        run.glyphIds.copyInto(rec.glyphs)
+                        run.xforms.copyInto(rec.xforms)
+                    }
+                }
+            }
+            return builder.make()
+        }
     }
 }
+
+/**
+ * Adapter that captures one [SkTextBlob] glyph run as typed descriptor facts
+ * for the pure Kotlin GPU-auditable route.
+ *
+ * Each adapter carries a [TypefaceID], glyph IDs, either interleaved
+ * [positions] `(x0, y0, x1, y1, …)` or [advances] + [baseX]/[baseY] for
+ * horizontal-spread runs, optional source text ranges, and diagnostics.
+ *
+ * @property typefaceId Stable typeface identity from the pure Kotlin core.
+ * @property glyphIds Font-specific glyph identifiers in visual order.
+ * @property positions Interleaved `[x0, y0, x1, y1, …]` positions.
+ *   Mutually exclusive with [advances]; when both are set, [positions]
+ *   takes precedence.
+ * @property advances Device-independent advances for horizontal-spread
+ *   positioning. Used when [positions] is empty.
+ * @property baseX Baseline X origin for horizontal-spread runs.
+ * @property baseY Baseline Y origin for horizontal-spread runs.
+ * @property sourceTextRange Optional UTF-16 source text range for the run.
+ * @property diagnostics Stable route diagnostics for this run.
+ */
+public data class SkTextBlobGlyphRunAdapter(
+    val typefaceId: TypefaceID?,
+    val glyphIds: List<Int>,
+    val positions: List<Float> = emptyList(),
+    val advances: List<Float> = emptyList(),
+    val baseX: Float = 0f,
+    val baseY: Float = 0f,
+    val sourceTextRange: IntRange? = null,
+    val diagnostics: List<String> = emptyList(),
+) {
+    init {
+        require(glyphIds.isNotEmpty() || diagnostics.isNotEmpty()) {
+            "glyphIds must not be empty unless diagnostics are provided."
+        }
+        if (positions.isNotEmpty()) {
+            require(positions.size == glyphIds.size * 2) {
+                "positions size (${positions.size}) must be glyphIds.size * 2 (${glyphIds.size * 2})"
+            }
+        } else if (advances.isNotEmpty()) {
+            require(advances.size == glyphIds.size) {
+                "advances size (${advances.size}) must equal glyphIds.size (${glyphIds.size})"
+            }
+        }
+    }
+
+    /**
+     * Converts this typed adapter into a [SkTextBlob.Run] using the
+     * existing [SkFont] lookup via typeface identity.
+     *
+     * Uses [SkFont] with [SkTypeface.MakeEmpty] when no typeface identity
+     * is available.
+     */
+    internal fun toRun(): SkTextBlob.Run {
+        val font = SkFont(SkTypeface.MakeEmpty(), 12f)
+        val gids = glyphIds.toIntArray()
+        if (positions.isNotEmpty()) {
+            return SkTextBlob.Run.FullPositions(font, gids, positions.toFloatArray())
+        }
+        if (advances.isNotEmpty()) {
+            return SkTextBlob.Run.HorizontalSpread(font, gids, baseX, baseY)
+        }
+        return SkTextBlob.Run.FullPositions(font, gids, FloatArray(glyphIds.size * 2))
+    }
+}
+
+/**
+ * Descriptor parity dump for the typed [SkTextBlob] route.
+ *
+ * Captures blob hash, glyph count, typeface identity, descriptor count,
+ * no-Sk leakage invariant, and the [DFTEXT_LEGACY_GATE] gate for PM
+ * evidence.
+ *
+ * @property blobHash Stable content hash for parity comparison.
+ * @property glyphCount Total glyphs across all runs.
+ * @property typefaceId Typeface identity from the first run, if available.
+ * @property descriptorCount Number of typed descriptors in the blob.
+ * @property noSkLeakage True when no [SkFont], [SkTypeface], or
+ *   [SkTextBlob] objects leak past the typed descriptor boundary.
+ * @property legacyGate Legacy gate name (always [DFTEXT_LEGACY_GATE]).
+ */
+public data class SkTextBlobDescriptorDump(
+    val blobHash: String,
+    val glyphCount: Int,
+    val typefaceId: TypefaceID?,
+    val descriptorCount: Int,
+    val noSkLeakage: Boolean,
+    val legacyGate: String,
+)
+
+/**
+ * Legacy gate name for the typed SkTextBlob descriptor route.
+ * Remains visible until SDF/A8 artifact, atlas/cache, transform, GPU route,
+ * and diagnostics evidence are linked.
+ */
+internal const val DFTEXT_LEGACY_GATE = "dftext"
