@@ -524,57 +524,6 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
 }
 """
 
-        val BITMAP_SHADER_WRAPPER_WGSL: String = """
-// Real UV functions from BitmapShaderSnippet.kt (fragment:bitmap_shader:v1)
-fn bitmap_uv_clamp(uv: vec2<f32>) -> vec2<f32> { return clamp(uv, vec2(0.0, 0.0), vec2(1.0, 1.0)); }
-fn bitmap_uv_repeat(uv: vec2<f32>) -> vec2<f32> { return fract(uv); }
-fn bitmap_uv_mirror(uv: vec2<f32>) -> vec2<f32> {
-    let half = uv * 0.5;
-    let t = half - floor(half);
-    return 1.0 - 2.0 * abs(t - 0.5);
-}
-fn bitmap_uv_decal(uv: vec2<f32>) -> vec2<f32> { return uv; }
-
-// Procedural test texture tile (replaces texture binding + textureSample)
-fn sample_test_tile(uv: vec2<f32>) -> vec4<f32> {
-    let grid = floor(uv * 4.0);
-    let checker = f32((i32(grid.x) + i32(grid.y)) % 2);
-    return mix(vec4<f32>(0.1, 0.1, 0.9, 1.0), vec4<f32>(0.9, 0.5, 0.1, 1.0), checker);
-}
-
-// Real shader entry points using procedural texture data
-fn bitmap_shader_clamp(uv: vec2<f32>) -> vec4<f32> { return sample_test_tile(bitmap_uv_clamp(uv)); }
-fn bitmap_shader_repeat(uv: vec2<f32>) -> vec4<f32> { return sample_test_tile(bitmap_uv_repeat(uv)); }
-fn bitmap_shader_mirror(uv: vec2<f32>) -> vec4<f32> { return sample_test_tile(bitmap_uv_mirror(uv)); }
-fn bitmap_shader_decal(uv: vec2<f32>) -> vec4<f32> {
-    let inside = all(uv >= vec2(0.0, 0.0)) && all(uv <= vec2(1.0, 1.0));
-    if (inside) { return sample_test_tile(uv); }
-    return vec4<f32>(0.0, 0.0, 0.0, 0.0);
-}
-
-fn bitmap_procedural(pos: vec4f, color: vec4f) -> vec4f {
-    let uv = vec2f(pos.x / 320.0, pos.y / 200.0);
-    return bitmap_shader_clamp(uv);
-}
-"""
-
-        val TEXT_ATLAS_WRAPPER_WGSL: String = """
-// Real A8 atlas sampling concept from TextAtlasSnippet.kt (fragment:text_atlas_a8:v1)
-// Procedural glyph shape (replaces texture binding + textureSample)
-fn procedural_glyph_alpha(uv: vec2<f32>) -> f32 {
-    let dx = abs(uv.x - 0.5);
-    let dy = abs(uv.y - 0.5);
-    let shape = 1.0 - smoothstep(0.3, 0.55, sqrt(dx * dx + dy * dy));
-    return shape;
-}
-
-fn text_procedural(pos: vec4f, color: vec4f) -> vec4f {
-    let uv = vec2f(pos.x / 320.0, pos.y / 200.0);
-    let a8 = procedural_glyph_alpha(uv);
-    return vec4f(color.rgb, color.a * a8);
-}
-"""
-
         val LAYER_COMPOSITE_WRAPPER_WGSL: String = """
 // Real srcOver compositing logic from LayerCompositeSnippet.kt (fragment:layer_composite:v1)
 fn procedural_layer_color(uv: vec2<f32>) -> vec4<f32> {
