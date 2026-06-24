@@ -1680,6 +1680,24 @@ class GPURendererSceneRegistryTest {
                 ),
                 roadmapLinks = listOf(RoadmapExpectation("M10")),
             ),
+            SceneExpectationRow(
+                sceneId = "rounded-rect-solids",
+                tags = setOf(SceneTag.RRect),
+                commandFamilies = listOf("clear", "fill-rrect", "fill-rrect", "fill-rrect"),
+                roadmapLinks = listOf(RoadmapExpectation("M10")),
+            ),
+            SceneExpectationRow(
+                sceneId = "linear-gradient-lanes",
+                tags = setOf(SceneTag.Rect, SceneTag.Gradient),
+                commandFamilies = listOf("clear", "linear-gradient-rect", "linear-gradient-rect", "linear-gradient-rect"),
+                roadmapLinks = listOf(RoadmapExpectation("M10")),
+            ),
+            SceneExpectationRow(
+                sceneId = "scissor-overlay",
+                tags = setOf(SceneTag.Rect, SceneTag.Clip),
+                commandFamilies = listOf("clear", "clip", "fill-rect", "fill-rect", "fill-rect"),
+                roadmapLinks = listOf(RoadmapExpectation("M10")),
+            ),
         )
     }
 }

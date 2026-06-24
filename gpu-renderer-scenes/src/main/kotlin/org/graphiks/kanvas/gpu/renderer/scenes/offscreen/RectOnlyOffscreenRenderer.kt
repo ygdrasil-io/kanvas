@@ -311,6 +311,8 @@ internal fun prepareRectOnlyDrawPlan(
             when (command) {
                 is SceneCommand.Clip -> activeClip = command
                 is SceneCommand.FillRect -> add(RectOnlyIndexedDraw(index, command, activeClip))
+                is SceneCommand.FillRRect -> add(RectOnlyIndexedDraw(index, command, activeClip))
+                is SceneCommand.LinearGradientRect -> add(RectOnlyIndexedDraw(index, command, activeClip))
                 else -> Unit
             }
         }
@@ -426,6 +428,8 @@ internal fun rectOnlyCommandSequenceUnsupportedReason(commands: List<SceneComman
             if (
                 command is SceneCommand.Clear ||
                 command is SceneCommand.FillRect ||
+                command is SceneCommand.FillRRect ||
+                command is SceneCommand.LinearGradientRect ||
                 command is SceneCommand.Clip
             ) {
                 null
@@ -435,15 +439,15 @@ internal fun rectOnlyCommandSequenceUnsupportedReason(commands: List<SceneComman
         }
         .distinct()
     if (unsupportedFamilies.isNotEmpty()) {
-        return "rect-only offscreen render supports only clear, fill-rect, and clip command families: " +
+        return "rect-only offscreen render supports only clear, fill-rect, fill-rrect, linear-gradient-rect, and clip command families: " +
             unsupportedFamilies.joinToString()
     }
 
     if (commands.none {
-                it is SceneCommand.FillRect
+                it is SceneCommand.FillRect || it is SceneCommand.FillRRect || it is SceneCommand.LinearGradientRect
         }
     ) {
-        return "rect-only offscreen render requires at least one FillRect command"
+        return "rect-only offscreen render requires at least one FillRect, FillRRect, or LinearGradientRect command"
     }
 
     val clearIndices = commands.withIndex()

@@ -108,10 +108,9 @@ class GPURendererScenesModuleBoundaryTest {
         assertNull(rectOnlyCommandSequenceUnsupportedReason(supported.commands))
 
         val richer = GPURendererSceneRegistry.registry.requireScene("rounded-panel-gradient")
-        assertEquals(
-            "rect-only offscreen render supports only clear, fill-rect, and clip command families: " +
-                "fill-rrect, linear-gradient-rect",
+        assertNull(
             rectOnlyCommandSequenceUnsupportedReason(richer.commands),
+            "FillRRect and LinearGradientRect are now supported by the offscreen renderer",
         )
     }
 

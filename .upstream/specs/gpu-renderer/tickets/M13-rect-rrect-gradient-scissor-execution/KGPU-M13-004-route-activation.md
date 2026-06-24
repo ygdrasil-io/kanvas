@@ -1,7 +1,7 @@
 ---
 id: KGPU-M13-004
 title: "Activate M13 routes: FillRRect + LinearGradient + Scissor default ON with rollback"
-status: review
+status: done
 milestone: M13
 priority: P0
 owner_area: product-validation
@@ -84,6 +84,20 @@ rtk ./gradlew --no-daemon :gpu-renderer:check && rtk ./gradlew --no-daemon :gpu-
 ## Status Notes
 
 - `proposed`: Initial ticket.
+- `done` (2026-06-24): GpuProductFlagConfig created in product/ProductFlags.kt with:
+  - 3 product flag constants: fillRRect, linearGradient, scissor
+  - 3 rollback disable properties: each with `.disable` suffix
+  - `fromSystemProperties()` reads system properties to determine flag state
+  - `buildCapabilities()` generates GPUCapabilities with active feature facts
+  - Default: all 3 flags ON, rollback via `.disable=true`
+  - 7 ProductFlagConfigTest tests verify all flag combinations
+
+## Evidence
+
+- 7 ProductFlagConfigTest tests pass
+- All 3 flags default to ON
+- Rollback via system property `kanvas.gpu.renderer.product.<flag>.disable=true`
+- Capabilities built with `first_slice.fill_rrect.native`, `first_slice.linear_gradient.native`, `first_slice.scissor.native`
 
 ## Linear Labels
 
