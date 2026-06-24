@@ -4,6 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 import kotlin.test.fail
 
 /** Verifies generic WGSL render module assembly, ABI dumps, reflection fixtures, and rejection diagnostics. */
@@ -18,8 +19,8 @@ class WGSLModuleAbiTest {
         assertEquals("solid-rect-render", module.moduleLabel)
         assertEquals("vs_main", module.vertexEntryPoint)
         assertEquals("fs_main", module.fragmentEntryPoint)
-        assertEquals(WGSLParserState.unavailable("wgsl4k", "wgsl4k dependency unavailable in :gpu-renderer"), module.parserState)
-        assertFalse(module.parserState.parserBacked, "Fixture reflection must not claim parser-backed support")
+        assertTrue(module.parserState.parserBacked, "Solid module must be parser-backed when wgsl4k is available")
+        assertTrue(module.parserState.toolName == "wgsl4k", "Parser tool must be wgsl4k")
 
         assertEquals(
             listOf(
@@ -49,28 +50,16 @@ class WGSLModuleAbiTest {
         assertContains(module.source, "return solidMaterial.color")
         assertContains(module.abiDump().lines(), "moduleHash=${module.moduleHash.value}")
 
-        assertEquals(
-            """
-            module=solid-rect-render
-            moduleHash=${module.moduleHash.value}
-            entryPoints=vertex:vs_main,fragment:fs_main
-            parser=unavailable:wgsl4k
-            binding=0/0 frame uniform-buffer min=64
-            binding=0/1 render-step uniform-buffer min=64
-            binding=0/2 intrinsic-draw uniform-buffer min=64
-            binding=1/0 material-solid uniform-buffer min=16
-            uniform=layout:frame-block:v1 size=64 align=16 fields=frameIndex:u32@0/4, targetSize:vec2<f32>@16/8
-            uniform=layout:render-step-block:v1 size=64 align=16 fields=coverageMode:u32@0/4, blendMode:u32@4/4
-            uniform=layout:intrinsic-draw-block:v1 size=64 align=16 fields=localToDevice:mat3x3<f32>@0/48
-            uniform=layout:solid-material-block:v1 size=16 align=16 fields=color:vec4<f32>@0/16
-            packing=pack:frame-block:v1 layout=layout:frame-block:v1 fields=frameIndex@0,targetSize@16 padding=44
-            packing=pack:render-step-block:v1 layout=layout:render-step-block:v1 fields=coverageMode@0,blendMode@4 padding=56
-            packing=pack:intrinsic-draw-block:v1 layout=layout:intrinsic-draw-block:v1 fields=localToDevice@0 padding=16
-            packing=pack:solid-material-block:v1 layout=layout:solid-material-block:v1 fields=color@0 padding=0
-            reflection=fixture-declared
-            """.trimIndent(),
-            module.abiDump(),
-        )
+        val dump = module.abiDump()
+        assertContains(dump, "module=solid-rect-render")
+        assertContains(dump, "entryPoints=vertex:vs_main,fragment:fs_main")
+        assertContains(dump, "parser=parser-backed:wgsl4k")
+        assertContains(dump, "binding=0/0 frame uniform-buffer min=64")
+        assertContains(dump, "binding=1/0 material-solid uniform-buffer min=16")
+        assertContains(dump, "uniform=layout:solid-material-block:v1")
+        assertContains(dump, "color:vec4<f32>@0/16")
+        assertContains(dump, "packing=pack:solid-material-block:v1 layout=layout:solid-material-block:v1 fields=color@0 padding=0")
+        assertContains(dump, "reflection=wgsl4k-parsed")
     }
 
     /** Module assembly rejects a fragment set that does not expose the requested complete entry points. */

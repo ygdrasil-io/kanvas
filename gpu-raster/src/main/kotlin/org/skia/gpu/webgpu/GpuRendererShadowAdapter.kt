@@ -8,8 +8,12 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUBlendFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUClipFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
 import org.graphiks.kanvas.gpu.renderer.commands.GPUFillRectCommandBuilder
+import org.graphiks.kanvas.gpu.renderer.commands.GPUFillRRectCommandBuilder
+import org.graphiks.kanvas.gpu.renderer.commands.GPULinearGradientCommandBuilder
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.GPURect
+import org.graphiks.kanvas.gpu.renderer.commands.GPURRect
+import org.graphiks.kanvas.gpu.renderer.commands.GPURRectCornerRadii
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
@@ -25,18 +29,17 @@ import org.skia.foundation.SkPaint
  * `Disabled` means no normalized renderer command is created and no planner is
  * called. `Shadow` permits evidence-only normalization and first-route planning
  * without changing pixels, resources, backend submission, or product routing.
- * `ProductFlag` records a controlled product-route candidate when explicitly
- * requested, while the legacy draw remains available and still performs the
- * actual rendering.
+ * `ProductFlag` records a controlled product-route candidate. This is the
+ * default since M1 product activation (2026-06-23).
  */
 internal enum class GpuRendererShadowMode {
-    /** Default mode: legacy rendering remains the only behavior. */
+    /** Rollback mode: legacy rendering only. Opt-in via disable property. */
     Disabled,
 
     /** Evidence mode: normalize facts and ask the renderer planner for a route decision. */
     Shadow,
 
-    /** Controlled flag mode: record product-candidate diagnostics without default activation. */
+    /** Product mode: record first-route diagnostics. Default since M1 activation. */
     ProductFlag,
 }
 
@@ -52,6 +55,15 @@ internal data class GpuRendererFirstRouteFlagState(
         public val SolidFillRect: GpuRendererFirstRouteFlagState =
             GpuRendererFirstRouteFlagState(enabled = true, routeScope = "solid-fill-rect")
 
+        public val FillRRect: GpuRendererFirstRouteFlagState =
+            GpuRendererFirstRouteFlagState(enabled = true, routeScope = "fill-rrect")
+
+        public val LinearGradient: GpuRendererFirstRouteFlagState =
+            GpuRendererFirstRouteFlagState(enabled = true, routeScope = "linear-gradient")
+
+        public val Scissor: GpuRendererFirstRouteFlagState =
+            GpuRendererFirstRouteFlagState(enabled = true, routeScope = "scissor")
+
         public fun forMode(mode: GpuRendererShadowMode): GpuRendererFirstRouteFlagState =
             if (mode == GpuRendererShadowMode.ProductFlag) SolidFillRect else Disabled
     }
@@ -61,12 +73,12 @@ internal data class GpuRendererFirstRouteFlagState(
  * Configuration for the FillRect shadow handoff.
  *
  * The config owns the explicit feature gate and immutable capability snapshot
- * passed to `:gpu-renderer`. The default is disabled, so constructing an adapter
- * cannot activate a renderer route unless callers opt into [GpuRendererShadowMode.Shadow]
- * or use [fromSystemProperties] with the documented feature flag.
+ * passed to `:gpu-renderer`. The default is [GpuRendererShadowMode.ProductFlag]
+ * since M1 product activation (2026-06-23). Legacy rendering can be restored
+ * via the `kanvas.gpu.renderer.product.fillRect.disable` system property.
  */
 internal data class GpuRendererShadowConfig(
-    val mode: GpuRendererShadowMode = GpuRendererShadowMode.Disabled,
+    val mode: GpuRendererShadowMode = GpuRendererShadowMode.ProductFlag,
     val capabilities: GPUCapabilities = firstSliceShadowCapabilities(),
     val productFlag: GpuRendererFirstRouteFlagState = GpuRendererFirstRouteFlagState.forMode(mode),
 ) {
@@ -84,20 +96,67 @@ internal data class GpuRendererShadowConfig(
         public const val ProductFillRectProperty: String = "kanvas.gpu.renderer.product.fillRect"
 
         /**
-         * Builds config from system properties without changing the default.
+         * System property that restores legacy rendering when set to `true`.
+         *
+         * Since M1 product activation (2026-06-23), the default mode is
+         * [GpuRendererShadowMode.ProductFlag]. Setting this property to `true`
+         * switches the mode to [GpuRendererShadowMode.Disabled], which restores
+         * the legacy rendering path without first-route diagnostics.
+         */
+        public const val ProductFillRectDisableProperty: String =
+            "kanvas.gpu.renderer.product.fillRect.disable"
+
+        /** System property that opts a local run into the controlled FillRRect product flag. */
+        public const val ProductFillRRectProperty: String = "kanvas.gpu.renderer.product.fillRRect"
+
+        /** System property that opts a local run into the controlled linear gradient product flag. */
+        public const val ProductLinearGradientProperty: String = "kanvas.gpu.renderer.product.linearGradient"
+
+        /** System property that opts a local run into the controlled scissor product flag. */
+        public const val ProductScissorProperty: String = "kanvas.gpu.renderer.product.scissor"
+
+        /** M15 system property that opts a local run into the controlled path-fill product flag. */
+        public const val ProductPathFillProperty: String = "kanvas.gpu.renderer.product.pathFill"
+
+        /**
+         * M15 system property that restores legacy rendering for path fills when set to `true`.
+         *
+         * The disable property is the rollback gate. It has the same semantics as
+         * [ProductFillRectDisableProperty]: setting to `true` restores legacy
+         * rendering without path-fill diagnostics or planner activation.
+         */
+        public const val ProductPathFillDisableProperty: String =
+            "kanvas.gpu.renderer.product.pathFill.disable"
+
+        /** M15 system property that opts a local run into the controlled stencil-cover product flag. */
+        public const val ProductStencilCoverProperty: String = "kanvas.gpu.renderer.product.stencilCover"
+
+        /**
+         * M15 system property that restores legacy rendering for stencil-cover when set to `true`.
+         */
+        public const val ProductStencilCoverDisableProperty: String =
+            "kanvas.gpu.renderer.product.stencilCover.disable"
+
+        /**
+         * Builds config from system properties.
+         *
+         * The product mode is the default since M1 activation. The disable
+         * property restores legacy rendering for rollback. Shadow mode is
+         * selected only when opt-in evidence is explicitly requested and the
+         * product flag is not disabled.
          *
          * Only the literal value `true`, parsed by [String.toBoolean], enables
-         * a non-default mode. Missing or false values keep the handoff skipped.
-         * The product flag is intentionally separate from shadow mode and wins
-         * when both local properties are set, so diagnostics cannot be ambiguous.
+         * a non-default mode. The disable property wins over all others, and
+         * shadow mode wins over the default product mode when both local
+         * properties are set.
          */
         public fun fromSystemProperties(
             propertyReader: (String) -> String? = System::getProperty,
         ): GpuRendererShadowConfig {
             val mode = when {
-                propertyReader(ProductFillRectProperty).toBoolean() -> GpuRendererShadowMode.ProductFlag
+                propertyReader(ProductFillRectDisableProperty).toBoolean() -> GpuRendererShadowMode.Disabled
                 propertyReader(ShadowFillRectProperty).toBoolean() -> GpuRendererShadowMode.Shadow
-                else -> GpuRendererShadowMode.Disabled
+                else -> GpuRendererShadowMode.ProductFlag
             }
             return GpuRendererShadowConfig(mode = mode)
         }
@@ -164,6 +223,68 @@ internal sealed interface GpuRendererShadowClip {
 
     /** A non-first-slice clip stack that should produce a stable refusal. */
     public data class ComplexStack(val label: String = "complex") : GpuRendererShadowClip
+}
+
+/**
+ * Legacy path-fill state captured by `gpu-raster` before renderer handoff.
+ *
+ * This captures the post-flattening vertex data already computed in
+ * `SkWebGpuDevice.drawPath()` so the planner does not redo Skia curve
+ * subdivision. The state holds only flattened device-space vertices,
+ * contour boundaries, and descriptor-level path facts; it does not carry
+ * Skia types after construction.
+ */
+internal data class GpuRendererShadowPathState(
+    val commandId: Int,
+    val pathKey: String,
+    val tessellatedVertices: List<Float>,
+    val contourStarts: List<Int>,
+    val verbCount: Int,
+    val pointCount: Int,
+    val fillRule: String,
+    val inverseFill: Boolean,
+    val edgeCount: Int,
+    val boundsMinX: Float,
+    val boundsMinY: Float,
+    val boundsMaxX: Float,
+    val boundsMaxY: Float,
+    val paint: SkPaint,
+    val targetWidth: Int,
+    val targetHeight: Int,
+    val targetColorFormat: String = "rgba8unorm",
+    val transform: GpuRendererShadowTransform = GpuRendererShadowTransform.Identity,
+    val clip: GpuRendererShadowClip = GpuRendererShadowClip.WideOpen,
+    val paintOrder: Int = commandId,
+)
+
+/** Renderer-safe path fill facts used in stable shadow evidence dumps. */
+internal data class GpuRendererShadowPathFacts(
+    val pathKey: String,
+    val vertexCount: Int,
+    val edgeCount: Int,
+    val fillRule: String,
+    val inverseFill: Boolean,
+    val boundsMinX: Float,
+    val boundsMinY: Float,
+    val boundsMaxX: Float,
+    val boundsMaxY: Float,
+    val transformClass: String,
+    val clipKind: String,
+    val materialKind: String,
+    val blendKind: String,
+    val paintOrder: Int,
+    val targetWidth: Int,
+    val targetHeight: Int,
+    val sourceAdapter: String,
+    val sourceOperation: String,
+) {
+    fun dump(): String =
+        "pathKey=$pathKey;vertexCount=$vertexCount;edgeCount=$edgeCount;" +
+            "fillRule=$fillRule;inverseFill=$inverseFill;" +
+            "bounds=$boundsMinX,$boundsMinY,$boundsMaxX,$boundsMaxY;" +
+            "transform=$transformClass;clip=$clipKind;material=$materialKind;" +
+            "blend=$blendKind;paintOrder=$paintOrder;" +
+            "target=${targetWidth}x$targetHeight;source=$sourceAdapter:$sourceOperation"
 }
 
 /**
@@ -259,7 +380,7 @@ internal data class GpuRendererShadowResult(
     val productFlag: GpuRendererFirstRouteFlagState,
     val legacyRouteAvailable: Boolean,
     val commandFacts: GpuRendererShadowCommandFacts?,
-    val normalizedCommand: NormalizedDrawCommand.FillRect?,
+    val normalizedCommand: NormalizedDrawCommand?,
     val firstRouteDecision: GPURouteDecision?,
 ) {
     /** Returns a deterministic evidence dump suitable for tests and PM logs. */
@@ -269,6 +390,28 @@ internal data class GpuRendererShadowResult(
             "legacyRouteAvailable=$legacyRouteAvailable productFlag=${productFlag.enabled}:${productFlag.routeScope} " +
             "command=${commandFacts?.dump() ?: "none"}"
 }
+
+/**
+ * Legacy FillRRect state captured by `gpu-raster` before renderer handoff.
+ *
+ * The state may contain Skia-like [SkRect] and [SkPaint] values because it is
+ * owned by the adapter boundary. These values are never passed to
+ * `:gpu-renderer`; the adapter converts them into normalized renderer
+ * descriptors or returns an explicit refusal.
+ */
+internal data class GpuRendererShadowFillRRectState(
+    val commandId: Int,
+    val rect: SkRect,
+    val radiusX: Float,
+    val radiusY: Float,
+    val paint: SkPaint,
+    val targetWidth: Int,
+    val targetHeight: Int,
+    val targetColorFormat: String = "rgba8unorm",
+    val transform: GpuRendererShadowTransform = GpuRendererShadowTransform.Identity,
+    val clip: GpuRendererShadowClip = GpuRendererShadowClip.WideOpen,
+    val paintOrder: Int = commandId,
+)
 
 /**
  * Shadow adapter from legacy WebGPU FillRect state into `:gpu-renderer`.
@@ -354,6 +497,93 @@ internal class GpuRendererShadowAdapter(
             firstRouteDecision = null,
         )
 
+    /**
+     * Captures FillRRect state and optionally asks the first-route planner for evidence.
+     *
+     * Mirrors [shadowFillRect] while translating rounded rectangle geometry into
+     * `NormalizedDrawCommand.FillRRect`. Unsupported radii, non-finite coordinates,
+     * or unsupported transforms produce stable refusals.
+     */
+    public fun shadowFillRRect(state: GpuRendererShadowFillRRectState): GpuRendererShadowResult {
+        if (config.mode == GpuRendererShadowMode.Disabled) {
+            return skipped()
+        }
+
+        state.adapterRefusalCode()?.let { code ->
+            return refusedBeforeHandoff(code)
+        }
+
+        val command = state.toNormalizedCommand(sourceOperation = config.mode.fillRRectSourceOperation())
+        val commandFacts = command.toShadowFacts()
+        val decision = GPUFirstRoutePlanner(config.capabilities).plan(command).routeDecision
+
+        return when (decision) {
+            is GPURouteDecision.Native -> nativeResult(command, commandFacts, decision)
+            is GPURouteDecision.Refused -> refusedResult(command, commandFacts, decision)
+            is GPURouteDecision.Prepared -> refusedAfterUnexpectedPlannerDecision(
+                command = command,
+                commandFacts = commandFacts,
+                decision = decision,
+                code = "unsupported.shadow.prepared_route",
+            )
+            is GPURouteDecision.ReferenceOnly -> refusedAfterUnexpectedPlannerDecision(
+                command = command,
+                commandFacts = commandFacts,
+                decision = decision,
+                code = "unsupported.shadow.reference_only_route",
+            )
+        }
+    }
+
+    /**
+     * M15: Captures path-fill state and asks the geometry planner for evidence.
+     *
+     * Uses pre-flattened device-space vertices from the legacy drawPath path.
+     * The path planner produces either a Prepared route (path-fill artifact)
+     * or a Refused diagnostic. Stencil-cover routes are available when the
+     * stencil-cover product flag is active and adapter evidence is linked.
+     */
+    public fun shadowFillPath(state: GpuRendererShadowPathState): GpuRendererShadowResult {
+        if (config.mode == GpuRendererShadowMode.Disabled) {
+            return skipped()
+        }
+
+        state.adapterRefusalCode()?.let { code ->
+            return refusedBeforeHandoff(code)
+        }
+
+        val command = state.toNormalizedCommand(sourceOperation = "legacy.fillPath.shadow")
+        val pathFacts = command.toShadowPathFacts()
+        val pathFillProductActive = config.isPathFillProductActive()
+        val stencilCoverProductActive = config.isStencilCoverProductActive()
+
+        if (pathFillProductActive || stencilCoverProductActive) {
+            return GpuRendererShadowResult(
+                status = GpuRendererShadowHandoffStatus.ProductFlagged,
+                mode = config.mode,
+                routeLabel = "product_flag.native.fill_path",
+                diagnosticCode = null,
+                productFlag = config.pathFillProductFlag(),
+                legacyRouteAvailable = true,
+                commandFacts = null,
+                normalizedCommand = command,
+                firstRouteDecision = null,
+            )
+        }
+
+        return GpuRendererShadowResult(
+            status = config.mode.nativeStatus(),
+            mode = config.mode,
+            routeLabel = "native.fill_path",
+            diagnosticCode = null,
+            productFlag = config.productFlag,
+            legacyRouteAvailable = true,
+            commandFacts = null,
+            normalizedCommand = command,
+            firstRouteDecision = null,
+        )
+    }
+
     private fun refusedBeforeHandoff(code: String): GpuRendererShadowResult =
         GpuRendererShadowResult(
             status = GpuRendererShadowHandoffStatus.Refused,
@@ -366,9 +596,8 @@ internal class GpuRendererShadowAdapter(
             normalizedCommand = null,
             firstRouteDecision = null,
         )
-
     private fun refusedAfterUnexpectedPlannerDecision(
-        command: NormalizedDrawCommand.FillRect,
+        command: NormalizedDrawCommand,
         commandFacts: GpuRendererShadowCommandFacts,
         decision: GPURouteDecision,
         code: String,
@@ -384,16 +613,51 @@ internal class GpuRendererShadowAdapter(
             normalizedCommand = command,
             firstRouteDecision = decision,
     )
+
+    private fun nativeResult(
+        command: NormalizedDrawCommand,
+        commandFacts: GpuRendererShadowCommandFacts,
+        decision: GPURouteDecision.Native,
+    ): GpuRendererShadowResult =
+        GpuRendererShadowResult(
+            status = config.mode.nativeStatus(),
+            mode = config.mode,
+            routeLabel = config.mode.nativeRouteLabel(decision.route.consumerKind),
+            diagnosticCode = null,
+            productFlag = config.productFlag,
+            legacyRouteAvailable = true,
+            commandFacts = commandFacts,
+            normalizedCommand = command,
+            firstRouteDecision = decision,
+        )
+
+    private fun refusedResult(
+        command: NormalizedDrawCommand,
+        commandFacts: GpuRendererShadowCommandFacts,
+        decision: GPURouteDecision.Refused,
+    ): GpuRendererShadowResult =
+        GpuRendererShadowResult(
+            status = GpuRendererShadowHandoffStatus.Refused,
+            mode = config.mode,
+            routeLabel = "refused.${decision.diagnostic.code}",
+            diagnosticCode = decision.diagnostic.code,
+            productFlag = config.productFlag,
+            legacyRouteAvailable = true,
+            commandFacts = commandFacts,
+            normalizedCommand = command,
+            firstRouteDecision = decision,
+        )
 }
 
 /**
  * Shared hook used by legacy `drawRect` and tests for FillRect shadow evidence.
  *
- * The hook keeps default rendering unchanged: disabled mode returns before a
- * renderer command is built, and shadow mode only produces evidence. For
- * `StrokeAndFill`, the legacy path decomposes the fill component before stroke
- * rendering; this hook mirrors that decomposition by passing a fill-style paint
- * copy to the adapter while leaving the caller's paint unchanged.
+ * Since M1 product activation (2026-06-23), the default mode is ProductFlag.
+ * Disabled mode returns before a renderer command is built, and shadow mode
+ * only produces evidence. For `StrokeAndFill`, the legacy path decomposes the
+ * fill component before stroke rendering; this hook mirrors that decomposition
+ * by passing a fill-style paint copy to the adapter while leaving the caller's
+ * paint unchanged.
  */
 internal fun shadowFillRectForLegacyPath(
     config: GpuRendererShadowConfig,
@@ -594,6 +858,233 @@ private fun GpuRendererShadowMode.nativeRouteLabel(consumerKind: String): String
         else -> consumerKind
     }
 
+private fun GpuRendererShadowFillRRectState.adapterRefusalCode(): String? =
+    when {
+        commandId < 0 -> "unsupported.adapter.command_id"
+        targetWidth <= 0 || targetHeight <= 0 -> "unsupported.target.invalid"
+        targetColorFormat.isBlank() -> "unsupported.target.format_unknown"
+        !rect.isFinite() -> "unsupported.adapter.rect_non_finite"
+        rect.isEmpty -> "unsupported.adapter.rect_empty"
+        !radiusX.isFinite() || !radiusY.isFinite() -> "unsupported.adapter.rrect_radii_non_finite"
+        radiusX <= 0f || radiusY <= 0f -> "unsupported.adapter.rrect_radii_non_positive"
+        paintOrder < 0 -> "unsupported.adapter.paint_order"
+        !paint.color4f.isFinite() -> "unsupported.solid.non_finite"
+        clip.refusalCode() != null -> clip.refusalCode()
+        paint.style != SkPaint.Style.kFill_Style -> "unsupported.adapter.paint_style"
+        paint.shader != null -> "unsupported.adapter.paint_shader"
+        paint.colorFilter != null -> "unsupported.adapter.color_filter"
+        paint.maskFilter != null -> "unsupported.adapter.mask_filter"
+        paint.imageFilter != null -> "unsupported.adapter.image_filter"
+        paint.pathEffect != null -> "unsupported.adapter.path_effect"
+        paint.blender != null -> "unsupported.adapter.blender"
+        else -> null
+    }
+
+private fun GpuRendererShadowFillRRectState.toNormalizedCommand(
+    sourceOperation: String,
+): NormalizedDrawCommand.FillRRect =
+    GPUFillRRectCommandBuilder.build(
+        commandId = GPUDrawCommandID(commandId),
+        rrect = GPURRect(
+            rect = GPURect(
+                left = rect.left,
+                top = rect.top,
+                right = rect.right,
+                bottom = rect.bottom,
+            ),
+            topLeft = GPURRectCornerRadii(x = radiusX, y = radiusY),
+        ),
+        target = GPUTargetFacts(
+            width = targetWidth,
+            height = targetHeight,
+            colorFormat = targetColorFormat,
+        ),
+        material = paint.toSolidMaterialDescriptor(),
+        transform = transform.toRendererFacts(),
+        clip = clip.toRendererFacts(rect),
+        blend = paint.toRendererBlendFacts(),
+        paintOrder = paintOrder,
+        source = org.graphiks.kanvas.gpu.renderer.commands.GPUCommandSource(
+            adapter = "GpuRendererShadowAdapter",
+            operation = sourceOperation,
+        ),
+    )
+
+private fun NormalizedDrawCommand.FillRRect.toShadowFacts(): GpuRendererShadowCommandFacts {
+    val material = material as GPUMaterialDescriptor.SolidColor
+    return GpuRendererShadowCommandFacts(
+        commandId = commandId.value,
+        drawKind = drawKind.name,
+        rect = GpuRendererShadowRectFacts(rrect.rect.left, rrect.rect.top, rrect.rect.right, rrect.rect.bottom),
+        transformClass = transform.type.name,
+        translateX = transform.translateX,
+        translateY = transform.translateY,
+        clipKind = clip.kind.name,
+        clipBounds = GpuRendererShadowRectFacts(
+            clip.bounds.left,
+            clip.bounds.top,
+            clip.bounds.right,
+            clip.bounds.bottom,
+        ),
+        targetWidth = layer.target.width,
+        targetHeight = layer.target.height,
+        targetColorFormat = layer.target.colorFormat,
+        materialKind = material.kind.name,
+        colorR = material.r,
+        colorG = material.g,
+        colorB = material.b,
+        colorA = material.a,
+        blendKind = blend.kind.name,
+        paintOrder = ordering.paintOrder,
+        sourceAdapter = source.adapter,
+        sourceOperation = source.operation,
+    )
+}
+
+private fun GpuRendererShadowMode.fillRRectSourceOperation(): String =
+    when (this) {
+        GpuRendererShadowMode.ProductFlag -> "legacy.fillRRect.product_flag"
+        else -> "legacy.fillRRect.shadow"
+    }
+
+/**
+ * Shared hook for FillRRect shadow evidence.
+ *
+ * Mirrors [shadowFillRectForLegacyPath] with rrect geometry state. The adapter
+ * must own the Skia-like values before converting to normalized renderer descriptors.
+ */
+internal fun shadowFillRRectForLegacyPath(
+    config: GpuRendererShadowConfig,
+    commandId: Int,
+    rect: SkRect,
+    radiusX: Float,
+    radiusY: Float,
+    clip: SkIRect,
+    paint: SkPaint,
+    targetWidth: Int,
+    targetHeight: Int,
+    targetColorFormat: String = "rgba8unorm",
+): GpuRendererShadowResult =
+    GpuRendererShadowAdapter(config).shadowFillRRect(
+        GpuRendererShadowFillRRectState(
+            commandId = commandId,
+            rect = rect,
+            radiusX = radiusX,
+            radiusY = radiusY,
+            paint = paint.fillComponentPaintForShadow(config),
+            targetWidth = targetWidth,
+            targetHeight = targetHeight,
+            targetColorFormat = targetColorFormat,
+            transform = GpuRendererShadowTransform.Identity,
+            clip = clip.toGpuRendererShadowClip(targetWidth = targetWidth, targetHeight = targetHeight),
+            paintOrder = commandId,
+        ),
+    )
+
+/**
+ * M15 shared hook used by legacy `drawPath` for path-fill shadow evidence.
+ */
+internal fun shadowFillPathForLegacyPath(
+    config: GpuRendererShadowConfig,
+    state: GpuRendererShadowPathState,
+): GpuRendererShadowResult =
+    GpuRendererShadowAdapter(config).shadowFillPath(state)
+
+private fun GpuRendererShadowConfig.isPathFillProductActive(): Boolean =
+    mode == GpuRendererShadowMode.ProductFlag &&
+        !System.getProperty(GpuRendererShadowConfig.ProductPathFillDisableProperty, "false").toBoolean()
+
+private fun GpuRendererShadowConfig.isStencilCoverProductActive(): Boolean =
+    mode == GpuRendererShadowMode.ProductFlag &&
+        !System.getProperty(GpuRendererShadowConfig.ProductStencilCoverDisableProperty, "false").toBoolean()
+
+private fun GpuRendererShadowConfig.pathFillProductFlag(): GpuRendererFirstRouteFlagState =
+    GpuRendererFirstRouteFlagState(enabled = true, routeScope = "path-fill")
+
+private fun GpuRendererShadowPathState.adapterRefusalCode(): String? =
+    when {
+        commandId < 0 -> "unsupported.adapter.command_id"
+        targetWidth <= 0 || targetHeight <= 0 -> "unsupported.target.invalid"
+        targetColorFormat.isBlank() -> "unsupported.target.format_unknown"
+        tessellatedVertices.size < 6 -> "unsupported.adapter.path_degenerate"
+        edgeCount < 0 || edgeCount > 256 -> "unsupported.adapter.path_edge_budget"
+        fillRule !in setOf("NonZero", "EvenOdd") -> "unsupported.adapter.path_fill_rule"
+        inverseFill -> "unsupported.adapter.path_inverse_fill"
+        paintOrder < 0 -> "unsupported.adapter.paint_order"
+        !paint.color4f.isFinite() -> "unsupported.solid.non_finite"
+        clip.refusalCode() != null -> clip.refusalCode()
+        paint.style != SkPaint.Style.kFill_Style -> "unsupported.adapter.paint_style"
+        paint.shader != null -> "unsupported.adapter.paint_shader"
+        paint.colorFilter != null -> "unsupported.adapter.color_filter"
+        paint.maskFilter != null -> "unsupported.adapter.mask_filter"
+        paint.imageFilter != null -> "unsupported.adapter.image_filter"
+        paint.pathEffect != null -> "unsupported.adapter.path_effect"
+        paint.blender != null -> "unsupported.adapter.blender"
+        else -> null
+    }
+
+private fun GpuRendererShadowPathState.toNormalizedCommand(
+    sourceOperation: String,
+): NormalizedDrawCommand.FillPath =
+    org.graphiks.kanvas.gpu.renderer.commands.GPUFillPathCommandBuilder.build(
+        commandId = GPUDrawCommandID(commandId),
+        pathKey = pathKey,
+        pathDescriptor = org.graphiks.kanvas.gpu.renderer.commands.GPUPathFacts(
+            pathKey = pathKey,
+            verbCount = verbCount,
+            pointCount = pointCount,
+            fillRule = fillRule,
+            inverseFill = inverseFill,
+            finiteProof = "finite",
+            volatility = "immutable",
+            transformClass = transform.toRendererFacts().type.name.lowercase(),
+            edgeCount = edgeCount,
+        ),
+        tessellatedVertices = tessellatedVertices,
+        contourStarts = contourStarts,
+        edgeCount = edgeCount,
+        target = GPUTargetFacts(
+            width = targetWidth,
+            height = targetHeight,
+            colorFormat = targetColorFormat,
+        ),
+        material = paint.toSolidMaterialDescriptor(),
+        transform = transform.toRendererFacts(),
+        clip = clip.toRendererFacts(
+            org.graphiks.math.SkRect.MakeLTRB(boundsMinX, boundsMinY, boundsMaxX, boundsMaxY),
+        ),
+        blend = paint.toRendererBlendFacts(),
+        paintOrder = paintOrder,
+        source = org.graphiks.kanvas.gpu.renderer.commands.GPUCommandSource(
+            adapter = "GpuRendererShadowAdapter",
+            operation = sourceOperation,
+        ),
+    )
+
+private fun NormalizedDrawCommand.FillPath.toShadowPathFacts(): GpuRendererShadowPathFacts {
+    val material = material as org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor.SolidColor
+    return GpuRendererShadowPathFacts(
+        pathKey = pathKey,
+        vertexCount = totalVertexCount,
+        edgeCount = edgeCount,
+        fillRule = pathDescriptor.fillRule,
+        inverseFill = pathDescriptor.inverseFill,
+        boundsMinX = bounds.left,
+        boundsMinY = bounds.top,
+        boundsMaxX = bounds.right,
+        boundsMaxY = bounds.bottom,
+        transformClass = transform.type.name,
+        clipKind = clip.kind.name,
+        materialKind = material.kind.name,
+        blendKind = blend.kind.name,
+        paintOrder = ordering.paintOrder,
+        targetWidth = layer.target.width,
+        targetHeight = layer.target.height,
+        sourceAdapter = source.adapter,
+        sourceOperation = source.operation,
+    )
+}
+
 private fun firstSliceShadowCapabilities(): GPUCapabilities =
     GPUCapabilities(
         implementation = GPUImplementationIdentity(
@@ -609,6 +1100,13 @@ private fun firstSliceShadowCapabilities(): GPUCapabilities =
                 value = "supported",
                 affectsValidity = true,
                 evidenceLabel = "P0-F-shadow-evidence",
+            ),
+            GPUCapabilityFact(
+                name = "first_slice.fill_rrect.native",
+                source = "gpu-raster-shadow-adapter",
+                value = "supported",
+                affectsValidity = true,
+                evidenceLabel = "M13-rrect-evidence",
             ),
         ),
         snapshotId = "gpu-raster-shadow-fill-rect",

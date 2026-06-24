@@ -119,11 +119,14 @@ internal fun GPURendererScene<*>.pathStencilCoverGateDiagnostics(): List<String>
         "passResourceReadbackArtifactsLinked=false",
         "producerBeforeCoverOrderingProven=false",
         "stencilCoverRoutePromoted=false",
+        "pathFillRoutePromoted=false",
         "productRouteActivated=false",
         "releaseBlocking=false",
         "cpuPreparedContinuationCountsAsSupport=false",
         "descriptorOnlyPlanningCountsAsSupport=false",
         "refusalOnlySelectorCountsAsSupport=false",
+        "pathFillProductFlag=kanvas.gpu.renderer.product.pathFill",
+        "stencilCoverProductFlag=kanvas.gpu.renderer.product.stencilCover",
         "nonClaims=no-native-stencil-cover-support,no-adapter-backed-execution,no-product-activation,no-release-blocking-gate,no-cpu-prepared-continuation-as-support,no-refusal-only-selector-as-support",
     )
 }

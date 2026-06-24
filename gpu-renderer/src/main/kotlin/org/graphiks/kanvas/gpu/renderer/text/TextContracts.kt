@@ -155,6 +155,15 @@ data class GPUTextDiagnostic(
     val terminal: Boolean,
 )
 
+/** Text route decision produced by the A8 route planner from a glyph run descriptor. */
+sealed interface GPUTextRouteDecision {
+    /** Accepted A8 atlas route. */
+    data class Accepted(val route: GPUTextRoute.AtlasA8) : GPUTextRouteDecision
+
+    /** Refused text route with a stable diagnostic. */
+    data class Refused(val diagnostic: GPUTextDiagnostic) : GPUTextRouteDecision
+}
+
 /** Dumpable reference to one text-stack artifact plan consumed by GPU text routing. */
 data class GPUTextArtifactRef(
     val artifactType: String,

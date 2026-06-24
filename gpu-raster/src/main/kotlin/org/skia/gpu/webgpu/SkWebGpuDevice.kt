@@ -7085,6 +7085,7 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
     private var lastImageFilterRouteForDiagnostics: ImageFilterRouteDiagnostics? = null
     private var gpuRendererShadowCommandId: Int = 0
     private var lastGpuRendererShadowResult: GpuRendererShadowResult? = null
+    private var lastGpuRendererPathShadowResult: GpuRendererShadowResult? = null
 
     private val rectBindGroupLayout: GPUBindGroupLayout = context.device.createBindGroupLayout(
         BindGroupLayoutDescriptor(
@@ -7283,6 +7284,9 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
 
     internal fun gpuRendererShadowResultForTests(): GpuRendererShadowResult? =
         lastGpuRendererShadowResult
+
+    internal fun gpuRendererPathShadowResultForTests(): GpuRendererShadowResult? =
+        lastGpuRendererPathShadowResult
 
     // ─── Polygon pipeline (G3.3a) — vertex buffer in device coords ─────────
 
@@ -15239,6 +15243,74 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
         )
     }
 
+    private fun shadowFillPathForGpuRendererEvidence(
+        devVerts: ArrayList<Float>,
+        contourStarts: ArrayList<Int>,
+        path: SkPath,
+        deviceBounds: FloatRect,
+        clip: SkIRect,
+        paint: SkPaint,
+        ctm: SkMatrix,
+    ) {
+        val config = GpuRendererShadowConfig.fromSystemProperties()
+        if (config.mode == GpuRendererShadowMode.Disabled) return
+
+        val commandId = gpuRendererShadowCommandId++
+        val transform = when {
+            ctm.isIdentity -> GpuRendererShadowTransform.Identity
+            ctm.isTranslate() -> GpuRendererShadowTransform.Translate(
+                dx = ctm.getTranslateX(),
+                dy = ctm.getTranslateY(),
+            )
+            ctm.hasPerspective() -> GpuRendererShadowTransform.Perspective
+            ctm.invert() == null -> GpuRendererShadowTransform.Singular
+            else -> GpuRendererShadowTransform.Identity
+        }
+        val fillRule = when (path.fillType) {
+            SkPathFillType.kEvenOdd -> "EvenOdd"
+            else -> "NonZero"
+        }
+        val clipBounds = SkRect.MakeLTRB(
+            clip.left.toFloat(),
+            clip.top.toFloat(),
+            clip.right.toFloat(),
+            clip.bottom.toFloat(),
+        )
+        val gpuClip = if (clip.left <= 0 && clip.top <= 0 &&
+            clip.right >= width && clip.bottom >= height
+        ) {
+            GpuRendererShadowClip.WideOpen
+        } else {
+            GpuRendererShadowClip.DeviceRect(clipBounds)
+        }
+
+        val pathKey = "path:shadow:drawPath:$commandId"
+        lastGpuRendererPathShadowResult = shadowFillPathForLegacyPath(
+            config = config,
+            state = GpuRendererShadowPathState(
+                commandId = commandId,
+                pathKey = pathKey,
+                tessellatedVertices = devVerts.toList(),
+                contourStarts = contourStarts.toList(),
+                verbCount = path.verbs.size,
+                pointCount = path.coords.size / 2,
+                fillRule = fillRule,
+                inverseFill = path.fillType.isInverse(),
+                edgeCount = devVerts.size / 2,
+                boundsMinX = deviceBounds.left,
+                boundsMinY = deviceBounds.top,
+                boundsMaxX = deviceBounds.right,
+                boundsMaxY = deviceBounds.bottom,
+                paint = paint,
+                targetWidth = width,
+                targetHeight = height,
+                transform = transform,
+                clip = gpuClip,
+                paintOrder = commandId,
+            ),
+        )
+    }
+
     private fun drawFillRect(rect: SkRect, clip: SkIRect, paint: SkPaint) {
         val color = paint.color
         val scissor: IntArray
@@ -16853,6 +16925,17 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
             vi += 2
         }
         val pathDeviceBounds = FloatRect(minX, minY, maxX, maxY)
+
+        // M15: Capture path-fill state for GPU renderer shadow evidence.
+        shadowFillPathForGpuRendererEvidence(
+            devVerts = devVerts,
+            contourStarts = contourStarts,
+            path = path,
+            deviceBounds = pathDeviceBounds,
+            clip = clip,
+            paint = paint,
+            ctm = ctm,
+        )
 
         // Honour the device clip via scissor (axis-aligned int clip).
         val scissorL = clip.left.coerceAtLeast(0)

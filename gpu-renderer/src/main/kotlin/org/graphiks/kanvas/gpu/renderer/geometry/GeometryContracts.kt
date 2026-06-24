@@ -421,11 +421,80 @@ class GPUBasicPathFillPreparedPlanner(
         )
     }
 
+    /**
+     * M15: Tessellates flattened device-space vertices into a single fan
+     * (triangle-fan) vertex buffer for GPU submission.
+     *
+     * Each contour is tessellated as a separate fan. For single-contour paths
+     * this produces an indexed fan; for multi-contour paths each contour is
+     * emitted as its own triangle list. The max 256 edges budget is enforced
+     * on total vertex count (2 floats per vertex).
+     */
+    fun tessellate(
+        flattenedVertices: List<Float>,
+        contourStarts: List<Int>,
+        edgeCount: Int,
+    ): GPUPathTessellationResult {
+        if (flattenedVertices.size < 6 || contourStarts.isEmpty()) {
+            return GPUPathTessellationResult(
+                accepted = false,
+                vertexBuffer = emptyList(),
+                indexBuffer = emptyList(),
+                triangleCount = 0,
+                vertexCount = 0,
+                refusalCode = "unsupported.geometry.path_degenerate",
+            )
+        }
+        if (edgeCount < 3 || edgeCount > maxEdges) {
+            return GPUPathTessellationResult(
+                accepted = false,
+                vertexBuffer = emptyList(),
+                indexBuffer = emptyList(),
+                triangleCount = 0,
+                vertexCount = 0,
+                refusalCode = "unsupported.path.edge_budget",
+            )
+        }
+
+        val vertexCount = flattenedVertices.size / 2
+        val indices = mutableListOf<Int>()
+        for (ci in contourStarts.indices) {
+            val start = contourStarts[ci]
+            val end = if (ci + 1 < contourStarts.size) contourStarts[ci + 1] else vertexCount
+            val contourVertexCount = end - start
+            if (contourVertexCount < 3) continue
+            indices.add(start)
+            for (i in 1 until contourVertexCount - 1) {
+                indices.add(start + i)
+                indices.add(start + i + 1)
+            }
+        }
+
+        return GPUPathTessellationResult(
+            accepted = true,
+            vertexBuffer = flattenedVertices,
+            indexBuffer = indices,
+            triangleCount = indices.size / 3,
+            vertexCount = vertexCount,
+            refusalCode = null,
+        )
+    }
+
     private companion object {
         const val pathFillConsumerKind = "coverage-mask.sample.path-fill"
         val pathFillInvalidationFacts = listOf("path-content-hash", "fill-rule", "transform-class", "bounds-proof")
     }
 }
+
+/** M15 path tessellation result produced by [GPUBasicPathFillPreparedPlanner.tessellate]. */
+data class GPUPathTessellationResult(
+    val accepted: Boolean,
+    val vertexBuffer: List<Float>,
+    val indexBuffer: List<Int>,
+    val triangleCount: Int,
+    val vertexCount: Int,
+    val refusalCode: String?,
+)
 
 /** Builds the first M3 prepared simple-stroke route evidence without product activation. */
 class GPUSimpleStrokePreparedPlanner(

@@ -5,14 +5,22 @@ import org.graphiks.kanvas.gpu.renderer.materials.GPUMaterialSamplingPlan
 import org.graphiks.kanvas.gpu.renderer.materials.GPUMaterialSourceDescriptor
 import org.graphiks.kanvas.gpu.renderer.materials.GPUMaterialTileMode
 import org.graphiks.kanvas.gpu.renderer.materials.MaterialKey
+import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandBinding
+import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandKind
+import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandReference
 import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedResourceReference
 import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedResourceRole
+import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceDiagnostic
+import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceMaterializationDecision
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceMaterializationPreimagePlan
 import org.graphiks.kanvas.gpu.renderer.resources.GPUSampledTextureBinding
 import org.graphiks.kanvas.gpu.renderer.resources.GPUSamplerDescriptor
+import org.graphiks.kanvas.gpu.renderer.resources.GPUTargetPreparationContext
 import org.graphiks.kanvas.gpu.renderer.resources.GPUTextureDescriptor
+import org.graphiks.kanvas.gpu.renderer.resources.GPUTextureResourceRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUTextureViewDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUUseToken
+import org.skia.codec.SkCodec
 import java.security.MessageDigest
 
 /** Image upload artifact key. */
@@ -131,6 +139,12 @@ data class GPUImageCodecRegistrySnapshot(
                 message = "Codec ${codec.codecName} remains dependency-gated for $format.",
                 terminal = true,
             )
+            format == "png" && codec.codecName == "kanvas-png-kotlin" -> GPUImageDiagnostic(
+                code = "dependency.image.codec.accepted",
+                sourceId = request.source.sourceId,
+                message = "Codec ${codec.codecName} is accepted for $format; pipeline plan may wire decode output.",
+                terminal = false,
+            )
             else -> GPUImageDiagnostic(
                 code = "dependency.image.codec.decode_not_promoted",
                 sourceId = request.source.sourceId,
@@ -139,11 +153,13 @@ data class GPUImageCodecRegistrySnapshot(
             )
         }
 
+        val classification = if (diagnostic.terminal) "DependencyGated" else "Accepted"
+
         return GPUImageCodecProvenancePlan(
             registry = this,
             request = request,
             codec = codec,
-            classification = "DependencyGated",
+            classification = classification,
             diagnostic = diagnostic,
         )
     }
@@ -178,12 +194,97 @@ data class GPUImageDecodeRequest(
 )
 
 /** Image decode plan. */
-data class GPUImageDecodePlan(
-    val request: GPUImageDecodeRequest,
-    val codec: GPUImageCodecDescriptor,
-    val outputPixelPlan: GPUImagePixelPlan,
-    val diagnostics: List<GPUImageDiagnostic> = emptyList(),
-)
+sealed interface GPUImageDecodePlan {
+    /** Decode succeeded with RGBA pixel output. */
+    data class Accepted(
+        val width: Int,
+        val height: Int,
+        val pixelBytes: ByteArray,
+        val colorType: String,
+    ) : GPUImageDecodePlan {
+        override fun equals(other: Any?): Boolean {
+            if (this === other) return true
+            if (other !is Accepted) return false
+            return width == other.width &&
+                height == other.height &&
+                colorType == other.colorType &&
+                pixelBytes.contentEquals(other.pixelBytes)
+        }
+
+        override fun hashCode(): Int {
+            var result = width
+            result = 31 * result + height
+            result = 31 * result + colorType.hashCode()
+            result = 31 * result + pixelBytes.contentHashCode()
+            return result
+        }
+    }
+
+    /** Decode was refused with a stable diagnostic code. */
+    data class Refused(
+        val code: String,
+        val reason: String,
+    ) : GPUImageDecodePlan
+}
+
+/** Plans GPU image decode from encoded bytes using available codecs. */
+class GPUImageDecodePlanner {
+    private val supportedMimeTypes = setOf(
+        "image/png",
+        "image/jpeg",
+        "image/webp",
+        "image/gif",
+    )
+
+    /** Plans a decode from raw bytes and a mime type. */
+    fun plan(bytes: ByteArray, mimeType: String): GPUImageDecodePlan {
+        val normalized = mimeType.lowercase()
+        if (normalized !in supportedMimeTypes) {
+            val container = normalized.removePrefix("image/")
+            return GPUImageDecodePlan.Refused(
+                code = "dependency.image.codec.$container",
+                reason = "Codec for $mimeType is unsupported or dependency-gated.",
+            )
+        }
+
+        val codec = SkCodec.MakeFromData(bytes)
+        if (codec == null) {
+            return GPUImageDecodePlan.Refused(
+                code = "dependency.image.decode.codec_not_found",
+                reason = "No codec found for $mimeType bytes.",
+            )
+        }
+
+        val (bitmap, result) = codec.getImage()
+        if (result != SkCodec.Result.kSuccess || bitmap == null) {
+            return GPUImageDecodePlan.Refused(
+                code = "dependency.image.decode.failed",
+                reason = "Decode failed for $mimeType with result $result.",
+            )
+        }
+
+        val width = bitmap.width
+        val height = bitmap.height
+        val pixelBytes = ByteArray(width * height * 4)
+        for (y in 0 until height) {
+            for (x in 0 until width) {
+                val pixel = bitmap.getPixel(x, y)
+                val offset = (y * width + x) * 4
+                pixelBytes[offset] = ((pixel ushr 16) and 0xFF).toByte()
+                pixelBytes[offset + 1] = ((pixel ushr 8) and 0xFF).toByte()
+                pixelBytes[offset + 2] = (pixel and 0xFF).toByte()
+                pixelBytes[offset + 3] = ((pixel ushr 24) and 0xFF).toByte()
+            }
+        }
+
+        return GPUImageDecodePlan.Accepted(
+            width = width,
+            height = height,
+            pixelBytes = pixelBytes,
+            colorType = "rgba8unorm",
+        )
+    }
+}
 
 /** Image decode result descriptor. */
 sealed interface GPUImageDecodeResult {
@@ -968,3 +1069,68 @@ private fun GPUImageCodecDescriptor.dumpLine(): String =
         "formats=${supportedFormats.map { format -> format.lowercase() }.sorted().joinToString(",")} " +
         "kind=$implementationKind deterministic=$deterministic color=$colorManagementPolicy " +
         "gate=${dependencyGate ?: "none"}"
+
+/** Resource-layer materializer that validates decoded image pixels into GPU texture resources. */
+class ValidatingTextureUploadMaterializer(
+    private val maxUploadBytes: Long = 1_048_576L,
+) {
+    /** Materializes decoded pixels into a GPU texture resource or refuses with diagnostic. */
+    fun materialize(
+        descriptor: GPUDecodedImagePixelsDescriptor,
+        context: GPUTargetPreparationContext,
+    ): GPUResourceMaterializationDecision {
+        val resourceLabel = "uploaded-image:${descriptor.sourceId}"
+
+        if (descriptor.pixelFormat != "RGBA8Unorm") {
+            return GPUResourceMaterializationDecision.Refused(
+                diagnostic = GPUResourceDiagnostic(
+                    code = "unsupported.image.pixel.format",
+                    resourceLabel = resourceLabel,
+                    message = "Texture upload requires RGBA8Unorm pixel format, got ${descriptor.pixelFormat}.",
+                    terminal = true,
+                    facts = mapOf("pixelFormat" to descriptor.pixelFormat),
+                ),
+                targetId = context.targetId,
+                resourcePlanLabels = listOf(resourceLabel),
+            )
+        }
+
+        val uploadBytes = descriptor.rowBytes * descriptor.height
+        if (uploadBytes > maxUploadBytes) {
+            return GPUResourceMaterializationDecision.refusedUploadBudgetExceeded(
+                resourceLabel = resourceLabel,
+                requestedBytes = uploadBytes,
+                budgetBytes = maxUploadBytes,
+            )
+        }
+
+        val textureRef = GPUTextureResourceRef("texture-ref:${descriptor.sourceId}")
+        val textureOperand = GPUMaterializedCommandOperandReference(
+            label = "texture:${descriptor.sourceId}",
+            kind = GPUMaterializedCommandOperandKind.Texture,
+            descriptorHash = "sha256:${descriptor.contentHash}",
+            deviceGeneration = context.deviceGeneration,
+            ownerScope = "image-upload",
+            usageLabels = listOf("texture_binding", "copy_dst"),
+            invalidationPolicy = "recording-complete",
+            evidenceFacts = mapOf(
+                "sourceId" to descriptor.sourceId,
+                "pixelFormat" to descriptor.pixelFormat,
+                "width" to descriptor.width.toString(),
+                "height" to descriptor.height.toString(),
+            ),
+        )
+
+        return GPUResourceMaterializationDecision.Materialized(
+            resources = listOf(textureRef),
+            targetId = context.targetId,
+            resourcePlanLabels = listOf(resourceLabel),
+            operandBridge = listOf(
+                GPUMaterializedCommandOperandBinding(
+                    commandLabel = "upload-texture",
+                    operand = textureOperand,
+                ),
+            ),
+        )
+    }
+}
