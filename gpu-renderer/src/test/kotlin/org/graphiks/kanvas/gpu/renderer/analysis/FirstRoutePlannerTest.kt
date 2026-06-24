@@ -12,6 +12,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.commands.GPUFillRectCommandBuilder
 import org.graphiks.kanvas.gpu.renderer.commands.GPUFillRRectCommandBuilder
+import org.graphiks.kanvas.gpu.renderer.commands.GPULinearGradientCommandBuilder
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBlendFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUClipFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPULayerFacts
@@ -94,10 +95,70 @@ class FirstRoutePlannerTest {
             ),
         )
 
-        val plan = GPUFirstRoutePlanner(capabilities = firstSliceCapabilities()).plan(command)
+        val plan = GPUFirstRoutePlanner(capabilities = firstSliceWithScissorCapabilities()).plan(command)
         assertIs<GPURouteDecision.Native>(plan.routeDecision)
 
         assertEquals("bounds:4.0,5.0,16.0,17.0", plan.pass.invocations.single().scissorBoundsHash)
+    }
+
+    /** A DeviceRect clip without the scissor capability refuses with a specific diagnostic. */
+    @Test
+    fun `device rect clip without scissor capability refuses diagnostically`() {
+        val command = GPUFillRectCommandBuilder.build(
+            commandId = GPUDrawCommandID(7),
+            rect = GPURect(left = 2f, top = 3f, right = 18f, bottom = 21f),
+            target = GPUTargetFacts(width = 64, height = 64, colorFormat = "rgba8unorm"),
+            material = GPUMaterialDescriptor.SolidColor(r = 1f, g = 0.25f, b = 0.5f, a = 1f),
+            clip = GPUClipFacts.deviceRect(
+                bounds = GPUBounds(left = 4f, top = 5f, right = 16f, bottom = 17f),
+            ),
+        )
+
+        val plan = GPUFirstRoutePlanner(capabilities = firstSliceCapabilities()).plan(command)
+        assertIs<GPURouteDecision.Refused>(plan.routeDecision)
+        assertEquals("unsupported.clip.scissor_capability_missing", plan.pass.diagnostics.single().code)
+    }
+
+    /** Accepted FillRect with LinearGradient material requires the linear gradient capability. */
+    @Test
+    fun `linear gradient fill rect requires linear gradient capability`() {
+        val command = GPULinearGradientCommandBuilder.build(
+            commandId = GPUDrawCommandID(8),
+            rect = GPURect(left = 2f, top = 3f, right = 18f, bottom = 21f),
+            target = GPUTargetFacts(width = 64, height = 64, colorFormat = "rgba8unorm"),
+            material = GPUMaterialDescriptor.LinearGradient(
+                startX = 2f, startY = 3f, endX = 18f, endY = 21f,
+                startR = 1f, startG = 0.25f, startB = 0.5f, startA = 1f,
+                endR = 0f, endG = 0.75f, endB = 0.5f, endA = 1f,
+            ),
+        )
+
+        val plan = GPUFirstRoutePlanner(
+            capabilities = firstSliceWithLinearGradientCapabilities(),
+        ).plan(command)
+        assertIs<GPURouteDecision.Native>(plan.routeDecision)
+    }
+
+    /** FillRect with LinearGradient material refuses when the linear gradient capability is missing. */
+    @Test
+    fun `linear gradient fill rect without capability refuses diagnostically`() {
+        val command = GPULinearGradientCommandBuilder.build(
+            commandId = GPUDrawCommandID(9),
+            rect = GPURect(left = 2f, top = 3f, right = 18f, bottom = 21f),
+            target = GPUTargetFacts(width = 64, height = 64, colorFormat = "rgba8unorm"),
+            material = GPUMaterialDescriptor.LinearGradient(
+                startX = 2f, startY = 3f, endX = 18f, endY = 21f,
+                startR = 1f, startG = 0.25f, startB = 0.5f, startA = 1f,
+                endR = 0f, endG = 0.75f, endB = 0.5f, endA = 1f,
+            ),
+        )
+
+        val plan = GPUFirstRoutePlanner(capabilities = firstSliceCapabilities()).plan(command)
+        assertIs<GPURouteDecision.Refused>(plan.routeDecision)
+        assertEquals(
+            "unsupported.material.linear_gradient_capability_missing",
+            plan.pass.diagnostics.single().code,
+        )
     }
 
     /** Accepted solid FillRRect produces pre-materialization rrect analysis, native route, and pass records only. */
@@ -331,6 +392,32 @@ class FirstRoutePlannerTest {
                 ),
             ),
             snapshotId = "rrect-route-test",
+        )
+
+    /** Capability snapshot that enables the FillRect route plus the scissor clip. */
+    private fun firstSliceWithScissorCapabilities(): GPUCapabilities =
+        firstSliceCapabilities().copy(
+            facts = firstSliceCapabilities().facts + GPUCapabilityFact(
+                name = "first_slice.scissor.native",
+                source = "unit-test",
+                value = "supported",
+                affectsValidity = true,
+                evidenceLabel = "scissor-fixture",
+            ),
+            snapshotId = "scissor-test",
+        )
+
+    /** Capability snapshot that enables the FillRect route plus linear gradient material. */
+    private fun firstSliceWithLinearGradientCapabilities(): GPUCapabilities =
+        firstSliceCapabilities().copy(
+            facts = firstSliceCapabilities().facts + GPUCapabilityFact(
+                name = "first_slice.linear_gradient.native",
+                source = "unit-test",
+                value = "supported",
+                affectsValidity = true,
+                evidenceLabel = "linear-gradient-fixture",
+            ),
+            snapshotId = "linear-gradient-test",
         )
 
     /** Builds the common accepted command while allowing one refused fact to vary. */
