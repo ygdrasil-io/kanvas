@@ -1,7 +1,7 @@
 ---
 id: KGPU-M14-002
 title: "Add SweepGradient WGSL: atan2 angle interpolation + tile mode"
-status: proposed
+status: done
 milestone: M14
 priority: P0
 owner_area: materials-wgsl
@@ -82,6 +82,7 @@ rtk ./gradlew --no-daemon :gpu-renderer:test --tests '*SweepGradient*'
 ## Status Notes
 
 - `proposed`: Initial ticket.
+- `done`: Implemented in KGPU-M14. SweepGradientSnippet.kt with compute_t_sweep (atan2), sample_stops_at, clamp-only entry point. Material lowering with dictionary, expandOrRefuse, planSweepGradient (clamp-only, ≤16 stops). Product flag sweepGradientEnabled=true.
 
 ## Linear Labels
 
