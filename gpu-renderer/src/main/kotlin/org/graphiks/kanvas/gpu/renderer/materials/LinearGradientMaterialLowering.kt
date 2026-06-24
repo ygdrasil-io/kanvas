@@ -1,6 +1,8 @@
 package org.graphiks.kanvas.gpu.renderer.materials
 
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
+import org.graphiks.kanvas.gpu.renderer.wgsl.LinearGradientEntryPoint
+import org.graphiks.kanvas.gpu.renderer.wgsl.LinearGradientSnippetSourceHash
 
 object GPULinearGradientMaterialDictionary {
     const val DictionaryVersion: String = "material-dictionary:linear-gradient:v1"
@@ -76,8 +78,8 @@ object GPULinearGradientMaterialDictionary {
     private fun linearGradientSnippet(): WGSLSnippet =
         WGSLSnippet(
             snippetId = LinearGradientSnippetID,
-            sourceHash = "fragment:material.linear_gradient:v1",
-            entryPoint = "linear_gradient_source",
+            sourceHash = LinearGradientSnippetSourceHash,
+            entryPoint = LinearGradientEntryPoint,
             requiredBindings = listOf("group1.binding0.LinearGradientMaterialBlock"),
             category = "material-source",
             version = "v1",
