@@ -517,9 +517,13 @@ public class BasicParagraphLayoutEngine(
                     coveredRanges = shapedCoverage + placeholderRanges,
                 )
             val lineFontSize = lineRequests.maxOfOrNull { request -> request.style.fontSize } ?: paragraph.primaryStyleFor(textRange).fontSize
-            val baseAscent = -lineFontSize * ASCENT_FRACTION
-            val baseDescent = lineFontSize * DESCENT_FRACTION
-            val baseLineExtent = paragraph.paragraphStyle.lineHeight ?: lineFontSize
+            val effectiveLineHeight = paragraph.paragraphStyle.lineHeight
+                ?: lineRequests.maxOfOrNull { request ->
+                    (request.style.heightMultiplier?.let { request.style.fontSize * it }) ?: request.style.fontSize
+                } ?: lineFontSize
+            val baseAscent = -effectiveLineHeight * ASCENT_FRACTION
+            val baseDescent = effectiveLineHeight * DESCENT_FRACTION
+            val baseLineExtent = paragraph.paragraphStyle.lineHeight ?: effectiveLineHeight
             val hasParticipatingPlaceholders = placeholderRanges.any { range ->
                 paragraph.placeholders.getValue(range).participatesInLineHeight
             }
@@ -554,15 +558,24 @@ public class BasicParagraphLayoutEngine(
                 baseline = baseline,
             )
             val direction = if ((glyphRuns.firstOrNull()?.bidiLevel ?: lineRequests.firstOrNull()?.bidiLevel ?: 0) % 2 == 0) 1 else -1
+            val alignX = when (paragraph.paragraphStyle.textAlign) {
+                TextAlign.START -> when (paragraph.paragraphStyle.textDirection) {
+                    TextDirection.RIGHT_TO_LEFT -> maxOf(0f, maxWidth - lineWidth)
+                    else -> 0f
+                }
+                TextAlign.CENTER -> maxOf(0f, (maxWidth - lineWidth) / 2f)
+                TextAlign.END -> maxOf(0f, maxWidth - lineWidth)
+                TextAlign.JUSTIFY -> 0f
+            }
             val boxes = if (lineWidth == 0f) {
                 emptyList()
             } else {
                 listOf(
                     TextBox(
                         textRange = textRange,
-                        left = 0f,
+                        left = alignX,
                         top = y,
-                        right = lineWidth,
+                        right = alignX + lineWidth,
                         bottom = y + lineHeight,
                         direction = direction,
                     ),
