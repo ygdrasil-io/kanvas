@@ -1,0 +1,8 @@
+rendered linear-gradient-lanes via WebGPU offscreen
+adapter=Apple M2 Max
+clearCommands=1
+fillRectCommands=0
+fillRRectCommands=0
+linearGradientRectCommands=3
+clipCommands=0
+bitmapRectCommands=0

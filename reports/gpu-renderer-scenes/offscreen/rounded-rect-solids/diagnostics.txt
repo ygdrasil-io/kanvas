@@ -1,0 +1,8 @@
+rendered rounded-rect-solids via WebGPU offscreen
+adapter=Apple M2 Max
+clearCommands=1
+fillRectCommands=0
+fillRRectCommands=3
+linearGradientRectCommands=0
+clipCommands=0
+bitmapRectCommands=0
