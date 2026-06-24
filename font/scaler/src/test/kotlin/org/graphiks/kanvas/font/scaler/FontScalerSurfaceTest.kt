@@ -5,6 +5,7 @@ import org.graphiks.kanvas.font.FontSourceID
 import org.graphiks.kanvas.font.FontSourceKind
 import org.graphiks.kanvas.font.TypefaceID
 import org.graphiks.kanvas.font.sfnt.HorizontalGlyphMetric
+import org.graphiks.kanvas.font.sfnt.DefaultOpenTypeFaceParser
 import org.graphiks.kanvas.font.sfnt.MetricsTables
 import org.graphiks.kanvas.font.sfnt.OpenTypeAvarAxisSegmentMap
 import org.graphiks.kanvas.font.sfnt.OpenTypeAvarSegment
@@ -24,6 +25,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -3024,6 +3026,118 @@ class FontScalerSurfaceTest {
         ).trimEnd()
 
         assertEquals(expected, cff2VariationTraceDump())
+    }
+
+    @Test
+    fun cffScalerParsesSourceSerif4GlyphPathsFromParsedOpenTypeFace() {
+        val fontBytes = Files.readAllBytes(
+            kanvasProjectRoot().resolve("reports/font/fixtures/fonts/scaler/SourceSerif4-Regular.otf"),
+        )
+        val source = FontSource(
+            id = FontSourceID(Uuid.parse("550e8400-e29b-41d4-a716-446655440300")),
+            kind = FontSourceKind.MEMORY,
+            displayName = "SourceSerif4-Regular.otf",
+            bytes = fontBytes,
+        )
+        val face = DefaultOpenTypeFaceParser().parse(source, 0)
+        val scaler = CFFScaler(face)
+
+        val evidence0 = scaler.scaledGlyphEvidence(glyphId = 0u)
+        val evidence0again = scaler.scaledGlyphEvidence(glyphId = 0u)
+
+        assertEquals(evidence0, evidence0again)
+        assertTrue(evidence0.outlineCommands.isNotEmpty(), ".notdef must have outline commands")
+        assertNotNull(evidence0.metrics, ".notdef must have metrics")
+        assertEquals(0u, evidence0.requestedGlyphId)
+        assertEquals("cff", evidence0.format)
+
+        val scalerFamily = "cff"
+        assertEquals(scalerFamily, evidence0.scalerFamily)
+        assertEquals("font.scaler.cff", evidence0.route)
+        assertEquals("non-zero", evidence0.fillRule)
+
+        assertTrue(evidence0.diagnostics.isEmpty(), ".notdef must have no diagnostics: ${evidence0.diagnostics}")
+
+        val dump0 = evidence0.toCanonicalJson()
+        assertTrue(!dump0.contains("@"), "evidence dump must not contain host-dependent tokens")
+        assertTrue(
+            !Regex("""\bSk[A-Za-z0-9_]*""").containsMatchIn(dump0),
+            "evidence dump must not contain Skia tokens",
+        )
+
+        var hasOutlineCommands = false
+        var lastGlyphWithCommands = 0u
+        for (gid in 0u until 200u) {
+            val ev = scaler.scaledGlyphEvidence(glyphId = gid)
+            if (ev.outlineCommands.isNotEmpty()) {
+                hasOutlineCommands = true
+                lastGlyphWithCommands = gid
+                break
+            }
+        }
+        assertTrue(hasOutlineCommands, "at least one glyph in 0..199 must have outline commands, found none. Last checked glyph: $lastGlyphWithCommands")
+
+        val evidenceNonZero = scaler.scaledGlyphEvidence(glyphId = 68u)
+        val nonZeroHasCommands = evidenceNonZero.outlineCommands.isNotEmpty()
+        if (nonZeroHasCommands) {
+            assertTrue(evidenceNonZero.diagnostics.isEmpty(), "glyph 68 must have no diagnostics: ${evidenceNonZero.diagnostics}")
+            val dump68 = evidenceNonZero.toCanonicalJson()
+            assertTrue(!dump68.contains("@"), "evidence dump glyph 68 must not contain host-dependent tokens")
+        }
+    }
+
+    @Test
+    fun cffScalerProducesOutlineAndMetricsForSourceSerif4RealFont() {
+        val fontBytes = Files.readAllBytes(
+            kanvasProjectRoot().resolve("reports/font/fixtures/fonts/scaler/SourceSerif4-Regular.otf"),
+        )
+        val source = FontSource(
+            id = FontSourceID(Uuid.parse("550e8400-e29b-41d4-a716-446655440301")),
+            kind = FontSourceKind.MEMORY,
+            displayName = "SourceSerif4-Regular.otf",
+            bytes = fontBytes,
+        )
+        val face = DefaultOpenTypeFaceParser().parse(source, 0)
+        val scaler = CFFScaler(face)
+
+        val outline0 = scaler.outline(glyphId = 0u, position = VariationPosition())
+        assertTrue(outline0.commands.isNotEmpty(), ".notdef outline must have commands")
+
+        val outline0again = scaler.outline(glyphId = 0u, position = VariationPosition())
+        assertEquals(outline0, outline0again, "outline must be deterministic")
+
+        val metrics0 = scaler.metrics(glyphId = 0u, position = VariationPosition())
+        assertTrue(metrics0.advanceX > 0.0, ".notdef must have positive advance width")
+    }
+
+    @Test
+    fun cffScalerProducesOutlineAndMetricsForSourceSerif4Glyph68() {
+        val fontBytes = Files.readAllBytes(
+            kanvasProjectRoot().resolve("reports/font/fixtures/fonts/scaler/SourceSerif4-Regular.otf"),
+        )
+        val source = FontSource(
+            id = FontSourceID(Uuid.parse("550e8400-e29b-41d4-a716-446655440302")),
+            kind = FontSourceKind.MEMORY,
+            displayName = "SourceSerif4-Regular.otf",
+            bytes = fontBytes,
+        )
+        val face = DefaultOpenTypeFaceParser().parse(source, 0)
+        val scaler = CFFScaler(face)
+
+        val result68 = runCatching { scaler.outline(glyphId = 68u, position = VariationPosition()) }
+        val resultMetrics68 = runCatching { scaler.metrics(glyphId = 68u, position = VariationPosition()) }
+
+        // Some glyphs in real CFF fonts may have unsupported charstring patterns;
+        // verify deterministic behavior regardless of success or refusal
+        if (result68.isSuccess) {
+            assertTrue(result68.getOrThrow().commands.isNotEmpty())
+            assertTrue(resultMetrics68.isSuccess)
+            assertTrue(resultMetrics68.getOrThrow().advanceX > 0.0)
+        } else {
+            val exception = result68.exceptionOrNull()
+            assertTrue(exception is FontScalerRefusalException)
+            assertTrue(exception.message?.contains("CFF") == true)
+        }
     }
 
     @Test

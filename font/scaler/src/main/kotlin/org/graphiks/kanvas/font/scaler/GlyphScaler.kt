@@ -115,7 +115,7 @@ class GlyphScaler private constructor(
             when {
                 "CFF/CFF2" in msg -> {
                     code = "font.scaler.cff_not_yet_supported"
-                    reason = "CFF/CFF2 charstring parsing is deferred"
+                    reason = "CFF/CFF2 charstring parsing is deferred here; use CFFScaler for pure Kotlin CFF path output"
                 }
                 "point-matching" in msg -> {
                     code = "font.scaler.composite_point_matching_unsupported"
