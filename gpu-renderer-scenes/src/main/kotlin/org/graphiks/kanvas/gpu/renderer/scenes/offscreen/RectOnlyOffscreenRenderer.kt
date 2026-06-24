@@ -26,6 +26,7 @@ import org.graphiks.kanvas.gpu.renderer.wgsl.LayerCompositeEntryPoint
 import org.graphiks.kanvas.gpu.renderer.wgsl.LayerCompositeSnippetSourceHash
 import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTEntryPoint
 import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTSourceHash
+import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTWgsl
 import org.graphiks.kanvas.gpu.renderer.layers.SaveLayerExecutor
 import org.graphiks.kanvas.gpu.renderer.text.SDFGenerator
 import org.graphiks.kanvas.gpu.renderer.text.TextA8AtlasExecutor
@@ -249,7 +250,7 @@ class RectOnlyOffscreenRenderer {
 
             val reFills = drawPlan.fills.filter { it.family == "runtime-effect" }
             if (reFills.isNotEmpty()) {
-                val wgsl = composeRectWgsl("rt", SIMPLE_RT_SNIPPET_WGSL, "simple_rt_render", "uniforms.color")
+                val wgsl = composeRuntimeEffectWgsl()
                 drawFullscreenRawUniformPass(
                     wgsl = wgsl,
                     colorFormat = OFFSCREEN_COLOR_FORMAT,
@@ -488,22 +489,6 @@ fn bitmap_shader_decal(uv: vec2<f32>) -> vec4<f32> {
 fn bitmap_procedural(pos: vec4f, color: vec4f) -> vec4f {
     let uv = vec2f(pos.x / 320.0, pos.y / 200.0);
     return bitmap_shader_clamp(uv);
-}
-"""
-
-        // Real SimpleRT runtime-effect snippet (M21 registered descriptor).
-        // Mirrors SimpleRTWgsl.simple_rt_source, which returns the gColor uniform.
-        // The fullscreen-uniform backend binds the uniform at @group(0) @binding(0)
-        // instead of SimpleRTWgsl's @group(1) @binding(0); the gColor ABI (vec4f@0:16)
-        // and entry-point semantics are identical, so this is real GPU output (no procedural wrapper).
-        val SIMPLE_RT_SNIPPET_WGSL: String = """
-// SimpleRT source (fragment:simple_rt:v1, entry simple_rt_source): returns gColor.
-fn simple_rt_source(gColor: vec4f) -> vec4f {
-    return gColor;
-}
-
-fn simple_rt_render(pos: vec4f, gColor: vec4f) -> vec4f {
-    return simple_rt_source(gColor);
 }
 """
 
@@ -920,6 +905,33 @@ internal fun textAtlasWiringDiagnostics(width: Int, height: Int): List<String> =
     add("textSdf:smoothing=${SDFGenerator.SDF_SMOOTHING} threshold=${SDFGenerator.SDF_THRESHOLD}")
     add("textSdf:${SDFGenerator.nonClaimLine}")
     add("textAtlas:proceduralAtlas=true realAtlasDeferred=M26 productActivation=false")
+}
+
+/**
+ * KGPU-M25-003: composes the runtime-effect fullscreen pass from the real registered
+ * [SimpleRTWgsl] module source (M21 descriptor) rather than an inline copy. The offscreen
+ * fullscreen-uniform backend binds the uniform at `@group(0) @binding(0)`, while [SimpleRTWgsl]
+ * declares it at `@group(1) @binding(0)`; the binding is rebound here (in the renderer) instead of
+ * forking the shader. The `gColor` ABI (vec4f@0:16) and `simple_rt_source` entry point are taken
+ * verbatim from the module, so this is real GPU output (no procedural wrapper).
+ */
+internal fun composeRuntimeEffectWgsl(): String {
+    val snippet = SimpleRTWgsl.replace("@group(1)", "@group(0)")
+    return """
+$snippet
+
+@vertex
+fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
+    let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
+    let y = f32(idx & 2u) * 2.0 - 1.0;
+    return vec4f(x, y, 0.0, 1.0);
+}
+
+@fragment
+fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
+    return $SimpleRTEntryPoint(pos.xy);
+}
+"""
 }
 
 /**

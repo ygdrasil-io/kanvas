@@ -95,6 +95,7 @@ rtk ./gradlew --no-daemon :gpu-renderer-scenes:renderGpuRendererSceneOffscreen -
 
 - `proposed`: Initial ticket.
 - `done` (ImplementationCandidate): BitmapRect routed through the real `BitmapShaderSnippet` identity (`BitmapShaderSnippetSourceHash` = `fragment:bitmap_shader:v1`, entry `bitmap_shader_clamp`) and a new `UniformPacker.bitmapBytes` packer. Wiring evidence emitted via `bitmapShaderWiringDiagnostics()` (see `M25ExecutorWiringTest`). Remaining gate (M26): real decoded texture upload + `textureSample`; the procedural `BITMAP_SHADER_WRAPPER` stays for visuals because the offscreen `GPUBackendRenderRecorder` supports only fullscreen uniform passes (no texture/sampler bindings). No product activation.
+- `done` clarification (Bitmap identity-ref): Unlike the path/text/saveLayer/vertices families (which invoke a delivered executor: `StencilCoverExecutor`/`ConvexFanExecutor`, `TextA8AtlasExecutor`/`SDFGenerator`, `SaveLayerExecutor`, `VerticesExecutor`), the bitmap integration here is by **snippet identity / reference only** — it asserts the real `BitmapShaderSnippetSourceHash` + `BitmapShaderClampEntryPoint` + `UniformPacker.bitmapBytes` ABI, but does **not** invoke a bitmap executor. There is no executor to invoke yet because real texture sampling (`textureSample` over an uploaded GPU texture) requires the M26 image-upload path (KGPU-M26-001). The matching note lives in `M25ExecutorWiringTest`'s `KGPU-M25-001` test.
 
 ## Linear Labels
 
