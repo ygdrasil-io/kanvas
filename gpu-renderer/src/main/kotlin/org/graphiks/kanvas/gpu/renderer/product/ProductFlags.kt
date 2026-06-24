@@ -4,6 +4,7 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilityFact
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUImplementationIdentity
 
+/** Product flag configuration controlling GPU renderer feature enablement. */
 data class GpuProductFlagConfig(
     val fillRRectEnabled: Boolean = true,
     val linearGradientEnabled: Boolean = true,
@@ -11,6 +12,7 @@ data class GpuProductFlagConfig(
     val radialGradientEnabled: Boolean = true,
     val sweepGradientEnabled: Boolean = true,
 ) {
+    /** Builds a GPUCapabilities instance from the current flag configuration. */
     fun buildCapabilities(
         implementation: GPUImplementationIdentity = GpuProductFlagConfig.defaultImplementation(),
     ): GPUCapabilities {
@@ -79,6 +81,7 @@ data class GpuProductFlagConfig(
         const val SweepGradientProperty: String = "kanvas.gpu.renderer.product.sweepGradient"
         const val SweepGradientDisableProperty: String = "kanvas.gpu.renderer.product.sweepGradient.disable"
 
+        /** Returns the default GPU implementation identity for product flags. */
         fun defaultImplementation(): GPUImplementationIdentity =
             GPUImplementationIdentity(
                 facadeName = "kanvas-gpu-renderer",
@@ -87,6 +90,7 @@ data class GpuProductFlagConfig(
                 deviceName = "product-device",
             )
 
+        /** Creates a configuration from system properties with disable toggles. */
         fun fromSystemProperties(
             propertyReader: (String) -> String? = System::getProperty,
         ): GpuProductFlagConfig {

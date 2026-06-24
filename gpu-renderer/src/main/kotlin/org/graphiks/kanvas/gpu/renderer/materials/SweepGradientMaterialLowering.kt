@@ -13,6 +13,7 @@ object GPUSweepGradientMaterialDictionary {
 
     const val SweepGradientMaterialModuleSalt: String = "kanvas-gpu-renderer:sweep-gradient-material:v1"
 
+    /** Creates a sweep gradient material dictionary. */
     fun create(): GPUMaterialDictionary =
         GPUMaterialDictionary(
             dictionaryVersion = DictionaryVersion,
@@ -20,6 +21,7 @@ object GPUSweepGradientMaterialDictionary {
             rootSets = listOf(sweepGradientRootSet()),
         )
 
+    /** Expands a sweep gradient material entry or refuses with diagnostic. */
     fun expandSweepGradientMaterialOrRefuse(
         materialKey: MaterialKey,
         dictionary: GPUMaterialDictionary,
@@ -45,6 +47,7 @@ object GPUSweepGradientMaterialDictionary {
         )
     }
 
+    /** Validates a sweep gradient material dictionary. */
     fun validateSweepGradientDictionary(
         dictionary: GPUMaterialDictionary,
     ): GPUMaterialSourceDiagnostic? {
@@ -96,6 +99,7 @@ object GPUSweepGradientMaterialDictionary {
 }
 
 object GPUSweepGradientMaterialLowering {
+    /** Plans a paint descriptor into a sweep gradient pipeline. */
     fun planPaint(
         descriptor: GPUPaintDescriptor,
         context: GPUMaterialLoweringContext,
@@ -115,6 +119,7 @@ object GPUSweepGradientMaterialLowering {
         )
     }
 
+    /** Plans a material source descriptor into a source plan. */
     fun planSource(
         source: GPUMaterialSourceDescriptor,
         context: GPUMaterialLoweringContext,
@@ -131,6 +136,7 @@ object GPUSweepGradientMaterialLowering {
             )
         }
 
+    /** Derives a unique material key from an accepted source plan. */
     fun deriveMaterialKey(
         accepted: GPUMaterialSourcePlan.Accepted,
         context: GPUMaterialLoweringContext,

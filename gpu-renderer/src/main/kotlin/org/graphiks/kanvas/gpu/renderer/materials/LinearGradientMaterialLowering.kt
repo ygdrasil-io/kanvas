@@ -13,6 +13,7 @@ object GPULinearGradientMaterialDictionary {
 
     const val LinearGradientMaterialModuleSalt: String = "kanvas-gpu-renderer:linear-gradient-material:v1"
 
+    /** Creates a linear gradient material dictionary. */
     fun create(): GPUMaterialDictionary =
         GPUMaterialDictionary(
             dictionaryVersion = DictionaryVersion,
@@ -20,6 +21,7 @@ object GPULinearGradientMaterialDictionary {
             rootSets = listOf(linearGradientRootSet()),
         )
 
+    /** Expands a linear gradient material entry or refuses with diagnostic. */
     fun expandLinearGradientMaterialOrRefuse(
         materialKey: MaterialKey,
         dictionary: GPUMaterialDictionary,
@@ -45,6 +47,7 @@ object GPULinearGradientMaterialDictionary {
         )
     }
 
+    /** Validates a linear gradient material dictionary. */
     fun validateLinearGradientDictionary(
         dictionary: GPUMaterialDictionary,
     ): GPUMaterialSourceDiagnostic? {
@@ -96,6 +99,7 @@ object GPULinearGradientMaterialDictionary {
 }
 
 object GPULinearGradientMaterialLowering {
+    /** Plans a paint descriptor into a linear gradient pipeline. */
     fun planPaint(
         descriptor: GPUPaintDescriptor,
         context: GPUMaterialLoweringContext,
@@ -115,6 +119,7 @@ object GPULinearGradientMaterialLowering {
         )
     }
 
+    /** Plans a material source descriptor into a source plan. */
     fun planSource(
         source: GPUMaterialSourceDescriptor,
         context: GPUMaterialLoweringContext,
@@ -131,6 +136,7 @@ object GPULinearGradientMaterialLowering {
             )
         }
 
+    /** Derives a unique material key from an accepted source plan. */
     fun deriveMaterialKey(
         accepted: GPUMaterialSourcePlan.Accepted,
         context: GPUMaterialLoweringContext,

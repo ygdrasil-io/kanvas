@@ -11,6 +11,12 @@ import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRectDraw
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
 import org.graphiks.kanvas.gpu.renderer.execution.GPUClearColor
 import org.graphiks.kanvas.gpu.renderer.execution.GPUOffscreenTargetRequest
+import org.graphiks.kanvas.gpu.renderer.wgsl.LinearGradientWgsl
+import org.graphiks.kanvas.gpu.renderer.wgsl.LinearGradientEntryPoint
+import org.graphiks.kanvas.gpu.renderer.wgsl.RadialGradientWgsl
+import org.graphiks.kanvas.gpu.renderer.wgsl.RadialGradientEntryPoint
+import org.graphiks.kanvas.gpu.renderer.wgsl.SweepGradientWgsl
+import org.graphiks.kanvas.gpu.renderer.wgsl.SweepGradientEntryPoint
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererScene
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.a8GlyphAtlasGateDiagnostics
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.legacyRetirementBlockerDiagnostics
@@ -27,6 +33,13 @@ import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneRect
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.textRunRouteUnavailableReason
 
 private const val BYTES_PER_PIXEL: Int = 4
+
+private data class GradientWgslInfo(
+    val snippet: String,
+    val entryPoint: String,
+    val uniformStruct: String,
+    val uniformArgs: String,
+)
 
 class RectOnlyOffscreenRenderer {
     fun render(scene: GPURendererScene<SceneCommand>, outputDir: Path): OffscreenRunReport {
@@ -104,7 +117,7 @@ class RectOnlyOffscreenRenderer {
             val solidFills = drawPlan.fills.filter { it.family !in gradientTypes && it.family != "vertices" }
             if (solidFills.isNotEmpty()) {
                 drawFullscreenPass(
-                    wgsl = WgslComposer.solidColorWgsl(),
+                    wgsl = SOLID_RECT_WGSL,
                     colorFormat = OFFSCREEN_COLOR_FORMAT,
                     draws = solidFills.map { fill ->
                         GPUBackendRectDraw(
@@ -119,12 +132,25 @@ class RectOnlyOffscreenRenderer {
             }
             val gradientFills = drawPlan.fills.filter { it.family in gradientTypes }
             gradientFills.groupBy { it.family }.forEach { (family, fills) ->
-                val wgsl = when (family) {
-                    "linear-gradient-rect" -> WgslComposer.linearGradientWgsl()
-                    "radial-gradient-rect" -> WgslComposer.radialGradientWgsl()
-                    "sweep-gradient-rect" -> WgslComposer.sweepGradientWgsl()
+                val gradientWgslInfo = when (family) {
+                    "linear-gradient-rect" -> GradientWgslInfo(
+                        LinearGradientWgsl, LinearGradientEntryPoint,
+                        "struct Uniforms { start: vec4f, end: vec4f, startColor: vec4f, endColor: vec4f };",
+                        "uniforms.start.xy, uniforms.end.xy",
+                    )
+                    "radial-gradient-rect" -> GradientWgslInfo(
+                        RadialGradientWgsl, RadialGradientEntryPoint,
+                        "struct Uniforms { center: vec4f, startColor: vec4f, endColor: vec4f };",
+                        "uniforms.center.xy, uniforms.center.z",
+                    )
+                    "sweep-gradient-rect" -> GradientWgslInfo(
+                        SweepGradientWgsl, SweepGradientEntryPoint,
+                        "struct Uniforms { center: vec4f, angles: vec4f, startColor: vec4f, endColor: vec4f };",
+                        "uniforms.center.xy, uniforms.angles.x, uniforms.angles.y",
+                    )
                     else -> error("Unknown gradient family: $family")
                 }
+                val wgsl = composeGradientWgsl(gradientWgslInfo.snippet, gradientWgslInfo.entryPoint, gradientWgslInfo.uniformStruct, gradientWgslInfo.uniformArgs)
                 drawFullscreenRawUniformPass(
                     wgsl = wgsl,
                     colorFormat = OFFSCREEN_COLOR_FORMAT,
@@ -201,6 +227,37 @@ class RectOnlyOffscreenRenderer {
     private companion object {
         const val RENDER_FILE_NAME: String = "render.png"
         const val OFFSCREEN_COLOR_FORMAT: String = "rgba8unorm"
+
+        fun composeGradientWgsl(
+            snippetWgsl: String,
+            entryPoint: String,
+            uniformStruct: String,
+            uniformArgs: String,
+        ): String = """
+$uniformStruct
+
+@group(0) @binding(0) var<uniform> uniforms: Uniforms;
+
+@vertex
+fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
+    let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
+    let y = f32(idx & 2u) * 2.0 - 1.0;
+    return vec4f(x, y, 0.0, 1.0);
+}
+
+$snippetWgsl
+
+@fragment
+fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
+    var positions: array<vec4f, 16>;
+    var colors: array<vec4f, 16>;
+    positions[0] = vec4f(0.0, 0.0, 0.0, 0.0);
+    positions[1] = vec4f(1.0, 0.0, 0.0, 0.0);
+    colors[0] = uniforms.startColor;
+    colors[1] = uniforms.endColor;
+    return $entryPoint(pos, $uniformArgs, 2u, &positions, &colors);
+}
+"""
 
         val SOLID_RECT_WGSL: String = """
             struct Uniforms {

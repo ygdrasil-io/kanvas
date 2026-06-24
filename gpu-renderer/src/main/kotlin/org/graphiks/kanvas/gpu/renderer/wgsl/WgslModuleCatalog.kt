@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.gpu.renderer.wgsl
 
+/** A render-step module identified by its shader stage entry points and source hash. */
 data class WgslRenderStepModule(
     val renderStepIdentity: String,
     val sourceHash: String,

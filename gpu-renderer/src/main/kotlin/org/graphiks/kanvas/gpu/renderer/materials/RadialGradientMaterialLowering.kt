@@ -13,7 +13,7 @@ object GPURadialGradientMaterialDictionary {
 
     const val RadialGradientMaterialModuleSalt: String = "kanvas-gpu-renderer:radial-gradient-material:v1"
 
-    /** Creates a material dictionary for radial gradient with the expected version and snippet layout. */
+    /** Creates a material dictionary for radial gradient with version, snippet, and root set. */
     fun create(): GPUMaterialDictionary =
         GPUMaterialDictionary(
             dictionaryVersion = DictionaryVersion,
@@ -47,6 +47,7 @@ object GPURadialGradientMaterialDictionary {
         )
     }
 
+    /** Validates a radial gradient material dictionary. */
     fun validateRadialGradientDictionary(
         dictionary: GPUMaterialDictionary,
     ): GPUMaterialSourceDiagnostic? {
@@ -98,6 +99,7 @@ object GPURadialGradientMaterialDictionary {
 }
 
 object GPURadialGradientMaterialLowering {
+    /** Plans a paint descriptor into a radial gradient pipeline. */
     fun planPaint(
         descriptor: GPUPaintDescriptor,
         context: GPUMaterialLoweringContext,
@@ -117,6 +119,7 @@ object GPURadialGradientMaterialLowering {
         )
     }
 
+    /** Plans a material source descriptor into a source plan. */
     fun planSource(
         source: GPUMaterialSourceDescriptor,
         context: GPUMaterialLoweringContext,
@@ -133,6 +136,7 @@ object GPURadialGradientMaterialLowering {
             )
         }
 
+    /** Derives a unique material key from an accepted source plan. */
     fun deriveMaterialKey(
         accepted: GPUMaterialSourcePlan.Accepted,
         context: GPUMaterialLoweringContext,
