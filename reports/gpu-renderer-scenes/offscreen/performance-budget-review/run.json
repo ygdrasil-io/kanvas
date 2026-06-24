@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "sceneId": "performance-budget-review",
+  "status": "rendered",
+  "productRefusal": false,
+  "backend": "webgpu-offscreen",
+  "imagePath": "render.png",
+  "width": 320,
+  "height": 200,
+  "byteCount": 256000,
+  "nonTransparentPixels": 64000,
+  "diagnostics": ["rendered performance-budget-review via WebGPU offscreen","adapter=Apple M2 Max","clearCommands=1","fillRectCommands=5","fillRRectCommands=0","linearGradientRectCommands=0","radialGradientRectCommands=0","sweepGradientRectCommands=0","clipCommands=0","bitmapRectCommands=0","pathFillStencilCommands=0","convexFanMeshCommands=0"]
+}

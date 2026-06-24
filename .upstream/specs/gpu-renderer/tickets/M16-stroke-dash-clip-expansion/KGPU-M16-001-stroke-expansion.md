@@ -1,7 +1,7 @@
 ---
 id: KGPU-M16-001
 title: "Add stroke expansion: stroke path -> fillable contour with join/cap geometry"
-status: proposed
+status: done
 milestone: M16
 priority: P0
 owner_area: geometry-passes
@@ -82,7 +82,14 @@ rtk ./gradlew --no-daemon :gpu-renderer:test --tests '*Stroke*'
 
 ## Status Notes
 
-- `proposed`: Initial ticket.
+Status changed from `proposed` to `done` on 2026-06-24.
+
+Implementation evidence:
+- StrokeExpander, DashPathEffect, bounded clip expansion
+- All source files created and committed
+- All unit tests pass
+- Product flags registered in ProductFlags.kt
+- Scenes registered in GPURendererSceneRegistry
 
 ## Linear Labels
 

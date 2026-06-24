@@ -1,7 +1,7 @@
 ---
 id: KGPU-M19-001
 title: "Add Gaussian blur filter: 2-pass H/V separable blur with downsample/upsample"
-status: proposed
+status: done
 milestone: M19
 priority: P0
 owner_area: filters-passes
@@ -81,7 +81,14 @@ rtk ./gradlew --no-daemon :gpu-renderer:test --tests '*Blur*'
 
 ## Status Notes
 
-- `proposed`: Initial ticket.
+Status changed from `proposed` to `done` on 2026-06-24.
+
+Implementation evidence:
+- GaussianBlurFilter, ColorMatrixFilter, FilterDAGExecutor
+- All source files created and committed
+- All unit tests pass
+- Product flags registered in ProductFlags.kt
+- Scenes registered in GPURendererSceneRegistry
 
 ## Linear Labels
 

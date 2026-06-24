@@ -19,11 +19,11 @@ Depends on M13 scissor clip (KGPU-M13-003), M15 path fill and stencil-cover (KGP
 
 | Ticket | Status | Priority | Claim Impact | Route Kind | Product Activation | Adapter Required | Owner Area | Depends On | Legacy Gate |
 |---|---|---|---|---|---|---|---|---|---|
-| [KGPU-M16-001 - Add stroke expansion: stroke path -> fillable contour with join/cap geometry](KGPU-M16-001-stroke-expansion.md) | `proposed` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `geometry-passes` | [KGPU-M15-001] | null |
-| [KGPU-M16-002 - Add dash path effect: dash interval decomposition -> stroke sub-paths](KGPU-M16-002-dash-path-effect.md) | `proposed` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `geometry-passes` | [KGPU-M16-001] | null |
-| [KGPU-M16-003 - Add bounded clip expansion: rrect/path clip stacks beyond simple scissor](KGPU-M16-003-bounded-clip-expansion.md) | `proposed` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `clips-passes` | [KGPU-M13-003, KGPU-M15-002] | null |
-| [KGPU-M16-004 - Activate M16 routes: Stroke + Dash + bounded clips default ON with rollback](KGPU-M16-004-route-activation.md) | `proposed` | `P0` | `PolicyGated` | `GPUNative` | `false` | `true` | `product-validation` | [KGPU-M16-001, KGPU-M16-002, KGPU-M16-003] | legacy drawPath stroke |
-| [KGPU-M16-005 - Add gpu-renderer-scenes evidence: stroke-cap-join, dash-pattern-ladder](KGPU-M16-005-scenes-evidence.md) | `proposed` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `true` | `scenes-evidence` | [KGPU-M16-001, KGPU-M16-002, KGPU-M16-003] | null |
+| [KGPU-M16-001 - Add stroke expansion: stroke path -> fillable contour with join/cap geometry](KGPU-M16-001-stroke-expansion.md) | `done` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `geometry-passes` | [KGPU-M15-001] | null |
+| [KGPU-M16-002 - Add dash path effect: dash interval decomposition -> stroke sub-paths](KGPU-M16-002-dash-path-effect.md) | `done` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `geometry-passes` | [KGPU-M16-001] | null |
+| [KGPU-M16-003 - Add bounded clip expansion: rrect/path clip stacks beyond simple scissor](KGPU-M16-003-bounded-clip-expansion.md) | `done` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `clips-passes` | [KGPU-M13-003, KGPU-M15-002] | null |
+| [KGPU-M16-004 - Activate M16 routes: Stroke + Dash + bounded clips default ON with rollback](KGPU-M16-004-route-activation.md) | `done` | `P0` | `PolicyGated` | `GPUNative` | `false` | `true` | `product-validation` | [KGPU-M16-001, KGPU-M16-002, KGPU-M16-003] | legacy drawPath stroke |
+| [KGPU-M16-005 - Add gpu-renderer-scenes evidence: stroke-cap-join, dash-pattern-ladder](KGPU-M16-005-scenes-evidence.md) | `done` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `true` | `scenes-evidence` | [KGPU-M16-001, KGPU-M16-002, KGPU-M16-003] | null |
 
 ## Validation Bundle
 

@@ -1,7 +1,7 @@
 ---
 id: KGPU-M19-003
 title: "Add filter DAG execution: multi-node graphs with intermediate texture ownership"
-status: proposed
+status: done
 milestone: M19
 priority: P0
 owner_area: filters-passes
@@ -84,7 +84,14 @@ rtk ./gradlew --no-daemon :gpu-renderer:test --tests '*FilterDAG*'
 
 ## Status Notes
 
-- `proposed`: Initial ticket.
+Status changed from `proposed` to `done` on 2026-06-24.
+
+Implementation evidence:
+- GaussianBlurFilter, ColorMatrixFilter, FilterDAGExecutor
+- All source files created and committed
+- All unit tests pass
+- Product flags registered in ProductFlags.kt
+- Scenes registered in GPURendererSceneRegistry
 
 ## Linear Labels
 

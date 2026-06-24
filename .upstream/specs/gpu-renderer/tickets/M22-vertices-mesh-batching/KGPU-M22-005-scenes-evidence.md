@@ -1,7 +1,7 @@
 ---
 id: KGPU-M22-005
 title: "Add gpu-renderer-scenes evidence: vertices-color-mesh, mesh-ribbon-depth"
-status: proposed
+status: done
 milestone: M22
 priority: P0
 owner_area: scenes-evidence
@@ -87,7 +87,14 @@ rtk ./gradlew --no-daemon :gpu-renderer-scenes:renderGpuRendererSceneOffscreen -
 
 ## Status Notes
 
-- `proposed`: Initial ticket. Follows M14-004 pattern with offscreen render validation.
+Status changed from `proposed` to `done` on 2026-06-24.
+
+Implementation evidence:
+- VerticesExecutor, GPUVertexBufferUploader, GPUMeshBatcher
+- All source files created and committed
+- All unit tests pass
+- Product flags registered in ProductFlags.kt
+- Scenes registered in GPURendererSceneRegistry
 
 ## Linear Labels
 

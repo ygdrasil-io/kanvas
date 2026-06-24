@@ -1,7 +1,7 @@
 ---
 id: KGPU-M22-002
 title: "Add vertex buffer materialization: CPU-packed buffers -> GPU upload -> bind"
-status: proposed
+status: done
 milestone: M22
 priority: P0
 owner_area: resources-execution
@@ -81,7 +81,14 @@ rtk ./gradlew --no-daemon :gpu-renderer:test --tests '*VertexBuffer*'
 
 ## Status Notes
 
-- `proposed`: Initial ticket.
+Status changed from `proposed` to `done` on 2026-06-24.
+
+Implementation evidence:
+- VerticesExecutor, GPUVertexBufferUploader, GPUMeshBatcher
+- All source files created and committed
+- All unit tests pass
+- Product flags registered in ProductFlags.kt
+- Scenes registered in GPURendererSceneRegistry
 
 ## Linear Labels
 

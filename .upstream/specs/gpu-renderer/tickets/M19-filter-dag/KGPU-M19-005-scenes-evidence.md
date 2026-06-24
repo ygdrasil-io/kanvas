@@ -1,7 +1,7 @@
 ---
 id: KGPU-M19-005
 title: "Add gpu-renderer-scenes evidence: blur-radius-ladder, color-matrix-filter"
-status: proposed
+status: done
 milestone: M19
 priority: P0
 owner_area: scenes-evidence
@@ -88,7 +88,14 @@ rtk ./gradlew --no-daemon :gpu-renderer-scenes:renderGpuRendererSceneOffscreen -
 
 ## Status Notes
 
-- `proposed`: Initial ticket. Follows M14-004 pattern with offscreen render validation.
+Status changed from `proposed` to `done` on 2026-06-24.
+
+Implementation evidence:
+- GaussianBlurFilter, ColorMatrixFilter, FilterDAGExecutor
+- All source files created and committed
+- All unit tests pass
+- Product flags registered in ProductFlags.kt
+- Scenes registered in GPURendererSceneRegistry
 
 ## Linear Labels
 

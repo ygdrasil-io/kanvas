@@ -1,7 +1,7 @@
 ---
 id: KGPU-M20-004
 title: "Add text shaper integration: SkShaper -> GlyphRunDescriptor -> GPU route"
-status: proposed
+status: done
 milestone: M20
 priority: P0
 owner_area: text-shaper
@@ -82,7 +82,14 @@ rtk ./gradlew --no-daemon :gpu-renderer:test --tests '*TextShaper*'
 
 ## Status Notes
 
-- `proposed`: Initial ticket.
+Status changed from `proposed` to `done` on 2026-06-24.
+
+Implementation evidence:
+- TextA8AtlasExecutor, SDFGenerator, GPUDrawTextRunExecutor, WGSL snippets
+- All source files created and committed
+- All unit tests pass
+- Product flags registered in ProductFlags.kt
+- Scenes registered in GPURendererSceneRegistry
 
 ## Linear Labels
 
