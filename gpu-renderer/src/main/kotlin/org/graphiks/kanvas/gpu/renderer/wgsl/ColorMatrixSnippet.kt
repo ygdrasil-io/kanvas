@@ -27,5 +27,3 @@ fn fs_main() -> @location(0) vec4f {
 }
 """
 
-const val ColorMatrixSnippetSourceHash: String = "fragment:color_matrix:v1"
-const val ColorMatrixEntryPoint: String = "color_matrix_apply"

@@ -27,5 +27,4 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
 }
 """
 
-const val BlurSnippetSourceHash: String = "fragment:blur:v1"
-const val BlurEntryPoint: String = "blur_rect"
+

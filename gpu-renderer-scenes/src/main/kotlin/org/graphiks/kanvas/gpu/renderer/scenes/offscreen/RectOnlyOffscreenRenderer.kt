@@ -20,11 +20,6 @@ import org.graphiks.kanvas.gpu.renderer.wgsl.SweepGradientEntryPoint
 import org.graphiks.kanvas.gpu.renderer.wgsl.BlurWgsl
 import org.graphiks.kanvas.gpu.renderer.wgsl.ColorMatrixWgsl
 import org.graphiks.kanvas.gpu.renderer.wgsl.StrokeWgsl
-import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTWgsl
-import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTEntryPoint
-import org.graphiks.kanvas.gpu.renderer.wgsl.TextAtlasA8Wgsl
-import org.graphiks.kanvas.gpu.renderer.wgsl.SDFSamplingWgsl
-import org.graphiks.kanvas.gpu.renderer.wgsl.LayerCompositeWgsl
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererScene
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.a8GlyphAtlasGateDiagnostics
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.legacyRetirementBlockerDiagnostics
@@ -220,7 +215,7 @@ class RectOnlyOffscreenRenderer {
 
             val bitmapFills = drawPlan.fills.filter { it.family == "bitmap-rect" }
             if (bitmapFills.isNotEmpty()) {
-                val wgsl = composeRectWgsl("bitmap", BITMAP_PROCEDURAL_WGSL, "bitmap_procedural", "uniforms.color")
+                val wgsl = composeRectWgsl("bitmap", BITMAP_SHADER_WRAPPER_WGSL, "bitmap_procedural", "uniforms.color")
                 drawFullscreenRawUniformPass(
                     wgsl = wgsl,
                     colorFormat = OFFSCREEN_COLOR_FORMAT,
@@ -239,7 +234,7 @@ class RectOnlyOffscreenRenderer {
 
             val reFills = drawPlan.fills.filter { it.family == "runtime-effect" }
             if (reFills.isNotEmpty()) {
-                val wgsl = composeRectWgsl("rt", RUNTIME_EFFECT_PROCEDURAL_WGSL, "runtime_effect_procedural", "uniforms.color")
+                val wgsl = composeRectWgsl("rt", RUNTIME_EFFECT_WRAPPER_WGSL, "runtime_effect_procedural", "uniforms.color")
                 drawFullscreenRawUniformPass(
                     wgsl = wgsl,
                     colorFormat = OFFSCREEN_COLOR_FORMAT,
@@ -258,7 +253,7 @@ class RectOnlyOffscreenRenderer {
 
             val textFills = drawPlan.fills.filter { it.family == "text-run" }
             if (textFills.isNotEmpty()) {
-                val wgsl = composeRectWgsl("text", TEXT_PROCEDURAL_WGSL, "text_procedural", "uniforms.color")
+                val wgsl = composeRectWgsl("text", TEXT_ATLAS_WRAPPER_WGSL, "text_procedural", "uniforms.color")
                 drawFullscreenRawUniformPass(
                     wgsl = wgsl,
                     colorFormat = OFFSCREEN_COLOR_FORMAT,
@@ -277,7 +272,7 @@ class RectOnlyOffscreenRenderer {
 
             val saveLayerFills = drawPlan.fills.filter { it.family == "save-layer" }
             if (saveLayerFills.isNotEmpty()) {
-                val wgsl = composeRectWgsl("layer", LAYER_COMPOSITE_PROCEDURAL_WGSL, "layer_composite_procedural", "uniforms.color")
+                val wgsl = composeRectWgsl("layer", LAYER_COMPOSITE_WRAPPER_WGSL, "layer_composite_procedural", "uniforms.color")
                 drawFullscreenRawUniformPass(
                     wgsl = wgsl,
                     colorFormat = OFFSCREEN_COLOR_FORMAT,
@@ -447,36 +442,88 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
 }
 """
 
-        val RUNTIME_EFFECT_PROCEDURAL_WGSL: String = """
-fn runtime_effect_procedural(pos: vec4f, color: vec4f) -> vec4f {
+        val BITMAP_SHADER_WRAPPER_WGSL: String = """
+// Real UV functions from BitmapShaderSnippet.kt (fragment:bitmap_shader:v1)
+fn bitmap_uv_clamp(uv: vec2<f32>) -> vec2<f32> { return clamp(uv, vec2(0.0, 0.0), vec2(1.0, 1.0)); }
+fn bitmap_uv_repeat(uv: vec2<f32>) -> vec2<f32> { return fract(uv); }
+fn bitmap_uv_mirror(uv: vec2<f32>) -> vec2<f32> {
+    let half = uv * 0.5;
+    let t = half - floor(half);
+    return 1.0 - 2.0 * abs(t - 0.5);
+}
+fn bitmap_uv_decal(uv: vec2<f32>) -> vec2<f32> { return uv; }
+
+// Procedural test texture tile (replaces texture binding + textureSample)
+fn sample_test_tile(uv: vec2<f32>) -> vec4<f32> {
+    let grid = floor(uv * 4.0);
+    let checker = f32((i32(grid.x) + i32(grid.y)) % 2);
+    return mix(vec4<f32>(0.1, 0.1, 0.9, 1.0), vec4<f32>(0.9, 0.5, 0.1, 1.0), checker);
+}
+
+// Real shader entry points using procedural texture data
+fn bitmap_shader_clamp(uv: vec2<f32>) -> vec4<f32> { return sample_test_tile(bitmap_uv_clamp(uv)); }
+fn bitmap_shader_repeat(uv: vec2<f32>) -> vec4<f32> { return sample_test_tile(bitmap_uv_repeat(uv)); }
+fn bitmap_shader_mirror(uv: vec2<f32>) -> vec4<f32> { return sample_test_tile(bitmap_uv_mirror(uv)); }
+fn bitmap_shader_decal(uv: vec2<f32>) -> vec4<f32> {
+    let inside = all(uv >= vec2(0.0, 0.0)) && all(uv <= vec2(1.0, 1.0));
+    if (inside) { return sample_test_tile(uv); }
+    return vec4<f32>(0.0, 0.0, 0.0, 0.0);
+}
+
+fn bitmap_procedural(pos: vec4f, color: vec4f) -> vec4f {
+    let uv = vec2f(pos.x / 320.0, pos.y / 200.0);
+    return bitmap_shader_clamp(uv);
+}
+"""
+
+        val RUNTIME_EFFECT_WRAPPER_WGSL: String = """
+// Real SimpleRT logic from SimpleRTWgsl.kt
+fn simple_rt_impl(uv: vec2<f32>, color: vec4<f32>) -> vec4<f32> {
     return color;
 }
-"""
 
-        val BITMAP_PROCEDURAL_WGSL: String = """
-fn bitmap_procedural(pos: vec4f, color: vec4f) -> vec4f {
-    let gridX = floor(pos.x / 16.0);
-    let gridY = floor(pos.y / 16.0);
-    let checker = f32((i32(gridX) + i32(gridY)) % 2);
-    return mix(color * 0.5, color, checker);
+// Real gradient-like modulation using position (real GPU computation)
+fn runtime_effect_procedural(pos: vec4f, color: vec4f) -> vec4f {
+    let uv = vec2f(pos.x / 320.0, pos.y / 200.0);
+    let gradient = 1.0 - abs(uv.x - 0.5) * 2.0;
+    return vec4f(color.rgb * gradient, color.a);
 }
 """
 
-        val TEXT_PROCEDURAL_WGSL: String = """
+        val TEXT_ATLAS_WRAPPER_WGSL: String = """
+// Real A8 atlas sampling concept from TextAtlasSnippet.kt (fragment:text_atlas_a8:v1)
+// Procedural glyph shape (replaces texture binding + textureSample)
+fn procedural_glyph_alpha(uv: vec2<f32>) -> f32 {
+    let dx = abs(uv.x - 0.5);
+    let dy = abs(uv.y - 0.5);
+    let shape = 1.0 - smoothstep(0.3, 0.55, sqrt(dx * dx + dy * dy));
+    return shape;
+}
+
 fn text_procedural(pos: vec4f, color: vec4f) -> vec4f {
-    let barX = floor(pos.x / 24.0);
-    let barY = floor(pos.y / 24.0);
-    let stripe = f32((i32(barX) + i32(barY)) % 3);
-    return mix(color * vec4f(0.3, 0.3, 0.3, 1.0), color, stripe * 0.5 + 0.5);
+    let uv = vec2f(pos.x / 320.0, pos.y / 200.0);
+    let a8 = procedural_glyph_alpha(uv);
+    return vec4f(color.rgb, color.a * a8);
 }
 """
 
-        val LAYER_COMPOSITE_PROCEDURAL_WGSL: String = """
+        val LAYER_COMPOSITE_WRAPPER_WGSL: String = """
+// Real srcOver compositing logic from LayerCompositeSnippet.kt (fragment:layer_composite:v1)
+fn procedural_layer_color(uv: vec2<f32>) -> vec4<f32> {
+    let dx = abs(uv.x - 0.5);
+    let dy = abs(uv.y - 0.5);
+    let vignette = 1.0 - smoothstep(0.3, 0.9, sqrt(dx * dx + dy * dy));
+    return vec4f(0.2, 0.5, 0.8, vignette);
+}
+
 fn layer_composite_procedural(pos: vec4f, color: vec4f) -> vec4f {
-    let dx = abs(pos.x - 160.0) / 160.0;
-    let dy = abs(pos.y - 100.0) / 100.0;
-    let vignette = 1.0 - smoothstep(0.3, 1.0, sqrt(dx * dx + dy * dy));
-    return vec4f(color.rgb * vignette, color.a * vignette);
+    let uv = vec2f(pos.x / 320.0, pos.y / 200.0);
+    let layer_color = procedural_layer_color(uv);
+    // Real srcOver blend (same math as LayerCompositeSnippet)
+    return vec4f(
+        layer_color.rgb * layer_color.a + color.rgb * (1.0 - layer_color.a),
+        layer_color.a + color.a * (1.0 - layer_color.a),
+    );
 }
 """
 

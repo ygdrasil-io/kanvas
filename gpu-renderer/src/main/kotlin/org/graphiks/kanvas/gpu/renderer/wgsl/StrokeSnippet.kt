@@ -34,5 +34,3 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
 }
 """
 
-const val StrokeSnippetSourceHash: String = "fragment:stroke:v1"
-const val StrokeEntryPoint: String = "stroke_fill"
