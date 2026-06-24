@@ -1711,6 +1711,24 @@ class GPURendererSceneRegistryTest {
                 commandFamilies = listOf("clear", "sweep-gradient-rect", "sweep-gradient-rect", "sweep-gradient-rect"),
                 roadmapLinks = listOf(RoadmapExpectation("M14")),
             ),
+            SceneExpectationRow(
+                sceneId = "path-fill-stencil",
+                tags = setOf(SceneTag.Path),
+                commandFamilies = listOf("clear", "path-fill-stencil"),
+                roadmapLinks = listOf(
+                    RoadmapExpectation("M15"),
+                    RoadmapExpectation("M15", ticketId = "KGPU-M15-002"),
+                ),
+            ),
+            SceneExpectationRow(
+                sceneId = "convex-fan-mesh",
+                tags = setOf(SceneTag.Path),
+                commandFamilies = listOf("clear", "convex-fan-mesh"),
+                roadmapLinks = listOf(
+                    RoadmapExpectation("M15"),
+                    RoadmapExpectation("M15", ticketId = "KGPU-M15-003"),
+                ),
+            ),
         )
     }
 }

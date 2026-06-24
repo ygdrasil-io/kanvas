@@ -1,7 +1,7 @@
 ---
 id: KGPU-M15-002
 title: "Add stencil-cover execution: two-pass stencil write + cover resolve with WGSL"
-status: proposed
+status: done
 milestone: M15
 priority: P0
 owner_area: geometry-passes
@@ -82,6 +82,7 @@ rtk ./gradlew --no-daemon :gpu-renderer:test --tests '*StencilCover*'
 ## Status Notes
 
 - `proposed`: Initial ticket.
+- `done`: Implemented StencilCoverExecutor (two-pass stencil-cover with clear, write, resolve), StencilCoverSnippet.kt (WGSL fullscreen vertex + resolve fragment), and 4 unit tests covering star fill, circle fill, buffer diagnostics, and empty refusal.
 
 ## Linear Labels
 

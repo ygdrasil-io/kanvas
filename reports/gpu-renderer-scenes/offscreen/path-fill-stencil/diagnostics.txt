@@ -1,0 +1,29 @@
+rendered path-fill-stencil via WebGPU offscreen
+adapter=Apple M2 Max
+clearCommands=1
+fillRectCommands=0
+fillRRectCommands=0
+linearGradientRectCommands=0
+radialGradientRectCommands=0
+sweepGradientRectCommands=0
+clipCommands=0
+bitmapRectCommands=0
+pathFillStencilCommands=1
+convexFanMeshCommands=0
+pathFillStencil:label=star-fill
+pathFillStencil:vertices=11
+pathFillStencil:triangles=9
+pathFillStencil:isConvex=false
+pathFillStencil:stencilPasses=1
+pathFillStencil:coverPasses=1
+pathFillStencil:totalDraws=2
+stencil:pass state=stencil-write passIndex=1
+stencil:pass state=stencil-write clearValue=0
+stencil:pass clear between passes=true
+stencil:pass operation=increment-wrapping
+stencil:pass operation=decrement-wrapping
+stencil:pass compare=always
+stencil:cover state=cover-resolve passIndex=2
+stencil:cover compare=not-equal
+stencil:cover clearValue=0
+stencil:stats twoPass=true stencilWrite=1 coverResolve=1 totalDraws=2
