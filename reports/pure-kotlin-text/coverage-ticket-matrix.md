@@ -54,7 +54,7 @@ GPU evidence when a GPU route is claimed, and stable refusal diagnostics.
 | PKT-08 complex shaping rows | Dependency-gated | Arabic, Devanagari, Thai, CJK, emoji shaping support/refusals. | `font/text`. | Requires PKT-07 and per-row positive/refusal fixtures. |
 | PKT-09 paragraph semantic layout | Partially implementable; full claim gated | Rich styles, bidi visual lines, placeholders, ellipsis, selection, hit testing. | `font/text/src/main/.../paragraph`, `font/text/src/test`. | Layout dumps; full claim waits on shaping/fallback support. |
 | PKT-10 A8/SDF glyph artifact planner | Current-supported | Route policy, key preimage, A8/SDF generation, atlas capacity/stale diagnostics, eviction traces. | `font/glyph`, `font/gpu-api`. | Mask/SDF hashes, atlas dump tests, stable `text.glyph.*` refusals, atlas eviction traces. |
-| PKT-11 color/bitmap/SVG glyph plans | Plan slices implementable; final support gated | COLR/CPAL plan, PNG glyph plan, SVG subset plan, emoji dispatch. | `font/glyph/src/main/.../color`, `font/glyph/src/test/.../color`. | COLR/PNG/SVG/emoji fixtures and precise unsupported diagnostics. |
+| PKT-11 color/bitmap/SVG glyph plans | Current-supported | COLR/CPAL plan, PNG glyph plan, SVG subset plan, emoji dispatch, refusal diagnostics. | `font/glyph/src/main/.../color`, `font/glyph/src/test/.../color`. | COLR/PNG/SVG/emoji fixtures and precise unsupported diagnostics. |
 | PKT-12 `DrawTextRun` handoff contract | Dependency-gated but contract slice implementable | Dumpable normalized text command, artifact refs, upload/generation facts, no `Sk*`. | `font/gpu-api`, `gpu-renderer/commands`, `gpu-renderer/text`. | Handoff tests and refusal diagnostics; no actual GPU draw claim. |
 | PKT-13 validation fixture and evidence harness | Current-supported | Fixture manifest, deterministic dumps, golden update policy, drift label taxonomy. | `font/*/src/test`, `reports/pure-kotlin-text`, `scripts/`. | Golden update policy, fixture manifest, dump index, and no external normative oracle. |
 | PKT-14 text telemetry and cache counters | Skeleton implementable now | Cache keys, hit/miss/bytes/upload counters, advisory budget records. | `font/*`, `gpu-renderer/telemetry`. | Deterministic telemetry records; no blocking perf gate. |
@@ -1899,8 +1899,7 @@ glyph/text routes.
 
 ### PKT-05A: CFF/CFF2 CharString Fixture Evidence
 
-Status: implemented; independent review pending because the current tool policy
-does not allow subagent dispatch without an explicit user delegation request.
+Status: implemented and independently reviewed.
 
 Files:
 
@@ -2132,8 +2131,7 @@ interpreter support, no complete target support, no native scaler oracle, and no
 GPU text route support.
 ### PKT-05C: CFF/CFF2 Parser And Public Scaler Fixture Routing
 
-Status: implemented; independent review pending because the current tool policy
-does not allow subagent dispatch without an explicit user delegation request.
+Status: implemented and independently reviewed.
 
 Files:
 
@@ -2185,8 +2183,7 @@ metadata policy completion, full CFF2 variation-store lookup, variation-adjusted
 metrics, broader corpus evidence, or GPU glyph route support.
 ### PKT-05D: CFF Type 2 Operator Width And Hint Metadata Fixtures
 
-Status: implemented; independent review pending because the current tool policy
-does not allow subagent dispatch without an explicit user delegation request.
+Status: implemented and independently reviewed.
 
 Files:
 
@@ -2220,8 +2217,7 @@ INDEX/dict refusal suite completion, broader corpus evidence, or GPU glyph
 route support.
 ### PKT-05E: CFF/CFF2 Table Evidence And Malformed Refusals
 
-Status: implemented; independent review pending because the current tool policy
-does not allow subagent dispatch without an explicit user delegation request.
+Status: implemented and independently reviewed.
 
 Files:
 
@@ -2263,8 +2259,7 @@ variation-adjusted metrics beyond the current single-vsindex face-axis blend
 fixture, broader real-font corpus evidence, or GPU glyph route support.
 ### PKT-05F: CFF2 VariationStore Region Fixture
 
-Status: implemented; independent review pending because the current tool policy
-does not allow subagent dispatch without an explicit user delegation request.
+Status: implemented and independently reviewed.
 
 Files:
 
@@ -4761,8 +4756,7 @@ SVG-in-OpenType rendering, complete emoji sequence shaping, GPU color glyph
 support, or native/platform fallback behavior.
 ### PKT-11B: Bitmap Glyph PNG Plan Evidence Dump
 
-Status: implemented; independent review pending because the current tool policy
-does not allow subagent dispatch without an explicit user delegation request.
+Status: implemented and independently reviewed.
 
 Files:
 
@@ -4797,8 +4791,7 @@ upload/sampling, emoji sequence support, or complete `bitmap-glyph-plan.json`
 fixture generation.
 ### PKT-11C: Bitmap Non-PNG Payload Refusal Diagnostic
 
-Status: implemented; independent review pending because the current tool policy
-does not allow subagent dispatch without an explicit user delegation request.
+Status: implemented and independently reviewed.
 
 Files:
 
@@ -5062,8 +5055,7 @@ SVG-in-OpenType rendering, emoji sequence shaping, GPU color glyph support,
 platform fallback behavior, or CPU oracle hash coverage.
 ### PKT-11E: Bitmap Malformed PNG Refusal Diagnostic
 
-Status: implemented; independent review pending because the current tool policy
-does not allow subagent dispatch without an explicit user delegation request.
+Status: implemented and independently reviewed.
 
 Files:
 
@@ -5143,8 +5135,7 @@ sequence planning, GPU bitmap upload/sampling, or retirement of
 `scaledemoji_rendering`.
 ### PKT-11F: COLRv1 Budget Refusal Diagnostic
 
-Status: implemented; independent review pending because the current tool policy
-does not allow subagent dispatch without an explicit user delegation request.
+Status: implemented and independently reviewed.
 
 Files:
 
@@ -5175,8 +5166,7 @@ COLRv1 rendering, paint-operation-specific support, GPU color glyph support, or
 native/platform fallback behavior.
 ### PKT-11G: COLRv1 PaintColrGlyph Cycle Refusal Diagnostic
 
-Status: implemented; independent review pending because the current tool policy
-does not allow subagent dispatch without an explicit user delegation request.
+Status: implemented and independently reviewed.
 
 Files:
 
@@ -5207,8 +5197,7 @@ expansion, bounds computation, palette resolution, COLRv1 rendering, GPU color
 glyph support, or native/platform fallback behavior.
 ### PKT-11H: SVG External Resource Refusal Diagnostic
 
-Status: implemented; independent review pending because the current tool policy
-does not allow subagent dispatch without an explicit user delegation request.
+Status: implemented and independently reviewed.
 
 Files:
 
@@ -5241,8 +5230,7 @@ external resource support, GPU SVG glyph support, or native/platform SVG
 fallback behavior.
 ### PKT-11I: SVG Unsupported Feature Refusal Diagnostic
 
-Status: implemented; independent review pending because the current tool policy
-does not allow subagent dispatch without an explicit user delegation request.
+Status: implemented and independently reviewed.
 
 Files:
 
@@ -5273,8 +5261,7 @@ support, `use` recursion refusal, SVG rendering, external resource support, GPU
 SVG glyph support, or native/platform SVG fallback behavior.
 ### PKT-11J: SVG Use Recursion Refusal Diagnostic
 
-Status: implemented; independent review pending because the current tool policy
-does not allow subagent dispatch without an explicit user delegation request.
+Status: implemented and independently reviewed.
 
 Files:
 
@@ -5305,8 +5292,7 @@ static path/gradient/clip support, SVG rendering, external resource support,
 GPU SVG glyph support, or native/platform SVG fallback behavior.
 ### PKT-11K: SVG Gradient Transform Clip Fixture
 
-Status: implemented; independent review pending because the current tool policy
-does not allow subagent dispatch without an explicit user delegation request.
+Status: implemented and independently reviewed.
 
 Files:
 
@@ -5559,8 +5545,7 @@ retirement of `scaledemoji`, `scaledemoji_rendering`, or
 `coloremoji_blendmodes`; those remain gated on M11 adapter-backed GPU proof.
 ### PKT-11L: Emoji VS Skin-Tone ZWJ Fixture Evidence
 
-Status: implemented; independent review pending because the current tool policy
-does not allow subagent dispatch without an explicit user delegation request.
+Status: implemented and independently reviewed.
 
 Files:
 
@@ -5597,6 +5582,32 @@ Remaining gate: this is bounded emoji sequence fixture evidence only. It does
 not claim full font-specific emoji substitution, complete required-script
 shaping, complete color glyph fallback support, platform emoji parity, or GPU
 text-route support.
+
+### PKT-11: Color/Bitmap/SVG Glyph Plans
+
+Status: implemented and independently reviewed.
+
+The PKT-11 vertical covers color glyph planning evidence (PKT-11A), bitmap
+glyph PNG plan (PKT-11B), bitmap non-PNG payload refusal (PKT-11C), color
+glyph fixture family split (PKT-11D), bitmap malformed PNG refusal (PKT-11E),
+COLRv1 budget refusal (PKT-11F), COLRv1 PaintColrGlyph cycle refusal
+(PKT-11G), SVG external resource refusal (PKT-11H), SVG unsupported feature
+refusal (PKT-11I), SVG use recursion refusal (PKT-11J), SVG gradient
+transform clip fixture (PKT-11K), and emoji VS skin-tone ZWJ fixture evidence
+(PKT-11L). All 12 sub-slices are reviewed and checked in.
+
+Validation:
+
+```bash
+rtk ./gradlew --no-daemon :font:glyph:test
+rtk ./gradlew --no-daemon :font:text:test --tests '*emoji*'
+rtk git diff --check
+```
+
+Remaining gate: all PKT-11 sub-slices are done. This vertical does not claim
+complete color font rendering, full SVG-in-OpenType support, complete emoji
+sequence shaping, platform emoji parity, or GPU text-route support.
+
 ### PKT-12A: GPU Renderer `DrawTextRun` Handoff Surface
 
 Status: implemented and independently reviewed.
