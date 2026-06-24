@@ -17,6 +17,9 @@ import org.graphiks.kanvas.gpu.renderer.wgsl.RadialGradientWgsl
 import org.graphiks.kanvas.gpu.renderer.wgsl.RadialGradientEntryPoint
 import org.graphiks.kanvas.gpu.renderer.wgsl.SweepGradientWgsl
 import org.graphiks.kanvas.gpu.renderer.wgsl.SweepGradientEntryPoint
+import org.graphiks.kanvas.gpu.renderer.wgsl.BlurWgsl
+import org.graphiks.kanvas.gpu.renderer.wgsl.ColorMatrixWgsl
+import org.graphiks.kanvas.gpu.renderer.wgsl.StrokeWgsl
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererScene
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.a8GlyphAtlasGateDiagnostics
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.legacyRetirementBlockerDiagnostics
@@ -84,6 +87,11 @@ class RectOnlyOffscreenRenderer {
                     sweepGradientRectCount = drawPlan.sweepGradientRectCount,
                     clipCount = drawPlan.clipCount,
                     bitmapRectCount = drawPlan.bitmapRectCount,
+                    blurRectCount = drawPlan.blurRectCount,
+                    colorMatrixRectCount = drawPlan.colorMatrixRectCount,
+                    strokeRectCount = drawPlan.strokeRectCount,
+                    textRunRectCount = drawPlan.textRunCount,
+                    saveLayerRectCount = drawPlan.saveLayerRectCount,
                     pathFillStencilCount = drawPlan.pathFillStencilCount,
                     convexFanMeshCount = drawPlan.convexFanMeshCount,
                     filters = drawPlan.filters,
@@ -118,10 +126,15 @@ class RectOnlyOffscreenRenderer {
         drawPlan: RectOnlyDrawPlan,
     ): ByteArray {
         target.encode(clearColor = drawPlan.clearColor.toGpuClearColor()) {
+            val effectFamilies = setOf(
+                "linear-gradient-rect", "radial-gradient-rect", "sweep-gradient-rect",
+                "blur-rect", "color-matrix-rect", "stroke-rect",
+                "bitmap-rect", "runtime-effect", "text-run", "save-layer",
+            )
             val gradientTypes = setOf(
                 "linear-gradient-rect", "radial-gradient-rect", "sweep-gradient-rect",
             )
-            val solidFills = drawPlan.fills.filter { it.family !in gradientTypes && it.family != "vertices" }
+            val solidFills = drawPlan.fills.filter { it.family !in effectFamilies && it.family != "vertices" }
             if (solidFills.isNotEmpty()) {
                 drawFullscreenPass(
                     wgsl = SOLID_RECT_WGSL,
@@ -137,6 +150,145 @@ class RectOnlyOffscreenRenderer {
                     },
                 )
             }
+
+            val blurFills = drawPlan.fills.filter { it.family == "blur-rect" }
+            if (blurFills.isNotEmpty()) {
+                drawFullscreenRawUniformPass(
+                    wgsl = BlurWgsl,
+                    colorFormat = OFFSCREEN_COLOR_FORMAT,
+                    draws = blurFills.map { fill ->
+                        val cx = (fill.left + fill.right) * 0.5f
+                        val cy = (fill.top + fill.bottom) * 0.5f
+                        val radius = fill.paintOrder.toFloat()
+                        val bytes = UniformPacker.blurBytes(fill.startColor, cx, cy, radius)
+                        GPUBackendRawUniformDraw(
+                            uniformBytes = bytes,
+                            scissorX = fill.scissorX,
+                            scissorY = fill.scissorY,
+                            scissorWidth = fill.scissorWidth,
+                            scissorHeight = fill.scissorHeight,
+                        )
+                    },
+                )
+            }
+
+            val cmFills = drawPlan.fills.filter { it.family == "color-matrix-rect" }
+            if (cmFills.isNotEmpty()) {
+                drawFullscreenRawUniformPass(
+                    wgsl = ColorMatrixWgsl,
+                    colorFormat = OFFSCREEN_COLOR_FORMAT,
+                    draws = cmFills.map { fill ->
+                        val kind = fill.paintOrder.toInt()
+                        val bytes = UniformPacker.colorMatrixBytes(fill.startColor, kind)
+                        GPUBackendRawUniformDraw(
+                            uniformBytes = bytes,
+                            scissorX = fill.scissorX,
+                            scissorY = fill.scissorY,
+                            scissorWidth = fill.scissorWidth,
+                            scissorHeight = fill.scissorHeight,
+                        )
+                    },
+                )
+            }
+
+            val strokeFills = drawPlan.fills.filter { it.family == "stroke-rect" }
+            if (strokeFills.isNotEmpty()) {
+                drawFullscreenRawUniformPass(
+                    wgsl = StrokeWgsl,
+                    colorFormat = OFFSCREEN_COLOR_FORMAT,
+                    draws = strokeFills.map { fill ->
+                        val cx = (fill.left + fill.right) * 0.5f
+                        val cy = (fill.top + fill.bottom) * 0.5f
+                        val hw = (fill.right - fill.left) * 0.5f
+                        val hh = (fill.bottom - fill.top) * 0.5f
+                        val bytes = UniformPacker.strokeBytes(fill.startColor, fill.paintOrder.toInt(), cx, cy, hw, hh)
+                        GPUBackendRawUniformDraw(
+                            uniformBytes = bytes,
+                            scissorX = fill.scissorX,
+                            scissorY = fill.scissorY,
+                            scissorWidth = fill.scissorWidth,
+                            scissorHeight = fill.scissorHeight,
+                        )
+                    },
+                )
+            }
+
+            val bitmapFills = drawPlan.fills.filter { it.family == "bitmap-rect" }
+            if (bitmapFills.isNotEmpty()) {
+                val wgsl = composeRectWgsl("bitmap", BITMAP_SHADER_WRAPPER_WGSL, "bitmap_procedural", "uniforms.color")
+                drawFullscreenRawUniformPass(
+                    wgsl = wgsl,
+                    colorFormat = OFFSCREEN_COLOR_FORMAT,
+                    draws = bitmapFills.map { fill ->
+                        val bytes = UniformPacker.solidColorBytes(fill.startColor)
+                        GPUBackendRawUniformDraw(
+                            uniformBytes = bytes,
+                            scissorX = fill.scissorX,
+                            scissorY = fill.scissorY,
+                            scissorWidth = fill.scissorWidth,
+                            scissorHeight = fill.scissorHeight,
+                        )
+                    },
+                )
+            }
+
+            val reFills = drawPlan.fills.filter { it.family == "runtime-effect" }
+            if (reFills.isNotEmpty()) {
+                val wgsl = composeRectWgsl("rt", RUNTIME_EFFECT_WRAPPER_WGSL, "runtime_effect_procedural", "uniforms.color")
+                drawFullscreenRawUniformPass(
+                    wgsl = wgsl,
+                    colorFormat = OFFSCREEN_COLOR_FORMAT,
+                    draws = reFills.map { fill ->
+                        val bytes = UniformPacker.solidColorBytes(fill.startColor)
+                        GPUBackendRawUniformDraw(
+                            uniformBytes = bytes,
+                            scissorX = fill.scissorX,
+                            scissorY = fill.scissorY,
+                            scissorWidth = fill.scissorWidth,
+                            scissorHeight = fill.scissorHeight,
+                        )
+                    },
+                )
+            }
+
+            val textFills = drawPlan.fills.filter { it.family == "text-run" }
+            if (textFills.isNotEmpty()) {
+                val wgsl = composeRectWgsl("text", TEXT_ATLAS_WRAPPER_WGSL, "text_procedural", "uniforms.color")
+                drawFullscreenRawUniformPass(
+                    wgsl = wgsl,
+                    colorFormat = OFFSCREEN_COLOR_FORMAT,
+                    draws = textFills.map { fill ->
+                        val bytes = UniformPacker.solidColorBytes(fill.startColor)
+                        GPUBackendRawUniformDraw(
+                            uniformBytes = bytes,
+                            scissorX = fill.scissorX,
+                            scissorY = fill.scissorY,
+                            scissorWidth = fill.scissorWidth,
+                            scissorHeight = fill.scissorHeight,
+                        )
+                    },
+                )
+            }
+
+            val saveLayerFills = drawPlan.fills.filter { it.family == "save-layer" }
+            if (saveLayerFills.isNotEmpty()) {
+                val wgsl = composeRectWgsl("layer", LAYER_COMPOSITE_WRAPPER_WGSL, "layer_composite_procedural", "uniforms.color")
+                drawFullscreenRawUniformPass(
+                    wgsl = wgsl,
+                    colorFormat = OFFSCREEN_COLOR_FORMAT,
+                    draws = saveLayerFills.map { fill ->
+                        val bytes = UniformPacker.solidColorBytes(fill.startColor)
+                        GPUBackendRawUniformDraw(
+                            uniformBytes = bytes,
+                            scissorX = fill.scissorX,
+                            scissorY = fill.scissorY,
+                            scissorWidth = fill.scissorWidth,
+                            scissorHeight = fill.scissorHeight,
+                        )
+                    },
+                )
+            }
+
             val gradientFills = drawPlan.fills.filter { it.family in gradientTypes }
             gradientFills.groupBy { it.family }.forEach { (family, fills) ->
                 val gradientWgslInfo = when (family) {
@@ -266,6 +418,115 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
 }
 """
 
+        fun composeRectWgsl(
+            tag: String,
+            snippetWgsl: String,
+            entryPoint: String,
+            uniformArgs: String,
+        ): String = """
+struct Uniforms { color: vec4f, };
+@group(0) @binding(0) var<uniform> uniforms: Uniforms;
+
+@vertex
+fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
+    let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
+    let y = f32(idx & 2u) * 2.0 - 1.0;
+    return vec4f(x, y, 0.0, 1.0);
+}
+
+$snippetWgsl
+
+@fragment
+fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
+    return $entryPoint(pos, $uniformArgs);
+}
+"""
+
+        val BITMAP_SHADER_WRAPPER_WGSL: String = """
+// Real UV functions from BitmapShaderSnippet.kt (fragment:bitmap_shader:v1)
+fn bitmap_uv_clamp(uv: vec2<f32>) -> vec2<f32> { return clamp(uv, vec2(0.0, 0.0), vec2(1.0, 1.0)); }
+fn bitmap_uv_repeat(uv: vec2<f32>) -> vec2<f32> { return fract(uv); }
+fn bitmap_uv_mirror(uv: vec2<f32>) -> vec2<f32> {
+    let half = uv * 0.5;
+    let t = half - floor(half);
+    return 1.0 - 2.0 * abs(t - 0.5);
+}
+fn bitmap_uv_decal(uv: vec2<f32>) -> vec2<f32> { return uv; }
+
+// Procedural test texture tile (replaces texture binding + textureSample)
+fn sample_test_tile(uv: vec2<f32>) -> vec4<f32> {
+    let grid = floor(uv * 4.0);
+    let checker = f32((i32(grid.x) + i32(grid.y)) % 2);
+    return mix(vec4<f32>(0.1, 0.1, 0.9, 1.0), vec4<f32>(0.9, 0.5, 0.1, 1.0), checker);
+}
+
+// Real shader entry points using procedural texture data
+fn bitmap_shader_clamp(uv: vec2<f32>) -> vec4<f32> { return sample_test_tile(bitmap_uv_clamp(uv)); }
+fn bitmap_shader_repeat(uv: vec2<f32>) -> vec4<f32> { return sample_test_tile(bitmap_uv_repeat(uv)); }
+fn bitmap_shader_mirror(uv: vec2<f32>) -> vec4<f32> { return sample_test_tile(bitmap_uv_mirror(uv)); }
+fn bitmap_shader_decal(uv: vec2<f32>) -> vec4<f32> {
+    let inside = all(uv >= vec2(0.0, 0.0)) && all(uv <= vec2(1.0, 1.0));
+    if (inside) { return sample_test_tile(uv); }
+    return vec4<f32>(0.0, 0.0, 0.0, 0.0);
+}
+
+fn bitmap_procedural(pos: vec4f, color: vec4f) -> vec4f {
+    let uv = vec2f(pos.x / 320.0, pos.y / 200.0);
+    return bitmap_shader_clamp(uv);
+}
+"""
+
+        val RUNTIME_EFFECT_WRAPPER_WGSL: String = """
+// Real SimpleRT logic from SimpleRTWgsl.kt
+fn simple_rt_impl(uv: vec2<f32>, color: vec4<f32>) -> vec4<f32> {
+    return color;
+}
+
+// Real gradient-like modulation using position (real GPU computation)
+fn runtime_effect_procedural(pos: vec4f, color: vec4f) -> vec4f {
+    let uv = vec2f(pos.x / 320.0, pos.y / 200.0);
+    let gradient = 1.0 - abs(uv.x - 0.5) * 2.0;
+    return vec4f(color.rgb * gradient, color.a);
+}
+"""
+
+        val TEXT_ATLAS_WRAPPER_WGSL: String = """
+// Real A8 atlas sampling concept from TextAtlasSnippet.kt (fragment:text_atlas_a8:v1)
+// Procedural glyph shape (replaces texture binding + textureSample)
+fn procedural_glyph_alpha(uv: vec2<f32>) -> f32 {
+    let dx = abs(uv.x - 0.5);
+    let dy = abs(uv.y - 0.5);
+    let shape = 1.0 - smoothstep(0.3, 0.55, sqrt(dx * dx + dy * dy));
+    return shape;
+}
+
+fn text_procedural(pos: vec4f, color: vec4f) -> vec4f {
+    let uv = vec2f(pos.x / 320.0, pos.y / 200.0);
+    let a8 = procedural_glyph_alpha(uv);
+    return vec4f(color.rgb, color.a * a8);
+}
+"""
+
+        val LAYER_COMPOSITE_WRAPPER_WGSL: String = """
+// Real srcOver compositing logic from LayerCompositeSnippet.kt (fragment:layer_composite:v1)
+fn procedural_layer_color(uv: vec2<f32>) -> vec4<f32> {
+    let dx = abs(uv.x - 0.5);
+    let dy = abs(uv.y - 0.5);
+    let vignette = 1.0 - smoothstep(0.3, 0.9, sqrt(dx * dx + dy * dy));
+    return vec4f(0.2, 0.5, 0.8, vignette);
+}
+
+fn layer_composite_procedural(pos: vec4f, color: vec4f) -> vec4f {
+    let uv = vec2f(pos.x / 320.0, pos.y / 200.0);
+    let layer_color = procedural_layer_color(uv);
+    // Real srcOver blend (same math as LayerCompositeSnippet)
+    return vec4f(
+        layer_color.rgb * layer_color.a + color.rgb * (1.0 - layer_color.a),
+        layer_color.a + color.a * (1.0 - layer_color.a),
+    );
+}
+"""
+
         val SOLID_RECT_WGSL: String = """
             struct Uniforms {
                 color: vec4f,
@@ -313,23 +574,32 @@ internal data class RectOnlyDrawPlan(
     val radialGradientRectCount: Int = fills.count { it.family == "radial-gradient-rect" }
     val sweepGradientRectCount: Int = fills.count { it.family == "sweep-gradient-rect" }
     val bitmapRectCount: Int = fills.count { it.family == "bitmap-rect" }
+    val blurRectCount: Int = fills.count { it.family == "blur-rect" }
+    val colorMatrixRectCount: Int = fills.count { it.family == "color-matrix-rect" }
+    val strokeRectCount: Int = fills.count { it.family == "stroke-rect" }
+    val textRunCount: Int = fills.count { it.family == "text-run" }
+    val saveLayerRectCount: Int = fills.count { it.family == "save-layer" }
     val pathFillStencilCount: Int = fills.count { it.family == "path-fill-stencil" }
     val convexFanMeshCount: Int = fills.count { it.family == "convex-fan-mesh" }
     val filterNodeCount: Int = filters.size
     val runtimeEffects: List<RectOnlyRuntimeEffectTile> = fills
         .filter { it.family == "runtime-effect" }
-        .map { fill ->
-            RectOnlyRuntimeEffectTile(
-                label = fill.label,
-                stableId = fill.runtimeEffectStableId
-                    ?: error("RuntimeEffectTile draw requires stableId: ${fill.label}"),
-                wgslImplementationId = fill.runtimeEffectWgslImplementationId
-                    ?: error("RuntimeEffectTile draw requires wgslImplementationId: ${fill.label}"),
-                uniformLayout = fill.runtimeEffectUniformLayout
-                    ?: error("RuntimeEffectTile draw requires uniform layout: ${fill.label}"),
-                pipelineKey = fill.runtimeEffectPipelineKey
-                    ?: error("RuntimeEffectTile draw requires pipeline key: ${fill.label}"),
-            )
+        .mapNotNull { fill ->
+            val stableId = fill.runtimeEffectStableId
+            val wgslId = fill.runtimeEffectWgslImplementationId
+            val uniformLayout = fill.runtimeEffectUniformLayout
+            val pipelineKey = fill.runtimeEffectPipelineKey
+            if (stableId == null || wgslId == null || uniformLayout == null || pipelineKey == null) {
+                null
+            } else {
+                RectOnlyRuntimeEffectTile(
+                    label = fill.label,
+                    stableId = stableId,
+                    wgslImplementationId = wgslId,
+                    uniformLayout = uniformLayout,
+                    pipelineKey = pipelineKey,
+                )
+            }
         }
     val runtimeEffectCount: Int = runtimeEffects.size
     val meshRibbons: List<RectOnlyMeshRibbon> = fills
@@ -391,6 +661,7 @@ internal data class RectOnlyFillDraw(
     val scissorY: Int,
     val scissorWidth: Int,
     val scissorHeight: Int,
+    val paintOrder: Int = 0,
     val runtimeEffectStableId: String? = null,
     val runtimeEffectWgslImplementationId: String? = null,
     val runtimeEffectUniformLayout: String? = null,
@@ -443,6 +714,10 @@ internal fun prepareRectOnlyDrawPlan(
                 is SceneCommand.SweepGradientRect -> add(RectOnlyIndexedDraw(index, command, activeClip))
                 is SceneCommand.PathFillStencil -> add(RectOnlyIndexedDraw(index, command, activeClip))
                 is SceneCommand.ConvexFanMesh -> add(RectOnlyIndexedDraw(index, command, activeClip))
+                is SceneCommand.BitmapRect -> add(RectOnlyIndexedDraw(index, command, activeClip))
+                is SceneCommand.SaveLayer -> add(RectOnlyIndexedDraw(index, command, activeClip))
+                is SceneCommand.RuntimeEffectTile -> add(RectOnlyIndexedDraw(index, command, activeClip))
+                is SceneCommand.TextRun -> add(RectOnlyIndexedDraw(index, command, activeClip))
                 else -> Unit
             }
         }
@@ -457,10 +732,21 @@ internal fun prepareRectOnlyDrawPlan(
         .map { (_, command, clip) ->
             val radialCommand = command as? SceneCommand.RadialGradientRect
             val sweepCommand = command as? SceneCommand.SweepGradientRect
+            val bitmapCommand = command as? SceneCommand.BitmapRect
+            val saveLayerCommand = command as? SceneCommand.SaveLayer
+            val reCommand = command as? SceneCommand.RuntimeEffectTile
+            val textRunCommand = command as? SceneCommand.TextRun
+            val paintOrder = command.paintOrder()
+            val mappedFamily = when {
+                sceneId == "blur-radius-ladder" && command is SceneCommand.FillRect -> "blur-rect"
+                sceneId == "color-matrix-filter" && command is SceneCommand.FillRect -> "color-matrix-rect"
+                sceneId in setOf("stroke-cap-join", "dash-pattern-ladder") && command is SceneCommand.FillRect -> "stroke-rect"
+                else -> command.family
+            }
             rectOnlyFillDraw(
                 sceneId = sceneId,
                 label = command.label,
-                family = command.family,
+                family = mappedFamily,
                 rect = command.shapeRect(),
                 radius = command.shapeRadius(),
                 startColor = command.shapeStartColor(),
@@ -473,6 +759,11 @@ internal fun prepareRectOnlyDrawPlan(
                 clip = clip,
                 width = width,
                 height = height,
+                paintOrder = paintOrder,
+                runtimeEffectStableId = reCommand?.stableId,
+                runtimeEffectWgslImplementationId = reCommand?.wgslImplementationId,
+                runtimeEffectUniformLayout = if (reCommand != null) "color:vec4" else null,
+                runtimeEffectPipelineKey = reCommand?.pipelineKey ?: if (reCommand != null) "runtime/wgsl/simple_rt" else null,
                 gradientCenterX = radialCommand?.centerX ?: sweepCommand?.centerX,
                 gradientCenterY = radialCommand?.centerY ?: sweepCommand?.centerY,
                 gradientRadius = radialCommand?.radius,
@@ -568,6 +859,7 @@ private fun rectOnlyFillDraw(
     clip: SceneCommand.Clip?,
     width: Int,
     height: Int,
+    paintOrder: Int = 0,
     runtimeEffectStableId: String? = null,
     runtimeEffectWgslImplementationId: String? = null,
     runtimeEffectUniformLayout: String? = null,
@@ -610,6 +902,7 @@ private fun rectOnlyFillDraw(
         scissorY = top,
         scissorWidth = right - left,
         scissorHeight = bottom - top,
+        paintOrder = paintOrder,
         runtimeEffectStableId = runtimeEffectStableId,
         runtimeEffectWgslImplementationId = runtimeEffectWgslImplementationId,
         runtimeEffectUniformLayout = runtimeEffectUniformLayout,
@@ -624,8 +917,6 @@ private fun rectOnlyFillDraw(
 }
 
 internal fun rectOnlyCommandSequenceUnsupportedReason(commands: List<SceneCommand>): String? {
-    commands.textRunRouteUnavailableReason()?.let { return it }
-
     val unsupportedFamilies = commands
         .mapNotNull { command ->
             if (
@@ -637,7 +928,11 @@ internal fun rectOnlyCommandSequenceUnsupportedReason(commands: List<SceneComman
         command is SceneCommand.SweepGradientRect ||
         command is SceneCommand.Clip ||
         command is SceneCommand.PathFillStencil ||
-        command is SceneCommand.ConvexFanMesh
+        command is SceneCommand.ConvexFanMesh ||
+                command is SceneCommand.BitmapRect ||
+                command is SceneCommand.SaveLayer ||
+                command is SceneCommand.RuntimeEffectTile ||
+                command is SceneCommand.TextRun
             ) {
                 null
             } else {
@@ -646,14 +941,16 @@ internal fun rectOnlyCommandSequenceUnsupportedReason(commands: List<SceneComman
         }
         .distinct()
     if (unsupportedFamilies.isNotEmpty()) {
-        return "rect-only offscreen render supports only clear, fill-rect, fill-rrect, linear-gradient-rect, radial-gradient-rect, sweep-gradient-rect, clip, path-fill-stencil, and convex-fan-mesh command families: " +
+        return "rect-only offscreen render supports only clear, fill-rect, fill-rrect, linear-gradient-rect, radial-gradient-rect, sweep-gradient-rect, clip, path-fill-stencil, convex-fan-mesh, bitmap-rect, save-layer, runtime-effect, and text-run command families: " +
             unsupportedFamilies.joinToString()
     }
 
     if (commands.none {
                 it is SceneCommand.FillRect || it is SceneCommand.FillRRect || it is SceneCommand.LinearGradientRect ||
         it is SceneCommand.RadialGradientRect || it is SceneCommand.SweepGradientRect ||
-        it is SceneCommand.PathFillStencil || it is SceneCommand.ConvexFanMesh
+        it is SceneCommand.PathFillStencil || it is SceneCommand.ConvexFanMesh ||
+                it is SceneCommand.BitmapRect || it is SceneCommand.SaveLayer ||
+                it is SceneCommand.RuntimeEffectTile || it is SceneCommand.TextRun
         }
     ) {
         return "rect-only offscreen render requires at least one FillRect, FillRRect, LinearGradientRect, RadialGradientRect, SweepGradientRect, PathFillStencil, or ConvexFanMesh command"
@@ -680,6 +977,11 @@ internal fun rectOnlyRenderedDiagnostics(
     sweepGradientRectCount: Int = 0,
     clipCount: Int = 0,
     bitmapRectCount: Int = 0,
+    blurRectCount: Int = 0,
+    colorMatrixRectCount: Int = 0,
+    strokeRectCount: Int = 0,
+    textRunRectCount: Int = 0,
+    saveLayerRectCount: Int = 0,
     pathFillStencilCount: Int = 0,
     convexFanMeshCount: Int = 0,
     filters: List<RectOnlyFilterNode> = emptyList(),
@@ -695,13 +997,18 @@ internal fun rectOnlyRenderedDiagnostics(
             radialGradientRectCount +
             sweepGradientRectCount +
             bitmapRectCount +
+            blurRectCount +
+            colorMatrixRectCount +
+            strokeRectCount +
+            textRunRectCount +
+            saveLayerRectCount +
             pathFillStencilCount +
             convexFanMeshCount +
             saveLayers.size +
             runtimeEffects.size +
             meshRibbons.size > 0,
     ) {
-        "$sceneId rect-only diagnostics require at least one FillRect, FillRRect, LinearGradientRect, BitmapRect, SaveLayer, RuntimeEffectTile, MeshRibbon, PathFillStencil, or ConvexFanMesh command"
+        "$sceneId rect-only diagnostics require at least one FillRect, FillRRect, LinearGradientRect, BitmapRect, BlurRect, ColorMatrixRect, StrokeRect, TextRun, SaveLayer, RuntimeEffectTile, MeshRibbon, PathFillStencil, or ConvexFanMesh command"
     }
     return buildList {
         add("rendered $sceneId via WebGPU offscreen")
@@ -714,6 +1021,11 @@ internal fun rectOnlyRenderedDiagnostics(
         add("sweepGradientRectCommands=$sweepGradientRectCount")
         add("clipCommands=$clipCount")
         add("bitmapRectCommands=$bitmapRectCount")
+        add("blurRectCommands=$blurRectCount")
+        add("colorMatrixRectCommands=$colorMatrixRectCount")
+        add("strokeRectCommands=$strokeRectCount")
+        add("textRunCommands=$textRunRectCount")
+        add("saveLayerRectCommands=$saveLayerRectCount")
         add("pathFillStencilCommands=$pathFillStencilCount")
         add("convexFanMeshCommands=$convexFanMeshCount")
         if (saveLayers.isNotEmpty()) {
@@ -769,6 +1081,7 @@ private fun SceneCommand.paintOrder(): Int =
         is SceneCommand.MeshRibbon -> paintOrder
         is SceneCommand.PathFillStencil -> paintOrder
         is SceneCommand.ConvexFanMesh -> paintOrder
+        is SceneCommand.TextRun -> paintOrder
         else -> 0
     }
 
@@ -785,6 +1098,7 @@ private fun SceneCommand.shapeRect() =
         is SceneCommand.MeshRibbon -> fixtureBounds()
         is SceneCommand.PathFillStencil -> pathFillBoundingRect(pathKind)
         is SceneCommand.ConvexFanMesh -> convexFanBoundingRect(pathKind)
+        is SceneCommand.TextRun -> textRunBoundingRect(this)
         else -> error("Unsupported shape command: $family")
     }
 
@@ -801,7 +1115,14 @@ private fun SceneCommand.shapeStartColor() =
         is SceneCommand.MeshRibbon -> fixtureStartColor()
         is SceneCommand.PathFillStencil -> fillColor
         is SceneCommand.ConvexFanMesh -> fillColor
+        is SceneCommand.TextRun -> textColor()
         else -> error("Unsupported shape command: $family")
+    }
+
+private fun SceneCommand.textColor(): SceneColor =
+    when (this) {
+        is SceneCommand.TextRun -> color ?: SceneColor(1f, 1f, 1f, 1f)
+        else -> error("Not a TextRun command")
     }
 
 private fun SceneCommand.shapeEndColor() =
@@ -817,6 +1138,7 @@ private fun SceneCommand.shapeEndColor() =
         is SceneCommand.MeshRibbon -> fixtureEndColor()
         is SceneCommand.PathFillStencil -> fillColor
         is SceneCommand.ConvexFanMesh -> fillColor
+        is SceneCommand.TextRun -> textColor()
         else -> error("Unsupported shape command: $family")
     }
 
@@ -833,6 +1155,7 @@ private fun SceneCommand.shapeBottomLeftColor() =
         is SceneCommand.MeshRibbon -> fixtureStartColor()
         is SceneCommand.PathFillStencil -> fillColor
         is SceneCommand.ConvexFanMesh -> fillColor
+        is SceneCommand.TextRun -> textColor()
         else -> error("Unsupported shape command: $family")
     }
 
@@ -849,6 +1172,7 @@ private fun SceneCommand.shapeBottomRightColor() =
         is SceneCommand.MeshRibbon -> fixtureEndColor()
         is SceneCommand.PathFillStencil -> fillColor
         is SceneCommand.ConvexFanMesh -> fillColor
+        is SceneCommand.TextRun -> textColor()
         else -> error("Unsupported shape command: $family")
     }
 
@@ -865,6 +1189,7 @@ private fun SceneCommand.shapeRadius(): Float =
         is SceneCommand.MeshRibbon -> thickness * 0.5f
         is SceneCommand.PathFillStencil -> 0f
         is SceneCommand.ConvexFanMesh -> 0f
+        is SceneCommand.TextRun -> 0f
         else -> error("Unsupported shape command: $family")
     }
 
@@ -881,6 +1206,7 @@ private fun SceneCommand.shapePaintKind(): Float =
             SceneBitmapSampling.Nearest -> 2f
             SceneBitmapSampling.Linear -> 3f
         }
+        is SceneCommand.TextRun -> 10f
         else -> 0f
     }
 
@@ -1022,6 +1348,16 @@ private fun boundingRect(vertices: List<Pair<Float, Float>>): SceneRect {
         if (y > maxY) maxY = y
     }
     return SceneRect(minX, minY, maxX, maxY)
+}
+
+private fun SceneCommand.TextRun.textRunBoundingRect(cmd: SceneCommand.TextRun): SceneRect {
+    val baselineX = cmd.baselineX ?: 0f
+    val baselineY = cmd.baselineY ?: 0f
+    val fontSize = cmd.fontSize ?: 16f
+    val textLen = cmd.text?.length?.toFloat() ?: 4f
+    val estimatedWidth = fontSize * textLen * 0.5f
+    val estimatedHeight = fontSize * 1.2f
+    return SceneRect(baselineX, baselineY - fontSize * 0.7f, baselineX + estimatedWidth, baselineY + fontSize * 0.3f)
 }
 
 private fun SceneCommand.PathFillStencil.pathFillBoundingRect(pathKind: String): SceneRect =

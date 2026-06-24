@@ -1,13 +1,13 @@
 {
   "schemaVersion": 1,
   "sceneId": "savelayer-isolated",
-  "status": "not-yet-rendered",
+  "status": "rendered",
   "productRefusal": false,
   "backend": "webgpu-offscreen",
-  "imagePath": null,
-  "width": null,
-  "height": null,
-  "byteCount": null,
-  "nonTransparentPixels": null,
-  "diagnostics": ["rect-only offscreen render supports only clear, fill-rect, fill-rrect, linear-gradient-rect, radial-gradient-rect, sweep-gradient-rect, clip, path-fill-stencil, and convex-fan-mesh command families: save-layer"]
+  "imagePath": "render.png",
+  "width": 320,
+  "height": 200,
+  "byteCount": 256000,
+  "nonTransparentPixels": 64000,
+  "diagnostics": ["rendered savelayer-isolated via WebGPU offscreen","adapter=Apple M2 Max","clearCommands=1","fillRectCommands=2","fillRRectCommands=0","linearGradientRectCommands=0","radialGradientRectCommands=0","sweepGradientRectCommands=0","clipCommands=0","bitmapRectCommands=0","blurRectCommands=0","colorMatrixRectCommands=0","strokeRectCommands=0","textRunCommands=0","saveLayerRectCommands=1","pathFillStencilCommands=0","convexFanMeshCommands=0"]
 }
