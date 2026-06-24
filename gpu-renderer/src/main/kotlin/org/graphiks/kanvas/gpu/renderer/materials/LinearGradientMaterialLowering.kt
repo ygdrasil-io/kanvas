@@ -156,6 +156,28 @@ object GPULinearGradientMaterialLowering {
             )
         }
 
+        if (plan.tileMode != GPUMaterialTileMode.Clamp) {
+            return GPUMaterialSourcePlan.Refused(
+                GPUMaterialSourceDiagnostic(
+                    code = "unsupported.material.gradient_tile_mode_unimplemented",
+                    sourceKind = GPUMaterialSourceKind.Gradient,
+                    message = "M13 linear gradient only supports Clamp tile mode (got ${plan.tileMode})",
+                    terminal = true,
+                ),
+            )
+        }
+
+        if (plan.stops.size > 16) {
+            return GPUMaterialSourcePlan.Refused(
+                GPUMaterialSourceDiagnostic(
+                    code = "unsupported.material.gradient_stop_count_exceeded",
+                    sourceKind = GPUMaterialSourceKind.Gradient,
+                    message = "M13 linear gradient WGSL supports at most 16 stops (got ${plan.stops.size})",
+                    terminal = true,
+                ),
+            )
+        }
+
         return GPUMaterialSourcePlan.Accepted(
             source = this,
             snippetId = GPULinearGradientMaterialDictionary.LinearGradientSnippetID,
