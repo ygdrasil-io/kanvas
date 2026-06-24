@@ -17,25 +17,25 @@ Depends on M12-M23 completion. Each ticket extends `GpuNativeOffscreenRenderer`
 
 ## Exit Criteria
 
-- [ ] Blur and colorMatrix filters render via real WGSL (no solid-color PNGs)
-- [ ] Bitmap shader + all four tile modes render via real WGSL
-- [ ] Text A8 + SDF atlas glyphs render via real WGSL
-- [ ] Registered runtime effects render via real WGSL (parser-validated)
-- [ ] Stroke paths render via tessellated geometry with cap/join
-- [ ] SaveLayer + destination-read composite via real WGSL blend
-- [ ] All replaced scene PNGs are committed and show real shader output
-- [ ] `RectOnlyOffscreenRenderer` remains available for diagnostic solid rendering
+- [x] Blur and colorMatrix filters render via real WGSL (no solid-color PNGs)
+- [x] Bitmap shader + all four tile modes render via real WGSL
+- [x] Text A8 + SDF atlas glyphs render via real WGSL
+- [x] Registered runtime effects render via real WGSL (parser-validated)
+- [x] Stroke paths render via tessellated geometry with cap/join
+- [x] SaveLayer + destination-read composite via real WGSL blend
+- [x] All replaced scene PNGs are committed and show real shader output
+- [x] `RectOnlyOffscreenRenderer` remains available for diagnostic solid rendering
 
 ## Tickets
 
 | Ticket | Status | Priority | Claim Impact | Route Kind | Product Activation | Adapter Required | Owner Area | Depends On | Legacy Gate |
 |---|---|---|---|---|---|---|---|---|---|
-| [KGPU-M24-001 - GPU-native blur + colorMatrix filter rendering](KGPU-M24-001-gpu-native-filter.md) | `proposed` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `true` | `execution-renderer` | [KGPU-M14-005, KGPU-M19-001, KGPU-M19-002] | null |
-| [KGPU-M24-002 - GPU-native bitmap shader + tile mode rendering](KGPU-M24-002-gpu-native-bitmap.md) | `proposed` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `true` | `execution-renderer` | [KGPU-M14-005, KGPU-M17-001, KGPU-M17-002, KGPU-M17-004] | null |
-| [KGPU-M24-003 - GPU-native text A8 + SDF atlas rendering](KGPU-M24-003-gpu-native-text.md) | `proposed` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `true` | `execution-renderer` | [KGPU-M14-005, KGPU-M20-001, KGPU-M20-002, KGPU-M20-003] | null |
-| [KGPU-M24-004 - GPU-native runtime effect rendering](KGPU-M24-004-gpu-native-runtime-effect.md) | `proposed` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `true` | `execution-renderer` | [KGPU-M14-005, KGPU-M21-001, KGPU-M21-002, KGPU-M21-003] | null |
-| [KGPU-M24-005 - GPU-native stroke rendering](KGPU-M24-005-gpu-native-stroke.md) | `proposed` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `true` | `execution-renderer` | [KGPU-M14-005, KGPU-M16-001, KGPU-M16-002] | null |
-| [KGPU-M24-006 - GPU-native saveLayer + destination-read compositing](KGPU-M24-006-gpu-native-savelayer.md) | `proposed` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `true` | `execution-renderer` | [KGPU-M14-005, KGPU-M18-001, KGPU-M18-003] | null |
+| [KGPU-M24-001 - GPU-native blur + colorMatrix filter rendering](KGPU-M24-001-gpu-native-filter.md) | `done` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `true` | `execution-renderer` | [KGPU-M14-005, KGPU-M19-001, KGPU-M19-002] | null |
+| [KGPU-M24-002 - GPU-native bitmap shader + tile mode rendering](KGPU-M24-002-gpu-native-bitmap.md) | `done` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `true` | `execution-renderer` | [KGPU-M14-005, KGPU-M17-001, KGPU-M17-002, KGPU-M17-004] | null |
+| [KGPU-M24-003 - GPU-native text A8 + SDF atlas rendering](KGPU-M24-003-gpu-native-text.md) | `done` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `true` | `execution-renderer` | [KGPU-M14-005, KGPU-M20-001, KGPU-M20-002, KGPU-M20-003] | null |
+| [KGPU-M24-004 - GPU-native runtime effect rendering](KGPU-M24-004-gpu-native-runtime-effect.md) | `done` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `true` | `execution-renderer` | [KGPU-M14-005, KGPU-M21-001, KGPU-M21-002, KGPU-M21-003] | null |
+| [KGPU-M24-005 - GPU-native stroke rendering](KGPU-M24-005-gpu-native-stroke.md) | `done` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `true` | `execution-renderer` | [KGPU-M14-005, KGPU-M16-001, KGPU-M16-002] | null |
+| [KGPU-M24-006 - GPU-native saveLayer + destination-read compositing](KGPU-M24-006-gpu-native-savelayer.md) | `done` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `true` | `execution-renderer` | [KGPU-M14-005, KGPU-M18-001, KGPU-M18-003] | null |
 
 ## Validation Bundle
 

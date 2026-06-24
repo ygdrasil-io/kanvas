@@ -1,7 +1,7 @@
 ---
 id: KGPU-M24-001
 title: "GPU-native blur + colorMatrix filter rendering"
-status: proposed
+status: done
 milestone: M24
 priority: P0
 owner_area: execution-renderer
@@ -116,8 +116,10 @@ rtk ./gradlew --no-daemon :gpu-renderer-scenes:renderGpuRendererSceneOffscreen -
 
 ## Status Notes
 
-- `proposed`: Initial ticket. Debloque l'evidence visuelle reelle pour les filtres
-  blur et colorMatrix. Necessite GPU pour l'execution.
+- `done`: BlurSnippet.kt + ColorMatrixSnippet.kt crees. BlurWgsl + ColorMatrixWgsl
+  executent sur GPU via RectOnlyOffscreenRenderer. Les scenes blur-radius-ladder et
+  color-matrix-filter produisent des PNGs avec flou gaussien et transformation
+  couleur reels. 2026-06-24.
 
 ## Linear Labels
 

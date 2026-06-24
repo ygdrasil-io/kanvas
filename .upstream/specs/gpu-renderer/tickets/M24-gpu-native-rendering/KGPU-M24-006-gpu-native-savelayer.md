@@ -1,7 +1,7 @@
 ---
 id: KGPU-M24-006
 title: "GPU-native saveLayer + destination-read compositing"
-status: proposed
+status: done
 milestone: M24
 priority: P0
 owner_area: execution-renderer
@@ -108,8 +108,9 @@ rtk ./gradlew --no-daemon :gpu-renderer-scenes:renderGpuRendererSceneOffscreen -
 
 ## Status Notes
 
-- `proposed`: Initial ticket. Debloque l'evidence visuelle reelle pour saveLayer
-  et destination-read. Necessite GPU pour l'execution.
+- `done`: Wrapper WGSL avec math srcOver reel de LayerCompositeSnippet.kt et
+  calque vignette procedural. Les scenes savelayer-isolated et dst-read-strategy
+  produisent des PNGs avec composition reelle. 2026-06-24.
 
 ## Linear Labels
 

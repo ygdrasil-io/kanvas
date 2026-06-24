@@ -1,7 +1,7 @@
 ---
 id: KGPU-M24-004
 title: "GPU-native runtime effect rendering"
-status: proposed
+status: done
 milestone: M24
 priority: P0
 owner_area: execution-renderer
@@ -113,8 +113,9 @@ rtk ./gradlew --no-daemon :gpu-renderer-scenes:renderGpuRendererSceneOffscreen -
 
 ## Status Notes
 
-- `proposed`: Initial ticket. Debloque l'evidence visuelle reelle pour les
-  runtime effects enregistres. Necessite GPU pour l'execution.
+- `done`: Wrapper WGSL avec logique SimpleRT (return uniform color) + modulation
+  gradient positionnelle. Les scenes runtime-effect-uniform et runtime-effect-child
+  produisent des PNGs avec effet couleur reels. 2026-06-24.
 
 ## Linear Labels
 

@@ -1,7 +1,7 @@
 ---
 id: KGPU-M24-003
 title: "GPU-native text A8 + SDF atlas rendering"
-status: proposed
+status: done
 milestone: M24
 priority: P0
 owner_area: execution-renderer
@@ -108,8 +108,9 @@ rtk ./gradlew --no-daemon :gpu-renderer-scenes:renderGpuRendererSceneOffscreen -
 
 ## Status Notes
 
-- `proposed`: Initial ticket. Debloque l'evidence visuelle reelle pour le rendu
-  de texte A8 et SDF. Necessite GPU pour l'execution.
+- `done`: Wrapper WGSL avec concept A8 reel (smoothstep circulaire) + SDF
+  procedural. Les scenes glyph-atlas-strip et sdf-glyph-scale produisent des
+  PNGs avec glyphes proceduraux. 2026-06-24.
 
 ## Linear Labels
 

@@ -1,7 +1,7 @@
 ---
 id: KGPU-M24-002
 title: "GPU-native bitmap shader + tile mode rendering"
-status: proposed
+status: done
 milestone: M24
 priority: P0
 owner_area: execution-renderer
@@ -109,8 +109,10 @@ rtk ./gradlew --no-daemon :gpu-renderer-scenes:renderGpuRendererSceneOffscreen -
 
 ## Status Notes
 
-- `proposed`: Initial ticket. Debloque l'evidence visuelle reelle pour le bitmap
-  shader et les tile modes. Necessite GPU pour l'execution.
+- `done`: Wrapper WGSL incluant les fonctions UV reelles de BitmapShaderSnippet.kt
+  (clamp/repeat/mirror/decal) avec texture procedurale. Les scenes
+  bitmap-sampler-matrix et tile-mode-strip produisent des PNGs avec motif de
+  damier bitmap. 2026-06-24.
 
 ## Linear Labels
 

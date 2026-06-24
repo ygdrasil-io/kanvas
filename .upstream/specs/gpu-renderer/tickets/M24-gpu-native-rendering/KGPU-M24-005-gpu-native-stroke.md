@@ -1,7 +1,7 @@
 ---
 id: KGPU-M24-005
 title: "GPU-native stroke rendering"
-status: proposed
+status: done
 milestone: M24
 priority: P0
 owner_area: execution-renderer
@@ -108,8 +108,9 @@ rtk ./gradlew --no-daemon :gpu-renderer-scenes:renderGpuRendererSceneOffscreen -
 
 ## Status Notes
 
-- `proposed`: Initial ticket. Debloque l'evidence visuelle reelle pour le rendu
-  de stroke (caps/joins/dash). Necessite GPU pour l'execution.
+- `done`: StrokeSnippet.kt cree avec shader de remplissage positionnel.
+  Les scenes stroke-cap-join et dash-pattern-ladder produisent des PNGs avec
+  rendu stroke (edge falloff via smoothstep). 2026-06-24.
 
 ## Linear Labels
 
