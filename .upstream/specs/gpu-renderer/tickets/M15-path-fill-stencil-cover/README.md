@@ -23,6 +23,7 @@ Depends on M12 (wgsl4k gate KGPU-M12-010). Wave 1 milestone, parallel with M13 a
 | [KGPU-M15-002 - Add stencil-cover execution: two-pass stencil write + cover resolve with WGSL](KGPU-M15-002-stencil-cover-execution.md) | `proposed` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `geometry-passes` | [KGPU-M15-001] | null |
 | [KGPU-M15-003 - Add convex fan execution: single-pass analytic AA with triangle list](KGPU-M15-003-convex-fan-execution.md) | `proposed` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `geometry-passes` | [KGPU-M15-001] | null |
 | [KGPU-M15-004 - Activate M15 routes: Path fill native + stencil-cover default ON with rollback](KGPU-M15-004-route-activation.md) | `proposed` | `P0` | `PolicyGated` | `GPUNative` | `false` | `true` | `product-validation` | [KGPU-M15-001, KGPU-M15-002, KGPU-M15-003] | legacy drawPath |
+| [KGPU-M15-005 - Add gpu-renderer-scenes evidence: path-fill-stencil, convex-fan-mesh](KGPU-M15-005-scenes-evidence.md) | `proposed` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `true` | `scenes-evidence` | [KGPU-M15-001, KGPU-M15-002, KGPU-M15-003] | null |
 
 ## Validation Bundle
 
