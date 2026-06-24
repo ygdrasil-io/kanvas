@@ -20,3 +20,17 @@ val linearGradientModule: WgslRenderStepModule = WgslRenderStepModule(
     vertexEntryPoint = "vs_main",
     fragmentEntryPoint = LinearGradientEntryPoint,
 )
+
+val radialGradientModule: WgslRenderStepModule = WgslRenderStepModule(
+    renderStepIdentity = "radial.gradient.fill",
+    sourceHash = RadialGradientSnippetSourceHash,
+    vertexEntryPoint = "vs_main",
+    fragmentEntryPoint = RadialGradientEntryPoint,
+)
+
+val sweepGradientModule: WgslRenderStepModule = WgslRenderStepModule(
+    renderStepIdentity = "sweep.gradient.fill",
+    sourceHash = SweepGradientSnippetSourceHash,
+    vertexEntryPoint = "vs_main",
+    fragmentEntryPoint = SweepGradientEntryPoint,
+)

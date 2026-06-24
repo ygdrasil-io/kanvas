@@ -315,6 +315,16 @@ class GPUFirstRoutePlanner(
             material is GPUMaterialDescriptor.LinearGradient &&
                 !capabilities.hasFact(firstLinearGradientCapabilityName) ->
                 "unsupported.material.linear_gradient_capability_missing"
+            material is GPUMaterialDescriptor.RadialGradient && material.refusalCode() != null ->
+                material.refusalCode()
+            material is GPUMaterialDescriptor.RadialGradient &&
+                !capabilities.hasFact(firstRadialGradientCapabilityName) ->
+                "unsupported.material.radial_gradient_capability_missing"
+            material is GPUMaterialDescriptor.SweepGradient && material.refusalCode() != null ->
+                material.refusalCode()
+            material is GPUMaterialDescriptor.SweepGradient &&
+                !capabilities.hasFact(firstSweepGradientCapabilityName) ->
+                "unsupported.material.sweep_gradient_capability_missing"
             clip.kind == GPUClipKind.DeviceRect && !capabilities.hasFact(firstScissorCapabilityName) ->
                 "unsupported.clip.scissor_capability_missing"
             blend.kind != GPUBlendKind.SrcOver -> "unsupported.blend.mode_unimplemented"
@@ -373,6 +383,40 @@ class GPUFirstRoutePlanner(
             else -> null
         }
 
+    /** Returns a terminal radial gradient refusal code, or null when facts are accepted. */
+    private fun GPUMaterialDescriptor.RadialGradient.refusalCode(): String? =
+        when {
+            !centerX.isFinite() || !centerY.isFinite() ->
+                "unsupported.material.gradient_non_finite_coords"
+            !radius.isFinite() || radius <= 0f ->
+                "unsupported.material.gradient_non_finite_radius"
+            !startR.isFinite() || !startG.isFinite() || !startB.isFinite() || !startA.isFinite() ->
+                "unsupported.material.gradient_non_finite_color"
+            !endR.isFinite() || !endG.isFinite() || !endB.isFinite() || !endA.isFinite() ->
+                "unsupported.material.gradient_non_finite_color"
+            tileMode !in acceptedGradientTileModes ->
+                "unsupported.material.gradient_tile_mode_unsupported"
+            else -> null
+        }
+
+    /** Returns a terminal sweep gradient refusal code, or null when facts are accepted. */
+    private fun GPUMaterialDescriptor.SweepGradient.refusalCode(): String? =
+        when {
+            !centerX.isFinite() || !centerY.isFinite() ->
+                "unsupported.material.gradient_non_finite_coords"
+            !startAngle.isFinite() || !endAngle.isFinite() ->
+                "unsupported.material.gradient_non_finite_angle"
+            (endAngle - startAngle).let { sweep -> !sweep.isFinite() || sweep <= 0f } ->
+                "unsupported.material.gradient_non_finite_angle"
+            !startR.isFinite() || !startG.isFinite() || !startB.isFinite() || !startA.isFinite() ->
+                "unsupported.material.gradient_non_finite_color"
+            !endR.isFinite() || !endG.isFinite() || !endB.isFinite() || !endA.isFinite() ->
+                "unsupported.material.gradient_non_finite_color"
+            tileMode !in acceptedGradientTileModes ->
+                "unsupported.material.gradient_tile_mode_unsupported"
+            else -> null
+        }
+
     private companion object {
         /** Required target format for the first native FillRect route. */
         const val firstRouteTargetFormat = "rgba8unorm"
@@ -386,6 +430,12 @@ class GPUFirstRoutePlanner(
         /** Required capability fact for the linear gradient material route. */
         const val firstLinearGradientCapabilityName = "first_slice.linear_gradient.native"
 
+        /** Required capability fact for the radial gradient material route. */
+        const val firstRadialGradientCapabilityName = "first_slice.radial_gradient.native"
+
+        /** Required capability fact for the sweep gradient material route. */
+        const val firstSweepGradientCapabilityName = "first_slice.sweep_gradient.native"
+
         /** Required capability fact for the scissor clip route. */
         const val firstScissorCapabilityName = "first_slice.scissor.native"
 
@@ -396,7 +446,12 @@ class GPUFirstRoutePlanner(
         val acceptedClipKinds = setOf(GPUClipKind.WideOpen, GPUClipKind.DeviceRect)
 
         /** Material kinds supported by the first native FillRect expansion route. */
-        val acceptedMaterialKinds = setOf(GPUMaterialKind.SolidColor, GPUMaterialKind.LinearGradient)
+        val acceptedMaterialKinds = setOf(
+            GPUMaterialKind.SolidColor,
+            GPUMaterialKind.LinearGradient,
+            GPUMaterialKind.RadialGradient,
+            GPUMaterialKind.SweepGradient,
+        )
 
         /** Gradient tile modes accepted by the first expansion route. */
         val acceptedGradientTileModes = setOf("clamp")

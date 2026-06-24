@@ -8,6 +8,8 @@ data class GpuProductFlagConfig(
     val fillRRectEnabled: Boolean = true,
     val linearGradientEnabled: Boolean = true,
     val scissorEnabled: Boolean = true,
+    val radialGradientEnabled: Boolean = true,
+    val sweepGradientEnabled: Boolean = true,
 ) {
     fun buildCapabilities(
         implementation: GPUImplementationIdentity = GpuProductFlagConfig.defaultImplementation(),
@@ -40,6 +42,24 @@ data class GpuProductFlagConfig(
                 evidenceLabel = "product-flag:scissor",
             )
         }
+        if (radialGradientEnabled) {
+            facts += GPUCapabilityFact(
+                name = "first_slice.radial_gradient.native",
+                source = "product-flags",
+                value = "supported",
+                affectsValidity = true,
+                evidenceLabel = "product-flag:radialGradient",
+            )
+        }
+        if (sweepGradientEnabled) {
+            facts += GPUCapabilityFact(
+                name = "first_slice.sweep_gradient.native",
+                source = "product-flags",
+                value = "supported",
+                affectsValidity = true,
+                evidenceLabel = "product-flag:sweepGradient",
+            )
+        }
         return GPUCapabilities(
             implementation = implementation,
             facts = facts,
@@ -54,6 +74,10 @@ data class GpuProductFlagConfig(
         const val LinearGradientDisableProperty: String = "kanvas.gpu.renderer.product.linearGradient.disable"
         const val ScissorProperty: String = "kanvas.gpu.renderer.product.scissor"
         const val ScissorDisableProperty: String = "kanvas.gpu.renderer.product.scissor.disable"
+        const val RadialGradientProperty: String = "kanvas.gpu.renderer.product.radialGradient"
+        const val RadialGradientDisableProperty: String = "kanvas.gpu.renderer.product.radialGradient.disable"
+        const val SweepGradientProperty: String = "kanvas.gpu.renderer.product.sweepGradient"
+        const val SweepGradientDisableProperty: String = "kanvas.gpu.renderer.product.sweepGradient.disable"
 
         fun defaultImplementation(): GPUImplementationIdentity =
             GPUImplementationIdentity(
@@ -69,10 +93,14 @@ data class GpuProductFlagConfig(
             val fillRRectDisabled = propertyReader(FillRRectDisableProperty).toBoolean()
             val linearGradientDisabled = propertyReader(LinearGradientDisableProperty).toBoolean()
             val scissorDisabled = propertyReader(ScissorDisableProperty).toBoolean()
+            val radialGradientDisabled = propertyReader(RadialGradientDisableProperty).toBoolean()
+            val sweepGradientDisabled = propertyReader(SweepGradientDisableProperty).toBoolean()
             return GpuProductFlagConfig(
                 fillRRectEnabled = !fillRRectDisabled,
                 linearGradientEnabled = !linearGradientDisabled,
                 scissorEnabled = !scissorDisabled,
+                radialGradientEnabled = !radialGradientDisabled,
+                sweepGradientEnabled = !sweepGradientDisabled,
             )
         }
     }

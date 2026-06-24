@@ -62,6 +62,8 @@ class RectOnlyOffscreenRenderer {
                     fillRectCount = drawPlan.fillRectCount,
                     fillRRectCount = drawPlan.fillRRectCount,
                     linearGradientRectCount = drawPlan.linearGradientRectCount,
+                    radialGradientRectCount = drawPlan.radialGradientRectCount,
+                    sweepGradientRectCount = drawPlan.sweepGradientRectCount,
                     clipCount = drawPlan.clipCount,
                     bitmapRectCount = drawPlan.bitmapRectCount,
                     filters = drawPlan.filters,
@@ -193,6 +195,8 @@ internal data class RectOnlyDrawPlan(
     val fillRectCount: Int = fills.count { it.family == "fill-rect" }
     val fillRRectCount: Int = fills.count { it.family == "fill-rrect" }
     val linearGradientRectCount: Int = fills.count { it.family == "linear-gradient-rect" }
+    val radialGradientRectCount: Int = fills.count { it.family == "radial-gradient-rect" }
+    val sweepGradientRectCount: Int = fills.count { it.family == "sweep-gradient-rect" }
     val bitmapRectCount: Int = fills.count { it.family == "bitmap-rect" }
     val filterNodeCount: Int = filters.size
     val runtimeEffects: List<RectOnlyRuntimeEffectTile> = fills
@@ -313,6 +317,8 @@ internal fun prepareRectOnlyDrawPlan(
                 is SceneCommand.FillRect -> add(RectOnlyIndexedDraw(index, command, activeClip))
                 is SceneCommand.FillRRect -> add(RectOnlyIndexedDraw(index, command, activeClip))
                 is SceneCommand.LinearGradientRect -> add(RectOnlyIndexedDraw(index, command, activeClip))
+                is SceneCommand.RadialGradientRect -> add(RectOnlyIndexedDraw(index, command, activeClip))
+                is SceneCommand.SweepGradientRect -> add(RectOnlyIndexedDraw(index, command, activeClip))
                 else -> Unit
             }
         }
@@ -429,8 +435,10 @@ internal fun rectOnlyCommandSequenceUnsupportedReason(commands: List<SceneComman
                 command is SceneCommand.Clear ||
                 command is SceneCommand.FillRect ||
                 command is SceneCommand.FillRRect ||
-                command is SceneCommand.LinearGradientRect ||
-                command is SceneCommand.Clip
+        command is SceneCommand.LinearGradientRect ||
+        command is SceneCommand.RadialGradientRect ||
+        command is SceneCommand.SweepGradientRect ||
+        command is SceneCommand.Clip
             ) {
                 null
             } else {
@@ -439,15 +447,16 @@ internal fun rectOnlyCommandSequenceUnsupportedReason(commands: List<SceneComman
         }
         .distinct()
     if (unsupportedFamilies.isNotEmpty()) {
-        return "rect-only offscreen render supports only clear, fill-rect, fill-rrect, linear-gradient-rect, and clip command families: " +
+        return "rect-only offscreen render supports only clear, fill-rect, fill-rrect, linear-gradient-rect, radial-gradient-rect, sweep-gradient-rect, and clip command families: " +
             unsupportedFamilies.joinToString()
     }
 
     if (commands.none {
-                it is SceneCommand.FillRect || it is SceneCommand.FillRRect || it is SceneCommand.LinearGradientRect
+                it is SceneCommand.FillRect || it is SceneCommand.FillRRect || it is SceneCommand.LinearGradientRect ||
+        it is SceneCommand.RadialGradientRect || it is SceneCommand.SweepGradientRect
         }
     ) {
-        return "rect-only offscreen render requires at least one FillRect, FillRRect, or LinearGradientRect command"
+        return "rect-only offscreen render requires at least one FillRect, FillRRect, LinearGradientRect, RadialGradientRect, or SweepGradientRect command"
     }
 
     val clearIndices = commands.withIndex()
@@ -467,6 +476,8 @@ internal fun rectOnlyRenderedDiagnostics(
     fillRectCount: Int,
     fillRRectCount: Int,
     linearGradientRectCount: Int = 0,
+    radialGradientRectCount: Int = 0,
+    sweepGradientRectCount: Int = 0,
     clipCount: Int = 0,
     bitmapRectCount: Int = 0,
     filters: List<RectOnlyFilterNode> = emptyList(),
@@ -479,6 +490,8 @@ internal fun rectOnlyRenderedDiagnostics(
         fillRectCount +
             fillRRectCount +
             linearGradientRectCount +
+            radialGradientRectCount +
+            sweepGradientRectCount +
             bitmapRectCount +
             saveLayers.size +
             runtimeEffects.size +
@@ -493,6 +506,8 @@ internal fun rectOnlyRenderedDiagnostics(
         add("fillRectCommands=$fillRectCount")
         add("fillRRectCommands=$fillRRectCount")
         add("linearGradientRectCommands=$linearGradientRectCount")
+        add("radialGradientRectCommands=$radialGradientRectCount")
+        add("sweepGradientRectCommands=$sweepGradientRectCount")
         add("clipCommands=$clipCount")
         add("bitmapRectCommands=$bitmapRectCount")
         if (saveLayers.isNotEmpty()) {
@@ -540,6 +555,8 @@ private fun SceneCommand.paintOrder(): Int =
         is SceneCommand.FillRect -> paintOrder
         is SceneCommand.FillRRect -> paintOrder
         is SceneCommand.LinearGradientRect -> paintOrder
+        is SceneCommand.RadialGradientRect -> paintOrder
+        is SceneCommand.SweepGradientRect -> paintOrder
         is SceneCommand.BitmapRect -> paintOrder
         is SceneCommand.SaveLayer -> paintOrder
         is SceneCommand.RuntimeEffectTile -> paintOrder
@@ -552,6 +569,8 @@ private fun SceneCommand.shapeRect() =
         is SceneCommand.FillRect -> rect
         is SceneCommand.FillRRect -> rect
         is SceneCommand.LinearGradientRect -> rect
+        is SceneCommand.RadialGradientRect -> rect
+        is SceneCommand.SweepGradientRect -> rect
         is SceneCommand.BitmapRect -> fixtureRect()
         is SceneCommand.SaveLayer -> fixtureContentRect()
         is SceneCommand.RuntimeEffectTile -> fixtureRect()
@@ -564,6 +583,8 @@ private fun SceneCommand.shapeStartColor() =
         is SceneCommand.FillRect -> color
         is SceneCommand.FillRRect -> color
         is SceneCommand.LinearGradientRect -> startColor
+        is SceneCommand.RadialGradientRect -> startColor
+        is SceneCommand.SweepGradientRect -> startColor
         is SceneCommand.BitmapRect -> fixtureSource().topLeft
         is SceneCommand.SaveLayer -> fixtureContentColor()
         is SceneCommand.RuntimeEffectTile -> fixtureUniformColor()
@@ -576,6 +597,8 @@ private fun SceneCommand.shapeEndColor() =
         is SceneCommand.FillRect -> color
         is SceneCommand.FillRRect -> color
         is SceneCommand.LinearGradientRect -> endColor
+        is SceneCommand.RadialGradientRect -> endColor
+        is SceneCommand.SweepGradientRect -> endColor
         is SceneCommand.BitmapRect -> fixtureSource().topRight
         is SceneCommand.SaveLayer -> fixtureContentColor()
         is SceneCommand.RuntimeEffectTile -> fixtureUniformColor()
@@ -588,6 +611,8 @@ private fun SceneCommand.shapeBottomLeftColor() =
         is SceneCommand.FillRect -> color
         is SceneCommand.FillRRect -> color
         is SceneCommand.LinearGradientRect -> startColor
+        is SceneCommand.RadialGradientRect -> startColor
+        is SceneCommand.SweepGradientRect -> startColor
         is SceneCommand.BitmapRect -> fixtureSource().bottomLeft
         is SceneCommand.SaveLayer -> fixtureContentColor()
         is SceneCommand.RuntimeEffectTile -> fixtureUniformColor()
@@ -600,6 +625,8 @@ private fun SceneCommand.shapeBottomRightColor() =
         is SceneCommand.FillRect -> color
         is SceneCommand.FillRRect -> color
         is SceneCommand.LinearGradientRect -> endColor
+        is SceneCommand.RadialGradientRect -> endColor
+        is SceneCommand.SweepGradientRect -> endColor
         is SceneCommand.BitmapRect -> fixtureSource().bottomRight
         is SceneCommand.SaveLayer -> fixtureContentColor()
         is SceneCommand.RuntimeEffectTile -> fixtureUniformColor()
@@ -612,6 +639,8 @@ private fun SceneCommand.shapeRadius(): Float =
         is SceneCommand.FillRect -> 0f
         is SceneCommand.FillRRect -> radius
         is SceneCommand.LinearGradientRect -> 0f
+        is SceneCommand.RadialGradientRect -> 0f
+        is SceneCommand.SweepGradientRect -> 0f
         is SceneCommand.BitmapRect -> 0f
         is SceneCommand.SaveLayer -> radius
         is SceneCommand.RuntimeEffectTile -> 0f
@@ -624,6 +653,8 @@ private fun SceneCommand.shapePaintKind(): Float =
         is SceneCommand.MeshRibbon -> 5f
         is SceneCommand.RuntimeEffectTile -> 4f
         is SceneCommand.LinearGradientRect -> 1f
+        is SceneCommand.RadialGradientRect -> 6f
+        is SceneCommand.SweepGradientRect -> 7f
         is SceneCommand.BitmapRect -> when (sampling) {
             SceneBitmapSampling.Nearest -> 2f
             SceneBitmapSampling.Linear -> 3f
