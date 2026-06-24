@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.gpu.renderer.wgsl
 
+/** A render-step module identified by its shader stage entry points and source hash. */
 data class WgslRenderStepModule(
     val renderStepIdentity: String,
     val sourceHash: String,
@@ -19,4 +20,18 @@ val linearGradientModule: WgslRenderStepModule = WgslRenderStepModule(
     sourceHash = LinearGradientSnippetSourceHash,
     vertexEntryPoint = "vs_main",
     fragmentEntryPoint = LinearGradientEntryPoint,
+)
+
+val radialGradientModule: WgslRenderStepModule = WgslRenderStepModule(
+    renderStepIdentity = "radial.gradient.fill",
+    sourceHash = RadialGradientSnippetSourceHash,
+    vertexEntryPoint = "vs_main",
+    fragmentEntryPoint = RadialGradientEntryPoint,
+)
+
+val sweepGradientModule: WgslRenderStepModule = WgslRenderStepModule(
+    renderStepIdentity = "sweep.gradient.fill",
+    sourceHash = SweepGradientSnippetSourceHash,
+    vertexEntryPoint = "vs_main",
+    fragmentEntryPoint = SweepGradientEntryPoint,
 )

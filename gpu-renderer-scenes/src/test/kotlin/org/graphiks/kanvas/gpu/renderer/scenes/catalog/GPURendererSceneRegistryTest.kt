@@ -17,6 +17,7 @@ class GPURendererSceneRegistryTest {
         assertTrue(roadmapLinks.map { it.milestone }.containsAll((0..10).map { "M$it" }))
         assertTrue(roadmapLinks.mapNotNull { it.rStage }.containsAll(RStage.entries))
         assertTrue(scenes.any { scene -> scene.roadmapLinks.any { it.milestone == "M10" } })
+        assertTrue(scenes.any { scene -> scene.roadmapLinks.any { it.milestone == "M14" } })
     }
 
     @Test
@@ -1697,6 +1698,18 @@ class GPURendererSceneRegistryTest {
                 tags = setOf(SceneTag.Rect, SceneTag.Clip),
                 commandFamilies = listOf("clear", "clip", "fill-rect", "fill-rect", "fill-rect"),
                 roadmapLinks = listOf(RoadmapExpectation("M10")),
+            ),
+            SceneExpectationRow(
+                sceneId = "radial-swatch",
+                tags = setOf(SceneTag.Rect, SceneTag.Gradient),
+                commandFamilies = listOf("clear", "radial-gradient-rect", "radial-gradient-rect", "radial-gradient-rect"),
+                roadmapLinks = listOf(RoadmapExpectation("M14")),
+            ),
+            SceneExpectationRow(
+                sceneId = "sweep-disk",
+                tags = setOf(SceneTag.Rect, SceneTag.Gradient),
+                commandFamilies = listOf("clear", "sweep-gradient-rect", "sweep-gradient-rect", "sweep-gradient-rect"),
+                roadmapLinks = listOf(RoadmapExpectation("M14")),
             ),
         )
     }

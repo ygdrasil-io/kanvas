@@ -505,6 +505,27 @@ private class WgpuRenderRecorder(
         )
     }
 
+    override fun drawFullscreenRawUniformPass(
+        wgsl: String,
+        colorFormat: String,
+        draws: List<GPUBackendRawUniformDraw>,
+    ) {
+        recordFullscreenUniformPass(
+            wgsl = wgsl,
+            colorFormat = colorFormat,
+            draws = draws.map { draw ->
+                WgpuFullscreenUniformDraw(
+                    uniformPayload = ArrayBuffer.of(draw.uniformBytes),
+                    uniformSizeBytes = draw.uniformBytes.size.toULong(),
+                    scissorX = draw.scissorX,
+                    scissorY = draw.scissorY,
+                    scissorWidth = draw.scissorWidth,
+                    scissorHeight = draw.scissorHeight,
+                )
+            },
+        )
+    }
+
     private fun recordFullscreenUniformPass(
         wgsl: String,
         colorFormat: String,

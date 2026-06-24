@@ -2,7 +2,7 @@ package org.graphiks.kanvas.gpu.renderer.scenes.catalog
 
 private val sceneIdPattern = Regex("[a-z][a-z0-9]*(?:-[a-z0-9]+)+")
 private val roadmapLikeSceneIdPattern = Regex("m[0-9]+(?:-[a-z])?(?:-[0-9]{3})?")
-private val plainMilestonePattern = Regex("M(?:[0-9]|10)")
+private val plainMilestonePattern = Regex("M(?:[0-9]|1[0-9])")
 private val activeRuntimeMilestonePattern = Regex("M70-[ABC]")
 private val ticketIdPattern = Regex("KGPU-(M[0-9]+)-[0-9]{3}")
 

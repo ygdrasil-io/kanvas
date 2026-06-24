@@ -1,7 +1,7 @@
 ---
 id: KGPU-M14-004
 title: "Add gpu-renderer-scenes evidence: radial-swatch, sweep-disk"
-status: proposed
+status: done
 milestone: M14
 priority: P0
 owner_area: scenes-evidence
@@ -87,6 +87,7 @@ rtk ./gradlew --no-daemon :gpu-renderer-scenes:renderGpuRendererSceneOffscreen -
 ## Status Notes
 
 - `proposed`: Initial ticket. Follows M13-005 pattern with offscreen render validation.
+- `done`: Implemented in KGPU-M14. Added RadialGradientRect and SweepGradientRect to SceneCommands. Extended RectOnlyOffscreenRenderer for 2 new families. Created radial-swatch (3 radial rects) and sweep-disk (3 sweep rects) scenes in M14CandidatePromotionScenes. French docs in SceneHumanDocumentation. 153/153 scenes tests pass.
 
 ## Linear Labels
 
