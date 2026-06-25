@@ -1,7 +1,7 @@
 ---
 id: KGPU-M28-006
 title: "Wire saveLayer real composite rendering"
-status: ready
+status: done
 milestone: M28
 priority: P0
 owner_area: execution-backend
@@ -139,6 +139,14 @@ rtk ./gradlew --no-daemon :gpu-renderer-scenes:renderGpuRendererSceneOffscreen -
 - `ready` (2026-06-25): reopened/downgraded from `done` — children are not rendered into the
   secondary target and the target is not sampled. Ready to implement child render into the
   secondary target + `@group(1)` sampling in the composite pass.
+- `done` (2026-06-25): saveLayer children now render into a viewport-sized secondary offscreen target
+  via `target.encodeOffscreenTexture` pre-pass (shadow + content card + child fills with srcOver).
+  Composite uses real `LayerCompositeWgsl` with `drawCompositePass` binding the offscreen texture
+  at `@group(1)` binding 1 + sampler at binding 2. LayerCompositeWgsl blend formula fixed for
+  premultiplied layer texture (layer_color.rgb directly, not multiplied by layer_color.a again).
+  `savelayer-isolated` diagnostics: `childrenRendered=1 childContentSampled=true`. Parity:
+  similarity=1.0000 mismatch=0/64000 maxChannelDelta=1 vs CPU reference. `:gpu-renderer:test` +
+  `:gpu-renderer-scenes:test` BUILD SUCCESSFUL. `OffscreenScenePngParityTest` 5 tests 0 failures.
 
 ## Linear Labels
 

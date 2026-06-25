@@ -18,8 +18,8 @@ hygiene cleanup of stale diagnostics/comments and dead code.
 | M28-002 stencil-cover path fill | uses backend | `path-fill-stencil` pixels via tessellated **indexed fill** (`drawVertexColorIndexed`), **not** two-pass stencil-write + cover-resolve | **PARTIAL** — criteria 1 & 4 met (non-rect shape, convex indexed); criteria 2 & 3 (stencil write pass / cover resolve) **NOT met** |
 | M28-003 vertex/index buffer | `createVertexBuffer`/`createVertexColorBuffer`, `drawIndexed`/`drawVertexColorIndexed`, position+color layout | n/a (backend capability) | **MET** |
 | M28-004 vertices mesh rendering | uses backend | `vertices` + `convex-fan-mesh` render real indexed colored mesh in `renderToPixels` | **MET** |
-| M28-005 secondary render target | `createOffscreenTexture`/`encodeOffscreenTexture` contracts; saveLayer allocates a secondary texture | secondary texture **allocated** but **not sampled** | **PARTIAL** — "texture sampling from a secondary target works in a composite pass" **NOT demonstrated** |
-| M28-006 saveLayer composite | composite uses real `LayerCompositeWgsl` snippet | `childrenRendered=0`; composite WGSL has **no texture binding** (secondary not bound as `@group(1)`) | **PARTIAL** — "use real snippet" met; "children render to secondary", "texture bound @group(1)", "real layer isolation output" **NOT met** |
+| M28-005 secondary render target | `createOffscreenTexture`/`encodeOffscreenTexture` contracts; saveLayer allocates a secondary texture | secondary texture **allocated**, **rendered into**, and **sampled** via `drawCompositePass` @group(1) | **MET** |
+| M28-006 saveLayer composite | composite uses real `LayerCompositeWgsl` snippet | `childrenRendered=1`, `childContentSampled=true`; offscreen texture bound @group(1); correct premultiplied blend; parity 1.0000 | **MET** |
 
 ### Evidence pointers
 
@@ -129,3 +129,66 @@ both shape scenes; the anchor assertion is retained and the non-asserting diagno
 Validation: both scene PNGs regenerated via `renderGpuRendererSceneOffscreen`
 (run.json `status=rendered`); `:gpu-renderer:test` + `:gpu-renderer-scenes:test` BUILD SUCCESSFUL
 (`OffscreenScenePngParityTest`: 4 tests, 0 failures). M28-005/006 (saveLayer) remain untouched.
+
+## 7. M28-005/006 completed: secondary render target + saveLayer composite (2026-06-25)
+
+Both M28-005 and M28-006 are now completed with real pixel-parity proof via the CPU reference harness.
+
+### M28-005: Secondary render target
+
+- Added `GPUBackendOffscreenTarget.createOffscreenTexture` and `encodeOffscreenTexture` to contracts
+- Implemented in `WgpuOffscreenTarget`: `createOffscreenTexture` (was already internal, now `override`)
+  and `encodeOffscreenTexture` (delegates to `encodeOffscreenTextureInternal` with a fresh
+  `GpuResourceScope`)
+- `encodeOffscreenTextureInternal` extended with a `Depth24PlusStencil8` attachment so the
+  render pass is compatible with the existing pipeline (which declares depth-stencil state)
+- `LayerCompositeWgsl` blend formula fixed: previously treated the texture sample as straight alpha
+  (`layer_color.rgb * layer_color.a`), now treats it as premultiplied (`layer_color.rgb` directly)
+  since the offscreen render pass writes premultiplied data via srcOver GPU blend
+
+### M28-006: SaveLayer composite
+
+- `RectOnlyFillDraw` extended with `shadowColor`, `shadowOffsetX`, `shadowOffsetY` fields
+- `prepareRectOnlyDrawPlan` now passes saveLayer shadow info through to fills
+- `renderToPixels` restructured with a pre-pass:
+  1. For each saveLayer, identify child fills (fills with paintOrder between this saveLayer
+     and the next, excluding saveLayer fills themselves)
+  2. Create a viewport-sized offscreen texture via `target.createOffscreenTexture`
+  3. Render shadow + content card + child fills into it via `target.encodeOffscreenTexture`
+     (with srcOver, using `drawFullscreenPass` + `SOLID_RECT_WGSL`)
+  4. In the main pass, skip child fills (excluded from solid fills via `saveLayerChildLabels`)
+  5. Composite via `drawCompositePass` with transparent tint `(0,0,0,0)` so the premultiplied
+     layer content passes through to the GPU hardware srcOver blend
+- Composite covers full viewport (scissor 0,0 → viewportW,viewportH), UV `pos.xy / vec2f(320,200)`
+  maps correctly to the viewport-sized offscreen texture
+- `saveLayerWiringDiagnostics` updated to count actual children from the fill list
+
+### CPU reference extension
+
+- `OffscreenSceneCpuReference` now handles `SceneCommand.SaveLayer` with fixture payload:
+  renders the shadow (contentRect + shadowOffset, shadowColor) then content card (contentRect,
+  contentColor) with srcOver, followed by any subsequent FillRect children
+
+### Evidence
+
+| Scene | similarity | mismatch / 64000 | maxChannelDelta | childrenRendered | childContentSampled |
+|-------|-----------|------------------|----------------|-----------------|-------------------|
+| savelayer-isolated (before) | N/A (blank composite) | — | — | 0 | false |
+| savelayer-isolated (after) | **1.0000** | **0** | **1** | **1** | **true** |
+| solid-card-stack (anchor) | 1.0000 | 0 | 0 | — | — |
+
+### Files changed
+
+- `gpu-renderer/.../GPUBackendRuntimeContracts.kt` — added `createOffscreenTexture`/`encodeOffscreenTexture` to `GPUBackendOffscreenTarget`
+- `gpu-renderer/.../GPUBackendRuntimeWgpu.kt` — implemented target-level methods; added depth-stencil to `encodeOffscreenTextureInternal`
+- `gpu-renderer/.../LayerCompositeSnippet.kt` — fixed premultiplied blend formula
+- `gpu-renderer-scenes/.../RectOnlyOffscreenRenderer.kt` — shadow fields, pre-pass saveLayer rendering, composite pass, diagnostics
+- `gpu-renderer-scenes/.../OffscreenSceneCpuReference.kt` — SaveLayer CPU reference rendering
+- `gpu-renderer-scenes/.../OffscreenScenePngParityTest.kt` — savelayer-isolated parity assertion
+
+### Validation
+
+```bash
+rtk ./gradlew --no-daemon :gpu-renderer:test :gpu-renderer-scenes:test
+```
+Both BUILD SUCCESSFUL; `OffscreenScenePngParityTest`: 5 tests, 0 failures.

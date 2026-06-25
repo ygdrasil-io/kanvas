@@ -408,7 +408,7 @@ private class WgpuOffscreenTarget(
         return buffer
     }
 
-    internal fun createOffscreenTexture(textureDesc: GPUBackendOffscreenTexture): String {
+    override fun createOffscreenTexture(textureDesc: GPUBackendOffscreenTexture): String {
         val label = "offscreenTex:${textureDesc.width}x${textureDesc.height}:${textureDesc.format}"
         if (label in offscreenTextures) return label
         val tex = device.createTexture(
@@ -421,6 +421,22 @@ private class WgpuOffscreenTarget(
         )
         offscreenTextures[label] = tex
         return label
+    }
+
+    override fun encodeOffscreenTexture(
+        textureLabel: String,
+        clearColor: GPUClearColor,
+        block: GPUBackendRenderRecorder.() -> Unit,
+    ) {
+        GpuResourceScope().use { resources ->
+            encodeOffscreenTextureInternal(
+                textureLabel = textureLabel,
+                clearColor = clearColor,
+                textureFormat = format,
+                resources = resources,
+                block = { recorder -> recorder.block() },
+            )
+        }
     }
 
     internal fun offscreenTexture(label: String): GPUTexture {
@@ -437,6 +453,19 @@ private class WgpuOffscreenTarget(
     ) {
         val tex = offscreenTexture(textureLabel)
         val texView = resources.track(tex.createView()) { it.close() }
+        val texWidth = tex.width
+        val texHeight = tex.height
+        val dsTex = resources.track(
+            device.createTexture(
+                TextureDescriptor(
+                    size = Extent3D(width = texWidth, height = texHeight),
+                    format = GPUTextureFormat.Depth24PlusStencil8,
+                    usage = GPUTextureUsage.RenderAttachment,
+                    label = "GPUBackend.offscreenLayer.depthStencil",
+                ),
+            ),
+        ) { it.close() }
+        val dsView = resources.track(dsTex.createView()) { it.close() }
         val encoder = resources.trackIfAutoCloseable(device.createCommandEncoder())
         encoder.beginRenderPass(
             RenderPassDescriptor(
@@ -447,6 +476,14 @@ private class WgpuOffscreenTarget(
                         clearValue = clearColor.toWgpuColor(),
                         storeOp = GPUStoreOp.Store,
                     ),
+                ),
+                depthStencilAttachment = RenderPassDepthStencilAttachment(
+                    view = dsView,
+                    stencilClearValue = 0u,
+                    stencilLoadOp = GPULoadOp.Clear,
+                    stencilStoreOp = GPUStoreOp.Store,
+                    stencilReadOnly = false,
+                    depthReadOnly = true,
                 ),
             ),
         ) {

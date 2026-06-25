@@ -29,15 +29,26 @@ object OffscreenSceneCpuReference {
         val w = scene.dimensions.width
         val h = scene.dimensions.height
         val buf = FloatArray(w * h * 4) // r,g,b,a straight, 0..1
+        var childFillIndex = 0
         for (cmd in scene.commands) {
             when (cmd) {
                 is SceneCommand.Clear -> clear(buf, cmd.color)
                 is SceneCommand.FillRect -> fillRect(buf, w, h, cmd.rect, cmd.color)
+                is SceneCommand.SaveLayer -> {
+                    if (cmd.hasFixturePayload) {
+                        val contentRect = cmd.contentRect!!
+                        val shadowRect = cmd.shadowRect!!
+                        val contentColor = cmd.contentColor!!
+                        val shadowColor = cmd.shadowColor!!
+                        fillRect(buf, w, h, shadowRect, shadowColor)
+                        fillRect(buf, w, h, contentRect, contentColor)
+                    }
+                }
                 is SceneCommand.PathFillStencil ->
                     fillPolygon(buf, w, h, generateStarVertices(160f, 100f, 80f, 35f, 5), cmd.fillColor)
                 is SceneCommand.ConvexFanMesh ->
                     fillPolygon(buf, w, h, generateOctagonVertices(160f, 100f, 60f, 8), cmd.fillColor)
-                else -> Unit // unsupported in this reference (translucent/layer/text handled per-task)
+                else -> Unit // unsupported in this reference
             }
         }
         return RefImage(w, h, toRgbaBytes(buf))

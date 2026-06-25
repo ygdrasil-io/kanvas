@@ -6,10 +6,13 @@ const val LayerCompositeWgsl: String = """
 
 fn layer_composite(uv: vec2<f32>, src_color: vec4<f32>) -> vec4<f32> {
     let layer_color = textureSample(layer_texture, layer_sampler, uv);
-    // srcOver blend
+    // layer_color from the offscreen render pass is premultiplied.
+    // src_color (uniform) is packed straight-alpha; premultiply it before blending.
+    let src_premul = vec4<f32>(src_color.rgb * src_color.a, src_color.a);
+    // srcOver: layer over tint-color
     return vec4<f32>(
-        layer_color.rgb * layer_color.a + src_color.rgb * (1.0 - layer_color.a),
-        layer_color.a + src_color.a * (1.0 - layer_color.a),
+        layer_color.rgb + src_premul.rgb * (1.0 - layer_color.a),
+        layer_color.a + src_premul.a * (1.0 - layer_color.a),
     );
 }
 """

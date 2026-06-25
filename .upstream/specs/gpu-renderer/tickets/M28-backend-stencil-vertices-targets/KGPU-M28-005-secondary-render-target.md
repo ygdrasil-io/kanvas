@@ -1,7 +1,7 @@
 ---
 id: KGPU-M28-005
 title: "Add secondary render target support"
-status: ready
+status: done
 milestone: M28
 priority: P0
 owner_area: execution-backend
@@ -128,6 +128,14 @@ rtk ./gradlew --no-daemon :gpu-renderer-scenes:test
   `reports/gpu-renderer/2026-06-25-m28-backend-stencil-vertices-targets.md`.
 - `ready` (2026-06-25): reopened/downgraded from `done` — secondary-target sampling is not
   demonstrated. Ready to implement and prove secondary-target sampling in a composite pass.
+- `done` (2026-06-25): `GPUBackendOffscreenTarget.createOffscreenTexture`/`encodeOffscreenTexture` added
+  to contracts and implemented in `WgpuOffscreenTarget` (with depth-stencil attachment for pipeline
+  compat). `WgpuOffscreenTarget.encodeOffscreenTexture` creates a separate command encoder + render
+  pass into the offscreen texture and submits. Offscreen-texture-to-target saveLayer pre-rendering
+  works in `renderToPixels` (viewport-sized secondary target, child fills + shadow + content card
+  rendered into it, then composited via real `LayerCompositeWgsl` with `@group(1)` texture binding
+  in `drawCompositePass`). Parity: savelayer-isolated similarity=1.0000 mismatch=0/64000 maxChannelDelta=1
+  vs CPU reference. `:gpu-renderer:test` + `:gpu-renderer-scenes:test` BUILD SUCCESSFUL.
 
 ## Linear Labels
 

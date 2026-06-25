@@ -70,6 +70,20 @@ class OffscreenScenePngParityTest {
     }
 
     @Test
+    fun savelayerIsolated_gpuMatchesCpuReference() {
+        // KGPU-M28-005/006: saveLayer children render into the offscreen secondary texture
+        // and are composited via LayerCompositeWgsl srcOver onto the main target.
+        val cpu = OffscreenSceneCpuReference.renderSceneRgba("savelayer-isolated")
+        val gpu = loadCommittedPng("savelayer-isolated")
+        val d = diff(gpu, cpu, tolerance = 8)
+        println("[parity] savelayer-isolated -> $d")
+        assertTrue(
+            d.similarity >= 0.99,
+            "savelayer-isolated GPU↔CPU-reference similarity ${d.similarity} < 0.99 ($d)",
+        )
+    }
+
+    @Test
     fun recordCurrentShapeAndLayerSceneDivergence() {
         // Diagnostic only (no assert): documents the remaining layer-scene divergence
         // (blank save-layer composite on dst-read-strategy). Tasks M28-005/006 will add
