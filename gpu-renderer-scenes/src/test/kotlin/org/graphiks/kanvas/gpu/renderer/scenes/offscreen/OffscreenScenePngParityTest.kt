@@ -39,11 +39,42 @@ class OffscreenScenePngParityTest {
     }
 
     @Test
+    fun pathFillStencil_gpuMatchesCpuReference() {
+        // KGPU-M28-002: the non-convex star is now filled via two-pass stencil-cover
+        // (winding write + cover where stencil != 0), so it matches the clean CPU
+        // star reference. Residual mismatches are single hard-edge pixels at the star
+        // tips (GPU stencil coverage vs CPU even-odd point-in-polygon sampling).
+        val cpu = OffscreenSceneCpuReference.renderSceneRgba("path-fill-stencil")
+        val gpu = loadCommittedPng("path-fill-stencil")
+        val d = diff(gpu, cpu, tolerance = 8)
+        println("[parity] path-fill-stencil -> $d")
+        assertTrue(
+            d.similarity >= 0.99,
+            "path-fill-stencil GPU↔CPU-reference similarity ${d.similarity} < 0.99 ($d)",
+        )
+    }
+
+    @Test
+    fun convexFanMesh_gpuMatchesCpuReference() {
+        // KGPU-M28-002: the convex octagon mesh passes an identity-white uniform to the
+        // vertex-color pass (`in.color * white`), so the fill color is no longer squared
+        // and the octagon matches the CPU reference exactly.
+        val cpu = OffscreenSceneCpuReference.renderSceneRgba("convex-fan-mesh")
+        val gpu = loadCommittedPng("convex-fan-mesh")
+        val d = diff(gpu, cpu, tolerance = 8)
+        println("[parity] convex-fan-mesh -> $d")
+        assertTrue(
+            d.similarity >= 0.99,
+            "convex-fan-mesh GPU↔CPU-reference similarity ${d.similarity} < 0.99 ($d)",
+        )
+    }
+
+    @Test
     fun recordCurrentShapeAndLayerSceneDivergence() {
-        // Diagnostic only (no assert): documents that the harness DETECTS the
-        // current divergences (bounding-box artifact on path/convex; blank layer
-        // on savelayer). Tasks M28-002/005/006 will add passing parity assertions.
-        for (id in listOf("path-fill-stencil", "convex-fan-mesh", "dst-read-strategy")) {
+        // Diagnostic only (no assert): documents the remaining layer-scene divergence
+        // (blank save-layer composite on dst-read-strategy). Tasks M28-005/006 will add
+        // passing parity assertions. The path/convex shape scenes are now asserted above.
+        for (id in listOf("dst-read-strategy")) {
             val cpu = OffscreenSceneCpuReference.renderSceneRgba(id)
             val gpu = loadCommittedPng(id)
             println("[parity-current] $id -> ${diff(gpu, cpu, tolerance = 8)}")

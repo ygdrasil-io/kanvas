@@ -385,21 +385,40 @@ class RectOnlyOffscreenRenderer {
                     val tessellator = PathTessellator()
                     val flat = tessellator.flatten(pathData)
                     val tri = tessellator.triangulate(flat)
-                    val flatVerts = tri.vertices.flatMap { p ->
-                        listOf(p.x, p.y, 0f, 0f, fill.startColor.r, fill.startColor.g, fill.startColor.b, fill.startColor.a)
-                    }.toFloatArray()
-                    val flatIndices = tri.indices.toIntArray()
-                    val vertexColorData = GPUBackendVertexColorData(vertexData = flatVerts, indices = flatIndices)
-                    val bufferLabel = createVertexColorBuffer(vertexColorData)
-                    drawVertexColorIndexed(
-                        vertexBufferLabel = bufferLabel,
-                        indexCount = flatIndices.size,
-                        uniformDraw = GPUBackendRawUniformDraw(
-                            uniformBytes = UniformPacker.solidColorBytes(fill.startColor),
-                            scissorX = fill.scissorX,
-                            scissorY = fill.scissorY,
-                            scissorWidth = fill.scissorWidth,
-                            scissorHeight = fill.scissorHeight,
+                    // x,y position pairs only; the stencil-write pipeline binds a
+                    // Float32x2 @location(0) vertex layout (no color/padding).
+                    val triangleVertices = tri.vertices.flatMap { p -> listOf(p.x, p.y) }.toFloatArray()
+                    val triangleIndices = tri.indices.toIntArray()
+                    val triangleData = GPUBackendTriangleData(
+                        vertices = triangleVertices,
+                        indices = triangleIndices,
+                    )
+                    // Pass 1 (stencil write): rasterize the triangulated contour with
+                    // increment/decrement-wrap winding ops and no color writes, so a
+                    // non-convex (concave) star resolves to correct coverage via the
+                    // nonzero winding rule instead of a bloated fan rasterization.
+                    drawFullscreenStencilPass(
+                        wgsl = STENCIL_RENDER_WGSL,
+                        colorFormat = OFFSCREEN_COLOR_FORMAT,
+                        stencilMode = GPUBackendStencilMode.Write,
+                        triangleData = triangleData,
+                        draws = emptyList(),
+                    )
+                    // Pass 2 (stencil cover): a fullscreen quad that passes only where
+                    // stencil != 0, writing the fill color through srcOver blending.
+                    drawFullscreenStencilPass(
+                        wgsl = SOLID_RECT_WGSL,
+                        colorFormat = OFFSCREEN_COLOR_FORMAT,
+                        stencilMode = GPUBackendStencilMode.Test,
+                        triangleData = null,
+                        draws = listOf(
+                            GPUBackendRawUniformDraw(
+                                uniformBytes = UniformPacker.solidColorBytes(fill.startColor),
+                                scissorX = fill.scissorX,
+                                scissorY = fill.scissorY,
+                                scissorWidth = fill.scissorWidth,
+                                scissorHeight = fill.scissorHeight,
+                            ),
                         ),
                     )
                 }
@@ -423,7 +442,10 @@ class RectOnlyOffscreenRenderer {
                         vertexBufferLabel = bufferLabel,
                         indexCount = flatIndices.size,
                         uniformDraw = GPUBackendRawUniformDraw(
-                            uniformBytes = UniformPacker.solidColorBytes(fill.startColor),
+                            // VERTEX_COLOR_WGSL multiplies per-vertex color by the uniform
+                            // (`in.color * uniforms.color`). The fill color is already carried
+                            // per-vertex, so pass an identity-white uniform to avoid squaring it.
+                            uniformBytes = UniformPacker.solidColorBytes(SceneColor(1f, 1f, 1f, 1f)),
                             scissorX = fill.scissorX,
                             scissorY = fill.scissorY,
                             scissorWidth = fill.scissorWidth,
