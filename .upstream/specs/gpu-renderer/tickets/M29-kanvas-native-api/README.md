@@ -15,7 +15,7 @@ stencil/vertices/targets support that `flush()` submits to.
 
 ## Exit Criteria
 
-- [x] `:kanvas-api` module compiles as a standalone Kotlin JVM artifact
+- [x] `:kanvas` module compiles as a standalone Kotlin JVM artifact
 - [x] `KanvasSurface` + `KanvasCanvas` accept all five draw families (rect, rrect, path, image, text)
 - [x] `KanvasPaint` defines color, shader, blendMode, colorFilter, stroke
 - [x] `KanvasPath` supports moveTo/lineTo/quadTo/cubicTo/close with fillType
