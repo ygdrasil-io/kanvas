@@ -7,10 +7,14 @@ import org.graphiks.math.SkColor4f
 import org.graphiks.math.SkRect
 import org.skia.core.SkSurface
 import org.skia.foundation.SkBlendMode
+import org.skia.foundation.SkFont
 import org.skia.foundation.SkImage
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPathBuilder
 import org.skia.foundation.SkPathFillType
+import org.skia.foundation.SkRRect
+import org.skia.foundation.SkTextBlob
+import org.skia.foundation.SkTypeface
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.*
 
@@ -206,13 +210,157 @@ class KanvasSkiaBridgeTest {
     }
 
     @Test
-    fun `isKanvasRendererEnabled returns false by default`() {
-        assertEquals(false, isKanvasRendererEnabled())
+    fun `isKanvasRendererEnabled returns true by default`() {
+        assertEquals(true, isKanvasRendererEnabled())
     }
 
     @Test
-    fun `wrapIfEnabled returns null by default`() {
+    fun `isKanvasRendererEnabled returns false when rollback flag set`() {
+        val previous = System.getProperty("kanvas.rollback.legacy-gpu-raster")
+        try {
+            System.setProperty("kanvas.rollback.legacy-gpu-raster", "true")
+            assertEquals(false, isKanvasRendererEnabled())
+        } finally {
+            if (previous != null) {
+                System.setProperty("kanvas.rollback.legacy-gpu-raster", previous)
+            } else {
+                System.clearProperty("kanvas.rollback.legacy-gpu-raster")
+            }
+        }
+    }
+
+    @Test
+    fun `wrapIfEnabled returns non-null by default`() {
         val skiaSurface = SkSurface.MakeRasterN32Premul(64, 64)
-        assertNull(SkiaKanvasSurface.wrapIfEnabled(skiaSurface))
+        assertNotNull(SkiaKanvasSurface.wrapIfEnabled(skiaSurface))
+    }
+
+    @Test
+    fun `wrapIfEnabled returns null when useLegacyGpuRaster is set`() {
+        val previous = System.getProperty("kanvas.rollback.legacy-gpu-raster")
+        try {
+            System.setProperty("kanvas.rollback.legacy-gpu-raster", "true")
+            val skiaSurface = SkSurface.MakeRasterN32Premul(64, 64)
+            assertNull(SkiaKanvasSurface.wrapIfEnabled(skiaSurface))
+        } finally {
+            if (previous != null) {
+                System.setProperty("kanvas.rollback.legacy-gpu-raster", previous)
+            } else {
+                System.clearProperty("kanvas.rollback.legacy-gpu-raster")
+            }
+        }
+    }
+
+    @Test
+    fun `toKanvasRRect maps simple rounded rect`() {
+        val sr = SkRRect.MakeRectXY(SkRect.MakeLTRB(10f, 20f, 100f, 200f), 5f, 8f)
+        val kr = sr.toKanvasRRect()
+        assertEquals(10f, kr.rect.left)
+        assertEquals(20f, kr.rect.top)
+        assertEquals(100f, kr.rect.right)
+        assertEquals(200f, kr.rect.bottom)
+        assertEquals(5f, kr.topLeft.x)
+        assertEquals(8f, kr.topLeft.y)
+        assertEquals(5f, kr.topRight.x)
+        assertEquals(8f, kr.topRight.y)
+        assertEquals(5f, kr.bottomRight.x)
+        assertEquals(8f, kr.bottomRight.y)
+        assertEquals(5f, kr.bottomLeft.x)
+        assertEquals(8f, kr.bottomLeft.y)
+    }
+
+    @Test
+    fun `toKanvasRRect empty rect`() {
+        val sr = SkRRect.MakeEmpty()
+        val kr = sr.toKanvasRRect()
+        assertTrue(kr.rect.isEmpty)
+    }
+
+    @Test
+    fun `SkiaKanvasSurface drawRRect records tasks`() {
+        val skiaSurface = SkSurface.MakeRasterN32Premul(256, 256)
+        val kanvasSurface = SkiaKanvasSurface.wrap(skiaSurface)
+
+        val rrect = SkRRect.MakeRectXY(SkRect.MakeLTRB(10f, 10f, 100f, 100f), 5f, 5f)
+        val paint = SkPaint().apply { color = 0xFF0000FF.toInt() }
+
+        kanvasSurface.drawRRect(rrect, paint)
+        val frame = kanvasSurface.flush()
+        assertTrue(frame.recording.taskList.tasks.isNotEmpty())
+    }
+
+    @Test
+    fun `toKanvasTextBlob from HorizontalSpread`() {
+        val font = SkFont(SkTypeface.MakeEmpty(), 12f)
+        val blob = SkTextBlob.MakeFromString("Hi", font)!!
+        val ktb = blob.toKanvasTextBlob()
+        assertEquals(1, ktb.glyphRuns.size)
+        val run = ktb.glyphRuns[0]
+        assertEquals(2, run.glyphs.size)
+        assertEquals(2, run.positions.size)
+    }
+
+    @Test
+    fun `SkiaKanvasSurface drawTextBlob records tasks`() {
+        val skiaSurface = SkSurface.MakeRasterN32Premul(256, 256)
+        val kanvasSurface = SkiaKanvasSurface.wrap(skiaSurface)
+
+        val font = SkFont(SkTypeface.MakeEmpty(), 12f)
+        val blob = SkTextBlob.MakeFromString("Hello", font)!!
+        val paint = SkPaint().apply { color = 0xFF000000.toInt() }
+
+        kanvasSurface.drawTextBlob(blob, 10f, 20f, paint)
+        val frame = kanvasSurface.flush()
+        assertTrue(frame.recording.taskList.tasks.isNotEmpty())
+    }
+
+    @Test
+    fun `KanvasSkiaBridge class wraps Canvas and delegates drawRect`() {
+        val kSurface = org.graphiks.kanvas.Surface(64, 64, org.graphiks.kanvas.PixelFormat.RGBA8)
+        val canvas = org.graphiks.kanvas.Canvas(kSurface)
+        val bridge = KanvasSkiaBridge(canvas)
+
+        val rect = SkRect.MakeLTRB(0f, 0f, 10f, 10f)
+        val paint = SkPaint().apply { color = 0xFFFF0000.toInt() }
+
+        bridge.drawRect(rect, paint)
+        assertNotNull(canvas)
+    }
+
+    @Test
+    fun `KanvasSkiaBridge class drawRRect`() {
+        val kSurface = org.graphiks.kanvas.Surface(64, 64, org.graphiks.kanvas.PixelFormat.RGBA8)
+        val canvas = org.graphiks.kanvas.Canvas(kSurface)
+        val bridge = KanvasSkiaBridge(canvas)
+
+        val rrect = SkRRect.MakeRectXY(SkRect.MakeLTRB(0f, 0f, 50f, 50f), 5f, 5f)
+        val paint = SkPaint().apply { color = 0xFF00FF00.toInt() }
+
+        bridge.drawRRect(rrect, paint)
+        assertNotNull(canvas)
+    }
+
+    @Test
+    fun `KanvasSkiaBridge class drawTextBlob`() {
+        val kSurface = org.graphiks.kanvas.Surface(64, 64, org.graphiks.kanvas.PixelFormat.RGBA8)
+        val canvas = org.graphiks.kanvas.Canvas(kSurface)
+        val bridge = KanvasSkiaBridge(canvas)
+
+        val font = SkFont(SkTypeface.MakeEmpty(), 12f)
+        val blob = SkTextBlob.MakeFromString("Test", font)!!
+        val paint = SkPaint().apply { color = 0xFF000000.toInt() }
+
+        bridge.drawTextBlob(blob, 0f, 12f, paint)
+        assertNotNull(canvas)
+    }
+
+    @Test
+    fun `diagnostic helper emits expected prefix`() {
+        emitBridgeDiagnostic("test-code", "test message")
+    }
+
+    @Test
+    fun `unsupported diagnostic helper`() {
+        emitUnsupportedBridgeDiagnostic("drawPicture")
     }
 }

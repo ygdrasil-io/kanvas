@@ -8,13 +8,26 @@ import org.skia.core.SkSurface
 import org.skia.foundation.SkImage
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
+import org.skia.foundation.SkRRect
+import org.skia.foundation.SkTextBlob
 import org.graphiks.math.SkRect
 
-private const val PROPERTY_KEY = "kanvas.renderer"
-private const val NATIVE_MODE = "native"
+@Volatile
+private var activationDiagnosticEmitted = false
 
 fun isKanvasRendererEnabled(): Boolean =
-    System.getProperty(PROPERTY_KEY) == NATIVE_MODE
+    !RollbackConfig.useLegacyGpuRaster
+
+internal fun emitRouteMigratedDiagnostic() {
+    if (!activationDiagnosticEmitted) {
+        activationDiagnosticEmitted = true
+        emitBridgeDiagnostic(
+            code = "route-migrated-to-kanvas",
+            message = "SkSurface rendering routed through Kanvas native pipeline (SkiaKanvasSurface). " +
+                "Set -Dkanvas.rollback.legacy-gpu-raster=true for emergency rollback to gpu-raster.",
+        )
+    }
+}
 
 class SkiaKanvasSurface internal constructor(
     val skSurface: SkSurface,
@@ -27,20 +40,26 @@ class SkiaKanvasSurface internal constructor(
 
     val kanvasCanvas: Canvas = Canvas(kanvasSurface)
 
+    val bridge: KanvasSkiaBridge = KanvasSkiaBridge(kanvasCanvas)
+
     fun drawRect(rect: SkRect, paint: SkPaint) {
-        kanvasCanvas.drawRect(rect.toKanvasRect(), paint.toKanvasPaint())
+        bridge.drawRect(rect, paint)
+    }
+
+    fun drawRRect(rrect: SkRRect, paint: SkPaint) {
+        bridge.drawRRect(rrect, paint)
     }
 
     fun drawPath(path: SkPath, paint: SkPaint) {
-        kanvasCanvas.drawPath(path.toKanvasPath(), paint.toKanvasPaint())
+        bridge.drawPath(path, paint)
     }
 
     fun drawImage(image: SkImage, rect: SkRect, paint: SkPaint?) {
-        kanvasCanvas.drawImage(
-            image = image.toKanvasImage(),
-            rect = rect.toKanvasRect(),
-            paint = paint?.toKanvasPaint(),
-        )
+        bridge.drawImage(image, rect, paint)
+    }
+
+    fun drawTextBlob(blob: SkTextBlob, x: Float, y: Float, paint: SkPaint) {
+        bridge.drawTextBlob(blob, x, y, paint)
     }
 
     fun flush(): Frame = kanvasSurface.flush()
@@ -51,7 +70,10 @@ class SkiaKanvasSurface internal constructor(
             SkiaKanvasSurface(skSurface)
 
         @JvmStatic
-        fun wrapIfEnabled(skSurface: SkSurface): SkiaKanvasSurface? =
-            if (isKanvasRendererEnabled()) wrap(skSurface) else null
+        fun wrapIfEnabled(skSurface: SkSurface): SkiaKanvasSurface? {
+            if (!isKanvasRendererEnabled()) return null
+            emitRouteMigratedDiagnostic()
+            return wrap(skSurface)
+        }
     }
 }

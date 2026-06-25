@@ -10,6 +10,10 @@ import kotlinx.coroutines.runBlocking
 /**
  * G0 bootstrap — "headless" WebGPU context for tests.
  *
+ * @deprecated gpu-raster is frozen at M30. Use the Kanvas-native pipeline
+ * via [org.skia.kanvas.SkiaKanvasSurface] instead.
+ * gpu-raster will be removed in M31+.
+ *
  * wgpu4k 0.2.0 requires a `NativeSurface` for
  * [io.ygdrasil.webgpu.WGPU.requestAdapter] (confirmed by reading
  * wgpu4k commonNativeMain `WGPU.kt` — `surface.handler` is
@@ -29,6 +33,16 @@ import kotlinx.coroutines.runBlocking
  * this; revisit when Linux CI is wired up (likely Wayland surface
  * via xvfb or a similar offscreen wrapper).
  */
+@Deprecated(
+    message = "gpu-raster is frozen at M30; use SkiaKanvasBridge instead. " +
+        "The Kanvas-native pipeline is the default since M30. " +
+        "Set -Dkanvas.rollback.legacy-gpu-raster=true for emergency rollback. " +
+        "gpu-raster will be removed in M31+.",
+    replaceWith = ReplaceWith(
+        expression = "SkiaKanvasSurface.wrap(surface)",
+        imports = ["org.skia.kanvas.SkiaKanvasSurface"],
+    ),
+)
 public class WebGpuContext private constructor(
     private val glfw: GLFWContext,
 ) : AutoCloseable {

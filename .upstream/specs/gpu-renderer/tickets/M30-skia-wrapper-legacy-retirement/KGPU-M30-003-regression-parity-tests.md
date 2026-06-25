@@ -1,7 +1,7 @@
 ---
 id: KGPU-M30-003
 title: "Regression tests — Skia GM parity via Kanvas bridge"
-status: proposed
+status: review
 milestone: M30
 priority: P0
 owner_area: kanvas-skia-bridge
@@ -108,6 +108,7 @@ rtk ./gradlew --no-daemon :integration-tests:test
 ## Status Notes
 
 - `proposed`: Initial ticket.
+- `review` (2026-06-25): Implemented. Parity test suite covers all five draw families (rect, rrect, path, text, image via existing tests), blend modes (parameterized over 17 modes), multiple draws, and stroke variations. Pixel-diff GPU comparison deferred to M31-003 evidence bundle. Evidence at `reports/gpu-renderer/2026-06-25-M30-003-evidence.md`.
 
 ## Linear Labels
 
