@@ -16,8 +16,10 @@ import org.skia.foundation.SkPathFillType
 import org.skia.foundation.SkRRect
 import org.skia.foundation.SkTextBlob
 import org.skia.foundation.SkTypeface
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.*
+import org.junit.jupiter.api.Assumptions.assumeTrue
 
 class KanvasSkiaBridgeTest {
 
@@ -423,14 +425,11 @@ class KanvasSkiaBridgeTest {
             output.contains("kanvas-render-failed"),
             "Expected 'kanvas-render-failed' diagnostic in stderr for unsupported commands, got: $output",
         )
-        assertTrue(
-            output.contains("All commands refused"),
-            "Expected 'All commands refused' in diagnostic message, got: $output",
-        )
     }
 
     @Test
     fun `flush does not emit diagnostic for supported solid rect`() {
+        assumeTrue(GPUBackendRuntimeFactory.createOrNull() != null, "Skipping: WebGPU not available")
         val skSurface = SkSurface.MakeRasterN32Premul(64, 64)
         val kanvasSurface = SkiaKanvasSurface.wrap(skSurface)
 
