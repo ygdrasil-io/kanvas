@@ -101,6 +101,26 @@ the primary route-kind outcome.
 | M9 | [M9-performance-cache-release-gates](M9-performance-cache-release-gates/README.md) | 3 | Promote observed performance/cache telemetry into release-gate candidates. |
 | M10 | [M10-legacy-gpu-raster-migration](M10-legacy-gpu-raster-migration/README.md) | 4 | Migrate or retire legacy `gpu-raster` routes only after route-specific evidence is accepted. |
 | M11 | [M11-graphite-dawn-execution-gap-closure](M11-graphite-dawn-execution-gap-closure/README.md) | 9 | Cut missing execution/resource materialization tickets from the Graphite/Dawn gap matrix without duplicating M0-M10 gates. |
+| M12 | [M12-dependencies](M12-dependencies/README.md) | 10 | Codec and font dependency pipelines for image and text routes. |
+| M13 | [M13-rect-rrect-gradient-scissor-execution](M13-rect-rrect-gradient-scissor-execution/README.md) | 5 | Execute rect, rrect, gradient, and scissor routes with real GPU rendering. |
+| M14 | [M14-gradients-radial-sweep](M14-gradients-radial-sweep/README.md) | 5 | Add radial and sweep gradient execution with real GPU rendering. |
+| M15 | [M15-path-fill-stencil-cover](M15-path-fill-stencil-cover/README.md) | 5 | Real GPU path fill via stencil-cover with tessellation. |
+| M16 | [M16-stroke-dash-clip-expansion](M16-stroke-dash-clip-expansion/README.md) | 5 | Stroke, dash, and clip expansion with real GPU execution. |
+| M17 | [M17-image-shader-codec-upload](M17-image-shader-codec-upload/README.md) | 6 | Image shader, codec upload, and sampler configuration with real GPU textures. |
+| M18 | [M18-savelayer-destination-read](M18-savelayer-destination-read/README.md) | 6 | SaveLayer and destination-read execution with real GPU compositing. |
+| M19 | [M19-filter-dag](M19-filter-dag/README.md) | 5 | Filter DAG execution with real GPU render nodes. |
+| M20 | [M20-text-a8-sdf-glyph-atlas](M20-text-a8-sdf-glyph-atlas/README.md) | 6 | Text A8/SDF glyph atlas execution with real GPU rendering. |
+| M21 | [M21-runtime-effects-registry](M21-runtime-effects-registry/README.md) | 5 | Registered runtime effects with parser-validated WGSL. |
+| M22 | [M22-vertices-mesh-batching](M22-vertices-mesh-batching/README.md) | 5 | Vertices and mesh batching with real GPU execution. |
+| M23 | [M23-performance-gates-pm-evidence](M23-performance-gates-pm-evidence/README.md) | 5 | Performance gates and PM evidence collection. |
+| M24 | [M24-gpu-native-rendering](M24-gpu-native-rendering/README.md) | 6 | GPU native rendering consolidation with offscreen backend. |
+| M25 | [M25-missing-wiring](M25-missing-wiring/README.md) | 6 | Missing wiring — executor connections for real GPU rendering. |
+| M26 | [M26-real-textures](M26-real-textures/README.md) | 4 | Real GPU texture creation and upload from codec pipelines. |
+| M27 | [M27-performance](M27-performance/README.md) | 3 | Performance optimization and cache gate promotion. |
+| M28 | [M28-backend-stencil-vertices-targets](M28-backend-stencil-vertices-targets/README.md) | 6 | Backend stencil, vertices, and render targets for real GPU compositing. |
+| M29 | [M29-kanvas-native-api](M29-kanvas-native-api/README.md) | 8 | Public Kanvas native API module with surface, canvas, paint, path, shader, image, and text. |
+| M30 | [M30-skia-wrapper-legacy-retirement](M30-skia-wrapper-legacy-retirement/README.md) | 4 | Skia wrapper bridge, route migration, parity tests, and gpu-raster deprecation. |
+| M31 | [M31-production-activation](M31-production-activation/README.md) | 4 | Production activation, rollback flag, PM evidence bundle, and API stability freeze. |
 
 ## Source Of Truth
 
