@@ -1,7 +1,7 @@
 ---
 id: KGPU-M29-006
 title: "KanvasImage — decode PNG/JPEG/WebP to GPU texture"
-status: proposed
+status: done
 milestone: M29
 priority: P0
 owner_area: kanvas-api
@@ -109,6 +109,7 @@ rtk ./gradlew --no-daemon :gpu-renderer:test
 ## Status Notes
 
 - `proposed`: Initial ticket.
+- `done`: KanvasImage with decode(bytes, mimeType), lower() returns GPUImageSourceDescriptor.
 
 ## Linear Labels
 

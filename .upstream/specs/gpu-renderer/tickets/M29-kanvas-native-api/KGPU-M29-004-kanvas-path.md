@@ -1,7 +1,7 @@
 ---
 id: KGPU-M29-004
 title: "KanvasPath — moveTo/lineTo/quadTo/cubicTo/close + fillType"
-status: proposed
+status: done
 milestone: M29
 priority: P0
 owner_area: kanvas-api
@@ -105,6 +105,7 @@ rtk ./gradlew --no-daemon :gpu-renderer:test
 ## Status Notes
 
 - `proposed`: Initial ticket.
+- `done`: KanvasPath with moveTo, lineTo, quadTo, cubicTo, close, fillType. lower() returns GPUPathDescriptor.
 
 ## Linear Labels
 
