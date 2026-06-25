@@ -1,7 +1,7 @@
 ---
 id: KGPU-M31-002
 title: "Rollback flag — emergency gpu-raster fallback control"
-status: proposed
+status: review
 milestone: M31
 priority: P0
 owner_area: product-validation
@@ -113,6 +113,7 @@ rtk ./gradlew --no-daemon :integration-tests:test
 ## Status Notes
 
 - `proposed`: Initial ticket.
+- `review` (2026-06-25): Implemented. Rollback flag (system property + env var) formalized in RollbackConfig; integration tests verify flag switching; procedure documented. Evidence at reports/gpu-renderer/2026-06-25-M31-002-evidence.md.
 
 ## Linear Labels
 

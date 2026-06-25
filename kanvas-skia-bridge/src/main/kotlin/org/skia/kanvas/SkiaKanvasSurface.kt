@@ -18,6 +18,9 @@ private var activationDiagnosticEmitted = false
 fun isKanvasRendererEnabled(): Boolean =
     !RollbackConfig.useLegacyGpuRaster
 
+fun isProductActivation(): Boolean =
+    RollbackConfig.productActivation
+
 internal fun emitRouteMigratedDiagnostic() {
     if (!activationDiagnosticEmitted) {
         activationDiagnosticEmitted = true
@@ -26,6 +29,14 @@ internal fun emitRouteMigratedDiagnostic() {
             message = "SkSurface rendering routed through Kanvas native pipeline (SkiaKanvasSurface). " +
                 "Set -Dkanvas.rollback.legacy-gpu-raster=true for emergency rollback to gpu-raster.",
         )
+        if (isProductActivation()) {
+            emitBridgeDiagnostic(
+                code = "renderer-activated-kanvas-production",
+                message = "Kanvas native pipeline is the production default renderer. " +
+                    "product_activation=true. " +
+                    "Set -Dkanvas.product.activation.disable=true to disable.",
+            )
+        }
     }
 }
 
