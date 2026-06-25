@@ -109,6 +109,62 @@ interface GPUBackendWindowSurface : AutoCloseable {
     ): Boolean
 }
 
+/** Enumerates stencil render modes for [GPUBackendRenderRecorder.drawFullscreenStencilPass]. */
+enum class GPUBackendStencilMode {
+    /** Render triangles into stencil buffer with increment/decrement winding ops (no color write). */
+    Write,
+    /** Fullscreen quad that passes only where stencil != 0, writing fill color. */
+    Test,
+}
+
+/** Describes a secondary offscreen texture that can be bound as a texture source. */
+data class GPUBackendOffscreenTexture(
+    val width: Int,
+    val height: Int,
+    val format: String,
+) {
+    init {
+        require(width > 0) { "GPUBackendOffscreenTexture.width must be positive" }
+        require(height > 0) { "GPUBackendOffscreenTexture.height must be positive" }
+        require(format.isNotBlank()) { "GPUBackendOffscreenTexture.format must not be blank" }
+    }
+}
+
+/** Holds triangle vertex data for stencil write or vertex buffer passes. */
+data class GPUBackendTriangleData(
+    val vertices: FloatArray,
+    val indices: IntArray,
+) {
+    val vertexCount: Int get() = vertices.size / 2
+    val triangleCount: Int get() = indices.size / 3
+
+    init {
+        require(vertices.size >= 6) { "GPUBackendTriangleData.vertices must have at least 6 floats (3 positions)" }
+        require(vertices.size % 2 == 0) { "GPUBackendTriangleData.vertices must contain pairs of floats" }
+        require(indices.size >= 3) { "GPUBackendTriangleData.indices must have at least 3 indices" }
+        require(indices.size % 3 == 0) { "GPUBackendTriangleData.indices must be a multiple of 3" }
+        require(indices.all { it in 0 until vertexCount }) { "GPUBackendTriangleData.indices out of range" }
+    }
+}
+
+/** Holds interleaved vertex data (position + padding + color) for vertex buffer passes. */
+data class GPUBackendVertexColorData(
+    val vertexData: FloatArray,
+    val indices: IntArray,
+) {
+    val vertexCount: Int get() = vertexData.size / 8
+    val strideFloats: Int = 8
+
+    init {
+        require(vertexData.size >= 8) { "GPUBackendVertexColorData.vertexData must have at least 8 floats" }
+        require(vertexData.size % strideFloats == 0) {
+            "GPUBackendVertexColorData.vertexData must be a multiple of $strideFloats"
+        }
+        require(indices.isNotEmpty()) { "GPUBackendVertexColorData.indices must not be empty" }
+        require(indices.all { it in 0 until vertexCount }) { "GPUBackendVertexColorData.indices out of range" }
+    }
+}
+
 /** Records draw inputs for the backend runtime's fullscreen pass helper. */
 interface GPUBackendRenderRecorder {
     /** Draws a fullscreen pass parameterized by WGSL source and per-draw rect payloads. */
@@ -140,6 +196,43 @@ interface GPUBackendRenderRecorder {
         textureWidth: Int,
         textureHeight: Int,
         textureFormat: String,
+        draws: List<GPUBackendRawUniformDraw>,
+    )
+
+    /** Draws a two-pass stencil-cover fill with triangle geometry (write) and fullscreen cover (test). */
+    fun drawFullscreenStencilPass(
+        wgsl: String,
+        colorFormat: String,
+        stencilMode: GPUBackendStencilMode,
+        triangleData: GPUBackendTriangleData?,
+        draws: List<GPUBackendRawUniformDraw>,
+    )
+
+    /** Creates a GPU vertex buffer from interleaved position + color float data. Returns a stable label. */
+    fun createVertexColorBuffer(data: GPUBackendVertexColorData): String
+
+    /** Draws an indexed mesh using a previously-created vertex buffer. */
+    fun drawVertexColorIndexed(
+        vertexBufferLabel: String,
+        indexCount: Int,
+        uniformDraw: GPUBackendRawUniformDraw,
+    )
+
+    /** Creates a secondary offscreen texture that can be bound as a texture source. */
+    fun createOffscreenTexture(texture: GPUBackendOffscreenTexture): String
+
+    /** Renders into a previously-created offscreen texture via a separate render pass with the given clear color. */
+    fun encodeOffscreenTexture(
+        textureLabel: String,
+        clearColor: GPUClearColor,
+        block: GPUBackendRenderRecorder.() -> Unit,
+    )
+
+    /** Binds a previously-created offscreen texture as @group(1) texture source for compositing. */
+    fun drawCompositePass(
+        wgsl: String,
+        colorFormat: String,
+        textureLabel: String,
         draws: List<GPUBackendRawUniformDraw>,
     )
 }

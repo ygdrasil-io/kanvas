@@ -1,13 +1,13 @@
 {
   "schemaVersion": 1,
   "sceneId": "mesh-ribbon-depth",
-  "status": "not-yet-rendered",
+  "status": "rendered",
   "productRefusal": false,
   "backend": "webgpu-offscreen",
-  "imagePath": null,
-  "width": null,
-  "height": null,
-  "byteCount": null,
-  "nonTransparentPixels": null,
-  "diagnostics": ["rect-only offscreen render supports only clear, fill-rect, fill-rrect, linear-gradient-rect, radial-gradient-rect, sweep-gradient-rect, clip, path-fill-stencil, and convex-fan-mesh command families: vertices"]
+  "imagePath": "render.png",
+  "width": 320,
+  "height": 200,
+  "byteCount": 256000,
+  "nonTransparentPixels": 64000,
+  "diagnostics": ["rendered mesh-ribbon-depth via WebGPU offscreen","adapter=Apple M2 Max","clearCommands=1","fillRectCommands=0","fillRRectCommands=0","linearGradientRectCommands=0","radialGradientRectCommands=0","sweepGradientRectCommands=0","clipCommands=0","bitmapRectCommands=0","blurRectCommands=0","colorMatrixRectCommands=0","strokeRectCommands=0","textRunCommands=0","saveLayerRectCommands=0","pathFillStencilCommands=0","convexFanMeshCommands=0","meshRibbonCommands=3","meshRibbonKinds=bounded-ribbon-strip, bounded-ribbon-strip, bounded-ribbon-strip","meshRibbonRoute=scene-fixture.bounded-ribbon-strip","meshRibbonFallbackReason=none","generalVerticesSupport=false","vertexIndexBufferSupport=false","vertices:executor executed=true vertexCount=6 colorCount=6 mode=Triangles","vertices:executor.vertices:nonclaim verticesExecutionSupported=true primitiveBlenderExecuted=false cpuVertexTransform=false gpuIndexedDraw=false productActivation=false","vertices:uploader uploaded=true vertexCount=6 bufferBytes=144 providerUsed=true","vertices:uploader.vertices:nonclaim vertexBufferUploadSupported=true indexBufferUpload=false stagingUpload=false bindGroupMaterialized=false productActivation=false","vertices:batcher inputDraws=2 batches=1 pipelineChanges=0 mergedDraws=1","vertices:batcher.vertices:nonclaim batchingSupported=true crossLayerBatching=false destinationReadBatching=false performanceReady=false productActivation=false","vertices:boundingRectVisual=true realMeshDeferred=M26 productActivation=false"]
 }
