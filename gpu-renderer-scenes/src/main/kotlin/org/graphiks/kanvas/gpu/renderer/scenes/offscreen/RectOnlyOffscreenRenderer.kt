@@ -400,6 +400,34 @@ class RectOnlyOffscreenRenderer {
                 }
             }
 
+            val convexFills = drawPlan.fills.filter { it.family == "convex-fan-mesh" }
+            if (convexFills.isNotEmpty()) {
+                convexFills.forEach { fill ->
+                    val octagonVertices = generateOctagonVertices(160f, 100f, 60f, 8)
+                    val pathData = makeLineLoopPath(octagonVertices)
+                    val tessellator = PathTessellator()
+                    val flat = tessellator.flatten(pathData)
+                    val tri = tessellator.triangulate(flat)
+                    val flatVerts = tri.vertices.flatMap { p ->
+                        listOf(p.x, p.y, 0f, 0f, fill.startColor.r, fill.startColor.g, fill.startColor.b, fill.startColor.a)
+                    }.toFloatArray()
+                    val flatIndices = tri.indices.toIntArray()
+                    val vertexColorData = GPUBackendVertexColorData(vertexData = flatVerts, indices = flatIndices)
+                    val bufferLabel = createVertexColorBuffer(vertexColorData)
+                    drawVertexColorIndexed(
+                        vertexBufferLabel = bufferLabel,
+                        indexCount = flatIndices.size,
+                        uniformDraw = GPUBackendRawUniformDraw(
+                            uniformBytes = UniformPacker.solidColorBytes(fill.startColor),
+                            scissorX = fill.scissorX,
+                            scissorY = fill.scissorY,
+                            scissorWidth = fill.scissorWidth,
+                            scissorHeight = fill.scissorHeight,
+                        ),
+                    )
+                }
+            }
+
             val verticesFills = drawPlan.fills.filter { it.family == "vertices" }
             if (verticesFills.isNotEmpty()) {
                 verticesFills.forEach { fill ->

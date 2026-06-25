@@ -1,7 +1,7 @@
 ---
 id: KGPU-M28-002
 title: "Wire stencil-cover real GPU rendering for path fill"
-status: proposed
+status: done
 milestone: M28
 priority: P0
 owner_area: execution-backend

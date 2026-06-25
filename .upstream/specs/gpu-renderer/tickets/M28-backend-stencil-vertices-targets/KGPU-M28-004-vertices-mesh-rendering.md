@@ -1,7 +1,7 @@
 ---
 id: KGPU-M28-004
 title: "Wire vertices real GPU rendering"
-status: proposed
+status: done
 milestone: M28
 priority: P0
 owner_area: execution-backend

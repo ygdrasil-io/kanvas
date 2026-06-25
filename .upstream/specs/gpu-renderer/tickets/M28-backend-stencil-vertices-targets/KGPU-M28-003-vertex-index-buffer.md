@@ -1,7 +1,7 @@
 ---
 id: KGPU-M28-003
 title: "Add vertex/index buffer to offscreen backend"
-status: proposed
+status: done
 milestone: M28
 priority: P0
 owner_area: execution-backend

@@ -10,12 +10,12 @@ Depends on M25 (executor wiring) and M26 (real textures).
 
 ## Exit Criteria
 
-- [ ] Stencil buffer depth-stencil attachment + write/read/clear functional
-- [ ] Vertex/index buffer creation + indexed draw functional
-- [ ] Secondary render target creation + texture sampling functional
-- [ ] Path fill scenes render real stencil-cover output
-- [ ] Vertices scenes render real mesh output
-- [ ] SaveLayer scenes render real composite output
+- [x] Stencil buffer depth-stencil attachment + write/read/clear functional
+- [x] Vertex/index buffer creation + indexed draw functional
+- [x] Secondary render target creation + texture sampling functional
+- [x] Path fill scenes render real stencil-cover output
+- [x] Vertices scenes render real mesh output
+- [x] SaveLayer scenes render real composite output
 
 ## Tickets
 

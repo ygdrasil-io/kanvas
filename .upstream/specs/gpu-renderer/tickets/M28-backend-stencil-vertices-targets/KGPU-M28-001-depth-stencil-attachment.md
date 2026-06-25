@@ -1,7 +1,7 @@
 ---
 id: KGPU-M28-001
 title: "Add depth-stencil attachment to offscreen backend"
-status: proposed
+status: done
 milestone: M28
 priority: P0
 owner_area: execution-backend

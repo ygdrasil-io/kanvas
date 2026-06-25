@@ -1,7 +1,7 @@
 ---
 id: KGPU-M28-005
 title: "Add secondary render target support"
-status: proposed
+status: done
 milestone: M28
 priority: P0
 owner_area: execution-backend
