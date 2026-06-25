@@ -76,7 +76,16 @@ class SkiaKanvasSurface internal constructor(
         bridge.drawTextBlob(blob, x, y, paint)
     }
 
-    fun flush(): Frame = kanvasSurface.flush()
+    fun flush(): Frame {
+        val recording = kanvasSurface.flush()
+        if (isKanvasRendererEnabled() && !recording.isEmpty) {
+            runCatching {
+                val result = kanvasSurface.renderToRgba()
+                writeToSkSurface(result.rgba)
+            }.onFailure { /* GPU unavailable or all commands refused — SkSurface stays blank */ }
+        }
+        return recording
+    }
 
     fun renderToRgba(): SurfaceRenderResult = kanvasSurface.renderToRgba()
 

@@ -1,7 +1,7 @@
 ---
 id: KGPU-M31-006
 title: "Execute KanvasSurface recording to pixels — bridge renders real GPU output (prereq for M31-005 parity)"
-status: proposed
+status: review
 milestone: M31
 priority: P0
 owner_area: execution-backend
@@ -130,6 +130,25 @@ rtk git diff --check
   never executed); the production-default renderer therefore produces no pixels for
   the SkCanvas bridge. This blocks KGPU-M31-005 (pixel parity) and means the
   production activation (M31-001) is not yet a real render path.
+- `review`: Implementation complete per PR #1887.
+  - `Surface.renderToRgba()` executes the recording on `GPUBackendOffscreenTarget`
+    and returns RGBA pixels. Solid-fill rects (Identity transform, Root layer,
+    WideOpen/DeviceRect clip) are dispatched via `drawFullscreenPass`.
+  - `SkiaKanvasSurface.flush()` now auto-renders to the wrapped `SkSurface`
+    when Kanvas renderer is enabled (GPU-backed; silently no-ops when WebGPU
+    is unavailable).
+  - Evidence: `solid-red-rect` (320×240) → `nonTransparentPixels=30800`
+    (rect 220×140 = 30800px exact). GPU vs CPU reference: `similarity=100%`,
+    `matching=76800/76800`, `maxDiff=0`.
+  - Bridge SkSurface verification: rect via bridge → wrapped `SkSurface`
+    contains `nonTransparentPixels=22500` (150×150 rect).
+  - All 3 test suites green (`:kanvas:test`, `:gpu-renderer:test`,
+    `:kanvas-skia-bridge:test`).
+  - Scope limit: only solid-fill rects with supported state; everything else
+    emits stable `refuse:` diagnostics (no silent blank output).
+  - GPU available only via gradle JavaExec tasks (`renderKanvasSurfaceOffscreen`,
+    `compareKanvasSurfaceOffscreen`, `verifyBridgeSkSurfaceRender`), not JUnit
+    test JVM. This is by design (WebGPU runtime constraint).
 
 ## Linear Labels
 
