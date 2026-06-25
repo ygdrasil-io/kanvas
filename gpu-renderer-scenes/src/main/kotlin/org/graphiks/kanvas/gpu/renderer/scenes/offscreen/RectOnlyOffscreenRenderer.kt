@@ -1630,7 +1630,7 @@ private fun SceneRect.isInsideTarget(width: Int, height: Int): Boolean =
         right > left &&
         bottom > top
 
-private fun generateStarVertices(
+internal fun generateStarVertices(
     centerX: Float, centerY: Float,
     outerRadius: Float, innerRadius: Float, points: Int,
 ): List<Pair<Float, Float>> {
@@ -1666,7 +1666,7 @@ private fun generateRibbonVertices(
     )
 }
 
-private fun generateOctagonVertices(
+internal fun generateOctagonVertices(
     centerX: Float, centerY: Float, radius: Float, sides: Int,
 ): List<Pair<Float, Float>> {
     val vertices = mutableListOf<Pair<Float, Float>>()
