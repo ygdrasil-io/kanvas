@@ -2,7 +2,7 @@
 
 ## Goal
 
-Expose a public, Skia-free `:kanvas-api` module with `KanvasSurface`, `KanvasCanvas`,
+Expose a public, Skia-free `:kanvas` module with `KanvasSurface`, `KanvasCanvas`,
 `KanvasPaint`, `KanvasPath`, `KanvasShader`, `KanvasImage`, and `KanvasTextBlob`
 as the native Kanvas drawing surface. This milestone creates the standalone
 Kotlin API that callers use directly without Skia indirection.
@@ -15,7 +15,7 @@ stencil/vertices/targets support that `flush()` submits to.
 
 ## Exit Criteria
 
-- [ ] `:kanvas-api` module compiles as a standalone Kotlin multiplatform artifact
+- [ ] `:kanvas` module compiles as a standalone Kotlin multiplatform artifact
 - [ ] `KanvasSurface` + `KanvasCanvas` accept all five draw families (rect, rrect, path, image, text)
 - [ ] `KanvasPaint` defines color, shader, blendMode, colorFilter, stroke
 - [ ] `KanvasPath` supports moveTo/lineTo/quadTo/cubicTo/close with fillType
@@ -41,9 +41,9 @@ stencil/vertices/targets support that `flush()` submits to.
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :kanvas-api:compileKotlinJvm
-rtk ./gradlew --no-daemon :kanvas-api:compileKotlinMacosArm64
-rtk ./gradlew --no-daemon :kanvas-api:test
+rtk ./gradlew --no-daemon :kanvas:compileKotlinJvm
+rtk ./gradlew --no-daemon :kanvas:compileKotlinMacosArm64
+rtk ./gradlew --no-daemon :kanvas:test
 rtk ./gradlew --no-daemon :gpu-renderer:test
 rtk ./gradlew --no-daemon :gpu-renderer-scenes:test
 ```

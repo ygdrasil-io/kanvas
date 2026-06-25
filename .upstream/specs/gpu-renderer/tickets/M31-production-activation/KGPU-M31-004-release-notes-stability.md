@@ -19,20 +19,20 @@ legacy_gate: null
 ## PM Note
 
 Ce ticket gele l'API publique Kanvas et produit les notes de release pour la
-version de production. Apres ce ticket, l'API `:kanvas-api` est stable, les
+version de production. Apres ce ticket, l'API `:kanvas` est stable, les
 breaking changes sont interdits sans procedure formelle, et la documentation
 de release est prete pour distribution.
 
 ## Problem
 
 Kanvas is in production (M31-001) but the API surface has no stability guarantee.
-Callers need confidence that the `:kanvas-api` module will not break without
+Callers need confidence that the `:kanvas` module will not break without
 notice. Release notes document what is supported, what is frozen, and what is
 explicitly refused.
 
 ## Scope
 
-- Declare `:kanvas-api` public API surface as stable/frozen
+- Declare `:kanvas` public API surface as stable/frozen
 - Document API stability policy (semantic versioning, deprecation cycles)
 - Write release notes covering M0-M31 feature set
 - Document supported draw families, shader types, and codec formats
@@ -69,7 +69,7 @@ class KanvasCanvas { ... }
 
 ## Acceptance Criteria
 
-- [ ] `:kanvas-api` public surface is annotated with stability guarantees
+- [ ] `:kanvas` public surface is annotated with stability guarantees
 - [ ] API stability policy document committed (deprecation cycle, breaking change process)
 - [ ] Release notes cover all M0-M31 features with support/non-support declarations
 - [ ] Supported draw families matrix is current and accurate
@@ -79,7 +79,7 @@ class KanvasCanvas { ... }
 
 ## Required Evidence
 
-- API stability annotations diff for `:kanvas-api` public classes
+- API stability annotations diff for `:kanvas` public classes
 - API stability policy document
 - Release notes markdown file covering M0-M31
 - Draw-family support matrix (final)
@@ -101,7 +101,7 @@ emit `api-stability-violation` diagnostic and are rejected at review.
 ## Validation
 
 ```bash
-rtk ./gradlew --no-daemon :kanvas-api:compileKotlinJvm
+rtk ./gradlew --no-daemon :kanvas:compileKotlinJvm
 rtk ./gradlew --no-daemon :kanvas-skia:test
 rtk ./gradlew --no-daemon :gpu-renderer:test
 rtk git diff --check

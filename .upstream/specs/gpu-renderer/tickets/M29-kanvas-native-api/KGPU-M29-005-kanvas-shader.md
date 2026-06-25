@@ -113,7 +113,7 @@ Shader variants with unsupported tile modes or color-stop counts emit
 ## Validation
 
 ```bash
-rtk ./gradlew --no-daemon :kanvas-api:test
+rtk ./gradlew --no-daemon :kanvas:test
 rtk ./gradlew --no-daemon :gpu-renderer:test
 ```
 
@@ -125,4 +125,4 @@ rtk ./gradlew --no-daemon :gpu-renderer:test
 
 - `gpu-renderer`
 - `milestone:M29`
-- `area:kanvas-api`
+- `area:kanvas`

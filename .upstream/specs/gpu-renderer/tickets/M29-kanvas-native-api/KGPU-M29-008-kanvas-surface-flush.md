@@ -93,7 +93,7 @@ No CPU-side rasterization fallback. No silent discard of recorded commands.
 ## Validation
 
 ```bash
-rtk ./gradlew --no-daemon :kanvas-api:test
+rtk ./gradlew --no-daemon :kanvas:test
 rtk ./gradlew --no-daemon :gpu-renderer:test
 rtk ./gradlew --no-daemon :gpu-renderer-scenes:test
 ```
@@ -106,4 +106,4 @@ rtk ./gradlew --no-daemon :gpu-renderer-scenes:test
 
 - `gpu-renderer`
 - `milestone:M29`
-- `area:kanvas-api`
+- `area:kanvas`

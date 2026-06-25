@@ -99,7 +99,7 @@ acceptance of incorrect output.
 ## Validation
 
 ```bash
-rtk ./gradlew --no-daemon :kanvas-api:test
+rtk ./gradlew --no-daemon :kanvas:test
 rtk ./gradlew --no-daemon :kanvas-skia:test
 rtk ./gradlew --no-daemon :skia-integration-tests:test
 rtk ./gradlew --no-daemon :integration-tests:test

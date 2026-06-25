@@ -2,11 +2,11 @@
 
 Date: 2026-06-24
 Status: Accepted
-Scope: `:kanvas-api` (new), `:gpu-renderer`, `:kanvas-skia`
+Scope: `:kanvas` (new), `:gpu-renderer`, `:kanvas-skia`
 
 ## Goal
 
-Create a native Kanvas public API (`:kanvas-api`) backed by `:gpu-renderer`, with
+Create a native Kanvas public API (`:kanvas`) backed by `:gpu-renderer`, with
 Skia compatibility as a legacy wrapper. Replace `gpu-raster` as the default
 renderer path.
 
@@ -16,13 +16,13 @@ renderer path.
 (planners, WGSL, materials, product flags) is complete. Missing: a public API
 that uses it.
 
-## M29 — `:kanvas-api` (8 tickets)
+## M29 — `:kanvas` (8 tickets)
 
 New module, zero Skia dependency. Package `org.graphiks.kanvas.api`.
 
 | ID | Title |
 |----|-------|
-| KGPU-M29-001 | `:kanvas-api` module skeleton + `KanvasSurface` |
+| KGPU-M29-001 | `:kanvas` module skeleton + `KanvasSurface` |
 | KGPU-M29-002 | `KanvasCanvas` — drawRect/drawRRect/drawPath/drawImage/drawText |
 | KGPU-M29-003 | `KanvasPaint` — color, shader, blendMode, colorFilter, stroke |
 | KGPU-M29-004 | `KanvasPath` — moveTo/lineTo/quadTo/cubicTo/close + fillType |
@@ -52,7 +52,7 @@ New module, zero Skia dependency. Package `org.graphiks.kanvas.api`.
 ## Validation
 
 ```bash
-rtk ./gradlew --no-daemon :kanvas-api:test
+rtk ./gradlew --no-daemon :kanvas:test
 rtk ./gradlew --no-daemon :gpu-renderer:test
 rtk git diff --check
 ```

@@ -19,7 +19,7 @@ legacy_gate: null
 ## PM Note
 
 Avant de pouvoir exposer les operations de dessin natives Kanvas, il faut un module
-Kotlin autonome `:kanvas-api` avec une surface de rendu. Ce ticket cree le squelette
+Kotlin autonome `:kanvas` avec une surface de rendu. Ce ticket cree le squelette
 du module et la classe `KanvasSurface` pour que le PM voie la fondation de l'API
 publique.
 
@@ -27,12 +27,12 @@ publique.
 
 No public Kanvas native API module exists. Current rendering paths go through
 `:gpu-renderer` internals, Skia wrappers, or legacy `gpu-raster`. A new
-`:kanvas-api` module with `KanvasSurface` is the entry point for native Kanvas
+`:kanvas` module with `KanvasSurface` is the entry point for native Kanvas
 rendering without Skia indirection.
 
 ## Scope
 
-- Create `:kanvas-api` Gradle module with Kotlin multiplatform layout
+- Create `:kanvas` Gradle module with Kotlin multiplatform layout
 - Define `KanvasSurface` class with width, height, and GPU backend handle
 - Wire minimal build configuration (no rendering ops yet)
 - Ensure the module compiles as a standalone artifact
@@ -55,14 +55,14 @@ rendering without Skia indirection.
 ## Design Sketch
 
 ```kotlin
-// :kanvas-api/src/commonMain/kotlin/.../kanvas/KanvasSurface.kt
+// :kanvas/src/commonMain/kotlin/.../kanvas/KanvasSurface.kt
 class KanvasSurface(
     val width: Int,
     val height: Int,
     internal val backend: GPUDevice,
 )
 
-// :kanvas-api/build.gradle.kts
+// :kanvas/build.gradle.kts
 kotlin {
     sourceSets {
         commonMain {
@@ -76,7 +76,7 @@ kotlin {
 
 ## Acceptance Criteria
 
-- [ ] `:kanvas-api` module compiles in `commonMain`, `jvmMain`, `appleMain`
+- [ ] `:kanvas` module compiles in `commonMain`, `jvmMain`, `appleMain`
 - [ ] `KanvasSurface` holds width, height, and backend reference
 - [ ] Module is registered in `settings.gradle.kts`
 - [ ] No rendering operations or drawing logic in this ticket
@@ -102,8 +102,8 @@ If the GPU backend is unavailable, `KanvasSurface` construction emits a
 ## Validation
 
 ```bash
-rtk ./gradlew --no-daemon :kanvas-api:compileKotlinJvm
-rtk ./gradlew --no-daemon :kanvas-api:compileKotlinMacosArm64
+rtk ./gradlew --no-daemon :kanvas:compileKotlinJvm
+rtk ./gradlew --no-daemon :kanvas:compileKotlinMacosArm64
 ```
 
 ## Status Notes
@@ -114,4 +114,4 @@ rtk ./gradlew --no-daemon :kanvas-api:compileKotlinMacosArm64
 
 - `gpu-renderer`
 - `milestone:M29`
-- `area:kanvas-api`
+- `area:kanvas`

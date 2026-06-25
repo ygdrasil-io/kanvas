@@ -98,7 +98,7 @@ fill types emit `unsupported-fill-type` diagnostic. No CPU tessellation fallback
 ## Validation
 
 ```bash
-rtk ./gradlew --no-daemon :kanvas-api:test
+rtk ./gradlew --no-daemon :kanvas:test
 rtk ./gradlew --no-daemon :gpu-renderer:test
 ```
 
@@ -110,4 +110,4 @@ rtk ./gradlew --no-daemon :gpu-renderer:test
 
 - `gpu-renderer`
 - `milestone:M29`
-- `area:kanvas-api`
+- `area:kanvas`

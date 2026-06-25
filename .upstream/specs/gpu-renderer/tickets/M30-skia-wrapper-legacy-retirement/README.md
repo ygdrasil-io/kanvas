@@ -34,7 +34,7 @@ that the bridge targets.
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :kanvas-api:test
+rtk ./gradlew --no-daemon :kanvas:test
 rtk ./gradlew --no-daemon :kanvas-skia:test
 rtk ./gradlew --no-daemon :gpu-renderer:test
 rtk ./gradlew --no-daemon :gpu-renderer-scenes:test

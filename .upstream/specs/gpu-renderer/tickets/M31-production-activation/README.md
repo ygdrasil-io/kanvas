@@ -17,7 +17,7 @@ milestones (M0-M30) for the complete rendering feature set.
 - [ ] Kanvas is the default renderer for all new surfaces (`product_activation=true`)
 - [ ] Emergency rollback flag (`useLegacyGpuRaster`) is documented and tested
 - [ ] Final PM evidence bundle committed: render PNGs, performance reports, support matrix
-- [ ] Release notes published with API stability freeze on `:kanvas-api`
+- [ ] Release notes published with API stability freeze on `:kanvas`
 - [ ] Explicit support/non-support declarations documented
 
 ## Tickets
@@ -33,8 +33,8 @@ milestones (M0-M30) for the complete rendering feature set.
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon :kanvas-api:compileKotlinJvm
-rtk ./gradlew --no-daemon :kanvas-api:test
+rtk ./gradlew --no-daemon :kanvas:compileKotlinJvm
+rtk ./gradlew --no-daemon :kanvas:test
 rtk ./gradlew --no-daemon :kanvas-skia:test
 rtk ./gradlew --no-daemon :gpu-renderer:test
 rtk ./gradlew --no-daemon :gpu-renderer-scenes:test

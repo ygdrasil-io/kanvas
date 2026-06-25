@@ -101,7 +101,7 @@ No partial translation that produces incorrect output.
 ## Validation
 
 ```bash
-rtk ./gradlew --no-daemon :kanvas-api:test
+rtk ./gradlew --no-daemon :kanvas:test
 rtk ./gradlew --no-daemon :kanvas-skia:test
 rtk ./gradlew --no-daemon :gpu-renderer:test
 ```

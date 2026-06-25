@@ -101,7 +101,7 @@ silent fallback to a solid-color rect.
 ## Validation
 
 ```bash
-rtk ./gradlew --no-daemon :kanvas-api:test
+rtk ./gradlew --no-daemon :kanvas:test
 rtk ./gradlew --no-daemon :codec-core:test
 rtk ./gradlew --no-daemon :gpu-renderer:test
 ```
@@ -114,4 +114,4 @@ rtk ./gradlew --no-daemon :gpu-renderer:test
 
 - `gpu-renderer`
 - `milestone:M29`
-- `area:kanvas-api`
+- `area:kanvas`
