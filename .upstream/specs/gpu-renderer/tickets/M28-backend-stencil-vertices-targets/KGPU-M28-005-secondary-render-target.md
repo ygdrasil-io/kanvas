@@ -1,7 +1,7 @@
 ---
 id: KGPU-M28-005
 title: "Add secondary render target support"
-status: done
+status: ready
 milestone: M28
 priority: P0
 owner_area: execution-backend
@@ -119,6 +119,15 @@ rtk ./gradlew --no-daemon :gpu-renderer-scenes:test
 ## Status Notes
 
 - `proposed`: Initial ticket.
+- `done` (earlier; reopened below) — PARTIAL per 2026-06-25 review. Secondary offscreen texture creation is
+  present (`createOffscreenTexture`/`encodeOffscreenTexture` contracts + saveLayer allocation in
+  `renderToPixels`). But the acceptance criterion "texture sampling from a secondary target works
+  in a fullscreen composite pass" is NOT demonstrated — the saveLayer composite (the only consumer)
+  does not bind the secondary texture as a `@group(1)` sampler source. Recommend a follow-up that
+  proves secondary-target sampling, or downgrade. See
+  `reports/gpu-renderer/2026-06-25-m28-backend-stencil-vertices-targets.md`.
+- `ready` (2026-06-25): reopened/downgraded from `done` — secondary-target sampling is not
+  demonstrated. Ready to implement and prove secondary-target sampling in a composite pass.
 
 ## Linear Labels
 

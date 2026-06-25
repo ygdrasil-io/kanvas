@@ -1,7 +1,7 @@
 ---
 id: KGPU-M28-006
 title: "Wire saveLayer real composite rendering"
-status: done
+status: ready
 milestone: M28
 priority: P0
 owner_area: execution-backend
@@ -127,6 +127,18 @@ rtk ./gradlew --no-daemon :gpu-renderer-scenes:renderGpuRendererSceneOffscreen -
 ## Status Notes
 
 - `proposed`: Initial ticket.
+- `done` (earlier; reopened below) — ACCEPTANCE GAP found in 2026-06-25 review. The composite now uses the
+  real `LayerCompositeWgsl` snippet (the procedural `LAYER_COMPOSITE_WRAPPER_WGSL` was removed
+  2026-06-25, satisfying that one criterion). Remaining criteria are NOT met: saveLayer children
+  do not render into the secondary target (`childrenRendered=0`), and the secondary target is not
+  bound/sampled as `@group(1)` in the composite WGSL (`composeSaveLayerCompositeWgsl` declares only
+  a uniform, no texture binding), so the scene does not demonstrate real layer isolation. Scene
+  diagnostics corrected 2026-06-25 (`saveLayer:secondaryTargetAllocated=true childContentSampled=false`).
+  Recommend reopen/downgrade or a follow-up to render children into the secondary target and sample
+  it. See `reports/gpu-renderer/2026-06-25-m28-backend-stencil-vertices-targets.md`.
+- `ready` (2026-06-25): reopened/downgraded from `done` — children are not rendered into the
+  secondary target and the target is not sampled. Ready to implement child render into the
+  secondary target + `@group(1)` sampling in the composite pass.
 
 ## Linear Labels
 

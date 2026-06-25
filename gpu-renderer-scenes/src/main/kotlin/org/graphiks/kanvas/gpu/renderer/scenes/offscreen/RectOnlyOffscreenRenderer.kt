@@ -640,26 +640,6 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
 }
 """
 
-        val LAYER_COMPOSITE_WRAPPER_WGSL: String = """
-// Real srcOver compositing logic from LayerCompositeSnippet.kt (fragment:layer_composite:v1)
-fn procedural_layer_color(uv: vec2<f32>) -> vec4<f32> {
-    let dx = abs(uv.x - 0.5);
-    let dy = abs(uv.y - 0.5);
-    let vignette = 1.0 - smoothstep(0.3, 0.9, sqrt(dx * dx + dy * dy));
-    return vec4f(0.2, 0.5, 0.8, vignette);
-}
-
-fn layer_composite_procedural(pos: vec4f, color: vec4f) -> vec4f {
-    let uv = vec2f(pos.x / 320.0, pos.y / 200.0);
-    let layer_color = procedural_layer_color(uv);
-    // Real srcOver blend (same math as LayerCompositeSnippet)
-    return vec4f(
-        layer_color.rgb * layer_color.a + color.rgb * (1.0 - layer_color.a),
-        layer_color.a + color.a * (1.0 - layer_color.a),
-    );
-}
-"""
-
         val STENCIL_RENDER_WGSL: String = """
 struct VertexInput {
     @location(0) position: vec2f,
@@ -1118,9 +1098,10 @@ internal fun runtimeEffectWiringDiagnostics(): List<String> = listOf(
 )
 
 /**
- * KGPU-M25-004: routes SaveLayer through the real [SaveLayerExecutor] (M18) for diagnostic evidence
- * and references the [LayerCompositeSnippetSourceHash] composite snippet. The procedural composite
- * stays in the renderer wrapper because the offscreen backend cannot allocate a secondary target.
+ * KGPU-M25-004 / KGPU-M28-005/006: routes SaveLayer through the real [SaveLayerExecutor] (M18) and
+ * references the [LayerCompositeSnippetSourceHash] composite snippet. M28 added the secondary
+ * offscreen target, so the composite runs against a real allocated target using the real
+ * layer_composite snippet (child layer content is not yet sampled into it; childrenRendered=0).
  */
 internal fun saveLayerWiringDiagnostics(sceneId: String, width: Int, height: Int): List<String> = buildList {
     val executor = SaveLayerExecutor()
@@ -1128,14 +1109,14 @@ internal fun saveLayerWiringDiagnostics(sceneId: String, width: Int, height: Int
     addAll(executor.dumpLines(stats))
     add("saveLayer:compositeSnippetSourceHash=$LayerCompositeSnippetSourceHash")
     add("saveLayer:compositeEntryPoint=$LayerCompositeEntryPoint")
-    add("saveLayer:proceduralComposite=true secondaryTargetDeferred=M26 productActivation=false")
+    add("saveLayer:secondaryTargetAllocated=true childContentSampled=false productActivation=false")
 }
 
 /**
- * KGPU-M25-006: vertices wiring evidence. The offscreen backend cannot allocate vertex/index buffers,
- * so this invokes the real [VerticesExecutor] + [GPUVertexBufferUploader] + [GPUMeshBatcher] (M22)
- * on a representative triangle mesh to produce dispatch + upload + batching evidence. Real mesh
- * rendering is deferred; this is ImplementationCandidate evidence only.
+ * KGPU-M25-006 / KGPU-M28-003/004: vertices wiring evidence. M28 added vertex/index buffers to the
+ * offscreen backend, so the `vertices` family now renders a real indexed mesh (see renderToPixels).
+ * This also invokes the real [VerticesExecutor] + [GPUVertexBufferUploader] + [GPUMeshBatcher] (M22)
+ * on a representative triangle mesh to produce dispatch + upload + batching evidence.
  */
 internal fun verticesWiringDiagnostics(): List<String> = buildList {
     val positions = listOf(
@@ -1185,7 +1166,7 @@ internal fun verticesWiringDiagnostics(): List<String> = buildList {
             "pipelineChanges=${batchStats.pipelineChangeCount} mergedDraws=${batchStats.mergedDrawCount}",
     )
     add("vertices:batcher.${batchStats.nonClaimLine}")
-    add("vertices:boundingRectVisual=true realMeshDeferred=M26 productActivation=false")
+    add("vertices:realMesh=true vertexIndexBuffersUploaded=true productActivation=false")
 }
 
 private fun rectOnlyFillDraw(

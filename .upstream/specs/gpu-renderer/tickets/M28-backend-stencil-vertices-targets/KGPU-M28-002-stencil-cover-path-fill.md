@@ -1,7 +1,7 @@
 ---
 id: KGPU-M28-002
 title: "Wire stencil-cover real GPU rendering for path fill"
-status: done
+status: ready
 milestone: M28
 priority: P0
 owner_area: execution-backend
@@ -125,6 +125,16 @@ rtk ./gradlew --no-daemon :gpu-renderer-scenes:renderGpuRendererSceneOffscreen -
 ## Status Notes
 
 - `proposed`: Initial ticket.
+- `done` (earlier; reopened below) — ACCEPTANCE GAP found in 2026-06-25 review. Backend stencil capability is
+  present (M28-001), but the `path-fill-stencil` scene pixel output is produced by tessellated
+  indexed fill (`drawVertexColorIndexed` in `RectOnlyOffscreenRenderer.renderToPixels`), NOT by a
+  two-pass stencil-write + cover-resolve. Acceptance criteria "stencil write pass renders
+  tessellated triangles into the stencil buffer" and "cover resolve pass draws the fullscreen quad
+  with stencil test enabled" are NOT met by the render path (criteria 1 & 4 — non-rect shape,
+  convex indexed — are met). Recommend reopen/downgrade or a follow-up to wire real stencil-cover
+  pixel output. See `reports/gpu-renderer/2026-06-25-m28-backend-stencil-vertices-targets.md`.
+- `ready` (2026-06-25): reopened/downgraded from `done` — acceptance criteria 2 & 3 are unmet.
+  Ready to implement real two-pass stencil-cover pixel output.
 
 ## Linear Labels
 

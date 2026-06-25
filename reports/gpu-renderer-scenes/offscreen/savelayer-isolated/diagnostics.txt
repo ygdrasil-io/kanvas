@@ -19,4 +19,4 @@ savelayer:executor targetAllocated=true childrenRendered=0 compositeApplied=true
 savelayer:executor.nonclaim nativeSaveLayer=false adapterBacked=false cpuLayerTextureFallback=false framebufferFetch=false inputAttachment=false
 saveLayer:compositeSnippetSourceHash=fragment:layer_composite:v1
 saveLayer:compositeEntryPoint=layer_composite
-saveLayer:proceduralComposite=true secondaryTargetDeferred=M26 productActivation=false
+saveLayer:secondaryTargetAllocated=true childContentSampled=false productActivation=false

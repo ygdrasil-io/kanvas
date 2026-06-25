@@ -119,6 +119,12 @@ rtk ./gradlew --no-daemon :gpu-renderer-scenes:test
 ## Status Notes
 
 - `proposed`: Initial ticket.
+- `done` (2026-06-25 review): backend depth-stencil capability delivered. `GPUBackendRuntimeWgpu`
+  creates a `Depth24PlusStencil8` texture at target resolution and attaches it via
+  `RenderPassDepthStencilAttachment` (stencil clear/store + stencil-reference action); the
+  `GPUBackendRenderRecorder.drawFullscreenStencilPass` contract is defined. Evidence:
+  `gpu-renderer/.../execution/GPUBackendRuntimeWgpu.kt`, `GPUBackendRuntimeContracts.kt`;
+  `reports/gpu-renderer/2026-06-25-m28-backend-stencil-vertices-targets.md`.
 
 ## Linear Labels
 
