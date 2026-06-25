@@ -98,3 +98,34 @@ needs two-pass stencil-cover (fan triangulation cannot fill a non-convex polygon
 (saveLayer) remain untouched.
 
 Validation: `:gpu-renderer:test` and `:gpu-renderer-scenes:test` both BUILD SUCCESSFUL.
+
+## 6. M28-002 completed: stencil-cover star + convex colour fix (2026-06-25)
+
+Both remaining M28-002 defects are now fixed and PROVEN via the parity harness (tolerance 8):
+
+- **Concave star → real two-pass stencil-cover.** `RectOnlyOffscreenRenderer` now renders
+  `path-fill-stencil` through `drawFullscreenStencilPass(GPUBackendStencilMode.Write, …)`
+  (increment/decrement-wrap winding of the triangulated star into the stencil buffer, no colour
+  writes) followed by `drawFullscreenStencilPass(GPUBackendStencilMode.Test, …)` (a fullscreen
+  cover quad that passes only where stencil != 0, writing the fill colour via srcOver). This
+  replaces the fan-triangulated `drawVertexColorIndexed` indexed fill, which cannot fill a
+  non-convex polygon.
+- **Convex octagon colour double-apply fixed.** The `convex-fan-mesh` vertex-colour draw now passes
+  an identity-white uniform to `VERTEX_COLOR_WGSL` (`in.color * white = in.color`) so the per-vertex
+  fill colour is no longer squared against the uniform colour.
+
+| Scene | similarity (before → after) | mismatch px / 64000 | maxChannelDelta |
+|-------|-----------------------------|---------------------|-----------------|
+| `path-fill-stencil` | 0.8278 → **1.0000** | 11022 → 2 | 248 → 214 |
+| `convex-fan-mesh` | 0.8409 → **1.0000** | 10184 → 0 | 54 → 0 |
+| `solid-card-stack` (anchor) | 1.0000 → 1.0000 | 0 → 0 | 0 → 0 |
+
+The 2 residual `path-fill-stencil` pixels are single hard-edge differences at the star tips (GPU
+stencil coverage vs the CPU even-odd point-in-polygon reference), within the documented 1px
+tolerance. Passing parity assertions (`>= 0.99`) were added to `OffscreenScenePngParityTest` for
+both shape scenes; the anchor assertion is retained and the non-asserting diagnostic now tracks only
+`dst-read-strategy` (M28-005/006 pending).
+
+Validation: both scene PNGs regenerated via `renderGpuRendererSceneOffscreen`
+(run.json `status=rendered`); `:gpu-renderer:test` + `:gpu-renderer-scenes:test` BUILD SUCCESSFUL
+(`OffscreenScenePngParityTest`: 4 tests, 0 failures). M28-005/006 (saveLayer) remain untouched.

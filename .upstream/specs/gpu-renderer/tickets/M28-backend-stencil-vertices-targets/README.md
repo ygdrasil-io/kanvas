@@ -13,7 +13,7 @@ Depends on M25 (executor wiring) and M26 (real textures).
 - [x] Stencil buffer depth-stencil attachment + write/read/clear functional
 - [x] Vertex/index buffer creation + indexed draw functional
 - [ ] Secondary render target creation + texture sampling functional (creation done; sampling not demonstrated — KGPU-M28-005 reopened)
-- [ ] Path fill scenes render real stencil-cover output (indexed fill only, not two-pass stencil — KGPU-M28-002 reopened)
+- [x] Path fill scenes render real stencil-cover output (concave star via two-pass stencil-write + cover; convex octagon via indexed fan — KGPU-M28-002, parity 1.0000 vs CPU reference)
 - [x] Vertices scenes render real mesh output
 - [ ] SaveLayer scenes render real composite output (no child isolation/sampling — KGPU-M28-006 reopened)
 
@@ -22,7 +22,7 @@ Depends on M25 (executor wiring) and M26 (real textures).
 | Ticket | Status | Priority | Claim Impact | Route Kind | Product Activation | Adapter Required | Owner Area | Depends On | Legacy Gate |
 |---|---|---|---|---|---|---|---|---|---|---|
 | [KGPU-M28-001 - Add depth-stencil attachment to offscreen backend](KGPU-M28-001-depth-stencil-attachment.md) | `done` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `true` | `execution-backend` | [KGPU-M25-005] | null |
-| [KGPU-M28-002 - Wire stencil-cover real GPU rendering for path fill](KGPU-M28-002-stencil-cover-path-fill.md) | `ready` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `true` | `execution-backend` | [KGPU-M28-001] | null |
+| [KGPU-M28-002 - Wire stencil-cover real GPU rendering for path fill](KGPU-M28-002-stencil-cover-path-fill.md) | `done` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `true` | `execution-backend` | [KGPU-M28-001] | null |
 | [KGPU-M28-003 - Add vertex/index buffer to offscreen backend](KGPU-M28-003-vertex-index-buffer.md) | `done` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `true` | `execution-backend` | [KGPU-M25-006] | null |
 | [KGPU-M28-004 - Wire vertices real GPU rendering](KGPU-M28-004-vertices-mesh-rendering.md) | `done` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `true` | `execution-backend` | [KGPU-M28-003] | null |
 | [KGPU-M28-005 - Add secondary render target support](KGPU-M28-005-secondary-render-target.md) | `ready` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `true` | `execution-backend` | [KGPU-M25-004] | null |

@@ -1,7 +1,7 @@
 ---
 id: KGPU-M28-002
 title: "Wire stencil-cover real GPU rendering for path fill"
-status: ready
+status: done
 milestone: M28
 priority: P0
 owner_area: execution-backend
@@ -84,13 +84,13 @@ when (command) {
 
 ## Acceptance Criteria
 
-- [ ] Concave/complex path fills no longer draw the bounding rectangle
-- [ ] Stencil write pass renders tessellated triangles into the stencil buffer
-- [ ] Cover resolve pass draws the fullscreen quad with stencil test enabled
-- [ ] Convex paths render through indexed triangle draw (convex fan mesh)
-- [ ] `path-fill-stencil` scene PNG shows real stencil-cover output
-- [ ] `convex-fan-mesh` scene PNG shows real convex mesh output
-- [ ] `RectOnlyOffscreenRenderer` remains available for diagnostic solid rendering
+- [x] Concave/complex path fills no longer draw the bounding rectangle
+- [x] Stencil write pass renders tessellated triangles into the stencil buffer
+- [x] Cover resolve pass draws the fullscreen quad with stencil test enabled
+- [x] Convex paths render through indexed triangle draw (convex fan mesh)
+- [x] `path-fill-stencil` scene PNG shows real stencil-cover output
+- [x] `convex-fan-mesh` scene PNG shows real convex mesh output
+- [x] `RectOnlyOffscreenRenderer` remains available for diagnostic solid rendering
 
 ## Required Evidence
 
@@ -144,6 +144,21 @@ rtk ./gradlew --no-daemon :gpu-renderer-scenes:renderGpuRendererSceneOffscreen -
   (a) convex per-vertex-colour × uniform-colour double-apply in `VERTEX_COLOR_WGSL` (pass an
   identity/white uniform), (b) the concave star needs two-pass stencil-cover — fan triangulation
   cannot fill a non-convex polygon. M28-005/006 (saveLayer) untouched.
+- `done` (2026-06-25): both remaining defects fixed and PROVEN via the CPU-reference parity
+  harness (`OffscreenScenePngParityTest`, tolerance 8). (a) The concave star now renders via
+  real two-pass stencil-cover (`drawFullscreenStencilPass` with `GPUBackendStencilMode.Write`
+  using increment/decrement-wrap winding into the stencil buffer, then `GPUBackendStencilMode.Test`
+  covering where stencil != 0 with the fill colour) instead of a fan-triangulated indexed fill
+  that cannot fill a non-convex polygon. (b) The convex octagon now passes an identity-white
+  uniform to `VERTEX_COLOR_WGSL` (`in.color * white`), removing the per-vertex × uniform colour
+  double-apply. Measured parity (committed `render.png` ↔ CPU reference): `path-fill-stencil`
+  similarity 0.8278 → 1.0000 (mismatch 11022 → 2 of 64000; the 2 residual pixels are single
+  hard-edge differences at star tips, GPU stencil coverage vs CPU even-odd sampling);
+  `convex-fan-mesh` similarity 0.8409 → 1.0000 (mismatch 10184 → 0, maxChannelDelta 54 → 0).
+  Passing parity assertions added for both scenes (`>= 0.99`); anchor `solid-card-stack` stays
+  1.0000. `:gpu-renderer:test` + `:gpu-renderer-scenes:test` BUILD SUCCESSFUL. Both scene PNGs
+  regenerated via `renderGpuRendererSceneOffscreen` (run.json `status=rendered`). M28-005/006
+  (saveLayer) untouched.
 
 ## Linear Labels
 
