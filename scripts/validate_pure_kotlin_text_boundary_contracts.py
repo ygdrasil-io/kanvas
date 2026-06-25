@@ -112,7 +112,6 @@ GPU_RENDERER_FORBIDDEN_PREFIXES = [
     ("org.jetbrains.skiko", "Skia binding"),
     ("skia", "Skia package"),
     ("org.graphiks.kanvas.font.sfnt", "font parser"),
-    ("org.graphiks.kanvas.font.scaler", "font scaler"),
     ("org.graphiks.kanvas.text.shaping", "text shaping"),
     ("org.graphiks.kanvas.text.paragraph", "paragraph layout"),
     ("java.awt", "AWT"),

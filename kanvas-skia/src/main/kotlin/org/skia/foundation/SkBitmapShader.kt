@@ -39,6 +39,14 @@ public class SkBitmapShader public constructor(
     localMatrix: SkMatrix = SkMatrix.Identity,
 ) : SkShader(localMatrix) {
 
+    override val shaderKind: ShaderKind
+        get() = ShaderKind.Bitmap(
+            image = image,
+            tileX = tileX,
+            tileY = tileY,
+            localMatrix = localMatrix,
+        )
+
     // ─── Public accessors (B2.4 — SVG projection via <pattern>) ──────
 
     /** Source image — read-only, never aliased. */
