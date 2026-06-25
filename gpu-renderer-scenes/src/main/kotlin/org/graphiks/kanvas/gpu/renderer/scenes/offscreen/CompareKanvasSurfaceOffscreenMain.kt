@@ -5,6 +5,7 @@ import java.io.File
 import javax.imageio.ImageIO
 import org.graphiks.kanvas.Canvas
 import org.graphiks.kanvas.Paint
+import org.graphiks.kanvas.RRect
 import org.graphiks.kanvas.Rect
 import org.graphiks.kanvas.Surface
 
@@ -32,6 +33,7 @@ fun main(args: Array<String>) {
 
     val render = when (sceneName) {
         "solid-red-rect" -> renderSolidRedRect(320, 240)
+        "solid-rrect" -> renderSolidRRect(320, 240)
         else -> error("Unknown scene: $sceneName")
     }
 
@@ -44,7 +46,12 @@ fun main(args: Array<String>) {
     }
 
     val referencePixels = generateReferencePixels(width, height, render.scene)
-    val comparison = comparePixels(gpuRgba, referencePixels, tolerance = 0)
+    // tolerance=1 accounts for WGSL vs Kotlin f32 rounding in SDF coverage;
+    // the rect comparison uses tolerance=0 because it's binary inside/outside
+    // tolerance=1 accounts for WGSL vs Kotlin f32 rounding in SDF coverage;
+    // the rect comparison uses tolerance=0 because it's binary inside/outside
+    val tolerance = if (render.scene is RRectScene) 1 else 0
+    val comparison = comparePixels(gpuRgba, referencePixels, tolerance = tolerance)
 
     writePng(gpuRgba, width, height, outputDir.resolve(RENDER_FILE_NAME).toPath())
     writePng(referencePixels, width, height, outputDir.resolve(REFERENCE_FILE_NAME).toPath())
@@ -76,16 +83,70 @@ fun main(args: Array<String>) {
     println("PASS: GPU output matches CPU reference (100% similarity)")
 }
 
+private sealed interface Scene {
+    val r: Int; val g: Int; val b: Int; val a: Int
+    fun isInside(x: Int, y: Int): Boolean
+    fun coverage(x: Int, y: Int): Float
+}
+
+private data class RectScene(
+    val left: Int, val top: Int, val right: Int, val bottom: Int,
+    override val r: Int, override val g: Int, override val b: Int, override val a: Int,
+) : Scene {
+    override fun isInside(x: Int, y: Int): Boolean =
+        x >= left && x < right && y >= top && y < bottom
+
+    override fun coverage(x: Int, y: Int): Float =
+        if (isInside(x, y)) 1f else 0f
+}
+
+private data class RRectScene(
+    val left: Float, val top: Float, val right: Float, val bottom: Float,
+    val rx: Float, val ry: Float,
+    override val r: Int, override val g: Int, override val b: Int, override val a: Int,
+) : Scene {
+    override fun isInside(x: Int, y: Int): Boolean =
+        coverage(x.toFloat(), y.toFloat()) > 0.5f
+
+    // Sample at pixel center (x+0.5, y+0.5) to match GPU @builtin(position)
+    override fun coverage(x: Int, y: Int): Float =
+        coverage(x.toFloat() + 0.5f, y.toFloat() + 0.5f)
+
+    private fun coverage(px: Float, py: Float): Float {
+        val centreX = 0.5f * (left + right)
+        val centreY = 0.5f * (top + bottom)
+        val halfX = 0.5f * (right - left)
+        val halfY = 0.5f * (bottom - top)
+        val rxClamped = maxOf(rx, 1e-4f)
+        val ryClamped = maxOf(ry, 1e-4f)
+        val qAbsX = kotlin.math.abs(px - centreX)
+        val qAbsY = kotlin.math.abs(py - centreY)
+        val qX = qAbsX - (halfX - rxClamped)
+        val qY = qAbsY - (halfY - ryClamped)
+        val outerRectSdf = maxOf(qAbsX - halfX, qAbsY - halfY)
+        val qmX = maxOf(qX, 0f)
+        val qmY = maxOf(qY, 0f)
+        val nX = qmX / rxClamped
+        val nY = qmY / ryClamped
+        val nl = kotlin.math.sqrt(nX * nX + nY * nY)
+        val nlSafe = maxOf(nl, 1e-6f)
+        val dirX = nX / nlSafe
+        val dirY = nY / nlSafe
+        val effectiveR = kotlin.math.sqrt(
+            (rxClamped * dirX) * (rxClamped * dirX) + (ryClamped * dirY) * (ryClamped * dirY)
+        )
+        val cornerSdf = (nl - 1.0f) * effectiveR
+        val inCornerBand = if (qX >= 0f && qY >= 0f) 1f else 0f
+        val bandSdf = if (inCornerBand > 0.5f) cornerSdf else outerRectSdf
+        return (0.5f - bandSdf).coerceIn(0f, 1f)
+    }
+}
+
 private data class SceneRender(
     val rgba: ByteArray,
     val width: Int,
     val height: Int,
-    val scene: RectScene,
-)
-
-private data class RectScene(
-    val left: Int, val top: Int, val right: Int, val bottom: Int,
-    val r: Int, val g: Int, val b: Int, val a: Int,
+    val scene: Scene,
 )
 
 private fun renderSolidRedRect(width: Int, height: Int): SceneRender {
@@ -111,19 +172,43 @@ private fun renderSolidRedRect(width: Int, height: Int): SceneRender {
     return SceneRender(rgba = result.rgba, width = width, height = height, scene = scene)
 }
 
-private fun generateReferencePixels(width: Int, height: Int, scene: RectScene): ByteArray {
+private fun renderSolidRRect(width: Int, height: Int): SceneRender {
+    val surface = Surface(width = width, height = height)
+    val canvas = Canvas(surface)
+
+    val blue = Paint().apply {
+        r = 0f
+        g = 0.5f
+        b = 1f
+        a = 1f
+    }
+    canvas.drawRRect(RRect(Rect(50f, 50f, 270f, 190f), 20f, 20f), blue)
+
+    val result = surface.renderToRgba()
+    val scene = RRectScene(
+        left = 50f, top = 50f, right = 270f, bottom = 190f,
+        rx = 20f, ry = 20f, r = 0, g = 128, b = 255, a = 255,
+    )
+
+    println(
+        "GPU render: nonTransparentPixels=${result.nonTransparentPixels} " +
+            "dispatched=${result.dispatchedCount} refused=${result.refusedCount}"
+    )
+
+    return SceneRender(rgba = result.rgba, width = width, height = height, scene = scene)
+}
+
+private fun generateReferencePixels(width: Int, height: Int, scene: Scene): ByteArray {
     val pixels = ByteArray(width * height * BYTES_PER_PIXEL)
     for (y in 0 until height) {
         for (x in 0 until width) {
             val i = (y * width + x) * BYTES_PER_PIXEL
-            val inside = x >= scene.left && x < scene.right && y >= scene.top && y < scene.bottom
-            if (inside) {
-                pixels[i] = scene.r.toByte()
-                pixels[i + 1] = scene.g.toByte()
-                pixels[i + 2] = scene.b.toByte()
-                pixels[i + 3] = scene.a.toByte()
-            }
-            // else: already zeroed
+            val cov = scene.coverage(x, y)
+            // GPU outputs premultiplied: (R*a*cov, G*a*cov, B*a*cov, a*cov) as bytes
+            pixels[i] = (scene.r * scene.a * cov / 255).toInt().coerceIn(0, 255).toByte()
+            pixels[i + 1] = (scene.g * scene.a * cov / 255).toInt().coerceIn(0, 255).toByte()
+            pixels[i + 2] = (scene.b * scene.a * cov / 255).toInt().coerceIn(0, 255).toByte()
+            pixels[i + 3] = (scene.a * cov).toInt().coerceIn(0, 255).toByte()
         }
     }
     return pixels

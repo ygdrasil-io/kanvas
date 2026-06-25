@@ -1,7 +1,7 @@
 ---
 id: KGPU-M31-005
 title: "SkCanvas-bridge ↔ legacy gpu-raster pixel/GM parity (blocks M30-003/M31-003 sign-off)"
-status: proposed
+status: in-progress
 milestone: M31
 priority: P0
 owner_area: product-validation
@@ -148,6 +148,18 @@ rtk git diff --check
   review of M30/M31. M30-003/M31-003 “parity” is structural task-count only; real
   pixel/GM parity is required before the production-default activation can be
   signed off.
+- `in-progress`: M31-006 (GPU execution→pixels) done. FillRRect dispatch
+  implemented:
+  - `Surface.renderToRgba()` now dispatches `NormalizedDrawCommand.FillRRect`
+    via `drawFullscreenRawUniformPass` with SDF-based coverage in WGSL
+    (reuses `rrect_cov` from `RRectCoverageSnippet`).
+  - Constraints: SolidColor material, Identity transform, Root layer,
+    WideOpen/DeviceRect clip, uniform corner radii. Non-uniform radii
+    or unsupported state emits stable `refuse:` diagnostic.
+  - Pixel parity proven: `solid-rrect` scene (320×240, 220×140 rect with
+    20px radii) → `similarity=100%`, `matching=76800/76800`,
+    `maxDiff=(R=0,G=0,B=0,A=0)` at tolerance=1 (WGSL/Kotlin f32 rounding).
+  - Next family: FillPath (blocked — stencil-cover or tessellator dispatch).
 
 ## Linear Labels
 

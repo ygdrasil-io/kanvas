@@ -7,6 +7,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRawUniformDraw
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRectDraw
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRenderRecorder
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
@@ -35,6 +36,51 @@ private val SOLID_RECT_WGSL: String = """
     @fragment
     fn fs_main() -> @location(0) vec4f {
         return uniforms.color;
+    }
+""".trimIndent()
+
+private val RRECT_WGSL: String = """
+    struct Uniforms {
+        bounds: vec4f,
+        radii: vec4f,
+        color: vec4f,
+    };
+
+    @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+
+    fn rrect_cov(p: vec2f, bounds: vec4f, rx_in: f32, ry_in: f32) -> f32 {
+        let centre = vec2f(0.5 * (bounds.x + bounds.z), 0.5 * (bounds.y + bounds.w));
+        let half = vec2f(0.5 * (bounds.z - bounds.x), 0.5 * (bounds.w - bounds.y));
+        let rx = max(rx_in, 1e-4);
+        let ry = max(ry_in, 1e-4);
+        let q_abs = abs(p - centre);
+        let q = q_abs - (half - vec2f(rx, ry));
+        let inner_rect_sdf = max(q.x, q.y);
+        let outer_rect_sdf = max(q_abs.x - half.x, q_abs.y - half.y);
+        let qm = max(q, vec2f(0.0, 0.0));
+        let n = vec2f(qm.x / rx, qm.y / ry);
+        let nl = length(n);
+        let nl_safe = max(nl, 1e-6);
+        let dir = n / nl_safe;
+        let effective_r = length(vec2f(rx * dir.x, ry * dir.y));
+        let corner_sdf = (nl - 1.0) * effective_r;
+        let in_corner_band = step(0.0, q.x) * step(0.0, q.y);
+        let band_sdf = mix(outer_rect_sdf, corner_sdf, in_corner_band);
+        let final_sdf = band_sdf;
+        return clamp(0.5 - final_sdf, 0.0, 1.0);
+    }
+
+    @vertex
+    fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
+        let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
+        let y = f32(idx & 2u) * 2.0 - 1.0;
+        return vec4f(x, y, 0.0, 1.0);
+    }
+
+    @fragment
+    fn fs_main(@builtin(position) coord: vec4f) -> @location(0) vec4f {
+        let cov = rrect_cov(coord.xy, uniforms.bounds, uniforms.radii.x, uniforms.radii.y);
+        return vec4f(uniforms.color.rgb * cov, uniforms.color.a * cov);
     }
 """.trimIndent()
 
@@ -98,7 +144,7 @@ class Surface(
                     for (cmd in commands) {
                         when (cmd) {
                             is NormalizedDrawCommand.FillRect -> dispatchFillRect(cmd, dispatched, diagnostics)
-                            is NormalizedDrawCommand.FillRRect -> refuseCommand(cmd, dispatched, diagnostics)
+                            is NormalizedDrawCommand.FillRRect -> dispatchFillRRect(cmd, dispatched, diagnostics)
                             is NormalizedDrawCommand.FillPath -> refuseCommand(cmd, dispatched, diagnostics)
                             is NormalizedDrawCommand.DrawTextRun -> refuseCommand(cmd, dispatched, diagnostics)
                         }
@@ -165,6 +211,82 @@ class Surface(
             wgsl = SOLID_RECT_WGSL,
             colorFormat = GPU_COLOR_FORMAT,
             draws = listOf(GPUBackendRectDraw(rgbaPremul = rgba, scissorX = sx, scissorY = sy, scissorWidth = sw, scissorHeight = sh)),
+        )
+        dispatched.add(cmd.commandId.toString())
+        diagnostics.add("dispatch:${cmd.diagnosticName}")
+    }
+
+    private fun GPUBackendRenderRecorder.dispatchFillRRect(
+        cmd: NormalizedDrawCommand.FillRRect,
+        dispatched: MutableList<String>,
+        diagnostics: MutableList<String>,
+    ) {
+        fun refuse(reason: String) {
+            diagnostics.add("refuse:${cmd.diagnosticName}:$reason")
+        }
+
+        val material = cmd.material
+        if (material !is GPUMaterialDescriptor.SolidColor) {
+            refuse("unsupported_material:${material.kind.name}")
+            return
+        }
+        if (cmd.transform.type != GPUTransformType.Identity) {
+            refuse("unsupported_transform:${cmd.transform.type.name}")
+            return
+        }
+        if (cmd.clip.kind !in listOf(GPUClipKind.WideOpen, GPUClipKind.DeviceRect)) {
+            refuse("unsupported_clip:${cmd.clip.kind.name}")
+            return
+        }
+        if (cmd.layer.scopeKind != GPULayerScopeKind.Root) {
+            refuse("unsupported_layer:${cmd.layer.scopeKind.name}")
+            return
+        }
+
+        val rrect = cmd.rrect
+        val rx = rrect.topLeft.x
+        val ry = rrect.topLeft.y
+        if (rrect.topRight.x != rx || rrect.topRight.y != ry ||
+            rrect.bottomRight.x != rx || rrect.bottomRight.y != ry ||
+            rrect.bottomLeft.x != rx || rrect.bottomLeft.y != ry
+        ) {
+            refuse("non_uniform_radii")
+            return
+        }
+
+        val rect = rrect.rect
+        val clipBounds = cmd.clip.bounds
+        val sx = maxOf(rect.left, clipBounds.left).toInt().coerceIn(0, width - 1)
+        val sy = maxOf(rect.top, clipBounds.top).toInt().coerceIn(0, height - 1)
+        val sw = (minOf(rect.right, clipBounds.right).toInt() - sx).coerceIn(1, width - sx)
+        val sh = (minOf(rect.bottom, clipBounds.bottom).toInt() - sy).coerceIn(1, height - sy)
+
+        val bb = java.nio.ByteBuffer.allocate(48).order(java.nio.ByteOrder.nativeOrder())
+        bb.putFloat(rect.left)
+        bb.putFloat(rect.top)
+        bb.putFloat(rect.right)
+        bb.putFloat(rect.bottom)
+        bb.putFloat(rx)
+        bb.putFloat(ry)
+        bb.putFloat(0f)
+        bb.putFloat(0f)
+        bb.putFloat(material.r * material.a)
+        bb.putFloat(material.g * material.a)
+        bb.putFloat(material.b * material.a)
+        bb.putFloat(material.a)
+
+        drawFullscreenRawUniformPass(
+            wgsl = RRECT_WGSL,
+            colorFormat = GPU_COLOR_FORMAT,
+            draws = listOf(
+                GPUBackendRawUniformDraw(
+                    uniformBytes = bb.array(),
+                    scissorX = sx,
+                    scissorY = sy,
+                    scissorWidth = sw,
+                    scissorHeight = sh,
+                ),
+            ),
         )
         dispatched.add(cmd.commandId.toString())
         diagnostics.add("dispatch:${cmd.diagnosticName}")
