@@ -1,15 +1,20 @@
 package org.skia.kanvas
 
 import org.graphiks.kanvas.BlendMode
+import org.graphiks.kanvas.Canvas
 import org.graphiks.kanvas.Image
 import org.graphiks.kanvas.KanvasColorType
 import org.graphiks.kanvas.KanvasFillType
+import org.graphiks.kanvas.KanvasGlyphRun
 import org.graphiks.kanvas.KanvasPoint
 import org.graphiks.kanvas.KanvasTileMode
 import org.graphiks.kanvas.Paint
 import org.graphiks.kanvas.Path
+import org.graphiks.kanvas.RRect
+import org.graphiks.kanvas.RRectCornerRadii
 import org.graphiks.kanvas.Rect
 import org.graphiks.kanvas.Shader
+import org.graphiks.kanvas.TextBlob
 import org.graphiks.math.SkColor4f
 import org.graphiks.math.SkColorGetA
 import org.graphiks.math.SkColorGetB
@@ -20,10 +25,72 @@ import org.skia.foundation.ShaderKind
 import org.skia.foundation.SkBlendMode
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkPathFillType
+import org.skia.foundation.SkRRect
+import org.skia.foundation.SkTextBlob
 import org.skia.foundation.SkTileMode
 
 fun SkRect.toKanvasRect(): Rect =
     Rect(left = left, top = top, right = right, bottom = bottom)
+
+fun SkRRect.toKanvasRRect(): RRect {
+    return RRect(
+        rect = rect().toKanvasRect(),
+        topLeft = RRectCornerRadii(
+            radii(SkRRect.Corner.kUpperLeft_Corner).fX,
+            radii(SkRRect.Corner.kUpperLeft_Corner).fY,
+        ),
+        topRight = RRectCornerRadii(
+            radii(SkRRect.Corner.kUpperRight_Corner).fX,
+            radii(SkRRect.Corner.kUpperRight_Corner).fY,
+        ),
+        bottomRight = RRectCornerRadii(
+            radii(SkRRect.Corner.kLowerRight_Corner).fX,
+            radii(SkRRect.Corner.kLowerRight_Corner).fY,
+        ),
+        bottomLeft = RRectCornerRadii(
+            radii(SkRRect.Corner.kLowerLeft_Corner).fX,
+            radii(SkRRect.Corner.kLowerLeft_Corner).fY,
+        ),
+    )
+}
+
+fun SkTextBlob.toKanvasTextBlob(): TextBlob {
+    val glyphRuns = runs.map { run -> run.toKanvasGlyphRun() }
+    return TextBlob(glyphRuns = glyphRuns)
+}
+
+internal fun SkTextBlob.Run.toKanvasGlyphRun(): KanvasGlyphRun {
+    val glyphs = glyphIds.map { id -> (id and 0xFFFF).toUShort() }
+    val positions = when (this) {
+        is SkTextBlob.Run.HorizontalSpread -> {
+            val pts = ArrayList<KanvasPoint>(glyphIds.size)
+            var cx = x
+            for (i in glyphIds.indices) {
+                pts.add(KanvasPoint(cx, y))
+                if (i + 1 < glyphIds.size) {
+                    cx += font.getWidth(glyphIds[i])
+                }
+            }
+            pts
+        }
+        is SkTextBlob.Run.HorizontalPositions -> {
+            glyphIds.indices.map { i ->
+                KanvasPoint(xs[i], constY)
+            }
+        }
+        is SkTextBlob.Run.FullPositions -> {
+            glyphIds.indices.map { i ->
+                KanvasPoint(positions[2 * i], positions[2 * i + 1])
+            }
+        }
+        is SkTextBlob.Run.RSXformPositions -> {
+            glyphIds.indices.map { i ->
+                KanvasPoint(xforms[i].fTx, xforms[i].fTy)
+            }
+        }
+    }
+    return KanvasGlyphRun(glyphs = glyphs, positions = positions)
+}
 
 fun SkBlendMode.toKanvasBlendMode(): BlendMode = when (this) {
     SkBlendMode.kClear -> BlendMode.CLEAR
@@ -192,3 +259,53 @@ fun org.skia.foundation.SkImage.toKanvasImage(): Image = Image(
     },
     sourceId = "skia-image-${System.identityHashCode(this)}",
 )
+
+private const val BRIDGE_DIAGNOSTIC_PREFIX = "[kanvas-skia-bridge]"
+
+internal fun emitBridgeDiagnostic(code: String, message: String) {
+    System.err.println("$BRIDGE_DIAGNOSTIC_PREFIX $code: $message")
+}
+
+internal fun emitUnsupportedBridgeDiagnostic(feature: String) {
+    emitBridgeDiagnostic(
+        code = "unsupported-skia-bridge-feature",
+        message = "Unsupported SkCanvas bridge feature: $feature. No silent fallback to legacy gpu-raster.",
+    )
+}
+
+class KanvasSkiaBridge(private val kanvasCanvas: Canvas) {
+    fun drawRect(rect: SkRect, paint: org.skia.foundation.SkPaint) {
+        kanvasCanvas.drawRect(rect.toKanvasRect(), paint.toKanvasPaint())
+    }
+
+    fun drawRRect(rrect: SkRRect, paint: org.skia.foundation.SkPaint) {
+        kanvasCanvas.drawRRect(rrect.toKanvasRRect(), paint.toKanvasPaint())
+    }
+
+    fun drawPath(path: SkPath, paint: org.skia.foundation.SkPaint) {
+        kanvasCanvas.drawPath(path.toKanvasPath(), paint.toKanvasPaint())
+    }
+
+    fun drawImage(
+        image: org.skia.foundation.SkImage,
+        rect: SkRect,
+        paint: org.skia.foundation.SkPaint?,
+    ) {
+        kanvasCanvas.drawImage(
+            image = image.toKanvasImage(),
+            rect = rect.toKanvasRect(),
+            paint = paint?.toKanvasPaint(),
+        )
+    }
+
+    fun drawTextBlob(blob: SkTextBlob, x: Float, y: Float, paint: org.skia.foundation.SkPaint) {
+        kanvasCanvas.drawTextBlob(
+            blob = blob.toKanvasTextBlob(),
+            x = x,
+            y = y,
+            paint = paint.toKanvasPaint(),
+        )
+    }
+
+    val canvas: Canvas get() = kanvasCanvas
+}
