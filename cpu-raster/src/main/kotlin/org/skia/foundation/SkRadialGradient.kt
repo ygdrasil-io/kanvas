@@ -22,6 +22,15 @@ public class SkRadialGradient internal constructor(
     localMatrix: SkMatrix = SkMatrix.Identity,
 ) : SkShader(localMatrix) {
 
+    override val shaderKind: ShaderKind
+        get() = ShaderKind.Radial(
+            center = center, radius = radius,
+            colors = srcColors.copyOf(),
+            positions = positions.copyOf(),
+            tileMode = tileMode,
+            localMatrix = localMatrix,
+        )
+
     // ─── Public accessors (B2.4 — SVG projection) ────────────────────
 
     /** Centre of the radial gradient in shader-local space. */

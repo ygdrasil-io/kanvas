@@ -507,6 +507,19 @@ Support claims after the MVP require visible evidence: reference, CPU/GPU
 render or explicit refusal, diffs, stats, route diagnostics, and stable fallback
 policy. Static or estimated evidence must be labelled as such.
 
+## M30 — Skia Kanvas Bridge
+
+| Ticket | Scope | Status |
+| --- | --- | --- |
+| M30-001 | KanvasSkiaBridge — type conversion functions (SkRect→Rect, SkPaint→Paint, SkPath→Path, SkShader→Shader, SkImage→Image, SkBlendMode→BlendMode) | Done |
+| M30-002 | SkiaKanvasSurface — wrap SkSurface → Kanvas Surface, bridge draw calls through Kanvas Canvas, flush via Surface.flush() | Done |
+| M30-003 | Regression tests — 14 unit tests covering bridge conversion and SkiaKanvasSurface integration | Done |
+| M30-004 | gpu-raster deprecation — @Deprecated on SkWebGpuDevice, log warning, frozen at M30 | Done |
+
+Module: `:kanvas-skia-bridge` depends on `:kanvas-skia` and `:kanvas` without circular dependency.
+
+Activation: set `kanvas.renderer=native` system property to switch from legacy gpu-raster to the Kanvas-native pipeline.
+
 ## Development Commands
 
 Use the Gradle wrapper from the repository root:

@@ -21,6 +21,15 @@ public class SkLinearGradient internal constructor(
     localMatrix: SkMatrix = SkMatrix.Identity,
 ) : SkShader(localMatrix) {
 
+    override val shaderKind: ShaderKind
+        get() = ShaderKind.Linear(
+            p0 = p0, p1 = p1,
+            colors = srcColors.copyOf(),
+            positions = positions.copyOf(),
+            tileMode = tileMode,
+            localMatrix = localMatrix,
+        )
+
     // ─── Public accessors (mirror Skia's `SkShader::asAGradient(GradientInfo*)`) ─
     //
     // Used by [org.skia.svg.SkSVGCanvas] (B2.4) to project a linear

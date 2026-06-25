@@ -15,6 +15,105 @@ import kotlin.math.floor
 import kotlin.math.sqrt
 
 /**
+ * Identifies the concrete [SkShader] subclass and exposes its parameters
+ * for bridge conversion without requiring cross-module type checks.
+ * The bridge in [org.skia.kanvas.KanvasSkiaBridge] switches on this type.
+ */
+public sealed class ShaderKind {
+    public data class Linear(
+        val p0: org.graphiks.math.SkPoint,
+        val p1: org.graphiks.math.SkPoint,
+        val colors: IntArray,
+        val positions: FloatArray,
+        val tileMode: SkTileMode,
+        val localMatrix: org.graphiks.math.SkMatrix = org.graphiks.math.SkMatrix.Identity,
+    ) : ShaderKind() {
+        override fun equals(other: Any?): Boolean {
+            if (this === other) return true
+            if (other !is Linear) return false
+            return p0 == other.p0 && p1 == other.p1 &&
+                colors.contentEquals(other.colors) &&
+                positions.contentEquals(other.positions) &&
+                tileMode == other.tileMode && localMatrix == other.localMatrix
+        }
+        override fun hashCode(): Int {
+            var result = p0.hashCode()
+            result = 31 * result + p1.hashCode()
+            result = 31 * result + colors.contentHashCode()
+            result = 31 * result + positions.contentHashCode()
+            result = 31 * result + tileMode.hashCode()
+            result = 31 * result + localMatrix.hashCode()
+            return result
+        }
+    }
+
+    public data class Radial(
+        val center: org.graphiks.math.SkPoint,
+        val radius: Float,
+        val colors: IntArray,
+        val positions: FloatArray,
+        val tileMode: SkTileMode,
+        val localMatrix: org.graphiks.math.SkMatrix = org.graphiks.math.SkMatrix.Identity,
+    ) : ShaderKind() {
+        override fun equals(other: Any?): Boolean {
+            if (this === other) return true
+            if (other !is Radial) return false
+            return center == other.center && radius == other.radius &&
+                colors.contentEquals(other.colors) &&
+                positions.contentEquals(other.positions) &&
+                tileMode == other.tileMode && localMatrix == other.localMatrix
+        }
+        override fun hashCode(): Int {
+            var result = center.hashCode()
+            result = 31 * result + radius.hashCode()
+            result = 31 * result + colors.contentHashCode()
+            result = 31 * result + positions.contentHashCode()
+            result = 31 * result + tileMode.hashCode()
+            result = 31 * result + localMatrix.hashCode()
+            return result
+        }
+    }
+
+    public data class Sweep(
+        val center: org.graphiks.math.SkPoint,
+        val startAngle: Float,
+        val endAngle: Float,
+        val colors: IntArray,
+        val positions: FloatArray,
+        val tileMode: SkTileMode,
+        val localMatrix: org.graphiks.math.SkMatrix = org.graphiks.math.SkMatrix.Identity,
+    ) : ShaderKind() {
+        override fun equals(other: Any?): Boolean {
+            if (this === other) return true
+            if (other !is Sweep) return false
+            return center == other.center && startAngle == other.startAngle &&
+                endAngle == other.endAngle && colors.contentEquals(other.colors) &&
+                positions.contentEquals(other.positions) &&
+                tileMode == other.tileMode && localMatrix == other.localMatrix
+        }
+        override fun hashCode(): Int {
+            var result = center.hashCode()
+            result = 31 * result + startAngle.hashCode()
+            result = 31 * result + endAngle.hashCode()
+            result = 31 * result + colors.contentHashCode()
+            result = 31 * result + positions.contentHashCode()
+            result = 31 * result + tileMode.hashCode()
+            result = 31 * result + localMatrix.hashCode()
+            return result
+        }
+    }
+
+    public data class Bitmap(
+        val image: SkImage,
+        val tileX: SkTileMode,
+        val tileY: SkTileMode,
+        val localMatrix: org.graphiks.math.SkMatrix = org.graphiks.math.SkMatrix.Identity,
+    ) : ShaderKind()
+
+    public data object Unknown : ShaderKind()
+}
+
+/**
  * Base class for paint shaders — Phase 5a. A [SkShader] supplies one
  * [SkColor] (in the bitmap's *working colour space*, usually Rec.2020)
  * per device-space pixel covered by a draw. The colour is then modulated
@@ -42,6 +141,14 @@ public abstract class SkShader protected constructor(
      */
     public val localMatrix: SkMatrix = SkMatrix.Identity,
 ) {
+    /**
+     * Identifies the concrete shader subclass and exposes its parameters.
+     * Returns [ShaderKind.Unknown] by default; subclasses override to
+     * return the appropriate kind. Used by the Kanvas bridge for type
+     * conversion without cross-module type checks.
+     */
+    public open val shaderKind: ShaderKind get() = ShaderKind.Unknown
+
     /**
      * Cached per-draw inverse of `(canvasCtm · localMatrix)`. `null` if
      * the total matrix is singular — in which case the shader degenerates

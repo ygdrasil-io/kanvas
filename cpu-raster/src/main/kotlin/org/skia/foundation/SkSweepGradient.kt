@@ -37,6 +37,16 @@ public class SkSweepGradient internal constructor(
     localMatrix: SkMatrix = SkMatrix.Identity,
 ) : SkShader(localMatrix) {
 
+    override val shaderKind: ShaderKind
+        get() = ShaderKind.Sweep(
+            center = center,
+            startAngle = startAngle, endAngle = endAngle,
+            colors = srcColors.copyOf(),
+            positions = positions.copyOf(),
+            tileMode = tileMode,
+            localMatrix = localMatrix,
+        )
+
     /** Centre of the sweep in shader-local space. */
     public fun getCenter(): SkPoint = center.copy()
 
