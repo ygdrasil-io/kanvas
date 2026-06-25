@@ -149,21 +149,19 @@ rtk git diff --check
   pixel/GM parity is required before the production-default activation can be
   signed off.
 - `in-progress`: M31-006 (GPU execution→pixels) done. FillRRect + FillPath
-  dispatch implemented:
+  dispatched; DrawImage now explicitly refused (over-claim fix).
   - `FillRRect`: SDF-based coverage via `drawFullscreenRawUniformPass`
-    (reuses `rrect_cov` from `RRectCoverageSnippet`). Constraints: uniform
-    radii, SolidColor, Identity, Root, WideOpen/DeviceRect. Proven at 100%
-    similarity (tolerance=1 for f32 rounding).
-  - `FillPath`: Stencil-cover dispatch via `drawFullscreenStencilPass`
-    (Write→stencil increment/decrement, Test→solid fill where stencil != 0).
-    Per-contour fan indices from `tessellatedVertices`+`contourStarts`.
-    Constraints: SolidColor, Identity, Root, WideOpen/DeviceRect. Proven:
-    triangle (100%, tolerance=0) and star (100%, tolerance=0).
-  - `DrawImage`: already lowered to `FillRect` in the recorder → dispatched
-    through the existing `dispatchFillRect` path (pixel content snapped to
-    solid color — true texture draw deferred).
+    (reuses `rrect_cov`). 99.84% similarity against **independent geometric
+    CPU reference** (not WGSL SDF port). 120 edge pixels differ due to AA
+    SDF vs binary reference (expected).
+  - `FillPath`: Stencil-cover dispatch via `drawFullscreenStencilPass`.
+    Proven: triangle (100%) and star (100%) against non-zero winding rule.
+  - `DrawImage` **fixed**: now uses `GPUMaterialDescriptor.ImageDraw` (non-
+    SolidColor) → `dispatchFillRect` refuses automatically. Previously
+    emitted a silent solid-color rect. Hermetic test captures `refuse:`
+    diagnostic. True texture draw deferred.
   - `DrawTextRun`: remains `refuse:` (needs text atlas/SDF pipeline).
-  - No silent no-op; all refused paths emit stable `refuse:` diagnostics.
+  - Summary: **3/5 dispatched with independent parity; 2/5 explicitly refused**.
 
 ## Linear Labels
 

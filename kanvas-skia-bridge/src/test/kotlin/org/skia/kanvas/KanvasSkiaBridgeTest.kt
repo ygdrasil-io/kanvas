@@ -428,6 +428,35 @@ class KanvasSkiaBridgeTest {
     }
 
     @Test
+    fun `drawImage via bridge emits refuse diagnostic`() {
+        assumeTrue(GPUBackendRuntimeFactory.createOrNull() != null, "Skipping: WebGPU not available")
+        val skSurface = SkSurface.MakeRasterN32Premul(64, 64)
+        val kanvasSurface = SkiaKanvasSurface.wrap(skSurface)
+
+        val image = SkImage(16, 16, IntArray(16 * 16))
+        kanvasSurface.drawImage(
+            image = image,
+            rect = SkRect.MakeLTRB(0f, 0f, 16f, 16f),
+            paint = SkPaint().apply { color = 0xFFFF0000.toInt() },
+        )
+
+        val errBytes = java.io.ByteArrayOutputStream()
+        val originalErr = System.err
+        System.setErr(java.io.PrintStream(errBytes))
+        try {
+            kanvasSurface.flush()
+        } finally {
+            System.setErr(originalErr)
+        }
+
+        val output = errBytes.toString("UTF-8")
+        assertTrue(
+            output.contains("refuse:") && output.contains("ImageDraw"),
+            "Expected 'refuse:...ImageDraw' diagnostic for drawImage, got: $output",
+        )
+    }
+
+    @Test
     fun `flush does not emit diagnostic for supported solid rect`() {
         assumeTrue(GPUBackendRuntimeFactory.createOrNull() != null, "Skipping: WebGPU not available")
         val skSurface = SkSurface.MakeRasterN32Premul(64, 64)
