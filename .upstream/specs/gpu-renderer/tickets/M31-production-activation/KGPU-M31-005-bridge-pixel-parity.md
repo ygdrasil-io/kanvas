@@ -10,7 +10,7 @@ route_kind: CPUReferenceOnly
 product_activation: false
 release_blocking: true
 adapter_required: true
-depends_on: [KGPU-M30-003, KGPU-M31-003]
+depends_on: [KGPU-M30-003, KGPU-M31-003, KGPU-M31-006]
 legacy_gate: gpu-raster-legacy-path
 ---
 
@@ -46,6 +46,15 @@ Surfaced by the 2026-06-25 independent review of M30/M31 (PRs #1882 / #1883):
 Activating a renderer as the production default without visual-equivalence proof
 contradicts the validation discipline (`07-validation-conformance.md`, AGENTS.md:
 no “supported” without reference/CPU-GPU evidence).
+
+**Update (2026-06-25 feasibility check):** the bridge path is **record-only** —
+`:kanvas` `Surface.flush()` returns a `GPURecording` that is never executed to
+pixels (verified: `Frame` exposes no pixels; nothing in `:kanvas`/bridge/integration
+consumes the recording). The bridge therefore produces **no pixel output**, so pixel
+parity is **impossible to measure** until the GPU execution-to-pixels path lands.
+This ticket is consequently **blocked on KGPU-M31-006** (execute the KanvasSurface
+recording to pixels). It also confirms the production-default activation
+(M30-002/M31-001) is currently a **pixel-level no-op** for this path.
 
 ## Scope
 
