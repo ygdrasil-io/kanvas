@@ -37,8 +37,8 @@ product activation, and updates the owning milestone table in the same change.
 | M28 | 0 | 0 | 0 | 0 | 0 | 6 |
 | M29 | 0 | 0 | 0 | 0 | 0 | 8 |
 | M30 | 0 | 0 | 0 | 0 | 4 | 0 |
-| M31 | 1 | 0 | 0 | 0 | 5 | 0 |
-| **Total** | **1** | **0** | **0** | **0** | **9** | **156** |
+| M31 | 1 | 0 | 0 | 0 | 4 | 1 |
+| **Total** | **1** | **0** | **0** | **0** | **8** | **157** |
 
 ## Status Update Rule
 

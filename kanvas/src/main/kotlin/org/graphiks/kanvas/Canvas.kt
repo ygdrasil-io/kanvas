@@ -168,12 +168,17 @@ class Canvas(private val surface: Surface) {
 
     fun drawImage(image: Image, rect: Rect, paint: Paint? = null) {
         val effectivePaint = paint ?: Paint()
-        val (material, blend) = lowerPaint(effectivePaint)
+        val (_, blend) = lowerPaint(effectivePaint)
+        // Use ImageDraw material so dispatchFillRect refuses (no silent solid-rect fallback)
         val command = GPUFillRectCommandBuilder.build(
             commandId = nextCommandId(),
             rect = GPURect(rect.left, rect.top, rect.right, rect.bottom),
             target = surface.targetFacts,
-            material = material,
+            material = CoreMaterialDescriptor.ImageDraw(
+                imageSourceId = image.sourceId,
+                imageWidth = image.width,
+                imageHeight = image.height,
+            ),
             blend = blend,
             source = source,
         )

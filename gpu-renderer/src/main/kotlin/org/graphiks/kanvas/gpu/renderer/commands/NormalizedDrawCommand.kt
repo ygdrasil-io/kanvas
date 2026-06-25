@@ -110,6 +110,8 @@ enum class GPUMaterialKind {
     RadialGradient,
     /** Sweep gradient source material. */
     SweepGradient,
+    /** Image/texture source material — no dispatch support (deferred). */
+    ImageDraw,
 }
 
 /** Rectangle geometry in local command coordinates. */
@@ -386,6 +388,15 @@ sealed interface GPUMaterialDescriptor {
         val tileMode: String = "clamp",
     ) : GPUMaterialDescriptor {
         override val kind: GPUMaterialKind = GPUMaterialKind.SweepGradient
+    }
+
+    /** Placeholder image-draw descriptor — deferred; dispatch refuses via non-SolidColor material. */
+    data class ImageDraw(
+        val imageSourceId: String = "",
+        val imageWidth: Int = 0,
+        val imageHeight: Int = 0,
+    ) : GPUMaterialDescriptor {
+        override val kind: GPUMaterialKind = GPUMaterialKind.ImageDraw
     }
 }
 
