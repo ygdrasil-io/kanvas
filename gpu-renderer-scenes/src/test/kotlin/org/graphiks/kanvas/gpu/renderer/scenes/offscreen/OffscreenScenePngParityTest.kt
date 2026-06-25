@@ -84,6 +84,24 @@ class OffscreenScenePngParityTest {
     }
 
     @Test
+    fun savelayerGroupAlpha_gpuMatchesCpuReference() {
+        // KGPU-M28-006 (proof hardening): a group-alpha (0.5) saveLayer with two
+        // OVERLAPPING OPAQUE children. The GPU must fade the whole isolated layer by
+        // group alpha at composite time (children rendered at full opacity into the
+        // secondary, then scaled). The overlap region therefore blends at a uniform
+        // 50% over the background — a layer-isolation bug (e.g. compositing at full
+        // opacity, or naive direct draw) diverges from the CPU layered reference here.
+        val cpu = OffscreenSceneCpuReference.renderSceneRgba("savelayer-group-alpha")
+        val gpu = loadCommittedPng("savelayer-group-alpha")
+        val d = diff(gpu, cpu, tolerance = 8)
+        println("[parity] savelayer-group-alpha -> $d")
+        assertTrue(
+            d.similarity >= 0.99,
+            "savelayer-group-alpha GPU↔CPU-reference similarity ${d.similarity} < 0.99 ($d)",
+        )
+    }
+
+    @Test
     fun recordCurrentShapeAndLayerSceneDivergence() {
         // Diagnostic only (no assert): documents the remaining layer-scene divergence
         // (blank save-layer composite on dst-read-strategy). Tasks M28-005/006 will add

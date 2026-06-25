@@ -2102,6 +2102,7 @@ object GPURendererSceneRegistry {
         pathFillStencilScene,
         convexFanMeshScene,
         savelayerIsolatedScene,
+        savelayerGroupAlphaScene,
         dstReadStrategyScene,
         blurRadiusLadderScene,
         colorMatrixFilterScene,

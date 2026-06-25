@@ -128,6 +128,18 @@ object UniformPacker {
     fun textAtlasBytes(color: SceneColor, texLeft: Float, texTop: Float, texWidth: Float, texHeight: Float): ByteArray =
         bitmapTextureBytes(color, texLeft, texTop, texWidth, texHeight)
 
+    /**
+     * Packs the saveLayer composite uniform for `layer_composite` (`Uniforms { color: vec4f, params: vec4f }`).
+     * `color` is the straight-alpha tint the faded layer is composited over (normally transparent), and
+     * `params.x` carries the saveLayer group alpha used to fade the whole isolated layer at composite time.
+     */
+    fun layerCompositeBytes(color: SceneColor, groupAlpha: Float): ByteArray {
+        val buf = ByteBuffer.allocate(32).order(ByteOrder.LITTLE_ENDIAN)
+        buf.putFloat(color.r); buf.putFloat(color.g); buf.putFloat(color.b); buf.putFloat(color.a)
+        buf.putFloat(groupAlpha); buf.putFloat(0f); buf.putFloat(0f); buf.putFloat(0f)
+        return buf.array()
+    }
+
     fun strokeBytes(color: SceneColor, capJoin: Int, centerX: Float, centerY: Float, halfW: Float, halfH: Float): ByteArray {
         val buf = ByteBuffer.allocate(48).order(ByteOrder.LITTLE_ENDIAN)
         buf.putFloat(color.r); buf.putFloat(color.g); buf.putFloat(color.b); buf.putFloat(color.a)

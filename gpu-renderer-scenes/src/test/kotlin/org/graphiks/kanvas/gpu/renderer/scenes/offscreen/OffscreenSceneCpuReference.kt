@@ -29,13 +29,26 @@ object OffscreenSceneCpuReference {
         val w = scene.dimensions.width
         val h = scene.dimensions.height
         val buf = FloatArray(w * h * 4) // r,g,b,a straight, 0..1
-        var childFillIndex = 0
+
+        // Group-alpha saveLayers (groupAlpha < 1) genuinely isolate their children:
+        // their child FillRects are NOT drawn directly onto the main buffer; they are
+        // composited via the layered path below. Child association mirrors the GPU
+        // renderer's paintOrder windowing exactly.
+        val layeredChildLabels = scene.commands
+            .filterIsInstance<SceneCommand.SaveLayer>()
+            .filter { it.groupAlpha < 1f }
+            .flatMap { childFillsOf(scene, it).map { child -> child.label } }
+            .toSet()
+
         for (cmd in scene.commands) {
             when (cmd) {
                 is SceneCommand.Clear -> clear(buf, cmd.color)
-                is SceneCommand.FillRect -> fillRect(buf, w, h, cmd.rect, cmd.color)
+                is SceneCommand.FillRect ->
+                    if (cmd.label !in layeredChildLabels) fillRect(buf, w, h, cmd.rect, cmd.color)
                 is SceneCommand.SaveLayer -> {
-                    if (cmd.hasFixturePayload) {
+                    if (cmd.groupAlpha < 1f) {
+                        compositeGroupAlphaLayer(buf, w, h, scene, cmd)
+                    } else if (cmd.hasFixturePayload) {
                         val contentRect = cmd.contentRect!!
                         val shadowRect = cmd.shadowRect!!
                         val contentColor = cmd.contentColor!!
@@ -52,6 +65,70 @@ object OffscreenSceneCpuReference {
             }
         }
         return RefImage(w, h, toRgbaBytes(buf))
+    }
+
+    /**
+     * Child FillRects belonging to [layer], using the same paintOrder windowing as the
+     * GPU renderer: a child is any FillRect whose paintOrder is strictly between this
+     * layer's paintOrder and the next saveLayer's paintOrder.
+     */
+    private fun childFillsOf(
+        scene: org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererScene<SceneCommand>,
+        layer: SceneCommand.SaveLayer,
+    ): List<SceneCommand.FillRect> {
+        val layers = scene.commands.filterIsInstance<SceneCommand.SaveLayer>().sortedBy { it.paintOrder }
+        val idx = layers.indexOfFirst { it === layer }
+        val nextPaintOrder = if (idx + 1 < layers.size) layers[idx + 1].paintOrder else Int.MAX_VALUE
+        return scene.commands.filterIsInstance<SceneCommand.FillRect>()
+            .filter { it.paintOrder > layer.paintOrder && it.paintOrder < nextPaintOrder }
+            .sortedBy { it.paintOrder }
+    }
+
+    /**
+     * True layered compositing: render the layer's content into a SEPARATE transparent
+     * RGBA layer buffer via srcOver, then composite that layer onto the main buffer
+     * where each layer pixel's alpha is scaled by [SceneCommand.SaveLayer.groupAlpha].
+     * This is genuine layer isolation, NOT a direct draw — the whole layer fades by
+     * group alpha as one unit, so overlapping opaque children blend uniformly.
+     */
+    private fun compositeGroupAlphaLayer(
+        main: FloatArray,
+        w: Int,
+        h: Int,
+        scene: org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererScene<SceneCommand>,
+        layer: SceneCommand.SaveLayer,
+    ) {
+        val layerBuf = FloatArray(w * h * 4) // transparent (0,0,0,0)
+        if (layer.hasFixturePayload) {
+            fillRect(layerBuf, w, h, layer.shadowRect!!, layer.shadowColor!!)
+            fillRect(layerBuf, w, h, layer.contentRect!!, layer.contentColor!!)
+        }
+        childFillsOf(scene, layer).forEach { child ->
+            fillRect(layerBuf, w, h, child.rect, child.color)
+        }
+        compositeLayerOver(main, layerBuf, layer.groupAlpha)
+    }
+
+    /** srcOver of [layer] (straight RGBA) over [main], scaling the layer alpha by [groupAlpha]. */
+    private fun compositeLayerOver(main: FloatArray, layer: FloatArray, groupAlpha: Float) {
+        var i = 0
+        while (i < main.size) {
+            val sa = (layer[i + 3] * groupAlpha).coerceIn(0f, 1f)
+            if (sa > 0f) {
+                val sr = layer[i]; val sg = layer[i + 1]; val sb = layer[i + 2]
+                val dr = main[i]; val dg = main[i + 1]; val db = main[i + 2]; val da = main[i + 3]
+                val outA = sa + da * (1f - sa)
+                if (outA <= 0f) {
+                    main[i] = 0f; main[i + 1] = 0f; main[i + 2] = 0f; main[i + 3] = 0f
+                } else {
+                    main[i] = (sr * sa + dr * da * (1f - sa)) / outA
+                    main[i + 1] = (sg * sa + dg * da * (1f - sa)) / outA
+                    main[i + 2] = (sb * sa + db * da * (1f - sa)) / outA
+                    main[i + 3] = outA
+                }
+            }
+            i += 4
+        }
     }
 
     private fun clear(buf: FloatArray, c: SceneColor) {

@@ -588,7 +588,10 @@ class RectOnlyOffscreenRenderer {
                         textureLabel = reroute.texLabel,
                         draws = listOf(
                             GPUBackendRawUniformDraw(
-                                uniformBytes = UniformPacker.solidColorBytes(SceneColor(0f, 0f, 0f, 0f)),
+                                uniformBytes = UniformPacker.layerCompositeBytes(
+                                    SceneColor(0f, 0f, 0f, 0f),
+                                    fill.groupAlpha,
+                                ),
                                 scissorX = 0,
                                 scissorY = 0,
                                 scissorWidth = viewportWidth,
@@ -767,7 +770,7 @@ fn fs_main() -> @location(0) vec4f {
 """.trimIndent()
 
         fun composeSaveLayerCompositeWgsl(): String = """
-struct Uniforms { color: vec4f };
+struct Uniforms { color: vec4f, params: vec4f };
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
 
@@ -783,7 +786,7 @@ fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
 @fragment
 fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     let uv = pos.xy / vec2f(320.0, 200.0);
-    return layer_composite(uv, uniforms.color);
+    return layer_composite(uv, uniforms.color, uniforms.params.x);
 }
 """
 
@@ -940,6 +943,7 @@ internal data class RectOnlyFillDraw(
     val shadowColor: SceneColor? = null,
     val shadowOffsetX: Float = 0f,
     val shadowOffsetY: Float = 0f,
+    val groupAlpha: Float = 1f,
 )
 
 private data class RectOnlyIndexedDraw(
@@ -1043,6 +1047,7 @@ internal fun prepareRectOnlyDrawPlan(
                 shadowColor = saveLayerCommand?.fixtureShadowColor(),
                 shadowOffsetX = saveLayerCommand?.shadowOffsetX ?: 0f,
                 shadowOffsetY = saveLayerCommand?.shadowOffsetY ?: 0f,
+                groupAlpha = saveLayerCommand?.groupAlpha ?: 1f,
             )
         }
     require(fills.isNotEmpty()) {
@@ -1335,6 +1340,7 @@ private fun rectOnlyFillDraw(
     shadowColor: SceneColor? = null,
     shadowOffsetX: Float = 0f,
     shadowOffsetY: Float = 0f,
+    groupAlpha: Float = 1f,
 ): RectOnlyFillDraw {
     requireInsideTarget(sceneId, label, rect, width, height, "fill shape")
     clip?.let { requireInsideTarget(sceneId, it.label, it.rect, width, height, "clip") }
@@ -1381,6 +1387,7 @@ private fun rectOnlyFillDraw(
         shadowColor = shadowColor,
         shadowOffsetX = shadowOffsetX,
         shadowOffsetY = shadowOffsetY,
+        groupAlpha = groupAlpha,
     )
 }
 

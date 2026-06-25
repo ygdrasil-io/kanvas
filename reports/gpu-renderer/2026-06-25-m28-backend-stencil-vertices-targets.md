@@ -192,3 +192,86 @@ Both M28-005 and M28-006 are now completed with real pixel-parity proof via the 
 rtk ./gradlew --no-daemon :gpu-renderer:test :gpu-renderer-scenes:test
 ```
 Both BUILD SUCCESSFUL; `OffscreenScenePngParityTest`: 5 tests, 0 failures.
+
+## Proof hardening (KGPU-M28-006): group-alpha layer isolation
+
+### Why the prior proof was weak
+
+The only saveLayer parity scene (`savelayer-isolated`) used plain srcOver at group
+opacity 1.0. There, "draw children directly onto the parent" is mathematically
+identical to "render children into an isolated layer then composite" (srcOver is
+associative), so the parity test could NOT detect a layer-isolation bug.
+
+### Discriminating scene
+
+Added `savelayer-group-alpha` (320×200): opaque dark Clear; an opaque contrasting
+background FillRect; a `SaveLayer` with `groupAlpha = 0.5` whose isolated layer
+contains TWO OVERLAPPING OPAQUE FillRect children (red `(0.90,0.20,0.20)` over
+`(80,70,200,140)`, green `(0.20,0.80,0.30)` over `(140,90,260,160)`, overlap
+`(140,90,200,140)`). The layer content card and shadow are transparent (alpha 0),
+so the layer carries only the two opaque children.
+
+- **True layered@0.5**: the layer's coverage alpha is 1 across the whole union, so
+  every covered pixel blends at a uniform 50% over the background. The overlap
+  region equals the child-B-only region: `(0.20,0.525,0.325) → (51,134,83)`.
+- **Naive direct@0.5** (the bug this scene catches): child A at 50%, then child B at
+  50% on top → overlap ≈ 75% opaque (`red ≈ 96`, child A still showing through).
+- **No group alpha** (full-opacity composite): the union shows children fully opaque.
+
+The CPU reference (`OffscreenSceneCpuReference`) was rewritten to do GENUINE layered
+compositing for `groupAlpha < 1`: children render into a SEPARATE transparent RGBA
+layer buffer via srcOver, then that buffer is composited onto the main buffer with
+`alpha = layerPixel.a * groupAlpha`. `SaveLayerGroupAlphaCpuReferenceTest` pins the
+overlap == child-B-only equality and the 50% blend values, so a circular/direct CPU
+reference fails (it did, before the rewrite).
+
+### Before / after (honest discrimination check)
+
+| Stage | scene | similarity | mismatch / 64000 | maxChannelDelta |
+|-------|-------|-----------|------------------|-----------------|
+| **before** GPU group-alpha | savelayer-group-alpha | **0.7844** | **13800** | **89** |
+| **after** GPU group-alpha | savelayer-group-alpha | **1.0000** | **0** | **1** |
+| regression check | savelayer-isolated | **1.0000** | **0** | **1** |
+
+The 13800-pixel "before" mismatch is exactly the union area of the two children
+(8400 + 8400 − 3000 overlap), confirming the GPU composited the isolated layer at
+full opacity while the CPU computed the correct layered@0.5 result. `maxChannelDelta=89`
+is child-A-only red (GPU 230 vs CPU 140). After implementing GPU group alpha the
+overlap blends uniformly at 50% and parity is exact (maxChannelDelta 1, readback
+quantization). `savelayer-isolated` (group alpha defaults to 1.0) is byte-stable.
+
+### GPU implementation
+
+- `LayerCompositeSnippet.kt` — `layer_composite(uv, src_color, group_alpha)` fades the
+  sampled premultiplied layer by `group_alpha` before the srcOver (children still
+  render into the secondary at full opacity).
+- `RectOnlyOffscreenRenderer.kt` — `composeSaveLayerCompositeWgsl` carries
+  `Uniforms { color, params }` and passes `params.x` as the group alpha;
+  `RectOnlyFillDraw.groupAlpha` threaded from `SceneCommand.SaveLayer.groupAlpha`;
+  composite pass packs it via `UniformPacker.layerCompositeBytes`.
+- `SceneCommand.SaveLayer` — new `groupAlpha: Float = 1f` field (validated 0..1).
+
+### Files changed (proof hardening)
+
+- `gpu-renderer-scenes/.../commands/SceneCommands.kt` — `SaveLayer.groupAlpha`
+- `gpu-renderer-scenes/.../catalog/M28VerificationScenes.kt` — `savelayer-group-alpha` scene
+- `gpu-renderer-scenes/.../catalog/GPURendererSceneRegistry.kt` — register scene
+- `gpu-renderer-scenes/.../catalog/SceneHumanDocumentation.kt` — human doc entry
+- `gpu-renderer-scenes/.../offscreen/RectOnlyOffscreenRenderer.kt` — group-alpha threading + composite
+- `gpu-renderer-scenes/.../offscreen/UniformPacker.kt` — `layerCompositeBytes`
+- `gpu-renderer/.../wgsl/LayerCompositeSnippet.kt` — group-alpha fade
+- `gpu-renderer-scenes/test/.../OffscreenSceneCpuReference.kt` — true layered compositing
+- `gpu-renderer-scenes/test/.../OffscreenScenePngParityTest.kt` — `savelayer-group-alpha` parity assertion
+- `gpu-renderer-scenes/test/.../SaveLayerGroupAlphaCpuReferenceTest.kt` — overlap discriminator (new)
+- `gpu-renderer-scenes/test/.../catalog/GPURendererSceneRegistryTest.kt` — expectation row
+- `reports/gpu-renderer-scenes/offscreen/savelayer-group-alpha/` — render.png + run.json (childrenRendered=2)
+
+### Validation (proof hardening)
+
+```bash
+rtk ./gradlew --no-daemon :gpu-renderer:test :gpu-renderer-scenes:test
+```
+Both BUILD SUCCESSFUL. `OffscreenScenePngParityTest`: 6 tests, 0 failures
+(`savelayer-group-alpha` now asserted at similarity 1.0000);
+`SaveLayerGroupAlphaCpuReferenceTest`: 4 tests, 0 failures.
+
