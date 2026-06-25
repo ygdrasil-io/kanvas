@@ -135,8 +135,8 @@ rtk git diff --check
     and returns RGBA pixels. Solid-fill rects (Identity transform, Root layer,
     WideOpen/DeviceRect clip) are dispatched via `drawFullscreenPass`.
   - `SkiaKanvasSurface.flush()` now auto-renders to the wrapped `SkSurface`
-    when Kanvas renderer is enabled (GPU-backed; silently no-ops when WebGPU
-    is unavailable).
+    when Kanvas renderer is enabled (GPU-backed; emits `kanvas-render-failed`
+    diagnostic on failure — never silent no-op, per refusal-first policy).
   - Evidence: `solid-red-rect` (320×240) → `nonTransparentPixels=30800`
     (rect 220×140 = 30800px exact). GPU vs CPU reference: `similarity=100%`,
     `matching=76800/76800`, `maxDiff=0`.

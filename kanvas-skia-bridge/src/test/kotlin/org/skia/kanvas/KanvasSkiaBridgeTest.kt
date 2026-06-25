@@ -4,6 +4,7 @@ import org.graphiks.kanvas.BlendMode
 import org.graphiks.kanvas.KanvasFillType
 import org.graphiks.kanvas.KanvasTileMode
 import org.graphiks.math.SkColor4f
+import org.graphiks.math.SkColorSetARGB
 import org.graphiks.math.SkRect
 import org.skia.core.SkSurface
 import org.skia.foundation.SkBlendMode
@@ -395,5 +396,64 @@ class KanvasSkiaBridgeTest {
         val skiaSurface = SkSurface.MakeRasterN32Premul(64, 64)
         val result = SkiaKanvasSurface.wrapIfEnabled(skiaSurface)
         assertNotNull(result)
+    }
+
+    @Test
+    fun `flush emits kanvas-render-failed diagnostic for unsupported commands`() {
+        val skSurface = SkSurface.MakeRasterN32Premul(64, 64)
+        val kanvasSurface = SkiaKanvasSurface.wrap(skSurface)
+
+        // Draw a text blob (unsupported) so all commands are refused
+        val font = SkFont(SkTypeface.MakeEmpty(), 12f)
+        val blob = SkTextBlob.MakeFromString("diagnostic test", font)!!
+        kanvasSurface.drawTextBlob(blob, 10f, 20f, SkPaint().apply { color = 0xFF000000.toInt() })
+
+        // Capture System.err
+        val errBytes = java.io.ByteArrayOutputStream()
+        val originalErr = System.err
+        System.setErr(java.io.PrintStream(errBytes))
+        try {
+            kanvasSurface.flush()
+        } finally {
+            System.setErr(originalErr)
+        }
+
+        val output = errBytes.toString("UTF-8")
+        assertTrue(
+            output.contains("kanvas-render-failed"),
+            "Expected 'kanvas-render-failed' diagnostic in stderr for unsupported commands, got: $output",
+        )
+        assertTrue(
+            output.contains("All commands refused"),
+            "Expected 'All commands refused' in diagnostic message, got: $output",
+        )
+    }
+
+    @Test
+    fun `flush does not emit diagnostic for supported solid rect`() {
+        val skSurface = SkSurface.MakeRasterN32Premul(64, 64)
+        val kanvasSurface = SkiaKanvasSurface.wrap(skSurface)
+
+        // Draw a solid rect (supported)
+        kanvasSurface.drawRect(
+            SkRect.MakeLTRB(10f, 10f, 54f, 54f),
+            SkPaint().apply { color = SkColorSetARGB(255, 255, 0, 0) },
+        )
+
+        // Capture System.err
+        val errBytes = java.io.ByteArrayOutputStream()
+        val originalErr = System.err
+        System.setErr(java.io.PrintStream(errBytes))
+        try {
+            kanvasSurface.flush()
+        } finally {
+            System.setErr(originalErr)
+        }
+
+        val output = errBytes.toString("UTF-8")
+        assertFalse(
+            output.contains("kanvas-render-failed"),
+            "Expected NO 'kanvas-render-failed' diagnostic for supported solid rect, got: $output",
+        )
     }
 }

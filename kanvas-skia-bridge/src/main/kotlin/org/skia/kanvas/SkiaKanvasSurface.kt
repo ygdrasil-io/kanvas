@@ -81,10 +81,26 @@ class SkiaKanvasSurface internal constructor(
         if (isKanvasRendererEnabled() && !recording.isEmpty) {
             runCatching {
                 val result = kanvasSurface.renderToRgba()
+                emitRefusedDiagnostics(result)
                 writeToSkSurface(result.rgba)
-            }.onFailure { /* GPU unavailable or all commands refused — SkSurface stays blank */ }
+            }.onFailure { cause ->
+                val msg = cause.message ?: cause::class.simpleName ?: "unknown"
+                emitBridgeDiagnostic(
+                    code = "kanvas-render-failed",
+                    message = "GPU execution failed: $msg. SkSurface left unrendered; no silent fallback.",
+                )
+            }
         }
         return recording
+    }
+
+    private fun emitRefusedDiagnostics(result: SurfaceRenderResult) {
+        if (result.refusedCount == 0) return
+        for (d in result.diagnostics) {
+            if (d.startsWith("refuse:")) {
+                emitBridgeDiagnostic(code = d, message = d)
+            }
+        }
     }
 
     fun renderToRgba(): SurfaceRenderResult = kanvasSurface.renderToRgba()
