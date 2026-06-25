@@ -72,3 +72,29 @@ Verification: `rtk ./gradlew --no-daemon :gpu-renderer-scenes:test --tests '*M25
 rtk ./gradlew --no-daemon :gpu-renderer-scenes:test --tests '*M25ExecutorWiringTest*'
 rtk git diff --check
 ```
+
+## 5. Verification harness + partial M28-002 fixes (2026-06-25)
+
+A CPU-reference parity harness was added so GPU offscreen output is diffed against an independent
+ground truth (no GPU is available in the test JVM, so the GPU `render.png` is produced by the
+`renderGpuRendererSceneOffscreen` task and the in-JVM test compares it to the CPU reference):
+
+- `OffscreenSceneCpuReference` (test): minimal self-contained rasterizer (clear + srcOver rects +
+  filled polygons), reusing the renderer's exact `generateStarVertices`/`generateOctagonVertices`.
+- `OffscreenScenePngParityTest` (test): decodes the committed `render.png` and diffs it.
+  Anchor `solid-card-stack` = similarity 1.0000 (maxΔ 0); `dst-read-strategy` = 1.0000 (maxΔ 1) —
+  the harness is validated against known-correct scenes.
+
+The harness objectively confirmed and then drove two real fixes:
+
+| Defect | Evidence (before → after) |
+|--------|---------------------------|
+| Bounding-box fall-through (`path-fill-stencil`/`convex-fan-mesh` drawn by the solid-rect pass) | excluded from `solidFills` |
+| `drawVertexColorIndexed` fabricated sequential indices, ignoring the real triangulation indices | now uses caller indices; convex maxΔ 224 → 54 (full octagon shape) |
+
+Remaining (M28-002 not yet `done`): (a) convex colour double-apply (`in.color * uniforms.color`
+with both = fill colour → blue², maxΔ 54) — pass an identity/white uniform; (b) the concave star
+needs two-pass stencil-cover (fan triangulation cannot fill a non-convex polygon). M28-005/006
+(saveLayer) remain untouched.
+
+Validation: `:gpu-renderer:test` and `:gpu-renderer-scenes:test` both BUILD SUCCESSFUL.

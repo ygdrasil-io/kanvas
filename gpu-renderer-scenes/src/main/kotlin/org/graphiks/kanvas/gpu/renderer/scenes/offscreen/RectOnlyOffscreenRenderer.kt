@@ -161,7 +161,12 @@ class RectOnlyOffscreenRenderer {
             val gradientTypes = setOf(
                 "linear-gradient-rect", "radial-gradient-rect", "sweep-gradient-rect",
             )
-            val solidFills = drawPlan.fills.filter { it.family !in effectFamilies && it.family != "vertices" }
+            val solidFills = drawPlan.fills.filter {
+                it.family !in effectFamilies &&
+                    it.family != "vertices" &&
+                    it.family != "path-fill-stencil" &&
+                    it.family != "convex-fan-mesh"
+            }
             if (solidFills.isNotEmpty()) {
                 drawFullscreenPass(
                     wgsl = SOLID_RECT_WGSL,

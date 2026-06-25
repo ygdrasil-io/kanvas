@@ -620,6 +620,7 @@ private class WgpuRenderRecorder(
     private val offscreenTextureStore: MutableMap<String, GPUTexture>,
 ) : GPUBackendRenderRecorder {
     private val vertexBufferStore = mutableMapOf<String, Pair<GPUBuffer, Int>>()
+    private val vertexColorIndexStore = mutableMapOf<String, IntArray>()
 
     override fun drawFullscreenPass(
         wgsl: String,
@@ -762,6 +763,7 @@ private class WgpuRenderRecorder(
         ) { it.close() }
         queue.writeBuffer(buffer, 0uL, ArrayBuffer.of(data.vertexData))
         vertexBufferStore[label] = buffer to data.vertexCount
+        vertexColorIndexStore[label] = data.indices
         return label
     }
 
@@ -773,7 +775,15 @@ private class WgpuRenderRecorder(
         val (vertexBuffer, vertexCount) = vertexBufferStore[vertexBufferLabel]
             ?: error("Vertex buffer not found: $vertexBufferLabel")
 
-        val indices = (0 until indexCount).toList()
+        // Use the caller-provided triangulation indices. A fabricated sequential
+        // 0..indexCount list would reference out-of-range vertices for fan/indexed
+        // geometry (e.g. path-fill star, convex octagon) and fill only garbage
+        // slivers; the real indices map each triangle to actual vertices.
+        val indices = vertexColorIndexStore[vertexBufferLabel]
+            ?: error("Vertex color index data not found: $vertexBufferLabel")
+        require(indices.size == indexCount) {
+            "indexCount=$indexCount does not match stored index data ${indices.size} for $vertexBufferLabel"
+        }
         val indexByteSize = (indices.size * 4).toULong()
         val indexBuffer = resourceScope.track(
             device.createBuffer(
@@ -784,7 +794,7 @@ private class WgpuRenderRecorder(
                 ),
             ),
         ) { it.close() }
-        queue.writeBuffer(indexBuffer, 0uL, ArrayBuffer.of(IntArray(indices.size) { indices[it] }))
+        queue.writeBuffer(indexBuffer, 0uL, ArrayBuffer.of(indices))
 
         val vertexWgsl = VERTEX_COLOR_WGSL
         val keys = stencilExecutionCacheKeys(wgsl = vertexWgsl, targetFormat = targetFormat, vertexStage = true)

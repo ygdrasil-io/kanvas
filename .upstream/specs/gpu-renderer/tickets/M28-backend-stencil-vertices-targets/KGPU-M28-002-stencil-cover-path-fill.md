@@ -135,6 +135,15 @@ rtk ./gradlew --no-daemon :gpu-renderer-scenes:renderGpuRendererSceneOffscreen -
   pixel output. See `reports/gpu-renderer/2026-06-25-m28-backend-stencil-vertices-targets.md`.
 - `ready` (2026-06-25): reopened/downgraded from `done` — acceptance criteria 2 & 3 are unmet.
   Ready to implement real two-pass stencil-cover pixel output.
+- `ready` (2026-06-25 partial fix): two real defects fixed and verified via the CPU-reference
+  parity harness — (1) the bounding-box fall-through (`solidFills` no longer includes
+  `path-fill-stencil`/`convex-fan-mesh`, which previously filled the shape's bounding rectangle)
+  and (2) a backend bug where `drawVertexColorIndexed` fabricated sequential `0..indexCount`
+  indices and ignored the real triangulation indices (the convex octagon filled only ~22% of
+  garbage slivers). The convex octagon SHAPE now renders correctly. REMAINING for `done`:
+  (a) convex per-vertex-colour × uniform-colour double-apply in `VERTEX_COLOR_WGSL` (pass an
+  identity/white uniform), (b) the concave star needs two-pass stencil-cover — fan triangulation
+  cannot fill a non-convex polygon. M28-005/006 (saveLayer) untouched.
 
 ## Linear Labels
 
