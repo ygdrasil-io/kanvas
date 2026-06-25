@@ -1,7 +1,7 @@
-rendered savelayer-isolated via WebGPU offscreen
+rendered savelayer-group-alpha via WebGPU offscreen
 adapter=Apple M2 Max
 clearCommands=1
-fillRectCommands=2
+fillRectCommands=3
 fillRRectCommands=0
 linearGradientRectCommands=0
 radialGradientRectCommands=0
@@ -15,7 +15,7 @@ textRunCommands=0
 saveLayerRectCommands=1
 pathFillStencilCommands=0
 convexFanMeshCommands=0
-savelayer:executor targetAllocated=true childrenRendered=1 compositeApplied=true adapterBacked=false productActivation=false
+savelayer:executor targetAllocated=true childrenRendered=2 compositeApplied=true adapterBacked=false productActivation=false
 savelayer:executor.nonclaim nativeSaveLayer=false adapterBacked=false cpuLayerTextureFallback=false framebufferFetch=false inputAttachment=false
 saveLayer:compositeSnippetSourceHash=fragment:layer_composite:v1
 saveLayer:compositeEntryPoint=layer_composite

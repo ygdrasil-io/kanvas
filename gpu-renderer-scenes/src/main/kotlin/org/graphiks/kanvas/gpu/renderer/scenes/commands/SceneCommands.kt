@@ -254,6 +254,7 @@ sealed interface SceneCommand {
         val shadowOffsetX: Float = 8f,
         val shadowOffsetY: Float = 10f,
         val paintOrder: Int = 0,
+        val groupAlpha: Float = 1f,
     ) : SceneCommand {
         override val family: String = "save-layer"
         val layerKind: String = "bounded-shadow-card"
@@ -278,6 +279,9 @@ sealed interface SceneCommand {
                 "SceneCommand.SaveLayer.shadowOffsetY must be finite"
             }
             require(paintOrder >= 0) { "SceneCommand.SaveLayer.paintOrder must be non-negative" }
+            require(!groupAlpha.isNaN() && !groupAlpha.isInfinite() && groupAlpha in 0f..1f) {
+                "SceneCommand.SaveLayer.groupAlpha must be finite and normalized in 0..1"
+            }
             if (hasFixturePayload) {
                 val layerBounds = bounds ?: error("SaveLayer requires bounds fixture payload: $label")
                 val content = contentRect ?: error("SaveLayer requires contentRect fixture payload: $label")

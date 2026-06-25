@@ -1739,6 +1739,12 @@ class GPURendererSceneRegistryTest {
                 roadmapLinks = listOf(RoadmapExpectation("M18")),
             ),
             SceneExpectationRow(
+                sceneId = "savelayer-group-alpha",
+                tags = setOf(SceneTag.Layer, SceneTag.Blend),
+                commandFamilies = listOf("clear", "fill-rect", "save-layer", "fill-rect", "fill-rect"),
+                roadmapLinks = listOf(RoadmapExpectation("M28", ticketId = "KGPU-M28-006")),
+            ),
+            SceneExpectationRow(
                 sceneId = "dst-read-strategy",
                 tags = setOf(SceneTag.Layer, SceneTag.Blend),
                 commandFamilies = listOf("clear", "fill-rect", "fill-rect"),

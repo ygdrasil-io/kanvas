@@ -12,10 +12,10 @@ Depends on M25 (executor wiring) and M26 (real textures).
 
 - [x] Stencil buffer depth-stencil attachment + write/read/clear functional
 - [x] Vertex/index buffer creation + indexed draw functional
-- [x] Secondary render target creation + texture sampling functional
-- [x] Path fill scenes render real stencil-cover output
+- [x] Secondary render target creation + texture sampling functional (M28-005 done: target-level createOffscreenTexture/encodeOffscreenTexture, offscreen pass with depth-stencil, composite sampling via drawCompositePass @group(1))
+- [x] Path fill scenes render real stencil-cover output (concave star via two-pass stencil-write + cover; convex octagon via indexed fan — KGPU-M28-002, parity 1.0000 vs CPU reference)
 - [x] Vertices scenes render real mesh output
-- [x] SaveLayer scenes render real composite output
+- [x] SaveLayer scenes render real composite output (M28-006 done: children rendered to secondary via pre-pass; composite uses real LayerCompositeWgsl with premultiplied-corrected blend; parity 1.0000, childrenRendered=1)
 
 ## Tickets
 

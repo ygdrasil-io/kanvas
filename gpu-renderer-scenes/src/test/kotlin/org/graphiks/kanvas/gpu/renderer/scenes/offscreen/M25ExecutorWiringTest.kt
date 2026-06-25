@@ -17,8 +17,8 @@ import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTWgsl
 /**
  * KGPU-M25-001..006: proves the offscreen renderer routes each family through the real delivered
  * executors / module snippets for diagnostic evidence. These assertions cover the wiring only;
- * real textures, atlases, secondary targets, and vertex/index buffers remain deferred to M26 and
- * no family is promoted to product support here (ImplementationCandidate).
+ * real textures and atlases landed in M26, and secondary targets + vertex/index buffers landed in
+ * M28, and no family is promoted to product support here (ImplementationCandidate).
  */
 class M25ExecutorWiringTest {
     @Test
@@ -71,7 +71,7 @@ class M25ExecutorWiringTest {
         val lines = saveLayerWiringDiagnostics(sceneId = "savelayer-composite", width = 320, height = 200)
         assertTrue(lines.any { it.contains("savelayer:executor targetAllocated=true") }, lines.toString())
         assertTrue(lines.any { it.contains("compositeSnippetSourceHash=fragment:layer_composite:v1") }, lines.toString())
-        assertTrue(lines.any { it.contains("secondaryTargetDeferred=M26") }, lines.toString())
+        assertTrue(lines.any { it.contains("secondaryTargetAllocated=true") }, lines.toString())
     }
 
     @Test
@@ -108,7 +108,7 @@ class M25ExecutorWiringTest {
         assertTrue(lines.any { it.startsWith("vertices:executor executed=true") }, lines.toString())
         assertTrue(lines.any { it.startsWith("vertices:uploader uploaded=true") }, lines.toString())
         assertTrue(lines.any { it.startsWith("vertices:batcher inputDraws=2") }, lines.toString())
-        assertTrue(lines.any { it.contains("realMeshDeferred=M26") }, lines.toString())
+        assertTrue(lines.any { it.contains("realMesh=true") }, lines.toString())
     }
 
     private fun loopPath(vertices: List<Point>): PathData =
