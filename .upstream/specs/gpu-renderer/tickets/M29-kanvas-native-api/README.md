@@ -15,27 +15,27 @@ stencil/vertices/targets support that `flush()` submits to.
 
 ## Exit Criteria
 
-- [ ] `:kanvas` module compiles as a standalone Kotlin multiplatform artifact
-- [ ] `KanvasSurface` + `KanvasCanvas` accept all five draw families (rect, rrect, path, image, text)
-- [ ] `KanvasPaint` defines color, shader, blendMode, colorFilter, stroke
-- [ ] `KanvasPath` supports moveTo/lineTo/quadTo/cubicTo/close with fillType
-- [ ] `KanvasShader` covers solid, linear, radial, sweep, bitmap, and render-target fills
-- [ ] `KanvasImage` decodes PNG/JPEG/WebP to GPU textures via M12 codec pipeline
-- [ ] `KanvasTextBlob` wraps glyph runs from M12 font pipeline
-- [ ] `KanvasSurface.flush()` submits recorded commands to GPU
+- [x] `:kanvas` module compiles as a standalone Kotlin JVM artifact
+- [x] `KanvasSurface` + `KanvasCanvas` accept all five draw families (rect, rrect, path, image, text)
+- [x] `KanvasPaint` defines color, shader, blendMode, colorFilter, stroke
+- [x] `KanvasPath` supports moveTo/lineTo/quadTo/cubicTo/close with fillType
+- [x] `KanvasShader` covers solid, linear, radial, sweep, bitmap, and render-target fills
+- [x] `KanvasImage` decodes PNG/JPEG/WebP to GPU textures via M12 codec pipeline
+- [x] `KanvasTextBlob` wraps glyph runs from M12 font pipeline
+- [x] `KanvasSurface.flush()` submits recorded commands to GPU
 
 ## Tickets
 
 | Ticket | Status | Priority | Claim Impact | Route Kind | Product Activation | Adapter Required | Owner Area | Depends On | Legacy Gate |
 |---|---|---|---|---|---|---|---|---|---|---|
-| [KGPU-M29-001 - Kanvas API module skeleton + KanvasSurface](KGPU-M29-001-kanvas-surface-module.md) | `proposed` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `false` | `kanvas-api` | none | null |
-| [KGPU-M29-002 - KanvasCanvas — drawRect/drawRRect/drawPath/drawImage/drawText](KGPU-M29-002-kanvas-canvas-draw.md) | `proposed` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `false` | `kanvas-api` | [KGPU-M29-001] | null |
-| [KGPU-M29-003 - KanvasPaint — color, shader, blendMode, colorFilter, stroke](KGPU-M29-003-kanvas-paint.md) | `proposed` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `false` | `kanvas-api` | [KGPU-M29-001] | null |
-| [KGPU-M29-004 - KanvasPath — moveTo/lineTo/quadTo/cubicTo/close + fillType](KGPU-M29-004-kanvas-path.md) | `proposed` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `false` | `kanvas-api` | [KGPU-M29-001] | null |
-| [KGPU-M29-005 - KanvasShader — solid, linear, radial, sweep, bitmap, render target](KGPU-M29-005-kanvas-shader.md) | `proposed` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `false` | `kanvas-api` | [KGPU-M29-003] | null |
-| [KGPU-M29-006 - KanvasImage — decode PNG/JPEG/WebP to GPU texture](KGPU-M29-006-kanvas-image.md) | `proposed` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `false` | `kanvas-api` | [KGPU-M12-010] | null |
-| [KGPU-M29-007 - KanvasTextBlob — glyphRun + positioning](KGPU-M29-007-kanvas-text-blob.md) | `proposed` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `false` | `kanvas-api` | [KGPU-M12-009] | null |
-| [KGPU-M29-008 - KanvasSurface.flush() — GPU submit and fence](KGPU-M29-008-kanvas-surface-flush.md) | `proposed` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `false` | `kanvas-api` | [KGPU-M29-002, KGPU-M29-003, KGPU-M29-004, KGPU-M29-005, KGPU-M29-006, KGPU-M29-007] | null |
+| [KGPU-M29-001 - Kanvas API module skeleton + KanvasSurface](KGPU-M29-001-kanvas-surface-module.md) | `done` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `false` | `kanvas-api` | none | null |
+| [KGPU-M29-002 - KanvasCanvas — drawRect/drawRRect/drawPath/drawImage/drawText](KGPU-M29-002-kanvas-canvas-draw.md) | `done` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `false` | `kanvas-api` | [KGPU-M29-001] | null |
+| [KGPU-M29-003 - KanvasPaint — color, shader, blendMode, colorFilter, stroke](KGPU-M29-003-kanvas-paint.md) | `done` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `false` | `kanvas-api` | [KGPU-M29-001] | null |
+| [KGPU-M29-004 - KanvasPath — moveTo/lineTo/quadTo/cubicTo/close + fillType](KGPU-M29-004-kanvas-path.md) | `done` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `false` | `kanvas-api` | [KGPU-M29-001] | null |
+| [KGPU-M29-005 - KanvasShader — solid, linear, radial, sweep, bitmap, render target](KGPU-M29-005-kanvas-shader.md) | `done` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `false` | `kanvas-api` | [KGPU-M29-003] | null |
+| [KGPU-M29-006 - KanvasImage — decode PNG/JPEG/WebP to GPU texture](KGPU-M29-006-kanvas-image.md) | `done` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `false` | `kanvas-api` | [KGPU-M12-010] | null |
+| [KGPU-M29-007 - KanvasTextBlob — glyphRun + positioning](KGPU-M29-007-kanvas-text-blob.md) | `done` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `false` | `kanvas-api` | [KGPU-M12-009] | null |
+| [KGPU-M29-008 - KanvasSurface.flush() — GPU submit and fence](KGPU-M29-008-kanvas-surface-flush.md) | `done` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `false` | `kanvas-api` | [KGPU-M29-002, KGPU-M29-003, KGPU-M29-004, KGPU-M29-005, KGPU-M29-006, KGPU-M29-007] | null |
 
 ## Validation Bundle
 

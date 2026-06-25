@@ -1,7 +1,7 @@
 ---
 id: KGPU-M29-003
 title: "KanvasPaint — color, shader, blendMode, colorFilter, stroke"
-status: proposed
+status: done
 milestone: M29
 priority: P0
 owner_area: kanvas-api
@@ -102,6 +102,7 @@ rtk ./gradlew --no-daemon :gpu-renderer:test
 ## Status Notes
 
 - `proposed`: Initial ticket.
+- `done`: KanvasPaint with color, shader, blendMode, colorFilter, strokeWidth/cap/join. lower() returns GPUPaintDescriptor.
 
 ## Linear Labels
 

@@ -1,7 +1,7 @@
 ---
 id: KGPU-M29-002
 title: "KanvasCanvas — drawRect/drawRRect/drawPath/drawImage/drawText"
-status: proposed
+status: done
 milestone: M29
 priority: P0
 owner_area: kanvas-api
@@ -102,6 +102,7 @@ rtk ./gradlew --no-daemon :gpu-renderer:test
 ## Status Notes
 
 - `proposed`: Initial ticket.
+- `done`: KanvasCanvas with drawRect, drawRRect, drawPath, drawImage, drawTextBlob. Each method lowers paint to GPU material/blend and records via GPURecorder.
 
 ## Linear Labels
 

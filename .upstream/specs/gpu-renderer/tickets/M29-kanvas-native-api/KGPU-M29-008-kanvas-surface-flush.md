@@ -1,7 +1,7 @@
 ---
 id: KGPU-M29-008
 title: "KanvasSurface.flush() — GPU submit and fence"
-status: proposed
+status: done
 milestone: M29
 priority: P0
 owner_area: kanvas-api
@@ -101,6 +101,7 @@ rtk ./gradlew --no-daemon :gpu-renderer-scenes:test
 ## Status Notes
 
 - `proposed`: Initial ticket.
+- `done`: KanvasSurface.flush() returns KanvasFrame containing GPURecording. Idempotent flush supported via GPURecorder.close().
 
 ## Linear Labels
 

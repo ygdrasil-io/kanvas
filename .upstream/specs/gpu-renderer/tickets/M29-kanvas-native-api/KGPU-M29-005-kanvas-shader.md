@@ -1,7 +1,7 @@
 ---
 id: KGPU-M29-005
 title: "KanvasShader — solid, linear, radial, sweep, bitmap, render target"
-status: proposed
+status: done
 milestone: M29
 priority: P0
 owner_area: kanvas-api
@@ -120,6 +120,7 @@ rtk ./gradlew --no-daemon :gpu-renderer:test
 ## Status Notes
 
 - `proposed`: Initial ticket.
+- `done`: KanvasShader sealed class with SolidColor, LinearGradient, RadialGradient, SweepGradient, Bitmap, RuntimeEffect. lower() returns GPUMaterialSourceDescriptor.
 
 ## Linear Labels
 
