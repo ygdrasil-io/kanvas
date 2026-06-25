@@ -114,4 +114,71 @@ class PipelineCacheTelemetryTest {
         val ledger = GPUTelemetryLedger.empty()
         assertTrue(ledger.pipelineCacheTelemetryDumpLines().isEmpty())
     }
+
+    @Test
+    fun `pipeline cache telemetry records pipeline creation count per family`() {
+        val t = GPUPipelineCacheTelemetry(
+            sceneId = "per-family-scene",
+            hitCount = 90,
+            missCount = 10,
+            evictionCount = 0,
+            moduleCount = 4,
+            pipelineCreationCountsByFamily = mapOf("FillRect" to 1L, "Blur" to 2L),
+        )
+        assertEquals(1L, t.pipelineCreationCountsByFamily["FillRect"])
+        assertEquals(2L, t.pipelineCreationCountsByFamily["Blur"])
+        assertEquals(3L, t.totalPipelineCreations)
+    }
+
+    @Test
+    fun `pipeline cache telemetry rejects negative per-family creation count`() {
+        assertFailsWith<IllegalArgumentException> {
+            GPUPipelineCacheTelemetry(
+                sceneId = "bad-family",
+                hitCount = 1,
+                missCount = 1,
+                evictionCount = 0,
+                moduleCount = 1,
+                pipelineCreationCountsByFamily = mapOf("FillRect" to -1L),
+            )
+        }
+    }
+
+    @Test
+    fun `pipeline cache telemetry rejects blank per-family creation key`() {
+        assertFailsWith<IllegalArgumentException> {
+            GPUPipelineCacheTelemetry(
+                sceneId = "blank-family",
+                hitCount = 1,
+                missCount = 1,
+                evictionCount = 0,
+                moduleCount = 1,
+                pipelineCreationCountsByFamily = mapOf(" " to 1L),
+            )
+        }
+    }
+
+    @Test
+    fun `pipeline cache telemetry dump line includes per-family creation counts`() {
+        val t = GPUPipelineCacheTelemetry(
+            sceneId = "dump-family",
+            hitCount = 90,
+            missCount = 10,
+            evictionCount = 0,
+            moduleCount = 4,
+            pipelineCreationCountsByFamily = mapOf("Blur" to 2L, "FillRect" to 1L),
+        )
+        val line = t.dumpLine()
+        assertTrue(line.contains("pipelineCreations=3"))
+        assertTrue(line.contains("Blur:2"))
+        assertTrue(line.contains("FillRect:1"))
+        assertTrue(line.contains("Blur:2,FillRect:1"))
+    }
+
+    @Test
+    fun `pipeline cache telemetry defaults to no per-family creation counts`() {
+        val t = GPUPipelineCacheTelemetry("legacy-scene", 10, 2, 1, 3)
+        assertEquals(0L, t.totalPipelineCreations)
+        assertTrue(t.pipelineCreationCountsByFamily.isEmpty())
+    }
 }

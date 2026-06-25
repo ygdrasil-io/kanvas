@@ -1,10 +1,22 @@
 package org.graphiks.kanvas.gpu.renderer.scenes.offscreen
 
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneColor
+import org.graphiks.kanvas.gpu.renderer.wgsl.BitmapShaderClampEntryPoint
+import org.graphiks.kanvas.gpu.renderer.wgsl.BitmapShaderSnippetSourceHash
+import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTEntryPoint
+import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTSourceHash
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
 object UniformPacker {
+
+    /** Snippet identity wired into the bitmap uniform ABI (BitmapShaderSnippet, M17). */
+    const val bitmapSnippetSourceHash: String = BitmapShaderSnippetSourceHash
+    const val bitmapSnippetEntryPoint: String = BitmapShaderClampEntryPoint
+
+    /** Snippet identity wired into the runtime-effect uniform ABI (SimpleRTWgsl, M21). */
+    const val simpleRtSnippetSourceHash: String = SimpleRTSourceHash
+    const val simpleRtSnippetEntryPoint: String = SimpleRTEntryPoint
 
     fun solidColorBytes(color: SceneColor): ByteArray {
         val buf = ByteBuffer.allocate(16).order(ByteOrder.LITTLE_ENDIAN)
@@ -14,6 +26,19 @@ object UniformPacker {
         buf.putFloat(color.a)
         return buf.array()
     }
+
+    /**
+     * Packs the bitmap sampling uniform for the [BitmapShaderClampEntryPoint] ABI of
+     * [BitmapShaderSnippetSourceHash]. Procedural texture data stays in the renderer wrapper
+     * until M26 delivers real decoded textures; this packs the color/tint uniform only.
+     */
+    fun bitmapBytes(color: SceneColor): ByteArray = solidColorBytes(color)
+
+    /**
+     * Packs the SimpleRT `gColor` uniform (vec4f@0:16) for the [SimpleRTEntryPoint] ABI of
+     * [SimpleRTSourceHash]. This is the real registered runtime-effect descriptor uniform.
+     */
+    fun simpleRtBytes(gColor: SceneColor): ByteArray = solidColorBytes(gColor)
 
     fun linearGradientBytes(
         startX: Float, startY: Float, endX: Float, endY: Float,
@@ -86,6 +111,22 @@ object UniformPacker {
         }
         return buf.array()
     }
+
+    fun bitmapTextureBytes(
+        color: SceneColor,
+        texLeft: Float,
+        texTop: Float,
+        texWidth: Float,
+        texHeight: Float,
+    ): ByteArray {
+        val buf = ByteBuffer.allocate(32).order(ByteOrder.LITTLE_ENDIAN)
+        buf.putFloat(color.r); buf.putFloat(color.g); buf.putFloat(color.b); buf.putFloat(color.a)
+        buf.putFloat(texLeft); buf.putFloat(texTop); buf.putFloat(texWidth); buf.putFloat(texHeight)
+        return buf.array()
+    }
+
+    fun textAtlasBytes(color: SceneColor, texLeft: Float, texTop: Float, texWidth: Float, texHeight: Float): ByteArray =
+        bitmapTextureBytes(color, texLeft, texTop, texWidth, texHeight)
 
     fun strokeBytes(color: SceneColor, capJoin: Int, centerX: Float, centerY: Float, halfW: Float, halfH: Float): ByteArray {
         val buf = ByteBuffer.allocate(48).order(ByteOrder.LITTLE_ENDIAN)

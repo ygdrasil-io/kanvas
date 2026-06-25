@@ -5,7 +5,7 @@ const val BitmapShaderWgsl: String = """
 @group(1) @binding(2) var texture_sampler: sampler;
 
 fn bitmap_uv_clamp(uv: vec2<f32>) -> vec2<f32> {
-    return clamp(uv, vec2(0.0, 0.0), vec2(1.0, 1.0));
+    return clamp(uv, vec2f(0.0, 0.0), vec2f(1.0, 1.0));
 }
 
 fn bitmap_uv_repeat(uv: vec2<f32>) -> vec2<f32> {
@@ -38,11 +38,11 @@ fn bitmap_shader_mirror(uv: vec2<f32>) -> vec4<f32> {
 }
 
 fn bitmap_shader_decal(uv: vec2<f32>) -> vec4<f32> {
-    let inside = all(uv >= vec2(0.0, 0.0)) && all(uv <= vec2(1.0, 1.0));
+    let inside = all(uv >= vec2f(0.0, 0.0)) && all(uv <= vec2f(1.0, 1.0));
     if (inside) {
         return textureSample(texture_sampled, texture_sampler, uv);
     }
-    return vec4(0.0, 0.0, 0.0, 0.0);
+    return vec4f(0.0, 0.0, 0.0, 0.0);
 }
 
 fn bitmap_shader_source(uv: vec2<f32>) -> vec4<f32> {
