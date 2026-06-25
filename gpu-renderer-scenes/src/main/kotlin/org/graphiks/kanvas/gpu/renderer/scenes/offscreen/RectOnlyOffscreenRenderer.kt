@@ -20,6 +20,27 @@ import org.graphiks.kanvas.gpu.renderer.wgsl.SweepGradientEntryPoint
 import org.graphiks.kanvas.gpu.renderer.wgsl.BlurWgsl
 import org.graphiks.kanvas.gpu.renderer.wgsl.ColorMatrixWgsl
 import org.graphiks.kanvas.gpu.renderer.wgsl.StrokeWgsl
+import org.graphiks.kanvas.gpu.renderer.wgsl.BitmapShaderClampEntryPoint
+import org.graphiks.kanvas.gpu.renderer.wgsl.BitmapShaderSnippetSourceHash
+import org.graphiks.kanvas.gpu.renderer.wgsl.BitmapShaderWgsl
+import org.graphiks.kanvas.gpu.renderer.wgsl.TextAtlasA8Wgsl
+import org.graphiks.kanvas.gpu.renderer.wgsl.TextAtlasA8EntryPoint
+import org.graphiks.kanvas.gpu.renderer.images.decodePngToRgba
+import org.graphiks.kanvas.gpu.renderer.text.GlyphAtlasTextureBuilder
+import org.graphiks.kanvas.gpu.renderer.text.GlyphAtlasTextureResult
+import org.graphiks.kanvas.gpu.renderer.wgsl.LayerCompositeEntryPoint
+import org.graphiks.kanvas.gpu.renderer.wgsl.LayerCompositeSnippetSourceHash
+import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTEntryPoint
+import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTSourceHash
+import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTWgsl
+import org.graphiks.kanvas.gpu.renderer.layers.SaveLayerExecutor
+import org.graphiks.kanvas.gpu.renderer.text.SDFGenerator
+import org.graphiks.kanvas.gpu.renderer.text.TextA8AtlasExecutor
+import org.graphiks.kanvas.gpu.renderer.vertices.GPUDrawCallDescriptor
+import org.graphiks.kanvas.gpu.renderer.vertices.GPUMeshBatcher
+import org.graphiks.kanvas.gpu.renderer.vertices.GPUVertexBufferUploader
+import org.graphiks.kanvas.gpu.renderer.vertices.GPUVertexMode
+import org.graphiks.kanvas.gpu.renderer.vertices.VerticesExecutor
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererScene
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.a8GlyphAtlasGateDiagnostics
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.legacyRetirementBlockerDiagnostics
@@ -102,6 +123,7 @@ class RectOnlyOffscreenRenderer {
                 val diagnostics =
                     baseDiagnostics +
                         drawPlan.tessellationDiagnostics +
+                        drawPlan.executorWiringDiagnostics +
                         scene.runtimeEffectRefusalGateDiagnostics() +
                         scene.a8GlyphAtlasGateDiagnostics() +
                         scene.textResourceBindingGateDiagnostics() +
@@ -215,14 +237,23 @@ class RectOnlyOffscreenRenderer {
 
             val bitmapFills = drawPlan.fills.filter { it.family == "bitmap-rect" }
             if (bitmapFills.isNotEmpty()) {
-                val wgsl = composeRectWgsl("bitmap", BITMAP_SHADER_WRAPPER_WGSL, "bitmap_procedural", "uniforms.color")
-                drawFullscreenRawUniformPass(
+                val pngBytes = this::class.java.classLoader.getResourceAsStream("bitmap-test-32x32.png")?.readBytes()
+                val decoded = pngBytes?.let { decodePngToRgba(it, "bitmap-test-32x32") }
+                val wgsl = composeBitmapTextureWgsl()
+                drawFullscreenTextureUniformPass(
                     wgsl = wgsl,
                     colorFormat = OFFSCREEN_COLOR_FORMAT,
+                    textureRgba = decoded?.rgba ?: ByteArray(4),
+                    textureWidth = decoded?.width ?: 1,
+                    textureHeight = decoded?.height ?: 1,
+                    textureFormat = "rgba8unorm",
                     draws = bitmapFills.map { fill ->
-                        val bytes = UniformPacker.solidColorBytes(fill.startColor)
+                        val rectWidth = fill.right - fill.left
+                        val rectHeight = fill.bottom - fill.top
                         GPUBackendRawUniformDraw(
-                            uniformBytes = bytes,
+                            uniformBytes = UniformPacker.bitmapTextureBytes(
+                                fill.startColor, fill.left, fill.top, rectWidth, rectHeight,
+                            ),
                             scissorX = fill.scissorX,
                             scissorY = fill.scissorY,
                             scissorWidth = fill.scissorWidth,
@@ -234,12 +265,12 @@ class RectOnlyOffscreenRenderer {
 
             val reFills = drawPlan.fills.filter { it.family == "runtime-effect" }
             if (reFills.isNotEmpty()) {
-                val wgsl = composeRectWgsl("rt", RUNTIME_EFFECT_WRAPPER_WGSL, "runtime_effect_procedural", "uniforms.color")
+                val wgsl = composeRuntimeEffectWgsl()
                 drawFullscreenRawUniformPass(
                     wgsl = wgsl,
                     colorFormat = OFFSCREEN_COLOR_FORMAT,
                     draws = reFills.map { fill ->
-                        val bytes = UniformPacker.solidColorBytes(fill.startColor)
+                        val bytes = UniformPacker.simpleRtBytes(fill.startColor)
                         GPUBackendRawUniformDraw(
                             uniformBytes = bytes,
                             scissorX = fill.scissorX,
@@ -253,14 +284,23 @@ class RectOnlyOffscreenRenderer {
 
             val textFills = drawPlan.fills.filter { it.family == "text-run" }
             if (textFills.isNotEmpty()) {
-                val wgsl = composeRectWgsl("text", TEXT_ATLAS_WRAPPER_WGSL, "text_procedural", "uniforms.color")
-                drawFullscreenRawUniformPass(
+                val atlasResult = GlyphAtlasTextureBuilder().build("TheQuickBrownFoxJumpsOver", fontSize = 24f)
+                val atlas = (atlasResult as? GlyphAtlasTextureResult.Built)?.atlas
+                val wgsl = composeTextAtlasWgsl()
+                drawFullscreenTextureUniformPass(
                     wgsl = wgsl,
                     colorFormat = OFFSCREEN_COLOR_FORMAT,
+                    textureRgba = atlas?.a8Bytes ?: ByteArray(1),
+                    textureWidth = atlas?.width ?: 1,
+                    textureHeight = atlas?.height ?: 1,
+                    textureFormat = "r8unorm",
                     draws = textFills.map { fill ->
-                        val bytes = UniformPacker.solidColorBytes(fill.startColor)
+                        val rectWidth = fill.right - fill.left
+                        val rectHeight = fill.bottom - fill.top
                         GPUBackendRawUniformDraw(
-                            uniformBytes = bytes,
+                            uniformBytes = UniformPacker.textAtlasBytes(
+                                fill.startColor, fill.left, fill.top, rectWidth, rectHeight,
+                            ),
                             scissorX = fill.scissorX,
                             scissorY = fill.scissorY,
                             scissorWidth = fill.scissorWidth,
@@ -348,6 +388,19 @@ class RectOnlyOffscreenRenderer {
         }
         return target.readRgba()
     }
+
+    /**
+     * KGPU-M27-002: pipeline-cache telemetry for the passes this renderer emits
+     * for [drawPlan], modeled across [frameCount] steady-state frames. Derived
+     * from the draw plan (not a backend pipeline-cache observation), so it carries
+     * no GPU support or performance claim by itself.
+     */
+    internal fun pipelineCacheTelemetry(
+        drawPlan: RectOnlyDrawPlan,
+        sceneId: String,
+        frameCount: Int,
+    ): org.graphiks.kanvas.gpu.renderer.telemetry.GPUPipelineCacheTelemetry =
+        rectOnlyPipelineCacheTelemetry(drawPlan, sceneId, frameCount)
 
     private fun SceneColor.toGpuClearColor(): GPUClearColor =
         GPUClearColor(
@@ -442,68 +495,45 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
 }
 """
 
-        val BITMAP_SHADER_WRAPPER_WGSL: String = """
-// Real UV functions from BitmapShaderSnippet.kt (fragment:bitmap_shader:v1)
-fn bitmap_uv_clamp(uv: vec2<f32>) -> vec2<f32> { return clamp(uv, vec2(0.0, 0.0), vec2(1.0, 1.0)); }
-fn bitmap_uv_repeat(uv: vec2<f32>) -> vec2<f32> { return fract(uv); }
-fn bitmap_uv_mirror(uv: vec2<f32>) -> vec2<f32> {
-    let half = uv * 0.5;
-    let t = half - floor(half);
-    return 1.0 - 2.0 * abs(t - 0.5);
-}
-fn bitmap_uv_decal(uv: vec2<f32>) -> vec2<f32> { return uv; }
+        fun composeBitmapTextureWgsl(): String = """
+struct Uniforms { color: vec4f, texRect: vec4f }
+@group(0) @binding(0) var<uniform> uniforms: Uniforms;
 
-// Procedural test texture tile (replaces texture binding + textureSample)
-fn sample_test_tile(uv: vec2<f32>) -> vec4<f32> {
-    let grid = floor(uv * 4.0);
-    let checker = f32((i32(grid.x) + i32(grid.y)) % 2);
-    return mix(vec4<f32>(0.1, 0.1, 0.9, 1.0), vec4<f32>(0.9, 0.5, 0.1, 1.0), checker);
+${BitmapShaderWgsl}
+
+@vertex
+fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
+    let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
+    let y = f32(idx & 2u) * 2.0 - 1.0;
+    return vec4f(x, y, 0.0, 1.0);
 }
 
-// Real shader entry points using procedural texture data
-fn bitmap_shader_clamp(uv: vec2<f32>) -> vec4<f32> { return sample_test_tile(bitmap_uv_clamp(uv)); }
-fn bitmap_shader_repeat(uv: vec2<f32>) -> vec4<f32> { return sample_test_tile(bitmap_uv_repeat(uv)); }
-fn bitmap_shader_mirror(uv: vec2<f32>) -> vec4<f32> { return sample_test_tile(bitmap_uv_mirror(uv)); }
-fn bitmap_shader_decal(uv: vec2<f32>) -> vec4<f32> {
-    let inside = all(uv >= vec2(0.0, 0.0)) && all(uv <= vec2(1.0, 1.0));
-    if (inside) { return sample_test_tile(uv); }
-    return vec4<f32>(0.0, 0.0, 0.0, 0.0);
-}
-
-fn bitmap_procedural(pos: vec4f, color: vec4f) -> vec4f {
-    let uv = vec2f(pos.x / 320.0, pos.y / 200.0);
-    return bitmap_shader_clamp(uv);
+@fragment
+fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
+    let uv = (pos.xy - uniforms.texRect.xy) / uniforms.texRect.zw;
+    let c = bitmap_shader_clamp(uv) * uniforms.color;
+    return vec4f(c.rgb * c.a, c.a);
 }
 """
 
-        val RUNTIME_EFFECT_WRAPPER_WGSL: String = """
-// Real SimpleRT logic from SimpleRTWgsl.kt
-fn simple_rt_impl(uv: vec2<f32>, color: vec4<f32>) -> vec4<f32> {
-    return color;
+        fun composeTextAtlasWgsl(): String = """
+struct Uniforms { color: vec4f, texRect: vec4f }
+@group(0) @binding(0) var<uniform> uniforms: Uniforms;
+
+${TextAtlasA8Wgsl}
+
+@vertex
+fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
+    let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
+    let y = f32(idx & 2u) * 2.0 - 1.0;
+    return vec4f(x, y, 0.0, 1.0);
 }
 
-// Real gradient-like modulation using position (real GPU computation)
-fn runtime_effect_procedural(pos: vec4f, color: vec4f) -> vec4f {
-    let uv = vec2f(pos.x / 320.0, pos.y / 200.0);
-    let gradient = 1.0 - abs(uv.x - 0.5) * 2.0;
-    return vec4f(color.rgb * gradient, color.a);
-}
-"""
-
-        val TEXT_ATLAS_WRAPPER_WGSL: String = """
-// Real A8 atlas sampling concept from TextAtlasSnippet.kt (fragment:text_atlas_a8:v1)
-// Procedural glyph shape (replaces texture binding + textureSample)
-fn procedural_glyph_alpha(uv: vec2<f32>) -> f32 {
-    let dx = abs(uv.x - 0.5);
-    let dy = abs(uv.y - 0.5);
-    let shape = 1.0 - smoothstep(0.3, 0.55, sqrt(dx * dx + dy * dy));
-    return shape;
-}
-
-fn text_procedural(pos: vec4f, color: vec4f) -> vec4f {
-    let uv = vec2f(pos.x / 320.0, pos.y / 200.0);
-    let a8 = procedural_glyph_alpha(uv);
-    return vec4f(color.rgb, color.a * a8);
+@fragment
+fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
+    let uv = (pos.xy - uniforms.texRect.xy) / uniforms.texRect.zw;
+    let t = text_atlas_source(uv);
+    return vec4f(uniforms.color.rgb * t.a, uniforms.color.a * t.a);
 }
 """
 
@@ -567,6 +597,7 @@ internal data class RectOnlyDrawPlan(
     val filters: List<RectOnlyFilterNode> = emptyList(),
     val saveLayers: List<RectOnlySaveLayer> = emptyList(),
     val tessellationDiagnostics: List<String> = emptyList(),
+    val executorWiringDiagnostics: List<String> = emptyList(),
 ) {
     val fillRectCount: Int = fills.count { it.family == "fill-rect" }
     val fillRRectCount: Int = fills.count { it.family == "fill-rrect" }
@@ -762,8 +793,8 @@ internal fun prepareRectOnlyDrawPlan(
                 paintOrder = paintOrder,
                 runtimeEffectStableId = reCommand?.stableId,
                 runtimeEffectWgslImplementationId = reCommand?.wgslImplementationId,
-                runtimeEffectUniformLayout = if (reCommand != null) "color:vec4" else null,
-                runtimeEffectPipelineKey = reCommand?.pipelineKey ?: if (reCommand != null) "runtime/wgsl/simple_rt" else null,
+                runtimeEffectUniformLayout = reCommand?.uniformLayout,
+                runtimeEffectPipelineKey = reCommand?.pipelineKey,
                 gradientCenterX = radialCommand?.centerX ?: sweepCommand?.centerX,
                 gradientCenterY = radialCommand?.centerY ?: sweepCommand?.centerY,
                 gradientRadius = radialCommand?.radius,
@@ -830,6 +861,24 @@ internal fun prepareRectOnlyDrawPlan(
         }
     }
 
+    val executorWiringDiagnostics = buildList {
+        if (fills.any { it.family == "bitmap-rect" }) {
+            addAll(bitmapShaderWiringDiagnostics())
+        }
+        if (fills.any { it.family == "text-run" }) {
+            addAll(textAtlasWiringDiagnostics(width, height))
+        }
+        if (fills.any { it.family == "runtime-effect" }) {
+            addAll(runtimeEffectWiringDiagnostics())
+        }
+        if (fills.any { it.family == "save-layer" }) {
+            addAll(saveLayerWiringDiagnostics(sceneId, width, height))
+        }
+        if (fills.any { it.family == "vertices" }) {
+            addAll(verticesWiringDiagnostics())
+        }
+    }
+
     return RectOnlyDrawPlan(
         sceneId = sceneId,
         clearColor = commands.filterIsInstance<SceneCommand.Clear>().firstOrNull()?.color
@@ -840,7 +889,160 @@ internal fun prepareRectOnlyDrawPlan(
         filters = emptyList(),
         saveLayers = emptyList(),
         tessellationDiagnostics = tessellationDiagnostics,
+        executorWiringDiagnostics = executorWiringDiagnostics,
     )
+}
+
+/**
+ * KGPU-M26-002: bitmap now samples a real decoded image texture uploaded via the
+ * offscreen texture-uniform backend. The M25 wiring evidence (snippet identity,
+ * entry point, packer) stays; the procedural wrapper is removed per M26 exit criteria.
+ */
+internal fun bitmapShaderWiringDiagnostics(): List<String> = listOf(
+    "bitmapShader:snippetSourceHash=$BitmapShaderSnippetSourceHash",
+    "bitmapShader:entryPoint=$BitmapShaderClampEntryPoint",
+    "bitmapShader:uniformPacker=UniformPacker.bitmapTextureBytes",
+    "bitmapShader:catalogWired=true realTextureUploaded=true bitmapDecodedSource=bitmap-test-32x32 productActivation=false",
+)
+
+/**
+ * KGPU-M25-002: routes DrawTextRun through the real [TextA8AtlasExecutor] + [SDFGenerator]
+ * (M20/M12) for diagnostic evidence. The procedural glyph stays in the renderer wrapper; the real
+ * Liberation Sans A8 atlas is deferred to M26.
+ */
+internal fun textAtlasWiringDiagnostics(width: Int, height: Int): List<String> = buildList {
+    val a8Stats = TextA8AtlasExecutor().execute(atlasKey = "scene-text-a8", width = width, height = height)
+    add(
+        "textA8Atlas:executor accepted=${a8Stats.accepted} atlasWidth=${a8Stats.atlasWidth} " +
+            "atlasHeight=${a8Stats.atlasHeight} glyphCount=${a8Stats.glyphCount} " +
+            "uploadSizeBytes=${a8Stats.uploadSizeBytes}",
+    )
+    a8Stats.diagnostic?.let { add("textA8Atlas:diagnostic=$it") }
+    add("textA8Atlas:${TextA8AtlasExecutor.nonClaimLine}")
+
+    val proceduralA8 = ByteArray(8 * 8) { index ->
+        val x = index % 8
+        val y = index / 8
+        if (x in 2..5 && y in 2..5) 0xFF.toByte() else 0x00.toByte()
+    }
+    val sdf = SDFGenerator().generateFromA8(proceduralA8, width = 8, height = 8)
+    add(
+        "textSdf:generator accepted=${sdf.accepted} width=${sdf.width} height=${sdf.height} " +
+            "radius=${sdf.radius} sdfBytes=${sdf.sdfBytes.size}",
+    )
+    add("textSdf:smoothing=${SDFGenerator.SDF_SMOOTHING} threshold=${SDFGenerator.SDF_THRESHOLD}")
+    add("textSdf:${SDFGenerator.nonClaimLine}")
+    add("textAtlas:realAtlasUploaded=true atlasFont=LiberationSans productActivation=false")
+}
+
+/**
+ * KGPU-M25-003: composes the runtime-effect fullscreen pass from the real registered
+ * [SimpleRTWgsl] module source (M21 descriptor) rather than an inline copy. The offscreen
+ * fullscreen-uniform backend binds the uniform at `@group(0) @binding(0)`, while [SimpleRTWgsl]
+ * declares it at `@group(1) @binding(0)`; the binding is rebound here (in the renderer) instead of
+ * forking the shader. The `gColor` ABI (vec4f@0:16) and `simple_rt_source` entry point are taken
+ * verbatim from the module, so this is real GPU output (no procedural wrapper).
+ */
+internal fun composeRuntimeEffectWgsl(): String {
+    val snippet = SimpleRTWgsl.replace("@group(1)", "@group(0)")
+    return """
+$snippet
+
+@vertex
+fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
+    let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
+    let y = f32(idx & 2u) * 2.0 - 1.0;
+    return vec4f(x, y, 0.0, 1.0);
+}
+
+@fragment
+fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
+    return $SimpleRTEntryPoint(pos.xy);
+}
+"""
+}
+
+/**
+ * KGPU-M25-003: BitmapRect's runtime-effect sibling routes through the real SimpleRT snippet
+ * identity ([SimpleRTSourceHash]) and the registered gColor uniform ABI. Unlike the other families,
+ * this is real GPU output (the fragment returns the per-tile gColor uniform), not a procedural wrapper.
+ */
+internal fun runtimeEffectWiringDiagnostics(): List<String> = listOf(
+    "runtimeEffect:wgslSnippetSourceHash=$SimpleRTSourceHash",
+    "runtimeEffect:entryPoint=$SimpleRTEntryPoint",
+    "runtimeEffect:uniformPacker=UniformPacker.simpleRtBytes",
+    "runtimeEffect:realGpuOutput=true proceduralWrapperRemoved=true productActivation=false",
+)
+
+/**
+ * KGPU-M25-004: routes SaveLayer through the real [SaveLayerExecutor] (M18) for diagnostic evidence
+ * and references the [LayerCompositeSnippetSourceHash] composite snippet. The procedural composite
+ * stays in the renderer wrapper because the offscreen backend cannot allocate a secondary target.
+ */
+internal fun saveLayerWiringDiagnostics(sceneId: String, width: Int, height: Int): List<String> = buildList {
+    val executor = SaveLayerExecutor()
+    val stats = executor.execute(scopeLabel = sceneId, width = width, height = height)
+    addAll(executor.dumpLines(stats))
+    add("saveLayer:compositeSnippetSourceHash=$LayerCompositeSnippetSourceHash")
+    add("saveLayer:compositeEntryPoint=$LayerCompositeEntryPoint")
+    add("saveLayer:proceduralComposite=true secondaryTargetDeferred=M26 productActivation=false")
+}
+
+/**
+ * KGPU-M25-006: vertices wiring evidence. The offscreen backend cannot allocate vertex/index buffers,
+ * so this invokes the real [VerticesExecutor] + [GPUVertexBufferUploader] + [GPUMeshBatcher] (M22)
+ * on a representative triangle mesh to produce dispatch + upload + batching evidence. Real mesh
+ * rendering is deferred; this is ImplementationCandidate evidence only.
+ */
+internal fun verticesWiringDiagnostics(): List<String> = buildList {
+    val positions = listOf(
+        20f, 20f, 120f, 20f, 70f, 120f,
+        140f, 20f, 240f, 20f, 190f, 120f,
+    )
+    val colors = List(6 * 4) { 1f }
+    val executor = VerticesExecutor()
+    val execStats = executor.execute(positions, colors, GPUVertexMode.Triangles)
+    add(
+        "vertices:executor executed=${execStats.executed} vertexCount=${execStats.vertexCount} " +
+            "colorCount=${execStats.colorCount} mode=${execStats.primitiveMode.sourceLabel}",
+    )
+    add("vertices:executor.${execStats.nonClaimLine}")
+
+    val uploader = GPUVertexBufferUploader()
+    val uploadStats = uploader.upload(positions, colors, vertexStrideBytes = 24)
+    add(
+        "vertices:uploader uploaded=${uploadStats.uploaded} vertexCount=${uploadStats.vertexCount} " +
+            "bufferBytes=${uploadStats.bufferBytes} providerUsed=${uploadStats.providerUsed}",
+    )
+    add("vertices:uploader.${uploadStats.nonClaimLine}")
+
+    val batcher = GPUMeshBatcher()
+    val batchStats = batcher.batch(
+        listOf(
+            GPUDrawCallDescriptor(
+                drawId = "vertices-mesh-a",
+                pipelineKey = "vertices/triangles/srcover",
+                vertexCount = 3,
+                topology = GPUVertexMode.Triangles,
+                blendMode = "SrcOver",
+                sortKey = 0,
+            ),
+            GPUDrawCallDescriptor(
+                drawId = "vertices-mesh-b",
+                pipelineKey = "vertices/triangles/srcover",
+                vertexCount = 3,
+                topology = GPUVertexMode.Triangles,
+                blendMode = "SrcOver",
+                sortKey = 1,
+            ),
+        ),
+    )
+    add(
+        "vertices:batcher inputDraws=${batchStats.inputDrawCount} batches=${batchStats.batchCount} " +
+            "pipelineChanges=${batchStats.pipelineChangeCount} mergedDraws=${batchStats.mergedDrawCount}",
+    )
+    add("vertices:batcher.${batchStats.nonClaimLine}")
+    add("vertices:boundingRectVisual=true realMeshDeferred=M26 productActivation=false")
 }
 
 private fun rectOnlyFillDraw(

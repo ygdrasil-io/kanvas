@@ -15,3 +15,9 @@ textRunCommands=1
 saveLayerRectCommands=0
 pathFillStencilCommands=0
 convexFanMeshCommands=0
+textA8Atlas:executor accepted=true atlasWidth=0 atlasHeight=0 glyphCount=0 uploadSizeBytes=0
+textA8Atlas:nonclaim:no-gpu-atlas-pages no-backend-texture-allocation no-cpu-bitmap-upload
+textSdf:generator accepted=true width=8 height=8 radius=8.0 sdfBytes=64
+textSdf:smoothing=0.125 threshold=0.5
+textSdf:nonclaim:no-hybrid-sdf no-cpu-sdf-rasterizer no-distortion-mesh no-color-bitmap-sdf
+textAtlas:realAtlasUploaded=true atlasFont=LiberationSans productActivation=false

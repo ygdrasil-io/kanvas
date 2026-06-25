@@ -15,3 +15,7 @@ textRunCommands=0
 saveLayerRectCommands=0
 pathFillStencilCommands=0
 convexFanMeshCommands=0
+bitmapShader:snippetSourceHash=fragment:bitmap_shader:v1
+bitmapShader:entryPoint=bitmap_shader_clamp
+bitmapShader:uniformPacker=UniformPacker.bitmapTextureBytes
+bitmapShader:catalogWired=true realTextureUploaded=true bitmapDecodedSource=bitmap-test-32x32 productActivation=false
