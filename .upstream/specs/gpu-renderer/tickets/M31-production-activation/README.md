@@ -28,6 +28,7 @@ milestones (M0-M30) for the complete rendering feature set.
 | [KGPU-M31-002 - Rollback flag — emergency gpu-raster fallback control](KGPU-M31-002-rollback-flag.md) | `review` | `P0` | `ImplementationCandidate` | `CPUReferenceOnly` | `false` | `true` | `product-validation` | [KGPU-M31-001] | null |
 | [KGPU-M31-003 - Final PM evidence bundle — production-readiness sign-off](KGPU-M31-003-pm-evidence-bundle.md) | `review` | `P0` | `ImplementationCandidate` | `CPUReferenceOnly` | `false` | `true` | `product-validation` | [KGPU-M31-001] | null |
 | [KGPU-M31-004 - Release notes and API stability freeze](KGPU-M31-004-release-notes-stability.md) | `review` | `P0` | `ImplementationCandidate` | `CPUReferenceOnly` | `false` | `true` | `product-validation` | [KGPU-M31-003] | null |
+| [KGPU-M31-005 - SkCanvas-bridge ↔ legacy gpu-raster pixel/GM parity](KGPU-M31-005-bridge-pixel-parity.md) | `proposed` | `P0` | `ImplementationCandidate` | `CPUReferenceOnly` | `false` | `true` | `product-validation` | [KGPU-M30-003, KGPU-M31-003] | `gpu-raster-legacy-path` |
 
 ## Validation Bundle
 
