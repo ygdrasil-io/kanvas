@@ -19,6 +19,22 @@ tasks.withType<JavaCompile> {
     options.encoding = "UTF-8"
 }
 
+tasks.register<JavaExec>("verifyBridgeSkSurfaceRender") {
+    group = "verification"
+    description = "Verifies that SkiaKanvasSurface.flush() renders into the wrapped SkSurface."
+
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("org.skia.kanvas.VerifyBridgeSkSurfaceRenderKt")
+    outputs.upToDateWhen { false }
+    jvmArgs(buildList {
+        add("--add-opens=java.base/java.lang=ALL-UNNAMED")
+        add("--enable-native-access=ALL-UNNAMED")
+        if (org.gradle.internal.os.OperatingSystem.current().isMacOsX) {
+            add("-XstartOnFirstThread")
+        }
+    })
+}
+
 tasks.withType<Test> {
     jvmArgs(
         "--add-opens=java.base/java.lang=ALL-UNNAMED",

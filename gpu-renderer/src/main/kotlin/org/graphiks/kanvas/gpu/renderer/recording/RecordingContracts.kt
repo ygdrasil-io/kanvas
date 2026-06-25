@@ -219,6 +219,9 @@ class GPURecorder(
     private val commands = mutableListOf<NormalizedDrawCommand>()
     private var closedRecording: GPURecording? = null
 
+    /** Returns a snapshot of recorded commands (defensive copy). */
+    fun recordedCommands(): List<NormalizedDrawCommand> = commands.toList()
+
     /** Records one already-normalized command into this recorder scope. */
     fun record(command: NormalizedDrawCommand) {
         check(closedRecording == null) { "GPURecorder.record cannot be called after close" }

@@ -29,7 +29,12 @@ milestones (M0-M30) for the complete rendering feature set.
 | [KGPU-M31-003 - Final PM evidence bundle — production-readiness sign-off](KGPU-M31-003-pm-evidence-bundle.md) | `review` | `P0` | `ImplementationCandidate` | `CPUReferenceOnly` | `false` | `true` | `product-validation` | [KGPU-M31-001] | null |
 | [KGPU-M31-004 - Release notes and API stability freeze](KGPU-M31-004-release-notes-stability.md) | `review` | `P0` | `ImplementationCandidate` | `CPUReferenceOnly` | `false` | `true` | `product-validation` | [KGPU-M31-003] | null |
 | [KGPU-M31-005 - SkCanvas-bridge ↔ legacy gpu-raster pixel/GM parity](KGPU-M31-005-bridge-pixel-parity.md) | `proposed` | `P0` | `ImplementationCandidate` | `CPUReferenceOnly` | `false` | `true` | `product-validation` | [KGPU-M30-003, KGPU-M31-003, KGPU-M31-006] | `gpu-raster-legacy-path` |
-| [KGPU-M31-006 - Execute KanvasSurface recording to pixels — bridge renders real GPU output](KGPU-M31-006-bridge-gpu-execution.md) | `proposed` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `true` | `execution-backend` | [KGPU-M29-001, KGPU-M31-001] | null |
+| [KGPU-M31-006 - Execute KanvasSurface recording to pixels — bridge renders real GPU output](KGPU-M31-006-bridge-gpu-execution.md) | `review` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `true` | `execution-backend` | [KGPU-M29-001, KGPU-M31-001] | null |
+
+## Evidence Reports
+
+- [KGPU-M31-006 evidence](../../../../reports/gpu-renderer/2026-06-26-M31-006-evidence.md)
+  — bridge GPU execution, nonTransparentPixels=30800, CPU similarity=100%
 
 ## Validation Bundle
 
