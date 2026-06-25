@@ -5,6 +5,8 @@ import java.io.File
 import javax.imageio.ImageIO
 import org.graphiks.kanvas.Canvas
 import org.graphiks.kanvas.Paint
+import org.graphiks.kanvas.Path
+import org.graphiks.kanvas.RRect
 import org.graphiks.kanvas.Rect
 import org.graphiks.kanvas.Surface
 import org.graphiks.kanvas.SurfaceRenderResult
@@ -23,6 +25,9 @@ fun main(args: Array<String>) {
 
     val (result, description) = when (sceneName) {
         "solid-red-rect" -> renderSolidRedRect(320, 240)
+        "solid-rrect" -> renderSolidRRect(320, 240)
+        "solid-path" -> renderSolidPath(320, 240)
+        "solid-star-path" -> renderSolidStarPath(320, 240)
         else -> error("Unknown scene: $sceneName")
     }
 
@@ -55,6 +60,73 @@ private data class SceneDescription(
     val width: Int,
     val height: Int,
 )
+
+private fun renderSolidRRect(width: Int, height: Int): Pair<SurfaceRenderResult, SceneDescription> {
+    val surface = Surface(width = width, height = height)
+    val canvas = Canvas(surface)
+
+    val blue = Paint().apply {
+        r = 0f
+        g = 0.5f
+        b = 1f
+        a = 1f
+    }
+    canvas.drawRRect(RRect(Rect(50f, 50f, 270f, 190f), 20f, 20f), blue)
+
+    val result = surface.renderToRgba()
+    return Pair(result, SceneDescription(width, height))
+}
+
+private fun renderSolidStarPath(width: Int, height: Int): Pair<SurfaceRenderResult, SceneDescription> {
+    val surface = Surface(width = width, height = height)
+    val canvas = Canvas(surface)
+
+    val magenta = Paint().apply {
+        r = 1f
+        g = 0f
+        b = 1f
+        a = 1f
+    }
+    val path = Path().apply {
+        moveTo(160f, 20f)
+        lineTo(180f, 80f)
+        lineTo(250f, 80f)
+        lineTo(195f, 120f)
+        lineTo(215f, 185f)
+        lineTo(160f, 150f)
+        lineTo(105f, 185f)
+        lineTo(125f, 120f)
+        lineTo(70f, 80f)
+        lineTo(140f, 80f)
+        close()
+    }
+    canvas.drawPath(path, magenta)
+
+    val result = surface.renderToRgba()
+    return Pair(result, SceneDescription(width, height))
+}
+
+private fun renderSolidPath(width: Int, height: Int): Pair<SurfaceRenderResult, SceneDescription> {
+    val surface = Surface(width = width, height = height)
+    val canvas = Canvas(surface)
+
+    val green = Paint().apply {
+        r = 0f
+        g = 1f
+        b = 0f
+        a = 1f
+    }
+    val path = Path().apply {
+        moveTo(80f, 50f)
+        lineTo(240f, 50f)
+        lineTo(160f, 190f)
+        close()
+    }
+    canvas.drawPath(path, green)
+
+    val result = surface.renderToRgba()
+    return Pair(result, SceneDescription(width, height))
+}
 
 private fun renderSolidRedRect(width: Int, height: Int): Pair<SurfaceRenderResult, SceneDescription> {
     val surface = Surface(width = width, height = height)

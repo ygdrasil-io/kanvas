@@ -1,7 +1,7 @@
 ---
 id: KGPU-M31-005
 title: "SkCanvas-bridge ↔ legacy gpu-raster pixel/GM parity (blocks M30-003/M31-003 sign-off)"
-status: proposed
+status: in-progress
 milestone: M31
 priority: P0
 owner_area: product-validation
@@ -148,6 +148,20 @@ rtk git diff --check
   review of M30/M31. M30-003/M31-003 “parity” is structural task-count only; real
   pixel/GM parity is required before the production-default activation can be
   signed off.
+- `in-progress`: M31-006 (GPU execution→pixels) done. FillRRect + FillPath
+  dispatched; DrawImage now explicitly refused (over-claim fix).
+  - `FillRRect`: SDF-based coverage via `drawFullscreenRawUniformPass`
+    (reuses `rrect_cov`). 99.84% similarity against **independent geometric
+    CPU reference** (not WGSL SDF port). 120 edge pixels differ due to AA
+    SDF vs binary reference (expected).
+  - `FillPath`: Stencil-cover dispatch via `drawFullscreenStencilPass`.
+    Proven: triangle (100%) and star (100%) against non-zero winding rule.
+  - `DrawImage` **fixed**: now uses `GPUMaterialDescriptor.ImageDraw` (non-
+    SolidColor) → `dispatchFillRect` refuses automatically. Previously
+    emitted a silent solid-color rect. Hermetic test captures `refuse:`
+    diagnostic. True texture draw deferred.
+  - `DrawTextRun`: remains `refuse:` (needs text atlas/SDF pipeline).
+  - Summary: **3/5 dispatched with independent parity; 2/5 explicitly refused**.
 
 ## Linear Labels
 
