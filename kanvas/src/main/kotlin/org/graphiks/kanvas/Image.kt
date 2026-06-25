@@ -1,24 +1,24 @@
-package org.graphiks.kanvas.api
+package org.graphiks.kanvas
 
 import org.graphiks.kanvas.gpu.renderer.images.GPUImageSourceDescriptor
 
-class KanvasImage(
+class Image(
     val width: Int,
     val height: Int,
     val colorType: KanvasColorType,
     internal val sourceId: String,
 ) {
     companion object {
-        fun decode(bytes: ByteArray, mimeType: String? = null): KanvasImage {
+        fun decode(bytes: ByteArray, mimeType: String? = null): Image {
             val hint = mimeType?.let { codecHintFromMime(it) }
             return if (hint != null) {
-                KanvasImage(
+                Image(
                     width = 0, height = 0,
                     colorType = KanvasColorType.RGBA_8888,
                     sourceId = "decoded:${hint}:${bytes.size}bytes",
                 )
             } else {
-                KanvasImage(
+                Image(
                     width = 0, height = 0,
                     colorType = KanvasColorType.RGBA_8888,
                     sourceId = "decoded:unknown:${bytes.size}bytes",

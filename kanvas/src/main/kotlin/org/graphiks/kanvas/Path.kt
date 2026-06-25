@@ -1,4 +1,4 @@
-package org.graphiks.kanvas.api
+package org.graphiks.kanvas
 
 import org.graphiks.kanvas.gpu.renderer.geometry.GPUPathDescriptor
 import org.graphiks.kanvas.gpu.renderer.geometry.PathData
@@ -12,28 +12,28 @@ enum class KanvasFillType(val label: String) {
     INVERSE_EVEN_ODD("inverse_even_odd"),
 }
 
-class KanvasPath(
+class Path(
     var fillType: KanvasFillType = KanvasFillType.WINDING,
 ) {
     private val verbs = mutableListOf<PathVerb>()
 
-    fun moveTo(x: Float, y: Float): KanvasPath = apply {
+    fun moveTo(x: Float, y: Float): Path = apply {
         verbs.add(PathVerb.MoveTo(Point(x, y)))
     }
 
-    fun lineTo(x: Float, y: Float): KanvasPath = apply {
+    fun lineTo(x: Float, y: Float): Path = apply {
         verbs.add(PathVerb.LineTo(Point(x, y)))
     }
 
-    fun quadTo(cx: Float, cy: Float, x: Float, y: Float): KanvasPath = apply {
+    fun quadTo(cx: Float, cy: Float, x: Float, y: Float): Path = apply {
         verbs.add(PathVerb.QuadTo(c = Point(cx, cy), p = Point(x, y)))
     }
 
-    fun cubicTo(c1x: Float, c1y: Float, c2x: Float, c2y: Float, x: Float, y: Float): KanvasPath = apply {
+    fun cubicTo(c1x: Float, c1y: Float, c2x: Float, c2y: Float, x: Float, y: Float): Path = apply {
         verbs.add(PathVerb.CubicTo(c1 = Point(c1x, c1y), c2 = Point(c2x, c2y), p = Point(x, y)))
     }
 
-    fun close(): KanvasPath = apply {
+    fun close(): Path = apply {
         verbs.add(PathVerb.Close)
     }
 

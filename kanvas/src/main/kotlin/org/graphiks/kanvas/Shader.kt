@@ -1,4 +1,4 @@
-package org.graphiks.kanvas.api
+package org.graphiks.kanvas
 
 import org.graphiks.kanvas.gpu.renderer.materials.GPUGradientGeometryPlan
 import org.graphiks.kanvas.gpu.renderer.materials.GPUGradientKind
@@ -18,7 +18,7 @@ enum class KanvasTileMode(val label: String) {
     DECAL("decal"),
 }
 
-sealed class KanvasShader {
+sealed class Shader {
 
     fun lower(): GPUMaterialSourceDescriptor = when (this) {
         is SolidColor -> GPUMaterialSourceDescriptor.Solid(
@@ -94,21 +94,21 @@ sealed class KanvasShader {
 
     data class SolidColor(
         val r: Float, val g: Float, val b: Float, val a: Float = 1f,
-    ) : KanvasShader()
+    ) : Shader()
 
     data class LinearGradient(
         val start: KanvasPoint, val end: KanvasPoint,
         val stops: List<Triple<Float, Float, Float>>,
         val positions: List<Float>? = null,
         val tileMode: KanvasTileMode = KanvasTileMode.CLAMP,
-    ) : KanvasShader()
+    ) : Shader()
 
     data class RadialGradient(
         val center: KanvasPoint, val radius: Float,
         val stops: List<Triple<Float, Float, Float>>,
         val positions: List<Float>? = null,
         val tileMode: KanvasTileMode = KanvasTileMode.CLAMP,
-    ) : KanvasShader()
+    ) : Shader()
 
     data class SweepGradient(
         val center: KanvasPoint,
@@ -116,16 +116,16 @@ sealed class KanvasShader {
         val stops: List<Triple<Float, Float, Float>>,
         val positions: List<Float>? = null,
         val tileMode: KanvasTileMode = KanvasTileMode.CLAMP,
-    ) : KanvasShader()
+    ) : Shader()
 
     data class Bitmap(
-        val image: KanvasImage,
+        val image: Image,
         val tileModeX: KanvasTileMode = KanvasTileMode.CLAMP,
         val tileModeY: KanvasTileMode = KanvasTileMode.CLAMP,
-    ) : KanvasShader()
+    ) : Shader()
 
     data class RuntimeEffect(
         val effectId: String,
         val descriptorVersion: Int = 1,
-    ) : KanvasShader()
+    ) : Shader()
 }

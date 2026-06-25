@@ -1,4 +1,4 @@
-package org.graphiks.kanvas.api
+package org.graphiks.kanvas
 
 import org.graphiks.kanvas.font.atlas.AtlasRegion
 import org.graphiks.kanvas.font.atlas.GlyphAtlasPlacement
@@ -7,7 +7,7 @@ import org.graphiks.kanvas.font.glyph.GlyphStrikeKey
 import org.graphiks.kanvas.font.handoff.GlyphDescriptor
 import org.graphiks.kanvas.font.handoff.GlyphRunDescriptor
 
-data class KanvasTextBlob(
+data class TextBlob(
     val glyphRuns: List<KanvasGlyphRun>,
 ) {
     fun lower(): GlyphRunDescriptor {

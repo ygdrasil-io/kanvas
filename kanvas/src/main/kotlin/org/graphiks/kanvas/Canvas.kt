@@ -1,4 +1,4 @@
-package org.graphiks.kanvas.api
+package org.graphiks.kanvas
 
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.commands.GPUClipFacts
@@ -22,7 +22,7 @@ import org.graphiks.kanvas.gpu.renderer.geometry.PathData
 import org.graphiks.kanvas.gpu.renderer.geometry.PathTessellator
 import org.graphiks.kanvas.gpu.renderer.geometry.Point
 
-class KanvasCanvas(private val surface: KanvasSurface) {
+class Canvas(private val surface: Surface) {
     private var commandCounter = 0
     private val source = GPUCommandSource(adapter = "kanvas-api", operation = "draw")
 
@@ -32,11 +32,11 @@ class KanvasCanvas(private val surface: KanvasSurface) {
         return id
     }
 
-    private fun lowerPaint(paint: KanvasPaint): Pair<CoreMaterialDescriptor, CoreGPUBlendFacts> {
+    private fun lowerPaint(paint: Paint): Pair<CoreMaterialDescriptor, CoreGPUBlendFacts> {
         val material: CoreMaterialDescriptor = when (val shader = paint.shader) {
             null -> CoreMaterialDescriptor.SolidColor(r = paint.r, g = paint.g, b = paint.b, a = paint.a)
-            is KanvasShader.SolidColor -> CoreMaterialDescriptor.SolidColor(r = shader.r, g = shader.g, b = shader.b, a = shader.a)
-            is KanvasShader.LinearGradient -> {
+            is Shader.SolidColor -> CoreMaterialDescriptor.SolidColor(r = shader.r, g = shader.g, b = shader.b, a = shader.a)
+            is Shader.LinearGradient -> {
                 val s = shader
                 val startColor = s.stops.firstOrNull() ?: Triple(0f, 0f, 0f)
                 val endColor = s.stops.lastOrNull() ?: Triple(0f, 0f, 0f)
@@ -47,7 +47,7 @@ class KanvasCanvas(private val surface: KanvasSurface) {
                     endR = endColor.first, endG = endColor.second, endB = endColor.third, endA = 1f,
                 )
             }
-            is KanvasShader.RadialGradient -> {
+            is Shader.RadialGradient -> {
                 val s = shader
                 val startColor = s.stops.firstOrNull() ?: Triple(0f, 0f, 0f)
                 val endColor = s.stops.lastOrNull() ?: Triple(0f, 0f, 0f)
@@ -57,7 +57,7 @@ class KanvasCanvas(private val surface: KanvasSurface) {
                     endR = endColor.first, endG = endColor.second, endB = endColor.third, endA = 1f,
                 )
             }
-            is KanvasShader.SweepGradient -> {
+            is Shader.SweepGradient -> {
                 val s = shader
                 val startColor = s.stops.firstOrNull() ?: Triple(0f, 0f, 0f)
                 val endColor = s.stops.lastOrNull() ?: Triple(0f, 0f, 0f)
@@ -74,12 +74,12 @@ class KanvasCanvas(private val surface: KanvasSurface) {
         return Pair(material, blend)
     }
 
-    private fun blendFromMode(mode: KanvasBlendMode): CoreGPUBlendFacts = when (mode) {
-        KanvasBlendMode.SRC_OVER -> CoreGPUBlendFacts.srcOver()
+    private fun blendFromMode(mode: BlendMode): CoreGPUBlendFacts = when (mode) {
+        BlendMode.SRC_OVER -> CoreGPUBlendFacts.srcOver()
         else -> CoreGPUBlendFacts.unsupported(modeLabel = mode.label)
     }
 
-    fun drawRect(rect: KanvasRect, paint: KanvasPaint) {
+    fun drawRect(rect: Rect, paint: Paint) {
         val (material, blend) = lowerPaint(paint)
         val command = GPUFillRectCommandBuilder.build(
             commandId = nextCommandId(),
@@ -92,7 +92,7 @@ class KanvasCanvas(private val surface: KanvasSurface) {
         surface.recorder.record(command)
     }
 
-    fun drawRRect(rect: KanvasRect, radii: KanvasRRectCornerRadii, paint: KanvasPaint) {
+    fun drawRRect(rect: Rect, radii: RRectCornerRadii, paint: Paint) {
         val (material, blend) = lowerPaint(paint)
         val command = GPUFillRRectCommandBuilder.build(
             commandId = nextCommandId(),
@@ -111,7 +111,7 @@ class KanvasCanvas(private val surface: KanvasSurface) {
         surface.recorder.record(command)
     }
 
-    fun drawRRect(rrect: KanvasRRect, paint: KanvasPaint) {
+    fun drawRRect(rrect: RRect, paint: Paint) {
         val (material, blend) = lowerPaint(paint)
         val command = GPUFillRRectCommandBuilder.build(
             commandId = nextCommandId(),
@@ -130,7 +130,7 @@ class KanvasCanvas(private val surface: KanvasSurface) {
         surface.recorder.record(command)
     }
 
-    fun drawPath(path: KanvasPath, paint: KanvasPaint) {
+    fun drawPath(path: Path, paint: Paint) {
         val (material, blend) = lowerPaint(paint)
         val pathDescriptor = path.lower()
         val pathData = path.toPathData()
@@ -166,8 +166,8 @@ class KanvasCanvas(private val surface: KanvasSurface) {
         surface.recorder.record(command)
     }
 
-    fun drawImage(image: KanvasImage, rect: KanvasRect, paint: KanvasPaint? = null) {
-        val effectivePaint = paint ?: KanvasPaint()
+    fun drawImage(image: Image, rect: Rect, paint: Paint? = null) {
+        val effectivePaint = paint ?: Paint()
         val (material, blend) = lowerPaint(effectivePaint)
         val command = GPUFillRectCommandBuilder.build(
             commandId = nextCommandId(),
@@ -180,7 +180,7 @@ class KanvasCanvas(private val surface: KanvasSurface) {
         surface.recorder.record(command)
     }
 
-    fun drawTextBlob(blob: KanvasTextBlob, x: Float, y: Float, paint: KanvasPaint) {
+    fun drawTextBlob(blob: TextBlob, x: Float, y: Float, paint: Paint) {
         val (material, blend) = lowerPaint(paint)
         val glyphRunDescriptor = blob.lower()
         val command = NormalizedDrawCommand.DrawTextRun(

@@ -1,10 +1,10 @@
-package org.graphiks.kanvas.api
+package org.graphiks.kanvas
 
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPaintDescriptor
 import org.graphiks.kanvas.gpu.renderer.materials.GPUMaterialSourceDescriptor
 import org.graphiks.kanvas.gpu.renderer.materials.GPUSolidColorPlan
 
-enum class KanvasBlendMode(val label: String) {
+enum class BlendMode(val label: String) {
     CLEAR("clear"),
     SRC("src"),
     DST("dst"),
@@ -23,20 +23,20 @@ enum class KanvasBlendMode(val label: String) {
     SCREEN("screen"),
 }
 
-enum class KanvasStrokeCap(val label: String) {
+enum class StrokeCap(val label: String) {
     BUTT("butt"),
     ROUND("round"),
     SQUARE("square"),
 }
 
-enum class KanvasStrokeJoin(val label: String) {
+enum class StrokeJoin(val label: String) {
     MITER("miter"),
     ROUND("round"),
     BEVEL("bevel"),
 }
 
-sealed interface KanvasColorFilter {
-    data class Matrix(val values: FloatArray) : KanvasColorFilter {
+sealed interface ColorFilter {
+    data class Matrix(val values: FloatArray) : ColorFilter {
         override fun equals(other: Any?): Boolean {
             if (this === other) return true
             if (other !is Matrix) return false
@@ -46,32 +46,32 @@ sealed interface KanvasColorFilter {
         override fun hashCode(): Int = values.contentHashCode()
     }
 
-    data object None : KanvasColorFilter
+    data object None : ColorFilter
 }
 
-class KanvasPaint(
+class Paint(
     var r: Float = 0f,
     var g: Float = 0f,
     var b: Float = 0f,
     var a: Float = 1f,
-    var shader: KanvasShader? = null,
-    var blendMode: KanvasBlendMode = KanvasBlendMode.SRC_OVER,
-    var colorFilter: KanvasColorFilter = KanvasColorFilter.None,
+    var shader: Shader? = null,
+    var blendMode: BlendMode = BlendMode.SRC_OVER,
+    var colorFilter: ColorFilter = ColorFilter.None,
     var strokeWidth: Float = 0f,
-    var strokeCap: KanvasStrokeCap = KanvasStrokeCap.BUTT,
-    var strokeJoin: KanvasStrokeJoin = KanvasStrokeJoin.MITER,
+    var strokeCap: StrokeCap = StrokeCap.BUTT,
+    var strokeJoin: StrokeJoin = StrokeJoin.MITER,
     var antiAlias: Boolean = true,
 ) {
-    fun color(r: Float, g: Float, b: Float, a: Float = 1f): KanvasPaint = apply {
+    fun color(r: Float, g: Float, b: Float, a: Float = 1f): Paint = apply {
         this.r = r; this.g = g; this.b = b; this.a = a
     }
 
-    fun shader(shader: KanvasShader?): KanvasPaint = apply { this.shader = shader }
-    fun blendMode(mode: KanvasBlendMode): KanvasPaint = apply { this.blendMode = mode }
-    fun colorFilter(filter: KanvasColorFilter): KanvasPaint = apply { this.colorFilter = filter }
-    fun strokeWidth(w: Float): KanvasPaint = apply { this.strokeWidth = w }
-    fun strokeCap(cap: KanvasStrokeCap): KanvasPaint = apply { this.strokeCap = cap }
-    fun strokeJoin(join: KanvasStrokeJoin): KanvasPaint = apply { this.strokeJoin = join }
+    fun shader(shader: Shader?): Paint = apply { this.shader = shader }
+    fun blendMode(mode: BlendMode): Paint = apply { this.blendMode = mode }
+    fun colorFilter(filter: ColorFilter): Paint = apply { this.colorFilter = filter }
+    fun strokeWidth(w: Float): Paint = apply { this.strokeWidth = w }
+    fun strokeCap(cap: StrokeCap): Paint = apply { this.strokeCap = cap }
+    fun strokeJoin(join: StrokeJoin): Paint = apply { this.strokeJoin = join }
 
     fun lower(): GPUPaintDescriptor {
         val source: GPUMaterialSourceDescriptor = shader?.lower() ?: GPUMaterialSourceDescriptor.Solid(
