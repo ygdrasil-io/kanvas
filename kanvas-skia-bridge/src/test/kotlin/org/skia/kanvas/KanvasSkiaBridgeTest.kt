@@ -234,6 +234,7 @@ class KanvasSkiaBridgeTest {
 
     @Test
     fun `wrapIfEnabled returns non-null by default`() {
+        assumeTrue(GPUBackendRuntimeFactory.createOrNull() != null, "Skipping: WebGPU not available")
         val skiaSurface = SkSurface.MakeRasterN32Premul(64, 64)
         assertNotNull(SkiaKanvasSurface.wrapIfEnabled(skiaSurface))
     }
@@ -368,6 +369,46 @@ class KanvasSkiaBridgeTest {
     }
 
     @Test
+    fun `activation check emits kanvas-activation-failed when WebGPU unavailable`() {
+        assumeTrue(GPUBackendRuntimeFactory.createOrNull() == null, "Skipping: WebGPU available, cannot test activation failure")
+        val errBytes = java.io.ByteArrayOutputStream()
+        val originalErr = System.err
+        System.setErr(java.io.PrintStream(errBytes))
+        try {
+            assertThrows(IllegalStateException::class.java) {
+                checkGpuActivationOrThrow()
+            }
+        } finally {
+            System.setErr(originalErr)
+        }
+        val output = errBytes.toString("UTF-8")
+        assertTrue(
+            output.contains("kanvas-activation-failed"),
+            "Expected 'kanvas-activation-failed' diagnostic in stderr, got: $output",
+        )
+    }
+
+    @Test
+    fun `bridge unsupported emits diagnostic to stderr`() {
+        val kSurface = org.graphiks.kanvas.Surface(64, 64, org.graphiks.kanvas.PixelFormat.RGBA8)
+        val canvas = org.graphiks.kanvas.Canvas(kSurface)
+        val bridge = KanvasSkiaBridge(canvas)
+
+        val errBytes = java.io.ByteArrayOutputStream()
+        val originalErr = System.err
+        System.setErr(java.io.PrintStream(errBytes))
+        try {
+            bridge.unsupported("drawVertices")
+        } finally {
+            System.setErr(originalErr)
+        }
+
+        val output = errBytes.toString("UTF-8")
+        assertTrue(output.contains("unsupported-skia-bridge-feature"), "Expected unsupported-skia-bridge-feature diagnostic, got: $output")
+        assertTrue(output.contains("drawVertices"), "Expected feature name 'drawVertices' in diagnostic, got: $output")
+    }
+
+    @Test
     fun `productActivation is true by default`() {
         assertTrue(isProductActivation())
     }
@@ -395,6 +436,7 @@ class KanvasSkiaBridgeTest {
 
     @Test
     fun `wrapIfEnabled emits production activation diagnostic`() {
+        assumeTrue(GPUBackendRuntimeFactory.createOrNull() != null, "Skipping: WebGPU not available")
         val skiaSurface = SkSurface.MakeRasterN32Premul(64, 64)
         val result = SkiaKanvasSurface.wrapIfEnabled(skiaSurface)
         assertNotNull(result)

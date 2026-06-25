@@ -7,6 +7,7 @@ dependencies {
     implementation(project(":math"))
     implementation(project(":kanvas-skia"))
     implementation(project(":kanvas"))
+    implementation(project(":gpu-renderer"))
 
     testImplementation(project(":cpu-raster"))
     testImplementation(project(":skia-integration-tests"))
