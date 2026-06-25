@@ -152,6 +152,97 @@ class RectOnlyOffscreenRenderer {
         target: org.graphiks.kanvas.gpu.renderer.execution.GPUBackendOffscreenTarget,
         drawPlan: RectOnlyDrawPlan,
     ): ByteArray {
+        val viewportWidth = target.target.descriptor.width
+        val viewportHeight = target.target.descriptor.height
+
+        val saveLayerFills = drawPlan.fills.filter { it.family == "save-layer" }
+        val saveLayerReroutes = mutableMapOf<String, SaveLayerReroute>()
+        val saveLayerChildLabels = mutableSetOf<String>()
+
+        for ((layerIndex, saveLayerFill) in saveLayerFills.withIndex()) {
+            val nextPaintOrder = if (layerIndex + 1 < saveLayerFills.size)
+                saveLayerFills[layerIndex + 1].paintOrder else Int.MAX_VALUE
+            val childFills = drawPlan.fills.filter {
+                it.paintOrder > saveLayerFill.paintOrder &&
+                    it.paintOrder < nextPaintOrder &&
+                    it.family != "save-layer"
+            }
+            childFills.forEach { saveLayerChildLabels.add(it.label) }
+
+            val texDesc = org.graphiks.kanvas.gpu.renderer.execution.GPUBackendOffscreenTexture(
+                width = viewportWidth,
+                height = viewportHeight,
+                format = "rgba8unorm",
+            )
+            val texLabel = target.createOffscreenTexture(texDesc)
+
+            target.encodeOffscreenTexture(
+                texLabel,
+                clearColor = GPUClearColor(0.0, 0.0, 0.0, 0.0),
+            ) {
+                val offscreenFills = mutableListOf<RectOnlyFillDraw>()
+
+                if (saveLayerFill.shadowColor != null) {
+                    val shadowRect = SceneRect(
+                        saveLayerFill.left + saveLayerFill.shadowOffsetX,
+                        saveLayerFill.top + saveLayerFill.shadowOffsetY,
+                        saveLayerFill.right + saveLayerFill.shadowOffsetX,
+                        saveLayerFill.bottom + saveLayerFill.shadowOffsetY,
+                    )
+                    val sl = floor(shadowRect.left).toInt()
+                    val st = floor(shadowRect.top).toInt()
+                    val sr = ceil(shadowRect.right).toInt()
+                    val sb = ceil(shadowRect.bottom).toInt()
+                    offscreenFills.add(
+                        RectOnlyFillDraw(
+                            label = "${saveLayerFill.label}-shadow",
+                            family = "fill-rect",
+                            startColor = saveLayerFill.shadowColor,
+                            endColor = saveLayerFill.shadowColor,
+                            bottomLeftColor = saveLayerFill.shadowColor,
+                            bottomRightColor = saveLayerFill.shadowColor,
+                            left = shadowRect.left,
+                            top = shadowRect.top,
+                            right = shadowRect.right,
+                            bottom = shadowRect.bottom,
+                            radius = saveLayerFill.radius,
+                            paintKind = 0f,
+                            filterKind = 0f,
+                            filterStrength = 0f,
+                            scissorX = sl,
+                            scissorY = st,
+                            scissorWidth = sr - sl,
+                            scissorHeight = sb - st,
+                            paintOrder = 0,
+                        ),
+                    )
+                }
+
+                offscreenFills.add(saveLayerFill)
+
+                offscreenFills.addAll(childFills)
+
+                val solidDraws = offscreenFills.map { fill ->
+                    GPUBackendRectDraw(
+                        rgbaPremul = fill.toPremulColorArray(),
+                        scissorX = fill.scissorX,
+                        scissorY = fill.scissorY,
+                        scissorWidth = fill.scissorWidth,
+                        scissorHeight = fill.scissorHeight,
+                    )
+                }
+                if (solidDraws.isNotEmpty()) {
+                    drawFullscreenPass(
+                        wgsl = SOLID_RECT_WGSL,
+                        colorFormat = OFFSCREEN_COLOR_FORMAT,
+                        draws = solidDraws,
+                    )
+                }
+            }
+
+            saveLayerReroutes[saveLayerFill.label] = SaveLayerReroute(texLabel)
+        }
+
         target.encode(clearColor = drawPlan.clearColor.toGpuClearColor()) {
             val effectFamilies = setOf(
                 "linear-gradient-rect", "radial-gradient-rect", "sweep-gradient-rect",
@@ -161,7 +252,13 @@ class RectOnlyOffscreenRenderer {
             val gradientTypes = setOf(
                 "linear-gradient-rect", "radial-gradient-rect", "sweep-gradient-rect",
             )
-            val solidFills = drawPlan.fills.filter { it.family !in effectFamilies && it.family != "vertices" }
+            val solidFills = drawPlan.fills.filter {
+                it.family !in effectFamilies &&
+                    it.family != "vertices" &&
+                    it.family != "path-fill-stencil" &&
+                    it.family != "convex-fan-mesh" &&
+                    it.label !in saveLayerChildLabels
+            }
             if (solidFills.isNotEmpty()) {
                 drawFullscreenPass(
                     wgsl = SOLID_RECT_WGSL,
@@ -380,21 +477,40 @@ class RectOnlyOffscreenRenderer {
                     val tessellator = PathTessellator()
                     val flat = tessellator.flatten(pathData)
                     val tri = tessellator.triangulate(flat)
-                    val flatVerts = tri.vertices.flatMap { p ->
-                        listOf(p.x, p.y, 0f, 0f, fill.startColor.r, fill.startColor.g, fill.startColor.b, fill.startColor.a)
-                    }.toFloatArray()
-                    val flatIndices = tri.indices.toIntArray()
-                    val vertexColorData = GPUBackendVertexColorData(vertexData = flatVerts, indices = flatIndices)
-                    val bufferLabel = createVertexColorBuffer(vertexColorData)
-                    drawVertexColorIndexed(
-                        vertexBufferLabel = bufferLabel,
-                        indexCount = flatIndices.size,
-                        uniformDraw = GPUBackendRawUniformDraw(
-                            uniformBytes = UniformPacker.solidColorBytes(fill.startColor),
-                            scissorX = fill.scissorX,
-                            scissorY = fill.scissorY,
-                            scissorWidth = fill.scissorWidth,
-                            scissorHeight = fill.scissorHeight,
+                    // x,y position pairs only; the stencil-write pipeline binds a
+                    // Float32x2 @location(0) vertex layout (no color/padding).
+                    val triangleVertices = tri.vertices.flatMap { p -> listOf(p.x, p.y) }.toFloatArray()
+                    val triangleIndices = tri.indices.toIntArray()
+                    val triangleData = GPUBackendTriangleData(
+                        vertices = triangleVertices,
+                        indices = triangleIndices,
+                    )
+                    // Pass 1 (stencil write): rasterize the triangulated contour with
+                    // increment/decrement-wrap winding ops and no color writes, so a
+                    // non-convex (concave) star resolves to correct coverage via the
+                    // nonzero winding rule instead of a bloated fan rasterization.
+                    drawFullscreenStencilPass(
+                        wgsl = STENCIL_RENDER_WGSL,
+                        colorFormat = OFFSCREEN_COLOR_FORMAT,
+                        stencilMode = GPUBackendStencilMode.Write,
+                        triangleData = triangleData,
+                        draws = emptyList(),
+                    )
+                    // Pass 2 (stencil cover): a fullscreen quad that passes only where
+                    // stencil != 0, writing the fill color through srcOver blending.
+                    drawFullscreenStencilPass(
+                        wgsl = SOLID_RECT_WGSL,
+                        colorFormat = OFFSCREEN_COLOR_FORMAT,
+                        stencilMode = GPUBackendStencilMode.Test,
+                        triangleData = null,
+                        draws = listOf(
+                            GPUBackendRawUniformDraw(
+                                uniformBytes = UniformPacker.solidColorBytes(fill.startColor),
+                                scissorX = fill.scissorX,
+                                scissorY = fill.scissorY,
+                                scissorWidth = fill.scissorWidth,
+                                scissorHeight = fill.scissorHeight,
+                            ),
                         ),
                     )
                 }
@@ -418,7 +534,10 @@ class RectOnlyOffscreenRenderer {
                         vertexBufferLabel = bufferLabel,
                         indexCount = flatIndices.size,
                         uniformDraw = GPUBackendRawUniformDraw(
-                            uniformBytes = UniformPacker.solidColorBytes(fill.startColor),
+                            // VERTEX_COLOR_WGSL multiplies per-vertex color by the uniform
+                            // (`in.color * uniforms.color`). The fill color is already carried
+                            // per-vertex, so pass an identity-white uniform to avoid squaring it.
+                            uniformBytes = UniformPacker.solidColorBytes(SceneColor(1f, 1f, 1f, 1f)),
                             scissorX = fill.scissorX,
                             scissorY = fill.scissorY,
                             scissorWidth = fill.scissorWidth,
@@ -459,30 +578,24 @@ class RectOnlyOffscreenRenderer {
                 }
             }
 
-            val saveLayerFills = drawPlan.fills.filter { it.family == "save-layer" }
             if (saveLayerFills.isNotEmpty()) {
                 saveLayerFills.forEach { fill ->
-                    val rectWidth = (fill.right - fill.left).toInt().coerceAtLeast(1)
-                    val rectHeight = (fill.bottom - fill.top).toInt().coerceAtLeast(1)
-                    val texLabel = createOffscreenTexture(
-                        GPUBackendOffscreenTexture(
-                            width = rectWidth,
-                            height = rectHeight,
-                            format = "rgba8unorm",
-                        ),
-                    )
+                    val reroute = saveLayerReroutes[fill.label] ?: return@forEach
                     val compositeWgsl = composeSaveLayerCompositeWgsl()
                     drawCompositePass(
                         wgsl = compositeWgsl,
                         colorFormat = OFFSCREEN_COLOR_FORMAT,
-                        textureLabel = texLabel,
+                        textureLabel = reroute.texLabel,
                         draws = listOf(
                             GPUBackendRawUniformDraw(
-                                uniformBytes = UniformPacker.solidColorBytes(fill.startColor),
-                                scissorX = fill.scissorX,
-                                scissorY = fill.scissorY,
-                                scissorWidth = fill.scissorWidth,
-                                scissorHeight = fill.scissorHeight,
+                                uniformBytes = UniformPacker.layerCompositeBytes(
+                                    SceneColor(0f, 0f, 0f, 0f),
+                                    fill.groupAlpha,
+                                ),
+                                scissorX = 0,
+                                scissorY = 0,
+                                scissorWidth = viewportWidth,
+                                scissorHeight = viewportHeight,
                             ),
                         ),
                     )
@@ -640,26 +753,6 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
 }
 """
 
-        val LAYER_COMPOSITE_WRAPPER_WGSL: String = """
-// Real srcOver compositing logic from LayerCompositeSnippet.kt (fragment:layer_composite:v1)
-fn procedural_layer_color(uv: vec2<f32>) -> vec4<f32> {
-    let dx = abs(uv.x - 0.5);
-    let dy = abs(uv.y - 0.5);
-    let vignette = 1.0 - smoothstep(0.3, 0.9, sqrt(dx * dx + dy * dy));
-    return vec4f(0.2, 0.5, 0.8, vignette);
-}
-
-fn layer_composite_procedural(pos: vec4f, color: vec4f) -> vec4f {
-    let uv = vec2f(pos.x / 320.0, pos.y / 200.0);
-    let layer_color = procedural_layer_color(uv);
-    // Real srcOver blend (same math as LayerCompositeSnippet)
-    return vec4f(
-        layer_color.rgb * layer_color.a + color.rgb * (1.0 - layer_color.a),
-        layer_color.a + color.a * (1.0 - layer_color.a),
-    );
-}
-"""
-
         val STENCIL_RENDER_WGSL: String = """
 struct VertexInput {
     @location(0) position: vec2f,
@@ -677,7 +770,7 @@ fn fs_main() -> @location(0) vec4f {
 """.trimIndent()
 
         fun composeSaveLayerCompositeWgsl(): String = """
-struct Uniforms { color: vec4f };
+struct Uniforms { color: vec4f, params: vec4f };
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
 
@@ -693,7 +786,7 @@ fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
 @fragment
 fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     let uv = pos.xy / vec2f(320.0, 200.0);
-    return layer_composite(uv, uniforms.color);
+    return layer_composite(uv, uniforms.color, uniforms.params.x);
 }
 """
 
@@ -727,6 +820,10 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
         }
     }
 }
+
+internal data class SaveLayerReroute(
+    val texLabel: String,
+)
 
 internal data class RectOnlyDrawPlan(
     val sceneId: String,
@@ -843,6 +940,10 @@ internal data class RectOnlyFillDraw(
     val gradientRadius: Float? = null,
     val gradientStartAngle: Float? = null,
     val gradientEndAngle: Float? = null,
+    val shadowColor: SceneColor? = null,
+    val shadowOffsetX: Float = 0f,
+    val shadowOffsetY: Float = 0f,
+    val groupAlpha: Float = 1f,
 )
 
 private data class RectOnlyIndexedDraw(
@@ -943,6 +1044,10 @@ internal fun prepareRectOnlyDrawPlan(
                 gradientRadius = radialCommand?.radius,
                 gradientStartAngle = sweepCommand?.startAngle,
                 gradientEndAngle = sweepCommand?.endAngle,
+                shadowColor = saveLayerCommand?.fixtureShadowColor(),
+                shadowOffsetX = saveLayerCommand?.shadowOffsetX ?: 0f,
+                shadowOffsetY = saveLayerCommand?.shadowOffsetY ?: 0f,
+                groupAlpha = saveLayerCommand?.groupAlpha ?: 1f,
             )
         }
     require(fills.isNotEmpty()) {
@@ -1015,7 +1120,7 @@ internal fun prepareRectOnlyDrawPlan(
             addAll(runtimeEffectWiringDiagnostics())
         }
         if (fills.any { it.family == "save-layer" }) {
-            addAll(saveLayerWiringDiagnostics(sceneId, width, height))
+            addAll(saveLayerWiringDiagnostics(fills, sceneId, width, height))
         }
         if (fills.any { it.family == "vertices" }) {
             addAll(verticesWiringDiagnostics())
@@ -1118,9 +1223,10 @@ internal fun runtimeEffectWiringDiagnostics(): List<String> = listOf(
 )
 
 /**
- * KGPU-M25-004: routes SaveLayer through the real [SaveLayerExecutor] (M18) for diagnostic evidence
- * and references the [LayerCompositeSnippetSourceHash] composite snippet. The procedural composite
- * stays in the renderer wrapper because the offscreen backend cannot allocate a secondary target.
+ * KGPU-M25-004 / KGPU-M28-005/006: routes SaveLayer through the real [SaveLayerExecutor] (M18) and
+ * references the [LayerCompositeSnippetSourceHash] composite snippet. M28 added the secondary
+ * offscreen target, so the composite runs against a real allocated target using the real
+ * layer_composite snippet (child layer content is not yet sampled into it; childrenRendered=0).
  */
 internal fun saveLayerWiringDiagnostics(sceneId: String, width: Int, height: Int): List<String> = buildList {
     val executor = SaveLayerExecutor()
@@ -1128,14 +1234,30 @@ internal fun saveLayerWiringDiagnostics(sceneId: String, width: Int, height: Int
     addAll(executor.dumpLines(stats))
     add("saveLayer:compositeSnippetSourceHash=$LayerCompositeSnippetSourceHash")
     add("saveLayer:compositeEntryPoint=$LayerCompositeEntryPoint")
-    add("saveLayer:proceduralComposite=true secondaryTargetDeferred=M26 productActivation=false")
+    add("saveLayer:secondaryTargetAllocated=true childContentSampled=false productActivation=false")
+}
+
+internal fun saveLayerWiringDiagnostics(fills: List<RectOnlyFillDraw>, sceneId: String, width: Int, height: Int): List<String> = buildList {
+    val saveLayerFills = fills.filter { it.family == "save-layer" }
+    val childCount = saveLayerFills.mapIndexed { index, slFill ->
+        val nextPaintOrder = if (index + 1 < saveLayerFills.size)
+            saveLayerFills[index + 1].paintOrder else Int.MAX_VALUE
+        fills.count { it.paintOrder > slFill.paintOrder && it.paintOrder < nextPaintOrder && it.family != "save-layer" }
+    }.sum()
+    val executor = SaveLayerExecutor()
+    val executorStats = executor.execute(scopeLabel = sceneId, width = width, height = height)
+    val updatedStats = executorStats.copy(childrenRendered = childCount)
+    addAll(executor.dumpLines(updatedStats))
+    add("saveLayer:compositeSnippetSourceHash=$LayerCompositeSnippetSourceHash")
+    add("saveLayer:compositeEntryPoint=$LayerCompositeEntryPoint")
+    add("saveLayer:secondaryTargetAllocated=true childContentSampled=${childCount > 0} productActivation=false")
 }
 
 /**
- * KGPU-M25-006: vertices wiring evidence. The offscreen backend cannot allocate vertex/index buffers,
- * so this invokes the real [VerticesExecutor] + [GPUVertexBufferUploader] + [GPUMeshBatcher] (M22)
- * on a representative triangle mesh to produce dispatch + upload + batching evidence. Real mesh
- * rendering is deferred; this is ImplementationCandidate evidence only.
+ * KGPU-M25-006 / KGPU-M28-003/004: vertices wiring evidence. M28 added vertex/index buffers to the
+ * offscreen backend, so the `vertices` family now renders a real indexed mesh (see renderToPixels).
+ * This also invokes the real [VerticesExecutor] + [GPUVertexBufferUploader] + [GPUMeshBatcher] (M22)
+ * on a representative triangle mesh to produce dispatch + upload + batching evidence.
  */
 internal fun verticesWiringDiagnostics(): List<String> = buildList {
     val positions = listOf(
@@ -1185,7 +1307,7 @@ internal fun verticesWiringDiagnostics(): List<String> = buildList {
             "pipelineChanges=${batchStats.pipelineChangeCount} mergedDraws=${batchStats.mergedDrawCount}",
     )
     add("vertices:batcher.${batchStats.nonClaimLine}")
-    add("vertices:boundingRectVisual=true realMeshDeferred=M26 productActivation=false")
+    add("vertices:realMesh=true vertexIndexBuffersUploaded=true productActivation=false")
 }
 
 private fun rectOnlyFillDraw(
@@ -1215,6 +1337,10 @@ private fun rectOnlyFillDraw(
     gradientRadius: Float? = null,
     gradientStartAngle: Float? = null,
     gradientEndAngle: Float? = null,
+    shadowColor: SceneColor? = null,
+    shadowOffsetX: Float = 0f,
+    shadowOffsetY: Float = 0f,
+    groupAlpha: Float = 1f,
 ): RectOnlyFillDraw {
     requireInsideTarget(sceneId, label, rect, width, height, "fill shape")
     clip?.let { requireInsideTarget(sceneId, it.label, it.rect, width, height, "clip") }
@@ -1258,6 +1384,10 @@ private fun rectOnlyFillDraw(
         gradientRadius = gradientRadius,
         gradientStartAngle = gradientStartAngle,
         gradientEndAngle = gradientEndAngle,
+        shadowColor = shadowColor,
+        shadowOffsetX = shadowOffsetX,
+        shadowOffsetY = shadowOffsetY,
+        groupAlpha = groupAlpha,
     )
 }
 
@@ -1649,7 +1779,7 @@ private fun SceneRect.isInsideTarget(width: Int, height: Int): Boolean =
         right > left &&
         bottom > top
 
-private fun generateStarVertices(
+internal fun generateStarVertices(
     centerX: Float, centerY: Float,
     outerRadius: Float, innerRadius: Float, points: Int,
 ): List<Pair<Float, Float>> {
@@ -1685,7 +1815,7 @@ private fun generateRibbonVertices(
     )
 }
 
-private fun generateOctagonVertices(
+internal fun generateOctagonVertices(
     centerX: Float, centerY: Float, radius: Float, sides: Int,
 ): List<Pair<Float, Float>> {
     val vertices = mutableListOf<Pair<Float, Float>>()

@@ -86,13 +86,13 @@ is SceneCommand.SaveLayer -> {
 
 ## Acceptance Criteria
 
-- [ ] SaveLayer children render to a secondary offscreen target (not the primary)
-- [ ] Composite pass uses real `LayerCompositeWgsl` instead of `LAYER_COMPOSITE_WRAPPER_WGSL`
-- [ ] Offscreen target texture is bound as `@group(1)` source for the composite pass
-- [ ] Composite pass uses srcOver blend with correct premul alpha handling
-- [ ] `savelayer-isolated` scene PNG shows real layer isolation output
-- [ ] `dst-read-strategy` scene PNG shows real composite output
-- [ ] `RectOnlyOffscreenRenderer` remains available for diagnostic solid rendering
+- [x] SaveLayer children render to a secondary offscreen target, not the primary (`encodeOffscreenTexture`; run.json `childrenRendered>0`)
+- [x] Composite pass uses real `LayerCompositeWgsl` instead of `LAYER_COMPOSITE_WRAPPER_WGSL` (dead wrapper removed)
+- [x] Offscreen target texture is bound as `@group(1)` source for the composite pass
+- [x] Composite pass uses srcOver blend with correct premul alpha handling
+- [x] `savelayer-isolated` scene PNG shows real layer isolation output (parity 1.0000; isolation further proven by the `savelayer-group-alpha` group-alpha overlap parity)
+- [ ] `dst-read-strategy` scene PNG shows real composite output — **N/A**: `dst-read-strategy` contains no SaveLayer, so there is no layer composite to validate; layer isolation is proven instead by `savelayer-isolated` + `savelayer-group-alpha`
+- [x] `RectOnlyOffscreenRenderer` remains available for diagnostic solid rendering
 
 ## Required Evidence
 
@@ -127,6 +127,26 @@ rtk ./gradlew --no-daemon :gpu-renderer-scenes:renderGpuRendererSceneOffscreen -
 ## Status Notes
 
 - `proposed`: Initial ticket.
+- `done` (earlier; reopened below) — ACCEPTANCE GAP found in 2026-06-25 review. The composite now uses the
+  real `LayerCompositeWgsl` snippet (the procedural `LAYER_COMPOSITE_WRAPPER_WGSL` was removed
+  2026-06-25, satisfying that one criterion). Remaining criteria are NOT met: saveLayer children
+  do not render into the secondary target (`childrenRendered=0`), and the secondary target is not
+  bound/sampled as `@group(1)` in the composite WGSL (`composeSaveLayerCompositeWgsl` declares only
+  a uniform, no texture binding), so the scene does not demonstrate real layer isolation. Scene
+  diagnostics corrected 2026-06-25 (`saveLayer:secondaryTargetAllocated=true childContentSampled=false`).
+  Recommend reopen/downgrade or a follow-up to render children into the secondary target and sample
+  it. See `reports/gpu-renderer/2026-06-25-m28-backend-stencil-vertices-targets.md`.
+- `ready` (2026-06-25): reopened/downgraded from `done` — children are not rendered into the
+  secondary target and the target is not sampled. Ready to implement child render into the
+  secondary target + `@group(1)` sampling in the composite pass.
+- `done` (2026-06-25): saveLayer children now render into a viewport-sized secondary offscreen target
+  via `target.encodeOffscreenTexture` pre-pass (shadow + content card + child fills with srcOver).
+  Composite uses real `LayerCompositeWgsl` with `drawCompositePass` binding the offscreen texture
+  at `@group(1)` binding 1 + sampler at binding 2. LayerCompositeWgsl blend formula fixed for
+  premultiplied layer texture (layer_color.rgb directly, not multiplied by layer_color.a again).
+  `savelayer-isolated` diagnostics: `childrenRendered=1 childContentSampled=true`. Parity:
+  similarity=1.0000 mismatch=0/64000 maxChannelDelta=1 vs CPU reference. `:gpu-renderer:test` +
+  `:gpu-renderer-scenes:test` BUILD SUCCESSFUL. `OffscreenScenePngParityTest` 5 tests 0 failures.
 
 ## Linear Labels
 

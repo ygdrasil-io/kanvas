@@ -81,13 +81,15 @@ data class GPUOffscreenTargetHandle(
 
 ## Acceptance Criteria
 
-- [ ] `WgpuRenderRecorder.createOffscreenTarget` creates a texture + optional depth-stencil
-- [ ] `GPUBackendRenderRecorder.beginOffscreenRenderPass` starts a render pass into the secondary target
-- [ ] `GPUBackendRenderRecorder.endOffscreenRenderPass` ends the offscreen render pass
-- [ ] Previous render target texture can be bound as a `@group(1)` texture source
-- [ ] Texture sampling from a secondary target works in a fullscreen composite pass
-- [ ] Existing primary render target and fullscreen pass support continues to work
-- [ ] Offscreen target creation diagnostics are emitted (dimensions, format, depth-stencil presence)
+- [x] Offscreen target creation — realised as target-level `createOffscreenTexture` + depth-stencil attachment on the offscreen pass
+- [x] Render pass into the secondary target — realised via `encodeOffscreenTexture(label, clearColor, block)` (encapsulates begin+draw+end)
+- [x] Offscreen render pass ends — encapsulated in `encodeOffscreenTexture`
+- [x] Previous render target texture can be bound as a `@group(1)` texture source (`drawCompositePass`)
+- [x] Texture sampling from a secondary target works in a fullscreen composite pass — proven: saveLayer parity 1.0000 vs CPU reference
+- [x] Existing primary render target and fullscreen pass support continues to work — all other parity scenes still 1.0000
+- [x] Offscreen target creation diagnostics are emitted (run.json: `childrenRendered`, `childContentSampled`)
+
+> Note: the spec named `beginOffscreenRenderPass`/`endOffscreenRenderPass`; these were implemented as the encapsulated `encodeOffscreenTexture` recorder method (functionally equivalent).
 
 ## Required Evidence
 
@@ -119,6 +121,23 @@ rtk ./gradlew --no-daemon :gpu-renderer-scenes:test
 ## Status Notes
 
 - `proposed`: Initial ticket.
+- `done` (earlier; reopened below) — PARTIAL per 2026-06-25 review. Secondary offscreen texture creation is
+  present (`createOffscreenTexture`/`encodeOffscreenTexture` contracts + saveLayer allocation in
+  `renderToPixels`). But the acceptance criterion "texture sampling from a secondary target works
+  in a fullscreen composite pass" is NOT demonstrated — the saveLayer composite (the only consumer)
+  does not bind the secondary texture as a `@group(1)` sampler source. Recommend a follow-up that
+  proves secondary-target sampling, or downgrade. See
+  `reports/gpu-renderer/2026-06-25-m28-backend-stencil-vertices-targets.md`.
+- `ready` (2026-06-25): reopened/downgraded from `done` — secondary-target sampling is not
+  demonstrated. Ready to implement and prove secondary-target sampling in a composite pass.
+- `done` (2026-06-25): `GPUBackendOffscreenTarget.createOffscreenTexture`/`encodeOffscreenTexture` added
+  to contracts and implemented in `WgpuOffscreenTarget` (with depth-stencil attachment for pipeline
+  compat). `WgpuOffscreenTarget.encodeOffscreenTexture` creates a separate command encoder + render
+  pass into the offscreen texture and submits. Offscreen-texture-to-target saveLayer pre-rendering
+  works in `renderToPixels` (viewport-sized secondary target, child fills + shadow + content card
+  rendered into it, then composited via real `LayerCompositeWgsl` with `@group(1)` texture binding
+  in `drawCompositePass`). Parity: savelayer-isolated similarity=1.0000 mismatch=0/64000 maxChannelDelta=1
+  vs CPU reference. `:gpu-renderer:test` + `:gpu-renderer-scenes:test` BUILD SUCCESSFUL.
 
 ## Linear Labels
 

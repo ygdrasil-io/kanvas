@@ -84,13 +84,13 @@ when (command) {
 
 ## Acceptance Criteria
 
-- [ ] Concave/complex path fills no longer draw the bounding rectangle
-- [ ] Stencil write pass renders tessellated triangles into the stencil buffer
-- [ ] Cover resolve pass draws the fullscreen quad with stencil test enabled
-- [ ] Convex paths render through indexed triangle draw (convex fan mesh)
-- [ ] `path-fill-stencil` scene PNG shows real stencil-cover output
-- [ ] `convex-fan-mesh` scene PNG shows real convex mesh output
-- [ ] `RectOnlyOffscreenRenderer` remains available for diagnostic solid rendering
+- [x] Concave/complex path fills no longer draw the bounding rectangle
+- [x] Stencil write pass renders tessellated triangles into the stencil buffer
+- [x] Cover resolve pass draws the fullscreen quad with stencil test enabled
+- [x] Convex paths render through indexed triangle draw (convex fan mesh)
+- [x] `path-fill-stencil` scene PNG shows real stencil-cover output
+- [x] `convex-fan-mesh` scene PNG shows real convex mesh output
+- [x] `RectOnlyOffscreenRenderer` remains available for diagnostic solid rendering
 
 ## Required Evidence
 
@@ -125,6 +125,40 @@ rtk ./gradlew --no-daemon :gpu-renderer-scenes:renderGpuRendererSceneOffscreen -
 ## Status Notes
 
 - `proposed`: Initial ticket.
+- `done` (earlier; reopened below) — ACCEPTANCE GAP found in 2026-06-25 review. Backend stencil capability is
+  present (M28-001), but the `path-fill-stencil` scene pixel output is produced by tessellated
+  indexed fill (`drawVertexColorIndexed` in `RectOnlyOffscreenRenderer.renderToPixels`), NOT by a
+  two-pass stencil-write + cover-resolve. Acceptance criteria "stencil write pass renders
+  tessellated triangles into the stencil buffer" and "cover resolve pass draws the fullscreen quad
+  with stencil test enabled" are NOT met by the render path (criteria 1 & 4 — non-rect shape,
+  convex indexed — are met). Recommend reopen/downgrade or a follow-up to wire real stencil-cover
+  pixel output. See `reports/gpu-renderer/2026-06-25-m28-backend-stencil-vertices-targets.md`.
+- `ready` (2026-06-25): reopened/downgraded from `done` — acceptance criteria 2 & 3 are unmet.
+  Ready to implement real two-pass stencil-cover pixel output.
+- `ready` (2026-06-25 partial fix): two real defects fixed and verified via the CPU-reference
+  parity harness — (1) the bounding-box fall-through (`solidFills` no longer includes
+  `path-fill-stencil`/`convex-fan-mesh`, which previously filled the shape's bounding rectangle)
+  and (2) a backend bug where `drawVertexColorIndexed` fabricated sequential `0..indexCount`
+  indices and ignored the real triangulation indices (the convex octagon filled only ~22% of
+  garbage slivers). The convex octagon SHAPE now renders correctly. REMAINING for `done`:
+  (a) convex per-vertex-colour × uniform-colour double-apply in `VERTEX_COLOR_WGSL` (pass an
+  identity/white uniform), (b) the concave star needs two-pass stencil-cover — fan triangulation
+  cannot fill a non-convex polygon. M28-005/006 (saveLayer) untouched.
+- `done` (2026-06-25): both remaining defects fixed and PROVEN via the CPU-reference parity
+  harness (`OffscreenScenePngParityTest`, tolerance 8). (a) The concave star now renders via
+  real two-pass stencil-cover (`drawFullscreenStencilPass` with `GPUBackendStencilMode.Write`
+  using increment/decrement-wrap winding into the stencil buffer, then `GPUBackendStencilMode.Test`
+  covering where stencil != 0 with the fill colour) instead of a fan-triangulated indexed fill
+  that cannot fill a non-convex polygon. (b) The convex octagon now passes an identity-white
+  uniform to `VERTEX_COLOR_WGSL` (`in.color * white`), removing the per-vertex × uniform colour
+  double-apply. Measured parity (committed `render.png` ↔ CPU reference): `path-fill-stencil`
+  similarity 0.8278 → 1.0000 (mismatch 11022 → 2 of 64000; the 2 residual pixels are single
+  hard-edge differences at star tips, GPU stencil coverage vs CPU even-odd sampling);
+  `convex-fan-mesh` similarity 0.8409 → 1.0000 (mismatch 10184 → 0, maxChannelDelta 54 → 0).
+  Passing parity assertions added for both scenes (`>= 0.99`); anchor `solid-card-stack` stays
+  1.0000. `:gpu-renderer:test` + `:gpu-renderer-scenes:test` BUILD SUCCESSFUL. Both scene PNGs
+  regenerated via `renderGpuRendererSceneOffscreen` (run.json `status=rendered`). M28-005/006
+  (saveLayer) untouched.
 
 ## Linear Labels
 

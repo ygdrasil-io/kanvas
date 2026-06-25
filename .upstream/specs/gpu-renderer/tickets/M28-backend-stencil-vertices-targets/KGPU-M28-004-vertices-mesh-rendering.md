@@ -116,6 +116,11 @@ rtk ./gradlew --no-daemon :gpu-renderer-scenes:renderGpuRendererSceneOffscreen -
 ## Status Notes
 
 - `proposed`: Initial ticket.
+- `done` (2026-06-25 review): the `vertices` family renders a real indexed colored mesh via the
+  M28-003 vertex/index buffers (`RectOnlyOffscreenRenderer.renderToPixels`, vertices +
+  convex-fan-mesh branches). Scene evidence: `reports/gpu-renderer-scenes/offscreen/vertices-color-mesh/`,
+  `mesh-ribbon-depth/` (diagnostics corrected 2026-06-25 to `vertices:realMesh=true`). See
+  `reports/gpu-renderer/2026-06-25-m28-backend-stencil-vertices-targets.md`.
 
 ## Linear Labels
 

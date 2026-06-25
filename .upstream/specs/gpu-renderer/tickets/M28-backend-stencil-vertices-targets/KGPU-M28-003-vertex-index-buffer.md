@@ -121,6 +121,11 @@ rtk ./gradlew --no-daemon :gpu-renderer-scenes:test
 ## Status Notes
 
 - `proposed`: Initial ticket.
+- `done` (2026-06-25 review): backend vertex/index buffer capability delivered. `GPUBackendRuntimeWgpu`
+  uploads vertex (position+color) and index data and dispatches indexed draws
+  (`createVertexBuffer`/`createVertexColorBuffer`, `drawIndexed`/`drawVertexColorIndexed`).
+  Evidence: `gpu-renderer/.../execution/GPUBackendRuntimeWgpu.kt`;
+  `reports/gpu-renderer/2026-06-25-m28-backend-stencil-vertices-targets.md`.
 
 ## Linear Labels
 
