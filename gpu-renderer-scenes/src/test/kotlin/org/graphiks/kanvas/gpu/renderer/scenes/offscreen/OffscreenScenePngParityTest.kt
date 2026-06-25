@@ -103,9 +103,9 @@ class OffscreenScenePngParityTest {
 
     @Test
     fun recordCurrentShapeAndLayerSceneDivergence() {
-        // Diagnostic only (no assert): documents the remaining layer-scene divergence
-        // (blank save-layer composite on dst-read-strategy). Tasks M28-005/006 will add
-        // passing parity assertions. The path/convex shape scenes are now asserted above.
+        // Diagnostic only (no assert): dst-read-strategy is a plain two-translucent-rect
+        // scene (no SaveLayer); it has no layer composite to assert. The shape and saveLayer
+        // scenes (incl. savelayer-group-alpha isolation) are asserted above.
         for (id in listOf("dst-read-strategy")) {
             val cpu = OffscreenSceneCpuReference.renderSceneRgba(id)
             val gpu = loadCommittedPng(id)

@@ -15,7 +15,7 @@ hygiene cleanup of stale diagnostics/comments and dead code.
 | Ticket | Capability | Render-path wiring | Verdict |
 |--------|-----------|--------------------|---------|
 | M28-001 depth-stencil attachment | `Depth24PlusStencil8` texture + `RenderPassDepthStencilAttachment` + `drawFullscreenStencilPass` contract + stencil-reference action | n/a (backend capability) | **MET** |
-| M28-002 stencil-cover path fill | uses backend | `path-fill-stencil` pixels via tessellated **indexed fill** (`drawVertexColorIndexed`), **not** two-pass stencil-write + cover-resolve | **PARTIAL** — criteria 1 & 4 met (non-rect shape, convex indexed); criteria 2 & 3 (stencil write pass / cover resolve) **NOT met** |
+| M28-002 stencil-cover path fill | uses backend | now real two-pass stencil-write + cover-resolve (concave star); convex via indexed fan | **SUPERSEDED → DONE** (see §6): real stencil-cover implemented; parity 1.0000 vs CPU reference |
 | M28-003 vertex/index buffer | `createVertexBuffer`/`createVertexColorBuffer`, `drawIndexed`/`drawVertexColorIndexed`, position+color layout | n/a (backend capability) | **MET** |
 | M28-004 vertices mesh rendering | uses backend | `vertices` + `convex-fan-mesh` render real indexed colored mesh in `renderToPixels` | **MET** |
 | M28-005 secondary render target | `createOffscreenTexture`/`encodeOffscreenTexture` contracts; saveLayer allocates a secondary texture | secondary texture **allocated**, **rendered into**, and **sampled** via `drawCompositePass` @group(1) | **MET** |
@@ -57,7 +57,7 @@ Verification: `rtk ./gradlew --no-daemon :gpu-renderer-scenes:test --tests '*M25
 ## 3. Recommendations
 
 - M28-001, M28-003, M28-004: keep `done` (criteria met).
-- M28-002, M28-005, M28-006: the `done` status overstates the acceptance criteria. Choose one:
+- M28-002, M28-005, M28-006: **RESOLVED (2026-06-25)** — implemented and proven (see §5–§7: real stencil-cover, secondary-target render+sample, saveLayer isolation incl. group-alpha overlap parity). Original recommendation retained for history:
   1. **Reopen/downgrade** these tickets and implement the missing wiring (real two-pass
      stencil-cover pixel output; render saveLayer children into the secondary target and sample it
      as `@group(1)`), or
