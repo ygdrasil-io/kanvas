@@ -307,5 +307,9 @@ class KanvasSkiaBridge(private val kanvasCanvas: Canvas) {
         )
     }
 
+    fun unsupported(feature: String) {
+        emitUnsupportedBridgeDiagnostic(feature)
+    }
+
     val canvas: Canvas get() = kanvasCanvas
 }
