@@ -4,12 +4,15 @@ import org.graphiks.kanvas.Canvas
 import org.graphiks.kanvas.Frame
 import org.graphiks.kanvas.PixelFormat
 import org.graphiks.kanvas.Surface
+import org.graphiks.kanvas.SurfaceRenderResult
 import org.skia.core.SkSurface
+import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkImage
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkRRect
 import org.skia.foundation.SkTextBlob
+import org.graphiks.math.SkColorSetARGB
 import org.graphiks.math.SkRect
 
 @Volatile
@@ -74,6 +77,33 @@ class SkiaKanvasSurface internal constructor(
     }
 
     fun flush(): Frame = kanvasSurface.flush()
+
+    fun renderToRgba(): SurfaceRenderResult = kanvasSurface.renderToRgba()
+
+    fun flushAndRenderToSkSurface(): SurfaceRenderResult {
+        val result = renderToRgba()
+        writeToSkSurface(result.rgba)
+        return result
+    }
+
+    private fun writeToSkSurface(rgba: ByteArray) {
+        val pixelCount = skSurface.width * skSurface.height
+        require(rgba.size == pixelCount * 4) {
+            "RGBA buffer size mismatch: expected ${pixelCount * 4}, got ${rgba.size}"
+        }
+        val argb = IntArray(pixelCount)
+        for (i in 0 until pixelCount) {
+            val base = i * 4
+            val r = rgba[base].toInt() and 0xFF
+            val g = rgba[base + 1].toInt() and 0xFF
+            val b = rgba[base + 2].toInt() and 0xFF
+            val a = rgba[base + 3].toInt() and 0xFF
+            argb[i] = SkColorSetARGB(a, r, g, b)
+        }
+        val src = SkBitmap(skSurface.width, skSurface.height)
+        System.arraycopy(argb, 0, src.pixels8888, 0, argb.size)
+        skSurface.canvas.writePixels(src, 0, 0)
+    }
 
     companion object {
         @JvmStatic
