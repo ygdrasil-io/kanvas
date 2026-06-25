@@ -1,7 +1,7 @@
 ---
 id: KGPU-M29-001
 title: "Kanvas API module skeleton + KanvasSurface"
-status: proposed
+status: done
 milestone: M29
 priority: P0
 owner_area: kanvas-api
@@ -109,6 +109,7 @@ rtk ./gradlew --no-daemon :kanvas:compileKotlinMacosArm64
 ## Status Notes
 
 - `proposed`: Initial ticket.
+- `done`: Module created with build.gradle.kts, settings.gradle.kts include, KanvasSurface.kt, KanvasPixelFormat.kt, KanvasRect.kt, KanvasFrame.kt. Module compiles against :gpu-renderer.
 
 ## Linear Labels
 

@@ -1,7 +1,7 @@
 ---
 id: KGPU-M29-007
 title: "KanvasTextBlob — glyphRun + positioning"
-status: proposed
+status: done
 milestone: M29
 priority: P0
 owner_area: kanvas-api
@@ -104,6 +104,7 @@ rtk ./gradlew --no-daemon :gpu-renderer:test
 ## Status Notes
 
 - `proposed`: Initial ticket.
+- `done`: KanvasTextBlob with glyphRun descriptor wrapping, lower() returns GlyphRunDescriptor.
 
 ## Linear Labels
 
