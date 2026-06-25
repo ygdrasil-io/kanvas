@@ -145,7 +145,7 @@ class FontTelemetrySchemaTest {
             "| [KFONT-M12-005 - Add GPU handoff metrics](KFONT-M12-005-add-gpu-handoff-metrics.md) | `done` |",
         )
         assertContains(statusSummary, "| M12 | 0 | 0 | 0 | 0 | 0 | 5 |")
-        assertContains(statusSummary, "| **Total** | **0** | **0** | **0** | **15** | **0** | **71** |")
+        assertContains(statusSummary, "| **Total** | **0** | **0** | **0** | **0** | **0** | **86** |")
         assertContains(schemaReport, "All M12 telemetry domains now have checked-in deterministic producer evidence")
         assertFalse(schemaReport.contains("KFONT-M12-004 now solely owns"))
         assertFalse(schemaReport.contains("KFONT-M12-005 still owns"))
