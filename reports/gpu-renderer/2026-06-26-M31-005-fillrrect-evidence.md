@@ -1,26 +1,42 @@
-# KGPU-M31-005 — FillRRect Dispatch & Pixel Parity Evidence
+# KGPU-M31-005 — FillRRect & FillPath Dispatch & Pixel Parity Evidence
 
 ## Scope
 
-First supported family in the M31-005 pixel-parity campaign. Extends
-`Surface.renderToRgba()` to dispatch `NormalizedDrawCommand.FillRRect`
-through the offscreen WebGPU backend using an SDF-based coverage shader.
+Extends `Surface.renderToRgba()` with GPU dispatch for `FillRRect` (SDF
+coverage) and `FillPath` (stencil-cover). Covers 4 of 5 bridge draw families
+(FillRect from M31-006, FillRRect + FillPath added, DrawImage lowered to
+FillRect). DrawTextRun remains refused (text atlas pipeline pending).
 
 ## Status
 
-**in-progress** (FillRRect done; FillPath, DrawImage, DrawTextRun pending)
+**in-progress** (FillRRect + FillPath done; DrawTextRun still refused)
 
 ## Dispatch Details
 
+### FillRRect
 - **WGSL**: Fullscreen triangle pass with `rrect_cov` SDF function
   (reused from `RRectCoverageSnippet`). Fragment shader outputs
   `color * coverage` (premultiplied alpha with coverage modulation).
 - **Data path**: `drawFullscreenRawUniformPass` with 48-byte uniform
   (bounds vec4f, radii vec4f, color vec4f).
 - **Constraints**: SolidColor material, Identity transform, Root layer,
-  WideOpen/DeviceRect clip, uniform corner radii.
-- **Refusal**: Non-solid materials, transforms, complex clips, non-root
-  layers, non-uniform radii all emit stable `refuse:` diagnostics.
+  WideOpen/DeviceRect clip, **uniform corner radii**.
+- **Refusal**: Non-uniform radii → `non_uniform_radii` diagnostic.
+
+### FillPath
+- **WGSL (write)**: Vertex shader with `@location(0) position: vec2f`,
+  maps canvas coords to NDC via target dimensions. No color output
+  (write mask = None). Generated dynamically per surface.
+- **WGSL (test)**: Fullscreen triangle with color uniform (same as
+  `SOLID_RECT_WGSL`). Stencil test passes where stencil != 0.
+- **Data path**: `drawFullscreenStencilPass` with Write mode (triangle
+  mesh via `GPUBackendTriangleData`) + Test mode (color fill via
+  `GPUBackendRawUniformDraw`).
+- **Indexing**: Per-contour fan indices from `tessellatedVertices` +
+  `contourStarts` (matches `GPUBasicPathFillPreparedPlanner.tessellate()`).
+- **Constraints**: SolidColor, Identity, Root, WideOpen/DeviceRect.
+- **Refusal**: Insufficient vertices → `insufficient_vertices`, no
+  triangles generated → `no_triangles_generated`.
 
 ## Validation Commands and Output
 
@@ -31,7 +47,7 @@ rtk ./gradlew --no-daemon :kanvas:test :gpu-renderer:test :kanvas-skia-bridge:te
 → All 3 suites green
 ```
 
-### 2. GPU render → PNG (JavaExec)
+### 2. FillRRect — GPU render → PNG (JavaExec)
 
 ```
 rtk ./gradlew --no-daemon :gpu-renderer-scenes:renderKanvasSurfaceOffscreen \
@@ -39,10 +55,9 @@ rtk ./gradlew --no-daemon :gpu-renderer-scenes:renderKanvasSurfaceOffscreen \
 → nonTransparentPixels=30504 dispatched=1 refused=0
 ```
 
-Scene: 320x240 surface, blue rrect (0, 0.5, 1, 1), rect (50,50)-(270,190),
-radii 20px uniform.
+Scene: 320x240, blue rrect (0, 0.5, 1, 1), rect (50,50)-(270,190), radii 20px.
 
-### 3. GPU vs CPU mathematical reference comparison (JavaExec)
+### 3. FillRRect — GPU vs CPU mathematical reference comparison
 
 ```
 rtk ./gradlew --no-daemon :gpu-renderer-scenes:compareKanvasSurfaceOffscreen \
@@ -52,12 +67,53 @@ rtk ./gradlew --no-daemon :gpu-renderer-scenes:compareKanvasSurfaceOffscreen \
 → PASS: GPU output matches CPU reference (100% similarity)
 ```
 
-CPU reference uses the same SDF coverage function in Kotlin, sampling at pixel
-centers (x+0.5, y+0.5). Tolerance=1 accounts for WGSL vs JVM f32 rounding
-at anti-aliased edges. The rect reference uses tolerance=0 (binary
-inside/outside).
+CPU reference: same SDF coverage in Kotlin, pixel-center sampling.
+Tolerance=1 for WGSL vs JVM f32 rounding at AA edges.
 
-### 4. Git whitespace check
+### 4. FillPath (triangle) — GPU render → PNG
+
+```
+rtk ./gradlew --no-daemon :gpu-renderer-scenes:renderKanvasSurfaceOffscreen \
+  -PsceneName=solid-path -PsceneOutput=reports/kanvas-surface-offscreen/path
+→ nonTransparentPixels=11200 dispatched=1 refused=0
+```
+
+Scene: 320x240, green triangle (80,50)-(240,50)-(160,190). Area = 11200 ✓
+
+### 5. FillPath (triangle) — GPU vs CPU reference
+
+```
+rtk ./gradlew --no-daemon :gpu-renderer-scenes:compareKanvasSurfaceOffscreen \
+  -PsceneName=solid-path -PsceneOutput=reports/kanvas-surface-offscreen/path/compare
+→ similarity=100,00% matching=76800/76800
+→ maxDiff=(R=0,G=0,B=0,A=0) meanDiff=(R=0.00,G=0.00,B=0.00,A=0.00)
+→ PASS: GPU output matches CPU reference (100% similarity)
+```
+
+### 6. FillPath (star) — GPU render → PNG
+
+```
+rtk ./gradlew --no-daemon :gpu-renderer-scenes:renderKanvasSurfaceOffscreen \
+  -PsceneName=solid-star-path -PsceneOutput=reports/kanvas-surface-offscreen/star-path
+→ nonTransparentPixels=10125 dispatched=1 refused=0
+```
+
+Scene: 320x240, magenta 10-point star (non-zero winding). Stencil-cover proves
+correct winding-number fill (not even-odd).
+
+### 7. FillPath (star) — GPU vs CPU reference
+
+```
+rtk ./gradlew --no-daemon :gpu-renderer-scenes:compareKanvasSurfaceOffscreen \
+  -PsceneName=solid-star-path -PsceneOutput=reports/kanvas-surface-offscreen/star-path/compare
+→ similarity=100,00% matching=76800/76800
+→ maxDiff=(R=0,G=0,B=0,A=0) meanDiff=(R=0.00,G=0.00,B=0.00,A=0.00)
+→ PASS: GPU output matches CPU reference (100% similarity)
+```
+
+CPU reference: non-zero winding rule (matching stencil increment/decrement).
+
+### 8. Git whitespace check
 
 ```
 rtk git diff --check → clean
@@ -65,26 +121,30 @@ rtk git diff --check → clean
 
 ## Key Numbers
 
-| Metric | Value |
-|---|---|
-| `nonTransparentPixels` (render task) | 30504 (220×140 rrect, 20px radii) |
-| CPU similarity | 100% (76800/76800, tolerance=1) |
-| Max pixel diff | 0 all channels |
-| Command dispatch count | 1 solid rrect |
-| Command refuse count | 0 |
-| Test suites passing | 3/3 |
+| Metric | FillRRect | FillPath (triangle) | FillPath (star) |
+|---|---|---|---|
+| `nonTransparentPixels` | 30504 | 11200 | 10125 |
+| CPU similarity | 100% (tolerance 1) | 100% (tolerance 0) | 100% (tolerance 0) |
+| Max pixel diff | 0 all channels | 0 all channels | 0 all channels |
+| Dispatched | 1 | 1 | 1 |
+| Refused | 0 | 0 | 0 |
 
-## Files
+## Family Coverage Status
 
-### Modified
-- `kanvas/.../Surface.kt` — `dispatchFillRRect`, RRECT_WGSL, when-branch
-
-### New
-- (scenes added to existing files)
+| Family | Status | Method |
+|---|---|---|
+| FillRect | ✅ Done (M31-006) | Fullscreen pass + scissor |
+| FillRRect | ✅ Done | SDF coverage via raw uniform pass |
+| FillPath | ✅ Done | Stencil-cover (Write + Test) |
+| DrawImage | ✅ Via FillRect lowering | Lowered to FillRect (solid color) |
+| DrawTextRun | ❌ Refused | Needs text atlas/SDF pipeline |
 
 ## Known Limitations
 
-- Non-uniform corner radii refused (`non_uniform_radii` diagnostic)
-- SDF coverage is analytic (no multi-sample AA); tolerance=1 for edge rounding
-- Same state constraints as FillRect (Identity, Root, WideOpen/DeviceRect, SrcOver)
-- GPU still requires JavaExec; not available in JUnit test JVM
+- All families limited to: SolidColor material, Identity transform, Root layer,
+  WideOpen/DeviceRect clip, SrcOver blend
+- Non-uniform rrect radii refused
+- DrawImage lowers to solid-color FillRect (loses pixel content; true texture
+  draw deferred to future work)
+- DrawTextRun refused (text atlas pipeline not wired into dispatch)
+- GPU requires JavaExec; not available in JUnit test JVM

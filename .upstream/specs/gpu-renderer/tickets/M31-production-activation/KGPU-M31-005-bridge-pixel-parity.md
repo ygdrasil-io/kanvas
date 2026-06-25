@@ -148,18 +148,22 @@ rtk git diff --check
   review of M30/M31. M30-003/M31-003 “parity” is structural task-count only; real
   pixel/GM parity is required before the production-default activation can be
   signed off.
-- `in-progress`: M31-006 (GPU execution→pixels) done. FillRRect dispatch
-  implemented:
-  - `Surface.renderToRgba()` now dispatches `NormalizedDrawCommand.FillRRect`
-    via `drawFullscreenRawUniformPass` with SDF-based coverage in WGSL
-    (reuses `rrect_cov` from `RRectCoverageSnippet`).
-  - Constraints: SolidColor material, Identity transform, Root layer,
-    WideOpen/DeviceRect clip, uniform corner radii. Non-uniform radii
-    or unsupported state emits stable `refuse:` diagnostic.
-  - Pixel parity proven: `solid-rrect` scene (320×240, 220×140 rect with
-    20px radii) → `similarity=100%`, `matching=76800/76800`,
-    `maxDiff=(R=0,G=0,B=0,A=0)` at tolerance=1 (WGSL/Kotlin f32 rounding).
-  - Next family: FillPath (blocked — stencil-cover or tessellator dispatch).
+- `in-progress`: M31-006 (GPU execution→pixels) done. FillRRect + FillPath
+  dispatch implemented:
+  - `FillRRect`: SDF-based coverage via `drawFullscreenRawUniformPass`
+    (reuses `rrect_cov` from `RRectCoverageSnippet`). Constraints: uniform
+    radii, SolidColor, Identity, Root, WideOpen/DeviceRect. Proven at 100%
+    similarity (tolerance=1 for f32 rounding).
+  - `FillPath`: Stencil-cover dispatch via `drawFullscreenStencilPass`
+    (Write→stencil increment/decrement, Test→solid fill where stencil != 0).
+    Per-contour fan indices from `tessellatedVertices`+`contourStarts`.
+    Constraints: SolidColor, Identity, Root, WideOpen/DeviceRect. Proven:
+    triangle (100%, tolerance=0) and star (100%, tolerance=0).
+  - `DrawImage`: already lowered to `FillRect` in the recorder → dispatched
+    through the existing `dispatchFillRect` path (pixel content snapped to
+    solid color — true texture draw deferred).
+  - `DrawTextRun`: remains `refuse:` (needs text atlas/SDF pipeline).
+  - No silent no-op; all refused paths emit stable `refuse:` diagnostics.
 
 ## Linear Labels
 

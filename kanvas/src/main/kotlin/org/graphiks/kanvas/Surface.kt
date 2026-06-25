@@ -11,6 +11,8 @@ import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRawUniformDraw
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRectDraw
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRenderRecorder
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendStencilMode
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendTriangleData
 import org.graphiks.kanvas.gpu.renderer.execution.GPUClearColor
 import org.graphiks.kanvas.gpu.renderer.execution.GPUOffscreenTargetRequest
 import org.graphiks.kanvas.gpu.renderer.recording.GPURecorder
@@ -145,7 +147,7 @@ class Surface(
                         when (cmd) {
                             is NormalizedDrawCommand.FillRect -> dispatchFillRect(cmd, dispatched, diagnostics)
                             is NormalizedDrawCommand.FillRRect -> dispatchFillRRect(cmd, dispatched, diagnostics)
-                            is NormalizedDrawCommand.FillPath -> refuseCommand(cmd, dispatched, diagnostics)
+                            is NormalizedDrawCommand.FillPath -> dispatchFillPath(cmd, dispatched, diagnostics)
                             is NormalizedDrawCommand.DrawTextRun -> refuseCommand(cmd, dispatched, diagnostics)
                         }
                     }
@@ -288,6 +290,128 @@ class Surface(
                 ),
             ),
         )
+        dispatched.add(cmd.commandId.toString())
+        diagnostics.add("dispatch:${cmd.diagnosticName}")
+    }
+
+    private fun stencilWriteWgsl(): String = """
+struct VertexInput {
+    @location(0) position: vec2f,
+};
+
+@vertex
+fn vs_main(in: VertexInput) -> @builtin(position) vec4f {
+    let hw = f32($width) / 2.0;
+    let hh = f32($height) / 2.0;
+    return vec4f(in.position.x / hw - 1.0, 1.0 - in.position.y / hh, 0.0, 1.0);
+}
+
+@fragment
+fn fs_main() -> @location(0) vec4f {
+    return vec4f(0.0, 0.0, 0.0, 0.0);
+}
+""".trimIndent()
+
+    private fun GPUBackendRenderRecorder.dispatchFillPath(
+        cmd: NormalizedDrawCommand.FillPath,
+        dispatched: MutableList<String>,
+        diagnostics: MutableList<String>,
+    ) {
+        fun refuse(reason: String) {
+            diagnostics.add("refuse:${cmd.diagnosticName}:$reason")
+        }
+
+        val material = cmd.material
+        if (material !is GPUMaterialDescriptor.SolidColor) {
+            refuse("unsupported_material:${material.kind.name}")
+            return
+        }
+        if (cmd.transform.type != GPUTransformType.Identity) {
+            refuse("unsupported_transform:${cmd.transform.type.name}")
+            return
+        }
+        if (cmd.clip.kind !in listOf(GPUClipKind.WideOpen, GPUClipKind.DeviceRect)) {
+            refuse("unsupported_clip:${cmd.clip.kind.name}")
+            return
+        }
+        if (cmd.layer.scopeKind != GPULayerScopeKind.Root) {
+            refuse("unsupported_layer:${cmd.layer.scopeKind.name}")
+            return
+        }
+
+        val tessVertices = cmd.tessellatedVertices
+        val vertexCount = cmd.totalVertexCount
+        if (vertexCount < 3 || tessVertices.size < 6) {
+            refuse("insufficient_vertices:count=$vertexCount")
+            return
+        }
+
+        // Build per-contour triangle fan indices
+        val contourStarts = cmd.contourStarts
+        val indices = mutableListOf<Int>()
+        for (ci in contourStarts.indices) {
+            val start = contourStarts[ci]
+            val end = if (ci + 1 < contourStarts.size) contourStarts[ci + 1] else vertexCount
+            val cvCount = end - start
+            if (cvCount < 3) continue
+            for (i in 1 until cvCount - 1) {
+                indices.add(start)
+                indices.add(start + i)
+                indices.add(start + i + 1)
+            }
+        }
+
+        if (indices.size < 3) {
+            refuse("no_triangles_generated")
+            return
+        }
+
+        val triangleData = GPUBackendTriangleData(
+            vertices = tessVertices.toFloatArray(),
+            indices = indices.toIntArray(),
+        )
+
+        val clipBounds = cmd.clip.bounds
+        val pathBounds = cmd.bounds
+        val sx = maxOf(pathBounds.left, clipBounds.left).toInt().coerceIn(0, width - 1)
+        val sy = maxOf(pathBounds.top, clipBounds.top).toInt().coerceIn(0, height - 1)
+        val sw = (minOf(pathBounds.right, clipBounds.right).toInt() - sx).coerceIn(1, width - sx)
+        val sh = (minOf(pathBounds.bottom, clipBounds.bottom).toInt() - sy).coerceIn(1, height - sy)
+
+        val writeWgsl = stencilWriteWgsl()
+
+        // Stencil write pass: render triangles to stencil buffer (no color write)
+        drawFullscreenStencilPass(
+            wgsl = writeWgsl,
+            colorFormat = GPU_COLOR_FORMAT,
+            stencilMode = GPUBackendStencilMode.Write,
+            triangleData = triangleData,
+            draws = emptyList(),
+        )
+
+        // Stencil test pass: fill where stencil != 0
+        val colorBb = java.nio.ByteBuffer.allocate(16).order(java.nio.ByteOrder.nativeOrder())
+        colorBb.putFloat(material.r * material.a)
+        colorBb.putFloat(material.g * material.a)
+        colorBb.putFloat(material.b * material.a)
+        colorBb.putFloat(material.a)
+
+        drawFullscreenStencilPass(
+            wgsl = SOLID_RECT_WGSL,
+            colorFormat = GPU_COLOR_FORMAT,
+            stencilMode = GPUBackendStencilMode.Test,
+            triangleData = null,
+            draws = listOf(
+                GPUBackendRawUniformDraw(
+                    uniformBytes = colorBb.array(),
+                    scissorX = sx,
+                    scissorY = sy,
+                    scissorWidth = sw,
+                    scissorHeight = sh,
+                ),
+            ),
+        )
+
         dispatched.add(cmd.commandId.toString())
         diagnostics.add("dispatch:${cmd.diagnosticName}")
     }
