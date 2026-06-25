@@ -11,6 +11,7 @@ val kadreSourceSet = sourceSets.create("kadre") {
 dependencies {
     implementation(kotlin("stdlib"))
     implementation(project(":gpu-renderer"))
+    implementation(project(":kanvas"))
     implementation("io.ygdrasil:wgpu4k-toolkit:0.2.0-SNAPSHOT")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
 
@@ -48,6 +49,52 @@ tasks.register<JavaExec>("renderGpuRendererSceneOffscreen") {
     classpath = sourceSets.main.get().runtimeClasspath
     mainClass.set("org.graphiks.kanvas.gpu.renderer.scenes.offscreen.RenderGpuRendererSceneOffscreenMainKt")
     args(sceneId.get(), outputDir.get().absolutePath)
+    outputs.dir(outputDir)
+    outputs.upToDateWhen { false }
+    jvmArgs(buildList {
+        add("--add-opens=java.base/java.lang=ALL-UNNAMED")
+        add("--enable-native-access=ALL-UNNAMED")
+        if (org.gradle.internal.os.OperatingSystem.current().isMacOsX) {
+            add("-XstartOnFirstThread")
+        }
+    })
+}
+
+tasks.register<JavaExec>("compareKanvasSurfaceOffscreen") {
+    group = "verification"
+    description = "Renders a Kanvas Surface scene via GPU and compares against CPU reference."
+
+    val sceneName = providers.gradleProperty("sceneName").orElse("solid-red-rect")
+    val outputDir = providers.gradleProperty("sceneOutput")
+        .map { value -> rootProject.layout.projectDirectory.file(value).asFile }
+        .orElse(rootProject.layout.projectDirectory.dir("reports/kanvas-surface-offscreen/compare").asFile)
+
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("org.graphiks.kanvas.gpu.renderer.scenes.offscreen.CompareKanvasSurfaceOffscreenMainKt")
+    args(outputDir.get().absolutePath, sceneName.get())
+    outputs.dir(outputDir)
+    outputs.upToDateWhen { false }
+    jvmArgs(buildList {
+        add("--add-opens=java.base/java.lang=ALL-UNNAMED")
+        add("--enable-native-access=ALL-UNNAMED")
+        if (org.gradle.internal.os.OperatingSystem.current().isMacOsX) {
+            add("-XstartOnFirstThread")
+        }
+    })
+}
+
+tasks.register<JavaExec>("renderKanvasSurfaceOffscreen") {
+    group = "verification"
+    description = "Renders a Kanvas Surface scene through the opt-in WebGPU offscreen runner (bridge GPU execution)."
+
+    val sceneName = providers.gradleProperty("sceneName").orElse("solid-red-rect")
+    val outputDir = providers.gradleProperty("sceneOutput")
+        .map { value -> rootProject.layout.projectDirectory.file(value).asFile }
+        .orElse(rootProject.layout.projectDirectory.dir("reports/kanvas-surface-offscreen").asFile)
+
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("org.graphiks.kanvas.gpu.renderer.scenes.offscreen.RenderKanvasSurfaceOffscreenMainKt")
+    args(outputDir.get().absolutePath, sceneName.get())
     outputs.dir(outputDir)
     outputs.upToDateWhen { false }
     jvmArgs(buildList {
