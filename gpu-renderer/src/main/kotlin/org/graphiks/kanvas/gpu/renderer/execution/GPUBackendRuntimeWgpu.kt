@@ -15,12 +15,15 @@ import io.ygdrasil.webgpu.BufferDescriptor
 import io.ygdrasil.webgpu.Color
 import io.ygdrasil.webgpu.ColorTargetState
 import io.ygdrasil.webgpu.CompositeAlphaMode
+import io.ygdrasil.webgpu.DepthStencilState
 import io.ygdrasil.webgpu.Extent3D
 import io.ygdrasil.webgpu.FragmentState
 import io.ygdrasil.webgpu.GLFWContext
 import io.ygdrasil.webgpu.GPUAddressMode
 import io.ygdrasil.webgpu.GPUBlendFactor
 import io.ygdrasil.webgpu.GPUBlendOperation
+import io.ygdrasil.webgpu.GPUColorWrite
+import io.ygdrasil.webgpu.GPUCompareFunction
 import io.ygdrasil.webgpu.GPUAdapterInfo
 import io.ygdrasil.webgpu.GPUBindGroup
 import io.ygdrasil.webgpu.GPUBindGroupLayout
@@ -30,6 +33,7 @@ import io.ygdrasil.webgpu.GPUBufferUsage
 import io.ygdrasil.webgpu.GPUDevice
 import io.ygdrasil.webgpu.GPUErrorFilter
 import io.ygdrasil.webgpu.GPUFilterMode
+import io.ygdrasil.webgpu.GPUIndexFormat
 import io.ygdrasil.webgpu.GPULoadOp
 import io.ygdrasil.webgpu.GPUMapMode
 import io.ygdrasil.webgpu.GPUPipelineLayout
@@ -39,6 +43,7 @@ import io.ygdrasil.webgpu.GPUSampler
 import io.ygdrasil.webgpu.GPUSamplerBindingType
 import io.ygdrasil.webgpu.GPUShaderModule
 import io.ygdrasil.webgpu.GPUShaderStage
+import io.ygdrasil.webgpu.GPUStencilOperation
 import io.ygdrasil.webgpu.GPUStoreOp
 import io.ygdrasil.webgpu.GPUTexture
 import io.ygdrasil.webgpu.GPUTextureFormat
@@ -46,15 +51,18 @@ import io.ygdrasil.webgpu.GPUTextureSampleType
 import io.ygdrasil.webgpu.GPUTextureUsage
 import io.ygdrasil.webgpu.GPUTextureView
 import io.ygdrasil.webgpu.GPUTextureViewDimension
+import io.ygdrasil.webgpu.GPUVertexFormat
 import io.ygdrasil.webgpu.NativeSurface
 import io.ygdrasil.webgpu.PipelineLayoutDescriptor
 import io.ygdrasil.webgpu.PrimitiveState
 import io.ygdrasil.webgpu.RenderPassColorAttachment
+import io.ygdrasil.webgpu.RenderPassDepthStencilAttachment
 import io.ygdrasil.webgpu.RenderPassDescriptor
 import io.ygdrasil.webgpu.RenderPipelineDescriptor
 import io.ygdrasil.webgpu.SamplerBindingLayout
 import io.ygdrasil.webgpu.SamplerDescriptor
 import io.ygdrasil.webgpu.ShaderModuleDescriptor
+import io.ygdrasil.webgpu.StencilFaceState
 import io.ygdrasil.webgpu.SurfaceConfiguration
 import io.ygdrasil.webgpu.SurfaceTextureStatus
 import io.ygdrasil.webgpu.TexelCopyBufferInfo
@@ -62,6 +70,8 @@ import io.ygdrasil.webgpu.TexelCopyBufferLayout
 import io.ygdrasil.webgpu.TexelCopyTextureInfo
 import io.ygdrasil.webgpu.TextureBindingLayout
 import io.ygdrasil.webgpu.TextureDescriptor
+import io.ygdrasil.webgpu.VertexAttribute
+import io.ygdrasil.webgpu.VertexBufferLayout
 import io.ygdrasil.webgpu.VertexState
 import io.ygdrasil.webgpu.WGPU
 import io.ygdrasil.webgpu.WGPUInstanceBackend
@@ -80,6 +90,7 @@ private const val COPY_BYTES_PER_ROW_ALIGNMENT: Int = 256
 private const val FULL_SCREEN_TRIANGLE_VERTEX_COUNT: UInt = 3u
 private const val RGBA_BYTES_PER_PIXEL: Int = 4
 private const val RECT_COLOR_UNIFORM_SIZE_BYTES: ULong = 16uL
+private const val VERTEX_COLOR_STRIDE_BYTES: Int = 32
 private val sessionOrdinalCounter = AtomicLong(0L)
 private val windowRuntimeOrdinalCounter = AtomicLong(0L)
 
@@ -256,6 +267,15 @@ private class WgpuOffscreenTarget(
             label = "GPUBackend.offscreen.color",
         ),
     )
+    private val depthStencilTexture = device.createTexture(
+        TextureDescriptor(
+            size = Extent3D(width = request.width.toUInt(), height = request.height.toUInt()),
+            format = GPUTextureFormat.Depth24PlusStencil8,
+            usage = GPUTextureUsage.RenderAttachment,
+            label = "GPUBackend.offscreen.depthStencil",
+        ),
+    )
+    private val depthStencilView = depthStencilTexture.createView()
     private val stagingBuffer = device.createBuffer(
         BufferDescriptor(
             size = stagingSize,
@@ -264,6 +284,8 @@ private class WgpuOffscreenTarget(
             label = "GPUBackend.offscreen.staging",
         ),
     )
+    private val vertexBuffers = mutableMapOf<String, Pair<GPUBuffer, Int>>()
+    private val offscreenTextures = mutableMapOf<String, GPUTexture>()
 
     override val target: GPUSurfaceTarget =
         GPUSurfaceTarget(
@@ -301,6 +323,14 @@ private class WgpuOffscreenTarget(
                             storeOp = GPUStoreOp.Store,
                         ),
                     ),
+                    depthStencilAttachment = RenderPassDepthStencilAttachment(
+                        view = depthStencilView,
+                        stencilClearValue = 0u,
+                        stencilLoadOp = GPULoadOp.Clear,
+                        stencilStoreOp = GPUStoreOp.Store,
+                        stencilReadOnly = false,
+                        depthReadOnly = true,
+                    ),
                 ),
             ) {
                 val recorder = WgpuRenderRecorder(
@@ -313,6 +343,11 @@ private class WgpuOffscreenTarget(
                     setBindGroupAction = { index, bindGroup -> setBindGroup(index, bindGroup) },
                     setScissorAction = { x, y, width, height -> setScissorRect(x, y, width, height) },
                     drawAction = { vertexCount -> draw(vertexCount) },
+                    setStencilReferenceAction = { ref -> setStencilReference(ref) },
+                    setVertexBufferAction = { slot, buffer -> setVertexBuffer(slot, buffer) },
+                    setIndexBufferAction = { buffer, format -> setIndexBuffer(buffer, format) },
+                    drawIndexedAction = { indexCount -> drawIndexed(indexCount) },
+                    offscreenTextureStore = offscreenTextures,
                 )
                 recorder.block()
                 end()
@@ -351,9 +386,110 @@ private class WgpuOffscreenTarget(
         }
     }
 
+    internal fun createVertexBuffer(data: FloatArray): String {
+        val label = "vertexBuffer:${data.contentHashCode()}:${vertexBuffers.size}"
+        if (label in vertexBuffers) return label
+        val byteSize = (data.size * 4).toULong()
+        val buffer = device.createBuffer(
+            BufferDescriptor(
+                size = byteSize,
+                usage = GPUBufferUsage.Vertex or GPUBufferUsage.CopyDst,
+                label = label,
+            ),
+        )
+        queue.writeBuffer(buffer, 0uL, ArrayBuffer.of(data))
+        vertexBuffers[label] = buffer to data.size
+        return label
+    }
+
+    internal fun vertexBuffer(label: String): GPUBuffer {
+        val (buffer, _) = vertexBuffers[label]
+            ?: error("Vertex buffer not found: $label")
+        return buffer
+    }
+
+    internal fun createOffscreenTexture(textureDesc: GPUBackendOffscreenTexture): String {
+        val label = "offscreenTex:${textureDesc.width}x${textureDesc.height}:${textureDesc.format}"
+        if (label in offscreenTextures) return label
+        val tex = device.createTexture(
+            TextureDescriptor(
+                size = Extent3D(width = textureDesc.width.toUInt(), height = textureDesc.height.toUInt()),
+                format = textureDesc.format.toWgpuTextureFormat(),
+                usage = GPUTextureUsage.RenderAttachment or GPUTextureUsage.TextureBinding or GPUTextureUsage.CopySrc,
+                label = label,
+            ),
+        )
+        offscreenTextures[label] = tex
+        return label
+    }
+
+    internal fun offscreenTexture(label: String): GPUTexture {
+        return offscreenTextures[label]
+            ?: error("Offscreen texture not found: $label")
+    }
+
+    internal fun encodeOffscreenTextureInternal(
+        textureLabel: String,
+        clearColor: GPUClearColor,
+        textureFormat: GPUTextureFormat,
+        resources: GpuResourceScope,
+        block: (WgpuRenderRecorder) -> Unit,
+    ) {
+        val tex = offscreenTexture(textureLabel)
+        val texView = resources.track(tex.createView()) { it.close() }
+        val encoder = resources.trackIfAutoCloseable(device.createCommandEncoder())
+        encoder.beginRenderPass(
+            RenderPassDescriptor(
+                colorAttachments = listOf(
+                    RenderPassColorAttachment(
+                        view = texView,
+                        loadOp = GPULoadOp.Clear,
+                        clearValue = clearColor.toWgpuColor(),
+                        storeOp = GPUStoreOp.Store,
+                    ),
+                ),
+            ),
+        ) {
+            val recorder = WgpuRenderRecorder(
+                device = device,
+                queue = queue,
+                targetFormat = textureFormat,
+                resourceScope = resources,
+                executionCaches = executionCaches,
+                setPipelineAction = { pipeline -> setPipeline(pipeline) },
+                setBindGroupAction = { index, bindGroup -> setBindGroup(index, bindGroup) },
+                setScissorAction = { x, y, width, height -> setScissorRect(x, y, width, height) },
+                drawAction = { vertexCount -> draw(vertexCount) },
+                setStencilReferenceAction = { ref -> setStencilReference(ref) },
+                setVertexBufferAction = { slot, buffer -> setVertexBuffer(slot, buffer) },
+                setIndexBufferAction = { buffer, format -> setIndexBuffer(buffer, format) },
+                drawIndexedAction = { indexCount -> drawIndexed(indexCount) },
+                offscreenTextureStore = mutableMapOf(),
+            )
+            block(recorder)
+            end()
+        }
+        val commandBuffer = resources.trackIfAutoCloseable(encoder.finish())
+        queue.submit(listOf(commandBuffer))
+    }
+
     override fun close() {
-        stagingBuffer.close()
-        texture.close()
+        var firstFailure: Throwable? = null
+        /** Suppresses exceptions thrown inside [block] and collects the first failure for re-throw. */
+        fun closeQuietly(block: () -> Unit) {
+            try { block() } catch (e: Throwable) {
+                if (firstFailure == null) firstFailure = e else firstFailure.addSuppressed(e)
+            }
+        }
+        closeQuietly { stagingBuffer.close() }
+        closeQuietly { depthStencilView.close() }
+        closeQuietly { depthStencilTexture.close() }
+        closeQuietly { texture.close() }
+        vertexBuffers.values.forEach { (buffer, _) -> closeQuietly { buffer.close() } }
+        vertexBuffers.clear()
+        offscreenTextures.values.forEach { tex -> closeQuietly { tex.close() } }
+        offscreenTextures.clear()
+        firstFailure?.let { throw it }
     }
 }
 
@@ -442,6 +578,11 @@ private class WgpuWindowSurface(
                     setBindGroupAction = { index, bindGroup -> setBindGroup(index, bindGroup) },
                     setScissorAction = { x, y, surfaceWidth, surfaceHeight -> setScissorRect(x, y, surfaceWidth, surfaceHeight) },
                     drawAction = { vertexCount -> draw(vertexCount) },
+                    setStencilReferenceAction = { ref -> setStencilReference(ref) },
+                    setVertexBufferAction = { slot, buffer -> setVertexBuffer(slot, buffer) },
+                    setIndexBufferAction = { buffer, format -> setIndexBuffer(buffer, format) },
+                    drawIndexedAction = { indexCount -> drawIndexed(indexCount) },
+                    offscreenTextureStore = mutableMapOf(),
                 )
                 recorder.block()
                 end()
@@ -472,7 +613,14 @@ private class WgpuRenderRecorder(
     private val setBindGroupAction: (UInt, GPUBindGroup) -> Unit,
     private val setScissorAction: (UInt, UInt, UInt, UInt) -> Unit,
     private val drawAction: (UInt) -> Unit,
+    private val setStencilReferenceAction: (UInt) -> Unit,
+    private val setVertexBufferAction: (UInt, GPUBuffer) -> Unit,
+    private val setIndexBufferAction: (GPUBuffer, GPUIndexFormat) -> Unit,
+    private val drawIndexedAction: (UInt) -> Unit,
+    private val offscreenTextureStore: MutableMap<String, GPUTexture>,
 ) : GPUBackendRenderRecorder {
+    private val vertexBufferStore = mutableMapOf<String, Pair<GPUBuffer, Int>>()
+
     override fun drawFullscreenPass(
         wgsl: String,
         colorFormat: String,
@@ -566,6 +714,342 @@ private class WgpuRenderRecorder(
         )
     }
 
+    override fun drawFullscreenStencilPass(
+        wgsl: String,
+        colorFormat: String,
+        stencilMode: GPUBackendStencilMode,
+        triangleData: GPUBackendTriangleData?,
+        draws: List<GPUBackendRawUniformDraw>,
+    ) {
+        require(wgsl.isNotBlank()) { "wgsl must not be blank" }
+        require(colorFormat.normalizedColorFormat() == targetFormat.toBackendColorFormat()) {
+            "Requested color format $colorFormat does not match target format ${targetFormat.toBackendColorFormat()}"
+        }
+
+        when (stencilMode) {
+            GPUBackendStencilMode.Write -> {
+                require(triangleData != null) { "triangleData required for stencil write mode" }
+                recordStencilWritePass(wgsl = wgsl, colorFormat = colorFormat, triangleData = triangleData)
+            }
+            GPUBackendStencilMode.Test -> {
+                require(draws.isNotEmpty()) { "draws required for stencil test mode" }
+                recordStencilTestPass(wgsl = wgsl, colorFormat = colorFormat, draws = draws.map { draw ->
+                    WgpuFullscreenUniformDraw(
+                        uniformPayload = ArrayBuffer.of(draw.uniformBytes),
+                        uniformSizeBytes = draw.uniformBytes.size.toULong(),
+                        scissorX = draw.scissorX,
+                        scissorY = draw.scissorY,
+                        scissorWidth = draw.scissorWidth,
+                        scissorHeight = draw.scissorHeight,
+                    )
+                })
+            }
+        }
+    }
+
+    override fun createVertexColorBuffer(data: GPUBackendVertexColorData): String {
+        val label = "vertexColor:${data.vertexData.contentHashCode()}:${vertexBufferStore.size}"
+        if (label in vertexBufferStore) return label
+        val byteSize = (data.vertexData.size * 4).toULong()
+        val buffer = resourceScope.track(
+            device.createBuffer(
+                BufferDescriptor(
+                    size = byteSize,
+                    usage = GPUBufferUsage.Vertex or GPUBufferUsage.CopyDst,
+                    label = label,
+                ),
+            ),
+        ) { it.close() }
+        queue.writeBuffer(buffer, 0uL, ArrayBuffer.of(data.vertexData))
+        vertexBufferStore[label] = buffer to data.vertexCount
+        return label
+    }
+
+    override fun drawVertexColorIndexed(
+        vertexBufferLabel: String,
+        indexCount: Int,
+        uniformDraw: GPUBackendRawUniformDraw,
+    ) {
+        val (vertexBuffer, vertexCount) = vertexBufferStore[vertexBufferLabel]
+            ?: error("Vertex buffer not found: $vertexBufferLabel")
+
+        val indices = (0 until indexCount).toList()
+        val indexByteSize = (indices.size * 4).toULong()
+        val indexBuffer = resourceScope.track(
+            device.createBuffer(
+                BufferDescriptor(
+                    size = indexByteSize,
+                    usage = GPUBufferUsage.Index or GPUBufferUsage.CopyDst,
+                    label = "GPUBackend.index.$vertexBufferLabel",
+                ),
+            ),
+        ) { it.close() }
+        queue.writeBuffer(indexBuffer, 0uL, ArrayBuffer.of(IntArray(indices.size) { indices[it] }))
+
+        val vertexWgsl = VERTEX_COLOR_WGSL
+        val keys = stencilExecutionCacheKeys(wgsl = vertexWgsl, targetFormat = targetFormat, vertexStage = true)
+        executionCaches.recordPreimages(keys)
+        val bindGroupLayout = executionCaches.bindGroupLayout(device = device, keys = keys)
+        val shader = executionCaches.shaderModule(device = device, wgsl = vertexWgsl, keys = keys)
+        val pipelineLayout = executionCaches.pipelineLayout(device = device, bindGroupLayout = bindGroupLayout, keys = keys)
+        val pipeline = executionCaches.vertexColorRenderPipeline(
+            device = device,
+            shader = shader,
+            pipelineLayout = pipelineLayout,
+            targetFormat = targetFormat,
+            keys = keys,
+        )
+
+        val uniform = resourceScope.track(
+            device.createBuffer(
+                BufferDescriptor(
+                    size = uniformDraw.uniformBytes.size.toULong(),
+                    usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
+                    label = "GPUBackend.vertexColor.uniform",
+                ),
+            ),
+        ) { it.close() }
+        queue.writeBuffer(uniform, 0uL, ArrayBuffer.of(uniformDraw.uniformBytes))
+        val bindGroup = resourceScope.track(
+            device.createBindGroup(
+                BindGroupDescriptor(
+                    layout = bindGroupLayout,
+                    entries = listOf(
+                        BindGroupEntry(binding = 0u, resource = BufferBinding(buffer = uniform)),
+                    ),
+                ),
+            ),
+        ) { it.close() }
+
+        setPipelineAction(pipeline)
+        setBindGroupAction(0u, bindGroup)
+        setScissorAction(
+            uniformDraw.scissorX.toUInt(),
+            uniformDraw.scissorY.toUInt(),
+            uniformDraw.scissorWidth.toUInt(),
+            uniformDraw.scissorHeight.toUInt(),
+        )
+        setVertexBufferAction(0u, vertexBuffer)
+        setIndexBufferAction(indexBuffer, GPUIndexFormat.Uint32)
+        drawIndexedAction(indexCount.toUInt())
+    }
+
+    override fun createOffscreenTexture(texture: GPUBackendOffscreenTexture): String {
+        val label = "offscreenTex:${texture.width}x${texture.height}:${texture.format}"
+        if (label in offscreenTextureStore) return label
+        val tex = resourceScope.track(
+            device.createTexture(
+                TextureDescriptor(
+                    size = Extent3D(width = texture.width.toUInt(), height = texture.height.toUInt()),
+                    format = texture.format.toWgpuTextureFormat(),
+                    usage = GPUTextureUsage.RenderAttachment or GPUTextureUsage.TextureBinding or GPUTextureUsage.CopySrc,
+                    label = label,
+                ),
+            ),
+        ) { it.close() }
+        offscreenTextureStore[label] = tex
+        return label
+    }
+
+    override fun encodeOffscreenTexture(
+        textureLabel: String,
+        clearColor: GPUClearColor,
+        block: GPUBackendRenderRecorder.() -> Unit,
+    ) {
+        error("encodeOffscreenTexture must be handled by WgpuOffscreenTarget via internal encodeOffscreenTexture")
+    }
+
+    override fun drawCompositePass(
+        wgsl: String,
+        colorFormat: String,
+        textureLabel: String,
+        draws: List<GPUBackendRawUniformDraw>,
+    ) {
+        require(wgsl.isNotBlank()) { "wgsl must not be blank" }
+        require(colorFormat.normalizedColorFormat() == targetFormat.toBackendColorFormat()) {
+            "Requested color format $colorFormat does not match target format ${targetFormat.toBackendColorFormat()}"
+        }
+        require(draws.isNotEmpty()) { "draws required for composite pass" }
+
+        val tex = offscreenTextureStore[textureLabel]
+            ?: error("Offscreen texture not found: $textureLabel")
+        val textureFormat = GPUTextureFormat.RGBA8Unorm
+
+        val textureBindGroupLayout = executionCaches.textureBindGroupLayout(
+            device = device,
+            keys = fullscreenTextureExecutionCacheKeys(wgsl = wgsl, targetFormat = targetFormat, textureFormat = textureFormat),
+        )
+        val bindGroupLayout = executionCaches.bindGroupLayout(
+            device = device,
+            keys = fullscreenExecutionCacheKeys(wgsl = wgsl, targetFormat = targetFormat),
+        )
+        val shader = executionCaches.shaderModule(device = device, wgsl = wgsl, keys = fullscreenExecutionCacheKeys(wgsl = wgsl, targetFormat = targetFormat))
+        val pipelineLayout = executionCaches.texturePipelineLayout(
+            device = device,
+            bindGroupLayouts = listOf(bindGroupLayout, textureBindGroupLayout),
+            keys = fullscreenTextureExecutionCacheKeys(wgsl = wgsl, targetFormat = targetFormat, textureFormat = textureFormat),
+        )
+        val pipeline = executionCaches.renderPipeline(
+            device = device,
+            shader = shader,
+            pipelineLayout = pipelineLayout,
+            targetFormat = targetFormat,
+            keys = fullscreenTextureExecutionCacheKeys(wgsl = wgsl, targetFormat = targetFormat, textureFormat = textureFormat),
+        )
+
+        val textureView = resourceScope.track(tex.createView()) { it.close() }
+        val sampler = resourceScope.track(
+            device.createSampler(
+                SamplerDescriptor(
+                    addressModeU = GPUAddressMode.ClampToEdge,
+                    addressModeV = GPUAddressMode.ClampToEdge,
+                    magFilter = GPUFilterMode.Linear,
+                    minFilter = GPUFilterMode.Linear,
+                ),
+            ),
+        ) { it.close() }
+
+        setPipelineAction(pipeline)
+        draws.forEach { draw ->
+            val uniform = resourceScope.track(
+                device.createBuffer(
+                    BufferDescriptor(
+                        size = draw.uniformBytes.size.toULong(),
+                        usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
+                        label = "GPUBackend.composite.uniform",
+                    ),
+                ),
+            ) { it.close() }
+            queue.writeBuffer(uniform, 0uL, ArrayBuffer.of(draw.uniformBytes))
+            val bindGroup = resourceScope.track(
+                device.createBindGroup(
+                    BindGroupDescriptor(
+                        layout = bindGroupLayout,
+                        entries = listOf(
+                            BindGroupEntry(binding = 0u, resource = BufferBinding(buffer = uniform)),
+                        ),
+                    ),
+                ),
+            ) { it.close() }
+            val textureBindGroup = resourceScope.track(
+                device.createBindGroup(
+                    BindGroupDescriptor(
+                        layout = textureBindGroupLayout,
+                        entries = listOf(
+                            BindGroupEntry(binding = 1u, resource = textureView),
+                            BindGroupEntry(binding = 2u, resource = sampler),
+                        ),
+                    ),
+                ),
+            ) { it.close() }
+
+            setBindGroupAction(0u, bindGroup)
+            setBindGroupAction(1u, textureBindGroup)
+            setScissorAction(
+                draw.scissorX.toUInt(),
+                draw.scissorY.toUInt(),
+                draw.scissorWidth.toUInt(),
+                draw.scissorHeight.toUInt(),
+            )
+            drawAction(FULL_SCREEN_TRIANGLE_VERTEX_COUNT)
+        }
+    }
+
+    private fun recordStencilWritePass(
+        wgsl: String,
+        colorFormat: String,
+        triangleData: GPUBackendTriangleData,
+    ) {
+        val vertexBuffer = resourceScope.track(
+            device.createBuffer(
+                BufferDescriptor(
+                    size = (triangleData.vertices.size * 4).toULong(),
+                    usage = GPUBufferUsage.Vertex or GPUBufferUsage.CopyDst,
+                    label = "GPUBackend.stencil.write.vertex",
+                ),
+            ),
+        ) { it.close() }
+        queue.writeBuffer(vertexBuffer, 0uL, ArrayBuffer.of(triangleData.vertices))
+
+        val indexBuffer = resourceScope.track(
+            device.createBuffer(
+                BufferDescriptor(
+                    size = (triangleData.indices.size * 4).toULong(),
+                    usage = GPUBufferUsage.Index or GPUBufferUsage.CopyDst,
+                    label = "GPUBackend.stencil.write.index",
+                ),
+            ),
+        ) { it.close() }
+        queue.writeBuffer(indexBuffer, 0uL, ArrayBuffer.of(triangleData.indices))
+
+        val keys = stencilExecutionCacheKeys(wgsl = wgsl, targetFormat = targetFormat, vertexStage = true)
+        executionCaches.recordPreimages(keys)
+        val pipeline = executionCaches.stencilWriteRenderPipeline(
+            device = device,
+            wgsl = wgsl,
+            targetFormat = targetFormat,
+            keys = keys,
+        )
+
+        setPipelineAction(pipeline)
+        setStencilReferenceAction(0u)
+        setVertexBufferAction(0u, vertexBuffer)
+        setIndexBufferAction(indexBuffer, GPUIndexFormat.Uint32)
+        drawIndexedAction(triangleData.indices.size.toUInt())
+    }
+
+    private fun recordStencilTestPass(
+        wgsl: String,
+        colorFormat: String,
+        draws: List<WgpuFullscreenUniformDraw>,
+    ) {
+        val keys = stencilExecutionCacheKeys(wgsl = wgsl, targetFormat = targetFormat, vertexStage = false)
+        executionCaches.recordPreimages(keys)
+        val bindGroupLayout = executionCaches.bindGroupLayout(device = device, keys = keys)
+        val shader = executionCaches.shaderModule(device = device, wgsl = wgsl, keys = keys)
+        val pipelineLayout = executionCaches.pipelineLayout(device = device, bindGroupLayout = bindGroupLayout, keys = keys)
+        val pipeline = executionCaches.stencilTestRenderPipeline(
+            device = device,
+            shader = shader,
+            pipelineLayout = pipelineLayout,
+            targetFormat = targetFormat,
+            keys = keys,
+        )
+
+        setPipelineAction(pipeline)
+        setStencilReferenceAction(0u)
+        draws.forEach { draw ->
+            val uniform = resourceScope.track(
+                device.createBuffer(
+                    BufferDescriptor(
+                        size = draw.uniformSizeBytes,
+                        usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
+                        label = "GPUBackend.stencil.test.color",
+                    ),
+                ),
+            ) { it.close() }
+            queue.writeBuffer(uniform, 0uL, draw.uniformPayload)
+            val bindGroup = resourceScope.track(
+                device.createBindGroup(
+                    BindGroupDescriptor(
+                        layout = bindGroupLayout,
+                        entries = listOf(
+                            BindGroupEntry(binding = 0u, resource = BufferBinding(buffer = uniform)),
+                        ),
+                    ),
+                ),
+            ) { it.close() }
+            setBindGroupAction(0u, bindGroup)
+            setScissorAction(
+                draw.scissorX.toUInt(),
+                draw.scissorY.toUInt(),
+                draw.scissorWidth.toUInt(),
+                draw.scissorHeight.toUInt(),
+            )
+            drawAction(FULL_SCREEN_TRIANGLE_VERTEX_COUNT)
+        }
+    }
+
     private fun recordFullscreenTextureUniformPass(
         wgsl: String,
         colorFormat: String,
@@ -588,11 +1072,10 @@ private class WgpuRenderRecorder(
         val textureBytesPerPixel = gpuTextureFormat.bytesPerPixel()
         val tightTextureBytesPerRow = textureWidth * textureBytesPerPixel
         val paddedTextureBytesPerRow = alignCopyBytesPerRow(tightTextureBytesPerRow)
-        val expectedTextureBytes = paddedTextureBytesPerRow * textureHeight
         val paddedTextureData = if (paddedTextureBytesPerRow == tightTextureBytesPerRow) {
             textureRgba
         } else {
-            val padded = ByteArray(expectedTextureBytes)
+            val padded = ByteArray(paddedTextureBytesPerRow * textureHeight)
             for (row in 0 until textureHeight) {
                 System.arraycopy(
                     textureRgba, row * tightTextureBytesPerRow,
@@ -773,6 +1256,73 @@ private class WgpuRenderRecorder(
         val scissorWidth: Int,
         val scissorHeight: Int,
     )
+
+    companion object {
+        val VERTEX_COLOR_WGSL: String = """
+struct Uniforms { color: vec4f };
+
+@group(0) @binding(0) var<uniform> uniforms: Uniforms;
+
+struct VertexInput {
+    @location(0) position: vec2f,
+    @location(1) color: vec4f,
+};
+
+struct VertexOutput {
+    @builtin(position) position: vec4f,
+    @location(0) color: vec4f,
+};
+
+@vertex
+fn vs_main(in: VertexInput) -> VertexOutput {
+    let nx = in.position.x / 160.0 - 1.0;
+    let ny = 1.0 - in.position.y / 100.0;
+    var out: VertexOutput;
+    out.position = vec4f(nx, ny, 0.0, 1.0);
+    out.color = in.color;
+    return out;
+}
+
+@fragment
+fn fs_main(in: VertexOutput) -> @location(0) vec4f {
+    return in.color * uniforms.color;
+}
+""".trimIndent()
+
+        val STENCIL_WRITE_VERTEX_WGSL: String = """
+struct VertexInput {
+    @location(0) position: vec2f,
+};
+
+@vertex
+fn vs_main(in: VertexInput) -> @builtin(position) vec4f {
+    return vec4f(in.position.x / 160.0 - 1.0, 1.0 - in.position.y / 100.0, 0.0, 1.0);
+}
+
+@fragment
+fn fs_main() -> @location(0) vec4f {
+    return vec4f(0.0, 0.0, 0.0, 0.0);
+}
+""".trimIndent()
+
+        val STENCIL_TEST_FULLSCREEN_WGSL: String = """
+struct Uniforms { color: vec4f };
+
+@group(0) @binding(0) var<uniform> uniforms: Uniforms;
+
+@vertex
+fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
+    let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
+    let y = f32(idx & 2u) * 2.0 - 1.0;
+    return vec4f(x, y, 0.0, 1.0);
+}
+
+@fragment
+fn fs_main() -> @location(0) vec4f {
+    return uniforms.color;
+}
+""".trimIndent()
+    }
 }
 
 private class WgpuExecutionCaches(
@@ -850,11 +1400,11 @@ private class WgpuExecutionCaches(
             device.createBindGroupLayout(
                 BindGroupLayoutDescriptor(
                     entries = listOf(
-                        BindGroupLayoutEntry(
-                            binding = 0u,
-                            visibility = GPUShaderStage.Fragment,
-                            buffer = BufferBindingLayout(type = GPUBufferBindingType.Uniform),
-                        ),
+                    BindGroupLayoutEntry(
+                        binding = 0u,
+                        visibility = GPUShaderStage.Vertex or GPUShaderStage.Fragment,
+                        buffer = BufferBindingLayout(type = GPUBufferBindingType.Uniform),
+                    ),
                     ),
                 ),
             )
@@ -962,6 +1512,247 @@ private class WgpuExecutionCaches(
                     layout = pipelineLayout,
                     vertex = VertexState(module = shader, entryPoint = "vs_main"),
                     primitive = PrimitiveState(),
+                    depthStencil = DepthStencilState(
+                        format = GPUTextureFormat.Depth24PlusStencil8,
+                        depthWriteEnabled = false,
+                        depthCompare = GPUCompareFunction.Always,
+                        stencilFront = StencilFaceState(
+                            compare = GPUCompareFunction.Always,
+                            failOp = GPUStencilOperation.Keep,
+                            depthFailOp = GPUStencilOperation.Keep,
+                            passOp = GPUStencilOperation.Keep,
+                        ),
+                        stencilBack = StencilFaceState(
+                            compare = GPUCompareFunction.Always,
+                            failOp = GPUStencilOperation.Keep,
+                            depthFailOp = GPUStencilOperation.Keep,
+                            passOp = GPUStencilOperation.Keep,
+                        ),
+                        stencilReadMask = 0u,
+                        stencilWriteMask = 0u,
+                    ),
+                    fragment = FragmentState(
+                        module = shader,
+                        entryPoint = "fs_main",
+                        targets = listOf(
+                            ColorTargetState(
+                                format = targetFormat,
+                                blend = srcOverBlendState(),
+                            ),
+                        ),
+                    ),
+                ),
+            )
+        }
+        record(decision)
+        return decision.readyHandle()
+    }
+
+    /** Returns the cached stencil-write render pipeline with vertex buffer input, no color writes, and winding stencil ops. */
+    fun stencilWriteRenderPipeline(
+        device: GPUDevice,
+        wgsl: String,
+        targetFormat: GPUTextureFormat,
+        keys: FullscreenExecutionCacheKeys,
+    ): GPURenderPipeline {
+        val decision = renderPipelineCache.getOrCreate(
+            request = request(
+                domain = GPUExecutionCacheDomain.RenderPipeline,
+                keyHash = keys.renderPipelineKeyHash,
+                subjectHash = keys.renderPipelineSubjectHash,
+            ),
+        ) {
+            val shader = device.createShaderModule(ShaderModuleDescriptor(code = wgsl))
+            try {
+                val pipelineLayout = device.createPipelineLayout(
+                    PipelineLayoutDescriptor(bindGroupLayouts = emptyList()),
+                )
+                device.createRenderPipelineWithValidationScope(
+                    RenderPipelineDescriptor(
+                        layout = pipelineLayout,
+                        vertex = VertexState(
+                            module = shader,
+                            entryPoint = "vs_main",
+                            buffers = listOf(
+                                VertexBufferLayout(
+                                    arrayStride = 8uL,
+                                    attributes = listOf(
+                                        VertexAttribute(
+                                            shaderLocation = 0u,
+                                            offset = 0uL,
+                                            format = GPUVertexFormat.Float32x2,
+                                        ),
+                                    ),
+                                ),
+                            ),
+                        ),
+                        primitive = PrimitiveState(),
+                        depthStencil = DepthStencilState(
+                            format = GPUTextureFormat.Depth24PlusStencil8,
+                            depthWriteEnabled = false,
+                            depthCompare = GPUCompareFunction.Always,
+                            stencilFront = StencilFaceState(
+                                compare = GPUCompareFunction.Always,
+                                failOp = GPUStencilOperation.Keep,
+                                depthFailOp = GPUStencilOperation.Keep,
+                                passOp = GPUStencilOperation.IncrementWrap,
+                            ),
+                            stencilBack = StencilFaceState(
+                                compare = GPUCompareFunction.Always,
+                                failOp = GPUStencilOperation.Keep,
+                                depthFailOp = GPUStencilOperation.Keep,
+                                passOp = GPUStencilOperation.DecrementWrap,
+                            ),
+                            stencilReadMask = 0xFFu,
+                            stencilWriteMask = 0xFFu,
+                        ),
+                        fragment = FragmentState(
+                            module = shader,
+                            entryPoint = "fs_main",
+                            targets = listOf(
+                                ColorTargetState(
+                                    format = targetFormat,
+                                    blend = BlendState(
+                                        color = BlendComponent(
+                                            operation = GPUBlendOperation.Add,
+                                            srcFactor = GPUBlendFactor.One,
+                                            dstFactor = GPUBlendFactor.Zero,
+                                        ),
+                                        alpha = BlendComponent(
+                                            operation = GPUBlendOperation.Add,
+                                            srcFactor = GPUBlendFactor.One,
+                                            dstFactor = GPUBlendFactor.Zero,
+                                        ),
+                                    ),
+                                    writeMask = GPUColorWrite.None,
+                                ),
+                            ),
+                        ),
+                    ),
+                )
+            } finally {
+                shader.close()
+            }
+        }
+        record(decision)
+        return decision.readyHandle()
+    }
+
+    /** Returns the cached stencil-test render pipeline that fills pixels where stencil != 0 with the fragment color. */
+    fun stencilTestRenderPipeline(
+        device: GPUDevice,
+        shader: GPUShaderModule,
+        pipelineLayout: GPUPipelineLayout,
+        targetFormat: GPUTextureFormat,
+        keys: FullscreenExecutionCacheKeys,
+    ): GPURenderPipeline {
+        val decision = renderPipelineCache.getOrCreate(
+            request = request(
+                domain = GPUExecutionCacheDomain.RenderPipeline,
+                keyHash = keys.renderPipelineKeyHash,
+                subjectHash = keys.renderPipelineSubjectHash,
+            ),
+        ) {
+            device.createRenderPipelineWithValidationScope(
+                RenderPipelineDescriptor(
+                    layout = pipelineLayout,
+                    vertex = VertexState(module = shader, entryPoint = "vs_main"),
+                    primitive = PrimitiveState(),
+                    depthStencil = DepthStencilState(
+                        format = GPUTextureFormat.Depth24PlusStencil8,
+                        depthWriteEnabled = false,
+                        depthCompare = GPUCompareFunction.Always,
+                        stencilFront = StencilFaceState(
+                            compare = GPUCompareFunction.NotEqual,
+                            failOp = GPUStencilOperation.Keep,
+                            depthFailOp = GPUStencilOperation.Keep,
+                            passOp = GPUStencilOperation.Keep,
+                        ),
+                        stencilBack = StencilFaceState(
+                            compare = GPUCompareFunction.NotEqual,
+                            failOp = GPUStencilOperation.Keep,
+                            depthFailOp = GPUStencilOperation.Keep,
+                            passOp = GPUStencilOperation.Keep,
+                        ),
+                        stencilReadMask = 0xFFu,
+                        stencilWriteMask = 0xFFu,
+                    ),
+                    fragment = FragmentState(
+                        module = shader,
+                        entryPoint = "fs_main",
+                        targets = listOf(
+                            ColorTargetState(
+                                format = targetFormat,
+                                blend = srcOverBlendState(),
+                            ),
+                        ),
+                    ),
+                ),
+            )
+        }
+        record(decision)
+        return decision.readyHandle()
+    }
+
+    /** Returns the cached vertex-color render pipeline with interleaved position+color vertex buffer input. */
+    fun vertexColorRenderPipeline(
+        device: GPUDevice,
+        shader: GPUShaderModule,
+        pipelineLayout: GPUPipelineLayout,
+        targetFormat: GPUTextureFormat,
+        keys: FullscreenExecutionCacheKeys,
+    ): GPURenderPipeline {
+        val decision = renderPipelineCache.getOrCreate(
+            request = request(
+                domain = GPUExecutionCacheDomain.RenderPipeline,
+                keyHash = keys.renderPipelineKeyHash,
+                subjectHash = keys.renderPipelineSubjectHash,
+            ),
+        ) {
+            device.createRenderPipelineWithValidationScope(
+                RenderPipelineDescriptor(
+                    layout = pipelineLayout,
+                    vertex = VertexState(
+                        module = shader,
+                        entryPoint = "vs_main",
+                        buffers = listOf(
+                            VertexBufferLayout(
+                                arrayStride = VERTEX_COLOR_STRIDE_BYTES.toULong(),
+                                attributes = listOf(
+                                    VertexAttribute(
+                                        shaderLocation = 0u,
+                                        offset = 0uL,
+                                        format = GPUVertexFormat.Float32x2,
+                                    ),
+                            VertexAttribute(
+                                shaderLocation = 1u,
+                                offset = 16uL,
+                                format = GPUVertexFormat.Float32x4,
+                            ),
+                                ),
+                            ),
+                        ),
+                    ),
+                    primitive = PrimitiveState(),
+                    depthStencil = DepthStencilState(
+                        format = GPUTextureFormat.Depth24PlusStencil8,
+                        depthWriteEnabled = false,
+                        depthCompare = GPUCompareFunction.Always,
+                        stencilFront = StencilFaceState(
+                            compare = GPUCompareFunction.Always,
+                            failOp = GPUStencilOperation.Keep,
+                            depthFailOp = GPUStencilOperation.Keep,
+                            passOp = GPUStencilOperation.Keep,
+                        ),
+                        stencilBack = StencilFaceState(
+                            compare = GPUCompareFunction.Always,
+                            failOp = GPUStencilOperation.Keep,
+                            depthFailOp = GPUStencilOperation.Keep,
+                            passOp = GPUStencilOperation.Keep,
+                        ),
+                        stencilReadMask = 0u,
+                        stencilWriteMask = 0u,
+                    ),
                     fragment = FragmentState(
                         module = shader,
                         entryPoint = "fs_main",
@@ -1239,6 +2030,76 @@ private fun fullscreenExecutionCacheKeys(
     )
 }
 
+private fun stencilExecutionCacheKeys(
+    wgsl: String,
+    targetFormat: GPUTextureFormat,
+    vertexStage: Boolean,
+): FullscreenExecutionCacheKeys {
+    val targetFormatClass = targetFormat.toBackendColorFormat()
+    val wgslHash = stableSha256(wgsl)
+        val role = if (vertexStage) "stencil-write-vertex" else "stencil-test-fullscreen"
+        val bindGroupLayoutPreimage = listOf(
+            "kind=bind-group-layout",
+            "role=$role",
+            "version=1",
+            "binding=0",
+            "visibility=vertex|fragment",
+            "bufferType=uniform",
+            "dynamicOffsets=false",
+        ).joinToString("\n")
+    val bindGroupLayoutHash = stableSha256(bindGroupLayoutPreimage)
+    val modulePreimage = listOf(
+        "kind=wgsl-module",
+        "role=$role",
+        "entryPoints=vs_main,fs_main",
+        "wgsl=$wgslHash",
+    ).joinToString("\n")
+    val moduleHash = stableSha256(modulePreimage)
+    val pipelineLayoutPreimage = listOf(
+        "kind=pipeline-layout",
+        "role=$role",
+        "version=1",
+        "bindGroupLayouts=$bindGroupLayoutHash",
+    ).joinToString("\n")
+    val pipelineLayoutHash = stableSha256(pipelineLayoutPreimage)
+    val renderPreimage = GPUPipelineKeyPreimage.Render(
+        renderStepIdentity = "gpu-backend.$role",
+        renderStepVersion = "1",
+        primitiveTopology = "triangle-list",
+        materialKeyHash = stableSha256("material:$role:v1"),
+        materialProgramId = "wgsl.$role",
+        materialDictionaryVersion = "runtime-helper-v1",
+        materialLayoutHash = bindGroupLayoutHash,
+        snippetIdentityHash = stableSha256("snippet:$role:v1"),
+        moduleHash = moduleHash,
+        vertexLayoutHash = if (vertexStage) stableSha256("vertex-layout:float32x2:stencil") else stableSha256("vertex-layout:fullscreen-triangle:vertex-index-only"),
+        targetFormatClass = targetFormatClass,
+        blendStateHash = stableSha256("blend:src-over-premul:v1"),
+        sampleStateHash = stableSha256("sample-state:count=1:mask=all"),
+        bindGroupLayoutHash = bindGroupLayoutHash,
+        capabilityClass = "webgpu-wgsl-$role",
+        capabilityFacts = listOf("adapter-backed-helper", "targetFormat=$targetFormatClass"),
+        rendererSalt = "kgpu-m28-001",
+    )
+    val canonicalRenderPreimage = GPUPipelineKeys.canonicalRenderPreimage(renderPreimage)
+    val renderPipelineKey = GPUPipelineKeys.renderPipelineKey(renderPreimage).value
+
+    return FullscreenExecutionCacheKeys(
+        moduleKeyHash = "module:$moduleHash",
+        moduleSubjectHash = "wgsl:$wgslHash",
+        modulePreimage = modulePreimage,
+        bindGroupLayoutKeyHash = "bind-group-layout:$bindGroupLayoutHash",
+        bindGroupLayoutSubjectHash = "layout-shape:$bindGroupLayoutHash",
+        bindGroupLayoutPreimage = bindGroupLayoutPreimage,
+        pipelineLayoutKeyHash = "pipeline-layout:$pipelineLayoutHash",
+        pipelineLayoutSubjectHash = "bind-groups:$bindGroupLayoutHash",
+        pipelineLayoutPreimage = pipelineLayoutPreimage,
+        renderPipelineKeyHash = renderPipelineKey,
+        renderPipelineSubjectHash = stableSha256(canonicalRenderPreimage),
+        renderPipelinePreimage = canonicalRenderPreimage,
+    )
+}
+
 private fun String.dumpPreimage(): String =
     lineSequence()
         .map { line -> line.trim() }
@@ -1262,7 +2123,7 @@ private fun GPUDevice.createRenderPipelineWithValidationScope(
     val validationError = runBlocking { popErrorScope().getOrThrow() }
     if (validationError != null) {
         pipeline.close()
-        error("WGPU render pipeline validation failed")
+        error("WGPU render pipeline validation failed: ${validationError.message}")
     }
     return pipeline
 }
