@@ -320,6 +320,12 @@ public fun selectLayerCompositeBlendPlan(mode: SkBlendMode): BlendPlan = when {
 /**
  * G1.2 — first GPU-backed [SkDevice] implementation, built on wgpu4k.
  *
+ * @deprecated gpu-raster is frozen at M30. No new features will be added.
+ * New rendering work must use the Kanvas-native Surface/Canvas pipeline
+ * via [org.skia.kanvas.SkiaKanvasSurface] and [org.skia.kanvas.KanvasSkiaBridge].
+ * Set `kanvas.renderer=native` to activate the replacement pipeline.
+ * gpu-raster will be removed in M31+.
+ *
  * **Scope.** Only `drawRect` with axis-aligned, fill-style, opaque-color,
  * non-AA paint is supported. The other three [SkDevice] methods stub out
  * with `TODO("G2+")`. This is enough to ratchet the SkDevice abstraction
@@ -354,6 +360,15 @@ public fun selectLayerCompositeBlendPlan(mode: SkBlendMode): BlendPlan = when {
  * `gpu-raster/build.gradle.kts`). The device itself never touches GLFW
  * after the context is built.
  */
+@Deprecated(
+    message = "gpu-raster is frozen at M30; use SkiaKanvasBridge instead. " +
+        "Set kanvas.renderer=native to activate the Kanvas-native pipeline. " +
+        "gpu-raster will be removed in M31+.",
+    replaceWith = ReplaceWith(
+        expression = "SkiaKanvasSurface.wrap(surface)",
+        imports = ["org.skia.kanvas.SkiaKanvasSurface"],
+    ),
+)
 public class SkWebGpuDevice(
     private val context: WebGpuContext,
     override val width: Int,
@@ -399,6 +414,12 @@ public class SkWebGpuDevice(
      */
     private val intermediateFormat: GPUTextureFormat = GPUTextureFormat.RGBA16Float,
 ) : SkDevice, AutoCloseable {
+    init {
+        System.err.println("[WARN] SkWebGpuDevice (gpu-raster) is deprecated since M30. " +
+            "Set kanvas.renderer=native to use the Kanvas-native pipeline instead. " +
+            "gpu-raster will be removed in M31+.")
+    }
+
     public enum class PipelineKeyAxisClass {
         Layout,
         Code,
