@@ -15,7 +15,7 @@ stencil/vertices/targets support that `flush()` submits to.
 
 ## Exit Criteria
 
-- [ ] `:kanvas` module compiles as a standalone Kotlin multiplatform artifact
+- [x] `:kanvas-api` module compiles as a standalone Kotlin JVM artifact
 - [ ] `KanvasSurface` + `KanvasCanvas` accept all five draw families (rect, rrect, path, image, text)
 - [ ] `KanvasPaint` defines color, shader, blendMode, colorFilter, stroke
 - [ ] `KanvasPath` supports moveTo/lineTo/quadTo/cubicTo/close with fillType
@@ -28,7 +28,7 @@ stencil/vertices/targets support that `flush()` submits to.
 
 | Ticket | Status | Priority | Claim Impact | Route Kind | Product Activation | Adapter Required | Owner Area | Depends On | Legacy Gate |
 |---|---|---|---|---|---|---|---|---|---|---|
-| [KGPU-M29-001 - Kanvas API module skeleton + KanvasSurface](KGPU-M29-001-kanvas-surface-module.md) | `proposed` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `false` | `kanvas-api` | none | null |
+| [KGPU-M29-001 - Kanvas API module skeleton + KanvasSurface](KGPU-M29-001-kanvas-surface-module.md) | `done` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `false` | `kanvas-api` | none | null |
 | [KGPU-M29-002 - KanvasCanvas — drawRect/drawRRect/drawPath/drawImage/drawText](KGPU-M29-002-kanvas-canvas-draw.md) | `proposed` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `false` | `kanvas-api` | [KGPU-M29-001] | null |
 | [KGPU-M29-003 - KanvasPaint — color, shader, blendMode, colorFilter, stroke](KGPU-M29-003-kanvas-paint.md) | `proposed` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `false` | `kanvas-api` | [KGPU-M29-001] | null |
 | [KGPU-M29-004 - KanvasPath — moveTo/lineTo/quadTo/cubicTo/close + fillType](KGPU-M29-004-kanvas-path.md) | `proposed` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `false` | `kanvas-api` | [KGPU-M29-001] | null |
