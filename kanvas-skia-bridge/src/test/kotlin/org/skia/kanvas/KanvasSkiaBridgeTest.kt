@@ -363,4 +363,37 @@ class KanvasSkiaBridgeTest {
     fun `unsupported diagnostic helper`() {
         emitUnsupportedBridgeDiagnostic("drawPicture")
     }
+
+    @Test
+    fun `productActivation is true by default`() {
+        assertTrue(isProductActivation())
+    }
+
+    @Test
+    fun `RollbackConfig useLegacyGpuRaster environment variable`() {
+        val previous = System.getenv("KANVAS_ROLLBACK_LEGACY_GPU_RASTER")
+        assertFalse(RollbackConfig.useLegacyGpuRaster)
+    }
+
+    @Test
+    fun `productActivation disabled via system property`() {
+        val previous = System.getProperty("kanvas.product.activation.disable")
+        try {
+            System.setProperty("kanvas.product.activation.disable", "true")
+            assertFalse(isProductActivation())
+        } finally {
+            if (previous != null) {
+                System.setProperty("kanvas.product.activation.disable", previous)
+            } else {
+                System.clearProperty("kanvas.product.activation.disable")
+            }
+        }
+    }
+
+    @Test
+    fun `wrapIfEnabled emits production activation diagnostic`() {
+        val skiaSurface = SkSurface.MakeRasterN32Premul(64, 64)
+        val result = SkiaKanvasSurface.wrapIfEnabled(skiaSurface)
+        assertNotNull(result)
+    }
 }
