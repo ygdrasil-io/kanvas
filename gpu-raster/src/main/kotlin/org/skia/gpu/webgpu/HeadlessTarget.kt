@@ -15,6 +15,10 @@ import io.ygdrasil.webgpu.TextureDescriptor
 
 /**
  * Headless render-to-texture surrogate built directly on the device.
+ *
+ * @deprecated gpu-raster is frozen at M30. Use the Kanvas-native pipeline
+ * via [org.skia.kanvas.SkiaKanvasSurface] instead.
+ * gpu-raster will be removed in M31+.
  * Owns:
  *  - the color texture (used by callers as render-pass attachment)
  *  - a staging buffer sized for one full readback at WebGPU's
@@ -30,6 +34,16 @@ import io.ygdrasil.webgpu.TextureDescriptor
  * `RGBA16Float`; the bytes-per-pixel and the de-padding loop both
  * generalize then.
  */
+@Deprecated(
+    message = "gpu-raster is frozen at M30; use SkiaKanvasBridge instead. " +
+        "The Kanvas-native pipeline is the default since M30. " +
+        "Set -Dkanvas.rollback.legacy-gpu-raster=true for emergency rollback. " +
+        "gpu-raster will be removed in M31+.",
+    replaceWith = ReplaceWith(
+        expression = "SkiaKanvasSurface.wrap(surface)",
+        imports = ["org.skia.kanvas.SkiaKanvasSurface"],
+    ),
+)
 public class HeadlessTarget(
     public val context: WebGpuContext,
     public val width: Int,

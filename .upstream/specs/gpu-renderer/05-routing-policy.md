@@ -293,6 +293,31 @@ A route may be promoted only when:
 - GPU evidence exists for GPU claims;
 - PM/report output identifies route counts and refusals.
 
+## Frozen Routes
+
+### `gpu-raster-legacy-path` → `FROZEN`
+
+The `gpu-raster` legacy path (backed by `SkWebGpuDevice` and `WebGpuContext`)
+is frozen at M30 and will be removed in M31+.
+
+- Status: `FROZEN`
+- Emergency rollback: `-Dkanvas.rollback.legacy-gpu-raster=true`
+- Active route: `kanvas-bridge-path` (default since M30)
+- The frozen path receives no new features, no bug fixes, and no performance
+  improvements.
+- Tests using `WebGpuSink` and `SkWebGpuDevice` remain valid for regression
+  comparison until the module is removed.
+
+### `kanvas-bridge-path` → `ACTIVE`
+
+The Kanvas-native bridge path (backed by `SkiaKanvasSurface` and
+`KanvasSkiaBridge`) is the active rendering route since M30.
+
+- Status: `ACTIVE`
+- Uses the Kanvas-native Surface/Canvas pipeline with WGSL GPU rendering
+- Falls back to the `gpu-raster-legacy-path` only when the rollback flag
+  is explicitly set
+
 ## Non-Goals
 
 - Do not infer support from missing diagnostics.

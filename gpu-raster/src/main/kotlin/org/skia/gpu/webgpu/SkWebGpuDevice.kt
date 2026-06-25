@@ -323,7 +323,9 @@ public fun selectLayerCompositeBlendPlan(mode: SkBlendMode): BlendPlan = when {
  * @deprecated gpu-raster is frozen at M30. No new features will be added.
  * New rendering work must use the Kanvas-native Surface/Canvas pipeline
  * via [org.skia.kanvas.SkiaKanvasSurface] and [org.skia.kanvas.KanvasSkiaBridge].
- * Set `kanvas.renderer=native` to activate the replacement pipeline.
+ * The Kanvas-native pipeline is now the default renderer.
+ * Set `-Dkanvas.rollback.legacy-gpu-raster=true` (or env `KANVAS_ROLLBACK_LEGACY_GPU_RASTER=true`)
+ * for emergency rollback to this legacy path.
  * gpu-raster will be removed in M31+.
  *
  * **Scope.** Only `drawRect` with axis-aligned, fill-style, opaque-color,
@@ -362,7 +364,8 @@ public fun selectLayerCompositeBlendPlan(mode: SkBlendMode): BlendPlan = when {
  */
 @Deprecated(
     message = "gpu-raster is frozen at M30; use SkiaKanvasBridge instead. " +
-        "Set kanvas.renderer=native to activate the Kanvas-native pipeline. " +
+        "The Kanvas-native pipeline is the default since M30. " +
+        "Set -Dkanvas.rollback.legacy-gpu-raster=true for emergency rollback. " +
         "gpu-raster will be removed in M31+.",
     replaceWith = ReplaceWith(
         expression = "SkiaKanvasSurface.wrap(surface)",
@@ -416,7 +419,8 @@ public class SkWebGpuDevice(
 ) : SkDevice, AutoCloseable {
     init {
         System.err.println("[WARN] SkWebGpuDevice (gpu-raster) is deprecated since M30. " +
-            "Set kanvas.renderer=native to use the Kanvas-native pipeline instead. " +
+            "The Kanvas-native pipeline is the default renderer. " +
+            "Set -Dkanvas.rollback.legacy-gpu-raster=true for emergency rollback to this legacy path. " +
             "gpu-raster will be removed in M31+.")
     }
 
