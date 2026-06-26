@@ -1,7 +1,7 @@
 ---
 id: KGPU-M32-021
 title: "Legacy decommission: clear-discard-target-background port (surface-init clear)"
-status: proposed
+status: review
 milestone: M32
 priority: P0
 owner_area: legacy-cleanup
@@ -127,6 +127,9 @@ rtk git diff --check
   Phase 3 retirement (KGPU-M32-003). See
   `reports/gpu-renderer/2026-06-26-m32-port-evidence.md` §KGPU-M32-021.
   Documentation-only; no new evidence; independent review still owed.
+
+
+- `review` (2026-06-26): promoted after maintainer review of PR #1892 (https://github.com/ygdrasil-io/kanvas/pull/1892) — no blocking issues found.
 
 ## Linear Labels
 

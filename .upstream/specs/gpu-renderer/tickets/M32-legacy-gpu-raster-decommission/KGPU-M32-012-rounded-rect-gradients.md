@@ -1,7 +1,7 @@
 ---
 id: KGPU-M32-012
 title: "Legacy decommission: rounded-rect-gradients port (solid uniform rrect) / refuse (gradients + non-uniform radii)"
-status: proposed
+status: review
 milestone: M32
 priority: P0
 owner_area: legacy-cleanup
@@ -146,6 +146,9 @@ rtk git diff --check
   edge. Gradients and **non-uniform radii** are refused. See
   `reports/gpu-renderer/2026-06-26-m32-port-evidence.md` §KGPU-M32-012.
   Documentation-only; no new evidence; independent review still owed.
+
+
+- `review` (2026-06-26): promoted after maintainer review of PR #1892 (https://github.com/ygdrasil-io/kanvas/pull/1892) — no blocking issues found.
 
 ## Linear Labels
 

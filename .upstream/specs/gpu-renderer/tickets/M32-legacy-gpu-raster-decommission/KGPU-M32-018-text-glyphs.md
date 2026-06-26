@@ -1,7 +1,7 @@
 ---
 id: KGPU-M32-018
 title: "Legacy decommission: text-glyphs port (A8 text fill) / refuse (color/SDF/emoji text)"
-status: proposed
+status: review
 milestone: M32
 priority: P0
 owner_area: legacy-cleanup
@@ -149,6 +149,9 @@ rtk git diff --check
   Color/SDF/emoji refused. See
   `reports/gpu-renderer/2026-06-26-m32-port-evidence.md` §KGPU-M32-018.
   Documentation-only; no new evidence; independent review still owed.
+
+
+- `review` (2026-06-26): promoted after maintainer review of PR #1892 (https://github.com/ygdrasil-io/kanvas/pull/1892) — no blocking issues found.
 
 ## Linear Labels
 

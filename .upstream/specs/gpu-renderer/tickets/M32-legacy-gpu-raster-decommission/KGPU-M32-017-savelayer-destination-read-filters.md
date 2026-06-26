@@ -1,7 +1,7 @@
 ---
 id: KGPU-M32-017
 title: "Legacy decommission: savelayer-destination-read-filters formal refusal (dependency-gated)"
-status: proposed
+status: review
 milestone: M32
 priority: P1
 owner_area: legacy-cleanup
@@ -123,6 +123,9 @@ rtk git diff --check
   test was added for a non-existent API. Report:
   `reports/gpu-renderer/2026-06-26-m32-refusal-coverage.md`. Real port =
   KGPU-M11-006 (dependency-gated).
+
+
+- `review` (2026-06-26): promoted after maintainer review of PR #1892 (https://github.com/ygdrasil-io/kanvas/pull/1892) — no blocking issues found.
 
 ## Linear Labels
 

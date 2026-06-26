@@ -1,7 +1,7 @@
 ---
 id: KGPU-M31-005
 title: "SkCanvas-bridge ↔ legacy gpu-raster pixel/GM parity (blocks M30-003/M31-003 sign-off)"
-status: review
+status: done
 milestone: M31
 priority: P0
 owner_area: product-validation
@@ -170,10 +170,11 @@ rtk git diff --check
   (40000/40000, maxDiff 0; non-AA triangle fill). Still refused on the bridge with
   stable diagnostics: DrawImage (texture), non-SRC_OVER blend modes,
   saveLayer/destination-read/filters, vertices/mesh, runtime effects, and
-  color/SDF/emoji text. The "parity verified for all 5 draw families" over-claim in
-  the M31-003 evidence is corrected accordingly: structural/task-level coverage PLUS
-  real bridge↔legacy parity for the 3 fill families; refused families are not claimed
-  as parity-proven.
+color/SDF/emoji text. The "parity verified for all 5 draw families" over-claim in
+the M31-003 evidence is corrected accordingly: structural/task-level coverage PLUS
+real bridge↔legacy parity for the 3 fill families; refused families are not claimed
+as parity-proven.
+- `done` (2026-06-26): promoted after maintainer review of PR #1892 (https://github.com/ygdrasil-io/kanvas/pull/1892) — no blocking issues found.
 
 ## Linear Labels
 

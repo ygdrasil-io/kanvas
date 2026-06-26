@@ -1,7 +1,7 @@
 ---
 id: KGPU-M32-013
 title: "Legacy decommission: rect-rrect-stroke formal refusal"
-status: proposed
+status: review
 milestone: M32
 priority: P1
 owner_area: legacy-cleanup
@@ -129,6 +129,9 @@ rtk git diff --check
   `unsupported_material`/`unsupported_blend` pattern), not the pre-implementation
   literal `unsupported_stroke_command` above. Kept `proposed` — independent review
   owed.
+
+
+- `review` (2026-06-26): promoted after maintainer review of PR #1892 (https://github.com/ygdrasil-io/kanvas/pull/1892) — no blocking issues found.
 
 ## Linear Labels
 

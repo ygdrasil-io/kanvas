@@ -1,7 +1,7 @@
 ---
 id: KGPU-M32-016
 title: "Legacy decommission: images-bitmap-codecs-uploads formal refusal (dependency-gated)"
-status: proposed
+status: review
 milestone: M32
 priority: P1
 owner_area: legacy-cleanup
@@ -125,6 +125,9 @@ rtk git diff --check
   `MaterialRefuseTest`. Report:
   `reports/gpu-renderer/2026-06-26-m32-refusal-coverage.md`. Codec/upload port
   remains dependency-gated (KGPU-M11-004).
+
+
+- `review` (2026-06-26): promoted after maintainer review of PR #1892 (https://github.com/ygdrasil-io/kanvas/pull/1892) — no blocking issues found.
 
 ## Linear Labels
 
