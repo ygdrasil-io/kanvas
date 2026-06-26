@@ -446,6 +446,7 @@ object GPUFillRectCommandBuilder {
         blend: GPUBlendFacts = GPUBlendFacts.srcOver(),
         paintOrder: Int = 0,
         source: GPUCommandSource = GPUCommandSource(adapter = "gpu-renderer", operation = "fillRect"),
+        stroke: Boolean = false,
     ): NormalizedDrawCommand.FillRect {
         val bounds = rect.toBounds()
         val resolvedClip = clip ?: GPUClipFacts.wideOpen(bounds = bounds)
@@ -464,6 +465,7 @@ object GPUFillRectCommandBuilder {
                 requiresBarrier = false,
             ),
             source = source,
+            stroke = stroke,
         )
     }
 }
@@ -489,6 +491,7 @@ object GPUFillRRectCommandBuilder {
         blend: GPUBlendFacts = GPUBlendFacts.srcOver(),
         paintOrder: Int = 0,
         source: GPUCommandSource = GPUCommandSource(adapter = "gpu-renderer", operation = "fillRRect"),
+        stroke: Boolean = false,
     ): NormalizedDrawCommand.FillRRect {
         val bounds = rrect.rect.toBounds()
         val resolvedClip = clip ?: GPUClipFacts.wideOpen(bounds = bounds)
@@ -507,6 +510,7 @@ object GPUFillRRectCommandBuilder {
                 requiresBarrier = false,
             ),
             source = source,
+            stroke = stroke,
         )
     }
 }
@@ -573,6 +577,7 @@ object GPUFillPathCommandBuilder {
         blend: GPUBlendFacts = GPUBlendFacts.srcOver(),
         paintOrder: Int = 0,
         source: GPUCommandSource = GPUCommandSource(adapter = "gpu-renderer", operation = "fillPath.shadow"),
+        stroke: Boolean = false,
     ): NormalizedDrawCommand.FillPath {
         val vertexCount = tessellatedVertices.size / 2
         val minBounds = if (vertexCount > 0) {
@@ -610,6 +615,7 @@ object GPUFillPathCommandBuilder {
                 requiresBarrier = false,
             ),
             source = source,
+            stroke = stroke,
         )
     }
 }
@@ -653,6 +659,13 @@ sealed interface NormalizedDrawCommand {
         override val bounds: GPUBounds,
         override val ordering: GPUOrderingFacts,
         override val source: GPUCommandSource,
+        /**
+         * `true` when the originating paint requested a stroke (or
+         * stroke-and-fill) style. Stroke draws are refused with
+         * `unsupported_stroke` instead of being silently filled. Defaults to
+         * `false` so all existing fill callers keep fill behavior.
+         */
+        val stroke: Boolean = false,
     ) : NormalizedDrawCommand {
         override val drawKind: GPUDrawKind = GPUDrawKind.FillRect
     }
@@ -669,6 +682,8 @@ sealed interface NormalizedDrawCommand {
         override val bounds: GPUBounds,
         override val ordering: GPUOrderingFacts,
         override val source: GPUCommandSource,
+        /** See [FillRect.stroke]. Stroke rrect draws refuse instead of filling. */
+        val stroke: Boolean = false,
     ) : NormalizedDrawCommand {
         override val drawKind: GPUDrawKind = GPUDrawKind.FillRRect
     }
@@ -690,6 +705,8 @@ sealed interface NormalizedDrawCommand {
         override val bounds: GPUBounds,
         override val ordering: GPUOrderingFacts,
         override val source: GPUCommandSource,
+        /** See [FillRect.stroke]. Stroke path draws refuse instead of filling. */
+        val stroke: Boolean = false,
     ) : NormalizedDrawCommand {
         override val drawKind: GPUDrawKind = GPUDrawKind.FillPath
     }

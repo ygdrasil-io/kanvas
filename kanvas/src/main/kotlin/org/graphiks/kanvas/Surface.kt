@@ -22,6 +22,27 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPURecordingID
 
 private const val GPU_COLOR_FORMAT: String = "rgba8unorm"
 
+/**
+ * Returns the stable stroke refusal reason (`unsupported_stroke`) when [this]
+ * command carries a stroke-style paint, or `null` for fill commands.
+ *
+ * Stroke-style draws (Skia `kStroke_Style` / `kStrokeAndFill_Style`) cannot be
+ * rendered by the native fill pipeline; they are REFUSED instead of being
+ * silently filled. Real stroke rendering is dependency-gated (KGPU-M3-003).
+ * The dispatch methods surface this reason through
+ * [SurfaceRenderResult.diagnostics] so the bridge's `emitRefusedDiagnostics`
+ * reports `refuse:<command>:unsupported_stroke`.
+ */
+internal fun NormalizedDrawCommand.strokeRefusalReasonOrNull(): String? {
+    val stroke = when (this) {
+        is NormalizedDrawCommand.FillRect -> stroke
+        is NormalizedDrawCommand.FillRRect -> stroke
+        is NormalizedDrawCommand.FillPath -> stroke
+        is NormalizedDrawCommand.DrawTextRun -> false
+    }
+    return if (stroke) "unsupported_stroke" else null
+}
+
 private val SOLID_RECT_WGSL: String = """
     struct Uniforms {
         color: vec4f,
@@ -178,6 +199,8 @@ class Surface(
             diagnostics.add("refuse:${cmd.diagnosticName}:$reason")
         }
 
+        cmd.strokeRefusalReasonOrNull()?.let { refuse(it); return }
+
         val material = cmd.material
         if (material !is GPUMaterialDescriptor.SolidColor) {
             refuse("unsupported_material:${material.kind.name}")
@@ -231,6 +254,8 @@ class Surface(
         fun refuse(reason: String) {
             diagnostics.add("refuse:${cmd.diagnosticName}:$reason")
         }
+
+        cmd.strokeRefusalReasonOrNull()?.let { refuse(it); return }
 
         val material = cmd.material
         if (material !is GPUMaterialDescriptor.SolidColor) {
@@ -329,6 +354,8 @@ fn fs_main() -> @location(0) vec4f {
         fun refuse(reason: String) {
             diagnostics.add("refuse:${cmd.diagnosticName}:$reason")
         }
+
+        cmd.strokeRefusalReasonOrNull()?.let { refuse(it); return }
 
         val material = cmd.material
         if (material !is GPUMaterialDescriptor.SolidColor) {

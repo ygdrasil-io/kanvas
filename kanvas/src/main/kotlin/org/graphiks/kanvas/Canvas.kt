@@ -89,6 +89,7 @@ class Canvas(private val surface: Surface) {
             material = material,
             blend = blend,
             source = source,
+            stroke = paint.style == PaintStyle.STROKE,
         )
         surface.recorder.record(command)
     }
@@ -108,6 +109,7 @@ class Canvas(private val surface: Surface) {
             material = material,
             blend = blend,
             source = source,
+            stroke = paint.style == PaintStyle.STROKE,
         )
         surface.recorder.record(command)
     }
@@ -127,6 +129,7 @@ class Canvas(private val surface: Surface) {
             material = material,
             blend = blend,
             source = source,
+            stroke = paint.style == PaintStyle.STROKE,
         )
         surface.recorder.record(command)
     }
@@ -163,6 +166,7 @@ class Canvas(private val surface: Surface) {
             material = material,
             blend = blend,
             source = source,
+            stroke = paint.style == PaintStyle.STROKE,
         )
         surface.recorder.record(command)
     }

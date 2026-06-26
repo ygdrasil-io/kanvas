@@ -134,6 +134,15 @@ fun org.skia.foundation.SkPaint.toKanvasPaint(): Paint {
             org.skia.foundation.SkPaint.Join.kRound_Join -> org.graphiks.kanvas.StrokeJoin.ROUND
             org.skia.foundation.SkPaint.Join.kBevel_Join -> org.graphiks.kanvas.StrokeJoin.BEVEL
         }
+        // Carry the geometry style so stroke-style (and stroke-and-fill) draws
+        // REFUSE with `unsupported_stroke` downstream instead of being silently
+        // filled. Real stroke rendering is dependency-gated (KGPU-M3-003).
+        p.style = when (style) {
+            org.skia.foundation.SkPaint.Style.kFill_Style -> org.graphiks.kanvas.PaintStyle.FILL
+            org.skia.foundation.SkPaint.Style.kStroke_Style,
+            org.skia.foundation.SkPaint.Style.kStrokeAndFill_Style,
+            -> org.graphiks.kanvas.PaintStyle.STROKE
+        }
     }
 }
 

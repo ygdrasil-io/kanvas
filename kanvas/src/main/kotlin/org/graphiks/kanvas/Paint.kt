@@ -35,6 +35,18 @@ enum class StrokeJoin(val label: String) {
     BEVEL("bevel"),
 }
 
+/**
+ * Paint geometry style. [FILL] is the only style the native pipeline can
+ * render; [STROKE] (covering Skia's `kStroke_Style` and
+ * `kStrokeAndFill_Style`) is carried so stroke draws REFUSE with
+ * `unsupported_stroke` instead of being silently filled. Real stroke
+ * rendering is dependency-gated (KGPU-M3-003).
+ */
+enum class PaintStyle(val label: String) {
+    FILL("fill"),
+    STROKE("stroke"),
+}
+
 sealed interface ColorFilter {
     data class Matrix(val values: FloatArray) : ColorFilter {
         override fun equals(other: Any?): Boolean {
@@ -60,6 +72,7 @@ class Paint(
     var strokeWidth: Float = 0f,
     var strokeCap: StrokeCap = StrokeCap.BUTT,
     var strokeJoin: StrokeJoin = StrokeJoin.MITER,
+    var style: PaintStyle = PaintStyle.FILL,
     var antiAlias: Boolean = true,
 ) {
     fun color(r: Float, g: Float, b: Float, a: Float = 1f): Paint = apply {
@@ -72,6 +85,7 @@ class Paint(
     fun strokeWidth(w: Float): Paint = apply { this.strokeWidth = w }
     fun strokeCap(cap: StrokeCap): Paint = apply { this.strokeCap = cap }
     fun strokeJoin(join: StrokeJoin): Paint = apply { this.strokeJoin = join }
+    fun style(style: PaintStyle): Paint = apply { this.style = style }
 
     fun lower(): GPUPaintDescriptor {
         val source: GPUMaterialSourceDescriptor = shader?.lower() ?: GPUMaterialSourceDescriptor.Solid(

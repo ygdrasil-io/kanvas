@@ -125,6 +125,19 @@ rtk git diff --check
   KGPU-M32-002 and KGPU-M31-005; kept `proposed` pending independent review.
   Path-stroke remainder refused and dependency-linked to KGPU-M11-007. No new
   evidence produced here.
+- `proposed` (2026-06-26, Phase 2.B(i)): Path-stroke sub-case now REFUSES instead
+  of silently filling. `toKanvasPaint()` reads `SkPaint.style`; stroke /
+  stroke-and-fill path draws carry `stroke=true` on
+  `NormalizedDrawCommand.FillPath` and are refused in `Surface.dispatchFillPath`
+  with the stable reason `unsupported_stroke`, surfaced via
+  `SurfaceRenderResult.diagnostics` → `SkiaKanvasSurface.emitRefusedDiagnostics`
+  (emitted form `refuse:<command>:unsupported_stroke`). Path *fill* dispatch is
+  unchanged (default `stroke=false`); its prior parity evidence still stands. No
+  stroke renderer added; real path-stroke port stays KGPU-M11-007. Hermetic +
+  GPU-gated regression tests pass. Evidence:
+  `reports/gpu-renderer/2026-06-26-m32-013-stroke-refusal.md`. NOTE: implemented
+  reason token is `unsupported_stroke`, not the pre-implementation literal
+  `path:unsupported_stroke` above. Kept `proposed` — independent review owed.
 
 ## Linear Labels
 

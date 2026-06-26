@@ -3,6 +3,7 @@ package org.skia.kanvas
 import org.graphiks.kanvas.BlendMode
 import org.graphiks.kanvas.KanvasFillType
 import org.graphiks.kanvas.KanvasTileMode
+import org.graphiks.kanvas.PaintStyle
 import org.graphiks.math.SkColor4f
 import org.graphiks.math.SkColorSetARGB
 import org.graphiks.math.SkRect
@@ -105,6 +106,29 @@ class KanvasSkiaBridgeTest {
         assertEquals(BlendMode.SRC_OVER, kp.blendMode)
         assertEquals(0f, kp.strokeWidth)
         assertEquals(false, kp.antiAlias)
+    }
+
+    @Test
+    fun `toKanvasPaint maps fill style to FILL`() {
+        val sp = SkPaint().apply { style = SkPaint.Style.kFill_Style }
+        assertEquals(PaintStyle.FILL, sp.toKanvasPaint().style)
+    }
+
+    @Test
+    fun `toKanvasPaint defaults to FILL style`() {
+        assertEquals(PaintStyle.FILL, SkPaint().toKanvasPaint().style)
+    }
+
+    @Test
+    fun `toKanvasPaint maps stroke style to STROKE`() {
+        val sp = SkPaint().apply { style = SkPaint.Style.kStroke_Style }
+        assertEquals(PaintStyle.STROKE, sp.toKanvasPaint().style)
+    }
+
+    @Test
+    fun `toKanvasPaint maps stroke-and-fill style to STROKE`() {
+        val sp = SkPaint().apply { style = SkPaint.Style.kStrokeAndFill_Style }
+        assertEquals(PaintStyle.STROKE, sp.toKanvasPaint().style)
     }
 
     @Test
@@ -559,6 +583,105 @@ class KanvasSkiaBridgeTest {
         assertFalse(
             output.contains("kanvas-render-failed"),
             "Expected NO 'kanvas-render-failed' diagnostic for supported solid rect, got: $output",
+        )
+    }
+
+    @Test
+    fun `stroked drawRect via bridge emits refuse unsupported_stroke`() {
+        assumeTrue(GPUBackendRuntimeFactory.createOrNull() != null, "Skipping: WebGPU not available")
+        val skSurface = SkSurface.MakeRasterN32Premul(64, 64)
+        val kanvasSurface = SkiaKanvasSurface.wrap(skSurface)
+
+        kanvasSurface.drawRect(
+            SkRect.MakeLTRB(10f, 10f, 54f, 54f),
+            SkPaint().apply {
+                color = SkColorSetARGB(255, 255, 0, 0)
+                style = SkPaint.Style.kStroke_Style
+                strokeWidth = 3f
+            },
+        )
+
+        val errBytes = java.io.ByteArrayOutputStream()
+        val originalErr = System.err
+        System.setErr(java.io.PrintStream(errBytes))
+        try {
+            kanvasSurface.flush()
+        } finally {
+            System.setErr(originalErr)
+        }
+
+        val output = errBytes.toString("UTF-8")
+        assertTrue(
+            output.contains("refuse:") && output.contains("unsupported_stroke"),
+            "Expected 'refuse:...:unsupported_stroke' diagnostic for stroked drawRect, got: $output",
+        )
+    }
+
+    @Test
+    fun `stroked drawRRect via bridge emits refuse unsupported_stroke`() {
+        assumeTrue(GPUBackendRuntimeFactory.createOrNull() != null, "Skipping: WebGPU not available")
+        val skSurface = SkSurface.MakeRasterN32Premul(64, 64)
+        val kanvasSurface = SkiaKanvasSurface.wrap(skSurface)
+
+        kanvasSurface.drawRRect(
+            SkRRect.MakeRectXY(SkRect.MakeLTRB(10f, 10f, 54f, 54f), 5f, 5f),
+            SkPaint().apply {
+                color = SkColorSetARGB(255, 0, 255, 0)
+                style = SkPaint.Style.kStroke_Style
+                strokeWidth = 3f
+            },
+        )
+
+        val errBytes = java.io.ByteArrayOutputStream()
+        val originalErr = System.err
+        System.setErr(java.io.PrintStream(errBytes))
+        try {
+            kanvasSurface.flush()
+        } finally {
+            System.setErr(originalErr)
+        }
+
+        val output = errBytes.toString("UTF-8")
+        assertTrue(
+            output.contains("refuse:") && output.contains("unsupported_stroke"),
+            "Expected 'refuse:...:unsupported_stroke' diagnostic for stroked drawRRect, got: $output",
+        )
+    }
+
+    @Test
+    fun `stroked drawPath via bridge emits refuse unsupported_stroke`() {
+        assumeTrue(GPUBackendRuntimeFactory.createOrNull() != null, "Skipping: WebGPU not available")
+        val skSurface = SkSurface.MakeRasterN32Premul(64, 64)
+        val kanvasSurface = SkiaKanvasSurface.wrap(skSurface)
+
+        val path = SkPathBuilder()
+            .moveTo(10f, 10f)
+            .lineTo(50f, 10f)
+            .lineTo(30f, 50f)
+            .close()
+            .detach()
+        kanvasSurface.drawPath(
+            path,
+            SkPaint().apply {
+                color = SkColorSetARGB(255, 0, 0, 255)
+                style = SkPaint.Style.kStroke_Style
+                strokeWidth = 3f
+            },
+        )
+
+        val errBytes = java.io.ByteArrayOutputStream()
+        val originalErr = System.err
+        System.setErr(java.io.PrintStream(errBytes))
+        try {
+            kanvasSurface.flush()
+        } finally {
+            System.setErr(originalErr)
+        }
+
+        val output = errBytes.toString("UTF-8")
+        assertTrue(
+            output.contains("refuse:") && output.contains("unsupported_stroke"),
+            "Expected 'refuse:...:unsupported_stroke' diagnostic for stroked drawPath, got: $output",
         )
     }
 }

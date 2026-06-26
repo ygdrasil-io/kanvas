@@ -116,6 +116,19 @@ rtk git diff --check
   stroke dispatch path exists; formal refusal + hermetic test required, future
   port deferred to KGPU-M3-003. Not dependency/codec-gated — refusal is because
   stroke is unimplemented, so `claim_impact: RefuseRequired`. No evidence yet.
+- `proposed` (2026-06-26, Phase 2.B(i)): Silent stroke-fill bug fixed. The bridge
+  `toKanvasPaint()` now reads `SkPaint.style`; stroke / stroke-and-fill draws are
+  carried as `stroke=true` on `NormalizedDrawCommand.FillRect/FillRRect` and
+  REFUSED in `Surface.dispatchFillRect/RRect` with the stable reason
+  `unsupported_stroke`, surfaced via `SurfaceRenderResult.diagnostics` →
+  `SkiaKanvasSurface.emitRefusedDiagnostics` (emitted form
+  `refuse:<command>:unsupported_stroke`). No stroke renderer was added; real port
+  stays KGPU-M3-003. Hermetic + GPU-gated regression tests pass. Evidence:
+  `reports/gpu-renderer/2026-06-26-m32-013-stroke-refusal.md`. NOTE: implemented
+  reason token is `unsupported_stroke` (per task instruction + existing
+  `unsupported_material`/`unsupported_blend` pattern), not the pre-implementation
+  literal `unsupported_stroke_command` above. Kept `proposed` — independent review
+  owed.
 
 ## Linear Labels
 
