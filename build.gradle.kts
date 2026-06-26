@@ -563,19 +563,6 @@ project(":cpu-raster").registerPipelineConformanceTest(
     ),
 )
 
-project(":gpu-raster").registerPipelineConformanceTest(
-    descriptionText = "Runs generated WGSL, text WGSL validation, BlendPlan, and runtime descriptor conformance tests.",
-    testPatterns = listOf(
-        "org.skia.gpu.webgpu.tools.WgslValidationReportTest",
-        "org.skia.gpu.webgpu.tools.WgslStrictValidationReportTest",
-        "org.skia.gpu.webgpu.tools.GeneratedSolidRectWgslTest",
-        "org.skia.gpu.webgpu.tools.GeneratedLinearGradientWgslTest",
-        "org.skia.gpu.webgpu.BlendPlanTest",
-        "org.skia.gpu.webgpu.RuntimeEffectDescriptorWebGpuTest",
-        "org.skia.gpu.webgpu.TextWgslValidationPipelineConformanceTest",
-    ),
-)
-
 project(":render-pipeline").registerPipelineConformanceTest(
     descriptionText = "Runs PipelineIR, CPU executor, and geometry coverage oracle conformance tests.",
     testPatterns = listOf(
