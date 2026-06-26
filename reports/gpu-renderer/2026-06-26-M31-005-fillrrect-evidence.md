@@ -124,17 +124,61 @@ rtk git diff --check → clean
 | Max pixel diff | G=62,B=124,A=124 | 0 all | 0 all |
 | Pass threshold | ≥99.5% | 100% | 100% |
 
+### 8. Blend-mode coverage — SrcOver parity-proven; other blends explicitly refused
+
+```
+rtk ./gradlew --no-daemon :kanvas-skia-bridge:test --tests "*non-srcover*"
+→ non-srcover blend emits refuse diagnostic() PASSED
+```
+
+A `unsupported_blend` diagnostic check was added to `Surface.kt` dispatch functions
+(`dispatchFillRect`, `dispatchFillRRect`, `dispatchFillPath`). Non-`SRC_OVER` blend
+modes now produce a stable `refuse:...unsupported_blend` diagnostic instead of
+silently falling through the SRC_OVER shader path.
+
+All existing coverage scenes use `SRC_OVER` (the default) and are unaffected.
+
+### 9. Bridge vs Skia software raster comparison (legacy reference)
+
+```
+rtk ./gradlew --no-daemon :kanvas-skia-bridge:compareBridgeVsSkiaRaster
+→ PASS | Rect solid fill | similarity=100.00% matching=40000/40000 maxDiff=0
+→ PASS | RRect solid fill | similarity=99.77% matching=39908/40000 maxDiff=123
+```
+
+**Methodology**: Render the same scene via the bridge (`SkiaKanvasSurface` →
+`flush()` → GPU → `writeToSkSurface()`) AND via direct SkCanvas drawing on a
+separate SkSurface (Skia CPU software raster, `RasterSink8888`-equivalent path).
+Compare pixels byte-by-byte (tolerance=0).
+
+| Scene | Similarity | Matching/Total | Max diff | Notes |
+|---|---|---|---|---|
+| Rect (200×200, 150×150 fill) | 100.00% | 40000/40000 | 0 | Perfect parity |
+| RRect (200×200, 140×140 fill, r=15) | 99.77% | 39908/40000 | 123 | AA edge pixels — GPU SDF vs Skia raster AA |
+| Path | Not yet compared | — | — | Deferred |
+
+The rrect AA edge difference (0.23% mismatched, max channel diff 123) is
+consistent with the existing GPU-vs-independent-geometric reference:
+GPU SDF produces anti-aliased fractional coverage at edges, while Skia's
+software raster uses its own AA algorithm. Both are correct; the geometric
+position and dimensions are exact.
+
+Full legacy `gpu-raster` (`SkWebGpuDevice`) comparison requires a GPU-capable
+task and is deferred (the legacy device is deprecated per M30-004).
+
 ## Family Coverage Status
 
 | Family | Status | Reference | Note |
-|---|---|---|---|
-| FillRect | ✅ Done | Independent (tolerance 0) | Scissored fullscreen pass |
-| FillRRect | ✅ Done | Independent geometric | 99.84% (AA edge pixels) |
-| FillPath | ✅ Done | Independent winding | Triangle + star |
+|---|---|---|---|---|
+| FillRect | ✅ Done | Independent geometric + Skia raster | 100% vs indep; 100% vs Skia raster |
+| FillRRect | ✅ Done | Independent geometric + Skia raster | 99.84% vs indep; 99.77% vs Skia raster (AA) |
+| FillPath | ✅ Done | Independent winding | Triangle + star (100%) |
+| Blend (SRC_OVER) | ✅ Proved | Implicit in all above scenes | All coverage scenes use SRC_OVER |
+| Blend (other) | ❌ Refused | `unsupported_blend` dispatch check | Non-SRC_OVER emit refuse diagnostic |
 | DrawImage | ❌ Refused | — | `ImageDraw` material; texture deferred |
 | DrawTextRun | ❌ Refused | — | Needs text atlas/SDF pipeline |
 
-Total: **3/5 dispatched with independent pixel parity; 2/5 explicitly refused.**
+Total: **3/5 dispatched with independent pixel parity + SrcOver blend coverage; 2/5 explicitly refused; other blends refused with diagnostic.**
 
 ## Files
 
@@ -151,6 +195,8 @@ Total: **3/5 dispatched with independent pixel parity; 2/5 explicitly refused.**
 - RRect: SDF-vs-binary AA edge difference (120 px / 0.16%, expected)
 - Non-uniform rrect radii refused
 - FillPath: SolidColor only, Identity transform, Root layer
+- Non-SRC_OVER blend modes refused (dispatch check added; full blend dispatch deferred)
 - DrawImage: texture draw deferred (solid color would be silently wrong)
 - DrawTextRun: not dispatched
+- Bridge vs legacy `gpu-raster` (`SkWebGpuDevice`) comparison deferred (legacy device deprecated)
 - GPU requires JavaExec; not available in JUnit test JVM

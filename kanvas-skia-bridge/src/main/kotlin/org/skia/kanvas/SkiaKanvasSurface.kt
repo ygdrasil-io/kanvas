@@ -14,9 +14,13 @@ import org.skia.foundation.SkRRect
 import org.skia.foundation.SkTextBlob
 import org.graphiks.math.SkColorSetARGB
 import org.graphiks.math.SkRect
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
 
 @Volatile
 private var activationDiagnosticEmitted = false
+
+@Volatile
+private var activationFailedEmitted = false
 
 fun isKanvasRendererEnabled(): Boolean =
     !RollbackConfig.useLegacyGpuRaster
@@ -40,6 +44,19 @@ internal fun emitRouteMigratedDiagnostic() {
                     "Set -Dkanvas.product.activation.disable=true to disable.",
             )
         }
+    }
+}
+
+internal fun checkGpuActivationOrThrow() {
+    if (activationFailedEmitted) return
+    if (GPUBackendRuntimeFactory.createOrNull() == null) {
+        activationFailedEmitted = true
+        emitBridgeDiagnostic(
+            code = "kanvas-activation-failed",
+            message = "WebGPU backend unavailable. Kanvas native pipeline cannot start. " +
+                "No silent fallback to legacy gpu-raster.",
+        )
+        error("kanvas-activation-failed: WebGPU backend unavailable. Refusing to start Kanvas native pipeline.")
     }
 }
 
@@ -138,6 +155,7 @@ class SkiaKanvasSurface internal constructor(
         @JvmStatic
         fun wrapIfEnabled(skSurface: SkSurface): SkiaKanvasSurface? {
             if (!isKanvasRendererEnabled()) return null
+            checkGpuActivationOrThrow()
             emitRouteMigratedDiagnostic()
             return wrap(skSurface)
         }
