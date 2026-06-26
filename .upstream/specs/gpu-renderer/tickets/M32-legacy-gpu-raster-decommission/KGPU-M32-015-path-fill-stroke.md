@@ -138,6 +138,12 @@ rtk git diff --check
   `reports/gpu-renderer/2026-06-26-m32-013-stroke-refusal.md`. NOTE: implemented
   reason token is `unsupported_stroke`, not the pre-implementation literal
   `path:unsupported_stroke` above. Kept `proposed` — independent review owed.
+- 2026-06-26 (Phase 2.C, still `proposed`): port-evidence consolidation. Path
+  **fill** is proven — bridge↔legacy Path **100% (40000/40000, maxDiff 0)**
+  (m32-002) and independent-CPU triangle+star **100% (76800/76800)** (M31-005).
+  Path **stroke** is refused (`unsupported_stroke`; m32-013). See
+  `reports/gpu-renderer/2026-06-26-m32-port-evidence.md` §KGPU-M32-015.
+  Documentation-only; no new evidence; independent review still owed.
 
 ## Linear Labels
 

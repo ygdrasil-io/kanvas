@@ -113,6 +113,12 @@ rtk git diff --check
 - `proposed`: Phase 2.A ticket created from KGPU-M32-001 row 2 (`port`). FillRect
   parity already proven via KGPU-M32-002 (`c5b7387`) and KGPU-M31-005; kept
   `proposed` pending independent review. No new evidence produced here.
+- 2026-06-26 (Phase 2.C, still `proposed`): port-evidence consolidation. FillRect
+  is fully proven — bridge↔legacy Rect **100% (40000/40000, maxDiff 0)** (m32-002,
+  re-confirmed in this Phase 2.C run) plus independent-CPU and Skia-raster
+  **100%** (M31-005). See
+  `reports/gpu-renderer/2026-06-26-m32-port-evidence.md` §KGPU-M32-011.
+  Documentation-only; no new evidence; independent review still owed.
 
 ## Linear Labels
 

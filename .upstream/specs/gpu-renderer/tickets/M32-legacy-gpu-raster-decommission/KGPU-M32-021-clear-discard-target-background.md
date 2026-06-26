@@ -119,6 +119,14 @@ rtk git diff --check
   It is therefore intentionally omitted from `depends_on` (no invented link). A
   real replacement ticket id must be assigned before Phase 3 retirement
   authorization (KGPU-M32-003).
+- 2026-06-26 (Phase 2.C, still `proposed`): port-evidence consolidation. Surface
+  clear / background-init is **trivial / implicit** — exercised by every rendered
+  scene (e.g. the m32-002 backgrounds); no standalone empty-surface readback dump
+  has been produced. The placeholder replacement-ticket
+  `route-specific-clear-discard-ticket-required` must be assigned a real id before
+  Phase 3 retirement (KGPU-M32-003). See
+  `reports/gpu-renderer/2026-06-26-m32-port-evidence.md` §KGPU-M32-021.
+  Documentation-only; no new evidence; independent review still owed.
 
 ## Linear Labels
 

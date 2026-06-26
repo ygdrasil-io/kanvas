@@ -139,6 +139,13 @@ rtk git diff --check
   `RRectRadiiRefuseTest`. Report:
   `reports/gpu-renderer/2026-06-26-m32-refusal-coverage.md`. Gradient/non-uniform
   port remains dependency-gated.
+- 2026-06-26 (Phase 2.C, still `proposed`): port-evidence consolidation. The
+  **solid uniform rrect** sub-case is proven — bridge↔legacy RRect **99.77%
+  (39908/40000, maxDiff 123)** (m32-002) and independent-CPU **99.84%
+  (76680/76800)** (M31-005); the sub-1% delta is the expected SDF-vs-analytic AA
+  edge. Gradients and **non-uniform radii** are refused. See
+  `reports/gpu-renderer/2026-06-26-m32-port-evidence.md` §KGPU-M32-012.
+  Documentation-only; no new evidence; independent review still owed.
 
 ## Linear Labels
 

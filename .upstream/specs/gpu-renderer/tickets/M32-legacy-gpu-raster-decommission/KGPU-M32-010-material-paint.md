@@ -149,6 +149,12 @@ rtk git diff --check
   materials and refuse. Tests: `MaterialRefuseTest`. Report:
   `reports/gpu-renderer/2026-06-26-m32-refusal-coverage.md`. No new render
   feature; gradient/shader port remains dependency-gated.
+- 2026-06-26 (Phase 2.C, still `proposed`): port-evidence consolidation. The
+  **SolidColor** material sub-case is covered transitively by all solid
+  rect/rrect/path parity (m32-002 + M31-005). Gradients / image-shaders /
+  runtime-effects are refused (not proven). See
+  `reports/gpu-renderer/2026-06-26-m32-port-evidence.md` §KGPU-M32-010.
+  Documentation-only; no new evidence; independent review still owed.
 
 ## Linear Labels
 

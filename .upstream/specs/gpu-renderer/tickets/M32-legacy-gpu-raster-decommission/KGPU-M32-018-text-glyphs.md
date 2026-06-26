@@ -142,6 +142,13 @@ rtk git diff --check
   still green). Tests: `ClipRefuseTest`. Report:
   `reports/gpu-renderer/2026-06-26-m32-refusal-coverage.md`. Color/SDF/emoji port
   remains dependency-gated (KGPU-M6-002).
+- 2026-06-26 (Phase 2.C, still `proposed`): port-evidence consolidation. The
+  **A8 text fill** sub-case is proven as **GPU↔CPU-oracle parity**
+  (`TextGpuEvidenceMain.kt`, PASS) — note this is CPU-parity, **NOT** bridge↔legacy
+  GPU pixel parity (strictly weaker than the rect/rrect/path evidence).
+  Color/SDF/emoji refused. See
+  `reports/gpu-renderer/2026-06-26-m32-port-evidence.md` §KGPU-M32-018.
+  Documentation-only; no new evidence; independent review still owed.
 
 ## Linear Labels
 

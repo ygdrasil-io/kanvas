@@ -152,6 +152,13 @@ rtk git diff --check
   `reports/gpu-renderer/2026-06-26-m32-refusal-coverage.md`. Other blends / color
   filters / runtime effects / color management port remains dependency-gated
   (KGPU-M11-008).
+- 2026-06-26 (Phase 2.C, still `proposed`): port-evidence consolidation. The
+  **SRC_OVER** blend sub-case is proven only **implicitly** — SRC_OVER is the
+  blend used by every parity scene (M31-005 §8). Other blends / runtime effects
+  are refused; color filters are not wired into material lowering (neither
+  rendered nor refused). See
+  `reports/gpu-renderer/2026-06-26-m32-port-evidence.md` §KGPU-M32-019.
+  Documentation-only; no new evidence; independent review still owed.
 
 ## Linear Labels
 

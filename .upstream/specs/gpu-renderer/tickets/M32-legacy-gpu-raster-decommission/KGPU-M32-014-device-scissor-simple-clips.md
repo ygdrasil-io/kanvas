@@ -139,6 +139,15 @@ rtk git diff --check
   clip`). Tests: `ClipRefuseTest`. Report:
   `reports/gpu-renderer/2026-06-26-m32-refusal-coverage.md`. Device-scissor port
   remains dependency-gated.
+- 2026-06-26 (Phase 2.C, still `proposed`): port-evidence consolidation. HONEST
+  scoping — the "simple clip" port is effectively **WideOpen (full-surface)**,
+  implicitly covered by all parity scenes (`Canvas` defaults to WideOpen; the
+  bridge has no clip entrypoint). The **DeviceRect** scissor path is
+  dispatch-capable (`Surface.kt:70`, `TextRunDispatch.kt:100`) but **NOT
+  bridge-reachable end-to-end** — DeviceRect end-to-end parity is **NOT claimed**.
+  Complex clips refuse `unsupported_clip`. See
+  `reports/gpu-renderer/2026-06-26-m32-port-evidence.md` §KGPU-M32-014.
+  Documentation-only; no new evidence; independent review still owed.
 
 ## Linear Labels
 
