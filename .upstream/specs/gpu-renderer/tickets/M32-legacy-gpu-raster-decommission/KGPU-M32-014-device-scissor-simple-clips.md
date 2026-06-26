@@ -130,6 +130,15 @@ rtk git diff --check
   owed. Complex-clip remainder refused and dependency-linked to KGPU-M2-003.
   Matrix concern #2 noted: only the embedded scissor is ported, not a standalone
   clip stack. No new evidence produced here.
+- 2026-06-26 (Phase 2.B(ii), still `proposed`): added a DISPATCH-LEVEL hermetic
+  refuse test — a fill command with a non-`WideOpen`/`DeviceRect` clip refuses
+  `unsupported_clip:<ClipKind>`. HONESTY: complex clips are NOT constructible via
+  the public bridge/Canvas API (`Canvas` always emits `WideOpen`; the bridge has
+  no clip entrypoint), so this is a guard test, not a reachable end-to-end
+  complex-clip refuse (asserted by `drawRect via public API produces a WideOpen
+  clip`). Tests: `ClipRefuseTest`. Report:
+  `reports/gpu-renderer/2026-06-26-m32-refusal-coverage.md`. Device-scissor port
+  remains dependency-gated.
 
 ## Linear Labels
 

@@ -134,6 +134,14 @@ rtk git diff --check
   stale KGPU-M31-005 "DrawTextRun refuse" claim is superseded (matrix concern
   #5). Color/SDF/emoji remainder refused and dependency-linked to KGPU-M6-002.
   No new evidence produced here.
+- 2026-06-26 (Phase 2.B(ii), still `proposed`): added a hermetic text **clip**
+  refuse test — a `DrawTextRun` with a non-`WideOpen`/`DeviceRect` clip refuses
+  `unsupported_clip:<ClipKind>` via `TextRunDispatchPlanner.plan` (no GPU). The
+  non-solid text **material** refuse is already covered by
+  `TextRunDispatchTest.planner refuses a non-solid text material` (referenced,
+  still green). Tests: `ClipRefuseTest`. Report:
+  `reports/gpu-renderer/2026-06-26-m32-refusal-coverage.md`. Color/SDF/emoji port
+  remains dependency-gated (KGPU-M6-002).
 
 ## Linear Labels
 

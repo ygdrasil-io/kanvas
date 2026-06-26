@@ -43,6 +43,62 @@ internal fun NormalizedDrawCommand.strokeRefusalReasonOrNull(): String? {
     return if (stroke) "unsupported_stroke" else null
 }
 
+/**
+ * Returns the first stable refusal reason for a fill command's shared dispatch
+ * guards (stroke, material, transform, clip, layer, blend), or `null` when the
+ * command passes every guard.
+ *
+ * The order mirrors the historical inline checks in the
+ * `dispatchFillRect`/`dispatchFillRRect`/`dispatchFillPath` methods so behavior
+ * is preserved exactly; extracting it makes the refusals hermetically testable
+ * (no GPU) and keeps a single source of truth. Non-SolidColor materials
+ * (gradients, image/runtime-effect shaders) refuse with
+ * `unsupported_material:<kind>` BEFORE any fill dispatch, so a non-solid paint
+ * is never silently solid-filled (KGPU-M32-010/-012/-016/-019). DrawTextRun is
+ * not a fill command and is planned separately by [TextRunDispatchPlanner].
+ */
+internal fun NormalizedDrawCommand.fillGuardRefusalReasonOrNull(): String? {
+    strokeRefusalReasonOrNull()?.let { return it }
+    if (this is NormalizedDrawCommand.DrawTextRun) return null
+    val material = this.material
+    if (material !is GPUMaterialDescriptor.SolidColor) {
+        return "unsupported_material:${material.kind.name}"
+    }
+    if (transform.type != GPUTransformType.Identity) {
+        return "unsupported_transform:${transform.type.name}"
+    }
+    if (clip.kind !in listOf(GPUClipKind.WideOpen, GPUClipKind.DeviceRect)) {
+        return "unsupported_clip:${clip.kind.name}"
+    }
+    if (layer.scopeKind != GPULayerScopeKind.Root) {
+        return "unsupported_layer:${layer.scopeKind.name}"
+    }
+    if (blend.kind != GPUBlendKind.SrcOver) {
+        return "unsupported_blend:${blend.modeLabel}"
+    }
+    return null
+}
+
+/**
+ * Returns `non_uniform_radii` when this rounded rect has non-uniform corner
+ * radii (the uniform-rrect fill route cannot represent them), or `null` for a
+ * uniform rrect. Runs after [fillGuardRefusalReasonOrNull] in the rrect
+ * dispatcher (KGPU-M32-012 refused sub-case).
+ */
+internal fun NormalizedDrawCommand.FillRRect.nonUniformRadiiRefusalReasonOrNull(): String? {
+    val rrect = this.rrect
+    val rx = rrect.topLeft.x
+    val ry = rrect.topLeft.y
+    return if (rrect.topRight.x != rx || rrect.topRight.y != ry ||
+        rrect.bottomRight.x != rx || rrect.bottomRight.y != ry ||
+        rrect.bottomLeft.x != rx || rrect.bottomLeft.y != ry
+    ) {
+        "non_uniform_radii"
+    } else {
+        null
+    }
+}
+
 private val SOLID_RECT_WGSL: String = """
     struct Uniforms {
         color: vec4f,
@@ -199,29 +255,9 @@ class Surface(
             diagnostics.add("refuse:${cmd.diagnosticName}:$reason")
         }
 
-        cmd.strokeRefusalReasonOrNull()?.let { refuse(it); return }
+        cmd.fillGuardRefusalReasonOrNull()?.let { refuse(it); return }
 
-        val material = cmd.material
-        if (material !is GPUMaterialDescriptor.SolidColor) {
-            refuse("unsupported_material:${material.kind.name}")
-            return
-        }
-        if (cmd.transform.type != GPUTransformType.Identity) {
-            refuse("unsupported_transform:${cmd.transform.type.name}")
-            return
-        }
-        if (cmd.clip.kind !in listOf(GPUClipKind.WideOpen, GPUClipKind.DeviceRect)) {
-            refuse("unsupported_clip:${cmd.clip.kind.name}")
-            return
-        }
-        if (cmd.layer.scopeKind != GPULayerScopeKind.Root) {
-            refuse("unsupported_layer:${cmd.layer.scopeKind.name}")
-            return
-        }
-        if (cmd.blend.kind != GPUBlendKind.SrcOver) {
-            refuse("unsupported_blend:${cmd.blend.modeLabel}")
-            return
-        }
+        val material = cmd.material as GPUMaterialDescriptor.SolidColor
 
         val rgba = floatArrayOf(
             material.r * material.a,
@@ -255,40 +291,13 @@ class Surface(
             diagnostics.add("refuse:${cmd.diagnosticName}:$reason")
         }
 
-        cmd.strokeRefusalReasonOrNull()?.let { refuse(it); return }
+        cmd.fillGuardRefusalReasonOrNull()?.let { refuse(it); return }
+        cmd.nonUniformRadiiRefusalReasonOrNull()?.let { refuse(it); return }
 
-        val material = cmd.material
-        if (material !is GPUMaterialDescriptor.SolidColor) {
-            refuse("unsupported_material:${material.kind.name}")
-            return
-        }
-        if (cmd.transform.type != GPUTransformType.Identity) {
-            refuse("unsupported_transform:${cmd.transform.type.name}")
-            return
-        }
-        if (cmd.clip.kind !in listOf(GPUClipKind.WideOpen, GPUClipKind.DeviceRect)) {
-            refuse("unsupported_clip:${cmd.clip.kind.name}")
-            return
-        }
-        if (cmd.layer.scopeKind != GPULayerScopeKind.Root) {
-            refuse("unsupported_layer:${cmd.layer.scopeKind.name}")
-            return
-        }
-        if (cmd.blend.kind != GPUBlendKind.SrcOver) {
-            refuse("unsupported_blend:${cmd.blend.modeLabel}")
-            return
-        }
-
+        val material = cmd.material as GPUMaterialDescriptor.SolidColor
         val rrect = cmd.rrect
         val rx = rrect.topLeft.x
         val ry = rrect.topLeft.y
-        if (rrect.topRight.x != rx || rrect.topRight.y != ry ||
-            rrect.bottomRight.x != rx || rrect.bottomRight.y != ry ||
-            rrect.bottomLeft.x != rx || rrect.bottomLeft.y != ry
-        ) {
-            refuse("non_uniform_radii")
-            return
-        }
 
         val rect = rrect.rect
         val clipBounds = cmd.clip.bounds
@@ -355,29 +364,9 @@ fn fs_main() -> @location(0) vec4f {
             diagnostics.add("refuse:${cmd.diagnosticName}:$reason")
         }
 
-        cmd.strokeRefusalReasonOrNull()?.let { refuse(it); return }
+        cmd.fillGuardRefusalReasonOrNull()?.let { refuse(it); return }
 
-        val material = cmd.material
-        if (material !is GPUMaterialDescriptor.SolidColor) {
-            refuse("unsupported_material:${material.kind.name}")
-            return
-        }
-        if (cmd.transform.type != GPUTransformType.Identity) {
-            refuse("unsupported_transform:${cmd.transform.type.name}")
-            return
-        }
-        if (cmd.clip.kind !in listOf(GPUClipKind.WideOpen, GPUClipKind.DeviceRect)) {
-            refuse("unsupported_clip:${cmd.clip.kind.name}")
-            return
-        }
-        if (cmd.layer.scopeKind != GPULayerScopeKind.Root) {
-            refuse("unsupported_layer:${cmd.layer.scopeKind.name}")
-            return
-        }
-        if (cmd.blend.kind != GPUBlendKind.SrcOver) {
-            refuse("unsupported_blend:${cmd.blend.modeLabel}")
-            return
-        }
+        val material = cmd.material as GPUMaterialDescriptor.SolidColor
 
         val tessVertices = cmd.tessellatedVertices
         val vertexCount = cmd.totalVertexCount

@@ -116,6 +116,13 @@ rtk git diff --check
   dependency-gated). Non-Root layer refuse already exists; saveLayer/Restore
   command types are absent, so a hermetic test binding the family to a stable
   diagnostic is still owed. Port deferred to KGPU-M11-006. No new evidence here.
+- 2026-06-26 (Phase 2.B(ii), still `proposed`): documented **refuse-by-absence**.
+  Verified by reading `KanvasSkiaBridge.kt` that there is NO saveLayer /
+  save / restore / layer-scope bridge entrypoint, so a saveLayer/destination-read/
+  filter draw cannot be silently served by the Kanvas route. No fabricated refuse
+  test was added for a non-existent API. Report:
+  `reports/gpu-renderer/2026-06-26-m32-refusal-coverage.md`. Real port =
+  KGPU-M11-006 (dependency-gated).
 
 ## Linear Labels
 

@@ -117,6 +117,14 @@ rtk git diff --check
   dependency-gated). ImageDraw refuse diagnostic already exists; a hermetic
   regression test binding it to this family is still owed. Port deferred to
   KGPU-M11-004 (blocked on codec / texture deliveries). No new evidence here.
+- 2026-06-26 (Phase 2.B(ii), still `proposed`): added a hermetic kanvas-level
+  ImageDraw refuse test (`unsupported_material:ImageDraw`), complementing the
+  existing GPU-gated bridge `drawImage` test. **Found + FIXED a silent-wrong
+  bug**: a bitmap image **shader** (`Shader.Bitmap`, bridge-reachable) was
+  silently solid-filled; it now lowers to `ImageDraw` and refuses. Tests:
+  `MaterialRefuseTest`. Report:
+  `reports/gpu-renderer/2026-06-26-m32-refusal-coverage.md`. Codec/upload port
+  remains dependency-gated (KGPU-M11-004).
 
 ## Linear Labels
 

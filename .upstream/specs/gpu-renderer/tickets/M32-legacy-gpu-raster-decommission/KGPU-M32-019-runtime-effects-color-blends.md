@@ -139,6 +139,19 @@ rtk git diff --check
   baseline already covered implicitly; kept `proposed` pending independent
   review. Remainder refused and dependency-linked to KGPU-M11-008. No new
   evidence produced here.
+- 2026-06-26 (Phase 2.B(ii), still `proposed`): added hermetic refuse coverage.
+  Non-SRC_OVER blend refuses `unsupported_blend:<mode>` (new hermetic guard test;
+  end-to-end already covered by the GPU-gated bridge `non-srcover blend emits
+  refuse diagnostic`). **Found + FIXED a silent-wrong bug**: a runtime-effect
+  paint (`Shader.RuntimeEffect`) was silently solid-filled; it now lowers to a new
+  non-SolidColor `GPUMaterialDescriptor.RuntimeEffect` and refuses
+  `unsupported_material:RuntimeEffect`. HONESTY: `Paint.colorFilter` is NOT wired
+  into material lowering, so color filters are neither rendered nor refused as a
+  distinct token (out of scope; dependency-gated). Tests: `BlendRefuseTest`,
+  `MaterialRefuseTest`. Report:
+  `reports/gpu-renderer/2026-06-26-m32-refusal-coverage.md`. Other blends / color
+  filters / runtime effects / color management port remains dependency-gated
+  (KGPU-M11-008).
 
 ## Linear Labels
 

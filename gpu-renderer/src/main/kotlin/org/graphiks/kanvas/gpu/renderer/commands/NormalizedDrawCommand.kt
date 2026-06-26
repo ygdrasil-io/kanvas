@@ -112,6 +112,8 @@ enum class GPUMaterialKind {
     SweepGradient,
     /** Image/texture source material — no dispatch support (deferred). */
     ImageDraw,
+    /** Runtime-effect (SkRuntimeEffect compatibility) source material — no dispatch support (dependency-gated). */
+    RuntimeEffect,
 }
 
 /** Rectangle geometry in local command coordinates. */
@@ -397,6 +399,20 @@ sealed interface GPUMaterialDescriptor {
         val imageHeight: Int = 0,
     ) : GPUMaterialDescriptor {
         override val kind: GPUMaterialKind = GPUMaterialKind.ImageDraw
+    }
+
+    /**
+     * Runtime-effect descriptor — dependency-gated; dispatch refuses via
+     * non-SolidColor material so a runtime-effect paint is never silently
+     * solid-filled. `SkRuntimeEffect` stays a registered Kotlin/WGSL
+     * compatibility facade (see AGENTS.md); real GPU support is gated by
+     * KGPU-M11-008.
+     */
+    data class RuntimeEffect(
+        val effectId: String = "",
+        val descriptorVersion: Int = 1,
+    ) : GPUMaterialDescriptor {
+        override val kind: GPUMaterialKind = GPUMaterialKind.RuntimeEffect
     }
 }
 

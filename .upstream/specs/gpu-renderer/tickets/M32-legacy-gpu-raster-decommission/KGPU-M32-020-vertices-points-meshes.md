@@ -115,6 +115,15 @@ rtk git diff --check
   dependency/spec-gated). No dispatch and no command types exist; formal refusal
   + hermetic test required when the command types are introduced. Port deferred
   to KGPU-M8-003. No evidence yet.
+- 2026-06-26 (Phase 2.B(ii), still `proposed`): documented **refuse-by-absence**.
+  Verified by reading `KanvasSkiaBridge.kt` that there is NO drawVertices /
+  drawPoints / mesh bridge entrypoint and no vertices/points command family on
+  the Kanvas route, so such a draw cannot be silently served. No fabricated
+  refuse test was added for a non-existent API (the existing
+  `bridge unsupported emits diagnostic to stderr` test covers the
+  `unsupported("drawVertices")` diagnostic). Report:
+  `reports/gpu-renderer/2026-06-26-m32-refusal-coverage.md`. Real port =
+  KGPU-M8-003 (dependency-gated).
 
 ## Linear Labels
 

@@ -132,6 +132,13 @@ rtk git diff --check
   parity already proven via KGPU-M32-002 and KGPU-M31-005; kept `proposed`
   pending independent review. Gradient + non-uniform remainder refused and
   dependency-linked to KGPU-M2-002. No new evidence produced here.
+- 2026-06-26 (Phase 2.B(ii), still `proposed`): added hermetic refuse coverage —
+  gradient rrect refuses `unsupported_material:<gradientKind>`, and non-uniform
+  radii refuse `non_uniform_radii` (including a test proving non-uniform radii are
+  reachable end-to-end via `Canvas.drawRRect`). Tests: `MaterialRefuseTest`,
+  `RRectRadiiRefuseTest`. Report:
+  `reports/gpu-renderer/2026-06-26-m32-refusal-coverage.md`. Gradient/non-uniform
+  port remains dependency-gated.
 
 ## Linear Labels
 

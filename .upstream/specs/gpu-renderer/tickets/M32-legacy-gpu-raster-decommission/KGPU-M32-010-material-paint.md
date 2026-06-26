@@ -141,6 +141,14 @@ rtk git diff --check
   pipeline). SolidColor baseline already covered by KGPU-M32-002 evidence
   (independent review still required). Gradient/shader remainder is refused and
   dependency-linked to KGPU-M11-009. No new evidence produced by this ticket.
+- 2026-06-26 (Phase 2.B(ii), still `proposed`): added hermetic refuse coverage.
+  Gradients were already refusing (`unsupported_material:<gradientKind>`) — now
+  regression-locked. **Found + FIXED a silent-wrong bug**: `Canvas.lowerPaint`
+  `else -> SolidColor` silently solid-filled image-shader (`Shader.Bitmap`) and
+  runtime-effect (`Shader.RuntimeEffect`) paints; both now lower to non-SolidColor
+  materials and refuse. Tests: `MaterialRefuseTest`. Report:
+  `reports/gpu-renderer/2026-06-26-m32-refusal-coverage.md`. No new render
+  feature; gradient/shader port remains dependency-gated.
 
 ## Linear Labels
 
