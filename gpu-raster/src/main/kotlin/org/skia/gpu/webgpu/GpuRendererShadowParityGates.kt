@@ -64,7 +64,7 @@ internal enum class GpuRendererLegacyRouteFamily(
     ClearDiscardTargetBackground(
         familyId = "clear-discard-target-background",
         displayName = "Clear/discard and target background",
-        defaultReplacementTicket = "route-specific-clear-discard-ticket-required",
+        defaultReplacementTicket = "KGPU-M32-022",
     ),
 }
 

@@ -1,7 +1,7 @@
 ---
 id: KGPU-M31-001
 title: "Default renderer activation — Kanvas as the production rendering path"
-status: review
+status: done
 milestone: M31
 priority: P0
 owner_area: product-validation
@@ -117,6 +117,7 @@ rtk ./gradlew --no-daemon :integration-tests:test
 
 - `proposed`: Initial ticket.
 - `review` (2026-06-25): Implemented. productActivation flag (default true) in RollbackConfig; renderer-activated-kanvas-production diagnostic emitted on first bridge activation; disable via -Dkanvas.product.activation.disable=true. Evidence at reports/gpu-renderer/2026-06-25-M31-001-evidence.md.
+- `done` (2026-06-26): promoted after maintainer review of PR #1892 (https://github.com/ygdrasil-io/kanvas/pull/1892) — no blocking issues found.
 
 ## Linear Labels
 

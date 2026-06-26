@@ -166,6 +166,25 @@ class GpuRendererLegacyRetirementGateTest {
     }
 
     @Test
+    fun `M32-003 all twelve families authorized with real evidence and gatePassed`() {
+        val report = GpuRendererLegacyRetirementGate.evaluate(allTwelveFamilyEvidence())
+
+        assertEquals(
+            GpuRendererLegacyRouteFamily.values().size,
+            report.acceptedFamilyCount,
+            report.dumpLines().joinToString("\n"),
+        )
+        assertTrue(report.gatePassed, report.dumpLines().joinToString("\n"))
+        assertEquals(0, report.missingFamilyCount)
+        assertEquals(0, report.refusedFamilyCount)
+        assertTrue(report.familyGates.all { gate -> gate.legacyRouteActive })
+        assertTrue(report.familyGates.all { gate -> gate.retirementAuthorized })
+        assertFalse(report.productRouteActivated)
+        assertFalse(report.releaseBlocking)
+        assertEquals(0.0, report.readinessDelta)
+    }
+
+    @Test
     fun `partially shared activation rollback or usage evidence is refused per family`() {
         val solidFill = GpuRendererLegacyRouteFamily.SolidRectAndDrawPaintFill
         val roundedRect = GpuRendererLegacyRouteFamily.RoundedRectAndGradients
@@ -187,6 +206,30 @@ class GpuRendererLegacyRetirementGateTest {
         )
     }
 }
+
+private fun allTwelveFamilyEvidence(): List<GpuRendererLegacyRetirementEvidence> =
+    GpuRendererLegacyRouteFamily.values().map { family ->
+        GpuRendererLegacyRetirementEvidence(
+            family = family,
+            acceptedReplacementTicket = family.defaultReplacementTicket,
+            replacementAccepted = true,
+            activationDecisionId = "activation:${family.familyId}:kanvas-default-2026-06-26",
+            activationDecisionAccepted = true,
+            rollbackEvidenceId = "rollback:${family.familyId}:m32-003-validated",
+            rollbackValidationHash = "sha256:c8180d28a14b34dcd15db4fcfe67eac4ab5c366f2741683a5a4757715f8d4d26",
+            pmEvidenceRowId = "gpu-renderer.legacy-retirement.${family.familyId}",
+            oldPathUsageEvidenceId = "old-path:${family.familyId}:m32-003-zero",
+            oldPathUsageCount = 0,
+            scopeLabel = "legacy.${family.familyId}.retirement",
+            archivedEvidenceOnly = false,
+            genericMigrationGate = false,
+            broadDeletion = false,
+            productRouteActivated = false,
+            releaseBlocking = false,
+            readinessDelta = 0.0,
+            shadowParityAccepted = true,
+        )
+    }
 
 private fun validRetirementEvidence(
     family: GpuRendererLegacyRouteFamily,

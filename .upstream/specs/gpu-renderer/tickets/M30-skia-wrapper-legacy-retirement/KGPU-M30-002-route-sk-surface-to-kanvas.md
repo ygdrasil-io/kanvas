@@ -1,7 +1,7 @@
 ---
 id: KGPU-M30-002
 title: "Route SkSurface to KanvasSurface — replace gpu-raster path"
-status: review
+status: done
 milestone: M30
 priority: P0
 owner_area: kanvas-skia-bridge
@@ -111,6 +111,7 @@ rtk ./gradlew --no-daemon :gpu-renderer-scenes:test
 
 - `proposed`: Initial ticket.
 - `review` (2026-06-25): Implemented. Added RollbackConfig with useLegacyGpuRaster flag (default false); flipped default renderer to Kanvas-native; route-migrated-to-kanvas diagnostic emitted on first activation; gpu-raster deprecation messages updated. Visual parity verification deferred to M30-003. Evidence at `reports/gpu-renderer/2026-06-25-M30-002-evidence.md`.
+- `done` (2026-06-26): promoted after maintainer review of PR #1892 (https://github.com/ygdrasil-io/kanvas/pull/1892) — no blocking issues found.
 
 ## Linear Labels
 

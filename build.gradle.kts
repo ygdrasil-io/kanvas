@@ -131,55 +131,11 @@ val requiredPipelineConformanceSuites = listOf(
         resultRoot = "gpu-raster/build/test-results/pipelineConformanceTest",
     ),
     RequiredPipelineConformanceSuite(
-        className = "org.skia.gpu.webgpu.PipelineKeyTelemetryTest",
-        resultRoot = "gpu-raster/build/test-results/pipelineConformanceTest",
-    ),
-    RequiredPipelineConformanceSuite(
         className = "org.skia.gpu.webgpu.RuntimeEffectDescriptorWebGpuTest",
         resultRoot = "gpu-raster/build/test-results/pipelineConformanceTest",
     ),
     RequiredPipelineConformanceSuite(
-        className = "org.skia.gpu.webgpu.SimpleRuntimeEffectSceneEvidenceTest",
-        resultRoot = "gpu-raster/build/test-results/pipelineConformanceTest",
-    ),
-    RequiredPipelineConformanceSuite(
-        className = "org.skia.gpu.webgpu.SkWebGpuGlyphAtlasTest",
-        resultRoot = "gpu-raster/build/test-results/pipelineConformanceTest",
-    ),
-    RequiredPipelineConformanceSuite(
-        className = "org.skia.gpu.webgpu.SimpleLatinLineSceneEvidenceTest",
-        resultRoot = "gpu-raster/build/test-results/pipelineConformanceTest",
-    ),
-    RequiredPipelineConformanceSuite(
         className = "org.skia.gpu.webgpu.TextWgslValidationPipelineConformanceTest",
-        resultRoot = "gpu-raster/build/test-results/pipelineConformanceTest",
-    ),
-    RequiredPipelineConformanceSuite(
-        className = "org.skia.gpu.webgpu.SimpleLinearGradientSceneEvidenceTest",
-        resultRoot = "gpu-raster/build/test-results/pipelineConformanceTest",
-    ),
-    RequiredPipelineConformanceSuite(
-        className = "org.skia.gpu.webgpu.SimpleBitmapRectSceneEvidenceTest",
-        resultRoot = "gpu-raster/build/test-results/pipelineConformanceTest",
-    ),
-    RequiredPipelineConformanceSuite(
-        className = "org.skia.gpu.webgpu.SimpleSrcOverAlphaSceneEvidenceTest",
-        resultRoot = "gpu-raster/build/test-results/pipelineConformanceTest",
-    ),
-    RequiredPipelineConformanceSuite(
-        className = "org.skia.gpu.webgpu.SimpleColorFilterSceneEvidenceTest",
-        resultRoot = "gpu-raster/build/test-results/pipelineConformanceTest",
-    ),
-    RequiredPipelineConformanceSuite(
-        className = "org.skia.gpu.webgpu.RuntimeColorFilterSceneEvidenceTest",
-        resultRoot = "gpu-raster/build/test-results/pipelineConformanceTest",
-    ),
-    RequiredPipelineConformanceSuite(
-        className = "org.skia.gpu.webgpu.SimpleSaveLayerImageFilterSceneEvidenceTest",
-        resultRoot = "gpu-raster/build/test-results/pipelineConformanceTest",
-    ),
-    RequiredPipelineConformanceSuite(
-        className = "org.skia.gpu.webgpu.WebGpuCoveragePlanSelectorTest",
         resultRoot = "gpu-raster/build/test-results/pipelineConformanceTest",
     ),
     RequiredPipelineConformanceSuite(
@@ -260,8 +216,8 @@ fun gpuAdapterEvidenceForReport(
     ciLaneAvailable: Boolean = true,
 ): GpuAdapterEvidence {
     val adapterSuites = suites.filter {
-        it.className == "org.skia.gpu.webgpu.WebGpuCoveragePlanSelectorTest" ||
-            it.className == "org.skia.gpu.webgpu.PipelineKeyTelemetryTest"
+        it.className == "org.skia.gpu.webgpu.BlendPlanTest" ||
+            it.className == "org.skia.gpu.webgpu.RuntimeEffectDescriptorWebGpuTest"
     }
     val localStatus = conformanceStatus(adapterSuites)
     val observedStatus = when {
@@ -608,26 +564,15 @@ project(":cpu-raster").registerPipelineConformanceTest(
 )
 
 project(":gpu-raster").registerPipelineConformanceTest(
-    descriptionText = "Runs generated WGSL, text WGSL validation, PipelineKey, BlendPlan, runtime descriptor, WebGPU glyph atlas, simple Latin line, simple linear gradient, simple bitmap rect, simple SrcOver alpha, simple ColorFilter, runtime ColorFilter, simple SaveLayer image-filter, simple SimpleRT runtime effect, and selector conformance tests.",
+    descriptionText = "Runs generated WGSL, text WGSL validation, BlendPlan, and runtime descriptor conformance tests.",
     testPatterns = listOf(
         "org.skia.gpu.webgpu.tools.WgslValidationReportTest",
         "org.skia.gpu.webgpu.tools.WgslStrictValidationReportTest",
         "org.skia.gpu.webgpu.tools.GeneratedSolidRectWgslTest",
         "org.skia.gpu.webgpu.tools.GeneratedLinearGradientWgslTest",
-        "org.skia.gpu.webgpu.PipelineKeyTelemetryTest",
         "org.skia.gpu.webgpu.BlendPlanTest",
         "org.skia.gpu.webgpu.RuntimeEffectDescriptorWebGpuTest",
-        "org.skia.gpu.webgpu.SkWebGpuGlyphAtlasTest",
-        "org.skia.gpu.webgpu.SimpleLatinLineSceneEvidenceTest",
         "org.skia.gpu.webgpu.TextWgslValidationPipelineConformanceTest",
-        "org.skia.gpu.webgpu.SimpleLinearGradientSceneEvidenceTest",
-        "org.skia.gpu.webgpu.SimpleBitmapRectSceneEvidenceTest",
-        "org.skia.gpu.webgpu.SimpleSrcOverAlphaSceneEvidenceTest",
-        "org.skia.gpu.webgpu.SimpleColorFilterSceneEvidenceTest",
-        "org.skia.gpu.webgpu.RuntimeColorFilterSceneEvidenceTest",
-        "org.skia.gpu.webgpu.SimpleSaveLayerImageFilterSceneEvidenceTest",
-        "org.skia.gpu.webgpu.SimpleRuntimeEffectSceneEvidenceTest",
-        "org.skia.gpu.webgpu.WebGpuCoveragePlanSelectorTest",
     ),
 )
 
@@ -688,7 +633,6 @@ tasks.register<Exec>("pipelineRuntimeChildShaderEffectLaneReport") {
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/runtime-effects-v2/support-matrix.json"))
     inputs.file(layout.projectDirectory.file("cpu-raster/src/main/kotlin/org/skia/effects/runtime/effects/SkBuiltinShaderEffectsChildren.kt"))
     inputs.file(layout.projectDirectory.file("cpu-raster/src/test/kotlin/org/skia/effects/runtime/effects/SkBuiltinShaderEffectsChildrenTest.kt"))
-    inputs.file(layout.projectDirectory.file("gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt"))
     outputs.file(outputDir.file("runtime-child-shader-effect-lane.json"))
     outputs.file(outputDir.file("runtime-child-shader-effect-lane.md"))
     outputs.file(outputDir.file("runtime-child-shader-effect-lane-route.json"))
@@ -736,7 +680,6 @@ tasks.register<Exec>("pipelineRuntimeBlenderBoundaryReport") {
     inputs.file(layout.projectDirectory.file("cpu-raster/src/main/kotlin/org/skia/effects/runtime/effects/SkBuiltinSpecialisedEffects.kt"))
     inputs.file(layout.projectDirectory.file("cpu-raster/src/main/kotlin/org/skia/effects/runtime/SkRuntimeBlender.kt"))
     inputs.file(layout.projectDirectory.file("cpu-raster/src/main/kotlin/org/skia/effects/runtime/SkRuntimeEffectDescriptor.kt"))
-    inputs.file(layout.projectDirectory.file("gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt"))
     inputs.file(layout.projectDirectory.file("cpu-raster/src/test/kotlin/org/skia/effects/runtime/SkRuntimeBlenderTest.kt"))
     inputs.file(layout.projectDirectory.file("gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/RuntimeEffectDescriptorWebGpuTest.kt"))
     outputs.file(outputDir.file("runtime-blender-boundary.json"))
@@ -824,28 +767,6 @@ tasks.register("pipelineConformance") {
         "pipelineRuntimeBlenderBoundaryReport",
         "pipelineRuntimeEffectUniformPreviewReport",
         "pipelineRuntimeEffectsV2EvidenceBundleReport",
-        "validateKan035HairlinesRootCause",
-        "validateKan036ButtStrokeNonHairline",
-        "validateKan037CapsJoinsMicroMatrix",
-        "validateKan038DashesBoundedV1",
-        "validateKan039NestedClipStackV1",
-        "validateKan040CoverageCloseoutMatrix",
-        "validateKan041ImageFilterDagBoundedV3",
-        "validateKan042ImageFilterResidualRefusalMatrix",
-        "validateKan043TextShapingFallbackScope",
-        "validateKan044GlyphMaskAtlasOwnership",
-        "validateKan045ColorPipelineBoundedPolicy",
-        "validateKan046TileModesMipmapBoundary",
-        "validateKan047CodecProvenanceMatrix",
-        "validateKan048PerformanceFamilyBudgets",
-        "validateKan049CacheTelemetryReleaseGateCriteria",
-        "validateKan050PmBreadthSupportRefusalPack",
-        "validateKan051RendererVisualDelta",
-        "validateKan052ImageFilterVisualDelta",
-        "validateKan053TextGlyphVisualDelta",
-        "validateKan054WebGpuGlyphAtlasSamplingRoute",
-        "validateKan055TextGlyphAtlasVisualDelta",
-        "validateKan056GlyphAtlasRouteHardening",
         ":gpu-raster:wgslValidateStrict",
         ":gpu-raster:wgslValidateAll",
         ":gpu-raster:pipelineConformanceTest",
@@ -865,28 +786,6 @@ tasks.register("pipelineConformance") {
             |- REQUIRED Runtime Blender boundary report: pipelineRuntimeBlenderBoundaryReport
             |- REQUIRED Runtime Effect uniform preview report: pipelineRuntimeEffectUniformPreviewReport
             |- REQUIRED Runtime Effects V2 evidence bundle: pipelineRuntimeEffectsV2EvidenceBundleReport
-            |- REQUIRED KAN-035 HairlinesGM root-cause evidence and stable refusal classification: validateKan035HairlinesRootCause
-            |- REQUIRED KAN-036 butt stroke non-hairline row evidence and stable refusal classification: validateKan036ButtStrokeNonHairline
-            |- REQUIRED KAN-037 caps/joins micro-matrix evidence and stable refusal classification: validateKan037CapsJoinsMicroMatrix
-            |- REQUIRED KAN-038 dashes bounded V1 evidence and stable refusal classification: validateKan038DashesBoundedV1
-            |- REQUIRED KAN-039 nested clip-stack V1 evidence and stable refusal classification: validateKan039NestedClipStackV1
-            |- REQUIRED KAN-040 coverage/stroke/clip closeout matrix and claim guards: validateKan040CoverageCloseoutMatrix
-            |- REQUIRED KAN-041 image-filter DAG bounded V3 support/refusal evidence: validateKan041ImageFilterDagBoundedV3
-            |- REQUIRED KAN-042 image-filter residual refusal matrix and PM category guards: validateKan042ImageFilterResidualRefusalMatrix
-            |- REQUIRED KAN-043 text shaping/fallback scope and font fallback guards: validateKan043TextShapingFallbackScope
-            |- REQUIRED KAN-044 glyph mask/atlas ownership boundary and coverage ownership guards: validateKan044GlyphMaskAtlasOwnership
-            |- REQUIRED KAN-045 color pipeline bounded policy and color/refusal guards: validateKan045ColorPipelineBoundedPolicy
-            |- REQUIRED KAN-046 tile modes/mipmap boundary and sampling route guards: validateKan046TileModesMipmapBoundary
-            |- REQUIRED KAN-047 codec provenance matrix and stub/fixture claim guards: validateKan047CodecProvenanceMatrix
-            |- REQUIRED KAN-048 performance family budgets and reporting-only gate guards: validateKan048PerformanceFamilyBudgets
-            |- REQUIRED KAN-049 cache telemetry classification and release-gate criteria guards: validateKan049CacheTelemetryReleaseGateCriteria
-            |- REQUIRED KAN-050 PM breadth support/refusal pack and manifest-entry guard: validateKan050PmBreadthSupportRefusalPack
-            |- REQUIRED KAN-051 renderer visual delta and before/after metric guards: validateKan051RendererVisualDelta
-            |- REQUIRED KAN-052 image-filter visual delta blocker guard: validateKan052ImageFilterVisualDelta
-            |- REQUIRED KAN-053 text glyph visual delta blocker guard: validateKan053TextGlyphVisualDelta
-            |- REQUIRED KAN-054 WebGPU glyph atlas sampling route guard: validateKan054WebGpuGlyphAtlasSamplingRoute
-            |- REQUIRED KAN-055 text glyph atlas visual delta and KAN-053 closure-decision guard: validateKan055TextGlyphAtlasVisualDelta
-            |- REQUIRED KAN-056 glyph atlas route hardening PM gates and non-claim guards: validateKan056GlyphAtlasRouteHardening
             |- REQUIRED strict generated/registered WGSL validation: :gpu-raster:wgslValidateStrict
             |- REQUIRED legacy WGSL diagnostic inventory: :gpu-raster:wgslValidateAll
             |- REQUIRED generated WGSL, text WGSL validation, PipelineKey, BlendPlan, runtime descriptor, WebGPU glyph atlas, simple Latin line, simple linear gradient, simple bitmap rect, simple SrcOver alpha, simple ColorFilter, runtime ColorFilter, simple SimpleRT runtime effect, and selector tests: :gpu-raster:pipelineConformanceTest
@@ -5127,895 +5026,6 @@ tasks.register<Exec>("validateMepNextRuntimeInteractive") {
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m84-native-frame-timing/evidence.json"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m85-resource-lifetime-cache/evidence.json"))
 }
-
-tasks.register<Exec>("validateKan002PathAaEdgeBudget") {
-    group = "verification"
-    description = "Validates KAN-002 bounded Path AA edge-budget evidence and refusal policy."
-    commandLine("python3", "scripts/validate_kan002_path_aa_edge_budget.py", rootDir.absolutePath)
-    inputs.file(layout.projectDirectory.file("scripts/validate_kan002_path_aa_edge_budget.py"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-10-kan-002-path-aa-edge-budget.md"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/kan-002-path-aa-edge-budget/kan-002-path-aa-edge-budget.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/results.json"))
-    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts/path-aa-stroke-primitive"))
-    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts/m57-aaclip-bounded-grid"))
-    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts/path-aa-convexpaths-edge-budget"))
-    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts/path-aa-edge-budget-boundary"))
-    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join"))
-    inputs.file(layout.projectDirectory.file(".upstream/specs/skia-like-realtime/01-rendering-feature-expansion.md"))
-    inputs.file(layout.projectDirectory.file(".upstream/specs/geometry-coverage/08-path-aa-mvp-boundary.md"))
-    inputs.file(layout.projectDirectory.file(".upstream/specs/geometry-coverage/adr/0005-webgpu-aa-edge-budget.md"))
-    inputs.file(layout.projectDirectory.file("render-pipeline/src/main/kotlin/org/skia/pipeline/GeometryCoverageContracts.kt"))
-    inputs.file(layout.projectDirectory.file("gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/WebGpuCoveragePlanSelector.kt"))
-    inputs.file(layout.projectDirectory.file("gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt"))
-}
-
-tasks.register<Exec>("validateKan003CapsJoinsAa") {
-    group = "verification"
-    description = "Validates KAN-003 bounded caps/joins AA visible refusal evidence."
-    commandLine("python3", "scripts/validate_kan003_caps_joins_aa.py", rootDir.absolutePath)
-    inputs.file(layout.projectDirectory.file("scripts/validate_kan003_caps_joins_aa.py"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-10-kan-003-caps-joins-aa.md"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/kan-003-caps-joins-aa/kan-003-caps-joins-aa.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m60-nested-clip-path-aa-promotion.json"))
-    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-03-for-266-stroke-cap-join-aa-residual.md"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-03-for-267-round-cap-join-coverage-equivalence.md"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/stroke-cap-join-aa-residual-for266/stroke-cap-join-aa-residual-for266.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/round-cap-join-coverage-equivalence-for267/round-cap-join-coverage-equivalence-for267.json"))
-    inputs.file(layout.projectDirectory.file(".upstream/specs/skia-like-realtime/01-rendering-feature-expansion.md"))
-    inputs.file(layout.projectDirectory.file("render-pipeline/src/main/kotlin/org/skia/pipeline/GeometryCoverageContracts.kt"))
-    inputs.file(layout.projectDirectory.file("gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/WebGpuCoveragePlanSelector.kt"))
-}
-
-tasks.register<Exec>("validateKan004ClipsAa") {
-    group = "verification"
-    description = "Validates KAN-004 bounded AA clip support evidence and stable clip-stack refusals."
-    commandLine("python3", "scripts/validate_kan004_clips_aa.py", rootDir.absolutePath)
-    inputs.file(layout.projectDirectory.file("scripts/validate_kan004_clips_aa.py"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-10-kan-004-clips-aa.md"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/kan-004-clips-aa/kan-004-clips-aa.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m57-path-aa-clip-micro-promotion.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m60-nested-clip-path-aa-promotion.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-05-31-m57-path-aa-clip-micro-promotion.md"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-01-m60-nested-clip-path-aa-promotion.md"))
-    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts/m57-aaclip-bounded-grid"))
-    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip"))
-    inputs.file(layout.projectDirectory.file(".upstream/specs/skia-like-realtime/01-rendering-feature-expansion.md"))
-    inputs.file(layout.projectDirectory.file(".upstream/specs/geometry-coverage/02-lowering-rules.md"))
-    inputs.file(layout.projectDirectory.file(".upstream/specs/geometry-coverage/05-fallback-diagnostics.md"))
-}
-
-tasks.register<Exec>("validateKan026HairlinesHarness") {
-    group = "verification"
-    description = "Validates KAN-026 HairlinesGM row-specific harness evidence and stable support refusal."
-    commandLine("python3", "scripts/validate_kan026_hairlines_harness.py", rootDir.absolutePath)
-    inputs.file(layout.projectDirectory.file("scripts/validate_kan026_hairlines_harness.py"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-10-kan-026-hairlines-harness.md"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/kan-026-hairlines-harness/kan-026-hairlines-harness.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/dash-hairline-stroke-gm-dashboard-visibility.json"))
-    inputs.file(layout.projectDirectory.file("skia-integration-tests/src/test/resources/original-888/hairlines.png"))
-    inputs.file(layout.projectDirectory.file("gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/crossbackend/HairlinesCrossBackendTest.kt"))
-    inputs.file(layout.projectDirectory.file("gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/testing/CrossBackendHarness.kt"))
-    inputs.file(layout.projectDirectory.file("skia-integration-tests/src/main/kotlin/org/skia/tests/HairlinesGM.kt"))
-    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/stroke-cap-join-aa-residual-for266/stroke-cap-join-aa-residual-for266.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/round-cap-join-coverage-equivalence-for267/round-cap-join-coverage-equivalence-for267.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-04-for-318-path-aa-arc-stroke-hairline-scout.md"))
-}
-
-tasks.register<Exec>("validateKan035HairlinesRootCause") {
-    group = "verification"
-    description = "Materializes and validates the KAN-035 HairlinesGM residual root-cause evidence and stable refusal classification."
-    val outputDir = layout.projectDirectory.dir("reports/wgsl-pipeline/hairlines-root-cause")
-    commandLine(
-        "python3",
-        "scripts/validate_kan035_hairlines_root_cause.py",
-        rootDir.absolutePath,
-        outputDir.asFile.absolutePath,
-    )
-    inputs.file(layout.projectDirectory.file("scripts/validate_kan035_hairlines_root_cause.py"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/kan-026-hairlines-harness/kan-026-hairlines-harness.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-10-kan-026-hairlines-harness.md"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/dash-hairline-stroke-gm-dashboard-visibility.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/route-gpu.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/stats.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/route-cpu.json"))
-    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/stroke-cap-join-aa-residual-for266/stroke-cap-join-aa-residual-for266.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/round-cap-join-coverage-equivalence-for267/round-cap-join-coverage-equivalence-for267.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-04-for-318-path-aa-arc-stroke-hairline-scout.md"))
-    inputs.file(layout.projectDirectory.file("skia-integration-tests/src/test/resources/original-888/hairlines.png"))
-    inputs.file(layout.projectDirectory.file("skia-integration-tests/test-similarity-report.md"))
-    inputs.file(layout.projectDirectory.file("skia-integration-tests/test-similarity-scores.properties"))
-    inputs.file(layout.projectDirectory.file("gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/crossbackend/HairlinesCrossBackendTest.kt"))
-    inputs.file(layout.projectDirectory.file("gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/tools/GpuInventoryFailureReport.kt"))
-    inputs.file(layout.projectDirectory.file("gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/tools/GpuInventoryFailureReportTest.kt"))
-    inputs.file(layout.projectDirectory.file("skia-integration-tests/src/main/kotlin/org/skia/tests/HairlinesGM.kt"))
-    inputs.file(layout.projectDirectory.file(".upstream/specs/skia-like-realtime/01-rendering-feature-expansion.md"))
-    inputs.file(layout.projectDirectory.file(".upstream/specs/geometry-coverage/02-lowering-rules.md"))
-    inputs.file(layout.projectDirectory.file(".upstream/specs/geometry-coverage/08-path-aa-mvp-boundary.md"))
-    inputs.file(layout.projectDirectory.file(".upstream/specs/geometry-coverage/adr/0005-webgpu-aa-edge-budget.md"))
-    outputs.file(outputDir.file("kan-035-hairlines-root-cause.json"))
-    outputs.file(outputDir.file("kan-035-hairlines-root-cause.md"))
-    outputs.file(outputDir.file("gpu-inventory-hairlines-classification.json"))
-    outputs.file(outputDir.file("gpu-inventory-hairlines-classification.md"))
-    outputs.upToDateWhen { false }
-}
-
-tasks.register<Exec>("validateKan036ButtStrokeNonHairline") {
-    group = "verification"
-    description = "Materializes and validates the KAN-036 selected butt stroke non-hairline evidence and stable refusal classification."
-    dependsOn("validateKan035HairlinesRootCause")
-    val outputDir = layout.projectDirectory.dir("reports/wgsl-pipeline/butt-stroke-non-hairline")
-    commandLine(
-        "python3",
-        "scripts/validate_kan036_butt_stroke_non_hairline.py",
-        rootDir.absolutePath,
-        outputDir.asFile.absolutePath,
-    )
-    inputs.file(layout.projectDirectory.file("scripts/validate_kan036_butt_stroke_non_hairline.py"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-harness-for322/circular-arcs-stroke-butt-selected-cell-harness-for322.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-04-for-322-circular-arcs-stroke-butt-selected-cell-harness.md"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-harness-for322/stats.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-harness-for322/route-gpu.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-harness-for322/route-cpu.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-harness-for322/cpu.png"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-harness-for322/cpu-diff.png"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-skia-reference-for327/circular-arcs-stroke-butt-selected-cell-skia-reference-for327.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-skia-reference-for327/skia.png"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-skia-reference-for327/skia-reference-provenance.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-skia-cpu-diff-for328/circular-arcs-stroke-butt-selected-cell-skia-cpu-diff-for328.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-skia-cpu-diff-for328/cpu-vs-skia-diff.png"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-cpu-raster-audit-for329/circular-arcs-stroke-butt-selected-cell-cpu-raster-audit-for329.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/hairlines-root-cause/kan-035-hairlines-root-cause.json"))
-    inputs.file(layout.projectDirectory.file("gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/CircularArcsStrokeButtSelectedCellCaptureTest.kt"))
-    inputs.file(layout.projectDirectory.file("gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/WebGpuCoveragePlanSelector.kt"))
-    inputs.file(layout.projectDirectory.file("gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/WebGpuCoveragePlanSelectorTest.kt"))
-    inputs.file(layout.projectDirectory.file(".upstream/specs/geometry-coverage/02-lowering-rules.md"))
-    inputs.file(layout.projectDirectory.file(".upstream/specs/geometry-coverage/04-webgpu-coverage-backend.md"))
-    inputs.file(layout.projectDirectory.file(".upstream/specs/geometry-coverage/06-validation-and-perf.md"))
-    outputs.file(outputDir.file("kan-036-butt-stroke-non-hairline.json"))
-    outputs.file(outputDir.file("kan-036-butt-stroke-non-hairline.md"))
-    outputs.upToDateWhen { false }
-}
-
-tasks.register<Exec>("validateKan037CapsJoinsMicroMatrix") {
-    group = "verification"
-    description = "Materializes and validates the KAN-037 caps/joins micro-matrix evidence and stable refusal classification."
-    dependsOn("validateKan003CapsJoinsAa", "validateKan036ButtStrokeNonHairline")
-    val outputDir = layout.projectDirectory.dir("reports/wgsl-pipeline/caps-joins-micro-matrix")
-    commandLine(
-        "python3",
-        "scripts/validate_kan037_caps_joins_micro_matrix.py",
-        rootDir.absolutePath,
-        outputDir.asFile.absolutePath,
-    )
-    inputs.file(layout.projectDirectory.file("scripts/validate_kan037_caps_joins_micro_matrix.py"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/kan-003-caps-joins-aa/kan-003-caps-joins-aa.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/butt-stroke-non-hairline/kan-036-butt-stroke-non-hairline.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m60-nested-clip-path-aa-promotion.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/route-cpu.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/route-gpu.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/stats.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/aa-residual-diagnostic.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/experimental-gpu-diagnostic.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/skia.png"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/cpu.png"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/cpu-diff.png"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/gpu-experimental.png"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/gpu-experimental-diff.png"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/stroke-cap-join-aa-residual-for266/stroke-cap-join-aa-residual-for266.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/round-cap-join-coverage-equivalence-for267/round-cap-join-coverage-equivalence-for267.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-03-for-266-stroke-cap-join-aa-residual.md"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-03-for-267-round-cap-join-coverage-equivalence.md"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-10-kan-003-caps-joins-aa.md"))
-    inputs.file(layout.projectDirectory.file("gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt"))
-    inputs.file(layout.projectDirectory.file("gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/WebGpuCoveragePlanSelector.kt"))
-    inputs.file(layout.projectDirectory.file(".upstream/specs/skia-like-realtime/01-rendering-feature-expansion.md"))
-    inputs.file(layout.projectDirectory.file(".upstream/specs/geometry-coverage/02-lowering-rules.md"))
-    inputs.file(layout.projectDirectory.file(".upstream/specs/geometry-coverage/05-fallback-diagnostics.md"))
-    outputs.file(outputDir.file("kan-037-caps-joins-micro-matrix.json"))
-    outputs.file(outputDir.file("kan-037-caps-joins-micro-matrix.md"))
-    outputs.upToDateWhen { false }
-}
-
-tasks.register<Exec>("validateKan038DashesBoundedV1") {
-    group = "verification"
-    description = "Materializes and validates the KAN-038 bounded dashes V1 evidence and stable refusal classification."
-    dependsOn("validateKan037CapsJoinsMicroMatrix")
-    val outputDir = layout.projectDirectory.dir("reports/wgsl-pipeline/dashes-bounded-v1")
-    commandLine(
-        "python3",
-        "scripts/validate_kan038_dashes_bounded_v1.py",
-        rootDir.absolutePath,
-        outputDir.asFile.absolutePath,
-    )
-    inputs.file(layout.projectDirectory.file("scripts/validate_kan038_dashes_bounded_v1.py"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/dash-hairline-stroke-gm-dashboard-visibility.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/results.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m54-hard-feature-depth-pack.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m66-gm-promotion-wave.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/path-aa-dashing-edge-budget/route-cpu.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/path-aa-dashing-edge-budget/route-gpu.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/path-aa-dashing-edge-budget/stats.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/path-aa-dashing-edge-budget/skia.png"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/path-aa-dashing-edge-budget/cpu.png"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/path-aa-dashing-edge-budget/cpu-diff.png"))
-    inputs.file(layout.projectDirectory.file("skia-integration-tests/src/main/kotlin/org/skia/tests/DashingGM.kt"))
-    inputs.file(layout.projectDirectory.file("gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/crossbackend/DashingCrossBackendTest.kt"))
-    inputs.file(layout.projectDirectory.file("render-pipeline/src/main/kotlin/org/skia/pipeline/GeometryCoverageContracts.kt"))
-    inputs.file(layout.projectDirectory.file("render-pipeline/src/test/kotlin/org/skia/pipeline/GeometryCoverageContractsTest.kt"))
-    inputs.file(layout.projectDirectory.file(".upstream/specs/skia-like-realtime/01-rendering-feature-expansion.md"))
-    inputs.file(layout.projectDirectory.file(".upstream/specs/geometry-coverage/02-lowering-rules.md"))
-    inputs.file(layout.projectDirectory.file(".upstream/specs/geometry-coverage/adr/0005-webgpu-aa-edge-budget.md"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-05-31-m48-expected-unsupported-breadth-evidence.md"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-05-31-m60-path-aa-budget-audit.md"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-05-31-gra-336-path-aa-clip-budget-review.md"))
-    outputs.file(outputDir.file("kan-038-dashes-bounded-v1.json"))
-    outputs.file(outputDir.file("kan-038-dashes-bounded-v1.md"))
-    outputs.upToDateWhen { false }
-}
-
-tasks.register<Exec>("validateKan039NestedClipStackV1") {
-    group = "verification"
-    description = "Materializes and validates the KAN-039 nested clip-stack V1 evidence and stable refusal classification."
-    dependsOn("validateKan004ClipsAa", "validateKan038DashesBoundedV1")
-    val outputDir = layout.projectDirectory.dir("reports/wgsl-pipeline/nested-clip-stack-v1")
-    commandLine(
-        "python3",
-        "scripts/validate_kan039_nested_clip_stack_v1.py",
-        rootDir.absolutePath,
-        outputDir.asFile.absolutePath,
-    )
-    inputs.file(layout.projectDirectory.file("scripts/validate_kan039_nested_clip_stack_v1.py"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/kan-004-clips-aa/kan-004-clips-aa.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-10-kan-004-clips-aa.md"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m57-path-aa-clip-micro-promotion.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m60-nested-clip-path-aa-promotion.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-01-m60-nested-clip-path-aa-promotion.md"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/route-cpu.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/route-gpu.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/stats.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/skia.png"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/cpu.png"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/cpu-diff.png"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/gpu.png"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/gpu-diff.png"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/m57-aaclip-bounded-grid/route-gpu.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/m57-aaclip-bounded-grid/stats.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-skaaclip-band-trace-for301.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-04-for-301-m60-skaaclip-band-trace.md"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-analytic-clip-model-reconciliation-for302.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-04-for-304-renderer-feature-conversion-wave-closeout.md"))
-    inputs.file(layout.projectDirectory.file("gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/NestedClipSceneCaptureTest.kt"))
-    inputs.file(layout.projectDirectory.file("render-pipeline/src/main/kotlin/org/skia/pipeline/GeometryCoverageContracts.kt"))
-    inputs.file(layout.projectDirectory.file("render-pipeline/src/test/kotlin/org/skia/pipeline/GeometryCoverageContractsTest.kt"))
-    inputs.file(layout.projectDirectory.file("gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/WebGpuCoveragePlanSelector.kt"))
-    inputs.file(layout.projectDirectory.file("gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/WebGpuCoveragePlanSelectorTest.kt"))
-    inputs.file(layout.projectDirectory.file(".upstream/specs/geometry-coverage/01-contracts-geometry-coverage.md"))
-    inputs.file(layout.projectDirectory.file(".upstream/specs/geometry-coverage/02-lowering-rules.md"))
-    inputs.file(layout.projectDirectory.file(".upstream/specs/geometry-coverage/04-webgpu-coverage-backend.md"))
-    inputs.file(layout.projectDirectory.file(".upstream/specs/geometry-coverage/05-fallback-diagnostics.md"))
-    outputs.file(outputDir.file("kan-039-nested-clip-stack-v1.json"))
-    outputs.file(outputDir.file("kan-039-nested-clip-stack-v1.md"))
-    outputs.upToDateWhen { false }
-}
-
-tasks.register<Exec>("validateKan040CoverageCloseoutMatrix") {
-    group = "verification"
-    description = "Materializes and validates the KAN-040 coverage/stroke/clip closeout matrix and claim guards."
-    dependsOn("validateKan039NestedClipStackV1")
-    val outputDir = layout.projectDirectory.dir("reports/wgsl-pipeline/coverage-closeout-matrix")
-    commandLine(
-        "python3",
-        "scripts/validate_kan040_coverage_closeout_matrix.py",
-        rootDir.absolutePath,
-        outputDir.asFile.absolutePath,
-    )
-    inputs.file(layout.projectDirectory.file("scripts/validate_kan040_coverage_closeout_matrix.py"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/kan-004-clips-aa/kan-004-clips-aa.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/hairlines-root-cause/kan-035-hairlines-root-cause.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/butt-stroke-non-hairline/kan-036-butt-stroke-non-hairline.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/caps-joins-micro-matrix/kan-037-caps-joins-micro-matrix.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/dashes-bounded-v1/kan-038-dashes-bounded-v1.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/nested-clip-stack-v1/kan-039-nested-clip-stack-v1.json"))
-    inputs.file(layout.projectDirectory.file(".upstream/specs/geometry-coverage/05-fallback-diagnostics.md"))
-    inputs.file(layout.projectDirectory.file(".upstream/specs/geometry-coverage/06-validation-and-perf.md"))
-    inputs.file(layout.projectDirectory.file(".upstream/specs/skia-like-realtime/01-rendering-feature-expansion.md"))
-    outputs.file(outputDir.file("kan-040-coverage-closeout-matrix.json"))
-    outputs.file(outputDir.file("kan-040-coverage-closeout-matrix.md"))
-    outputs.upToDateWhen { false }
-}
-
-tasks.register<Exec>("validateKan041ImageFilterDagBoundedV3") {
-    group = "verification"
-    description = "Materializes and validates the KAN-041 image-filter DAG bounded V3 support/refusal evidence."
-    dependsOn(
-        "validateKan006IntermediateTextureOwnership",
-        "validateKan008ImageFilterDagRefusals",
-        "validateKan040CoverageCloseoutMatrix",
-    )
-    val outputDir = layout.projectDirectory.dir("reports/wgsl-pipeline/image-filter-dag-bounded-v3")
-    commandLine(
-        "python3",
-        "scripts/validate_kan041_image_filter_dag_bounded_v3.py",
-        rootDir.absolutePath,
-        outputDir.asFile.absolutePath,
-    )
-    inputs.file(layout.projectDirectory.file("scripts/validate_kan041_image_filter_dag_bounded_v3.py"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/results.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m52-inventory-promotion-pack.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m54-hard-feature-depth-pack.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m61-image-filter-dag-v2-promotion.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m66-gm-promotion-wave.json"))
-    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass"))
-    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts/image-filter-compose-cf-matrix-transform"))
-    inputs.file(layout.projectDirectory.file(".upstream/specs/skia-like-realtime/01-rendering-feature-expansion.md"))
-    inputs.file(layout.projectDirectory.file(".upstream/specs/wgsl-pipeline/09-image-filter-mvp-lane.md"))
-    inputs.file(layout.projectDirectory.file(".upstream/target/high-performance-wgsl-pipeline-target.md"))
-    outputs.file(outputDir.file("kan-041-image-filter-dag-bounded-v3.json"))
-    outputs.file(outputDir.file("kan-041-image-filter-dag-bounded-v3.md"))
-    outputs.upToDateWhen { false }
-}
-
-tasks.register<Exec>("validateKan042ImageFilterResidualRefusalMatrix") {
-    group = "verification"
-    description = "Materializes and validates the KAN-042 image-filter residual refusal matrix."
-    dependsOn(
-        "validateKan008ImageFilterDagRefusals",
-        "validateKan041ImageFilterDagBoundedV3",
-        "pipelineSceneDashboardGate",
-    )
-    val outputDir = layout.projectDirectory.dir("reports/wgsl-pipeline/image-filter-residual-refusal-matrix")
-    commandLine(
-        "python3",
-        "scripts/validate_kan042_image_filter_residual_refusal_matrix.py",
-        rootDir.absolutePath,
-        outputDir.asFile.absolutePath,
-    )
-    inputs.file(layout.projectDirectory.file("scripts/validate_kan042_image_filter_residual_refusal_matrix.py"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/results.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m52-inventory-promotion-pack.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m53-inventory-promotion-pack.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m54-hard-feature-depth-pack.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/image-filter-dag-bounded-v3/kan-041-image-filter-dag-bounded-v3.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-10-kan-008-image-filter-dag-refusals.md"))
-    inputs.file(layout.projectDirectory.file(".upstream/specs/skia-like-realtime/01-rendering-feature-expansion.md"))
-    inputs.file(layout.projectDirectory.file(".upstream/specs/skia-like-realtime/05-pm-demo-and-release-candidate.md"))
-    inputs.file(layout.projectDirectory.file(".upstream/target/skia-like-realtime-renderer-target.md"))
-    inputs.file(layout.projectDirectory.file(".upstream/specs/skia-like-realtime/README.md"))
-    outputs.file(outputDir.file("kan-042-image-filter-residual-refusal-matrix.json"))
-    outputs.file(outputDir.file("kan-042-image-filter-residual-refusal-matrix.md"))
-    outputs.upToDateWhen { false }
-}
-
-tasks.register<Exec>("validateKan043TextShapingFallbackScope") {
-    group = "verification"
-    description = "Materializes and validates the KAN-043 text shaping and fallback scope evidence."
-    dependsOn(
-        "validateKan042ImageFilterResidualRefusalMatrix",
-        ":gpu-raster:pipelineConformanceTest",
-        ":kanvas-skia:pipelineConformanceTest",
-    )
-    val outputDir = layout.projectDirectory.dir("reports/wgsl-pipeline/text-shaping-fallback-scope")
-    commandLine(
-        "python3",
-        "scripts/validate_kan043_text_shaping_fallback_scope.py",
-        rootDir.absolutePath,
-        outputDir.asFile.absolutePath,
-    )
-    inputs.file(layout.projectDirectory.file("scripts/validate_kan043_text_shaping_fallback_scope.py"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/stats.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/atlas.json"))
-    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line"))
-    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts/font-kerning-style-fixture"))
-    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts/font-complex-shaping-refusal"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/font-latin-outline-drawstring/font-diagnostics.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m62-font-fallback-evidence.json"))
-    inputs.file(layout.projectDirectory.file("kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Regular.ttf"))
-    inputs.file(layout.projectDirectory.file("kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Bold.ttf"))
-    inputs.file(layout.projectDirectory.file("kanvas-skia/src/main/resources/fonts/liberation/LiberationSerif-Italic.ttf"))
-    inputs.file(layout.projectDirectory.file(".upstream/specs/skia-like-realtime/01-rendering-feature-expansion.md"))
-    inputs.file(layout.projectDirectory.file("docs/opentype-font-backend.md"))
-    inputs.file(layout.projectDirectory.file(".upstream/specs/font/README.md"))
-    inputs.file(layout.projectDirectory.file(".upstream/specs/font/03-shaping-and-layout-boundary.md"))
-    inputs.file(layout.projectDirectory.file(".upstream/specs/font/06-validation-and-conformance.md"))
-    inputs.file(layout.projectDirectory.file(".upstream/specs/geometry-coverage/02-lowering-rules.md"))
-    outputs.file(outputDir.file("kan-043-text-shaping-fallback-scope.json"))
-    outputs.file(outputDir.file("kan-043-text-shaping-fallback-scope.md"))
-    outputs.upToDateWhen { false }
-}
-
-tasks.register<Exec>("validateKan044GlyphMaskAtlasOwnership") {
-    group = "verification"
-    description = "Materializes and validates the KAN-044 glyph mask atlas ownership evidence."
-    dependsOn(
-        "validateKan043TextShapingFallbackScope",
-        ":render-pipeline:pipelineConformanceTest",
-        ":gpu-raster:pipelineConformanceTest",
-    )
-    val outputDir = layout.projectDirectory.dir("reports/wgsl-pipeline/glyph-mask-atlas-ownership")
-    commandLine(
-        "python3",
-        "scripts/validate_kan044_glyph_mask_atlas_ownership.py",
-        rootDir.absolutePath,
-        outputDir.asFile.absolutePath,
-    )
-    inputs.file(layout.projectDirectory.file("scripts/validate_kan044_glyph_mask_atlas_ownership.py"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/atlas.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/stats.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/text-shaping-fallback-scope/kan-043-text-shaping-fallback-scope.json"))
-    inputs.file(layout.projectDirectory.file("gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuGlyphAtlas.kt"))
-    inputs.file(layout.projectDirectory.file("gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/SkWebGpuGlyphAtlasTest.kt"))
-    inputs.file(layout.projectDirectory.file("kanvas-skia/src/main/kotlin/org/skia/foundation/SkCpuGlyphCache.kt"))
-    inputs.file(layout.projectDirectory.file("render-pipeline/src/main/kotlin/org/skia/pipeline/GeometryCoverageContracts.kt"))
-    inputs.file(layout.projectDirectory.file("render-pipeline/src/test/kotlin/org/skia/pipeline/GeometryCoverageContractsTest.kt"))
-    inputs.file(layout.projectDirectory.file("kanvas-skia/src/test/kotlin/org/skia/core/SkBitmapDescriptorCoverageOracleTest.kt"))
-    inputs.file(layout.projectDirectory.file(".upstream/specs/geometry-coverage/02-lowering-rules.md"))
-    inputs.file(layout.projectDirectory.file(".upstream/specs/skia-like-realtime/02-realtime-runtime-architecture.md"))
-    inputs.file(layout.projectDirectory.file(".upstream/target/high-performance-wgsl-pipeline-target.md"))
-    inputs.file(layout.projectDirectory.file(".upstream/specs/font/README.md"))
-    inputs.file(layout.projectDirectory.file(".upstream/specs/font/04-glyph-rendering-and-coverage.md"))
-    outputs.file(outputDir.file("kan-044-glyph-mask-atlas-ownership.json"))
-    outputs.file(outputDir.file("kan-044-glyph-mask-atlas-ownership.md"))
-    outputs.upToDateWhen { false }
-}
-
-tasks.register<Exec>("validateKan045ColorPipelineBoundedPolicy") {
-    group = "verification"
-    description = "Materializes and validates the KAN-045 color pipeline bounded policy evidence."
-    dependsOn(
-        "validateKan044GlyphMaskAtlasOwnership",
-        ":gpu-raster:pipelineConformanceTest",
-        ":gpu-raster:wgslValidateStrict",
-    )
-    val outputDir = layout.projectDirectory.dir("reports/wgsl-pipeline/color-pipeline-bounded-policy")
-    commandLine(
-        "python3",
-        "scripts/validate_kan045_color_pipeline_bounded_policy.py",
-        rootDir.absolutePath,
-        outputDir.asFile.absolutePath,
-    )
-    inputs.file(layout.projectDirectory.file("scripts/validate_kan045_color_pipeline_bounded_policy.py"))
-    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts/kan-015-srcover-alpha"))
-    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts/kan-016-color-filter-blend-kplus"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m63-color-blend-parity-pack.json"))
-    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts/non-arc-rec2020-f16-reference-row-for345"))
-    inputs.file(layout.projectDirectory.file(".upstream/specs/skia-like-realtime/01-rendering-feature-expansion.md"))
-    inputs.file(layout.projectDirectory.file(".upstream/specs/wgsl-pipeline/01-pipeline-ir-contracts.md"))
-    inputs.file(layout.projectDirectory.file(".upstream/target/high-performance-wgsl-pipeline-target.md"))
-    inputs.file(layout.projectDirectory.file(".upstream/target/skia-like-realtime-renderer-target.md"))
-    inputs.file(layout.projectDirectory.file(".upstream/specs/skia-like-realtime/README.md"))
-    outputs.file(outputDir.file("kan-045-color-pipeline-bounded-policy.json"))
-    outputs.file(outputDir.file("kan-045-color-pipeline-bounded-policy.md"))
-    outputs.upToDateWhen { false }
-}
-
-tasks.register<Exec>("validateKan046TileModesMipmapBoundary") {
-    group = "verification"
-    description = "Materializes and validates the KAN-046 tile modes and mipmap boundary evidence."
-    dependsOn("validateKan045ColorPipelineBoundedPolicy")
-    val outputDir = layout.projectDirectory.dir("reports/wgsl-pipeline/tile-modes-mipmap-boundary")
-    commandLine(
-        "python3",
-        "scripts/validate_kan046_tile_modes_mipmap_boundary.py",
-        rootDir.absolutePath,
-        outputDir.asFile.absolutePath,
-    )
-    inputs.file(layout.projectDirectory.file("scripts/validate_kan046_tile_modes_mipmap_boundary.py"))
-    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-repeat-tile"))
-    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m79-bitmap-replay/evidence.json"))
-    inputs.file(layout.projectDirectory.file(".upstream/specs/wgsl-pipeline/08-bitmap-image-rect-sampling.md"))
-    inputs.file(layout.projectDirectory.file(".upstream/specs/skia-like-realtime/01-rendering-feature-expansion.md"))
-    inputs.file(layout.projectDirectory.file(".upstream/specs/skia-like-realtime/03-skia-fidelity-and-gm-promotion.md"))
-    outputs.file(outputDir.file("kan-046-tile-modes-mipmap-boundary.json"))
-    outputs.file(outputDir.file("kan-046-tile-modes-mipmap-boundary.md"))
-    outputs.upToDateWhen { false }
-}
-
-tasks.register<Exec>("validateKan051RendererVisualDelta") {
-    group = "verification"
-    description = "Materializes and validates the KAN-051 renderer visual delta evidence."
-    dependsOn("validateKan046TileModesMipmapBoundary")
-    val outputDir = layout.projectDirectory.dir("reports/wgsl-pipeline/renderer-visual-delta")
-    commandLine(
-        "python3",
-        "scripts/validate_kan051_renderer_visual_delta.py",
-        rootDir.absolutePath,
-        outputDir.asFile.absolutePath,
-    )
-    inputs.file(layout.projectDirectory.file("scripts/validate_kan051_renderer_visual_delta.py"))
-    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/renderer-visual-delta/assets"))
-    inputs.file(layout.projectDirectory.file("gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt"))
-    inputs.file(layout.projectDirectory.file("gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/ClipDifferenceCrossTest.kt"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/image-filter-dag-bounded-v3/kan-041-image-filter-dag-bounded-v3.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/image-filter-residual-refusal-matrix/kan-042-image-filter-residual-refusal-matrix.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/text-shaping-fallback-scope/kan-043-text-shaping-fallback-scope.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/glyph-mask-atlas-ownership/kan-044-glyph-mask-atlas-ownership.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/color-pipeline-bounded-policy/kan-045-color-pipeline-bounded-policy.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/tile-modes-mipmap-boundary/kan-046-tile-modes-mipmap-boundary.json"))
-    inputs.file(layout.projectDirectory.file(".upstream/target/skia-like-realtime-renderer-target.md"))
-    inputs.file(layout.projectDirectory.file(".upstream/specs/skia-like-realtime/03-skia-fidelity-and-gm-promotion.md"))
-    inputs.file(layout.projectDirectory.file(".upstream/specs/skia-like-realtime/01-rendering-feature-expansion.md"))
-    outputs.file(outputDir.file("kan-051-renderer-visual-delta.json"))
-    outputs.file(outputDir.file("kan-051-renderer-visual-delta.md"))
-    outputs.upToDateWhen { false }
-}
-
-tasks.register<Exec>("validateKan052ImageFilterVisualDelta") {
-    group = "verification"
-    description = "Materializes and validates the KAN-052 image-filter visual delta root-cause blocker."
-    dependsOn("validateKan051RendererVisualDelta")
-    val outputDir = layout.projectDirectory.dir("reports/wgsl-pipeline/image-filter-visual-delta")
-    commandLine(
-        "python3",
-        "scripts/validate_kan052_image_filter_visual_delta.py",
-        rootDir.absolutePath,
-        outputDir.asFile.absolutePath,
-    )
-    inputs.file(layout.projectDirectory.file("scripts/validate_kan052_image_filter_visual_delta.py"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/image-filter-dag-bounded-v3/kan-041-image-filter-dag-bounded-v3.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/image-filter-residual-refusal-matrix/kan-042-image-filter-residual-refusal-matrix.json"))
-    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/color-reference-bias-audit-for252/color-reference-bias-audit-for252.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/intermediate-store-present-audit-for259/intermediate-store-present-audit-for259.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/intermediate-quantization-candidate-audit-for260/intermediate-quantization-candidate-audit-for260.json"))
-    inputs.file(layout.projectDirectory.file(".upstream/specs/wgsl-pipeline/09-image-filter-mvp-lane.md"))
-    inputs.file(layout.projectDirectory.file(".upstream/specs/skia-like-realtime/03-skia-fidelity-and-gm-promotion.md"))
-    inputs.file(layout.projectDirectory.file(".upstream/target/skia-like-realtime-renderer-target.md"))
-    inputs.file(layout.projectDirectory.file(".upstream/target/high-performance-wgsl-pipeline-target.md"))
-    outputs.file(outputDir.file("kan-052-image-filter-visual-delta.json"))
-    outputs.file(outputDir.file("kan-052-image-filter-visual-delta.md"))
-    outputs.upToDateWhen { false }
-}
-
-tasks.register<Exec>("validateKan053TextGlyphVisualDelta") {
-    group = "verification"
-    description = "Materializes and validates the KAN-053 text glyph visual delta root-cause blocker."
-    dependsOn("validateKan052ImageFilterVisualDelta")
-    val outputDir = layout.projectDirectory.dir("reports/wgsl-pipeline/text-glyph-visual-delta")
-    commandLine(
-        "python3",
-        "scripts/validate_kan053_text_glyph_visual_delta.py",
-        rootDir.absolutePath,
-        outputDir.asFile.absolutePath,
-    )
-    inputs.file(layout.projectDirectory.file("scripts/validate_kan053_text_glyph_visual_delta.py"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/text-shaping-fallback-scope/kan-043-text-shaping-fallback-scope.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/glyph-mask-atlas-ownership/kan-044-glyph-mask-atlas-ownership.json"))
-    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line"))
-    inputs.file(layout.projectDirectory.file("kanvas-skia/src/main/kotlin/org/skia/core/SkCanvas.kt"))
-    inputs.file(layout.projectDirectory.file("gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuGlyphAtlas.kt"))
-    inputs.file(layout.projectDirectory.file("gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/SimpleLatinLineSceneEvidence.kt"))
-    inputs.file(layout.projectDirectory.file(".upstream/specs/skia-like-realtime/01-rendering-feature-expansion.md"))
-    inputs.file(layout.projectDirectory.file(".upstream/specs/skia-like-realtime/03-skia-fidelity-and-gm-promotion.md"))
-    inputs.file(layout.projectDirectory.file(".upstream/target/high-performance-wgsl-pipeline-target.md"))
-    inputs.file(layout.projectDirectory.file(".upstream/specs/geometry-coverage/02-lowering-rules.md"))
-    inputs.file(layout.projectDirectory.file(".upstream/specs/geometry-coverage/adr/0006-mask-ownership-boundary.md"))
-    outputs.file(outputDir.file("kan-053-text-glyph-visual-delta.json"))
-    outputs.file(outputDir.file("kan-053-text-glyph-visual-delta.md"))
-    outputs.upToDateWhen { false }
-}
-
-tasks.register<Exec>("validateKan054WebGpuGlyphAtlasSamplingRoute") {
-    group = "verification"
-    description = "Materializes and validates the KAN-054 WebGPU glyph atlas sampling route evidence."
-    mustRunAfter("validateKan053TextGlyphVisualDelta")
-    val outputDir = layout.projectDirectory.dir("reports/wgsl-pipeline/webgpu-glyph-atlas-sampling-route")
-    commandLine(
-        "python3",
-        "scripts/validate_kan054_webgpu_glyph_atlas_sampling_route.py",
-        rootDir.absolutePath,
-        outputDir.asFile.absolutePath,
-    )
-    inputs.file(layout.projectDirectory.file("scripts/validate_kan054_webgpu_glyph_atlas_sampling_route.py"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/text-glyph-visual-delta/kan-053-text-glyph-visual-delta.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/glyph-mask-atlas-ownership/kan-044-glyph-mask-atlas-ownership.json"))
-    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line"))
-    inputs.file(layout.projectDirectory.file("gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt"))
-    inputs.file(layout.projectDirectory.file("gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuGlyphAtlas.kt"))
-    inputs.file(layout.projectDirectory.file("gpu-raster/src/main/resources/shaders/text_glyph_atlas.wgsl"))
-    outputs.file(outputDir.file("kan-054-webgpu-glyph-atlas-sampling-route.json"))
-    outputs.file(outputDir.file("kan-054-webgpu-glyph-atlas-sampling-route.md"))
-    outputs.upToDateWhen { false }
-}
-
-tasks.register<Exec>("validateKan055TextGlyphAtlasVisualDelta") {
-    group = "verification"
-    description = "Materializes and validates the KAN-055 text glyph atlas visual delta after KAN-054."
-    dependsOn("validateKan054WebGpuGlyphAtlasSamplingRoute")
-    val outputDir = layout.projectDirectory.dir("reports/wgsl-pipeline/text-glyph-atlas-visual-delta")
-    commandLine(
-        "python3",
-        "scripts/validate_kan055_text_glyph_atlas_visual_delta.py",
-        rootDir.absolutePath,
-        outputDir.asFile.absolutePath,
-    )
-    inputs.file(layout.projectDirectory.file("scripts/validate_kan055_text_glyph_atlas_visual_delta.py"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/text-glyph-visual-delta/kan-053-text-glyph-visual-delta.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/webgpu-glyph-atlas-sampling-route/kan-054-webgpu-glyph-atlas-sampling-route.json"))
-    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line"))
-    outputs.file(outputDir.file("kan-055-text-glyph-atlas-visual-delta.json"))
-    outputs.file(outputDir.file("kan-055-text-glyph-atlas-visual-delta.md"))
-    outputs.upToDateWhen { false }
-}
-
-tasks.register<Exec>("validateKan056GlyphAtlasRouteHardening") {
-    group = "verification"
-    description = "Materializes and validates the KAN-056 glyph atlas route hardening PM gates."
-    dependsOn("validateKan055TextGlyphAtlasVisualDelta")
-    val outputDir = layout.projectDirectory.dir("reports/wgsl-pipeline/glyph-atlas-route-hardening")
-    commandLine(
-        "python3",
-        "scripts/validate_kan056_glyph_atlas_route_hardening.py",
-        rootDir.absolutePath,
-        outputDir.asFile.absolutePath,
-    )
-    inputs.file(layout.projectDirectory.file("scripts/validate_kan056_glyph_atlas_route_hardening.py"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/webgpu-glyph-atlas-sampling-route/kan-054-webgpu-glyph-atlas-sampling-route.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/text-glyph-atlas-visual-delta/kan-055-text-glyph-atlas-visual-delta.json"))
-    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line"))
-    outputs.file(outputDir.file("kan-056-glyph-atlas-route-hardening.json"))
-    outputs.file(outputDir.file("kan-056-glyph-atlas-route-hardening.md"))
-    outputs.file(outputDir.file("pm-bundle-manifest-entry.json"))
-    outputs.upToDateWhen { false }
-}
-
-tasks.register<Exec>("validateKan047CodecProvenanceMatrix") {
-    group = "verification"
-    description = "Materializes and validates the KAN-047 codec provenance matrix."
-    dependsOn("validateKan046TileModesMipmapBoundary")
-    val outputDir = layout.projectDirectory.dir("reports/wgsl-pipeline/codec-provenance-matrix")
-    commandLine(
-        "python3",
-        "scripts/validate_kan047_codec_provenance_matrix.py",
-        rootDir.absolutePath,
-        outputDir.asFile.absolutePath,
-    )
-    inputs.file(layout.projectDirectory.file("scripts/validate_kan047_codec_provenance_matrix.py"))
-    inputs.file(layout.projectDirectory.file("SUPPORTED_CODECS.md"))
-    inputs.file(layout.projectDirectory.file("codec-real-image-tests/FIXTURES.md"))
-    inputs.file(layout.projectDirectory.file(".upstream/target/skia-like-realtime-renderer-target.md"))
-    inputs.file(layout.projectDirectory.file(".upstream/specs/skia-like-realtime/01-rendering-feature-expansion.md"))
-    inputs.file(layout.projectDirectory.file("codec-api/src/main/kotlin/org/skia/codec/SkCodec.kt"))
-    inputs.file(layout.projectDirectory.file("cpu-raster/src/main/kotlin/org/skia/tools/ToolUtils.kt"))
-    inputs.file(layout.projectDirectory.file("skia-integration-tests/src/main/kotlin/org/skia/tests/BitmapSubsetShaderGM.kt"))
-    inputs.file(layout.projectDirectory.file("skia-integration-tests/src/main/kotlin/org/skia/tests/AnimatedImageGM.kt"))
-    inputs.file(layout.projectDirectory.file("gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/AnimatedImageWebGpuTest.kt"))
-    inputs.file(layout.projectDirectory.file("gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/crossbackend/AnimatedImageCrossBackendTest.kt"))
-    inputs.file(layout.projectDirectory.file("codec-extended/src/main/kotlin/org/skia/codec/SkAvifDecoder.kt"))
-    inputs.file(layout.projectDirectory.file("codec-extended/src/main/kotlin/org/skia/codec/SkJpegxlDecoder.kt"))
-    inputs.file(layout.projectDirectory.file("codec-extended/src/main/kotlin/org/skia/codec/SkRawDecoder.kt"))
-    inputs.file(layout.projectDirectory.file("codec-extended/src/main/kotlin/org/skia/codec/SkVideoDecoder.kt"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/tile-modes-mipmap-boundary/kan-046-tile-modes-mipmap-boundary.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m79-bitmap-replay/evidence.json"))
-    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts/kan-014-bitmap-rect"))
-    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts/d54-skia-gm-image"))
-    outputs.file(outputDir.file("kan-047-codec-provenance-matrix.json"))
-    outputs.file(outputDir.file("kan-047-codec-provenance-matrix.md"))
-    outputs.upToDateWhen { false }
-}
-
-tasks.register<Exec>("validateKan048PerformanceFamilyBudgets") {
-    group = "verification"
-    description = "Materializes and validates the KAN-048 performance family budget reporting pack."
-    dependsOn(
-        "validateKan047CodecProvenanceMatrix",
-        "validateKan052ImageFilterVisualDelta",
-        "validateKan053TextGlyphVisualDelta",
-    )
-    mustRunAfter(
-        "pipelineM67PerformanceTiering",
-        "pipelineMeasuredCpuPerformance",
-        "pipelineMeasuredGpuPerformance",
-    )
-    val outputDir = layout.projectDirectory.dir("reports/wgsl-pipeline/performance-family-budgets")
-    commandLine(
-        "python3",
-        "scripts/validate_kan048_performance_family_budgets.py",
-        rootDir.absolutePath,
-        outputDir.asFile.absolutePath,
-    )
-    inputs.file(layout.projectDirectory.file("scripts/validate_kan048_performance_family_budgets.py"))
-    inputs.file(layout.projectDirectory.file(".upstream/specs/skia-like-realtime/04-performance-tiering-and-release-gates.md"))
-    inputs.file(layout.projectDirectory.file(".upstream/specs/wgsl-pipeline/12-benchmark-harness-and-performance-gates.md"))
-    inputs.file(layout.projectDirectory.file(".upstream/target/skia-like-realtime-renderer-target.md"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/performance/kan-020-slice-performance-minimum.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/performance/m67-performance-tiering/m67-family-budgets.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/codec-provenance-matrix/kan-047-codec-provenance-matrix.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/image-filter-visual-delta/kan-052-image-filter-visual-delta.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/text-glyph-visual-delta/kan-053-text-glyph-visual-delta.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-local-matrix/cpu-performance.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-local-matrix/gpu-performance.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/linear-gradient-rect/cpu-performance.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/linear-gradient-rect/gpu-performance.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/src-over-stack/cpu-performance.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/src-over-stack/gpu-performance.json"))
-    outputs.file(outputDir.file("kan-048-performance-family-budgets.json"))
-    outputs.file(outputDir.file("kan-048-performance-family-budgets.md"))
-    outputs.upToDateWhen { false }
-}
-
-tasks.register<Exec>("validateKan049CacheTelemetryReleaseGateCriteria") {
-    group = "verification"
-    description = "Materializes and validates the KAN-049 cache telemetry release-gate criteria pack."
-    dependsOn(
-        "validateKan021CacheResourceTelemetry",
-        "validateKan048PerformanceFamilyBudgets",
-    )
-    mustRunAfter(
-        "pipelineM67PerformanceTiering",
-        "pipelineM67PerformanceTieringNegative",
-        ":kadre-runtime:pipelineM84NativeFrameTimingCandidate",
-        ":kadre-runtime:pipelineM85ResourceLifetimeCacheHardening",
-        ":kadre-runtime:pipelineM88ReleaseCandidate2",
-        "validateM88ReleaseCandidate2",
-        "validateMepNextRuntimeInteractive",
-    )
-    val outputDir = layout.projectDirectory.dir("reports/wgsl-pipeline/cache-telemetry-release-gate")
-    commandLine(
-        "python3",
-        "scripts/validate_kan049_cache_telemetry_release_gate_criteria.py",
-        rootDir.absolutePath,
-        outputDir.asFile.absolutePath,
-    )
-    inputs.file(layout.projectDirectory.file("scripts/validate_kan049_cache_telemetry_release_gate_criteria.py"))
-    inputs.file(layout.projectDirectory.file(".upstream/specs/skia-like-realtime/02-realtime-runtime-architecture.md"))
-    inputs.file(layout.projectDirectory.file(".upstream/specs/skia-like-realtime/04-performance-tiering-and-release-gates.md"))
-    inputs.file(layout.projectDirectory.file(".upstream/target/skia-like-realtime-renderer-target.md"))
-    inputs.file(layout.projectDirectory.file(".upstream/target/high-performance-wgsl-pipeline-target.md"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/performance/kan-020-slice-performance-minimum.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m85-resource-lifetime-cache/kan-021-selected-telemetry.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/performance-family-budgets/kan-048-performance-family-budgets.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m84-native-frame-timing/negative-fixture.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m85-resource-lifetime-cache/evidence.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m88-realtime-rc2/gate-freeze.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m90-runtime-interactive/telemetry-live.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m92-kadre-runtime-rc/telemetry-classification.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/runtime-cache-counter-source-map-for314.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/headless-webgpu-cache-counters-for315.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/runtime-cache-telemetry-closeout-for317.json"))
-    outputs.file(outputDir.file("kan-049-cache-telemetry-release-gate.json"))
-    outputs.file(outputDir.file("kan-049-cache-telemetry-release-gate.md"))
-    outputs.file(outputDir.file("kan-049-cache-telemetry-negative-fixture.json"))
-    outputs.file(outputDir.file("kan-049-cache-telemetry-gate-freeze-delta.json"))
-    outputs.upToDateWhen { false }
-}
-
-tasks.register<Exec>("validateKan050PmBreadthSupportRefusalPack") {
-    group = "verification"
-    description = "Materializes and validates the KAN-050 PM breadth support/refusal release-readiness pack."
-    dependsOn(
-        "pipelineRuntimeEffectsV2EvidenceBundleReport",
-        "validateM88ReleaseCandidate2",
-        "validateKan040CoverageCloseoutMatrix",
-        "validateKan041ImageFilterDagBoundedV3",
-        "validateKan042ImageFilterResidualRefusalMatrix",
-        "validateKan043TextShapingFallbackScope",
-        "validateKan044GlyphMaskAtlasOwnership",
-        "validateKan045ColorPipelineBoundedPolicy",
-        "validateKan046TileModesMipmapBoundary",
-        "validateKan047CodecProvenanceMatrix",
-        "validateKan048PerformanceFamilyBudgets",
-        "validateKan049CacheTelemetryReleaseGateCriteria",
-        "validateKan052ImageFilterVisualDelta",
-        "validateKan053TextGlyphVisualDelta",
-    )
-    val outputDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m99-breadth-pm-pack")
-    commandLine(
-        "python3",
-        "scripts/validate_kan050_pm_breadth_support_refusal_pack.py",
-        rootDir.absolutePath,
-        outputDir.asFile.absolutePath,
-    )
-    inputs.file(layout.projectDirectory.file("scripts/validate_kan050_pm_breadth_support_refusal_pack.py"))
-    inputs.file(layout.projectDirectory.file(".upstream/specs/skia-like-realtime/05-pm-demo-and-release-candidate.md"))
-    inputs.file(layout.projectDirectory.file(".upstream/specs/wgsl-pipeline/11-conformance-dashboard-generation.md"))
-    inputs.file(layout.projectDirectory.file(".upstream/target/skia-like-realtime-renderer-target.md"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/runtime-effects-v2/evidence.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/coverage-closeout-matrix/kan-040-coverage-closeout-matrix.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/image-filter-dag-bounded-v3/kan-041-image-filter-dag-bounded-v3.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/image-filter-residual-refusal-matrix/kan-042-image-filter-residual-refusal-matrix.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/text-shaping-fallback-scope/kan-043-text-shaping-fallback-scope.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/glyph-mask-atlas-ownership/kan-044-glyph-mask-atlas-ownership.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/color-pipeline-bounded-policy/kan-045-color-pipeline-bounded-policy.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/tile-modes-mipmap-boundary/kan-046-tile-modes-mipmap-boundary.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/codec-provenance-matrix/kan-047-codec-provenance-matrix.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/performance-family-budgets/kan-048-performance-family-budgets.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/cache-telemetry-release-gate/kan-049-cache-telemetry-release-gate.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/image-filter-visual-delta/kan-052-image-filter-visual-delta.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/text-glyph-visual-delta/kan-053-text-glyph-visual-delta.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m88-realtime-rc2/support-refusal-matrix.json"))
-    outputs.file(outputDir.file("evidence.json"))
-    outputs.file(outputDir.file("evidence.md"))
-    outputs.file(outputDir.file("pm-bundle-manifest-entry.json"))
-    outputs.upToDateWhen { false }
-}
-
-tasks.register<Exec>("validateKan006IntermediateTextureOwnership") {
-    group = "verification"
-    description = "Validates KAN-006 bounded image-filter intermediate texture ownership evidence."
-    commandLine("python3", "scripts/validate_kan006_intermediate_texture_ownership.py", rootDir.absolutePath)
-    inputs.file(layout.projectDirectory.file("scripts/validate_kan006_intermediate_texture_ownership.py"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-10-kan-006-intermediate-texture-ownership.md"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m61-image-filter-dag-v2-promotion.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/image-filter-compose-cf-matrix-transform/route-gpu.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/image-filter-compose-cf-matrix-transform/route-prepass.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/image-filter-compose-cf-matrix-transform/stats.json"))
-    inputs.file(layout.projectDirectory.file("gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt"))
-    inputs.file(layout.projectDirectory.file("gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/SaveLayerImageFilterTest.kt"))
-}
-
-tasks.register<Exec>("validateKan007SaveLayerSimpleFilter") {
-    group = "verification"
-    description = "Validates KAN-007 bounded SaveLayer simple image-filter evidence."
-    commandLine("python3", "scripts/validate_kan007_savelayer_simple_filter.py", rootDir.absolutePath)
-    inputs.file(layout.projectDirectory.file("scripts/validate_kan007_savelayer_simple_filter.py"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-10-kan-007-savelayer-simple-filter.md"))
-    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts/kan-007-savelayer-simple-color-filter"))
-    inputs.file(layout.projectDirectory.file("gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt"))
-    inputs.file(layout.projectDirectory.file("gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/SimpleSaveLayerImageFilterSceneEvidence.kt"))
-    inputs.file(layout.projectDirectory.file("gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/SimpleSaveLayerImageFilterSceneEvidenceTest.kt"))
-}
-
-tasks.register<Exec>("validateKan008ImageFilterDagRefusals") {
-    group = "verification"
-    description = "Validates KAN-008 visible expected-unsupported image-filter DAG refusals."
-    commandLine("python3", "scripts/validate_kan008_image_filter_dag_refusals.py", rootDir.absolutePath)
-    inputs.file(layout.projectDirectory.file("scripts/validate_kan008_image_filter_dag_refusals.py"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-10-kan-008-image-filter-dag-refusals.md"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-01-m61-image-filter-dag-diagnostics.md"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-10-kan-007-savelayer-simple-filter.md"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/results.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m52-inventory-promotion-pack.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m54-hard-feature-depth-pack.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m61-image-filter-dag-v2-promotion.json"))
-    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts/image-filter-crop-nonnull-prepass-required"))
-}
-
-tasks.register<Exec>("validateKan020PerformanceProofMinimum") {
-    group = "verification"
-    description = "Validates KAN-020 minimum performance proof policy for PM-visible slices."
-    mustRunAfter("pipelineM67PerformanceTiering", "pipelineM67PerformanceTieringNegative")
-    commandLine("python3", "scripts/validate_kan020_performance_proof_minimum.py", rootDir.absolutePath)
-    inputs.file(layout.projectDirectory.file("scripts/validate_kan020_performance_proof_minimum.py"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-10-kan-020-performance-proof-minimum.md"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/performance/kan-020-slice-performance-minimum.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/performance/m59-performance-release-gate.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/performance/m67-performance-tiering/m67-frame-gate-candidate.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/performance/m67-performance-tiering/m67-family-budgets.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/performance/m67-performance-tiering-negative/m67-negative-fixture.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m84-native-frame-timing/evidence.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m84-native-frame-timing/negative-fixture.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m85-resource-lifetime-cache/evidence.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m85-resource-lifetime-cache/cache-pressure.json"))
-    inputs.file(layout.projectDirectory.file(".upstream/specs/skia-like-realtime/04-performance-tiering-and-release-gates.md"))
-}
-
-tasks.register<Exec>("validateKan021CacheResourceTelemetry") {
-    group = "verification"
-    description = "Validates KAN-021 selected cache/resource telemetry evidence."
-    mustRunAfter(
-        "validateKan020PerformanceProofMinimum",
-        ":kadre-runtime:pipelineM85ResourceLifetimeCacheHardening",
-        ":kadre-runtime:pipelineMepNextRuntimeInteractive",
-    )
-    commandLine("python3", "scripts/validate_kan021_cache_resource_telemetry.py", rootDir.absolutePath)
-    inputs.file(layout.projectDirectory.file("scripts/validate_kan021_cache_resource_telemetry.py"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-10-kan-021-cache-resource-telemetry.md"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m85-resource-lifetime-cache/kan-021-selected-telemetry.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m85-resource-lifetime-cache/evidence.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m85-resource-lifetime-cache/cache-pressure.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m90-runtime-interactive/telemetry-live.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/headless-webgpu-cache-counters-for315.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/runtime-cache-counter-source-map-for314.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/runtime-cache-telemetry-closeout-for317.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m92-kadre-runtime-rc/telemetry-classification.json"))
-    inputs.file(layout.projectDirectory.file(".upstream/specs/skia-like-realtime/02-realtime-runtime-architecture.md"))
-    inputs.file(layout.projectDirectory.file(".upstream/specs/skia-like-realtime/04-performance-tiering-and-release-gates.md"))
-}
-
 tasks.register<Exec>("validateMepRcScenePack") {
     group = "verification"
     description = "Validates checked-in MEP RC FOR-215/FOR-216/FOR-218 scene-pack evidence without Kadre native dependencies."
@@ -6081,36 +5091,7 @@ tasks.register("pipelinePmBundle") {
         "validateMepNextRuntimeInteractive",
         "validateMepRcScenePack",
         "validateMepRcRuntime",
-        "validateKan002PathAaEdgeBudget",
-        "validateKan003CapsJoinsAa",
-        "validateKan004ClipsAa",
-        "validateKan026HairlinesHarness",
-        "validateKan035HairlinesRootCause",
-        "validateKan036ButtStrokeNonHairline",
-        "validateKan037CapsJoinsMicroMatrix",
-        "validateKan038DashesBoundedV1",
-        "validateKan039NestedClipStackV1",
-        "validateKan040CoverageCloseoutMatrix",
-        "validateKan041ImageFilterDagBoundedV3",
-        "validateKan042ImageFilterResidualRefusalMatrix",
-        "validateKan043TextShapingFallbackScope",
-        "validateKan044GlyphMaskAtlasOwnership",
-        "validateKan045ColorPipelineBoundedPolicy",
-        "validateKan046TileModesMipmapBoundary",
-        "validateKan047CodecProvenanceMatrix",
-        "validateKan048PerformanceFamilyBudgets",
-        "validateKan049CacheTelemetryReleaseGateCriteria",
-        "validateKan051RendererVisualDelta",
-        "validateKan052ImageFilterVisualDelta",
-        "validateKan053TextGlyphVisualDelta",
-        "validateKan054WebGpuGlyphAtlasSamplingRoute",
-        "validateKan055TextGlyphAtlasVisualDelta",
-        "validateKan056GlyphAtlasRouteHardening",
-        "validateKan006IntermediateTextureOwnership",
-        "validateKan007SaveLayerSimpleFilter",
-        "validateKan008ImageFilterDagRefusals",
-        "validateKan020PerformanceProofMinimum",
-        "validateKan021CacheResourceTelemetry",
+
     )
 
     val dashboardDir = layout.buildDirectory.dir("reports/wgsl-pipeline-scenes")
@@ -8780,67 +7761,18 @@ tasks.register("pipelinePmBundle") {
     }
 }
 
-tasks.register<Exec>("injectKan050PmBreadthSupportRefusalPackIntoPmBundle") {
-    group = "verification"
-    description = "Injects the KAN-050 PM breadth pack into the generated pipelinePmBundle manifest."
-    dependsOn("validateKan050PmBreadthSupportRefusalPack")
-    mustRunAfter("pipelinePmBundle")
-    val outputDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m99-breadth-pm-pack")
-    val bundleDir = layout.buildDirectory.dir("reports/wgsl-pipeline-pm-bundle")
-    commandLine(
-        "python3",
-        "scripts/validate_kan050_pm_breadth_support_refusal_pack.py",
-        rootDir.absolutePath,
-        outputDir.asFile.absolutePath,
-        "--inject-pm-bundle",
-        bundleDir.get().asFile.absolutePath,
-    )
-    inputs.file(layout.projectDirectory.file("scripts/validate_kan050_pm_breadth_support_refusal_pack.py"))
-    inputs.dir(outputDir)
-    inputs.file(bundleDir.map { it.file("manifest.json") })
-    outputs.file(bundleDir.map { it.file("manifest.json") })
-    outputs.dir(bundleDir.map { it.dir("release/m99-breadth-pm-pack") })
-    outputs.upToDateWhen { false }
-}
+// Removed injectKan050PmBreadthSupportRefusalPackIntoPmBundle — legacy-device gate deleted
 
-tasks.named("pipelinePmBundle") {
-    dependsOn("validateKan056GlyphAtlasRouteHardening")
-    finalizedBy("injectKan056GlyphAtlasRouteHardeningIntoPmBundle")
-    dependsOn("validateKan050PmBreadthSupportRefusalPack")
-    finalizedBy("injectKan050PmBreadthSupportRefusalPackIntoPmBundle")
-}
+// Legacy-device validateKan* gates removed with device deletion.
+// pipelinePmBundle no longer depends on removed validateKan tasks.
 
-tasks.register<Exec>("injectKan056GlyphAtlasRouteHardeningIntoPmBundle") {
-    group = "verification"
-    description = "Injects the KAN-056 glyph atlas route hardening evidence into the generated pipelinePmBundle manifest."
-    dependsOn("validateKan056GlyphAtlasRouteHardening")
-    mustRunAfter("pipelinePmBundle")
-    mustRunAfter("injectKan050PmBreadthSupportRefusalPackIntoPmBundle")
-    val outputDir = layout.projectDirectory.dir("reports/wgsl-pipeline/glyph-atlas-route-hardening")
-    val bundleDir = layout.buildDirectory.dir("reports/wgsl-pipeline-pm-bundle")
-    commandLine(
-        "python3",
-        "scripts/validate_kan056_glyph_atlas_route_hardening.py",
-        rootDir.absolutePath,
-        outputDir.asFile.absolutePath,
-        "--inject-pm-bundle",
-        bundleDir.get().asFile.absolutePath,
-    )
-    inputs.file(layout.projectDirectory.file("scripts/validate_kan056_glyph_atlas_route_hardening.py"))
-    inputs.dir(outputDir)
-    inputs.file(bundleDir.map { it.file("manifest.json") })
-    outputs.file(bundleDir.map { it.file("manifest.json") })
-    outputs.dir(bundleDir.map { it.dir("release/kan-056-glyph-atlas-route-hardening") })
-    outputs.upToDateWhen { false }
-}
+// Removed injectKan056GlyphAtlasRouteHardeningIntoPmBundle — legacy-device gate deleted
 
 tasks.register<Exec>("injectGpuRendererR6FirstRoutePmEvidenceIntoPmBundle") {
     group = "verification"
     description = "Injects the :gpu-renderer R6 first-route PM evidence bundle into the generated pipelinePmBundle manifest."
     dependsOn(":gpu-renderer:gpuRendererR6FirstRoutePmEvidenceBundle")
     mustRunAfter("pipelinePmBundle")
-    mustRunAfter("injectKan056GlyphAtlasRouteHardeningIntoPmBundle")
-
     val outputDir = layout.projectDirectory.dir("gpu-renderer/build/reports/gpu-renderer-r6-first-route-pm-evidence")
     val bundleDir = layout.buildDirectory.dir("reports/wgsl-pipeline-pm-bundle")
     commandLine(
@@ -8889,14 +7821,8 @@ tasks.register<Exec>("validateGpuRendererR6AdapterBackedPromotionReadinessBounda
     description = "Validates the opt-in adapter-backed GPU renderer R6 promotion boundary without product route activation."
     dependsOn("pipelinePmBundle")
     dependsOn("injectGpuRendererR6FirstRoutePmEvidenceIntoPmBundle")
-    dependsOn(":gpu-raster:validateGpuRendererR6ExecutedFirstRoutePmEvidenceBundle")
-
     val validator = layout.projectDirectory.file("scripts/validate_gpu_renderer_r6_promotion_readiness_boundary.py")
     val bundleDir = layout.buildDirectory.dir("reports/wgsl-pipeline-pm-bundle")
-    val executedSummary = layout.projectDirectory.file(
-        "gpu-raster/build/reports/gpu-renderer-r6-executed-first-route-pm-evidence/" +
-            "diagnostic-webgpu-first-route-pm-evidence-summary.json",
-    )
     val report = layout.projectDirectory.file("reports/gpu-renderer/2026-06-14-r6-promotion-readiness-boundary.md")
 
     commandLine(
@@ -8905,16 +7831,12 @@ tasks.register<Exec>("validateGpuRendererR6AdapterBackedPromotionReadinessBounda
         rootDir.absolutePath,
         "--pm-bundle-dir",
         bundleDir.get().asFile.absolutePath,
-        "--executed-summary",
-        executedSummary.asFile.absolutePath,
-        "--require-executed-summary",
         "--write-report",
         report.asFile.absolutePath,
     )
     inputs.file(validator)
     inputs.file(bundleDir.map { it.file("manifest.json") })
     inputs.file(bundleDir.map { it.file("release/gpu-renderer-r6-first-route-pm-evidence/pm-bundle-manifest-entry.json") })
-    inputs.file(executedSummary)
     outputs.file(report)
     outputs.upToDateWhen { false }
 }

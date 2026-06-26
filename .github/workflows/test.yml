@@ -3,11 +3,10 @@ name: Test matrix (raster + GPU)
 # G7/M31 cross-validation matrix. Three jobs:
 #  - `raster`        : :cpu-raster + :skia-integration-tests on ubuntu-latest.
 #                      No native GPU driver dependency, fast runner.
-#  - `gpu_smoke`     : required macOS smoke gate using `:gpu-raster:gpuSmokeTest`.
-#                      This lane must prove adapter-backed fixtures with zero
-#                      adapter skips.
-#                      Promotion policy for what is allowed in this required
-#                      smoke lane: reports/wgsl-pipeline/2026-05-27-m31-gpu-smoke-promotion-policy.md
+#  - `gpu_smoke`     : required macOS GPU bridge gate using `:kanvas-skia-bridge:test :kanvas:test`.
+#                      The legacy `:gpu-raster:gpuSmokeTest` was deleted with the device
+#                      (KGPU-M32-005). The bridge tests exercise the real GPU path on Metal.
+#                      Bridge tests use `assumeTrue` gating; fail-closed-on-skip is a follow-up.
 #  - `gpu_inventory` : non-blocking full `:gpu-raster:test` inventory lane that
 #                      stays runnable and uploads triage artifacts.
 #
@@ -225,40 +224,37 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Run required GPU smoke gate
-        # `:gpu-raster:gpuSmokeTest` injects `-XstartOnFirstThread` on
-        # macOS, plus `--add-opens=java.base/java.lang=ALL-UNNAMED` and
-        # `--enable-native-access=ALL-UNNAMED` (see build.gradle.kts).
-        # Smoke fixture scope is governed by the M31 promotion policy:
-        # `reports/wgsl-pipeline/2026-05-27-m31-gpu-smoke-promotion-policy.md`.
-        # Expected unsupported diagnostics and adapter skips stay out of
-        # required smoke and remain in non-blocking inventory.
-        # macOS runners ship a Metal adapter that wgpu4k-toolkit can
-        # bind via `WebGpuContext.createOrNull()`. The smoke task fails
-        # closed when adapter-dependent tests are skipped.
-        run: ./gradlew --no-daemon :gpu-raster:gpuSmokeTest
+      - name: Run required GPU bridge smoke gate
+        # The legacy `:gpu-raster:gpuSmokeTest` was deleted with the device
+        # (KGPU-M32-005). Real GPU rendering now runs through the Kanvas
+        # bridge (`:kanvas-skia-bridge` + `:kanvas`), which exercises the
+        # actual GPU bridge path on the macOS Metal runner.
+        # The bridge tests use `assumeTrue` gating; fail-closed-on-GPU-skip
+        # semantics are a follow-up.
+        run: ./gradlew --no-daemon :kanvas-skia-bridge:test :kanvas:test
 
-      - name: Upload GPU smoke debug images
-        # Cross-backend tests dump raster.png / gpu.png / diff.png /
-        # triptych.png under `gpu-raster/build/debug-images/` whenever
-        # either backend lands inside its `floor + 2 %` warning band.
-        # The triptych is the single file to open first when triaging.
+      - name: Upload GPU bridge smoke debug images
+        # Bridge tests dump debug images under `kanvas-skia-bridge/build/`
+        # and `kanvas/build/` when GPU rendering lands inside warning bands.
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: gpu-smoke-debug-images
-          path: gpu-raster/build/debug-images/
+          name: gpu-bridge-smoke-debug-images
+          path: |
+            kanvas-skia-bridge/build/debug-images/
+            kanvas/build/debug-images/
           if-no-files-found: ignore
 
-      - name: Upload GPU smoke test reports
+      - name: Upload GPU bridge smoke test reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: gpu-smoke-test-reports
+          name: gpu-bridge-smoke-test-reports
           path: |
-            gpu-raster/build/reports/tests/gpuSmokeTest/
-            gpu-raster/build/test-results/gpuSmokeTest/
-            gpu-raster/test-similarity-scores-webgpu.properties
+            kanvas-skia-bridge/build/reports/tests/test/
+            kanvas/build/reports/tests/test/
+            kanvas-skia-bridge/build/test-results/test/
+            kanvas/build/test-results/test/
           if-no-files-found: ignore
 
   gpu_inventory:

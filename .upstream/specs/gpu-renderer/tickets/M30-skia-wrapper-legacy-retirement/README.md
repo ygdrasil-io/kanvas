@@ -25,9 +25,9 @@ that the bridge targets.
 
 | Ticket | Status | Priority | Claim Impact | Route Kind | Product Activation | Adapter Required | Owner Area | Depends On | Legacy Gate |
 |---|---|---|---|---|---|---|---|---|---|---|
-| [KGPU-M30-001 - KanvasSkiaBridge — SkCanvas to KanvasCanvas command translation](KGPU-M30-001-kanvas-skia-bridge.md) | `review` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `false` | `kanvas-skia-bridge` | [KGPU-M29-008] | null |
-| [KGPU-M30-002 - Route SkSurface to KanvasSurface — replace gpu-raster path](KGPU-M30-002-route-sk-surface-to-kanvas.md) | `review` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `false` | `kanvas-skia-bridge` | [KGPU-M30-001] | `gpu-raster-legacy-path` |
-| [KGPU-M30-003 - Regression tests — Skia GM parity via Kanvas bridge](KGPU-M30-003-regression-parity-tests.md) | `review` | `P0` | `ImplementationCandidate` | `CPUReferenceOnly` | `false` | `false` | `kanvas-skia-bridge` | [KGPU-M30-002] | null |
+| [KGPU-M30-001 - KanvasSkiaBridge — SkCanvas to KanvasCanvas command translation](KGPU-M30-001-kanvas-skia-bridge.md) | `done` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `false` | `kanvas-skia-bridge` | [KGPU-M29-008] | null |
+| [KGPU-M30-002 - Route SkSurface to KanvasSurface — replace gpu-raster path](KGPU-M30-002-route-sk-surface-to-kanvas.md) | `done` | `P0` | `ImplementationCandidate` | `GPUNative` | `false` | `false` | `kanvas-skia-bridge` | [KGPU-M30-001] | `gpu-raster-legacy-path` |
+| [KGPU-M30-003 - Regression tests — Skia GM parity via Kanvas bridge](KGPU-M30-003-regression-parity-tests.md) | `done` | `P0` | `ImplementationCandidate` | `CPUReferenceOnly` | `false` | `false` | `kanvas-skia-bridge` | [KGPU-M30-002] | null |
 | [KGPU-M30-004 - gpu-raster deprecation and legacy route freeze](KGPU-M30-004-gpu-raster-deprecation.md) | `done` | `P0` | `ImplementationCandidate` | `CPUReferenceOnly` | `false` | `false` | `kanvas-skia-bridge` | [KGPU-M30-002] | `gpu-raster-legacy-freeze` |
 
 ## Validation Bundle
