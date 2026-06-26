@@ -1,7 +1,7 @@
 ---
 id: KGPU-M30-004
 title: "gpu-raster deprecation and legacy route freeze"
-status: review
+status: done
 milestone: M30
 priority: P0
 owner_area: kanvas-skia-bridge
@@ -111,7 +111,7 @@ rtk ./gradlew --no-daemon :gpu-renderer:test
 ## Status Notes
 
 - `proposed`: Initial ticket.
-- `review` (2026-06-25): Implemented. Deprecated WebGpuContext and HeadlessTarget with @Deprecated annotations; updated route taxonomy in 05-routing-policy.md marking gpu-raster-legacy-path as FROZEN and kanvas-bridge-path as ACTIVE; documented useLegacyGpuRaster as emergency-only rollback. Evidence at `reports/gpu-renderer/2026-06-25-M30-004-evidence.md`.
+- `done` (2026-06-26): Implemented. Deprecated WebGpuContext and HeadlessTarget with @Deprecated annotations; updated route taxonomy in 05-routing-policy.md marking gpu-raster-legacy-path as FROZEN and kanvas-bridge-path as ACTIVE; documented useLegacyGpuRaster as emergency-only rollback. Evidence at `reports/gpu-renderer/2026-06-25-M30-004-evidence.md`.
 
 ## Linear Labels
 
