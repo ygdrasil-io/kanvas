@@ -121,6 +121,7 @@ the primary route-kind outcome.
 | M29 | [M29-kanvas-native-api](M29-kanvas-native-api/README.md) | 8 | Public Kanvas native API module with surface, canvas, paint, path, shader, image, and text. |
 | M30 | [M30-skia-wrapper-legacy-retirement](M30-skia-wrapper-legacy-retirement/README.md) | 4 | Skia wrapper bridge, route migration, parity tests, and gpu-raster deprecation. |
 | M31 | [M31-production-activation](M31-production-activation/README.md) | 4 | Production activation, rollback flag, PM evidence bundle, and API stability freeze. |
+| M32 | [M32-legacy-gpu-raster-decommission](M32-legacy-gpu-raster-decommission/README.md) | 6 | Remove legacy gpu-raster after per-family port-or-refuse, retirement-gate authorization, and shared-infra relocation. |
 
 ## Source Of Truth
 
