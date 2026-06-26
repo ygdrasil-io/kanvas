@@ -114,6 +114,7 @@ rtk ./gradlew --no-daemon :integration-tests:test
 
 - `proposed`: Initial ticket.
 - `done` (2026-06-26): Implemented. Rollback flag (system property + env var) formalized in RollbackConfig; integration tests verify flag switching; procedure documented. Evidence at reports/gpu-renderer/2026-06-25-M31-002-evidence.md.
+- **Status Note (2026-06-26, KGPU-M32-005):** The rollback flag (`kanvas.rollback.legacy-gpu-raster` / `useLegacyGpuRaster`) was removed in KGPU-M32-005 (commit 4bfdd9f) because the legacy `SkWebGpuDevice` target no longer exists. The Kanvas bridge is now the sole, unconditional render route. This ticket's `status` remains `done` — the flag was correctly implemented and served its purpose during the M30→M32 transition window. Deletion report: `reports/gpu-renderer/2026-06-26-m32-005-legacy-device-deletion.md`.
 
 ## Linear Labels
 

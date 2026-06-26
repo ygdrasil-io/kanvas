@@ -36,7 +36,7 @@ New module, zero Skia dependency. Package `org.graphiks.kanvas.api`.
 | ID | Title |
 |----|-------|
 | KGPU-M30-001 | `KanvasSkiaBridge` — SkCanvas → KanvasCanvas translation |
-| KGPU-M30-002 | Route SkSurface → KanvasSurface (replace gpu-raster path) |
+| KGPU-M30-002 | Route SkSurface → KanvasSurface (replace gpu-raster path; legacy device + rollback removed in KGPU-M32-005, commit 4bfdd9f) |
 | KGPU-M30-003 | Regression tests: Skia GM parity via Kanvas bridge |
 | KGPU-M30-004 | gpu-raster deprecation + legacy route freeze |
 
@@ -45,7 +45,7 @@ New module, zero Skia dependency. Package `org.graphiks.kanvas.api`.
 | ID | Title |
 |----|-------|
 | KGPU-M31-001 | Default renderer = Kanvas (productActivation=true) |
-| KGPU-M31-002 | Rollback flag: disable Kanvas → restore legacy gpu-raster |
+| KGPU-M31-002 | Rollback flag: disable Kanvas → restore legacy gpu-raster (flag removed in KGPU-M32-005; legacy target no longer exists) |
 | KGPU-M31-003 | Final PM evidence bundle (all families, gate green) |
 | KGPU-M31-004 | Release notes + API stability freeze |
 
