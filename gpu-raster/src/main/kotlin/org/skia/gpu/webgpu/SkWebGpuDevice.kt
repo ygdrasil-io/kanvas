@@ -424,19 +424,6 @@ public class SkWebGpuDevice(
             "gpu-raster will be removed in M31+.")
     }
 
-    public enum class PipelineKeyAxisClass {
-        Layout,
-        Code,
-        PipelineState,
-        UniformOnly,
-    }
-
-    public data class PipelineKeyClassification(
-        val axis: String,
-        val axisClass: PipelineKeyAxisClass,
-        val value: String,
-    )
-
     public data class GpuCacheTelemetrySnapshot(
         val shaderModuleCacheHits: Int,
         val shaderModuleCacheMisses: Int,

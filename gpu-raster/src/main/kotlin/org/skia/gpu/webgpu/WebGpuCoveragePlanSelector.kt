@@ -315,7 +315,7 @@ public data class WebGpuCoverageSelection(
     val coveragePlan: CoveragePlan,
     val clipInteraction: ClipInteraction,
     val loweringResult: CoverageLoweringResult,
-    val pipelineAxes: List<SkWebGpuDevice.PipelineKeyClassification>,
+    val pipelineAxes: List<PipelineKeyClassification>,
     val routeIdentifier: String,
     val diagnostic: WebGpuCoverageDiagnostic?,
     val budgetDiagnostics: WebGpuPathAaBudgetDiagnostics? = null,
@@ -449,9 +449,9 @@ public object WebGpuCoveragePlanSelector {
         clipInteraction = clipInteraction,
         loweringResult = lowering,
         pipelineAxes = listOf(
-            SkWebGpuDevice.PipelineKeyClassification(
+            PipelineKeyClassification(
                 axis = "coverageKind",
-                axisClass = SkWebGpuDevice.PipelineKeyAxisClass.Code,
+                axisClass = PipelineKeyAxisClass.Code,
                 value = coverageKind,
             ),
         ),
@@ -587,20 +587,20 @@ public object WebGpuCoveragePlanSelector {
     private fun pathPipelineAxes(
         coverageKind: String,
         plan: CoveragePlan.PathCoverage,
-    ): List<SkWebGpuDevice.PipelineKeyClassification> = listOf(
-        SkWebGpuDevice.PipelineKeyClassification(
+    ): List<PipelineKeyClassification> = listOf(
+        PipelineKeyClassification(
             axis = "coverageKind",
-            axisClass = SkWebGpuDevice.PipelineKeyAxisClass.Code,
+            axisClass = PipelineKeyAxisClass.Code,
             value = coverageKind,
         ),
-        SkWebGpuDevice.PipelineKeyClassification(
+        PipelineKeyClassification(
             axis = "pathFillRule",
-            axisClass = SkWebGpuDevice.PipelineKeyAxisClass.PipelineState,
+            axisClass = PipelineKeyAxisClass.PipelineState,
             value = if (plan.fillType == PathFillType.EvenOdd) "evenOdd" else "winding",
         ),
-        SkWebGpuDevice.PipelineKeyClassification(
+        PipelineKeyClassification(
             axis = "topology",
-            axisClass = SkWebGpuDevice.PipelineKeyAxisClass.PipelineState,
+            axisClass = PipelineKeyAxisClass.PipelineState,
             value = "triangleList",
         ),
     )
@@ -611,7 +611,7 @@ public object WebGpuCoveragePlanSelector {
         clipInteraction: ClipInteraction,
         lowering: CoverageLoweringResult,
         reason: DiagnosticReason,
-        pipelineAxes: List<SkWebGpuDevice.PipelineKeyClassification> = emptyList(),
+        pipelineAxes: List<PipelineKeyClassification> = emptyList(),
         budgetDiagnostics: WebGpuPathAaBudgetDiagnostics? = null,
     ): WebGpuCoverageSelection = WebGpuCoverageSelection(
         drawKind = drawKind,

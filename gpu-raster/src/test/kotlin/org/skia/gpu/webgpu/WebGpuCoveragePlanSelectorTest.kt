@@ -48,9 +48,9 @@ class WebGpuCoveragePlanSelectorTest {
         assertEquals("webgpu.coverage.analytic-rect", selection.routeIdentifier)
         assertEquals(
             listOf(
-                SkWebGpuDevice.PipelineKeyClassification(
+                PipelineKeyClassification(
                     axis = "coverageKind",
-                    axisClass = SkWebGpuDevice.PipelineKeyAxisClass.Code,
+                    axisClass = PipelineKeyAxisClass.Code,
                     value = "analyticRect",
                 ),
             ),
