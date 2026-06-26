@@ -160,8 +160,20 @@ rtk git diff --check
     SolidColor) → `dispatchFillRect` refuses automatically. Previously
     emitted a silent solid-color rect. Hermetic test captures `refuse:`
     diagnostic. True texture draw deferred.
-  - `DrawTextRun`: remains `refuse:` (needs text atlas/SDF pipeline).
-  - Summary: **3/5 dispatched with independent parity; 2/5 explicitly refused**.
+  - `DrawTextRun`: A8 fill **dispatched + CPU-parity proven** (`kanvas/src/main/kotlin/org/graphiks/kanvas/TextRunDispatch.kt` A8 atlas planner; `kanvas/src/test/kotlin/org/graphiks/kanvas/TextGpuEvidenceMain.kt` prints "PASS real GPU A8 text pixels with CPU parity"); color/SDF/emoji text still `refuse:`.
+  - Summary: **rect/rrect/path dispatched with parity + A8 text dispatched (CPU-parity proven); DrawImage and color/SDF/emoji text refused**.
+- `(2026-06-26)` Real bridge↔legacy `SkWebGpuDevice` pixel parity for the 3 fill
+  families landed via **KGPU-M32-002** (commit `c5b7387`;
+  `reports/gpu-renderer/2026-06-26-m32-002-bridge-vs-legacy-parity.md`,
+  independently re-verified): Rect 100.00% (40000/40000, maxDiff 0), RRect 99.77%
+  (39908/40000, maxDiff 123; AA edge pixels, threshold ≥99.0%), Path 100.00%
+  (40000/40000, maxDiff 0; non-AA triangle fill). Still refused on the bridge with
+  stable diagnostics: DrawImage (texture), non-SRC_OVER blend modes,
+  saveLayer/destination-read/filters, vertices/mesh, runtime effects, and
+  color/SDF/emoji text. The "parity verified for all 5 draw families" over-claim in
+  the M31-003 evidence is corrected accordingly: structural/task-level coverage PLUS
+  real bridge↔legacy parity for the 3 fill families; refused families are not claimed
+  as parity-proven.
 
 ## Linear Labels
 
