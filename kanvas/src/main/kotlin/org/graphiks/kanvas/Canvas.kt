@@ -188,7 +188,12 @@ class Canvas(private val surface: Surface) {
 
     fun drawTextBlob(blob: TextBlob, x: Float, y: Float, paint: Paint) {
         val (material, blend) = lowerPaint(paint)
-        val glyphRunDescriptor = blob.lower()
+        val loweredDescriptor = blob.lower()
+        // Bake the absolute draw origin into each glyph so the command carries
+        // device-space glyph positions (the typeface stays on TextBlob, out of the command).
+        val glyphRunDescriptor = loweredDescriptor.copy(
+            glyphs = loweredDescriptor.glyphs.map { it.copy(drawX = it.drawX + x, drawY = it.drawY + y) },
+        )
         val command = NormalizedDrawCommand.DrawTextRun(
             commandId = nextCommandId(),
             textLayoutResultId = "kanvas-text-${System.identityHashCode(blob)}",
@@ -205,7 +210,7 @@ class Canvas(private val surface: Surface) {
             layer = GPULayerFacts.root(target = surface.targetFacts),
             material = material,
             blend = blend,
-            bounds = computeTextRunBounds(glyphRunDescriptor, x, y),
+            bounds = computeTextRunBounds(glyphRunDescriptor, 0f, 0f),
             ordering = GPUOrderingFacts(paintOrder = 0, dependsOnDestination = false, requiresBarrier = false),
             source = source,
         )
