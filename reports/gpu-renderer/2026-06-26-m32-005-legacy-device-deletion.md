@@ -118,45 +118,29 @@ rtk git diff --check  — clean (no whitespace errors)
 - ~30 validateKan* tasks in root build.gradle.kts still have `inputs.file(...)` references to deleted gpu-raster files (not evaluated during default build lifecycle, no breakage)
 - `checkGpuRasterImageToolingNoAwt` task is now a no-op (references deleted `CrossBackendHarness.kt`); left as-is to preserve build graph consistency
 
-## Deferred cleanup
+## CI Gate Cleanup
 
-The following are explicitly deferred to the agreed "later step" (Option A) per
-`docs/superpowers/plans/2026-06-26-legacy-gpu-raster-decommission.md`.
+The earlier claim that stale `validateKan*`/`gpuSmokeTest` references were
+"deferrable / non-breaking" was WRONG — they broke the required WGSL scene
+dashboard release gate and the GPU smoke CI job in PR #1892.
 
-### (a) Stale `inputs.file(...)` references in root `build.gradle.kts`
+### (a) Obsolete `validateKan*` gate removal
 
-~30 custom verify tasks (`validateKan*`) still reference deleted `:gpu-raster`
-files via `inputs.file(...)`. These tasks are outside the default `build`
-lifecycle and do not cause build failures. Confirmed stale references (sample):
+All 31 `validateKan*` Exec task registrations and 2 `injectKan*` tasks were
+REMOVED from root `build.gradle.kts` because they referenced deleted
+`:gpu-raster` files (`SkWebGpuDevice.kt`, `WebGpuCoveragePlanSelector.kt`) via
+`inputs.file(...)`, causing Gradle configuration failure when
+`pipelineSceneDashboardGate` or `pipelinePmBundle` pulled them into the task
+graph.
 
-| Line | Stale reference |
-|------|----------------|
-| 3392 | `gpu-raster/src/test/.../testing/CrossBackendHarness.kt` |
-| 5091 | `gpu-raster/src/main/.../WebGpuCoveragePlanSelector.kt` |
-| 5092 | `gpu-raster/src/main/.../SkWebGpuDevice.kt` |
-| 5110 | `gpu-raster/src/main/.../WebGpuCoveragePlanSelector.kt` |
-| 5141 | `gpu-raster/src/test/.../testing/CrossBackendHarness.kt` |
-| 5215 | `gpu-raster/src/main/.../WebGpuCoveragePlanSelector.kt` |
-| 5216 | `gpu-raster/src/test/.../WebGpuCoveragePlanSelectorTest.kt` |
-| 5256 | `gpu-raster/src/main/.../WebGpuCoveragePlanSelector.kt` |
-| 5336 | `gpu-raster/src/main/.../WebGpuCoveragePlanSelector.kt` |
-| 5337 | `gpu-raster/src/test/.../WebGpuCoveragePlanSelectorTest.kt` |
-| 5491 | `gpu-raster/src/main/.../SkWebGpuGlyphAtlas.kt` |
-| 5492 | `gpu-raster/src/test/.../SkWebGpuGlyphAtlasTest.kt` |
-| 5573 | `gpu-raster/src/main/.../SkWebGpuDevice.kt` |
-| 5632 | `gpu-raster/src/main/.../SkWebGpuGlyphAtlas.kt` |
-| 5659 | `gpu-raster/src/main/.../SkWebGpuDevice.kt` |
-| 5660 | `gpu-raster/src/main/.../SkWebGpuGlyphAtlas.kt` |
-| 5889 | `gpu-raster/src/main/.../SkWebGpuDevice.kt` |
-| 5900 | `gpu-raster/src/main/.../SkWebGpuDevice.kt` |
+### (b) GPU smoke job repointed
 
-(Full list: 21 matches confirmed via `rtk rg -n "gpu-raster/src.*(SkWebGpuDevice|WebGpuCoveragePlanSelector|SkWebGpuGlyphAtlas|CrossBackendHarness)" build.gradle.kts`.)
+The `.github/workflows/test.yml` "GPU tests (macos)" job was repointed from
+the deleted `:gpu-raster:gpuSmokeTest` to `:kanvas-skia-bridge:test :kanvas:test`
+(the real GPU bridge path on macOS Metal). Artifact paths were updated to
+`kanvas-skia-bridge/build/...` and `kanvas/build/...`.
 
-These references are in custom `JavaExec` / verify tasks that are not triggered
-by `build`, `check`, or `test`. Cleanup is deferred to the Option A relocation
-phase.
-
-### (b) Option A — relocate shared infra out of `:gpu-raster` and delete the module
+### (c) Retained: Option A — relocate shared infra out of `:gpu-raster` and delete the module
 
 The `:gpu-raster` module currently hosts:
 - `tools/`: WgslValidationReport, WgslStrictValidationReport,

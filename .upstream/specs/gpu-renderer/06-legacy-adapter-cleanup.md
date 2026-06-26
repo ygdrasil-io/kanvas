@@ -127,9 +127,11 @@ unconditional render route.
 **Deferred (Option A):** Full `:gpu-raster` module removal + relocating
 shared infra to `:gpu-renderer` is deferred to a later step per
 `docs/superpowers/plans/2026-06-26-legacy-gpu-raster-decommission.md`.
-Stale `inputs.file(...)` references to deleted files in root
-`build.gradle.kts` custom verify tasks are non-breaking (outside `build`
-lifecycle) and also deferred.
+The obsolete legacy-device CI gates (`validateKan*` chain, `gpuSmokeTest` in the
+root `build.gradle.kts` and CI workflow) were REMOVED as part of the device
+deletion because they broke the required WGSL scene dashboard release gate and
+the GPU smoke CI job. The GPU smoke job was repointed to the bridge GPU tests
+(`:kanvas-skia-bridge:test :kanvas:test`).
 
 Deletion report: `reports/gpu-renderer/2026-06-26-m32-005-legacy-device-deletion.md`
 
