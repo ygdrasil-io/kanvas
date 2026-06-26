@@ -37,9 +37,26 @@ decisions (KGPU-M10-001, KGPU-M10-002) and the
 | KGPU-M32-005 - Remove legacy device, rollback branch, and module include | `proposed` | `P0` | `PolicyGated` | `CPUReferenceOnly` | `false` | `false` | `legacy-cleanup` | [KGPU-M32-004] | `gpu-raster legacy` |
 | KGPU-M32-006 - Final decommission validation + evidence bundle + PR | `proposed` | `P0` | `PolicyGated` | `CPUReferenceOnly` | `false` | `false` | `legacy-cleanup` | [KGPU-M32-005] | `gpu-raster legacy` |
 
-Per-family port-or-refuse tickets (Phase 2) are enumerated as `KGPU-M32-010`
-onward after `KGPU-M32-001` (the decision matrix) determines which
-`GpuRendererLegacyRouteFamily` rows are `port` vs `refuse`.
+### Per-family port-or-refuse tickets (Phase 2)
+
+Created from the accepted `KGPU-M32-001` decision matrix
+(`reports/gpu-renderer/2026-06-26-m32-001-decommission-decision-matrix.md`); one
+ticket per `GpuRendererLegacyRouteFamily` row. All are `status: proposed`.
+
+| Ticket | familyId | decision | route_kind |
+|---|---|---|---|
+| KGPU-M32-010 | `material-paint` | port (SolidColor) / refuse (gradients + shader pipeline) | `GPUNative` |
+| KGPU-M32-011 | `solid-rect-drawpaint` | port | `GPUNative` |
+| KGPU-M32-012 | `rounded-rect-gradients` | port (solid uniform rrect) / refuse (gradients + non-uniform radii) | `GPUNative` |
+| KGPU-M32-013 | `rect-rrect-stroke` | refuse | `RefuseDiagnostic` |
+| KGPU-M32-014 | `device-scissor-simple-clips` | port (WideOpen/DeviceRect) / refuse (complex clips) | `GPUNative` |
+| KGPU-M32-015 | `path-fill-stroke` | port (path fill) / refuse (path stroke) | `GPUNative` |
+| KGPU-M32-016 | `images-bitmap-codecs-uploads` | refuse (dependency-gated) | `RefuseDiagnostic` |
+| KGPU-M32-017 | `savelayer-destination-read-filters` | refuse (dependency-gated) | `RefuseDiagnostic` |
+| KGPU-M32-018 | `text-glyphs` | port (A8 text) / refuse (color/SDF/emoji) | `GPUNative` |
+| KGPU-M32-019 | `runtime-effects-color-blends` | port (SrcOver) / refuse (other blends, color filters, runtime effects, color management) | `GPUNative` |
+| KGPU-M32-020 | `vertices-points-meshes` | refuse (dependency-gated) | `RefuseDiagnostic` |
+| KGPU-M32-021 | `clear-discard-target-background` | port (trivial — surface init) | `GPUNative` |
 
 Release-blocking tickets in this milestone: KGPU-M32-002, KGPU-M32-004,
 KGPU-M32-005, and KGPU-M32-006. KGPU-M32-001 and KGPU-M32-003 are not
