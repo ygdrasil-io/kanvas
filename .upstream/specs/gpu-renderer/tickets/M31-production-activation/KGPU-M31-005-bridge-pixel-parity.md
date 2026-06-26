@@ -1,7 +1,7 @@
 ---
 id: KGPU-M31-005
 title: "SkCanvas-bridge ↔ legacy gpu-raster pixel/GM parity (blocks M30-003/M31-003 sign-off)"
-status: in-progress
+status: review
 milestone: M31
 priority: P0
 owner_area: product-validation
