@@ -2,6 +2,7 @@ package org.graphiks.kanvas
 
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.commands.GPUClipKind
+import org.graphiks.kanvas.gpu.renderer.commands.GPUBlendKind
 import org.graphiks.kanvas.gpu.renderer.commands.GPULayerScopeKind
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
@@ -194,6 +195,10 @@ class Surface(
             refuse("unsupported_layer:${cmd.layer.scopeKind.name}")
             return
         }
+        if (cmd.blend.kind != GPUBlendKind.SrcOver) {
+            refuse("unsupported_blend:${cmd.blend.modeLabel}")
+            return
+        }
 
         val rgba = floatArrayOf(
             material.r * material.a,
@@ -242,6 +247,10 @@ class Surface(
         }
         if (cmd.layer.scopeKind != GPULayerScopeKind.Root) {
             refuse("unsupported_layer:${cmd.layer.scopeKind.name}")
+            return
+        }
+        if (cmd.blend.kind != GPUBlendKind.SrcOver) {
+            refuse("unsupported_blend:${cmd.blend.modeLabel}")
             return
         }
 
@@ -336,6 +345,10 @@ fn fs_main() -> @location(0) vec4f {
         }
         if (cmd.layer.scopeKind != GPULayerScopeKind.Root) {
             refuse("unsupported_layer:${cmd.layer.scopeKind.name}")
+            return
+        }
+        if (cmd.blend.kind != GPUBlendKind.SrcOver) {
+            refuse("unsupported_blend:${cmd.blend.modeLabel}")
             return
         }
 

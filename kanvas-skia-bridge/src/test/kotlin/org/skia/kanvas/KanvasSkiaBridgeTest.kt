@@ -499,6 +499,41 @@ class KanvasSkiaBridgeTest {
     }
 
     @Test
+    fun `non-srcover blend emits refuse diagnostic`() {
+        assumeTrue(GPUBackendRuntimeFactory.createOrNull() != null, "Skipping: WebGPU not available")
+        val skSurface = SkSurface.MakeRasterN32Premul(64, 64)
+        val kanvasSurface = SkiaKanvasSurface.wrap(skSurface)
+
+        // Draw overlapping rects with MULTIPLY blend (refused: only SRC_OVER is dispatched)
+        kanvasSurface.drawRect(
+            SkRect.MakeLTRB(10f, 10f, 40f, 40f),
+            SkPaint().apply { color = SkColorSetARGB(255, 255, 0, 0) },
+        )
+        kanvasSurface.drawRect(
+            SkRect.MakeLTRB(24f, 24f, 54f, 54f),
+            SkPaint().apply {
+                color = SkColorSetARGB(128, 0, 0, 255)
+                blendMode = org.skia.foundation.SkBlendMode.kMultiply
+            },
+        )
+
+        val errBytes = java.io.ByteArrayOutputStream()
+        val originalErr = System.err
+        System.setErr(java.io.PrintStream(errBytes))
+        try {
+            kanvasSurface.flush()
+        } finally {
+            System.setErr(originalErr)
+        }
+
+        val output = errBytes.toString("UTF-8")
+        assertTrue(
+            output.contains("unsupported_blend"),
+            "Expected 'unsupported_blend' diagnostic for non-SRC_OVER blend, got: $output",
+        )
+    }
+
+    @Test
     fun `flush does not emit diagnostic for supported solid rect`() {
         assumeTrue(GPUBackendRuntimeFactory.createOrNull() != null, "Skipping: WebGPU not available")
         val skSurface = SkSurface.MakeRasterN32Premul(64, 64)
