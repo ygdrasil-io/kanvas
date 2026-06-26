@@ -149,7 +149,7 @@ class Surface(
                             is NormalizedDrawCommand.FillRect -> dispatchFillRect(cmd, dispatched, diagnostics)
                             is NormalizedDrawCommand.FillRRect -> dispatchFillRRect(cmd, dispatched, diagnostics)
                             is NormalizedDrawCommand.FillPath -> dispatchFillPath(cmd, dispatched, diagnostics)
-                            is NormalizedDrawCommand.DrawTextRun -> refuseCommand(cmd, dispatched, diagnostics)
+                            is NormalizedDrawCommand.DrawTextRun -> dispatchDrawTextRun(cmd, dispatched, diagnostics)
                         }
                     }
                 }
@@ -429,13 +429,40 @@ fn fs_main() -> @location(0) vec4f {
         diagnostics.add("dispatch:${cmd.diagnosticName}")
     }
 
-    private fun GPUBackendRenderRecorder.refuseCommand(
-        cmd: NormalizedDrawCommand,
+    private fun GPUBackendRenderRecorder.dispatchDrawTextRun(
+        cmd: NormalizedDrawCommand.DrawTextRun,
         dispatched: MutableList<String>,
         diagnostics: MutableList<String>,
     ) {
-        val d = "refuse:${cmd.diagnosticName}:unsupported_command_family:${cmd.drawKind.name}"
-        diagnostics.add(d)
+        when (val plan = TextRunDispatchPlanner.plan(cmd, width, height)) {
+            is TextRunDispatchPlan.Refused -> {
+                diagnostics.add("refuse:${cmd.diagnosticName}:${plan.reason}")
+            }
+            is TextRunDispatchPlan.Draws -> {
+                drawFullscreenTextureUniformPass(
+                    wgsl = TextAtlasGlyphWgsl,
+                    colorFormat = GPU_COLOR_FORMAT,
+                    textureRgba = plan.atlasBytes,
+                    textureWidth = plan.atlasWidth,
+                    textureHeight = plan.atlasHeight,
+                    textureFormat = "r8unorm",
+                    draws = plan.placements.map { placement ->
+                        GPUBackendRawUniformDraw(
+                            uniformBytes = placement.uniformBytes(),
+                            scissorX = placement.scissorX,
+                            scissorY = placement.scissorY,
+                            scissorWidth = placement.scissorWidth,
+                            scissorHeight = placement.scissorHeight,
+                        )
+                    },
+                )
+                dispatched.add(cmd.commandId.toString())
+                diagnostics.add(
+                    "dispatch:${cmd.diagnosticName}:glyphs=${plan.placements.size}" +
+                        ":atlas=${plan.atlasWidth}x${plan.atlasHeight}:bytes=${plan.atlasBytes.size}",
+                )
+            }
+        }
     }
 
     private companion object {

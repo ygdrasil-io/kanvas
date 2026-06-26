@@ -14,6 +14,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPURRect
 import org.graphiks.kanvas.gpu.renderer.commands.GPURRectCornerRadii
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
+import org.graphiks.kanvas.font.handoff.GlyphRunDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBlendFacts as CoreGPUBlendFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBlendKind as CoreGPUBlendKind
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor as CoreMaterialDescriptor
@@ -187,7 +188,12 @@ class Canvas(private val surface: Surface) {
 
     fun drawTextBlob(blob: TextBlob, x: Float, y: Float, paint: Paint) {
         val (material, blend) = lowerPaint(paint)
-        val glyphRunDescriptor = blob.lower()
+        val loweredDescriptor = blob.lower()
+        // Bake the absolute draw origin into each glyph so the command carries
+        // device-space glyph positions (the typeface stays on TextBlob, out of the command).
+        val glyphRunDescriptor = loweredDescriptor.copy(
+            glyphs = loweredDescriptor.glyphs.map { it.copy(drawX = it.drawX + x, drawY = it.drawY + y) },
+        )
         val command = NormalizedDrawCommand.DrawTextRun(
             commandId = nextCommandId(),
             textLayoutResultId = "kanvas-text-${System.identityHashCode(blob)}",
@@ -204,10 +210,29 @@ class Canvas(private val surface: Surface) {
             layer = GPULayerFacts.root(target = surface.targetFacts),
             material = material,
             blend = blend,
-            bounds = GPUBounds(x, y, x + 100f, y + 20f),
+            bounds = computeTextRunBounds(glyphRunDescriptor, 0f, 0f),
             ordering = GPUOrderingFacts(paintOrder = 0, dependsOnDestination = false, requiresBarrier = false),
             source = source,
         )
         surface.recorder.record(command)
+    }
+
+    private fun computeTextRunBounds(descriptor: GlyphRunDescriptor, originX: Float, originY: Float): GPUBounds {
+        if (descriptor.glyphs.isEmpty()) return GPUBounds(originX, originY, originX, originY)
+        var left = Float.POSITIVE_INFINITY
+        var top = Float.POSITIVE_INFINITY
+        var right = Float.NEGATIVE_INFINITY
+        var bottom = Float.NEGATIVE_INFINITY
+        for (glyph in descriptor.glyphs) {
+            val glyphX = originX + glyph.drawX
+            val glyphY = originY + glyph.drawY
+            val width = glyph.placement.region.width.toFloat()
+            val height = glyph.placement.region.height.toFloat()
+            left = minOf(left, glyphX)
+            top = minOf(top, glyphY)
+            right = maxOf(right, glyphX + width)
+            bottom = maxOf(bottom, glyphY + height)
+        }
+        return GPUBounds(left, top, right, bottom)
     }
 }
