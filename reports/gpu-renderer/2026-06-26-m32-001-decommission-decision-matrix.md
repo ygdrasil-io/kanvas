@@ -80,7 +80,7 @@ All 4 dispatched command types share these acceptance criteria (verified against
 
 3. **`runtime-effects-color-blends` scope:** This family groups runtime effects, color filters, blends, AND color management. Blends are partially ported (SrcOver); everything else is refused. The family is too broad for a single yes/no decision — Phase 2 should split it.
 
-4. **`clear-discard-target-background` replacement ticket:** The `defaultReplacementTicket` is the placeholder `route-specific-clear-discard-ticket-required`. A real ticket id must be assigned before Phase 3 retirement authorization.
+4. **`clear-discard-target-background` replacement ticket:** RESOLVED 2026-06-26. The `defaultReplacementTicket` was the placeholder `route-specific-clear-discard-ticket-required`. Replaced with `KGPU-M32-022` (`clear-discard-route-ownership`) — the surface-init clear is trivially covered by the Kanvas surface contract (`Surface.kt:145,468-470`). See `KGPU-M32-022-clear-discard-route-ownership.md`.
 
 5. **Text A8 port vs M31-005 stale claim:** The M31-005 evidence report marks DrawTextRun as "refused" (§ Family Coverage Status table). This is stale — A8 text was implemented and proven after that report (see `TextGpuEvidenceMain.kt`). The stale claim must be corrected in Phase 1 (Task 1.2 per the plan).
 
