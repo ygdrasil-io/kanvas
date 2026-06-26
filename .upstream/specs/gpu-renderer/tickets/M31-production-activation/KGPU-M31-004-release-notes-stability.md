@@ -1,7 +1,7 @@
 ---
 id: KGPU-M31-004
 title: "Release notes and API stability freeze"
-status: review
+status: done
 milestone: M31
 priority: P0
 owner_area: product-validation
@@ -110,7 +110,7 @@ rtk git diff --check
 ## Status Notes
 
 - `proposed`: Initial ticket.
-- `review` (2026-06-25): Produced. Release notes draft covering M0-M31 feature set, supported draw families, blend modes, shader types, explicit non-support declarations, and rollback procedure. API stability declared for core :kanvas types. Evidence at reports/gpu-renderer/2026-06-25-M31-004-release-notes.md.
+- `done` (2026-06-26): Produced. Release notes draft covering M0-M31 feature set, supported draw families, blend modes, shader types, explicit non-support declarations, and rollback procedure. API stability declared for core :kanvas types. Evidence at reports/gpu-renderer/2026-06-25-M31-004-release-notes.md.
 
 ## Linear Labels
 
