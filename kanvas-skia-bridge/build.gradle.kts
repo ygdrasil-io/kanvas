@@ -7,6 +7,7 @@ dependencies {
     implementation(project(":math"))
     implementation(project(":kanvas-skia"))
     implementation(project(":kanvas"))
+    implementation(project(":gpu-renderer"))
 
     testImplementation(project(":cpu-raster"))
     testImplementation(project(":skia-integration-tests"))
@@ -25,6 +26,22 @@ tasks.register<JavaExec>("verifyBridgeSkSurfaceRender") {
 
     classpath = sourceSets.main.get().runtimeClasspath
     mainClass.set("org.skia.kanvas.VerifyBridgeSkSurfaceRenderKt")
+    outputs.upToDateWhen { false }
+    jvmArgs(buildList {
+        add("--add-opens=java.base/java.lang=ALL-UNNAMED")
+        add("--enable-native-access=ALL-UNNAMED")
+        if (org.gradle.internal.os.OperatingSystem.current().isMacOsX) {
+            add("-XstartOnFirstThread")
+        }
+    })
+}
+
+tasks.register<JavaExec>("compareBridgeVsSkiaRaster") {
+    group = "verification"
+    description = "Compares bridge GPU output vs Skia software raster for rect/rrect scenes."
+
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("org.skia.kanvas.CompareBridgeVsSkiaRasterKt")
     outputs.upToDateWhen { false }
     jvmArgs(buildList {
         add("--add-opens=java.base/java.lang=ALL-UNNAMED")
