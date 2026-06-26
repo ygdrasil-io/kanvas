@@ -11,3 +11,21 @@ dependencies {
     implementation(project(":font"))
     testImplementation(kotlin("test"))
 }
+
+tasks.register<JavaExec>("kanvasTextGpuEvidence") {
+    group = "verification"
+    description = "Native WebGPU evidence: renders A8 text via Surface and checks GPU/CPU coverage parity (opt-in)."
+    classpath = sourceSets.test.get().runtimeClasspath
+    mainClass.set("org.graphiks.kanvas.TextGpuEvidenceMainKt")
+    dependsOn(tasks.named("testClasses"))
+    outputs.upToDateWhen { false }
+    jvmArgs(
+        buildList {
+            add("--add-opens=java.base/java.lang=ALL-UNNAMED")
+            add("--enable-native-access=ALL-UNNAMED")
+            if (org.gradle.internal.os.OperatingSystem.current().isMacOsX) {
+                add("-XstartOnFirstThread")
+            }
+        },
+    )
+}
