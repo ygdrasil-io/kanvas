@@ -22,8 +22,7 @@ private var activationDiagnosticEmitted = false
 @Volatile
 private var activationFailedEmitted = false
 
-fun isKanvasRendererEnabled(): Boolean =
-    !RollbackConfig.useLegacyGpuRaster
+fun isKanvasRendererEnabled(): Boolean = true
 
 fun isProductActivation(): Boolean =
     RollbackConfig.productActivation
@@ -33,8 +32,7 @@ internal fun emitRouteMigratedDiagnostic() {
         activationDiagnosticEmitted = true
         emitBridgeDiagnostic(
             code = "route-migrated-to-kanvas",
-            message = "SkSurface rendering routed through Kanvas native pipeline (SkiaKanvasSurface). " +
-                "Set -Dkanvas.rollback.legacy-gpu-raster=true for emergency rollback to gpu-raster.",
+            message = "SkSurface rendering routed through Kanvas native pipeline (SkiaKanvasSurface).",
         )
         if (isProductActivation()) {
             emitBridgeDiagnostic(
@@ -54,7 +52,7 @@ internal fun checkGpuActivationOrThrow() {
         emitBridgeDiagnostic(
             code = "kanvas-activation-failed",
             message = "WebGPU backend unavailable. Kanvas native pipeline cannot start. " +
-                "No silent fallback to legacy gpu-raster.",
+                "No silent fallback.",
         )
         error("kanvas-activation-failed: WebGPU backend unavailable. Refusing to start Kanvas native pipeline.")
     }
@@ -95,7 +93,7 @@ class SkiaKanvasSurface internal constructor(
 
     fun flush(): Frame {
         val recording = kanvasSurface.flush()
-        if (isKanvasRendererEnabled() && !recording.isEmpty) {
+        if (!recording.isEmpty) {
             runCatching {
                 val result = kanvasSurface.renderToRgba()
                 emitRefusedDiagnostics(result)
@@ -154,7 +152,6 @@ class SkiaKanvasSurface internal constructor(
 
         @JvmStatic
         fun wrapIfEnabled(skSurface: SkSurface): SkiaKanvasSurface? {
-            if (!isKanvasRendererEnabled()) return null
             checkGpuActivationOrThrow()
             emitRouteMigratedDiagnostic()
             return wrap(skSurface)

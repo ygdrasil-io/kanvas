@@ -242,41 +242,10 @@ class KanvasSkiaBridgeTest {
     }
 
     @Test
-    fun `isKanvasRendererEnabled returns false when rollback flag set`() {
-        val previous = System.getProperty("kanvas.rollback.legacy-gpu-raster")
-        try {
-            System.setProperty("kanvas.rollback.legacy-gpu-raster", "true")
-            assertEquals(false, isKanvasRendererEnabled())
-        } finally {
-            if (previous != null) {
-                System.setProperty("kanvas.rollback.legacy-gpu-raster", previous)
-            } else {
-                System.clearProperty("kanvas.rollback.legacy-gpu-raster")
-            }
-        }
-    }
-
-    @Test
     fun `wrapIfEnabled returns non-null by default`() {
         assumeTrue(GPUBackendRuntimeFactory.createOrNull() != null, "Skipping: WebGPU not available")
         val skiaSurface = SkSurface.MakeRasterN32Premul(64, 64)
         assertNotNull(SkiaKanvasSurface.wrapIfEnabled(skiaSurface))
-    }
-
-    @Test
-    fun `wrapIfEnabled returns null when useLegacyGpuRaster is set`() {
-        val previous = System.getProperty("kanvas.rollback.legacy-gpu-raster")
-        try {
-            System.setProperty("kanvas.rollback.legacy-gpu-raster", "true")
-            val skiaSurface = SkSurface.MakeRasterN32Premul(64, 64)
-            assertNull(SkiaKanvasSurface.wrapIfEnabled(skiaSurface))
-        } finally {
-            if (previous != null) {
-                System.setProperty("kanvas.rollback.legacy-gpu-raster", previous)
-            } else {
-                System.clearProperty("kanvas.rollback.legacy-gpu-raster")
-            }
-        }
     }
 
     @Test
@@ -437,11 +406,7 @@ class KanvasSkiaBridgeTest {
         assertTrue(isProductActivation())
     }
 
-    @Test
-    fun `RollbackConfig useLegacyGpuRaster environment variable`() {
-        val previous = System.getenv("KANVAS_ROLLBACK_LEGACY_GPU_RASTER")
-        assertFalse(RollbackConfig.useLegacyGpuRaster)
-    }
+
 
     @Test
     fun `productActivation disabled via system property`() {

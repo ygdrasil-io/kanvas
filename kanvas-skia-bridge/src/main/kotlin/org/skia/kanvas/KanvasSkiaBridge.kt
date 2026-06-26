@@ -278,7 +278,7 @@ internal fun emitBridgeDiagnostic(code: String, message: String) {
 internal fun emitUnsupportedBridgeDiagnostic(feature: String) {
     emitBridgeDiagnostic(
         code = "unsupported-skia-bridge-feature",
-        message = "Unsupported SkCanvas bridge feature: $feature. No silent fallback to legacy gpu-raster.",
+        message = "Unsupported SkCanvas bridge feature: $feature. No silent fallback.",
     )
 }
 

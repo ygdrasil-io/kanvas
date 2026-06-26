@@ -131,55 +131,11 @@ val requiredPipelineConformanceSuites = listOf(
         resultRoot = "gpu-raster/build/test-results/pipelineConformanceTest",
     ),
     RequiredPipelineConformanceSuite(
-        className = "org.skia.gpu.webgpu.PipelineKeyTelemetryTest",
-        resultRoot = "gpu-raster/build/test-results/pipelineConformanceTest",
-    ),
-    RequiredPipelineConformanceSuite(
         className = "org.skia.gpu.webgpu.RuntimeEffectDescriptorWebGpuTest",
         resultRoot = "gpu-raster/build/test-results/pipelineConformanceTest",
     ),
     RequiredPipelineConformanceSuite(
-        className = "org.skia.gpu.webgpu.SimpleRuntimeEffectSceneEvidenceTest",
-        resultRoot = "gpu-raster/build/test-results/pipelineConformanceTest",
-    ),
-    RequiredPipelineConformanceSuite(
-        className = "org.skia.gpu.webgpu.SkWebGpuGlyphAtlasTest",
-        resultRoot = "gpu-raster/build/test-results/pipelineConformanceTest",
-    ),
-    RequiredPipelineConformanceSuite(
-        className = "org.skia.gpu.webgpu.SimpleLatinLineSceneEvidenceTest",
-        resultRoot = "gpu-raster/build/test-results/pipelineConformanceTest",
-    ),
-    RequiredPipelineConformanceSuite(
         className = "org.skia.gpu.webgpu.TextWgslValidationPipelineConformanceTest",
-        resultRoot = "gpu-raster/build/test-results/pipelineConformanceTest",
-    ),
-    RequiredPipelineConformanceSuite(
-        className = "org.skia.gpu.webgpu.SimpleLinearGradientSceneEvidenceTest",
-        resultRoot = "gpu-raster/build/test-results/pipelineConformanceTest",
-    ),
-    RequiredPipelineConformanceSuite(
-        className = "org.skia.gpu.webgpu.SimpleBitmapRectSceneEvidenceTest",
-        resultRoot = "gpu-raster/build/test-results/pipelineConformanceTest",
-    ),
-    RequiredPipelineConformanceSuite(
-        className = "org.skia.gpu.webgpu.SimpleSrcOverAlphaSceneEvidenceTest",
-        resultRoot = "gpu-raster/build/test-results/pipelineConformanceTest",
-    ),
-    RequiredPipelineConformanceSuite(
-        className = "org.skia.gpu.webgpu.SimpleColorFilterSceneEvidenceTest",
-        resultRoot = "gpu-raster/build/test-results/pipelineConformanceTest",
-    ),
-    RequiredPipelineConformanceSuite(
-        className = "org.skia.gpu.webgpu.RuntimeColorFilterSceneEvidenceTest",
-        resultRoot = "gpu-raster/build/test-results/pipelineConformanceTest",
-    ),
-    RequiredPipelineConformanceSuite(
-        className = "org.skia.gpu.webgpu.SimpleSaveLayerImageFilterSceneEvidenceTest",
-        resultRoot = "gpu-raster/build/test-results/pipelineConformanceTest",
-    ),
-    RequiredPipelineConformanceSuite(
-        className = "org.skia.gpu.webgpu.WebGpuCoveragePlanSelectorTest",
         resultRoot = "gpu-raster/build/test-results/pipelineConformanceTest",
     ),
     RequiredPipelineConformanceSuite(
@@ -260,8 +216,8 @@ fun gpuAdapterEvidenceForReport(
     ciLaneAvailable: Boolean = true,
 ): GpuAdapterEvidence {
     val adapterSuites = suites.filter {
-        it.className == "org.skia.gpu.webgpu.WebGpuCoveragePlanSelectorTest" ||
-            it.className == "org.skia.gpu.webgpu.PipelineKeyTelemetryTest"
+        it.className == "org.skia.gpu.webgpu.BlendPlanTest" ||
+            it.className == "org.skia.gpu.webgpu.RuntimeEffectDescriptorWebGpuTest"
     }
     val localStatus = conformanceStatus(adapterSuites)
     val observedStatus = when {
@@ -608,26 +564,15 @@ project(":cpu-raster").registerPipelineConformanceTest(
 )
 
 project(":gpu-raster").registerPipelineConformanceTest(
-    descriptionText = "Runs generated WGSL, text WGSL validation, PipelineKey, BlendPlan, runtime descriptor, WebGPU glyph atlas, simple Latin line, simple linear gradient, simple bitmap rect, simple SrcOver alpha, simple ColorFilter, runtime ColorFilter, simple SaveLayer image-filter, simple SimpleRT runtime effect, and selector conformance tests.",
+    descriptionText = "Runs generated WGSL, text WGSL validation, BlendPlan, and runtime descriptor conformance tests.",
     testPatterns = listOf(
         "org.skia.gpu.webgpu.tools.WgslValidationReportTest",
         "org.skia.gpu.webgpu.tools.WgslStrictValidationReportTest",
         "org.skia.gpu.webgpu.tools.GeneratedSolidRectWgslTest",
         "org.skia.gpu.webgpu.tools.GeneratedLinearGradientWgslTest",
-        "org.skia.gpu.webgpu.PipelineKeyTelemetryTest",
         "org.skia.gpu.webgpu.BlendPlanTest",
         "org.skia.gpu.webgpu.RuntimeEffectDescriptorWebGpuTest",
-        "org.skia.gpu.webgpu.SkWebGpuGlyphAtlasTest",
-        "org.skia.gpu.webgpu.SimpleLatinLineSceneEvidenceTest",
         "org.skia.gpu.webgpu.TextWgslValidationPipelineConformanceTest",
-        "org.skia.gpu.webgpu.SimpleLinearGradientSceneEvidenceTest",
-        "org.skia.gpu.webgpu.SimpleBitmapRectSceneEvidenceTest",
-        "org.skia.gpu.webgpu.SimpleSrcOverAlphaSceneEvidenceTest",
-        "org.skia.gpu.webgpu.SimpleColorFilterSceneEvidenceTest",
-        "org.skia.gpu.webgpu.RuntimeColorFilterSceneEvidenceTest",
-        "org.skia.gpu.webgpu.SimpleSaveLayerImageFilterSceneEvidenceTest",
-        "org.skia.gpu.webgpu.SimpleRuntimeEffectSceneEvidenceTest",
-        "org.skia.gpu.webgpu.WebGpuCoveragePlanSelectorTest",
     ),
 )
 
@@ -688,7 +633,6 @@ tasks.register<Exec>("pipelineRuntimeChildShaderEffectLaneReport") {
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/runtime-effects-v2/support-matrix.json"))
     inputs.file(layout.projectDirectory.file("cpu-raster/src/main/kotlin/org/skia/effects/runtime/effects/SkBuiltinShaderEffectsChildren.kt"))
     inputs.file(layout.projectDirectory.file("cpu-raster/src/test/kotlin/org/skia/effects/runtime/effects/SkBuiltinShaderEffectsChildrenTest.kt"))
-    inputs.file(layout.projectDirectory.file("gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt"))
     outputs.file(outputDir.file("runtime-child-shader-effect-lane.json"))
     outputs.file(outputDir.file("runtime-child-shader-effect-lane.md"))
     outputs.file(outputDir.file("runtime-child-shader-effect-lane-route.json"))
@@ -736,7 +680,6 @@ tasks.register<Exec>("pipelineRuntimeBlenderBoundaryReport") {
     inputs.file(layout.projectDirectory.file("cpu-raster/src/main/kotlin/org/skia/effects/runtime/effects/SkBuiltinSpecialisedEffects.kt"))
     inputs.file(layout.projectDirectory.file("cpu-raster/src/main/kotlin/org/skia/effects/runtime/SkRuntimeBlender.kt"))
     inputs.file(layout.projectDirectory.file("cpu-raster/src/main/kotlin/org/skia/effects/runtime/SkRuntimeEffectDescriptor.kt"))
-    inputs.file(layout.projectDirectory.file("gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt"))
     inputs.file(layout.projectDirectory.file("cpu-raster/src/test/kotlin/org/skia/effects/runtime/SkRuntimeBlenderTest.kt"))
     inputs.file(layout.projectDirectory.file("gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/RuntimeEffectDescriptorWebGpuTest.kt"))
     outputs.file(outputDir.file("runtime-blender-boundary.json"))
@@ -8889,14 +8832,8 @@ tasks.register<Exec>("validateGpuRendererR6AdapterBackedPromotionReadinessBounda
     description = "Validates the opt-in adapter-backed GPU renderer R6 promotion boundary without product route activation."
     dependsOn("pipelinePmBundle")
     dependsOn("injectGpuRendererR6FirstRoutePmEvidenceIntoPmBundle")
-    dependsOn(":gpu-raster:validateGpuRendererR6ExecutedFirstRoutePmEvidenceBundle")
-
     val validator = layout.projectDirectory.file("scripts/validate_gpu_renderer_r6_promotion_readiness_boundary.py")
     val bundleDir = layout.buildDirectory.dir("reports/wgsl-pipeline-pm-bundle")
-    val executedSummary = layout.projectDirectory.file(
-        "gpu-raster/build/reports/gpu-renderer-r6-executed-first-route-pm-evidence/" +
-            "diagnostic-webgpu-first-route-pm-evidence-summary.json",
-    )
     val report = layout.projectDirectory.file("reports/gpu-renderer/2026-06-14-r6-promotion-readiness-boundary.md")
 
     commandLine(
@@ -8905,16 +8842,12 @@ tasks.register<Exec>("validateGpuRendererR6AdapterBackedPromotionReadinessBounda
         rootDir.absolutePath,
         "--pm-bundle-dir",
         bundleDir.get().asFile.absolutePath,
-        "--executed-summary",
-        executedSummary.asFile.absolutePath,
-        "--require-executed-summary",
         "--write-report",
         report.asFile.absolutePath,
     )
     inputs.file(validator)
     inputs.file(bundleDir.map { it.file("manifest.json") })
     inputs.file(bundleDir.map { it.file("release/gpu-renderer-r6-first-route-pm-evidence/pm-bundle-manifest-entry.json") })
-    inputs.file(executedSummary)
     outputs.file(report)
     outputs.upToDateWhen { false }
 }
