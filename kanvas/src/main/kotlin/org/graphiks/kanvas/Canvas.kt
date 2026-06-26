@@ -69,7 +69,15 @@ class Canvas(private val surface: Surface) {
                     endR = endColor.first, endG = endColor.second, endB = endColor.third, endA = 1f,
                 )
             }
-            else -> CoreMaterialDescriptor.SolidColor(r = paint.r, g = paint.g, b = paint.b, a = paint.a)
+            is Shader.Bitmap -> CoreMaterialDescriptor.ImageDraw(
+                imageSourceId = shader.image.sourceId,
+                imageWidth = shader.image.width,
+                imageHeight = shader.image.height,
+            )
+            is Shader.RuntimeEffect -> CoreMaterialDescriptor.RuntimeEffect(
+                effectId = shader.effectId,
+                descriptorVersion = shader.descriptorVersion,
+            )
         }
         val blend = blendFromMode(paint.blendMode)
         return Pair(material, blend)
@@ -89,6 +97,7 @@ class Canvas(private val surface: Surface) {
             material = material,
             blend = blend,
             source = source,
+            stroke = paint.style == PaintStyle.STROKE,
         )
         surface.recorder.record(command)
     }
@@ -108,6 +117,7 @@ class Canvas(private val surface: Surface) {
             material = material,
             blend = blend,
             source = source,
+            stroke = paint.style == PaintStyle.STROKE,
         )
         surface.recorder.record(command)
     }
@@ -127,6 +137,7 @@ class Canvas(private val surface: Surface) {
             material = material,
             blend = blend,
             source = source,
+            stroke = paint.style == PaintStyle.STROKE,
         )
         surface.recorder.record(command)
     }
@@ -163,6 +174,7 @@ class Canvas(private val surface: Surface) {
             material = material,
             blend = blend,
             source = source,
+            stroke = paint.style == PaintStyle.STROKE,
         )
         surface.recorder.record(command)
     }

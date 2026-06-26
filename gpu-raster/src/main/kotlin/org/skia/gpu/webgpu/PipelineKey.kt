@@ -2,6 +2,19 @@ package org.skia.gpu.webgpu
 
 import java.security.MessageDigest
 
+public enum class PipelineKeyAxisClass {
+    Layout,
+    Code,
+    PipelineState,
+    UniformOnly,
+}
+
+public data class PipelineKeyClassification(
+    val axis: String,
+    val axisClass: PipelineKeyAxisClass,
+    val value: String,
+)
+
 public data class PipelineKey(
     val preimage: String,
     val hash: String,
@@ -53,27 +66,27 @@ internal class PipelineKeyedCache<T>(
 internal const val PIPELINE_KEY_COLLISION_FATAL_FLAG: String = "kanvas.gpu.pipelineKey.collisionFatal"
 
 internal fun canonicalPipelineKeyIdentity(
-    parts: List<SkWebGpuDevice.PipelineKeyClassification>,
+    parts: List<PipelineKeyClassification>,
 ): PipelineKey {
     val grouped = parts
-        .filter { it.axisClass != SkWebGpuDevice.PipelineKeyAxisClass.UniformOnly }
+        .filter { it.axisClass != PipelineKeyAxisClass.UniformOnly }
         .groupBy { it.axisClass }
     val preimage = "pipeline.key v=1 " +
-        "layout=[${grouped.canonicalGroup(SkWebGpuDevice.PipelineKeyAxisClass.Layout)}] " +
-        "code=[${grouped.canonicalGroup(SkWebGpuDevice.PipelineKeyAxisClass.Code)}] " +
-        "state=[${grouped.canonicalGroup(SkWebGpuDevice.PipelineKeyAxisClass.PipelineState)}]"
+        "layout=[${grouped.canonicalGroup(PipelineKeyAxisClass.Layout)}] " +
+        "code=[${grouped.canonicalGroup(PipelineKeyAxisClass.Code)}] " +
+        "state=[${grouped.canonicalGroup(PipelineKeyAxisClass.PipelineState)}]"
     return PipelineKey(
         preimage = preimage,
         hash = sha256Hex(preimage),
         uniformFacts = parts
-            .filter { it.axisClass == SkWebGpuDevice.PipelineKeyAxisClass.UniformOnly }
+            .filter { it.axisClass == PipelineKeyAxisClass.UniformOnly }
             .sortedBy { it.axis }
             .joinToString(prefix = "[", postfix = "]") { "${it.axis}=${it.value}" },
     )
 }
 
-private fun Map<SkWebGpuDevice.PipelineKeyAxisClass, List<SkWebGpuDevice.PipelineKeyClassification>>.canonicalGroup(
-    axisClass: SkWebGpuDevice.PipelineKeyAxisClass,
+private fun Map<PipelineKeyAxisClass, List<PipelineKeyClassification>>.canonicalGroup(
+    axisClass: PipelineKeyAxisClass,
 ): String =
     this[axisClass].orEmpty()
         .sortedBy { it.axis }

@@ -293,30 +293,28 @@ A route may be promoted only when:
 - GPU evidence exists for GPU claims;
 - PM/report output identifies route counts and refusals.
 
-## Frozen Routes
+## Historic Routes
 
-### `gpu-raster-legacy-path` → `FROZEN`
+### `gpu-raster-legacy-path` → `REMOVED`
 
 The `gpu-raster` legacy path (backed by `SkWebGpuDevice` and `WebGpuContext`)
-is frozen at M30 and will be removed in M31+.
+was deleted in KGPU-M32-005 (commit 4bfdd9f). The `:gpu-raster` module is kept
+as host for shared WGSL-validation, pipeline-conformance, retirement/shadow
+gates, generated-WGSL, and inventory infrastructure. It no longer contains a
+render device.
 
-- Status: `FROZEN`
-- Emergency rollback: `-Dkanvas.rollback.legacy-gpu-raster=true`
-- Active route: `kanvas-bridge-path` (default since M30)
-- The frozen path receives no new features, no bug fixes, and no performance
-  improvements.
-- Tests using `WebGpuSink` and `SkWebGpuDevice` remain valid for regression
-  comparison until the module is removed.
+- Status: `REMOVED` (device deleted; module kept for shared infra)
+- No rollback target exists (`-Dkanvas.rollback.legacy-gpu-raster` removed)
+- Deletion report: `reports/gpu-renderer/2026-06-26-m32-005-legacy-device-deletion.md`
 
 ### `kanvas-bridge-path` → `ACTIVE`
 
 The Kanvas-native bridge path (backed by `SkiaKanvasSurface` and
-`KanvasSkiaBridge`) is the active rendering route since M30.
+`KanvasSkiaBridge`) is the sole rendering route since M32-005.
 
 - Status: `ACTIVE`
 - Uses the Kanvas-native Surface/Canvas pipeline with WGSL GPU rendering
-- Falls back to the `gpu-raster-legacy-path` only when the rollback flag
-  is explicitly set
+- No legacy fallback route exists
 
 ## Non-Goals
 

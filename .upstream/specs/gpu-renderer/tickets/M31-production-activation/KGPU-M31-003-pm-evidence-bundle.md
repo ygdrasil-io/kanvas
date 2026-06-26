@@ -1,7 +1,7 @@
 ---
 id: KGPU-M31-003
 title: "Final PM evidence bundle — production-readiness sign-off"
-status: review
+status: done
 milestone: M31
 priority: P0
 owner_area: product-validation
@@ -114,6 +114,7 @@ rtk ./gradlew --no-daemon :gpu-renderer:test
 
 - `proposed`: Initial ticket.
 - `review` (2026-06-25): Produced. Evidence reports for all M30+M31 tickets under reports/gpu-renderer/; task-level parity validated for 5 draw families; support matrix documented; release notes draft produced (M31-004). Full GPU pixel comparison deferred to execution pipeline completion. Evidence at reports/gpu-renderer/2026-06-25-M31-003-evidence.md.
+- `done` (2026-06-26): promoted after maintainer review of PR #1892 (https://github.com/ygdrasil-io/kanvas/pull/1892) — no blocking issues found.
 
 ## Linear Labels
 

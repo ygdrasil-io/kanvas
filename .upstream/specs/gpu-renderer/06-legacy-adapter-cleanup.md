@@ -110,6 +110,31 @@ Legacy code may be removed only when:
 
 No broad deletion is allowed just because the new module exists.
 
+## Retirement Status
+
+### Legacy gpu-raster DEVICE → `COMPLETE` (KGPU-M32-005)
+
+The legacy `SkWebGpuDevice`, `WebGpuContext`, `HeadlessTarget`,
+`WebGpuCoveragePlanSelector`, `SkWebGpuGlyphAtlas`, and all device-dependent
+classes were deleted in KGPU-M32-005 (commit 4bfdd9f). The `:gpu-raster`
+module is kept as host for shared WGSL-validation, pipeline-conformance,
+retirement/shadow gates, generated-WGSL, and inventory infrastructure.
+
+The rollback flag (`-Dkanvas.rollback.legacy-gpu-raster` /
+`useLegacyGpuRaster`) was severed. The Kanvas bridge path is now the sole,
+unconditional render route.
+
+**Deferred (Option A):** Full `:gpu-raster` module removal + relocating
+shared infra to `:gpu-renderer` is deferred to a later step per
+`docs/superpowers/plans/2026-06-26-legacy-gpu-raster-decommission.md`.
+The obsolete legacy-device CI gates (`validateKan*` chain, `gpuSmokeTest` in the
+root `build.gradle.kts` and CI workflow) were REMOVED as part of the device
+deletion because they broke the required WGSL scene dashboard release gate and
+the GPU smoke CI job. The GPU smoke job was repointed to the bridge GPU tests
+(`:kanvas-skia-bridge:test :kanvas:test`).
+
+Deletion report: `reports/gpu-renderer/2026-06-26-m32-005-legacy-device-deletion.md`
+
 ## Non-Goals
 
 - Do not perform a cosmetic large-file split without behavioral evidence.

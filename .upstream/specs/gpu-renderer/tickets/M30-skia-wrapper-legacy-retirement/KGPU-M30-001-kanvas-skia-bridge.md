@@ -1,7 +1,7 @@
 ---
 id: KGPU-M30-001
 title: "KanvasSkiaBridge — SkCanvas to KanvasCanvas command translation"
-status: review
+status: done
 milestone: M30
 priority: P0
 owner_area: kanvas-skia-bridge
@@ -110,6 +110,7 @@ rtk ./gradlew --no-daemon :gpu-renderer:test
 
 - `proposed`: Initial ticket.
 - `review` (2026-06-25): Implemented. Added SkRRect, SkTextBlob translation; created KanvasSkiaBridge class; extended SkiaKanvasSurface with drawRRect/drawTextBlob; added diagnostic helpers. 26 tests pass. Existing code was extended, not recreated — gaps from ticket AC are filled. Evidence at `reports/gpu-renderer/2026-06-25-M30-001-evidence.md`.
+- `done` (2026-06-26): promoted after maintainer review of PR #1892 (https://github.com/ygdrasil-io/kanvas/pull/1892) — no blocking issues found.
 
 ## Linear Labels
 
