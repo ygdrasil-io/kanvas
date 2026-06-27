@@ -41,10 +41,15 @@ in `32-target-authority-taxonomy-diagnostics.md`. Key, payload, resource, and
 material-lowering boundaries are centralized in
 `33-key-boundaries-material-lowering.md`. Analysis, materialization, recording
 lifetime, and late-diagnostic rules are centralized in
-`34-analysis-materialization-recording.md`. Package and class ownership is
-centralized in `35-package-class-layout.md`. Implementation roadmap,
+`34-custom-runtime-effect-pipeline.md` and `35-custom-runtime-effect-security.md` for custom WGSL support, then `36-analysis-materialization-recording.md`. Package and class ownership is
+centralized in `37-package-class-layout.md`. Implementation roadmap,
 critical-path order, and parallel implementation lanes are centralized in
-`36-implementation-roadmap.md`.
+`38-implementation-roadmap`.
+lifetime, and late-diagnostic rules are centralized in
+`36-analysis-materialization-recording.md`. Package and class ownership is
+centralized in `37-package-class-layout.md`. Implementation roadmap,
+critical-path order, and parallel implementation lanes are centralized in
+`38-implementation-roadmap.md`.
 
 ## Source Of Truth
 
@@ -302,13 +307,15 @@ critical-path order, and parallel implementation lanes are centralized in
 | `28-layer-savelayer-execution.md` | Graphite-inspired layer/saveLayer execution target: save records, bounds planning, offscreen targets, initialization/backdrop, filters, restore composite, elision, task ordering, budgets, diagnostics, and validation gates. |
 | `29-color-management-pipeline.md` | Graphite-inspired color-management target: value specs, color-space/profile descriptors, ICC/CICP, transfer/gamut transforms, working spaces, gradients, images, runtime color uniforms, HDR/gainmap, store plans, budgets, diagnostics, and validation gates. |
 | `30-coordinate-transform-bounds-policy.md` | Graphite-inspired coordinate/transform/bounds target: coordinate spaces, transform classification, inverses, pixel grid, conservative bounds proofs, rounding, precision, budgets, diagnostics, and validation gates. |
+| `34-custom-runtime-effect-pipeline.md` | Custom runtime effect pipeline: user-provided WGSL support, `GPUCustomRuntimeEffectRegistry`, validation via `wgsl4k`, security checks, and isolation from registered effects. |
+| `35-custom-runtime-effect-security.md` | Security constraints for custom WGSL: blocked features (e.g., `atomic`, unbounded `storageBuffer`), resource limits, and `WGSLSecurityValidator`. |
 | `31-material-source-paint-pipeline.md` | Graphite-inspired material source and paint pipeline target: paint descriptor order, source planning, solid/gradient/image/local-matrix/blend/runtime-effect sources, tile/sampling policy, payload handoff, budgets, diagnostics, and validation gates. |
 | `32-target-authority-taxonomy-diagnostics.md` | Consolidated target authority, status vocabulary, route taxonomy, capability taxonomy, diagnostic registry policy, aliases, and refusal semantics. |
 | `33-key-boundaries-material-lowering.md` | Canonical key/payload/resource boundary table, resource topology versus identity rule, `GPUMaterialLoweringContext`, material root set, WGSL snippet I/O ABI, and runtime-effect usage set. |
-| `34-analysis-materialization-recording.md` | Analysis versus materialization boundary, late failure classes, recording replay compatibility, ordered recordings, lazy/promise/imported resources, scratch/intermediate lifetimes, and negative CPU-fallback tests. |
-| `35-package-class-layout.md` | Target package/class ownership layout for `:gpu-renderer`, dependency bands, public/internal surface, Graphite orientation table, and package-boundary validation. |
-| `36-implementation-roadmap.md` | Vertical-first implementation roadmap, critical path, parallel lanes, expansion order, commit/review proposal, stop conditions, and open planning questions. |
-| `37-draw-packet-command-stream.md` | Draw packet stream, pass command stream, materialization handoff, WGPU/Dawn-aligned command encoder plan, diagnostics, and validation gates. |
+| `36-analysis-materialization-recording.md` | Analysis versus materialization boundary, late failure classes, recording replay compatibility, ordered recordings, lazy/promise/imported resources, scratch/intermediate lifetimes, and negative CPU-fallback tests. |
+| `37-package-class-layout.md` | Target package/class ownership layout for `:gpu-renderer`, dependency bands, public/internal surface, Graphite orientation table, and package-boundary validation. |
+| `38-implementation-roadmap.md` | Vertical-first implementation roadmap, critical path, parallel lanes, expansion order, commit/review proposal, stop conditions, and open planning questions. |
+| `39-draw-packet-command-stream.md` | Draw packet stream, pass command stream, materialization handoff, WGPU/Dawn-aligned command encoder plan, diagnostics, and validation gates. |
 
 ## Target Shape
 
@@ -468,7 +475,7 @@ coverage.
 The concrete fixture and promotion contract for this first slice is defined in
 `14-first-slice-contract.md`. The proposed implementation order, parallel
 lanes, review shape, expansion sequence, and stop conditions are defined in
-`36-implementation-roadmap.md`.
+`38-implementation-roadmap.md`.
 
 ## Status Policy
 
