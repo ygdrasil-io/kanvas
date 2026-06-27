@@ -74,7 +74,7 @@ class GPUMeshBatcher {
         const val VERTICES_BATCHER_NONCLAIM_LINE: String =
             "vertices:nonclaim batchingSupported=true " +
                 "crossLayerBatching=false destinationReadBatching=false " +
-                "performanceReady=false productActivation=false"
+                "performanceReady=false productActivation=true"
     }
 }
 

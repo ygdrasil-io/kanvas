@@ -78,7 +78,7 @@ private fun gatePlan(
     routeKind = "GPUNative",
     classification = "DependencyGated",
     promoted = false,
-    productActivation = false,
+    productActivation = true,
     materialized = false,
     routePlan = GPURuntimeEffectRoutePlan.Refused(
         lookupPlan = GPURuntimeEffectLookupPlan(

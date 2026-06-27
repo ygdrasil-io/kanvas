@@ -26,6 +26,7 @@ data class GpuProductFlagConfig(
     val runtimeEffectsEnabled: Boolean = true,
     val performanceGatesEnabled: Boolean = true,
     val verticesEnabled: Boolean = true,
+    val productActivation: Boolean = true,
 ) {
     /** Builds a GPUCapabilities instance from the current flag configuration. */
     fun buildCapabilities(
@@ -212,6 +213,23 @@ data class GpuProductFlagConfig(
                 evidenceLabel = "product-flag:vertices",
             )
         }
+        if (productActivation) {
+            facts += GPUCapabilityFact(
+                name = "first_slice.product_activation.native",
+                source = "product-flags",
+                value = "activated",
+                affectsValidity = true,
+                evidenceLabel = "product-flag:productActivation",
+            )
+        } else {
+            facts += GPUCapabilityFact(
+                name = "first_slice.product_activation.native",
+                source = "product-flags",
+                value = "not-activated",
+                affectsValidity = true,
+                evidenceLabel = "product-flag:productActivation",
+            )
+        }
         return GPUCapabilities(
             implementation = implementation,
             facts = facts,
@@ -260,6 +278,8 @@ data class GpuProductFlagConfig(
         const val PerformanceGatesDisableProperty: String = "kanvas.gpu.renderer.product.performanceGates.disable"
         const val VerticesProperty: String = "kanvas.gpu.renderer.product.vertices"
         const val VerticesDisableProperty: String = "kanvas.gpu.renderer.product.vertices.disable"
+        const val ProductActivationProperty: String = "kanvas.gpu.renderer.product.productActivation"
+        const val ProductActivationDisableProperty: String = "kanvas.gpu.renderer.product.productActivation.disable"
 
         /** Returns the default GPU implementation identity for product flags. */
         fun defaultImplementation(): GPUImplementationIdentity =
@@ -294,6 +314,7 @@ data class GpuProductFlagConfig(
             val runtimeEffectsDisabled = propertyReader(RuntimeEffectsDisableProperty).toBoolean()
             val performanceGatesDisabled = propertyReader(PerformanceGatesDisableProperty).toBoolean()
             val verticesDisabled = propertyReader(VerticesDisableProperty).toBoolean()
+            val productActivationDisabled = propertyReader(ProductActivationDisableProperty).toBoolean()
             return GpuProductFlagConfig(
                 fillRRectEnabled = !fillRRectDisabled,
                 linearGradientEnabled = !linearGradientDisabled,
@@ -315,6 +336,7 @@ data class GpuProductFlagConfig(
                 runtimeEffectsEnabled = !runtimeEffectsDisabled,
                 performanceGatesEnabled = !performanceGatesDisabled,
                 verticesEnabled = !verticesDisabled,
+                productActivation = !productActivationDisabled,
             )
         }
     }

@@ -4,6 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertTrue
 
 class SimpleFilterRenderNodeRouteTest {
     @Test
@@ -14,7 +15,7 @@ class SimpleFilterRenderNodeRouteTest {
         assertEquals("GPUNative", result.routeKind)
         assertEquals("TargetNative", result.classification)
         assertFalse(result.promoted)
-        assertFalse(result.productActivation)
+        assertTrue(result.productActivation)
         assertFalse(result.materialized)
         assertAcceptedDiagnostic(result)
 
@@ -25,14 +26,14 @@ class SimpleFilterRenderNodeRouteTest {
 
         assertEquals(
             listOf(
-                "filter:simple-node row=gpu-renderer.filter.simple-node routeKind=GPUNative classification=TargetNative promoted=false productActivation=false materialized=false graph=filter-card node=cf-1 kind=ColorFilter route=GPUNativeRender",
+                "filter:simple-node row=gpu-renderer.filter.simple-node routeKind=GPUNative classification=TargetNative promoted=false productActivation=true materialized=false graph=filter-card node=cf-1 kind=ColorFilter route=GPUNativeRender",
                 "filter:graph id=filter-card version=1 source=layer-source nodes=cf-1 edges=none coordinates=layer,target provenance=test-fixture descriptor=${result.graphDescriptorHash}",
                 "filter:bounds node=cf-1 input=0,0,64,48 output=0,0,64,48 finite=true conservative=true crop=0,0,64,48 tile=decal/decal sampling=nearest/none coord=layer",
                 "filter:intermediate label=filter-intermediate:cf-1 descriptor=${result.intermediateDescriptorHash} owner=GPURecorderScope generation=17 bounds=0,0,64,48 format=rgba8unorm usage=render_attachment,texture_binding lifetime=layer-local bytes=12288",
                 "filter:render-node step=filter-render:colorfilter pipeline=${result.renderPipelineKeyHash} payload=${result.payloadPlanHash} binding=${result.bindingPlanHash}",
                 "filter:resource source=layer-source generation=17 readWriteAliasing=false activeAttachmentSampled=false budget=filter-small intermediateBytes=12288",
                 "filter:diagnostic code=accepted.filter.simple_node terminal=false",
-                "filter:nonclaim nativeFilter=false adapterBacked=false arbitraryFilterDag=false runtimeEffectFilter=false cpuRenderedFilterTextureFallback=false productActivation=false",
+                "filter:nonclaim nativeFilter=false adapterBacked=false arbitraryFilterDag=false runtimeEffectFilter=false cpuRenderedFilterTextureFallback=false productActivation=true",
             ),
             result.dumpLines(),
         )
@@ -108,8 +109,8 @@ class SimpleFilterRenderNodeRouteTest {
             assertEquals(case.reason, result.diagnostics.single().code)
             assertEquals(
                 listOf(
-                    "filter:simple-node.refused row=gpu-renderer.filter.simple-node routeKind=RefuseDiagnostic classification=TargetNative promoted=false productActivation=false materialized=false graph=filter-card node=${case.nodeId} reason=${case.reason} label=${case.label}",
-                    "filter:nonclaim nativeFilter=false adapterBacked=false arbitraryFilterDag=false runtimeEffectFilter=false cpuRenderedFilterTextureFallback=false productActivation=false",
+                    "filter:simple-node.refused row=gpu-renderer.filter.simple-node routeKind=RefuseDiagnostic classification=TargetNative promoted=false productActivation=true materialized=false graph=filter-card node=${case.nodeId} reason=${case.reason} label=${case.label}",
+                    "filter:nonclaim nativeFilter=false adapterBacked=false arbitraryFilterDag=false runtimeEffectFilter=false cpuRenderedFilterTextureFallback=false productActivation=true",
                 ),
                 result.dumpLines(),
             )

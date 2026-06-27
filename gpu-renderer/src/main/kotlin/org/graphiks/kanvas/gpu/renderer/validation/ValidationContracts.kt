@@ -171,7 +171,7 @@ class GPUValidationFixture {
      * Assembles R6 first-route PM evidence after resource materialization and backend execution.
      *
      * The helper accepts only Kanvas-owned contract objects, so backend-specific resources stay in
-     * `:gpu-raster` or another backend package. It projects materialization, submission, readback,
+     * `:gpu-renderer` or another backend package. It projects materialization, submission, readback,
      * recording, explicit parser-backed WGSL reflection, and telemetry facts into validation dumps
      * without constructing success evidence. A report passes only when the supplied objects include
      * a native route recording, parser-backed WGSL reflection supplied for the execution evidence,

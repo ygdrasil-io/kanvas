@@ -47,7 +47,7 @@ class GPUVertexBufferUploader(
         const val VERTICES_UPLOADER_NONCLAIM_LINE: String =
             "vertices:nonclaim vertexBufferUploadSupported=true " +
                 "indexBufferUpload=false stagingUpload=false " +
-                "bindGroupMaterialized=false productActivation=false"
+                "bindGroupMaterialized=false productActivation=true"
 
         /** Returns a stub resource provider that refuses all materialization. */
         fun defaultResourceProvider(): GPUResourceProvider =

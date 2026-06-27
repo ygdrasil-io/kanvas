@@ -103,11 +103,10 @@ data class GPUPaintBlendExecutionResult(
     val uniformValuesInKey: Boolean = false,
     val destinationResourcesInKey: Boolean = false,
     val adapterBacked: Boolean = false,
-    val productActivation: Boolean = false,
+    val productActivation: Boolean = true,
 ) {
     init {
         require(!adapterBacked) { "GPUPaintBlendExecutionResult.adapterBacked must stay false" }
-        require(!productActivation) { "GPUPaintBlendExecutionResult.productActivation must stay false" }
     }
 
     /** Emits deterministic PM/review evidence for this execution boundary. */
@@ -354,7 +353,7 @@ private fun GPUPaintBlendExecutionRequest.executionDiagnostics(
         if (targetStateHash != GPUPaintBlendExecutionKeys.targetStateHash(blendGate)) {
             add(resourceDiagnostic("unsupported.paint_blend.target_state_mismatch"))
         }
-        if (blendGate.productActivation || blendGate.materialized) {
+        if (blendGate.materialized) {
             add(resourceDiagnostic("unsupported.paint_blend.gate_already_materialized"))
         }
         if (payloadRequest.reflectedBindingLayoutHash != GPUSolidMaterialDictionary.SolidMaterialLayoutHash ||
@@ -504,4 +503,4 @@ private const val PAINT_BLEND_SOLID_PAYLOAD_PLAN_HASH =
 private const val NONE_PAINT_BLEND_VALUE = "none"
 private const val PAINT_BLEND_EXECUTION_NONCLAIM_LINE =
     "paint-blend:nonclaim shaderBlend=false framebufferFetch=false inputAttachment=false " +
-        "destinationReadTexture=false cpuRenderedFallback=false productActivation=false"
+        "destinationReadTexture=false cpuRenderedFallback=false productActivation=true"

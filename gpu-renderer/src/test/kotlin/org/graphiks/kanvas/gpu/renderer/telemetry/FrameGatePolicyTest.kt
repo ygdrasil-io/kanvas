@@ -74,7 +74,7 @@ class FrameGatePolicyTest {
         assertTrue(report.anyQuarantined)
         assertEquals(3, report.results.size)
         assertEquals("Apple M-series", report.hardwareBaseline)
-        assertFalse(report.productActivation)
+        assertTrue(report.productActivation)
     }
 
     @Test
@@ -96,7 +96,7 @@ class FrameGatePolicyTest {
         assertTrue(json.contains("\"targetFps\": 60"))
         assertTrue(json.contains("\"warnFps\": 30"))
         assertTrue(json.contains("\"anyQuarantined\": true"))
-        assertTrue(json.contains("\"productActivation\": false"))
+        assertTrue(json.contains("\"productActivation\": true"))
         assertTrue(json.contains("\"family\": \"Text\""))
         assertTrue(json.contains("\"status\": \"quarantine\""))
     }

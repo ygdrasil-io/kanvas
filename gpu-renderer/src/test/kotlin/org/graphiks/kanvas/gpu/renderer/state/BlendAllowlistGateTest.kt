@@ -11,6 +11,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
+import kotlin.test.assertTrue
 
 class BlendAllowlistGateTest {
     @Test
@@ -24,7 +25,7 @@ class BlendAllowlistGateTest {
         assertEquals("GPUNative", srcOver.routeKind)
         assertEquals("TargetNative", srcOver.classification)
         assertFalse(srcOver.promoted)
-        assertFalse(srcOver.productActivation)
+        assertTrue(srcOver.productActivation)
         assertFalse(srcOver.materialized)
         assertEquals(GPUDestinationReadRequirement.FixedFunctionBlend, srcOver.destinationReadRequirement)
         assertEquals(GPUDestinationReadStrategy.FixedFunction, srcOver.destinationReadStrategy)
@@ -39,12 +40,12 @@ class BlendAllowlistGateTest {
 
         assertEquals(
             listOf(
-                "blend:allowlist row=gpu-renderer.blend-allowlist routeKind=GPUNative classification=TargetNative promoted=false productActivation=false materialized=false command=blend:src-over mode=SrcOver plan=FixedFunctionBlend target=rgba8unorm state=${srcOver.blendStateHash} pipeline=${srcOver.pipelineBlendStateKey}",
+                "blend:allowlist row=gpu-renderer.blend-allowlist routeKind=GPUNative classification=TargetNative promoted=false productActivation=true materialized=false command=blend:src-over mode=SrcOver plan=FixedFunctionBlend target=rgba8unorm state=${srcOver.blendStateHash} pipeline=${srcOver.pipelineBlendStateKey}",
                 "blend:alpha input=premultiplied output=premultiplied premultiply=false clamp=true",
                 "blend:fixed-function mode=SrcOver color=src=one,dst=one-minus-src-alpha,op=add alpha=src=one,dst=one-minus-src-alpha,op=add writeMask=rgba destinationRead=FixedFunctionAttachmentBlend",
                 "blend:pipeline-key material=material:solid renderStep=rect-fill blendState=${srcOver.blendStateHash} pipelineKey=${srcOver.pipelineKeyHash}",
                 "blend:diagnostic code=accepted.blend.fixed_function terminal=false mode=SrcOver",
-                "blend:nonclaim nativeAdvancedBlend=false shaderBlend=false framebufferFetch=false inputAttachment=false destinationReadTexture=false productActivation=false",
+                "blend:nonclaim nativeAdvancedBlend=false shaderBlend=false framebufferFetch=false inputAttachment=false destinationReadTexture=false productActivation=true",
             ),
             srcOver.dumpLines(),
         )
@@ -65,9 +66,9 @@ class BlendAllowlistGateTest {
             assertEquals("unsupported.blend.dst_read_requires_intermediate", result.diagnostics.single().code)
             assertEquals(
                 listOf(
-                    "blend:allowlist.refused row=gpu-renderer.blend-allowlist routeKind=RefuseDiagnostic classification=TargetNative promoted=false productActivation=false materialized=false command=blend:$label mode=$mode plan=ShaderBlendWithDstRead reason=unsupported.blend.dst_read_requires_intermediate target=rgba8unorm",
+                    "blend:allowlist.refused row=gpu-renderer.blend-allowlist routeKind=RefuseDiagnostic classification=TargetNative promoted=false productActivation=true materialized=false command=blend:$label mode=$mode plan=ShaderBlendWithDstRead reason=unsupported.blend.dst_read_requires_intermediate target=rgba8unorm",
                     "blend:destination-read mode=$mode requirement=ShaderBlend strategy=RefuseDiagnostic action=Refuse plan=missing planStrategy=none activeAttachmentSampled=false",
-                    "blend:nonclaim nativeAdvancedBlend=false shaderBlend=false framebufferFetch=false inputAttachment=false destinationReadTexture=false productActivation=false",
+                    "blend:nonclaim nativeAdvancedBlend=false shaderBlend=false framebufferFetch=false inputAttachment=false destinationReadTexture=false productActivation=true",
                 ),
                 result.dumpLines(),
             )
@@ -98,9 +99,9 @@ class BlendAllowlistGateTest {
         assertEquals("unsupported.blend.shader_route_unvalidated", result.diagnostics.single().code)
         assertEquals(
             listOf(
-                "blend:allowlist.refused row=gpu-renderer.blend-allowlist routeKind=RefuseDiagnostic classification=TargetNative promoted=false productActivation=false materialized=false command=blend:screen mode=Screen plan=ShaderBlendWithDstRead reason=unsupported.blend.shader_route_unvalidated target=rgba8unorm",
+                "blend:allowlist.refused row=gpu-renderer.blend-allowlist routeKind=RefuseDiagnostic classification=TargetNative promoted=false productActivation=true materialized=false command=blend:screen mode=Screen plan=ShaderBlendWithDstRead reason=unsupported.blend.shader_route_unvalidated target=rgba8unorm",
                 "blend:destination-read mode=Screen requirement=ShaderBlend strategy=RefuseDiagnostic action=Refuse plan=gpu-renderer.destination-read.strategy:accepted planStrategy=TargetCopySnapshot activeAttachmentSampled=false",
-                "blend:nonclaim nativeAdvancedBlend=false shaderBlend=false framebufferFetch=false inputAttachment=false destinationReadTexture=false productActivation=false",
+                "blend:nonclaim nativeAdvancedBlend=false shaderBlend=false framebufferFetch=false inputAttachment=false destinationReadTexture=false productActivation=true",
             ),
             result.dumpLines(),
         )
@@ -154,9 +155,9 @@ class BlendAllowlistGateTest {
         assertEquals("unsupported.destination_read.active_attachment_sampled", result.diagnostics.single().code)
         assertEquals(
             listOf(
-                "blend:allowlist.refused row=gpu-renderer.blend-allowlist routeKind=RefuseDiagnostic classification=TargetNative promoted=false productActivation=false materialized=false command=blend:screen mode=Screen plan=ShaderBlendWithDstRead reason=unsupported.destination_read.active_attachment_sampled target=rgba8unorm",
+                "blend:allowlist.refused row=gpu-renderer.blend-allowlist routeKind=RefuseDiagnostic classification=TargetNative promoted=false productActivation=true materialized=false command=blend:screen mode=Screen plan=ShaderBlendWithDstRead reason=unsupported.destination_read.active_attachment_sampled target=rgba8unorm",
                 "blend:destination-read mode=Screen requirement=ShaderBlend strategy=RefuseDiagnostic action=Refuse plan=missing planStrategy=none activeAttachmentSampled=true",
-                "blend:nonclaim nativeAdvancedBlend=false shaderBlend=false framebufferFetch=false inputAttachment=false destinationReadTexture=false productActivation=false",
+                "blend:nonclaim nativeAdvancedBlend=false shaderBlend=false framebufferFetch=false inputAttachment=false destinationReadTexture=false productActivation=true",
             ),
             result.dumpLines(),
         )
@@ -196,9 +197,9 @@ class BlendAllowlistGateTest {
         assertEquals("unsupported.blend.alpha_plan_unaccepted", result.diagnostics.single().code)
         assertEquals(
             listOf(
-                "blend:allowlist.refused row=gpu-renderer.blend-allowlist routeKind=RefuseDiagnostic classification=TargetNative promoted=false productActivation=false materialized=false command=blend:src-over mode=SrcOver plan=FixedFunctionBlend reason=unsupported.blend.alpha_plan_unaccepted target=rgba8unorm",
+                "blend:allowlist.refused row=gpu-renderer.blend-allowlist routeKind=RefuseDiagnostic classification=TargetNative promoted=false productActivation=true materialized=false command=blend:src-over mode=SrcOver plan=FixedFunctionBlend reason=unsupported.blend.alpha_plan_unaccepted target=rgba8unorm",
                 "blend:destination-read mode=SrcOver requirement=FixedFunctionOnly strategy=RefuseDiagnostic action=Refuse plan=missing planStrategy=none activeAttachmentSampled=false",
-                "blend:nonclaim nativeAdvancedBlend=false shaderBlend=false framebufferFetch=false inputAttachment=false destinationReadTexture=false productActivation=false",
+                "blend:nonclaim nativeAdvancedBlend=false shaderBlend=false framebufferFetch=false inputAttachment=false destinationReadTexture=false productActivation=true",
             ),
             result.dumpLines(),
         )

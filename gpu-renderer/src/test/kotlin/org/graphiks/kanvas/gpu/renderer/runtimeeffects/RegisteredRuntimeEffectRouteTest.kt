@@ -18,6 +18,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertTrue
 
 class RegisteredRuntimeEffectRouteTest {
     @Test
@@ -28,7 +29,7 @@ class RegisteredRuntimeEffectRouteTest {
         assertEquals("GPUNative", result.routeKind)
         assertEquals("DependencyGated", result.classification)
         assertFalse(result.promoted)
-        assertFalse(result.productActivation)
+        assertTrue(result.productActivation)
         assertFalse(result.materialized)
         assertFalse(result.materialKeyIncludesUniformValues)
         assertEquals("accepted.runtime_effect.registered_descriptor", result.diagnostics.single().code)
@@ -42,14 +43,14 @@ class RegisteredRuntimeEffectRouteTest {
 
         assertEquals(
             listOf(
-                "runtime-effect:registered row=gpu-renderer.runtime-effect.registered routeKind=GPUNative classification=DependencyGated promoted=false productActivation=false materialized=false descriptor=runtime.simple.color version=1 requestKind=MaterialSource route=MaterialSource",
+                "runtime-effect:registered row=gpu-renderer.runtime-effect.registered routeKind=GPUNative classification=DependencyGated promoted=false productActivation=true materialized=false descriptor=runtime.simple.color version=1 requestKind=MaterialSource route=MaterialSource",
                 "runtime-effect:registry version=runtime-registry-v1 generation=17 descriptors=runtime.simple.color@1 provenance=test-fixture",
                 "runtime-effect:uniform schema=sha256:schema-simple-color fields=color:vec4<f32>@0:16 packing=std140 blockBytes=16 dynamicOffsets=false",
                 "runtime-effect:wgsl module=runtime.simple.color source=runtime/runtime_simple_rt.wgsl hash=sha256:runtime-simple entry=fs_main wgsl4k=72a35b58758f241756d984a84768ae77308730da comparison=accepted reflection=sha256:reflection-simple-color",
                 "runtime-effect:oracle id=runtime.simple.color evidence=$RUNTIME_ORACLE_EVIDENCE_HASH diagnostics=none fallback=false",
                 "runtime-effect:material snippet=runtime.simple.color@1 payload=${result.payloadPlanHash} materialKey=${result.materialKeyBoundaryHash} uniformValuesInKey=false route=registered-descriptor",
                 "runtime-effect:diagnostic code=accepted.runtime_effect.registered_descriptor terminal=false",
-                "runtime-effect:nonclaim nativeRuntimeEffect=false adapterBacked=false dynamicSkSL=false arbitraryWGSL=false children=false blender=false filter=false productActivation=false",
+                "runtime-effect:nonclaim nativeRuntimeEffect=false adapterBacked=false dynamicSkSL=false arbitraryWGSL=false children=false blender=false filter=false productActivation=true",
             ),
             result.dumpLines(),
         )
@@ -131,8 +132,8 @@ class RegisteredRuntimeEffectRouteTest {
             assertEquals(case.reason, result.diagnostics.single().code)
             assertEquals(
                 listOf(
-                    "runtime-effect:registered.refused row=gpu-renderer.runtime-effect.registered routeKind=RefuseDiagnostic classification=DependencyGated promoted=false productActivation=false materialized=false descriptor=${case.effectId.value} reason=${case.reason} label=${case.label}",
-                    "runtime-effect:nonclaim nativeRuntimeEffect=false adapterBacked=false dynamicSkSL=false arbitraryWGSL=false children=false blender=false filter=false productActivation=false",
+                    "runtime-effect:registered.refused row=gpu-renderer.runtime-effect.registered routeKind=RefuseDiagnostic classification=DependencyGated promoted=false productActivation=true materialized=false descriptor=${case.effectId.value} reason=${case.reason} label=${case.label}",
+                    "runtime-effect:nonclaim nativeRuntimeEffect=false adapterBacked=false dynamicSkSL=false arbitraryWGSL=false children=false blender=false filter=false productActivation=true",
                 ),
                 result.dumpLines(),
             )
@@ -296,7 +297,7 @@ private fun acceptedRuntimeWgslEvidence(status: String = "accepted"): GPURuntime
                 descriptorId = "runtime.simple.color",
                 descriptorVersion = 1,
                 routePromotion = "not-promoted",
-                productActivation = false,
+                productActivation = true,
             ),
         ).let { report ->
             if (status == "accepted") {

@@ -4,6 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertTrue
 
 class SaveLayerIsolatedTargetGateTest {
     @Test
@@ -14,7 +15,7 @@ class SaveLayerIsolatedTargetGateTest {
         assertEquals("GPUNative", plan.routeKind)
         assertEquals("TargetNative", plan.classification)
         assertFalse(plan.promoted)
-        assertFalse(plan.productActivation)
+        assertTrue(plan.productActivation)
         assertFalse(plan.materialized)
         assertEquals(emptyList(), plan.diagnostics)
 
@@ -31,7 +32,7 @@ class SaveLayerIsolatedTargetGateTest {
         val dump = plan.dumpLines()
         assertEquals(
             listOf(
-                "savelayer:isolated-target row=gpu-renderer.savelayer.isolated-target routeKind=GPUNative classification=TargetNative promoted=false productActivation=false materialized=false scope=layer:card parent=root-target",
+                "savelayer:isolated-target row=gpu-renderer.savelayer.isolated-target routeKind=GPUNative classification=TargetNative promoted=false productActivation=true materialized=false scope=layer:card parent=root-target",
                 "savelayer:save scope=layer:card parentScope=root bounds=requested=card-local device=0,0,64,48 finite=true conservative=true children=draw-rect,draw-image",
                 "savelayer:target label=layer-target:card owner=GPURecorderScope generation=17 descriptor=${plan.targetDescriptorHash} size=64x48 format=rgba8unorm sampleCount=1 usage=render_attachment,texture_binding load=clear store=store lifetime=layer-local origin=device:0,0 bytes=12288",
                 "savelayer:init clear=clear(transparent-black) load=clear backdropCopy=false previousContent=false",
@@ -139,7 +140,7 @@ class SaveLayerIsolatedTargetGateTest {
             assertEquals(case.reason, plan.diagnostics.single().code)
             assertEquals(
                 listOf(
-                    "savelayer:isolated-target.refused row=gpu-renderer.savelayer.isolated-target routeKind=RefuseDiagnostic classification=TargetNative promoted=false productActivation=false materialized=false scope=layer:card reason=${case.reason} label=${case.label}",
+                    "savelayer:isolated-target.refused row=gpu-renderer.savelayer.isolated-target routeKind=RefuseDiagnostic classification=TargetNative promoted=false productActivation=true materialized=false scope=layer:card reason=${case.reason} label=${case.label}",
                     "savelayer:nonclaim nativeSaveLayer=false adapterBacked=false cpuLayerTextureFallback=false arbitraryLayerStacks=false filters=false destinationRead=false",
                 ),
                 plan.dumpLines(),

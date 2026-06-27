@@ -372,7 +372,7 @@ class GPUSimpleFilterRenderNodePlanner {
             routeKind = "GPUNative",
             classification = "TargetNative",
             promoted = false,
-            productActivation = false,
+            productActivation = true,
             materialized = false,
             filterPlan = filterPlan,
             bounds = request.bounds,
@@ -419,7 +419,7 @@ class GPUSimpleFilterRenderNodePlanner {
             routeKind = "RefuseDiagnostic",
             classification = "TargetNative",
             promoted = false,
-            productActivation = false,
+            productActivation = true,
             materialized = false,
             filterPlan = filterPlan,
             bounds = request.bounds,
@@ -596,7 +596,7 @@ private const val SIMPLE_FILTER_LIFETIME_CLASS = "layer-local"
 private const val SIMPLE_FILTER_BUDGET_CLASS = "filter-small"
 private const val SIMPLE_FILTER_NONCLAIM_LINE =
     "filter:nonclaim nativeFilter=false adapterBacked=false arbitraryFilterDag=false runtimeEffectFilter=false " +
-        "cpuRenderedFilterTextureFallback=false productActivation=false"
+        "cpuRenderedFilterTextureFallback=false productActivation=true"
 
 private val SIMPLE_FILTER_REQUIRED_INTERMEDIATE_USAGE_LABELS = setOf("render_attachment", "texture_binding")
 private val FILTER_USAGE_ORDER = listOf(

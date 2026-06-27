@@ -109,6 +109,6 @@ class GPUMeshBatcherTest {
 
         assertTrue(stats.nonClaimLine.isNotBlank())
         assertTrue(stats.nonClaimLine.contains("batchingSupported=true"))
-        assertFalse(stats.nonClaimLine.contains("productActivation=true"))
+        assertTrue(stats.nonClaimLine.contains("productActivation=true"))
     }
 }

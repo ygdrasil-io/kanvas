@@ -55,7 +55,7 @@ data class FrameGatePolicyReport(
     val targetFrameMs: Double,
     val warnFrameMs: Double,
     val results: List<FrameGateResult>,
-    val productActivation: Boolean = false,
+    val productActivation: Boolean = true,
 ) {
     /** True when any evaluated family is quarantined. */
     val anyQuarantined: Boolean get() = results.any { it.quarantined }
