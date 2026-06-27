@@ -95,7 +95,7 @@ data class CPUPreparedGPUArtifactDescriptor(
 /** Registry for typed CPU-prepared GPU artifact descriptors. */
 interface CPUPreparedGPUArtifactRegistry {
     /** Looks up a descriptor without creating artifacts. */
-    fun descriptor(key: CPUPreparedGPUArtifactKey): CPUPreparedGPUArtifactDescriptor? = TODO("Wire CPUPreparedGPUArtifactRegistry to prepared artifact descriptors")
+    fun descriptor(key: CPUPreparedGPUArtifactKey): CPUPreparedGPUArtifactDescriptor?
 }
 
 /** Diagnostic emitted by routing. */
