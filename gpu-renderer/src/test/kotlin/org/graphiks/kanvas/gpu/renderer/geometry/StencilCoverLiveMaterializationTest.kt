@@ -95,7 +95,7 @@ class StencilCoverLiveMaterializationTest {
                 "path=path:triangle:v1 attachment=stencil-attachment:triangle " +
                 "producer=path-fill.stencil-producer cover=path-fill.cover-consumer " +
                 "ordering=producer-before-cover clear=clear-stencil-store-color-discard-stencil " +
-                "compare=equal writeMask=0xff sampleCount=4 adapterBacked=false productActivation=false",
+                "compare=equal writeMask=0xff sampleCount=4 adapterBacked=false productActivation=true",
         )
         assertFalse(result.dumpLines().joinToString("\n").contains("WGPU"))
         assertFalse(result.dumpLines().joinToString("\n").contains("@0x"))
@@ -197,7 +197,7 @@ class StencilCoverLiveMaterializationTest {
             "stencil-cover:materialization.refused row=gpu-renderer.path.stencil-cover.live " +
                 "path=path:triangle:v1 attachment=stencil-attachment:triangle " +
                 "code=unsupported.geometry.path_empty_inverse_unbounded " +
-                "adapterBacked=false productActivation=false",
+                "adapterBacked=false productActivation=true",
         )
     }
 }

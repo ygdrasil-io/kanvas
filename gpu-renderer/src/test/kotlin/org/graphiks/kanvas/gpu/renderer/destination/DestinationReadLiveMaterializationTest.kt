@@ -81,7 +81,7 @@ class DestinationReadLiveMaterializationTest {
             "destination-read:materialization row=gpu-renderer.destination-read.live-materialization " +
                 "strategy=TargetCopySnapshot action=SplitPassAndCopyTarget resource=dst-copy:blend-screen " +
                 "binding=dst-read:blend-screen copyBeforeSample=true passSplit=true " +
-                "adapterBacked=false productActivation=false",
+                "adapterBacked=false productActivation=true",
         )
         assertFalse(result.dumpLines().joinToString("\n").contains("WGPU"))
         assertFalse(result.dumpLines().joinToString("\n").contains("@0x"))
@@ -134,7 +134,7 @@ class DestinationReadLiveMaterializationTest {
             "destination-read:materialization row=gpu-renderer.destination-read.live-materialization " +
                 "strategy=SampleExistingIntermediate action=UseExistingIntermediate resource=intermediate:layer-card " +
                 "binding=dst-read:blend-screen copyBeforeSample=false passSplit=false " +
-                "adapterBacked=false productActivation=false",
+                "adapterBacked=false productActivation=true",
         )
     }
 

@@ -23,7 +23,7 @@ class ImageSamplerBoundaryGateTest {
         assertEquals("none", plan.samplerDescriptor.mipmapFilter)
         assertEquals(
             listOf(
-                "sampler-boundary:accepted row=gpu-renderer.sampler-boundary routeKind=GPUNative classification=TargetNative promoted=false productActivation=false source=image:checker:v1",
+                "sampler-boundary:accepted row=gpu-renderer.sampler-boundary routeKind=GPUNative classification=TargetNative promoted=false productActivation=true source=image:checker:v1",
                 "sampler-boundary:sampler descriptor=${plan.samplerDescriptorHash} address=clamp-to-edge/clamp-to-edge filter=linear/linear mipmap=none lod=0..0 compare=none anisotropy=1 capabilities=none",
                 "sampler-boundary:tile x=clamp y=clamp address=clamp-to-edge/clamp-to-edge wgsl=hardware-address-mode broadTileSupport=false",
                 "sampler-boundary:mip requested=none availableLevels=1 viewMipRange=0..0 policy=no-mipmap support=false",

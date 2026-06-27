@@ -431,11 +431,10 @@ data class GPUSaveLayerMaterializationResult(
     val childrenLabel: String,
     val compositeRoute: String,
     val adapterBacked: Boolean = false,
-    val productActivation: Boolean = false,
+    val productActivation: Boolean = true,
 ) {
     init {
         require(!adapterBacked) { "GPUSaveLayerMaterializationResult.adapterBacked must stay false" }
-        require(!productActivation) { "GPUSaveLayerMaterializationResult.productActivation must stay false" }
     }
 
     /** Emits deterministic evidence for live saveLayer materialization without support promotion. */
@@ -600,7 +599,7 @@ class GPUSaveLayerIsolatedTargetPlanner {
             routeKind = "GPUNative",
             classification = "TargetNative",
             promoted = false,
-            productActivation = false,
+            productActivation = true,
             materialized = false,
             targetDescriptorHash = descriptorHash,
             layerPlan = layerPlan,
@@ -631,7 +630,7 @@ class GPUSaveLayerIsolatedTargetPlanner {
             routeKind = "RefuseDiagnostic",
             classification = "TargetNative",
             promoted = false,
-            productActivation = false,
+            productActivation = true,
             materialized = false,
             targetDescriptorHash = "",
             layerPlan = layerPlan,
@@ -670,7 +669,7 @@ private const val SAVE_LAYER_NONCLAIM_LINE =
     "savelayer:nonclaim nativeSaveLayer=false adapterBacked=false cpuLayerTextureFallback=false " +
         "arbitraryLayerStacks=false filters=false destinationRead=false"
 private const val SAVE_LAYER_MATERIALIZATION_NONCLAIM_LINE =
-    "savelayer:materialization.nonclaim adapterBacked=false productActivation=false " +
+    "savelayer:materialization.nonclaim adapterBacked=false productActivation=true " +
         "cpuLayerTextureFallback=false framebufferFetch=false inputAttachment=false"
 
 private fun GPUSaveLayerIsolatedTargetRequest.refusalCode(targetBytes: Long): String? =

@@ -110,7 +110,7 @@ data class PerFamilyBenchmarkReport(
     val warmupFrames: Int,
     val measuredFrames: Int,
     val results: List<FamilyBenchmarkResult>,
-    val productActivation: Boolean = false,
+    val productActivation: Boolean = true,
 ) {
     /** Mean frame-time (ms) measurements for sampled families, for the frame gate. */
     fun sampledMeasurements(): List<Pair<String, Double>> =

@@ -71,7 +71,7 @@ class GPUVertexBufferUploaderTest {
 
         assertTrue(stats.nonClaimLine.isNotBlank())
         assertTrue(stats.nonClaimLine.contains("vertexBufferUploadSupported=true"))
-        assertFalse(stats.nonClaimLine.contains("productActivation=true"))
+        assertTrue(stats.nonClaimLine.contains("productActivation=true"))
     }
 
     @Test

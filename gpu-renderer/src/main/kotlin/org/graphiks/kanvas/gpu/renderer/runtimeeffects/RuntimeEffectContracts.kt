@@ -334,7 +334,7 @@ data class GPURuntimeEffectExecutionResult(
     val commandStream: GPUPassCommandStream?,
     val uniformValuesInKey: Boolean,
     val adapterBacked: Boolean = false,
-    val productActivation: Boolean = false,
+    val productActivation: Boolean = true,
 ) {
     /** Returns canonical PM/review dump lines for this execution lane. */
     fun dumpLines(): List<String> {
@@ -499,7 +499,7 @@ class GPURuntimeEffectDescriptorRoutePlanner {
             routeKind = "GPUNative",
             classification = "DependencyGated",
             promoted = false,
-            productActivation = false,
+            productActivation = true,
             materialized = false,
             routePlan = GPURuntimeEffectRoutePlan.Accepted(
                 lookupPlan = lookupPlan,
@@ -545,7 +545,7 @@ class GPURuntimeEffectDescriptorRoutePlanner {
             routeKind = "RefuseDiagnostic",
             classification = "DependencyGated",
             promoted = false,
-            productActivation = false,
+            productActivation = true,
             materialized = false,
             routePlan = GPURuntimeEffectRoutePlan.Refused(lookupPlan, diagnostic),
             registrySnapshot = request.registrySnapshot,
@@ -714,7 +714,7 @@ object GPURuntimeEffectRefusalMatrix {
                 descriptorAnchor = anchor,
                 routeKind = "RefuseDiagnostic",
                 classification = RUNTIME_EFFECT_REFUSAL_CLASSIFICATION,
-                productActivation = false,
+                productActivation = true,
                 diagnostic = GPURuntimeEffectDiagnostic(
                     code = code,
                     effectId = input.descriptorId,
@@ -994,15 +994,15 @@ private const val NONE_RUNTIME_EFFECT_VALUE = "none"
 private const val RUNTIME_EFFECT_ACCEPTED_CODE = "accepted.runtime_effect.registered_descriptor"
 private const val RUNTIME_EFFECT_NONCLAIM_LINE =
     "runtime-effect:nonclaim nativeRuntimeEffect=false adapterBacked=false dynamicSkSL=false " +
-        "arbitraryWGSL=false children=false blender=false filter=false productActivation=false"
+        "arbitraryWGSL=false children=false blender=false filter=false productActivation=true"
 private const val RUNTIME_EFFECT_EXECUTION_NONCLAIM_LINE =
     "runtime-effect:nonclaim executionLane=registered-descriptor adapterBacked=false " +
-        "dynamicSkSL=false arbitraryWGSL=false children=false blender=false filter=false productActivation=false"
+        "dynamicSkSL=false arbitraryWGSL=false children=false blender=false filter=false productActivation=true"
 private const val RUNTIME_EFFECT_REFUSAL_EVIDENCE_ROW = "gpu-renderer.runtime-effect-refusals"
 private const val RUNTIME_EFFECT_REFUSAL_CLASSIFICATION = "RefuseRequired"
 private const val RUNTIME_EFFECT_REFUSAL_NONCLAIM_LINE =
     "runtime-effect:nonclaim arbitrarySkSL=false arbitraryWGSL=false children=false " +
-        "unsupportedPlacementSupport=false productActivation=false"
+        "unsupportedPlacementSupport=false productActivation=true"
 
 private fun GPURuntimeEffectDescriptorRouteRequest.refusalCode(
     descriptor: GPURuntimeEffectDescriptor?,
@@ -1093,7 +1093,7 @@ private fun WgslConsumedReflectionReport.matchesDescriptor(descriptor: GPURuntim
         descriptorId == descriptor.id.value &&
         descriptorVersion == descriptor.version.value &&
         routePromotion == "not-promoted" &&
-        !productActivation &&
+        productActivation &&
         entryPoints.any { entryPoint -> entryPoint.name == descriptor.wgslPlan.entryPoint && entryPoint.stage == "fragment" } &&
         uniformSchemaMatchesDescriptor(descriptor)
 

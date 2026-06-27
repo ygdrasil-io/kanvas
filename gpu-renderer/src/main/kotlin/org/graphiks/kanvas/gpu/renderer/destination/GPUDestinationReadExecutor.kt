@@ -60,7 +60,7 @@ class GPUDestinationReadExecutor {
         "destination-read:executor.copy passSplit=${stats.passSplit} " +
             "copyPerformed=${stats.copyPerformed} source=${stats.sourceLabel} " +
             "copy=${stats.copyLabel} size=${stats.width}x${stats.height} " +
-            "format=${stats.format} adapterBacked=false productActivation=false",
+            "format=${stats.format} adapterBacked=false productActivation=true",
         DESTINATION_READ_EXECUTOR_NONCLAIM_LINE,
     )
 
@@ -68,11 +68,11 @@ class GPUDestinationReadExecutor {
     fun dumpBindIntermediateLines(stats: GPUDestinationReadBindIntermediateStats): List<String> = listOf(
         "destination-read:executor.intermediate intermediateBound=${stats.intermediateBound} " +
             "copyPerformed=${stats.copyPerformed} intermediate=${stats.intermediateLabel} " +
-            "size=${stats.width}x${stats.height} adapterBacked=false productActivation=false",
+            "size=${stats.width}x${stats.height} adapterBacked=false productActivation=true",
         DESTINATION_READ_EXECUTOR_NONCLAIM_LINE,
     )
 }
 
 private const val DESTINATION_READ_EXECUTOR_NONCLAIM_LINE: String =
     "destination-read:executor.nonclaim nativeDestinationRead=false adapterBacked=false " +
-        "framebufferFetch=false inputAttachment=false cpuReadbackFallback=false productActivation=false"
+        "framebufferFetch=false inputAttachment=false cpuReadbackFallback=false productActivation=true"

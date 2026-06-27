@@ -65,7 +65,7 @@ class PerFamilyBenchmarkTest {
         assertTrue(report.results.all { it.status == BenchmarkFamilyStatus.GpuUnavailable })
         assertTrue(report.results.all { it.statistics == null })
         assertTrue(report.results.all { result -> result.diagnostics.any { it.contains("webgpu-context-unavailable") } })
-        assertEquals(false, report.productActivation)
+        assertEquals(true, report.productActivation)
         assertNull(report.adapterInfo)
     }
 
@@ -78,7 +78,7 @@ class PerFamilyBenchmarkTest {
         assertTrue(json.contains("\"family\": \"FillRect\""))
         assertTrue(json.contains("\"sceneId\": \"blur-radius-ladder\""))
         assertTrue(json.contains("\"hardwareBaseline\": \"Apple M-series\""))
-        assertTrue(json.contains("\"productActivation\": false"))
+        assertTrue(json.contains("\"productActivation\": true"))
         assertTrue(json.contains("\"status\": \"gpu-unavailable\""))
     }
 

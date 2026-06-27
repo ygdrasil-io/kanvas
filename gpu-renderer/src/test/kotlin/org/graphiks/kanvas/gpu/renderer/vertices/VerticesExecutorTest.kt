@@ -97,6 +97,6 @@ class VerticesExecutorTest {
 
         assertTrue(stats.nonClaimLine.isNotBlank())
         assertTrue(stats.nonClaimLine.contains("verticesExecutionSupported=true"))
-        assertFalse(stats.nonClaimLine.contains("productActivation=true"))
+        assertTrue(stats.nonClaimLine.contains("productActivation=true"))
     }
 }

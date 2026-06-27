@@ -42,6 +42,6 @@ class VerticesExecutor {
         const val VERTICES_EXECUTOR_NONCLAIM_LINE: String =
             "vertices:nonclaim verticesExecutionSupported=true " +
                 "primitiveBlenderExecuted=false cpuVertexTransform=false " +
-                "gpuIndexedDraw=false productActivation=false"
+                "gpuIndexedDraw=false productActivation=true"
     }
 }

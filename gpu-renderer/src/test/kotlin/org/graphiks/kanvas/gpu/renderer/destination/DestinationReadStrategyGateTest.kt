@@ -3,6 +3,7 @@ package org.graphiks.kanvas.gpu.renderer.destination
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class DestinationReadStrategyGateTest {
     @Test
@@ -13,7 +14,7 @@ class DestinationReadStrategyGateTest {
         assertEquals("GPUNative", result.routeKind)
         assertEquals("TargetNative", result.classification)
         assertFalse(result.promoted)
-        assertFalse(result.productActivation)
+        assertTrue(result.productActivation)
         assertFalse(result.materialized)
         assertAcceptedDiagnostic(result, GPUDestinationReadRequirement.TargetCopy)
         assertEquals(GPUDestinationReadStrategy.CopyTarget, result.plan.strategy)
@@ -22,13 +23,13 @@ class DestinationReadStrategyGateTest {
 
         assertEquals(
             listOf(
-                "destination-read:strategy row=gpu-renderer.destination-read.strategy routeKind=GPUNative classification=TargetNative promoted=false productActivation=false materialized=false requirement=ShaderBlend strategy=TargetCopySnapshot action=SplitPassAndCopyTarget source=target:main generation=42",
+                "destination-read:strategy row=gpu-renderer.destination-read.strategy routeKind=GPUNative classification=TargetNative promoted=false productActivation=true materialized=false requirement=ShaderBlend strategy=TargetCopySnapshot action=SplitPassAndCopyTarget source=target:main generation=42",
                 "destination-read:bounds command=blend:screen requested=shape-local unclipped=0,0,80,40 clipped=4,8,64,32 copy=4,8,64,32 finite=true pixelAligned=true conservative=true target=128x96",
                 "destination-read:copy label=dst-copy:blend-screen descriptor=${result.copyDescriptorHash} source=target:main generation=42 size=64x32 format=rgba8unorm usage=copy_dst,texture_binding sampleCount=1 lifetime=pass-local owner=GPURecorderScope bytes=8192",
                 "destination-read:binding label=dst-read:blend-screen layout=${result.bindingLayoutHash} textureView=${result.textureViewHash} sampler=${result.samplerHash} bounds=4,8,64,32 generation=42 slot=group1.binding3 materialKey=false",
                 "destination-read:barrier split=true copyBeforeSample=true activeAttachmentSampled=false token=dst-token:blend:screen:42",
                 "destination-read:resource sourceUsage=render_attachment,copy_src copyUsage=copy_dst,texture_binding budget=copy-small copyBytes=8192",
-                "destination-read:nonclaim nativeDestinationRead=false adapterBacked=false framebufferFetch=false inputAttachment=false cpuReadbackFallback=false productActivation=false",
+                "destination-read:nonclaim nativeDestinationRead=false adapterBacked=false framebufferFetch=false inputAttachment=false cpuReadbackFallback=false productActivation=true",
             ),
             result.dumpLines(),
         )
@@ -51,13 +52,13 @@ class DestinationReadStrategyGateTest {
         assertAcceptedDiagnostic(result, GPUDestinationReadRequirement.ExistingIntermediate)
         assertEquals(
             listOf(
-                "destination-read:strategy row=gpu-renderer.destination-read.strategy routeKind=GPUNative classification=TargetNative promoted=false productActivation=false materialized=false requirement=ExistingIntermediate strategy=SampleExistingIntermediate action=UseExistingIntermediate source=intermediate:layer-card generation=42",
+                "destination-read:strategy row=gpu-renderer.destination-read.strategy routeKind=GPUNative classification=TargetNative promoted=false productActivation=true materialized=false requirement=ExistingIntermediate strategy=SampleExistingIntermediate action=UseExistingIntermediate source=intermediate:layer-card generation=42",
                 "destination-read:bounds command=blend:screen requested=shape-local unclipped=0,0,80,40 clipped=4,8,64,32 copy=4,8,64,32 finite=true pixelAligned=true conservative=true target=128x96",
                 "destination-read:intermediate label=intermediate:layer-card descriptor=${result.copyDescriptorHash} separateAttachment=true generation=42 bounds=4,8,64,32 lifetime=layer-local",
                 "destination-read:binding label=dst-read:blend-screen layout=${result.bindingLayoutHash} textureView=${result.textureViewHash} sampler=${result.samplerHash} bounds=4,8,64,32 generation=42 slot=group1.binding3 materialKey=false",
                 "destination-read:barrier split=false copyBeforeSample=false activeAttachmentSampled=false token=dst-token:blend:screen:42",
                 "destination-read:resource sourceUsage=texture_binding copyUsage=texture_binding budget=intermediate-small copyBytes=8192",
-                "destination-read:nonclaim nativeDestinationRead=false adapterBacked=false framebufferFetch=false inputAttachment=false cpuReadbackFallback=false productActivation=false",
+                "destination-read:nonclaim nativeDestinationRead=false adapterBacked=false framebufferFetch=false inputAttachment=false cpuReadbackFallback=false productActivation=true",
             ),
             result.dumpLines(),
         )
@@ -176,8 +177,8 @@ class DestinationReadStrategyGateTest {
             assertEquals(case.reason, result.diagnostics.single().code)
             assertEquals(
                 listOf(
-                    "destination-read:strategy.refused row=gpu-renderer.destination-read.strategy routeKind=RefuseDiagnostic classification=TargetNative promoted=false productActivation=false materialized=false command=blend:screen reason=${case.reason} label=${case.label}",
-                    "destination-read:nonclaim nativeDestinationRead=false adapterBacked=false framebufferFetch=false inputAttachment=false cpuReadbackFallback=false productActivation=false",
+                    "destination-read:strategy.refused row=gpu-renderer.destination-read.strategy routeKind=RefuseDiagnostic classification=TargetNative promoted=false productActivation=true materialized=false command=blend:screen reason=${case.reason} label=${case.label}",
+                    "destination-read:nonclaim nativeDestinationRead=false adapterBacked=false framebufferFetch=false inputAttachment=false cpuReadbackFallback=false productActivation=true",
                 ),
                 result.dumpLines(),
             )

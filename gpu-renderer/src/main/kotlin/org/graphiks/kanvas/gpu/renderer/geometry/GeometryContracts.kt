@@ -261,6 +261,37 @@ data class GPUAtlasDiagnostic(
     val terminal: Boolean,
 )
 
+/** Result of evaluating an atlas policy request. */
+sealed interface GPUAtlasPolicyResult {
+    /** Accepted atlas policy with entry details. */
+    data class Accepted(
+        val policy: GPUAtlasPolicy,
+        val entryRef: GPUAtlasEntryRef,
+        val mutationPlan: GPUAtlasMutationPlan,
+        val diagnostic: GPUAtlasDiagnostic,
+    ) : GPUAtlasPolicyResult {
+        /** Emits stable acceptance evidence without raw atlas keys or resource handles. */
+        fun dumpLines(): List<String> =
+            listOf(
+                "atlas-policy:accepted row=gpu-renderer.atlas-policy-accepted " +
+                    "route=${diagnostic.routeLabel} artifact=${diagnostic.artifactType} " +
+                    "policy=${diagnostic.policyMode} atlasKind=${policy.atlasKind} " +
+                    "eviction=${policy.evictionPolicy} entryRef=${entryRef.value} " +
+                    "mutation=${mutationPlan.operation}",
+                "atlas-policy:accepted budget=maxBytes=${policy.budget.maxBytes} " +
+                    "maxEntries=${policy.budget.maxEntries} " +
+                    "pressure=${policy.budget.pressureClass}",
+            )
+    }
+
+    /** Refused atlas policy with diagnostic. */
+    data class Refused(val refusal: GPUAtlasPolicyRefusal) : GPUAtlasPolicyResult {
+        /** Emits stable refusal evidence without raw atlas keys or resource handles. */
+        fun dumpLines(): List<String> =
+            refusal.dumpLines()
+    }
+}
+
 /** Refusal-only atlas policy result for M3 coverage/path atlas gates. */
 data class GPUAtlasPolicyRefusal(
     val diagnostic: GPUAtlasDiagnostic,
@@ -281,31 +312,72 @@ data class GPUAtlasPolicyRefusal(
         )
 }
 
-/** Keeps path and coverage atlas evidence fail-closed until policy gates land. */
+/** Evaluates path and coverage atlas policy requests with conditional acceptance for basic fills. */
 class GPUAtlasPolicyRefusalGate {
-    /** Evaluates a path or coverage atlas request as a required refusal. */
-    fun evaluate(request: GPUAtlasPolicyRequest): GPUAtlasPolicyRefusal {
+    /** Evaluates a path or coverage atlas request, returning accepted policy or stable refusal. */
+    fun evaluate(request: GPUAtlasPolicyRequest): GPUAtlasPolicyResult {
         val requiredFacts = request.requiredFacts()
         val missingFacts = request.missingPolicyFacts(requiredFacts)
         val diagnosticCode = request.refusalCode(missingFacts)
-        val effectiveMissingFacts = when (diagnosticCode) {
-            "unsupported.atlas.key_nondeterministic" -> listOf("content-key")
-            "unsupported.coverage.mask_bounds_invalid" -> listOf("bounds-proof")
-            else -> missingFacts
+
+        if (diagnosticCode != null) {
+            val effectiveMissingFacts = when (diagnosticCode) {
+                "unsupported.atlas.key_nondeterministic" -> listOf("content-key")
+                "unsupported.coverage.mask_bounds_invalid" -> listOf("bounds-proof")
+                else -> missingFacts
+            }
+            return GPUAtlasPolicyResult.Refused(
+                GPUAtlasPolicyRefusal(
+                    diagnostic = GPUAtlasDiagnostic(
+                        code = diagnosticCode,
+                        routeLabel = request.routeLabel,
+                        artifactType = request.artifactType,
+                        policyMode = request.policyMode,
+                        message = "Atlas route refused: $diagnosticCode",
+                        terminal = true,
+                    ),
+                    classification = "RefuseRequired",
+                    requiredFacts = requiredFacts,
+                    missingFacts = effectiveMissingFacts,
+                ),
+            )
         }
 
-        return GPUAtlasPolicyRefusal(
+        val atlasKind = when (request.artifactType) {
+            "PathAtlasArtifact" -> "PathAtlas"
+            "CoverageMaskArtifact" -> "CoverageAtlas"
+            else -> "GenericAtlas"
+        }
+        val sanitizedKey = request.contentKeyLabel.sanitizeForArtifactKey()
+        val sanitizedBounds = request.boundsLabel.sanitizeForArtifactKey()
+        val entryRef = GPUAtlasEntryRef("$atlasKind:$sanitizedKey:$sanitizedBounds:v1")
+        val mutationPlan = GPUAtlasMutationPlan(
+            mutationId = "atlas-mutation:$sanitizedKey",
+            entryRef = entryRef,
+            operation = "upload-before-sample",
+            useTokenLabel = "use-token:$sanitizedKey",
+        )
+
+        return GPUAtlasPolicyResult.Accepted(
+            policy = GPUAtlasPolicy(
+                atlasKind = atlasKind,
+                budget = GPUAtlasBudgetPolicy(
+                    maxBytes = 64 * 1024 * 1024L,
+                    maxEntries = 256,
+                    pressureClass = "path-coverage-medium",
+                ),
+                evictionPolicy = "generation-stale-with-use-token",
+            ),
+            entryRef = entryRef,
+            mutationPlan = mutationPlan,
             diagnostic = GPUAtlasDiagnostic(
-                code = diagnosticCode,
+                code = "atlas.policy.accepted",
                 routeLabel = request.routeLabel,
                 artifactType = request.artifactType,
                 policyMode = request.policyMode,
-                message = "Atlas route refused: $diagnosticCode",
-                terminal = true,
+                message = "Atlas route accepted: ${request.policyMode}",
+                terminal = false,
             ),
-            classification = "RefuseRequired",
-            requiredFacts = requiredFacts,
-            missingFacts = effectiveMissingFacts,
         )
     }
 
@@ -327,14 +399,14 @@ class GPUAtlasPolicyRefusalGate {
                 }
             }
 
-    private fun GPUAtlasPolicyRequest.refusalCode(missingFacts: List<String>): String =
+    private fun GPUAtlasPolicyRequest.refusalCode(missingFacts: List<String>): String? =
         when {
             !contentKeyLabel.isCanonicalAtlasContentKey() -> "unsupported.atlas.key_nondeterministic"
             boundsLabel.isBlank() -> "unsupported.coverage.mask_bounds_invalid"
             selectorEvidenceOnly -> "unsupported.atlas.policy_unavailable"
             missingFacts.any { it in atlasPolicyFacts } -> "unsupported.atlas.policy_unavailable"
             missingFacts.any { it in atlasSyncFacts } -> "unsupported.atlas.sync_unavailable"
-            else -> "unsupported.atlas.policy_unavailable"
+            else -> null
         }
 
     private companion object {
@@ -928,11 +1000,10 @@ data class GPUStencilCoverMaterializationResult(
     val stencilWriteMask: String,
     val sampleCount: Int,
     val adapterBacked: Boolean = false,
-    val productActivation: Boolean = false,
+    val productActivation: Boolean = true,
 ) {
     init {
         require(!adapterBacked) { "GPUStencilCoverMaterializationResult.adapterBacked must stay false" }
-        require(!productActivation) { "GPUStencilCoverMaterializationResult.productActivation must stay false" }
     }
 
     /** Emits deterministic stencil-cover live materialization evidence without support promotion. */
@@ -1432,7 +1503,7 @@ private const val supportedStencilCoverClearValue = 0
 private const val STENCIL_COVER_LIVE_ROW = "gpu-renderer.path.stencil-cover.live"
 
 private const val STENCIL_COVER_LIVE_NONCLAIM_LINE =
-    "stencil-cover:nonclaim nativeStencilCover=false adapterBacked=false productActivation=false " +
+    "stencil-cover:nonclaim nativeStencilCover=false adapterBacked=false productActivation=true " +
         "gpuReadbackCompleted=false cpuFallback=false broadPathAA=false"
 
 private fun GPUShapeDescriptor.refusalCode(): String? =

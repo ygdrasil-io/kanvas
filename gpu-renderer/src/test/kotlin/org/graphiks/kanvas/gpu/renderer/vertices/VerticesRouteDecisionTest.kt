@@ -4,6 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
+import kotlin.test.assertTrue
 
 class VerticesRouteDecisionTest {
     @Test
@@ -22,7 +23,7 @@ class VerticesRouteDecisionTest {
         assertEquals("GPUNative", plan.routeKind)
         assertEquals("TargetNative", plan.classification)
         assertFalse(plan.promoted)
-        assertFalse(plan.productActivation)
+        assertTrue(plan.productActivation)
         assertFalse(plan.materialized)
         assertEquals("accepted.vertices.route_decision", plan.diagnostics.single().code)
         assertFalse(plan.diagnostics.single().terminal)
@@ -30,12 +31,12 @@ class VerticesRouteDecisionTest {
         assertEquals(listOf("position"), plan.layout.attributes)
         assertEquals(
             listOf(
-                "vertices:descriptor row=gpu-renderer.vertices.descriptor routeKind=GPUNative classification=TargetNative promoted=false productActivation=false materialized=false command=vertices:triangles descriptor=${plan.descriptorHash} mode=Triangles vertexCount=3 indexCount=none variant=position-only",
+                "vertices:descriptor row=gpu-renderer.vertices.descriptor routeKind=GPUNative classification=TargetNative promoted=false productActivation=true materialized=false command=vertices:triangles descriptor=${plan.descriptorHash} mode=Triangles vertexCount=3 indexCount=none variant=position-only",
                 "vertices:layout hash=${plan.layoutHash} attributes=position:f32x2@0:0 stride=8 locations=position:0",
                 "vertices:route decision=NativeDescriptor renderStep=vertices.triangles.position-only.v1 pipeline=${plan.pipelineKeyHash} material=material:solid target=rgba8unorm adapter=wgpu-layout-evidence wgsl=vertices-wgsl-layout-v1",
                 "vertices:key materialFacts=localCoords=position,primitiveBlend=none,primitiveColor=false pipelineFacts=layout=${plan.layoutHash},mode=Triangles,primitiveColor=false,target=rgba8unorm,texcoord=false",
                 "vertices:diagnostic code=accepted.vertices.route_decision terminal=false",
-                "vertices:nonclaim drawVerticesSupport=false adapterBacked=false vertexBufferUpload=false indexBufferUpload=false primitiveBlenderSupport=false texcoordMaterialSupport=false meshSupport=false productActivation=false cpuRenderedTextureFallback=false",
+                "vertices:nonclaim drawVerticesSupport=false adapterBacked=false vertexBufferUpload=false indexBufferUpload=false primitiveBlenderSupport=false texcoordMaterialSupport=false meshSupport=false productActivation=true cpuRenderedTextureFallback=false",
             ),
             plan.dumpLines(),
         )
@@ -107,9 +108,9 @@ class VerticesRouteDecisionTest {
             }
             assertEquals(
                 listOf(
-                    "vertices:descriptor.refused row=gpu-renderer.vertices.descriptor routeKind=RefuseDiagnostic classification=TargetNative promoted=false productActivation=false materialized=false command=vertices:triangles descriptor=${plan.descriptorHash} reason=${case.expectedCode} mode=${plan.descriptor.primitiveMode.sourceLabel} vertexCount=${plan.descriptor.vertexCount} indexCount=${plan.descriptor.indexCount ?: "none"}",
+                    "vertices:descriptor.refused row=gpu-renderer.vertices.descriptor routeKind=RefuseDiagnostic classification=TargetNative promoted=false productActivation=true materialized=false command=vertices:triangles descriptor=${plan.descriptorHash} reason=${case.expectedCode} mode=${plan.descriptor.primitiveMode.sourceLabel} vertexCount=${plan.descriptor.vertexCount} indexCount=${plan.descriptor.indexCount ?: "none"}",
                     "vertices:refusal facts=${plan.refusalFacts.entries.sortedBy { entry -> entry.key }.joinToString(",") { entry -> "${entry.key}=${entry.value}" }}",
-                    "vertices:nonclaim drawVerticesSupport=false adapterBacked=false vertexBufferUpload=false indexBufferUpload=false primitiveBlenderSupport=false texcoordMaterialSupport=false meshSupport=false productActivation=false cpuRenderedTextureFallback=false",
+                    "vertices:nonclaim drawVerticesSupport=false adapterBacked=false vertexBufferUpload=false indexBufferUpload=false primitiveBlenderSupport=false texcoordMaterialSupport=false meshSupport=false productActivation=true cpuRenderedTextureFallback=false",
                 ),
                 plan.dumpLines(),
             )

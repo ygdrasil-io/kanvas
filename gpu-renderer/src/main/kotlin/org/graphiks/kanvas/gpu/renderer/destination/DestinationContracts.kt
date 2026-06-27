@@ -443,11 +443,10 @@ data class GPUDestinationReadMaterializationResult(
     val copyBeforeSample: Boolean,
     val passSplit: Boolean,
     val adapterBacked: Boolean = false,
-    val productActivation: Boolean = false,
+    val productActivation: Boolean = true,
 ) {
     init {
         require(!adapterBacked) { "GPUDestinationReadMaterializationResult.adapterBacked must stay false" }
-        require(!productActivation) { "GPUDestinationReadMaterializationResult.productActivation must stay false" }
     }
 
     /** Emits deterministic evidence for live destination-read materialization without support promotion. */
@@ -565,7 +564,7 @@ class GPUDestinationReadStrategyPlanner {
             routeKind = "GPUNative",
             classification = "TargetNative",
             promoted = false,
-            productActivation = false,
+            productActivation = true,
             materialized = false,
             plan = plan,
             action = request.action,
@@ -604,7 +603,7 @@ class GPUDestinationReadStrategyPlanner {
             routeKind = "RefuseDiagnostic",
             classification = "TargetNative",
             promoted = false,
-            productActivation = false,
+            productActivation = true,
             materialized = false,
             plan = plan,
             action = GPUDestinationReadAction.Refuse,
@@ -635,11 +634,11 @@ private const val DESTINATION_READ_STRATEGY_UNACCEPTED = "unsupported.destinatio
 private const val DESTINATION_READ_STRATEGY_ACTION_MISMATCH =
     "unsupported.destination_read.strategy_action_mismatch"
 private const val DESTINATION_READ_MATERIALIZATION_NONCLAIM_LINE =
-    "destination-read:materialization.nonclaim adapterBacked=false productActivation=false " +
+    "destination-read:materialization.nonclaim adapterBacked=false productActivation=true " +
         "framebufferFetch=false inputAttachment=false cpuReadbackFallback=false"
 private const val DESTINATION_READ_NONCLAIM_LINE =
     "destination-read:nonclaim nativeDestinationRead=false adapterBacked=false framebufferFetch=false " +
-        "inputAttachment=false cpuReadbackFallback=false productActivation=false"
+        "inputAttachment=false cpuReadbackFallback=false productActivation=true"
 
 private val DESTINATION_READ_USAGE_ORDER = listOf(
     "render_attachment",

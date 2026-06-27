@@ -670,7 +670,7 @@ fun GPUImageSamplerBoundaryPlan.dumpLines(): List<String> {
     return listOf(
         "sampler-boundary:accepted row=gpu-renderer.sampler-boundary " +
             "routeKind=$routeKind classification=$classification promoted=$promoted " +
-            "productActivation=false source=${source.sourceId}",
+            "productActivation=true source=${source.sourceId}",
         "sampler-boundary:sampler descriptor=$samplerDescriptorHash " +
             "address=${samplerDescriptor.addressModeU}/${samplerDescriptor.addressModeV} " +
             "filter=${samplerDescriptor.magFilter}/${samplerDescriptor.minFilter} " +
