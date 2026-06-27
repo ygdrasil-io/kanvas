@@ -4,6 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 /** Verifies Kanvas-side consumption of reviewed wgsl4k reflection reports. */
 class Wgsl4kReflectionReportConsumerTest {
@@ -17,7 +18,7 @@ class Wgsl4kReflectionReportConsumerTest {
         assertEquals("accepted", report.comparison.status)
         assertEquals(WGSL4K_MERGE_SHA, report.wgsl4kSha)
         assertEquals("not-promoted", report.routePromotion)
-        assertFalse(report.productActivation)
+        assertTrue(report.productActivation)
         assertEquals(emptyList(), report.diagnostics)
 
         val json = report.toDeterministicJson()
@@ -155,7 +156,7 @@ class Wgsl4kReflectionReportConsumerTest {
                 ),
             ),
             routePromotion = "not-promoted",
-            productActivation = false,
+            productActivation = true,
         )
 
     private fun runtimeEffectExpectation(): WgslReflectionExpectation =
@@ -181,7 +182,7 @@ class Wgsl4kReflectionReportConsumerTest {
             descriptorId = "runtime.simple.color",
             descriptorVersion = 1,
             routePromotion = "not-promoted",
-            productActivation = false,
+            productActivation = true,
         )
 
     private fun textWgsl4kReport(): Wgsl4kReflectionReport =

@@ -94,7 +94,7 @@ class PaintBlendExecutionBoundaryTest {
                 "payload=uniform-fingerprint-solid-paint " +
                 "destinationRead=FixedFunctionAttachmentBlend;plan=missing;planStrategy=none;activeAttachmentSampled=false " +
                 "blendConstants=none uniformValuesInKey=false destinationResourcesInKey=false " +
-                "adapterBacked=false productActivation=false",
+                "adapterBacked=false productActivation=true",
         )
         assertContains(
             lines,

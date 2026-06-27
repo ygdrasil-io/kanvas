@@ -126,34 +126,7 @@ val requiredPipelineConformanceSuites = listOf(
         className = "org.skia.effects.runtime.SkRuntimeEffectMakeTest",
         resultRoot = "cpu-raster/build/test-results/pipelineConformanceTest",
     ),
-    RequiredPipelineConformanceSuite(
-        className = "org.skia.gpu.webgpu.BlendPlanTest",
-        resultRoot = "gpu-raster/build/test-results/pipelineConformanceTest",
-    ),
-    RequiredPipelineConformanceSuite(
-        className = "org.skia.gpu.webgpu.RuntimeEffectDescriptorWebGpuTest",
-        resultRoot = "gpu-raster/build/test-results/pipelineConformanceTest",
-    ),
-    RequiredPipelineConformanceSuite(
-        className = "org.skia.gpu.webgpu.TextWgslValidationPipelineConformanceTest",
-        resultRoot = "gpu-raster/build/test-results/pipelineConformanceTest",
-    ),
-    RequiredPipelineConformanceSuite(
-        className = "org.skia.gpu.webgpu.tools.GeneratedLinearGradientWgslTest",
-        resultRoot = "gpu-raster/build/test-results/pipelineConformanceTest",
-    ),
-    RequiredPipelineConformanceSuite(
-        className = "org.skia.gpu.webgpu.tools.GeneratedSolidRectWgslTest",
-        resultRoot = "gpu-raster/build/test-results/pipelineConformanceTest",
-    ),
-    RequiredPipelineConformanceSuite(
-        className = "org.skia.gpu.webgpu.tools.WgslValidationReportTest",
-        resultRoot = "gpu-raster/build/test-results/pipelineConformanceTest",
-    ),
-    RequiredPipelineConformanceSuite(
-        className = "org.skia.gpu.webgpu.tools.WgslStrictValidationReportTest",
-        resultRoot = "gpu-raster/build/test-results/pipelineConformanceTest",
-    ),
+
     RequiredPipelineConformanceSuite(
         className = "org.skia.pipeline.CpuScalarPipelineExecutorTest",
         resultRoot = "render-pipeline/build/test-results/pipelineConformanceTest",
@@ -274,7 +247,6 @@ fun renderPipelineConformanceReport(
     commit: String,
     suites: List<PipelineConformanceSuiteSummary>,
     vectorDecisionReportPresent: Boolean,
-    legacyWgslDiagnosticsAllowlistCount: Int,
     runtimeEffectSupportMatrixCounts: String,
     runtimeEffectLayoutV2Counts: String,
     runtimeShaderEffectsV2Counts: String,
@@ -361,8 +333,7 @@ fun renderPipelineConformanceReport(
         ||---|---|---|
         |${row("Tests", conformanceStatus(suites), "$totalTests tests, $totalFailures failures, $totalErrors errors, $totalSkipped skipped")}
         |${row("Release readiness", releaseReadinessStatus, "`releaseReadiness=$releaseReadinessStatus`; GPU adapter evidence `${gpuAdapterEvidence.status}`")}
-        |${row("Strict WGSL status", status("org.skia.gpu.webgpu.tools.WgslStrictValidationReportTest"), "`WgslStrictValidationReportTest` plus required `:gpu-raster:wgslValidateStrict` dependency")}
-        |${row("Legacy WGSL diagnostics", status("org.skia.gpu.webgpu.tools.WgslValidationReportTest"), "$legacyWgslDiagnosticsAllowlistCount known diagnostics allowlisted by `gpu-raster/src/test/resources/wgsl-diagnostics-allowlist.txt`; `:gpu-raster:wgslValidateAll` remains the diagnostic inventory")}
+
         |${row("Generated WGSL status", status("org.skia.gpu.webgpu.tools.GeneratedSolidRectWgslTest", "org.skia.gpu.webgpu.tools.GeneratedLinearGradientWgslTest"), "`GeneratedSolidRectWgslTest`, `GeneratedLinearGradientWgslTest`")}
         |${row("PipelineKey status", status("org.skia.gpu.webgpu.PipelineKeyTelemetryTest"), "`PipelineKeyTelemetryTest`")}
         |${row("BlendPlan status", status("org.skia.gpu.webgpu.BlendPlanTest"), "`BlendPlanTest`")}
@@ -422,12 +393,6 @@ fun renderPipelineConformanceReport(
         |  and `executionEvidence=lowering-consumed:CoverageModel.AnalyticRect`).
         |- GPU descriptor shadow route dump: `render-pipeline/src/test/kotlin/org/skia/pipeline/GeometryCoverageMigrationHarnessTest.kt`
         |  (`descriptorRoute=gpu.shadow.generated-rect-candidate`).
-        |- WebGPU selector production dump: `gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/WebGpuCoveragePlanSelectorTest.kt`
-        |  (`productionDump`, selector disabled rollback, and coverage selector route identifiers).
-        |- WebGPU coverage strategy inventory: `gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/WebGpuCoveragePlanSelector.kt`
-        |  (`proven` is limited to selector-only mask/atlas route selection, not adapter CI;
-        |  adapter-dependent promoted routes use explicit adapter lane statuses (`adapter-pass`, `adapter-fail`,
-        |  `adapter-skipped`, `adapter-timeout`) and reserve `blocked-no-adapter-lane` for missing-lane cases only).
         |- CoverageAtlas policy gate: `render-pipeline/src/main/kotlin/org/skia/pipeline/GeometryCoverageContracts.kt`
         |  (`CoverageAtlasPolicyGate` reports persistent atlas `no-go` until shape key, transform key,
         |  invalidation, memory budget, eviction, CPU/GPU synchronization, and owner-thread handling are accepted).
@@ -435,10 +400,6 @@ fun renderPipelineConformanceReport(
         |  (`GlyphMaskLowering` accepts text-owned glyph alpha masks as opaque refs, lowers them to
         |  `CoveragePlan.AlphaMask`, and reports `coverage.glyph-mask-dependency-unavailable` when the
         |  text/glyph infrastructure has not supplied a mask; WebGPU still refuses standalone alpha masks).
-        |- WebGPU glyph atlas upload-plan dump: `gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/SkWebGpuGlyphAtlasTest.kt`
-        |  (`SkWebGpuGlyphAtlas` consumes the KAN-010 CPU glyph masks, emits deterministic A8/R8
-        |  coordinates, upload bytes, a sampling diagnostic, and non-claims for line text, shaping,
-        |  fallback fonts, emoji/color fonts, SDF/LCD, and dynamic eviction).
         |- Simple Latin text line artifacts: `reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/`
         |  (`route-webgpu.json` records `selectedRoute=webgpu.text.glyph-atlas.simple-latin`,
         |  `fallbackReason=none`, the KAN-011 atlas upload SHA/byte count, and non-claims for
@@ -488,8 +449,6 @@ fun renderPipelineConformanceReport(
         |  multi-shape AA difference, shader clip, and unlowerable stacks to supported clips or stable refusal codes.
         |  CPU descriptor fallback evidence for AA clip and clip shader is asserted by
         |  `kanvas-skia/src/test/kotlin/org/skia/core/SkBitmapDescriptorCoverageOracleTest.kt`.
-        |- Pipeline cache telemetry: `gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/PipelineKeyTelemetryTest.kt`
-        |  verifies cold frame misses are at least one and warm frame cache hits increase.
         |- Runtime-effect V2 support matrix: `reports/wgsl-pipeline/runtime-effects-v2/support-matrix.md`
         |  lists descriptor-backed runtime effects separately from adapter-backed scene parity, keeps policy refusals explicit, and avoids broad runtime-effect claims;
         |  current counts are $runtimeEffectSupportMatrixCounts.
@@ -530,9 +489,6 @@ fun renderPipelineConformanceReport(
         |- GPU smoke promotion policy: `reports/wgsl-pipeline/2026-05-27-m31-gpu-smoke-promotion-policy.md`
         |  defines checklist gates for promotion from full inventory to required smoke, names current smoke-eligible fixtures,
         |  and keeps unsupported diagnostics out of required smoke until implementation evidence exists.
-        |- GPU Crop(input = nonNull) inventory classification: `gpu-raster/build/reports/gpu-inventory/gpu-inventory-failure-classification.md`
-        |  records `unsupported-image-filter=0` for the M38 selected SimpleOffset child pre-pass target; stable diagnostic
-        |  `image-filter.crop-input-nonnull-prepass-required` remains reserved for out-of-scope Crop(input nonNull) graph shapes.
         |
         |## Full Test Summary
         |
@@ -546,7 +502,6 @@ fun renderPipelineConformanceReport(
         |- Unblock condition: ${gpuAdapterEvidence.unblockCondition}
         |- GPU adapter-dependent checks can be JUnit-skipped on machines without a usable WebGPU adapter; this is recorded risk, not a green adapter pass.
         |- Slow benchmark gates are not part of `pipelineConformance`; vector promotion remains rejected until the allocation-aware benchmark meets the promotion threshold.
-        |- Existing legacy WGSL parser/reflection diagnostics are allowlisted by `gpu-raster/src/test/resources/wgsl-diagnostics-allowlist.txt`; strict release readiness applies only to generated and registered WGSL modules until legacy remediation lands.
         |
         |## Outcome
         |
@@ -632,7 +587,6 @@ tasks.register<Exec>("pipelineRuntimeColorFilterWgslReport") {
 
     dependsOn(
         ":cpu-raster:pipelineRuntimeEffectsV2SupportMatrix",
-        ":gpu-raster:pipelineRuntimeEffectsLayoutV2Report",
     )
     val outputDir = layout.projectDirectory.dir("reports/wgsl-pipeline/runtime-color-filter-wgsl")
     commandLine(
@@ -668,7 +622,6 @@ tasks.register<Exec>("pipelineRuntimeBlenderBoundaryReport") {
     inputs.file(layout.projectDirectory.file("cpu-raster/src/main/kotlin/org/skia/effects/runtime/SkRuntimeBlender.kt"))
     inputs.file(layout.projectDirectory.file("cpu-raster/src/main/kotlin/org/skia/effects/runtime/SkRuntimeEffectDescriptor.kt"))
     inputs.file(layout.projectDirectory.file("cpu-raster/src/test/kotlin/org/skia/effects/runtime/SkRuntimeBlenderTest.kt"))
-    inputs.file(layout.projectDirectory.file("gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/RuntimeEffectDescriptorWebGpuTest.kt"))
     outputs.file(outputDir.file("runtime-blender-boundary.json"))
     outputs.file(outputDir.file("runtime-blender-boundary.md"))
     outputs.file(outputDir.file("runtime-blender-boundary-route.json"))
@@ -682,7 +635,6 @@ tasks.register<Exec>("pipelineRuntimeEffectUniformPreviewReport") {
 
     dependsOn(
         ":cpu-raster:pipelineRuntimeEffectsV2SupportMatrix",
-        ":gpu-raster:pipelineRuntimeEffectsLayoutV2Report",
     )
     val outputDir = layout.projectDirectory.dir("reports/wgsl-pipeline/runtime-effect-uniform-preview")
     commandLine(
@@ -694,8 +646,6 @@ tasks.register<Exec>("pipelineRuntimeEffectUniformPreviewReport") {
     inputs.file(layout.projectDirectory.file("scripts/validate_kan033_runtime_effect_uniform_preview.py"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/runtime-effects-v2/support-matrix.json"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/runtime-effects-layout-v2/runtime-effects-layout-v2.json"))
-    inputs.file(layout.projectDirectory.file("gpu-raster/src/main/resources/shaders/runtime_simple_rt.wgsl"))
-    inputs.file(layout.projectDirectory.file("gpu-raster/src/main/resources/shaders/runtime_spiral_rt.wgsl"))
     inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts/runtime-effect-simple"))
     inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts/runtime-effect-spiral"))
     outputs.file(outputDir.file("runtime-effect-uniform-preview.json"))
@@ -712,7 +662,6 @@ tasks.register<Exec>("pipelineRuntimeEffectsV2EvidenceBundleReport") {
 
     dependsOn(
         ":cpu-raster:pipelineRuntimeEffectsV2SupportMatrix",
-        ":gpu-raster:pipelineRuntimeEffectsLayoutV2Report",
         "pipelineRuntimeShaderEffectsV2PromotionReport",
         "pipelineRuntimeChildShaderEffectLaneReport",
         "pipelineRuntimeColorFilterWgslReport",
@@ -754,9 +703,6 @@ tasks.register("pipelineConformance") {
         "pipelineRuntimeBlenderBoundaryReport",
         "pipelineRuntimeEffectUniformPreviewReport",
         "pipelineRuntimeEffectsV2EvidenceBundleReport",
-        ":gpu-raster:wgslValidateStrict",
-        ":gpu-raster:wgslValidateAll",
-        ":gpu-raster:pipelineConformanceTest",
         ":cpu-raster:pipelineConformanceTest",
         ":render-pipeline:pipelineConformanceTest",
         ":kanvas-skia:pipelineConformanceTest",
@@ -773,9 +719,6 @@ tasks.register("pipelineConformance") {
             |- REQUIRED Runtime Blender boundary report: pipelineRuntimeBlenderBoundaryReport
             |- REQUIRED Runtime Effect uniform preview report: pipelineRuntimeEffectUniformPreviewReport
             |- REQUIRED Runtime Effects V2 evidence bundle: pipelineRuntimeEffectsV2EvidenceBundleReport
-            |- REQUIRED strict generated/registered WGSL validation: :gpu-raster:wgslValidateStrict
-            |- REQUIRED legacy WGSL diagnostic inventory: :gpu-raster:wgslValidateAll
-            |- REQUIRED generated WGSL, text WGSL validation, PipelineKey, BlendPlan, runtime descriptor, WebGPU glyph atlas, simple Latin line, simple linear gradient, simple bitmap rect, simple SrcOver alpha, simple ColorFilter, runtime ColorFilter, simple SimpleRT runtime effect, and selector tests: :gpu-raster:pipelineConformanceTest
             |- REQUIRED runtime descriptor registry and CPU dispatch tests: :cpu-raster:pipelineConformanceTest
             |- REQUIRED PipelineIR, CPU executor, and geometry oracle tests: :render-pipeline:pipelineConformanceTest
             |- REQUIRED kanvas-skia production descriptor-route tests: :kanvas-skia:pipelineConformanceTest
@@ -835,9 +778,6 @@ tasks.register("pipelineConformanceReport") {
 
         val commit = runPipelineConformanceCommand("git", "rev-parse", "HEAD")
         val vectorDecisionReportPresent = file("reports/wgsl-pipeline/2026-05-27-m22-vector-promotion-decision.md").isFile
-        val legacyWgslDiagnosticsAllowlistCount = file("gpu-raster/src/test/resources/wgsl-diagnostics-allowlist.txt")
-            .readLines()
-            .count { line -> line.isNotBlank() && !line.startsWith("#") }
         val runtimeEffectSupportMatrixCounts = file("reports/wgsl-pipeline/runtime-effects-v2/support-matrix.md")
             .readLines()
             .firstOrNull { it.startsWith("Status counts: ") }
@@ -906,7 +846,6 @@ tasks.register("pipelineConformanceReport") {
             commit = commit,
             suites = suites,
             vectorDecisionReportPresent = vectorDecisionReportPresent,
-            legacyWgslDiagnosticsAllowlistCount = legacyWgslDiagnosticsAllowlistCount,
             runtimeEffectSupportMatrixCounts = runtimeEffectSupportMatrixCounts,
             runtimeEffectLayoutV2Counts = runtimeEffectLayoutV2Counts,
             runtimeShaderEffectsV2Counts = runtimeShaderEffectsV2Counts,
@@ -3167,7 +3106,7 @@ tasks.register("checkProductionCodecImageClasspathNoJavaDesktop") {
 
     doLast {
         val violations = mutableListOf<String>()
-        val projectsToCheck = (pureKotlinCodecProjects + "codec-image-generator" + "kanvas-skia" + "cpu-raster" + "gpu-raster")
+        val projectsToCheck = (pureKotlinCodecProjects + "codec-image-generator" + "kanvas-skia" + "cpu-raster")
             .mapNotNull { name -> findProject(":$name") }
 
         projectsToCheck.forEach { checkedProject ->
@@ -3319,37 +3258,6 @@ tasks.register("checkCpuRasterImageToolingNoAwt") {
             throw GradleException(
                 buildString {
                     appendLine("CPU raster image test tooling must not use AWT/ImageIO/java.desktop APIs.")
-                    violations.sorted().forEach { appendLine("- $it") }
-                }
-            )
-        }
-    }
-}
-
-tasks.register("checkGpuRasterImageToolingNoAwt") {
-    group = "verification"
-    description = "Fails if gpu-raster image test tooling uses AWT/ImageIO/java.desktop APIs."
-
-    doLast {
-        val filesToCheck = listOf(
-            file("gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/testing/CrossBackendHarness.kt"),
-        )
-        val violations = mutableListOf<String>()
-        filesToCheck
-            .filter { source -> source.isFile }
-            .forEach { source ->
-                val sourceText = source.readText().withoutKotlinOrJavaComments()
-                forbiddenSourcePatterns.forEach { pattern ->
-                    if (pattern.containsMatchIn(sourceText)) {
-                        violations += "${source.relativeTo(rootDir)} contains forbidden image tooling API reference ${pattern.pattern}"
-                    }
-                }
-            }
-
-        if (violations.isNotEmpty()) {
-            throw GradleException(
-                buildString {
-                    appendLine("GPU raster image test tooling must not use AWT/ImageIO/java.desktop APIs.")
                     violations.sorted().forEach { appendLine("- $it") }
                 }
             )

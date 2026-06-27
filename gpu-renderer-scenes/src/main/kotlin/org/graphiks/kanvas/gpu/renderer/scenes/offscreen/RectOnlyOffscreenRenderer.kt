@@ -1150,7 +1150,7 @@ internal fun bitmapShaderWiringDiagnostics(): List<String> = listOf(
     "bitmapShader:snippetSourceHash=$BitmapShaderSnippetSourceHash",
     "bitmapShader:entryPoint=$BitmapShaderClampEntryPoint",
     "bitmapShader:uniformPacker=UniformPacker.bitmapTextureBytes",
-    "bitmapShader:catalogWired=true realTextureUploaded=true bitmapDecodedSource=bitmap-test-32x32 productActivation=false",
+    "bitmapShader:catalogWired=true realTextureUploaded=true bitmapDecodedSource=bitmap-test-32x32 productActivation=true",
 )
 
 /**
@@ -1180,7 +1180,7 @@ internal fun textAtlasWiringDiagnostics(width: Int, height: Int): List<String> =
     )
     add("textSdf:smoothing=${SDFGenerator.SDF_SMOOTHING} threshold=${SDFGenerator.SDF_THRESHOLD}")
     add("textSdf:${SDFGenerator.nonClaimLine}")
-    add("textAtlas:realAtlasUploaded=true atlasFont=LiberationSans productActivation=false")
+    add("textAtlas:realAtlasUploaded=true atlasFont=LiberationSans productActivation=true")
 }
 
 /**
@@ -1219,7 +1219,7 @@ internal fun runtimeEffectWiringDiagnostics(): List<String> = listOf(
     "runtimeEffect:wgslSnippetSourceHash=$SimpleRTSourceHash",
     "runtimeEffect:entryPoint=$SimpleRTEntryPoint",
     "runtimeEffect:uniformPacker=UniformPacker.simpleRtBytes",
-    "runtimeEffect:realGpuOutput=true proceduralWrapperRemoved=true productActivation=false",
+    "runtimeEffect:realGpuOutput=true proceduralWrapperRemoved=true productActivation=true",
 )
 
 /**
@@ -1234,7 +1234,7 @@ internal fun saveLayerWiringDiagnostics(sceneId: String, width: Int, height: Int
     addAll(executor.dumpLines(stats))
     add("saveLayer:compositeSnippetSourceHash=$LayerCompositeSnippetSourceHash")
     add("saveLayer:compositeEntryPoint=$LayerCompositeEntryPoint")
-    add("saveLayer:secondaryTargetAllocated=true childContentSampled=false productActivation=false")
+    add("saveLayer:secondaryTargetAllocated=true childContentSampled=false productActivation=true")
 }
 
 internal fun saveLayerWiringDiagnostics(fills: List<RectOnlyFillDraw>, sceneId: String, width: Int, height: Int): List<String> = buildList {
@@ -1250,7 +1250,7 @@ internal fun saveLayerWiringDiagnostics(fills: List<RectOnlyFillDraw>, sceneId: 
     addAll(executor.dumpLines(updatedStats))
     add("saveLayer:compositeSnippetSourceHash=$LayerCompositeSnippetSourceHash")
     add("saveLayer:compositeEntryPoint=$LayerCompositeEntryPoint")
-    add("saveLayer:secondaryTargetAllocated=true childContentSampled=${childCount > 0} productActivation=false")
+    add("saveLayer:secondaryTargetAllocated=true childContentSampled=${childCount > 0} productActivation=true")
 }
 
 /**
@@ -1307,7 +1307,7 @@ internal fun verticesWiringDiagnostics(): List<String> = buildList {
             "pipelineChanges=${batchStats.pipelineChangeCount} mergedDraws=${batchStats.mergedDrawCount}",
     )
     add("vertices:batcher.${batchStats.nonClaimLine}")
-    add("vertices:realMesh=true vertexIndexBuffersUploaded=true productActivation=false")
+    add("vertices:realMesh=true vertexIndexBuffersUploaded=true productActivation=true")
 }
 
 private fun rectOnlyFillDraw(

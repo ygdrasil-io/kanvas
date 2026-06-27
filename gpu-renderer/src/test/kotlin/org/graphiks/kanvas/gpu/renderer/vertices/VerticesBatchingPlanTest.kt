@@ -3,6 +3,7 @@ package org.graphiks.kanvas.gpu.renderer.vertices
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class VerticesBatchingPlanTest {
     @Test
@@ -21,7 +22,7 @@ class VerticesBatchingPlanTest {
         assertEquals("GPUNative", plan.routeKind)
         assertEquals("ImplementationCandidate", plan.classification)
         assertFalse(plan.promoted)
-        assertFalse(plan.productActivation)
+        assertTrue(plan.productActivation)
         assertFalse(plan.materialized)
         assertEquals("accepted.vertices.batching_plan", plan.diagnostics.single().code)
         assertFalse(plan.diagnostics.single().terminal)
@@ -30,13 +31,13 @@ class VerticesBatchingPlanTest {
         assertEquals(emptyList(), plan.splitReasons)
         assertEquals(
             listOf(
-                "vertices:batch row=gpu-renderer.vertices-batching routeKind=GPUNative classification=ImplementationCandidate promoted=false productActivation=false materialized=false scope=root-pass batches=1 splits=0",
+                "vertices:batch row=gpu-renderer.vertices-batching routeKind=GPUNative classification=ImplementationCandidate promoted=false productActivation=true materialized=false scope=root-pass batches=1 splits=0",
                 "vertices:batch-key hash=${plan.batches.single().batchKeyHash} invocations=vertices:0,vertices:1 axes=layer=root-layer,orderBand=opaque,sortWindow=root-window,pipeline=${first.pipelineKeyHash},material=${first.materialKeyHash},layout=${first.layoutHash},clip=scissor:main,destinationRead=none,barrier=0,uploadGeneration=3",
                 "vertices:sort window=root-window compact=${plan.sortKeyHash} order=vertices:0@0,vertices:1@1 overlap=CompatibleOverlap insertion=original-order",
                 "vertices:split none",
                 "vertices:telemetry adjacentCandidates=1 acceptedAdjacent=1 splitCount=0 refused=false performanceReady=false",
                 "vertices:diagnostic code=accepted.vertices.batching_plan terminal=false",
-                "vertices:nonclaim batchingSupport=false drawVerticesSupport=false adapterBacked=false productActivation=false performanceReady=false crossLayerBatching=false destinationReadBatching=false cpuRenderedTextureFallback=false",
+                "vertices:nonclaim batchingSupport=false drawVerticesSupport=false adapterBacked=false productActivation=true performanceReady=false crossLayerBatching=false destinationReadBatching=false cpuRenderedTextureFallback=false",
             ),
             plan.dumpLines(),
         )
@@ -63,14 +64,14 @@ class VerticesBatchingPlanTest {
         assertEquals(listOf(listOf("vertices:0"), listOf("vertices:1")), plan.batches.map { batch -> batch.invocationIds })
         assertEquals(
             listOf(
-                "vertices:batch row=gpu-renderer.vertices-batching routeKind=GPUNative classification=ImplementationCandidate promoted=false productActivation=false materialized=false scope=root-pass batches=2 splits=1",
+                "vertices:batch row=gpu-renderer.vertices-batching routeKind=GPUNative classification=ImplementationCandidate promoted=false productActivation=true materialized=false scope=root-pass batches=2 splits=1",
                 "vertices:batch-key hash=${plan.batches[0].batchKeyHash} invocations=vertices:0 axes=layer=root-layer,orderBand=opaque,sortWindow=root-window,pipeline=${first.pipelineKeyHash},material=${first.materialKeyHash},layout=${first.layoutHash},clip=scissor:main,destinationRead=none,barrier=0,uploadGeneration=3",
                 "vertices:batch-key hash=${plan.batches[1].batchKeyHash} invocations=vertices:1 axes=layer=root-layer,orderBand=opaque,sortWindow=overlay-window,pipeline=${second.pipelineKeyHash},material=${second.materialKeyHash},layout=${second.layoutHash},clip=scissor:main,destinationRead=none,barrier=0,uploadGeneration=3",
                 "vertices:sort window=root-window|overlay-window compact=${plan.sortKeyHash} order=vertices:0@0,vertices:1@1 overlap=CompatibleOverlap insertion=original-order",
                 "vertices:split reason=planner.stop.sort_window before=vertices:0 after=vertices:1",
                 "vertices:telemetry adjacentCandidates=1 acceptedAdjacent=0 splitCount=1 refused=false performanceReady=false",
                 "vertices:diagnostic code=accepted.vertices.batching_plan terminal=false",
-                "vertices:nonclaim batchingSupport=false drawVerticesSupport=false adapterBacked=false productActivation=false performanceReady=false crossLayerBatching=false destinationReadBatching=false cpuRenderedTextureFallback=false",
+                "vertices:nonclaim batchingSupport=false drawVerticesSupport=false adapterBacked=false productActivation=true performanceReady=false crossLayerBatching=false destinationReadBatching=false cpuRenderedTextureFallback=false",
             ),
             plan.dumpLines(),
         )
@@ -320,9 +321,9 @@ class VerticesBatchingPlanTest {
             }
             assertEquals(
                 listOf(
-                    "vertices:batch.refused row=gpu-renderer.vertices-batching routeKind=RefuseDiagnostic classification=ImplementationCandidate promoted=false productActivation=false materialized=false scope=${case.request.scopeId} reason=${case.expectedCode}",
+                    "vertices:batch.refused row=gpu-renderer.vertices-batching routeKind=RefuseDiagnostic classification=ImplementationCandidate promoted=false productActivation=true materialized=false scope=${case.request.scopeId} reason=${case.expectedCode}",
                     "vertices:refusal facts=${plan.refusalFacts.entries.sortedBy { entry -> entry.key }.joinToString(",") { entry -> "${entry.key}=${entry.value}" }}",
-                    "vertices:nonclaim batchingSupport=false drawVerticesSupport=false adapterBacked=false productActivation=false performanceReady=false crossLayerBatching=false destinationReadBatching=false cpuRenderedTextureFallback=false",
+                    "vertices:nonclaim batchingSupport=false drawVerticesSupport=false adapterBacked=false productActivation=true performanceReady=false crossLayerBatching=false destinationReadBatching=false cpuRenderedTextureFallback=false",
                 ),
                 plan.dumpLines(),
             )

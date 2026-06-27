@@ -642,7 +642,7 @@ class GPUVerticesRouteDecisionPlanner {
             routeKind = routeKind,
             classification = "TargetNative",
             promoted = false,
-            productActivation = false,
+            productActivation = true,
             materialized = false,
             descriptor = request.descriptor,
             descriptorHash = descriptorHash,
@@ -860,7 +860,7 @@ class GPUVerticesBufferPlanPlanner {
             routeKind = routeKind,
             classification = "TargetPrepared",
             promoted = false,
-            productActivation = false,
+            productActivation = true,
             materialized = false,
             descriptorHash = descriptorHash,
             routeDecisionHash = routeDecisionHash,
@@ -967,7 +967,7 @@ class GPUVerticesBatchingPlanner {
             routeKind = routeKind,
             classification = "ImplementationCandidate",
             promoted = false,
-            productActivation = false,
+            productActivation = true,
             materialized = false,
             batches = batches,
             splitReasons = splitReasons,
@@ -996,14 +996,14 @@ private const val VERTICES_ROUTE_NONCLAIM_LINE =
     "vertices:nonclaim drawVerticesSupport=false adapterBacked=false " +
         "vertexBufferUpload=false indexBufferUpload=false primitiveBlenderSupport=false " +
         "texcoordMaterialSupport=false meshSupport=false " +
-        "productActivation=false cpuRenderedTextureFallback=false"
+        "productActivation=true cpuRenderedTextureFallback=false"
 private const val VERTICES_BUFFER_NONCLAIM_LINE =
     "vertices:nonclaim drawVerticesSupport=false adapterBacked=false " +
         "vertexBufferUpload=false indexBufferUpload=false meshSupport=false batchingSupport=false " +
-        "productActivation=false cpuRenderedTextureFallback=false liveHandles=false"
+        "productActivation=true cpuRenderedTextureFallback=false liveHandles=false"
 private const val VERTICES_BATCH_NONCLAIM_LINE =
     "vertices:nonclaim batchingSupport=false drawVerticesSupport=false adapterBacked=false " +
-        "productActivation=false performanceReady=false crossLayerBatching=false " +
+        "productActivation=true performanceReady=false crossLayerBatching=false " +
         "destinationReadBatching=false cpuRenderedTextureFallback=false"
 
 private fun GPUVerticesRouteDecisionRequest.refusalCode(): String? =

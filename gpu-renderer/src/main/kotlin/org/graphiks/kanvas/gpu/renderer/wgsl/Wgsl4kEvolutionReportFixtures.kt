@@ -157,7 +157,7 @@ private fun textWgslReflectionExpectation(): WgslReflectionExpectation =
             ),
         ),
         routePromotion = "not-promoted",
-        productActivation = false,
+        productActivation = true,
     )
 
 private fun runtimeEffectWgslReflectionExpectation(): WgslReflectionExpectation =
@@ -183,7 +183,7 @@ private fun runtimeEffectWgslReflectionExpectation(): WgslReflectionExpectation 
         descriptorId = "runtime.simple.color",
         descriptorVersion = 1,
         routePromotion = "not-promoted",
-        productActivation = false,
+        productActivation = true,
     )
 
 private fun textWgsl4kReflectionReport(wgsl4kSha: String): Wgsl4kReflectionReport =

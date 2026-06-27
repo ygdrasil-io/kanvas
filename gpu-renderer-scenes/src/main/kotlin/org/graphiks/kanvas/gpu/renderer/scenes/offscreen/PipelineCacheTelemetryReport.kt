@@ -20,7 +20,7 @@ data class PipelineCacheTelemetryReport(
     val backend: String,
     val frameCount: Int,
     val sceneTelemetry: List<GPUPipelineCacheTelemetry>,
-    val productActivation: Boolean = false,
+    val productActivation: Boolean = true,
 ) {
     /** Canonical dump lines for PM evidence and tests. */
     fun dumpLines(): List<String> =

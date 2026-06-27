@@ -90,7 +90,7 @@ class SaveLayerLiveMaterializationTest {
             "savelayer:materialization row=gpu-renderer.savelayer.live-materialization " +
                 "scope=layer:card target=layer-target:card parent=root-target clear=clear(transparent-black) " +
                 "children=draw-rect,draw-image composite=fixed-function-srcOver " +
-                "adapterBacked=false productActivation=false",
+                "adapterBacked=false productActivation=true",
         )
         assertFalse(result.dumpLines().joinToString("\n").contains("WGPU"))
         assertFalse(result.dumpLines().joinToString("\n").contains("@0x"))
@@ -181,7 +181,7 @@ class SaveLayerLiveMaterializationTest {
             result.dumpLines(),
             "savelayer:materialization.refused row=gpu-renderer.savelayer.live-materialization " +
                 "scope=layer:card target=layer-target:card code=unsupported.layer.init_previous_unaccepted " +
-                "adapterBacked=false productActivation=false",
+                "adapterBacked=false productActivation=true",
         )
     }
 }

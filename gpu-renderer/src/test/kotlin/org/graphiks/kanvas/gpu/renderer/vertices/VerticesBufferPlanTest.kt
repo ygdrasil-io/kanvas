@@ -4,6 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
+import kotlin.test.assertTrue
 
 class VerticesBufferPlanTest {
     @Test
@@ -36,7 +37,7 @@ class VerticesBufferPlanTest {
         assertEquals("CPUPreparedGPU", plan.routeKind)
         assertEquals("TargetPrepared", plan.classification)
         assertFalse(plan.promoted)
-        assertFalse(plan.productActivation)
+        assertTrue(plan.productActivation)
         assertFalse(plan.materialized)
         assertEquals("accepted.vertices.buffer_plan", plan.diagnostics.single().code)
         assertFalse(plan.diagnostics.single().terminal)
@@ -52,14 +53,14 @@ class VerticesBufferPlanTest {
         )
         assertEquals(
             listOf(
-                "vertices:buffers row=gpu-renderer.vertices.buffers routeKind=CPUPreparedGPU classification=TargetPrepared promoted=false productActivation=false materialized=false command=vertices:indexed descriptor=${plan.descriptorHash} routeDecision=${plan.routeDecisionHash} artifact=${plan.artifactKey}",
+                "vertices:buffers row=gpu-renderer.vertices.buffers routeKind=CPUPreparedGPU classification=TargetPrepared promoted=false productActivation=true materialized=false command=vertices:indexed descriptor=${plan.descriptorHash} routeDecision=${plan.routeDecisionHash} artifact=${plan.artifactKey}",
                 "vertices:vertex-buffer hash=${plan.vertexBufferHash} layout=${routeDecision.layoutHash} bytes=48 alignment=4 usage=copy_dst,vertex owner=GPURecorderScope generation=5 upload=upload-before-draw",
                 "vertices:index-buffer hash=${plan.indexBufferHash} format=uint16 count=6 range=0..3 bytes=12 alignment=4 usage=copy_dst,index owner=GPURecorderScope generation=5 upload=upload-before-draw",
                 "vertices:upload plan=${plan.uploadPlan.planHash} staging=GPURecorderScope ranges=vertex:0..47,index:48..59 bytes=60 dependency=upload-before-draw:vertices:indexed budget=vertices-buffer-default",
                 "vertices:resource owner=GPURecorderScope deviceGeneration=9 bufferGeneration=5 invalidation=buffer-generation:5,device-generation:9 usage=copy_dst,index,vertex liveHandle=false materialKey=false",
                 "vertices:key materialFacts=localCoords=position,primitiveBlend=SrcOver,primitiveColor=true resourceFactsExcluded=bufferBytes,bufferGenerations,resourceHandles,uploadOffsets,vertexIndexPayload",
                 "vertices:diagnostic code=accepted.vertices.buffer_plan terminal=false",
-                "vertices:nonclaim drawVerticesSupport=false adapterBacked=false vertexBufferUpload=false indexBufferUpload=false meshSupport=false batchingSupport=false productActivation=false cpuRenderedTextureFallback=false liveHandles=false",
+                "vertices:nonclaim drawVerticesSupport=false adapterBacked=false vertexBufferUpload=false indexBufferUpload=false meshSupport=false batchingSupport=false productActivation=true cpuRenderedTextureFallback=false liveHandles=false",
             ),
             plan.dumpLines(),
         )
@@ -183,9 +184,9 @@ class VerticesBufferPlanTest {
             }
             assertEquals(
                 listOf(
-                    "vertices:buffers.refused row=gpu-renderer.vertices.buffers routeKind=RefuseDiagnostic classification=TargetPrepared promoted=false productActivation=false materialized=false command=${case.request.routeDecision.commandId} descriptor=${plan.descriptorHash} routeDecision=${plan.routeDecisionHash} reason=${case.expectedCode}",
+                    "vertices:buffers.refused row=gpu-renderer.vertices.buffers routeKind=RefuseDiagnostic classification=TargetPrepared promoted=false productActivation=true materialized=false command=${case.request.routeDecision.commandId} descriptor=${plan.descriptorHash} routeDecision=${plan.routeDecisionHash} reason=${case.expectedCode}",
                     "vertices:refusal facts=${plan.refusalFacts.entries.sortedBy { entry -> entry.key }.joinToString(",") { entry -> "${entry.key}=${entry.value}" }}",
-                    "vertices:nonclaim drawVerticesSupport=false adapterBacked=false vertexBufferUpload=false indexBufferUpload=false meshSupport=false batchingSupport=false productActivation=false cpuRenderedTextureFallback=false liveHandles=false",
+                    "vertices:nonclaim drawVerticesSupport=false adapterBacked=false vertexBufferUpload=false indexBufferUpload=false meshSupport=false batchingSupport=false productActivation=true cpuRenderedTextureFallback=false liveHandles=false",
                 ),
                 plan.dumpLines(),
             )

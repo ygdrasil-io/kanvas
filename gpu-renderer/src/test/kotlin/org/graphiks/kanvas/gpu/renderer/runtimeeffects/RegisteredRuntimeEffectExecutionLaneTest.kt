@@ -80,7 +80,7 @@ class RegisteredRuntimeEffectExecutionLaneTest {
                     "schema=sha256:schema-simple-color payload=uniform-fingerprint-runtime " +
                     "bindingLayout=sha256:binding-simple-color pipeline=runtime-effect-pipeline:runtime.simple.color@1 " +
                     "renderKey=$renderKey pipelineCache=$expectedCacheKey " +
-                    "uniformValuesInKey=false adapterBacked=false productActivation=false",
+                    "uniformValuesInKey=false adapterBacked=false productActivation=true",
         )
         assertContains(
             lines,
@@ -449,7 +449,7 @@ private fun acceptedRuntimeWgslEvidence(): GPURuntimeEffectWGSLEvidence =
                 descriptorId = "runtime.simple.color",
                 descriptorVersion = 1,
                 routePromotion = "not-promoted",
-                productActivation = false,
+                productActivation = true,
             ),
         ),
     )

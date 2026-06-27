@@ -28,7 +28,7 @@ class PipelineCacheTelemetryReportTest {
         assertTrue(json.contains("\"evictionCount\": 0"))
         assertTrue(json.contains("\"pipelineCreations\": 1"))
         assertTrue(json.contains("SolidRect"))
-        assertTrue(json.contains("\"productActivation\": false"))
+        assertTrue(json.contains("\"productActivation\": true"))
     }
 
     @Test

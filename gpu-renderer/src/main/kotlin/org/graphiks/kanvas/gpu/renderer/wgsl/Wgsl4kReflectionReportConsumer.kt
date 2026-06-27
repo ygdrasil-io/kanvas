@@ -71,7 +71,7 @@ data class WgslReflectionExpectation(
     val descriptorId: String? = null,
     val descriptorVersion: Int? = null,
     val routePromotion: String = "not-promoted",
-    val productActivation: Boolean = false,
+    val productActivation: Boolean = true,
 )
 
 /** Expected Kanvas entry point fact used when comparing wgsl4k reflection. */

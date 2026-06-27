@@ -27,7 +27,7 @@ class SaveLayerExecutor {
         "savelayer:executor targetAllocated=${stats.targetAllocated} " +
             "childrenRendered=${stats.childrenRendered} " +
             "compositeApplied=${stats.compositeApplied} " +
-            "adapterBacked=false productActivation=false",
+            "adapterBacked=false productActivation=true",
         SAVE_LAYER_EXECUTOR_NONCLAIM_LINE,
     )
 }

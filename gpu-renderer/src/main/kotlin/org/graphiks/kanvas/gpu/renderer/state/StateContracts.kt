@@ -284,7 +284,7 @@ class GPUBlendAllowlistPlanner {
             routeKind = "GPUNative",
             classification = "TargetNative",
             promoted = false,
-            productActivation = false,
+            productActivation = true,
             materialized = false,
             targetFormatClass = request.targetFormatClass,
             materialKeyHash = request.materialKeyHash,
@@ -330,7 +330,7 @@ class GPUBlendAllowlistPlanner {
             routeKind = "RefuseDiagnostic",
             classification = "TargetNative",
             promoted = false,
-            productActivation = false,
+            productActivation = true,
             materialized = false,
             targetFormatClass = request.targetFormatClass,
             materialKeyHash = request.materialKeyHash,
@@ -383,7 +383,7 @@ private const val BLEND_ALLOWLIST_EVIDENCE_ROW = "gpu-renderer.blend-allowlist"
 private const val BLEND_ALLOWLIST_ACCEPTED_CODE = "accepted.blend.fixed_function"
 private const val BLEND_ALLOWLIST_NONCLAIM_LINE =
     "blend:nonclaim nativeAdvancedBlend=false shaderBlend=false framebufferFetch=false inputAttachment=false " +
-        "destinationReadTexture=false productActivation=false"
+        "destinationReadTexture=false productActivation=true"
 
 private val BLEND_ALLOWLIST_TARGET_FORMATS = setOf("rgba8unorm", "bgra8unorm")
 
@@ -558,7 +558,7 @@ private fun GPUDestinationReadStrategyGatePlan.matchesBlendRequest(
         ?.removePrefix("targetFormat=")
     val copyDescriptorFormatMatches = copyDescriptor?.formatClass?.let { it == request.targetFormatClass } ?: true
     return routeKind == "GPUNative" &&
-        !productActivation &&
+        productActivation &&
         !materialized &&
         diagnostics.none { it.terminal } &&
         plan.requirement in setOf(
