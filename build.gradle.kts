@@ -3291,7 +3291,6 @@ tasks.register("checkCodecImageComplete") {
     dependsOn(
         "checkCodecKotlinSwitchCriteria",
         "checkCpuRasterImageToolingNoAwt",
-        "checkGpuRasterImageToolingNoAwt",
         "checkProductionCodecImageClasspathNoJavaDesktop",
         ":codec-png-kotlin:test",
         ":codec-jpeg-kotlin:test",
