@@ -224,10 +224,10 @@ data class GPUDrawPayloadRef(
 /** Payload gathering contract. */
 interface GPUPayloadGatherer {
     /** Gathers one payload reference without uploading it. */
-    fun gather(plan: GPUPayloadGatherPlan, payload: GPUMaterialPayload): GPUDrawPayloadRef = TODO("Wire GPUPayloadGatherer to concrete payload packing")
+    fun gather(plan: GPUPayloadGatherPlan, payload: GPUMaterialPayload): GPUDrawPayloadRef
 
     /** Resets pass-local state for a payload scope. */
-    fun reset(scopeId: String): Unit = TODO("Wire GPUPayloadGatherer.reset to pass-local payload storage")
+    fun reset(scopeId: String)
 }
 
 /**
