@@ -1,0 +1,20 @@
+rendered custom-runtime-effect-valid-tile via WebGPU offscreen
+adapter=Apple M2 Max
+clearCommands=1
+fillRectCommands=0
+fillRRectCommands=0
+linearGradientRectCommands=0
+radialGradientRectCommands=0
+sweepGradientRectCommands=0
+clipCommands=0
+bitmapRectCommands=0
+blurRectCommands=0
+colorMatrixRectCommands=0
+strokeRectCommands=0
+textRunCommands=0
+saveLayerRectCommands=0
+pathFillStencilCommands=0
+pathFillGradientCommands=0
+convexFanMeshCommands=0
+customRuntimeEffectRectCommands=1
+custom-runtime-effect supports custom WGSL source per-tile via fullscreen raw uniform pass

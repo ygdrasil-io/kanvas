@@ -10,6 +10,7 @@ value class GPUCustomRuntimeEffectID(val value: String) {
     }
 
     companion object {
+        /** Generates a deterministic [GPUCustomRuntimeEffectID] from source, schema, and child slot hashes. */
         fun generate(source: String, schemaHash: String, childSlotHash: String): GPUCustomRuntimeEffectID {
             val input = "custom-runtime-effect-id-v1:$source:$schemaHash:$childSlotHash"
             val digest = MessageDigest.getInstance("SHA-256")
@@ -60,11 +61,12 @@ data class GPUCustomRuntimeEffectDescriptor(
 /** Validation error returned when custom WGSL registration fails. */
 data class GPUCustomRuntimeEffectValidationError(
     val code: String,
-    val message: String,
-)
+    override val message: String,
+) : RuntimeException(message)
 
 /** Registry for custom runtime effects, isolated from GPURuntimeEffectRegistry. */
 interface GPUCustomRuntimeEffectRegistry {
+    /** Registers a custom WGSL runtime effect with validation, security checks, and reflection. */
     fun registerCustomEffect(
         source: String,
         uniformSchema: GPURuntimeEffectUniformSchema,
@@ -72,9 +74,12 @@ interface GPUCustomRuntimeEffectRegistry {
         sourceProvenance: String,
     ): Result<GPUCustomRuntimeEffectID>
 
+    /** Returns the descriptor for [id], or null when not registered. */
     fun getDescriptor(id: GPUCustomRuntimeEffectID): GPUCustomRuntimeEffectDescriptor?
 
+    /** Removes the registered custom effect identified by [id]. */
     fun unregisterCustomEffect(id: GPUCustomRuntimeEffectID)
 
+    /** Returns true when a custom effect is registered for [id]. */
     fun isRegistered(id: GPUCustomRuntimeEffectID): Boolean
 }

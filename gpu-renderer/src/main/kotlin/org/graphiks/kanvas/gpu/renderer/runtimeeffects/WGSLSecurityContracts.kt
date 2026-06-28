@@ -32,6 +32,7 @@ data class WGSLDeviceCapabilities(
 /** Minimal stub for a wgsl4k-parsed module consumed by security validation. */
 data class WGSLParsedModule(
     val sourceHash: String,
+    val source: String = "",
     val uniforms: List<String> = emptyList(),
     val textures: List<String> = emptyList(),
     val bindGroups: List<String> = emptyList(),
@@ -58,6 +59,7 @@ data class WGSLParsedModule(
 class WGSLSecurityValidator(
     private val deviceCapabilities: WGSLDeviceCapabilities = WGSLDeviceCapabilities(),
 ) {
+    /** Validates [module] against blocked features, resource limits, device capabilities, and buffer/texture bounds. */
     fun validateSecurity(module: WGSLParsedModule): WGSLSecurityValidationReport {
         val errors = mutableListOf<WGSLSecurityError>()
         errors.addAll(checkBlockedFeatures(module))

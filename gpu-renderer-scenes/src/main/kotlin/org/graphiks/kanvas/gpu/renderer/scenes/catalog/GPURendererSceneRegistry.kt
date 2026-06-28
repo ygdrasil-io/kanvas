@@ -1496,6 +1496,55 @@ object GPURendererSceneRegistry {
         ),
         runtimeEffectUniformLadderScene,
         scene(
+            id = "custom-runtime-effect-valid-tile",
+            title = "Custom Runtime Effect Valid Tile",
+            description = "Registers a custom WGSL shader producing a solid color, renders a tile with it, and verifies GPU output.",
+            tags = setOf(SceneTag.RuntimeEffect, SceneTag.Rect),
+            links = listOf(SceneRoadmapLink.ticket("KGPU-M32-019")),
+            commands = listOf(
+                SceneCommand.Clear(SceneColor(0f, 0f, 0f, 1f)),
+                SceneCommand.CustomRuntimeEffectTile(
+                    label = "custom-solid-blue",
+                    rect = SceneRect(0f, 0f, 320f, 200f),
+                    wgslSource = """
+                        @group(0) @binding(0) var<uniform> u_color: vec4<f32>;
+                        @fragment
+                        fn main() -> @location(0) vec4<f32> {
+                            return u_color;
+                        }
+                    """.trimIndent(),
+                    uniformSchema = "u_color:vec4<f32>@0:16",
+                ),
+            ),
+        ),
+        GPURendererScene(
+            sceneId = SceneId("custom-runtime-effect-unregistered-refusal"),
+            title = "Custom Runtime Effect Unregistered Refusal",
+            description = "Attempts to execute a custom effect that was never registered. Must refuse with stable diagnostics.",
+            dimensions = SceneDimensions(320, 200),
+            tags = setOf(SceneTag.RuntimeEffect, SceneTag.Rect),
+            roadmapLinks = listOf(SceneRoadmapLink.ticket("KGPU-M32-019")),
+            expectation = SceneExpectation.ShouldRefuse(
+                stableReasonCode = "unsupported.runtime_effect.custom_wgsl_not_registered",
+            ),
+            commands = listOf(
+                SceneCommand.Clear(SceneColor(0f, 0f, 0f, 1f)),
+                SceneCommand.CustomRuntimeEffectTile(
+                    label = "custom-unregistered-refused",
+                    rect = SceneRect(0f, 0f, 320f, 200f),
+                    wgslSource = """
+                        @group(0) @binding(0) var<uniform> u_color: vec4<f32>;
+                        @fragment
+                        fn main() -> @location(0) vec4<f32> {
+                            return u_color;
+                        }
+                    """.trimIndent(),
+                    uniformSchema = "u_color:vec4<f32>@0:16",
+                    customEffectId = null,
+                ),
+            ),
+        ),
+        scene(
             id = "blend-mode-strip",
             title = "Blend Mode Strip",
             description = "Rect strip reserved for future explicit blend coverage.",
