@@ -45,7 +45,7 @@ ticket per `GpuRendererLegacyRouteFamily` row. All are `status: review`.
 
 | Ticket | Status | familyId | decision | route_kind |
 |---|---|---|---|
-| KGPU-M32-010 | `review` | `material-paint` | port (SolidColor) / refuse (gradients + shader pipeline) | `GPUNative` |
+| KGPU-M32-010 | `done` | `material-paint` | port (SolidColor) / refuse (gradients + shader pipeline) | `GPUNative` |
 | KGPU-M32-011 | `review` | `solid-rect-drawpaint` | port | `GPUNative` |
 | KGPU-M32-012 | `review` | `rounded-rect-gradients` | port (solid uniform rrect) / refuse (gradients + non-uniform radii) | `GPUNative` |
 | KGPU-M32-013 | `review` | `rect-rrect-stroke` | refuse | `RefuseDiagnostic` |
