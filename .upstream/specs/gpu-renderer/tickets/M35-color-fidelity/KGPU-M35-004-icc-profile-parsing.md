@@ -52,7 +52,9 @@ Without this, tagged images with embedded ICC profiles cannot be color-managed.
 
 ## Graphite Algorithm References
 
-- `GFX-ICC-PARSE` from `GRAPHITE-ALGORITHM-REFERENCES.md` — GPU-side ICC profile parsing patterns. Algorithm reference only.
+- [`GFX-PAINTPARAMS-TO-KEY`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-paintparams-to-key) - source [PaintParams.cpp:222](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/PaintParams.cpp:222); Lower paint color, image shader, primitive color, color filters, and final blend into key blocks while producing destination-usage metadata.
+- [`GFX-RENDERSTEP-MODEL`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-renderstep-model) - source [Renderer.h:83](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/Renderer.h:83); Decompose one high-level renderer into ordered RenderSteps that can be batched across draws.
+- Boundary: Graphite is a working-algorithm reference only; do not port Graphite or Ganesh, and keep Kanvas WebGPU/WGSL acceptance criteria authoritative.
 
 ## Design Sketch
 

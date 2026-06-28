@@ -51,7 +51,10 @@ tone-mapped to SDR fallback surfaces.
 
 ## Graphite Algorithm References
 
-- `GFX-COLOR-TRANSFER` from `GRAPHITE-ALGORITHM-REFERENCES.md` — GPU-side color transfer application patterns. Algorithm reference only.
+- [`GFX-GRADIENT-STOPS`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-gradient-stops) - source [KeyHelpers.cpp:166](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/KeyHelpers.cpp:166); Pack gradient stops into uniforms, move larger stop tables into storage buffers or textures, and carry tile mode/color-space interpolation metadata.
+- [`GFX-PAINTPARAMS-TO-KEY`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-paintparams-to-key) - source [PaintParams.cpp:222](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/PaintParams.cpp:222); Lower paint color, image shader, primitive color, color filters, and final blend into key blocks while producing destination-usage metadata.
+- [`GFX-BLEND-KEYING`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-blend-keying) - source [KeyHelpers.cpp:2593](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/KeyHelpers.cpp:2593); Reduce coefficient blends to constants, group HSL advanced blends into a shared snippet.
+- Boundary: Graphite is a working-algorithm reference only; do not port Graphite or Ganesh, and keep Kanvas WebGPU/WGSL acceptance criteria authoritative.
 
 ## Design Sketch
 

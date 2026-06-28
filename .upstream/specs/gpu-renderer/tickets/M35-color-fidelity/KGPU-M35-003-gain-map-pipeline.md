@@ -50,7 +50,9 @@ the adaptive HDR/SDR rendering capability.
 
 ## Graphite Algorithm References
 
-- `GFX-GAINMAP` from `GRAPHITE-ALGORITHM-REFERENCES.md` — GPU-side gain map application patterns. Algorithm reference only.
+- [`GFX-TEXTURE-UPLOAD-ROOT`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-texture-upload-root) - source [TextureUtils.cpp:251](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/TextureUtils.cpp:251); Create a texture proxy view, compute mip levels and swizzles, build an upload source, and record a root upload task.
+- [`GFX-IMAGE-SAMPLER-KEY`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-image-sampler-key) - source [KeyHelpers.cpp:530](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/KeyHelpers.cpp:530); Select image shader variants for HW/cubic/clamp/manual tiling, add texture/sampler bindings, and embed immutable sampler data.
+- Boundary: Graphite is a working-algorithm reference only; do not port Graphite or Ganesh, and keep Kanvas WebGPU/WGSL acceptance criteria authoritative.
 
 ## Design Sketch
 
