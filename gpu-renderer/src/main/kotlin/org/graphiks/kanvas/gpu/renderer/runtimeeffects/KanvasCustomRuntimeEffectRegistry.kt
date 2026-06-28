@@ -57,9 +57,14 @@ class KanvasCustomRuntimeEffectRegistry(
             validationReportHash = validationReportHash,
         )
 
+        val resourceLabels = buildList<String> {
+            for (g in 0 until reflection.bindGroupCount) {
+                add("group$g.binding0.uniformBuffer")
+            }
+        }
         val resources = GPURuntimeEffectResourcePlan(
-            resourceLabels = listOf("group0.binding0.uniformBuffer"),
-            bindingPlanHash = "binding:custom:${id.value}",
+            resourceLabels = resourceLabels.ifEmpty { listOf("group0.binding0.uniformBuffer") },
+            bindingPlanHash = "binding:custom:${id.value}:groups=${reflection.bindGroupCount}:uniforms=${reflection.uniformCount}",
         )
 
         val descriptor = GPUCustomRuntimeEffectDescriptor(
@@ -91,16 +96,12 @@ class KanvasCustomRuntimeEffectRegistry(
     override fun isRegistered(id: GPUCustomRuntimeEffectID): Boolean = descriptors.containsKey(id)
 }
 
-/** Stub for wgsl4k WGSL parser/validator consumed by KanvasCustomRuntimeEffectRegistry. */
 interface WGSLValidator {
-    fun parse(source: String): WGSLParsedModule =
-        TODO("Wire WGSLValidator to wgsl4k parser")
+    fun parse(source: String): WGSLParsedModule
 }
 
-/** Stub for wgsl4k reflection provider consumed by KanvasCustomRuntimeEffectRegistry. */
 interface WGSLReflectionProvider {
-    fun reflect(module: WGSLParsedModule): WGSLReflectionResult =
-        TODO("Wire WGSLReflectionProvider to wgsl4k reflection")
+    fun reflect(module: WGSLParsedModule): WGSLReflectionResult
 }
 
 /** Stub for wgsl4k reflection result — hash-based placeholder until wgsl4k integration. */
