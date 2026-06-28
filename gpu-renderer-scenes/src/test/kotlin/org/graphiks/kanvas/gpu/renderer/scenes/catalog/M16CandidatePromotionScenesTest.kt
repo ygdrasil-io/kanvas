@@ -3,6 +3,7 @@ package org.graphiks.kanvas.gpu.renderer.scenes.catalog
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneCommand
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class M16CandidatePromotionScenesTest {
@@ -56,5 +57,29 @@ class M16CandidatePromotionScenesTest {
             fills.map { it.label },
         )
         assertEquals(listOf(1, 2, 3, 4, 5), fills.map { it.paintOrder })
+    }
+
+    @Test
+    fun `stroke rect outline candidate carries M16 metadata and render expectation`() {
+        val scene = strokeRectOutlineScene
+        assertEquals("stroke-rect-outline", scene.sceneId.value)
+        assertEquals("Stroke Rect Outline", scene.title)
+        assertEquals(setOf(SceneTag.Stroke), scene.tags)
+        assertEquals(listOf("M16"), scene.roadmapLinks.map { it.milestone })
+        assertEquals(SceneExpectation.ShouldRender, scene.expectation)
+        assertTrue(scene.description.contains("stroke", ignoreCase = true))
+        assertTrue(m16CandidatePromotionScenes.contains(scene))
+    }
+
+    @Test
+    fun `stroke rect outline uses a clear and a stroke command`() {
+        val scene = strokeRectOutlineScene
+        assertTrue(scene.commands[0] is SceneCommand.Clear)
+        val stroke = assertIs<SceneCommand.Stroke>(scene.commands[1])
+        assertEquals(2, scene.commands.size)
+        assertEquals("rect-outline", stroke.label)
+        assertEquals("bounded-rect-path", stroke.pathKind)
+        assertEquals(6f, stroke.strokeWidth)
+        assertEquals(1, stroke.paintOrder)
     }
 }

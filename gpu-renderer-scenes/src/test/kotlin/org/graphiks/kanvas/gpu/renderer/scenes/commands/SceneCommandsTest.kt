@@ -85,6 +85,11 @@ class SceneCommandsTest {
             ).family,
         )
         assertEquals("runtime-effect", SceneCommand.RuntimeEffectTile("simple-rt").family)
+        assertEquals("path-fill-gradient", SceneCommand.PathFillGradient(
+            "path-grad",
+            SceneColor.amber(),
+            SceneColor.green(),
+        ).family)
         assertEquals("vertices", SceneCommand.MeshRibbon("mesh").family)
     }
 
@@ -105,7 +110,7 @@ class SceneCommandsTest {
         assertEquals("simple-latin", command.shapingMode)
         assertEquals("font.glyph.outline-path", command.glyphRoute)
         assertEquals("webgpu.text.glyph-atlas.simple-latin", command.webGpuCandidateRoute)
-        assertEquals("unsupported.text.draw_run_route_unavailable", command.fallbackReason)
+        assertEquals("", command.fallbackReason)
         assertEquals(0, command.paintOrder)
     }
 
@@ -198,6 +203,7 @@ class SceneCommandsTest {
             )
         }
         assertFailsWith<IllegalArgumentException> { SceneCommand.RuntimeEffectTile("") }
+        assertFailsWith<IllegalArgumentException> { SceneCommand.PathFillGradient(" ", SceneColor.red(), SceneColor.blue()) }
         assertFailsWith<IllegalArgumentException> { SceneCommand.MeshRibbon("\t") }
     }
 
@@ -426,6 +432,14 @@ class SceneCommandsTest {
                 bounds = SceneRect(0f, 0f, 8f, 8f),
                 startColor = SceneColor.blue(),
                 endColor = SceneColor.amber(),
+                paintOrder = -1,
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            SceneCommand.PathFillGradient(
+                "path-grad",
+                SceneColor.red(),
+                SceneColor.blue(),
                 paintOrder = -1,
             )
         }

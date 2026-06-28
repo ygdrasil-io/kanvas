@@ -39,6 +39,9 @@ internal fun NormalizedDrawCommand.strokeRefusalReasonOrNull(): String? {
         is NormalizedDrawCommand.FillRRect -> stroke
         is NormalizedDrawCommand.FillPath -> stroke
         is NormalizedDrawCommand.DrawTextRun -> false
+        is NormalizedDrawCommand.DrawImageRect -> false
+        is NormalizedDrawCommand.DrawLayer -> false
+        is NormalizedDrawCommand.ApplyFilter -> false
     }
     return if (stroke) "unsupported_stroke" else null
 }
@@ -227,6 +230,9 @@ class Surface(
                             is NormalizedDrawCommand.FillRRect -> dispatchFillRRect(cmd, dispatched, diagnostics)
                             is NormalizedDrawCommand.FillPath -> dispatchFillPath(cmd, dispatched, diagnostics)
                             is NormalizedDrawCommand.DrawTextRun -> dispatchDrawTextRun(cmd, dispatched, diagnostics)
+                            is NormalizedDrawCommand.DrawImageRect -> diagnostics.add("unsupported_draw_kind:DrawImageRect")
+                            is NormalizedDrawCommand.DrawLayer -> diagnostics.add("unsupported_draw_kind:DrawLayer")
+                            is NormalizedDrawCommand.ApplyFilter -> diagnostics.add("unsupported_draw_kind:ApplyFilter")
                         }
                     }
                 }

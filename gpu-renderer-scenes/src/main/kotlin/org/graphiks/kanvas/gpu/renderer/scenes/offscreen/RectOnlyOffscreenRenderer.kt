@@ -119,6 +119,7 @@ class RectOnlyOffscreenRenderer {
                     textRunRectCount = drawPlan.textRunCount,
                     saveLayerRectCount = drawPlan.saveLayerRectCount,
                     pathFillStencilCount = drawPlan.pathFillStencilCount,
+                    pathFillGradientCount = drawPlan.pathFillGradientCount,
                     convexFanMeshCount = drawPlan.convexFanMeshCount,
                     filters = drawPlan.filters,
                     saveLayers = drawPlan.saveLayers,
@@ -256,6 +257,7 @@ class RectOnlyOffscreenRenderer {
                 it.family !in effectFamilies &&
                     it.family != "vertices" &&
                     it.family != "path-fill-stencil" &&
+                    it.family != "path-fill-gradient" &&
                     it.family != "convex-fan-mesh" &&
                     it.label !in saveLayerChildLabels
             }
@@ -506,6 +508,54 @@ class RectOnlyOffscreenRenderer {
                         draws = listOf(
                             GPUBackendRawUniformDraw(
                                 uniformBytes = UniformPacker.solidColorBytes(fill.startColor),
+                                scissorX = fill.scissorX,
+                                scissorY = fill.scissorY,
+                                scissorWidth = fill.scissorWidth,
+                                scissorHeight = fill.scissorHeight,
+                            ),
+                        ),
+                    )
+                }
+            }
+
+            val gradientStencilFills = drawPlan.fills.filter { it.family == "path-fill-gradient" }
+            if (gradientStencilFills.isNotEmpty()) {
+                val gradientWgsl = composeGradientWgsl(
+                    LinearGradientWgsl, LinearGradientEntryPoint,
+                    "struct Uniforms { start: vec4f, end: vec4f, startColor: vec4f, endColor: vec4f };",
+                    "uniforms.start.xy, uniforms.end.xy",
+                )
+                gradientStencilFills.forEach { fill ->
+                    val starVertices = generateStarVertices(160f, 100f, 80f, 35f, 5)
+                    val pathData = makeLineLoopPath(starVertices)
+                    val tessellator = PathTessellator()
+                    val flat = tessellator.flatten(pathData)
+                    val tri = tessellator.triangulate(flat)
+                    val triangleVertices = tri.vertices.flatMap { p -> listOf(p.x, p.y) }.toFloatArray()
+                    val triangleIndices = tri.indices.toIntArray()
+                    val triangleData = GPUBackendTriangleData(
+                        vertices = triangleVertices,
+                        indices = triangleIndices,
+                    )
+                    drawFullscreenStencilPass(
+                        wgsl = STENCIL_RENDER_WGSL,
+                        colorFormat = OFFSCREEN_COLOR_FORMAT,
+                        stencilMode = GPUBackendStencilMode.Write,
+                        triangleData = triangleData,
+                        draws = emptyList(),
+                    )
+                    drawFullscreenStencilPass(
+                        wgsl = gradientWgsl,
+                        colorFormat = OFFSCREEN_COLOR_FORMAT,
+                        stencilMode = GPUBackendStencilMode.Test,
+                        triangleData = null,
+                        draws = listOf(
+                            GPUBackendRawUniformDraw(
+                                uniformBytes = UniformPacker.linearGradientBytes(
+                                    startX = fill.left, startY = fill.top,
+                                    endX = fill.right, endY = fill.bottom,
+                                    startColor = fill.startColor, endColor = fill.endColor,
+                                ),
                                 scissorX = fill.scissorX,
                                 scissorY = fill.scissorY,
                                 scissorWidth = fill.scissorWidth,
@@ -848,6 +898,7 @@ internal data class RectOnlyDrawPlan(
     val textRunCount: Int = fills.count { it.family == "text-run" }
     val saveLayerRectCount: Int = fills.count { it.family == "save-layer" }
     val pathFillStencilCount: Int = fills.count { it.family == "path-fill-stencil" }
+    val pathFillGradientCount: Int = fills.count { it.family == "path-fill-gradient" }
     val convexFanMeshCount: Int = fills.count { it.family == "convex-fan-mesh" }
     val filterNodeCount: Int = filters.size
     val runtimeEffects: List<RectOnlyRuntimeEffectTile> = fills
@@ -981,10 +1032,12 @@ internal fun prepareRectOnlyDrawPlan(
                 is SceneCommand.Clip -> activeClip = command
                 is SceneCommand.FillRect -> add(RectOnlyIndexedDraw(index, command, activeClip))
                 is SceneCommand.FillRRect -> add(RectOnlyIndexedDraw(index, command, activeClip))
+                is SceneCommand.Stroke -> add(RectOnlyIndexedDraw(index, command, activeClip))
                 is SceneCommand.LinearGradientRect -> add(RectOnlyIndexedDraw(index, command, activeClip))
                 is SceneCommand.RadialGradientRect -> add(RectOnlyIndexedDraw(index, command, activeClip))
                 is SceneCommand.SweepGradientRect -> add(RectOnlyIndexedDraw(index, command, activeClip))
                 is SceneCommand.PathFillStencil -> add(RectOnlyIndexedDraw(index, command, activeClip))
+                is SceneCommand.PathFillGradient -> add(RectOnlyIndexedDraw(index, command, activeClip))
                 is SceneCommand.ConvexFanMesh -> add(RectOnlyIndexedDraw(index, command, activeClip))
                 is SceneCommand.BitmapRect -> add(RectOnlyIndexedDraw(index, command, activeClip))
                 is SceneCommand.SaveLayer -> add(RectOnlyIndexedDraw(index, command, activeClip))
@@ -1012,8 +1065,12 @@ internal fun prepareRectOnlyDrawPlan(
             val meshRibbonCommand = command as? SceneCommand.MeshRibbon
             val paintOrder = command.paintOrder()
             val mappedFamily = when {
+                command is SceneCommand.Stroke -> "stroke-rect"
                 sceneId == "blur-radius-ladder" && command is SceneCommand.FillRect -> "blur-rect"
                 sceneId == "color-matrix-filter" && command is SceneCommand.FillRect -> "color-matrix-rect"
+                sceneId == "gaussian-blur-photo" && command is SceneCommand.FillRect -> "blur-rect"
+                sceneId == "color-matrix-tint" && command is SceneCommand.FillRect -> "color-matrix-rect"
+                sceneId == "stroke-and-filter-card" && command is SceneCommand.FillRect -> "blur-rect"
                 sceneId in setOf("stroke-cap-join", "dash-pattern-ladder") && command is SceneCommand.FillRect -> "stroke-rect"
                 else -> command.family
             }
@@ -1077,6 +1134,28 @@ internal fun prepareRectOnlyDrawPlan(
                         addAll(executor.stencilStateDiagnostics())
                     } catch (e: Exception) {
                         add("pathFillStencil:error=${e.message}")
+                    }
+                }
+                is SceneCommand.PathFillGradient -> {
+                    val tessellator = PathTessellator()
+                    val vertices = generateStarVertices(160f, 100f, 80f, 35f, 5)
+                    val pathData = makeLineLoopPath(vertices)
+                    try {
+                        val flat = tessellator.flatten(pathData)
+                        val tri = tessellator.triangulate(flat)
+                        val executor = StencilCoverExecutor()
+                        val stats = executor.execute(tri)
+                        val convex = isPathConvex(flat)
+                        add("pathFillGradient:label=${command.label}")
+                        add("pathFillGradient:vertices=${stats.vertexCount}")
+                        add("pathFillGradient:triangles=${stats.triangleCount}")
+                        add("pathFillGradient:isConvex=$convex")
+                        add("pathFillGradient:stencilPasses=${stats.stencilPassCount}")
+                        add("pathFillGradient:coverPasses=${stats.coverPassCount}")
+                        add("pathFillGradient:totalDraws=${stats.totalDrawCalls}")
+                        addAll(executor.stencilStateDiagnostics())
+                    } catch (e: Exception) {
+                        add("pathFillGradient:error=${e.message}")
                     }
                 }
                 is SceneCommand.ConvexFanMesh -> {
@@ -1398,11 +1477,13 @@ internal fun rectOnlyCommandSequenceUnsupportedReason(commands: List<SceneComman
                 command is SceneCommand.Clear ||
                 command is SceneCommand.FillRect ||
                 command is SceneCommand.FillRRect ||
+                command is SceneCommand.Stroke ||
         command is SceneCommand.LinearGradientRect ||
         command is SceneCommand.RadialGradientRect ||
         command is SceneCommand.SweepGradientRect ||
         command is SceneCommand.Clip ||
                 command is SceneCommand.PathFillStencil ||
+                command is SceneCommand.PathFillGradient ||
                 command is SceneCommand.ConvexFanMesh ||
                 command is SceneCommand.BitmapRect ||
                 command is SceneCommand.SaveLayer ||
@@ -1417,20 +1498,20 @@ internal fun rectOnlyCommandSequenceUnsupportedReason(commands: List<SceneComman
         }
         .distinct()
     if (unsupportedFamilies.isNotEmpty()) {
-        return "rect-only offscreen render supports only clear, fill-rect, fill-rrect, linear-gradient-rect, radial-gradient-rect, sweep-gradient-rect, clip, path-fill-stencil, convex-fan-mesh, bitmap-rect, save-layer, runtime-effect, mesh-ribbon, and text-run command families: " +
+        return "rect-only offscreen render supports only clear, fill-rect, fill-rrect, stroke, linear-gradient-rect, radial-gradient-rect, sweep-gradient-rect, clip, path-fill-stencil, path-fill-gradient, convex-fan-mesh, bitmap-rect, save-layer, runtime-effect, mesh-ribbon, and text-run command families: " +
             unsupportedFamilies.joinToString()
     }
 
     if (commands.none {
-                it is SceneCommand.FillRect || it is SceneCommand.FillRRect || it is SceneCommand.LinearGradientRect ||
-        it is SceneCommand.RadialGradientRect || it is SceneCommand.SweepGradientRect ||
-        it is SceneCommand.PathFillStencil || it is SceneCommand.ConvexFanMesh ||
+                it is SceneCommand.FillRect || it is SceneCommand.FillRRect || it is SceneCommand.Stroke ||
+        it is SceneCommand.LinearGradientRect || it is SceneCommand.RadialGradientRect || it is SceneCommand.SweepGradientRect ||
+        it is SceneCommand.PathFillStencil || it is SceneCommand.PathFillGradient || it is SceneCommand.ConvexFanMesh ||
                 it is SceneCommand.BitmapRect || it is SceneCommand.SaveLayer ||
                 it is SceneCommand.RuntimeEffectTile || it is SceneCommand.TextRun ||
                 it is SceneCommand.MeshRibbon
         }
     ) {
-        return "rect-only offscreen render requires at least one FillRect, FillRRect, LinearGradientRect, RadialGradientRect, SweepGradientRect, PathFillStencil, ConvexFanMesh, BitmapRect, SaveLayer, RuntimeEffectTile, MeshRibbon, or TextRun command"
+        return "rect-only offscreen render requires at least one FillRect, FillRRect, Stroke, LinearGradientRect, RadialGradientRect, SweepGradientRect, PathFillStencil, PathFillGradient, ConvexFanMesh, BitmapRect, SaveLayer, RuntimeEffectTile, MeshRibbon, or TextRun command"
     }
 
     val clearIndices = commands.withIndex()
@@ -1460,6 +1541,7 @@ internal fun rectOnlyRenderedDiagnostics(
     textRunRectCount: Int = 0,
     saveLayerRectCount: Int = 0,
     pathFillStencilCount: Int = 0,
+    pathFillGradientCount: Int = 0,
     convexFanMeshCount: Int = 0,
     filters: List<RectOnlyFilterNode> = emptyList(),
     saveLayers: List<RectOnlySaveLayer> = emptyList(),
@@ -1480,12 +1562,13 @@ internal fun rectOnlyRenderedDiagnostics(
             textRunRectCount +
             saveLayerRectCount +
             pathFillStencilCount +
+            pathFillGradientCount +
             convexFanMeshCount +
             saveLayers.size +
             runtimeEffects.size +
             meshRibbons.size > 0,
     ) {
-        "$sceneId rect-only diagnostics require at least one FillRect, FillRRect, LinearGradientRect, BitmapRect, BlurRect, ColorMatrixRect, StrokeRect, TextRun, SaveLayer, RuntimeEffectTile, MeshRibbon, PathFillStencil, or ConvexFanMesh command"
+        "$sceneId rect-only diagnostics require at least one FillRect, FillRRect, LinearGradientRect, BitmapRect, BlurRect, ColorMatrixRect, StrokeRect, TextRun, SaveLayer, RuntimeEffectTile, MeshRibbon, PathFillStencil, PathFillGradient, or ConvexFanMesh command"
     }
     return buildList {
         add("rendered $sceneId via WebGPU offscreen")
@@ -1504,6 +1587,7 @@ internal fun rectOnlyRenderedDiagnostics(
         add("textRunCommands=$textRunRectCount")
         add("saveLayerRectCommands=$saveLayerRectCount")
         add("pathFillStencilCommands=$pathFillStencilCount")
+        add("pathFillGradientCommands=$pathFillGradientCount")
         add("convexFanMeshCommands=$convexFanMeshCount")
         if (saveLayers.isNotEmpty()) {
             add("saveLayerCommands=${saveLayers.size}")
@@ -1549,6 +1633,7 @@ private fun SceneCommand.paintOrder(): Int =
     when (this) {
         is SceneCommand.FillRect -> paintOrder
         is SceneCommand.FillRRect -> paintOrder
+        is SceneCommand.Stroke -> paintOrder
         is SceneCommand.LinearGradientRect -> paintOrder
         is SceneCommand.RadialGradientRect -> paintOrder
         is SceneCommand.SweepGradientRect -> paintOrder
@@ -1557,6 +1642,7 @@ private fun SceneCommand.paintOrder(): Int =
         is SceneCommand.RuntimeEffectTile -> paintOrder
         is SceneCommand.MeshRibbon -> paintOrder
         is SceneCommand.PathFillStencil -> paintOrder
+        is SceneCommand.PathFillGradient -> paintOrder
         is SceneCommand.ConvexFanMesh -> paintOrder
         is SceneCommand.TextRun -> paintOrder
         else -> 0
@@ -1566,6 +1652,7 @@ private fun SceneCommand.shapeRect() =
     when (this) {
         is SceneCommand.FillRect -> rect
         is SceneCommand.FillRRect -> rect
+        is SceneCommand.Stroke -> rect
         is SceneCommand.LinearGradientRect -> rect
         is SceneCommand.RadialGradientRect -> rect
         is SceneCommand.SweepGradientRect -> rect
@@ -1574,6 +1661,7 @@ private fun SceneCommand.shapeRect() =
         is SceneCommand.RuntimeEffectTile -> fixtureRect()
         is SceneCommand.MeshRibbon -> fixtureBounds()
         is SceneCommand.PathFillStencil -> pathFillBoundingRect(pathKind)
+        is SceneCommand.PathFillGradient -> pathFillBoundingRect(pathKind)
         is SceneCommand.ConvexFanMesh -> convexFanBoundingRect(pathKind)
         is SceneCommand.TextRun -> textRunBoundingRect(this)
         else -> error("Unsupported shape command: $family")
@@ -1583,6 +1671,7 @@ private fun SceneCommand.shapeStartColor() =
     when (this) {
         is SceneCommand.FillRect -> color
         is SceneCommand.FillRRect -> color
+        is SceneCommand.Stroke -> strokeColor
         is SceneCommand.LinearGradientRect -> startColor
         is SceneCommand.RadialGradientRect -> startColor
         is SceneCommand.SweepGradientRect -> startColor
@@ -1591,6 +1680,7 @@ private fun SceneCommand.shapeStartColor() =
         is SceneCommand.RuntimeEffectTile -> fixtureUniformColor()
         is SceneCommand.MeshRibbon -> fixtureStartColor()
         is SceneCommand.PathFillStencil -> fillColor
+        is SceneCommand.PathFillGradient -> startColor
         is SceneCommand.ConvexFanMesh -> fillColor
         is SceneCommand.TextRun -> textColor()
         else -> error("Unsupported shape command: $family")
@@ -1606,6 +1696,7 @@ private fun SceneCommand.shapeEndColor() =
     when (this) {
         is SceneCommand.FillRect -> color
         is SceneCommand.FillRRect -> color
+        is SceneCommand.Stroke -> strokeColor
         is SceneCommand.LinearGradientRect -> endColor
         is SceneCommand.RadialGradientRect -> endColor
         is SceneCommand.SweepGradientRect -> endColor
@@ -1614,6 +1705,7 @@ private fun SceneCommand.shapeEndColor() =
         is SceneCommand.RuntimeEffectTile -> fixtureUniformColor()
         is SceneCommand.MeshRibbon -> fixtureEndColor()
         is SceneCommand.PathFillStencil -> fillColor
+        is SceneCommand.PathFillGradient -> endColor
         is SceneCommand.ConvexFanMesh -> fillColor
         is SceneCommand.TextRun -> textColor()
         else -> error("Unsupported shape command: $family")
@@ -1623,6 +1715,7 @@ private fun SceneCommand.shapeBottomLeftColor() =
     when (this) {
         is SceneCommand.FillRect -> color
         is SceneCommand.FillRRect -> color
+        is SceneCommand.Stroke -> strokeColor
         is SceneCommand.LinearGradientRect -> startColor
         is SceneCommand.RadialGradientRect -> startColor
         is SceneCommand.SweepGradientRect -> startColor
@@ -1631,6 +1724,7 @@ private fun SceneCommand.shapeBottomLeftColor() =
         is SceneCommand.RuntimeEffectTile -> fixtureUniformColor()
         is SceneCommand.MeshRibbon -> fixtureStartColor()
         is SceneCommand.PathFillStencil -> fillColor
+        is SceneCommand.PathFillGradient -> startColor
         is SceneCommand.ConvexFanMesh -> fillColor
         is SceneCommand.TextRun -> textColor()
         else -> error("Unsupported shape command: $family")
@@ -1640,6 +1734,7 @@ private fun SceneCommand.shapeBottomRightColor() =
     when (this) {
         is SceneCommand.FillRect -> color
         is SceneCommand.FillRRect -> color
+        is SceneCommand.Stroke -> strokeColor
         is SceneCommand.LinearGradientRect -> endColor
         is SceneCommand.RadialGradientRect -> endColor
         is SceneCommand.SweepGradientRect -> endColor
@@ -1648,6 +1743,7 @@ private fun SceneCommand.shapeBottomRightColor() =
         is SceneCommand.RuntimeEffectTile -> fixtureUniformColor()
         is SceneCommand.MeshRibbon -> fixtureEndColor()
         is SceneCommand.PathFillStencil -> fillColor
+        is SceneCommand.PathFillGradient -> endColor
         is SceneCommand.ConvexFanMesh -> fillColor
         is SceneCommand.TextRun -> textColor()
         else -> error("Unsupported shape command: $family")
@@ -1657,6 +1753,7 @@ private fun SceneCommand.shapeRadius(): Float =
     when (this) {
         is SceneCommand.FillRect -> 0f
         is SceneCommand.FillRRect -> radius
+        is SceneCommand.Stroke -> 0f
         is SceneCommand.LinearGradientRect -> 0f
         is SceneCommand.RadialGradientRect -> 0f
         is SceneCommand.SweepGradientRect -> 0f
@@ -1665,6 +1762,7 @@ private fun SceneCommand.shapeRadius(): Float =
         is SceneCommand.RuntimeEffectTile -> 0f
         is SceneCommand.MeshRibbon -> thickness * 0.5f
         is SceneCommand.PathFillStencil -> 0f
+        is SceneCommand.PathFillGradient -> 0f
         is SceneCommand.ConvexFanMesh -> 0f
         is SceneCommand.TextRun -> 0f
         else -> error("Unsupported shape command: $family")
@@ -1678,6 +1776,7 @@ private fun SceneCommand.shapePaintKind(): Float =
         is SceneCommand.RadialGradientRect -> 6f
         is SceneCommand.SweepGradientRect -> 7f
         is SceneCommand.PathFillStencil -> 8f
+        is SceneCommand.PathFillGradient -> 11f
         is SceneCommand.ConvexFanMesh -> 9f
         is SceneCommand.BitmapRect -> when (sampling) {
             SceneBitmapSampling.Nearest -> 2f
@@ -1691,6 +1790,8 @@ private fun SceneFilterKind.filterPaintKind(): Float =
     when (this) {
         SceneFilterKind.LumaTint -> 1f
         SceneFilterKind.DropShadow -> 0f
+        SceneFilterKind.GaussianBlur -> 2f
+        SceneFilterKind.ColorMatrix -> 3f
     }
 
 private fun SceneCommand.BitmapRect.fixtureRect(): SceneRect =
@@ -1856,6 +1957,12 @@ private fun SceneCommand.TextRun.textRunBoundingRect(cmd: SceneCommand.TextRun):
 }
 
 private fun SceneCommand.PathFillStencil.pathFillBoundingRect(pathKind: String): SceneRect =
+    when (pathKind) {
+        "non-convex-star" -> boundingRect(generateStarVertices(160f, 100f, 80f, 35f, 5))
+        else -> SceneRect(60f, 20f, 260f, 180f)
+    }
+
+private fun SceneCommand.PathFillGradient.pathFillBoundingRect(pathKind: String): SceneRect =
     when (pathKind) {
         "non-convex-star" -> boundingRect(generateStarVertices(160f, 100f, 80f, 35f, 5))
         else -> SceneRect(60f, 20f, 260f, 180f)

@@ -210,7 +210,7 @@ class RenderGpuRendererSceneOffscreenMainTest {
             )
         }
 
-        assertContains(failure.message ?: "", "supports only clear, fill-rect, fill-rrect, linear-gradient-rect, radial-gradient-rect, sweep-gradient-rect, clip, path-fill-stencil, convex-fan-mesh, bitmap-rect, save-layer, runtime-effect, mesh-ribbon, and text-run command families")
+        assertContains(failure.message ?: "", "supports only clear, fill-rect, fill-rrect, stroke, linear-gradient-rect, radial-gradient-rect, sweep-gradient-rect, clip, path-fill-stencil, path-fill-gradient, convex-fan-mesh, bitmap-rect, save-layer, runtime-effect, mesh-ribbon, and text-run command families")
         assertContains(failure.message ?: "", "filter-node")
     }
 
@@ -549,8 +549,8 @@ class RenderGpuRendererSceneOffscreenMainTest {
         assertContains(runJson, "\"status\": \"${OffscreenRunStatus.NotYetRendered.wireName}\"")
         assertContains(runJson, "\"productRefusal\": false")
         assertContains(runJson, "\"imagePath\": null")
-        assertContains(runJson, "supports only clear, fill-rect, fill-rrect, linear-gradient-rect, radial-gradient-rect, sweep-gradient-rect, clip, path-fill-stencil, convex-fan-mesh, bitmap-rect, save-layer, runtime-effect, mesh-ribbon, and text-run command families")
-        assertContains(diagnostics, "supports only clear, fill-rect, fill-rrect, linear-gradient-rect, radial-gradient-rect, sweep-gradient-rect, clip, path-fill-stencil, convex-fan-mesh, bitmap-rect, save-layer, runtime-effect, mesh-ribbon, and text-run command families")
+        assertContains(runJson, "supports only clear, fill-rect, fill-rrect, stroke, linear-gradient-rect, radial-gradient-rect, sweep-gradient-rect, clip, path-fill-stencil, path-fill-gradient, convex-fan-mesh, bitmap-rect, save-layer, runtime-effect, mesh-ribbon, and text-run command families")
+        assertContains(diagnostics, "supports only clear, fill-rect, fill-rrect, stroke, linear-gradient-rect, radial-gradient-rect, sweep-gradient-rect, clip, path-fill-stencil, path-fill-gradient, convex-fan-mesh, bitmap-rect, save-layer, runtime-effect, mesh-ribbon, and text-run command families")
         unsupportedFamilies.forEach { family ->
             assertContains(runJson, family, ignoreCase = false, message = sceneId)
             assertContains(diagnostics, family, ignoreCase = false, message = sceneId)

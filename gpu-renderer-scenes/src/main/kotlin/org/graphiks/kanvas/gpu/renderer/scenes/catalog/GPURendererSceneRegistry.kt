@@ -2106,12 +2106,16 @@ object GPURendererSceneRegistry {
         dstReadStrategyScene,
         blurRadiusLadderScene,
         colorMatrixFilterScene,
+        gaussianBlurPhotoScene,
+        colorMatrixTintScene,
+        strokeAndFilterCardScene,
         glyphAtlasStripScene,
         sdfGlyphScaleScene,
         runtimeEffectUniformScene,
         runtimeEffectChildScene,
     ) + m16CandidatePromotionScenes + m17CandidatePromotionScenes +
-        m22CandidatePromotionScenes + m23CandidatePromotionScenes
+        m22CandidatePromotionScenes + m23CandidatePromotionScenes +
+        listOf(pathStarGradientScene, textA8HelloScene, gradientPathAndTextScene)
 
     val registry: SceneRegistry<SceneCommand> = SceneRegistry(scenes)
 
