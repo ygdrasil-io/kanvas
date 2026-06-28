@@ -243,4 +243,53 @@ class CustomRuntimeEffectRegistryTest {
         assertTrue(execResult.dumpLines().isNotEmpty())
         assertTrue(execResult.dumpLines().any { it.contains("custom") })
     }
+
+    @Test
+    fun `GPURuntimeEffectDispatch routes custom IDs to custom executor`() {
+        val registry = customRegistry()
+        val schema = GPURuntimeEffectUniformSchema(
+            schemaHash = "schema:test:v1",
+            fields = listOf("u_color:vec4<f32>@0:16"),
+            packingPolicy = "std140",
+        )
+        val regResult = registry.registerCustomEffect(validWGSLSource(), schema, emptyList(), "test-fixture")
+        val id = regResult.getOrThrow()
+        val customExecutor = GPUCustomRuntimeEffectExecutor(registry)
+        val dispatch = GPURuntimeEffectDispatch(customExecutor = customExecutor)
+
+        val result = dispatch.dispatch(id.value)
+        assertEquals("accepted", result.outcome)
+        assertEquals(id.value, result.descriptorId)
+    }
+
+    @Test
+    fun `GPURuntimeEffectDispatch refuses unknown effect ID`() {
+        val dispatch = GPURuntimeEffectDispatch(
+            customExecutor = GPUCustomRuntimeEffectExecutor(customRegistry()),
+        )
+
+        val result = dispatch.dispatch("unknown.blah")
+        assertEquals("refused", result.outcome)
+        assertTrue(result.reason.contains("unknown"))
+    }
+
+    @Test
+    fun `GPURuntimeEffectDispatch custom result produces dump lines`() {
+        val registry = customRegistry()
+        val schema = GPURuntimeEffectUniformSchema(
+            schemaHash = "schema:test:v1",
+            fields = listOf("u_color:vec4<f32>@0:16"),
+            packingPolicy = "std140",
+        )
+        val regResult = registry.registerCustomEffect(validWGSLSource(), schema, emptyList(), "test-fixture")
+        val id = regResult.getOrThrow()
+        val dispatch = GPURuntimeEffectDispatch(
+            customExecutor = GPUCustomRuntimeEffectExecutor(registry),
+        )
+
+        val result = dispatch.dispatch(id.value)
+        val lines = result.dumpLines()
+        assertTrue(lines.isNotEmpty())
+        assertTrue(lines.any { it.contains("custom") })
+    }
 }
