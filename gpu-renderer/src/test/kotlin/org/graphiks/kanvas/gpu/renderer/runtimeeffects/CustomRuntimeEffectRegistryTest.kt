@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.runtimeeffects
 
 import kotlin.test.Test
+import kotlin.test.assertFailsWith
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
@@ -103,6 +104,19 @@ class CustomRuntimeEffectRegistryTest {
         securityValidator = WGSLSecurityValidator(),
         deviceCapabilities = WGSLDeviceCapabilities(),
     )
+
+    @Test
+    fun `WGSLReflectionProvider falls back to fixture when source is blank`() {
+        val provider = KanvasWGSLReflectionProvider()
+        val module = WGSLParsedModule(
+            sourceHash = "sha256:blank",
+            source = "",
+        )
+        val result = provider.reflect(module)
+        assertNotNull(result)
+        // Blank source triggers fixture fallback — hash starts with "fixture:"
+        assertTrue(result.moduleHash.startsWith("fixture:"))
+    }
 
     @Test
     fun `registerCustomEffect succeeds for valid WGSL`() {
@@ -291,5 +305,23 @@ class CustomRuntimeEffectRegistryTest {
         val lines = result.dumpLines()
         assertTrue(lines.isNotEmpty())
         assertTrue(lines.any { it.contains("custom") })
+    }
+
+    @Test
+    fun `dispatchRegistered throws when registered executor is not provided`() {
+        val dispatch = GPURuntimeEffectDispatch(
+            customExecutor = GPUCustomRuntimeEffectExecutor(customRegistry()),
+        )
+        assertFailsWith<IllegalArgumentException> {
+            dispatch.dispatchRegistered(
+                SimpleRTDescriptor.createExecutionRequest(),
+                org.graphiks.kanvas.gpu.renderer.resources.GPUTargetPreparationContext(
+                    targetId = "test",
+                    frameId = "frame",
+                    deviceGeneration = 1L,
+                    budgetClass = "test",
+                ),
+            )
+        }
     }
 }

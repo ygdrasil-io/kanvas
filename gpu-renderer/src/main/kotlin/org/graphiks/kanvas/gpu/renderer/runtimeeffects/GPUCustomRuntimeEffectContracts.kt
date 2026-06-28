@@ -65,7 +65,6 @@ data class GPUCustomRuntimeEffectValidationError(
 ) : RuntimeException(message)
 
 /** Registry for custom runtime effects, isolated from GPURuntimeEffectRegistry. */
-/** Registry for custom runtime effects, isolated from GPURuntimeEffectRegistry. */
 interface GPUCustomRuntimeEffectRegistry {
     /** Registers a custom WGSL runtime effect with validation, security checks, and reflection. */
     fun registerCustomEffect(

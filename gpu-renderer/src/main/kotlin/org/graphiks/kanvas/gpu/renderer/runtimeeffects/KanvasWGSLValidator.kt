@@ -5,7 +5,6 @@ import org.graphiks.wgsl.ir.StorageClass
 import org.graphiks.wgsl.ir.TypeInner
 import org.graphiks.wgsl.parser.Lowerer
 import org.graphiks.wgsl.parser.parseWgslResult
-import java.security.MessageDigest
 
 /** Validates WGSL source via the wgsl4k parser with fixture fallback when the library is unavailable. */
 class KanvasWGSLValidator : WGSLValidator {
@@ -21,7 +20,7 @@ class KanvasWGSLValidator : WGSLValidator {
     }
 
     private fun parserBackedParse(source: String): WGSLParsedModule {
-        val sourceHash = sha256(source)
+        val sourceHash = WGSLHashUtils.sha256(source)
 
         val parsed = parseWgslResult(source)
         val errors = parsed.errors.map { it.message }
@@ -94,7 +93,7 @@ class KanvasWGSLValidator : WGSLValidator {
 
     private fun fixtureBackedParse(source: String): WGSLParsedModule {
         return WGSLParsedModule(
-            sourceHash = sha256(source),
+            sourceHash = WGSLHashUtils.sha256(source),
             source = source,
             syntaxErrors = emptyList(),
             uniforms = emptyList(),
@@ -119,11 +118,5 @@ class KanvasWGSLValidator : WGSLValidator {
         )
     }
 
-    companion object {
-        private fun sha256(input: String): String =
-            MessageDigest.getInstance("SHA-256")
-                .digest(input.toByteArray(Charsets.UTF_8))
-                .joinToString("") { "%02x".format(it) }
-                .take(12)
-    }
+
 }

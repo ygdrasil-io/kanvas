@@ -1,7 +1,5 @@
 package org.graphiks.kanvas.gpu.renderer.runtimeeffects
 
-import java.security.MessageDigest
-
 /**
  * Concrete custom runtime-effect registry wired to wgsl4k validation and security checks.
  * Isolated from [KanvasRuntimeEffectRegistry]; does not share caches with registered effects.
@@ -9,7 +7,10 @@ import java.security.MessageDigest
 class KanvasCustomRuntimeEffectRegistry(
     private val wgslValidator: WGSLValidator,
     private val reflectionProvider: WGSLReflectionProvider,
+    /** Security validator wired to [WGSLSecurityContracts]; carries its own [WGSLDeviceCapabilities]. */
     private val securityValidator: WGSLSecurityValidator = WGSLSecurityValidator(),
+    /** Deferred: not yet consumed by registry-level checks; security validator owns capability gating. */
+    @Suppress("unused")
     private val deviceCapabilities: WGSLDeviceCapabilities = WGSLDeviceCapabilities(),
 ) : GPUCustomRuntimeEffectRegistry {
     private val descriptors: MutableMap<GPUCustomRuntimeEffectID, GPUCustomRuntimeEffectDescriptor> = mutableMapOf()
@@ -23,7 +24,7 @@ class KanvasCustomRuntimeEffectRegistry(
         val childSlotHash = childSlots.joinToString(",") { slot ->
             "${slot.slotName}:${slot.acceptedSourceKinds.sorted().joinToString("+")}"
         }
-        val id = GPUCustomRuntimeEffectID.generate(source, uniformSchema.schemaHash, sha256(childSlotHash))
+        val id = GPUCustomRuntimeEffectID.generate(source, uniformSchema.schemaHash, WGSLHashUtils.sha256(childSlotHash))
 
         val module = wgslValidator.parse(source)
         if (module.syntaxErrors.isNotEmpty()) {
@@ -46,7 +47,7 @@ class KanvasCustomRuntimeEffectRegistry(
         }
 
         val reflection = reflectionProvider.reflect(module)
-        val validationReportHash = sha256(
+        val validationReportHash = WGSLHashUtils.sha256(
             securityReport.errors.joinToString("|") { "${it.code}:${it.severity}" }
         )
         val wgslPlan = GPUCustomRuntimeEffectWGSLPlan(
@@ -81,12 +82,6 @@ class KanvasCustomRuntimeEffectRegistry(
         return Result.success(id)
     }
 
-    private fun sha256(input: String): String =
-        MessageDigest.getInstance("SHA-256")
-            .digest(input.toByteArray(Charsets.UTF_8))
-            .joinToString("") { "%02x".format(it) }
-            .take(12)
-
     override fun getDescriptor(id: GPUCustomRuntimeEffectID): GPUCustomRuntimeEffectDescriptor? = descriptors[id]
 
     override fun unregisterCustomEffect(id: GPUCustomRuntimeEffectID) {
@@ -112,7 +107,11 @@ interface WGSLReflectionProvider {
     fun reflect(module: WGSLParsedModule): WGSLReflectionResult
 }
 
-/** Stub for wgsl4k reflection result — hash-based placeholder until wgsl4k integration. */
+/** wgsl4k reflection result for a custom runtime-effect WGSL module.
+ *  Contains hash-based module identity, entry point name, and resource counts
+ *  derived from [WGSLReflectionProvider.reflect]. Fields are populated from
+ *  live wgsl4k [Lowerer]/[Layouter] output when available, or from fixture
+ *  defaults when wgsl4k is absent from the classpath. */
 data class WGSLReflectionResult(
     val moduleHash: String,
     val entryPoint: String,
