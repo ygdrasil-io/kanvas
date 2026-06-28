@@ -55,10 +55,10 @@ sources cannot participate in the GPU rendering pipeline.
 
 ## Graphite Algorithm References
 
-- `GFX-IMAGE-TEXTURE-UPLOAD` from `../GRAPHITE-ALGORITHM-REFERENCES.md` —
-  Study multi-plan texture upload paths and format conversion dispatch.
-- Boundary: references are for algorithm study only; do not port Graphite or
-  Ganesh and do not treat them as Kanvas acceptance criteria.
+- [`GFX-TEXTURE-UPLOAD-ROOT`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-texture-upload-root) - source [TextureUtils.cpp:251](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/TextureUtils.cpp:251); Create a texture proxy view, compute mip levels and swizzles, build an upload source, and record a root upload task.
+- [`GFX-DAWN-SAMPLER`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-dawn-sampler) - source [DawnSampler.cpp:52](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/dawn/DawnSampler.cpp:52); Translate tile modes to Dawn address modes, filter/mipmap options to sampler filters, and attach immutable YCbCr metadata when present.
+- [`GFX-SAMPLER-DESC`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-sampler-desc) - source [ResourceTypes.h:238](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/ResourceTypes.h:238); Bit-pack tile modes, filter mode, mipmap mode, immutable sampler info, and external format bits into a hashable sampler descriptor.
+- Boundary: Graphite is a working-algorithm reference only; do not port Graphite or Ganesh, and keep Kanvas WebGPU/WGSL acceptance criteria authoritative.
 
 ## Design Sketch
 

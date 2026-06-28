@@ -56,10 +56,10 @@ Promotion when:
 
 ## Graphite Algorithm References
 
-- `GFX-IMAGE-CONTEXT` from `../GRAPHITE-ALGORITHM-REFERENCES.md` — Study
-  codec-backed image context layout and decode task scheduling.
-- Boundary: references are for algorithm study only; do not port Graphite or
-  Ganesh and do not treat them as Kanvas acceptance criteria.
+- [`GFX-TEXTURE-UPLOAD-ROOT`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-texture-upload-root) - source [TextureUtils.cpp:251](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/TextureUtils.cpp:251); Create a texture proxy view, compute mip levels and swizzles, build an upload source, and record a root upload task before rendering tasks consume the texture.
+- [`GFX-IMAGE-COPY`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-image-copy) - source [Image_Graphite.cpp:90](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/Image_Graphite.cpp:90); Reject non-copyable sources, choose copy-as-draw if direct copy is unsupported, allocate a destination proxy, record a copy task.
+- [`GFX-UPLOAD-TASK`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-upload-task) - source [UploadTask.cpp:309](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/task/UploadTask.cpp:309); Instantiate upload targets during resource preparation, copy buffer-to-texture commands, crop replay-target uploads.
+- Boundary: Graphite is a working-algorithm reference only; do not port Graphite or Ganesh, and keep Kanvas WebGPU/WGSL acceptance criteria authoritative.
 
 ## Design Sketch
 

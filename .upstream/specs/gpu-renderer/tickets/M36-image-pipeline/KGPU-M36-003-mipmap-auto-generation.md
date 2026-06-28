@@ -54,10 +54,10 @@ without requiring pre-computed mip chains.
 
 ## Graphite Algorithm References
 
-- `GFX-TEXTURE-MIPMAP` from `../GRAPHITE-ALGORITHM-REFERENCES.md` — Study
-  mipmap level computation and blit-dispatch decisions.
-- Boundary: references are for algorithm study only; do not port Graphite or
-  Ganesh and do not treat them as Kanvas acceptance criteria.
+- [`GFX-MIPMAP-GENERATION`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-mipmap-generation) - source [TextureUtils.cpp:553](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/TextureUtils.cpp:553); Generate mipmaps by ping-ponging between scratch surfaces, copy each generated level into the target, and degrade sampling policy when required mipmaps are absent.
+- [`GFX-TEXTURE-UPLOAD-ROOT`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-texture-upload-root) - source [TextureUtils.cpp:251](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/TextureUtils.cpp:251); Create a texture proxy view, compute mip levels and swizzles, and record a root upload task.
+- [`GFX-IMAGE-SAMPLER-KEY`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-image-sampler-key) - source [KeyHelpers.cpp:530](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/KeyHelpers.cpp:530); Select image shader variants for HW/cubic/clamp/manual tiling, add texture/sampler bindings.
+- Boundary: Graphite is a working-algorithm reference only; do not port Graphite or Ganesh, and keep Kanvas WebGPU/WGSL acceptance criteria authoritative.
 
 ## Design Sketch
 

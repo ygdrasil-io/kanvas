@@ -55,10 +55,9 @@ use must be gated on approved profiles and documented sources of variation.
 
 ## Graphite Algorithm References
 
-- `GFX-IMAGE-CODEC-DISPATCH` from `../GRAPHITE-ALGORITHM-REFERENCES.md` —
-  Study codec dispatch tables and hardware/software fallback chains.
-- Boundary: references are for algorithm study only; do not port Graphite or
-  Ganesh and do not treat them as Kanvas acceptance criteria.
+- [`GFX-IMAGE-COPY`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-image-copy) - source [Image_Graphite.cpp:90](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/Image_Graphite.cpp:90); Reject non-copyable/non-texturable sources, choose copy-as-draw if direct copy is unsupported, allocate a destination proxy, record a copy task.
+- [`GFX-TEXTURE-UPLOAD-ROOT`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-texture-upload-root) - source [TextureUtils.cpp:251](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/TextureUtils.cpp:251); Create a texture proxy view, build an upload source, and record a root upload task before rendering tasks consume the texture.
+- Boundary: Graphite is a working-algorithm reference only; do not port Graphite or Ganesh, and keep Kanvas WebGPU/WGSL acceptance criteria authoritative.
 
 ## Design Sketch
 
