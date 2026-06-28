@@ -58,13 +58,10 @@ kind contracts.
 
 ## Graphite Algorithm References
 
-- `GFX-RUNTIMEEFFECT-BLENDER` — Study SkBlender with SkRuntimeEffect for
-  blend-mode extension patterns.
-- `GFX-RUNTIMEEFFECT-CLIPSHADER` — Study SkClipShader for coverage-from-shader
-  patterns.
-- `GFX-RUNTIMEEFFECT-COMPUTE` — Study graphite compute task patterns.
-- Boundary: references are for algorithm study only; do not port Graphite or
-  Ganesh and do not treat them as Kanvas acceptance criteria.
+- [`GFX-RUNTIME-EFFECT-KEY`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-runtime-effect-key) - source [KeyHelpers.cpp:1387](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/KeyHelpers.cpp:1387); Register or find a runtime-effect snippet, stash user-defined effects in a transient dictionary, gather transformed uniforms.
+- [`GFX-BLEND-KEYING`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-blend-keying) - source [KeyHelpers.cpp:2593](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/KeyHelpers.cpp:2593); Reduce coefficient blends to constants, group HSL advanced blends into a shared snippet, and leave other advanced modes as fixed blend snippets.
+- [`GFX-RENDERSTEP-MODEL`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-renderstep-model) - source [Renderer.h:83](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/Renderer.h:83); Decompose one high-level renderer into ordered RenderSteps that can be batched across draws if stencil and painter-order dependencies remain valid.
+- Boundary: Graphite is a working-algorithm reference only; do not port Graphite or Ganesh, and keep Kanvas WebGPU/WGSL acceptance criteria authoritative.
 
 ## Design Sketch
 

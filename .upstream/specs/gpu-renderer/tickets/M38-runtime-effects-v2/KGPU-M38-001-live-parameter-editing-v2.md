@@ -55,12 +55,10 @@ uniform buffer without tearing down or rebuilding the pipeline.
 
 ## Graphite Algorithm References
 
-- `GFX-RUNTIMEEFFECT-UNIFORM` — Study how SkRuntimeEffect uniform data is
-  copied into SkSL uniforms for parameter mutation patterns.
-- `GFX-RUNTIMEEFFECT-MAKE` — Study SkRuntimeEffect::makeShader with uniform
-  data for parameter binding and offset layout.
-- Boundary: references are for algorithm study only; do not port Graphite or
-  Ganesh and do not treat them as Kanvas acceptance criteria.
+- [`GFX-RUNTIME-EFFECT-KEY`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-runtime-effect-key) - source [KeyHelpers.cpp:1387](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/KeyHelpers.cpp:1387); Register or find a runtime-effect snippet, stash user-defined effects in a transient dictionary, gather transformed uniforms, and fall back to no-op when registration fails.
+- [`GFX-RUNTIME-EFFECT-PREAMBLE`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-runtime-effect-preamble) - source [ShaderCodeDictionary.cpp:638](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/ShaderCodeDictionary.cpp:638); Resolve known or transient runtime effects, convert their program through pipeline callbacks, and inject child sampling/color transform callbacks.
+- [`GFX-PAINT-KEY-TREE`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-paint-key-tree) - source [PaintParamsKey.cpp:88](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/PaintParamsKey.cpp:88); Decode snippet IDs into a shader node tree, carry embedded sampler data blocks, and validate serializable keys against known runtime-effect IDs.
+- Boundary: Graphite is a working-algorithm reference only; do not port Graphite or Ganesh, and keep Kanvas WebGPU/WGSL acceptance criteria authoritative.
 
 ## Design Sketch
 
