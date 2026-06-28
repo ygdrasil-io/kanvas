@@ -51,12 +51,9 @@ implement shaping, BiDi, or script detection itself.
 
 ## Graphite Algorithm References
 
-- `GFX-BIDI-RUN` from `../GRAPHITE-ALGORITHM-REFERENCES.md` — study BiDi run
-  ordering and per-run direction propagation.
-- `GFX-SHAPING-INTEGRATION` — study script complexity classification and
-  atlas budget impact.
-- Boundary: references are for algorithm study only; do not port Graphite or
-  Ganesh and do not treat them as Kanvas acceptance criteria.
+- [`GFX-SUBRUN-DATA`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-subrun-data) - source [SubRunData.h:24](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/geom/SubRunData.h:24); Carry a subspan of an atlas subrun, mask bounds, mask-to-device matrix, glyph range, SDF/LCD metadata, and renderer data as geometry.
+- [`GFX-DRAWLIST-RECORD`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-drawlist-record) - source [DrawList.cpp:21](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/DrawList.cpp:21); One high-level draw expands to one sort key per RenderStep; each key combines render step ID, paint ID, uniform data, and texture binding data.
+- Boundary: Graphite is a working-algorithm reference only; do not port Graphite or Ganesh, and keep Kanvas WebGPU/WGSL acceptance criteria authoritative.
 
 ## Design Sketch
 

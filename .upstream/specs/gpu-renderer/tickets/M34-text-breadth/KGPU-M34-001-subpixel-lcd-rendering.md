@@ -53,12 +53,10 @@ or emit a subpixel-aware WGSL render step.
 
 ## Graphite Algorithm References
 
-- `GFX-GLYPH-ATLAS` from `../GRAPHITE-ALGORITHM-REFERENCES.md` — study
-  subpixel atlas entry allocation and component mask layout.
-- `GFX-SUBPIXEL-RENDERSTEP` — study subpixel render step color modulation
-  and per-component alpha blending.
-- Boundary: references are for algorithm study only; do not port Graphite or
-  Ganesh and do not treat them as Kanvas acceptance criteria.
+- [`GFX-TEXT-ATLAS-CONFIG`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-text-atlas-config) - source [TextAtlasManager.cpp:47](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/text/TextAtlasManager.cpp:47); Derive atlas/plot dimensions from max texture size and glyph cache byte budget, and keep A8 atlas dimensions larger than ARGB/LCD dimensions.
+- [`GFX-SDF-TEXT-STEP`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-sdf-text-step) - source [SDFTextRenderStep.cpp:95](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/render/SDFTextRenderStep.cpp:95); Sample an indexed SDF atlas, carry luminance/gamma/pixel geometry parameters, bind atlas proxies with linear clamp sampling.
+- [`GFX-BITMAP-TEXT-STEP`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-bitmap-text-step) - source [BitmapTextRenderStep.cpp:59](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/render/BitmapTextRenderStep.cpp:59); Choose A8/LCD/color variants, append per-glyph instance data, bind up to four atlas textures.
+- Boundary: Graphite is a working-algorithm reference only; do not port Graphite or Ganesh, and keep Kanvas WebGPU/WGSL acceptance criteria authoritative.
 
 ## Design Sketch
 

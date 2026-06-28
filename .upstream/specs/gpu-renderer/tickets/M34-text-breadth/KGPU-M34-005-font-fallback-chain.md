@@ -51,12 +51,9 @@ fallback identity and emit stable diagnostics when the chain is exhausted.
 
 ## Graphite Algorithm References
 
-- `GFX-FALLBACK-SUBRUN` from `../GRAPHITE-ALGORITHM-REFERENCES.md` — study
-  subrun splitting by fallback identity and atlas page assignment.
-- `GFX-FALLBACK-EXHAUSTED` — study exhausted chain diagnostics and missing
-  glyph reporting.
-- Boundary: references are for algorithm study only; do not port Graphite or
-  Ganesh and do not treat them as Kanvas acceptance criteria.
+- [`GFX-SUBRUN-DATA`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-subrun-data) - source [SubRunData.h:24](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/geom/SubRunData.h:24); Carry a subspan of an atlas subrun, mask bounds, mask-to-device matrix, glyph range, SDF/LCD metadata, and renderer data as geometry.
+- [`GFX-TEXT-ATLAS-CONFIG`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-text-atlas-config) - source [TextAtlasManager.cpp:47](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/text/TextAtlasManager.cpp:47); Derive atlas/plot dimensions from max texture size and glyph cache byte budget.
+- Boundary: Graphite is a working-algorithm reference only; do not port Graphite or Ganesh, and keep Kanvas WebGPU/WGSL acceptance criteria authoritative.
 
 ## Design Sketch
 
