@@ -7,6 +7,7 @@ import org.graphiks.wgsl.parser.Lowerer
 import org.graphiks.wgsl.parser.parseWgslResult
 import java.security.MessageDigest
 
+/** Validates WGSL source via the wgsl4k parser with fixture fallback when the library is unavailable. */
 class KanvasWGSLValidator : WGSLValidator {
 
     override fun parse(source: String): WGSLParsedModule {

@@ -100,11 +100,15 @@ class KanvasCustomRuntimeEffectRegistry(
     }
 }
 
+/** Validates WGSL source and produces a parsed module carrying resource and feature information. */
 interface WGSLValidator {
+    /** Parses the WGSL [source] into a [WGSLParsedModule] with syntax errors and resource usage. */
     fun parse(source: String): WGSLParsedModule
 }
 
+/** Reflects on a parsed WGSL module to extract entry point, uniform/texture counts, and layout metadata. */
 interface WGSLReflectionProvider {
+    /** Reflects [module] into a [WGSLReflectionResult] carrying layout and entry point metadata. */
     fun reflect(module: WGSLParsedModule): WGSLReflectionResult
 }
 

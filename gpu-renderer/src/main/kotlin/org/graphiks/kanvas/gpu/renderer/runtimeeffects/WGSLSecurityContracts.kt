@@ -59,6 +59,7 @@ data class WGSLParsedModule(
 class WGSLSecurityValidator(
     private val deviceCapabilities: WGSLDeviceCapabilities = WGSLDeviceCapabilities(),
 ) {
+    /** Validates [module] against blocked features, resource limits, device capabilities, and buffer/texture bounds. */
     fun validateSecurity(module: WGSLParsedModule): WGSLSecurityValidationReport {
         val errors = mutableListOf<WGSLSecurityError>()
         errors.addAll(checkBlockedFeatures(module))

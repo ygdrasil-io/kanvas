@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.gpu.renderer.runtimeeffects
 
+/** Execution result from the custom runtime effect executor, carrying outcome and provenance fields. */
 data class GPUCustomRuntimeEffectExecutionResult(
     val descriptorId: String,
     val outcome: String,
@@ -9,6 +10,7 @@ data class GPUCustomRuntimeEffectExecutionResult(
     val moduleHash: String,
     val entryPoint: String,
 ) {
+    /** Emits diagnostic evidence lines for the execution result. */
     fun dumpLines(): List<String> {
         return listOf(
             "runtime-effect:custom descriptor=$descriptorId outcome=$outcome " +
@@ -19,9 +21,11 @@ data class GPUCustomRuntimeEffectExecutionResult(
     }
 }
 
+/** Executes a custom user-provided WGSL runtime effect gated by validation status. */
 class GPUCustomRuntimeEffectExecutor(
     private val registry: GPUCustomRuntimeEffectRegistry,
 ) {
+    /** Executes the effect identified by [id], returning refused outcome when unregistered or invalid. */
     fun execute(id: GPUCustomRuntimeEffectID): GPUCustomRuntimeEffectExecutionResult {
         val descriptor = registry.getDescriptor(id)
         if (descriptor == null) {

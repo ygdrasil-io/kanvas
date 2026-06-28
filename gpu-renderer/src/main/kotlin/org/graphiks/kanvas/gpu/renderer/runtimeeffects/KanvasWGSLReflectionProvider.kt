@@ -6,6 +6,7 @@ import org.graphiks.wgsl.parser.Lowerer
 import org.graphiks.wgsl.parser.parseWgslResult
 import java.security.MessageDigest
 
+/** Reflects on parsed WGSL via wgsl4k with fixture fallback, extracting entry point and resource counts. */
 class KanvasWGSLReflectionProvider : WGSLReflectionProvider {
 
     override fun reflect(module: WGSLParsedModule): WGSLReflectionResult {
