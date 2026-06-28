@@ -49,8 +49,10 @@ Large render targets produce unbounded intermediate memory and block-level paral
 
 ## Graphite Algorithm References
 
-- `GFX-TILE-DEFERRED-RENDERER` from `../GRAPHITE-ALGORITHM-REFERENCES.md` — study tile subdivision, binning strategy, and composite pass in Graphite.
-- Boundary: references are for algorithm study only; do not port Graphite or Ganesh and do not treat them as Kanvas acceptance criteria.
+- [`GFX-DRAWCONTEXT-FLUSH`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-drawcontext-flush) - source [DrawContext.cpp:213](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/DrawContext.cpp:213); Drain pending uploads, record compute path-atlas dispatches, derive pass bounds/MSAA/depth-stencil/destination-read strategy, then convert pending draws into an immutable DrawPass.
+- [`GFX-RENDERPASS-TASK`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-renderpass-task) - source [RenderPassTask.cpp:128](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/task/RenderPassTask.cpp:128); Instantiate targets, prepare draw passes, recycle scratch resources, allocate MSAA/depth-stencil attachments, and replay the render pass.
+- [`GFX-DRAW-ORDER`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-draw-order) - source [DrawOrder.h:52](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/DrawOrder.h:52); Encode compressed painter order, depth ordering, and disjoint stencil indices so batching can reorder compatible work without violating visible draw order.
+- Boundary: Graphite is a working-algorithm reference only; do not port Graphite or Ganesh, and keep Kanvas WebGPU/WGSL acceptance criteria authoritative.
 
 ## Design Sketch
 

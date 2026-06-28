@@ -48,8 +48,10 @@ Without occlusion culling, every opaque draw in view is submitted to the GPU reg
 
 ## Graphite Algorithm References
 
-- `GFX-HIZ-OCCLUSION-CULLER` from `../GRAPHITE-ALGORITHM-REFERENCES.md` — study pyramid construction, conservative depth test, and Z-prepass integration in Graphite.
-- Boundary: references are for algorithm study only; do not port Graphite or Ganesh and do not treat them as Kanvas acceptance criteria.
+- [`GFX-DRAW-ORDER`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-draw-order) - source [DrawOrder.h:52](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/DrawOrder.h:52); Encode compressed painter order, depth ordering, and disjoint stencil indices so batching can reorder compatible work without violating visible draw order.
+- [`GFX-DRAWLIST-SORT`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-drawlist-sort) - source [DrawList.cpp:90](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/DrawList.cpp:90); Sort compact keys, detect pipeline/uniform/texture/scissor state changes, flush the draw writer when state or barriers require it.
+- [`GFX-DRAWCONTEXT-RECORD`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-drawcontext-record) - source [DrawContext.cpp:155](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/DrawContext.cpp:155); Classify whether a draw needs a destination-read barrier or advanced-blend barrier before inserting it into the pending draw list.
+- Boundary: Graphite is a working-algorithm reference only; do not port Graphite or Ganesh, and keep Kanvas WebGPU/WGSL acceptance criteria authoritative.
 
 ## Design Sketch
 
