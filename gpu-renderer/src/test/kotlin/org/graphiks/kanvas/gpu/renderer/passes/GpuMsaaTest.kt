@@ -1,0 +1,181 @@
+package org.graphiks.kanvas.gpu.renderer.passes
+
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertIs
+import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
+
+class GpuMsaaTest {
+
+    private val adapter4x = GpuMsaaAdapterCapability(
+        adapterLabel = "adapter:wgpu4k:test-device",
+        maxSampleCount = 4,
+        supportsAlphaToCoverage = false,
+    )
+    private val adapter8x = GpuMsaaAdapterCapability(
+        adapterLabel = "adapter:wgpu4k:test-device-8x",
+        maxSampleCount = 8,
+        supportsAlphaToCoverage = true,
+    )
+
+    @Test
+    fun `4x MSAA resolve accepted with standard coverage`() {
+        val route = GpuMsaa.resolve4x(adapter4x)
+
+        val accepted = assertIs<GpuMsaaRoute.Accepted>(route)
+        assertEquals(4, accepted.sampleCount)
+        assertEquals(GpuMsaaCoverageMode.Standard, accepted.coverageMode)
+        assertEquals("adapter:wgpu4k:test-device", accepted.resolved.adapter.adapterLabel)
+        assertTrue(accepted.resolved.psnrEvidence == null)
+    }
+
+    @Test
+    fun `8x MSAA resolve accepted per adapter`() {
+        val route = GpuMsaa.resolve8x(adapter8x)
+
+        val accepted = assertIs<GpuMsaaRoute.Accepted>(route)
+        assertEquals(8, accepted.sampleCount)
+        assertEquals(GpuMsaaCoverageMode.Standard, accepted.coverageMode)
+        assertEquals("adapter:wgpu4k:test-device-8x", accepted.resolved.adapter.adapterLabel)
+    }
+
+    @Test
+    fun `alpha-to-coverage accepted when adapter supports it`() {
+        val route = GpuMsaa.resolve(
+            GpuMsaaRequest(
+                requestedSampleCount = 4,
+                coverageMode = GpuMsaaCoverageMode.AlphaToCoverage,
+                adapter = adapter8x,
+            )
+        )
+
+        val accepted = assertIs<GpuMsaaRoute.Accepted>(route)
+        assertEquals(4, accepted.sampleCount)
+        assertEquals(GpuMsaaCoverageMode.AlphaToCoverage, accepted.coverageMode)
+    }
+
+    @Test
+    fun `alpha-to-coverage refused when adapter does not support it`() {
+        val route = GpuMsaa.resolve(
+            GpuMsaaRequest(
+                requestedSampleCount = 4,
+                coverageMode = GpuMsaaCoverageMode.AlphaToCoverage,
+                adapter = adapter4x,
+            )
+        )
+
+        val refused = assertIs<GpuMsaaRoute.Refused>(route)
+        assertEquals("unsupported.msaa.alpha_to_coverage", refused.diagnostic.code)
+        assertEquals("msaa.resolve", refused.diagnostic.stage)
+        assertTrue(refused.diagnostic.terminal)
+    }
+
+    @Test
+    fun `refused when adapter capability insufficient for requested sample count`() {
+        val route = GpuMsaa.resolve8x(adapter4x)
+
+        val refused = assertIs<GpuMsaaRoute.Refused>(route)
+        assertEquals("unsupported.msaa.adapter_capability", refused.diagnostic.code)
+        assertTrue(refused.diagnostic.message.contains("maxSampleCount 4 < requested 8"))
+    }
+
+    @Test
+    fun `refused when no adapter capability evidence provided`() {
+        val route = GpuMsaa.resolve(
+            GpuMsaaRequest(
+                requestedSampleCount = 4,
+                coverageMode = GpuMsaaCoverageMode.Standard,
+                adapter = null,
+            )
+        )
+
+        val refused = assertIs<GpuMsaaRoute.Refused>(route)
+        assertEquals("unsupported.msaa.webgpu_missing_adapter", refused.diagnostic.code)
+    }
+
+    @Test
+    fun `PSNR evidence computed for 4x MSAA quality measurement`() {
+        val reference = FloatArray(64 * 64 * 4) { 0.5f }
+        val resolved = FloatArray(64 * 64 * 4) { index ->
+            0.5f + (index % 1000).toFloat() * 0.0001f
+        }
+
+        val route = GpuMsaa.resolve4x(
+            adapter = adapter4x,
+            referencePixels = reference,
+            resolvedPixels = resolved,
+        )
+
+        val accepted = assertIs<GpuMsaaRoute.Accepted>(route)
+        val psnr = accepted.resolved.psnrEvidence
+        assertNotNull(psnr)
+        assertEquals(4, psnr.sampleCount)
+        assertTrue(psnr.psnrDb > 0.0)
+        assertTrue(psnr.psnrDb.isFinite())
+        assertEquals("reference-4x", psnr.referenceLabel)
+    }
+
+    @Test
+    fun `8x resolve includes PSNR evidence when pixel arrays provided`() {
+        val reference = FloatArray(32 * 32 * 4) { 1.0f }
+        val resolved = FloatArray(32 * 32 * 4) { 1.0f }
+
+        val route = GpuMsaa.resolve8x(
+            adapter = adapter8x,
+            referencePixels = reference,
+            resolvedPixels = resolved,
+        )
+
+        val accepted = assertIs<GpuMsaaRoute.Accepted>(route)
+        val psnr = accepted.resolved.psnrEvidence
+        assertNotNull(psnr)
+        assertEquals(8, psnr.sampleCount)
+        assertTrue(psnr.psnrDb.isInfinite(), "identical pixels should yield infinite PSNR")
+    }
+
+    @Test
+    fun `dump lines expose stable evidence without backend objects`() {
+        val route = GpuMsaa.resolve4x(
+            adapter = adapter8x,
+            coverageMode = GpuMsaaCoverageMode.AlphaToCoverage,
+        )
+
+        val accepted = assertIs<GpuMsaaRoute.Accepted>(route)
+        val lines = accepted.dumpLines()
+
+        assertEquals(3, lines.size)
+        assertEquals(
+            "msaa.resolve sampleCount=4 coverageMode=AlphaToCoverage adapter=adapter:wgpu4k:test-device-8x " +
+                "maxSampleCount=8 alphaToCoverage=true route=accepted",
+            lines[0],
+        )
+        assertEquals(
+            "msaa.resolve.adapter label=adapter:wgpu4k:test-device-8x maxSamples=8 alphaToCoverage=true",
+            lines[1],
+        )
+        assertEquals(
+            "msaa.resolve.psnr sampleCount=4 psnrDb=none reference=none",
+            lines[2],
+        )
+    }
+
+    @Test
+    fun `dump lines for refused route contain diagnostic evidence`() {
+        val route = GpuMsaa.resolve8x(adapter4x)
+
+        val refused = assertIs<GpuMsaaRoute.Refused>(route)
+        val lines = refused.dumpLines()
+
+        assertEquals(2, lines.size)
+        assertEquals(
+            "msaa.resolve sampleCount=8 adapter=adapter:wgpu4k:test-device maxSampleCount=4 route=refused",
+            lines[0],
+        )
+        assertEquals(
+            "msaa.resolve.diagnostic code=unsupported.msaa.adapter_capability " +
+                "message=Adapter maxSampleCount 4 < requested 8 stage=msaa.resolve terminal=true",
+            lines[1],
+        )
+    }
+}
