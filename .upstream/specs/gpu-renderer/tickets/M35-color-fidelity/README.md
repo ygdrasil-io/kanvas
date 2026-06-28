@@ -1,5 +1,7 @@
 # M35 - Color Fidelity
 
+**Status:** active (2026-06-28) — Wave B Track 3
+
 ## Goal
 
 Promote HDR transfer functions, wide-gamut working spaces, gain map pipeline, and ICC profile parsing from TargetNative specs to accepted routes with evidence.

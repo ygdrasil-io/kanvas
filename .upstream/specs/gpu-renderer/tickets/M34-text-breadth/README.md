@@ -1,5 +1,7 @@
 # M34 - Text Breadth
 
+**Status:** active (2026-06-28) — Wave B Track 2
+
 ## Goal
 
 Promote subpixel LCD rendering, color font/emoji support, variable font
