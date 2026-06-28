@@ -3,6 +3,7 @@ package org.graphiks.kanvas.gpu.renderer.runtimeeffects
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 
 class CustomRuntimeEffectRegistryTest {
 
@@ -57,5 +58,25 @@ class CustomRuntimeEffectRegistryTest {
         val validator = KanvasWGSLValidator()
         val module = validator.parse("@fragment fn main() -> @location(0) vec4<f32> { return vec4(1.0); }")
         assertNotNull(module)
+    }
+
+    @Test
+    fun `WGSLReflectionProvider reflect returns WGSLReflectionResult`() {
+        val provider = KanvasWGSLReflectionProvider()
+        val module = fixtureModule()
+        val result = provider.reflect(module)
+        assertNotNull(result)
+        assertTrue(result.moduleHash.isNotBlank())
+        assertTrue(result.entryPoint.isNotBlank())
+        assertEquals(0, result.uniformCount)
+    }
+
+    @Test
+    fun `WGSLReflectionProvider falls back to fixture when wgsl4k is unavailable`() {
+        val provider = KanvasWGSLReflectionProvider()
+        val module = fixtureModule()
+        val result = provider.reflect(module)
+        assertNotNull(result)
+        assertTrue(result.reflectionHash.isNotBlank())
     }
 }
