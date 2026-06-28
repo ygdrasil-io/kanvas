@@ -1,10 +1,22 @@
 package org.graphiks.kanvas.gpu.renderer.runtimeeffects
 
-/** Unique identifier for a custom runtime effect, generated from WGSL source hash + uniform schema hash + child slot hash. */
+import java.security.MessageDigest
+
+/** Unique identifier for a custom runtime effect, generated from SHA-256 of WGSL source + uniform schema + child slots. */
 @JvmInline
 value class GPUCustomRuntimeEffectID(val value: String) {
     init {
         require(value.isNotBlank()) { "GPUCustomRuntimeEffectID.value must not be blank" }
+    }
+
+    companion object {
+        fun generate(source: String, schemaHash: String, childSlotHash: String): GPUCustomRuntimeEffectID {
+            val input = "custom-runtime-effect-id-v1:$source:$schemaHash:$childSlotHash"
+            val digest = MessageDigest.getInstance("SHA-256")
+            val hash = digest.digest(input.toByteArray(Charsets.UTF_8))
+            val hex = hash.joinToString("") { "%02x".format(it) }.take(12)
+            return GPUCustomRuntimeEffectID("custom.$hex")
+        }
     }
 }
 
@@ -15,14 +27,20 @@ enum class GPUCustomRuntimeEffectValidationStatus {
     INVALID,
 }
 
-/** WGSL plan for a custom runtime effect, carrying the source and validation/reflection results. */
+/** WGSL plan for a custom runtime effect, carrying the source and validation/reflection hashes. */
 data class GPUCustomRuntimeEffectWGSLPlan(
     val source: String,
     val entryPoint: String,
     val moduleHash: String,
     val reflectionHash: String,
     val validationReportHash: String,
-)
+) {
+    init {
+        require(source.isNotBlank()) { "GPUCustomRuntimeEffectWGSLPlan.source must not be blank" }
+        require(entryPoint.isNotBlank()) { "GPUCustomRuntimeEffectWGSLPlan.entryPoint must not be blank" }
+        require(moduleHash.isNotBlank()) { "GPUCustomRuntimeEffectWGSLPlan.moduleHash must not be blank" }
+    }
+}
 
 /** Descriptor for a custom user-provided WGSL runtime effect. Separate from registered descriptors. */
 data class GPUCustomRuntimeEffectDescriptor(
@@ -32,15 +50,24 @@ data class GPUCustomRuntimeEffectDescriptor(
     val wgslPlan: GPUCustomRuntimeEffectWGSLPlan,
     val sourceProvenance: String,
     val validationStatus: GPUCustomRuntimeEffectValidationStatus,
-)
+) {
+    init {
+        require(sourceProvenance.isNotBlank()) { "GPUCustomRuntimeEffectDescriptor.sourceProvenance must not be blank" }
+    }
+}
 
 /** Registry for custom runtime effects, isolated from GPURuntimeEffectRegistry. */
 interface GPUCustomRuntimeEffectRegistry {
-    fun register(source: String, uniformSchema: GPURuntimeEffectUniformSchema, childSlots: List<GPURuntimeEffectChildSlotPlan>, sourceProvenance: String): Result<GPUCustomRuntimeEffectID>
+    fun registerCustomEffect(
+        source: String,
+        uniformSchema: GPURuntimeEffectUniformSchema,
+        childSlots: List<GPURuntimeEffectChildSlotPlan>,
+        sourceProvenance: String,
+    ): Result<GPUCustomRuntimeEffectID>
 
     fun lookup(id: GPUCustomRuntimeEffectID): GPUCustomRuntimeEffectDescriptor?
 
-    fun unregister(id: GPUCustomRuntimeEffectID)
+    fun unregisterCustomEffect(id: GPUCustomRuntimeEffectID)
 
     fun isRegistered(id: GPUCustomRuntimeEffectID): Boolean
 }

@@ -3,6 +3,9 @@
 Status: Draft
 Date: 2026-06-13
 Updated: 2026-06-28
+Note: Filename `27-registered-runtime-effects-registry.md` is historical; this spec
+now covers both registered and custom runtime effects in one document. The file
+may be renamed in a future cleanup pass.
 
 ## Purpose
 
@@ -843,33 +846,35 @@ enum class GPUCustomRuntimeEffectValidationStatus {
 
 #### `GPUCustomRuntimeEffectWGSLPlan`
 
-Contains the custom WGSL source and its validation/reflection results.
+Contains the custom WGSL source and its validation/reflection hashes.
+Uses hash-based identity (consistent with `GPURuntimeEffectWGSLPlan`),
+with `source` as the extra field that distinguishes custom effects.
 
 ```kotlin
 data class GPUCustomRuntimeEffectWGSLPlan(
     val source: String,
     val entryPoint: String,
-    val reflection: WGSLReflectionResult,
-    val validationReport: WGSLValidationReport,
-) : GPURuntimeEffectWGSLPlan()
+    val moduleHash: String,
+    val reflectionHash: String,
+    val validationReportHash: String,
+)
 ```
 
 #### `GPUCustomRuntimeEffectDescriptor`
 
-Extends `GPURuntimeEffectDescriptor` with custom WGSL support. Not
-interchangeable with registered descriptors. The `cpuOracle` is optional
-(defaults to null).
+Standalone descriptor for custom WGSL effects. Not interchangeable with
+registered `GPURuntimeEffectDescriptor`. Custom effects do not carry version,
+route contract, or live-edit plan — those belong to registered descriptors only.
 
 ```kotlin
 data class GPUCustomRuntimeEffectDescriptor(
-    override val id: GPUCustomRuntimeEffectID,
-    override val uniformSchema: GPURuntimeEffectUniformSchema,
-    override val childSlots: List<GPURuntimeEffectChildSlotPlan>,
-    override val wgslPlan: GPUCustomRuntimeEffectWGSLPlan,
+    val id: GPUCustomRuntimeEffectID,
+    val uniformSchema: GPURuntimeEffectUniformSchema,
+    val childSlots: List<GPURuntimeEffectChildSlotPlan>,
+    val wgslPlan: GPUCustomRuntimeEffectWGSLPlan,
     val sourceProvenance: String,
     val validationStatus: GPUCustomRuntimeEffectValidationStatus,
-    override val cpuOracle: GPURuntimeEffectCPUOracle? = null,
-) : GPURuntimeEffectDescriptor()
+)
 ```
 
 Descriptor invariants for custom effects:
@@ -906,13 +911,13 @@ class GPUCustomRuntimeEffectRegistry(
         childSlots: List<GPURuntimeEffectChildSlotPlan>,
         sourceProvenance: String,
     ): Result<GPUCustomRuntimeEffectID> {
-        val id = generateCustomEffectID(source, uniformSchema, childSlots)
+        val id = GPUCustomRuntimeEffectID.generate(source, uniformSchema.schemaHash, childSlots.hashCode().toString())
 
         val module = validator.parse(source)
-        if (module.hasErrors) {
+        if (module.syntaxErrors.isNotEmpty()) {
             return Result.failure(GPUCustomRuntimeEffectValidationError(
                 code = "custom-wgsl.syntax-error",
-                message = "WGSL syntax error: ${module.errors.joinToString()}"))
+                message = "WGSL syntax error: ${module.syntaxErrors.joinToString()}"))
         }
 
         val securityReport = securityValidator.validateSecurity(module)
@@ -922,12 +927,13 @@ class GPUCustomRuntimeEffectRegistry(
                 message = "Security validation failed: ${securityReport.errors.joinToString()}"))
         }
 
-        val reflection = reflectionProvider.reflect(source)
+        val reflection = reflectionProvider.reflect(module)
         val wgslPlan = GPUCustomRuntimeEffectWGSLPlan(
             source = source,
             entryPoint = "main",
-            reflection = reflection,
-            validationReport = WGSLValidationReport(isValid = true, diagnostics = emptyList()))
+            moduleHash = reflection.moduleHash,
+            reflectionHash = reflection.reflectionHash,
+            validationReportHash = securityReport.errors.hashCode().toString())
 
         val descriptor = GPUCustomRuntimeEffectDescriptor(
             id = id,
@@ -944,15 +950,6 @@ class GPUCustomRuntimeEffectRegistry(
     fun getDescriptor(id: GPUCustomRuntimeEffectID): GPUCustomRuntimeEffectDescriptor? = descriptors[id]
     fun unregisterCustomEffect(id: GPUCustomRuntimeEffectID) { descriptors.remove(id) }
     fun isRegistered(id: GPUCustomRuntimeEffectID): Boolean = descriptors.containsKey(id)
-
-    private fun generateCustomEffectID(
-        source: String,
-        uniformSchema: GPURuntimeEffectUniformSchema,
-        childSlots: List<GPURuntimeEffectChildSlotPlan>,
-    ): GPUCustomRuntimeEffectID {
-        val hashInput = "$source|${uniformSchema.hashCode()}|${childSlots.hashCode()}"
-        return GPUCustomRuntimeEffectID("custom.${hashInput.hashCode().toUInt()}")
-    }
 }
 ```
 
@@ -1034,30 +1031,43 @@ Custom WGSL is untrusted. Kanvas enforces strict validation before execution.
 class WGSLSecurityValidator(
     private val deviceCapabilities: WGSLDeviceCapabilities,
 ) {
-    fun validateSecurity(module: WGSLModule): WGSLSecurityValidationReport {
+    fun validateSecurity(module: WGSLParsedModule): WGSLSecurityValidationReport {
         val errors = mutableListOf<WGSLSecurityError>()
         errors.addAll(checkBlockedFeatures(module))
         errors.addAll(checkResourceLimits(module))
         errors.addAll(checkDeviceCapabilities(module, deviceCapabilities))
+        errors.addAll(checkBufferTextureAccessBounds(module))
         return WGSLSecurityValidationReport(isSecure = errors.isEmpty(), errors = errors)
     }
 
-    private fun checkBlockedFeatures(module: WGSLModule): List<WGSLSecurityError> {
+    private fun checkBlockedFeatures(module: WGSLParsedModule): List<WGSLSecurityError> {
         val errors = mutableListOf<WGSLSecurityError>()
-        if (module.usesAtomics())
+        if (module.usesAtomics)
             errors.add(WGSLSecurityError("custom-wgsl.unsafe-atomic", "Atomic operations not allowed", WGSLSecurityErrorSeverity.ERROR))
-        if (module.usesUnboundedStorageBuffers())
+        if (module.usesUnboundedStorageBuffers)
             errors.add(WGSLSecurityError("custom-wgsl.unsafe-storage-buffer", "Storage buffers must have explicit size", WGSLSecurityErrorSeverity.ERROR))
-        if (module.usesReadWriteBuffers())
+        if (module.usesReadWriteBuffers)
             errors.add(WGSLSecurityError("custom-wgsl.unsafe-read-write-buffer", "Read-write storage buffers not allowed", WGSLSecurityErrorSeverity.ERROR))
-        if (module.usesPtrOperations())
+        if (module.usesPtrOperations)
             errors.add(WGSLSecurityError("custom-wgsl.unsafe-ptr", "Pointer operations not allowed", WGSLSecurityErrorSeverity.ERROR))
-        if (module.hasRecursiveFunctions())
+        if (module.hasRecursiveFunctions)
             errors.add(WGSLSecurityError("custom-wgsl.unsafe-recursion", "Recursive functions not allowed", WGSLSecurityErrorSeverity.ERROR))
+        if (module.hasUnboundedLoops)
+            errors.add(WGSLSecurityError("custom-wgsl.unsafe-loop", "Unbounded loops not allowed", WGSLSecurityErrorSeverity.ERROR))
+        if (module.usesDynamicSampling)
+            errors.add(WGSLSecurityError("custom-wgsl.unsafe-dynamic-sampling", "Dynamic texture sampling not allowed", WGSLSecurityErrorSeverity.ERROR))
+        if (module.usesTextureStore)
+            errors.add(WGSLSecurityError("custom-wgsl.unsafe-texture-store", "Texture storage not allowed", WGSLSecurityErrorSeverity.ERROR))
+        if (module.usesDynamicBinding)
+            errors.add(WGSLSecurityError("custom-wgsl.unsafe-dynamic-binding", "Dynamic bind groups not allowed", WGSLSecurityErrorSeverity.ERROR))
+        if (module.usesComputeShader)
+            errors.add(WGSLSecurityError("custom-wgsl.unsafe-compute", "Compute shaders not allowed", WGSLSecurityErrorSeverity.ERROR))
+        if (module.usesWorkgroupBuiltins)
+            errors.add(WGSLSecurityError("custom-wgsl.unsafe-workgroup", "Workgroup builtins not allowed", WGSLSecurityErrorSeverity.ERROR))
         return errors
     }
 
-    private fun checkResourceLimits(module: WGSLModule): List<WGSLSecurityError> {
+    private fun checkResourceLimits(module: WGSLParsedModule): List<WGSLSecurityError> {
         val errors = mutableListOf<WGSLSecurityError>()
         if (module.uniforms.size > MAX_CUSTOM_UNIFORMS)
             errors.add(WGSLSecurityError("custom-wgsl.uniform-count-exceeded", "${module.uniforms.size} > $MAX_CUSTOM_UNIFORMS", WGSLSecurityErrorSeverity.ERROR))
@@ -1065,13 +1075,28 @@ class WGSLSecurityValidator(
             errors.add(WGSLSecurityError("custom-wgsl.texture-count-exceeded", "${module.textures.size} > $MAX_CUSTOM_TEXTURES", WGSLSecurityErrorSeverity.ERROR))
         if (module.bindGroups.size > MAX_CUSTOM_BIND_GROUPS)
             errors.add(WGSLSecurityError("custom-wgsl.bind-group-count-exceeded", "${module.bindGroups.size} > $MAX_CUSTOM_BIND_GROUPS", WGSLSecurityErrorSeverity.ERROR))
+        if (module.loopIterationCount > MAX_CUSTOM_LOOP_ITERATIONS)
+            errors.add(WGSLSecurityError("custom-wgsl.loop-iteration-exceeded", "${module.loopIterationCount} > $MAX_CUSTOM_LOOP_ITERATIONS", WGSLSecurityErrorSeverity.ERROR))
+        if (module.functionDepth > MAX_CUSTOM_FUNCTION_DEPTH)
+            errors.add(WGSLSecurityError("custom-wgsl.function-depth-exceeded", "${module.functionDepth} > $MAX_CUSTOM_FUNCTION_DEPTH", WGSLSecurityErrorSeverity.ERROR))
         return errors
     }
 
-    private fun checkDeviceCapabilities(module: WGSLModule, capabilities: WGSLDeviceCapabilities): List<WGSLSecurityError> {
+    private fun checkDeviceCapabilities(module: WGSLParsedModule, capabilities: WGSLDeviceCapabilities): List<WGSLSecurityError> {
         val errors = mutableListOf<WGSLSecurityError>()
-        if (module.usesRayQuery() && !capabilities.supportsRayQuery)
+        if (module.usesRayQuery && !capabilities.supportsRayQuery)
             errors.add(WGSLSecurityError("custom-wgsl.unsafe-ray-query", "Device does not support ray query", WGSLSecurityErrorSeverity.ERROR))
+        if (module.usesAtomics && !capabilities.supportsAtomics)
+            errors.add(WGSLSecurityError("custom-wgsl.device-unsupported", "Device does not support atomic operations", WGSLSecurityErrorSeverity.ERROR))
+        return errors
+    }
+
+    private fun checkBufferTextureAccessBounds(module: WGSLParsedModule): List<WGSLSecurityError> {
+        val errors = mutableListOf<WGSLSecurityError>()
+        if (module.storageBuffers.isNotEmpty() && module.usesUnboundedStorageBuffers)
+            errors.add(WGSLSecurityError("custom-wgsl.unsafe-storage-buffer", "Unbounded storage buffers risk out-of-bounds memory access", WGSLSecurityErrorSeverity.ERROR))
+        if (module.textures.isNotEmpty() && module.usesDynamicSampling && module.usesTextureStore)
+            errors.add(WGSLSecurityError("custom-wgsl.unsafe-texture-store", "Dynamic texture sampling with storage risks out-of-bounds access", WGSLSecurityErrorSeverity.ERROR))
         return errors
     }
 }
@@ -1096,6 +1121,8 @@ const val MAX_CUSTOM_BIND_GROUPS = 4
 const val MAX_CUSTOM_BINDINGS_PER_GROUP = 8
 const val MAX_CUSTOM_UNIFORM_BUFFER_SIZE = 16 * 1024
 const val MAX_CUSTOM_STORAGE_BUFFER_SIZE = 64 * 1024
+const val MAX_CUSTOM_LOOP_ITERATIONS = 1024
+const val MAX_CUSTOM_FUNCTION_DEPTH = 8
 ```
 
 ### Custom Effect Diagnostics
@@ -1162,12 +1189,16 @@ val customRegistry = GPUCustomRuntimeEffectRegistry(
 
 val result = customRegistry.registerCustomEffect(
     source = sinusoidalWaveWGSL,
-    uniformSchema = GPURuntimeEffectUniformSchema(uniforms = listOf(
-        GPUUniform("time", GPUUniformType.F32),
-        GPUUniform("resolution", GPUUniformType.VEC2_F32),
-        GPUUniform("amplitude", GPUUniformType.F32),
-        GPUUniform("frequency", GPUUniformType.F32),
-    )),
+    uniformSchema = GPURuntimeEffectUniformSchema(
+        schemaHash = "schema:sinusoidal_wave:v1",
+        fields = listOf(
+            "time:f32@0:4",
+            "resolution:vec2<f32>@4:8",
+            "amplitude:f32@12:4",
+            "frequency:f32@16:4",
+        ),
+        packingPolicy = "std140",
+    ),
     childSlots = emptyList(),
     sourceProvenance = "example.sinusoidal_wave",
 )
