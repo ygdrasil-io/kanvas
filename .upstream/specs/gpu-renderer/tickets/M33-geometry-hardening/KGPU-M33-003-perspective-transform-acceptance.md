@@ -1,7 +1,7 @@
 ---
 id: KGPU-M33-003
 title: "Perspective transform acceptance for rect/rrect geometry"
-status: ready
+status: review
 milestone: M33
 priority: P1
 owner_area: coordinates
@@ -108,6 +108,7 @@ rtk ./gradlew --no-daemon :gpu-renderer:test --tests '*PerspectiveTransform*'
 
 - `proposed`: Initial ticket. Awaiting M33 milestone acceptance.
 - `proposed → ready` (2026-06-28): M33-001 tessellation baseline available.
+- `ready → review` (2026-06-28): perspective transform plan implemented for rect/rrect + solid color.
 
 ## Linear Labels
 
