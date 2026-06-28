@@ -774,6 +774,51 @@ It must not claim support for:
 
 Those routes require later evidence against this spec.
 
+## Perspective Acceptance Policy
+
+Perspective transforms are no longer unconditionally refused. A perspective
+transform is accepted when the adapter provides conservative finite bounds
+proofs and the consuming route explicitly accepts perspective coordinates.
+
+### Contracts
+
+| Contract | Purpose |
+|---|---|
+| `GPUPerspectiveTransformPlan` | Perspective matrix classification, homogeneous divide facts, finite bounds proof, and visible-region acceptance. |
+| `GPUPerspectiveBoundsProof` | Conservative 2D projected bounds for a 3D-transformed geometry payload, or explicit refusal when projection produces unbounded or singular regions. |
+| `GPUPerspectiveRouteAcceptance` | Enumeration: `Accepted` when all consuming routes accept perspective, `Refused` when any route or path requires affine-only coordinates. |
+| `GPUPerspectiveDiagnostic` | Reason codes for behind-camera geometry, degenerate w-divide, unbounded projection, affine-only route conflict. |
+
+### Acceptance Conditions
+
+A draw with a perspective transform is accepted only when ALL of:
+1. `GPUTransformPlan` classifies the transform as `Perspective` with finite determinant.
+2. `GPUPerspectiveBoundsProof` produces finite, non-degenerate projected device bounds.
+3. Every consuming route in the draw (geometry, clip, material, filter, layer) explicitly declares `GPUPerspectiveRouteAcceptance.Accepted`.
+4. WGSL fragment-code requirements (perspective-correct interpolation, varying declaration) are satisfied.
+
+If any consuming route declares `AffineOnly`, the entire draw is refused with
+reason code `unsupported.transform.perspective_route_rejected.<route_name>`.
+
+### First Acceptance Target
+
+- Rect and rounded-rect geometry with solid color material and perspective transform.
+- Homogeneous divide performed in vertex shader; fragment receives device coordinates.
+- Conservative bounds proof via 4-corner projection and AxisAlign bounding box.
+
+### Refusal Cases
+
+- Behind-camera geometry (w <= 0 for all corners).
+- Degenerate projection (determinant near zero).
+- Path geometry with perspective (requires full curve reprojection, not yet proven).
+- Clip plans that cannot express projected clip regions.
+
+### Non-Goals
+
+- Do not implement general 3D clipping.
+- Do not add perspective-correct attribute interpolation before a route consumes it.
+- Do not claim perspective acceptance for text, image, filter, or layer routes.
+
 ## Non-Goals
 
 - Do not port Skia's matrix, rect, or Graphite transform classes.

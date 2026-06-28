@@ -122,6 +122,14 @@ the primary route-kind outcome.
 | M30 | [M30-skia-wrapper-legacy-retirement](M30-skia-wrapper-legacy-retirement/README.md) | 4 | Skia wrapper bridge, route migration, parity tests, and gpu-raster deprecation. |
 | M31 | [M31-production-activation](M31-production-activation/README.md) | 4 | Production activation, rollback flag, PM evidence bundle, and API stability freeze. |
 | M32 | [M32-legacy-gpu-raster-decommission](M32-legacy-gpu-raster-decommission/README.md) | 6 | Remove legacy gpu-raster after per-family port-or-refuse, retirement-gate authorization, and shared-infra relocation. |
+| M33 | [M33-geometry-hardening](M33-geometry-hardening/README.md) | 3 | Promote GPU compute tessellation, advanced stroke, and perspective transform acceptance. |
+| M34 | [M34-text-breadth](M34-text-breadth/README.md) | 5 | Add subpixel LCD, color fonts, variable fonts, complex shaping, and font fallback. |
+| M35 | [M35-color-fidelity](M35-color-fidelity/README.md) | 4 | Add HDR transfer functions, wide-gamut spaces, gain maps, and ICC profile parsing. |
+| M36 | [M36-image-pipeline](M36-image-pipeline/README.md) | 4 | Promote HEIF/AVIF gates, YUV multi-plan, mipmap auto-gen, and hardware codecs. |
+| M37 | [M37-filter-breadth](M37-filter-breadth/README.md) | 6 | Add separable blur, morphology, drop shadow, lighting, displacement, and tile-based filter eval. |
+| M38 | [M38-runtime-effects-v2](M38-runtime-effects-v2/README.md) | 3 | Add live editing V2, extended effect kinds, and dynamic shader graph. |
+| M39 | [M39-rendering-architecture](M39-rendering-architecture/README.md) | 4 | Add MSAA resolve, instanced batching, subpass merging, and deferred display list. |
+| M40 | [M40-architecture-capabilities](M40-architecture-capabilities/README.md) | 3 | Add tile-deferred rendering, multi-threaded recording, and hi-z occlusion culling. |
 
 ## Source Of Truth
 

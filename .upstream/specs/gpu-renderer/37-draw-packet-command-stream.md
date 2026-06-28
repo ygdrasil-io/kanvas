@@ -310,3 +310,37 @@ Promoted packet and command-stream behavior requires:
 - Do not claim GPU support from a command stream that was never encoded,
   submitted, or explicitly skipped with stable evidence.
 - Do not use command-stream construction as hidden CPU fallback.
+
+## Instanced Draw Packet Grouping
+
+Draw packets that share the same render step, pipeline key, and material layout
+but differ only in instance data (transform, color, geometry payload) may be
+batched into instanced draw commands.
+
+### Contracts
+
+| Contract | Purpose |
+|---|---|
+| `GPUInstancedPacketGroup` | Group of N compatible draw packets with shared render step, pipeline key, bind group layout, and vertex buffers. |
+| `GPUInstancedUniformStrategy` | Instance-varying uniforms packed into a single buffer with stride. Each draw packet contributes one instance's data at its buffer offset. |
+| `GPUInstancedVertexStrategy` | Instance-varying vertex data packed into instanced vertex buffers. Vertex attribute divisor = 1. |
+| `GPUInstancedDrawCommand` | Pass command: draw indexed instanced with instance count = group size, or draw instanced for non-indexed geometry. |
+| `GPUInstancedBatchingDiagnostic` | Refusal for incompatible packets (different render step, pipeline key, or bind group layout). |
+
+### Grouping Rules
+
+Packets are eligible for instanced grouping when:
+1. `renderStepIdentifier` matches.
+2. `renderPipelineKey` matches (same WGSL module, same blend state, same target state).
+3. `bindingLayoutKey` matches (same bind group layout identity).
+4. All vary-only data (per-instance transform, color, rect bounds, radii) is in payload slots.
+5. No ordering token, dependency edge, or atomic group prevents reordering.
+6. No destination-read, clip-stencil, atlas mutation, or upload barrier exists between packets.
+
+### Acceptance Gates
+
+- At least 4 compatible solid-color rect packets batched into one instanced draw.
+- Instance-varying uniform data produces correct per-instance colors and positions.
+- Non-batchable packets (different render steps) are not grouped.
+- Instanced batching does not change pixel output compared to individual draws.
+- Telemetry reports instanced draw count and batch size distribution.

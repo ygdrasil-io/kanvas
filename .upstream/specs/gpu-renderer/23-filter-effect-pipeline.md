@@ -672,3 +672,136 @@ complete unsupported text run into a CPU texture just to apply a filter.
   filter fallback.
 - Do not claim support for picture filters, lighting filters, runtime effects,
   compute filters, or large kernels without explicit route evidence.
+
+## Multi-Pass Separable Blur
+
+Blur filters that accept separable 2D convolution use a multi-pass strategy:
+horizontal pass writes to an intermediate texture, vertical pass reads from it.
+
+### Contracts
+
+| Contract | Purpose |
+|---|---|
+| `GPUSeparableBlurPlan` | Accepted separable blur: kernel size, sigma, pass count (2-pass default), intermediate texture format, and tile mode (clamp, repeat, mirror, decal). |
+| `GPUBlurPassPlan` | Per-pass plan: horizontal or vertical direction, kernel weights (precomputed from sigma), render step, and intermediate target binding. |
+| `GPUBlurKernelCachePlan` | Cached precomputed kernel weights per sigma and kernel size. Fixed-point or float storage, uploaded as uniform data. |
+| `GPUBlurIntermediateArtifact` | Typed registered intermediate texture artifact produced by the first blur pass, consumed by the second. |
+| `GPUBlurQualityLevel` | Tiered quality: `Fast` (fixed 5-tap box), `Normal` (sigma-dependent tap count), `High` (sigma*3 taps, Gaussian weights). |
+| `GPUBlurDiagnostic` | Refusal for unsupported sigma range, tile mode that requires edge sampling, or intermediate budget exceeded. |
+
+### Route Selection
+
+```
+GPUFilterNodePlan.Blur
+  -> GPUBlurQualityLevel selection from paint filter-quality hint
+  -> GPUSeparableBlurPlan when sigma > 0 and kernel size <= max supported
+  -> GPUBlurPassPlan.Horizontal for first pass
+  -> GPUBlurIntermediateArtifact
+  -> GPUBlurPassPlan.Vertical consuming intermediate
+  -> RefuseDiagnostic when sigma=0, kernel size exceeds limits, or intermediate allocation fails
+```
+
+### Acceptance Gates
+
+- At least one blur with sigma=2.0 and sigma=10.0, with CPU oracle parity.
+- Quality level `Normal` and `High` produce visually correct results.
+- Separable and non-separable paths produce matching output within tolerance.
+- Stable refusal for sigma=0 (identity, handled as elision) and sigma > max.
+
+## Morphology Filter
+
+Dilate and erode morphology filters with circular or rectangular kernels.
+
+### Contracts
+
+| Contract | Purpose |
+|---|---|
+| `GPUMorphologyPlan` | Accepted morphology: dilate (max) or erode (min), kernel radius X/Y, kernel shape (rect, circle, ellipse via separable box). |
+| `GPUMorphologyPassPlan` | Single-pass or separable two-pass plan: horizontal pass + vertical pass for rectangular kernels. |
+| `GPUMorphologySamplingPlan` | Sampling strategy per pixel: gather N samples in kernel region, min/max reduce, output result. |
+| `GPUMorphologyDiagnostic` | Refusal for zero-radius, kernel exceeding sample budget, or unsupported kernel shape. |
+
+### Acceptance Gates
+
+- Dilate radius 3 and erode radius 3 with CPU oracle parity.
+- Rectangular kernel (radius_x != radius_y) produces correct anisotropic result.
+- Stable refusal for radius=0 (identity elision) and radius > sample budget.
+
+## Lighting Filters
+
+Directional, point, and specular lighting filters that consume a height map
+(alpha channel or separate texture) and produce lit output.
+
+### Contracts
+
+| Contract | Purpose |
+|---|---|
+| `GPULightingPlan` | Accepted lighting: type (directional, point, spot, specular), light direction/position, surface scale, light color, ambient, and specular exponent. |
+| `GPULightingNormalMapPlan` | Normal map source: bump map derived from alpha gradient, or explicit normal map texture binding. |
+| `GPULightingWGSL` | WGSL fragment implementing Phong/Blinn-Phong lighting with dot-product diffuse + specular. |
+| `GPULightingDiagnostic` | Refusal for unsupported light type, missing normal source, or unvalidated WGSL. |
+
+### Acceptance Gates
+
+- Directional lighting with bump map (alpha as height) produces correct shading (CPU oracle parity).
+- Specular lighting with explicit normal map texture.
+- Stable refusal for spot lights (future), missing surface-scale metadata, and unregistered WGSL.
+
+## Displacement Map Filter
+
+Displaces source pixels by a per-pixel offset read from a displacement map
+texture (or color channel). Uses WGSL gather with offset coordinates.
+
+### Contracts
+
+| Contract | Purpose |
+|---|---|
+| `GPUDisplacementMapPlan` | Accepted displacement: channel select (R/G/B/A for X, same or different channel for Y), scale X/Y, and tile mode for out-of-bounds reads. |
+| `GPUDisplacementSamplingPlan` | Sample source at (coord + displacement * scale), clamp or tile edge behavior, and interpolation mode. |
+| `GPUDisplacementDiagnostic` | Refusal for unsupported channel mapping, missing displacement texture, or out-of-bounds policy not defined. |
+
+### Acceptance Gates
+
+- Displacement with R=X, G=Y channels and scale 10 produces correct pixel shift (CPU oracle).
+- Edge tile mode clamp and repeat both produce expected results.
+- Stable refusal for displacement texture exceeding max texture size or unregistered sampler.
+
+## Drop Shadow Filter
+
+GPU-native drop shadow: blur an alpha mask, offset, and composite behind source.
+
+### Contracts
+
+| Contract | Purpose |
+|---|---|
+| `GPUDropShadowPlan` | Accepted drop shadow: offset (dx, dy), sigma X/Y, color, and shadow-only or composite mode. |
+| `GPUDropShadowMaskPlan` | Extracted alpha mask from source image or explicit shape alpha. |
+| `GPUDropShadowBlurPlan` | Reuses `GPUSeparableBlurPlan` with the shadow mask as input. |
+| `GPUDropShadowCompositePlan` | Composite shadow behind source: shadow color * blurred alpha, then source over shadow. |
+| `GPUDropShadowDiagnostic` | Refusal for missing blur support, incompatible mask format, or composite blend mode unsupported. |
+
+### Acceptance Gates
+
+- Drop shadow with offset (5,5), sigma 2.0, and black color produces correct output (CPU oracle).
+- Shadow composited behind source with SrcOver.
+- Stable refusal when blur or composite route is unavailable.
+
+## Filter Tile-Based Evaluation Policy
+
+When filter source extents exceed intermediate texture budget, tiled evaluation
+splits the filter into tile-sized sub-renders.
+
+### Contracts
+
+| Contract | Purpose |
+|---|---|
+| `GPUFilterTilePlan` | Accepted tile grid: tile size (from `GPUFilterBudgetPolicy`), tile count X/Y, and overlap (separable blur needs sigma*3 overlap). |
+| `GPUFilterTileRenderPlan` | Per-tile render: render source portion to tile intermediate, apply filter, composite tile into final target or next intermediate. |
+| `GPUFilterTileBudgetPolicy` | Memory budget per tile intermediate, max tile count, and refusal when single tile exceeds budget. |
+| `GPUFilterTileDiagnostic` | Refusal for tile count exceeding limit, overlap exceeding tile size, or tile composite artifacts. |
+
+### Acceptance Gates
+
+- Large blur (sigma 20 on 4K source) tiled into 1024x1024 tiles, matching non-tiled output.
+- Tile overlap correctly handles filter kernel expansion.
+- Stable refusal for tiles smaller than kernel footprint.

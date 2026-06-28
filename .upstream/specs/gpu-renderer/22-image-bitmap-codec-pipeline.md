@@ -714,3 +714,102 @@ codec support.
   the GPU renderer core.
 - Do not claim image/bitmap support without decode, artifact, upload, texture
   ownership, sampling, diagnostics, and validation evidence.
+
+## HEIF / AVIF Gate Criteria
+
+HEIF and AVIF are dependency-gated pending accepted codec capabilities. This
+section defines the exact promotion criteria.
+
+### Contracts
+
+| Contract | Purpose |
+|---|---|
+| `GPUHEIFCodecDescriptor` | HEIF container capability: still image, image sequence (animated), burst, grid, and tiled image support. |
+| `GPUAVIFCodecDescriptor` | AVIF codec capability: AV1 still, AV1 animated, HDR (PQ/HLG), gain map, alpha, depth, and multi-layer support. |
+| `GPUHEICCodecDescriptor` | HEIC codec capability: HEVC still, HEVC animated, HDR, alpha, depth, and multi-image support. |
+| `GPUISOBMFFParsePlan` | ISOBMFF container parsing for HEIF/AVIF/HEIC: box hierarchy, item references, property associations, and decoder configuration. |
+| `GPUModernCodecDiagnostic` | Refusal for unsupported container, missing codec dependency, patent-encumbered profile, or unlicensed decoder. |
+
+### Promotion Gates
+
+```
+DependencyGated
+  -> TargetNative when:
+    1. KanvasImageCodec with codec ID "heif" or "avif" is registered
+    2. Implementation capability enum reports at least "still_decode" tier
+    3. Conformance tier reports at least "beta" or project-accepted equivalent
+    4. At least one valid HEIF still and one valid AVIF still decode with GPU texture evidence
+    5. Invalid/truncated/malformed inputs refuse with stable diagnostics
+    6. No patent-encumbered profile is silently accepted
+```
+
+### Container Support
+
+- HEIF brand: `mif1`, `msf1`, `heic`, `heix`, `hevc`, `hevx`, `heis`, `hevs`.
+- AVIF brand: `avif`, `avis`.
+- Image grid and tiled images: dependency-gated until tested.
+- Image sequences (animated): dependency-gated until per-frame decode and timing proven.
+
+## Hardware Codec Descriptor
+
+Platform and hardware codecs may be accepted behind explicit descriptors that
+expose capability, nondeterminism policy, and fallback behavior.
+
+### Contracts
+
+| Contract | Purpose |
+|---|---|
+| `GPUHardwareCodecDescriptor` | Codec ID, implementation kind ("platform", "hardware", "hybrid"), vendor, version, capability flags, and approved profile list. |
+| `GPUHardwareCodecNondeterminismPolicy` | Documented sources of nondeterminism: driver version, GPU vendor, decode output variation, and key-frame dependency. |
+| `GPUHardwareCodecFallbackPlan` | Fallback from hardware to software codec when hardware decode fails, with explicit reason code and diagnostic. |
+| `GPUHardwareCodecDiagnostic` | Refusal for unapproved codec, vendor blocklist, nondeterministic output without policy, or fallback exhaustion. |
+
+### Acceptance Rules
+
+- Hardware codec must produce bit-exact or policy-accepted output compared to a pure Kotlin reference codec.
+- Nondeterminism must be documented per codec ID and vendor.
+- Hardware decode failure must fall back deterministically, not produce silent garbage.
+- Android-specific codecs must not leak `Bitmap`, `MediaCodec`, or platform objects into `:gpu-renderer`.
+
+## YUV Multi-Plan Texture Route
+
+Multi-planar YUV image sources (JPEG YCbCr, HEIF YUV 4:2:0, AVIF YUV) may
+upload to separate GPU texture planes and convert to RGB in WGSL.
+
+### Contracts
+
+| Contract | Purpose |
+|---|---|
+| `GPUYUVMultiPlanDescriptor` | Planar format facts: YUV color space (BT.601, BT.709, BT.2020), chroma subsampling (4:2:0, 4:2:2, 4:4:4), plane count, and plane dimensions. |
+| `GPUYUVPlaneUploadPlan` | Per-plane texture upload: plane pixel data, row stride, texture format (r8unorm or r16unorm), and upload ordering before YUV-to-RGB conversion draw. |
+| `GPUYUVToRGBCoverterPlan` | WGSL fragment that samples Y, U, V planes, applies matrix conversion + transfer function, and outputs rgba. |
+| `GPUYUVSamplingPlan` | Sampler configuration: nearest/linear per plane, chroma siting (centered, co-sited), and UV scaling for subsampled planes. |
+| `GPUYUVDiagnostic` | Refusal for unsupported color space, unvalidated WGSL converter, incompatible plane formats, or missing plane data. |
+
+### Acceptance Gates
+
+- JPEG YCbCr image decoded to YUV planes and GPU-converted, matching CPU reference within 1-bit tolerance.
+- At least one 4:2:0 and one 4:4:4 source.
+- Stable refusal for unsupported chroma siting, BT.2020 YUV, or >3 plane formats.
+- No CPU-side YUV-to-RGB conversion hidden as texture preparation.
+
+## Mipmap Auto-Generation
+
+`GPUImageMipmapPlan` is promoted from stub to a complete mipmap generation
+pipeline for texture minification quality.
+
+### Contracts
+
+| Contract | Purpose |
+|---|---|
+| `GPUImageMipmapGenerationPlan` | Mip level count, filter (box, tent, Kaiser), GPU-side generation via blit or compute, and mip level budget. |
+| `GPUImageMipmapBlitPlan` | WGPU-compatible mip generation using texture blit/copy commands when the facade supports it. |
+| `GPUImageMipmapComputePlan` | Compute-shader mip generation when blit is unavailable or when filter quality requires custom WGSL. |
+| `GPUImageMipmapCachePlan` | Cache generated mipmaps per upload artifact key + filter + target format. Invalidate on eviction. |
+| `GPUImageMipmapDiagnostic` | Refusal for unsupported mip filter, budget exceeded, or incompatible texture format. |
+
+### Acceptance Gates
+
+- At least one image with mipmaps rendered with correct minification sampling (CPU oracle parity).
+- Mip generation does not regress nearest-sampled images.
+- Mip level budget enforced: refusal when mip count exceeds adapter limit.

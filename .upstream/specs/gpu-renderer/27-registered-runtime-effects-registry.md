@@ -1283,3 +1283,109 @@ registered effects, using the `CustomRuntimeEffect` route. Key differences:
 - Do not share caches between custom and registered runtime effects.
 - Do not imply that selected `runtime.simple_rt` support means broad
   runtime-effect compatibility.
+
+## Live Parameter Editing V2
+
+The `GPURuntimeEffectLiveEditPlan` stub is promoted to a complete live-editing
+contract. A registered runtime effect with live-editing capability exposes
+parameter metadata that an interactive runtime can update per frame without
+recompiling shaders.
+
+### Contracts
+
+| Contract | Purpose |
+|---|---|
+| `GPURuntimeEffectLiveParameterSchema` | Per-effect parameter list: parameter ID, display name, type (float, float2, float3, float4, int, color), default value, min/max range, and step granularity. |
+| `GPURuntimeEffectLiveParameterBinding` | Maps each live-editable parameter to a uniform byte offset within the effect's `GPUUniformPayloadBlock`. |
+| `GPURuntimeEffectLiveState` | Mutable per-effect-instance state: current parameter values, dirty flags, and generation counter. Dirty parameters trigger uniform re-upload without pipeline re-creation. |
+| `GPURuntimeEffectLiveControlPlan` | Interactive control contract: set parameter by ID, animate parameter via timeline, reset to defaults, serialize/deserialize preset. |
+| `GPURuntimeEffectLiveDiagnostic` | Refusal for unregistered parameter, type mismatch, out-of-range value, or missing binding metadata. |
+
+### Descriptor Extension
+
+The `GPURuntimeEffectDescriptor` gains an optional `liveEdit: GPURuntimeEffectLiveEditPlan?`
+field. When present:
+
+- The registry snapshot exposes `liveParameterSchema` in PM dashboards.
+- The runtime may query `liveParameterBindings` without GPU recompilation.
+- Parameter changes affect only uniform payload values, not `MaterialKey` or pipeline identity.
+
+### Acceptance Gates
+
+- At least one registered effect (SimpleRT or equivalent) with 3+ live parameters.
+- Parameter change between frames produces correct GPU output without pipeline recompilation.
+- Dirty-tracking ensures only changed uniform bytes are re-uploaded.
+- Serialized preset round-trips produce identical output.
+- Stable refusal for effects without live-edit metadata or incompatible uniform layout.
+
+## Extended Effect Kinds
+
+The runtime effect registry expands from `Shader` and `ColorFilter` to support
+`Blender`, `ClipShader`, and `Compute` effect kinds.
+
+### Contracts
+
+| Contract | Purpose |
+|---|---|
+| `GPURuntimeEffectKind.Blender` | Blender effect: consumes `src` and `dst` premultiplied colors, outputs premultiplied blended color. Used in `GPUShaderBlendSourcePlan`. |
+| `GPURuntimeEffectKind.ClipShader` | Clip shader effect: evaluates per-pixel coverage from coordinates and uniforms. Used in `GPUClipShaderPlan`. |
+| `GPURuntimeEffectKind.Compute` | Compute effect: arbitrary compute-shader dispatch with storage buffer I/O. Used for custom image processing, physics, or data transform. |
+| `GPURuntimeEffectKind.Material` (renamed from Shader) | Material shader effect: produces unpremultiplied color from coordinates and uniforms. Unchanged from existing `Shader` kind. |
+| `GPURuntimeEffectKind.Filter` | Existing filter effect kind, used inside `GPUFilterRuntimeEffectPlan`. |
+
+### Kind-Specific Contracts
+
+| Kind | Consumes | Produces | Route placement |
+|---|---|---|---|
+| `Material` | Coordinates + uniforms + children | unpremul RGBA | `MaterialKey` |
+| `Blender` | premul src + premul dst | premul result | `GPUBlendPlan.Shader` |
+| `ClipShader` | Device coordinates + uniforms | Coverage float (0..1) | `GPUClipShaderPlan` |
+| `Filter` | Sampled source + uniforms + children | unpremul RGBA | `GPUFilterRuntimeEffectPlan` |
+| `Compute` | Storage buffers + uniforms | Storage buffers | `GPUComputePipelineKey` |
+
+### Kind Validation
+
+Each kind requires:
+- Descriptor declares `kind` explicitly.
+- WGSL entry point matches kind: `fragment` for Material/Blender/ClipShader/Filter, `compute` for Compute.
+- Input/output types match kind contracts (e.g., Blender must declare `src` and `dst` as fragment inputs).
+- CPU oracle implements the same kind semantics.
+- Route placement is validated: a Material effect cannot be used as a ClipShader.
+
+### Acceptance Gates
+
+- At least one registered Blender effect with GPU evidence.
+- At least one registered ClipShader effect producing correct coverage (CPU oracle parity).
+- At least one registered Compute effect with storage buffer I/O and GPU evidence.
+- Kind mismatch produces `unsupported.runtime_effect.kind_mismatch` with descriptor kind and requested use.
+- Stable refusal for unregistered kind combinations.
+
+## Dynamic Shader Graph Assembly
+
+Registered effects that declare children (input shaders) form a shader DAG. The
+renderer assembles the complete WGSL module from the effect tree at pipeline
+build time.
+
+### Contracts
+
+| Contract | Purpose |
+|---|---|
+| `GPURuntimeEffectShaderGraph` | Directed acyclic graph of effect descriptors: parent effect + child slots referencing child effects. Validated for cycles, kind compatibility, and binding budget. |
+| `GPURuntimeEffectShaderGraphAssemblyPlan` | WGSL module assembly from graph: topologically sort nodes, generate `evaluateChild_<slot>()` functions, inline uniforms, emit combined module. |
+| `GPURuntimeEffectShaderGraphBudget` | Max graph depth, max child count per effect, max total WGSL instruction count, and max uniform buffer size for combined uniforms. |
+| `GPURuntimeEffectShaderGraphDiagnostic` | Refusal for cycle detected, depth exceeded, child kind mismatch (e.g., Blender child in Material slot), or budget exceeded. |
+
+### Assembly Rules
+
+1. Walk graph from root, topological sort by child references.
+2. Each node's WGSL snippet is inlined with unique prefix identifiers.
+3. Parent calls `evaluateChild_<slot>(coord)` which evaluates the child subtree.
+4. Combined uniform block merges all uniforms with deterministic layout.
+5. Combined `WGSLModule` is validated through `wgsl4k` as a single module.
+
+### Acceptance Gates
+
+- At least one 2-level shader graph (parent with one child) with correct GPU output.
+- Cycle detection produces stable refusal before WGSL assembly.
+- Budget exceeded produces refusal before GPU pipeline creation.
+- Graph assembly is deterministic: same descriptors produce identical WGSL modules.
