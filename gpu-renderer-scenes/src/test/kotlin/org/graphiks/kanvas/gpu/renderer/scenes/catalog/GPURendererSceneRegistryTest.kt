@@ -41,7 +41,7 @@ class GPURendererSceneRegistryTest {
                 scene.roadmapLinks.map { RoadmapExpectation(it.milestone, it.rStage, it.ticketId) },
                 "${expected.sceneId} roadmap links",
             )
-            assertEquals(SceneExpectation.ShouldRender, scene.expectation, "${expected.sceneId} expectation")
+            assertEquals(expected.expectation, scene.expectation, "${expected.sceneId} expectation")
             assertTrue(expected.tags.isNotEmpty(), "${expected.sceneId} matrix tags must not be empty")
             assertTrue(
                 expected.commandFamilies.isNotEmpty(),
@@ -1008,6 +1008,7 @@ class GPURendererSceneRegistryTest {
         val tags: Set<SceneTag>,
         val commandFamilies: List<String>,
         val roadmapLinks: List<RoadmapExpectation>,
+        val expectation: SceneExpectation = SceneExpectation.ShouldRender,
     )
 
     private data class RoadmapExpectation(
@@ -1472,6 +1473,21 @@ class GPURendererSceneRegistryTest {
                     "runtime-effect",
                 ),
                 roadmapLinks = listOf(RoadmapExpectation("M7")),
+            ),
+            SceneExpectationRow(
+                sceneId = "custom-runtime-effect-valid-tile",
+                tags = setOf(SceneTag.RuntimeEffect, SceneTag.Rect),
+                commandFamilies = listOf("clear", "custom-runtime-effect"),
+                roadmapLinks = listOf(RoadmapExpectation("M32", ticketId = "KGPU-M32-019")),
+            ),
+            SceneExpectationRow(
+                sceneId = "custom-runtime-effect-unregistered-refusal",
+                tags = setOf(SceneTag.RuntimeEffect, SceneTag.Rect),
+                commandFamilies = listOf("clear", "custom-runtime-effect"),
+                roadmapLinks = listOf(RoadmapExpectation("M32", ticketId = "KGPU-M32-019")),
+                expectation = SceneExpectation.ShouldRefuse(
+                    stableReasonCode = "unsupported.runtime_effect.custom_wgsl_not_registered",
+                ),
             ),
             SceneExpectationRow(
                 sceneId = "blend-mode-strip",
