@@ -25,22 +25,23 @@ class WGSLSecurityValidatorTest {
     @Test
     fun `each blocked feature produces an error`() {
         val cases = listOf(
-            "atomic" to WGSLParsedModule(sourceHash = "sha256:1", usesAtomics = true),
-            "unbounded storage buffer" to WGSLParsedModule(sourceHash = "sha256:2", usesUnboundedStorageBuffers = true),
-            "read-write buffer" to WGSLParsedModule(sourceHash = "sha256:3", usesReadWriteBuffers = true),
-            "ptr operations" to WGSLParsedModule(sourceHash = "sha256:4", usesPtrOperations = true),
-            "recursive functions" to WGSLParsedModule(sourceHash = "sha256:5", hasRecursiveFunctions = true),
-            "unbounded loops" to WGSLParsedModule(sourceHash = "sha256:6", hasUnboundedLoops = true),
-            "dynamic sampling" to WGSLParsedModule(sourceHash = "sha256:7", usesDynamicSampling = true),
-            "texture store" to WGSLParsedModule(sourceHash = "sha256:8", usesTextureStore = true),
-            "dynamic binding" to WGSLParsedModule(sourceHash = "sha256:9", usesDynamicBinding = true),
-            "compute shader" to WGSLParsedModule(sourceHash = "sha256:10", usesComputeShader = true),
-            "workgroup builtins" to WGSLParsedModule(sourceHash = "sha256:11", usesWorkgroupBuiltins = true),
+            Triple("atomic", WGSLParsedModule(sourceHash = "sha256:1", usesAtomics = true), "custom-wgsl.unsafe-atomic"),
+            Triple("unbounded storage buffer", WGSLParsedModule(sourceHash = "sha256:2", usesUnboundedStorageBuffers = true), "custom-wgsl.unsafe-storage-buffer"),
+            Triple("read-write buffer", WGSLParsedModule(sourceHash = "sha256:3", usesReadWriteBuffers = true), "custom-wgsl.unsafe-read-write-buffer"),
+            Triple("ptr operations", WGSLParsedModule(sourceHash = "sha256:4", usesPtrOperations = true), "custom-wgsl.unsafe-ptr"),
+            Triple("recursive functions", WGSLParsedModule(sourceHash = "sha256:5", hasRecursiveFunctions = true), "custom-wgsl.unsafe-recursion"),
+            Triple("unbounded loops", WGSLParsedModule(sourceHash = "sha256:6", hasUnboundedLoops = true), "custom-wgsl.unsafe-loop"),
+            Triple("dynamic sampling", WGSLParsedModule(sourceHash = "sha256:7", usesDynamicSampling = true), "custom-wgsl.unsafe-dynamic-sampling"),
+            Triple("texture store", WGSLParsedModule(sourceHash = "sha256:8", usesTextureStore = true), "custom-wgsl.unsafe-texture-store"),
+            Triple("dynamic binding", WGSLParsedModule(sourceHash = "sha256:9", usesDynamicBinding = true), "custom-wgsl.unsafe-dynamic-binding"),
+            Triple("compute shader", WGSLParsedModule(sourceHash = "sha256:10", usesComputeShader = true), "custom-wgsl.unsafe-compute"),
+            Triple("workgroup builtins", WGSLParsedModule(sourceHash = "sha256:11", usesWorkgroupBuiltins = true), "custom-wgsl.unsafe-workgroup"),
         )
-        for ((label, module) in cases) {
+        for ((label, module, expectedCode) in cases) {
             val report = WGSLSecurityValidator().validateSecurity(module)
             assertFalse(report.isSecure, "$label should be blocked")
             assertTrue(report.errors.isNotEmpty(), "$label should produce at least one error")
+            assertEquals(expectedCode, report.errors.first().code, "$label should have error code $expectedCode")
             assertTrue(report.errors.all { it.severity == WGSLSecurityErrorSeverity.ERROR })
         }
     }
@@ -115,6 +116,21 @@ class WGSLSecurityValidatorTest {
         val report = WGSLSecurityValidator().validateSecurity(module)
         assertFalse(report.isSecure)
         assertEquals("custom-wgsl.function-depth-exceeded", report.errors.first().code)
+    }
+
+    @Test
+    fun `at-limit resource counts pass security`() {
+        val module = WGSLParsedModule(
+            sourceHash = "sha256:at_limit",
+            uniforms = (1..16).map { "u$it" },
+            textures = (1..8).map { "t$it" },
+            bindGroups = (1..4).map { "g$it" },
+            loopIterationCount = 1024,
+            functionDepth = 8,
+        )
+        val report = WGSLSecurityValidator().validateSecurity(module)
+        assertTrue(report.isSecure, "values at max limits should pass")
+        assertEquals(emptyList(), report.errors)
     }
 
     @Test
