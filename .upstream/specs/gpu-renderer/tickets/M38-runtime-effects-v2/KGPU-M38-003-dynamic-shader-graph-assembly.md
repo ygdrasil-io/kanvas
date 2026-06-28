@@ -1,7 +1,7 @@
 ---
 id: KGPU-M38-003
 title: "Dynamic shader graph assembly"
-status: proposed
+status: blocked
 milestone: M38
 priority: P1
 owner_area: runtimeeffects
@@ -139,6 +139,7 @@ rtk ./gradlew --no-daemon :gpu-renderer:test --tests '*ShaderGraph*'
 ## Status Notes
 
 - `proposed`: Initial ticket.
+- `blocked` (2026-06-28): Blocked on wgsl4k multi-fragment module assembly support
 
 ## Linear Labels
 

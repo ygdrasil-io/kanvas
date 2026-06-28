@@ -1,7 +1,7 @@
 ---
 id: KGPU-M39-003
 title: "Subpass merging"
-status: proposed
+status: ready
 milestone: M39
 priority: P1
 owner_area: passes
@@ -126,6 +126,7 @@ rtk ./gradlew --no-daemon :gpu-renderer:test --tests '*SubpassMerge*'
 ## Status Notes
 
 - `proposed`: Initial ticket.
+- `ready` (2026-06-28): promoted — milestone activated, autonomous implementation starting.
 
 ## Linear Labels
 

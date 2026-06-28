@@ -1,7 +1,7 @@
 ---
 id: KGPU-M36-003
 title: "Mipmap auto-generation"
-status: proposed
+status: ready
 milestone: M36
 priority: P1
 owner_area: images
@@ -127,6 +127,7 @@ rtk ./gradlew --no-daemon :gpu-renderer:test --tests '*Mipmap*'
 ## Status Notes
 
 - `proposed`: Initial ticket.
+- `ready` (2026-06-28): promoted — milestone activated, autonomous implementation starting.
 
 ## Linear Labels
 

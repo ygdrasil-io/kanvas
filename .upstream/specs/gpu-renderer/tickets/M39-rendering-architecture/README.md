@@ -1,5 +1,7 @@
 # M39 - Rendering Architecture
 
+**Status:** active (2026-06-28) — Wave C Track 4
+
 ## Goal
 
 Promote MSAA resolve, instanced draw batching, subpass merging, and deferred
@@ -28,10 +30,10 @@ are satisfied.
 
 | Ticket | Status | Priority | Claim Impact | Route Kind | Product Activation | Adapter Required | Owner Area | Depends On | Legacy Gate |
 |---|---|---|---|---|---|---|---|---|---|
-| [KGPU-M39-001 - MSAA resolve](KGPU-M39-001-msaa-resolve.md) | `proposed` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `state` | `KGPU-M1-001` | — |
-| [KGPU-M39-002 - Instanced draw batching](KGPU-M39-002-instanced-draw-batching.md) | `proposed` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `passes` | `KGPU-M1-001` | — |
-| [KGPU-M39-003 - Subpass merging](KGPU-M39-003-subpass-merging.md) | `proposed` | `P1` | `TargetNative` | `GPUNative` | `false` | `true` | `passes` | `KGPU-M1-001` | — |
-| [KGPU-M39-004 - Deferred display list](KGPU-M39-004-deferred-display-list.md) | `proposed` | `P1` | `TargetNative` | `GPUNative` | `false` | `true` | `recording` | `KGPU-M1-001` | — |
+| [KGPU-M39-001 - MSAA resolve](KGPU-M39-001-msaa-resolve.md) | `ready` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `state` | `KGPU-M1-001` | — |
+| [KGPU-M39-002 - Instanced draw batching](KGPU-M39-002-instanced-draw-batching.md) | `ready` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `passes` | `KGPU-M1-001` | — |
+| [KGPU-M39-003 - Subpass merging](KGPU-M39-003-subpass-merging.md) | `ready` | `P1` | `TargetNative` | `GPUNative` | `false` | `true` | `passes` | `KGPU-M1-001` | — |
+| [KGPU-M39-004 - Deferred display list](KGPU-M39-004-deferred-display-list.md) | `ready` | `P1` | `TargetNative` | `GPUNative` | `false` | `true` | `recording` | `KGPU-M1-001` | — |
 
 ## Validation Bundle
 
