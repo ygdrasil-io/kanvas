@@ -94,6 +94,10 @@ class KanvasCustomRuntimeEffectRegistry(
     }
 
     override fun isRegistered(id: GPUCustomRuntimeEffectID): Boolean = descriptors.containsKey(id)
+
+    internal fun forceSetDescriptor(id: GPUCustomRuntimeEffectID, descriptor: GPUCustomRuntimeEffectDescriptor) {
+        descriptors[id] = descriptor
+    }
 }
 
 interface WGSLValidator {

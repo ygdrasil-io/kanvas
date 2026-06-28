@@ -178,4 +178,69 @@ class CustomRuntimeEffectRegistryTest {
         val result2 = registry.registerCustomEffect(validWGSLSource(), schema, emptyList(), "b")
         assertEquals(result1.getOrThrow(), result2.getOrThrow(), "same source+schema produces same ID")
     }
+
+    @Test
+    fun `GPUCustomRuntimeEffectExecutor executes valid descriptor`() {
+        val registry = customRegistry()
+        val schema = GPURuntimeEffectUniformSchema(
+            schemaHash = "schema:test:v1",
+            fields = listOf("u_color:vec4<f32>@0:16"),
+            packingPolicy = "std140",
+        )
+        val result = registry.registerCustomEffect(validWGSLSource(), schema, emptyList(), "test-fixture")
+        val id = result.getOrThrow()
+        val executor = GPUCustomRuntimeEffectExecutor(registry)
+
+        val execResult = executor.execute(id)
+        assertEquals(id.value, execResult.descriptorId)
+        assertEquals(GPUCustomRuntimeEffectValidationStatus.VALID.name, execResult.validationStatus)
+        assertEquals("accepted", execResult.outcome)
+    }
+
+    @Test
+    fun `GPUCustomRuntimeEffectExecutor refuses unknown ID`() {
+        val registry = customRegistry()
+        val executor = GPUCustomRuntimeEffectExecutor(registry)
+        val execResult = executor.execute(GPUCustomRuntimeEffectID("custom.unknown"))
+        assertEquals("refused", execResult.outcome)
+        assertTrue(execResult.reason.isNotBlank())
+    }
+
+    @Test
+    fun `GPUCustomRuntimeEffectExecutor refuses PENDING descriptor`() {
+        val registry = customRegistry()
+        val schema = GPURuntimeEffectUniformSchema(
+            schemaHash = "schema:test:v1",
+            fields = listOf("u_color:vec4<f32>@0:16"),
+            packingPolicy = "std140",
+        )
+        val result = registry.registerCustomEffect(validWGSLSource(), schema, emptyList(), "test-fixture")
+        val id = result.getOrThrow()
+
+        val descriptor = registry.getDescriptor(id)!!
+        val pendingDescriptor = descriptor.copy(validationStatus = GPUCustomRuntimeEffectValidationStatus.PENDING)
+        registry.forceSetDescriptor(id, pendingDescriptor)
+
+        val executor = GPUCustomRuntimeEffectExecutor(registry)
+        val execResult = executor.execute(id)
+        assertEquals("refused", execResult.outcome)
+        assertTrue(execResult.reason.contains("pending"))
+    }
+
+    @Test
+    fun `GPUCustomRuntimeEffectExecutor result contains diagnostic dump lines`() {
+        val registry = customRegistry()
+        val schema = GPURuntimeEffectUniformSchema(
+            schemaHash = "schema:test:v1",
+            fields = listOf("u_color:vec4<f32>@0:16"),
+            packingPolicy = "std140",
+        )
+        val result = registry.registerCustomEffect(validWGSLSource(), schema, emptyList(), "test-fixture")
+        val id = result.getOrThrow()
+        val executor = GPUCustomRuntimeEffectExecutor(registry)
+
+        val execResult = executor.execute(id)
+        assertTrue(execResult.dumpLines().isNotEmpty())
+        assertTrue(execResult.dumpLines().any { it.contains("custom") })
+    }
 }
