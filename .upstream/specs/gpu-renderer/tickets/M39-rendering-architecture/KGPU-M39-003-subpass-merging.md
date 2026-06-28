@@ -62,11 +62,10 @@ the adapter supports this capability.
 
 ## Graphite Algorithm References
 
-- `GFX-RENDERPASS-SUBPASS` from `../GRAPHITE-ALGORITHM-REFERENCES.md` —
-  study Graphite's subpass planning and input attachment usage for algorithm
-  reference; do not port Graphite or Ganesh.
-- Boundary: references are for algorithm study only; do not port Graphite or
-  Ganesh and do not treat them as Kanvas acceptance criteria.
+- [`GFX-RENDERPASS-TASK`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-renderpass-task) - source [RenderPassTask.cpp:128](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/task/RenderPassTask.cpp:128); Instantiate targets, prepare draw passes, recycle scratch resources, allocate MSAA/depth-stencil attachments, and replay the render pass with destination-copy metadata.
+- [`GFX-DRAWCONTEXT-FLUSH`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-drawcontext-flush) - source [DrawContext.cpp:213](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/DrawContext.cpp:213); Drain pending uploads, record compute path-atlas dispatches, derive pass bounds and strategy, then convert pending draws into an immutable DrawPass.
+- [`GFX-DRAWCONTEXT-RECORD`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-drawcontext-record) - source [DrawContext.cpp:155](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/DrawContext.cpp:155); Classify whether a draw needs a destination-read barrier or advanced-blend barrier before inserting it into the pending draw list.
+- Boundary: Graphite is a working-algorithm reference only; do not port Graphite or Ganesh, and keep Kanvas WebGPU/WGSL acceptance criteria authoritative.
 
 ## Design Sketch
 

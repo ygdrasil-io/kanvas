@@ -56,11 +56,10 @@ lightweight substitutions at replay time.
 
 ## Graphite Algorithm References
 
-- `GFX-DRAWCONTEXT-FLUSH` from `../GRAPHITE-ALGORITHM-REFERENCES.md` — study
-  pass extraction and task insertion for deferred replay for algorithm
-  reference; do not port Graphite or Ganesh.
-- Boundary: references are for algorithm study only; do not port Graphite or
-  Ganesh and do not treat them as Kanvas acceptance criteria.
+- [`GFX-RECORDER-SNAP`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-recorder-snap) - source [Recorder.cpp:198](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/Recorder.cpp:198); Flush tracked devices, finalize draw/upload buffers, put root uploads before dependent render tasks, run prepareResources, then reset transient dictionaries and proxy read counts.
+- [`GFX-DRAWLIST-RECORD`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-drawlist-record) - source [DrawList.cpp:21](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/DrawList.cpp:21); One high-level draw expands to one sort key per RenderStep; each key combines render step ID, paint ID, uniform data, and texture binding data.
+- [`GFX-DRAWCONTEXT-FLUSH`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-drawcontext-flush) - source [DrawContext.cpp:213](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/DrawContext.cpp:213); Drain pending uploads, derive pass bounds and strategy, then convert pending draws into an immutable DrawPass for command encoding.
+- Boundary: Graphite is a working-algorithm reference only; do not port Graphite or Ganesh, and keep Kanvas WebGPU/WGSL acceptance criteria authoritative.
 
 ## Design Sketch
 

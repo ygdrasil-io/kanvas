@@ -55,11 +55,10 @@ must offer MSAA as a TargetNative capability to close the visual quality gap.
 
 ## Graphite Algorithm References
 
-- `GFX-RENDERTARGET-MULTISAMPLE` from `../GRAPHITE-ALGORITHM-REFERENCES.md` —
-  study Graphite's multisample render target configuration and resolve path
-  for algorithm reference only; do not port Graphite or Ganesh.
-- Boundary: references are for algorithm study only; do not port Graphite or
-  Ganesh and do not treat them as Kanvas acceptance criteria.
+- [`GFX-MSAA-PATH-HEURISTICS`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-msaa-path-heuristics) - source [Device.cpp:2040](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/Device.cpp:2040); Choose tessellated strokes for stroke/hairline, convex wedges for non-inverted convex fills, and switch between stencil wedges and curve+triangle tessellation.
+- [`GFX-RENDERPASS-TASK`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-renderpass-task) - source [RenderPassTask.cpp:128](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/task/RenderPassTask.cpp:128); Instantiate targets, prepare draw passes, recycle scratch resources, allocate MSAA/depth-stencil attachments, and replay the render pass.
+- [`GFX-DRAWCONTEXT-FLUSH`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-drawcontext-flush) - source [DrawContext.cpp:213](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/DrawContext.cpp:213); Drain pending uploads, record compute path-atlas dispatches, derive pass bounds/MSAA/depth-stencil strategy, and convert pending draws into an immutable DrawPass.
+- Boundary: Graphite is a working-algorithm reference only; do not port Graphite or Ganesh, and keep Kanvas WebGPU/WGSL acceptance criteria authoritative.
 
 ## Design Sketch
 

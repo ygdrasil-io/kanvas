@@ -62,11 +62,10 @@ uniform or vertex buffer path.
 
 ## Graphite Algorithm References
 
-- `GFX-DRAWCONTEXT-RECORD` from `../GRAPHITE-ALGORITHM-REFERENCES.md` — study
-  draw admission and grouping for algorithm reference; do not port Graphite
-  or Ganesh.
-- Boundary: references are for algorithm study only; do not port Graphite or
-  Ganesh and do not treat them as Kanvas acceptance criteria.
+- [`GFX-DRAW-WRITER`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-draw-writer) - source [DrawWriter.cpp:32](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/DrawWriter.cpp:32); Coalesce pending vertices/instances, bind only changed buffers, choose draw/drawIndexed/drawInstanced commands, and insert barriers at writer flush boundaries.
+- [`GFX-DRAWLIST-SORT`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-drawlist-sort) - source [DrawList.cpp:90](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/DrawList.cpp:90); Sort compact keys, detect pipeline/uniform/texture/scissor state changes, flush the draw writer when state or barriers require it.
+- [`GFX-DRAWLIST-RECORD`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-drawlist-record) - source [DrawList.cpp:21](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/DrawList.cpp:21); One high-level draw expands to one sort key per RenderStep with render step ID, paint ID, uniform data, and texture binding data.
+- Boundary: Graphite is a working-algorithm reference only; do not port Graphite or Ganesh, and keep Kanvas WebGPU/WGSL acceptance criteria authoritative.
 
 ## Design Sketch
 
