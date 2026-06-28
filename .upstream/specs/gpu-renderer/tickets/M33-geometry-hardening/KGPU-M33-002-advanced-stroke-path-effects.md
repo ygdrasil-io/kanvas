@@ -1,7 +1,7 @@
 ---
 id: KGPU-M33-002
 title: "Advanced stroke expansion — complex dash and path-effect chain"
-status: ready
+status: review
 milestone: M33
 priority: P1
 owner_area: geometry
@@ -115,6 +115,7 @@ rtk ./gradlew --no-daemon :gpu-renderer:test --tests '*AdvancedStroke*'
 
 - `proposed`: Initial ticket. Awaiting M33 milestone acceptance.
 - `proposed → ready` (2026-06-28): M33-001 tessellation baseline available for reuse.
+- `ready → review` (2026-06-28): dash expansion, path effect chain, advanced stroke plan implemented.
 
 ## Linear Labels
 
