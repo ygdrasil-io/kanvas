@@ -245,6 +245,17 @@ interface GPUBackendRenderRecorder {
         textureLabel: String,
         draws: List<GPUBackendRawUniformDraw>,
     )
+
+    /** Draws indexed glyph quads from an A8 atlas texture with per-draw uniform payloads. */
+    fun drawTextAtlasPass(
+        atlasRgba: ByteArray,
+        atlasWidth: Int,
+        atlasHeight: Int,
+        atlasFormat: String,
+        vertexData: FloatArray,
+        indexData: IntArray,
+        draws: List<GPUBackendRawUniformDraw>,
+    )
 }
 
 /** Raw uniform bytes for a fullscreen draw, bypassing provider materialization contracts. */

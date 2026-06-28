@@ -91,6 +91,7 @@ private const val FULL_SCREEN_TRIANGLE_VERTEX_COUNT: UInt = 3u
 private const val RGBA_BYTES_PER_PIXEL: Int = 4
 private const val RECT_COLOR_UNIFORM_SIZE_BYTES: ULong = 16uL
 private const val VERTEX_COLOR_STRIDE_BYTES: Int = 32
+private const val TEXT_ATLAS_VERTEX_STRIDE_BYTES: Int = 16
 private val sessionOrdinalCounter = AtomicLong(0L)
 private val windowRuntimeOrdinalCounter = AtomicLong(0L)
 
@@ -906,6 +907,155 @@ private class WgpuRenderRecorder(
         error("encodeOffscreenTexture must be handled by WgpuOffscreenTarget via internal encodeOffscreenTexture")
     }
 
+    override fun drawTextAtlasPass(
+        atlasRgba: ByteArray,
+        atlasWidth: Int,
+        atlasHeight: Int,
+        atlasFormat: String,
+        vertexData: FloatArray,
+        indexData: IntArray,
+        draws: List<GPUBackendRawUniformDraw>,
+    ) {
+        require(atlasRgba.isNotEmpty()) { "atlasRgba must not be empty" }
+        require(atlasWidth > 0) { "atlasWidth must be positive" }
+        require(atlasHeight > 0) { "atlasHeight must be positive" }
+        require(vertexData.isNotEmpty()) { "vertexData must not be empty" }
+        require(indexData.isNotEmpty()) { "indexData must not be empty" }
+        if (draws.isEmpty()) return
+
+        val wgsl = TEXT_ATLAS_A8_WGSL
+        val textureFormat = atlasFormat.toWgpuTextureFormat()
+        val keys = textAtlasExecutionCacheKeys(wgsl = wgsl, targetFormat = targetFormat, textureFormat = textureFormat)
+        executionCaches.recordPreimages(keys)
+
+        val bindGroupLayout = executionCaches.bindGroupLayout(device = device, keys = keys)
+        val textureBindGroupLayout = executionCaches.textureBindGroupLayout(device = device, keys = keys)
+        val shader = executionCaches.shaderModule(device = device, wgsl = wgsl, keys = keys)
+        val pipelineLayout = executionCaches.texturePipelineLayout(
+            device = device,
+            bindGroupLayouts = listOf(bindGroupLayout, textureBindGroupLayout),
+            keys = keys,
+        )
+        val pipeline = executionCaches.textAtlasRenderPipeline(
+            device = device,
+            shader = shader,
+            pipelineLayout = pipelineLayout,
+            targetFormat = targetFormat,
+            keys = keys,
+        )
+
+        val atlasTexture = resourceScope.track(
+            device.createTexture(
+                TextureDescriptor(
+                    size = Extent3D(width = atlasWidth.toUInt(), height = atlasHeight.toUInt()),
+                    format = textureFormat,
+                    usage = GPUTextureUsage.TextureBinding or GPUTextureUsage.CopyDst,
+                    label = "GPUBackend.text.atlas",
+                ),
+            ),
+        ) { it.close() }
+        val paddedAtlasBytesPerRow = alignCopyBytesPerRow(atlasWidth)
+        val paddedAtlasData = if (paddedAtlasBytesPerRow == atlasWidth) {
+            atlasRgba
+        } else {
+            val padded = ByteArray(paddedAtlasBytesPerRow * atlasHeight)
+            for (row in 0 until atlasHeight) {
+                System.arraycopy(atlasRgba, row * atlasWidth, padded, row * paddedAtlasBytesPerRow, atlasWidth)
+            }
+            padded
+        }
+        queue.writeTexture(
+            destination = TexelCopyTextureInfo(texture = atlasTexture),
+            data = ArrayBuffer.of(paddedAtlasData),
+            dataLayout = TexelCopyBufferLayout(
+                offset = 0uL,
+                bytesPerRow = paddedAtlasBytesPerRow.toUInt(),
+                rowsPerImage = atlasHeight.toUInt(),
+            ),
+            size = Extent3D(width = atlasWidth.toUInt(), height = atlasHeight.toUInt()),
+        )
+        val atlasView = resourceScope.track(atlasTexture.createView()) { it.close() }
+        val sampler = resourceScope.track(
+            device.createSampler(
+                SamplerDescriptor(
+                    addressModeU = GPUAddressMode.ClampToEdge,
+                    addressModeV = GPUAddressMode.ClampToEdge,
+                    magFilter = GPUFilterMode.Nearest,
+                    minFilter = GPUFilterMode.Nearest,
+                ),
+            ),
+        ) { it.close() }
+
+        val vertexBuffer = resourceScope.track(
+            device.createBuffer(
+                BufferDescriptor(
+                    size = (vertexData.size * 4).toULong(),
+                    usage = GPUBufferUsage.Vertex or GPUBufferUsage.CopyDst,
+                    label = "GPUBackend.text.vertex",
+                ),
+            ),
+        ) { it.close() }
+        queue.writeBuffer(vertexBuffer, 0uL, ArrayBuffer.of(vertexData))
+
+        val indexBuffer = resourceScope.track(
+            device.createBuffer(
+                BufferDescriptor(
+                    size = (indexData.size * 4).toULong(),
+                    usage = GPUBufferUsage.Index or GPUBufferUsage.CopyDst,
+                    label = "GPUBackend.text.index",
+                ),
+            ),
+        ) { it.close() }
+        queue.writeBuffer(indexBuffer, 0uL, ArrayBuffer.of(indexData))
+
+        setPipelineAction(pipeline)
+        draws.forEach { draw ->
+            val uniform = resourceScope.track(
+                device.createBuffer(
+                    BufferDescriptor(
+                        size = draw.uniformBytes.size.toULong(),
+                        usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
+                        label = "GPUBackend.text.uniform",
+                    ),
+                ),
+            ) { it.close() }
+            queue.writeBuffer(uniform, 0uL, ArrayBuffer.of(draw.uniformBytes))
+            val bindGroup = resourceScope.track(
+                device.createBindGroup(
+                    BindGroupDescriptor(
+                        layout = bindGroupLayout,
+                        entries = listOf(
+                            BindGroupEntry(binding = 0u, resource = BufferBinding(buffer = uniform)),
+                        ),
+                    ),
+                ),
+            ) { it.close() }
+            val textureBindGroup = resourceScope.track(
+                device.createBindGroup(
+                    BindGroupDescriptor(
+                        layout = textureBindGroupLayout,
+                        entries = listOf(
+                            BindGroupEntry(binding = 1u, resource = atlasView),
+                            BindGroupEntry(binding = 2u, resource = sampler),
+                        ),
+                    ),
+                ),
+            ) { it.close() }
+
+            setBindGroupAction(0u, bindGroup)
+            setBindGroupAction(1u, textureBindGroup)
+            setScissorAction(
+                draw.scissorX.toUInt(),
+                draw.scissorY.toUInt(),
+                draw.scissorWidth.toUInt(),
+                draw.scissorHeight.toUInt(),
+            )
+            setVertexBufferAction(0u, vertexBuffer)
+            setIndexBufferAction(indexBuffer, GPUIndexFormat.Uint32)
+            drawIndexedAction(indexData.size.toUInt())
+        }
+    }
+
     override fun drawCompositePass(
         wgsl: String,
         colorFormat: String,
@@ -1369,6 +1519,48 @@ fn fs_main() -> @location(0) vec4f {
     return uniforms.color;
 }
 """.trimIndent()
+
+        val TEXT_ATLAS_A8_WGSL: String = """
+struct Uniforms {
+    targetWidth: f32,
+    targetHeight: f32,
+    color: vec4f,
+};
+
+@group(0) @binding(0) var<uniform> uniforms: Uniforms;
+
+struct VertexInput {
+    @location(0) position: vec2<f32>,
+    @location(1) texcoord: vec2<f32>,
+};
+
+struct VertexOutput {
+    @builtin(position) position: vec4<f32>,
+    @location(0) texcoord: vec2<f32>,
+};
+
+@vertex
+fn vs_main(in: VertexInput) -> VertexOutput {
+    var out: VertexOutput;
+    out.position = vec4<f32>(
+        in.position.x / uniforms.targetWidth * 2.0 - 1.0,
+        1.0 - in.position.y / uniforms.targetHeight * 2.0,
+        0.0,
+        1.0
+    );
+    out.texcoord = in.texcoord;
+    return out;
+}
+
+@group(1) @binding(1) var a8_atlas_texture: texture_2d<f32>;
+@group(1) @binding(2) var a8_atlas_sampler: sampler;
+
+@fragment
+fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
+    let a8 = textureSample(a8_atlas_texture, a8_atlas_sampler, in.texcoord).r;
+    return vec4<f32>(uniforms.color.rgb, a8 * uniforms.color.a);
+}
+""".trimIndent()
     }
 }
 
@@ -1817,6 +2009,82 @@ private class WgpuExecutionCaches(
         return decision.readyHandle()
     }
 
+    /** Returns the cached text atlas A8 render pipeline with position+texcoord vertex buffers and indexed draw. */
+    fun textAtlasRenderPipeline(
+        device: GPUDevice,
+        shader: GPUShaderModule,
+        pipelineLayout: GPUPipelineLayout,
+        targetFormat: GPUTextureFormat,
+        keys: FullscreenExecutionCacheKeys,
+    ): GPURenderPipeline {
+        val decision = renderPipelineCache.getOrCreate(
+            request = request(
+                domain = GPUExecutionCacheDomain.RenderPipeline,
+                keyHash = keys.renderPipelineKeyHash,
+                subjectHash = keys.renderPipelineSubjectHash,
+            ),
+        ) {
+            device.createRenderPipelineWithValidationScope(
+                RenderPipelineDescriptor(
+                    layout = pipelineLayout,
+                    vertex = VertexState(
+                        module = shader,
+                        entryPoint = "vs_main",
+                        buffers = listOf(
+                            VertexBufferLayout(
+                                arrayStride = TEXT_ATLAS_VERTEX_STRIDE_BYTES.toULong(),
+                                attributes = listOf(
+                                    VertexAttribute(
+                                        shaderLocation = 0u,
+                                        offset = 0uL,
+                                        format = GPUVertexFormat.Float32x2,
+                                    ),
+                                    VertexAttribute(
+                                        shaderLocation = 1u,
+                                        offset = 8uL,
+                                        format = GPUVertexFormat.Float32x2,
+                                    ),
+                                ),
+                            ),
+                        ),
+                    ),
+                    primitive = PrimitiveState(),
+                    depthStencil = DepthStencilState(
+                        format = GPUTextureFormat.Depth24PlusStencil8,
+                        depthWriteEnabled = false,
+                        depthCompare = GPUCompareFunction.Always,
+                        stencilFront = StencilFaceState(
+                            compare = GPUCompareFunction.Always,
+                            failOp = GPUStencilOperation.Keep,
+                            depthFailOp = GPUStencilOperation.Keep,
+                            passOp = GPUStencilOperation.Keep,
+                        ),
+                        stencilBack = StencilFaceState(
+                            compare = GPUCompareFunction.Always,
+                            failOp = GPUStencilOperation.Keep,
+                            depthFailOp = GPUStencilOperation.Keep,
+                            passOp = GPUStencilOperation.Keep,
+                        ),
+                        stencilReadMask = 0u,
+                        stencilWriteMask = 0u,
+                    ),
+                    fragment = FragmentState(
+                        module = shader,
+                        entryPoint = "fs_main",
+                        targets = listOf(
+                            ColorTargetState(
+                                format = targetFormat,
+                                blend = srcOverBlendState(),
+                            ),
+                        ),
+                    ),
+                ),
+            )
+        }
+        record(decision)
+        return decision.readyHandle()
+    }
+
     private fun request(
         domain: GPUExecutionCacheDomain,
         keyHash: String,
@@ -2070,6 +2338,87 @@ private fun fullscreenExecutionCacheKeys(
         bindGroupLayoutPreimage = bindGroupLayoutPreimage,
         pipelineLayoutKeyHash = "pipeline-layout:$pipelineLayoutHash",
         pipelineLayoutSubjectHash = "bind-groups:$bindGroupLayoutHash",
+        pipelineLayoutPreimage = pipelineLayoutPreimage,
+        renderPipelineKeyHash = renderPipelineKey,
+        renderPipelineSubjectHash = stableSha256(canonicalRenderPreimage),
+        renderPipelinePreimage = canonicalRenderPreimage,
+    )
+}
+
+private fun textAtlasExecutionCacheKeys(
+    wgsl: String,
+    targetFormat: GPUTextureFormat,
+    textureFormat: GPUTextureFormat,
+): FullscreenExecutionCacheKeys {
+    val targetFormatClass = targetFormat.toBackendColorFormat()
+    val wgslHash = stableSha256(wgsl)
+    val bindGroupLayoutPreimage = listOf(
+        "kind=bind-group-layout",
+        "role=text-atlas-uniform",
+        "version=1",
+        "binding=0",
+        "visibility=vertex|fragment",
+        "bufferType=uniform",
+        "dynamicOffsets=false",
+    ).joinToString("\n")
+    val bindGroupLayoutHash = stableSha256(bindGroupLayoutPreimage)
+    val textureBindGroupLayoutPreimage = listOf(
+        "kind=bind-group-layout",
+        "role=text-atlas-sampler",
+        "version=1",
+        "binding=1:type=texture:format=${textureFormat.name}",
+        "binding=2:type=sampler:filtering",
+        "visibility=fragment",
+    ).joinToString("\n")
+    val textureBindGroupLayoutHash = stableSha256(textureBindGroupLayoutPreimage)
+    val modulePreimage = listOf(
+        "kind=wgsl-module",
+        "role=text-atlas-pass",
+        "entryPoints=vs_main,fs_main",
+        "wgsl=$wgslHash",
+    ).joinToString("\n")
+    val moduleHash = stableSha256(modulePreimage)
+    val pipelineLayoutPreimage = listOf(
+        "kind=pipeline-layout",
+        "role=text-atlas-pass",
+        "version=1",
+        "bindGroupLayouts=$bindGroupLayoutHash,$textureBindGroupLayoutHash",
+    ).joinToString("\n")
+    val pipelineLayoutHash = stableSha256(pipelineLayoutPreimage)
+    val renderPreimage = GPUPipelineKeyPreimage.Render(
+        renderStepIdentity = "gpu-backend.text-atlas-pass",
+        renderStepVersion = "1",
+        primitiveTopology = "triangle-list",
+        materialKeyHash = stableSha256("material:text-atlas-uniform:v1"),
+        materialProgramId = "wgsl.text-atlas-a8",
+        materialDictionaryVersion = "runtime-helper-v1",
+        materialLayoutHash = "$bindGroupLayoutHash,$textureBindGroupLayoutHash",
+        snippetIdentityHash = stableSha256("snippet:text-atlas-a8:v1"),
+        moduleHash = moduleHash,
+        vertexLayoutHash = stableSha256("vertex-layout:text-atlas:float32x2+float32x2"),
+        targetFormatClass = targetFormatClass,
+        blendStateHash = stableSha256("blend:src-over-premul:v1"),
+        sampleStateHash = stableSha256("sample-state:count=1:mask=all"),
+        bindGroupLayoutHash = "$bindGroupLayoutHash,$textureBindGroupLayoutHash",
+        capabilityClass = "webgpu-wgsl-text-atlas-pass",
+        capabilityFacts = listOf("adapter-backed-helper", "targetFormat=$targetFormatClass", "textureFormat=${textureFormat.name}"),
+        rendererSalt = "kgpu-m26-001",
+    )
+    val canonicalRenderPreimage = GPUPipelineKeys.canonicalRenderPreimage(renderPreimage)
+    val renderPipelineKey = GPUPipelineKeys.renderPipelineKey(renderPreimage).value
+
+    return FullscreenExecutionCacheKeys(
+        moduleKeyHash = "module:$moduleHash",
+        moduleSubjectHash = "wgsl:$wgslHash",
+        modulePreimage = modulePreimage,
+        bindGroupLayoutKeyHash = "bind-group-layout:$bindGroupLayoutHash",
+        bindGroupLayoutSubjectHash = "layout-shape:$bindGroupLayoutHash",
+        bindGroupLayoutPreimage = bindGroupLayoutPreimage,
+        textureBindGroupLayoutKeyHash = "bind-group-layout:$textureBindGroupLayoutHash",
+        textureBindGroupLayoutSubjectHash = "layout-shape:$textureBindGroupLayoutHash",
+        textureBindGroupLayoutPreimage = textureBindGroupLayoutPreimage,
+        pipelineLayoutKeyHash = "pipeline-layout:$pipelineLayoutHash",
+        pipelineLayoutSubjectHash = "bind-groups:$bindGroupLayoutHash,$textureBindGroupLayoutHash",
         pipelineLayoutPreimage = pipelineLayoutPreimage,
         renderPipelineKeyHash = renderPipelineKey,
         renderPipelineSubjectHash = stableSha256(canonicalRenderPreimage),
