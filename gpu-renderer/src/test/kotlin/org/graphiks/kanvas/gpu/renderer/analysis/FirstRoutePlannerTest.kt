@@ -1437,7 +1437,7 @@ class FirstRoutePlannerTest {
         assertEquals("native.apply_filter.simple_node", analysisDecision.routeDecisionLabel)
         assertEquals("native.apply_filter.simple_node", routeDecision.route.consumerKind)
         assertContains(routeDecision.route.renderStepIdentity, "filter-render:colorfilter")
-        assertEquals(listOf("first_slice.blur_filter.native", "first_slice.color_matrix_filter.native"), routeDecision.route.requirements)
+        assertEquals(listOf("first_slice.color_matrix_filter.native"), routeDecision.route.requirements)
         assertEquals(emptyList(), analysisDecision.resourceDeclarations)
         assertEquals("pass.filter.50", plan.pass.passId)
         assertEquals(1, plan.pass.pipelineKeys.size)

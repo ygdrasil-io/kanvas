@@ -804,7 +804,6 @@ class GPUFirstRoutePlanner(
         coordinateRefusalCode() ?: when {
             stroke -> "unsupported.stroke.unimplemented"
             scopeId.isBlank() -> "unsupported.layer.scope_id_empty"
-            bounds.hasNaN() -> "unsupported.bounds.nan"
             bounds.hasNonFinite() -> "unsupported.bounds.non_finite"
             !bounds.left.isFinite() || !bounds.top.isFinite() || !bounds.right.isFinite() || !bounds.bottom.isFinite() ->
                 "unsupported.layer.bounds_unbounded"
@@ -1169,11 +1168,17 @@ class GPUFirstRoutePlanner(
             sortKey = SortKey(command.ordering.paintOrder.toLong()),
             diagnostics = command.transform.analysisDiagnostics(recordId = recordId),
         )
+        val filterNodeKind = command.filterGraph.nodes.single().nodeKind
+        val filterRequirements = when (filterNodeKind) {
+            "GaussianBlur" -> listOf(firstBlurFilterCapabilityName)
+            "ColorFilter" -> listOf(firstColorMatrixFilterCapabilityName)
+            else -> listOf(firstBlurFilterCapabilityName, firstColorMatrixFilterCapabilityName)
+        }
         val routeDecision = GPUFirstRouteDecisionBuilder.nativeApplyFilter(
             commandIdValue = command.commandId.value,
             pipelinePreimageHash = pipelineKey,
             renderStepIdentity = renderStep,
-            requirements = listOf(firstBlurFilterCapabilityName, firstColorMatrixFilterCapabilityName),
+            requirements = filterRequirements,
         )
         val analysisDecision = GPUDrawAnalysisDecision.Candidate(
             recordId = recordId,
