@@ -43,7 +43,10 @@ Les transformations perspective étaient systématiquement refusées. Ce ticket 
 
 ## Graphite Algorithm References
 
-- `GFX-TRANSFORM` from `GRAPHITE-ALGORITHM-REFERENCES.md` — matrix classification and bounds projection. Algorithm reference only.
+- [`GFX-SHAPE-ROUTING-HEURISTICS`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-shape-routing-heuristics) - source [Device.cpp:1900](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/Device.cpp:1900); Route subruns, vertices, coverage masks, edge-AA quads, simple rect/rrects, and tessellated paths based on transform, style, and capabilities.
+- [`GFX-SIMPLE-SHAPE-BOUNDS`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-simple-shape-bounds) - source [Device.cpp:248](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/Device.cpp:248); Identify pixel-aligned rects, simple rect/rrect/line shapes, and inner-fill bounds that justify a second non-AA fill for overdraw reduction.
+- [`GFX-DRAWGEOMETRY-ROUTING`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-drawgeometry-routing) - source [Device.cpp:1512](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/Device.cpp:1512); Compute clipped bounds, pick a renderer or atlas, derive paint keys, handle atlas insertion, and split stroke/fill/inner-fill draws.
+- Boundary: Graphite is a working-algorithm reference only; do not port Graphite or Ganesh, and keep Kanvas WebGPU/WGSL acceptance criteria authoritative.
 
 ## Design Sketch
 

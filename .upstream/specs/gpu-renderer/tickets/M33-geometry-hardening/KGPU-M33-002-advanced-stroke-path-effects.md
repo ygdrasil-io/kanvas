@@ -43,7 +43,10 @@ GPUStrokeExpansionPlan currently refuses complex dashes and path-effect chains. 
 
 ## Graphite Algorithm References
 
-- `GFX-STROKE-STYLE` from `GRAPHITE-ALGORITHM-REFERENCES.md` — stroke expansion and dash decomposition. Algorithm reference only.
+- [`GFX-TESSELLATE-STROKES`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-tessellate-strokes) - source [TessellateStrokesRenderStep.cpp:91](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/render/TessellateStrokesRenderStep.cpp:91); Tessellate stroked paths with cap/join handling, cusp handling for quads/conics/cubics, transform scale, and stroke-width uniforms.
+- [`GFX-SHAPE-ROUTING-HEURISTICS`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-shape-routing-heuristics) - source [Device.cpp:1900](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/Device.cpp:1900); Route subruns, vertices, coverage masks, edge-AA quads, simple rect/rrects, and tessellated paths based on transform, style, and capabilities.
+- [`GFX-RENDERER-STRATEGY`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-renderer-strategy) - source [RendererProvider.cpp:80](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/RendererProvider.cpp:80); Choose a path strategy from capabilities, preferring compute when available, then tessellation/small-atlas, then raster atlas.
+- Boundary: Graphite is a working-algorithm reference only; do not port Graphite or Ganesh, and keep Kanvas WebGPU/WGSL acceptance criteria authoritative.
 
 ## Design Sketch
 

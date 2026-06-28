@@ -46,7 +46,10 @@ Currently all path fill/stroke goes through CPUPreparedGPU (atlas or CPU-prepare
 
 ## Graphite Algorithm References
 
-- `GFX-TESSELLATION` from `GRAPHITE-ALGORITHM-REFERENCES.md` — fan tessellation and indirect dispatch patterns. Algorithm reference only.
+- [`GFX-RENDERER-STRATEGY`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-renderer-strategy) - source [RendererProvider.cpp:80](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/RendererProvider.cpp:80); Choose a path strategy from capabilities, preferring compute when available, then tessellation/small-atlas, then raster atlas.
+- [`GFX-SHAPE-ROUTING-HEURISTICS`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-shape-routing-heuristics) - source [Device.cpp:1900](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/Device.cpp:1900); Route subruns, vertices, coverage masks, edge-AA quads, simple rect/rrects, and tessellated paths based on transform, style, and capabilities.
+- [`GFX-MSAA-PATH-HEURISTICS`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-msaa-path-heuristics) - source [Device.cpp:2040](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/Device.cpp:2040); Choose tessellated strokes, convex wedges, and switch between stencil wedges and curve+triangle tessellation using verb-count/area heuristics.
+- Boundary: Graphite is a working-algorithm reference only; do not port Graphite or Ganesh, and keep Kanvas WebGPU/WGSL acceptance criteria authoritative.
 
 ## Design Sketch
 
