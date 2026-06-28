@@ -121,6 +121,7 @@ class RectOnlyOffscreenRenderer {
                     pathFillStencilCount = drawPlan.pathFillStencilCount,
                     pathFillGradientCount = drawPlan.pathFillGradientCount,
                     convexFanMeshCount = drawPlan.convexFanMeshCount,
+                    customRuntimeEffectRectCount = drawPlan.customRuntimeEffectRectCount,
                     filters = drawPlan.filters,
                     saveLayers = drawPlan.saveLayers,
                     runtimeEffects = drawPlan.runtimeEffects,
@@ -249,6 +250,7 @@ class RectOnlyOffscreenRenderer {
                 "linear-gradient-rect", "radial-gradient-rect", "sweep-gradient-rect",
                 "blur-rect", "color-matrix-rect", "stroke-rect",
                 "bitmap-rect", "runtime-effect", "text-run", "save-layer",
+                "custom-runtime-effect",
             )
             val gradientTypes = setOf(
                 "linear-gradient-rect", "radial-gradient-rect", "sweep-gradient-rect",
@@ -384,6 +386,27 @@ class RectOnlyOffscreenRenderer {
                         )
                     },
                 )
+            }
+
+            val customReFills = drawPlan.fills.filter { it.family == "custom-runtime-effect" }
+            if (customReFills.isNotEmpty()) {
+                customReFills.groupBy { it.customWgslSource ?: "" }.forEach { (wgsl, fills) ->
+                    if (wgsl.isBlank() || wgsl.isEmpty()) return@forEach
+                    drawFullscreenRawUniformPass(
+                        wgsl = composeCustomRuntimeEffectWgsl(wgsl),
+                        colorFormat = OFFSCREEN_COLOR_FORMAT,
+                        draws = fills.map { fill ->
+                            val bytes = UniformPacker.simpleRtBytes(fill.startColor)
+                            GPUBackendRawUniformDraw(
+                                uniformBytes = bytes,
+                                scissorX = fill.scissorX,
+                                scissorY = fill.scissorY,
+                                scissorWidth = fill.scissorWidth,
+                                scissorHeight = fill.scissorHeight,
+                            )
+                        },
+                    )
+                }
             }
 
             val textFills = drawPlan.fills.filter { it.family == "text-run" }
@@ -900,6 +923,7 @@ internal data class RectOnlyDrawPlan(
     val pathFillStencilCount: Int = fills.count { it.family == "path-fill-stencil" }
     val pathFillGradientCount: Int = fills.count { it.family == "path-fill-gradient" }
     val convexFanMeshCount: Int = fills.count { it.family == "convex-fan-mesh" }
+    val customRuntimeEffectRectCount: Int = fills.count { it.family == "custom-runtime-effect" }
     val filterNodeCount: Int = filters.size
     val runtimeEffects: List<RectOnlyRuntimeEffectTile> = fills
         .filter { it.family == "runtime-effect" }
@@ -985,6 +1009,7 @@ internal data class RectOnlyFillDraw(
     val runtimeEffectWgslImplementationId: String? = null,
     val runtimeEffectUniformLayout: String? = null,
     val runtimeEffectPipelineKey: String? = null,
+    val customWgslSource: String? = null,
     val meshRibbonKind: String? = null,
     val gradientCenterX: Float? = null,
     val gradientCenterY: Float? = null,
@@ -1042,6 +1067,7 @@ internal fun prepareRectOnlyDrawPlan(
                 is SceneCommand.BitmapRect -> add(RectOnlyIndexedDraw(index, command, activeClip))
                 is SceneCommand.SaveLayer -> add(RectOnlyIndexedDraw(index, command, activeClip))
                 is SceneCommand.RuntimeEffectTile -> add(RectOnlyIndexedDraw(index, command, activeClip))
+                is SceneCommand.CustomRuntimeEffectTile -> add(RectOnlyIndexedDraw(index, command, activeClip))
                 is SceneCommand.TextRun -> add(RectOnlyIndexedDraw(index, command, activeClip))
                 is SceneCommand.MeshRibbon -> add(RectOnlyIndexedDraw(index, command, activeClip))
                 else -> Unit
@@ -1063,6 +1089,7 @@ internal fun prepareRectOnlyDrawPlan(
             val reCommand = command as? SceneCommand.RuntimeEffectTile
             val textRunCommand = command as? SceneCommand.TextRun
             val meshRibbonCommand = command as? SceneCommand.MeshRibbon
+            val creCommand = command as? SceneCommand.CustomRuntimeEffectTile
             val paintOrder = command.paintOrder()
             val mappedFamily = when {
                 command is SceneCommand.Stroke -> "stroke-rect"
@@ -1095,6 +1122,7 @@ internal fun prepareRectOnlyDrawPlan(
                 runtimeEffectWgslImplementationId = reCommand?.wgslImplementationId,
                 runtimeEffectUniformLayout = reCommand?.uniformLayout,
                 runtimeEffectPipelineKey = reCommand?.pipelineKey,
+                customWgslSource = creCommand?.wgslSource,
                 meshRibbonKind = meshRibbonCommand?.meshKind,
                 gradientCenterX = radialCommand?.centerX ?: sweepCommand?.centerX,
                 gradientCenterY = radialCommand?.centerY ?: sweepCommand?.centerY,
@@ -1198,6 +1226,9 @@ internal fun prepareRectOnlyDrawPlan(
         if (fills.any { it.family == "runtime-effect" }) {
             addAll(runtimeEffectWiringDiagnostics())
         }
+        if (fills.any { it.family == "custom-runtime-effect" }) {
+            addAll(customRuntimeEffectWiringDiagnostics())
+        }
         if (fills.any { it.family == "save-layer" }) {
             addAll(saveLayerWiringDiagnostics(fills, sceneId, width, height))
         }
@@ -1289,6 +1320,31 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
 """
 }
 
+internal fun composeCustomRuntimeEffectWgsl(source: String): String {
+    val snippet = source.replace("@group(1)", "@group(0)")
+        .replace(Regex("@fragment\\s+"), "")
+        .replace(Regex("@location\\(\\d+\\)\\s+"), "")
+    val entryPoint = "custom_main"
+    val renamed = snippet.replace(Regex("fn\\s+main\\s*\\("), "fn ${entryPoint}(")
+    val takesNoParams = Regex("fn\\s+${Regex.escape(entryPoint)}\\s*\\(\\s*\\)").containsMatchIn(renamed)
+    val call = if (takesNoParams) "$entryPoint()" else "$entryPoint(pos.xy)"
+    return """
+$renamed
+
+@vertex
+fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
+    let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
+    let y = f32(idx & 2u) * 2.0 - 1.0;
+    return vec4f(x, y, 0.0, 1.0);
+}
+
+@fragment
+fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
+    return $call;
+}
+"""
+}
+
 /**
  * KGPU-M25-003: BitmapRect's runtime-effect sibling routes through the real SimpleRT snippet
  * identity ([SimpleRTSourceHash]) and the registered gColor uniform ABI. Unlike the other families,
@@ -1299,6 +1355,10 @@ internal fun runtimeEffectWiringDiagnostics(): List<String> = listOf(
     "runtimeEffect:entryPoint=$SimpleRTEntryPoint",
     "runtimeEffect:uniformPacker=UniformPacker.simpleRtBytes",
     "runtimeEffect:realGpuOutput=true proceduralWrapperRemoved=true productActivation=true",
+)
+
+internal fun customRuntimeEffectWiringDiagnostics(): List<String> = listOf(
+    "custom-runtime-effect supports custom WGSL source per-tile via fullscreen raw uniform pass",
 )
 
 /**
@@ -1410,6 +1470,7 @@ private fun rectOnlyFillDraw(
     runtimeEffectWgslImplementationId: String? = null,
     runtimeEffectUniformLayout: String? = null,
     runtimeEffectPipelineKey: String? = null,
+    customWgslSource: String? = null,
     meshRibbonKind: String? = null,
     gradientCenterX: Float? = null,
     gradientCenterY: Float? = null,
@@ -1457,6 +1518,7 @@ private fun rectOnlyFillDraw(
         runtimeEffectWgslImplementationId = runtimeEffectWgslImplementationId,
         runtimeEffectUniformLayout = runtimeEffectUniformLayout,
         runtimeEffectPipelineKey = runtimeEffectPipelineKey,
+        customWgslSource = customWgslSource,
         meshRibbonKind = meshRibbonKind,
         gradientCenterX = gradientCenterX,
         gradientCenterY = gradientCenterY,
@@ -1488,6 +1550,7 @@ internal fun rectOnlyCommandSequenceUnsupportedReason(commands: List<SceneComman
                 command is SceneCommand.BitmapRect ||
                 command is SceneCommand.SaveLayer ||
                 command is SceneCommand.RuntimeEffectTile ||
+                command is SceneCommand.CustomRuntimeEffectTile ||
                 command is SceneCommand.TextRun ||
                 command is SceneCommand.MeshRibbon
             ) {
@@ -1498,7 +1561,7 @@ internal fun rectOnlyCommandSequenceUnsupportedReason(commands: List<SceneComman
         }
         .distinct()
     if (unsupportedFamilies.isNotEmpty()) {
-        return "rect-only offscreen render supports only clear, fill-rect, fill-rrect, stroke, linear-gradient-rect, radial-gradient-rect, sweep-gradient-rect, clip, path-fill-stencil, path-fill-gradient, convex-fan-mesh, bitmap-rect, save-layer, runtime-effect, mesh-ribbon, and text-run command families: " +
+        return "rect-only offscreen render supports only clear, fill-rect, fill-rrect, stroke, linear-gradient-rect, radial-gradient-rect, sweep-gradient-rect, clip, path-fill-stencil, path-fill-gradient, convex-fan-mesh, bitmap-rect, save-layer, runtime-effect, custom-runtime-effect, mesh-ribbon, and text-run command families: " +
             unsupportedFamilies.joinToString()
     }
 
@@ -1507,11 +1570,11 @@ internal fun rectOnlyCommandSequenceUnsupportedReason(commands: List<SceneComman
         it is SceneCommand.LinearGradientRect || it is SceneCommand.RadialGradientRect || it is SceneCommand.SweepGradientRect ||
         it is SceneCommand.PathFillStencil || it is SceneCommand.PathFillGradient || it is SceneCommand.ConvexFanMesh ||
                 it is SceneCommand.BitmapRect || it is SceneCommand.SaveLayer ||
-                it is SceneCommand.RuntimeEffectTile || it is SceneCommand.TextRun ||
-                it is SceneCommand.MeshRibbon
+                it is SceneCommand.RuntimeEffectTile || it is SceneCommand.CustomRuntimeEffectTile ||
+                it is SceneCommand.TextRun || it is SceneCommand.MeshRibbon
         }
     ) {
-        return "rect-only offscreen render requires at least one FillRect, FillRRect, Stroke, LinearGradientRect, RadialGradientRect, SweepGradientRect, PathFillStencil, PathFillGradient, ConvexFanMesh, BitmapRect, SaveLayer, RuntimeEffectTile, MeshRibbon, or TextRun command"
+        return "rect-only offscreen render requires at least one FillRect, FillRRect, Stroke, LinearGradientRect, RadialGradientRect, SweepGradientRect, PathFillStencil, PathFillGradient, ConvexFanMesh, BitmapRect, SaveLayer, RuntimeEffectTile, CustomRuntimeEffectTile, MeshRibbon, or TextRun command"
     }
 
     val clearIndices = commands.withIndex()
@@ -1543,6 +1606,7 @@ internal fun rectOnlyRenderedDiagnostics(
     pathFillStencilCount: Int = 0,
     pathFillGradientCount: Int = 0,
     convexFanMeshCount: Int = 0,
+    customRuntimeEffectRectCount: Int = 0,
     filters: List<RectOnlyFilterNode> = emptyList(),
     saveLayers: List<RectOnlySaveLayer> = emptyList(),
     runtimeEffects: List<RectOnlyRuntimeEffectTile> = emptyList(),
@@ -1564,11 +1628,12 @@ internal fun rectOnlyRenderedDiagnostics(
             pathFillStencilCount +
             pathFillGradientCount +
             convexFanMeshCount +
+            customRuntimeEffectRectCount +
             saveLayers.size +
             runtimeEffects.size +
             meshRibbons.size > 0,
     ) {
-        "$sceneId rect-only diagnostics require at least one FillRect, FillRRect, LinearGradientRect, BitmapRect, BlurRect, ColorMatrixRect, StrokeRect, TextRun, SaveLayer, RuntimeEffectTile, MeshRibbon, PathFillStencil, PathFillGradient, or ConvexFanMesh command"
+        "$sceneId rect-only diagnostics require at least one FillRect, FillRRect, LinearGradientRect, BitmapRect, BlurRect, ColorMatrixRect, StrokeRect, TextRun, SaveLayer, RuntimeEffectTile, CustomRuntimeEffectTile, MeshRibbon, PathFillStencil, PathFillGradient, or ConvexFanMesh command"
     }
     return buildList {
         add("rendered $sceneId via WebGPU offscreen")
@@ -1589,6 +1654,7 @@ internal fun rectOnlyRenderedDiagnostics(
         add("pathFillStencilCommands=$pathFillStencilCount")
         add("pathFillGradientCommands=$pathFillGradientCount")
         add("convexFanMeshCommands=$convexFanMeshCount")
+        add("customRuntimeEffectRectCommands=$customRuntimeEffectRectCount")
         if (saveLayers.isNotEmpty()) {
             add("saveLayerCommands=${saveLayers.size}")
             add("saveLayerKinds=${saveLayers.joinToString { it.layerKind }}")
@@ -1659,6 +1725,7 @@ private fun SceneCommand.shapeRect() =
         is SceneCommand.BitmapRect -> fixtureRect()
         is SceneCommand.SaveLayer -> fixtureContentRect()
         is SceneCommand.RuntimeEffectTile -> fixtureRect()
+        is SceneCommand.CustomRuntimeEffectTile -> rect
         is SceneCommand.MeshRibbon -> fixtureBounds()
         is SceneCommand.PathFillStencil -> pathFillBoundingRect(pathKind)
         is SceneCommand.PathFillGradient -> pathFillBoundingRect(pathKind)
@@ -1678,6 +1745,7 @@ private fun SceneCommand.shapeStartColor() =
         is SceneCommand.BitmapRect -> fixtureSource().topLeft
         is SceneCommand.SaveLayer -> fixtureContentColor()
         is SceneCommand.RuntimeEffectTile -> fixtureUniformColor()
+        is SceneCommand.CustomRuntimeEffectTile -> fixtureUniformColor()
         is SceneCommand.MeshRibbon -> fixtureStartColor()
         is SceneCommand.PathFillStencil -> fillColor
         is SceneCommand.PathFillGradient -> startColor
@@ -1703,6 +1771,7 @@ private fun SceneCommand.shapeEndColor() =
         is SceneCommand.BitmapRect -> fixtureSource().topRight
         is SceneCommand.SaveLayer -> fixtureContentColor()
         is SceneCommand.RuntimeEffectTile -> fixtureUniformColor()
+        is SceneCommand.CustomRuntimeEffectTile -> fixtureUniformColor()
         is SceneCommand.MeshRibbon -> fixtureEndColor()
         is SceneCommand.PathFillStencil -> fillColor
         is SceneCommand.PathFillGradient -> endColor
@@ -1722,6 +1791,7 @@ private fun SceneCommand.shapeBottomLeftColor() =
         is SceneCommand.BitmapRect -> fixtureSource().bottomLeft
         is SceneCommand.SaveLayer -> fixtureContentColor()
         is SceneCommand.RuntimeEffectTile -> fixtureUniformColor()
+        is SceneCommand.CustomRuntimeEffectTile -> fixtureUniformColor()
         is SceneCommand.MeshRibbon -> fixtureStartColor()
         is SceneCommand.PathFillStencil -> fillColor
         is SceneCommand.PathFillGradient -> startColor
@@ -1741,6 +1811,7 @@ private fun SceneCommand.shapeBottomRightColor() =
         is SceneCommand.BitmapRect -> fixtureSource().bottomRight
         is SceneCommand.SaveLayer -> fixtureContentColor()
         is SceneCommand.RuntimeEffectTile -> fixtureUniformColor()
+        is SceneCommand.CustomRuntimeEffectTile -> fixtureUniformColor()
         is SceneCommand.MeshRibbon -> fixtureEndColor()
         is SceneCommand.PathFillStencil -> fillColor
         is SceneCommand.PathFillGradient -> endColor
@@ -1760,6 +1831,7 @@ private fun SceneCommand.shapeRadius(): Float =
         is SceneCommand.BitmapRect -> 0f
         is SceneCommand.SaveLayer -> radius
         is SceneCommand.RuntimeEffectTile -> 0f
+        is SceneCommand.CustomRuntimeEffectTile -> 0f
         is SceneCommand.MeshRibbon -> thickness * 0.5f
         is SceneCommand.PathFillStencil -> 0f
         is SceneCommand.PathFillGradient -> 0f
@@ -1772,6 +1844,7 @@ private fun SceneCommand.shapePaintKind(): Float =
     when (this) {
         is SceneCommand.MeshRibbon -> 5f
         is SceneCommand.RuntimeEffectTile -> 4f
+        is SceneCommand.CustomRuntimeEffectTile -> 12f
         is SceneCommand.LinearGradientRect -> 1f
         is SceneCommand.RadialGradientRect -> 6f
         is SceneCommand.SweepGradientRect -> 7f
@@ -1817,6 +1890,9 @@ private fun SceneCommand.RuntimeEffectTile.fixtureRect(): SceneRect =
 
 private fun SceneCommand.RuntimeEffectTile.fixtureUniformColor(): SceneColor =
     uniformColor ?: error("RuntimeEffectTile requires uniform color fixture payload: $label")
+
+private fun SceneCommand.CustomRuntimeEffectTile.fixtureUniformColor(): SceneColor =
+    SceneColor.blue()
 
 private fun SceneCommand.MeshRibbon.fixtureBounds(): SceneRect =
     bounds ?: error("MeshRibbon requires bounds fixture payload: $label")
