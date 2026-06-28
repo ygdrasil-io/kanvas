@@ -32,6 +32,7 @@ data class WGSLDeviceCapabilities(
 /** Minimal stub for a wgsl4k-parsed module consumed by security validation. */
 data class WGSLParsedModule(
     val sourceHash: String,
+    val source: String = "",
     val uniforms: List<String> = emptyList(),
     val textures: List<String> = emptyList(),
     val bindGroups: List<String> = emptyList(),
