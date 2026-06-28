@@ -60,8 +60,8 @@ data class GPUCustomRuntimeEffectDescriptor(
 /** Validation error returned when custom WGSL registration fails. */
 data class GPUCustomRuntimeEffectValidationError(
     val code: String,
-    val message: String,
-)
+    override val message: String,
+) : RuntimeException(message)
 
 /** Registry for custom runtime effects, isolated from GPURuntimeEffectRegistry. */
 interface GPUCustomRuntimeEffectRegistry {

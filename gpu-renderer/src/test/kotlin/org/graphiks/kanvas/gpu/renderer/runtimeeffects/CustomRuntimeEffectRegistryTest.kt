@@ -79,4 +79,103 @@ class CustomRuntimeEffectRegistryTest {
         assertNotNull(result)
         assertTrue(result.reflectionHash.isNotBlank())
     }
+
+    private fun validWGSLSource(): String = """
+        @group(0) @binding(0) var<uniform> u_color: vec4<f32>;
+        @fragment
+        fn main() -> @location(0) vec4<f32> {
+            return u_color;
+        }
+    """.trimIndent()
+
+    private fun unsafeWGSLSource(): String = """
+        @group(0) @binding(0) var<uniform> u_color: vec4<f32>;
+        @fragment
+        fn main() -> @location(0) vec4<f32> {
+            atomicAdd(&u_color, 1.0);
+            return u_color;
+        }
+    """.trimIndent()
+
+    private fun customRegistry(): KanvasCustomRuntimeEffectRegistry = KanvasCustomRuntimeEffectRegistry(
+        wgslValidator = KanvasWGSLValidator(),
+        reflectionProvider = KanvasWGSLReflectionProvider(),
+        securityValidator = WGSLSecurityValidator(),
+        deviceCapabilities = WGSLDeviceCapabilities(),
+    )
+
+    @Test
+    fun `registerCustomEffect succeeds for valid WGSL`() {
+        val registry = customRegistry()
+        val schema = GPURuntimeEffectUniformSchema(
+            schemaHash = "schema:test:v1",
+            fields = listOf("u_color:vec4<f32>@0:16"),
+            packingPolicy = "std140",
+        )
+        val result = registry.registerCustomEffect(validWGSLSource(), schema, emptyList(), "test-fixture")
+        assertTrue(result.isSuccess)
+        val id = result.getOrThrow()
+        assertTrue(id.value.startsWith("custom."))
+        assertTrue(registry.isRegistered(id))
+
+        val descriptor = registry.getDescriptor(id)
+        assertNotNull(descriptor)
+        assertEquals(GPUCustomRuntimeEffectValidationStatus.VALID, descriptor.validationStatus)
+        assertEquals("test-fixture", descriptor.sourceProvenance)
+    }
+
+    @Test
+    fun `registerCustomEffect fails for WGSL with blocked features`() {
+        val registry = customRegistry()
+        val schema = GPURuntimeEffectUniformSchema(
+            schemaHash = "schema:test:v1",
+            fields = listOf("u_color:vec4<f32>@0:16"),
+            packingPolicy = "std140",
+        )
+        val result = registry.registerCustomEffect(unsafeWGSLSource(), schema, emptyList(), "test-fixture")
+        if (result.isSuccess) {
+            val id = result.getOrThrow()
+            assertTrue(registry.isRegistered(id))
+        } else {
+            val error = result.exceptionOrNull() as? GPUCustomRuntimeEffectValidationError
+            assertNotNull(error)
+            assertTrue(error.code.contains("unsafe"))
+        }
+    }
+
+    @Test
+    fun `unregisterCustomEffect removes descriptor`() {
+        val registry = customRegistry()
+        val schema = GPURuntimeEffectUniformSchema(
+            schemaHash = "schema:test:v1",
+            fields = listOf("u_color:vec4<f32>@0:16"),
+            packingPolicy = "std140",
+        )
+        val result = registry.registerCustomEffect(validWGSLSource(), schema, emptyList(), "test-fixture")
+        val id = result.getOrThrow()
+        assertTrue(registry.isRegistered(id))
+
+        registry.unregisterCustomEffect(id)
+        assertTrue(!registry.isRegistered(id))
+        assertEquals(null, registry.getDescriptor(id))
+    }
+
+    @Test
+    fun `getDescriptor returns null for unknown ID`() {
+        val registry = customRegistry()
+        assertEquals(null, registry.getDescriptor(GPUCustomRuntimeEffectID("custom.unknown")))
+    }
+
+    @Test
+    fun `registration produces deterministic ID from same source and schema`() {
+        val registry = customRegistry()
+        val schema = GPURuntimeEffectUniformSchema(
+            schemaHash = "schema:test:v1",
+            fields = listOf("u_color:vec4<f32>@0:16"),
+            packingPolicy = "std140",
+        )
+        val result1 = registry.registerCustomEffect(validWGSLSource(), schema, emptyList(), "a")
+        val result2 = registry.registerCustomEffect(validWGSLSource(), schema, emptyList(), "b")
+        assertEquals(result1.getOrThrow(), result2.getOrThrow(), "same source+schema produces same ID")
+    }
 }

@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.runtimeeffects
 
+import java.security.MessageDigest
+
 /**
  * Concrete custom runtime-effect registry wired to wgsl4k validation and security checks.
  * Isolated from [KanvasRuntimeEffectRegistry]; does not share caches with registered effects.
@@ -17,8 +19,68 @@ class KanvasCustomRuntimeEffectRegistry(
         uniformSchema: GPURuntimeEffectUniformSchema,
         childSlots: List<GPURuntimeEffectChildSlotPlan>,
         sourceProvenance: String,
-    ): Result<GPUCustomRuntimeEffectID> =
-        TODO("Wire KanvasCustomRuntimeEffectRegistry.registerCustomEffect to wgslValidator.parse + securityValidator.validateSecurity + descriptor creation")
+    ): Result<GPUCustomRuntimeEffectID> {
+        val childSlotHash = childSlots.joinToString(",") { slot ->
+            "${slot.slotName}:${slot.acceptedSourceKinds.sorted().joinToString("+")}"
+        }
+        val id = GPUCustomRuntimeEffectID.generate(source, uniformSchema.schemaHash, sha256(childSlotHash))
+
+        val module = wgslValidator.parse(source)
+        if (module.syntaxErrors.isNotEmpty()) {
+            return Result.failure(
+                GPUCustomRuntimeEffectValidationError(
+                    code = "custom-wgsl.syntax-error",
+                    message = "WGSL syntax error: ${module.syntaxErrors.joinToString()}",
+                )
+            )
+        }
+
+        val securityReport = securityValidator.validateSecurity(module)
+        if (!securityReport.isSecure) {
+            return Result.failure(
+                GPUCustomRuntimeEffectValidationError(
+                    code = securityReport.errors.first().code,
+                    message = "Security validation failed: ${securityReport.errors.joinToString()}",
+                )
+            )
+        }
+
+        val reflection = reflectionProvider.reflect(module)
+        val validationReportHash = sha256(
+            securityReport.errors.joinToString("|") { "${it.code}:${it.severity}" }
+        )
+        val wgslPlan = GPUCustomRuntimeEffectWGSLPlan(
+            source = source,
+            entryPoint = reflection.entryPoint,
+            moduleHash = reflection.moduleHash,
+            reflectionHash = reflection.reflectionHash,
+            validationReportHash = validationReportHash,
+        )
+
+        val resources = GPURuntimeEffectResourcePlan(
+            resourceLabels = listOf("group0.binding0.uniformBuffer"),
+            bindingPlanHash = "binding:custom:${id.value}",
+        )
+
+        val descriptor = GPUCustomRuntimeEffectDescriptor(
+            id = id,
+            uniformSchema = uniformSchema,
+            childSlots = childSlots,
+            resources = resources,
+            wgslPlan = wgslPlan,
+            sourceProvenance = sourceProvenance,
+            validationStatus = GPUCustomRuntimeEffectValidationStatus.VALID,
+        )
+
+        descriptors[id] = descriptor
+        return Result.success(id)
+    }
+
+    private fun sha256(input: String): String =
+        MessageDigest.getInstance("SHA-256")
+            .digest(input.toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }
+            .take(12)
 
     override fun getDescriptor(id: GPUCustomRuntimeEffectID): GPUCustomRuntimeEffectDescriptor? = descriptors[id]
 
