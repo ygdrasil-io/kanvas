@@ -49,8 +49,8 @@ ticket per `GpuRendererLegacyRouteFamily` row. All are `status: review`.
 | KGPU-M32-011 | `done` | `solid-rect-drawpaint` | port | `GPUNative` |
 | KGPU-M32-012 | `done` | `rounded-rect-gradients` | port (solid uniform rrect) / refuse (gradients + non-uniform radii) | `GPUNative` |
 | KGPU-M32-013 | `done` | `rect-rrect-stroke` | refuse | `RefuseDiagnostic` |
-| KGPU-M32-014 | `review` | `device-scissor-simple-clips` | port (WideOpen/DeviceRect) / refuse (complex clips) | `GPUNative` |
-| KGPU-M32-015 | `review` | `path-fill-stroke` | port (path fill) / refuse (path stroke) | `GPUNative` |
+| KGPU-M32-014 | `done` | `device-scissor-simple-clips` | port (WideOpen/DeviceRect) / refuse (complex clips) | `GPUNative` |
+| KGPU-M32-015 | `done` | `path-fill-stroke` | port (path fill) / refuse (path stroke) | `GPUNative` |
 | KGPU-M32-016 | `review` | `images-bitmap-codecs-uploads` | refuse (dependency-gated) | `RefuseDiagnostic` |
 | KGPU-M32-017 | `review` | `savelayer-destination-read-filters` | refuse (dependency-gated) | `RefuseDiagnostic` |
 | KGPU-M32-018 | `review` | `text-glyphs` | port (A8 text) / refuse (color/SDF/emoji) | `GPUNative` |
