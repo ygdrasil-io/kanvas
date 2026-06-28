@@ -25,7 +25,7 @@ Depends on M0-M1. M37-003 reuses M37-001 blur contracts.
 |---|---|---|---|---|---|---|---|---|---|
 | [KGPU-M37-001 - Multi-pass separable blur](KGPU-M37-001-multi-pass-separable-blur.md) | `ready` | `P0` | `TargetNative` | `GPUNative` | `false` | `false` | `filters` | `KGPU-M1-001` | `null` |
 | [KGPU-M37-002 - Morphology filter](KGPU-M37-002-morphology-filter.md) | `ready` | `P0` | `TargetNative` | `GPUNative` | `false` | `false` | `filters` | `KGPU-M1-001` | `null` |
-| [KGPU-M37-003 - Drop shadow filter](KGPU-M37-003-drop-shadow-filter.md) | `blocked` | `P1` | `TargetNative` | `GPUNative` | `false` | `false` | `filters` | `KGPU-M1-001`, `KGPU-M37-001` | `null` |
+| [KGPU-M37-003 - Drop shadow filter](KGPU-M37-003-drop-shadow-filter.md) | `ready` | `P1` | `TargetNative` | `GPUNative` | `false` | `false` | `filters` | `KGPU-M1-001`, `KGPU-M37-001` | `null` |
 | [KGPU-M37-004 - Lighting filters](KGPU-M37-004-lighting-filters.md) | `ready` | `P1` | `TargetNative` | `GPUNative` | `false` | `false` | `filters` | `KGPU-M1-001` | `null` |
 | [KGPU-M37-005 - Displacement map filter](KGPU-M37-005-displacement-map-filter.md) | `ready` | `P1` | `TargetNative` | `GPUNative` | `false` | `false` | `filters` | `KGPU-M1-001` | `null` |
 | [KGPU-M37-006 - Filter tile-based evaluation](KGPU-M37-006-filter-tile-based-evaluation.md) | `ready` | `P1` | `TargetNative` | `GPUNative` | `false` | `false` | `filters` | `KGPU-M1-001` | `null` |
