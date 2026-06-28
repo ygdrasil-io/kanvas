@@ -59,8 +59,9 @@ UI compositing.
 
 ## Graphite Algorithm References
 
-- [`GFX-DROPSHADOW-BACKEND`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-dropshadow-backend) — Study Graphite drop shadow pipeline decomposition into blur, offset, and composite passes.
-- [`GFX-BLUR-BACKEND`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-blur-backend) — Inherited from M37-001; re-examine intermediate texture lifetime across shadow passes.
+- [`GFX-FILTER-BACKEND`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-filter-backend) - source [TextureUtils.cpp:720](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/TextureUtils.cpp:720); Provide scratch-device, special-image, cached-bitmap proxy, and blur-device hooks used by image filters.
+- [`GFX-SPECIAL-IMAGE-LAYER`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-special-image-layer) - source [SpecialImage_Graphite.cpp:20](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/SpecialImage_Graphite.cpp:20); Wrap Graphite-backed images with subset metadata and convert non-Graphite images through the recorder image provider before filter use.
+- [`GFX-FILTER-RESOLVE`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-filter-resolve) - source [SkImageFilterTypes.cpp:1334](/Users/chaos/workspace/kanvas-forge/skia-main/src/core/SkImageFilterTypes.cpp:1334); Decide when a filter result must resolve to texture versus remain deferred as shader logic.
 - Boundary: Graphite is a working-algorithm reference only; do not port Graphite or Ganesh, and keep Kanvas WebGPU/WGSL acceptance criteria authoritative.
 
 ## Design Sketch
