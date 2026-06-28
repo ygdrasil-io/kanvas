@@ -141,6 +141,7 @@ class WGSLSecurityValidatorTest {
         assertFalse(report.isSecure)
         val codes = report.errors.map { it.code }
         assertTrue("custom-wgsl.unsafe-storage-buffer" in codes)
+        assertTrue(report.errors.size >= 2, "should catch in both blocked features and bounds check")
     }
 
     @Test
@@ -153,6 +154,9 @@ class WGSLSecurityValidatorTest {
         )
         val report = WGSLSecurityValidator().validateSecurity(module)
         assertFalse(report.isSecure)
+        val codes = report.errors.map { it.code }
+        assertTrue("custom-wgsl.unsafe-dynamic-sampling" in codes)
+        assertTrue("custom-wgsl.unsafe-texture-store" in codes)
     }
 
     @Test
