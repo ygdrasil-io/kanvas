@@ -1,7 +1,7 @@
 ---
 id: KGPU-M32-021
 title: "Legacy decommission: clear-discard-target-background port (surface-init clear)"
-status: review
+status: done
 milestone: M32
 priority: P0
 owner_area: legacy-cleanup
@@ -130,6 +130,7 @@ rtk git diff --check
 
 
 - `review` (2026-06-26): promoted after maintainer review of PR #1892 (https://github.com/ygdrasil-io/kanvas/pull/1892) — no blocking issues found.
+- `review → done` (2026-06-28): independently reviewed, evidence accepted, port-or-refuse decision validated.
 
 ## Linear Labels
 

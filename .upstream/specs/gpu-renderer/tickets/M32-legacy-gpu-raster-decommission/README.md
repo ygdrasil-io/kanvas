@@ -55,9 +55,9 @@ ticket per `GpuRendererLegacyRouteFamily` row. All are `status: review`.
 | KGPU-M32-017 | `done` | `savelayer-destination-read-filters` | refuse (dependency-gated) | `RefuseDiagnostic` |
 | KGPU-M32-018 | `done` | `text-glyphs` | port (A8 text) / refuse (color/SDF/emoji) | `GPUNative` |
 | KGPU-M32-019 | `done` | `runtime-effects-color-blends` | port (SrcOver) / refuse (other blends, color filters, runtime effects, color management) | `GPUNative` |
-| KGPU-M32-020 | `review` | `vertices-points-meshes` | refuse (dependency-gated) | `RefuseDiagnostic` |
-| KGPU-M32-021 | `review` | `clear-discard-target-background` | port (trivial — surface init) | `GPUNative` |
-| KGPU-M32-022 | `review` | `clear-discard-target-background` | route ownership assignment (replacement ticket) | `GPUNative` |
+| KGPU-M32-020 | `done` | `vertices-points-meshes` | refuse (dependency-gated) | `RefuseDiagnostic` |
+| KGPU-M32-021 | `done` | `clear-discard-target-background` | port (trivial — surface init) | `GPUNative` |
+| KGPU-M32-022 | `done` | `clear-discard-target-background` | route ownership assignment (replacement ticket) | `GPUNative` |
 
 Release-blocking tickets in this milestone: KGPU-M32-002, KGPU-M32-004,
 KGPU-M32-005, and KGPU-M32-006. KGPU-M32-001, KGPU-M32-003, and

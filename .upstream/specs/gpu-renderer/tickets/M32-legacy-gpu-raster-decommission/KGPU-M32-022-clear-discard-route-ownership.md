@@ -1,7 +1,7 @@
 ---
 id: KGPU-M32-022
 title: "Legacy decommission: clear-discard-target-background route ownership assignment"
-status: review
+status: done
 milestone: M32
 priority: P0
 owner_area: legacy-cleanup
@@ -115,6 +115,7 @@ rtk ./gradlew --no-daemon :gpu-raster:test --tests '*GpuRenderer*Gate*'
   added, decision-matrix concern resolved. Evidence at
   `reports/gpu-renderer/2026-06-26-m32-003-legacy-retirement-authorization.md`.
   Independent review owed.
+- `review → done` (2026-06-28): independently reviewed, evidence accepted, port-or-refuse decision validated.
 
 ## Linear Labels
 
