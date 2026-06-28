@@ -143,6 +143,7 @@ private fun SceneExpectation.label(): String =
     when (this) {
         SceneExpectation.ShouldRender -> "ShouldRender"
         is SceneExpectation.ProductRefusal -> "ProductRefusal:${reason.code}"
+        is SceneExpectation.ShouldRefuse -> "ShouldRefuse:${stableReasonCode}"
     }
 
 private fun String.escapeTable(): String = replace("|", "\\|")

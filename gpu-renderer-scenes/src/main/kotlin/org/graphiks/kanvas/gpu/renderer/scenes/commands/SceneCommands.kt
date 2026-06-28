@@ -440,6 +440,28 @@ sealed interface SceneCommand {
         }
     }
 
+    data class CustomRuntimeEffectTile(
+        override val label: String,
+        val rect: SceneRect,
+        val wgslSource: String,
+        val uniformSchema: String,
+        val customEffectId: String? = null,
+        val hasFixturePayload: Boolean = true,
+    ) : SceneCommand {
+        override val family: String = "custom-runtime-effect"
+
+        val isRegistered: Boolean get() = customEffectId != null
+
+        init {
+            requireSceneCommandLabel(label)
+            require(rect.right > rect.left && rect.bottom > rect.top) {
+                "CustomRuntimeEffectTile rect must have positive area"
+            }
+            require(wgslSource.isNotBlank()) { "CustomRuntimeEffectTile wgslSource must not be blank" }
+            require(uniformSchema.isNotBlank()) { "CustomRuntimeEffectTile uniformSchema must not be blank" }
+        }
+    }
+
     data class MeshRibbon(
         override val label: String,
         val bounds: SceneRect? = null,

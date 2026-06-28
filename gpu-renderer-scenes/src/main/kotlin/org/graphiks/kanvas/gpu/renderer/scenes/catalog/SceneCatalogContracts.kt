@@ -2,7 +2,7 @@ package org.graphiks.kanvas.gpu.renderer.scenes.catalog
 
 private val sceneIdPattern = Regex("[a-z][a-z0-9]*(?:-[a-z0-9]+)+")
 private val roadmapLikeSceneIdPattern = Regex("m[0-9]+(?:-[a-z])?(?:-[0-9]{3})?")
-private val plainMilestonePattern = Regex("M(?:[0-9]|[12][0-9])")
+private val plainMilestonePattern = Regex("M(?:[0-9]|[12][0-9]|3[0-9])")
 private val activeRuntimeMilestonePattern = Regex("M70-[ABC]")
 private val ticketIdPattern = Regex("KGPU-(M[0-9]+)-[0-9]{3}")
 
@@ -96,6 +96,11 @@ enum class ProductRefusalReason(val code: String) {
 sealed interface SceneExpectation {
     data object ShouldRender : SceneExpectation
     data class ProductRefusal(val reason: ProductRefusalReason) : SceneExpectation
+    data class ShouldRefuse(val stableReasonCode: String) : SceneExpectation {
+        init {
+            require(stableReasonCode.isNotBlank()) { "ShouldRefuse.stableReasonCode must not be blank" }
+        }
+    }
 }
 
 data class GPURendererScene<TCommand : Any>(

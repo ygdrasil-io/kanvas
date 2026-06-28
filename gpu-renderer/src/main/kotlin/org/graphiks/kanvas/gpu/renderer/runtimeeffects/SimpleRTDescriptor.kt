@@ -1,6 +1,15 @@
 package org.graphiks.kanvas.gpu.renderer.runtimeeffects
 
 import java.security.MessageDigest
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPayloadFingerprint
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPayloadSlotID
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPayloadUploadPlan
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUResourceBindingBlock
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUResourceBindingSlot
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUUniformPayloadBlock
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUUniformPayloadField
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUUniformPayloadSlot
+import org.graphiks.kanvas.gpu.renderer.resources.GPUPayloadMaterializationRequest
 import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTEntryPoint
 import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTSourceHash
 
@@ -58,6 +67,128 @@ object SimpleRTDescriptor {
         routeContract = routeContract,
         liveEditPlan = liveEditPlan,
     )
+    /** Builds a minimal [GPURuntimeEffectExecutionRequest] for testing dispatch paths. */
+    fun createExecutionRequest(): GPURuntimeEffectExecutionRequest {
+        val gatePlan = GPURuntimeEffectDescriptorGatePlan(
+            label = "simple_rt-test",
+            evidenceRow = "gpu-renderer.runtime-effect.registered",
+            routeKind = "GPUNative",
+            classification = "DependencyGated",
+            promoted = false,
+            productActivation = true,
+            materialized = false,
+            routePlan = GPURuntimeEffectRoutePlan.Refused(
+                lookupPlan = GPURuntimeEffectLookupPlan(
+                    inputKind = "descriptor-id",
+                    registryVersion = "runtime-registry-v1",
+                    registryGeneration = 1L,
+                    requestedEffectId = effectId,
+                    descriptorId = effectId,
+                    descriptorVersion = descriptorVersion,
+                    requestedPlacement = GPURuntimeEffectRoutePlacement.MaterialSource,
+                    routePlacement = null,
+                    diagnostic = GPURuntimeEffectDiagnostic(
+                        code = "placeholder",
+                        effectId = effectId,
+                        message = "placeholder gate plan for dispatch test",
+                        terminal = false,
+                    ),
+                ),
+                diagnostic = GPURuntimeEffectDiagnostic(
+                    code = "placeholder",
+                    effectId = effectId,
+                    message = "placeholder gate plan for dispatch test",
+                    terminal = false,
+                ),
+            ),
+            registrySnapshot = GPURuntimeEffectRegistrySnapshot(
+                registryVersion = "runtime-registry-v1",
+                generation = 1L,
+                descriptors = emptyList(),
+                provenance = "dispatch-test-fixture",
+            ),
+            payloadPlanHash = "payload:simple_rt:test",
+            materialKeyBoundaryHash = "material-key:simple_rt:test",
+            materialKeyIncludesUniformValues = false,
+            diagnostics = emptyList(),
+        )
+        return GPURuntimeEffectExecutionRequest(
+            label = "simple_rt-test",
+            gatePlan = gatePlan,
+            expectedDescriptorId = effectId,
+            expectedDescriptorVersion = descriptorVersion,
+            expectedRegistryGeneration = 1L,
+            expectedRoutePlacement = GPURuntimeEffectRoutePlacement.MaterialSource,
+            expectedWgslModuleHash = wgslPlan.moduleHash,
+            expectedReflectionHash = wgslPlan.reflectionHash,
+            expectedUniformSchemaHash = uniformSchema.schemaHash,
+            payloadRequest = GPUPayloadMaterializationRequest(
+                targetId = "root-target",
+                packetId = "runtime-effect:simple_rt:draw",
+                taskIds = listOf("task-test"),
+                resourcePlanLabels = listOf("runtime-effect-execution:simple_rt"),
+                uniformBlock = GPUUniformPayloadBlock(
+                    fingerprint = GPUPayloadFingerprint("uniform-simple_rt-test"),
+                    packingPlanHash = "simple_rt-layout-v1",
+                    byteSize = 16L,
+                    zeroedPadding = true,
+                    scope = "pass-test",
+                    bytes = listOf(0, 0, 128, 63, 0, 0, 0, 63, 0, 0, 0, 0, 0, 0, 128, 63),
+                    fields = listOf(
+                        GPUUniformPayloadField(
+                            fieldPath = "gColor",
+                            byteOffset = 0L,
+                            byteSize = 16L,
+                            valueClass = "vec4<f32>",
+                        ),
+                    ),
+                ),
+                uniformSlot = GPUUniformPayloadSlot(
+                    slotId = GPUPayloadSlotID("pass-test:uniform:0"),
+                    fingerprint = GPUPayloadFingerprint("uniform-simple_rt-test"),
+                    byteOffset = 0L,
+                ),
+                resourceBlock = GPUResourceBindingBlock(
+                    fingerprint = GPUPayloadFingerprint("resource-simple_rt-test"),
+                    bindingPlanHash = resources.bindingPlanHash,
+                    bindingCount = 1,
+                    resourceDescriptorLabels = listOf("uniform:simple_rt-payload"),
+                    dynamicOffsets = emptyList(),
+                ),
+                resourceSlot = GPUResourceBindingSlot(
+                    slotId = GPUPayloadSlotID("pass-test:resource:0"),
+                    fingerprint = GPUPayloadFingerprint("resource-simple_rt-test"),
+                    bindingIndex = 0,
+                ),
+                uploadPlan = GPUPayloadUploadPlan(
+                    planHash = "upload-test-v1",
+                    byteRanges = listOf(0L..15L),
+                    stagingScope = "pass-test-staging",
+                    budgetClass = "unit-test",
+                    beforeUseToken = "before-draw",
+                ),
+                reflectedBindingLayoutHash = resources.bindingPlanHash,
+                deviceGeneration = 11L,
+                payloadGeneration = 7L,
+                alignmentBytes = 16L,
+                uploadBudgetBytes = 64L,
+                uploadCapabilityAvailable = true,
+                maxDynamicOffsets = 0,
+                requiredUniformUsageLabels = setOf("copy_dst", "uniform"),
+                availableUniformUsageLabels = setOf("copy_dst", "uniform"),
+            ),
+            pipelineCacheKey = "render-pipeline:render:dispatch-test",
+            targetStateHash = "target-state:rgba8unorm",
+            loadStoreLabel = "load-store:clear",
+            passId = "pass-dispatch",
+            packetStreamId = "runtime-effect:dispatch-test:packets",
+            streamId = "runtime-effect:dispatch-test:stream",
+            vertexSourceLabel = "fullscreen-triangle",
+            cpuOracleEvidenceHash = "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+            gpuReadbackStatus = "skipped",
+            gpuReadbackReason = "headless-contract-only",
+        )
+    }
 }
 
 /**
