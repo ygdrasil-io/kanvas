@@ -47,6 +47,7 @@ data class GPUCustomRuntimeEffectDescriptor(
     val id: GPUCustomRuntimeEffectID,
     val uniformSchema: GPURuntimeEffectUniformSchema,
     val childSlots: List<GPURuntimeEffectChildSlotPlan>,
+    val resources: GPURuntimeEffectResourcePlan,
     val wgslPlan: GPUCustomRuntimeEffectWGSLPlan,
     val sourceProvenance: String,
     val validationStatus: GPUCustomRuntimeEffectValidationStatus,
@@ -55,6 +56,12 @@ data class GPUCustomRuntimeEffectDescriptor(
         require(sourceProvenance.isNotBlank()) { "GPUCustomRuntimeEffectDescriptor.sourceProvenance must not be blank" }
     }
 }
+
+/** Validation error returned when custom WGSL registration fails. */
+data class GPUCustomRuntimeEffectValidationError(
+    val code: String,
+    val message: String,
+)
 
 /** Registry for custom runtime effects, isolated from GPURuntimeEffectRegistry. */
 interface GPUCustomRuntimeEffectRegistry {
@@ -65,7 +72,7 @@ interface GPUCustomRuntimeEffectRegistry {
         sourceProvenance: String,
     ): Result<GPUCustomRuntimeEffectID>
 
-    fun lookup(id: GPUCustomRuntimeEffectID): GPUCustomRuntimeEffectDescriptor?
+    fun getDescriptor(id: GPUCustomRuntimeEffectID): GPUCustomRuntimeEffectDescriptor?
 
     fun unregisterCustomEffect(id: GPUCustomRuntimeEffectID)
 

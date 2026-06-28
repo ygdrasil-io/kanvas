@@ -20,7 +20,7 @@ class KanvasCustomRuntimeEffectRegistry(
     ): Result<GPUCustomRuntimeEffectID> =
         TODO("Wire KanvasCustomRuntimeEffectRegistry.registerCustomEffect to wgslValidator.parse + securityValidator.validateSecurity + descriptor creation")
 
-    override fun lookup(id: GPUCustomRuntimeEffectID): GPUCustomRuntimeEffectDescriptor? = descriptors[id]
+    override fun getDescriptor(id: GPUCustomRuntimeEffectID): GPUCustomRuntimeEffectDescriptor? = descriptors[id]
 
     override fun unregisterCustomEffect(id: GPUCustomRuntimeEffectID) {
         descriptors.remove(id)

@@ -825,13 +825,25 @@ failures.
 
 #### `GPUCustomRuntimeEffectID`
 
-A unique identifier generated from the WGSL source hash, uniform schema hash,
+A unique identifier generated from SHA-256 of WGSL source, uniform schema hash,
 and child slot hash.
 
-Format: `custom.<hash>` (e.g., `custom.a1b2c3d4`).
+Format: `custom.<hex>` (e.g., `custom.a1b2c3d4e5f6`).
 
 ```kotlin
-data class GPUCustomRuntimeEffectID(val value: String)
+@JvmInline
+value class GPUCustomRuntimeEffectID(val value: String) {
+    init { require(value.isNotBlank()) }
+
+    companion object {
+        fun generate(source: String, schemaHash: String, childSlotHash: String): GPUCustomRuntimeEffectID {
+            val input = "custom-runtime-effect-id-v1:$source:$schemaHash:$childSlotHash"
+            val digest = MessageDigest.getInstance("SHA-256")
+            val hex = digest.digest(input.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }.take(12)
+            return GPUCustomRuntimeEffectID("custom.$hex")
+        }
+    }
+}
 ```
 
 #### `GPUCustomRuntimeEffectValidationStatus`
@@ -871,6 +883,7 @@ data class GPUCustomRuntimeEffectDescriptor(
     val id: GPUCustomRuntimeEffectID,
     val uniformSchema: GPURuntimeEffectUniformSchema,
     val childSlots: List<GPURuntimeEffectChildSlotPlan>,
+    val resources: GPURuntimeEffectResourcePlan,
     val wgslPlan: GPUCustomRuntimeEffectWGSLPlan,
     val sourceProvenance: String,
     val validationStatus: GPUCustomRuntimeEffectValidationStatus,
@@ -884,6 +897,8 @@ Descriptor invariants for custom effects:
 - A custom descriptor cannot become `VALID` until wgsl4k syntax validation,
   reflection, security checks, and resource limits all pass.
 - Custom descriptors are not serialized to persistent caches by default.
+- `resources.bindingPlanHash` is derived from wgsl4k reflection at registration
+  time and used for WebGPU bind group layout and pipeline key derivation.
 
 #### `GPUCustomRuntimeEffectRegistry`
 
@@ -911,7 +926,8 @@ class GPUCustomRuntimeEffectRegistry(
         childSlots: List<GPURuntimeEffectChildSlotPlan>,
         sourceProvenance: String,
     ): Result<GPUCustomRuntimeEffectID> {
-        val id = GPUCustomRuntimeEffectID.generate(source, uniformSchema.schemaHash, childSlots.hashCode().toString())
+        val childSlotHash = childSlots.joinToString(",") { "${it.slotName}:${it.acceptedSourceKinds.sorted().joinToString("+")}" }
+        val id = GPUCustomRuntimeEffectID.generate(source, uniformSchema.schemaHash, sha256(childSlotHash))
 
         val module = validator.parse(source)
         if (module.syntaxErrors.isNotEmpty()) {
@@ -928,17 +944,23 @@ class GPUCustomRuntimeEffectRegistry(
         }
 
         val reflection = reflectionProvider.reflect(module)
+        val validationReportHash = sha256(securityReport.errors.joinToString("|") { "${it.code}:${it.severity}" })
         val wgslPlan = GPUCustomRuntimeEffectWGSLPlan(
             source = source,
-            entryPoint = "main",
+            entryPoint = reflection.entryPoint,
             moduleHash = reflection.moduleHash,
             reflectionHash = reflection.reflectionHash,
-            validationReportHash = securityReport.errors.hashCode().toString())
+            validationReportHash = validationReportHash)
+
+        val resources = GPURuntimeEffectResourcePlan(
+            resourceLabels = listOf("group0.binding0.uniformBuffer"),
+            bindingPlanHash = "binding:custom:${id.value}")
 
         val descriptor = GPUCustomRuntimeEffectDescriptor(
             id = id,
             uniformSchema = uniformSchema,
             childSlots = childSlots,
+            resources = resources,
             wgslPlan = wgslPlan,
             sourceProvenance = sourceProvenance,
             validationStatus = GPUCustomRuntimeEffectValidationStatus.VALID)
@@ -988,7 +1010,7 @@ Custom WGSL is untrusted. Kanvas enforces strict validation before execution.
 |---|---|
 | Resource Exhaustion | Strict resource limits. |
 | Infinite Loops | WebGPU timeouts + Kanvas loop validation. |
-| Memory Corruption | Validate buffer/texture access bounds. |
+| Memory Corruption | Validate buffer/texture access bounds. The current `checkBufferTextureAccessBounds` is a boolean-flag shell; full AST-level bounds analysis is future work. |
 | Denial of Service | Isolate custom effects in a separate pipeline. |
 | Information Leakage | Restrict texture/buffer access to declared inputs. |
 | Unsupported Features | Validate against device capabilities. |
