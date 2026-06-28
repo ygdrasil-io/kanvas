@@ -975,3 +975,102 @@ Those routes require later evidence against this spec.
 - Do not sample or store HDR/gainmap content through implicit SDR flattening.
 - Do not use CPU-rendered full draws, layers, filters, images, or scenes as
   product fallback for unsupported color behavior.
+
+## HDR Transfer Functions
+
+The `GPUHDRColorPlan` stub is promoted to a complete pipeline plan covering HDR
+transfer functions, mastering metadata, and tone-mapping policy.
+
+### Contracts
+
+| Contract | Purpose |
+|---|---|
+| `GPUHDRTransferFunctionPlan` | Explicit transfer function descriptor: PQ (ST 2084), HLG, scRGB (linear), or custom parametric curve. |
+| `GPUHDRMasteringMetadata` | SMPTE 2086 mastering display color volume: primaries, white point, min/max luminance. |
+| `GPUHDRContentLightLevel` | MaxCLL and MaxFALL metadata from HDR content. |
+| `GPUHDREOTFPlan` | Electro-optical transfer function for GPU-side display mapping: PQ EOTF, HLG OETF^-1, or identity for scRGB. |
+| `GPUHDRToneMapPlan` | Tone-mapping strategy when HDR content exceeds target display capabilities: Reinhard, ACES, Hable, or registered custom tone mapper. |
+| `GPUHDRColorDiagnostic` | Refusal for unsupported transfer function, missing metadata, HDR content on SDR target, or unvalidated tone-map WGSL. |
+
+### Route Selection
+
+```
+HDR Image / Surface
+  -> GPUHDRTransferFunctionPlan when codec/surface reports HDR metadata
+  -> GPUHDREOTFPlan for GPU-side display mapping
+  -> GPUHDRToneMapPlan when target luminance < content luminance
+  -> GPUColorStorePlan with HDR-capable target format (rgba16float, rgba32float)
+  -> RefuseDiagnostic when HDR target format unavailable
+```
+
+### Acceptance Gates
+
+- At least one PQ-encoded image decoded with correct EOTF application and GPU evidence.
+- HLG scene-referred image mapped to display with GPU evidence.
+- scRGB linear floating-point rendered and stored without quantization artifacts.
+- HDR-to-SDR tone mapping produces visually acceptable results (CPU oracle parity).
+- Stable refusal for HDR content on SDR-only targets.
+- WGSL color transform helpers validated through `wgsl4k`.
+
+## Wide-Gamut Working Spaces
+
+The renderer moves beyond sRGB to accept wide-gamut working spaces for color
+computation and intermediate storage.
+
+### Contracts
+
+| Contract | Purpose |
+|---|---|
+| `GPUWideGamutWorkingSpacePlan` | Accepted working space: Display P3, Adobe RGB, or Rec.2020 primaries with known white point and gamma/transfer. |
+| `GPUWideGamutConversionPlan` | Source-to-working-space and working-to-destination conversion using explicit matrix + transfer function pairs. |
+| `GPUWideGamutIntermediateFormat` | Intermediate texture format for wide-gamut layer/filter storage: rgba16float or rgba32float. |
+| `GPUWideGamutDiagnostic` | Refusal for unsupported gamut, out-of-gamut clipping policy not defined, or incompatible intermediate format. |
+
+### Acceptance Gates
+
+- Display P3 tagged image decoded and rendered with GPU evidence, compared to sRGB-clamped fallback.
+- Layer/saveLayer with wide-gamut working space preserves color fidelity (CPU oracle with DeltaE threshold).
+- Gradient interpolation in wide-gamut space uses correct transfer-function-aware interpolation.
+- Stable refusal for unregistered wide-gamut profile or incompatible destination format.
+
+## Gain Map Pipeline
+
+The `GPUGainmapPlan` stub is promoted to a complete pipeline for Ultra HDR /
+Android gain-map images and adaptive display rendering.
+
+### Contracts
+
+| Contract | Purpose |
+|---|---|
+| `GPUGainmapDecodePlan` | Gain map image decode: base image (SDR), gain map image (1- or 2-channel), and metadata (min/max content boost, gamma, offset, scaling). |
+| `GPUGainmapApplyPlan` | Per-pixel gain map application in WGSL: recover HDR from base + gain map, tone map to display range. |
+| `GPUGainmapDisplayAdaptationPlan` | Adapt gain-map rendering to current display headroom: use HDR when available, tone-map to SDR otherwise. |
+| `GPUGainmapDiagnostic` | Refusal for missing gain map metadata, incompatible gain map format, or unvalidated WGSL apply shader. |
+
+### Acceptance Gates
+
+- Ultra HDR JPEG decoded with gain map metadata preserved.
+- GPU-side gain map application produces HDR output (CPU oracle parity on known test images).
+- Adaptive display rendering: HDR on HDR target, tone-mapped SDR on SDR target.
+- Stable refusal for multi-image gain map variants until proven.
+
+## ICC Profile Parsing Pipeline
+
+ICC profile parsing moves from `RefuseDiagnostic` to an accepted pipeline when
+the profile is mathematically well-defined and the transform can be validated.
+
+### Contracts
+
+| Contract | Purpose |
+|---|---|
+| `GPUICCProfileParsePlan` | ICC profile header, tag table, and supported tag parsing: rXYZ/gXYZ/bXYZ, rTRC/gTRC/bTRC, A2B0/B2A0 (refused initially), and profile ID. |
+| `GPUICCProfileTransformPlan` | Matrix + TRC transform extracted from profile tags, equivalent to `GPUColorConversionPlan`, validated against reference profile implementation. |
+| `GPUICCProfileCachePlan` | Parsed profile cache keyed by profile bytes hash. Cached transforms are immutable after parsing. |
+| `GPUICCProfileDiagnostic` | Refusal for unsupported profile version (ICC v5), unsupported tag types, LUT-based profiles, or profile parse failure. |
+
+### Acceptance Gates
+
+- v2 and v4 ICC profiles with matrix/TRC tags parsed and transformed correctly.
+- CPU oracle for at least one ICC profile: GPU transform output matches reference ICC implementation within DeltaE tolerance.
+- Profile cache hit/miss telemetry.
+- Stable refusal for ICC v5, LUT profiles, named color profiles, and unparseable profiles.

@@ -973,3 +973,111 @@ uses Kanvas-owned fixtures and artifacts.
   `MaterialKey`.
 - Do not merge glyph atlas, path atlas, coverage atlas, image upload, and
   filter intermediate lifetimes into one untyped atlas.
+
+## Subpixel LCD Rendering
+
+Kanvas targets subpixel LCD text rendering for horizontal RGB/BGR stripe layouts
+on known target pixel geometries. This is a `GPUNative` route when the adapter
+and target accept it.
+
+### Contracts
+
+| Contract | Purpose |
+|---|---|
+| `GPUSubpixelLCDPlan` | Accepted subpixel route: pixel geometry (RGB horizontal, BGR horizontal, VRGB vertical, VBGR vertical), coverage mask per component, and blend mode with destination-read when needed. |
+| `GPUSubpixelCoverageMask` | Per-component (R, G, B) alpha coverage values for a glyph run, stored as a 3-channel atlas entry or inline instance data. |
+| `GPUSubpixelLCDRenderStep` | WGSL render step that samples a subpixel coverage atlas, applies per-component alpha modulation, and outputs premultiplied device RGB. |
+| `GPUSubpixelLCDDiagnostic` | Refusal codes for unsupported pixel geometry, incompatible target format, missing destination-read support, or atlas budget. |
+
+### Acceptance Gates
+
+- Adapter reports target surface pixel geometry (via `GPU` facade or explicit config).
+- Target format supports subpixel write (e.g., `rgba8unorm` with known layout).
+- Destination read is available or the route proves opaque-only coverage.
+- At least one A8 glyph run promoted to RGB subpixel with CPU oracle parity.
+- Stable refusal for rotated displays, unknown pixel geometry, and translucent destination.
+
+## Color Font Pipeline
+
+Color fonts (COLRv0, COLRv1, CBDT/CBLC, sbix, SVG-in-OpenType) are
+`DependencyGated` until the pure Kotlin text stack produces typed color glyph
+artifact plans, but the GPU renderer declares the target contracts now.
+
+### Contracts
+
+| Contract | Purpose |
+|---|---|
+| `GPUColorGlyphLayerPlan` | Per-glyph paint layers from COLRv0/v1 tables: solid, linear gradient, radial gradient, or glyph reference layers with transforms. |
+| `GPUColorGlyphCompositePlan` | Expanded from the existing stub: composite a color glyph layer tree into a single rasterized atlas entry or direct GPU render. |
+| `GPUColorGlyphDirectRenderPlan` | GPU-native color glyph rendering without atlas raster: each glyph layer draws as a separate filled shape with its own material. |
+| `GPUCBDTCBLCGlyphPlan` | CBDT/CBLC embedded bitmap glyph route with decode, color conversion, atlas upload, and sampling. |
+| `GPUSVGOpenTypeGlyphPlan` | SVG-in-OpenType glyph route: SVG document per glyph, rasterized on CPU as typed artifact, then atlas upload or direct sampling. |
+| `GPUEmojiFallbackPlan` | Emoji sequence fallback: prefer color font glyph, fall back to monochrome + emoji presentation selector policy, or refuse. |
+| `GPUColorGlyphDiagnostic` | Refusal for unsupported COLR version, unregistered layer tree, SVG format, or emoji sequence. |
+
+### Acceptance Gates
+
+- Pure Kotlin text stack exposes `ColorGlyphArtifact`, `CBDTArtifact`, `SVGGlyphArtifact`.
+- At least one COLRv0 layer tree rasterized or directly rendered with GPU evidence.
+- CBDT/CBLC embedded bitmap decoded and uploaded through `22-image-bitmap-codec-pipeline.md`.
+- Unsupported color font formats refuse with stable diagnostics.
+- Emoji presentation sequences differentiate text-vs-emoji selectors.
+
+## Variable Font Support
+
+Variable font axes (weight, width, slant, optical size, custom axes) enter the
+renderer as per-run font instance parameters. The GPU renderer does not own
+glyph outline generation, but it must route variations correctly.
+
+### Contracts
+
+| Contract | Purpose |
+|---|---|
+| `GPUVariableFontInstancePlan` | Per-run axis values (tag, value, precision), named instance reference, and default instance fallback. |
+| `GPUVariableFontRoute` | Route selection: axis values are consumed by the text stack for outline generation; GPU renderer sees only the resolved glyph artifacts. |
+| `GPUVariableFontDiagnostic` | Refusal for unsupported axis, out-of-range value, or missing default instance. |
+
+### Acceptance Gates
+
+- Text stack accepts axis-tag/value pairs and produces resolved glyph artifacts.
+- GPU renderer treats resolved glyphs identically to static font glyphs.
+- Out-of-range axis values refuse or clamp with explicit diagnostic.
+
+## Complex Shaping Integration
+
+The GPU renderer does not own text shaping. It consumes the output of the pure
+Kotlin text stack and declares the integration contract.
+
+### Contracts
+
+| Contract | Purpose |
+|---|---|
+| `GPUShapingIntegrationContract` | Text stack emits per-run shaping facts: script, language, direction (LTR/RTL/TTB), BiDi levels, and glyph cluster map. GPU renderer consumes these as immutable metadata, not shaping logic. |
+| `GPUBiDiRunPlan` | Per-run BiDi level, visual order index, and reordering token. Consumed by draw-layer planner for correct paint order. |
+| `GPUScriptComplexityClass` | Classification: `Simple` (Latin, Cyrillic, Greek), `Complex` (Arabic, Devanagari, Thai, etc.), `CJK`. Affects atlas budget policy only. |
+| `GPUShapingDiagnostic` | Refusal for unsupported script class (when text stack refuses shaping), missing BiDi data, or invalid cluster map. |
+
+### Non-Goals
+
+- Do not implement shaping, BiDi, or script detection in `:gpu-renderer`.
+- Do not add ICU, HarfBuzz, or CoreText dependencies to the GPU renderer module.
+
+## Font Fallback Chain
+
+When the primary font lacks a glyph, the text stack may select a fallback font.
+The GPU renderer receives resolved glyph artifacts; it must not own fallback
+selection, but it must route fallback-differentiated glyph runs correctly.
+
+### Contracts
+
+| Contract | Purpose |
+|---|---|
+| `GPUFallbackGlyphPlan` | Per-glyph fallback provenance: original font, fallback font, and reason (missing glyph, unsupported script, color font preference). |
+| `GPUFallbackBatchPolicy` | Subrun splitting rules when fallback fonts change: split by atlas page, fallback font identity, and representation (A8/SDF/color/bitmap/SVG). |
+| `GPUFallbackDiagnostic` | Refusal when fallback chain is exhausted, fallback produces incompatible representation, or fallback font is unregistered. |
+
+### Acceptance Gates
+
+- Text stack emits per-glyph fallback provenance facts.
+- GPU renderer splits and orders subruns correctly when fallback fonts differ.
+- Exhausted fallback chain produces `unsupported.text.glyph_unavailable` with glyph index and font identity.

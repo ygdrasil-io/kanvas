@@ -680,6 +680,84 @@ Each expansion must add:
 - resource/materialization dumps if resources change;
 - telemetry and promotion evidence.
 
+## Expansion Lanes After Architecture Specs
+
+After R6 promotion and the new architecture specs (38-40), expansion continues
+through these parallel lanes:
+
+### Lane 1: Geometry Hardening
+```
+compute tessellation (spec 25)
+  -> advanced stroke / path effects (spec 25)
+  -> perspective acceptance for first-slice (spec 30)
+```
+
+### Lane 2: Text Breadth
+```
+subpixel LCD (spec 21)
+  -> color fonts / emoji (spec 21)
+  -> variable fonts + fallback chain (spec 21)
+  -> complex shaping integration (spec 21)
+```
+
+### Lane 3: Color Fidelity
+```
+HDR transfer functions (spec 29)
+  -> wide-gamut working spaces (spec 29)
+  -> gain map pipeline (spec 29)
+  -> ICC profile parsing (spec 29)
+```
+
+### Lane 4: Image Pipeline Extension
+```
+HEIF/AVIF gate promotion (spec 22)
+  -> YUV multi-plan route (spec 22)
+  -> mipmap auto-generation (spec 22)
+  -> hardware codec descriptor (spec 22)
+```
+
+### Lane 5: Filter Breadth
+```
+blur multi-pass (spec 23)
+  -> morphology (spec 23)
+  -> drop shadow (spec 23)
+  -> lighting + displacement (spec 23)
+  -> tile-based filter eval (spec 23)
+```
+
+### Lane 6: Runtime Effect Extension
+```
+live editing V2 (spec 27)
+  -> blender / clip-shader / compute kinds (spec 27)
+  -> dynamic shader graph (spec 27)
+```
+
+### Lane 7: Rendering Architecture
+```
+MSAA resolve (spec 12)
+  -> instanced batching (spec 37)
+  -> subpass merging (spec 02)
+  -> deferred display list (spec 02)
+```
+
+### Lane 8: New Architecture Capabilities
+```
+tile-deferred rendering (spec 38)
+  -> multi-threaded recording (spec 39)
+  -> hi-z occlusion culling (spec 40)
+```
+
+### Merge Dependency
+
+Lanes 1-7 are independent and may execute in parallel. Lane 8 depends on R0-R6
+completion and on tile infrastructure from spec 38 for hi-z tile interaction.
+
+Each lane expansion must add:
+- accepted-route fixtures;
+- refusal fixtures for unsupported variants;
+- key, payload, WGSL, resource, and telemetry dumps;
+- promotion evidence matching `07-validation-conformance.md` criteria.
+
 ## Commit And Review Proposal
 
 Implementation should be committed in small vertical increments:
