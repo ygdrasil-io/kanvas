@@ -1,7 +1,7 @@
 ---
 id: KGPU-M39-001
 title: "MSAA resolve"
-status: ready
+status: review
 milestone: M39
 priority: P0
 owner_area: state
@@ -130,6 +130,7 @@ rtk ./gradlew --no-daemon :gpu-renderer:test --tests '*MSAA*'
 
 - `proposed`: Initial ticket.
 - `ready` (2026-06-28): promoted — milestone activated, autonomous implementation starting.
+- `ready → review` (2026-06-28): implemented. Pending independent review.
 
 ## Linear Labels
 

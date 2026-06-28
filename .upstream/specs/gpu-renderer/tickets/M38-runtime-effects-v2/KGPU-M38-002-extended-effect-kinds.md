@@ -1,7 +1,7 @@
 ---
 id: KGPU-M38-002
 title: "Extended effect kinds"
-status: ready
+status: review
 milestone: M38
 priority: P0
 owner_area: runtimeeffects
@@ -128,6 +128,7 @@ rtk ./gradlew --no-daemon :gpu-renderer:test --tests '*EffectKinds*'
 
 - `proposed`: Initial ticket.
 - `ready` (2026-06-28): promoted — milestone activated, autonomous implementation starting.
+- `ready → review` (2026-06-28): implemented. Pending independent review.
 
 ## Linear Labels
 

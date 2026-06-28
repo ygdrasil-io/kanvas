@@ -1,7 +1,7 @@
 ---
 id: KGPU-M37-004
 title: "Lighting filters"
-status: ready
+status: review
 milestone: M37
 priority: P1
 owner_area: filters
@@ -167,6 +167,7 @@ rtk ./gradlew --no-daemon :gpu-renderer:test --tests '*Lighting*'
 
 - `proposed`: Initial ticket.
 - `ready` (2026-06-28): promoted — milestone activated, autonomous implementation starting.
+- `ready → review` (2026-06-28): implemented. Pending independent review.
 
 ## Linear Labels
 
