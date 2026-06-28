@@ -3,7 +3,6 @@ package org.graphiks.kanvas.gpu.renderer.runtimeeffects
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
-import kotlin.test.assertTrue
 
 class CustomRuntimeEffectRegistryTest {
 
@@ -19,7 +18,7 @@ class CustomRuntimeEffectRegistryTest {
 
     private fun generateHash(input: String): String =
         java.security.MessageDigest.getInstance("SHA-256")
-            .digest(input.toByteArray())
+            .digest(input.toByteArray(Charsets.UTF_8))
             .joinToString("") { "%02x".format(it) }
             .take(12)
 

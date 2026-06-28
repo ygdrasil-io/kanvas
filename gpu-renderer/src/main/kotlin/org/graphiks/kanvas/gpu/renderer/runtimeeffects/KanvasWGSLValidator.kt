@@ -1,5 +1,10 @@
 package org.graphiks.kanvas.gpu.renderer.runtimeeffects
 
+import org.graphiks.wgsl.ir.ShaderStage
+import org.graphiks.wgsl.ir.StorageClass
+import org.graphiks.wgsl.ir.TypeInner
+import org.graphiks.wgsl.parser.Lowerer
+import org.graphiks.wgsl.parser.parseWgslResult
 import java.security.MessageDigest
 
 class KanvasWGSLValidator : WGSLValidator {
@@ -17,20 +22,8 @@ class KanvasWGSLValidator : WGSLValidator {
     private fun parserBackedParse(source: String): WGSLParsedModule {
         val sourceHash = sha256(source)
 
-        val parserClass = Class.forName("org.graphiks.wgsl.parser.WgslParserKt")
-        val parseResultMethod = parserClass.getMethod("parseWgslResult", String::class.java)
-        val parsed = parseResultMethod.invoke(null, source)
-
-        val errors = parsed?.let { p ->
-            val errorsField = p.javaClass.getDeclaredField("errors")
-            errorsField.isAccessible = true
-            @Suppress("UNCHECKED_CAST")
-            val errorsList = errorsField.get(p) as? List<*> ?: emptyList<Any>()
-            errorsList.mapNotNull { err ->
-                (err?.javaClass?.getDeclaredField("message")?.apply { isAccessible = true }
-                    ?.get(err) as? String)
-            }
-        } ?: emptyList()
+        val parsed = parseWgslResult(source)
+        val errors = parsed.errors.map { it.message }
 
         val uniforms = mutableListOf<String>()
         val textures = mutableListOf<String>()
@@ -39,90 +32,36 @@ class KanvasWGSLValidator : WGSLValidator {
         var usesComputeShader = false
         var usesWorkgroupBuiltins = false
 
-        runCatching {
-            val translationUnit = parsed?.javaClass?.getDeclaredField("translationUnit")
-                ?.apply { isAccessible = true }?.get(parsed)
-            if (translationUnit != null) {
-                val lowererClass = Class.forName("org.graphiks.wgsl.proc.Lowerer")
-                val lowerer = lowererClass.getDeclaredConstructor().newInstance()
-                val lowered = lowererClass.getMethod("lower", translationUnit.javaClass).invoke(lowerer, translationUnit)
+        val module = Lowerer().lower(parsed.translationUnit)
+        val seenGroups = mutableSetOf<Int>()
 
-                if (lowered != null) {
-                    val loweredClass = lowered.javaClass
+        for (global in module.globalVariables) {
+            val binding = global.binding
+            if (binding != null) {
+                if (binding.group !in seenGroups) {
+                    seenGroups.add(binding.group)
+                    bindGroups.add("group${binding.group}")
+                }
+            }
 
-                    val globalVariablesField = loweredClass.getDeclaredField("globalVariables")
-                    globalVariablesField.isAccessible = true
-                    @Suppress("UNCHECKED_CAST")
-                    val globalVariables = globalVariablesField.get(lowered) as? List<*> ?: emptyList<Any>()
-
-                    val seenGroups = mutableSetOf<Int>()
-
-                    for (global in globalVariables) {
-                        if (global == null) continue
-                        val globalClass = global.javaClass
-
-                        val binding = loweredClass.getMethod("bindingOf", globalClass).invoke(lowered, global)
-                        if (binding != null) {
-                            val group = binding.javaClass.getDeclaredField("group").apply { isAccessible = true }
-                                .get(binding) as? Int
-                            if (group != null && group !in seenGroups) {
-                                seenGroups.add(group)
-                                bindGroups.add("group$group")
-                            }
-                        }
-
-                        val space = globalClass.getDeclaredField("space").apply { isAccessible = true }
-                            .get(global) as? String
-                        val name = globalClass.getDeclaredField("name").apply { isAccessible = true }
-                            .get(global) as? String
-
-                        when (space) {
-                            "uniform" -> uniforms.add(name ?: "unknown")
-                            "storage" -> storageBuffers.add(name ?: "unknown")
-                            "handle" -> {
-                                val typesField = loweredClass.getDeclaredField("types").apply { isAccessible = true }
-                                val types = typesField.get(lowered)
-                                val tyField = globalClass.getDeclaredField("ty").apply { isAccessible = true }
-                                val ty = tyField.get(global)
-                                if (types != null && ty != null) {
-                                    val typesGetMethod = types.javaClass.getMethod("get", Any::class.java)
-                                    val typeEntry = typesGetMethod.invoke(types, ty)
-                                    if (typeEntry != null) {
-                                        val inner = typeEntry.javaClass.getDeclaredField("inner").apply { isAccessible = true }
-                                            .get(typeEntry)
-                                        if (inner?.javaClass?.simpleName == "Image") {
-                                            textures.add(name ?: "unknown")
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    val entryPointsField = loweredClass.getDeclaredField("entryPoints")
-                    entryPointsField.isAccessible = true
-                    @Suppress("UNCHECKED_CAST")
-                    val entryPoints = entryPointsField.get(lowered) as? List<*> ?: emptyList<Any>()
-
-                    val shaderStageComputeClass = try {
-                        Class.forName("org.graphiks.wgsl.ir.ShaderStage").enumConstants
-                            ?.firstOrNull { (it as? Enum<*>)?.name == "Compute" }
-                    } catch (_: Exception) { null }
-
-                    for (ep in entryPoints) {
-                        if (ep == null) continue
-                        val stage = ep.javaClass.getDeclaredField("stage").apply { isAccessible = true }
-                            .get(ep)
-                        if (stage == shaderStageComputeClass) {
-                            usesComputeShader = true
-                        }
-                        val workgroupSize = ep.javaClass.getDeclaredField("workgroupSize").apply { isAccessible = true }
-                            .get(ep)
-                        if (workgroupSize != null) {
-                            usesWorkgroupBuiltins = true
-                        }
+            when (global.storageClass) {
+                StorageClass.Uniform -> uniforms.add(global.name)
+                StorageClass.Storage -> storageBuffers.add(global.name)
+                StorageClass.Handle -> {
+                    if (module.types[global.type].inner is TypeInner.Opaque) {
+                        textures.add(global.name)
                     }
                 }
+                else -> {}
+            }
+        }
+
+        for (ep in module.entryPoints) {
+            if (ep.stage == ShaderStage.Compute) {
+                usesComputeShader = true
+            }
+            if (ep.workgroupSize != null) {
+                usesWorkgroupBuiltins = true
             }
         }
 
