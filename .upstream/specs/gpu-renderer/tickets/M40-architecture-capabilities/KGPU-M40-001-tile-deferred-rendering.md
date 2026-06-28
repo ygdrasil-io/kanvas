@@ -1,7 +1,7 @@
 ---
 id: KGPU-M40-001
 title: "Tile-deferred rendering"
-status: proposed
+status: ready
 milestone: M40
 priority: P0
 owner_area: passes
@@ -152,6 +152,7 @@ rtk git diff --check && rtk ./gradlew --no-daemon :gpu-renderer:test --tests '*T
 ## Status Notes
 
 - `proposed`: Initial ticket.
+- `ready` (2026-06-28): milestone activated, starting implementation.
 
 ## Linear Labels
 

@@ -1,5 +1,7 @@
 # M40 - Architecture Capabilities
 
+**Status:** active (2026-06-28) — Wave D
+
 ## Goal
 
 Promote tile-deferred rendering, multi-threaded recording, and hi-z occlusion culling from TargetNative specs to accepted routes.
@@ -20,7 +22,7 @@ Depends on M0 (R0-R6 boundary review) and M1 (first-route product activation) fo
 
 | Ticket | Status | Priority | Claim Impact | Route Kind | Product Activation | Adapter Required | Owner Area | Depends On | Legacy Gate |
 |---|---|---|---|---|---|---|---|---|---|
-| [KGPU-M40-001 - Tile-deferred rendering](KGPU-M40-001-tile-deferred-rendering.md) | `proposed` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `passes` | `KGPU-M1-001` | `null` |
+| [KGPU-M40-001 - Tile-deferred rendering](KGPU-M40-001-tile-deferred-rendering.md) | `ready` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `passes` | `KGPU-M1-001` | `null` |
 | [KGPU-M40-002 - Multi-threaded recording](KGPU-M40-002-multithreaded-recording.md) | `proposed` | `P1` | `TargetNative` | `GPUNative` | `false` | `true` | `recording` | `KGPU-M1-001`, `KGPU-M40-001` | `null` |
 | [KGPU-M40-003 - Hi-Z occlusion culling](KGPU-M40-003-hi-z-occlusion-culling.md) | `proposed` | `P1` | `TargetNative` | `GPUNative` | `false` | `true` | `analysis` | `KGPU-M1-001`, `KGPU-M40-001` | `null` |
 
