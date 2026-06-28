@@ -1,0 +1,10 @@
+{
+  "width": 320,
+  "height": 200,
+  "commands": [
+    { "type": "Clear", "color": { "r": 0.036, "g": 0.040, "b": 0.048, "a": 1.0 } },
+    { "type": "FillRRect", "rect": { "x": 30, "y": 32, "w": 116, "h": 136 }, "radius": 28, "color": { "r": 0.18, "g": 0.70, "b": 0.42, "a": 0.88 } },
+    { "type": "FillRRect", "rect": { "x": 174, "y": 48, "w": 116, "h": 104 }, "radius": 8, "color": { "r": 0.12, "g": 0.30, "b": 0.78, "a": 0.84 } },
+    { "type": "FillRRect", "rect": { "x": 102, "y": 88, "w": 116, "h": 82 }, "radius": 16, "color": { "r": 0.96, "g": 0.68, "b": 0.10, "a": 0.78 } }
+  ]
+}

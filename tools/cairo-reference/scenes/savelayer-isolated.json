@@ -1,0 +1,38 @@
+{
+  "width": 320,
+  "height": 200,
+  "commands": [
+    {
+      "type": "Clear",
+      "color": { "r": 0.16, "g": 0.17, "b": 0.18, "a": 1.0 }
+    },
+    {
+      "type": "FillRect",
+      "rect": { "x": 24, "y": 40, "w": 272, "h": 120 },
+      "color": { "r": 0.12, "g": 0.30, "b": 0.78, "a": 0.40 }
+    },
+    {
+      "type": "SaveLayer",
+      "groupAlpha": 1.0,
+      "commands": [
+        {
+          "type": "FillRRect",
+          "rect": { "x": 62, "y": 80, "w": 208, "h": 56 },
+          "radius": 12,
+          "color": { "r": 0.02, "g": 0.04, "b": 0.07, "a": 0.30 }
+        },
+        {
+          "type": "FillRRect",
+          "rect": { "x": 56, "y": 72, "w": 208, "h": 56 },
+          "radius": 12,
+          "color": { "r": 0.18, "g": 0.70, "b": 0.42, "a": 0.70 }
+        }
+      ]
+    },
+    {
+      "type": "FillRect",
+      "rect": { "x": 64, "y": 80, "w": 120, "h": 40 },
+      "color": { "r": 0.96, "g": 0.68, "b": 0.10, "a": 0.60 }
+    }
+  ]
+}

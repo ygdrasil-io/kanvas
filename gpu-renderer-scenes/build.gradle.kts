@@ -25,6 +25,50 @@ dependencies {
     testImplementation(kotlin("test"))
 }
 
+tasks.register<JavaExec>("exportCairoReferenceJson") {
+    group = "verification"
+    description = "Exports GPU renderer scenes to Cairo-reference JSON format in tools/cairo-reference/scenes/."
+
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("org.graphiks.kanvas.gpu.renderer.scenes.reports.CairoReferenceExportMainKt")
+    args(rootProject.layout.projectDirectory.asFile.absolutePath)
+    outputs.dir(rootProject.layout.projectDirectory.dir("tools/cairo-reference/scenes").asFile)
+}
+
+tasks.register("generateCairoReferences") {
+    group = "verification"
+    description = "Exports scene JSON and renders Cairo reference PNGs via tools/cairo-reference/render_scene."
+
+    dependsOn("exportCairoReferenceJson")
+
+    doLast {
+        val cairoDir = rootProject.layout.projectDirectory.dir("tools/cairo-reference").asFile
+        val outDir = File(cairoDir, "out").also { it.mkdirs() }
+        val renderer = File(cairoDir, "render_scene")
+        if (!renderer.isFile) {
+            throw GradleException(
+                "Cairo reference renderer not found at $renderer. " +
+                    "Build it first: cd tools/cairo-reference && make"
+            )
+        }
+        val sceneDir = File(cairoDir, "scenes")
+        sceneDir.listFiles { f -> f.extension == "json" }?.forEach { json ->
+            val name = json.nameWithoutExtension
+            val png = File(outDir, "$name.png")
+            val result = exec {
+                commandLine(renderer.absolutePath, json.absolutePath, png.absolutePath)
+                isIgnoreExitValue = true
+            }
+            if (result.exitValue == 0) {
+                println("[cairo-ref] $name -> ${png.name}")
+            } else {
+                logger.warn("[cairo-ref] FAILED: $name (exit=${result.exitValue})")
+            }
+        }
+        println("[cairo-ref] Generated ${outDir.list()?.size ?: 0} reference PNGs in $outDir")
+    }
+}
+
 tasks.register<JavaExec>("gpuRendererScenesCatalogReport") {
     group = "verification"
     description = "Writes the GPU renderer scenes catalog report without WebGPU or Kadre execution."
