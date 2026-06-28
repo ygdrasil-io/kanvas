@@ -74,9 +74,41 @@ target contracts.
 | Color filter | `TargetNative` | `GPUNative` | WGSL material fragment or filter render node | `MaterialKey` when folded, `GPUFilterColorPlan` inside filter DAGs | No CPU artifact; refusal for unsupported chains. |
 | Blend mode | `TargetNative` for selected modes | `GPUNative` or refusal | Fixed blend state or shader blend path with `GPUDestinationReadPlan` when needed | `MaterialKey`, `GPUBlendPlan`, `GPUColorPlan`, and `GPURenderPipelineKey` | Destination-read strategy from `20-destination-read-strategy.md`; refusal for unsupported dst-dependent modes. |
 | Clear/discard | `TargetNative` | `GPUNative` | Pass load/clear/discard ops | none | Target-state operation, not material rendering. |
+| GPU compute tessellation | `TargetNative` | `GPUNative` when capabilities accept, else `CPUPreparedGPU` | Compute pass, indirect dispatch, output buffer | `GPUComputeTessellationPlan`, `GPUComputeTessellationStage`, and `WGSLComputeModule` | `GPUComputeTessellationArtifact` or refusal. |
+| Advanced stroke (complex dash, path effects) | `TargetNative` | `GPUNative` or `CPUPreparedGPU` | Render pass with expanded geometry or mask | `GPUPathEffectChainPlan`, `GPUStrokeStyleCompositionPlan`, `GPUComplexDashPlan` | `PrecomputedGeometryArtifact` or `PathAtlasArtifact`. |
+| Subpixel LCD text | `TargetNative` | `GPUNative` when adapter reports pixel geometry | Text render step, per-component alpha modulation | `GPUSubpixelLCDPlan`, `GPUSubpixelCoverageMask`, `GPUSubpixelLCDRenderStep` | `GlyphAtlasArtifact` with per-component coverage or refusal. |
+| Color font / emoji | `DependencyGated` | `GPUNative`, `CPUPreparedGPU`, or refusal per format | Direct render, atlas composite, or bitmap decode then sample | `GPUColorGlyphLayerPlan`, `GPUColorGlyphCompositePlan`, `GPUCBDTCBLCGlyphPlan`, `GPUSVGOpenTypeGlyphPlan` | Color glyph artifact from pure-kotlin-text or refusal. |
+| Variable font | `DependencyGated` | Resolved at text-stack level; GPU sees static glyphs | Same as text/glyph run | `GPUVariableFontInstancePlan` | Resolved glyph artifacts; no GPU-side axis computation. |
+| Complex shaping (Arabic, Devanagari, CJK) | `DependencyGated` | Resolved at text-stack level | Same as text/glyph run | `GPUShapingIntegrationContract`, `GPUBiDiRunPlan` | Shaping facts as metadata only; GPU does not shape. |
+| Font fallback chain | `TargetNative` | Resolved at text-stack level | Subrun splitting by fallback font identity | `GPUFallbackGlyphPlan`, `GPUFallbackBatchPolicy` | Fallback glyph artifacts; exhausted chain refuses. |
+| HDR transfer functions (PQ, HLG) | `TargetNative` | `GPUNative` or `CPUPreparedGPU` for pixel preparation | Color transform render/compute nodes, EOTF application in WGSL | `GPUHDRTransferFunctionPlan`, `GPUHDREOTFPlan`, `GPUHDRToneMapPlan` | HDR target format required; tone-map to SDR when unavailable. |
+| Wide-gamut (P3, AdobeRGB, Rec.2020) | `TargetNative` | `GPUNative` | Color transform render nodes, intermediate format upgrade to rgba16float | `GPUWideGamutWorkingSpacePlan`, `GPUWideGamutConversionPlan` | Wide-gamut intermediate textures; refusal for incompatible target. |
+| Gain map / Ultra HDR | `TargetNative` | `GPUNative` or `CPUPreparedGPU` decode | Gain map apply WGSL fragment, adaptive display rendering | `GPUGainmapDecodePlan`, `GPUGainmapApplyPlan`, `GPUGainmapDisplayAdaptationPlan` | Decode base + gain map; adaptive output by display headroom. |
+| ICC profile parsing | `TargetNative` | `GPUNative` when profile is matrix/TRC, refuse for LUT | Color transform from parsed profile tags | `GPUICCProfileParsePlan`, `GPUICCProfileTransformPlan`, `GPUICCProfileCachePlan` | Parsed transform validated against reference; LUT profiles refused. |
+| HEIF / AVIF codec | `DependencyGated` | `CPUPreparedGPU` upload when codec accepted | Decode/prepare, upload, then texture sampling | `GPUHEIFCodecDescriptor`, `GPUAVIFCodecDescriptor`, `GPUISOBMFFParsePlan` | `UploadedTextureArtifact`; refused if codec unregistered. |
+| Hardware codec | `DependencyGated` | `CPUPreparedGPU` upload with documented nondeterminism policy | Decode via platform API, upload | `GPUHardwareCodecDescriptor`, `GPUHardwareCodecNondeterminismPolicy`, `GPUHardwareCodecFallbackPlan` | `UploadedTextureArtifact`; fallback to software codec on failure. |
+| YUV multi-plan texture | `TargetNative` | `GPUNative` when WGSL YUV converter is validated | Multi-plane texture upload, WGSL YUV-to-RGB conversion | `GPUYUVMultiPlanDescriptor`, `GPUYUVPlaneUploadPlan`, `GPUYUVToRGBCoverterPlan` | GPU YUV-to-RGB conversion; CPU-side conversion refused. |
+| Mipmap auto-generation | `TargetNative` | `GPUNative` via blit or compute | Mip generation blit/compute passes, cached mipmaps | `GPUImageMipmapGenerationPlan`, `GPUImageMipmapBlitPlan`, `GPUImageMipmapComputePlan`, `GPUImageMipmapCachePlan` | Refusal when mip count exceeds adapter limit. |
+| Blur multi-pass | `TargetNative` | `GPUNative` | Two-pass separable blur (horizontal + vertical), intermediate texture | `GPUSeparableBlurPlan`, `GPUBlurPassPlan`, `GPUBlurKernelCachePlan`, `GPUBlurQualityLevel` | `GPUBlurIntermediateArtifact`. |
+| Morphology (dilate/erode) | `TargetNative` | `GPUNative` | Single-pass or separable two-pass min/max gather | `GPUMorphologyPlan`, `GPUMorphologyPassPlan`, `GPUMorphologySamplingPlan` | GPU rendering; refusal for radius exceeding sample budget. |
+| Lighting filters | `TargetNative` | `GPUNative` | WGSL Phong/Blinn-Phong lighting with normal map | `GPULightingPlan`, `GPULightingNormalMapPlan`, `GPULightingWGSL` | GPU rendering; spot lights refused initially. |
+| Displacement map | `TargetNative` | `GPUNative` | WGSL gather with offset coordinates | `GPUDisplacementMapPlan`, `GPUDisplacementSamplingPlan` | GPU rendering; refusal for unregistered sampler. |
+| Drop shadow | `TargetNative` | `GPUNative` | Mask extraction, blur, offset composite | `GPUDropShadowPlan`, `GPUDropShadowMaskPlan`, `GPUDropShadowBlurPlan`, `GPUDropShadowCompositePlan` | Reuses `GPUSeparableBlurPlan`; refusal when blur unavailable. |
+| Filter tile-based evaluation | `TargetNative` | `GPUNative` | Tiled filter sub-renders with overlap, final composite | `GPUFilterTilePlan`, `GPUFilterTileRenderPlan`, `GPUFilterTileBudgetPolicy` | Per-tile intermediates; refused when tile smaller than kernel. |
+| MSAA resolve | `TargetNative` | `GPUNative` when adapter accepts sample count | Multisample render pass, resolve to single-sample target | `GPUMultisamplePlan`, `GPUMultisampleResolvePlan`, `GPUMultisampleTargetDescriptor` | GPU resolve; refusal for unsupported sample count or format. |
+| Live effect parameter editing | `TargetNative` | `GPUNative` | Uniform-only update, no pipeline recompilation | `GPURuntimeEffectLiveParameterSchema`, `GPURuntimeEffectLiveParameterBinding`, `GPURuntimeEffectLiveState` | Uniform payload update only; refusal for unregistered parameters. |
+| Blender / clip-shader / compute effects | `TargetNative` | `GPUNative` per effect kind | Material, blender, clip-shader, compute, or filter route | `GPURuntimeEffectKind.Blender`, `.ClipShader`, `.Compute` | Kind-specific WGSL and route placement; mismatch refused. |
+| Dynamic shader graph | `TargetNative` | `GPUNative` | Assembled WGSL module from effect DAG | `GPURuntimeEffectShaderGraph`, `GPURuntimeEffectShaderGraphAssemblyPlan` | DAG validated for cycles and budget before assembly. |
+| Perspective transform | `TargetNative` | `GPUNative` for rect/rrect + solid, refused for path/text | Homogeneous divide in vertex shader, conservative bounds proof | `GPUPerspectiveTransformPlan`, `GPUPerspectiveBoundsProof`, `GPUPerspectiveRouteAcceptance` | Accepted for first-slice geometry; refused for paths. |
+| Deferred display list | `TargetNative` | `GPUNative` replay | Record once, replay with new CTM/clip/target | `GPUDeferredDisplayList`, `GPUDeferredDisplayListCompatibilityKey`, `GPUDeferredDisplayListReplayPlan` | Cached recordings; refusal for incompatible replay. |
+| Subpass merging | `TargetNative` | `GPUNative` when adapter supports input attachments | Merged render pass with input attachments | `GPUSubpassMergePlan` | Refusal for incompatible format, barrier, or adapter limit. |
+| Instanced draw batching | `TargetNative` | `GPUNative` | Instanced draw commands with per-instance uniform/vertex data | `GPUInstancedPacketGroup`, `GPUInstancedUniformStrategy`, `GPUInstancedVertexStrategy` | Refusal for incompatible packets or barrier interference. |
+| Tile-deferred rendering | `TargetNative` | `GPUNative` for large targets | Tile-based render passes, tile binning, tile composite | `GPUTileGridPlan`, `GPUTileBin`, `GPUTilePass`, `GPUTileCompositePass` | Single-pass fallback for small targets; tile budget enforced. |
+| Multi-threaded recording | `TargetNative` | `GPUNative` when split is safe | Per-thread recording fragments, merge into single recording | `GPURecordingFragment`, `GPURecordingFragmentMerger`, `GPUThreadBoundArena` | Single-threaded remains default; unsafe splits refused. |
+| Hi-Z occlusion culling | `TargetNative` | `GPUNative` for opaque draws with Z-prepass or previous-frame depth | Depth pyramid compute pass, per-draw occlusion test | `GPUHiZPyramid`, `GPUHiZOcclusionTest` | ZERO false-positive tolerance; translucent draws excluded. |
+
 
 ## Required Evidence By Family
-
 ### Material Source And Paint Pipeline
 
 Evidence must include:
@@ -423,6 +455,57 @@ Examples:
 - `unsupported.runtime_effect.dynamic_sksl_forbidden`
 - `unsupported.runtime_effect.unregistered_descriptor`
 - `unsupported.blend.dst_dependent_mode`
+- `unsupported.tessellation.compute_unavailable`
+- `unsupported.tessellation.wgsl_validation`
+- `unsupported.tessellation.vertex_budget_exceeded`
+- `unsupported.stroke.path_effect_chain_depth`
+- `unsupported.stroke.dash_pattern_length`
+- `unsupported.text.subpixel_pixel_geometry`
+- `unsupported.text.subpixel_target_format`
+- `unsupported.text.color_font.format_unavailable`
+- `unsupported.text.color_font.layer_count`
+- `unsupported.text.shaping_script_unavailable`
+- `unsupported.text.fallback_exhausted`
+- `unsupported.color.hdr_transfer_function`
+- `unsupported.color.hdr_target_format`
+- `unsupported.color.wide_gamut_working_space`
+- `unsupported.color.gainmap_metadata_missing`
+- `unsupported.color.gainmap_apply_wgsl_unvalidated`
+- `unsupported.color.icc_profile_version`
+- `unsupported.color.icc_lut_profile`
+- `unsupported.image.heif_codec_unregistered`
+- `unsupported.image.avif_codec_unregistered`
+- `unsupported.image.hardware_codec_unapproved`
+- `unsupported.image.hardware_codec_nondeterministic`
+- `unsupported.image.yuv_color_space`
+- `unsupported.image.yuv_converter_wgsl_unvalidated`
+- `unsupported.image.mipmap_budget_exceeded`
+- `unsupported.filter.blur_sigma_range`
+- `unsupported.filter.blur_intermediate_budget`
+- `unsupported.filter.morphology_radius_budget`
+- `unsupported.filter.lighting_normal_source_missing`
+- `unsupported.filter.displacement_missing_texture`
+- `unsupported.filter.drop_shadow_blur_unavailable`
+- `unsupported.filter.tile_smaller_than_kernel`
+- `unsupported.target.multisample_count`
+- `unsupported.target.multisample_resolve_format`
+- `unsupported.runtime_effect.live_parameter_unregistered`
+- `unsupported.runtime_effect.live_parameter_type_mismatch`
+- `unsupported.runtime_effect.kind_not_registered`
+- `unsupported.runtime_effect.shader_graph_cycle`
+- `unsupported.runtime_effect.shader_graph_depth_exceeded`
+- `unsupported.transform.perspective_route_rejected`
+- `unsupported.transform.perspective_degenerate`
+- `unsupported.recording.deferred_incompatible_replay`
+- `unsupported.recording.subpass_merge_incompatible`
+- `unsupported.stream.instanced_incompatible_packets`
+- `unsupported.tile.budget_exceeded`
+- `unsupported.tile.cross_tile_destination_read`
+- `unsupported.tile.cross_tile_clip_atomic_group`
+- `unsupported.recording.fragment_split_unsafe`
+- `unsupported.recording.fragment_merge_cycle`
+- `unsupported.occlusion.depth_format_unsupported`
+- `unsupported.occlusion.depth_not_readable`
 
 ## Non-Goals
 

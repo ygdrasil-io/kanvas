@@ -448,3 +448,67 @@ diagnostics for:
 - Do not hide draw analysis, layer planning, or occlusion decisions as private
   pass-builder side effects.
 - Do not treat this target spec as an implementation order or vertical slice.
+
+## Deferred Display List Contract
+
+A deferred display list (`GPUDeferredDisplayList`) allows a `NormalizedDrawCommand`
+sequence to be recorded once and replayed across multiple frames or targets.
+This is a Kanvas-internal replay contract, not a product API.
+
+### Contracts
+
+| Contract | Purpose |
+|---|---|
+| `GPUDeferredDisplayList` | Immutable recorded command sequence + analysis decisions + layer plans. Can be composed with a new CTM, clip, and target for replay. |
+| `GPUDeferredDisplayListCompatibilityKey` | Keyed by recording ID, command sequence hash, and replay-compatible fields (excludes target, surface lease, and mutable resource generations). |
+| `GPUDeferredDisplayListReplayPlan` | Per-replay plan: apply composed CTM, intersection clip, target substitution, re-execute analysis/layer planning (lightweight), produce new task list. |
+| `GPUDeferredDisplayListCachePlan` | Cache plan for frequently replayed display lists. Keyed by compatibility key + replay CTM class + replay clip class. |
+| `GPUDeferredDisplayListDiagnostic` | Refusal for incompatible replay (format change, capability change, device generation mismatch) or cache budget exceeded. |
+
+### Target Acceptance
+
+```
+Recording Session
+  -> GPURecorder records N commands
+  -> snapshots as GPUDeferredDisplayList
+  -> later frame: replay with new CTM/clip
+  -> GPUDeferredDisplayListReplayPlan produces new GPUTaskList
+  -> submit
+```
+
+The replay path avoids full material-source re-evaluation when the recording is
+compatible. Only analysis decisions dependent on CTM/clip/target are recalculated.
+
+### Non-Goals
+
+- Do not expose `GPUDeferredDisplayList` as a public Skia-like API.
+- Do not allow cross-device replay until device-loss recovery is proven.
+- Do not claim performance improvement without measured evidence.
+
+## Subpass Merging Policy
+
+When a render pass produces intermediate textures consumed by later passes,
+subpass merging combines them into a single render pass with input attachments
+where the adapter supports it.
+
+### Contracts
+
+| Contract | Purpose |
+|---|---|
+| `GPUSubpassMergePlan` | Accepted merge: producer pass (color attachment), consumer pass (input attachment), compatible formats, and no intervening barriers that prevent merging. |
+| `GPUSubpassMergeDiagnostic` | Refusal for incompatible format, intervening texture barrier, vendor limitation, or merged pass exceeding max attachment count. |
+
+### Merge Conditions
+
+Two passes can be merged into subpasses when:
+1. The producer's color attachment is the consumer's input attachment.
+2. Both passes share the same render pass scope (same surface target or offscreen).
+3. No copy, upload, barrier, or readback is required between them.
+4. Adapter supports `inputAttachment` reads (`maxColorAttachments` permits the layout).
+5. Both passes use the same sample count.
+
+### Acceptance Gates
+
+- At least one producer-consumer pair (blur horizontal -> blur vertical) merged into subpasses with GPU evidence.
+- Non-mergeable pair produces stable refusal with explicit reason.
+- Subpass merge does not regress pixel output compared to sequential passes.

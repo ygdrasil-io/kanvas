@@ -255,3 +255,45 @@ Promoted blend/color behavior requires:
 - Do not encode target attachment state in `MaterialKey`.
 - Do not silently drop color-space or premul conversions.
 - Do not use CPU-rendered textures to implement unsupported blend modes.
+
+## Multisample Render Target
+
+MSAA (multisample anti-aliasing) is a `TargetNative` route when the adapter
+and target format support it. The renderer declares multisample state as part of
+`GPUTargetState` and `GPURenderPipelineKey`.
+
+### Contracts
+
+| Contract | Purpose |
+|---|---|
+| `GPUMultisamplePlan` | Accepted multisample state: sample count (1, 4, 8), sample mask, alpha-to-coverage enable, and resolve target. |
+| `GPUMultisampleResolvePlan` | Resolve operation: multisample target resolved to single-sample target via WGPU resolve command, custom WGSL resolve, or compute resolve. |
+| `GPUMultisampleTargetDescriptor` | Multisample texture descriptor: sample count, format compatibility, usage flags (RENDER_ATTACHMENT + texture binding for custom resolve). |
+| `GPUMultisampleDiagnostic` | Refusal for unsupported sample count, incompatible target format, missing resolve target, or adapter sample-count limit exceeded. |
+
+### Target State Integration
+
+`GPUTargetState` is extended with:
+- `sampleCount: Int` (default 1 for non-MSAA).
+- `multisamplePlan: GPUMultisamplePlan?` (null when sampleCount=1).
+
+`GPURenderPipelineKey` includes `sampleCount` as a `PipelineStateAffecting` axis.
+
+### Route Selection
+
+```
+Rect fill with MSAA
+  -> GPUTargetState with sampleCount = 4
+  -> GPUMultisamplePlan with resolve target as single-sample surface
+  -> GPURenderPipelineKey includes sampleCount
+  -> GPU executes render pass with multisample attachment
+  -> Resolve to single-sample surface after render pass
+```
+
+### Acceptance Gates
+
+- At least one filled rect rendered at 4x MSAA and resolved, compared to CPU supersampled reference (PSNR threshold).
+- 8x MSAA accepted or refused based on adapter query.
+- Alpha-to-coverage tested with partially transparent geometry.
+- Stable refusal for MSAA on non-renderable formats (depth-only, stencil-only).
+- MSAA resolve does not corrupt color values at polygon edges.

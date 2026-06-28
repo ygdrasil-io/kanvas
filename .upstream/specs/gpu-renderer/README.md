@@ -308,7 +308,10 @@ critical-path order, and parallel implementation lanes are centralized in
 | `34-analysis-materialization-recording.md` | Analysis versus materialization boundary, late failure classes, recording replay compatibility, ordered recordings, lazy/promise/imported resources, scratch/intermediate lifetimes, and negative CPU-fallback tests. |
 | `35-package-class-layout.md` | Target package/class ownership layout for `:gpu-renderer`, dependency bands, public/internal surface, Graphite orientation table, and package-boundary validation. |
 | `36-implementation-roadmap.md` | Vertical-first implementation roadmap, critical path, parallel lanes, expansion order, commit/review proposal, stop conditions, and open planning questions. |
-| `37-draw-packet-command-stream.md` | Draw packet stream, pass command stream, materialization handoff, WGPU/Dawn-aligned command encoder plan, diagnostics, and validation gates. |
+| `37-draw-packet-command-stream.md` | Draw packet stream, pass command stream, instanced batching, materialization handoff, WGPU/Dawn-aligned command encoder plan, diagnostics, and validation gates. |
+| `38-tile-deferred-rendering.md` | Tile-based deferred rendering architecture: tile grid, tile binning, tile pass construction, composite pass, tile memory budget, destination-read and clip interaction, and validation gates. |
+| `39-multithreaded-recording.md` | Multi-threaded recording model: recording fragments, fragment merger, thread-bound arenas, determinism contract, cache/resource thread safety, parallel strategies, and validation gates. |
+| `40-hi-z-occlusion-culling.md` | Hi-Z depth pyramid occlusion culling: pyramid construction, per-draw occlusion test, Z-prepass and previous-frame depth sources, tile interaction, and validation gates. |
 
 ## Target Shape
 
@@ -412,6 +415,10 @@ flowchart TD
     pipeline --> resources["GPUResourceProvider"]
     resources --> execution["GPUExecutionContext / submission"]
     packet --> execution
+    occlusion["GPUHiZPyramid + GPUHiZOcclusionTest"] --> recorder
+    tile["GPUTileGridPlan / GPUTileBin / GPUTilePass"] --> drawpass
+    tile --> composite["GPUTileCompositePass"]
+    threads["GPURecordingFragment / GPURecordingFragmentMerger"] --> recording
     execution --> facade["GPU facade used with wgpu4k"]
     execution --> telemetry["GPUTelemetryLedger / PM gates"]
     facade --> evidence["CPU/GPU evidence or RefuseDiagnostic"]

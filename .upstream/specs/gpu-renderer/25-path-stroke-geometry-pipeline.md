@@ -816,6 +816,72 @@ It must not claim support for:
 
 Those routes require later evidence against this spec.
 
+## GPU Compute Tessellation
+
+`GPUComputeTessellationPlan` is the GPU-native path tessellation route that
+replaces `CPUPreparedGPU` for path fill and stroke coverage when the adapter
+capabilities support it.
+
+### Contracts
+
+| Contract | Purpose |
+|---|---|
+| `GPUComputeTessellationPlan` | Accepted compute-shader tessellation with WGSL module, dispatch grid, indirect dispatch, and output buffer layout. |
+| `GPUComputeTessellationStage` | Pipeline stage: flatten (optional CPU hint), fan tessellation (compute), or stencil-cover (compute + render). |
+| `GPUComputeTessellationArtifact` | Typed registered artifact produced by compute tessellation, consumed by subsequent render steps. |
+| `GPUComputeTessellationBudgetPolicy` | Max dispatch groups, max output vertices, and memory budget per tessellation request. |
+| `GPUComputeTessellationDiagnostic` | Reason codes for unsupported topology, budget exceeded, WGSL validation failure, or unproven coverage equivalence. |
+
+### Route Selection
+
+```
+PathFill
+  -> GPUComputeTessellationPlan when capabilities and budget accept
+  -> CPUPreparedGPU(PrecomputedGeometryArtifact) when compute unavailable
+  -> RefuseDiagnostic otherwise
+```
+
+The compute tessellation route uses a separate `GPUComputePipelineKey` and is
+ordered before any render pass that consumes the tessellated geometry output.
+
+### Acceptance Gates
+
+- Access to `wgpu4k` compute shader capabilities (`maxComputeWorkgroupInvocations`,
+  `maxComputeWorkgroupStorageSize`, etc.).
+- Deterministic WGSL compute module validated through `wgsl4k`.
+- `GPUComputeTessellationArtifact` registered in `CPUPreparedGPUArtifactRegistry`.
+- CPU oracle comparison for at least one accepted path fill and one accepted path stroke.
+- Stable refusal for perspective-transformed paths, paths exceeding vertex budget,
+  and unvalidated WGSL compute output.
+
+### Non-Goals
+
+- Do not implement a general GPU compute scheduler.
+- Do not rewrite CPU-side flattening as compute.
+- Do not claim MSAA or multisample coverage from tessellation alone.
+
+## Advanced Stroke Expansion
+
+`GPUStrokeExpansionPlan` is extended to cover complex dash patterns, arbitrary
+path effects, and stroke-style composition that was previously refused.
+
+### Contracts
+
+| Contract | Purpose |
+|---|---|
+| `GPUComplexDashPlan` | Explicit dash array, dash phase, and interval classification (simple repeat vs complex pattern). |
+| `GPUPathEffectChainPlan` | Ordered chain of path-effect descriptors applied before stroke expansion. |
+| `GPUPathEffectDescriptor` | Immutable descriptor for a single path effect: corner path effect, discrete path effect, sum, compose, or registered custom effect. |
+| `GPUPathEffectRoute` | Selection: native GPU path effect, CPU-prepared artifact, or refusal. |
+| `GPUStrokeStyleCompositionPlan` | Width, cap, join, miter, dash, and path-effect chain composed into a single executable expansion plan. |
+| `GPUAdvancedStrokeDiagnostic` | Refusal codes for unsupported dash length, path-effect depth, or stroke-style combination. |
+
+### Acceptance Gates
+
+- At least one complex dash fixture (e.g., 4-element dash with phase offsets) accepted or refused with stable reason.
+- At least one path-effect chain fixture (corner + discrete) accepted or refused.
+- No hidden CPU raster of the full stroked shape into a texture.
+
 ## Non-Goals
 
 - Do not port Graphite `Geometry`, `Renderer`, `RenderStep`,
