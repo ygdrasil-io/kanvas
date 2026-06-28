@@ -843,7 +843,7 @@ class GPURendererSceneRegistryTest {
         assertEquals("simple-latin", command.shapingMode)
         assertEquals("font.glyph.outline-path", command.glyphRoute)
         assertEquals("webgpu.text.glyph-atlas.simple-latin", command.webGpuCandidateRoute)
-        assertEquals("unsupported.text.draw_run_route_unavailable", command.fallbackReason)
+        assertEquals("", command.fallbackReason)
     }
 
     @Test
@@ -1763,6 +1763,24 @@ class GPURendererSceneRegistryTest {
                 roadmapLinks = listOf(RoadmapExpectation("M19")),
             ),
             SceneExpectationRow(
+                sceneId = "gaussian-blur-photo",
+                tags = setOf(SceneTag.Filter),
+                commandFamilies = listOf("clear", "fill-rect"),
+                roadmapLinks = listOf(RoadmapExpectation("M19")),
+            ),
+            SceneExpectationRow(
+                sceneId = "color-matrix-tint",
+                tags = setOf(SceneTag.Filter),
+                commandFamilies = listOf("clear", "fill-rect"),
+                roadmapLinks = listOf(RoadmapExpectation("M19")),
+            ),
+            SceneExpectationRow(
+                sceneId = "stroke-and-filter-card",
+                tags = setOf(SceneTag.Stroke, SceneTag.Filter),
+                commandFamilies = listOf("clear", "fill-rect", "stroke"),
+                roadmapLinks = listOf(RoadmapExpectation("M16"), RoadmapExpectation("M19")),
+            ),
+            SceneExpectationRow(
                 sceneId = "glyph-atlas-strip",
                 tags = setOf(SceneTag.Text),
                 commandFamilies = listOf("clear", "text-run", "fill-rect"),
@@ -1796,6 +1814,12 @@ class GPURendererSceneRegistryTest {
                 sceneId = "dash-pattern-ladder",
                 tags = setOf(SceneTag.Stroke),
                 commandFamilies = listOf("clear", "fill-rect", "fill-rect", "fill-rect", "fill-rect", "fill-rect"),
+                roadmapLinks = listOf(RoadmapExpectation("M16")),
+            ),
+            SceneExpectationRow(
+                sceneId = "stroke-rect-outline",
+                tags = setOf(SceneTag.Stroke),
+                commandFamilies = listOf("clear", "stroke"),
                 roadmapLinks = listOf(RoadmapExpectation("M16")),
             ),
             SceneExpectationRow(
@@ -1845,6 +1869,24 @@ class GPURendererSceneRegistryTest {
                 tags = setOf(SceneTag.Rect),
                 commandFamilies = listOf("clear", "fill-rect"),
                 roadmapLinks = listOf(RoadmapExpectation("M23")),
+            ),
+            SceneExpectationRow(
+                sceneId = "path-star-gradient",
+                tags = setOf(SceneTag.Path, SceneTag.Gradient),
+                commandFamilies = listOf("clear", "path-fill-gradient"),
+                roadmapLinks = listOf(RoadmapExpectation("M26")),
+            ),
+            SceneExpectationRow(
+                sceneId = "text-a8-hello",
+                tags = setOf(SceneTag.Text),
+                commandFamilies = listOf("clear", "text-run", "fill-rect"),
+                roadmapLinks = listOf(RoadmapExpectation("M26")),
+            ),
+            SceneExpectationRow(
+                sceneId = "gradient-path-and-text",
+                tags = setOf(SceneTag.Path, SceneTag.Gradient, SceneTag.Text),
+                commandFamilies = listOf("clear", "path-fill-gradient", "text-run"),
+                roadmapLinks = listOf(RoadmapExpectation("M26")),
             ),
         )
     }

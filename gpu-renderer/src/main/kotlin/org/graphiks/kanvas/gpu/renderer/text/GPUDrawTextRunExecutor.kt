@@ -50,6 +50,6 @@ class GPUDrawTextRunExecutor {
 
     companion object {
         const val nonClaimLine: String =
-            "nonclaim:no-instance-batch-upload no-backend-draw-calls no-gpu-pipeline-state no-vertex-buffer-binding"
+            "nonclaim:no-instance-batch-upload no-gpu-pipeline-state"
     }
 }

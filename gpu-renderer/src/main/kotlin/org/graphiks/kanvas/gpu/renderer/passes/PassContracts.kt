@@ -1254,6 +1254,67 @@ object GPUFirstRoutePassBuilder {
         )
     }
 
+    /** Builds an accepted FillPath pass with path-fill render-step identity. */
+    fun acceptedFillPath(
+        commandIdValue: Int,
+        analysisRecordId: String,
+        renderStepIdentity: String,
+        sortKey: Long,
+        pipelineKeyHash: String,
+        boundsHash: String,
+        scissorBoundsHash: String?,
+        originalPaintOrder: Int,
+        targetStateHash: String,
+    ): GPUDrawPass {
+        val invocation = GPUDrawInvocation(
+            commandIdValue = commandIdValue,
+            analysisRecordId = analysisRecordId,
+            renderStepIndex = 0,
+            renderStepId = GPURenderStepID(renderStepIdentity),
+            role = "path_fill",
+            layerScopeId = "root",
+            sortKey = sortKey,
+            pipelineKeyHash = pipelineKeyHash,
+            uniformSlot = null,
+            resourceSlot = null,
+            boundsHash = boundsHash,
+            scissorBoundsHash = scissorBoundsHash,
+            originalPaintOrder = originalPaintOrder,
+        )
+        return GPUDrawPass(
+            passId = "pass.path_fill.$commandIdValue",
+            targetStateHash = targetStateHash,
+            layerScopeId = "root",
+            loadStoreLabel = "load.store",
+            invocations = listOf(invocation),
+            pipelineKeys = listOf(pipelineKeyHash),
+            barriers = emptyList(),
+        )
+    }
+
+    /** Builds an empty refused FillPath pass. */
+    fun refusedFillPath(
+        commandIdValue: Int,
+        targetStateHash: String,
+        code: String,
+    ): GPUDrawPass =
+        GPUDrawPass(
+            passId = "pass.refused.path_fill.$commandIdValue",
+            targetStateHash = targetStateHash,
+            layerScopeId = "root",
+            loadStoreLabel = "refused",
+            invocations = emptyList(),
+            pipelineKeys = emptyList(),
+            barriers = emptyList(),
+            diagnostics = listOf(
+                GPUPassDiagnostic(
+                    code = code,
+                    passId = "pass.refused.path_fill.$commandIdValue",
+                    terminal = true,
+                ),
+            ),
+        )
+
     /** Builds an empty refused DrawTextRun pass. */
     fun refusedDrawTextRun(
         commandIdValue: Int,
@@ -1272,6 +1333,199 @@ object GPUFirstRoutePassBuilder {
                 GPUPassDiagnostic(
                     code = code,
                     passId = "pass.refused.$commandIdValue",
+                    terminal = true,
+                ),
+            ),
+        )
+
+    /**
+     * Builds an accepted DrawImageRect pass with image-upload render-step
+     * identity but no concrete texture or sampler resources.
+     */
+    fun acceptedDrawImageRect(
+        commandIdValue: Int,
+        analysisRecordId: String,
+        renderStepIdentity: String,
+        sortKey: Long,
+        pipelineKeyHash: String,
+        boundsHash: String,
+        scissorBoundsHash: String?,
+        originalPaintOrder: Int,
+        targetStateHash: String,
+    ): GPUDrawPass {
+        val invocation = GPUDrawInvocation(
+            commandIdValue = commandIdValue,
+            analysisRecordId = analysisRecordId,
+            renderStepIndex = 0,
+            renderStepId = GPURenderStepID(renderStepIdentity),
+            role = "image_draw",
+            layerScopeId = "root",
+            sortKey = sortKey,
+            pipelineKeyHash = pipelineKeyHash,
+            uniformSlot = null,
+            resourceSlot = null,
+            boundsHash = boundsHash,
+            scissorBoundsHash = scissorBoundsHash,
+            originalPaintOrder = originalPaintOrder,
+        )
+        return GPUDrawPass(
+            passId = "pass.image_draw.$commandIdValue",
+            targetStateHash = targetStateHash,
+            layerScopeId = "root",
+            loadStoreLabel = "load.store",
+            invocations = listOf(invocation),
+            pipelineKeys = listOf(pipelineKeyHash),
+            barriers = emptyList(),
+        )
+    }
+
+    /**
+     * Builds an accepted ApplyFilter pass with filter render-step identity but
+     * no concrete resource or binding slots.
+     */
+    fun acceptedApplyFilter(
+        commandIdValue: Int,
+        analysisRecordId: String,
+        renderStepIdentity: String,
+        sortKey: Long,
+        pipelineKeyHash: String,
+        boundsHash: String,
+        scissorBoundsHash: String?,
+        originalPaintOrder: Int,
+        targetStateHash: String,
+    ): GPUDrawPass {
+        val invocation = GPUDrawInvocation(
+            commandIdValue = commandIdValue,
+            analysisRecordId = analysisRecordId,
+            renderStepIndex = 0,
+            renderStepId = GPURenderStepID(renderStepIdentity),
+            role = "filter",
+            layerScopeId = "root",
+            sortKey = sortKey,
+            pipelineKeyHash = pipelineKeyHash,
+            uniformSlot = null,
+            resourceSlot = null,
+            boundsHash = boundsHash,
+            scissorBoundsHash = scissorBoundsHash,
+            originalPaintOrder = originalPaintOrder,
+        )
+        return GPUDrawPass(
+            passId = "pass.filter.$commandIdValue",
+            targetStateHash = targetStateHash,
+            layerScopeId = "root",
+            loadStoreLabel = "load.store",
+            invocations = listOf(invocation),
+            pipelineKeys = listOf(pipelineKeyHash),
+            barriers = emptyList(),
+        )
+    }
+
+    /** Builds an empty refused ApplyFilter pass. */
+    fun refusedApplyFilter(
+        commandIdValue: Int,
+        targetStateHash: String,
+        code: String,
+    ): GPUDrawPass =
+        GPUDrawPass(
+            passId = "pass.refused.filter.$commandIdValue",
+            targetStateHash = targetStateHash,
+            layerScopeId = "root",
+            loadStoreLabel = "refused",
+            invocations = emptyList(),
+            pipelineKeys = emptyList(),
+            barriers = emptyList(),
+            diagnostics = listOf(
+                GPUPassDiagnostic(
+                    code = code,
+                    passId = "pass.refused.filter.$commandIdValue",
+                    terminal = true,
+                ),
+            ),
+        )
+
+    /** Builds an empty refused DrawImageRect pass. */
+    fun refusedDrawImageRect(
+        commandIdValue: Int,
+        targetStateHash: String,
+        code: String,
+    ): GPUDrawPass =
+        GPUDrawPass(
+            passId = "pass.refused.image_draw.$commandIdValue",
+            targetStateHash = targetStateHash,
+            layerScopeId = "root",
+            loadStoreLabel = "refused",
+            invocations = emptyList(),
+            pipelineKeys = emptyList(),
+            barriers = emptyList(),
+            diagnostics = listOf(
+                GPUPassDiagnostic(
+                    code = code,
+                    passId = "pass.refused.image_draw.$commandIdValue",
+                    terminal = true,
+                ),
+            ),
+        )
+
+    /**
+     * Builds an accepted DrawLayer pass with saveLayer render-step
+     * identity but no concrete offscreen target or composite resources.
+     */
+    fun acceptedDrawLayer(
+        commandIdValue: Int,
+        analysisRecordId: String,
+        renderStepIdentity: String,
+        sortKey: Long,
+        pipelineKeyHash: String,
+        boundsHash: String,
+        scissorBoundsHash: String?,
+        originalPaintOrder: Int,
+        targetStateHash: String,
+        layerScopeId: String,
+    ): GPUDrawPass {
+        val invocation = GPUDrawInvocation(
+            commandIdValue = commandIdValue,
+            analysisRecordId = analysisRecordId,
+            renderStepIndex = 0,
+            renderStepId = GPURenderStepID(renderStepIdentity),
+            role = "draw_layer",
+            layerScopeId = layerScopeId,
+            sortKey = sortKey,
+            pipelineKeyHash = pipelineKeyHash,
+            uniformSlot = null,
+            resourceSlot = null,
+            boundsHash = boundsHash,
+            scissorBoundsHash = scissorBoundsHash,
+            originalPaintOrder = originalPaintOrder,
+        )
+        return GPUDrawPass(
+            passId = "pass.draw_layer.$commandIdValue",
+            targetStateHash = targetStateHash,
+            layerScopeId = layerScopeId,
+            loadStoreLabel = "load.store",
+            invocations = listOf(invocation),
+            pipelineKeys = listOf(pipelineKeyHash),
+            barriers = emptyList(),
+        )
+    }
+
+    /** Builds an empty refused DrawLayer pass. */
+    fun refusedDrawLayer(
+        commandIdValue: Int,
+        targetStateHash: String,
+        code: String,
+    ): GPUDrawPass =
+        GPUDrawPass(
+            passId = "pass.refused.draw_layer.$commandIdValue",
+            targetStateHash = targetStateHash,
+            layerScopeId = "root",
+            loadStoreLabel = "refused",
+            invocations = emptyList(),
+            pipelineKeys = emptyList(),
+            barriers = emptyList(),
+            diagnostics = listOf(
+                GPUPassDiagnostic(
+                    code = code,
+                    passId = "pass.refused.draw_layer.$commandIdValue",
                     terminal = true,
                 ),
             ),

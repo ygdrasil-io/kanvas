@@ -164,6 +164,186 @@ object GPUFirstRouteDecisionBuilder {
             ),
         )
 
+    /** Builds a native FillRect linear gradient decision only after analysis has validated gradient command facts. */
+    fun nativeLinearGradientRect(
+        commandIdValue: Int,
+        pipelinePreimageHash: String,
+        renderStepIdentity: String,
+        requirements: List<String>,
+    ): GPURouteDecision.Native =
+        GPURouteDecision.Native(
+            route = GPUNativeRoute(
+                routeId = "route.fill_rect.$commandIdValue",
+                consumerKind = "native.fill_rect.linear_gradient",
+                renderStepIdentity = renderStepIdentity,
+                pipelinePreimageHash = pipelinePreimageHash,
+                requirements = requirements,
+            ),
+        )
+
+    /** Builds a native FillRRect linear gradient decision only after analysis has validated gradient command facts. */
+    fun nativeLinearGradientRRect(
+        commandIdValue: Int,
+        pipelinePreimageHash: String,
+        renderStepIdentity: String,
+        requirements: List<String>,
+    ): GPURouteDecision.Native =
+        GPURouteDecision.Native(
+            route = GPUNativeRoute(
+                routeId = "route.fill_rrect.$commandIdValue",
+                consumerKind = "native.fill_rrect.linear_gradient",
+                renderStepIdentity = renderStepIdentity,
+                pipelinePreimageHash = pipelinePreimageHash,
+                requirements = requirements,
+            ),
+        )
+
+    /** Builds a native FillPath stencil-cover route decision. */
+    fun nativeFillPath(
+        commandIdValue: Int,
+        pipelinePreimageHash: String,
+        renderStepIdentity: String,
+        requirements: List<String>,
+    ): GPURouteDecision.Native =
+        GPURouteDecision.Native(
+            route = GPUNativeRoute(
+                routeId = "route.path_fill.$commandIdValue",
+                consumerKind = "native.path_fill.stencil_cover",
+                renderStepIdentity = renderStepIdentity,
+                pipelinePreimageHash = pipelinePreimageHash,
+                requirements = requirements,
+            ),
+        )
+
+    /** Builds a prepared FillPath CPUPreparedGPU route decision. */
+    fun preparedFillPath(
+        commandIdValue: Int,
+        artifactKey: String,
+        consumerKind: String,
+        invalidationFacts: List<String>,
+    ): GPURouteDecision.Prepared =
+        GPURouteDecision.Prepared(
+            route = CPUPreparedGPURoute(
+                artifactKey = CPUPreparedGPUArtifactKey(artifactKey),
+                artifactType = "path-fill-tessellation",
+                lifetimeClass = "recording-local",
+                budgetClass = "path-fill-small",
+                consumerKind = consumerKind,
+                invalidationFacts = invalidationFacts,
+            ),
+        )
+
+    /**
+     * Builds a prepared DrawImageRect CPUPreparedGPU route decision for decoded
+     * image upload before sampler consumption.
+     */
+    fun preparedDrawImageRect(
+        commandIdValue: Int,
+        artifactKey: String,
+        consumerKind: String,
+        invalidationFacts: List<String>,
+    ): GPURouteDecision.Prepared =
+        GPURouteDecision.Prepared(
+            route = CPUPreparedGPURoute(
+                artifactKey = CPUPreparedGPUArtifactKey(artifactKey),
+                artifactType = "decoded-image-upload",
+                lifetimeClass = "recording-local",
+                budgetClass = "image-small",
+                consumerKind = consumerKind,
+                invalidationFacts = invalidationFacts,
+            ),
+        )
+
+    /**
+     * Builds a native DrawImageRect GPU route decision (future, when bitmap
+     * WGSL is ready for first-slice promotion).
+     */
+    fun nativeDrawImageRect(
+        commandIdValue: Int,
+        pipelinePreimageHash: String,
+        renderStepIdentity: String,
+        requirements: List<String>,
+    ): GPURouteDecision.Native =
+        GPURouteDecision.Native(
+            route = GPUNativeRoute(
+                routeId = "route.draw_image_rect.$commandIdValue",
+                consumerKind = "native.draw_image_rect.decoded_pixels",
+                renderStepIdentity = renderStepIdentity,
+                pipelinePreimageHash = pipelinePreimageHash,
+                requirements = requirements,
+            ),
+        )
+
+    /** Builds a native DrawLayer route decision only after analysis has validated saveLayer isolation facts. */
+    fun nativeDrawLayer(
+        commandIdValue: Int,
+        pipelinePreimageHash: String,
+        renderStepIdentity: String,
+        requirements: List<String>,
+    ): GPURouteDecision.Native =
+        GPURouteDecision.Native(
+            route = GPUNativeRoute(
+                routeId = "route.draw_layer.$commandIdValue",
+                consumerKind = "native.draw_layer.isolated_target",
+                renderStepIdentity = renderStepIdentity,
+                pipelinePreimageHash = pipelinePreimageHash,
+                requirements = requirements,
+            ),
+        )
+
+    /** Builds a prepared DrawLayer CPUPreparedGPU route decision. */
+    fun preparedDrawLayer(
+        commandIdValue: Int,
+        artifactKey: String,
+        consumerKind: String,
+        invalidationFacts: List<String>,
+    ): GPURouteDecision.Prepared =
+        GPURouteDecision.Prepared(
+            route = CPUPreparedGPURoute(
+                artifactKey = CPUPreparedGPUArtifactKey(artifactKey),
+                artifactType = "savelayer-filtered-compositor",
+                lifetimeClass = "recording-local",
+                budgetClass = "savelayer-small",
+                consumerKind = consumerKind,
+                invalidationFacts = invalidationFacts,
+            ),
+        )
+
+    /** Builds a native ApplyFilter decision only after analysis has validated filter command facts. */
+    fun nativeApplyFilter(
+        commandIdValue: Int,
+        pipelinePreimageHash: String,
+        renderStepIdentity: String,
+        requirements: List<String>,
+    ): GPURouteDecision.Native =
+        GPURouteDecision.Native(
+            route = GPUNativeRoute(
+                routeId = "route.apply_filter.$commandIdValue",
+                consumerKind = "native.apply_filter.simple_node",
+                renderStepIdentity = renderStepIdentity,
+                pipelinePreimageHash = pipelinePreimageHash,
+                requirements = requirements,
+            ),
+        )
+
+    /** Builds a prepared ApplyFilter CPUPreparedGPU route decision. */
+    fun preparedApplyFilter(
+        commandIdValue: Int,
+        artifactKey: String,
+        consumerKind: String,
+        invalidationFacts: List<String>,
+    ): GPURouteDecision.Prepared =
+        GPURouteDecision.Prepared(
+            route = CPUPreparedGPURoute(
+                artifactKey = CPUPreparedGPUArtifactKey(artifactKey),
+                artifactType = "filter-render-artifact",
+                lifetimeClass = "recording-local",
+                budgetClass = "filter-small",
+                consumerKind = consumerKind,
+                invalidationFacts = invalidationFacts,
+            ),
+        )
+
     /** Builds a terminal route refusal with the canonical reason code preserved for dumps and gates. */
     fun refused(code: String, stage: String, subject: String = "FillRect first native route"): GPURouteDecision.Refused =
         GPURouteDecision.Refused(

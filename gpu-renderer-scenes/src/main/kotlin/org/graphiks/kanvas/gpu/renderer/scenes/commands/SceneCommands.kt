@@ -87,6 +87,8 @@ enum class SceneBitmapSampling {
 enum class SceneFilterKind(val wireName: String) {
     LumaTint("luma-tint"),
     DropShadow("drop-shadow"),
+    GaussianBlur("gaussian-blur"),
+    ColorMatrix("color-matrix"),
 }
 
 sealed interface SceneCommand {
@@ -138,6 +140,27 @@ sealed interface SceneCommand {
             }
             require(radius >= 0f) { "SceneCommand.FillRRect.radius must be non-negative" }
             require(paintOrder >= 0) { "SceneCommand.FillRRect.paintOrder must be non-negative" }
+        }
+    }
+
+    data class Stroke(
+        override val label: String,
+        val rect: SceneRect,
+        val strokeColor: SceneColor,
+        val strokeWidth: Float,
+        val paintOrder: Int = 0,
+        val pathKind: String = "bounded-rect-path",
+    ) : SceneCommand {
+        override val family: String = "stroke"
+
+        init {
+            requireSceneCommandLabel(label)
+            require(!strokeWidth.isNaN() && !strokeWidth.isInfinite()) {
+                "SceneCommand.Stroke.strokeWidth must be finite"
+            }
+            require(strokeWidth > 0f) { "SceneCommand.Stroke.strokeWidth must be positive" }
+            require(paintOrder >= 0) { "SceneCommand.Stroke.paintOrder must be non-negative" }
+            require(pathKind.isNotBlank()) { "SceneCommand.Stroke.pathKind must not be blank" }
         }
     }
 
@@ -332,7 +355,7 @@ sealed interface SceneCommand {
         val shapingMode: String = "simple-latin",
         val glyphRoute: String = "font.glyph.outline-path",
         val webGpuCandidateRoute: String = "webgpu.text.glyph-atlas.simple-latin",
-        val fallbackReason: String = TEXT_DRAW_RUN_ROUTE_UNAVAILABLE,
+        val fallbackReason: String = "",
         val paintOrder: Int = 0,
     ) : SceneCommand {
         override val family: String = "text-run"
@@ -360,7 +383,7 @@ sealed interface SceneCommand {
             require(webGpuCandidateRoute.isNotBlank()) {
                 "SceneCommand.TextRun.webGpuCandidateRoute must not be blank"
             }
-            require(fallbackReason.isNotBlank()) { "SceneCommand.TextRun.fallbackReason must not be blank" }
+            require(fallbackReason.isEmpty() || fallbackReason.isNotBlank()) { "SceneCommand.TextRun.fallbackReason must not be blank" }
             requireOptionalFinite(baselineX, "SceneCommand.TextRun.baselineX")
             requireOptionalFinite(baselineY, "SceneCommand.TextRun.baselineY")
             require(fontSize == null || fontSize > 0f) { "SceneCommand.TextRun.fontSize must be positive" }
@@ -458,6 +481,22 @@ sealed interface SceneCommand {
         }
     }
 
+    data class PathFillGradient(
+        override val label: String,
+        val startColor: SceneColor,
+        val endColor: SceneColor,
+        val paintOrder: Int = 0,
+        val pathKind: String = "non-convex-star",
+    ) : SceneCommand {
+        override val family: String = "path-fill-gradient"
+
+        init {
+            requireSceneCommandLabel(label)
+            require(paintOrder >= 0) { "SceneCommand.PathFillGradient.paintOrder must be non-negative" }
+            require(pathKind.isNotBlank()) { "SceneCommand.PathFillGradient.pathKind must not be blank" }
+        }
+    }
+
     data class ConvexFanMesh(
         override val label: String,
         val fillColor: SceneColor,
@@ -478,8 +517,14 @@ sealed interface SceneCommand {
 
 internal const val TEXT_DRAW_RUN_ROUTE_UNAVAILABLE: String = "unsupported.text.draw_run_route_unavailable"
 
-internal fun List<SceneCommand>.textRunRouteUnavailableReason(): String? =
-    if (any { it is SceneCommand.TextRun }) TEXT_DRAW_RUN_ROUTE_UNAVAILABLE else null
+internal fun List<SceneCommand>.textRunRouteUnavailableReason(): String? {
+    val textRuns = filterIsInstance<SceneCommand.TextRun>()
+    if (textRuns.isEmpty()) return null
+    return if (textRuns.all { it.fallbackReason.isEmpty() }) null else TEXT_DRAW_RUN_ROUTE_UNAVAILABLE
+}
+
+internal fun SceneCommand.TextRun.routeUnavailableReason(): String? =
+    if (fallbackReason.isEmpty()) null else fallbackReason
 
 internal fun List<SceneCommand>.textRunRouteUnavailableDiagnostics(sceneId: String): List<String> {
     require(sceneId.isNotBlank()) { "sceneId must not be blank" }
