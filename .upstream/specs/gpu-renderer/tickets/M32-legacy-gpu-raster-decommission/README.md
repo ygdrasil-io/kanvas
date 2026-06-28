@@ -32,7 +32,7 @@ decisions (KGPU-M10-001, KGPU-M10-002) and the
 |---|---|---|---|---|---|---|---|---|---|
 | KGPU-M32-001 - Per-family decommission decision matrix | `done` | `P1` | `ReferenceOnly` | `CPUReferenceOnly` | `false` | `false` | `legacy-cleanup` | [KGPU-M10-001] | `gpu-raster legacy` |
 | KGPU-M32-002 - Close M31-005: bridge ↔ legacy gpu-raster pixel parity or formal refusal | `done` | `P0` | `ImplementationCandidate` | `CPUReferenceOnly` | `false` | `true` | `product-validation` | [KGPU-M31-005, KGPU-M31-006] | `gpu-raster-legacy-path` |
-| KGPU-M32-003 - Legacy retirement-gate authorization for all 12 families | `review` | `P0` | `PolicyGated` | `CPUReferenceOnly` | `false` | `false` | `legacy-cleanup` | [KGPU-M10-003, KGPU-M10-002, KGPU-M32-002] | `gpu-raster legacy` |
+| KGPU-M32-003 - Legacy retirement-gate authorization for all 12 families | `done` | `P0` | `PolicyGated` | `CPUReferenceOnly` | `false` | `false` | `legacy-cleanup` | [KGPU-M10-003, KGPU-M10-002, KGPU-M32-002] | `gpu-raster legacy` |
 | KGPU-M32-004 - Relocate shared WGSL/conformance/runtime-shader/gate infra out of :gpu-raster | `proposed` | `P0` | `PolicyGated` | `CPUReferenceOnly` | `false` | `false` | `legacy-cleanup` | [KGPU-M32-003] | `gpu-raster legacy` |
 | KGPU-M32-005 - Remove legacy device, rollback branch, and module include | `review` | `P0` | `PolicyGated` | `CPUReferenceOnly` | `false` | `false` | `legacy-cleanup` | [KGPU-M32-004] | `gpu-raster legacy` |
 | KGPU-M32-006 - Final decommission validation + evidence bundle + PR | `proposed` | `P0` | `PolicyGated` | `CPUReferenceOnly` | `false` | `false` | `legacy-cleanup` | [KGPU-M32-005] | `gpu-raster legacy` |
