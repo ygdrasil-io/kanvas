@@ -519,6 +519,12 @@ internal fun GPURendererScene<*>.kadreWindowedRectOnlyUnsupportedReason(): Strin
                 } else {
                     null
                 }
+                SceneFilterKind.GaussianBlur -> if (inputLabel !in fixtureSaveLayerLabels) {
+                    "${filter.label}->${filter.inputLabel}:gaussian-blur requires SaveLayer"
+                } else {
+                    null
+                }
+                SceneFilterKind.ColorMatrix -> "${filter.label}->${filter.inputLabel}:color-matrix requires BitmapRect"
                 null -> null
             }
         }

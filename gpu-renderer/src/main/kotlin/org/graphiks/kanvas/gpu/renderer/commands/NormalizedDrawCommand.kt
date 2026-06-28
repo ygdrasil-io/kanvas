@@ -1,6 +1,11 @@
 package org.graphiks.kanvas.gpu.renderer.commands
 
 import org.graphiks.kanvas.font.handoff.GlyphRunDescriptor
+import org.graphiks.kanvas.gpu.renderer.filters.GPUFilterGraphDescriptor
+import org.graphiks.kanvas.gpu.renderer.filters.GPUFilterSourcePlan
+import org.graphiks.kanvas.gpu.renderer.filters.GPUSimpleFilterBounds
+import org.graphiks.kanvas.gpu.renderer.filters.GPUFilterCropPlan
+import org.graphiks.kanvas.gpu.renderer.filters.GPUFilterSamplingPlan
 import org.graphiks.kanvas.gpu.renderer.text.GPUTextDiagnostic
 import org.graphiks.kanvas.gpu.renderer.text.GPUTextArtifactRef
 
@@ -29,6 +34,8 @@ enum class GPUDrawCommandFamily {
     Image,
     /** Vertices draw family. */
     Vertices,
+    /** Filter draw family. */
+    Filter,
 }
 
 /** Stable adapter/source provenance for a normalized draw command. */
@@ -72,6 +79,12 @@ enum class GPUDrawKind {
     FillPath,
     /** Text run command family with prepared text stack artifacts. */
     DrawTextRun,
+    /** Image draw command family with decoded pixel upload. */
+    DrawImageRect,
+    /** Save-layer command family with offscreen target isolation and composite. */
+    DrawLayer,
+    /** Filter command family with GPU-native filter render node execution. */
+    ApplyFilter,
 }
 
 /** Transform class captured by the command adapter before route analysis. */
@@ -636,6 +649,219 @@ object GPUFillPathCommandBuilder {
     }
 }
 
+/** Builds Kanvas-owned first-expansion DrawLayer commands from already-normalized facts. */
+object GPUDrawLayerCommandBuilder {
+    /**
+     * Builds an immutable DrawLayer command from facts already captured by the caller.
+     *
+     * Ownership stays with the command package: this builder records save/restore state,
+     * layer bounds, and standard command facts without lowering materials, allocating
+     * offscreen targets, or choosing a backend. Defaults are deliberately narrow: root
+     * layer facts, source-over blend, identity transform, and a wide-open clip derived
+     * from the provided bounds.
+     */
+    fun build(
+        commandId: GPUDrawCommandID,
+        scopeId: String,
+        target: GPUTargetFacts,
+        bounds: GPUBounds,
+        childCommandIds: List<String> = emptyList(),
+        parentScopeId: String? = null,
+        initWithPrevious: Boolean = false,
+        backdropRequired: Boolean = false,
+        sourceFilterCount: Int = 0,
+        restoreBlendMode: String = "srcOver",
+        cpuFallbackRequested: Boolean = false,
+        preserveLCDText: Boolean = false,
+        f16Requested: Boolean = false,
+        requiresFilter: Boolean = sourceFilterCount > 0,
+        requiresDestinationRead: Boolean = false,
+        transform: GPUTransformFacts = GPUTransformFacts.identity(),
+        clip: GPUClipFacts? = null,
+        layer: GPULayerFacts? = null,
+        blend: GPUBlendFacts = GPUBlendFacts.srcOver(),
+        paintOrder: Int = 0,
+        source: GPUCommandSource = GPUCommandSource(adapter = "gpu-renderer", operation = "drawLayer"),
+        stroke: Boolean = false,
+    ): NormalizedDrawCommand.DrawLayer {
+        val resolvedClip = clip ?: GPUClipFacts.wideOpen(bounds = bounds)
+        val resolvedLayer = layer ?: GPULayerFacts(
+            target = target,
+            scopeKind = GPULayerScopeKind.SaveLayer,
+            requiresFilter = requiresFilter,
+            requiresDestinationRead = requiresDestinationRead,
+        )
+        return NormalizedDrawCommand.DrawLayer(
+            commandId = commandId,
+            scopeId = scopeId,
+            parentScopeId = parentScopeId,
+            childCommandIds = childCommandIds,
+            initWithPrevious = initWithPrevious,
+            backdropRequired = backdropRequired,
+            sourceFilterCount = sourceFilterCount,
+            restoreBlendMode = restoreBlendMode,
+            cpuFallbackRequested = cpuFallbackRequested,
+            preserveLCDText = preserveLCDText,
+            f16Requested = f16Requested,
+            transform = transform,
+            clip = resolvedClip,
+            layer = resolvedLayer,
+            material = GPUMaterialDescriptor.SolidColor(r = 1f, g = 1f, b = 1f, a = 1f),
+            blend = blend,
+            bounds = bounds,
+            ordering = GPUOrderingFacts(
+                paintOrder = paintOrder,
+                dependsOnDestination = false,
+                requiresBarrier = false,
+            ),
+            source = source,
+            stroke = stroke,
+        )
+    }
+}
+
+/** Builds Kanvas-owned first-expansion DrawImageRect commands from already-normalized facts. */
+object GPUDrawImageRectCommandBuilder {
+    /**
+     * Builds an immutable DrawImageRect command from facts already captured by the caller.
+     *
+     * Ownership stays with the command package: this builder records source/destination
+     * rectangles, sampling parameters, decoded pixel facts, and standard command facts
+     * without lowering materials, allocating resources, or choosing a backend.
+     */
+    fun build(
+        commandId: GPUDrawCommandID,
+        imageSourceId: String,
+        src: GPURect,
+        dst: GPURect,
+        target: GPUTargetFacts,
+        material: GPUMaterialDescriptor,
+        samplingTileModeX: String = "clamp",
+        samplingTileModeY: String = "clamp",
+        samplingFilterMode: String = "linear",
+        samplingMipmapMode: String = "none",
+        pixelsWidth: Int = 0,
+        pixelsHeight: Int = 0,
+        pixelsFormat: String = "RGBA8Unorm",
+        pixelsRowBytes: Long = 0,
+        pixelsAlphaType: String = "Premul",
+        pixelsColorProfileLabel: String = "srgb",
+        pixelsOrientationState: String = "Applied",
+        pixelsGeneration: Long = 0,
+        pixelsContentHash: String = "",
+        pixelsProvenance: String = "",
+        transform: GPUTransformFacts = GPUTransformFacts.identity(),
+        clip: GPUClipFacts? = null,
+        layer: GPULayerFacts? = null,
+        blend: GPUBlendFacts = GPUBlendFacts.srcOver(),
+        paintOrder: Int = 0,
+        source: GPUCommandSource = GPUCommandSource(adapter = "gpu-renderer", operation = "drawImageRect"),
+        stroke: Boolean = false,
+    ): NormalizedDrawCommand.DrawImageRect {
+        val bounds = dst.toBounds()
+        val resolvedClip = clip ?: GPUClipFacts.wideOpen(bounds = bounds)
+        return NormalizedDrawCommand.DrawImageRect(
+            commandId = commandId,
+            imageSourceId = imageSourceId,
+            src = src,
+            dst = dst,
+            samplingTileModeX = samplingTileModeX,
+            samplingTileModeY = samplingTileModeY,
+            samplingFilterMode = samplingFilterMode,
+            samplingMipmapMode = samplingMipmapMode,
+            pixelsWidth = pixelsWidth,
+            pixelsHeight = pixelsHeight,
+            pixelsFormat = pixelsFormat,
+            pixelsRowBytes = pixelsRowBytes,
+            pixelsAlphaType = pixelsAlphaType,
+            pixelsColorProfileLabel = pixelsColorProfileLabel,
+            pixelsOrientationState = pixelsOrientationState,
+            pixelsGeneration = pixelsGeneration,
+            pixelsContentHash = pixelsContentHash,
+            pixelsProvenance = pixelsProvenance,
+            transform = transform,
+            clip = resolvedClip,
+            layer = layer ?: GPULayerFacts.root(target = target),
+            material = material,
+            blend = blend,
+            bounds = bounds,
+            ordering = GPUOrderingFacts(
+                paintOrder = paintOrder,
+                dependsOnDestination = false,
+                requiresBarrier = false,
+            ),
+            source = source,
+            stroke = stroke,
+        )
+    }
+}
+
+/** Builds Kanvas-owned first-expansion ApplyFilter commands from already-normalized facts. */
+object GPUApplyFilterCommandBuilder {
+    /**
+     * Builds an immutable ApplyFilter command from facts already captured by the caller.
+     *
+     * Ownership stays with the command package: this builder records filter graph,
+     * source, bounds, crop, and sampling plans plus standard command facts without
+     * lowering materials, allocating resources, or choosing a backend.
+     */
+    fun build(
+        commandId: GPUDrawCommandID,
+        filterGraph: GPUFilterGraphDescriptor,
+        filterSource: GPUFilterSourcePlan,
+        filterBounds: GPUSimpleFilterBounds,
+        target: GPUTargetFacts,
+        material: GPUMaterialDescriptor,
+        filterCrop: GPUFilterCropPlan = GPUFilterCropPlan(
+            cropLabel = filterBounds.outputBoundsLabel,
+            tilePolicy = org.graphiks.kanvas.gpu.renderer.filters.GPUFilterTilePlan(
+                tileModeX = "decal",
+                tileModeY = "decal",
+                decalOutsideCrop = true,
+            ),
+        ),
+        filterSampling: GPUFilterSamplingPlan = GPUFilterSamplingPlan(
+            filterMode = "nearest",
+            mipmapMode = "none",
+            coordinateSpaceLabel = "layer",
+        ),
+        transform: GPUTransformFacts = GPUTransformFacts.identity(),
+        clip: GPUClipFacts? = null,
+        layer: GPULayerFacts? = null,
+        blend: GPUBlendFacts = GPUBlendFacts.srcOver(),
+        paintOrder: Int = 0,
+        source: GPUCommandSource = GPUCommandSource(adapter = "gpu-renderer", operation = "applyFilter"),
+    ): NormalizedDrawCommand.ApplyFilter {
+        val commandBounds = GPUBounds(
+            left = 0f,
+            top = 0f,
+            right = filterBounds.width.toFloat(),
+            bottom = filterBounds.height.toFloat(),
+        )
+        val resolvedClip = clip ?: GPUClipFacts.wideOpen(bounds = commandBounds)
+        return NormalizedDrawCommand.ApplyFilter(
+            commandId = commandId,
+            filterGraph = filterGraph,
+            filterSource = filterSource,
+            filterBounds = filterBounds,
+            filterCrop = filterCrop,
+            filterSampling = filterSampling,
+            transform = transform,
+            clip = resolvedClip,
+            layer = layer ?: GPULayerFacts.root(target = target),
+            material = material,
+            blend = blend,
+            bounds = commandBounds,
+            ordering = GPUOrderingFacts(
+                paintOrder = paintOrder,
+                dependsOnDestination = false,
+                requiresBarrier = false,
+            ),
+            source = source,
+        )
+    }
+}
+
 /** High-level draw command after legacy state has been captured and normalized. */
 sealed interface NormalizedDrawCommand {
     /** Recording-local command identifier. */
@@ -754,6 +980,112 @@ sealed interface NormalizedDrawCommand {
         override val source: GPUCommandSource,
     ) : NormalizedDrawCommand {
         override val drawKind: GPUDrawKind = GPUDrawKind.DrawTextRun
+    }
+
+    /**
+     * Save-layer command with offscreen target scope isolation and composite facts
+     * captured before analysis and layer planning.
+     *
+     * The command holds save/restore state facts as primitive fields so it avoids
+     * importing layer-specific types into the commands package. Layer-type
+     * contracts (isolated target, composite plan, destination read) remain owned
+     * by the layers package and are reconstituted during analysis-time route planning.
+     */
+    data class DrawLayer(
+        override val commandId: GPUDrawCommandID,
+        val scopeId: String,
+        val parentScopeId: String?,
+        val childCommandIds: List<String>,
+        val initWithPrevious: Boolean,
+        val backdropRequired: Boolean,
+        val sourceFilterCount: Int,
+        val restoreBlendMode: String,
+        val cpuFallbackRequested: Boolean,
+        val preserveLCDText: Boolean,
+        val f16Requested: Boolean,
+        override val transform: GPUTransformFacts,
+        override val clip: GPUClipFacts,
+        override val layer: GPULayerFacts,
+        override val material: GPUMaterialDescriptor,
+        override val blend: GPUBlendFacts = GPUBlendFacts.srcOver(),
+        override val bounds: GPUBounds,
+        override val ordering: GPUOrderingFacts,
+        override val source: GPUCommandSource,
+        val stroke: Boolean = false,
+    ) : NormalizedDrawCommand {
+        override val drawKind: GPUDrawKind = GPUDrawKind.DrawLayer
+    }
+
+    /**
+     * Image draw command with decoded pixel facts captured before analysis
+     * and upload planning.
+     *
+     * The command holds source/destination rectangles and sampled decoded-pixel
+     * facts as primitive fields so it avoids importing image-specific types
+     * into the commands package. Image-type contracts (decoded pixels
+     * descriptor, sampling plan) remain owned by the images package and are
+     * reconstituted during analysis-time route planning.
+     */
+    data class DrawImageRect(
+        override val commandId: GPUDrawCommandID,
+        val imageSourceId: String,
+        val src: GPURect,
+        val dst: GPURect,
+        val samplingTileModeX: String = "clamp",
+        val samplingTileModeY: String = "clamp",
+        val samplingFilterMode: String = "linear",
+        val samplingMipmapMode: String = "none",
+        val pixelsWidth: Int = 0,
+        val pixelsHeight: Int = 0,
+        val pixelsFormat: String = "RGBA8Unorm",
+        val pixelsRowBytes: Long = 0,
+        val pixelsAlphaType: String = "Premul",
+        val pixelsColorProfileLabel: String = "srgb",
+        val pixelsOrientationState: String = "Applied",
+        val pixelsGeneration: Long = 0,
+        val pixelsContentHash: String = "",
+        val pixelsProvenance: String = "",
+        override val transform: GPUTransformFacts,
+        override val clip: GPUClipFacts,
+        override val layer: GPULayerFacts,
+        override val material: GPUMaterialDescriptor,
+        override val blend: GPUBlendFacts = GPUBlendFacts.srcOver(),
+        override val bounds: GPUBounds,
+        override val ordering: GPUOrderingFacts,
+        override val source: GPUCommandSource,
+        /** See [FillRect.stroke]. Stroke image draws refuse instead of drawing. */
+        val stroke: Boolean = false,
+    ) : NormalizedDrawCommand {
+        override val drawKind: GPUDrawKind = GPUDrawKind.DrawImageRect
+    }
+
+    /**
+     * Filter command with a bounded single-node filter DAG to be executed as
+     * a GPU-native render node.
+     *
+     * The command owns the filter graph, source, bounds, crop, and sampling
+     * plans needed by the simple filter render-node planner. The analysis
+     * planner validates visibility (node kind, DAG size, material), bounds,
+     * and capabilities before converting into a native or prepared filter
+     * route with a render-step pass.
+     */
+    data class ApplyFilter(
+        override val commandId: GPUDrawCommandID,
+        val filterGraph: GPUFilterGraphDescriptor,
+        val filterSource: GPUFilterSourcePlan,
+        val filterBounds: GPUSimpleFilterBounds,
+        val filterCrop: GPUFilterCropPlan,
+        val filterSampling: GPUFilterSamplingPlan,
+        override val transform: GPUTransformFacts,
+        override val clip: GPUClipFacts,
+        override val layer: GPULayerFacts,
+        override val material: GPUMaterialDescriptor,
+        override val blend: GPUBlendFacts = GPUBlendFacts.srcOver(),
+        override val bounds: GPUBounds,
+        override val ordering: GPUOrderingFacts,
+        override val source: GPUCommandSource,
+    ) : NormalizedDrawCommand {
+        override val drawKind: GPUDrawKind = GPUDrawKind.ApplyFilter
     }
 }
 

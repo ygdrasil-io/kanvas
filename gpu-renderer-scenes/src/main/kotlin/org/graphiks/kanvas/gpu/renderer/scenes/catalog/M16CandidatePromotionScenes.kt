@@ -92,5 +92,26 @@ val dashPatternLadderScene: GPURendererScene<SceneCommand> =
         ),
     )
 
+val strokeRectOutlineScene: GPURendererScene<SceneCommand> =
+    GPURendererScene(
+        sceneId = SceneId("stroke-rect-outline"),
+        title = "Stroke Rect Outline",
+        description = "Simple stroked rectangle outline with blue stroke color.",
+        dimensions = SceneDimensions(320, 200),
+        tags = setOf(SceneTag.Stroke),
+        roadmapLinks = listOf(SceneRoadmapLink.milestone("M16")),
+        expectation = SceneExpectation.ShouldRender,
+        commands = listOf(
+            SceneCommand.Clear(SceneColor(0.036f, 0.040f, 0.048f, 1f)),
+            SceneCommand.Stroke(
+                label = "rect-outline",
+                rect = SceneRect(48f, 36f, 272f, 164f),
+                strokeColor = SceneColor.blue(0.92f),
+                strokeWidth = 6f,
+                paintOrder = 1,
+            ),
+        ),
+    )
+
 val m16CandidatePromotionScenes: List<GPURendererScene<SceneCommand>> =
-    listOf(strokeCapJoinScene, dashPatternLadderScene)
+    listOf(strokeCapJoinScene, dashPatternLadderScene, strokeRectOutlineScene)

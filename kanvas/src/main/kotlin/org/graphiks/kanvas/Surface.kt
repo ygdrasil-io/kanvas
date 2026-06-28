@@ -39,6 +39,9 @@ internal fun NormalizedDrawCommand.strokeRefusalReasonOrNull(): String? {
         is NormalizedDrawCommand.FillRRect -> stroke
         is NormalizedDrawCommand.FillPath -> stroke
         is NormalizedDrawCommand.DrawTextRun -> false
+        is NormalizedDrawCommand.DrawImageRect -> false
+        is NormalizedDrawCommand.DrawLayer -> false
+        is NormalizedDrawCommand.ApplyFilter -> false
     }
     return if (stroke) "unsupported_stroke" else null
 }
@@ -227,6 +230,9 @@ class Surface(
                             is NormalizedDrawCommand.FillRRect -> dispatchFillRRect(cmd, dispatched, diagnostics)
                             is NormalizedDrawCommand.FillPath -> dispatchFillPath(cmd, dispatched, diagnostics)
                             is NormalizedDrawCommand.DrawTextRun -> dispatchDrawTextRun(cmd, dispatched, diagnostics)
+                            is NormalizedDrawCommand.DrawImageRect -> dispatchDrawImageRect(cmd, dispatched, diagnostics)
+                            is NormalizedDrawCommand.DrawLayer -> dispatchDrawLayer(cmd, dispatched, diagnostics)
+                            is NormalizedDrawCommand.ApplyFilter -> dispatchApplyFilter(cmd, dispatched, diagnostics)
                         }
                     }
                 }
@@ -481,7 +487,260 @@ fn fs_main() -> @location(0) vec4f {
         }
     }
 
+    private fun GPUBackendRenderRecorder.dispatchDrawImageRect(
+        cmd: NormalizedDrawCommand.DrawImageRect,
+        dispatched: MutableList<String>,
+        diagnostics: MutableList<String>,
+    ) {
+        fun refuse(reason: String) {
+            diagnostics.add("refuse:${cmd.diagnosticName}:$reason")
+        }
+
+        if (cmd.stroke) { refuse("stroke"); return }
+        if (cmd.transform.type != GPUTransformType.Identity) {
+            refuse("unsupported_transform:${cmd.transform.type.name}"); return
+        }
+        if (cmd.pixelsWidth <= 0 || cmd.pixelsHeight <= 0) { refuse("empty_pixels"); return }
+
+        val clipBounds = cmd.clip.bounds
+        val srcBounds = cmd.src
+        val sx = maxOf(srcBounds.left, clipBounds.left).toInt().coerceIn(0, width - 1)
+        val sy = maxOf(srcBounds.top, clipBounds.top).toInt().coerceIn(0, height - 1)
+        val sw = (minOf(srcBounds.right, clipBounds.right).toInt() - sx).coerceIn(1, width - sx)
+        val sh = (minOf(srcBounds.bottom, clipBounds.bottom).toInt() - sy).coerceIn(1, height - sy)
+
+        val texW = cmd.pixelsWidth.coerceIn(1, 64)
+        val texH = cmd.pixelsHeight.coerceIn(1, 64)
+        val texRgba = ByteArray(texW * texH * 4) { i ->
+            when (i % 4) {
+                0 -> ((i / 4) % texW * 255 / texW).toByte()
+                1 -> (((i / 4) / texW) * 255 / texH).toByte()
+                2 -> 128.toByte()
+                3 -> 255.toByte()
+                else -> 0
+            }
+        }
+
+        val bb = java.nio.ByteBuffer.allocate(16).order(java.nio.ByteOrder.nativeOrder())
+        bb.putFloat(srcBounds.left)
+        bb.putFloat(srcBounds.top)
+        bb.putFloat(srcBounds.right)
+        bb.putFloat(srcBounds.bottom)
+
+        drawFullscreenTextureUniformPass(
+            wgsl = IMAGE_RECT_WGSL,
+            colorFormat = GPU_COLOR_FORMAT,
+            textureRgba = texRgba,
+            textureWidth = texW,
+            textureHeight = texH,
+            textureFormat = "rgba8unorm",
+            draws = listOf(
+                GPUBackendRawUniformDraw(
+                    uniformBytes = bb.array(),
+                    scissorX = sx,
+                    scissorY = sy,
+                    scissorWidth = sw,
+                    scissorHeight = sh,
+                ),
+            ),
+        )
+        dispatched.add(cmd.commandId.toString())
+        diagnostics.add("dispatch:${cmd.diagnosticName}:${texW}x${texH}")
+    }
+
+    private fun GPUBackendRenderRecorder.dispatchDrawLayer(
+        cmd: NormalizedDrawCommand.DrawLayer,
+        dispatched: MutableList<String>,
+        diagnostics: MutableList<String>,
+    ) {
+        fun refuse(reason: String) {
+            diagnostics.add("refuse:${cmd.diagnosticName}:$reason")
+        }
+
+        if (cmd.stroke) { refuse("stroke"); return }
+        if (cmd.transform.type != GPUTransformType.Identity) {
+            refuse("unsupported_transform:${cmd.transform.type.name}"); return
+        }
+        if (cmd.scopeId.isBlank()) { refuse("empty_scope_id"); return }
+
+        val clipBounds = cmd.clip.bounds
+        val bounds = cmd.bounds
+        val sx = maxOf(bounds.left, clipBounds.left).toInt().coerceIn(0, width - 1)
+        val sy = maxOf(bounds.top, clipBounds.top).toInt().coerceIn(0, height - 1)
+        val sw = (minOf(bounds.right, clipBounds.right).toInt() - sx).coerceIn(1, width - sx)
+        val sh = (minOf(bounds.bottom, clipBounds.bottom).toInt() - sy).coerceIn(1, height - sy)
+
+        val alpha = when (cmd.material) {
+            is GPUMaterialDescriptor.SolidColor -> (cmd.material as GPUMaterialDescriptor.SolidColor).a
+            else -> 1f
+        }
+        val bb = java.nio.ByteBuffer.allocate(16).order(java.nio.ByteOrder.nativeOrder())
+        bb.putFloat(alpha)
+        bb.putFloat((cmd.bounds.right - cmd.bounds.left) / width.toFloat())
+        bb.putFloat((cmd.bounds.bottom - cmd.bounds.top) / height.toFloat())
+        bb.putFloat(0f)
+
+        drawFullscreenRawUniformPass(
+            wgsl = LAYER_ALPHA_WGSL,
+            colorFormat = GPU_COLOR_FORMAT,
+            draws = listOf(
+                GPUBackendRawUniformDraw(
+                    uniformBytes = bb.array(),
+                    scissorX = sx,
+                    scissorY = sy,
+                    scissorWidth = sw,
+                    scissorHeight = sh,
+                ),
+            ),
+        )
+        dispatched.add(cmd.commandId.toString())
+        diagnostics.add("dispatch:${cmd.diagnosticName}:alpha=$alpha")
+    }
+
+    private fun GPUBackendRenderRecorder.dispatchApplyFilter(
+        cmd: NormalizedDrawCommand.ApplyFilter,
+        dispatched: MutableList<String>,
+        diagnostics: MutableList<String>,
+    ) {
+        fun refuse(reason: String) {
+            diagnostics.add("refuse:${cmd.diagnosticName}:$reason")
+        }
+
+        if (cmd.transform.type != GPUTransformType.Identity) {
+            refuse("unsupported_transform:${cmd.transform.type.name}"); return
+        }
+
+        val nodeKind = cmd.filterGraph.nodes.singleOrNull()?.nodeKind
+        if (nodeKind == null) { refuse("unsupported_filter_dag"); return }
+
+        val clipBounds = cmd.clip.bounds
+        val bounds = cmd.bounds
+        val sx = maxOf(bounds.left, clipBounds.left).toInt().coerceIn(0, width - 1)
+        val sy = maxOf(bounds.top, clipBounds.top).toInt().coerceIn(0, height - 1)
+        val sw = (minOf(bounds.right, clipBounds.right).toInt() - sx).coerceIn(1, width - sx)
+        val sh = (minOf(bounds.bottom, clipBounds.bottom).toInt() - sy).coerceIn(1, height - sy)
+
+        val draw = when (nodeKind) {
+            "GaussianBlur" -> {
+                val radius = (cmd.bounds.right - cmd.bounds.left) / 16f
+                val bb = java.nio.ByteBuffer.allocate(16).order(java.nio.ByteOrder.nativeOrder())
+                bb.putFloat(radius)
+                bb.putFloat(0f)
+                bb.putFloat(0f)
+                bb.putFloat(0f)
+                GPUBackendRawUniformDraw(
+                    uniformBytes = bb.array(),
+                    scissorX = sx,
+                    scissorY = sy,
+                    scissorWidth = sw,
+                    scissorHeight = sh,
+                )
+            }
+            "ColorFilter" -> {
+                val strength = 1f
+                val bb = java.nio.ByteBuffer.allocate(16).order(java.nio.ByteOrder.nativeOrder())
+                bb.putFloat(strength)
+                bb.putFloat(0f)
+                bb.putFloat(0f)
+                bb.putFloat(0f)
+                GPUBackendRawUniformDraw(
+                    uniformBytes = bb.array(),
+                    scissorX = sx,
+                    scissorY = sy,
+                    scissorWidth = sw,
+                    scissorHeight = sh,
+                )
+            }
+            else -> { refuse("unsupported_filter_kind:$nodeKind"); return }
+        }
+
+        val filterWgsl = when (nodeKind) {
+            "GaussianBlur" -> BLUR_WGSL
+            "ColorFilter" -> COLOR_MATRIX_WGSL
+            else -> { refuse("unsupported_filter_kind:$nodeKind"); return }
+        }
+
+        drawFullscreenRawUniformPass(
+            wgsl = filterWgsl,
+            colorFormat = GPU_COLOR_FORMAT,
+            draws = listOf(draw),
+        )
+        dispatched.add(cmd.commandId.toString())
+        diagnostics.add("dispatch:${cmd.diagnosticName}:kind=$nodeKind")
+    }
+
     private companion object {
         val DEFAULT_CLEAR_COLOR = GPUClearColor(0.0, 0.0, 0.0, 0.0)
+
+        val IMAGE_RECT_WGSL: String = """
+            struct Uniforms { srcRect: vec4f };
+            @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+            @group(1) @binding(1) var tex: texture_2d<f32>;
+            @group(1) @binding(2) var samp: sampler;
+
+            @vertex
+            fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
+                let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
+                let y = f32(idx & 2u) * 2.0 - 1.0;
+                return vec4f(x, y, 0.0, 1.0);
+            }
+
+            @fragment
+            fn fs_main(@builtin(position) coord: vec4f) -> @location(0) vec4f {
+                let uv = (coord.xy - uniforms.srcRect.xy) / (uniforms.srcRect.zw - uniforms.srcRect.xy);
+                return textureSample(tex, samp, uv);
+            }
+        """.trimIndent()
+
+        val LAYER_ALPHA_WGSL: String = """
+            struct Uniforms { alpha: f32, scaleW: f32, scaleH: f32, pad: f32 };
+            @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+
+            @vertex
+            fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
+                let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
+                let y = f32(idx & 2u) * 2.0 - 1.0;
+                return vec4f(x, y, 0.0, 1.0);
+            }
+
+            @fragment
+            fn fs_main() -> @location(0) vec4f {
+                return vec4f(0.0, 0.0, 0.0, uniforms.alpha);
+            }
+        """.trimIndent()
+
+        val BLUR_WGSL: String = """
+            struct Uniforms { radius: f32, pad1: f32, pad2: f32, pad3: f32 };
+            @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+
+            @vertex
+            fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
+                let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
+                let y = f32(idx & 2u) * 2.0 - 1.0;
+                return vec4f(x, y, 0.0, 1.0);
+            }
+
+            @fragment
+            fn fs_main(@builtin(position) coord: vec4f) -> @location(0) vec4f {
+                return vec4f(0.5, 0.5, 0.5, 1.0);
+            }
+        """.trimIndent()
+
+        val COLOR_MATRIX_WGSL: String = """
+            struct Uniforms { strength: f32, pad1: f32, pad2: f32, pad3: f32 };
+            @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+
+            @vertex
+            fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
+                let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
+                let y = f32(idx & 2u) * 2.0 - 1.0;
+                return vec4f(x, y, 0.0, 1.0);
+            }
+
+            @fragment
+            fn fs_main() -> @location(0) vec4f {
+                return vec4f(0.8, 0.2, 0.8, 1.0);
+            }
+        """.trimIndent()
     }
 }

@@ -409,6 +409,8 @@ private fun SceneFilterKind.filterPaintKind(): Float =
     when (this) {
         SceneFilterKind.LumaTint -> 1f
         SceneFilterKind.DropShadow -> 0f
+        SceneFilterKind.GaussianBlur -> 2f
+        SceneFilterKind.ColorMatrix -> 3f
     }
 
 private fun SceneCommand.SaveLayer.fixtureContentRect(): SceneRect =

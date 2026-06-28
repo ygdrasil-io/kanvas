@@ -95,6 +95,20 @@ data class GpuProductFlagConfig(
                 affectsValidity = true,
                 evidenceLabel = "product-flag:saveLayer",
             )
+            facts += GPUCapabilityFact(
+                name = "first_slice.draw_layer.prepared",
+                source = "product-flags",
+                value = "supported",
+                affectsValidity = true,
+                evidenceLabel = "product-flag:drawLayerPrepared",
+            )
+            facts += GPUCapabilityFact(
+                name = "first_slice.draw_layer.native_isolation",
+                source = "product-flags",
+                value = "supported",
+                affectsValidity = true,
+                evidenceLabel = "product-flag:drawLayerNativeIsolation",
+            )
         }
         if (dstReadEnabled) {
             facts += GPUCapabilityFact(

@@ -515,7 +515,7 @@ class RunGpuRendererSceneKadreMainTest {
         assertContains(sessionJson, "\"status\": \"not-yet-rendered\"")
         assertContains(
             sessionJson,
-            "\"reason\": \"unsupported.text.draw_run_route_unavailable\"",
+            "\"reason\": \"rect-only windowed render supports only clear, fill-rect, fill-rrect, linear-gradient-rect, clip, fixture-backed bitmap-rect, fixture-backed save-layer, fixture-backed filter-node, fixture-backed runtime-effect, and fixture-backed mesh-ribbon command families: text-run\"",
         )
         assertContains(sessionJson, "commandFamily=text-run")
         assertContains(sessionJson, "fontFamily=Liberation Sans")

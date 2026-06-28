@@ -74,5 +74,72 @@ val colorMatrixFilterScene: GPURendererScene<SceneCommand> =
         ),
     )
 
+val gaussianBlurPhotoScene: GPURendererScene<SceneCommand> =
+    GPURendererScene(
+        sceneId = SceneId("gaussian-blur-photo"),
+        title = "Gaussian Blur Photo",
+        description = "Gaussian blur filter applied to a colored rect using separable gaussian passes.",
+        dimensions = SceneDimensions(320, 200),
+        tags = setOf(SceneTag.Filter),
+        roadmapLinks = listOf(SceneRoadmapLink.milestone("M19")),
+        expectation = SceneExpectation.ShouldRender,
+        commands = listOf(
+            SceneCommand.Clear(SceneColor(0.034f, 0.038f, 0.046f, 1f)),
+            SceneCommand.FillRect(
+                label = "photo-blur",
+                rect = SceneRect(48f, 36f, 272f, 164f),
+                color = SceneColor.blue(0.88f),
+                paintOrder = 1,
+            ),
+        ),
+    )
+
+val colorMatrixTintScene: GPURendererScene<SceneCommand> =
+    GPURendererScene(
+        sceneId = SceneId("color-matrix-tint"),
+        title = "Color Matrix Tint",
+        description = "Color matrix filter transformation applied to a colored rect via 4x5 WGSL matrix.",
+        dimensions = SceneDimensions(320, 200),
+        tags = setOf(SceneTag.Filter),
+        roadmapLinks = listOf(SceneRoadmapLink.milestone("M19")),
+        expectation = SceneExpectation.ShouldRender,
+        commands = listOf(
+            SceneCommand.Clear(SceneColor(0.034f, 0.038f, 0.046f, 1f)),
+            SceneCommand.FillRect(
+                label = "tint-rect",
+                rect = SceneRect(48f, 36f, 272f, 164f),
+                color = SceneColor.green(0.86f),
+                paintOrder = 1,
+            ),
+        ),
+    )
+
+val strokeAndFilterCardScene: GPURendererScene<SceneCommand> =
+    GPURendererScene(
+        sceneId = SceneId("stroke-and-filter-card"),
+        title = "Stroke and Filter Card",
+        description = "Combined scene with a stroked rectangle and a Gaussian blur filter applied to a fill rect.",
+        dimensions = SceneDimensions(320, 200),
+        tags = setOf(SceneTag.Stroke, SceneTag.Filter),
+        roadmapLinks = listOf(SceneRoadmapLink.milestone("M16"), SceneRoadmapLink.milestone("M19")),
+        expectation = SceneExpectation.ShouldRender,
+        commands = listOf(
+            SceneCommand.Clear(SceneColor(0.036f, 0.040f, 0.048f, 1f)),
+            SceneCommand.FillRect(
+                label = "card-blur-fill",
+                rect = SceneRect(48f, 36f, 272f, 164f),
+                color = SceneColor.amber(0.78f),
+                paintOrder = 1,
+            ),
+            SceneCommand.Stroke(
+                label = "card-outline",
+                rect = SceneRect(48f, 36f, 272f, 164f),
+                strokeColor = SceneColor.blue(0.92f),
+                strokeWidth = 4f,
+                paintOrder = 2,
+            ),
+        ),
+    )
+
 val m19CandidatePromotionScenes: List<GPURendererScene<SceneCommand>> =
-    listOf(blurRadiusLadderScene, colorMatrixFilterScene)
+    listOf(blurRadiusLadderScene, colorMatrixFilterScene, gaussianBlurPhotoScene, colorMatrixTintScene, strokeAndFilterCardScene)

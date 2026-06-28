@@ -612,7 +612,7 @@ private fun GPUSimpleFilterRenderNodeRequest.refusalCode(intermediateBytes: Long
         !bounds.finite -> "unsupported.filter.bounds_unbounded"
         bounds.width <= 0 || bounds.height <= 0 -> "unsupported.filter.bounds_invalid"
         graph.nodes.size != 1 || graph.edges.isNotEmpty() -> "unsupported.filter.graph_node_limit"
-        graph.nodes.single().nodeKind != "ColorFilter" -> "unsupported.filter.node_unimplemented"
+        graph.nodes.single().nodeKind !in setOf("ColorFilter", "GaussianBlur") -> "unsupported.filter.node_unimplemented"
         !intermediateOwnershipValidated ||
             (SIMPLE_FILTER_REQUIRED_INTERMEDIATE_USAGE_LABELS - intermediateUsageLabels).isNotEmpty() ->
             "unsupported.filter.intermediate_unvalidated"
