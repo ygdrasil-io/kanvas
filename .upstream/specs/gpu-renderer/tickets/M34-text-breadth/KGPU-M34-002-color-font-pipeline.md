@@ -1,7 +1,7 @@
 ---
 id: KGPU-M34-002
 title: "Color font pipeline"
-status: proposed
+status: blocked
 milestone: M34
 priority: P0
 owner_area: text
@@ -138,6 +138,7 @@ rtk git diff --check && rtk ./gradlew --no-daemon :gpu-renderer:test --tests '*C
 
 - `proposed`: Initial ticket. Promotion to `ready` requires text stack COLRv0
   parsing artifacts.
+- `proposed → blocked` (2026-06-28): Blocked on pure-kotlin-text COLRv0 parsing artifacts.
 
 ## Linear Labels
 

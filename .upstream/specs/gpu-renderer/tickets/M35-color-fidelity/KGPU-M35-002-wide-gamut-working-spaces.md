@@ -1,7 +1,7 @@
 ---
 id: KGPU-M35-002
 title: "Wide-gamut working spaces — Display P3, Adobe RGB, Rec.2020"
-status: proposed
+status: ready
 milestone: M35
 priority: P0
 owner_area: color
@@ -126,6 +126,7 @@ rtk ./gradlew --no-daemon :gpu-renderer:test --tests '*WideGamut*'
 ## Status Notes
 
 - `proposed`: Initial ticket. Awaiting M35 milestone acceptance.
+- `proposed → ready` (2026-06-28): milestone activated, autonomous implementation starting.
 
 ## Linear Labels
 

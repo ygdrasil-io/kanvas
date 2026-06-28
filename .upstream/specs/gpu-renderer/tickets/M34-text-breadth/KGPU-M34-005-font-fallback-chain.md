@@ -1,7 +1,7 @@
 ---
 id: KGPU-M34-005
 title: "Font fallback chain"
-status: proposed
+status: ready
 milestone: M34
 priority: P1
 owner_area: text
@@ -119,6 +119,7 @@ rtk git diff --check && rtk ./gradlew --no-daemon :gpu-renderer:test --tests '*F
 ## Status Notes
 
 - `proposed`: Initial ticket.
+- `proposed → ready` (2026-06-28): milestone activated, autonomous implementation starting.
 
 ## Linear Labels
 

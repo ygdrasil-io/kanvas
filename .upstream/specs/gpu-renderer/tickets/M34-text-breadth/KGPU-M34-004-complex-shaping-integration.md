@@ -1,7 +1,7 @@
 ---
 id: KGPU-M34-004
 title: "Complex shaping integration"
-status: proposed
+status: blocked
 milestone: M34
 priority: P1
 owner_area: text
@@ -118,6 +118,7 @@ rtk git diff --check && rtk ./gradlew --no-daemon :gpu-renderer:test --tests '*S
 
 - `proposed`: Initial ticket. Promotion to `ready` requires text stack
   shaping/BiDi output artifacts.
+- `proposed → blocked` (2026-06-28): Blocked on pure-kotlin-text shaping/BiDi output artifacts.
 
 ## Linear Labels
 

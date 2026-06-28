@@ -1,7 +1,7 @@
 ---
 id: KGPU-M34-003
 title: "Variable font support"
-status: proposed
+status: blocked
 milestone: M34
 priority: P1
 owner_area: text
@@ -103,6 +103,7 @@ rtk git diff --check && rtk ./gradlew --no-daemon :gpu-renderer:test --tests '*V
 
 - `proposed`: Initial ticket. Promotion to `ready` requires text stack
   variable font resolution artifacts.
+- `proposed → blocked` (2026-06-28): Blocked on pure-kotlin-text variable font resolution artifacts.
 
 ## Linear Labels
 
