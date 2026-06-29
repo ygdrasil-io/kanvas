@@ -20,8 +20,8 @@ class GpuMultiThreadedRecordingTest {
             fragments = emptyList(),
         )
 
-        assertEquals(GpuRecordingArenaId("arena-0"), arena.arenaId)
-        assertEquals(GpuRecordingThreadId("thread-worker-1"), arena.threadId)
+        assertEquals(GPURecordingArenaId("arena-0"), arena.arenaId)
+        assertEquals(GPURecordingThreadId("thread-worker-1"), arena.threadId)
         assertEquals(1024, arena.capacity)
         assertEquals(0, arena.fragmentCount)
         assertTrue(arena.fragments.isEmpty())
@@ -29,7 +29,7 @@ class GpuMultiThreadedRecordingTest {
 
     @Test
     fun `ordering tokens are strictly monotonic`() {
-        val recorder = GpuRecordingTokenIssuer()
+        val recorder = GPURecordingTokenIssuer()
 
         val t0 = recorder.issue()
         val t1 = recorder.issue()
@@ -44,13 +44,13 @@ class GpuMultiThreadedRecordingTest {
 
     @Test
     fun `fragment records command count between begin and end tokens`() {
-        val issuer = GpuRecordingTokenIssuer()
+        val issuer = GPURecordingTokenIssuer()
         val begin = issuer.issue()
         val end = issuer.issue()
 
-        val fragment = GpuRecordingFragment(
+        val fragment = GPURecordingFragment(
             fragmentId = "frag-1",
-            arenaId = GpuRecordingArenaId("arena-0"),
+            arenaId = GPURecordingArenaId("arena-0"),
             commandCount = 12,
             beginToken = begin,
             endToken = end,
@@ -65,14 +65,14 @@ class GpuMultiThreadedRecordingTest {
 
     @Test
     fun `fragment requires begin token precedes end token`() {
-        val issuer = GpuRecordingTokenIssuer()
+        val issuer = GPURecordingTokenIssuer()
         val earlier = issuer.issue()
         val later = issuer.issue()
 
-        assertIllegalArgument("GpuRecordingFragment.beginToken must precede endToken") {
-            GpuRecordingFragment(
+        assertIllegalArgument("GPURecordingFragment.beginToken must precede endToken") {
+            GPURecordingFragment(
                 fragmentId = "frag-1",
-                arenaId = GpuRecordingArenaId("arena-0"),
+                arenaId = GPURecordingArenaId("arena-0"),
                 commandCount = 1,
                 beginToken = later,
                 endToken = earlier,
@@ -82,9 +82,9 @@ class GpuMultiThreadedRecordingTest {
 
     @Test
     fun `deterministic merge combines fragments from a single arena in recording order`() {
-        val issuer = GpuRecordingTokenIssuer()
-        val arenaId = GpuRecordingArenaId("arena-0")
-        val threadId = GpuRecordingThreadId("thread-worker-1")
+        val issuer = GPURecordingTokenIssuer()
+        val arenaId = GPURecordingArenaId("arena-0")
+        val threadId = GPURecordingThreadId("thread-worker-1")
 
         val arena = arena(
             arenaId = "arena-0",
@@ -111,9 +111,9 @@ class GpuMultiThreadedRecordingTest {
 
     @Test
     fun `deterministic merge orders fragments across arenas by begin token sequence number`() {
-        val issuer = GpuRecordingTokenIssuer()
-        val arena0Id = GpuRecordingArenaId("arena-0")
-        val arena1Id = GpuRecordingArenaId("arena-1")
+        val issuer = GPURecordingTokenIssuer()
+        val arena0Id = GPURecordingArenaId("arena-0")
+        val arena1Id = GPURecordingArenaId("arena-1")
 
         val fragmentA = frag("frag-A", arena0Id, 2, issuer.issue(), issuer.issue())
         val fragmentB = frag("frag-B", arena1Id, 3, issuer.issue(), issuer.issue())
@@ -136,9 +136,9 @@ class GpuMultiThreadedRecordingTest {
 
     @Test
     fun `fragment ordering within each arena is preserved during merge`() {
-        val issuer = GpuRecordingTokenIssuer()
-        val arena0Id = GpuRecordingArenaId("arena-0")
-        val arena1Id = GpuRecordingArenaId("arena-1")
+        val issuer = GPURecordingTokenIssuer()
+        val arena0Id = GPURecordingArenaId("arena-0")
+        val arena1Id = GPURecordingArenaId("arena-1")
 
         val f0a = frag("f0-a", arena0Id, 1, issuer.issue(), issuer.issue())
         val f0b = frag("f0-b", arena0Id, 2, issuer.issue(), issuer.issue())
@@ -190,8 +190,8 @@ class GpuMultiThreadedRecordingTest {
 
     @Test
     fun `dump lines produce deterministic evidence without backend handles`() {
-        val issuer = GpuRecordingTokenIssuer()
-        val arenaId = GpuRecordingArenaId("arena-0")
+        val issuer = GPURecordingTokenIssuer()
+        val arenaId = GPURecordingArenaId("arena-0")
 
         val arena = arena(
             arenaId = "arena-0",
@@ -215,8 +215,8 @@ class GpuMultiThreadedRecordingTest {
 
     @Test
     fun `arena dump lines expose thread fragment and capacity evidence`() {
-        val issuer = GpuRecordingTokenIssuer()
-        val arenaId = GpuRecordingArenaId("arena-0")
+        val issuer = GPURecordingTokenIssuer()
+        val arenaId = GPURecordingArenaId("arena-0")
 
         val arena = arena(
             arenaId = "arena-0",
@@ -234,8 +234,8 @@ class GpuMultiThreadedRecordingTest {
 
     @Test
     fun `merge refuses arenas with overlapping token ranges from same thread`() {
-        val issuer = GpuRecordingTokenIssuer()
-        val arenaId = GpuRecordingArenaId("arena-0")
+        val issuer = GPURecordingTokenIssuer()
+        val arenaId = GPURecordingArenaId("arena-0")
 
         val begin1 = issuer.issue()
         val mid = issuer.issue()
@@ -248,8 +248,8 @@ class GpuMultiThreadedRecordingTest {
             threadId = "thread-worker-1",
             capacity = 4096,
             fragments = listOf(
-                GpuRecordingFragment("frag-1", arenaId, 3, begin1, end1),
-                GpuRecordingFragment("frag-2", arenaId, 2, begin2, end2),
+                GPURecordingFragment("frag-1", arenaId, 3, begin1, end1),
+                GPURecordingFragment("frag-2", arenaId, 2, begin2, end2),
             ),
         )
 
@@ -261,42 +261,42 @@ class GpuMultiThreadedRecordingTest {
 
     @Test
     fun `fragment validation requires non-blank fragment and arena identifiers`() {
-        assertIllegalArgument("GpuRecordingFragment.fragmentId must not be blank") {
-            GpuRecordingFragment(
+        assertIllegalArgument("GPURecordingFragment.fragmentId must not be blank") {
+            GPURecordingFragment(
                 fragmentId = "",
-                arenaId = GpuRecordingArenaId("arena-0"),
+                arenaId = GPURecordingArenaId("arena-0"),
                 commandCount = 1,
-                beginToken = GpuRecordingToken(1, 0),
-                endToken = GpuRecordingToken(2, 0),
+                beginToken = GPURecordingToken(1, 0),
+                endToken = GPURecordingToken(2, 0),
             )
         }
 
-        assertIllegalArgument("GpuRecordingFragment.commandCount must be non-negative") {
-            GpuRecordingFragment(
+        assertIllegalArgument("GPURecordingFragment.commandCount must be non-negative") {
+            GPURecordingFragment(
                 fragmentId = "frag-1",
-                arenaId = GpuRecordingArenaId("arena-0"),
+                arenaId = GPURecordingArenaId("arena-0"),
                 commandCount = -1,
-                beginToken = GpuRecordingToken(1, 0),
-                endToken = GpuRecordingToken(2, 0),
+                beginToken = GPURecordingToken(1, 0),
+                endToken = GPURecordingToken(2, 0),
             )
         }
     }
 
     @Test
     fun `arena validation requires non-blank thread id and positive capacity`() {
-        assertIllegalArgument("GpuRecordingThreadId.value must not be blank") {
-            GpuRecordingArena(
-                arenaId = GpuRecordingArenaId("arena-0"),
-                threadId = GpuRecordingThreadId(""),
+        assertIllegalArgument("GPURecordingThreadId.value must not be blank") {
+            GPURecordingArena(
+                arenaId = GPURecordingArenaId("arena-0"),
+                threadId = GPURecordingThreadId(""),
                 capacity = 1024,
                 fragments = emptyList(),
             )
         }
 
-        assertIllegalArgument("GpuRecordingArena.capacity must be positive") {
-            GpuRecordingArena(
-                arenaId = GpuRecordingArenaId("arena-0"),
-                threadId = GpuRecordingThreadId("t-1"),
+        assertIllegalArgument("GPURecordingArena.capacity must be positive") {
+            GPURecordingArena(
+                arenaId = GPURecordingArenaId("arena-0"),
+                threadId = GPURecordingThreadId("t-1"),
                 capacity = 0,
                 fragments = emptyList(),
             )
@@ -305,10 +305,10 @@ class GpuMultiThreadedRecordingTest {
 
     @Test
     fun `merge preserves arena count for multiple arenas each with fragments`() {
-        val issuer = GpuRecordingTokenIssuer()
-        val a0 = GpuRecordingArenaId("arena-0")
-        val a1 = GpuRecordingArenaId("arena-1")
-        val a2 = GpuRecordingArenaId("arena-2")
+        val issuer = GPURecordingTokenIssuer()
+        val a0 = GPURecordingArenaId("arena-0")
+        val a1 = GPURecordingArenaId("arena-1")
+        val a2 = GPURecordingArenaId("arena-2")
 
         val arena0 = arena("arena-0", "t-0", 1024, listOf(
             frag("f0-1", a0, 1, issuer.issue(), issuer.issue()),
@@ -337,26 +337,26 @@ class GpuMultiThreadedRecordingTest {
     fun `recording reason constants match spec refusal codes exactly`() {
         assertEquals(
             "unsupported.recording.fragment_split_unsafe",
-            GpuMultiThreadedRecordingReason.FRAGMENT_SPLIT_UNSAFE,
+            GPUMultiThreadedRecordingReason.FRAGMENT_SPLIT_UNSAFE,
         )
         assertEquals(
             "unsupported.recording.fragment_merge_cycle",
-            GpuMultiThreadedRecordingReason.FRAGMENT_MERGE_CYCLE,
+            GPUMultiThreadedRecordingReason.FRAGMENT_MERGE_CYCLE,
         )
     }
 
     @Test
     fun `merge refuses fragment split across atomic scope boundary`() {
-        val issuer = GpuRecordingTokenIssuer()
-        val a0 = GpuRecordingArenaId("arena-0")
-        val a1 = GpuRecordingArenaId("arena-1")
+        val issuer = GPURecordingTokenIssuer()
+        val a0 = GPURecordingArenaId("arena-0")
+        val a1 = GPURecordingArenaId("arena-1")
 
-        val fragmentA = GpuRecordingFragment(
+        val fragmentA = GPURecordingFragment(
             fragmentId = "frag-A", arenaId = a0, commandCount = 2,
             beginToken = issuer.issue(), endToken = issuer.issue(),
             atomicScopeIds = setOf("atomic-clip-1"),
         )
-        val fragmentB = GpuRecordingFragment(
+        val fragmentB = GPURecordingFragment(
             fragmentId = "frag-B", arenaId = a1, commandCount = 2,
             beginToken = issuer.issue(), endToken = issuer.issue(),
             atomicScopeIds = setOf("atomic-clip-1"),
@@ -371,20 +371,20 @@ class GpuMultiThreadedRecordingTest {
 
         assertTrue(analysis.refusedPairs.isNotEmpty())
         assertTrue(
-            analysis.refusedPairs.any { it.diagnostic.code == GpuMultiThreadedRecordingReason.FRAGMENT_SPLIT_UNSAFE },
+            analysis.refusedPairs.any { it.diagnostic.code == GPUMultiThreadedRecordingReason.FRAGMENT_SPLIT_UNSAFE },
         )
         assertTrue(
-            analysis.refusedPairs.first { it.diagnostic.code == GpuMultiThreadedRecordingReason.FRAGMENT_SPLIT_UNSAFE }
+            analysis.refusedPairs.first { it.diagnostic.code == GPUMultiThreadedRecordingReason.FRAGMENT_SPLIT_UNSAFE }
                 .diagnostic.terminal,
         )
     }
 
     @Test
     fun `merge accepts atomic scope confined to a single fragment`() {
-        val issuer = GpuRecordingTokenIssuer()
-        val a0 = GpuRecordingArenaId("arena-0")
+        val issuer = GPURecordingTokenIssuer()
+        val a0 = GPURecordingArenaId("arena-0")
 
-        val fragmentA = GpuRecordingFragment(
+        val fragmentA = GPURecordingFragment(
             fragmentId = "frag-A", arenaId = a0, commandCount = 4,
             beginToken = issuer.issue(), endToken = issuer.issue(),
             atomicScopeIds = setOf("atomic-clip-1", "layer-7"),
@@ -398,16 +398,16 @@ class GpuMultiThreadedRecordingTest {
 
     @Test
     fun `merge aborts on cross-fragment dependency cycle`() {
-        val issuer = GpuRecordingTokenIssuer()
-        val a0 = GpuRecordingArenaId("arena-0")
-        val a1 = GpuRecordingArenaId("arena-1")
+        val issuer = GPURecordingTokenIssuer()
+        val a0 = GPURecordingArenaId("arena-0")
+        val a1 = GPURecordingArenaId("arena-1")
 
-        val fragmentX = GpuRecordingFragment(
+        val fragmentX = GPURecordingFragment(
             fragmentId = "frag-X", arenaId = a0, commandCount = 1,
             beginToken = issuer.issue(), endToken = issuer.issue(),
             dependsOnFragmentIds = setOf("frag-Y"),
         )
-        val fragmentY = GpuRecordingFragment(
+        val fragmentY = GPURecordingFragment(
             fragmentId = "frag-Y", arenaId = a1, commandCount = 1,
             beginToken = issuer.issue(), endToken = issuer.issue(),
             dependsOnFragmentIds = setOf("frag-X"),
@@ -422,20 +422,20 @@ class GpuMultiThreadedRecordingTest {
 
         assertTrue(analysis.aborted)
         assertTrue(
-            analysis.refusedPairs.any { it.diagnostic.code == GpuMultiThreadedRecordingReason.FRAGMENT_MERGE_CYCLE },
+            analysis.refusedPairs.any { it.diagnostic.code == GPUMultiThreadedRecordingReason.FRAGMENT_MERGE_CYCLE },
         )
     }
 
     @Test
     fun `merge with acyclic dependencies does not abort`() {
-        val issuer = GpuRecordingTokenIssuer()
-        val a0 = GpuRecordingArenaId("arena-0")
+        val issuer = GPURecordingTokenIssuer()
+        val a0 = GPURecordingArenaId("arena-0")
 
-        val fragmentY = GpuRecordingFragment(
+        val fragmentY = GPURecordingFragment(
             fragmentId = "frag-Y", arenaId = a0, commandCount = 1,
             beginToken = issuer.issue(), endToken = issuer.issue(),
         )
-        val fragmentX = GpuRecordingFragment(
+        val fragmentX = GPURecordingFragment(
             fragmentId = "frag-X", arenaId = a0, commandCount = 1,
             beginToken = issuer.issue(), endToken = issuer.issue(),
             dependsOnFragmentIds = setOf("frag-Y"),
@@ -449,16 +449,16 @@ class GpuMultiThreadedRecordingTest {
 
     @Test
     fun `concurrency telemetry captures fragment count merge duration and contention events`() {
-        val issuer = GpuRecordingTokenIssuer()
-        val a0 = GpuRecordingArenaId("arena-0")
-        val a1 = GpuRecordingArenaId("arena-1")
+        val issuer = GPURecordingTokenIssuer()
+        val a0 = GPURecordingArenaId("arena-0")
+        val a1 = GPURecordingArenaId("arena-1")
 
-        val fragmentA = GpuRecordingFragment(
+        val fragmentA = GPURecordingFragment(
             fragmentId = "frag-A", arenaId = a0, commandCount = 2,
             beginToken = issuer.issue(), endToken = issuer.issue(),
             atomicScopeIds = setOf("atomic-clip-1"),
         )
-        val fragmentB = GpuRecordingFragment(
+        val fragmentB = GPURecordingFragment(
             fragmentId = "frag-B", arenaId = a1, commandCount = 2,
             beginToken = issuer.issue(), endToken = issuer.issue(),
             atomicScopeIds = setOf("atomic-clip-1"),
@@ -480,9 +480,9 @@ class GpuMultiThreadedRecordingTest {
 
     @Test
     fun `arena release report shows zero leak when all arenas released`() {
-        val released = GpuRecordingArena(
-            arenaId = GpuRecordingArenaId("arena-0"),
-            threadId = GpuRecordingThreadId("t-0"),
+        val released = GPURecordingArena(
+            arenaId = GPURecordingArenaId("arena-0"),
+            threadId = GPURecordingThreadId("t-0"),
             capacity = 4096,
             fragments = emptyList(),
             allocationBytes = 4096,
@@ -498,9 +498,9 @@ class GpuMultiThreadedRecordingTest {
 
     @Test
     fun `arena release report reports leaked bytes when an arena is not released`() {
-        val leaking = GpuRecordingArena(
-            arenaId = GpuRecordingArenaId("arena-0"),
-            threadId = GpuRecordingThreadId("t-0"),
+        val leaking = GPURecordingArena(
+            arenaId = GPURecordingArenaId("arena-0"),
+            threadId = GPURecordingThreadId("t-0"),
             capacity = 4096,
             fragments = emptyList(),
             allocationBytes = 4096,
@@ -517,23 +517,23 @@ class GpuMultiThreadedRecordingTest {
         arenaId: String,
         threadId: String,
         capacity: Int,
-        fragments: List<GpuRecordingFragment>,
-    ): GpuRecordingArena =
-        GpuRecordingArena(
-            arenaId = GpuRecordingArenaId(arenaId),
-            threadId = GpuRecordingThreadId(threadId),
+        fragments: List<GPURecordingFragment>,
+    ): GPURecordingArena =
+        GPURecordingArena(
+            arenaId = GPURecordingArenaId(arenaId),
+            threadId = GPURecordingThreadId(threadId),
             capacity = capacity,
             fragments = fragments,
         )
 
     private fun frag(
         fragmentId: String,
-        arenaId: GpuRecordingArenaId,
+        arenaId: GPURecordingArenaId,
         commandCount: Int,
-        beginToken: GpuRecordingToken,
-        endToken: GpuRecordingToken,
-    ): GpuRecordingFragment =
-        GpuRecordingFragment(
+        beginToken: GPURecordingToken,
+        endToken: GPURecordingToken,
+    ): GPURecordingFragment =
+        GPURecordingFragment(
             fragmentId = fragmentId,
             arenaId = arenaId,
             commandCount = commandCount,

@@ -205,7 +205,7 @@ fun buildHiZPyramid(
  */
 private fun selectHiZLevel(
     pyramid: GPUHiZPyramid,
-    drawBounds: GpuTileBounds,
+    drawBounds: GPUTileBounds,
 ): Int? {
     if (pyramid.levels.isEmpty()) return null
 
@@ -248,7 +248,7 @@ private fun selectHiZLevel(
 /** Maximum pyramid depth over the projected draw-bounds region at [selectedLevel]. */
 private fun hiZRegionMaxDepth(
     pyramid: GPUHiZPyramid,
-    drawBounds: GpuTileBounds,
+    drawBounds: GPUTileBounds,
     selectedLevel: Int,
 ): Float {
     val level = pyramid.levels[selectedLevel]
@@ -273,7 +273,7 @@ private fun hiZRegionMaxDepth(
 
 fun testHiZOcclusion(
     pyramid: GPUHiZPyramid,
-    drawBounds: GpuTileBounds,
+    drawBounds: GPUTileBounds,
     drawMinDepth: Float,
 ): GPUHiZOcclusionResult {
     val selectedLevel = selectHiZLevel(pyramid, drawBounds) ?: return GPUHiZOcclusionResult.Uncertain
@@ -296,7 +296,7 @@ fun testHiZOcclusion(
  */
 data class GPUHiZOcclusionTestDescriptor(
     val pyramid: GPUHiZPyramid,
-    val drawBounds: GpuTileBounds,
+    val drawBounds: GPUTileBounds,
     val drawMinDepth: Float,
     val selectedLevel: Int,
 ) {
@@ -317,7 +317,7 @@ data class GPUHiZOcclusionTestDescriptor(
 /** Builds a [GPUHiZOcclusionTestDescriptor], recording the selected pyramid level for evidence. */
 fun buildHiZOcclusionTest(
     pyramid: GPUHiZPyramid,
-    drawBounds: GpuTileBounds,
+    drawBounds: GPUTileBounds,
     drawMinDepth: Float,
 ): GPUHiZOcclusionTestDescriptor = GPUHiZOcclusionTestDescriptor(
     pyramid = pyramid,

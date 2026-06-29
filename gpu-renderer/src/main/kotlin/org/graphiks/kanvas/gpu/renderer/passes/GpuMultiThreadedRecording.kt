@@ -3,43 +3,43 @@ package org.graphiks.kanvas.gpu.renderer.passes
 import org.graphiks.kanvas.gpu.renderer.routing.RefuseDiagnostic
 
 @JvmInline
-value class GpuRecordingArenaId(val value: String) {
+value class GPURecordingArenaId(val value: String) {
     init {
-        require(value.isNotBlank()) { "GpuRecordingArenaId.value must not be blank" }
+        require(value.isNotBlank()) { "GPURecordingArenaId.value must not be blank" }
     }
 }
 
 @JvmInline
-value class GpuRecordingThreadId(val value: String) {
+value class GPURecordingThreadId(val value: String) {
     init {
-        require(value.isNotBlank()) { "GpuRecordingThreadId.value must not be blank" }
+        require(value.isNotBlank()) { "GPURecordingThreadId.value must not be blank" }
     }
 }
 
-data class GpuRecordingToken(
+data class GPURecordingToken(
     val sequenceNumber: Long,
     val issuedAtEpochMs: Long,
 ) {
     init {
-        require(sequenceNumber > 0) { "GpuRecordingToken.sequenceNumber must be positive" }
+        require(sequenceNumber > 0) { "GPURecordingToken.sequenceNumber must be positive" }
     }
 }
 
-class GpuRecordingTokenIssuer {
+class GPURecordingTokenIssuer {
     private var nextSequence: Long = 1
 
-    fun issue(): GpuRecordingToken {
+    fun issue(): GPURecordingToken {
         val seq = nextSequence++
-        return GpuRecordingToken(sequenceNumber = seq, issuedAtEpochMs = 0L)
+        return GPURecordingToken(sequenceNumber = seq, issuedAtEpochMs = 0L)
     }
 }
 
-data class GpuRecordingFragment(
+data class GPURecordingFragment(
     val fragmentId: String,
-    val arenaId: GpuRecordingArenaId,
+    val arenaId: GPURecordingArenaId,
     val commandCount: Int,
-    val beginToken: GpuRecordingToken,
-    val endToken: GpuRecordingToken,
+    val beginToken: GPURecordingToken,
+    val endToken: GPURecordingToken,
     /**
      * Ids of atomic scopes (clip atomic group, layer, or destination-read scope) whose commands
      * appear in this fragment. A scope id appearing in more than one fragment indicates an unsafe
@@ -50,25 +50,25 @@ data class GpuRecordingFragment(
     val dependsOnFragmentIds: Set<String> = emptySet(),
 ) {
     init {
-        require(fragmentId.isNotBlank()) { "GpuRecordingFragment.fragmentId must not be blank" }
-        require(commandCount >= 0) { "GpuRecordingFragment.commandCount must be non-negative" }
+        require(fragmentId.isNotBlank()) { "GPURecordingFragment.fragmentId must not be blank" }
+        require(commandCount >= 0) { "GPURecordingFragment.commandCount must be non-negative" }
         require(beginToken.sequenceNumber < endToken.sequenceNumber) {
-            "GpuRecordingFragment.beginToken must precede endToken"
+            "GPURecordingFragment.beginToken must precede endToken"
         }
     }
 }
 
-class GpuRecordingArena(
-    val arenaId: GpuRecordingArenaId,
-    val threadId: GpuRecordingThreadId,
+class GPURecordingArena(
+    val arenaId: GPURecordingArenaId,
+    val threadId: GPURecordingThreadId,
     val capacity: Int,
-    fragments: List<GpuRecordingFragment>,
+    fragments: List<GPURecordingFragment>,
     /** Peak transient thread-bound allocation bytes for this arena. */
     val allocationBytes: Long = 0L,
     /** Whether the arena's thread-bound allocations were released after fragment production. */
     val released: Boolean = false,
 ) {
-    val fragments: List<GpuRecordingFragment> = fragments.toList()
+    val fragments: List<GPURecordingFragment> = fragments.toList()
 
     val fragmentCount: Int
         get() = fragments.size
@@ -80,7 +80,7 @@ class GpuRecordingArena(
         get() = fragments.sumOf { frag -> frag.commandCount }
 
     init {
-        require(capacity > 0) { "GpuRecordingArena.capacity must be positive" }
+        require(capacity > 0) { "GPURecordingArena.capacity must be positive" }
     }
 
     fun dumpLines(): List<String> = listOf(
@@ -89,9 +89,9 @@ class GpuRecordingArena(
     ) + fragments.flatMap { frag -> frag.dumpLines() }
 }
 
-data class GpuRecordingMergeAnalysis(
-    val mergedFragments: List<GpuRecordingFragment>,
-    val refusedPairs: List<GpuRecordingMergeRefusal>,
+data class GPURecordingMergeAnalysis(
+    val mergedFragments: List<GPURecordingFragment>,
+    val refusedPairs: List<GPURecordingMergeRefusal>,
     val arenaCount: Int,
     /** True when the merge was aborted due to a cross-fragment dependency cycle. */
     val aborted: Boolean = false,
@@ -109,8 +109,8 @@ data class GpuRecordingMergeAnalysis(
         refusedPairs.flatMap { refusal -> refusal.dumpLines() }
 }
 
-data class GpuRecordingMergeRefusal(
-    val arenaId: GpuRecordingArenaId,
+data class GPURecordingMergeRefusal(
+    val arenaId: GPURecordingArenaId,
     val fragmentId: String,
     val diagnostic: RefuseDiagnostic,
 ) {
@@ -121,7 +121,7 @@ data class GpuRecordingMergeRefusal(
     )
 }
 
-fun GpuRecordingFragment.dumpLines(): List<String> = listOf(
+fun GPURecordingFragment.dumpLines(): List<String> = listOf(
     "passes.mt-recording.fragment id=$fragmentId arena=${arenaId.value} " +
         "commands=$commandCount " +
         "beginSeq=${beginToken.sequenceNumber} endSeq=${endToken.sequenceNumber}",
@@ -135,19 +135,19 @@ fun GpuRecordingFragment.dumpLines(): List<String> = listOf(
  * splits (an atomic scope spanning more than one fragment) and aborts on cross-fragment dependency
  * cycles, per KGPU-M40-002.
  */
-fun mergeArenas(arenas: List<GpuRecordingArena>): GpuRecordingMergeAnalysis {
+fun mergeArenas(arenas: List<GPURecordingArena>): GPURecordingMergeAnalysis {
     val allFragments = arenas.flatMap { arena -> arena.fragments }
     val sorted = allFragments.sortedWith(
-        compareBy<GpuRecordingFragment> { frag -> frag.beginToken.sequenceNumber }
+        compareBy<GPURecordingFragment> { frag -> frag.beginToken.sequenceNumber }
             .thenBy { frag -> frag.endToken.sequenceNumber }
             .thenBy { frag -> frag.fragmentId },
     )
 
-    val refusedPairs = mutableListOf<GpuRecordingMergeRefusal>()
+    val refusedPairs = mutableListOf<GPURecordingMergeRefusal>()
 
     // Unsafe split: an atomic scope (clip atomic group / layer / dst-read scope) whose commands are
     // distributed across more than one fragment cannot be merged safely.
-    val fragmentsByScope = linkedMapOf<String, MutableList<GpuRecordingFragment>>()
+    val fragmentsByScope = linkedMapOf<String, MutableList<GPURecordingFragment>>()
     for (frag in sorted) {
         for (scope in frag.atomicScopeIds.sorted()) {
             fragmentsByScope.getOrPut(scope) { mutableListOf() }.add(frag)
@@ -157,11 +157,11 @@ fun mergeArenas(arenas: List<GpuRecordingArena>): GpuRecordingMergeAnalysis {
         if (frags.map { it.fragmentId }.toSet().size > 1) {
             for (frag in frags) {
                 refusedPairs.add(
-                    GpuRecordingMergeRefusal(
+                    GPURecordingMergeRefusal(
                         arenaId = frag.arenaId,
                         fragmentId = frag.fragmentId,
                         diagnostic = RefuseDiagnostic(
-                            code = GpuMultiThreadedRecordingReason.FRAGMENT_SPLIT_UNSAFE,
+                            code = GPUMultiThreadedRecordingReason.FRAGMENT_SPLIT_UNSAFE,
                             message = "Atomic scope '$scope' split across fragments " +
                                 frags.joinToString(",") { it.fragmentId } +
                                 "; recording fragment split is unsafe",
@@ -180,11 +180,11 @@ fun mergeArenas(arenas: List<GpuRecordingArena>): GpuRecordingMergeAnalysis {
         for (fragId in cycle.distinct()) {
             val frag = sorted.first { it.fragmentId == fragId }
             refusedPairs.add(
-                GpuRecordingMergeRefusal(
+                GPURecordingMergeRefusal(
                     arenaId = frag.arenaId,
                     fragmentId = frag.fragmentId,
                     diagnostic = RefuseDiagnostic(
-                        code = GpuMultiThreadedRecordingReason.FRAGMENT_MERGE_CYCLE,
+                        code = GPUMultiThreadedRecordingReason.FRAGMENT_MERGE_CYCLE,
                         message = "Cross-fragment dependency cycle detected: " +
                             cycle.joinToString(" -> "),
                         stage = "mt-recording.merge",
@@ -195,7 +195,7 @@ fun mergeArenas(arenas: List<GpuRecordingArena>): GpuRecordingMergeAnalysis {
         }
     }
 
-    return GpuRecordingMergeAnalysis(
+    return GPURecordingMergeAnalysis(
         mergedFragments = sorted,
         refusedPairs = refusedPairs,
         arenaCount = arenas.size,
@@ -205,7 +205,7 @@ fun mergeArenas(arenas: List<GpuRecordingArena>): GpuRecordingMergeAnalysis {
 
 /** Returns a cyclic fragment-id path if the dependency graph contains a cycle, else null. */
 private fun detectFragmentDependencyCycle(
-    fragments: List<GpuRecordingFragment>,
+    fragments: List<GPURecordingFragment>,
 ): List<String>? {
     val byId = fragments.associateBy { it.fragmentId }
     val visiting = mutableSetOf<String>()
@@ -239,7 +239,7 @@ private fun detectFragmentDependencyCycle(
 }
 
 /** Recording concurrency telemetry (KGPU-M40-002 scope + evidence). */
-data class GpuConcurrencyTelemetry(
+data class GPUConcurrencyTelemetry(
     val fragmentCount: Int,
     val mergeDurationMs: Double,
     val contentionEvents: Int,
@@ -252,16 +252,16 @@ data class GpuConcurrencyTelemetry(
 
 /** Derives concurrency telemetry from a merge analysis; contention events are refused fragment merges. */
 fun buildConcurrencyTelemetry(
-    analysis: GpuRecordingMergeAnalysis,
+    analysis: GPURecordingMergeAnalysis,
     mergeDurationMs: Double,
-): GpuConcurrencyTelemetry = GpuConcurrencyTelemetry(
+): GPUConcurrencyTelemetry = GPUConcurrencyTelemetry(
     fragmentCount = analysis.fragmentCount,
     mergeDurationMs = mergeDurationMs,
     contentionEvents = analysis.refusedPairs.size,
 )
 
 /** Thread-bound arena memory release report (KGPU-M40-002 evidence: zero-leak after production). */
-data class GpuArenaReleaseReport(
+data class GPUArenaReleaseReport(
     val totalAllocationBytes: Long,
     val leakedBytes: Long,
     val allReleased: Boolean,
@@ -273,17 +273,17 @@ data class GpuArenaReleaseReport(
 }
 
 /** Reports arena allocation totals and any bytes leaked by arenas not released after production. */
-fun arenaReleaseReport(arenas: List<GpuRecordingArena>): GpuArenaReleaseReport {
+fun arenaReleaseReport(arenas: List<GPURecordingArena>): GPUArenaReleaseReport {
     val total = arenas.sumOf { arena -> arena.allocationBytes }
     val leaked = arenas.filter { arena -> !arena.released }.sumOf { arena -> arena.allocationBytes }
-    return GpuArenaReleaseReport(
+    return GPUArenaReleaseReport(
         totalAllocationBytes = total,
         leakedBytes = leaked,
         allReleased = arenas.all { arena -> arena.released },
     )
 }
 
-object GpuMultiThreadedRecordingReason {
+object GPUMultiThreadedRecordingReason {
     const val FRAGMENT_SPLIT_UNSAFE = "unsupported.recording.fragment_split_unsafe"
     const val FRAGMENT_MERGE_CYCLE = "unsupported.recording.fragment_merge_cycle"
 }

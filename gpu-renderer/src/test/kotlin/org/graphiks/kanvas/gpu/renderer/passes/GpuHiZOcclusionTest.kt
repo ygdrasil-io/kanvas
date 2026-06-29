@@ -10,8 +10,8 @@ import org.graphiks.kanvas.gpu.renderer.routing.RefuseDiagnostic
 
 class GpuHiZOcclusionTest {
 
-    private fun bounds(x: Int, y: Int, width: Int, height: Int): GpuTileBounds =
-        GpuTileBounds(x = x, y = y, width = width, height = height)
+    private fun bounds(x: Int, y: Int, width: Int, height: Int): GPUTileBounds =
+        GPUTileBounds(x = x, y = y, width = width, height = height)
 
     // -- Pyramid construction --
 

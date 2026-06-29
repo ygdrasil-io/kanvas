@@ -62,8 +62,8 @@ class GpuTileDeferredTest {
         resourceGeneration = 7L,
     )
 
-    private fun bounds(x: Int, y: Int, width: Int, height: Int): GpuTileBounds =
-        GpuTileBounds(x = x, y = y, width = width, height = height)
+    private fun bounds(x: Int, y: Int, width: Int, height: Int): GPUTileBounds =
+        GPUTileBounds(x = x, y = y, width = width, height = height)
 
     // -- Tile grid computation --
 
@@ -214,19 +214,19 @@ class GpuTileDeferredTest {
     @Test
     fun `memory budget accepts when within limit`() {
         val grid = computeTileGrid(targetWidth = 1024, targetHeight = 768, tileSize = 256)
-        val budget = GpuTileMemoryBudget(
+        val budget = GPUTileMemoryBudget(
             perTileBytes = 256L * 256 * 4,
             maxConcurrentTiles = 12,
         )
 
         val result = checkTileMemoryBudget(grid, budget)
-        assertIs<GpuTileDeferredResult.Accepted>(result)
+        assertIs<GPUTileDeferredResult.Accepted>(result)
     }
 
     @Test
     fun `memory budget refuses when per-tile bytes exceed cap`() {
         val grid = computeTileGrid(targetWidth = 1024, targetHeight = 768, tileSize = 256)
-        val budget = GpuTileMemoryBudget(
+        val budget = GPUTileMemoryBudget(
             perTileBytes = 256L * 256 * 4,
             maxConcurrentTiles = 12,
         )
@@ -237,14 +237,14 @@ class GpuTileDeferredTest {
             totalAdapterTextureMemoryBytes = 100L * 1024,
         )
 
-        assertIs<GpuTileDeferredResult.Refused>(result)
+        assertIs<GPUTileDeferredResult.Refused>(result)
         assertEquals("unsupported.tile.budget_exceeded", result.diagnostic.code)
         assertTrue(result.diagnostic.terminal)
     }
 
     @Test
     fun `budget enforces adapter texture memory fraction`() {
-        val budget = GpuTileMemoryBudget(
+        val budget = GPUTileMemoryBudget(
             perTileBytes = 256L * 256 * 4,
             maxConcurrentTiles = 12,
             adapterTextureMemoryFraction = 0.25f,
@@ -307,7 +307,7 @@ class GpuTileDeferredTest {
 
     @Test
     fun `grid policy activation decision when tile count meets minimum`() {
-        val policy = GpuTileGridPolicy(
+        val policy = GPUTileGridPolicy(
             adapterPreferredTileSize = 256,
             maxMemoryPerTile = 256L * 256 * 4,
             minTileCount = 2,
@@ -347,21 +347,21 @@ class GpuTileDeferredTest {
     @Test
     fun `grid policy validates positive values`() {
         assertIllegalArgument("adapterPreferredTileSize must be positive") {
-            GpuTileGridPolicy(
+            GPUTileGridPolicy(
                 adapterPreferredTileSize = 0,
                 maxMemoryPerTile = 1024,
                 minTileCount = 1,
             )
         }
         assertIllegalArgument("maxMemoryPerTile must be positive") {
-            GpuTileGridPolicy(
+            GPUTileGridPolicy(
                 adapterPreferredTileSize = 256,
                 maxMemoryPerTile = 0,
                 minTileCount = 1,
             )
         }
         assertIllegalArgument("minTileCount must be positive") {
-            GpuTileGridPolicy(
+            GPUTileGridPolicy(
                 adapterPreferredTileSize = 256,
                 maxMemoryPerTile = 1024,
                 minTileCount = 0,
@@ -371,12 +371,12 @@ class GpuTileDeferredTest {
 
     @Test
     fun `strategy DirectTargetSlice and TileIntermediateTexture serialize correctly`() {
-        val direct = GpuTileStrategy.DirectTargetSlice
-        assertIs<GpuTileStrategy.DirectTargetSlice>(direct)
+        val direct = GPUTileStrategy.DirectTargetSlice
+        assertIs<GPUTileStrategy.DirectTargetSlice>(direct)
 
-        val intermediate = GpuTileStrategy.TileIntermediateTexture(
+        val intermediate = GPUTileStrategy.TileIntermediateTexture(
             intermediate = "tex-tile-0-0",
-            compositePlan = GpuTileCompositePass(
+            compositePlan = GPUTileCompositePass(
                 sourceTiles = emptyList(),
                 mergeMode = "blit-merge",
             ),
@@ -388,10 +388,10 @@ class GpuTileDeferredTest {
     @Test
     fun `memory budget validates positive values`() {
         assertIllegalArgument("perTileBytes must be positive") {
-            GpuTileMemoryBudget(perTileBytes = 0, maxConcurrentTiles = 1)
+            GPUTileMemoryBudget(perTileBytes = 0, maxConcurrentTiles = 1)
         }
         assertIllegalArgument("maxConcurrentTiles must be positive") {
-            GpuTileMemoryBudget(perTileBytes = 1024, maxConcurrentTiles = 0)
+            GPUTileMemoryBudget(perTileBytes = 1024, maxConcurrentTiles = 0)
         }
     }
 
@@ -432,14 +432,14 @@ class GpuTileDeferredTest {
         )
         val tilePasses = buildTilePasses(bins, packetsByCommandId)
 
-        val result = GpuTileDeferredResult.Accepted(
+        val result = GPUTileDeferredResult.Accepted(
             tilePasses = tilePasses,
-            strategy = GpuTileStrategy.DirectTargetSlice,
+            strategy = GPUTileStrategy.DirectTargetSlice,
         )
 
-        assertIs<GpuTileDeferredResult.Accepted>(result)
+        assertIs<GPUTileDeferredResult.Accepted>(result)
         assertEquals(1, result.tilePasses.size)
-        assertEquals(GpuTileStrategy.DirectTargetSlice, result.strategy)
+        assertEquals(GPUTileStrategy.DirectTargetSlice, result.strategy)
         assertTrue(result.dumpLines().isNotEmpty())
         assertContains(result.dumpLines().first(), "tile-deferred.accepted")
     }
@@ -452,9 +452,9 @@ class GpuTileDeferredTest {
             stage = "tile.budget",
             terminal = true,
         )
-        val result = GpuTileDeferredResult.Refused(diagnostic)
+        val result = GPUTileDeferredResult.Refused(diagnostic)
 
-        assertIs<GpuTileDeferredResult.Refused>(result)
+        assertIs<GPUTileDeferredResult.Refused>(result)
         assertEquals("unsupported.tile.budget_exceeded", result.diagnostic.code)
         assertEquals("tile.budget", result.diagnostic.stage)
         assertTrue(result.diagnostic.terminal)
@@ -499,7 +499,7 @@ class GpuTileDeferredTest {
     fun `cross-tile dst read refusal returned for draw spanning multiple tiles`() {
         val grid = computeTileGrid(targetWidth = 1024, targetHeight = 768, tileSize = 256)
 
-        val result = GpuTileDeferredResult.Refused(
+        val result = GPUTileDeferredResult.Refused(
             RefuseDiagnostic(
                 code = "unsupported.tile.cross_tile_destination_read",
                 message = "Cross-tile destination read refused for draw 1; spans tiles [0,0][1,0][0,1][1,1]",
@@ -534,14 +534,14 @@ class GpuTileDeferredTest {
 
     @Test
     fun `reason constants match spec refusal codes exactly`() {
-        assertEquals("unsupported.tile.budget_exceeded", GpuTileDeferredReason.BUDGET_EXCEEDED)
+        assertEquals("unsupported.tile.budget_exceeded", GPUTileDeferredReason.BUDGET_EXCEEDED)
         assertEquals(
             "unsupported.tile.cross_tile_destination_read",
-            GpuTileDeferredReason.CROSS_TILE_DESTINATION_READ,
+            GPUTileDeferredReason.CROSS_TILE_DESTINATION_READ,
         )
         assertEquals(
             "unsupported.tile.cross_tile_clip_atomic_group",
-            GpuTileDeferredReason.CROSS_TILE_CLIP_ATOMIC_GROUP,
+            GPUTileDeferredReason.CROSS_TILE_CLIP_ATOMIC_GROUP,
         )
     }
 
@@ -554,8 +554,8 @@ class GpuTileDeferredTest {
 
         val result = checkCrossTileDestinationRead(bins, destinationReadingCommandIds = setOf(1))
 
-        assertIs<GpuTileDeferredResult.Refused>(result)
-        assertEquals(GpuTileDeferredReason.CROSS_TILE_DESTINATION_READ, result.diagnostic.code)
+        assertIs<GPUTileDeferredResult.Refused>(result)
+        assertEquals(GPUTileDeferredReason.CROSS_TILE_DESTINATION_READ, result.diagnostic.code)
         assertEquals("tile.binning", result.diagnostic.stage)
         assertTrue(result.diagnostic.terminal)
         assertContains(result.diagnostic.message, "deferred to composite")
@@ -570,7 +570,7 @@ class GpuTileDeferredTest {
 
         val result = checkCrossTileDestinationRead(bins, destinationReadingCommandIds = setOf(1))
 
-        assertIs<GpuTileDeferredResult.Accepted>(result)
+        assertIs<GPUTileDeferredResult.Accepted>(result)
     }
 
     @Test
@@ -588,8 +588,8 @@ class GpuTileDeferredTest {
             clipAtomicGroupByCommandId = mapOf(1 to "clip-group-A", 2 to "clip-group-A"),
         )
 
-        assertIs<GpuTileDeferredResult.Refused>(result)
-        assertEquals(GpuTileDeferredReason.CROSS_TILE_CLIP_ATOMIC_GROUP, result.diagnostic.code)
+        assertIs<GPUTileDeferredResult.Refused>(result)
+        assertEquals(GPUTileDeferredReason.CROSS_TILE_CLIP_ATOMIC_GROUP, result.diagnostic.code)
         assertEquals("tile.binning", result.diagnostic.stage)
         assertTrue(result.diagnostic.terminal)
         assertContains(result.diagnostic.message, "clip atomic")
@@ -610,7 +610,7 @@ class GpuTileDeferredTest {
             clipAtomicGroupByCommandId = mapOf(1 to "clip-group-A", 2 to "clip-group-A"),
         )
 
-        assertIs<GpuTileDeferredResult.Accepted>(result)
+        assertIs<GPUTileDeferredResult.Accepted>(result)
     }
 
     private fun assertIllegalArgument(expectedMessageFragment: String, block: () -> Unit) {
