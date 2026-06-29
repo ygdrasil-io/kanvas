@@ -10,6 +10,11 @@ import org.graphiks.kanvas.codec.Codec
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkColorType
+import org.skia.foundation.SkEncodedOrigin
+import org.skia.foundation.SkICC
+import org.skia.foundation.skcms.SkNamedGamut
+import org.skia.foundation.skcms.SkNamedTransferFn
+import org.skia.foundation.skcms.skcmsParse
 import java.io.ByteArrayOutputStream
 
 class JpegEncoderTest {
@@ -149,6 +154,48 @@ class JpegEncoderTest {
         assertTrue(0xC0 in markers, "baseline SOF0 marker must be present")
         assertTrue(0xC2 !in markers, "progressive SOF2 marker is intentionally out of scope")
         assertTrue(0xDD !in markers, "DRI restart interval marker is not emitted by the current encoder")
+    }
+
+    @Test
+    fun `non-sRGB JPEG writes ICC APP2 chunks`() {
+        val iccBytes = SkICC.WriteToICC(SkNamedTransferFn.kSRGB, SkNamedGamut.kDisplayP3)
+        val colorSpace = SkColorSpace.make(skcmsParse(iccBytes) ?: error("failed to parse ICC"))!!
+        val src = SkBitmap(8, 8, colorSpace)
+        for (y in 0 until 8) for (x in 0 until 8) {
+            src.pixels[y * 8 + x] = (0xFF shl 24) or ((x * 32) shl 16) or ((y * 32) shl 8) or 0x7F
+        }
+        val bytes = JpegEncoder.encode(src)!!
+        val codec = Codec.MakeFromData(bytes)
+        assertNotNull(codec)
+        val profile = codec!!.getICCProfile()
+        assertNotNull(profile, "non-sRGB JPEG must expose ICC profile on decode")
+    }
+
+    @Test
+    fun `sRGB JPEG does not write ICC APP2`() {
+        val src = SkBitmap(8, 8)
+        for (y in 0 until 8) for (x in 0 until 8) {
+            src.pixels[y * 8 + x] = (0xFF shl 24) or ((x * 32) shl 16) or ((y * 32) shl 8)
+        }
+        val bytes = JpegEncoder.encode(src)!!
+        val codec = Codec.MakeFromData(bytes)
+        assertNotNull(codec)
+        assertNull(codec!!.getICCProfile(), "sRGB JPEG must not expose ICC profile")
+    }
+
+    @Test
+    fun `EXIF orientation survives round-trip`() {
+        val src = SkBitmap(8, 8)
+        for (y in 0 until 8) for (x in 0 until 8) {
+            src.pixels[y * 8 + x] = (0xFF shl 24) or ((x * 32) shl 16) or ((y * 32) shl 8)
+        }
+        for (exifVal in 1..8) {
+            val orientation = SkEncodedOrigin.fromExifValue(exifVal)
+            val bytes = JpegEncoder.encode(src, JpegEncoder.Options(orientation = orientation))!!
+            val codec = Codec.MakeFromData(bytes)
+            assertNotNull(codec, "orientation $exifVal")
+            assertEquals(orientation, codec!!.getOrigin(), "orientation $exifVal must round-trip")
+        }
     }
 
     private fun makeFlat(width: Int, height: Int, color: Int): SkBitmap {

@@ -119,6 +119,69 @@ class PngEncoderTest {
         }
     }
 
+    @Test
+    fun `sRGB bitmap writes sRGB chunk not iCCP`() {
+        val src = SkBitmap(4, 4)
+        for (i in 0 until 16) src.pixels[i] = 0xFF808080.toInt()
+        val bytes = PngEncoder.encode(src)!!
+        val hasSrgb = findChunk(bytes, 0x73524742)
+        assertTrue(hasSrgb, "sRGB bitmap must write sRGB chunk")
+        val hasIccp = findChunk(bytes, 0x69434350)
+        assertTrue(!hasIccp, "sRGB bitmap must not write iCCP chunk")
+    }
+
+    @Test
+    fun `sRGB bitmap writes gAMA chunk`() {
+        val src = SkBitmap(4, 4)
+        for (i in 0 until 16) src.pixels[i] = 0xFF808080.toInt()
+        val bytes = PngEncoder.encode(src)!!
+        assertTrue(findChunk(bytes, 0x67414D41), "sRGB bitmap must write gAMA chunk")
+    }
+
+    @Test
+    fun `non-sRGB bitmap writes iCCP not sRGB`() {
+        val iccBytes = SkICC.WriteToICC(SkNamedTransferFn.kSRGB, SkNamedGamut.kDisplayP3)
+        val colorSpace = SkColorSpace.make(skcmsParse(iccBytes) ?: error("failed to parse ICC"))!!
+        val src = SkBitmap(4, 4, colorSpace)
+        for (i in 0 until 16) src.pixels[i] = 0xFF808080.toInt()
+        val bytes = PngEncoder.encode(src)!!
+        assertTrue(findChunk(bytes, 0x69434350), "non-sRGB must write iCCP")
+        assertTrue(!findChunk(bytes, 0x73524742), "non-sRGB must not write sRGB")
+    }
+
+    @Test
+    fun `adam7 interlace with filters round-trips correctly`() {
+        val src = SkBitmap(16, 16)
+        for (y in 0 until 16) for (x in 0 until 16) {
+            src.pixels[y * 16 + x] = (0xFF shl 24) or ((x * 16) shl 16) or ((y * 16) shl 8) or (x xor y)
+        }
+        val bytes = PngEncoder.encode(src, PngEncoder.Options(interlace = true))!!
+        val decoded = decodePng(bytes)
+        for (y in 0 until 16) for (x in 0 until 16) {
+            assertEquals(src.getPixel(x, y), decoded.getPixel(x, y), "($x,$y)")
+        }
+    }
+
+    private fun findChunk(png: ByteArray, type: Int): Boolean {
+        val typeBytes = byteArrayOf(
+            (type ushr 24).toByte(), (type ushr 16).toByte(),
+            (type ushr 8).toByte(), type.toByte()
+        )
+        var pos = 8
+        while (pos + 12 <= png.size) {
+            val len = ((png[pos].toInt() and 0xFF) shl 24) or
+                    ((png[pos + 1].toInt() and 0xFF) shl 16) or
+                    ((png[pos + 2].toInt() and 0xFF) shl 8) or
+                    (png[pos + 3].toInt() and 0xFF)
+            val typePos = pos + 4
+            if (png[typePos] == typeBytes[0] && png[typePos + 1] == typeBytes[1] &&
+                png[typePos + 2] == typeBytes[2] && png[typePos + 3] == typeBytes[3]
+            ) return true
+            pos += 12 + len
+        }
+        return false
+    }
+
     private fun decodePng(bytes: ByteArray): SkBitmap {
         val codec = Codec.MakeFromData(bytes)
         assertNotNull(codec, "PNG decoder must load encoded output")

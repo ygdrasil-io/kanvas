@@ -77,7 +77,12 @@ public object PngEncoder {
         options.comments.chunked(2).forEach { (keyword, text) ->
             writeChunk(dst, TYPE_TEXT, textChunk(keyword, text))
         }
-        if (!src.colorSpace.isSRGB()) {
+        if (src.colorSpace.isSRGB()) {
+            writeChunk(dst, TYPE_SRGB, byteArrayOf(0))
+            val gammaBytes = ByteArray(4)
+            writeU32BE(gammaBytes, 0, 45455)
+            writeChunk(dst, TYPE_GAMA, gammaBytes)
+        } else {
             val iccProfileData = SkICC.WriteToICC(src.colorSpace.transferFn, src.colorSpace.toXYZD50)
             val nameBytes = "sRGB".toByteArray()
             val deflater = Deflater()
@@ -299,6 +304,8 @@ public object PngEncoder {
     private const val TYPE_IEND = 0x49454E44
     private const val TYPE_TEXT = 0x74455874
     private const val TYPE_ICCP = 0x69434350
+    private const val TYPE_SRGB = 0x73524742
+    private const val TYPE_GAMA = 0x67414D41
 
     private val adam7Passes = arrayOf(
         intArrayOf(0, 0, 8, 8),
@@ -311,6 +318,8 @@ public object PngEncoder {
     )
 
     private fun adam7Rows(src: SkBitmap, w: Int, h: Int, filterFlags: Int): ByteArray {
+        val allowedFilters = allowedFilters(filterFlags)
+        val bpp = RGBA_BYTES_PER_PIXEL
         val allRows = ByteArrayOutputStream()
         for (pass in adam7Passes) {
             val xStart = pass[0]; val yStart = pass[1]
@@ -318,17 +327,26 @@ public object PngEncoder {
             val passW = if (w > xStart) (w - xStart + xStep - 1) / xStep else 0
             val passH = if (h > yStart) (h - yStart + yStep - 1) / yStep else 0
             if (passW <= 0 || passH <= 0) continue
+            val rowLen = passW * bpp
+            var prevRow = ByteArray(rowLen)
+            val filtered = ByteArray(rowLen)
             for (py in 0 until passH) {
                 val y = yStart + py * yStep
-                allRows.write(FILTER_NONE)
+                val current = ByteArray(rowLen)
+                var off = 0
                 for (px in 0 until passW) {
                     val x = xStart + px * xStep
                     val argb = src.getPixelAsSrgb(x, y)
-                    allRows.write((argb ushr 16) and 0xFF)
-                    allRows.write((argb ushr 8) and 0xFF)
-                    allRows.write(argb and 0xFF)
-                    allRows.write((argb ushr 24) and 0xFF)
+                    current[off++] = ((argb ushr 16) and 0xFF).toByte()
+                    current[off++] = ((argb ushr 8) and 0xFF).toByte()
+                    current[off++] = (argb and 0xFF).toByte()
+                    current[off++] = ((argb ushr 24) and 0xFF).toByte()
                 }
+                val filter = chooseFilter(current, prevRow, allowedFilters)
+                allRows.write(filter)
+                writeFilteredRow(filter, current, prevRow, filtered, 0)
+                allRows.write(filtered, 0, rowLen)
+                prevRow = current
             }
         }
         return allRows.toByteArray()

@@ -1,7 +1,9 @@
 package org.graphiks.kanvas.codec.webp
 
 import org.skia.foundation.SkBitmap
+import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkData
+import org.skia.foundation.SkICC
 import org.skia.foundation.SkImage
 import java.io.ByteArrayOutputStream
 import java.io.OutputStream
@@ -16,6 +18,9 @@ public object WebpEncoder {
     public data class Options(
         val compression: Compression = Compression.kLossless,
         val quality: Float = 100.0f,
+        val iccProfile: ByteArray? = null,
+        val exifData: ByteArray? = null,
+        val xmpData: ByteArray? = null,
     ) {
         init {
             require(quality in 0.0f..100.0f) {
@@ -96,7 +101,7 @@ public object WebpEncoder {
         if (width <= 0 || height <= 0) return null
         if (width > 16384 || height > 16384) return null
         return when (options.compression) {
-            Compression.kLossless -> WebpLosslessEncoder.encode(argb, width, height)
+            Compression.kLossless -> WebpLosslessEncoder.encode(argb, width, height, options)
             Compression.kLossy -> null
         }
     }
@@ -135,7 +140,7 @@ internal object WebpLosslessEncoder {
         17, 18, 0, 1, 2, 3, 4, 5, 16, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
     )
 
-    fun encode(argb: IntArray, width: Int, height: Int): ByteArray {
+    fun encode(argb: IntArray, width: Int, height: Int, options: WebpEncoder.Options): ByteArray {
         val payload = BitWriter()
 
         payload.writeBits(SIGNATURE, 8)
@@ -197,8 +202,45 @@ internal object WebpLosslessEncoder {
 
         val payloadBytes = payload.finish()
 
-        val padded = (payloadBytes.size + 1) and 1.inv()
-        val riffSize = 4 + 8 + padded
+        val hasMeta = options.iccProfile != null || options.exifData != null || options.xmpData != null
+
+        if (!hasMeta) {
+            val padded = (payloadBytes.size + 1) and 1.inv()
+            val riffSize = 4 + 8 + padded
+            val total = 8 + riffSize
+            val out = ByteArray(total)
+            var p = 0
+            out[p++] = 'R'.code.toByte(); out[p++] = 'I'.code.toByte()
+            out[p++] = 'F'.code.toByte(); out[p++] = 'F'.code.toByte()
+            out[p++] = (riffSize and 0xFF).toByte()
+            out[p++] = ((riffSize ushr 8) and 0xFF).toByte()
+            out[p++] = ((riffSize ushr 16) and 0xFF).toByte()
+            out[p++] = ((riffSize ushr 24) and 0xFF).toByte()
+            out[p++] = 'W'.code.toByte(); out[p++] = 'E'.code.toByte()
+            out[p++] = 'B'.code.toByte(); out[p++] = 'P'.code.toByte()
+            out[p++] = 'V'.code.toByte(); out[p++] = 'P'.code.toByte()
+            out[p++] = '8'.code.toByte(); out[p++] = 'L'.code.toByte()
+            out[p++] = (payloadBytes.size and 0xFF).toByte()
+            out[p++] = ((payloadBytes.size ushr 8) and 0xFF).toByte()
+            out[p++] = ((payloadBytes.size ushr 16) and 0xFF).toByte()
+            out[p++] = ((payloadBytes.size ushr 24) and 0xFF).toByte()
+            System.arraycopy(payloadBytes, 0, out, p, payloadBytes.size)
+            return out
+        }
+
+        var flags = 0
+        if (options.iccProfile != null) flags = flags or 0x20
+        if (options.exifData != null) flags = flags or 0x08
+        if (options.xmpData != null) flags = flags or 0x04
+
+        val vp8xChunk = buildVp8xChunk(width, height, flags)
+        val iccChunk = options.iccProfile?.let { buildMetaChunk("ICCP", it) } ?: ByteArray(0)
+        val exifChunk = options.exifData?.let { buildMetaChunk("EXIF", it) } ?: ByteArray(0)
+        val xmpChunk = options.xmpData?.let { buildMetaChunk("XMP ", it) } ?: ByteArray(0)
+        val vp8lChunk = buildVp8lChunk(payloadBytes)
+
+        val riffPayloadSize = vp8xChunk.size + iccChunk.size + exifChunk.size + xmpChunk.size + vp8lChunk.size
+        val riffSize = 4 + riffPayloadSize
         val total = 8 + riffSize
         val out = ByteArray(total)
         var p = 0
@@ -210,13 +252,11 @@ internal object WebpLosslessEncoder {
         out[p++] = ((riffSize ushr 24) and 0xFF).toByte()
         out[p++] = 'W'.code.toByte(); out[p++] = 'E'.code.toByte()
         out[p++] = 'B'.code.toByte(); out[p++] = 'P'.code.toByte()
-        out[p++] = 'V'.code.toByte(); out[p++] = 'P'.code.toByte()
-        out[p++] = '8'.code.toByte(); out[p++] = 'L'.code.toByte()
-        out[p++] = (payloadBytes.size and 0xFF).toByte()
-        out[p++] = ((payloadBytes.size ushr 8) and 0xFF).toByte()
-        out[p++] = ((payloadBytes.size ushr 16) and 0xFF).toByte()
-        out[p++] = ((payloadBytes.size ushr 24) and 0xFF).toByte()
-        System.arraycopy(payloadBytes, 0, out, p, payloadBytes.size)
+        System.arraycopy(vp8xChunk, 0, out, p, vp8xChunk.size); p += vp8xChunk.size
+        System.arraycopy(iccChunk, 0, out, p, iccChunk.size); p += iccChunk.size
+        System.arraycopy(exifChunk, 0, out, p, exifChunk.size); p += exifChunk.size
+        System.arraycopy(xmpChunk, 0, out, p, xmpChunk.size); p += xmpChunk.size
+        System.arraycopy(vp8lChunk, 0, out, p, vp8lChunk.size)
         return out
     }
 
@@ -447,6 +487,50 @@ internal object WebpLosslessEncoder {
             v = v ushr 1
         }
         return r
+    }
+
+    private fun buildVp8xChunk(width: Int, height: Int, flags: Int): ByteArray {
+        val payload = ByteArray(10)
+        payload[0] = flags.toByte()
+        payload[4] = ((width - 1) and 0xFF).toByte()
+        payload[5] = (((width - 1) ushr 8) and 0xFF).toByte()
+        payload[6] = (((width - 1) ushr 16) and 0xFF).toByte()
+        payload[7] = ((height - 1) and 0xFF).toByte()
+        payload[8] = (((height - 1) ushr 8) and 0xFF).toByte()
+        payload[9] = (((height - 1) ushr 16) and 0xFF).toByte()
+        val chunk = ByteArray(8 + payload.size)
+        chunk[0] = 'V'.code.toByte(); chunk[1] = 'P'.code.toByte()
+        chunk[2] = '8'.code.toByte(); chunk[3] = 'X'.code.toByte()
+        writeU32LE(chunk, 4, payload.size)
+        System.arraycopy(payload, 0, chunk, 8, payload.size)
+        return chunk
+    }
+
+    private fun buildMetaChunk(fourcc: String, data: ByteArray): ByteArray {
+        val paddedSize = (data.size + 1) and 1.inv()
+        val chunk = ByteArray(8 + paddedSize)
+        chunk[0] = fourcc[0].code.toByte(); chunk[1] = fourcc[1].code.toByte()
+        chunk[2] = fourcc[2].code.toByte(); chunk[3] = fourcc[3].code.toByte()
+        writeU32LE(chunk, 4, data.size)
+        System.arraycopy(data, 0, chunk, 8, data.size)
+        return chunk
+    }
+
+    private fun buildVp8lChunk(data: ByteArray): ByteArray {
+        val padded = (data.size + 1) and 1.inv()
+        val chunk = ByteArray(8 + padded)
+        chunk[0] = 'V'.code.toByte(); chunk[1] = 'P'.code.toByte()
+        chunk[2] = '8'.code.toByte(); chunk[3] = 'L'.code.toByte()
+        writeU32LE(chunk, 4, data.size)
+        System.arraycopy(data, 0, chunk, 8, data.size)
+        return chunk
+    }
+
+    private fun writeU32LE(out: ByteArray, offset: Int, value: Int) {
+        out[offset] = (value and 0xFF).toByte()
+        out[offset + 1] = ((value ushr 8) and 0xFF).toByte()
+        out[offset + 2] = ((value ushr 16) and 0xFF).toByte()
+        out[offset + 3] = ((value ushr 24) and 0xFF).toByte()
     }
 }
 

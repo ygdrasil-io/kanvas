@@ -7,46 +7,35 @@ import java.io.OutputStream
 
 public object IcoEncoder {
 
-    private val defaultOptions: PngEncoder.Options = PngEncoder.Options()
+    public enum class PayloadFormat { PNG, BMP }
+
+    public data class Entry(
+        val bitmap: SkBitmap,
+        val format: PayloadFormat = PayloadFormat.PNG,
+    )
+
+    public fun encode(entries: List<Entry>): ByteArray? {
+        if (entries.isEmpty()) return null
+        val payloads = ArrayList<ByteArray>(entries.size)
+        for (entry in entries) {
+            val w = entry.bitmap.width
+            val h = entry.bitmap.height
+            if (w <= 0 || h <= 0) return null
+            val payload = when (entry.format) {
+                PayloadFormat.PNG -> PngEncoder.encode(entry.bitmap) ?: return null
+                PayloadFormat.BMP -> {
+                    val fullBmp = org.graphiks.kanvas.codec.bmp.BmpEncoder.encode(entry.bitmap) ?: return null
+                    if (fullBmp.size <= 14) return null
+                    fullBmp.copyOfRange(14, fullBmp.size)
+                }
+            }
+            payloads.add(payload)
+        }
+        return buildIco(entries, payloads)
+    }
 
     public fun encode(bitmap: SkBitmap): ByteArray? {
-        val w = bitmap.width
-        val h = bitmap.height
-        if (w <= 0 || h <= 0) return null
-
-        // Encode bitmap as PNG first
-        val png = PngEncoder.encode(bitmap, defaultOptions) ?: return null
-
-        // ICO header: reserved(2) + type(2, 1=ICO) + count(2)
-        val count = 1
-        val headerSize = 6
-        val dirEntrySize = 16
-        val dataOffset = headerSize + count * dirEntrySize
-        val dirW = if (w >= 256) 0 else w
-        val dirH = if (h >= 256) 0 else h
-
-        val fileSize = dataOffset + png.size
-        val out = ByteArrayOutputStream(fileSize)
-
-        // ICO header
-        writeU16LE(out, 0) // reserved
-        writeU16LE(out, 1) // type = ICO
-        writeU16LE(out, count)
-
-        // Directory entry
-        out.write(dirW)          // width
-        out.write(dirH)          // height
-        out.write(0)             // color count (0 for true color)
-        out.write(0)             // reserved
-        writeU16LE(out, 1)       // planes (for ICO)
-        writeU16LE(out, 32)      // bits per pixel
-        writeU32LE(out, png.size) // image size
-        writeU32LE(out, dataOffset) // image data offset
-
-        // PNG payload
-        out.write(png)
-
-        return out.toByteArray()
+        return encode(listOf(Entry(bitmap)))
     }
 
     public fun encode(dst: OutputStream, bitmap: SkBitmap): Boolean {
@@ -57,6 +46,46 @@ public object IcoEncoder {
         } catch (_: Throwable) {
             false
         }
+    }
+
+    private fun buildIco(entries: List<Entry>, payloads: List<ByteArray>): ByteArray {
+        val count = entries.size
+        val headerSize = 6
+        val dirEntrySize = 16
+        val dirEnd = headerSize + count * dirEntrySize
+
+        val offsets = ArrayList<Int>(count)
+        var nextOffset = dirEnd
+        for (i in 0 until count) {
+            offsets.add(nextOffset)
+            nextOffset += payloads[i].size
+        }
+
+        val out = ByteArrayOutputStream(nextOffset)
+        writeU16LE(out, 0)
+        writeU16LE(out, 1)
+        writeU16LE(out, count)
+
+        for (i in 0 until count) {
+            val w = entries[i].bitmap.width
+            val h = entries[i].bitmap.height
+            val dirW = if (w >= 256) 0 else w
+            val dirH = if (h >= 256) 0 else h
+            out.write(dirW)
+            out.write(dirH)
+            out.write(0)
+            out.write(0)
+            writeU16LE(out, 1)
+            writeU16LE(out, 32)
+            writeU32LE(out, payloads[i].size)
+            writeU32LE(out, offsets[i])
+        }
+
+        for (payload in payloads) {
+            out.write(payload)
+        }
+
+        return out.toByteArray()
     }
 
     private fun writeU16LE(out: OutputStream, v: Int) {

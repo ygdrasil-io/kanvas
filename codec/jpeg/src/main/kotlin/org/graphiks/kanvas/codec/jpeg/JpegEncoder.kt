@@ -7,6 +7,9 @@ import org.graphiks.math.SkColorGetR
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkPixmap
+import org.skia.foundation.SkColorSpace
+import org.skia.foundation.SkEncodedOrigin
+import org.skia.foundation.SkICC
 import org.skia.foundation.stream.SkWStream
 import java.io.ByteArrayOutputStream
 import java.io.OutputStream
@@ -30,6 +33,7 @@ public object JpegEncoder {
         val quality: Int = 100,
         val downsample: Downsample = Downsample.k420,
         val alphaOption: AlphaOption = AlphaOption.kIgnore,
+        val orientation: SkEncodedOrigin = SkEncodedOrigin.kTopLeft,
     ) {
         init {
             require(quality in 0..100) { "quality must be in [0, 100], got $quality" }
@@ -109,6 +113,12 @@ private class JpegWriter(
         materializeRgb()
         writeMarker(SOI)
         writeApp0()
+        if (!bitmap.colorSpace.isSRGB()) {
+            writeIccApp2()
+        }
+        if (options.orientation != SkEncodedOrigin.kTopLeft) {
+            writeExifApp1()
+        }
         writeDqt()
         writeSof0()
         writeDht(0, 0, STD_DC_LUMA_BITS, STD_DC_VALUES)
@@ -327,6 +337,47 @@ private class JpegWriter(
         out.write(payload)
     }
 
+    private fun writeIccApp2() {
+        val iccBytes = SkICC.WriteToICC(bitmap.colorSpace.transferFn, bitmap.colorSpace.toXYZD50)
+        val signature = byteArrayOf(0x49, 0x43, 0x43, 0x5F, 0x50, 0x52, 0x4F, 0x46, 0x49, 0x4C, 0x45, 0x00)
+        val maxChunkPayload = 65519
+        val totalChunks = (iccBytes.size + maxChunkPayload - 1) / maxChunkPayload
+        var offset = 0
+        for (i in 1..totalChunks) {
+            val chunkSize = minOf(maxChunkPayload, iccBytes.size - offset)
+            val chunkPayload = ByteArray(chunkSize)
+            iccBytes.copyInto(chunkPayload, 0, offset, offset + chunkSize)
+            val segmentPayload = signature + byteArrayOf(i.toByte(), totalChunks.toByte()) + chunkPayload
+            writeSegment(APP2, segmentPayload)
+            offset += chunkSize
+        }
+    }
+
+    private fun writeExifApp1() {
+        val orientationValue = options.orientation.exifValue
+        val tiffPayload = ByteArrayOutputStream()
+        tiffPayload.write('M'.code)
+        tiffPayload.write('M'.code)
+        writeU16BE(tiffPayload, 0x002A)
+        writeU32BE(tiffPayload, 8)
+        writeU16BE(tiffPayload, 1)
+        writeU16BE(tiffPayload, 0x0112)
+        writeU16BE(tiffPayload, 3)
+        writeU32BE(tiffPayload, 1)
+        writeU16BE(tiffPayload, orientationValue)
+        writeU16BE(tiffPayload, 0)
+        writeU32BE(tiffPayload, 0)
+        val segmentPayload = byteArrayOf(0x45, 0x78, 0x69, 0x66, 0x00, 0x00) + tiffPayload.toByteArray()
+        writeSegment(APP1, segmentPayload)
+    }
+
+    private fun writeU32BE(out: ByteArrayOutputStream, value: Int) {
+        out.write((value ushr 24) and 0xFF)
+        out.write((value ushr 16) and 0xFF)
+        out.write((value ushr 8) and 0xFF)
+        out.write(value and 0xFF)
+    }
+
     private fun writeMarker(marker: Int) {
         out.write(0xFF)
         out.write(marker)
@@ -451,6 +502,8 @@ private const val COMPONENT_CR = 2
 private const val SOI = 0xD8
 private const val EOI = 0xD9
 private const val APP0 = 0xE0
+private const val APP1 = 0xE1
+private const val APP2 = 0xE2
 private const val DQT = 0xDB
 private const val SOF0 = 0xC0
 private const val DHT = 0xC4

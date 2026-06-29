@@ -6,10 +6,22 @@ import java.io.OutputStream
 
 public object GifEncoder {
 
-    public data class Options(
-        /** 0 = no loop, -1 = infinite, positive = play N times */
-        val loopCount: Int = 0,
+    public data class Frame(
+        val bitmap: SkBitmap,
+        val delayCs: Int = 0,
+        val disposal: Int = DISPOSAL_NONE,
+        val left: Int = 0,
+        val top: Int = 0,
     )
+
+    public data class Options(
+        val loopCount: Int = 0,
+        val frames: List<Frame>? = null,
+    )
+
+    const val DISPOSAL_NONE = 0
+    const val DISPOSAL_BACKGROUND = 2
+    const val DISPOSAL_PREVIOUS = 3
 
     private val defaultOptions = Options()
 
@@ -31,6 +43,10 @@ public object GifEncoder {
     }
 
     private fun writeGif(out: OutputStream, bitmap: SkBitmap, w: Int, h: Int, options: Options) {
+        if (options.frames != null && options.frames.isNotEmpty()) {
+            writeAnimatedGif(out, options.frames, options)
+            return
+        }
         val palette = buildPalette(bitmap, w, h)
         val colorDepth = colorTableBitDepth(palette.size)
 
@@ -77,11 +93,85 @@ public object GifEncoder {
         out.write(0x3B)
     }
 
+    private fun writeAnimatedGif(out: OutputStream, frames: List<Frame>, options: Options) {
+        val allBitmaps = frames.map { it.bitmap }
+        val canvasW = allBitmaps.maxOf { it.width }
+        val canvasH = allBitmaps.maxOf { it.height }
+        val palette = buildPaletteMulti(allBitmaps)
+        val colorDepth = colorTableBitDepth(palette.size)
+
+        out.write("GIF89a".toByteArray())
+        writeU16LE(out, canvasW)
+        writeU16LE(out, canvasH)
+        val packed = 0x80 or ((colorDepth - 1) and 0x07)
+        out.write(packed)
+        out.write(0)
+        out.write(0)
+
+        for (color in palette) {
+            out.write((color shr 16) and 0xFF)
+            out.write((color shr 8) and 0xFF)
+            out.write(color and 0xFF)
+        }
+        for (i in palette.size until (1 shl colorDepth)) {
+            out.write(0); out.write(0); out.write(0)
+        }
+
+        val loopCount = if (options.loopCount < 0) 0 else options.loopCount
+        out.write(0x21)
+        out.write(0xFF)
+        out.write(11)
+        out.write("NETSCAPE2.0".toByteArray())
+        out.write(3)
+        out.write(1)
+        writeU16LE(out, loopCount)
+        out.write(0)
+
+        for (frame in frames) {
+            val hasTransparency = frame.bitmap.width < canvasW || frame.bitmap.height < canvasH || frame.left != 0 || frame.top != 0
+            val transparentIdx = if (hasTransparency) palette.size else 0
+
+            val packedGce = ((frame.disposal and 0x07) shl 2) or (if (hasTransparency) 1 else 0)
+            out.write(0x21)
+            out.write(0xF9)
+            out.write(0x04)
+            out.write(packedGce)
+            writeU16LE(out, frame.delayCs)
+            out.write(transparentIdx)
+            out.write(0x00)
+
+            out.write(0x2C)
+            writeU16LE(out, frame.left)
+            writeU16LE(out, frame.top)
+            writeU16LE(out, frame.bitmap.width)
+            writeU16LE(out, frame.bitmap.height)
+            out.write(0)
+
+            val indices = buildIndices(frame.bitmap, frame.bitmap.width, frame.bitmap.height, palette)
+            val codeSize = maxOf(2, colorDepth)
+            out.write(codeSize)
+            lzwEncode(out, indices, codeSize)
+        }
+
+        out.write(0x3B)
+    }
+
     private fun buildPalette(bitmap: SkBitmap, w: Int, h: Int): IntArray {
         val colorSet = linkedSetOf<Int>()
         for (y in 0 until h) for (x in 0 until w) {
             colorSet.add(bitmap.getPixel(x, y) and 0x00FFFFFF)
             if (colorSet.size >= 256) break
+        }
+        return colorSet.toIntArray()
+    }
+
+    private fun buildPaletteMulti(bitmaps: List<SkBitmap>): IntArray {
+        val colorSet = linkedSetOf<Int>()
+        for (bm in bitmaps) {
+            for (y in 0 until bm.height) for (x in 0 until bm.width) {
+                colorSet.add(bm.getPixel(x, y) and 0x00FFFFFF)
+                if (colorSet.size >= 256) return colorSet.toIntArray()
+            }
         }
         return colorSet.toIntArray()
     }
