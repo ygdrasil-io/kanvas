@@ -1,7 +1,7 @@
 ---
 id: KGPU-M36-001
 title: "HEIF/AVIF gate promotion"
-status: proposed
+status: blocked
 milestone: M36
 priority: P0
 owner_area: images
@@ -122,6 +122,7 @@ rtk ./gradlew --no-daemon :gpu-renderer:test --tests '*HEIF*'
 ## Status Notes
 
 - `proposed`: Initial ticket.
+- `blocked` (2026-06-28): Blocked on KanvasImageCodec registry entry for HEIF/AVIF codec support
 
 ## Linear Labels
 

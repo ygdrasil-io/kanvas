@@ -7,51 +7,51 @@ import kotlin.test.assertTrue
 class ProductFlagsM20Test {
     @Test
     fun `textA8 defaults to enabled`() {
-        val config = GpuProductFlagConfig()
+        val config = GPUProductFlagConfig()
         assertTrue(config.textA8Enabled)
     }
 
     @Test
     fun `textSDF defaults to enabled`() {
-        val config = GpuProductFlagConfig()
+        val config = GPUProductFlagConfig()
         assertTrue(config.textSDFEnabled)
     }
 
     @Test
     fun `textA8 capability fact is included when enabled`() {
-        val config = GpuProductFlagConfig(textA8Enabled = true)
+        val config = GPUProductFlagConfig(textA8Enabled = true)
         val caps = config.buildCapabilities()
         assertTrue(caps.facts.any { it.name == "first_slice.text_a8_atlas.native" })
     }
 
     @Test
     fun `textSDF capability fact is included when enabled`() {
-        val config = GpuProductFlagConfig(textSDFEnabled = true)
+        val config = GPUProductFlagConfig(textSDFEnabled = true)
         val caps = config.buildCapabilities()
         assertTrue(caps.facts.any { it.name == "first_slice.text_sdf_atlas.native" })
     }
 
     @Test
     fun `textA8 capability fact is excluded when disabled`() {
-        val config = GpuProductFlagConfig(textA8Enabled = false)
+        val config = GPUProductFlagConfig(textA8Enabled = false)
         val caps = config.buildCapabilities()
         assertTrue(caps.facts.none { it.name == "first_slice.text_a8_atlas.native" })
     }
 
     @Test
     fun `textSDF capability fact is excluded when disabled`() {
-        val config = GpuProductFlagConfig(textSDFEnabled = false)
+        val config = GPUProductFlagConfig(textSDFEnabled = false)
         val caps = config.buildCapabilities()
         assertTrue(caps.facts.none { it.name == "first_slice.text_sdf_atlas.native" })
     }
 
     @Test
     fun `textA8 property constant is defined`() {
-        assertEquals("kanvas.gpu.renderer.product.textA8", GpuProductFlagConfig.TextA8Property)
+        assertEquals("kanvas.gpu.renderer.product.textA8", GPUProductFlagConfig.TextA8Property)
     }
 
     @Test
     fun `textSDF property constant is defined`() {
-        assertEquals("kanvas.gpu.renderer.product.textSDF", GpuProductFlagConfig.TextSDFProperty)
+        assertEquals("kanvas.gpu.renderer.product.textSDF", GPUProductFlagConfig.TextSDFProperty)
     }
 }

@@ -10,6 +10,36 @@ value class GPUTextOrderingToken(val value: String) {
     }
 }
 
+/** Font key for referencing a specific typeface in the GPU text stack. */
+@JvmInline
+value class GPUFontKey(val value: String) {
+    init {
+        require(value.isNotBlank()) { "GPUFontKey.value must not be blank" }
+    }
+}
+
+/** Reference to a specific page within a text atlas. */
+@JvmInline
+value class GPUAtlasPageRef(val value: String) {
+    init {
+        require(value.isNotBlank()) { "GPUAtlasPageRef.value must not be blank" }
+    }
+}
+
+/** Per-component alpha modulation for subpixel LCD rendering. */
+@JvmInline
+value class GPUPerComponentAlphaModulation(val modulation: String) {
+    init {
+        require(modulation.isNotBlank()) { "GPUPerComponentAlphaModulation.modulation must not be blank" }
+    }
+}
+
+/** Subpixel LCD WGSL module descriptor. */
+data class GPUSubpixelLCDWGSL(
+    val moduleId: String,
+    val entryPoint: String,
+)
+
 /** Text run plan after pure Kotlin shaping/layout. */
 data class GPUTextRunPlan(
     val layoutId: String,
@@ -218,6 +248,9 @@ object GPUTextDiagnosticCodes {
     const val DESTINATION_READ_UNACCEPTED: String = "unsupported.text.destination_read_unaccepted"
     const val CLIP_ROUTE_UNACCEPTED: String = "unsupported.text.clip_route_unaccepted"
     const val CPU_RENDERED_TEXTURE_FORBIDDEN: String = "unsupported.text.cpu_rendered_texture_forbidden"
+    const val SUBPIXEL_PIXEL_GEOMETRY: String = "unsupported.text.subpixel_pixel_geometry"
+    const val SUBPIXEL_TARGET_FORMAT: String = "unsupported.text.subpixel_target_format"
+    const val FALLBACK_EXHAUSTED: String = "unsupported.text.fallback_exhausted"
 
     val all: List<String> = listOf(
         PAYLOAD_NONDUMPABLE,
@@ -249,6 +282,9 @@ object GPUTextDiagnosticCodes {
         DESTINATION_READ_UNACCEPTED,
         CLIP_ROUTE_UNACCEPTED,
         CPU_RENDERED_TEXTURE_FORBIDDEN,
+        SUBPIXEL_PIXEL_GEOMETRY,
+        SUBPIXEL_TARGET_FORMAT,
+        FALLBACK_EXHAUSTED,
     )
 }
 

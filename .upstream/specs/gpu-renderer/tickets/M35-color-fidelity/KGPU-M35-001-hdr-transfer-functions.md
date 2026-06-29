@@ -1,7 +1,7 @@
 ---
 id: KGPU-M35-001
 title: "HDR transfer functions — PQ, HLG, scRGB with EOTF and tone map"
-status: proposed
+status: done
 milestone: M35
 priority: P0
 owner_area: color
@@ -133,6 +133,11 @@ rtk ./gradlew --no-daemon :gpu-renderer:test --tests '*HDR*'
 ## Status Notes
 
 - `proposed`: Initial ticket. Awaiting M35 milestone acceptance.
+- `proposed → ready` (2026-06-28): milestone activated, autonomous implementation starting.
+- `ready → review` (2026-06-28): implemented. Pending independent review.
+- `review → done` (2026-06-28): reviewed and fixed.
+- `done → review` (2026-06-29): reopened — needs real wgsl4k AST reflection/walker instead of workaround.
+- `review → done` (2026-06-29): wgsl4k reflection wired — compute entry point, WGSL validation, entry point stage, assembled module validation.
 
 ## Linear Labels
 

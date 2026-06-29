@@ -32,6 +32,9 @@ decisions (KGPU-M10-001, KGPU-M10-002) and the
 |---|---|---|---|---|---|---|---|---|---|
 | KGPU-M32-001 - Per-family decommission decision matrix | `done` | `P1` | `ReferenceOnly` | `CPUReferenceOnly` | `false` | `false` | `legacy-cleanup` | [KGPU-M10-001] | `gpu-raster legacy` |
 | KGPU-M32-002 - Close M31-005: bridge ↔ legacy gpu-raster pixel parity or formal refusal | `done` | `P0` | `ImplementationCandidate` | `CPUReferenceOnly` | `false` | `true` | `product-validation` | [KGPU-M31-005, KGPU-M31-006] | `gpu-raster-legacy-path` |
+| KGPU-M32-003 - Legacy retirement-gate authorization for all 12 families | `done` | `P0` | `PolicyGated` | `CPUReferenceOnly` | `false` | `false` | `legacy-cleanup` | [KGPU-M10-003, KGPU-M10-002, KGPU-M32-002] | `gpu-raster legacy` |
+| KGPU-M32-004 - Relocate shared WGSL/conformance/runtime-shader/gate infra out of :gpu-raster | `proposed` | `P0` | `PolicyGated` | `CPUReferenceOnly` | `false` | `false` | `legacy-cleanup` | [KGPU-M32-003] | `gpu-raster legacy` |
+| KGPU-M32-005 - Remove legacy device, rollback branch, and module include | `done` | `P0` | `PolicyGated` | `CPUReferenceOnly` | `false` | `false` | `legacy-cleanup` | [KGPU-M32-004] | `gpu-raster legacy` |
 | KGPU-M32-003 - Legacy retirement-gate authorization for all 12 families | `review` | `P0` | `PolicyGated` | `CPUReferenceOnly` | `false` | `false` | `legacy-cleanup` | [KGPU-M10-003, KGPU-M10-002, KGPU-M32-002] | `gpu-raster legacy` |
 | KGPU-M32-004 - Relocate shared WGSL/conformance/runtime-shader/gate infra out of :gpu-raster | `proposed` | `P0` | `PolicyGated` | `CPUReferenceOnly` | `false` | `false` | `legacy-cleanup` | [KGPU-M32-003] | `gpu-raster legacy` |
 | KGPU-M32-005 - Remove legacy device, rollback branch, and module include | `review` | `P0` | `PolicyGated` | `CPUReferenceOnly` | `false` | `false` | `legacy-cleanup` | [KGPU-M32-004] | `gpu-raster legacy` |
@@ -45,6 +48,19 @@ ticket per `GpuRendererLegacyRouteFamily` row. All are `status: review`.
 
 | Ticket | Status | familyId | decision | route_kind |
 |---|---|---|---|
+| KGPU-M32-010 | `done` | `material-paint` | port (SolidColor) / refuse (gradients + shader pipeline) | `GPUNative` |
+| KGPU-M32-011 | `done` | `solid-rect-drawpaint` | port | `GPUNative` |
+| KGPU-M32-012 | `done` | `rounded-rect-gradients` | port (solid uniform rrect) / refuse (gradients + non-uniform radii) | `GPUNative` |
+| KGPU-M32-013 | `done` | `rect-rrect-stroke` | refuse | `RefuseDiagnostic` |
+| KGPU-M32-014 | `done` | `device-scissor-simple-clips` | port (WideOpen/DeviceRect) / refuse (complex clips) | `GPUNative` |
+| KGPU-M32-015 | `done` | `path-fill-stroke` | port (path fill) / refuse (path stroke) | `GPUNative` |
+| KGPU-M32-016 | `done` | `images-bitmap-codecs-uploads` | refuse (dependency-gated) | `RefuseDiagnostic` |
+| KGPU-M32-017 | `done` | `savelayer-destination-read-filters` | refuse (dependency-gated) | `RefuseDiagnostic` |
+| KGPU-M32-018 | `done` | `text-glyphs` | port (A8 text) / refuse (color/SDF/emoji) | `GPUNative` |
+| KGPU-M32-019 | `done` | `runtime-effects-color-blends` | port (SrcOver) / refuse (other blends, color filters, runtime effects, color management) | `GPUNative` |
+| KGPU-M32-020 | `done` | `vertices-points-meshes` | refuse (dependency-gated) | `RefuseDiagnostic` |
+| KGPU-M32-021 | `done` | `clear-discard-target-background` | port (trivial — surface init) | `GPUNative` |
+| KGPU-M32-022 | `done` | `clear-discard-target-background` | route ownership assignment (replacement ticket) | `GPUNative` |
 | KGPU-M32-010 | `review` | `material-paint` | port (SolidColor) / refuse (gradients + shader pipeline) | `GPUNative` |
 | KGPU-M32-011 | `review` | `solid-rect-drawpaint` | port | `GPUNative` |
 | KGPU-M32-012 | `review` | `rounded-rect-gradients` | port (solid uniform rrect) / refuse (gradients + non-uniform radii) | `GPUNative` |

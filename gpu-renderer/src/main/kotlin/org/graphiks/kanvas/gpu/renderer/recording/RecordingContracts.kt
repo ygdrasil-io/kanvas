@@ -2,7 +2,7 @@ package org.graphiks.kanvas.gpu.renderer.recording
 
 import org.graphiks.kanvas.gpu.renderer.analysis.GPUDrawAnalysis
 import org.graphiks.kanvas.gpu.renderer.analysis.GPUDrawAnalysisDecision
-import org.graphiks.kanvas.gpu.renderer.product.GpuProductFlagConfig
+import org.graphiks.kanvas.gpu.renderer.product.GPUProductFlagConfig
 import org.graphiks.kanvas.gpu.renderer.analysis.GPUDrawAnalysisRecord
 import org.graphiks.kanvas.gpu.renderer.analysis.GPUAnalysisDependency
 import org.graphiks.kanvas.gpu.renderer.analysis.GPUAnalysisDiagnostic
@@ -211,7 +211,7 @@ object GPURecordingOrder {
  */
 class GPURecorder(
     private val recordingId: GPURecordingID,
-    private val capabilities: GPUCapabilities = GpuProductFlagConfig.fromSystemProperties().buildCapabilities(),
+    private val capabilities: GPUCapabilities = GPUProductFlagConfig.fromSystemProperties().buildCapabilities(),
     private val sharedScope: GPUSharedScope = GPUSharedScope("shared.default"),
     private val recorderScope: GPURecorderScope = GPURecorderScope("recorder.${recordingId.value}"),
     private val frameScope: GPUFrameScope = GPUFrameScope("frame.default"),

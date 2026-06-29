@@ -9,13 +9,13 @@ class ProductFlagsM23Test {
 
     @Test
     fun `performanceGates defaults to enabled`() {
-        val config = GpuProductFlagConfig()
+        val config = GPUProductFlagConfig()
         assertTrue(config.performanceGatesEnabled)
     }
 
     @Test
     fun `performanceGates flag produces capability fact when enabled`() {
-        val config = GpuProductFlagConfig()
+        val config = GPUProductFlagConfig()
         val capabilities = config.buildCapabilities()
         val factsByName = capabilities.facts.associateBy { it.name }
         assertTrue(factsByName.containsKey("first_slice.performance_gates.native"))
@@ -23,7 +23,7 @@ class ProductFlagsM23Test {
 
     @Test
     fun `disabled performanceGates flag does not produce capability fact`() {
-        val config = GpuProductFlagConfig(performanceGatesEnabled = false)
+        val config = GPUProductFlagConfig(performanceGatesEnabled = false)
         val capabilities = config.buildCapabilities()
         val factNames = capabilities.facts.map { it.name }
         assertFalse("first_slice.performance_gates.native" in factNames)
@@ -31,10 +31,10 @@ class ProductFlagsM23Test {
 
     @Test
     fun `disable property overrides performanceGates flag`() {
-        val config = GpuProductFlagConfig.fromSystemProperties(
+        val config = GPUProductFlagConfig.fromSystemProperties(
             propertyReader = { key ->
                 when (key) {
-                    GpuProductFlagConfig.PerformanceGatesDisableProperty -> "true"
+                    GPUProductFlagConfig.PerformanceGatesDisableProperty -> "true"
                     else -> null
                 }
             },
@@ -44,7 +44,7 @@ class ProductFlagsM23Test {
 
     @Test
     fun `empty property reader keeps performanceGates enabled`() {
-        val config = GpuProductFlagConfig.fromSystemProperties(
+        val config = GPUProductFlagConfig.fromSystemProperties(
             propertyReader = { null },
         )
         assertTrue(config.performanceGatesEnabled)
@@ -54,7 +54,7 @@ class ProductFlagsM23Test {
     fun `performanceGates property constant is defined`() {
         assertEquals(
             "kanvas.gpu.renderer.product.performanceGates",
-            GpuProductFlagConfig.PerformanceGatesProperty,
+            GPUProductFlagConfig.PerformanceGatesProperty,
         )
     }
 
@@ -62,7 +62,7 @@ class ProductFlagsM23Test {
     fun `performanceGates disable property constant is defined`() {
         assertEquals(
             "kanvas.gpu.renderer.product.performanceGates.disable",
-            GpuProductFlagConfig.PerformanceGatesDisableProperty,
+            GPUProductFlagConfig.PerformanceGatesDisableProperty,
         )
     }
 }

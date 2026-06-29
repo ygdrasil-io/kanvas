@@ -1,6 +1,7 @@
 ---
 id: KGPU-M32-011
 title: "Legacy decommission: solid-rect-drawpaint port (FillRect / drawPaint rect)"
+status: done
 status: review
 milestone: M32
 priority: P0
@@ -122,6 +123,7 @@ rtk git diff --check
 
 
 - `review` (2026-06-26): promoted after maintainer review of PR #1892 (https://github.com/ygdrasil-io/kanvas/pull/1892) — no blocking issues found.
+- `review → done` (2026-06-28): independently reviewed, evidence accepted, port-or-refuse decision validated.
 
 ## Linear Labels
 

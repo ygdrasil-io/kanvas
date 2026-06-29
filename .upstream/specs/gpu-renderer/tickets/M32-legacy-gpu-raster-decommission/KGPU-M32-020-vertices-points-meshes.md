@@ -1,6 +1,7 @@
 ---
 id: KGPU-M32-020
 title: "Legacy decommission: vertices-points-meshes formal refusal (dependency-gated)"
+status: done
 status: review
 milestone: M32
 priority: P1
@@ -127,6 +128,7 @@ rtk git diff --check
 
 
 - `review` (2026-06-26): promoted after maintainer review of PR #1892 (https://github.com/ygdrasil-io/kanvas/pull/1892) — no blocking issues found.
+- `review → done` (2026-06-28): independently reviewed, evidence accepted, port-or-refuse decision validated.
 
 ## Linear Labels
 

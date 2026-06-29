@@ -1,7 +1,7 @@
 ---
 id: KGPU-M38-003
 title: "Dynamic shader graph assembly"
-status: proposed
+status: done
 milestone: M38
 priority: P1
 owner_area: runtimeeffects
@@ -60,8 +60,8 @@ than dispatching each node in isolation.
 
 ## Dependencies
 
-- `wgsl4k` must support multi-fragment module assembly (parsing and combining
-  multiple WGSL fragments into a single valid module).
+- Assembly (merge, cycle detection, topological sort, prefixing) is done in
+  Kanvas; wgsl4k validates the single combined WGSL module.
 
 ## Graphite Algorithm References
 
@@ -139,6 +139,12 @@ rtk ./gradlew --no-daemon :gpu-renderer:test --tests '*ShaderGraph*'
 ## Status Notes
 
 - `proposed`: Initial ticket.
+- `blocked` (2026-06-28): Blocked on wgsl4k multi-fragment module assembly support
+- blocked → ready (2026-06-28): unblocked — approach is Kanvas assembles WGSL fragments into single module, wgsl4k validates final module (not multi-fragment).
+- ready → review (2026-06-28): shader graph assembly implemented (Kanvas merge, cycle detection, topo sort, prefixing, budget enforcement).
+- `review → done` (2026-06-29): promoted — independent review accepted.
+- `done → review` (2026-06-29): reopened — needs real wgsl4k AST reflection/walker instead of workaround.
+- `review → done` (2026-06-29): wgsl4k reflection wired — compute entry point, WGSL validation, entry point stage, assembled module validation.
 
 ## Linear Labels
 

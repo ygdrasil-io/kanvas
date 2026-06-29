@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sceneCount": 52,
+  "sceneCount": 87,
   "scenes": [
     {
       "sceneId": "solid-card-stack",
@@ -651,6 +651,42 @@
       }
     },
     {
+      "sceneId": "custom-runtime-effect-valid-tile",
+      "title": "Custom Runtime Effect Valid Tile",
+      "description": "Registers a custom WGSL shader producing a solid color, renders a tile with it, and verifies GPU output.",
+      "tags": ["RuntimeEffect","Rect"],
+      "kgpuMilestones": ["M32"],
+      "ticketIds": ["KGPU-M32-019"],
+      "rStages": [],
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Enregistre un shader WGSL personnalise produisant une couleur unie, affiche un pave avec ce shader et verifie la sortie GPU.",
+          "validates": "Valide CustomRuntimeEffectTile avec wgslSource et uniformSchema personnalises.",
+          "nonClaims": "Ne revendique pas les runtime effects enregistres ni la compilation SkSL dynamique.",
+          "evidence": "Preuve WebGPU offscreen avec sortie GPU verifiee."
+        }
+      }
+    },
+    {
+      "sceneId": "custom-runtime-effect-unregistered-refusal",
+      "title": "Custom Runtime Effect Unregistered Refusal",
+      "description": "Attempts to execute a custom effect that was never registered. Must refuse with stable diagnostics.",
+      "tags": ["RuntimeEffect","Rect"],
+      "kgpuMilestones": ["M32"],
+      "ticketIds": ["KGPU-M32-019"],
+      "rStages": [],
+      "expectation": "ShouldRefuse:unsupported.runtime_effect.custom_wgsl_not_registered",
+      "humanDocs": {
+        "fr": {
+          "intention": "Tente d'executer un effet personnalise jamais enregistre. Doit refuser avec un diagnostic stable.",
+          "validates": "Valide le refus stable CustomRuntimeEffectTile avec customEffectId null.",
+          "nonClaims": "Ne revendique pas l'execution runtime effect non enregistree.",
+          "evidence": "Preuve WebGPU offscreen avec diagnostic de refus."
+        }
+      }
+    },
+    {
       "sceneId": "blend-mode-strip",
       "title": "Blend Mode Strip",
       "description": "Rect strip reserved for future explicit blend coverage.",
@@ -935,6 +971,600 @@
           "validates": "Valide un board de comparaison rrect/rect borne avec lanes de parite, evidence et blockers.",
           "nonClaims": "Ne revendique pas remplacement accepte ni retrait effectif de la route legacy.",
           "evidence": "Preuve WebGPU offscreen et Kadre windowed."
+        }
+      }
+    },
+    {
+      "sceneId": "rounded-rect-solids",
+      "title": "Rounded Rect Solids",
+      "description": "FillRRect commands with solid colors and varying radii exercising the native rrect coverage route.",
+      "tags": ["RRect"],
+      "kgpuMilestones": ["M10"],
+      "ticketIds": [],
+      "rStages": [],
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Verifier trois rrects solides avec rayons varies.",
+          "validates": "Valide FillRRect avec rayons petits, moyens et grands.",
+          "nonClaims": "Ne revendique pas rayons par coin, gradients ou transforms avances.",
+          "evidence": "Preuve WebGPU offscreen et Kadre windowed."
+        }
+      }
+    },
+    {
+      "sceneId": "linear-gradient-lanes",
+      "title": "Linear Gradient Lanes",
+      "description": "Linear gradient rects with clamped tile mode exercising native gradient route evidence.",
+      "tags": ["Rect","Gradient"],
+      "kgpuMilestones": ["M10"],
+      "ticketIds": [],
+      "rStages": [],
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Verifier trois degradees lineaires bornes avec clamp.",
+          "validates": "Valide LinearGradientRect horizontal, vertical et diagonal.",
+          "nonClaims": "Ne revendique pas repeat, mirror, decal, local matrix ou plus de deux arrets.",
+          "evidence": "Preuve WebGPU offscreen et Kadre windowed."
+        }
+      }
+    },
+    {
+      "sceneId": "scissor-overlay",
+      "title": "Scissor Overlay",
+      "description": "Fill rects inside a scissor clip showing native scissor route evidence.",
+      "tags": ["Rect","Clip"],
+      "kgpuMilestones": ["M10"],
+      "ticketIds": [],
+      "rStages": [],
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Verifier un scissor simple avec rectangles bornes.",
+          "validates": "Valide Clip device-rect et FillRect ordonnes.",
+          "nonClaims": "Ne revendique pas clip rrect, stencil-cover ni clip stack complexe.",
+          "evidence": "Preuve WebGPU offscreen et Kadre windowed."
+        }
+      }
+    },
+    {
+      "sceneId": "radial-swatch",
+      "title": "Radial Swatch",
+      "description": "Three radial gradient rects with varying centers and radii exercising native radial gradient route evidence.",
+      "tags": ["Rect","Gradient"],
+      "kgpuMilestones": ["M14"],
+      "ticketIds": [],
+      "rStages": [],
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Verifier trois degradees radiales avec centres et rayons varies.",
+          "validates": "Valide RadialGradientRect avec centres decales et rayons differs.",
+          "nonClaims": "Ne revendique pas repeat, mirror, decal, plus de deux arrets ou transforms.",
+          "evidence": "Preuve WebGPU offscreen et Kadre windowed."
+        }
+      }
+    },
+    {
+      "sceneId": "sweep-disk",
+      "title": "Sweep Disk",
+      "description": "Three sweep gradient rects with different start/end angles exercising native sweep gradient route evidence.",
+      "tags": ["Rect","Gradient"],
+      "kgpuMilestones": ["M14"],
+      "ticketIds": [],
+      "rStages": [],
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Verifier trois degradees angulaires avec angles de depart/fin varies.",
+          "validates": "Valide SweepGradientRect avec sweeps 360, 180 et 90 degres.",
+          "nonClaims": "Ne revendique pas repeat, mirror, decal, plus de deux arrets ou transforms.",
+          "evidence": "Preuve WebGPU offscreen et Kadre windowed."
+        }
+      }
+    },
+    {
+      "sceneId": "path-fill-stencil",
+      "title": "Path Fill Stencil",
+      "description": "Non-convex star path filled via two-pass stencil-cover rendering.",
+      "tags": ["Path"],
+      "kgpuMilestones": ["M15"],
+      "ticketIds": ["KGPU-M15-002"],
+      "rStages": [],
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Remplir une etoile non-convexe via stencil-cover deux passes.",
+          "validates": "Valide PathFillStencil avec chemin etoile et fond blanc.",
+          "nonClaims": "Ne revendique pas stencil-cover GPU natif ni activation produit.",
+          "evidence": "Preuve WebGPU offscreen avec sortie PNG pour la scene."
+        }
+      }
+    },
+    {
+      "sceneId": "convex-fan-mesh",
+      "title": "Convex Fan Mesh",
+      "description": "Convex octagon path filled via single-pass convex fan rendering.",
+      "tags": ["Path"],
+      "kgpuMilestones": ["M15"],
+      "ticketIds": ["KGPU-M15-003"],
+      "rStages": [],
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Remplir un octogone convexe via convex fan monopasse.",
+          "validates": "Valide ConvexFanMesh avec octogone regulier et fond blanc.",
+          "nonClaims": "Ne revendique pas stencil-cover pour chemins convexes ni activation produit.",
+          "evidence": "Preuve WebGPU offscreen avec sortie PNG pour la scene."
+        }
+      }
+    },
+    {
+      "sceneId": "savelayer-isolated",
+      "title": "SaveLayer Isolated",
+      "description": "Translucent group rendered into an offscreen layer target then composited onto a background.",
+      "tags": ["Layer"],
+      "kgpuMilestones": ["M18"],
+      "ticketIds": [],
+      "rStages": [],
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Rendre un groupe translucide via offscreen saveLayer.",
+          "validates": "Valide SaveLayer avec cible isolee, rendu enfant et composite srcOver.",
+          "nonClaims": "Ne revendique pas saveLayer general, filtres, destination-read ou activation produit.",
+          "evidence": "Preuve WebGPU offscreen avec execution saveLayer."
+        }
+      }
+    },
+    {
+      "sceneId": "savelayer-group-alpha",
+      "title": "SaveLayer Group Alpha",
+      "description": "Group-alpha layer with two overlapping opaque children; the overlap region proves true layer isolation (uniform 50% blend) versus naive direct compositing.",
+      "tags": ["Layer","Blend"],
+      "kgpuMilestones": ["M28"],
+      "ticketIds": ["KGPU-M28-006"],
+      "rStages": [],
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Rendre un saveLayer a group alpha 0.5 avec deux enfants opaques qui se chevauchent.",
+          "validates": "Valide l isolation de couche reelle: la region de chevauchement se compose a 50% uniforme comme le reste.",
+          "nonClaims": "Ne revendique pas saveLayer general, filtres, destination-read ou activation produit.",
+          "evidence": "Preuve WebGPU offscreen avec parite GPU/CPU sur le chevauchement."
+        }
+      }
+    },
+    {
+      "sceneId": "dst-read-strategy",
+      "title": "Destination Read Strategy",
+      "description": "Blend mode requiring destination read via pass-split, copy, and bind strategy.",
+      "tags": ["Layer","Blend"],
+      "kgpuMilestones": ["M18"],
+      "ticketIds": [],
+      "rStages": [],
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Verifier une strategie destination-read par copie ou intermediate.",
+          "validates": "Valide FillRect avec lecture de destination via copie et bind intermediate.",
+          "nonClaims": "Ne revendique pas framebuffer fetch, input attachment ou fallback CPU.",
+          "evidence": "Preuve WebGPU offscreen avec strategie dst-read."
+        }
+      }
+    },
+    {
+      "sceneId": "blur-radius-ladder",
+      "title": "Blur Radius Ladder",
+      "description": "Four circles with increasing blur radii demonstrating separable gaussian blur passes.",
+      "tags": ["Filter"],
+      "kgpuMilestones": ["M19"],
+      "ticketIds": [],
+      "rStages": [],
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Verifier un echelon de rayons de flou gaussien.",
+          "validates": "Valide quatre rectangles avec blur radii croissants via separable gaussian.",
+          "nonClaims": "Ne revendique pas blur texture output ni kernel CPU.",
+          "evidence": "Preuve WebGPU offscreen avec scene blur."
+        }
+      }
+    },
+    {
+      "sceneId": "color-matrix-filter",
+      "title": "Color Matrix Filter",
+      "description": "Three color transformations demonstrating 4x5 matrix multiplication via WGSL.",
+      "tags": ["Filter"],
+      "kgpuMilestones": ["M19"],
+      "ticketIds": [],
+      "rStages": [],
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Verifier trois transformations couleur via matrice 4x5 WGSL.",
+          "validates": "Valide identity, saturation et hue-rotate via color matrix filter.",
+          "nonClaims": "Ne revendique pas color matrix filter produit ni pipeline GPU separe.",
+          "evidence": "Preuve WebGPU offscreen avec scene color matrix."
+        }
+      }
+    },
+    {
+      "sceneId": "gaussian-blur-photo",
+      "title": "Gaussian Blur Photo",
+      "description": "Gaussian blur filter applied to a colored rect using separable gaussian passes.",
+      "tags": ["Filter"],
+      "kgpuMilestones": ["M19"],
+      "ticketIds": [],
+      "rStages": [],
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Verifier un flou gaussien applique a un rectangle colore.",
+          "validates": "Valide GaussianBlur via passes gaussiennes separables sur un FillRect.",
+          "nonClaims": "Ne revendique pas blur texture output ni kernel CPU.",
+          "evidence": "Preuve WebGPU offscreen avec scene blur."
+        }
+      }
+    },
+    {
+      "sceneId": "color-matrix-tint",
+      "title": "Color Matrix Tint",
+      "description": "Color matrix filter transformation applied to a colored rect via 4x5 WGSL matrix.",
+      "tags": ["Filter"],
+      "kgpuMilestones": ["M19"],
+      "ticketIds": [],
+      "rStages": [],
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Verifier une teinte couleur via matrice 4x5 WGSL.",
+          "validates": "Valide ColorMatrix filter avec transformation sur un FillRect vert.",
+          "nonClaims": "Ne revendique pas color matrix filter produit ni pipeline GPU separe.",
+          "evidence": "Preuve WebGPU offscreen avec scene color matrix."
+        }
+      }
+    },
+    {
+      "sceneId": "stroke-and-filter-card",
+      "title": "Stroke and Filter Card",
+      "description": "Combined scene with a stroked rectangle and a Gaussian blur filter applied to a fill rect.",
+      "tags": ["Stroke","Filter"],
+      "kgpuMilestones": ["M16","M19"],
+      "ticketIds": [],
+      "rStages": [],
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Verifier une carte combinant contour stroke et flou gaussien.",
+          "validates": "Valide Stroke et FillRect avec blur dans une meme scene ordonnee.",
+          "nonClaims": "Ne revendique pas path coverage ni DAG filtre general.",
+          "evidence": "Preuve WebGPU offscreen avec scene combinee."
+        }
+      }
+    },
+    {
+      "sceneId": "glyph-atlas-strip",
+      "title": "Glyph Atlas Strip",
+      "description": "Line of A8 atlas glyphs sampling from a glyph texture atlas.",
+      "tags": ["Text"],
+      "kgpuMilestones": ["M20"],
+      "ticketIds": [],
+      "rStages": [],
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Verifier un echantillonnage atlas glyph A8.",
+          "validates": "Valide TextRun avec glyph route a8-atlas et diagnostic rect.",
+          "nonClaims": "Ne revendique pas atlas glyph A8 executable ni rendu glyph texture.",
+          "evidence": "Preuve WebGPU offscreen avec scene text."
+        }
+      }
+    },
+    {
+      "sceneId": "sdf-glyph-scale",
+      "title": "SDF Glyph Scale",
+      "description": "Same text rendered at 3 sizes with SDF smoothstep sampling.",
+      "tags": ["Text"],
+      "kgpuMilestones": ["M20"],
+      "ticketIds": [],
+      "rStages": [],
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Verifier trois tailles de glyphe SDF avec smoothstep.",
+          "validates": "Valide TextRun avec glyph route sdf-atlas pour 3 tailles de fonte.",
+          "nonClaims": "Ne revendique pas atlas SDF executable ni rendu glyph texture.",
+          "evidence": "Preuve WebGPU offscreen avec scene text."
+        }
+      }
+    },
+    {
+      "sceneId": "runtime-effect-uniform",
+      "title": "Runtime Effect Uniform",
+      "description": "Four SimpleRT tiles with different gColor uniforms demonstrating per-tile uniform variation.",
+      "tags": ["RuntimeEffect"],
+      "kgpuMilestones": ["M21"],
+      "ticketIds": [],
+      "rStages": [],
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Verifier quatre tuiles SimpleRT avec uniforms gColor differents.",
+          "validates": "Valide RuntimeEffectTile SimpleRT avec variation d uniforms et route registered descriptor.",
+          "nonClaims": "Ne revendique pas compilation SkSL dynamique, SpiralRT ou runtime effects enfants.",
+          "evidence": "Preuve WebGPU offscreen et Kadre windowed."
+        }
+      }
+    },
+    {
+      "sceneId": "runtime-effect-child",
+      "title": "Runtime Effect Child",
+      "description": "SimpleRT tile with a child shader reference to exercise the child-slot descriptor path.",
+      "tags": ["RuntimeEffect"],
+      "kgpuMilestones": ["M21"],
+      "ticketIds": [],
+      "rStages": [],
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Verifier une tuile SimpleRT avec reference a un shader enfant.",
+          "validates": "Valide RuntimeEffectTile avec label child-effect-tile et descriptor registered simple_rt.",
+          "nonClaims": "Ne revendique pas enfant runtime effect actif ni pipeline child compose.",
+          "evidence": "Preuve WebGPU offscreen et Kadre windowed."
+        }
+      }
+    },
+    {
+      "sceneId": "stroke-cap-join",
+      "title": "Stroke Cap Join",
+      "description": "Four strokes with different caps and joins demonstrating stroke expansion.",
+      "tags": ["Stroke"],
+      "kgpuMilestones": ["M16"],
+      "ticketIds": [],
+      "rStages": [],
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Verifier quatre styles de cap et join d expansion stroke.",
+          "validates": "Valide StrokeExpander avec butt, square, miter et bevel via FillRect proxy.",
+          "nonClaims": "Ne revendique pas stroke expansion GPU native ni activation produit.",
+          "evidence": "Preuve WebGPU offscreen avec scene stroke."
+        }
+      }
+    },
+    {
+      "sceneId": "dash-pattern-ladder",
+      "title": "Dash Pattern Ladder",
+      "description": "Four dash patterns demonstrating dash path effect intervals.",
+      "tags": ["Stroke"],
+      "kgpuMilestones": ["M16"],
+      "ticketIds": [],
+      "rStages": [],
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Verifier quatre motifs dash via decomposition d intervalles.",
+          "validates": "Valide DashPathEffect avec shorts, mediums, longs et alternes via FillRect proxy.",
+          "nonClaims": "Ne revendique pas dash path effect GPU natif ni activation produit.",
+          "evidence": "Preuve WebGPU offscreen avec scene dash."
+        }
+      }
+    },
+    {
+      "sceneId": "stroke-rect-outline",
+      "title": "Stroke Rect Outline",
+      "description": "Simple stroked rectangle outline with blue stroke color.",
+      "tags": ["Stroke"],
+      "kgpuMilestones": ["M16"],
+      "ticketIds": [],
+      "rStages": [],
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Verifier un contour de rectangle stroke bleu simple.",
+          "validates": "Valide Stroke avec strokeColor, strokeWidth et pathKind bounded-rect-path.",
+          "nonClaims": "Ne revendique pas path AA ni joins/caps complexes.",
+          "evidence": "Preuve WebGPU offscreen avec scene stroke."
+        }
+      }
+    },
+    {
+      "sceneId": "tile-mode-strip",
+      "title": "Tile Mode Strip",
+      "description": "Four bitmap bands with clamp, repeat, mirror, and decal tile mode intent markers.",
+      "tags": ["Image"],
+      "kgpuMilestones": ["M17"],
+      "ticketIds": [],
+      "rStages": [],
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Verifier quatre bandes avec modes tile clamp, repeat, mirror et decal.",
+          "validates": "Valide BitmapRect avec intentions de tile mode et echantillonnage nearest/linear.",
+          "nonClaims": "Ne revendique pas tile modes GPU natifs ni echantillonnage texture executable.",
+          "evidence": "Preuve WebGPU offscreen avec scene tile-mode."
+        }
+      }
+    },
+    {
+      "sceneId": "vertices-color-mesh",
+      "title": "Vertices Color Mesh",
+      "description": "Colored triangle mesh using per-vertex colors to exercise M22 vertices executor.",
+      "tags": ["Vertices"],
+      "kgpuMilestones": ["M22"],
+      "ticketIds": [],
+      "rStages": [],
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Rendre un maillage colore via per-vertex colors.",
+          "validates": "Valide VerticesExecutor avec triangle list, vertex colors et MeshRibbon scene.",
+          "nonClaims": "Ne revendique pas DrawVertices GPU natif ni activation produit.",
+          "evidence": "Preuve WebGPU offscreen avec scene vertices."
+        }
+      }
+    },
+    {
+      "sceneId": "mesh-ribbon-depth",
+      "title": "Mesh Ribbon Depth",
+      "description": "Three overlapping mesh ribbons with distinct colors demonstrating depth ordering.",
+      "tags": ["Vertices"],
+      "kgpuMilestones": ["M22"],
+      "ticketIds": [],
+      "rStages": [],
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Rendre trois rubans qui se chevauchent avec ordre de profondeur.",
+          "validates": "Valide MeshRibbon avec trois couches superposees et ordre paintOrder.",
+          "nonClaims": "Ne revendique pas mesh batching GPU natif ni activation produit.",
+          "evidence": "Preuve WebGPU offscreen avec scene mesh."
+        }
+      }
+    },
+    {
+      "sceneId": "performance-budget-review",
+      "title": "Performance Budget Review",
+      "description": "Performance budget lanes showing pass, warning, and fail thresholds without release-blocking or product activation claims.",
+      "tags": ["Rect","Cache"],
+      "kgpuMilestones": ["M23"],
+      "ticketIds": ["KGPU-M23-001"],
+      "rStages": [],
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Verifier les budgets performance par famille de draw.",
+          "validates": "Valide PerformanceBudgetEvaluator avec seuils pass, warning et fail.",
+          "nonClaims": "Ne revendique pas release-blocking ni activation produit.",
+          "evidence": "Preuve WebGPU offscreen avec scene budget."
+        }
+      }
+    },
+    {
+      "sceneId": "pipeline-cache-telemetry-review",
+      "title": "Pipeline Cache Telemetry Review",
+      "description": "Pipeline cache hit rate, eviction count, and module count lanes without cache readiness movement.",
+      "tags": ["Rect","Cache"],
+      "kgpuMilestones": ["M23"],
+      "ticketIds": ["KGPU-M23-002"],
+      "rStages": [],
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Verifier la telemetrie cache pipeline par scene.",
+          "validates": "Valide GPUPipelineCacheTelemetry avec hit rate, eviction et module count.",
+          "nonClaims": "Ne revendique pas cache readiness movement ni activation produit.",
+          "evidence": "Preuve WebGPU offscreen avec scene telemetry."
+        }
+      }
+    },
+    {
+      "sceneId": "frame-gate-m23-baseline",
+      "title": "Frame Gate M23 Baseline",
+      "description": "M23 60fps target and 30fps warning frame gate policy lanes with Apple M-series quarantine without release-blocking or product activation.",
+      "tags": ["Rect","Cache"],
+      "kgpuMilestones": ["M23"],
+      "ticketIds": ["KGPU-M23-003"],
+      "rStages": [],
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Verifier la politique frame gate M23 60fps/30fps.",
+          "validates": "Valide M23 baseline avec cibles 60fps et avertissement 30fps.",
+          "nonClaims": "Ne revendique pas release-blocking gate ni activation produit.",
+          "evidence": "Preuve WebGPU offscreen avec scene frame-gate."
+        }
+      }
+    },
+    {
+      "sceneId": "pm-evidence-m23-bundle",
+      "title": "PM Evidence M23 Bundle",
+      "description": "M23 PM evidence bundle showing all families activated, gates green, and rollback tested without readiness movement.",
+      "tags": ["Rect","Cache"],
+      "kgpuMilestones": ["M23"],
+      "ticketIds": ["KGPU-M23-004"],
+      "rStages": [],
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Verifier le bundle evidence PM final M23.",
+          "validates": "Valide M23PMEvidenceBundle avec familles activees et gates verts.",
+          "nonClaims": "Ne revendique pas readiness movement ni activation produit.",
+          "evidence": "Preuve WebGPU offscreen avec scene PM bundle."
+        }
+      }
+    },
+    {
+      "sceneId": "performance-gates-product-flag",
+      "title": "Performance Gates Product Flag",
+      "description": "Performance gates product flag activation lane without release-blocking or readiness movement claims.",
+      "tags": ["Rect"],
+      "kgpuMilestones": ["M23"],
+      "ticketIds": [],
+      "rStages": [],
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Verifier le flag produit performanceGatesEnabled.",
+          "validates": "Valide performanceGatesEnabled flag et sa propriete systeme disable.",
+          "nonClaims": "Ne revendique pas release-blocking ni activation produit.",
+          "evidence": "Preuve WebGPU offscreen avec scene product flag."
+        }
+      }
+    },
+    {
+      "sceneId": "path-star-gradient",
+      "title": "Path Star Gradient",
+      "description": "Non-convex star path filled with linear gradient via stencil-cover.",
+      "tags": ["Path","Gradient"],
+      "kgpuMilestones": ["M26"],
+      "ticketIds": [],
+      "rStages": [],
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Remplir une etoile non-convexe via stencil-cover avec degrade lineaire.",
+          "validates": "Valide PathFillGradient avec chemin etoile et degrade ambre vers vert.",
+          "nonClaims": "Ne revendique pas stencil-cover GPU natif ni activation produit.",
+          "evidence": "Preuve WebGPU offscreen avec sortie PNG pour la scene."
+        }
+      }
+    },
+    {
+      "sceneId": "text-a8-hello",
+      "title": "Text A8 Hello",
+      "description": "Hello Kanvas text rendered via A8 glyph atlas route.",
+      "tags": ["Text"],
+      "kgpuMilestones": ["M26"],
+      "ticketIds": [],
+      "rStages": [],
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Verifier un texte Hello Kanvas via atlas A8 active.",
+          "validates": "Valide TextRun avec route a8-atlas et fallback vide (route disponible).",
+          "nonClaims": "Ne revendique pas shaping complexe, emoji ou SDF atlas.",
+          "evidence": "Preuve WebGPU offscreen avec sortie PNG pour la scene."
+        }
+      }
+    },
+    {
+      "sceneId": "gradient-path-and-text",
+      "title": "Gradient Path And Text",
+      "description": "Gradient star path with text overlay via A8 atlas route.",
+      "tags": ["Path","Gradient","Text"],
+      "kgpuMilestones": ["M26"],
+      "ticketIds": [],
+      "rStages": [],
+      "expectation": "ShouldRender",
+      "humanDocs": {
+        "fr": {
+          "intention": "Verifier une etoile degradee avec texte superpose via atlas A8.",
+          "validates": "Valide PathFillGradient et TextRun actif en composition.",
+          "nonClaims": "Ne revendique pas stencil-cover GPU natif ni activation produit.",
+          "evidence": "Preuve WebGPU offscreen avec sortie PNG pour la scene."
         }
       }
     }

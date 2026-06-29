@@ -9,50 +9,50 @@ class ProductFlagsM19Test {
 
     @Test
     fun `blurFilter defaults to enabled`() {
-        val config = GpuProductFlagConfig()
+        val config = GPUProductFlagConfig()
         assertTrue(config.blurFilterEnabled)
     }
 
     @Test
     fun `colorMatrixFilter defaults to enabled`() {
-        val config = GpuProductFlagConfig()
+        val config = GPUProductFlagConfig()
         assertTrue(config.colorMatrixFilterEnabled)
     }
 
     @Test
     fun `blurFilter capability fact is included when enabled`() {
-        val config = GpuProductFlagConfig(blurFilterEnabled = true)
+        val config = GPUProductFlagConfig(blurFilterEnabled = true)
         val caps = config.buildCapabilities()
         assertTrue(caps.facts.any { it.name == "first_slice.blur_filter.native" })
     }
 
     @Test
     fun `colorMatrixFilter capability fact is included when enabled`() {
-        val config = GpuProductFlagConfig(colorMatrixFilterEnabled = true)
+        val config = GPUProductFlagConfig(colorMatrixFilterEnabled = true)
         val caps = config.buildCapabilities()
         assertTrue(caps.facts.any { it.name == "first_slice.color_matrix_filter.native" })
     }
 
     @Test
     fun `blurFilter property constant is defined`() {
-        assertEquals("kanvas.gpu.renderer.product.blurFilter", GpuProductFlagConfig.BlurFilterProperty)
+        assertEquals("kanvas.gpu.renderer.product.blurFilter", GPUProductFlagConfig.BlurFilterProperty)
     }
 
     @Test
     fun `colorMatrixFilter property constant is defined`() {
-        assertEquals("kanvas.gpu.renderer.product.colorMatrixFilter", GpuProductFlagConfig.ColorMatrixFilterProperty)
+        assertEquals("kanvas.gpu.renderer.product.colorMatrixFilter", GPUProductFlagConfig.ColorMatrixFilterProperty)
     }
 
     @Test
     fun `blurFilter disable property is defined`() {
-        assertEquals("kanvas.gpu.renderer.product.blurFilter.disable", GpuProductFlagConfig.BlurFilterDisableProperty)
+        assertEquals("kanvas.gpu.renderer.product.blurFilter.disable", GPUProductFlagConfig.BlurFilterDisableProperty)
     }
 
     @Test
     fun `colorMatrixFilter disable property is defined`() {
         assertEquals(
             "kanvas.gpu.renderer.product.colorMatrixFilter.disable",
-            GpuProductFlagConfig.ColorMatrixFilterDisableProperty,
+            GPUProductFlagConfig.ColorMatrixFilterDisableProperty,
         )
     }
 }

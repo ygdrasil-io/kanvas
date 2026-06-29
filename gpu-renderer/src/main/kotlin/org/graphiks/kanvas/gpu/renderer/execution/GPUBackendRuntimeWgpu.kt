@@ -311,7 +311,7 @@ private class WgpuOffscreenTarget(
         clearColor: GPUClearColor,
         block: GPUBackendRenderRecorder.() -> Unit,
     ) {
-        GpuResourceScope().use { resources ->
+        GPUResourceScope().use { resources ->
             val view = resources.track(texture.createView()) { it.close() }
             val encoder = resources.trackIfAutoCloseable(device.createCommandEncoder())
             encoder.beginRenderPass(
@@ -429,7 +429,7 @@ private class WgpuOffscreenTarget(
         clearColor: GPUClearColor,
         block: GPUBackendRenderRecorder.() -> Unit,
     ) {
-        GpuResourceScope().use { resources ->
+        GPUResourceScope().use { resources ->
             encodeOffscreenTextureInternal(
                 textureLabel = textureLabel,
                 clearColor = clearColor,
@@ -449,7 +449,7 @@ private class WgpuOffscreenTarget(
         textureLabel: String,
         clearColor: GPUClearColor,
         textureFormat: GPUTextureFormat,
-        resources: GpuResourceScope,
+        resources: GPUResourceScope,
         block: (WgpuRenderRecorder) -> Unit,
     ) {
         val tex = offscreenTexture(textureLabel)
@@ -591,7 +591,7 @@ private class WgpuWindowSurface(
             SurfaceTextureStatus.timeout -> Unit
         }
 
-        GpuResourceScope().use { resources ->
+        GPUResourceScope().use { resources ->
             val view = resources.track(surfaceTexture.texture.createView(null)) { it.close() }
             val encoder = resources.trackIfAutoCloseable(runtime.device.createCommandEncoder())
             encoder.beginRenderPass(
@@ -645,7 +645,7 @@ private class WgpuRenderRecorder(
     private val device: GPUDevice,
     private val queue: GPUQueue,
     private val targetFormat: GPUTextureFormat,
-    private val resourceScope: GpuResourceScope,
+    private val resourceScope: GPUResourceScope,
     private val executionCaches: WgpuExecutionCaches,
     private val setPipelineAction: (GPURenderPipeline) -> Unit,
     private val setBindGroupAction: (UInt, GPUBindGroup) -> Unit,
@@ -2684,7 +2684,7 @@ private fun GPUTextureFormat.isBgraFormat(): Boolean =
 
 private fun String.normalizedColorFormat(): String = lowercase()
 
-private class GpuResourceScope : AutoCloseable {
+private class GPUResourceScope : AutoCloseable {
     private val closeActions = ArrayDeque<() -> Unit>()
 
     /** Tracks a resource and registers the matching cleanup callback for reverse-order teardown. */
