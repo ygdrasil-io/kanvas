@@ -7,7 +7,7 @@ data class GpuFilterTileIndex(val column: Int, val row: Int)
 data class GpuFilterTileRegion(val x: Int, val y: Int, val width: Int, val height: Int)
 
 /** Tile grid descriptor for tiled filter evaluation. */
-data class GpuFilterTilePlan(
+data class GpuFilterTilingPlan(
     val tileWidth: Int,
     val tileHeight: Int,
     val overlap: Int,
@@ -19,7 +19,7 @@ data class GpuFilterTilePlan(
 
 /** Per-tile render plan produced by the tile evaluator. */
 data class GpuFilterTileRenderPlan(
-    val tilePlan: GpuFilterTilePlan,
+    val tilePlan: GpuFilterTilingPlan,
     val tileIndex: GpuFilterTileIndex,
     val sourceRegion: GpuFilterTileRegion,
     val targetRegion: GpuFilterTileRegion,
@@ -35,7 +35,7 @@ data class GpuFilterTileBudgetPolicy(
 /** Result of tiled filter evaluation. */
 sealed interface GpuFilterTileEvaluationResult {
     data class Accepted(
-        val plan: GpuFilterTilePlan,
+        val plan: GpuFilterTilingPlan,
         val renderPlans: List<GpuFilterTileRenderPlan>,
     ) : GpuFilterTileEvaluationResult
 
@@ -93,7 +93,7 @@ class GpuFilterTilePlanner(
             return refused("unsupported.filter.tile_intermediate_memory_budget")
         }
 
-        val plan = GpuFilterTilePlan(
+        val plan = GpuFilterTilingPlan(
             tileWidth = tileWidth,
             tileHeight = tileHeight,
             overlap = overlap,
