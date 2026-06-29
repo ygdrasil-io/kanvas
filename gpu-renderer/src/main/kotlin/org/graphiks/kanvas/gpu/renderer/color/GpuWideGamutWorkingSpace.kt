@@ -11,12 +11,15 @@ enum class GpuWideGamutIntermediateFormat(val descriptor: String) {
 
 data class GpuWideGamutWorkingSpacePlan(
     val primaries: GpuWideGamutPrimaries,
-    val transferFunction: String = "sRGB",
+    val transferFunction: GpuHdrTransferFunction? = null,
     val intermediateFormat: GpuWideGamutIntermediateFormat = GpuWideGamutIntermediateFormat.rgba16float,
 ) {
     companion object {
         fun forPrimaries(primaries: GpuWideGamutPrimaries): GpuWideGamutWorkingSpacePlan =
             GpuWideGamutWorkingSpacePlan(primaries = primaries)
+
+        private val supportedPrimaries: Set<GpuWideGamutPrimaries> =
+            GpuWideGamutPrimaries.entries.toSet()
 
         fun conversionMatrixToSrgb(primaries: GpuWideGamutPrimaries): FloatArray = when (primaries) {
             GpuWideGamutPrimaries.DisplayP3 -> floatArrayOf(
@@ -48,25 +51,33 @@ data class GpuWideGamutWorkingSpacePlan(
         """.trimIndent()
     }
 
-    private val supportedTransferFunctions = setOf("sRGB", "Linear")
-
     fun srgbConversion(): GpuWideGamutConversionPlan {
         val matrix = conversionMatrixToSrgb(primaries)
         return GpuWideGamutConversionPlan(
             source = this,
             destination = GpuWideGamutWorkingSpacePlan.forPrimaries(primaries),
             matrix = matrix,
-            transferConversion = "srgb_to_linear",
+            transferConversion = null,
             wgslSource = generateConversionShader(matrix),
         )
     }
 
     fun analyze(): GpuWideGamutRoute {
-        if (transferFunction !in supportedTransferFunctions) {
+        if (primaries !in supportedPrimaries) {
             return GpuWideGamutRoute.Refused(
                 RefuseDiagnostic(
-                    code = "unsupported.color.wide_gamut_transfer",
-                    message = "unsupported transfer function: $transferFunction",
+                    code = "unsupported.color.wide_gamut_working_space",
+                    message = "unsupported wide-gamut primaries: $primaries",
+                    stage = "color.analysis",
+                    terminal = true,
+                )
+            )
+        }
+        if (transferFunction != null) {
+            return GpuWideGamutRoute.Refused(
+                RefuseDiagnostic(
+                    code = "unsupported.color.wide_gamut_working_space",
+                    message = "unsupported transfer function for wide-gamut: $transferFunction",
                     stage = "color.analysis",
                     terminal = true,
                 )
@@ -74,11 +85,9 @@ data class GpuWideGamutWorkingSpacePlan(
         }
         val conversion = srgbConversion()
         return GpuWideGamutRoute.Accepted(
-            GpuWideGamutRoute.Accepted.AcceptedData(
-                workingSpace = this,
-                conversion = conversion,
-                intermediateFormat = intermediateFormat,
-            )
+            workingSpace = this,
+            conversion = conversion,
+            intermediateFormat = intermediateFormat,
         )
     }
 }
@@ -87,7 +96,7 @@ data class GpuWideGamutConversionPlan(
     val source: GpuWideGamutWorkingSpacePlan,
     val destination: GpuWideGamutWorkingSpacePlan,
     val matrix: FloatArray,
-    val transferConversion: String,
+    val transferConversion: GpuHdrTransferFunctionPlan?,
     val wgslSource: String,
 )
 
@@ -96,13 +105,6 @@ sealed interface GpuWideGamutRoute {
         val workingSpace: GpuWideGamutWorkingSpacePlan,
         val conversion: GpuWideGamutConversionPlan,
         val intermediateFormat: GpuWideGamutIntermediateFormat,
-    ) : GpuWideGamutRoute {
-        data class AcceptedData(
-            val workingSpace: GpuWideGamutWorkingSpacePlan,
-            val conversion: GpuWideGamutConversionPlan,
-            val intermediateFormat: GpuWideGamutIntermediateFormat,
-        )
-        constructor(data: AcceptedData) : this(data.workingSpace, data.conversion, data.intermediateFormat)
-    }
+    ) : GpuWideGamutRoute
     data class Refused(val diagnostic: RefuseDiagnostic) : GpuWideGamutRoute
 }

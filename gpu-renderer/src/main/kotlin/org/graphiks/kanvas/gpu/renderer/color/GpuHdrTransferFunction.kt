@@ -12,10 +12,16 @@ enum class GpuHdrTransferFunction {
         scRGBLinear -> encoded
     }
 
-    fun oetfInverse(linear: Float): Float = when (this) {
-        PQ -> pqEotf(linear)
-        HLG -> hlgOetfInverse(linear)
+    fun oetf(linear: Float): Float = when (this) {
+        PQ -> pqOetf(linear)
+        HLG -> hlgOetf(linear)
         scRGBLinear -> linear
+    }
+
+    fun oetfInverse(encoded: Float): Float = when (this) {
+        PQ -> pqEotf(encoded)
+        HLG -> hlgOetfInverse(encoded)
+        scRGBLinear -> encoded
     }
 
     fun wgslEotfFunction(): String = when (this) {
@@ -51,6 +57,40 @@ enum class GpuHdrTransferFunction {
         """.trimIndent()
     }
 
+    fun wgslOetfFunction(): String = when (this) {
+        PQ -> """
+            fn pq_oetf(L: f32) -> f32 {
+                let m1 = 0.1593017578125;
+                let m2 = 78.84375;
+                let c1 = 0.8359375;
+                let c2 = 18.8515625;
+                let c3 = 18.6875;
+                let Lm1 = pow(L, m1);
+                let num = c1 + c2 * Lm1;
+                let den = 1.0 + c3 * Lm1;
+                return pow(num / den, m2);
+            }
+        """.trimIndent()
+        HLG -> """
+            fn hlg_oetf(L: f32) -> f32 {
+                let a = 0.17883277;
+                let b = 1.0 - 4.0 * a;
+                let c = 0.5 - a * ln(4.0 * a);
+                let crossover = 1.0 / 12.0;
+                if (L <= crossover) {
+                    return sqrt(3.0 * L);
+                } else {
+                    return a * ln(12.0 * L - b) + c;
+                }
+            }
+        """.trimIndent()
+        scRGBLinear -> """
+            fn scrgb_linear_encode(color: vec4<f32>) -> vec4<f32> {
+                return color;
+            }
+        """.trimIndent()
+    }
+
     companion object {
         private const val PQ_M1 = 0.1593017578125f
         private const val PQ_M2 = 78.84375f
@@ -66,9 +106,17 @@ enum class GpuHdrTransferFunction {
             return (num / den).toDouble().pow(1.0 / PQ_M1).toFloat()
         }
 
+        private fun pqOetf(L: Float): Float {
+            val Lm1 = L.toDouble().pow(PQ_M1.toDouble()).toFloat()
+            val num = PQ_C1 + PQ_C2 * Lm1
+            val den = 1f + PQ_C3 * Lm1
+            return (num / den).toDouble().pow(PQ_M2.toDouble()).toFloat()
+        }
+
         private const val HLG_A = 0.17883277f
         private const val HLG_B = 1.0f - 4.0f * HLG_A
         private val HLG_C = 0.5f - HLG_A * ln(4.0 * HLG_A).toFloat()
+        private const val HLG_CROSSOVER_E = 1f / 12f
 
         private fun hlgOetfInverse(E: Float): Float {
             return if (E <= 0.5f) {
@@ -76,6 +124,14 @@ enum class GpuHdrTransferFunction {
             } else {
                 val d = (E - HLG_C) / HLG_A
                 (exp(d.toDouble()) + HLG_B).toFloat() / 12.0f
+            }
+        }
+
+        private fun hlgOetf(L: Float): Float {
+            return if (L <= HLG_CROSSOVER_E) {
+                sqrt(3.0f * L)
+            } else {
+                HLG_A * ln((12.0f * L - HLG_B).toDouble()).toFloat() + HLG_C
             }
         }
     }
@@ -123,6 +179,9 @@ data class GpuHdrTransferFunctionPlan(
                 wgslSource = tf.wgslEotfFunction(),
             )
 
+        private val supportedTransferFunctions: Set<GpuHdrTransferFunction> =
+            GpuHdrTransferFunction.entries.toSet()
+
         fun generateToneMapShader(strategy: GpuHdrToneMapStrategy): String = when (strategy) {
             GpuHdrToneMapStrategy.Reinhard -> """
                 fn reinhard_tone_map(color: vec3<f32>) -> vec3<f32> {
@@ -154,7 +213,28 @@ data class GpuHdrTransferFunctionPlan(
     fun analyze(
         displayPeakLuminance: Float = 1000f,
         toneMapStrategy: GpuHdrToneMapStrategy? = GpuHdrToneMapStrategy.ACES,
+        hdrTargetFormatAvailable: Boolean = true,
     ): GpuHdrTransferRoute {
+        if (transferFunction !in supportedTransferFunctions) {
+            return GpuHdrTransferRoute.Refused(
+                RefuseDiagnostic(
+                    code = "unsupported.color.hdr_transfer_function",
+                    message = "unsupported HDR transfer function: $transferFunction",
+                    stage = "color.hdr_transfer",
+                    terminal = true,
+                )
+            )
+        }
+        if (!hdrTargetFormatAvailable) {
+            return GpuHdrTransferRoute.Refused(
+                RefuseDiagnostic(
+                    code = "unsupported.color.hdr_target_format",
+                    message = "no HDR target format available for $transferFunction",
+                    stage = "color.hdr_transfer",
+                    terminal = true,
+                )
+            )
+        }
         val eotfPlan = GpuHdrEotfPlan(
             eotf = transferFunction,
             displayPeakLuminance = displayPeakLuminance,
@@ -168,11 +248,9 @@ data class GpuHdrTransferFunctionPlan(
             )
         } else null
         return GpuHdrTransferRoute.Accepted(
-            GpuHdrTransferRoute.Accepted.AcceptedData(
-                transferPlan = this,
-                eotfPlan = eotfPlan,
-                toneMapPlan = toneMapPlan,
-            )
+            transferPlan = this,
+            eotfPlan = eotfPlan,
+            toneMapPlan = toneMapPlan,
         )
     }
 }
@@ -194,13 +272,6 @@ sealed interface GpuHdrTransferRoute {
         val transferPlan: GpuHdrTransferFunctionPlan,
         val eotfPlan: GpuHdrEotfPlan,
         val toneMapPlan: GpuHdrToneMapPlan?,
-    ) : GpuHdrTransferRoute {
-        data class AcceptedData(
-            val transferPlan: GpuHdrTransferFunctionPlan,
-            val eotfPlan: GpuHdrEotfPlan,
-            val toneMapPlan: GpuHdrToneMapPlan?,
-        )
-        constructor(data: AcceptedData) : this(data.transferPlan, data.eotfPlan, data.toneMapPlan)
-    }
+    ) : GpuHdrTransferRoute
     data class Refused(val diagnostic: RefuseDiagnostic) : GpuHdrTransferRoute
 }

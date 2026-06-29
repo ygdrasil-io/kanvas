@@ -41,7 +41,7 @@ class GpuIccProfileTest {
             hasMatrixTrc = true,
         ).analyze()
         assertIs<GpuIccProfileRoute.Refused>(route)
-        assertEquals("unsupported.color.icc_v5", route.diagnostic.code)
+        assertEquals("unsupported.color.icc_profile_version", route.diagnostic.code)
     }
 
     @Test
@@ -53,7 +53,33 @@ class GpuIccProfileTest {
             hasMatrixTrc = false,
         ).analyze()
         assertIs<GpuIccProfileRoute.Refused>(route)
-        assertEquals("unsupported.color.icc_lut", route.diagnostic.code)
+        assertEquals("unsupported.color.icc_lut_profile", route.diagnostic.code)
+    }
+
+    @Test
+    fun `ICC malformed profile parse failure is refused`() {
+        val plan = GpuIccProfileParsePlan.parse(
+            version = GpuIccVersion.v2,
+            header = sampleHeader(),
+            tagTable = emptyList(),
+            hasMatrixTrc = true,
+        )
+        val route = plan.analyze()
+        assertIs<GpuIccProfileRoute.Refused>(route)
+        assertEquals("unsupported.color.icc_parse_failure", route.diagnostic.code)
+    }
+
+    @Test
+    fun `ICC accepted route carries full cache plan`() {
+        val route = GpuIccProfileParsePlan.parse(
+            version = GpuIccVersion.v2,
+            header = sampleHeader(),
+            tagTable = sampleTags(),
+            hasMatrixTrc = true,
+        ).analyze()
+        assertIs<GpuIccProfileRoute.Accepted>(route)
+        assertNotNull(route.cache.parsedPlan)
+        assertNotNull(route.cache.transformPlan)
     }
 
     @Test

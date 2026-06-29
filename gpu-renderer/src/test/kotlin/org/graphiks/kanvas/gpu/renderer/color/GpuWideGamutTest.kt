@@ -11,7 +11,7 @@ class GpuWideGamutTest {
     fun `wide-gamut plan accepts Display P3 conversion to sRGB`() {
         val plan = GpuWideGamutWorkingSpacePlan.forPrimaries(GpuWideGamutPrimaries.DisplayP3)
         val conversion = plan.srgbConversion()
-        assertTrue { conversion.matrix.size >= 9 } // 3x3 matrix
+        assertTrue { conversion.matrix.size >= 9 }
     }
 
     @Test
@@ -41,12 +41,12 @@ class GpuWideGamutTest {
     fun `wide-gamut route refuses unsupported transfer function`() {
         val plan = GpuWideGamutWorkingSpacePlan(
             primaries = GpuWideGamutPrimaries.DisplayP3,
-            transferFunction = "SMPTE_ST_2084_HDR",
+            transferFunction = GpuHdrTransferFunction.PQ,
             intermediateFormat = GpuWideGamutIntermediateFormat.rgba16float,
         )
         val route = plan.analyze()
         assertIs<GpuWideGamutRoute.Refused>(route)
-        assertEquals("unsupported.color.wide_gamut_transfer", route.diagnostic.code)
+        assertEquals("unsupported.color.wide_gamut_working_space", route.diagnostic.code)
     }
 
     @Test

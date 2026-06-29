@@ -58,7 +58,7 @@ data class GpuIccProfileParsePlan(
         if (version == GpuIccVersion.v5) {
             return GpuIccProfileRoute.Refused(
                 RefuseDiagnostic(
-                    code = "unsupported.color.icc_v5",
+                    code = "unsupported.color.icc_profile_version",
                     message = "ICC v5 profiles are not supported",
                     stage = "icc.parse",
                     terminal = true,
@@ -68,8 +68,18 @@ data class GpuIccProfileParsePlan(
         if (matrixTrc == null) {
             return GpuIccProfileRoute.Refused(
                 RefuseDiagnostic(
-                    code = "unsupported.color.icc_lut",
+                    code = "unsupported.color.icc_lut_profile",
                     message = "ICC LUT profiles (A2B0/B2A0) are not supported",
+                    stage = "icc.parse",
+                    terminal = true,
+                )
+            )
+        }
+        if (tagTable.isEmpty()) {
+            return GpuIccProfileRoute.Refused(
+                RefuseDiagnostic(
+                    code = "unsupported.color.icc_parse_failure",
+                    message = "ICC profile parse failure: empty tag table",
                     stage = "icc.parse",
                     terminal = true,
                 )
@@ -80,12 +90,15 @@ data class GpuIccProfileParsePlan(
             matrixTrc = matrixTrc,
             wgslSource = generateTransformShader(matrixTrc),
         )
+        val cache = GpuIccProfileCachePlan(
+            cacheKey = GpuIccProfileCachePlan.computeCacheKey(header.toString().encodeToByteArray()),
+            parsedPlan = this,
+            transformPlan = transform,
+        )
         return GpuIccProfileRoute.Accepted(
-            GpuIccProfileRoute.Accepted.AcceptedData(
-                parse = this,
-                transform = transform,
-                cacheKey = GpuIccProfileCachePlan.computeCacheKey(header.toString().encodeToByteArray()),
-            )
+            parse = this,
+            transform = transform,
+            cache = cache,
         )
     }
 }
@@ -114,14 +127,7 @@ sealed interface GpuIccProfileRoute {
     data class Accepted(
         val parse: GpuIccProfileParsePlan,
         val transform: GpuIccProfileTransformPlan,
-        val cacheKey: String,
-    ) : GpuIccProfileRoute {
-        data class AcceptedData(
-            val parse: GpuIccProfileParsePlan,
-            val transform: GpuIccProfileTransformPlan,
-            val cacheKey: String,
-        )
-        constructor(data: AcceptedData) : this(data.parse, data.transform, data.cacheKey)
-    }
+        val cache: GpuIccProfileCachePlan,
+    ) : GpuIccProfileRoute
     data class Refused(val diagnostic: RefuseDiagnostic) : GpuIccProfileRoute
 }
