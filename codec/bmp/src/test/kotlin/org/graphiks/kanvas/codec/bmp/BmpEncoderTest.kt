@@ -130,6 +130,52 @@ class BmpEncoderTest {
             ((buf[off + 2].toInt() and 0xFF) shl 16) or
             ((buf[off + 3].toInt() and 0xFF) shl 24)
 
+    @Test
+    fun `RLE8 encode round-trips through decoder`() {
+        val src = SkBitmap(4, 2)
+        for (y in 0 until 2) for (x in 0 until 4) {
+            src.pixels[y * 4 + x] = if (x < 2) 0xFFFF0000.toInt() else 0xFF00FF00.toInt()
+        }
+        val bytes = BmpEncoder.encode(src, BmpEncoder.Options(
+            format = BmpEncoder.BmpFormat.kBGR_888,
+            compression = BmpEncoder.Compression.RLE8,
+        ))!!
+        assertEquals(1, readU32LE(bytes, 14 + 16), "compression must be BI_RLE8")
+        val decoded = decodeBmp(bytes)
+        for (y in 0 until 2) for (x in 0 until 4) {
+            assertEquals(SkColorGetR(src.getPixel(x, y)), SkColorGetR(decoded.getPixel(x, y)), "R($x,$y)")
+            assertEquals(SkColorGetG(src.getPixel(x, y)), SkColorGetG(decoded.getPixel(x, y)), "G($x,$y)")
+            assertEquals(SkColorGetB(src.getPixel(x, y)), SkColorGetB(decoded.getPixel(x, y)), "B($x,$y)")
+        }
+    }
+
+    @Test
+    fun `RLE4 encode round-trips through decoder`() {
+        val src = SkBitmap(4, 1)
+        for (x in 0 until 4) src.pixels[x] = 0xFF0000FF.toInt()
+        val bytes = BmpEncoder.encode(src, BmpEncoder.Options(
+            format = BmpEncoder.BmpFormat.kBGR_888,
+            compression = BmpEncoder.Compression.RLE4,
+        ))!!
+        assertEquals(2, readU32LE(bytes, 14 + 16), "compression must be BI_RLE4")
+        val decoded = decodeBmp(bytes)
+        for (x in 0 until 4) {
+            assertEquals(0xFF, SkColorGetB(decoded.getPixel(x, 0)), "B($x,0)")
+        }
+    }
+
+    @Test
+    fun `RLE encode rejects non-palette input`() {
+        val src = SkBitmap(17, 17)
+        for (i in 0 until 289) {
+            src.pixels[i] = (0xFF shl 24) or i
+        }
+        val bytes = BmpEncoder.encode(src, BmpEncoder.Options(
+            compression = BmpEncoder.Compression.RLE8,
+        ))
+        assertNull(bytes, "RLE8 with >256 palette colors should return null")
+    }
+
     private fun readU16LE(buf: ByteArray, off: Int): Int =
         (buf[off].toInt() and 0xFF) or ((buf[off + 1].toInt() and 0xFF) shl 8)
 }
