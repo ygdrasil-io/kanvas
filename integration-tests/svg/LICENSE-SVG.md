@@ -1,18 +1,17 @@
-# Licence des fichiers SVG
+# SVG Files License
 
-Tous les fichiers SVG dans ce dossier proviennent d'[OpenClipart](https://openclipart.org/)
-et sont **dans le domaine public (CC0)**.
+All SVG files in this directory are sourced from [OpenClipart](https://openclipart.org/) and are **in the Public Domain (CC0)**.
 
-## Licence
-- **CC0 1.0 Universal (Domaine Public)** : [https://creativecommons.org/publicdomain/zero/1.0/](https://creativecommons.org/publicdomain/zero/1.0/)
-- **Aucune attribution requise**, mais appréciée.
+## License
+- **CC0 1.0 Universal (Public Domain)**: [https://creativecommons.org/publicdomain/zero/1.0/](https://creativecommons.org/publicdomain/zero/1.0/)
+- **No attribution required**, but appreciated.
 
-## Provenance
-Les fichiers ont été téléchargés depuis [OpenClipart](https://openclipart.org/) en utilisant l'API publique.
+## Source
+The files were downloaded from [OpenClipart](https://openclipart.org/) using the public API.
 
-### Fichiers inclus
-| Catégorie | Nombre de fichiers | Exemples | Source |
-|-----------|---------------------|----------|--------|
+### Included Files
+| Category | Number of Files | Examples | Source |
+|----------|-----------------|----------|--------|
 | **by-render-family/complex-paths/** | 3 | complex-1.svg, complex-2.svg, complex-3.svg | [OpenClipart](https://openclipart.org/) |
 | **by-render-family/geometric/** | 5 | geometric-1.svg, geometric-2.svg, geometric-3.svg, icon-computer.svg, laptop-computer.svg | [OpenClipart](https://openclipart.org/) |
 | **by-render-family/gradients/** | 3 | gradient-1.svg, gradient-2.svg, gradient-3.svg | [OpenClipart](https://openclipart.org/) |
@@ -24,8 +23,8 @@ Les fichiers ont été téléchargés depuis [OpenClipart](https://openclipart.o
 | **by-render-family/typography/** | 3 | typography-1.svg, typography-2.svg, typography-3.svg | [OpenClipart](https://openclipart.org/) |
 | **performance/** | 5 | colorful-geometric.svg, digital-devices-large.svg, dot-mandala-1.svg, dot-mandala-2.svg, flourish-pattern.svg | [OpenClipart](https://openclipart.org/) |
 
-### Métadonnées de licence
-Certains fichiers contiennent des métadonnées RDF explicites confirmant leur licence CC0. Exemple :
+### License Metadata
+Some files contain explicit RDF metadata confirming their CC0 license. Example:
 ```xml
 <metadata>
   <rdf:RDF>
@@ -36,19 +35,19 @@ Certains fichiers contiennent des métadonnées RDF explicites confirmant leur l
 </metadata>
 ```
 
-## Utilisation
-Libre pour tout usage, y compris commercial, sans restriction. Vous pouvez :
-- Copier, modifier, distribuer et exécuter les œuvres
-- Utiliser à des fins commerciales
-- Effectuer des modifications sans partager les changements
+## Usage
+Free for any use, including commercial, without restrictions. You may:
+- Copy, modify, distribute, and perform the works
+- Use for commercial purposes
+- Make modifications without sharing changes
 
-## Attribution (optionnelle)
-Bien que non requise par la licence CC0, vous pouvez attribuer les fichiers comme suit :
+## Attribution (Optional)
+While not required by the CC0 license, you may attribute the files as follows:
 ```
 SVG files from OpenClipart (https://openclipart.org/), CC0 Public Domain
 ```
 
-## Références
+## References
 - [OpenClipart](https://openclipart.org/)
-- [Licence CC0](https://creativecommons.org/publicdomain/zero/1.0/)
-- [FAQ OpenClipart](https://openclipart.org/faq)
+- [CC0 License](https://creativecommons.org/publicdomain/zero/1.0/)
+- [OpenClipart FAQ](https://openclipart.org/faq)

@@ -11,18 +11,33 @@ class SvgParser {
     private val factory: XMLInputFactory = XMLInputFactory.newInstance()
 
     fun parse(svg: String): Svg {
-        val reader = factory.createXMLStreamReader(StringReader(svg))
-        return parseSvg(reader)
+        return try {
+            val reader = factory.createXMLStreamReader(StringReader(svg))
+            parseSvg(reader)
+        } catch (e: Exception) {
+            System.err.println("Failed to parse SVG: ${e.message}")
+            Svg()
+        }
     }
 
     fun parse(file: File): Svg {
-        val reader = factory.createXMLStreamReader(file.inputStream())
-        return parseSvg(reader)
+        return try {
+            val reader = factory.createXMLStreamReader(file.inputStream())
+            parseSvg(reader)
+        } catch (e: Exception) {
+            System.err.println("Failed to parse SVG file ${file.name}: ${e.message}")
+            Svg()
+        }
     }
 
     fun parse(input: InputStream): Svg {
-        val reader = factory.createXMLStreamReader(input)
-        return parseSvg(reader)
+        return try {
+            val reader = factory.createXMLStreamReader(input)
+            parseSvg(reader)
+        } catch (e: Exception) {
+            System.err.println("Failed to parse SVG input stream: ${e.message}")
+            Svg()
+        }
     }
 
     private fun parseSvg(reader: XMLStreamReader): Svg {

@@ -31,7 +31,7 @@ class SvgRenderer(private val canvas: Canvas) {
         paintParser.setGradientMap(gradientMap)
         
         val viewBoxTransform = calculateViewBoxTransform(svg)
-        renderElements(svg, viewBoxTransform)
+        renderElements(svg, viewBoxTransform, 1f)
     }
 
     private fun calculateViewBoxTransform(svg: Svg): GPUTransformFacts {
@@ -87,21 +87,22 @@ class SvgRenderer(private val canvas: Canvas) {
         }
     }
 
-    private fun renderElements(svg: Svg, parentTransform: GPUTransformFacts) {
-        svg.rects.forEach { renderRect(it, parentTransform) }
-        svg.paths.forEach { renderPath(it, parentTransform) }
-        svg.circles.forEach { renderCircle(it, parentTransform) }
-        svg.ellipses.forEach { renderEllipse(it, parentTransform) }
-        svg.lines.forEach { renderLine(it, parentTransform) }
-        svg.polygons.forEach { renderPolygon(it, parentTransform) }
-        svg.polylines.forEach { renderPolyline(it, parentTransform) }
-        svg.groups.forEach { renderGroup(it, parentTransform) }
+    private fun renderElements(svg: Svg, parentTransform: GPUTransformFacts, parentOpacity: Float) {
+        svg.rects.forEach { renderRect(it, parentTransform, parentOpacity) }
+        svg.paths.forEach { renderPath(it, parentTransform, parentOpacity) }
+        svg.circles.forEach { renderCircle(it, parentTransform, parentOpacity) }
+        svg.ellipses.forEach { renderEllipse(it, parentTransform, parentOpacity) }
+        svg.lines.forEach { renderLine(it, parentTransform, parentOpacity) }
+        svg.polygons.forEach { renderPolygon(it, parentTransform, parentOpacity) }
+        svg.polylines.forEach { renderPolyline(it, parentTransform, parentOpacity) }
+        svg.groups.forEach { renderGroup(it, parentTransform, parentOpacity) }
     }
 
-    private fun renderGroup(group: SvgGroup, parentTransform: GPUTransformFacts) {
+    private fun renderGroup(group: SvgGroup, parentTransform: GPUTransformFacts, parentOpacity: Float) {
         val groupTransform = transformParser.parse(group.transform)
         val combinedTransform = combineTransforms(parentTransform, groupTransform)
-        val newOpacity = group.opacity ?: 1f
+        val groupOpacity = group.opacity ?: 1f
+        val newOpacity = parentOpacity * groupOpacity
 
         group.rects.forEach { renderRect(it, combinedTransform, newOpacity) }
         group.paths.forEach { renderPath(it, combinedTransform, newOpacity) }
@@ -110,7 +111,7 @@ class SvgRenderer(private val canvas: Canvas) {
         group.lines.forEach { renderLine(it, combinedTransform, newOpacity) }
         group.polygons.forEach { renderPolygon(it, combinedTransform, newOpacity) }
         group.polylines.forEach { renderPolyline(it, combinedTransform, newOpacity) }
-        group.groups.forEach { renderGroup(it, combinedTransform) }
+        group.groups.forEach { renderGroup(it, combinedTransform, newOpacity) }
     }
 
     private fun combineTransforms(parent: GPUTransformFacts, child: GPUTransformFacts): GPUTransformFacts {
@@ -263,7 +264,7 @@ class SvgRenderer(private val canvas: Canvas) {
         val fillOpacity = polygon.fillOpacity ?: 1f
         val strokeOpacity = polygon.strokeOpacity ?: 1f
 
-        val path = parsePoints(polygon.points)
+        val path = parsePoints(polygon.points, combinedTransform)
         path.close()
 
         if (polygon.fill != null) {
@@ -284,7 +285,7 @@ class SvgRenderer(private val canvas: Canvas) {
         val opacity = polyline.opacity ?: parentOpacity
         val strokeOpacity = polyline.strokeOpacity ?: 1f
 
-        val path = parsePoints(polyline.points)
+        val path = parsePoints(polyline.points, combinedTransform)
 
         if (polyline.stroke != null && polyline.strokeWidth != null && polyline.strokeWidth > 0) {
             val strokePaint = paintParser.parseStroke(polyline.stroke, polyline.strokeWidth, strokeOpacity * opacity)
@@ -292,17 +293,23 @@ class SvgRenderer(private val canvas: Canvas) {
         }
     }
 
-    private fun parsePoints(points: String): Path {
+    private fun parsePoints(points: String, transform: GPUTransformFacts = GPUTransformFacts.identity()): Path {
         val path = Path()
         val coords = points.split(Regex("[\\s,]+"))
             .filter { it.isNotEmpty() }
             .map { it.toFloatOrNull() ?: 0f }
 
+        val (tx, ty, sx, sy) = extractTransformComponents(transform)
+
         if (coords.size >= 2) {
-            path.moveTo(coords[0], coords[1])
+            val x0 = coords[0] * sx + tx
+            val y0 = coords[1] * sy + ty
+            path.moveTo(x0, y0)
             for (i in 2 until coords.size step 2) {
                 if (i + 1 < coords.size) {
-                    path.lineTo(coords[i], coords[i + 1])
+                    val x = coords[i] * sx + tx
+                    val y = coords[i + 1] * sy + ty
+                    path.lineTo(x, y)
                 }
             }
         }

@@ -4,13 +4,15 @@ import org.graphiks.kanvas.KanvasPoint
 import org.graphiks.kanvas.Shader
 
 class SvgGradientParser {
+    private val paintParser = SvgPaintParser()
+
     fun parseLinearGradient(
         x1: Float, y1: Float,
         x2: Float, y2: Float,
         stops: List<SvgStop>,
     ): Shader.LinearGradient {
         val colorStops = stops.map { stop ->
-            val color = SvgPaintParser().parseColor(stop.stopColor)
+            val color = paintParser.parseColor(stop.stopColor)
             val r = (color shr 16 and 0xFF) / 255f
             val g = (color shr 8 and 0xFF) / 255f
             val b = (color and 0xFF) / 255f
@@ -30,7 +32,7 @@ class SvgGradientParser {
         stops: List<SvgStop>,
     ): Shader.RadialGradient {
         val colorStops = stops.map { stop ->
-            val color = SvgPaintParser().parseColor(stop.stopColor)
+            val color = paintParser.parseColor(stop.stopColor)
             val r = (color shr 16 and 0xFF) / 255f
             val g = (color shr 8 and 0xFF) / 255f
             val b = (color and 0xFF) / 255f
