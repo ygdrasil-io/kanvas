@@ -45,7 +45,7 @@ class GpuDisplacementMapTest {
         val result = filter.accept(plan)
         assertTrue(result.accepted)
         assertEquals(0, result.pixelCount)
-        assertTrue(result.diagnostics.any { it.startsWith("elision") })
+        assertTrue(result.diagnostics.any { it.code == "elision.identity_pass" })
     }
 
     @Test
@@ -66,8 +66,9 @@ class GpuDisplacementMapTest {
         val result = filter.accept(plan)
         assertFalse(result.accepted)
         assertTrue(result.diagnostics.any {
-            it == "unsupported.filter.displacement_missing_texture"
+            it.code == "unsupported.filter.displacement_missing_texture"
         })
+        assertTrue(result.diagnostics.all { it.terminal })
     }
 
     @Test
@@ -370,6 +371,26 @@ class GpuDisplacementMapTest {
         )
         val result = filter.accept(plan)
         assertTrue(result.accepted)
+    }
+
+    @Test
+    fun `accept with unsupported tile mode produces refusal diagnostic`() {
+        val filter = GpuDisplacementMap()
+        val plan = GPUDisplacementSamplingPlan(
+            sourceBinding = GPUTextureBinding("src", 64, 64),
+            displacementBinding = GPUTextureBinding("disp", 64, 64),
+            targetBinding = GPUTextureBinding("tgt", 64, 64),
+            plan = GPUDisplacementMapPlan(
+                channelX = GPUColorChannel.R,
+                channelY = GPUColorChannel.G,
+                scaleX = 10f,
+                scaleY = 10f,
+                tileMode = GPUTileMode.Decal,
+            ),
+        )
+        val result = filter.accept(plan, supportedTileModes = setOf(GPUTileMode.Clamp, GPUTileMode.Repeat))
+        assertFalse(result.accepted)
+        assertTrue(result.diagnostics.any { it.code == "unsupported.filter.displacement_tile_mode_unsupported" })
     }
 
     @Test

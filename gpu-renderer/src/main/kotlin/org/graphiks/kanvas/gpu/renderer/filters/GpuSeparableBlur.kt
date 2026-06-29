@@ -2,18 +2,30 @@ package org.graphiks.kanvas.gpu.renderer.filters
 
 import kotlin.math.exp
 
-enum class SeparableBlurQualityTier(val sigmaScale: Float, val tapScale: Float) {
-    HIGH(1.0f, 1.0f),
-    MEDIUM(0.75f, 0.75f),
-    LOW(0.5f, 0.5f);
+enum class SeparableBlurQualityTier {
+    FAST,
+    NORMAL,
+    HIGH;
 
-    fun tapCount(radius: Float): Int {
-        val base = if (radius < 0.5f) 1 else (radius * 2f + 1f).toInt()
-        val scaled = (base * tapScale).toInt().coerceAtLeast(1)
-        return if (scaled % 2 == 0) scaled + 1 else scaled
+    fun tapCount(sigma: Float): Int = when (this) {
+        FAST -> 5
+        NORMAL -> {
+            if (sigma < 0.5f) return 1
+            val base = kotlin.math.ceil(sigma).toInt() * 2 + 1
+            if (base % 2 == 0) base + 1 else base.coerceAtLeast(1)
+        }
+        HIGH -> {
+            if (sigma < 0.5f) return 1
+            val base = (sigma * 3f).toInt() * 2 + 1
+            if (base % 2 == 0) base + 1 else base.coerceAtLeast(1)
+        }
     }
 
-    fun sigma(radius: Float): Float = (radius * sigmaScale).coerceAtLeast(0.5f)
+    fun effectiveSigma(sigma: Float): Float = when (this) {
+        FAST -> 0.5f
+        NORMAL -> sigma.coerceAtLeast(0.5f)
+        HIGH -> sigma.coerceAtLeast(0.5f)
+    }
 
     companion object {
         fun ordinalOf(quality: Int): SeparableBlurQualityTier =
@@ -91,33 +103,48 @@ class GpuSeparableBlurPlanner(
     private val bytesPerPixel: Long = 4L,
 ) {
     fun plan(
-        radiusX: Float,
-        radiusY: Float,
-        qualityTier: SeparableBlurQualityTier = SeparableBlurQualityTier.HIGH,
+        sigmaX: Float,
+        sigmaY: Float,
+        qualityTier: SeparableBlurQualityTier = SeparableBlurQualityTier.NORMAL,
+        tileMode: GPUTileMode = GPUTileMode.Clamp,
     ): SeparableBlurPlan {
-        if (radiusX <= 0f && radiusY <= 0f) {
+        if (sigmaX < 0f || sigmaY < 0f) {
             return SeparableBlurPlan(
                 passes = emptyList(),
                 intermediateArtifact = null,
                 diagnostics = listOf(
                     GPUFilterDiagnostic(
-                        code = "unsupported.filter.blur_zero_radius",
-                        message = "Zero-radius blur is a no-op; refuse execution.",
+                        code = "unsupported.filter.blur_sigma_range",
+                        message = "Sigma $sigmaX/$sigmaY out of range; refuse execution.",
                         terminal = true,
                     ),
                 ),
             )
         }
 
-        val hTaps = qualityTier.tapCount(radiusX)
-        val vTaps = qualityTier.tapCount(radiusY)
-        val hSigma = qualityTier.sigma(radiusX)
-        val vSigma = qualityTier.sigma(radiusY)
+        if (sigmaX <= 0f && sigmaY <= 0f) {
+            return SeparableBlurPlan(
+                passes = emptyList(),
+                intermediateArtifact = null,
+                diagnostics = listOf(
+                    GPUFilterDiagnostic(
+                        code = "elision.identity_pass",
+                        message = "Zero-sigma blur is a no-op; elision identity pass.",
+                        terminal = false,
+                    ),
+                ),
+            )
+        }
+
+        val hTaps = qualityTier.tapCount(sigmaX)
+        val vTaps = qualityTier.tapCount(sigmaY)
+        val hSigma = qualityTier.effectiveSigma(sigmaX)
+        val vSigma = qualityTier.effectiveSigma(sigmaY)
 
         val hKernel = kernelCache.getOrCompute(hSigma, hTaps)
         val vKernel = kernelCache.getOrCompute(vSigma, vTaps)
 
-        val artifactKey = "blur-intermediate:${radiusX}x${radiusY}:${qualityTier.name}"
+        val artifactKey = "blur-intermediate:${sigmaX}x${sigmaY}:${qualityTier.name}:${tileMode}"
 
         val passes = listOf(
             BlurPassPlan(
@@ -144,7 +171,7 @@ class GpuSeparableBlurPlanner(
             diagnostics = listOf(
                 GPUFilterDiagnostic(
                     code = "accepted.filter.separable_blur",
-                    message = "Separable blur plan accepted: ${qualityTier.name} x=$hTaps/$vTaps taps",
+                    message = "Separable blur plan accepted: ${qualityTier.name} sigma=($sigmaX,$sigmaY) x=$hTaps/$vTaps taps tile=$tileMode",
                     terminal = false,
                 ),
             ),

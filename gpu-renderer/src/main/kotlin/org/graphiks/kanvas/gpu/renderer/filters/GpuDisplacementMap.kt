@@ -36,7 +36,7 @@ data class GPUDisplacementSamplingPlan(
 /** Result of validating a displacement map filter plan. */
 data class GPUDisplacementMapResult(
     val accepted: Boolean,
-    val diagnostics: List<String> = emptyList(),
+    val diagnostics: List<GPUFilterDiagnostic> = emptyList(),
     val pixelCount: Int = 0,
 )
 
@@ -45,27 +45,56 @@ data class GPUDisplacementMapResult(
 class GpuDisplacementMap {
 
     /** Validates the displacement sampling plan and returns acceptance statistics. */
-    fun accept(samplingPlan: GPUDisplacementSamplingPlan): GPUDisplacementMapResult {
-        val diagnostics = mutableListOf<String>()
+    fun accept(samplingPlan: GPUDisplacementSamplingPlan, supportedTileModes: Set<GPUTileMode> = GPUTileMode.entries.toSet()): GPUDisplacementMapResult {
+        val diagnostics = mutableListOf<GPUFilterDiagnostic>()
 
         if (samplingPlan.displacementBinding.width <= 0 ||
             samplingPlan.displacementBinding.height <= 0
         ) {
-            diagnostics.add("unsupported.filter.displacement_missing_texture")
+            diagnostics.add(
+                GPUFilterDiagnostic(
+                    code = "unsupported.filter.displacement_missing_texture",
+                    message = "Displacement map texture is missing or has invalid dimensions.",
+                    terminal = true,
+                ),
+            )
             return GPUDisplacementMapResult(accepted = false, diagnostics = diagnostics)
         }
 
         if (samplingPlan.sourceBinding.width <= 0 ||
             samplingPlan.sourceBinding.height <= 0
         ) {
-            diagnostics.add("unsupported.filter.displacement_source_format")
+            diagnostics.add(
+                GPUFilterDiagnostic(
+                    code = "unsupported.filter.displacement_source_format",
+                    message = "Source texture has invalid dimensions: ${samplingPlan.sourceBinding.width}x${samplingPlan.sourceBinding.height}.",
+                    terminal = true,
+                ),
+            )
+            return GPUDisplacementMapResult(accepted = false, diagnostics = diagnostics)
+        }
+
+        if (samplingPlan.plan.tileMode !in supportedTileModes) {
+            diagnostics.add(
+                GPUFilterDiagnostic(
+                    code = "unsupported.filter.displacement_tile_mode_unsupported",
+                    message = "Tile mode ${samplingPlan.plan.tileMode} is not supported by the adapter.",
+                    terminal = true,
+                ),
+            )
             return GPUDisplacementMapResult(accepted = false, diagnostics = diagnostics)
         }
 
         if (samplingPlan.plan.scaleX == 0f && samplingPlan.plan.scaleY == 0f) {
             return GPUDisplacementMapResult(
                 accepted = true,
-                diagnostics = listOf("elision.identity_pass"),
+                diagnostics = listOf(
+                    GPUFilterDiagnostic(
+                        code = "elision.identity_pass",
+                        message = "Displacement scale is zero; elision identity pass.",
+                        terminal = false,
+                    ),
+                ),
                 pixelCount = 0,
             )
         }

@@ -61,6 +61,7 @@ class GpuLightingFilter {
     fun execute(
         plan: GPULightingPlan,
         normalMapPlan: GPULightingNormalMapPlan,
+        sourceFormat: String? = null,
     ): GPULightingResult {
         if (plan.specularExponent < 1f || plan.specularExponent > 128f) {
             return GPULightingResult(
@@ -78,8 +79,19 @@ class GpuLightingFilter {
             )
         }
 
+        if (sourceFormat != null && sourceFormat.isNotBlank() && sourceFormat !in setOf("rgba8", "bgra8")) {
+            return GPULightingResult(
+                accepted = false,
+                diagnosticCode = "unsupported.filter.lighting_source_format",
+                diagnosticMessage = "Unsupported source texture format: $sourceFormat",
+            )
+        }
+
         val refusal = unsupportedTypeRefusal(plan.type)
         if (refusal != null) return refusal
+
+        val normalResult = GpuLightingNormalSourceValidator.validate(normalMapPlan)
+        if (!normalResult.accepted) return normalResult
 
         val acceptedType = aceptableType(plan.type)
         if (acceptedType != null) return acceptedType

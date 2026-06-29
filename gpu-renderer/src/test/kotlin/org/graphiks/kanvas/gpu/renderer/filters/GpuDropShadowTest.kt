@@ -190,4 +190,43 @@ class GpuDropShadowTest {
         assertNotNull(accepted.blurPlan)
         assertEquals(2, accepted.blurPlan!!.blur.passes.size)
     }
+
+    @Test
+    fun `drop shadow composite mode produces mask plan and composite plan`() {
+        val filter = GpuDropShadowFilter()
+        val params = GPUDropShadowPlan(
+            offsetDx = 5f,
+            offsetDy = 5f,
+            sigmaX = 2f,
+            sigmaY = 2f,
+            shadowColor = blackColor(),
+            mode = GPUDropShadowMode.Composite,
+            tileMode = GPUTileMode.Clamp,
+        )
+        val result = filter.plan(params)
+        assertTrue(result is GPUDropShadowResult.Accepted)
+        val accepted = result as GPUDropShadowResult.Accepted
+        assertNotNull(accepted.maskPlan, "Mask plan should be present")
+        assertNotNull(accepted.compositePlan, "Composite plan should be present in Composite mode")
+        assertTrue(accepted.compositePlan!!.sampleOffset)
+    }
+
+    @Test
+    fun `drop shadow shadow-only mode has mask plan but no composite plan`() {
+        val filter = GpuDropShadowFilter()
+        val params = GPUDropShadowPlan(
+            offsetDx = 3f,
+            offsetDy = 3f,
+            sigmaX = 1f,
+            sigmaY = 1f,
+            shadowColor = blackColor(),
+            mode = GPUDropShadowMode.ShadowOnly,
+            tileMode = GPUTileMode.Clamp,
+        )
+        val result = filter.plan(params)
+        assertTrue(result is GPUDropShadowResult.Accepted)
+        val accepted = result as GPUDropShadowResult.Accepted
+        assertNotNull(accepted.maskPlan)
+        assertNull(accepted.compositePlan, "Composite plan should be null in ShadowOnly mode")
+    }
 }

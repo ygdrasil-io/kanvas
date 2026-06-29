@@ -2,7 +2,6 @@ package org.graphiks.kanvas.gpu.renderer.filters
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
@@ -10,16 +9,17 @@ import kotlin.test.assertTrue
 class GpuSeparableBlurTest {
 
     @Test
-    fun `quality tier HIGH produces more taps than LOW for same radius`() {
+    fun `quality tier HIGH produces more taps than NORMAL for same sigma`() {
         val highTaps = SeparableBlurQualityTier.HIGH.tapCount(4f)
-        val lowTaps = SeparableBlurQualityTier.LOW.tapCount(4f)
-        assertTrue(highTaps > lowTaps)
+        val normalTaps = SeparableBlurQualityTier.NORMAL.tapCount(4f)
+        assertTrue(highTaps > normalTaps)
     }
 
     @Test
-    fun `quality tier MEDIUM sigma scale is between HIGH and LOW`() {
-        assertTrue(SeparableBlurQualityTier.HIGH.sigmaScale > SeparableBlurQualityTier.MEDIUM.sigmaScale)
-        assertTrue(SeparableBlurQualityTier.MEDIUM.sigmaScale > SeparableBlurQualityTier.LOW.sigmaScale)
+    fun `quality tier FAST produces fixed five taps`() {
+        assertEquals(5, SeparableBlurQualityTier.FAST.tapCount(2f))
+        assertEquals(5, SeparableBlurQualityTier.FAST.tapCount(10f))
+        assertEquals(5, SeparableBlurQualityTier.FAST.tapCount(50f))
     }
 
     @Test
@@ -49,44 +49,60 @@ class GpuSeparableBlurTest {
     }
 
     @Test
-    fun `plan produces two passes for valid radius`() {
+    fun `plan produces two passes for valid sigma`() {
         val planner = GpuSeparableBlurPlanner()
-        val plan = planner.plan(radiusX = 4f, radiusY = 4f, qualityTier = SeparableBlurQualityTier.HIGH)
+        val plan = planner.plan(sigmaX = 4f, sigmaY = 4f, qualityTier = SeparableBlurQualityTier.HIGH)
         assertEquals(2, plan.passes.size)
     }
 
     @Test
-    fun `plan with zero radius produces refusal diagnostic`() {
+    fun `plan with zero sigma produces elision not refusal`() {
         val planner = GpuSeparableBlurPlanner()
-        val plan = planner.plan(radiusX = 0f, radiusY = 0f, qualityTier = SeparableBlurQualityTier.HIGH)
+        val plan = planner.plan(sigmaX = 0f, sigmaY = 0f, qualityTier = SeparableBlurQualityTier.NORMAL)
+        assertTrue(plan.diagnostics.none { it.terminal })
+        assertTrue(plan.diagnostics.any { it.code == "elision.identity_pass" })
+    }
+
+    @Test
+    fun `plan with negative sigma produces stable refusal`() {
+        val planner = GpuSeparableBlurPlanner()
+        val plan = planner.plan(sigmaX = -1f, sigmaY = 0f, qualityTier = SeparableBlurQualityTier.NORMAL)
         assertTrue(plan.diagnostics.any { it.terminal })
+        assertTrue(plan.diagnostics.any { it.code == "unsupported.filter.blur_sigma_range" })
     }
 
     @Test
     fun `plan intermediate artifact has correct format class`() {
         val planner = GpuSeparableBlurPlanner()
-        val plan = planner.plan(radiusX = 4f, radiusY = 4f, qualityTier = SeparableBlurQualityTier.HIGH)
+        val plan = planner.plan(sigmaX = 4f, sigmaY = 4f, qualityTier = SeparableBlurQualityTier.HIGH)
         assertNotNull(plan.intermediateArtifact)
         assertEquals("rgba8", plan.intermediateArtifact.formatClass)
     }
 
     @Test
-    fun `plan kernel size grows with radius`() {
+    fun `plan kernel size grows with sigma`() {
         val planner = GpuSeparableBlurPlanner()
-        val planSmall = planner.plan(radiusX = 2f, radiusY = 2f, qualityTier = SeparableBlurQualityTier.HIGH)
-        val planLarge = planner.plan(radiusX = 8f, radiusY = 8f, qualityTier = SeparableBlurQualityTier.HIGH)
+        val planSmall = planner.plan(sigmaX = 2f, sigmaY = 2f, qualityTier = SeparableBlurQualityTier.HIGH)
+        val planLarge = planner.plan(sigmaX = 8f, sigmaY = 8f, qualityTier = SeparableBlurQualityTier.HIGH)
         assertTrue(planLarge.passes.first().kernelTaps > planSmall.passes.first().kernelTaps)
     }
 
     @Test
-    fun `quality tier HIGH tap scaling factor is one`() {
-        assertEquals(1.0f, SeparableBlurQualityTier.HIGH.tapScale)
+    fun `quality tier HIGH sigma equals 10 tap count matches spec ceil sigma3 2 plus 1`() {
+        val taps = SeparableBlurQualityTier.HIGH.tapCount(10f)
+        assertEquals(61, taps)
+    }
+
+    @Test
+    fun `quality tier NORMAL sigma equals 10 tap count matches spec ceil sigma 2 plus 1`() {
+        val taps = SeparableBlurQualityTier.NORMAL.tapCount(10f)
+        assertEquals(21, taps)
     }
 
     @Test
     fun `quality tier names are ordered by quality`() {
-        assertEquals(0, SeparableBlurQualityTier.HIGH.ordinal)
-        assertEquals(1, SeparableBlurQualityTier.MEDIUM.ordinal)
-        assertEquals(2, SeparableBlurQualityTier.LOW.ordinal)
+        assertEquals(0, SeparableBlurQualityTier.FAST.ordinal)
+        assertEquals(1, SeparableBlurQualityTier.NORMAL.ordinal)
+        assertEquals(2, SeparableBlurQualityTier.HIGH.ordinal)
     }
 }

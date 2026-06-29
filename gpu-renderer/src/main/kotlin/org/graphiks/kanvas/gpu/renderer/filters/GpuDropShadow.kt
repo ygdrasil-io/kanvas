@@ -12,14 +12,32 @@ data class GPUDropShadowPlan(
     val tileMode: GPUTileMode,
 )
 
+data class GPUDropShadowMaskPlan(
+    val sourceBinding: String,
+    val maskOutput: String,
+)
+
 data class GPUDropShadowBlurPlan(
     val blur: SeparableBlurPlan,
+    val maskInput: String = "",
+    val blurredOutput: String = "",
+)
+
+data class GPUDropShadowCompositePlan(
+    val shadowBinding: String,
+    val sourceBinding: String,
+    val targetBinding: String,
+    val offsetDx: Float,
+    val offsetDy: Float,
+    val sampleOffset: Boolean,
 )
 
 sealed interface GPUDropShadowResult {
     data class Accepted(
         val plan: GPUDropShadowPlan,
+        val maskPlan: GPUDropShadowMaskPlan?,
         val blurPlan: GPUDropShadowBlurPlan?,
+        val compositePlan: GPUDropShadowCompositePlan?,
         val diagnostics: List<GPUFilterDiagnostic>,
     ) : GPUDropShadowResult
 
@@ -36,10 +54,16 @@ class GpuDropShadowFilter(
     fun plan(params: GPUDropShadowPlan): GPUDropShadowResult {
         val needsBlur = params.sigmaX > 0f || params.sigmaY > 0f
 
+        val maskPlan = GPUDropShadowMaskPlan(
+            sourceBinding = "source:${params.hashCode()}",
+            maskOutput = "mask-r8:${params.hashCode()}",
+        )
+
         val blurPlan: SeparableBlurPlan? = if (needsBlur) {
             val plan = blurPlanner.plan(
-                radiusX = params.sigmaX,
-                radiusY = params.sigmaY,
+                sigmaX = params.sigmaX,
+                sigmaY = params.sigmaY,
+                tileMode = params.tileMode,
             )
             if (plan.diagnostics.any { it.terminal }) {
                 return GPUDropShadowResult.Refused(
@@ -58,9 +82,28 @@ class GpuDropShadowFilter(
             null
         }
 
+        val blurPlanWrapper = blurPlan?.let { bp ->
+            GPUDropShadowBlurPlan(
+                blur = bp,
+                maskInput = maskPlan.maskOutput,
+                blurredOutput = "blurred-shadow:${params.hashCode()}",
+            )
+        }
+
+        val compositePlan = GPUDropShadowCompositePlan(
+            shadowBinding = blurPlanWrapper?.blurredOutput ?: maskPlan.maskOutput,
+            sourceBinding = maskPlan.sourceBinding,
+            targetBinding = "target:${params.hashCode()}",
+            offsetDx = params.offsetDx,
+            offsetDy = params.offsetDy,
+            sampleOffset = params.offsetDx != 0f || params.offsetDy != 0f,
+        )
+
         return GPUDropShadowResult.Accepted(
             plan = params,
-            blurPlan = if (blurPlan != null) GPUDropShadowBlurPlan(blur = blurPlan) else null,
+            maskPlan = maskPlan,
+            blurPlan = blurPlanWrapper,
+            compositePlan = if (params.mode == GPUDropShadowMode.Composite) compositePlan else null,
             diagnostics = listOf(
                 GPUFilterDiagnostic(
                     code = "accepted.filter.drop_shadow",

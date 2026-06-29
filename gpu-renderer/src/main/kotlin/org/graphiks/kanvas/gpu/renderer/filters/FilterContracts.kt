@@ -598,6 +598,16 @@ private const val SIMPLE_FILTER_NONCLAIM_LINE =
     "filter:nonclaim nativeFilter=false adapterBacked=false arbitraryFilterDag=false runtimeEffectFilter=false " +
         "cpuRenderedFilterTextureFallback=false productActivation=true"
 
+private val KNOWN_FILTER_NODE_KINDS = setOf(
+    "ColorFilter",
+    "GaussianBlur",
+    "SeparableBlur",
+    "Morphology",
+    "DropShadow",
+    "Lighting",
+    "DisplacementMap",
+)
+
 private val SIMPLE_FILTER_REQUIRED_INTERMEDIATE_USAGE_LABELS = setOf("render_attachment", "texture_binding")
 private val FILTER_USAGE_ORDER = listOf(
     "render_attachment",
@@ -612,7 +622,7 @@ private fun GPUSimpleFilterRenderNodeRequest.refusalCode(intermediateBytes: Long
         !bounds.finite -> "unsupported.filter.bounds_unbounded"
         bounds.width <= 0 || bounds.height <= 0 -> "unsupported.filter.bounds_invalid"
         graph.nodes.size != 1 || graph.edges.isNotEmpty() -> "unsupported.filter.graph_node_limit"
-        graph.nodes.single().nodeKind !in setOf("ColorFilter", "GaussianBlur") -> "unsupported.filter.node_unimplemented"
+        graph.nodes.single().nodeKind !in KNOWN_FILTER_NODE_KINDS -> "unsupported.filter.node_unimplemented"
         !intermediateOwnershipValidated ||
             (SIMPLE_FILTER_REQUIRED_INTERMEDIATE_USAGE_LABELS - intermediateUsageLabels).isNotEmpty() ->
             "unsupported.filter.intermediate_unvalidated"
