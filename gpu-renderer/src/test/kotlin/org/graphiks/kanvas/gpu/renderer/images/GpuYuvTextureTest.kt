@@ -22,7 +22,7 @@ class GpuYuvTextureTest {
             chromaSiting = ChromaSiting.Center,
         )
 
-        val route = GpuYuvTexture.planRoute(descriptor)
+        val route = GPUYuvTexture.planRoute(descriptor)
 
         val accepted = assertIs<GPUYUVMultiPlanTextureRoute.Accepted>(route)
         assertEquals(3, accepted.planeUploadPlan.planes.size)
@@ -56,7 +56,7 @@ class GpuYuvTextureTest {
             chromaSiting = ChromaSiting.Center,
         )
 
-        val route = GpuYuvTexture.planRoute(descriptor)
+        val route = GPUYuvTexture.planRoute(descriptor)
 
         val accepted = assertIs<GPUYUVMultiPlanTextureRoute.Accepted>(route)
         assertEquals(3, accepted.planeUploadPlan.planes.size)
@@ -87,7 +87,7 @@ class GpuYuvTextureTest {
             chromaSiting = ChromaSiting.Center,
         )
 
-        val route = GpuYuvTexture.planRoute(descriptor)
+        val route = GPUYuvTexture.planRoute(descriptor)
 
         val refused = assertIs<GPUYUVMultiPlanTextureRoute.Refused>(route)
         assertEquals("unsupported.image.yuv_color_space", refused.diagnostic.code)
@@ -111,7 +111,7 @@ class GpuYuvTextureTest {
             chromaSiting = ChromaSiting.Center,
         )
 
-        val route = GpuYuvTexture.planRoute(descriptor)
+        val route = GPUYuvTexture.planRoute(descriptor)
 
         val refused = assertIs<GPUYUVMultiPlanTextureRoute.Refused>(route)
         assertEquals("unsupported.image.yuv_plane_count", refused.diagnostic.code)
@@ -132,7 +132,7 @@ class GpuYuvTextureTest {
             chromaSiting = ChromaSiting.Center,
         )
 
-        val route = GpuYuvTexture.planRoute(descriptor)
+        val route = GPUYuvTexture.planRoute(descriptor)
 
         val refused = assertIs<GPUYUVMultiPlanTextureRoute.Refused>(route)
         assertEquals("unsupported.image.yuv_plane_count", refused.diagnostic.code)
@@ -153,7 +153,7 @@ class GpuYuvTextureTest {
             chromaSiting = ChromaSiting.Center,
         )
 
-        val route = GpuYuvTexture.planRoute(descriptor)
+        val route = GPUYuvTexture.planRoute(descriptor)
 
         val refused = assertIs<GPUYUVMultiPlanTextureRoute.Refused>(route)
         assertEquals("unsupported.image.yuv_plane_dims_mismatch", refused.diagnostic.code)
@@ -175,7 +175,7 @@ class GpuYuvTextureTest {
             chromaSiting = ChromaSiting.Center,
         )
 
-        val route = GpuYuvTexture.planRoute(descriptor)
+        val route = GPUYuvTexture.planRoute(descriptor)
 
         val refused = assertIs<GPUYUVMultiPlanTextureRoute.Refused>(route)
         assertEquals("unsupported.image.yuv_bit_depth", refused.diagnostic.code)
@@ -197,7 +197,7 @@ class GpuYuvTextureTest {
             chromaSiting = ChromaSiting.Left,
         )
 
-        val route = GpuYuvTexture.planRoute(descriptor)
+        val route = GPUYuvTexture.planRoute(descriptor)
 
         val refused = assertIs<GPUYUVMultiPlanTextureRoute.Refused>(route)
         assertEquals("unsupported.image.yuv_chroma_siting", refused.diagnostic.code)
