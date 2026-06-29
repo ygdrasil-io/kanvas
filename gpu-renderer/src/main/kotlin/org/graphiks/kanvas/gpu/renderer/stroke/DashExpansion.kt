@@ -26,3 +26,57 @@ data class DashExpansion(val intervals: List<DashInterval>) {
         }
     }
 }
+
+enum class GPUDashClassification {
+    SimpleRepeat,
+    ComplexPattern,
+    UnsupportedLength,
+}
+
+data class GPUComplexDashPlan(
+    val dashArray: FloatArray,
+    val dashPhase: Float,
+    val classification: GPUDashClassification,
+) {
+    companion object {
+        const val MAX_DASH_ELEMENTS = 32
+
+        fun classify(dashArray: FloatArray): GPUDashClassification {
+            return when {
+                dashArray.size > MAX_DASH_ELEMENTS -> GPUDashClassification.UnsupportedLength
+                dashArray.size <= 4 -> GPUDashClassification.SimpleRepeat
+                else -> GPUDashClassification.ComplexPattern
+            }
+        }
+
+        fun plan(dashArray: FloatArray, dashPhase: Float = 0f): GPUComplexDashPlan {
+            require(!dashArray.containsNegative()) { "Dash array must not contain negative values" }
+            return GPUComplexDashPlan(
+                dashArray = dashArray,
+                dashPhase = dashPhase,
+                classification = classify(dashArray),
+            )
+        }
+
+        private fun FloatArray.containsNegative(): Boolean = any { it < 0f }
+    }
+
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is GPUComplexDashPlan) return false
+        return dashArray.contentEquals(other.dashArray) &&
+            dashPhase == other.dashPhase &&
+            classification == other.classification
+    }
+
+    override fun hashCode(): Int {
+        var result = dashArray.contentHashCode()
+        result = 31 * result + dashPhase.hashCode()
+        result = 31 * result + classification.hashCode()
+        return result
+    }
+
+    override fun toString(): String {
+        return "GPUComplexDashPlan(dashArray=${dashArray.contentToString()}, dashPhase=$dashPhase, classification=$classification)"
+    }
+}
