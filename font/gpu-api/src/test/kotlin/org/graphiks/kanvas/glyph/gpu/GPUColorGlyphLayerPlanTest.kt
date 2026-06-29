@@ -47,4 +47,33 @@ class GPUColorGlyphLayerPlanTest {
             GPUColorGlyphLayerPlan(artifactKey = key(), baseGlyphID = 7u, layers = emptyList())
         }
     }
+
+    @Test
+    fun `dump lists base glyph, colors, and foreground layers`() {
+        val plan = GPUColorGlyphLayerPlan(
+            artifactKey = key(),
+            baseGlyphID = 7u,
+            layers = listOf(
+                GPUColorGlyphLayer(
+                    layerGlyphID = 11u,
+                    paletteIndex = 3,
+                    resolvedColorArgb = 0xFFFF0000.toInt(),
+                    useForeground = false,
+                ),
+                GPUColorGlyphLayer(
+                    layerGlyphID = 12u,
+                    paletteIndex = 0xFFFF,
+                    resolvedColorArgb = null,
+                    useForeground = true,
+                ),
+            ),
+        )
+
+        assertEquals(
+            "GPUColorGlyphLayerPlan(baseGlyphID=7, contentFingerprint=color-layer-plan-sha256, " +
+                "layerCount=2, layers=[{layerGlyphID=11, paletteIndex=3, color=#FFFF0000}, " +
+                "{layerGlyphID=12, paletteIndex=65535, color=foreground}])",
+            plan.toColorLayerDump(),
+        )
+    }
 }

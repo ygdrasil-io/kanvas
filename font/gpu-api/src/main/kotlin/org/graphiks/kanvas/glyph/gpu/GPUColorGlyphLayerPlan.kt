@@ -41,4 +41,32 @@ data class GPUColorGlyphLayerPlan(
 
     /** Number of color layers in this plan. */
     val layerCount: Int get() = layers.size
+
+    /**
+     * Dumpable canonical description of the plan for PM/route evidence. Lists the
+     * base glyph and each layer's coverage glyph, palette index, and resolved
+     * ARGB color (or "foreground"), without leaking renderer or parser state.
+     */
+    fun toColorLayerDump(): String = buildString {
+        append("GPUColorGlyphLayerPlan(")
+        append("baseGlyphID=").append(baseGlyphID.toString())
+        append(", contentFingerprint=").append(artifactKey.contentFingerprint)
+        append(", layerCount=").append(layerCount)
+        append(", layers=[")
+        layers.forEachIndexed { index, layer ->
+            if (index > 0) append(", ")
+            append("{layerGlyphID=").append(layer.layerGlyphID.toString())
+            append(", paletteIndex=").append(layer.paletteIndex)
+            append(", color=")
+            append(if (layer.useForeground) "foreground" else gpuColorGlyphArgbHex(layer.resolvedColorArgb))
+            append("}")
+        }
+        append("])")
+    }
+}
+
+private fun gpuColorGlyphArgbHex(color: Int?): String {
+    if (color == null) return "null"
+    val unsigned = color.toLong() and 0xFFFF_FFFFL
+    return "#" + unsigned.toString(16).uppercase().padStart(8, '0')
 }
