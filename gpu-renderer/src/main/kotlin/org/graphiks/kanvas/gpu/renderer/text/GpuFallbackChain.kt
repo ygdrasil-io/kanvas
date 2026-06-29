@@ -1,47 +1,68 @@
 package org.graphiks.kanvas.gpu.renderer.text
 
-enum class GpuFallbackReason {
+enum class GPUFallbackReason {
     MissingGlyph,
     UnsupportedScript,
     ColorFontPreference,
 }
 
-data class GpuFallbackGlyphPlan(
+data class GPUFallbackGlyphPlan(
     val glyphIndex: Int,
-    val originalFont: String,
-    val fallbackFont: String,
-    val reason: GpuFallbackReason,
+    val originalFont: GPUFontKey,
+    val fallbackFont: GPUFontKey,
+    val reason: GPUFallbackReason,
 )
 
-data class GpuFallbackSubrun(
-    val fontKey: String,
+data class GPUFallbackSubrun(
+    val fontKey: GPUFontKey,
     val glyphRange: IntRange,
-    val atlasPage: String,
+    val atlasPage: GPUAtlasPageRef,
 )
 
-data class GpuFallbackBatchPolicy(
-    val subruns: List<GpuFallbackSubrun>,
+data class GPUFallbackBatchPolicy(
+    val subruns: List<GPUFallbackSubrun>,
     val maxFallbackDepth: Int,
 ) {
     companion object {
         fun splitSubruns(
-            glyphs: List<GpuFallbackGlyphPlan>,
+            glyphs: List<GPUFallbackGlyphPlan>,
             maxFallbackDepth: Int,
-        ): List<GpuFallbackSubrun> {
+        ): List<GPUFallbackSubrun> {
             if (glyphs.isEmpty() || maxFallbackDepth <= 0) return emptyList()
-            val subruns = mutableListOf<GpuFallbackSubrun>()
-            var currentFont: String = glyphs.first().fallbackFont
+            val subruns = mutableListOf<GPUFallbackSubrun>()
+            var currentFont: GPUFontKey = glyphs.first().fallbackFont
             var startIdx = glyphs.first().glyphIndex
             for (i in 1 until glyphs.size) {
                 val glyph = glyphs[i]
                 if (glyph.fallbackFont != currentFont) {
-                    subruns.add(GpuFallbackSubrun(currentFont, startIdx..glyphs[i - 1].glyphIndex, currentFont))
+                    subruns.add(
+                        GPUFallbackSubrun(
+                            fontKey = currentFont,
+                            glyphRange = startIdx..glyphs[i - 1].glyphIndex,
+                            atlasPage = GPUAtlasPageRef(currentFont.value),
+                        ),
+                    )
                     currentFont = glyph.fallbackFont
                     startIdx = glyph.glyphIndex
                 }
             }
-            subruns.add(GpuFallbackSubrun(currentFont, startIdx..glyphs.last().glyphIndex, currentFont))
+            subruns.add(
+                GPUFallbackSubrun(
+                    fontKey = currentFont,
+                    glyphRange = startIdx..glyphs.last().glyphIndex,
+                    atlasPage = GPUAtlasPageRef(currentFont.value),
+                ),
+            )
             return subruns
         }
+
+        fun fallbackExhaustedDiagnostic(
+            glyphIndex: Int,
+            fontIdentity: String,
+        ): GPUTextDiagnostic = GPUTextDiagnostic(
+            code = GPUTextDiagnosticCodes.FALLBACK_EXHAUSTED,
+            message = "Fallback chain exhausted for glyph $glyphIndex (font: $fontIdentity)",
+            terminal = true,
+        )
     }
 }

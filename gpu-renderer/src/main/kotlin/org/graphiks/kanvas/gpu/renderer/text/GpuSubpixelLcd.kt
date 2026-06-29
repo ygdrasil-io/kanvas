@@ -1,62 +1,117 @@
 package org.graphiks.kanvas.gpu.renderer.text
 
-import kotlin.math.max
-import kotlin.math.min
+import org.graphiks.kanvas.gpu.renderer.geometry.GPUAtlasEntryRef
 
-enum class GpuPixelGeometry {
+enum class GPUPixelGeometry {
     RGBHorizontal,
     BGRHorizontal,
     VRGBVertical,
     VBGRVertical,
 }
 
-data class GpuSubpixelCoverageMask(
-    val atlasEntry: String,
-    var rComponent: Float,
-    var gComponent: Float,
-    var bComponent: Float,
+data class GPUSubpixelCoverageMask(
+    val atlasEntry: GPUAtlasEntryRef,
+    val rComponent: Float,
+    val gComponent: Float,
+    val bComponent: Float,
 ) {
     init {
-        rComponent = min(max(rComponent, 0f), 1f)
-        gComponent = min(max(gComponent, 0f), 1f)
-        bComponent = min(max(bComponent, 0f), 1f)
+        require(rComponent in 0f..1f) { "rComponent must be in [0,1]: $rComponent" }
+        require(gComponent in 0f..1f) { "gComponent must be in [0,1]: $gComponent" }
+        require(bComponent in 0f..1f) { "bComponent must be in [0,1]: $bComponent" }
     }
 }
 
-data class GpuSubpixelLcdRenderStep(
-    val modulation: String,
+data class GPUSubpixelLCDRenderStep(
+    val modulation: GPUPerComponentAlphaModulation,
+    val wgslModule: GPUSubpixelLCDWGSL,
 )
 
-data class GpuSubpixelLcdPlan(
-    val pixelGeometry: GpuPixelGeometry,
-    val coverageMask: GpuSubpixelCoverageMask,
-    val renderStep: GpuSubpixelLcdRenderStep,
+data class GPUSubpixelLCDPlan(
+    val pixelGeometry: GPUPixelGeometry,
+    val perComponentMask: GPUSubpixelCoverageMask,
+    val renderStep: GPUSubpixelLCDRenderStep,
 ) {
     companion object {
         fun create(
-            pixelGeometry: GpuPixelGeometry,
+            pixelGeometry: GPUPixelGeometry,
             r: Float,
             g: Float,
             b: Float,
             atlasEntry: String = "glyph_0",
-        ): GpuSubpixelLcdPlan {
-            val mask = GpuSubpixelCoverageMask(
-                atlasEntry = atlasEntry,
+        ): GPUSubpixelLCDPlan {
+            val mask = GPUSubpixelCoverageMask(
+                atlasEntry = GPUAtlasEntryRef(atlasEntry),
                 rComponent = r,
                 gComponent = g,
                 bComponent = b,
             )
-            val modulationName = "subpixel_lcd_" + when (pixelGeometry) {
-                GpuPixelGeometry.RGBHorizontal -> "rgb"
-                GpuPixelGeometry.BGRHorizontal -> "bgr"
-                GpuPixelGeometry.VRGBVertical -> "vrgb"
-                GpuPixelGeometry.VBGRVertical -> "vbgr"
+            val modulationSuffix = when (pixelGeometry) {
+                GPUPixelGeometry.RGBHorizontal -> "rgb"
+                GPUPixelGeometry.BGRHorizontal -> "bgr"
+                GPUPixelGeometry.VRGBVertical -> "vrgb"
+                GPUPixelGeometry.VBGRVertical -> "vbgr"
             }
-            return GpuSubpixelLcdPlan(
+            return GPUSubpixelLCDPlan(
                 pixelGeometry = pixelGeometry,
-                coverageMask = mask,
-                renderStep = GpuSubpixelLcdRenderStep(modulation = modulationName),
+                perComponentMask = mask,
+                renderStep = GPUSubpixelLCDRenderStep(
+                    modulation = GPUPerComponentAlphaModulation("subpixel_lcd_$modulationSuffix"),
+                    wgslModule = GPUSubpixelLCDWGSL(
+                        moduleId = "subpixel_lcd_$modulationSuffix",
+                        entryPoint = "subpixel_lcd_main",
+                    ),
+                ),
             )
+        }
+    }
+}
+
+sealed interface GPUSubpixelLCDRouteDecision {
+    data class Accepted(val plan: GPUSubpixelLCDPlan) : GPUSubpixelLCDRouteDecision
+
+    data class Refused(val diagnostic: GPUTextDiagnostic) : GPUSubpixelLCDRouteDecision
+}
+
+data class GPUSubpixelLCDRouteContext(
+    val targetFormat: String,
+    val pixelGeometryKnown: Boolean,
+    val destinationOpaque: Boolean,
+    val destinationReadAvailable: Boolean,
+) {
+    companion object {
+        fun decide(
+            ctx: GPUSubpixelLCDRouteContext,
+            plan: GPUSubpixelLCDPlan,
+        ): GPUSubpixelLCDRouteDecision {
+            if (!ctx.pixelGeometryKnown) {
+                return GPUSubpixelLCDRouteDecision.Refused(
+                    GPUTextDiagnostic(
+                        code = GPUTextDiagnosticCodes.SUBPIXEL_PIXEL_GEOMETRY,
+                        message = "Adapter does not report pixel geometry",
+                        terminal = true,
+                    ),
+                )
+            }
+            if (ctx.targetFormat != "rgba8unorm") {
+                return GPUSubpixelLCDRouteDecision.Refused(
+                    GPUTextDiagnostic(
+                        code = GPUTextDiagnosticCodes.SUBPIXEL_TARGET_FORMAT,
+                        message = "Target format ${ctx.targetFormat} is not subpixel-compatible (requires rgba8unorm)",
+                        terminal = true,
+                    ),
+                )
+            }
+            if (!ctx.destinationOpaque && !ctx.destinationReadAvailable) {
+                return GPUSubpixelLCDRouteDecision.Refused(
+                    GPUTextDiagnostic(
+                        code = GPUTextDiagnosticCodes.DESTINATION_READ_UNACCEPTED,
+                        message = "Translucent destination without destination-read is not supported for subpixel LCD",
+                        terminal = true,
+                    ),
+                )
+            }
+            return GPUSubpixelLCDRouteDecision.Accepted(plan)
         }
     }
 }
