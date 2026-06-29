@@ -7,6 +7,7 @@ dependencies {
     implementation(project(":math"))
     implementation(project(":kanvas-skia"))
     implementation(project(":cpu-raster"))
+    implementation(project(":codec:png"))
     implementation(project(":codec:core"))
     implementation(project(":codec:android"))
     implementation(project(":codec:animated"))

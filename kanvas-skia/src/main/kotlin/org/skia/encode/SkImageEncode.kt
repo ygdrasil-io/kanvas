@@ -15,7 +15,7 @@ import org.skia.foundation.SkImage
  *
  * The wrapper takes the same single snapshot ([SkImage.peekPixel]
  * into a fresh `SkBitmap` tagged sRGB) the previous extension built,
- * then routes through [SkPngEncoder] or [SkJpegEncoder]. Returns
+ * then routes through [PngCall] or [SkJpegEncoder]. Returns
  * `null` for formats that this convenience API intentionally does
  * not dispatch. BMP, WBMP, and lossless WebP have dedicated encoder
  * entry points, but `SkImage.encodeToData` remains PNG/JPEG-only to
@@ -33,7 +33,7 @@ internal fun encodeImageToBytes(
         }
     }
     return when (format) {
-        SkEncodedImageFormat.kPNG -> SkPngEncoder.Encode(bitmap)
+        SkEncodedImageFormat.kPNG -> PngCall.encode(bitmap)
         SkEncodedImageFormat.kJPEG -> SkJpegEncoder.Encode(
             bitmap,
             SkJpegEncoder.Options(quality = quality),

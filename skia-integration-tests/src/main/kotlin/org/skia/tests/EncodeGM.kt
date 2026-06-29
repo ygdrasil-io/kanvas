@@ -3,7 +3,7 @@ package org.skia.tests
 import org.graphiks.kanvas.codec.Codec
 import org.skia.core.SkCanvas
 import org.skia.encode.SkJpegEncoder
-import org.skia.encode.SkPngEncoder
+import org.graphiks.kanvas.codec.png.PngEncoder
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkFont
 import org.skia.foundation.SkPaint
@@ -14,7 +14,7 @@ import org.skia.tools.ToolUtils
  * Port of Skia's `gm/encode.cpp::EncodeGM`.
  *
  * Loads `images/mandrill_512_q075.jpg`, re-encodes it twice — once as
- * PNG via [SkPngEncoder.Encode], once as JPEG via [SkJpegEncoder.Encode]
+ * PNG via [PngEncoder.encode], once as JPEG via [SkJpegEncoder.Encode]
  * — then re-decodes both encoded blobs back into [SkImage]s and draws
  * them side-by-side at `(0, 0)` and `(512, 0)`. Below the images, the
  * legend "Images should look identical." is drawn with the portable
@@ -33,7 +33,7 @@ import org.skia.tools.ToolUtils
  * void onDraw(SkCanvas* canvas) override {
  *     SkBitmap orig;
  *     ToolUtils::GetResourceAsBitmap("images/mandrill_512_q075.jpg", &orig);
- *     sk_sp<SkData> pngData = SkPngEncoder::Encode(orig.pixmap(), {});
+ *     sk_sp<SkData> pngData = PngEncoder::encode(orig.pixmap(), {});
  *     sk_sp<SkData> jpgData = SkJpegEncoder::Encode(orig.pixmap(), {});
  *     sk_sp<SkImage> pngImage = SkImages::DeferredFromEncodedData(pngData);
  *     sk_sp<SkImage> jpgImage = SkImages::DeferredFromEncodedData(jpgData);
@@ -63,7 +63,7 @@ public class EncodeGM : GM() {
             }
         }
 
-        val pngData = SkPngEncoder.Encode(orig) ?: return
+        val pngData = PngEncoder.encode(orig) ?: return
         val jpgData = SkJpegEncoder.Encode(orig) ?: return
 
         val pngImage = decodeImage(pngData) ?: return

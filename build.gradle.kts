@@ -2822,7 +2822,7 @@ tasks.register("checkSupportedCodecsDoc") {
             "| GIF / ICO / AVIF / HEIF / JPEG XL / RAW / video |",
         )
         val requiredEncodeMarkers = listOf(
-            "Supported through `SkPngEncoder`.",
+            "Supported through `PngEncoder`.",
             "Supported through `SkJpegEncoder`",
             "Supported through `BmpEncoder`.",
             "Supported through `WbmpEncoder` in `codec/wbmp/`.",
@@ -2838,7 +2838,7 @@ tasks.register("checkSupportedCodecsDoc") {
         val missing = (requiredSections + requiredRows + requiredEncodeMarkers + requiredMetadataMarkers)
             .filterNot { marker -> text.contains(marker) }
         val requiredEncodeTestFiles = listOf(
-            "kanvas-skia/src/test/kotlin/org/skia/encode/SkPngEncoderTest.kt",
+            "codec/png/src/test/kotlin/org/graphiks/kanvas/codec/png/PngEncoderTest.kt",
             "kanvas-skia/src/test/kotlin/org/skia/encode/SkJpegEncoderTest.kt",
             "codec/bmp/src/test/kotlin/org/graphiks/kanvas/codec/bmp/BmpEncoderTest.kt",
             "codec/wbmp/src/test/kotlin/org/graphiks/kanvas/codec/wbmp/WbmpEncoderTest.kt",
@@ -3141,8 +3141,7 @@ tasks.register("checkPureKotlinPngEncoderNoAwt") {
 
     doLast {
         val filesToCheck = listOf(
-            file("kanvas-skia/src/main/kotlin/org/skia/encode/SkPngEncoder.kt"),
-            file("kanvas-skia/src/main/kotlin/org/skia/encode/EncoderSupport.kt"),
+            file("codec/png/src/main/kotlin/org/graphiks/kanvas/codec/png/PngEncoder.kt"),
         )
         val violations = mutableListOf<String>()
         filesToCheck

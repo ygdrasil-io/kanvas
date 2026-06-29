@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Test
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkImageInfo
 import org.graphiks.math.SkIRect
-import org.skia.encode.SkPngEncoder
+import org.graphiks.kanvas.codec.png.PngEncoder
 import org.skia.foundation.SkBitmap
 import java.nio.ByteBuffer
 
@@ -177,7 +177,7 @@ class AndroidCodecGetAndroidPixelsTest {
                 img.setPixel(x, y, (0xFF shl 24) or (x * 8) or ((y * 8) shl 8))
             }
         }
-        return SkPngEncoder.Encode(img) ?: error("Synthetic PNG encode failed")
+        return PngEncoder.encode(img) ?: error("Synthetic PNG encode failed")
     }
 
     @Test

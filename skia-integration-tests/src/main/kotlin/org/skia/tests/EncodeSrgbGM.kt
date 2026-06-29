@@ -4,7 +4,7 @@ import org.graphiks.kanvas.codec.Codec
 import org.skia.foundation.SkEncodedImageFormat
 import org.skia.core.SkCanvas
 import org.skia.encode.SkJpegEncoder
-import org.skia.encode.SkPngEncoder
+import org.graphiks.kanvas.codec.png.PngEncoder
 import org.skia.encode.SkWebpEncoder
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorSpace
@@ -28,7 +28,7 @@ import org.skia.tools.ToolUtils
  *
  * The GM exists upstream to validate that the encoders preserve sRGB
  * tagging across the round-trip ; in our `:kanvas-skia` port the
- * test focus shifts slightly because [SkPngEncoder] does **not**
+ * test focus shifts slightly because [PngEncoder] does **not**
  * embed an `iCCP` chunk (see class kdoc). The visual output still
  * matches because:
  *  - the source bitmaps are read back into the test as raw 8888
@@ -131,7 +131,7 @@ public open class EncodeSrgbGM(
 
     private fun encodeAndDecode(bitmap: SkBitmap): SkImage? {
         val bytes = when (format) {
-            SkEncodedImageFormat.kPNG -> SkPngEncoder.Encode(bitmap)
+            SkEncodedImageFormat.kPNG -> PngEncoder.encode(bitmap)
             SkEncodedImageFormat.kJPEG -> SkJpegEncoder.Encode(bitmap)
             // Upstream's third variant — VP8L lossless via SkWebpEncoder.
             // The TwelveMonkeys imageio-webp codec (on :cpu-raster's runtime

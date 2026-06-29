@@ -11,7 +11,7 @@ import org.graphiks.math.SkColorGetB
 import org.graphiks.math.SkColorGetG
 import org.graphiks.math.SkColorGetR
 import org.skia.core.SkCanvas
-import org.skia.encode.SkPngEncoder
+import org.graphiks.kanvas.codec.png.PngEncoder
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkBlendMode
 import org.skia.foundation.SkData
@@ -3000,7 +3000,7 @@ class OpenTypeFontTest {
             setPixel(0, 1, 0xFF0000FF.toInt())
             setPixel(1, 1, 0xFFFFFFFF.toInt())
         }
-        return SkPngEncoder.Encode(bitmap) ?: error("Failed to encode synthetic PNG payload")
+        return PngEncoder.encode(bitmap) ?: error("Failed to encode synthetic PNG payload")
     }
 
     private fun syntheticCbdtTable(png: ByteArray): ByteArray {

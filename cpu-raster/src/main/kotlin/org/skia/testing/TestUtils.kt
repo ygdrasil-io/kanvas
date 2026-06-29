@@ -8,7 +8,7 @@ import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkColorType
 import org.skia.foundation.skcms.SkNamedGamut
 import org.skia.foundation.skcms.SkNamedTransferFn
-import org.skia.encode.SkPngEncoder
+import org.graphiks.kanvas.codec.png.PngEncoder
 import org.skia.tests.GM
 import java.io.File
 
@@ -252,7 +252,7 @@ public object TestUtils {
     }
 
     private fun writePng(bitmap: SkBitmap, file: File) {
-        val bytes = SkPngEncoder.Encode(bitmap)
+        val bytes = PngEncoder.encode(bitmap)
             ?: throw IllegalStateException("Could not encode ${file.name} as PNG")
         file.writeBytes(bytes)
     }

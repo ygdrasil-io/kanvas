@@ -10,7 +10,7 @@ import java.io.OutputStream
  * R-suivi.23 implementation of upstream's
  * [`SkWebpEncoder`](https://github.com/google/skia/blob/main/include/encode/SkWebpEncoder.h).
  *
- * Sits beside [SkPngEncoder] / [SkJpegEncoder] in the `org.skia.encode`
+ * Sits beside [PngEncoder] / [SkJpegEncoder] in the `org.skia.encode`
  * package and follows the same shape : a Kotlin `object` carrying the
  * static `Encode` entry points and a Kotlin-idiomatic [Options] data
  * class mapped onto upstream's `SkWebpEncoder::Options`.

@@ -360,7 +360,7 @@ public class SkImage public constructor(
      *
      * Dispatch table :
      *  - [SkEncodedImageFormat.kPNG] : delegates to
-     *    [org.skia.encode.SkPngEncoder]. The [quality] argument is
+     *    [org.graphiks.kanvas.codec.png.PngEncoder]. The [quality] argument is
      *    ignored (PNG is lossless).
      *  - [SkEncodedImageFormat.kJPEG] : delegates to
      *    [org.skia.encode.SkJpegEncoder] with the supplied [quality].

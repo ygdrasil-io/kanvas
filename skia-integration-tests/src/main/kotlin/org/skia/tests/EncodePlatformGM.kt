@@ -4,7 +4,7 @@ import org.graphiks.kanvas.codec.Codec
 import org.skia.foundation.SkEncodedImageFormat
 import org.skia.core.SkCanvas
 import org.skia.encode.SkJpegEncoder
-import org.skia.encode.SkPngEncoder
+import org.graphiks.kanvas.codec.png.PngEncoder
 import org.skia.encode.SkWebpEncoder
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkImage
@@ -119,7 +119,7 @@ public class EncodePlatformGM : GM() {
 
     private fun encodeData(format: SkEncodedImageFormat, bitmap: SkBitmap, quality: Int): ByteArray? {
         return when (format) {
-            SkEncodedImageFormat.kPNG -> SkPngEncoder.Encode(bitmap)
+            SkEncodedImageFormat.kPNG -> PngEncoder.encode(bitmap)
             SkEncodedImageFormat.kJPEG -> SkJpegEncoder.Encode(
                 bitmap, SkJpegEncoder.Options(quality = quality),
             )

@@ -35,6 +35,10 @@ public object PngEncoder {
 
     private val defaultOptions = Options()
 
+    init {
+        org.skia.encode.PngCall.setEncoder { bitmap -> encode(bitmap) }
+    }
+
     public fun encode(src: SkBitmap, options: Options = defaultOptions): ByteArray? {
         val baos = ByteArrayOutputStream()
         return if (encode(baos, src, options)) baos.toByteArray() else null
