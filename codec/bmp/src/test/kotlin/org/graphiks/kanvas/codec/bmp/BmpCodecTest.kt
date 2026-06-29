@@ -172,7 +172,31 @@ class BmpCodecTest {
     }
 
     @Test
-    fun `decodes V5 32-bit bit masks and ignores embedded ICC profile for now`() {
+    fun `V5 BMP with embedded ICC profile exposes it via getICCProfile`() {
+        val iccBytes = org.skia.foundation.SkICC.WriteToICC(
+            org.skia.foundation.skcms.SkNamedTransferFn.kSRGB,
+            org.skia.foundation.skcms.SkNamedGamut.kSRGB,
+        )
+        val codec = BmpCodec.Decoder.make(
+            v4BitfieldsBmp(
+                width = 1,
+                height = 1,
+                headerSize = 124,
+                redMask = 0x00FF0000,
+                greenMask = 0x0000FF00,
+                blueMask = 0x000000FF,
+                alphaMask = -0x1000000,
+                iccProfile = iccBytes,
+                rowsTopDown = listOf(listOf(argb(0xFF, 0x12, 0x34, 0x56))),
+            ),
+        )!!
+        val profile = codec.getICCProfile()
+        assertNotNull(profile, "V5 BMP with embedded ICC must expose a profile")
+        assertEquals(iccBytes.size, profile!!.size)
+    }
+
+    @Test
+    fun `decodes V5 32-bit bit masks with non-parseable ICC profile returns null`() {
         val codec = BmpCodec.Decoder.make(
             v4BitfieldsBmp(
                 width = 1,
@@ -564,6 +588,7 @@ class BmpCodecTest {
     private fun r(c: Int): Int = (c ushr 16) and 0xFF
     private fun g(c: Int): Int = (c ushr 8) and 0xFF
     private fun b(c: Int): Int = c and 0xFF
+
 }
 
 private const val BLACK: Int = -0x1000000

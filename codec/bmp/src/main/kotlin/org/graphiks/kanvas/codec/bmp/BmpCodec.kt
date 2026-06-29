@@ -9,6 +9,7 @@ import org.skia.foundation.SkColorType
 import org.skia.foundation.SkEncodedImageFormat
 import org.skia.foundation.SkImageInfo
 import org.skia.foundation.skcms.SkcmsICCProfile
+import org.skia.foundation.skcms.skcmsParse
 
 /**
  * Pure Kotlin BMP decoder for the common uncompressed Windows BMP path.
@@ -17,14 +18,17 @@ import org.skia.foundation.skcms.SkcmsICCProfile
  * - Windows/OS2 file signature `BM`
  * - DIB headers with at least the BITMAPINFOHEADER fields
  * - BI_RGB, BI_BITFIELDS, BI_RLE8 and BI_RLE4 compression
- * - BITMAPV4HEADER/BITMAPV5HEADER RGB(A) masks; embedded ICC data is accepted but ignored
+ * - BITMAPV4HEADER/BITMAPV5HEADER RGB(A) masks and embedded ICC profiles
  * - indexed 1/4/8 bpp palettes and direct 16/24/32 bpp pixels
  * - bottom-up and top-down row order
  */
 public class BmpCodec private constructor(
     private val bytes: ByteArray,
     private val header: Header,
+    iccBytes: ByteArray?,
 ) : Codec() {
+
+    private val storedIccProfile: SkcmsICCProfile? = iccBytes?.let { skcmsParse(it) }
 
     private val cachedInfo: SkImageInfo by lazy {
         SkImageInfo.Make(
@@ -40,7 +44,7 @@ public class BmpCodec private constructor(
 
     override fun getEncodedFormat(): SkEncodedImageFormat = SkEncodedImageFormat.kBMP
 
-    override fun getICCProfile(): SkcmsICCProfile? = null
+    override fun getICCProfile(): SkcmsICCProfile? = storedIccProfile
 
     override fun getPixels(info: SkImageInfo, dst: SkBitmap): Result {
         if (dst.width != info.width || dst.height != info.height) {
@@ -229,11 +233,11 @@ public class BmpCodec private constructor(
 
         override fun make(data: ByteArray): Codec? {
             if (!matches(data)) return null
-            val header = parseHeader(data) ?: return null
-            return BmpCodec(data, header)
+            val (header, iccBytes) = parseHeader(data) ?: return null
+            return BmpCodec(data, header, iccBytes)
         }
 
-        private fun parseHeader(data: ByteArray): Header? {
+        private fun parseHeader(data: ByteArray): Pair<Header, ByteArray?>? {
             if (data.size < FILE_HEADER_SIZE + 40) return null
             val pixelOffset = readI32LE(data, 10)
             val dibSize = readI32LE(data, 14)
@@ -278,7 +282,15 @@ public class BmpCodec private constructor(
                 return null
             }
 
-            return Header(
+            val iccProfile: ByteArray? = if (dibSize >= 124) {
+                val iccOffset = readI32LE(data, 14 + 112)
+                val iccSize = readI32LE(data, 14 + 116)
+                if (iccOffset > 0 && iccSize > 0 && iccOffset.toLong() + iccSize.toLong() <= data.size.toLong()) {
+                    data.copyOfRange(iccOffset, iccOffset + iccSize)
+                } else null
+            } else null
+
+            return Pair(Header(
                 width = width,
                 height = height,
                 topDown = topDown,
@@ -287,7 +299,7 @@ public class BmpCodec private constructor(
                 pixelOffset = pixelOffset,
                 palette = palette,
                 bitMasks = bitMasks,
-            )
+            ), iccProfile)
         }
 
         private fun readBitMasks(data: ByteArray, dibSize: Int): BitMasks? {
