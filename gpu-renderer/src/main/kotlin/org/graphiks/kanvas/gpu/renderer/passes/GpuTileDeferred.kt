@@ -162,6 +162,13 @@ sealed interface GpuTileDeferredResult {
     }
 }
 
+/** Stable refusal/diagnostic codes for tile-deferred rendering (KGPU-M40-001). */
+object GpuTileDeferredReason {
+    const val BUDGET_EXCEEDED = "unsupported.tile.budget_exceeded"
+    const val CROSS_TILE_DESTINATION_READ = "unsupported.tile.cross_tile_destination_read"
+    const val CROSS_TILE_CLIP_ATOMIC_GROUP = "unsupported.tile.cross_tile_clip_atomic_group"
+}
+
 fun computeTileGrid(
     targetWidth: Int,
     targetHeight: Int,
@@ -276,6 +283,81 @@ fun buildCompositePass(
     )
 }
 
+/**
+ * Refuses a destination-read draw that bins into more than one tile.
+ *
+ * Cross-tile destination reads cannot be satisfied per-tile because each tile only owns its own
+ * sub-rect of the target; the read must be deferred to the composite pass. Single-tile destination
+ * reads are accepted (the read stays within one tile-private intermediate).
+ */
+fun checkCrossTileDestinationRead(
+    bins: List<GpuTileBin>,
+    destinationReadingCommandIds: Set<Int>,
+): GpuTileDeferredResult {
+    for (commandId in destinationReadingCommandIds) {
+        val coveringTiles = bins.filter { bin ->
+            bin.drawInvocations.any { invocation -> invocation.commandIdValue == commandId }
+        }
+        if (coveringTiles.size > 1) {
+            val tileLabels = coveringTiles
+                .sortedWith(compareBy({ it.tileIndexY }, { it.tileIndexX }))
+                .joinToString(separator = "") { tile -> "[${tile.tileIndexX},${tile.tileIndexY}]" }
+            return GpuTileDeferredResult.Refused(
+                RefuseDiagnostic(
+                    code = GpuTileDeferredReason.CROSS_TILE_DESTINATION_READ,
+                    message = "Cross-tile destination read refused for draw $commandId; " +
+                        "spans tiles $tileLabels; deferred to composite pass",
+                    stage = "tile.binning",
+                    terminal = true,
+                ),
+            )
+        }
+    }
+    return GpuTileDeferredResult.Accepted(
+        tilePasses = emptyList(),
+        strategy = GpuTileStrategy.DirectTargetSlice,
+    )
+}
+
+/**
+ * Refuses a clip atomic group whose member draws bin into more than one tile.
+ *
+ * Clip atomic groups must be evaluated together within a single tile pass; splitting them across
+ * tiles would break the all-or-nothing clip semantics, so the split is refused at binning.
+ */
+fun checkCrossTileClipAtomicGroup(
+    bins: List<GpuTileBin>,
+    clipAtomicGroupByCommandId: Map<Int, String>,
+): GpuTileDeferredResult {
+    val tilesByGroup = mutableMapOf<String, MutableSet<Pair<Int, Int>>>()
+    for (bin in bins) {
+        for (invocation in bin.drawInvocations) {
+            val group = clipAtomicGroupByCommandId[invocation.commandIdValue] ?: continue
+            tilesByGroup.getOrPut(group) { mutableSetOf() }.add(bin.tileIndexX to bin.tileIndexY)
+        }
+    }
+    for ((group, tiles) in tilesByGroup) {
+        if (tiles.size > 1) {
+            val tileLabels = tiles
+                .sortedWith(compareBy({ it.second }, { it.first }))
+                .joinToString(separator = "") { tile -> "[${tile.first},${tile.second}]" }
+            return GpuTileDeferredResult.Refused(
+                RefuseDiagnostic(
+                    code = GpuTileDeferredReason.CROSS_TILE_CLIP_ATOMIC_GROUP,
+                    message = "Cross-tile clip atomic group '$group' refused at binning; " +
+                        "spans tiles $tileLabels",
+                    stage = "tile.binning",
+                    terminal = true,
+                ),
+            )
+        }
+    }
+    return GpuTileDeferredResult.Accepted(
+        tilePasses = emptyList(),
+        strategy = GpuTileStrategy.DirectTargetSlice,
+    )
+}
+
 fun checkTileMemoryBudget(
     grid: GpuTileGridPlan,
     budget: GpuTileMemoryBudget,
@@ -290,7 +372,7 @@ fun checkTileMemoryBudget(
     if (actualPerTileBytes > maxAllowedPerTile) {
         return GpuTileDeferredResult.Refused(
             RefuseDiagnostic(
-                code = "unsupported.tile.budget_exceeded",
+                code = GpuTileDeferredReason.BUDGET_EXCEEDED,
                 message = "Per-tile budget exceeded: $actualPerTileBytes bytes needed, " +
                     "$maxAllowedPerTile bytes available (${budget.adapterTextureMemoryFraction * 100}% of adapter texture memory)",
                 stage = "tile.budget",
@@ -302,7 +384,7 @@ fun checkTileMemoryBudget(
     if (actualPerTileBytes > budget.perTileBytes) {
         return GpuTileDeferredResult.Refused(
             RefuseDiagnostic(
-                code = "unsupported.tile.budget_exceeded",
+                code = GpuTileDeferredReason.BUDGET_EXCEEDED,
                 message = "Per-tile budget exceeded: $actualPerTileBytes bytes needed, " +
                     "${budget.perTileBytes} limit",
                 stage = "tile.budget",

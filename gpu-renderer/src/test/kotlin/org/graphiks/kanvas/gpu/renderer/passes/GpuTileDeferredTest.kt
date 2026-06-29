@@ -530,6 +530,89 @@ class GpuTileDeferredTest {
         assertFalse(lines.joinToString("\n").contains("WGPU"))
     }
 
+    // -- Cross-tile destination read / clip atomic group refusals (production behavior) --
+
+    @Test
+    fun `reason constants match spec refusal codes exactly`() {
+        assertEquals("unsupported.tile.budget_exceeded", GpuTileDeferredReason.BUDGET_EXCEEDED)
+        assertEquals(
+            "unsupported.tile.cross_tile_destination_read",
+            GpuTileDeferredReason.CROSS_TILE_DESTINATION_READ,
+        )
+        assertEquals(
+            "unsupported.tile.cross_tile_clip_atomic_group",
+            GpuTileDeferredReason.CROSS_TILE_CLIP_ATOMIC_GROUP,
+        )
+    }
+
+    @Test
+    fun `cross-tile destination read refused when dst-reading draw spans multiple tiles`() {
+        val grid = computeTileGrid(targetWidth = 1024, targetHeight = 768, tileSize = 256)
+        val drawBoundsMap = mapOf(1 to bounds(128, 128, 256, 256))
+        val draws = listOf(makeDrawInvocation(commandId = 1))
+        val bins = binDrawsToTiles(grid, draws, drawBoundsMap)
+
+        val result = checkCrossTileDestinationRead(bins, destinationReadingCommandIds = setOf(1))
+
+        assertIs<GpuTileDeferredResult.Refused>(result)
+        assertEquals(GpuTileDeferredReason.CROSS_TILE_DESTINATION_READ, result.diagnostic.code)
+        assertEquals("tile.binning", result.diagnostic.stage)
+        assertTrue(result.diagnostic.terminal)
+        assertContains(result.diagnostic.message, "deferred to composite")
+    }
+
+    @Test
+    fun `dst read within single tile accepted`() {
+        val grid = computeTileGrid(targetWidth = 1024, targetHeight = 768, tileSize = 256)
+        val drawBoundsMap = mapOf(1 to bounds(0, 0, 128, 128))
+        val draws = listOf(makeDrawInvocation(commandId = 1))
+        val bins = binDrawsToTiles(grid, draws, drawBoundsMap)
+
+        val result = checkCrossTileDestinationRead(bins, destinationReadingCommandIds = setOf(1))
+
+        assertIs<GpuTileDeferredResult.Accepted>(result)
+    }
+
+    @Test
+    fun `cross-tile clip atomic group refused at binning when group spans tiles`() {
+        val grid = computeTileGrid(targetWidth = 1024, targetHeight = 768, tileSize = 256)
+        val drawBoundsMap = mapOf(
+            1 to bounds(0, 0, 128, 128),
+            2 to bounds(512, 256, 128, 128),
+        )
+        val draws = drawBoundsMap.keys.map { makeDrawInvocation(it) }
+        val bins = binDrawsToTiles(grid, draws, drawBoundsMap)
+
+        val result = checkCrossTileClipAtomicGroup(
+            bins,
+            clipAtomicGroupByCommandId = mapOf(1 to "clip-group-A", 2 to "clip-group-A"),
+        )
+
+        assertIs<GpuTileDeferredResult.Refused>(result)
+        assertEquals(GpuTileDeferredReason.CROSS_TILE_CLIP_ATOMIC_GROUP, result.diagnostic.code)
+        assertEquals("tile.binning", result.diagnostic.stage)
+        assertTrue(result.diagnostic.terminal)
+        assertContains(result.diagnostic.message, "clip atomic")
+    }
+
+    @Test
+    fun `clip atomic group confined to single tile accepted`() {
+        val grid = computeTileGrid(targetWidth = 1024, targetHeight = 768, tileSize = 256)
+        val drawBoundsMap = mapOf(
+            1 to bounds(0, 0, 64, 64),
+            2 to bounds(64, 64, 64, 64),
+        )
+        val draws = drawBoundsMap.keys.map { makeDrawInvocation(it) }
+        val bins = binDrawsToTiles(grid, draws, drawBoundsMap)
+
+        val result = checkCrossTileClipAtomicGroup(
+            bins,
+            clipAtomicGroupByCommandId = mapOf(1 to "clip-group-A", 2 to "clip-group-A"),
+        )
+
+        assertIs<GpuTileDeferredResult.Accepted>(result)
+    }
+
     private fun assertIllegalArgument(expectedMessageFragment: String, block: () -> Unit) {
         try {
             block()
