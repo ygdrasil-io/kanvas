@@ -9,6 +9,7 @@ import org.graphiks.kanvas.gpu.renderer.text.ColorGlyphRefusalKind
 import org.graphiks.kanvas.gpu.renderer.text.GPUColorGlyphRouteDecision
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import kotlin.uuid.Uuid
 
@@ -35,29 +36,37 @@ class GPUColorGlyphRoutePlannerTest {
 
     @Test
     fun `accepts COLRv0 within layer budget`() {
-        val decision = GPUColorGlyphRoutePlanner().planColorGlyphRoute(plan(2))
+        val decision = GPUColorGlyphRoutePlanner()
+            .planColorGlyphRoute(plan(GPUColorGlyphRoutePlanner.MAX_COLOR_LAYERS))
+        assertTrue(decision is GPUColorGlyphRouteDecision.Accepted)
+        assertEquals(7u, (decision as GPUColorGlyphRouteDecision.Accepted).route.plan.baseGlyphID)
+    }
+
+    @Test
+    fun `accepts exactly the max layer budget`() {
+        val decision = GPUColorGlyphRoutePlanner().planColorGlyphRoute(plan(16))
         assertTrue(decision is GPUColorGlyphRouteDecision.Accepted)
     }
 
     @Test
     fun `refuses layer count exceeding max`() {
-        val decision = GPUColorGlyphRoutePlanner().planColorGlyphRoute(plan(17))
-        assertTrue(decision is GPUColorGlyphRouteDecision.Refused)
-        decision as GPUColorGlyphRouteDecision.Refused
-        assertEquals(ColorGlyphRefusalKind.LAYER_COUNT_EXCEEDED, decision.refusalKind)
+        val decision = GPUColorGlyphRoutePlanner()
+            .planColorGlyphRoute(plan(GPUColorGlyphRoutePlanner.MAX_COLOR_LAYERS + 1))
+        val refused = assertIs<GPUColorGlyphRouteDecision.Refused>(decision)
+        assertEquals(ColorGlyphRefusalKind.LAYER_COUNT_EXCEEDED, refused.refusalKind)
         assertEquals(
             "unsupported.text.color_font.layer_count_exceeded",
-            decision.diagnostic.code,
+            refused.diagnostic.code,
         )
     }
 
     @Test
     fun `refuses unsupported color format`() {
-        val decision = GPUColorGlyphRoutePlanner().refuseUnsupportedColorFormat("COLRv1")
-        assertEquals(ColorGlyphRefusalKind.FORMAT_UNAVAILABLE, decision.refusalKind)
+        val refused = GPUColorGlyphRoutePlanner().refuseUnsupportedColorFormat("COLRv1")
+        assertEquals(ColorGlyphRefusalKind.FORMAT_UNAVAILABLE, refused.refusalKind)
         assertEquals(
             "unsupported.text.color_font.format_unavailable",
-            decision.diagnostic.code,
+            refused.diagnostic.code,
         )
     }
 }
