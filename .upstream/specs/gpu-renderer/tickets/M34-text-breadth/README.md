@@ -26,9 +26,9 @@ output artifacts. M34-001 depends on adapter pixel geometry query.
 | Ticket | Status | Priority | Claim Impact | Route Kind | Product Activation | Adapter Required | Owner Area | Depends On | Legacy Gate |
 |---|---|---|---|---|---|---|---|---|---|
 | [KGPU-M34-001 - Subpixel LCD rendering](KGPU-M34-001-subpixel-lcd-rendering.md) | `review` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `text` | `KGPU-M1-001` | `legacy drawText` |
-| [KGPU-M34-002 - Color font pipeline](KGPU-M34-002-color-font-pipeline.md) | `blocked` | `P0` | `DependencyGated` | `GPUNative` | `false` | `true` | `text` | `KGPU-M1-001` | `legacy drawText` |
-| [KGPU-M34-003 - Variable font support](KGPU-M34-003-variable-font-support.md) | `blocked` | `P1` | `DependencyGated` | `GPUNative` | `false` | `true` | `text` | `KGPU-M1-001` | `legacy drawText` |
-| [KGPU-M34-004 - Complex shaping integration](KGPU-M34-004-complex-shaping-integration.md) | `blocked` | `P1` | `DependencyGated` | `GPUNative` | `false` | `true` | `text` | `KGPU-M1-001` | `legacy drawText` |
+| [KGPU-M34-002 - Color font pipeline](KGPU-M34-002-color-font-pipeline.md) | `review` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `text` | `KGPU-M1-001` | `legacy drawText` |
+| [KGPU-M34-003 - Variable font support](KGPU-M34-003-variable-font-support.md) | `review` | `P1` | `TargetNative` | `GPUNative` | `false` | `true` | `text` | `KGPU-M1-001` | `legacy drawText` |
+| [KGPU-M34-004 - Complex shaping integration](KGPU-M34-004-complex-shaping-integration.md) | `review` | `P1` | `TargetNative` | `GPUNative` | `false` | `true` | `text` | `KGPU-M1-001` | `legacy drawText` |
 | [KGPU-M34-005 - Font fallback chain](KGPU-M34-005-font-fallback-chain.md) | `review` | `P1` | `TargetNative` | `GPUNative` | `false` | `true` | `text` | `KGPU-M1-001` | `legacy drawText` |
 
 ## Validation Bundle
@@ -40,12 +40,25 @@ rtk git diff --check && rtk ./gradlew --no-daemon :gpu-renderer:check
 ## Non-Claims
 
 - This milestone does not claim COLRv1, SVG OpenType, or full emoji sequence
-  rendering. Those remain `DependencyGated` until the pure Kotlin text stack
-  delivers the required parsing artifacts.
+  rendering. The pure Kotlin parsing artifacts are already delivered; these
+  remain `DependencyGated` until the GPU renderer delivers rendering execution
+  evidence (M10/M11) and the per-script / CFF2 gates close (M6/M4).
 - Variable font outline generation and complex shaping/BiDi execution remain
   in the text stack; the GPU renderer only consumes resolved artifacts.
 - Font fallback selection logic lives in the text stack; the GPU renderer
   only splits subruns by fallback identity.
+
+## Re-Scope (2026-06-29)
+
+M34-002/003/004 étaient `blocked` avec un motif faux (« gated on
+pure-kotlin-text artifacts »). L'audit `fichier:ligne` montre que le parsing
+COLRv0/CPAL/CBDT, la résolution fvar/gvar/avar et le shaping/BiDi sont livrés
+et testés. Ces trois tickets passent en `review` / `TargetNative` pour le
+**scope borné** handoff + facts portés + refus stable (`product_activation:
+false`), validé par `ColorFontHandoffRouteTest`, `VariableFontHandoffRouteTest`
+et `ShapingIntegrationHandoffRouteTest`. Le **rendu GPU** (couleur, parité
+variable, scripts complexes, CFF2 vraies polices) reste `DependencyGated` sur
+M6/M10/M11/M4. Évidence : `reports/gpu-renderer/m34-text-breadth-rescope/`.
 
 ## Status Update Rule
 
