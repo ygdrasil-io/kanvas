@@ -20,7 +20,7 @@ import java.io.ByteArrayOutputStream
  *  - the framing starts with the `'BM'` signature and a well-formed
  *    `BITMAPFILEHEADER` + `BITMAPINFOHEADER` ;
  *  - encode → decode round-trips opaque RGB pixels byte-identical
- *    through [SkCodec] / codec-bmp-kotlin ;
+ *    through [SkCodec] / :codec:bmp ;
  *  - the [SkBmpEncoder.BmpFormat.kBGR_888] code path drops alpha and
  *    pads rows correctly when the width is not a multiple of 4 bytes.
  */

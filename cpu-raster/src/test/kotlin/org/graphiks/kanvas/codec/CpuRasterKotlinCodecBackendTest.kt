@@ -20,7 +20,7 @@ class CpuRasterKotlinCodecBackendTest {
     }
 
     @Test
-    fun `cpu-raster codec tests can run with codec-all-kotlin providers`() {
+    fun `cpu-raster codec tests can run with codec providers`() {
         val providers = ServiceLoader.load(CodecDecoderProvider::class.java)
             .map { provider -> provider::class.qualifiedName.orEmpty() }
             .toList()

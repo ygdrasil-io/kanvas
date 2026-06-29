@@ -69,7 +69,7 @@ fun Test.useKotlinCodecBackendRuntime() {
 
 tasks.register<Test>("testCodecWithKotlinBackend") {
     group = "verification"
-    description = "Runs the cpu-raster codec backend smoke test with codec-all-kotlin instead of the temporary AWT/ImageIO codec bundle."
+    description = "Runs the cpu-raster codec backend smoke test with :codec instead of the temporary AWT/ImageIO codec bundle."
 
     useKotlinCodecBackendRuntime()
 
@@ -80,7 +80,7 @@ tasks.register<Test>("testCodecWithKotlinBackend") {
 
 tasks.register<Test>("testCodecSuiteWithKotlinBackend") {
     group = "verification"
-    description = "Runs the backend-agnostic cpu-raster codec suite subset with codec-all-kotlin."
+    description = "Runs the backend-agnostic cpu-raster codec suite subset with :codec."
 
     useKotlinCodecBackendRuntime()
 

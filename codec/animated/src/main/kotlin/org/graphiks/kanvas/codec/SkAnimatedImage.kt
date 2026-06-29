@@ -31,7 +31,7 @@ import org.skia.utils.SkPixmapUtils
  *    once the animation has completed (per [setRepetitionCount]).
  *  - [reset] / [setRepetitionCount] — playback controls.
  *
- * **Ownership boundary.** `codec-animated` owns playback state, frame
+ * **Ownership boundary.** `:codec:animated` owns playback state, frame
  * cursoring, orientation/crop/scale/post-processing, and snapshotting.
  * Container-specific parsing and frame composition remain owned by the
  * format codec that supplies the [SkCodec] (GIF today, future animated

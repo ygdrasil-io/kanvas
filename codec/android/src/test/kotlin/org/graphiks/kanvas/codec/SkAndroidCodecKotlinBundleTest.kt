@@ -15,7 +15,7 @@ import java.nio.ByteBuffer
 
 class SkAndroidCodecKotlinBundleTest {
     @Test
-    fun `MakeFromData decodes PNG through codec-all-kotlin providers`() {
+    fun `MakeFromData decodes PNG through codec providers`() {
         val codec = SkAndroidCodec.MakeFromData(CodecTestFixtures.simpleRgbaPng())
 
         assertNotNull(codec)
@@ -47,7 +47,7 @@ class SkAndroidCodecKotlinBundleTest {
     }
 
     @Test
-    fun `getAndroidPixels crops downsamples JPEG through codec-all-kotlin providers`() {
+    fun `getAndroidPixels crops downsamples JPEG through codec providers`() {
         val codec = SkAndroidCodec.MakeFromData(CodecTestFixtures.simpleGrayscaleJpeg(width = 16, height = 16))!!
         val pixels = decodeSampledRgba(codec, subset = SkIRect.MakeLTRB(4, 4, 16, 16), sampleSize = 4)
 
@@ -57,7 +57,7 @@ class SkAndroidCodecKotlinBundleTest {
     }
 
     @Test
-    fun `getAndroidPixels crops downsamples GIF through codec-all-kotlin providers`() {
+    fun `getAndroidPixels crops downsamples GIF through codec providers`() {
         val indexes = List(4) { y -> IntArray(4) { x -> (x + y) and 3 } }
         val palette = intArrayOf(0xFF101820.toInt(), 0xFF305060.toInt(), 0xFF708090.toInt(), 0xFFA0B0C0.toInt())
         val codec = SkAndroidCodec.MakeFromData(CodecTestFixtures.indexedGif(indexes, palette))!!
@@ -68,7 +68,7 @@ class SkAndroidCodecKotlinBundleTest {
     }
 
     @Test
-    fun `getAndroidPixels crops downsamples BMP through codec-all-kotlin providers`() {
+    fun `getAndroidPixels crops downsamples BMP through codec providers`() {
         val rows = patternedRows(width = 4, height = 4)
         val codec = SkAndroidCodec.MakeFromData(CodecTestFixtures.rgbBmp(rows))!!
         val pixels = decodeSampledRgba(codec, subset = SkIRect.MakeLTRB(1, 1, 4, 4), sampleSize = 2)

@@ -44,7 +44,7 @@ class CodecAllKotlinRealImageTest {
         val runtimeClasspath = System.getProperty("kanvas.codec.realImageTestRuntimeClasspath")
             ?: error("Missing kanvas.codec.realImageTestRuntimeClasspath test system property")
         assertTrue(
-            runtimeClasspath.contains("codec/build"),
+            runtimeClasspath.contains("/codec/build/"),
             "real image tests must run with the :codec aggregator on the Gradle test runtime classpath",
         )
         forbiddenCodecArtifacts.forEach { artifact ->
@@ -57,10 +57,10 @@ class CodecAllKotlinRealImageTest {
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("fixtures")
-    fun `checks real image fixture through codec-all-kotlin dispatch`(fixture: RealImageFixture) {
+    fun `checks real image fixture through codec dispatch`(fixture: RealImageFixture) {
         val data = readFixture(fixture.path)
         val codec = SkCodec.MakeFromData(data)
-        assertNotNull(codec, "${fixture.path} should be accepted by codec-all-kotlin dispatch")
+        assertNotNull(codec, "${fixture.path} should be accepted by :codec dispatch")
 
         val checkedCodec = codec!!
         assertEquals(fixture.format, checkedCodec.getEncodedFormat(), fixture.path)
@@ -116,7 +116,7 @@ class CodecAllKotlinRealImageTest {
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("negativeFixtures")
-    fun `rejects invalid real image fixtures through codec-all-kotlin dispatch`(fixture: NegativeFixture) {
+    fun `rejects invalid real image fixtures through codec dispatch`(fixture: NegativeFixture) {
         val data = readFixture(fixture.path)
         assertNull(SkCodec.MakeFromData(data), "${fixture.path} should be rejected: ${fixture.reason}")
     }
@@ -169,13 +169,13 @@ class CodecAllKotlinRealImageTest {
 
     private companion object {
         private val forbiddenCodecArtifacts = listOf(
-            "codec-all-awt",
-            "codec-png-imageio",
-            "codec-jpeg-imageio",
-            "codec-gif-imageio",
-            "codec-bmp-imageio",
-            "codec-wbmp-imageio",
-            "codec-webp-imageio",
+            "all-awt",
+            "png-imageio",
+            "jpeg-imageio",
+            "gif-imageio",
+            "bmp-imageio",
+            "wbmp-imageio",
+            "webp-imageio",
         )
 
         @JvmStatic

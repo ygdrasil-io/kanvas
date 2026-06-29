@@ -101,7 +101,7 @@ class CodecProvenanceMatrixTest(unittest.TestCase):
                 "rowId": "fake-avif-pass",
                 "status": "pass",
                 "format": "AVIF",
-                "decoder": {"name": "avif", "kind": "stub", "module": "codec-extended"},
+                "decoder": {"name": "avif", "kind": "stub", "module": "codec/extended"},
                 "colorInfo": {"policy": "unknown"},
                 "origin": {"kind": "synthetic"},
                 "decodeResult": {"status": "kSuccess"},

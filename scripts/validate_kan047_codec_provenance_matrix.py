@@ -10,7 +10,7 @@ OUTPUT_JSON = "kan-047-codec-provenance-matrix.json"
 OUTPUT_MARKDOWN = "kan-047-codec-provenance-matrix.md"
 
 SUPPORTED_CODECS = "SUPPORTED_CODECS.md"
-FIXTURE_PROVENANCE = "codec-real-image-tests/FIXTURES.md"
+FIXTURE_PROVENANCE = "codec/real-image-tests/FIXTURES.md"
 TARGET_RENDERER = ".upstream/target/skia-like-realtime-renderer-target.md"
 SPEC_RENDERING_FEATURE = ".upstream/specs/skia-like-realtime/01-rendering-feature-expansion.md"
 
@@ -135,10 +135,10 @@ def source_audit(root: Path) -> dict[str, Any]:
             "STUB.ANIMATED_IMAGE",
         ],
     )
-    require_text(root, "codec-extended/src/main/kotlin/org/skia/codec/SkAvifDecoder.kt", ["Always returns `null`"])
-    require_text(root, "codec-extended/src/main/kotlin/org/skia/codec/SkJpegxlDecoder.kt", ["Always returns `null`"])
-    require_text(root, "codec-extended/src/main/kotlin/org/skia/codec/SkRawDecoder.kt", ["Always returns `null`"])
-    require_text(root, "codec-extended/src/main/kotlin/org/skia/codec/SkVideoDecoder.kt", ["STUB.FFMPEG"])
+    require_text(root, "codec/extended/src/main/kotlin/org/graphiks/kanvas/codec/SkAvifDecoder.kt", ["Always returns `null`"])
+    require_text(root, "codec/extended/src/main/kotlin/org/graphiks/kanvas/codec/SkJpegxlDecoder.kt", ["Always returns `null`"])
+    require_text(root, "codec/extended/src/main/kotlin/org/graphiks/kanvas/codec/SkRawDecoder.kt", ["Always returns `null`"])
+    require_text(root, "codec/extended/src/main/kotlin/org/graphiks/kanvas/codec/SkVideoDecoder.kt", ["STUB.FFMPEG"])
     return {
         "supportedCodecs": SUPPORTED_CODECS,
         "fixtureProvenance": FIXTURE_PROVENANCE,
@@ -442,7 +442,7 @@ def codec_format_rows() -> list[dict[str, Any]]:
                 "module": module,
             },
             "colorInfo": color,
-            "origin": "codec-real-image-tests/FIXTURES.md plus format-specific unit tests",
+            "origin": "codec/real-image-tests/FIXTURES.md plus format-specific unit tests",
             "decodeResult": result,
             "reasonCode": "none",
         }
@@ -453,36 +453,36 @@ def codec_format_rows() -> list[dict[str, Any]]:
             {
                 "format": "AVIF",
                 "status": "dependency-gated",
-                "decoder": {"name": "avif", "kind": "stub", "module": "codec-extended"},
+                "decoder": {"name": "avif", "kind": "stub", "module": "codec/extended"},
                 "colorInfo": "out of scope until real AVIF dependency lands",
-                "origin": "codec-extended/src/main/kotlin/org/skia/codec/SkAvifDecoder.kt",
+                "origin": "codec/extended/src/main/kotlin/org/graphiks/kanvas/codec/SkAvifDecoder.kt",
                 "decodeResult": "stub-returns-null",
                 "reasonCode": "codec.decoder-unavailable",
             },
             {
                 "format": "JPEG XL",
                 "status": "dependency-gated",
-                "decoder": {"name": "jpegxl", "kind": "stub", "module": "codec-extended"},
+                "decoder": {"name": "jpegxl", "kind": "stub", "module": "codec/extended"},
                 "colorInfo": "out of scope until real JPEG XL dependency lands",
-                "origin": "codec-extended/src/main/kotlin/org/skia/codec/SkJpegxlDecoder.kt",
+                "origin": "codec/extended/src/main/kotlin/org/graphiks/kanvas/codec/SkJpegxlDecoder.kt",
                 "decodeResult": "stub-returns-null",
                 "reasonCode": "codec.decoder-unavailable",
             },
             {
                 "format": "RAW",
                 "status": "dependency-gated",
-                "decoder": {"name": "raw", "kind": "stub", "module": "codec-extended"},
+                "decoder": {"name": "raw", "kind": "stub", "module": "codec/extended"},
                 "colorInfo": "out of scope until real RAW dependency lands",
-                "origin": "codec-extended/src/main/kotlin/org/skia/codec/SkRawDecoder.kt",
+                "origin": "codec/extended/src/main/kotlin/org/graphiks/kanvas/codec/SkRawDecoder.kt",
                 "decodeResult": "stub-returns-null",
                 "reasonCode": "codec.decoder-unavailable",
             },
             {
                 "format": "video",
                 "status": "dependency-gated",
-                "decoder": {"name": "ffmpeg-video", "kind": "stub", "module": "codec-extended"},
+                "decoder": {"name": "ffmpeg-video", "kind": "stub", "module": "codec/extended"},
                 "colorInfo": "out of scope until FFmpeg-backed dependency lands outside portable runtime",
-                "origin": "codec-extended/src/main/kotlin/org/skia/codec/SkVideoDecoder.kt",
+                "origin": "codec/extended/src/main/kotlin/org/graphiks/kanvas/codec/SkVideoDecoder.kt",
                 "decodeResult": "throws-STUB.FFMPEG",
                 "reasonCode": "codec.decoder-unavailable",
             },

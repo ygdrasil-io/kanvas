@@ -32,7 +32,7 @@ class SkAnimatedImageTest {
     }
 
     @Test
-    fun `MakeFromCodec plays animated WebP frames through codec-animated`() {
+    fun `MakeFromCodec plays animated WebP frames through the codec animated module`() {
         val red = argb(0xFF, 200, 0, 0)
         val blue = argb(0xFF, 0, 0, 200)
         val codec = WebpKotlinDecoderProvider().decoders().single().make(

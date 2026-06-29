@@ -298,7 +298,7 @@ class SkGifKotlinCodecTest {
                 palette = intArrayOf(RED, GREEN, BLUE, YELLOW),
                 extensions = listOf(
                     netscapeLoopExtension(loopCount = 3),
-                    commentExtension("codec-gif-kotlin"),
+                    commentExtension(":codec:gif"),
                 ),
                 frames = listOf(
                     GifFrameSpec(0, 0, 2, 1, intArrayOf(0, 1), delayCs = 4),
