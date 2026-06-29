@@ -1,6 +1,6 @@
 package org.graphiks.kanvas.gpu.renderer.images
 
-import org.skia.codec.SkCodec
+import org.graphiks.kanvas.codec.SkCodec
 import org.graphiks.math.SkColorGetA
 import org.graphiks.math.SkColorGetB
 import org.graphiks.math.SkColorGetG

@@ -1,7 +1,7 @@
 package org.skia.tests
 
 import org.graphiks.math.SkISize
-import org.skia.codec.SkCodec
+import org.graphiks.kanvas.codec.SkCodec
 import org.skia.core.SkCanvas
 import org.skia.encode.SkJpegEncoder
 import org.skia.foundation.SkBitmap

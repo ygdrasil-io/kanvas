@@ -1,8 +1,8 @@
 package org.skia.tests
 
 import org.skia.core.SkCanvas
-import org.skia.codec.SkCodecImageGenerator
-import org.skia.codec.SkImageGeneratorImages
+import org.graphiks.kanvas.codec.SkCodecImageGenerator
+import org.graphiks.kanvas.codec.SkImageGeneratorImages
 import org.skia.foundation.SkImages
 import org.graphiks.math.SkISize
 import org.skia.tools.ToolUtils
@@ -38,7 +38,7 @@ import org.skia.tools.ToolUtils
  * tag (0x0112) out of the APP1 segment and applies the corresponding
  * rotation/flip to the decoded pixels via
  * [org.skia.utils.SkPixmapUtils.Orient] — surfaced through
- * [org.skia.codec.SkCodec.getOrigin]. Both GMs are therefore expected
+ * [org.graphiks.kanvas.codec.SkCodec.getOrigin]. Both GMs are therefore expected
  * to render at high pixel-fidelity vs. the upstream PNG references
  * (each of the eight tiles displays the same RGB-quadrant + corner-
  * label layout, only the centre digit changes).

@@ -15,7 +15,7 @@ import org.skia.tools.ToolUtils
  * `(srcColorType, dstColorType, dstAlphaType, dstColorSpace)`
  * Cartesian product driven by a raster source [SkImage].
  *
- * Upstream loads `images/google_chrome.ico` via [org.skia.codec.SkCodec],
+ * Upstream loads `images/google_chrome.ico` via [org.graphiks.kanvas.codec.SkCodec],
  * resamples to `64×64` in three source colour types
  * (`kRGBA_8888 / kBGRA_8888 / kRGBA_F16`), then reads each back into
  * the same three destination colour types × two alpha types ×
@@ -81,7 +81,7 @@ public class ReadPixelsGM : GM() {
 
     /**
      * Mirrors upstream's `make_raster_image(SkColorType)` — load
-     * `images/google_chrome.ico` via [org.skia.codec.SkCodec.MakeFromStream]
+     * `images/google_chrome.ico` via [org.graphiks.kanvas.codec.SkCodec.MakeFromStream]
      * and resample to `64×64` in [srcColorType] under
      * `kPremul_SkAlphaType`.
      *

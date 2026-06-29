@@ -1,7 +1,7 @@
 package org.skia.tests
 
 import org.graphiks.math.SkISize
-import org.skia.codec.SkImageCodecs
+import org.graphiks.kanvas.codec.SkImageCodecs
 import org.skia.core.SkCanvas
 import org.skia.foundation.SkAlphaType
 import org.skia.foundation.SkColorSpace

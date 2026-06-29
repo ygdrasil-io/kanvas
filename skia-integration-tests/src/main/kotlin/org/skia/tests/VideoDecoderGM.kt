@@ -1,6 +1,6 @@
 package org.skia.tests
 
-import org.skia.codec.SkVideoDecoder
+import org.graphiks.kanvas.codec.SkVideoDecoder
 import org.skia.core.SkCanvas
 import org.skia.foundation.stream.SkMemoryStream
 import org.graphiks.math.SkISize

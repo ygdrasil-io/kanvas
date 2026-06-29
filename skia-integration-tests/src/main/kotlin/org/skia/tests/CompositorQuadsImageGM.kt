@@ -1,6 +1,6 @@
 package org.skia.tests
 
-import org.skia.codec.SkCodec
+import org.graphiks.kanvas.codec.SkCodec
 import org.skia.core.SkCanvas
 import org.skia.foundation.SkBitmap
 import org.graphiks.math.SkColorSetARGB

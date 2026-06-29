@@ -3,7 +3,7 @@ package org.skia.tests
 import org.skia.core.SkCanvas
 import org.skia.core.SkPicture
 import org.skia.core.SkPictureRecorder
-import org.skia.codec.SkImageCodecs
+import org.graphiks.kanvas.codec.SkImageCodecs
 import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkImage
 import org.skia.foundation.SkImages

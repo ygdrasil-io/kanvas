@@ -74,7 +74,7 @@ tasks.register<Test>("testCodecWithKotlinBackend") {
     useKotlinCodecBackendRuntime()
 
     filter {
-        includeTestsMatching("org.skia.codec.CpuRasterKotlinCodecBackendTest")
+        includeTestsMatching("org.graphiks.kanvas.codec.CpuRasterKotlinCodecBackendTest")
     }
 }
 
@@ -85,7 +85,7 @@ tasks.register<Test>("testCodecSuiteWithKotlinBackend") {
     useKotlinCodecBackendRuntime()
 
     filter {
-        includeTestsMatching("org.skia.codec.*")
+        includeTestsMatching("org.graphiks.kanvas.codec.*")
     }
 }
 

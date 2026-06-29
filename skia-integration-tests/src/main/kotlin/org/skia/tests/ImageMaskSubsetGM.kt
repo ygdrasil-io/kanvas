@@ -1,6 +1,6 @@
 package org.skia.tests
 
-import org.skia.codec.SkImageGeneratorImages
+import org.graphiks.kanvas.codec.SkImageGeneratorImages
 import org.skia.core.SkCanvas
 import org.skia.core.SkSurface
 import org.skia.core.SrcRectConstraint

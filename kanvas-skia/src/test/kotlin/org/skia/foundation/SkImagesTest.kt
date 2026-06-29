@@ -5,8 +5,8 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.skia.codec.SkImageCodecs
-import org.skia.codec.SkImageGeneratorImages
+import org.graphiks.kanvas.codec.SkImageCodecs
+import org.graphiks.kanvas.codec.SkImageGeneratorImages
 import org.skia.foundation.SkEncodedImageFormat
 import java.nio.ByteBuffer
 import java.nio.ByteOrder

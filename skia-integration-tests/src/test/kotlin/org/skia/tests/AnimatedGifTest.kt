@@ -9,9 +9,9 @@ import org.skia.testing.TestUtils
 
 /**
  * Test for the R-final.5 [AnimatedGifGM] — exercises
- * [org.skia.codec.SkCodec.getFrameCount] +
- * [org.skia.codec.SkCodec.getFrameInfo] +
- * [org.skia.codec.SkCodec.Options]`(frameIndex, priorFrame)`.
+ * [org.graphiks.kanvas.codec.SkCodec.getFrameCount] +
+ * [org.graphiks.kanvas.codec.SkCodec.getFrameInfo] +
+ * [org.graphiks.kanvas.codec.SkCodec.Options]`(frameIndex, priorFrame)`.
  */
 class AnimatedGifTest {
 

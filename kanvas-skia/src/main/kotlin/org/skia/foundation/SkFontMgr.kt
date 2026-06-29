@@ -27,7 +27,7 @@ import java.io.InputStream
  * takes `std::unique_ptr<SkStreamAsset>`. The kanvas-skia port hasn't
  * lifted `SkStream` to Kotlin yet (deferred to R3.4 in the API plan),
  * so we expose [makeFromStream] taking a stdlib `InputStream` — same
- * convention as [org.skia.codec.SkCodec.MakeFromStream]. Callers
+ * convention as [org.graphiks.kanvas.codec.SkCodec.MakeFromStream]. Callers
  * retain ownership ; the stream is **not** closed by [makeFromStream]
  * (idiomatic Kotlin), unlike upstream which consumes the `unique_ptr`.
  */
