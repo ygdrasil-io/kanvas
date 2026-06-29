@@ -25,7 +25,7 @@ supporting multi-fragment module assembly.
 |---|---|---|---|---|---|---|---|---|---|---|
 | [KGPU-M38-001 - Live parameter editing V2](KGPU-M38-001-live-parameter-editing-v2.md) | `review` | `P0` | `TargetNative` | `GPUNative` | `false` | `false` | `runtimeeffects` | `KGPU-M1-001` | `null` |
 | [KGPU-M38-002 - Extended effect kinds](KGPU-M38-002-extended-effect-kinds.md) | `review` | `P0` | `TargetNative` | `GPUNative` | `false` | `false` | `runtimeeffects` | `KGPU-M1-001` | `null` |
-| [KGPU-M38-003 - Dynamic shader graph assembly](KGPU-M38-003-dynamic-shader-graph-assembly.md) | `ready` | `P1` | `TargetNative` | `GPUNative` | `false` | `false` | `runtimeeffects` | `KGPU-M1-001` | `null` |
+| [KGPU-M38-003 - Dynamic shader graph assembly](KGPU-M38-003-dynamic-shader-graph-assembly.md) | `review` | `P1` | `TargetNative` | `GPUNative` | `false` | `false` | `runtimeeffects` | `KGPU-M1-001` | `null` |
 
 ## Validation Bundle
 
