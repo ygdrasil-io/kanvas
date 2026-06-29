@@ -23,10 +23,10 @@ Depends on M0 (R0-R6 boundary review) and M1 (first-route product activation) fo
 
 | Ticket | Status | Priority | Claim Impact | Route Kind | Product Activation | Adapter Required | Owner Area | Depends On | Legacy Gate |
 |---|---|---|---|---|---|---|---|---|---|
-| [KGPU-M35-001 - HDR transfer functions (PQ, HLG, scRGB)](KGPU-M35-001-hdr-transfer-functions.md) | `review` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `color` | `KGPU-M1-001` | `legacy color transform` |
-| [KGPU-M35-002 - Wide-gamut working spaces](KGPU-M35-002-wide-gamut-working-spaces.md) | `review` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `color` | `KGPU-M1-001` | `legacy color transform` |
+| [KGPU-M35-001 - HDR transfer functions (PQ, HLG, scRGB)](KGPU-M35-001-hdr-transfer-functions.md) | `done` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `color` | `KGPU-M1-001` | `legacy color transform` |
+| [KGPU-M35-002 - Wide-gamut working spaces](KGPU-M35-002-wide-gamut-working-spaces.md) | `done` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `color` | `KGPU-M1-001` | `legacy color transform` |
 | [KGPU-M35-003 - Gain map pipeline](KGPU-M35-003-gain-map-pipeline.md) | `blocked` | `P1` | `TargetNative` | `GPUNative` | `false` | `true` | `color` | `KGPU-M1-001` | `legacy color transform` |
-| [KGPU-M35-004 - ICC profile parsing](KGPU-M35-004-icc-profile-parsing.md) | `review` | `P1` | `TargetNative` | `GPUNative` | `false` | `true` | `color` | `KGPU-M1-001` | `legacy color transform` |
+| [KGPU-M35-004 - ICC profile parsing](KGPU-M35-004-icc-profile-parsing.md) | `done` | `P1` | `TargetNative` | `GPUNative` | `false` | `true` | `color` | `KGPU-M1-001` | `legacy color transform` |
 
 ## Validation Bundle
 

@@ -25,11 +25,11 @@ output artifacts. M34-001 depends on adapter pixel geometry query.
 
 | Ticket | Status | Priority | Claim Impact | Route Kind | Product Activation | Adapter Required | Owner Area | Depends On | Legacy Gate |
 |---|---|---|---|---|---|---|---|---|---|
-| [KGPU-M34-001 - Subpixel LCD rendering](KGPU-M34-001-subpixel-lcd-rendering.md) | `review` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `text` | `KGPU-M1-001` | `legacy drawText` |
+| [KGPU-M34-001 - Subpixel LCD rendering](KGPU-M34-001-subpixel-lcd-rendering.md) | `done` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `text` | `KGPU-M1-001` | `legacy drawText` |
 | [KGPU-M34-002 - Color font pipeline](KGPU-M34-002-color-font-pipeline.md) | `blocked` | `P0` | `DependencyGated` | `GPUNative` | `false` | `true` | `text` | `KGPU-M1-001` | `legacy drawText` |
 | [KGPU-M34-003 - Variable font support](KGPU-M34-003-variable-font-support.md) | `blocked` | `P1` | `DependencyGated` | `GPUNative` | `false` | `true` | `text` | `KGPU-M1-001` | `legacy drawText` |
 | [KGPU-M34-004 - Complex shaping integration](KGPU-M34-004-complex-shaping-integration.md) | `blocked` | `P1` | `DependencyGated` | `GPUNative` | `false` | `true` | `text` | `KGPU-M1-001` | `legacy drawText` |
-| [KGPU-M34-005 - Font fallback chain](KGPU-M34-005-font-fallback-chain.md) | `review` | `P1` | `TargetNative` | `GPUNative` | `false` | `true` | `text` | `KGPU-M1-001` | `legacy drawText` |
+| [KGPU-M34-005 - Font fallback chain](KGPU-M34-005-font-fallback-chain.md) | `done` | `P1` | `TargetNative` | `GPUNative` | `false` | `true` | `text` | `KGPU-M1-001` | `legacy drawText` |
 
 ## Validation Bundle
 
