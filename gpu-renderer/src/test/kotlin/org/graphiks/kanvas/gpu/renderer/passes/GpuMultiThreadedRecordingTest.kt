@@ -331,6 +331,188 @@ class GpuMultiThreadedRecordingTest {
         assertEquals(0, analysis.refusedPairs.size)
     }
 
+    // -- Spec refusal codes, scope-split, merge cycle, telemetry, arena release --
+
+    @Test
+    fun `recording reason constants match spec refusal codes exactly`() {
+        assertEquals(
+            "unsupported.recording.fragment_split_unsafe",
+            GpuMultiThreadedRecordingReason.FRAGMENT_SPLIT_UNSAFE,
+        )
+        assertEquals(
+            "unsupported.recording.fragment_merge_cycle",
+            GpuMultiThreadedRecordingReason.FRAGMENT_MERGE_CYCLE,
+        )
+    }
+
+    @Test
+    fun `merge refuses fragment split across atomic scope boundary`() {
+        val issuer = GpuRecordingTokenIssuer()
+        val a0 = GpuRecordingArenaId("arena-0")
+        val a1 = GpuRecordingArenaId("arena-1")
+
+        val fragmentA = GpuRecordingFragment(
+            fragmentId = "frag-A", arenaId = a0, commandCount = 2,
+            beginToken = issuer.issue(), endToken = issuer.issue(),
+            atomicScopeIds = setOf("atomic-clip-1"),
+        )
+        val fragmentB = GpuRecordingFragment(
+            fragmentId = "frag-B", arenaId = a1, commandCount = 2,
+            beginToken = issuer.issue(), endToken = issuer.issue(),
+            atomicScopeIds = setOf("atomic-clip-1"),
+        )
+
+        val analysis = mergeArenas(
+            listOf(
+                arena("arena-0", "t-0", 1024, listOf(fragmentA)),
+                arena("arena-1", "t-1", 1024, listOf(fragmentB)),
+            ),
+        )
+
+        assertTrue(analysis.refusedPairs.isNotEmpty())
+        assertTrue(
+            analysis.refusedPairs.any { it.diagnostic.code == GpuMultiThreadedRecordingReason.FRAGMENT_SPLIT_UNSAFE },
+        )
+        assertTrue(
+            analysis.refusedPairs.first { it.diagnostic.code == GpuMultiThreadedRecordingReason.FRAGMENT_SPLIT_UNSAFE }
+                .diagnostic.terminal,
+        )
+    }
+
+    @Test
+    fun `merge accepts atomic scope confined to a single fragment`() {
+        val issuer = GpuRecordingTokenIssuer()
+        val a0 = GpuRecordingArenaId("arena-0")
+
+        val fragmentA = GpuRecordingFragment(
+            fragmentId = "frag-A", arenaId = a0, commandCount = 4,
+            beginToken = issuer.issue(), endToken = issuer.issue(),
+            atomicScopeIds = setOf("atomic-clip-1", "layer-7"),
+        )
+
+        val analysis = mergeArenas(listOf(arena("arena-0", "t-0", 1024, listOf(fragmentA))))
+
+        assertEquals(0, analysis.refusedPairs.size)
+        assertFalse(analysis.aborted)
+    }
+
+    @Test
+    fun `merge aborts on cross-fragment dependency cycle`() {
+        val issuer = GpuRecordingTokenIssuer()
+        val a0 = GpuRecordingArenaId("arena-0")
+        val a1 = GpuRecordingArenaId("arena-1")
+
+        val fragmentX = GpuRecordingFragment(
+            fragmentId = "frag-X", arenaId = a0, commandCount = 1,
+            beginToken = issuer.issue(), endToken = issuer.issue(),
+            dependsOnFragmentIds = setOf("frag-Y"),
+        )
+        val fragmentY = GpuRecordingFragment(
+            fragmentId = "frag-Y", arenaId = a1, commandCount = 1,
+            beginToken = issuer.issue(), endToken = issuer.issue(),
+            dependsOnFragmentIds = setOf("frag-X"),
+        )
+
+        val analysis = mergeArenas(
+            listOf(
+                arena("arena-0", "t-0", 1024, listOf(fragmentX)),
+                arena("arena-1", "t-1", 1024, listOf(fragmentY)),
+            ),
+        )
+
+        assertTrue(analysis.aborted)
+        assertTrue(
+            analysis.refusedPairs.any { it.diagnostic.code == GpuMultiThreadedRecordingReason.FRAGMENT_MERGE_CYCLE },
+        )
+    }
+
+    @Test
+    fun `merge with acyclic dependencies does not abort`() {
+        val issuer = GpuRecordingTokenIssuer()
+        val a0 = GpuRecordingArenaId("arena-0")
+
+        val fragmentY = GpuRecordingFragment(
+            fragmentId = "frag-Y", arenaId = a0, commandCount = 1,
+            beginToken = issuer.issue(), endToken = issuer.issue(),
+        )
+        val fragmentX = GpuRecordingFragment(
+            fragmentId = "frag-X", arenaId = a0, commandCount = 1,
+            beginToken = issuer.issue(), endToken = issuer.issue(),
+            dependsOnFragmentIds = setOf("frag-Y"),
+        )
+
+        val analysis = mergeArenas(listOf(arena("arena-0", "t-0", 1024, listOf(fragmentY, fragmentX))))
+
+        assertFalse(analysis.aborted)
+        assertEquals(0, analysis.refusedPairs.size)
+    }
+
+    @Test
+    fun `concurrency telemetry captures fragment count merge duration and contention events`() {
+        val issuer = GpuRecordingTokenIssuer()
+        val a0 = GpuRecordingArenaId("arena-0")
+        val a1 = GpuRecordingArenaId("arena-1")
+
+        val fragmentA = GpuRecordingFragment(
+            fragmentId = "frag-A", arenaId = a0, commandCount = 2,
+            beginToken = issuer.issue(), endToken = issuer.issue(),
+            atomicScopeIds = setOf("atomic-clip-1"),
+        )
+        val fragmentB = GpuRecordingFragment(
+            fragmentId = "frag-B", arenaId = a1, commandCount = 2,
+            beginToken = issuer.issue(), endToken = issuer.issue(),
+            atomicScopeIds = setOf("atomic-clip-1"),
+        )
+        val analysis = mergeArenas(
+            listOf(
+                arena("arena-0", "t-0", 1024, listOf(fragmentA)),
+                arena("arena-1", "t-1", 1024, listOf(fragmentB)),
+            ),
+        )
+
+        val telemetry = buildConcurrencyTelemetry(analysis, mergeDurationMs = 1.5)
+
+        assertEquals(2, telemetry.fragmentCount)
+        assertEquals(1.5, telemetry.mergeDurationMs)
+        assertEquals(analysis.refusedPairs.size, telemetry.contentionEvents)
+        assertTrue(telemetry.dumpLines().first().contains("passes.mt-telemetry"))
+    }
+
+    @Test
+    fun `arena release report shows zero leak when all arenas released`() {
+        val released = GpuRecordingArena(
+            arenaId = GpuRecordingArenaId("arena-0"),
+            threadId = GpuRecordingThreadId("t-0"),
+            capacity = 4096,
+            fragments = emptyList(),
+            allocationBytes = 4096,
+            released = true,
+        )
+
+        val report = arenaReleaseReport(listOf(released))
+
+        assertTrue(report.allReleased)
+        assertEquals(0L, report.leakedBytes)
+        assertTrue(report.dumpLines().first().contains("leakedBytes=0"))
+    }
+
+    @Test
+    fun `arena release report reports leaked bytes when an arena is not released`() {
+        val leaking = GpuRecordingArena(
+            arenaId = GpuRecordingArenaId("arena-0"),
+            threadId = GpuRecordingThreadId("t-0"),
+            capacity = 4096,
+            fragments = emptyList(),
+            allocationBytes = 4096,
+            released = false,
+        )
+
+        val report = arenaReleaseReport(listOf(leaking))
+
+        assertFalse(report.allReleased)
+        assertEquals(4096L, report.leakedBytes)
+    }
+
     private fun arena(
         arenaId: String,
         threadId: String,
