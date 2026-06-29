@@ -25,9 +25,9 @@ dependencies {
     // diagnostic tests). testImplementation only affects the test classpath ;
     // the main JAR stays raster-free.
     testImplementation(project(":cpu-raster"))
-    testImplementation(project(":codec-core"))
-    testImplementation(project(":codec-image-generator"))
-    testImplementation(project(":codec-webp-kotlin"))
+    testImplementation(project(":codec:core"))
+    testImplementation(project(":codec:image-generator"))
+    testImplementation(project(":codec:webp"))
     testImplementation(project(":skia-integration-tests"))
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
     testImplementation("org.junit.jupiter:junit-jupiter-params:5.10.2")
@@ -57,7 +57,7 @@ sourceSets {
         // Encoder tests reuse the small redistributable real-image corpus
         // from the codec validation module to prove encode paths against
         // decoded real fixtures rather than synthetic-only bitmaps.
-        resources.srcDir("../codec-real-image-tests/src/test/resources")
+        resources.srcDir("../codec/real-image-tests/src/test/resources")
     }
 }
 

@@ -20,7 +20,7 @@ dependencies {
     "kadreImplementation"("org.graphiks.kadre:kadre-x11:1.0.0")
     "kadreImplementation"("org.graphiks.kadre:kadre-wayland:1.0.0")
 
-    runtimeOnly(project(":codec-png-kotlin"))
+    runtimeOnly(project(":codec:png"))
 
     testImplementation(kotlin("test"))
 }

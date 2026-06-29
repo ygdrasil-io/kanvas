@@ -21,7 +21,7 @@ on:
     branches: [master]
     paths:
       - 'math/**'
-      - 'codec-*/**'
+      - 'codec/**'
       - 'kanvas-skia/**'
       - 'font/**'
       - 'cpu-raster/**'
@@ -54,7 +54,7 @@ on:
     branches: [master]
     paths:
       - 'math/**'
-      - 'codec-*/**'
+      - 'codec/**'
       - 'kanvas-skia/**'
       - 'font/**'
       - 'cpu-raster/**'
