@@ -1,7 +1,10 @@
 # M36 - Image Pipeline Extension
 
+<<<<<<< HEAD
 **Status:** active (2026-06-28) — Wave C Track 1
 
+=======
+>>>>>>> master
 ## Goal
 
 Promote HEIF/AVIF gate criteria, YUV multi-plan texture routes, mipmap
@@ -27,10 +30,17 @@ Without those entries the gates cannot be promoted from `DependencyGated` to
 
 | Ticket | Status | Priority | Claim Impact | Route Kind | Product Activation | Adapter Required | Owner Area | Depends On | Legacy Gate |
 |---|---|---|---|---|---|---|---|---|---|
+<<<<<<< HEAD
 | [KGPU-M36-001 - HEIF/AVIF gate promotion](KGPU-M36-001-heif-avif-gate-promotion.md) | `blocked` | `P0` | `DependencyGated` | `GPUNative` | `false` | `false` | `images` | `KGPU-M1-001` | `null` |
 | [KGPU-M36-002 - YUV multi-plan texture route](KGPU-M36-002-yuv-multi-plan-texture.md) | `done` | `P0` | `TargetNative` | `GPUNative` | `false` | `false` | `images` | `KGPU-M1-001` | `null` |
 | [KGPU-M36-003 - Mipmap auto-generation](KGPU-M36-003-mipmap-auto-generation.md) | `done` | `P1` | `TargetNative` | `GPUNative` | `false` | `false` | `images` | `KGPU-M1-001` | `null` |
 | [KGPU-M36-004 - Hardware codec descriptor](KGPU-M36-004-hardware-codec-descriptor.md) | `blocked` | `P1` | `DependencyGated` | `GPUNative` | `false` | `false` | `images` | `KGPU-M1-001` | `null` |
+=======
+| [KGPU-M36-001 - HEIF/AVIF gate promotion](KGPU-M36-001-heif-avif-gate-promotion.md) | `proposed` | `P0` | `DependencyGated` | `GPUNative` | `false` | `false` | `images` | `KGPU-M1-001` | `null` |
+| [KGPU-M36-002 - YUV multi-plan texture route](KGPU-M36-002-yuv-multi-plan-texture.md) | `proposed` | `P0` | `TargetNative` | `GPUNative` | `false` | `false` | `images` | `KGPU-M1-001` | `null` |
+| [KGPU-M36-003 - Mipmap auto-generation](KGPU-M36-003-mipmap-auto-generation.md) | `proposed` | `P1` | `TargetNative` | `GPUNative` | `false` | `false` | `images` | `KGPU-M1-001` | `null` |
+| [KGPU-M36-004 - Hardware codec descriptor](KGPU-M36-004-hardware-codec-descriptor.md) | `proposed` | `P1` | `DependencyGated` | `GPUNative` | `false` | `false` | `images` | `KGPU-M1-001` | `null` |
+>>>>>>> master
 
 ## Validation Bundle
 

@@ -1,7 +1,10 @@
 # M35 - Color Fidelity
 
+<<<<<<< HEAD
 **Status:** active (2026-06-28) — Wave B Track 3
 
+=======
+>>>>>>> master
 ## Goal
 
 Promote HDR transfer functions, wide-gamut working spaces, gain map pipeline, and ICC profile parsing from TargetNative specs to accepted routes with evidence.
@@ -23,10 +26,17 @@ Depends on M0 (R0-R6 boundary review) and M1 (first-route product activation) fo
 
 | Ticket | Status | Priority | Claim Impact | Route Kind | Product Activation | Adapter Required | Owner Area | Depends On | Legacy Gate |
 |---|---|---|---|---|---|---|---|---|---|
+<<<<<<< HEAD
 | [KGPU-M35-001 - HDR transfer functions (PQ, HLG, scRGB)](KGPU-M35-001-hdr-transfer-functions.md) | `done` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `color` | `KGPU-M1-001` | `legacy color transform` |
 | [KGPU-M35-002 - Wide-gamut working spaces](KGPU-M35-002-wide-gamut-working-spaces.md) | `done` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `color` | `KGPU-M1-001` | `legacy color transform` |
 | [KGPU-M35-003 - Gain map pipeline](KGPU-M35-003-gain-map-pipeline.md) | `blocked` | `P1` | `TargetNative` | `GPUNative` | `false` | `true` | `color` | `KGPU-M1-001` | `legacy color transform` |
 | [KGPU-M35-004 - ICC profile parsing](KGPU-M35-004-icc-profile-parsing.md) | `done` | `P1` | `TargetNative` | `GPUNative` | `false` | `true` | `color` | `KGPU-M1-001` | `legacy color transform` |
+=======
+| [KGPU-M35-001 - HDR transfer functions (PQ, HLG, scRGB)](KGPU-M35-001-hdr-transfer-functions.md) | `proposed` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `color` | `KGPU-M1-001` | `legacy color transform` |
+| [KGPU-M35-002 - Wide-gamut working spaces](KGPU-M35-002-wide-gamut-working-spaces.md) | `proposed` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `color` | `KGPU-M1-001` | `legacy color transform` |
+| [KGPU-M35-003 - Gain map pipeline](KGPU-M35-003-gain-map-pipeline.md) | `proposed` | `P1` | `TargetNative` | `GPUNative` | `false` | `true` | `color` | `KGPU-M1-001` | `legacy color transform` |
+| [KGPU-M35-004 - ICC profile parsing](KGPU-M35-004-icc-profile-parsing.md) | `proposed` | `P1` | `TargetNative` | `GPUNative` | `false` | `true` | `color` | `KGPU-M1-001` | `legacy color transform` |
+>>>>>>> master
 
 ## Validation Bundle
 

@@ -1,7 +1,11 @@
 ---
 id: KGPU-M37-002
 title: "Morphology filter"
+<<<<<<< HEAD
 status: done
+=======
+status: proposed
+>>>>>>> master
 milestone: M37
 priority: P0
 owner_area: filters
@@ -160,9 +164,12 @@ rtk ./gradlew --no-daemon :gpu-renderer:test --tests '*Morphology*'
 ## Status Notes
 
 - `proposed`: Initial ticket.
+<<<<<<< HEAD
 - `ready` (2026-06-28): promoted — milestone activated, autonomous implementation starting.
 - `ready → review` (2026-06-28): implemented. Pending independent review.
 - `review → done` (2026-06-29): promoted to done after independent review accepted linked evidence; no hidden product activation.
+=======
+>>>>>>> master
 
 ## Linear Labels
 

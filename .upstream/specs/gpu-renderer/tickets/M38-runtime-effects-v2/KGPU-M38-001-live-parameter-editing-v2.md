@@ -1,7 +1,11 @@
 ---
 id: KGPU-M38-001
 title: "Live parameter editing V2"
+<<<<<<< HEAD
 status: done
+=======
+status: proposed
+>>>>>>> master
 milestone: M38
 priority: P0
 owner_area: runtimeeffects
@@ -128,9 +132,12 @@ rtk ./gradlew --no-daemon :gpu-renderer:test --tests '*LiveEdit*'
 ## Status Notes
 
 - `proposed`: Initial ticket.
+<<<<<<< HEAD
 - `ready` (2026-06-28): promoted — milestone activated, autonomous implementation starting.
 - `ready → review` (2026-06-28): implemented. Pending independent review.
 - `review → done` (2026-06-29): promoted — independent review accepted.
+=======
+>>>>>>> master
 
 ## Linear Labels
 

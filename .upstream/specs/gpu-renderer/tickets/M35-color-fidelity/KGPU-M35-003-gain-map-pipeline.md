@@ -1,7 +1,11 @@
 ---
 id: KGPU-M35-003
 title: "Gain map pipeline — Ultra HDR decode, apply, and display adaptation"
+<<<<<<< HEAD
 status: blocked
+=======
+status: proposed
+>>>>>>> master
 milestone: M35
 priority: P1
 owner_area: color
@@ -135,7 +139,10 @@ rtk ./gradlew --no-daemon :gpu-renderer:test --tests '*Gainmap*'
 ## Status Notes
 
 - `proposed`: Initial ticket. Awaiting M35 milestone acceptance and codec Ultra HDR JPEG gain map metadata support.
+<<<<<<< HEAD
 - `proposed → blocked` (2026-06-28): Blocked on codec Ultra HDR JPEG gain map metadata.
+=======
+>>>>>>> master
 
 ## Linear Labels
 

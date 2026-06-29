@@ -1,7 +1,11 @@
 ---
 id: KGPU-M34-002
 title: "Color font pipeline"
+<<<<<<< HEAD
 status: blocked
+=======
+status: proposed
+>>>>>>> master
 milestone: M34
 priority: P0
 owner_area: text
@@ -18,6 +22,7 @@ legacy_gate: "legacy drawText"
 
 ## PM Note
 
+<<<<<<< HEAD
 Le parsing des polices couleur (COLRv0/CPAL, CBDT/CBLC) et le handoff
 `ColorGlyphPlan` existent et sont livrés. La route GPU consomme ce handoff et
 refuse de façon stable le rendu couleur (`text.gpu.color-plan-unsupported`,
@@ -51,6 +56,10 @@ parsing artifacts » est faux et corrigé.
 - Rasterisation GPU d'un glyphe COLRv0, COLRv1, SVG OpenType, emoji ; codes
   `unsupported.text.color_font.format_unavailable` / `.layer_count`.
 - Gated sur exécution GPU M10/M11. `product_activation` reste `false`.
+=======
+Les polices couleur (COLRv0/v1, CBDT/CBLC, SVG, emoji) sont DependencyGated
+en attendant les artefacts du text stack pure Kotlin.
+>>>>>>> master
 
 ## Problem
 
@@ -127,11 +136,14 @@ data class GPUSVGOpenTypeGlyphPlan(
 
 ## Acceptance Criteria
 
+<<<<<<< HEAD
 > Scope (2026-06-29) : le sous-scope borné « Claim Split » (handoff + refus
 > stable) est implémenté et testé, mais ne promeut pas le ticket. Les critères
 > de rendu GPU ci-dessous restent `DependencyGated` (M10/M11) — le ticket reste
 > `blocked`.
 
+=======
+>>>>>>> master
 - [ ] Contracts defined and dumpable (`GPUColorGlyphLayerPlan`,
       `GPUCBDTCBLCGlyphPlan`).
 - [ ] COLRv0 layer tree rasterized with GPU evidence (at least one glyph).
@@ -141,9 +153,12 @@ data class GPUSVGOpenTypeGlyphPlan(
 
 ## Required Evidence
 
+<<<<<<< HEAD
 > Scope borné couvert par `ColorFontHandoffRouteTest`. Les preuves de rendu GPU
 > ci-dessous restent `DependencyGated` (M10/M11).
 
+=======
+>>>>>>> master
 - `GPUColorGlyphLayerPlan` dump (COLRv0 glyph with ≥2 layers).
 - `GPUCBDTCBLCGlyphPlan` dump.
 - Refusal fixtures:
@@ -163,10 +178,16 @@ data class GPUSVGOpenTypeGlyphPlan(
 ## Dashboard Impact
 
 - Expected row: `gpu-renderer.text.color-font`
+<<<<<<< HEAD
 - Expected classification: `DependencyGated` (rendu GPU couleur). Le handoff +
   refus stable est implémenté/testé mais ne promeut pas le ticket.
 - Claim promotion allowed: no — aucun claim de rendu GPU couleur tant que
   l'évidence GPU (M10/M11) n'est pas livrée.
+=======
+- Expected classification: `DependencyGated`
+- Claim promotion allowed: no, unless all Required Evidence is attached and
+  validation has passed.
+>>>>>>> master
 
 ## Validation
 
@@ -178,6 +199,7 @@ rtk git diff --check && rtk ./gradlew --no-daemon :gpu-renderer:test --tests '*C
 
 - `proposed`: Initial ticket. Promotion to `ready` requires text stack COLRv0
   parsing artifacts.
+<<<<<<< HEAD
 - `proposed → blocked` (2026-06-28): Blocked on pure-kotlin-text COLRv0 parsing artifacts.
 - `reste blocked` (2026-06-29): correction du motif. Le motif « pure-kotlin-text
   COLRv0 artifacts » est faux : parsing COLRv0/CPAL/CBDT + handoff `ColorGlyphPlan`
@@ -187,6 +209,8 @@ rtk git diff --check && rtk ./gradlew --no-daemon :gpu-renderer:test --tests '*C
   sous-scope borné handoff + refus est implémenté et testé
   (`ColorFontHandoffRouteTest`) mais ne promeut pas le ticket. Vrai gate :
   exécution GPU M10/M11.
+=======
+>>>>>>> master
 
 ## Linear Labels
 

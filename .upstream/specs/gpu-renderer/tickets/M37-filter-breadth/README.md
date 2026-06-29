@@ -1,7 +1,10 @@
 # M37 - Filter Breadth
 
+<<<<<<< HEAD
 **Status:** active (2026-06-28) — Wave C Track 2
 
+=======
+>>>>>>> master
 ## Goal
 
 Promote multi-pass separable blur, morphology, drop shadow, lighting, displacement map, and tile-based filter evaluation from TargetNative specs to accepted routes.
@@ -23,12 +26,21 @@ Depends on M0-M1. M37-003 reuses M37-001 blur contracts.
 
 | Ticket | Status | Priority | Claim Impact | Route Kind | Product Activation | Adapter Required | Owner Area | Depends On | Legacy Gate |
 |---|---|---|---|---|---|---|---|---|---|
+<<<<<<< HEAD
 | [KGPU-M37-001 - Multi-pass separable blur](KGPU-M37-001-multi-pass-separable-blur.md) | `done` | `P0` | `TargetNative` | `GPUNative` | `false` | `false` | `filters` | `KGPU-M1-001` | `null` |
 | [KGPU-M37-002 - Morphology filter](KGPU-M37-002-morphology-filter.md) | `done` | `P0` | `TargetNative` | `GPUNative` | `false` | `false` | `filters` | `KGPU-M1-001` | `null` |
 | [KGPU-M37-003 - Drop shadow filter](KGPU-M37-003-drop-shadow-filter.md) | `done` | `P1` | `TargetNative` | `GPUNative` | `false` | `false` | `filters` | `KGPU-M1-001`, `KGPU-M37-001` | `null` |
 | [KGPU-M37-004 - Lighting filters](KGPU-M37-004-lighting-filters.md) | `done` | `P1` | `TargetNative` | `GPUNative` | `false` | `false` | `filters` | `KGPU-M1-001` | `null` |
 | [KGPU-M37-005 - Displacement map filter](KGPU-M37-005-displacement-map-filter.md) | `done` | `P1` | `TargetNative` | `GPUNative` | `false` | `false` | `filters` | `KGPU-M1-001` | `null` |
 | [KGPU-M37-006 - Filter tile-based evaluation](KGPU-M37-006-filter-tile-based-evaluation.md) | `done` | `P1` | `TargetNative` | `GPUNative` | `false` | `false` | `filters` | `KGPU-M1-001` | `null` |
+=======
+| [KGPU-M37-001 - Multi-pass separable blur](KGPU-M37-001-multi-pass-separable-blur.md) | `proposed` | `P0` | `TargetNative` | `GPUNative` | `false` | `false` | `filters` | `KGPU-M1-001` | `null` |
+| [KGPU-M37-002 - Morphology filter](KGPU-M37-002-morphology-filter.md) | `proposed` | `P0` | `TargetNative` | `GPUNative` | `false` | `false` | `filters` | `KGPU-M1-001` | `null` |
+| [KGPU-M37-003 - Drop shadow filter](KGPU-M37-003-drop-shadow-filter.md) | `proposed` | `P1` | `TargetNative` | `GPUNative` | `false` | `false` | `filters` | `KGPU-M1-001`, `KGPU-M37-001` | `null` |
+| [KGPU-M37-004 - Lighting filters](KGPU-M37-004-lighting-filters.md) | `proposed` | `P1` | `TargetNative` | `GPUNative` | `false` | `false` | `filters` | `KGPU-M1-001` | `null` |
+| [KGPU-M37-005 - Displacement map filter](KGPU-M37-005-displacement-map-filter.md) | `proposed` | `P1` | `TargetNative` | `GPUNative` | `false` | `false` | `filters` | `KGPU-M1-001` | `null` |
+| [KGPU-M37-006 - Filter tile-based evaluation](KGPU-M37-006-filter-tile-based-evaluation.md) | `proposed` | `P1` | `TargetNative` | `GPUNative` | `false` | `false` | `filters` | `KGPU-M1-001` | `null` |
+>>>>>>> master
 
 ## Validation Bundle
 

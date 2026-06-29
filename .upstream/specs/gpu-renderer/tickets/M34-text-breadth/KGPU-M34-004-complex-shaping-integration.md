@@ -1,7 +1,11 @@
 ---
 id: KGPU-M34-004
 title: "Complex shaping integration"
+<<<<<<< HEAD
 status: blocked
+=======
+status: proposed
+>>>>>>> master
 milestone: M34
 priority: P1
 owner_area: text
@@ -18,6 +22,7 @@ legacy_gate: "legacy drawText"
 
 ## PM Note
 
+<<<<<<< HEAD
 Le shaping complexe et le BiDi (UAX #9) sont implémentés et testés dans le text
 stack (fixtures arabe/devanagari/thai/CJK). Les facts de shaping (script,
 bidiLevel) sont portés par `GPUGlyphRunDescriptor` jusqu'au handoff GPU. La
@@ -56,6 +61,10 @@ est faux et corrigé.
   `unsupported.text.shaping_script_unavailable`.
 - Rendu GPU des scripts complexes (par-script M6, exécution GPU M10/M11).
   `product_activation` reste `false`.
+=======
+Le shaping complexe (arabe, devanagari, CJK) et le BiDi sont délégués au text
+stack. Ce ticket définit le contrat d'intégration.
+>>>>>>> master
 
 ## Problem
 
@@ -120,11 +129,14 @@ data class GPUBiDiRunPlan(
 
 ## Acceptance Criteria
 
+<<<<<<< HEAD
 > Scope (2026-06-29) : le sous-scope borné « Claim Split » (facts de shaping
 > portés au handoff) est implémenté et testé, mais ne promeut pas le ticket. La
 > consommation BiDi GPU et le rendu des scripts complexes ci-dessous restent
 > `DependencyGated` (M6/M10/M11) — le ticket reste `blocked`.
 
+=======
+>>>>>>> master
 - [ ] Text stack emits per-run shaping facts (script, direction, BiDi levels).
 - [ ] GPU consumes `GPUBiDiRunPlan` for paint order.
 - [ ] CJK class → atlas budget policy adjustment.
@@ -132,10 +144,13 @@ data class GPUBiDiRunPlan(
 
 ## Required Evidence
 
+<<<<<<< HEAD
 > Scope borné couvert par `ShapingIntegrationHandoffRouteTest`. Les preuves
 > ci-dessous (dump contrat GPU, `GPUBiDiRunPlan`, budget CJK) restent
 > `DependencyGated` (M6/M10/M11).
 
+=======
+>>>>>>> master
 - `GPUShapingIntegrationContract` dump with Arabic or Devanagari script.
 - `GPUBiDiRunPlan` dump for a mixed LTR/RTL run.
 - Refusal fixture: script unsupported by text stack.
@@ -149,11 +164,17 @@ data class GPUBiDiRunPlan(
 ## Dashboard Impact
 
 - Expected row: `gpu-renderer.text.shaping-integration`
+<<<<<<< HEAD
 - Expected classification: `DependencyGated` (consommation BiDi GPU + rendu
   scripts complexes). Shaping/BiDi text-stack + facts portés au handoff
   implémentés/testés mais ne promeuvent pas le ticket.
 - Claim promotion allowed: no — aucun claim de consommation BiDi GPU ni de rendu
   de scripts complexes.
+=======
+- Expected classification: `DependencyGated`
+- Claim promotion allowed: no, unless all Required Evidence is attached and
+  validation has passed.
+>>>>>>> master
 
 ## Validation
 
@@ -165,6 +186,7 @@ rtk git diff --check && rtk ./gradlew --no-daemon :gpu-renderer:test --tests '*S
 
 - `proposed`: Initial ticket. Promotion to `ready` requires text stack
   shaping/BiDi output artifacts.
+<<<<<<< HEAD
 - `proposed → blocked` (2026-06-28): Blocked on pure-kotlin-text shaping/BiDi output artifacts.
 - `reste blocked` (2026-06-29): correction du motif. Le motif « pure-kotlin-text
   shaping/BiDi output artifacts » est faux : moteur shaping OpenType + BiDi
@@ -176,6 +198,8 @@ rtk git diff --check && rtk ./gradlew --no-daemon :gpu-renderer:test --tests '*S
   (`GPUGlyphRunDescriptor.script` / `bidiLevel`) portés au handoff est implémenté
   et testé (`ShapingIntegrationHandoffRouteTest`) mais ne promeut pas le ticket.
   Vrai gate : exécution GPU M6/M10/M11.
+=======
+>>>>>>> master
 
 ## Linear Labels
 
