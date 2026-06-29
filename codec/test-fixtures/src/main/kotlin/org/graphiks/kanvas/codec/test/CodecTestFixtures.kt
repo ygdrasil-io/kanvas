@@ -1,6 +1,6 @@
 package org.graphiks.kanvas.codec.test
 
-import org.graphiks.kanvas.codec.SkCodec
+import org.graphiks.kanvas.codec.Codec
 import org.skia.foundation.SkBitmap
 import java.io.ByteArrayOutputStream
 import java.util.zip.CRC32
@@ -158,9 +158,9 @@ public object CodecTestFixtures {
         }.toByteArray()
     }
 
-    public fun decodePixels(codec: SkCodec): List<IntArray> {
+    public fun decodePixels(codec: Codec): List<IntArray> {
         val (bitmap, result) = codec.getImage()
-        require(result == SkCodec.Result.kSuccess) { "Expected successful decode, got $result" }
+        require(result == Codec.Result.kSuccess) { "Expected successful decode, got $result" }
         require(bitmap != null) { "Successful decode did not return a bitmap" }
         return bitmap.toArgbRows()
     }

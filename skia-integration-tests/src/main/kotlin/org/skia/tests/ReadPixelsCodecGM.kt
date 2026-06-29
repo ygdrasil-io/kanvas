@@ -1,7 +1,7 @@
 package org.skia.tests
 
 import org.graphiks.math.SkISize
-import org.graphiks.kanvas.codec.SkImageCodecs
+import org.graphiks.kanvas.codec.ImageCodecs
 import org.skia.core.SkCanvas
 import org.skia.foundation.SkAlphaType
 import org.skia.foundation.SkColorSpace
@@ -88,14 +88,14 @@ public class ReadPixelsCodecGM : GM() {
      * Mirrors upstream's `make_codec_image()` — load the encoded
      * `images/randPixels.png` bytes via [ToolUtils.GetResourceAsData],
      * then materialise as a deferred-decoded raster [SkImage] via
-     * [SkImageCodecs.DeferredFromEncodedData]. Returns `null` when the
+     * [ImageCodecs.DeferredFromEncodedData]. Returns `null` when the
      * fixture isn't on the classpath ; the GM body short-circuits and
      * leaves the canvas blank.
      */
     private fun makeCodecImage(): SkImage? {
         val data = ToolUtils.GetResourceAsData("images/randPixels.png") ?: return null
         val buffer: ByteBuffer = ByteBuffer.wrap(data.toByteArray())
-        return SkImageCodecs.DeferredFromEncodedData(buffer)
+        return ImageCodecs.DeferredFromEncodedData(buffer)
     }
 
     private companion object {

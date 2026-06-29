@@ -1,7 +1,7 @@
 package org.graphiks.kanvas.codec.png
 
 import org.graphiks.kanvas.codec.CodecDecoderProvider
-import org.graphiks.kanvas.codec.SkCodec
+import org.graphiks.kanvas.codec.Codec
 import org.skia.foundation.SkAlphaType
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorSpace
@@ -30,9 +30,9 @@ import java.util.zip.Inflater
  * structurally validated, but do not currently synthesize an ICC profile; the
  * decoder keeps using sRGB unless an embedded `iCCP` profile is parsed.
  */
-public class SkPngKotlinCodec private constructor(
+public class PngCodec private constructor(
     private val png: ParsedPng,
-) : SkCodec() {
+) : Codec() {
 
     private val cachedInfo: SkImageInfo by lazy {
         val isF16 = png.bitDepth == 16
@@ -262,15 +262,15 @@ public class SkPngKotlinCodec private constructor(
                         )
                 )
 
-    internal companion object Decoder : SkCodec.Decoder {
+    internal companion object Decoder : Codec.Decoder {
         override val name: String = "png"
 
         override fun matches(data: ByteArray): Boolean = hasPngSignature(data)
 
-        override fun make(data: ByteArray): SkCodec? {
+        override fun make(data: ByteArray): Codec? {
             if (!hasPngSignature(data)) return null
             val png = parse(data) ?: return null
-            return SkPngKotlinCodec(png)
+            return PngCodec(png)
         }
 
         private fun parse(data: ByteArray): ParsedPng? {
@@ -560,7 +560,7 @@ public class SkPngKotlinCodec private constructor(
 }
 
 public class PngKotlinDecoderProvider : CodecDecoderProvider {
-    override fun decoders(): List<SkCodec.Decoder> = listOf(SkPngKotlinCodec.Decoder)
+    override fun decoders(): List<Codec.Decoder> = listOf(PngCodec.Decoder)
 }
 
 private val PNG_SIGNATURE = byteArrayOf(

@@ -13,7 +13,7 @@ import org.skia.testing.TestUtils
  * **R-final.8 EXIF fix.** The JPEG codec now parses
  * the EXIF Orientation tag (0x0112) and applies the corresponding
  * rotation/flip to the decoded pixels via
- * [org.skia.utils.SkPixmapUtils.Orient]. The tests retain a permissive
+ * [org.skia.utils.PixmapUtils.Orient]. The tests retain a permissive
  * `floor` parameter so the [SimilarityTracker] ratchet drives the
  * monotonic improvement record — the fix is expected to lift both GMs
  * well above the pre-R-final.8 19.87 % baseline.

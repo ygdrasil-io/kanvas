@@ -1,7 +1,7 @@
 package org.graphiks.kanvas.codec.wbmp
 
 import org.graphiks.kanvas.codec.CodecDecoderProvider
-import org.graphiks.kanvas.codec.SkCodec
+import org.graphiks.kanvas.codec.Codec
 import org.skia.foundation.SkAlphaType
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorSpace
@@ -15,12 +15,12 @@ import org.skia.foundation.skcms.SkcmsICCProfile
  * long-term codec split: it parses the WAP type-0 monochrome container
  * directly from bytes and writes opaque black/white RGBA pixels.
  */
-public class SkWbmpKotlinCodec internal constructor(
+public class WbmpCodec internal constructor(
     private val bytes: ByteArray,
     private val pixelOffset: Int,
     private val width: Int,
     private val height: Int,
-) : SkCodec() {
+) : Codec() {
 
     private val cachedInfo: SkImageInfo by lazy {
         SkImageInfo.Make(
@@ -64,16 +64,16 @@ public class SkWbmpKotlinCodec internal constructor(
         return Result.kSuccess
     }
 
-    internal companion object Decoder : SkCodec.Decoder {
+    internal companion object Decoder : Codec.Decoder {
         override val name: String = "wbmp"
 
         override fun matches(data: ByteArray): Boolean = parseHeader(data) != null
 
-        override fun make(data: ByteArray): SkCodec? {
+        override fun make(data: ByteArray): Codec? {
             val header = parseHeader(data) ?: return null
             val required = requiredBytes(header)
             if (required > data.size.toLong()) return null
-            return SkWbmpKotlinCodec(
+            return WbmpCodec(
                 bytes = data,
                 pixelOffset = header.pixelOffset,
                 width = header.width,
@@ -123,7 +123,7 @@ public class SkWbmpKotlinCodec internal constructor(
 }
 
 public class WbmpKotlinDecoderProvider : CodecDecoderProvider {
-    override fun decoders(): List<SkCodec.Decoder> = listOf(SkWbmpKotlinCodec.Decoder)
+    override fun decoders(): List<Codec.Decoder> = listOf(WbmpCodec.Decoder)
 }
 
 private const val BLACK: Int = -0x1000000

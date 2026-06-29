@@ -10,7 +10,7 @@ Cross-test infrastructure shared between `:cpu-raster` and `:gpu-raster`. Hosts 
 
 # Package org.graphiks.kanvas.codec
 
-Image codec dispatch (`SkCodec`, format-specific decoders : PNG, JPEG, WEBP, AVIF, RAW, ICO, JPEG-XL).
+Image codec dispatch (`Codec`, format-specific decoders : PNG, JPEG, WEBP, AVIF, RAW, ICO, JPEG-XL).
 
 # Package org.skia.pathops
 
@@ -18,7 +18,7 @@ Boolean path operations (`SkPathOps.Op` : union, intersect, difference, xor, rev
 
 # Package org.skia.utils
 
-Standalone utilities : `SkPathUtils`, `SkPixmapUtils`, `SkShadowUtils`, `SkParsePath`, `SkNoDrawCanvas`, ...
+Standalone utilities : `SkPathUtils`, `PixmapUtils`, `SkShadowUtils`, `SkParsePath`, `SkNoDrawCanvas`, ...
 
 # Package org.skia.foundation
 

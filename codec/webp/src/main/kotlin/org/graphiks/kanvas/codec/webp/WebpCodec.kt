@@ -2,7 +2,7 @@ package org.graphiks.kanvas.codec.webp
 
 import org.graphiks.math.SkIRect
 import org.graphiks.kanvas.codec.CodecDecoderProvider
-import org.graphiks.kanvas.codec.SkCodec
+import org.graphiks.kanvas.codec.Codec
 import org.skia.foundation.SkAlphaType
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorSpace
@@ -16,15 +16,15 @@ import org.skia.foundation.skcms.skcmsParse
  * Pure Kotlin WebP metadata codec.
  *
  * This first slice only sniffs RIFF/WEBP and parses the container
- * metadata needed by [SkCodec.getInfo]. Pixel reconstruction is only
+ * metadata needed by [Codec.getInfo]. Pixel reconstruction is only
  * implemented for the current VP8L subset; VP8 alpha metadata is parsed,
  * but VP8 lossy pixel reconstruction and animation are intentionally left
  * for later slices.
  */
-public class SkWebpKotlinCodec internal constructor(
+public class WebpCodec internal constructor(
     internal val metadata: WebpMetadata,
     private val data: ByteArray,
-) : SkCodec() {
+) : Codec() {
 
     private val cachedInfo: SkImageInfo by lazy {
         SkImageInfo.Make(
@@ -46,7 +46,7 @@ public class SkWebpKotlinCodec internal constructor(
 
     override fun getRepetitionCount(): Int =
         metadata.animation?.loopCount?.let { loopCount ->
-            if (loopCount == 0) SkCodec.kRepetitionCountInfinite else loopCount - 1
+            if (loopCount == 0) Codec.kRepetitionCountInfinite else loopCount - 1
         } ?: 0
 
     override fun getFrameInfo(): List<FrameInfo> =
@@ -136,7 +136,7 @@ public class SkWebpKotlinCodec internal constructor(
         return Result.kSuccess
     }
 
-    internal companion object Decoder : SkCodec.Decoder {
+    internal companion object Decoder : Codec.Decoder {
         override val name: String = "webp"
 
         override fun matches(data: ByteArray): Boolean =
@@ -144,16 +144,16 @@ public class SkWebpKotlinCodec internal constructor(
                 data.hasAscii(0, "RIFF") &&
                 data.hasAscii(8, "WEBP")
 
-        override fun make(data: ByteArray): SkCodec? {
+        override fun make(data: ByteArray): Codec? {
             if (!matches(data)) return null
             val metadata = parseMetadata(data) ?: return null
-            return SkWebpKotlinCodec(metadata, data)
+            return WebpCodec(metadata, data)
         }
     }
 }
 
 public class WebpKotlinDecoderProvider : CodecDecoderProvider {
-    override fun decoders(): List<SkCodec.Decoder> = listOf(SkWebpKotlinCodec.Decoder)
+    override fun decoders(): List<Codec.Decoder> = listOf(WebpCodec.Decoder)
 }
 
 private sealed interface AnimationFrameDecodeResult {
@@ -243,7 +243,7 @@ private const val VP8_KEYFRAME_HEADER_SIZE: Int = 10
 private const val MAX_WEBP_DIMENSION: Int = 16_777_216
 
 private fun decodeAnimationFramePixels(frame: WebpAnimationFrame): AnimationFrameDecodeResult {
-    val codec = SkWebpKotlinCodec.Decoder.make(frame.asSingleFrameWebp())
+    val codec = WebpCodec.Decoder.make(frame.asSingleFrameWebp())
         ?: return AnimationFrameDecodeResult.Invalid
     val info = codec.getInfo()
     if (info.width != frame.width || info.height != frame.height || info.colorType != SkColorType.kRGBA_8888) {
@@ -256,8 +256,8 @@ private fun decodeAnimationFramePixels(frame: WebpAnimationFrame): AnimationFram
         colorSpace = SkColorSpace.makeSRGB(),
     )
     return when (codec.getPixels(info, bitmap)) {
-        SkCodec.Result.kSuccess -> AnimationFrameDecodeResult.Pixels(bitmap.pixels8888.copyOf())
-        SkCodec.Result.kUnimplemented -> AnimationFrameDecodeResult.Unsupported
+        Codec.Result.kSuccess -> AnimationFrameDecodeResult.Pixels(bitmap.pixels8888.copyOf())
+        Codec.Result.kUnimplemented -> AnimationFrameDecodeResult.Unsupported
         else -> AnimationFrameDecodeResult.Invalid
     }
 }

@@ -8,12 +8,12 @@ import org.skia.foundation.SkData
 import java.io.ByteArrayInputStream
 
 /**
- * R3.10 verification suite for [SkAvifDecoder] — the [SkAvifDecoder.IsAvif]
+ * R3.10 verification suite for [AvifDecoder] — the [AvifDecoder.IsAvif]
  * sniff must match real `ftypavif` / `ftypavis` brand headers and reject
- * other byte streams. [SkAvifDecoder.Decode] is a stub : every overload
+ * other byte streams. [AvifDecoder.Decode] is a stub : every overload
  * returns `null` until the libavif back-end lands (R-suivi.28).
  */
-class SkAvifDecoderTest {
+class AvifDecoderTest {
 
     /** Minimal 12-byte AVIF prefix : `00 00 00 20 'f' 't' 'y' 'p' 'a' 'v' 'i' 'f'`. */
     private fun avifHeader(brand: String = "avif"): ByteArray {
@@ -28,26 +28,26 @@ class SkAvifDecoderTest {
 
     @Test
     fun `IsAvif matches the avif brand`() {
-        assertTrue(SkAvifDecoder.IsAvif(avifHeader("avif")))
+        assertTrue(AvifDecoder.IsAvif(avifHeader("avif")))
     }
 
     @Test
     fun `IsAvif matches the avis sequence brand`() {
-        assertTrue(SkAvifDecoder.IsAvif(avifHeader("avis")))
+        assertTrue(AvifDecoder.IsAvif(avifHeader("avis")))
     }
 
     @Test
     fun `IsAvif rejects HEIF and unrelated byte streams`() {
         // Plain HEIF brand should NOT match (HEIF is routed to a separate
         // decoder slot upstream).
-        assertFalse(SkAvifDecoder.IsAvif(avifHeader("heic")))
-        assertFalse(SkAvifDecoder.IsAvif(avifHeader("mif1")))
+        assertFalse(AvifDecoder.IsAvif(avifHeader("heic")))
+        assertFalse(AvifDecoder.IsAvif(avifHeader("mif1")))
         // Random bytes.
-        assertFalse(SkAvifDecoder.IsAvif("not-an-avif-file-at-all".toByteArray()))
+        assertFalse(AvifDecoder.IsAvif("not-an-avif-file-at-all".toByteArray()))
         // Empty.
-        assertFalse(SkAvifDecoder.IsAvif(ByteArray(0)))
+        assertFalse(AvifDecoder.IsAvif(ByteArray(0)))
         // Truncated below the 12-byte sniff window.
-        assertFalse(SkAvifDecoder.IsAvif(byteArrayOf(0, 0, 0, 0x20, 'f'.code.toByte())))
+        assertFalse(AvifDecoder.IsAvif(byteArrayOf(0, 0, 0, 0x20, 'f'.code.toByte())))
     }
 
     @Test
@@ -55,15 +55,15 @@ class SkAvifDecoderTest {
         // Full buffer is AVIF, but a length-limited sniff should refuse
         // when the brand falls outside the window.
         val data = avifHeader("avif")
-        assertTrue(SkAvifDecoder.IsAvif(data, length = 12))
-        assertFalse(SkAvifDecoder.IsAvif(data, length = 8))
+        assertTrue(AvifDecoder.IsAvif(data, length = 12))
+        assertFalse(AvifDecoder.IsAvif(data, length = 8))
     }
 
     @Test
     fun `IsAvif on stream rewinds the buffer`() {
         val data = avifHeader("avif") + ByteArray(8) { it.toByte() }
         val stream = ByteArrayInputStream(data)
-        assertTrue(SkAvifDecoder.IsAvif(stream))
+        assertTrue(AvifDecoder.IsAvif(stream))
         // After IsAvif, the stream must still expose all bytes from offset 0.
         assertTrue(stream.available() == data.size)
     }
@@ -71,11 +71,11 @@ class SkAvifDecoderTest {
     @Test
     fun `Decode is stubbed to null for every overload`() {
         val bytes = avifHeader("avif")
-        assertNull(SkAvifDecoder.Decode(bytes))
-        assertNull(SkAvifDecoder.Decode(SkData.MakeWithCopy(bytes)))
-        assertNull(SkAvifDecoder.Decode(ByteArrayInputStream(bytes)))
+        assertNull(AvifDecoder.Decode(bytes))
+        assertNull(AvifDecoder.Decode(SkData.MakeWithCopy(bytes)))
+        assertNull(AvifDecoder.Decode(ByteArrayInputStream(bytes)))
         // Even non-AVIF bytes return null — the contract is stubbed
         // unconditionally for R3.10.
-        assertNull(SkAvifDecoder.Decode("garbage".toByteArray()))
+        assertNull(AvifDecoder.Decode("garbage".toByteArray()))
     }
 }

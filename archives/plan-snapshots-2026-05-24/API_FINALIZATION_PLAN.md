@@ -32,7 +32,7 @@ Après S7, le module `:kanvas-skia` couvre **319/437 GMs (73 %)**. Les 118 `🚧
 | `SkImage.makeWithFilter` + `makeTemporaryImage` + HDR PQ retag | 1 | hdr_pip_blur | **Pure Kotlin** (retag = métadonnée) ; HDR PQ optionnel |
 | Fontations Rust crate | 2 | fontations, fontations_ft_compare | **STUB obligatoire** — dépendance externe Rust |
 | `SkRuntimeEffect` SkSL parser | 1 | rippleshadergm | **STUB obligatoire** — parser SkSL = effort multi-mois |
-| `SkVideoDecoder` (FFmpeg) | 1 | video_decoder | **STUB JNI** — pas de path CPU upstream |
+| `VideoDecoder` (FFmpeg) | 1 | video_decoder | **STUB JNI** — pas de path CPU upstream |
 | `SkPaint.computeFastBounds` + `SkImageFilter.computeFastBounds` | 1 | filterfastbounds | **Pure Kotlin** — déjà calculé en interne pour layer bounds |
 | `SkPath.contains(scalar, scalar)` | 1 | hittestpath | **Pure Kotlin** — point-in-path classique |
 | `SkCanvas.drawImageNine` | 1 | ninepatchstretch | **Pure Kotlin** — cas dégénéré 3×3 de drawImageLattice (déjà fait) |
@@ -41,8 +41,8 @@ Après S7, le module `:kanvas-skia` couvre **319/437 GMs (73 %)**. Les 118 `🚧
 | `SkTableMaskFilter` | 1 | tablemaskfilter | **Pure Kotlin** — table 256 entrées sur alpha |
 | `SkHighContrastFilter` | 1 | highcontrastfilter | **Pure Kotlin** — ColorMatrix + invert/grayscale |
 | `SkMipmapBuilder` + `SkImage.attachTo` | 1 | showmiplevels | **Pure Kotlin** — chaîne de bitmaps downsamplés |
-| GIF multi-frame (`SkCodec.getFrameInfo` + per-frame `getPixels(Options{frameIndex, priorFrame})`) | 1 | animated_gif | **Pure Kotlin** — extension du codec GIF déjà présent |
-| SkAnimatedImage + EXIF SkAndroidCodec | 1 | animated_image_orientation | **Pure Kotlin** — wrap codec + EXIF reader (`metadata-extractor` ou `javax.imageio.metadata`) |
+| GIF multi-frame (`Codec.getFrameInfo` + per-frame `getPixels(Options{frameIndex, priorFrame})`) | 1 | animated_gif | **Pure Kotlin** — extension du codec GIF déjà présent |
+| AnimatedImage + EXIF AndroidCodec | 1 | animated_image_orientation | **Pure Kotlin** — wrap codec + EXIF reader (`metadata-extractor` ou `javax.imageio.metadata`) |
 | YUV multi-plane (`tools/gpu/YUVUtils`) | 1 | compositor_quads | **Pure Kotlin** — conversion YUV→RGB |
 | `SkFontArguments.VariationPosition` + `makeClone` (variable fonts) | 1 | fontscalerdistortable | **Pure Kotlin** — AWT supporte `Font.deriveFont(Map<TextAttribute, ...>)` + `OpenTypeFont` axes via java.awt.font |
 | LiberationFontMgr public family API | 1 | fontmgr | **STUB recommandé** — résolution de famille portable internal Skia |
@@ -100,7 +100,7 @@ Effort : **M** ; agents : **2 × 2 GMs**
 API :
 - `SkImageGenerator` interface + `SkImages.DeferredFromGenerator(gen)` — fonctional interface lazy `getPixels(info, dst, rowBytes)`.
 - `SkMipmapBuilder` + `SkImage.attachTo(builder)` — chaîne de bitmaps downsamplés stockée side-band sur l'image.
-- `SkCodec.getFrameInfo(): List<FrameInfo>` + `SkCodec.getPixels(options: Options{frameIndex, priorFrame})` — extension du codec GIF existant pour multi-frame.
+- `Codec.getFrameInfo(): List<FrameInfo>` + `Codec.getPixels(options: Options{frameIndex, priorFrame})` — extension du codec GIF existant pour multi-frame.
 
 GMs : orientation, pictureimagegenerator, showmiplevels, animated_gif.
 
@@ -131,8 +131,8 @@ GMs : crbug_224618, coordclampshader, highcontrastfilter, tablemaskfilter, mixed
 Effort : **M** ; agents : **2 × 1-2 GMs**
 
 API :
-- `SkAnimatedImage.MakeFromCodec(codec)` — wrapper iterable du frame loop existant.
-- `SkAndroidCodec` EXIF orientation — parser EXIF via `javax.imageio.metadata.IIOMetadata` ou `metadata-extractor`.
+- `AnimatedImage.MakeFromCodec(codec)` — wrapper iterable du frame loop existant.
+- `AndroidCodec` EXIF orientation — parser EXIF via `javax.imageio.metadata.IIOMetadata` ou `metadata-extractor`.
 - YUV→RGB pure Kotlin (BT.601 + BT.709 matrices) pour composition multi-plane.
 
 GMs : animated_image_orientation, compositor_quads, (déblocage partiel hdr_pip_blur).
@@ -156,7 +156,7 @@ Pour chaque API ci-dessous, créer la signature publique correcte qui jette `thr
 | Stub | API stubée | Bibliothèque cible | GMs débloquées (compile) |
 |---|---|---|---|
 | **STUB.WEBP_LOSSY** | `SkWebpEncoder.Encode` avec `compression = LOSSY` | libwebp | (variantes encode_*) |
-| **STUB.FFMPEG** | `SkVideoDecoder.MakeFromStream(stream)` | FFmpeg libavformat/libavcodec | video_decoder |
+| **STUB.FFMPEG** | `VideoDecoder.MakeFromStream(stream)` | FFmpeg libavformat/libavcodec | video_decoder |
 | **STUB.FONTATIONS** | `SkTypeface_Fontations.MakeFromStream` | Fontations Rust crate (UniFFI ou JNI direct) | fontations, fontations_ft_compare |
 | **STUB.COLR_V1** | `SkTypeface.makeColrV1Glyphs` + `SkFontArguments.Palette(index, overrides)` | FreeType + HarfBuzz COLR v1 path | colrv1, palette |
 | **STUB.EMOJI_TABLES** | `EmojiTypeface.CBDT/Sbix/SVG/ColrV0` | FreeType + librsvg pour SVG-in-OT | scaledemoji, scaledemoji_rendering, coloremoji_blendmodes |
@@ -205,7 +205,7 @@ Pour chaque API ci-dessous, créer la signature publique correcte qui jette `thr
 | R-final.5 — Generators + mipmaps + GIF anim | ☑ | #443 | 5 | 1 bonus (`RespectOrientationJpegGM`). AnimatedGif 100%, GIF89a disposal honoré. Manque `SkTextUtils.GetPath` (F10) |
 | R-final.6 — Encodeurs via `javax.imageio` | ☑ | #442 | 5 | JpgColorCubeGM 100%. Bonus fix bug latent `EncoderSupport.bitmapToBufferedImage`. Follow-ups : iCCP chunk (F8), per-bitmap alpha-type tag (F9) |
 | R-final.7 — Misc raster | ☑ | #445 | 6 | SkM44 perspective déjà présent. PlanetTypeface skipped (color-emoji non-AWT). 5 améliorations sur scores existants au merge |
-| R-final.8 — Animated images + EXIF + YUV | ☑ | #444 | 1 + 2 ratchets up | Orientation444GM + RespectOrientationJpegGM **19.87% → 100%** grâce au fix EXIF. SkEncodedOrigin + SkPixmapUtils.Orient déjà présents. CompositorQuads minimal port (full = `experimental_DrawEdgeAAImageSet`, F6). 2 GMs skip : assets `flightAnim.gif` + `stoplight_h.webp` non vendored (F11) + animated WebP (F12) |
+| R-final.8 — Animated images + EXIF + YUV | ☑ | #444 | 1 + 2 ratchets up | Orientation444GM + RespectOrientationJpegGM **19.87% → 100%** grâce au fix EXIF. SkEncodedOrigin + PixmapUtils.Orient déjà présents. CompositorQuads minimal port (full = `experimental_DrawEdgeAAImageSet`, F6). 2 GMs skip : assets `flightAnim.gif` + `stoplight_h.webp` non vendored (F11) + animated WebP (F12) |
 | R-final.9 — Variable fonts + HDR pipeline | ☑ | #447 | 2 | SkFontArguments + makeClone via AWT TextAttribute (4 axes : wght/wdth/slnt/ital). Axes opsz/GRAD/XHGT/XOPQ/YOPQ silently dropped (limite AWT). Asset Distortable.ttf vendored. SkColorSpace.MakePqHdr() (BT.2100 + Rec.2020) |
 | R-final.S — Stubs JNI documentés | ☑ | #446 | 0 (10 squelettes) | 8 stubs créés : WEBP_LOSSY, FFMPEG, FONTATIONS, COLR_V1, EMOJI_TABLES, SKSL, LIBERATION_FM, AAClip. 10 GM squelettes `@Ignore("STUB.X")` |
 | **Plan refresh (clôture)** | ☑ | (cette PR) | — | Refresh + archivage |

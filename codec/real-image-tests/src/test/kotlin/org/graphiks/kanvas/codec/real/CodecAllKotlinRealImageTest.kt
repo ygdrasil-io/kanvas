@@ -11,7 +11,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.MethodSource
 import org.graphiks.kanvas.codec.CodecDecoderProvider
-import org.graphiks.kanvas.codec.SkCodec
+import org.graphiks.kanvas.codec.Codec
 import org.skia.foundation.SkAlphaType
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkEncodedImageFormat
@@ -59,7 +59,7 @@ class CodecAllKotlinRealImageTest {
     @MethodSource("fixtures")
     fun `checks real image fixture through codec dispatch`(fixture: RealImageFixture) {
         val data = readFixture(fixture.path)
-        val codec = SkCodec.MakeFromData(data)
+        val codec = Codec.MakeFromData(data)
         assertNotNull(codec, "${fixture.path} should be accepted by :codec dispatch")
 
         val checkedCodec = codec!!
@@ -83,7 +83,7 @@ class CodecAllKotlinRealImageTest {
 
         val (bitmap, result) = checkedCodec.getImage()
         assertEquals(fixture.expectedResult, result, fixture.path)
-        if (fixture.expectedResult != SkCodec.Result.kSuccess) {
+        if (fixture.expectedResult != Codec.Result.kSuccess) {
             assertEquals(null, bitmap, "${fixture.path} is documented as unsupported for pixel decode")
             return
         }
@@ -105,9 +105,9 @@ class CodecAllKotlinRealImageTest {
             val frameResult = checkedCodec.getPixels(
                 checkedCodec.getInfo(),
                 frameBitmap,
-                SkCodec.Options(frameIndex = frameProbe.frameIndex),
+                Codec.Options(frameIndex = frameProbe.frameIndex),
             )
-            assertEquals(SkCodec.Result.kSuccess, frameResult, "${fixture.path} frame ${frameProbe.frameIndex}")
+            assertEquals(Codec.Result.kSuccess, frameResult, "${fixture.path} frame ${frameProbe.frameIndex}")
             frameProbe.pixelProbes.forEach { probe ->
                 assertPixel("${fixture.path} frame ${frameProbe.frameIndex}", frameBitmap, probe)
             }
@@ -118,7 +118,7 @@ class CodecAllKotlinRealImageTest {
     @MethodSource("negativeFixtures")
     fun `rejects invalid real image fixtures through codec dispatch`(fixture: NegativeFixture) {
         val data = readFixture(fixture.path)
-        assertNull(SkCodec.MakeFromData(data), "${fixture.path} should be rejected: ${fixture.reason}")
+        assertNull(Codec.MakeFromData(data), "${fixture.path} should be rejected: ${fixture.reason}")
     }
 
     data class RealImageFixture(
@@ -129,7 +129,7 @@ class CodecAllKotlinRealImageTest {
         val height: Int,
         val frameCount: Int = 1,
         val hasAlpha: Boolean,
-        val expectedResult: SkCodec.Result = SkCodec.Result.kSuccess,
+        val expectedResult: Codec.Result = Codec.Result.kSuccess,
         val origin: SkEncodedOrigin = SkEncodedOrigin.kTopLeft,
         val hasICCProfile: Boolean? = null,
         val frameInfo: List<FrameInfoExpectation> = emptyList(),
@@ -392,7 +392,7 @@ class CodecAllKotlinRealImageTest {
                 frameInfo = listOf(
                     FrameInfoExpectation(
                         index = 0,
-                        requiredFrame = SkCodec.kNoFrame,
+                        requiredFrame = Codec.kNoFrame,
                         durationMs = 0,
                         frameRect = SkIRect.MakeXYWH(0, 0, 200, 55),
                     ),
@@ -428,7 +428,7 @@ class CodecAllKotlinRealImageTest {
                 frameCount = 5,
                 hasAlpha = false,
                 frameInfo = listOf(
-                    FrameInfoExpectation(0, requiredFrame = SkCodec.kNoFrame, durationMs = 50, frameRect = SkIRect.MakeXYWH(0, 0, 3, 1)),
+                    FrameInfoExpectation(0, requiredFrame = Codec.kNoFrame, durationMs = 50, frameRect = SkIRect.MakeXYWH(0, 0, 3, 1)),
                     FrameInfoExpectation(1, requiredFrame = 0, durationMs = 60, frameRect = SkIRect.MakeXYWH(1, 0, 1, 1)),
                     FrameInfoExpectation(2, requiredFrame = 1, durationMs = 70, frameRect = SkIRect.MakeXYWH(2, 0, 1, 1)),
                     FrameInfoExpectation(3, requiredFrame = 2, durationMs = 80, frameRect = SkIRect.MakeXYWH(1, 0, 1, 1)),
@@ -573,7 +573,7 @@ class CodecAllKotlinRealImageTest {
                 frameInfo = listOf(
                     FrameInfoExpectation(
                         index = 0,
-                        requiredFrame = SkCodec.kNoFrame,
+                        requiredFrame = Codec.kNoFrame,
                         durationMs = 10,
                         alphaType = SkAlphaType.kUnpremul,
                         frameRect = SkIRect.MakeXYWH(0, 0, 4, 1),
@@ -630,7 +630,7 @@ class CodecAllKotlinRealImageTest {
                 frameInfo = listOf(
                     FrameInfoExpectation(
                         index = 0,
-                        requiredFrame = SkCodec.kNoFrame,
+                        requiredFrame = Codec.kNoFrame,
                         durationMs = 1000,
                         alphaType = SkAlphaType.kUnpremul,
                         frameRect = SkIRect.MakeXYWH(0, 0, 11, 29),
@@ -650,7 +650,7 @@ class CodecAllKotlinRealImageTest {
                         frameRect = SkIRect.MakeXYWH(2, 2, 7, 16),
                     ),
                 ),
-                expectedResult = SkCodec.Result.kErrorInInput,
+                expectedResult = Codec.Result.kErrorInInput,
                 pixelProbes = emptyList(),
             ),
         )

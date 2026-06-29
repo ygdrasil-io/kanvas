@@ -11,7 +11,7 @@ import org.skia.foundation.SkEncodedImageFormat
 import org.skia.foundation.SkImageInfo
 import org.skia.foundation.skcms.SkcmsICCProfile
 
-class SkAnimatedImageOwnershipTest {
+class AnimatedImageOwnershipTest {
 
     @Test
     fun `animated image delegates frame ownership to supplied codec`() {
@@ -20,12 +20,12 @@ class SkAnimatedImageOwnershipTest {
             delaysMs = listOf(40, 70),
         )
 
-        val animated = SkAnimatedImage.MakeFromCodec(codec)
+        val animated = AnimatedImage.MakeFromCodec(codec)
         assertNotNull(animated)
         animated!!
 
         assertEquals(listOf(0), codec.decodedFrameIndexes)
-        assertEquals(listOf(SkCodec.Options(frameIndex = 0, priorFrame = SkCodec.kNoFrame)), codec.decodedOptions)
+        assertEquals(listOf(Codec.Options(frameIndex = 0, priorFrame = Codec.kNoFrame)), codec.decodedOptions)
         assertEquals(2, animated.getFrameCount())
         assertEquals(40, animated.currentFrameDuration())
         assertEquals(RED, animated.getCurrentFrame().peekPixel(0, 0))
@@ -34,14 +34,14 @@ class SkAnimatedImageOwnershipTest {
         assertEquals(listOf(0, 1), codec.decodedFrameIndexes)
         assertEquals(
             listOf(
-                SkCodec.Options(frameIndex = 0, priorFrame = SkCodec.kNoFrame),
-                SkCodec.Options(frameIndex = 1, priorFrame = SkCodec.kNoFrame),
+                Codec.Options(frameIndex = 0, priorFrame = Codec.kNoFrame),
+                Codec.Options(frameIndex = 1, priorFrame = Codec.kNoFrame),
             ),
             codec.decodedOptions,
         )
         assertEquals(BLUE, animated.getCurrentFrame().peekPixel(0, 0))
 
-        assertEquals(SkAnimatedImage.kFinished, animated.decodeNextFrame())
+        assertEquals(AnimatedImage.kFinished, animated.decodeNextFrame())
     }
 
     @Test
@@ -55,18 +55,18 @@ class SkAnimatedImageOwnershipTest {
         val result = codec.getPixels(
             codec.getInfo(),
             dst,
-            SkCodec.Options(frameIndex = 1, priorFrame = 0),
+            Codec.Options(frameIndex = 1, priorFrame = 0),
         )
 
-        assertEquals(SkCodec.Result.kSuccess, result)
+        assertEquals(Codec.Result.kSuccess, result)
         assertEquals(BLUE, dst.getPixel(0, 0))
-        assertEquals(listOf(SkCodec.Options(frameIndex = 1, priorFrame = 0)), codec.decodedOptions)
+        assertEquals(listOf(Codec.Options(frameIndex = 1, priorFrame = 0)), codec.decodedOptions)
     }
 
     private class RecordingAnimatedCodec(
         private val frames: List<Int>,
         private val delaysMs: List<Int>,
-    ) : SkCodec() {
+    ) : Codec() {
         val decodedFrameIndexes = mutableListOf<Int>()
         val decodedOptions = mutableListOf<Options>()
         private val info = SkImageInfo.Make(

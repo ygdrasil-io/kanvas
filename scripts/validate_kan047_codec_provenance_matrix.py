@@ -114,7 +114,7 @@ def source_audit(root: Path) -> dict[str, Any]:
         root,
         "cpu-raster/src/main/kotlin/org/skia/tools/ToolUtils.kt",
         [
-            "SkCodec.MakeFromData",
+            "Codec.MakeFromData",
             "GetResourceAsImage",
         ],
     )
@@ -135,10 +135,10 @@ def source_audit(root: Path) -> dict[str, Any]:
             "STUB.ANIMATED_IMAGE",
         ],
     )
-    require_text(root, "codec/extended/src/main/kotlin/org/graphiks/kanvas/codec/SkAvifDecoder.kt", ["Always returns `null`"])
-    require_text(root, "codec/extended/src/main/kotlin/org/graphiks/kanvas/codec/SkJpegxlDecoder.kt", ["Always returns `null`"])
-    require_text(root, "codec/extended/src/main/kotlin/org/graphiks/kanvas/codec/SkRawDecoder.kt", ["Always returns `null`"])
-    require_text(root, "codec/extended/src/main/kotlin/org/graphiks/kanvas/codec/SkVideoDecoder.kt", ["STUB.FFMPEG"])
+    require_text(root, "codec/extended/src/main/kotlin/org/graphiks/kanvas/codec/AvifDecoder.kt", ["Always returns `null`"])
+    require_text(root, "codec/extended/src/main/kotlin/org/graphiks/kanvas/codec/JpegxlDecoder.kt", ["Always returns `null`"])
+    require_text(root, "codec/extended/src/main/kotlin/org/graphiks/kanvas/codec/RawDecoder.kt", ["Always returns `null`"])
+    require_text(root, "codec/extended/src/main/kotlin/org/graphiks/kanvas/codec/VideoDecoder.kt", ["STUB.FFMPEG"])
     return {
         "supportedCodecs": SUPPORTED_CODECS,
         "fixtureProvenance": FIXTURE_PROVENANCE,
@@ -275,7 +275,7 @@ def kan046_scene_rows(root: Path) -> list[dict[str, Any]]:
                 "name": "png",
                 "kind": "portable-codec",
                 "module": "codec/png",
-                "dispatch": "ToolUtils.GetResourceAsImage -> SkCodec.MakeFromData -> SkCodec.getImage",
+                "dispatch": "ToolUtils.GetResourceAsImage -> Codec.MakeFromData -> Codec.getImage",
             },
             "colorInfo": {
                 "colorType": "codec-natural RGBA_8888",
@@ -375,7 +375,7 @@ def animated_scene_rows() -> list[dict[str, Any]]:
                 "colorType": "RGBA_8888 for supported WebP frame encodings",
                 "colorSpace": "sRGB output; VP8X ICC parsed when parseable",
                 "alphaType": "codec frame alpha when supported",
-                "policy": "SkAnimatedImage scene pipeline is disabled; no animated renderer support",
+                "policy": "AnimatedImage scene pipeline is disabled; no animated renderer support",
             },
             "origin": {
                 "kind": "skia-resource-encoded-animation",
@@ -404,7 +404,7 @@ def animated_scene_rows() -> list[dict[str, Any]]:
                 "colorType": "RGBA_8888 indexed-frame output",
                 "colorSpace": "sRGB output",
                 "alphaType": "transparent color index when present",
-                "policy": "SkAnimatedImage scene pipeline is disabled; no animated renderer support",
+                "policy": "AnimatedImage scene pipeline is disabled; no animated renderer support",
             },
             "origin": {
                 "kind": "skia-resource-encoded-animation",
@@ -455,7 +455,7 @@ def codec_format_rows() -> list[dict[str, Any]]:
                 "status": "dependency-gated",
                 "decoder": {"name": "avif", "kind": "stub", "module": "codec/extended"},
                 "colorInfo": "out of scope until real AVIF dependency lands",
-                "origin": "codec/extended/src/main/kotlin/org/graphiks/kanvas/codec/SkAvifDecoder.kt",
+                "origin": "codec/extended/src/main/kotlin/org/graphiks/kanvas/codec/AvifDecoder.kt",
                 "decodeResult": "stub-returns-null",
                 "reasonCode": "codec.decoder-unavailable",
             },
@@ -464,7 +464,7 @@ def codec_format_rows() -> list[dict[str, Any]]:
                 "status": "dependency-gated",
                 "decoder": {"name": "jpegxl", "kind": "stub", "module": "codec/extended"},
                 "colorInfo": "out of scope until real JPEG XL dependency lands",
-                "origin": "codec/extended/src/main/kotlin/org/graphiks/kanvas/codec/SkJpegxlDecoder.kt",
+                "origin": "codec/extended/src/main/kotlin/org/graphiks/kanvas/codec/JpegxlDecoder.kt",
                 "decodeResult": "stub-returns-null",
                 "reasonCode": "codec.decoder-unavailable",
             },
@@ -473,7 +473,7 @@ def codec_format_rows() -> list[dict[str, Any]]:
                 "status": "dependency-gated",
                 "decoder": {"name": "raw", "kind": "stub", "module": "codec/extended"},
                 "colorInfo": "out of scope until real RAW dependency lands",
-                "origin": "codec/extended/src/main/kotlin/org/graphiks/kanvas/codec/SkRawDecoder.kt",
+                "origin": "codec/extended/src/main/kotlin/org/graphiks/kanvas/codec/RawDecoder.kt",
                 "decodeResult": "stub-returns-null",
                 "reasonCode": "codec.decoder-unavailable",
             },
@@ -482,7 +482,7 @@ def codec_format_rows() -> list[dict[str, Any]]:
                 "status": "dependency-gated",
                 "decoder": {"name": "ffmpeg-video", "kind": "stub", "module": "codec/extended"},
                 "colorInfo": "out of scope until FFmpeg-backed dependency lands outside portable runtime",
-                "origin": "codec/extended/src/main/kotlin/org/graphiks/kanvas/codec/SkVideoDecoder.kt",
+                "origin": "codec/extended/src/main/kotlin/org/graphiks/kanvas/codec/VideoDecoder.kt",
                 "decodeResult": "throws-STUB.FFMPEG",
                 "reasonCode": "codec.decoder-unavailable",
             },
@@ -737,7 +737,7 @@ thresholds, JNI, ImageIO/AWT usage, or animated scene support.
 ## Claim Guards
 
 - No stub codec renders a scene pass.
-- Deterministic fixtures stay distinct from real `SkCodec` decode.
+- Deterministic fixtures stay distinct from real `Codec` decode.
 - `bitmap-subset-local-matrix-repeat` cites `codec/png`, but its support
   claim remains bounded bitmap sampling, not broad codec or color-managed decode.
 - Animated WebP/GIF scene rows remain dependency-gated via

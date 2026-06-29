@@ -3,7 +3,7 @@ package org.skia.tests
 import org.skia.core.SkCanvas
 import org.skia.core.SkPicture
 import org.skia.core.SkPictureRecorder
-import org.graphiks.kanvas.codec.SkImageCodecs
+import org.graphiks.kanvas.codec.ImageCodecs
 import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkImage
 import org.skia.foundation.SkImages
@@ -25,14 +25,14 @@ import java.nio.ByteBuffer
  *  - `(220+110, 10)`  — the subset after an encode→decode round-trip
  *                       (upstream's `serial_deserial` via
  *                       `SkBinaryWriteBuffer::writeImage`; kanvas-skia
- *                       substitutes a PNG encode → SkImageCodecs decode).
+ *                       substitutes a PNG encode → ImageCodecs decode).
  *
  * Upstream `serial_deserial` serialises an isolated `SkImage` via the
  * `SkBinaryWriteBuffer::writeImage` / `SkReadBuffer::readImage` path,
  * which is a private Skia format distinct from [org.skia.core.SkPicture.serialize].
  * kanvas-skia does not implement a standalone image binary-buffer
  * serialisation API; we approximate the round-trip with
- * `SkImage.encodeToData()` (PNG) + [SkImageCodecs.DeferredFromEncodedData],
+ * `SkImage.encodeToData()` (PNG) + [ImageCodecs.DeferredFromEncodedData],
  * which exercises the same "encode, transmit, decode" intent while
  * keeping the test fully raster-portable.
  */
@@ -95,6 +95,6 @@ public class ImageSubsetGM : GM() {
         val data = img.encodeToData() ?: return null
         val bytes = data.toByteArray()
         val buf = ByteBuffer.wrap(bytes)
-        return SkImageCodecs.DeferredFromEncodedData(buf)
+        return ImageCodecs.DeferredFromEncodedData(buf)
     }
 }

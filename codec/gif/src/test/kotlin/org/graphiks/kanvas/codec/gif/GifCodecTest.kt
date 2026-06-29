@@ -7,14 +7,14 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.graphiks.kanvas.codec.CodecDecoderProvider
-import org.graphiks.kanvas.codec.SkCodec
+import org.graphiks.kanvas.codec.Codec
 import org.skia.foundation.SkAlphaType
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkEncodedImageFormat
 import java.util.ServiceLoader
 
-class SkGifKotlinCodecTest {
+class GifCodecTest {
 
     @Test
     fun `registers decoder through service loader`() {
@@ -27,15 +27,15 @@ class SkGifKotlinCodecTest {
 
     @Test
     fun `rejects invalid signatures`() {
-        assertFalse(SkGifKotlinCodec.Decoder.matches(ByteArray(0)))
-        assertFalse(SkGifKotlinCodec.Decoder.matches("not-a-gif".toByteArray()))
-        assertNull(SkGifKotlinCodec.Decoder.make("GIF00a".toByteArray()))
-        assertNull(SkGifKotlinCodec.Decoder.make("GIF89a".toByteArray()))
+        assertFalse(GifCodec.Decoder.matches(ByteArray(0)))
+        assertFalse(GifCodec.Decoder.matches("not-a-gif".toByteArray()))
+        assertNull(GifCodec.Decoder.make("GIF00a".toByteArray()))
+        assertNull(GifCodec.Decoder.make("GIF89a".toByteArray()))
     }
 
     @Test
     fun `decodes minimal single frame gif`() {
-        val codec = SkGifKotlinCodec.Decoder.make(
+        val codec = GifCodec.Decoder.make(
             gif(
                 width = 1,
                 height = 1,
@@ -45,7 +45,7 @@ class SkGifKotlinCodecTest {
         )
 
         assertNotNull(codec)
-        assertTrue(codec is SkGifKotlinCodec)
+        assertTrue(codec is GifCodec)
         assertEquals(SkEncodedImageFormat.kGIF, codec!!.getEncodedFormat())
         assertEquals(1, codec.getFrameCount())
         assertEquals(1, codec.dimensions().width)
@@ -55,14 +55,14 @@ class SkGifKotlinCodecTest {
         assertTrue(codec.getInfo().colorSpace.isSRGB())
 
         val (bitmap, result) = codec.getImage()
-        assertEquals(SkCodec.Result.kSuccess, result)
+        assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
         assertEquals(RED, bitmap!!.getPixel(0, 0))
     }
 
     @Test
     fun `applies graphic control transparent index`() {
-        val codec = SkGifKotlinCodec.Decoder.make(
+        val codec = GifCodec.Decoder.make(
             gif(
                 width = 2,
                 height = 1,
@@ -73,7 +73,7 @@ class SkGifKotlinCodecTest {
         )!!
 
         val (bitmap, result) = codec.getImage()
-        assertEquals(SkCodec.Result.kSuccess, result)
+        assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
         assertEquals(RED, bitmap!!.getPixel(0, 0))
         assertEquals(TRANSPARENT, bitmap.getPixel(1, 0))
@@ -81,7 +81,7 @@ class SkGifKotlinCodecTest {
 
     @Test
     fun `uses local color table when present`() {
-        val codec = SkGifKotlinCodec.Decoder.make(
+        val codec = GifCodec.Decoder.make(
             gif(
                 width = 2,
                 height = 1,
@@ -92,14 +92,14 @@ class SkGifKotlinCodecTest {
         )!!
 
         val (bitmap, result) = codec.getImage()
-        assertEquals(SkCodec.Result.kSuccess, result)
+        assertEquals(Codec.Result.kSuccess, result)
         assertEquals(GREEN, bitmap!!.getPixel(0, 0))
         assertEquals(YELLOW, bitmap.getPixel(1, 0))
     }
 
     @Test
     fun `deinterlaces image data in gif pass order`() {
-        val codec = SkGifKotlinCodec.Decoder.make(
+        val codec = GifCodec.Decoder.make(
             gif(
                 width = 1,
                 height = 8,
@@ -118,7 +118,7 @@ class SkGifKotlinCodecTest {
         )!!
 
         val (bitmap, result) = codec.getImage()
-        assertEquals(SkCodec.Result.kSuccess, result)
+        assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
         assertEquals(RED, bitmap!!.getPixel(0, 0))
         assertEquals(RED, bitmap.getPixel(0, 1))
@@ -132,7 +132,7 @@ class SkGifKotlinCodecTest {
 
     @Test
     fun `exposes partial frame rect delay and decodes selected frame`() {
-        val codec = SkGifKotlinCodec.Decoder.make(
+        val codec = GifCodec.Decoder.make(
             gif(
                 width = 3,
                 height = 2,
@@ -167,8 +167,8 @@ class SkGifKotlinCodecTest {
         assertEquals(2, frameInfo[1].frameRect.height())
 
         val dst = SkBitmap(codec.getInfo().width, codec.getInfo().height)
-        val result = codec.getPixels(codec.getInfo(), dst, SkCodec.Options(frameIndex = 1))
-        assertEquals(SkCodec.Result.kSuccess, result)
+        val result = codec.getPixels(codec.getInfo(), dst, Codec.Options(frameIndex = 1))
+        assertEquals(Codec.Result.kSuccess, result)
         assertEquals(RED, dst.getPixel(0, 0))
         assertEquals(BLUE, dst.getPixel(1, 0))
         assertEquals(RED, dst.getPixel(2, 0))
@@ -179,7 +179,7 @@ class SkGifKotlinCodecTest {
 
     @Test
     fun `restore to background uses logical background color`() {
-        val codec = SkGifKotlinCodec.Decoder.make(
+        val codec = GifCodec.Decoder.make(
             gif(
                 width = 3,
                 height = 1,
@@ -194,8 +194,8 @@ class SkGifKotlinCodecTest {
         )!!
 
         val dst = SkBitmap(codec.getInfo().width, codec.getInfo().height)
-        val result = codec.getPixels(codec.getInfo(), dst, SkCodec.Options(frameIndex = 2))
-        assertEquals(SkCodec.Result.kSuccess, result)
+        val result = codec.getPixels(codec.getInfo(), dst, Codec.Options(frameIndex = 2))
+        assertEquals(Codec.Result.kSuccess, result)
         assertEquals(RED, dst.getPixel(0, 0))
         assertEquals(GREEN, dst.getPixel(1, 0))
         assertEquals(BLUE, dst.getPixel(2, 0))
@@ -203,7 +203,7 @@ class SkGifKotlinCodecTest {
 
     @Test
     fun `restore to background uses transparency when background index is transparent`() {
-        val codec = SkGifKotlinCodec.Decoder.make(
+        val codec = GifCodec.Decoder.make(
             gif(
                 width = 3,
                 height = 1,
@@ -226,8 +226,8 @@ class SkGifKotlinCodecTest {
         )!!
 
         val dst = SkBitmap(codec.getInfo().width, codec.getInfo().height)
-        val result = codec.getPixels(codec.getInfo(), dst, SkCodec.Options(frameIndex = 2))
-        assertEquals(SkCodec.Result.kSuccess, result)
+        val result = codec.getPixels(codec.getInfo(), dst, Codec.Options(frameIndex = 2))
+        assertEquals(Codec.Result.kSuccess, result)
         assertEquals(RED, dst.getPixel(0, 0))
         assertEquals(TRANSPARENT, dst.getPixel(1, 0))
         assertEquals(BLUE, dst.getPixel(2, 0))
@@ -235,7 +235,7 @@ class SkGifKotlinCodecTest {
 
     @Test
     fun `restore to previous restores canvas before the disposed frame`() {
-        val codec = SkGifKotlinCodec.Decoder.make(
+        val codec = GifCodec.Decoder.make(
             gif(
                 width = 3,
                 height = 1,
@@ -249,13 +249,13 @@ class SkGifKotlinCodecTest {
         )!!
 
         val frameInfo = codec.getFrameInfo()
-        assertEquals(SkCodec.kNoFrame, frameInfo[0].requiredFrame)
+        assertEquals(Codec.kNoFrame, frameInfo[0].requiredFrame)
         assertEquals(0, frameInfo[1].requiredFrame)
         assertEquals(0, frameInfo[2].requiredFrame)
 
         val dst = SkBitmap(codec.getInfo().width, codec.getInfo().height)
-        val result = codec.getPixels(codec.getInfo(), dst, SkCodec.Options(frameIndex = 2))
-        assertEquals(SkCodec.Result.kSuccess, result)
+        val result = codec.getPixels(codec.getInfo(), dst, Codec.Options(frameIndex = 2))
+        assertEquals(Codec.Result.kSuccess, result)
         assertEquals(RED, dst.getPixel(0, 0))
         assertEquals(RED, dst.getPixel(1, 0))
         assertEquals(GREEN, dst.getPixel(2, 0))
@@ -264,7 +264,7 @@ class SkGifKotlinCodecTest {
     @Test
     fun `disposal none and do not dispose keep composed canvas`() {
         for (disposal in listOf(DISPOSAL_NONE, DISPOSAL_DO_NOT_DISPOSE)) {
-            val codec = SkGifKotlinCodec.Decoder.make(
+            val codec = GifCodec.Decoder.make(
                 gif(
                     width = 3,
                     height = 1,
@@ -281,8 +281,8 @@ class SkGifKotlinCodecTest {
             assertEquals(1, frameInfo[2].requiredFrame)
 
             val dst = SkBitmap(codec.getInfo().width, codec.getInfo().height)
-            val result = codec.getPixels(codec.getInfo(), dst, SkCodec.Options(frameIndex = 2))
-            assertEquals(SkCodec.Result.kSuccess, result)
+            val result = codec.getPixels(codec.getInfo(), dst, Codec.Options(frameIndex = 2))
+            assertEquals(Codec.Result.kSuccess, result)
             assertEquals(RED, dst.getPixel(0, 0))
             assertEquals(BLUE, dst.getPixel(1, 0))
             assertEquals(GREEN, dst.getPixel(2, 0))
@@ -291,7 +291,7 @@ class SkGifKotlinCodecTest {
 
     @Test
     fun `exposes netscape loop count and skips comment extensions before frames`() {
-        val codec = SkGifKotlinCodec.Decoder.make(
+        val codec = GifCodec.Decoder.make(
             gif(
                 width = 2,
                 height = 1,
@@ -314,15 +314,15 @@ class SkGifKotlinCodecTest {
         assertEquals(90, codec.getFrameInfo()[1].durationMs)
 
         val dst = SkBitmap(codec.getInfo().width, codec.getInfo().height)
-        val result = codec.getPixels(codec.getInfo(), dst, SkCodec.Options(frameIndex = 1))
-        assertEquals(SkCodec.Result.kSuccess, result)
+        val result = codec.getPixels(codec.getInfo(), dst, Codec.Options(frameIndex = 1))
+        assertEquals(Codec.Result.kSuccess, result)
         assertEquals(RED, dst.getPixel(0, 0))
         assertEquals(BLUE, dst.getPixel(1, 0))
     }
 
     @Test
     fun `maps netscape zero loop count to infinite repetition`() {
-        val codec = SkGifKotlinCodec.Decoder.make(
+        val codec = GifCodec.Decoder.make(
             gif(
                 width = 1,
                 height = 1,
@@ -333,12 +333,12 @@ class SkGifKotlinCodecTest {
         )
 
         assertNotNull(codec)
-        assertEquals(SkCodec.kRepetitionCountInfinite, codec!!.getRepetitionCount())
+        assertEquals(Codec.kRepetitionCountInfinite, codec!!.getRepetitionCount())
     }
 
     @Test
     fun `decodes representative multi frame fixture corpus`() {
-        val codec = SkGifKotlinCodec.Decoder.make(
+        val codec = GifCodec.Decoder.make(
             gif(
                 width = 4,
                 height = 4,
@@ -422,7 +422,7 @@ class SkGifKotlinCodecTest {
         val frameInfo = codec.getFrameInfo()
         assertEquals(6, codec.getFrameCount())
         assertEquals(listOf(50, 60, 70, 80, 90, 100), frameInfo.map { it.durationMs })
-        assertEquals(listOf(SkCodec.kNoFrame, 0, 1, 2, 3, 3), frameInfo.map { it.requiredFrame })
+        assertEquals(listOf(Codec.kNoFrame, 0, 1, 2, 3, 3), frameInfo.map { it.requiredFrame })
 
         assertFramePixels(
             codec,
@@ -497,7 +497,7 @@ class SkGifKotlinCodecTest {
         val corrupted = data.copyOf()
         corrupted[firstImageDataSubBlockSizeOffset(corrupted)] = 127.toByte()
 
-        assertNull(SkGifKotlinCodec.Decoder.make(corrupted))
+        assertNull(GifCodec.Decoder.make(corrupted))
     }
 
     @Test
@@ -514,7 +514,7 @@ class SkGifKotlinCodecTest {
         val truncatedAtEof = dataWithTrailer.copyOf(dataWithTrailer.size - 1)
 
         assertNull(
-            SkGifKotlinCodec.Decoder.make(
+            GifCodec.Decoder.make(
                 truncatedAtEof,
             ),
         )
@@ -523,7 +523,7 @@ class SkGifKotlinCodecTest {
     @Test
     fun `rejects frame rect outside canvas`() {
         assertNull(
-            SkGifKotlinCodec.Decoder.make(
+            GifCodec.Decoder.make(
                 gif(
                     width = 2,
                     height = 1,
@@ -539,7 +539,7 @@ class SkGifKotlinCodecTest {
     @Test
     fun `rejects decoded index outside palette`() {
         assertNull(
-            SkGifKotlinCodec.Decoder.make(
+            GifCodec.Decoder.make(
                 gif(
                     width = 1,
                     height = 1,
@@ -553,7 +553,7 @@ class SkGifKotlinCodecTest {
     @Test
     fun `rejects invalid lzw stream`() {
         assertNull(
-            SkGifKotlinCodec.Decoder.make(
+            GifCodec.Decoder.make(
                 gif(
                     width = 1,
                     height = 1,
@@ -593,7 +593,7 @@ class SkGifKotlinCodecTest {
             ),
         )
 
-        assertNull(SkGifKotlinCodec.Decoder.make(data))
+        assertNull(GifCodec.Decoder.make(data))
     }
 
     private fun gif(
@@ -759,10 +759,10 @@ class SkGifKotlinCodecTest {
         return imageSeparatorOffset + 10 + 1
     }
 
-    private fun assertFramePixels(codec: SkCodec, frameIndex: Int, expected: List<IntArray>) {
+    private fun assertFramePixels(codec: Codec, frameIndex: Int, expected: List<IntArray>) {
         val dst = SkBitmap(codec.getInfo().width, codec.getInfo().height)
-        val result = codec.getPixels(codec.getInfo(), dst, SkCodec.Options(frameIndex = frameIndex))
-        assertEquals(SkCodec.Result.kSuccess, result)
+        val result = codec.getPixels(codec.getInfo(), dst, Codec.Options(frameIndex = frameIndex))
+        assertEquals(Codec.Result.kSuccess, result)
         for (y in expected.indices) {
             for (x in expected[y].indices) {
                 assertEquals(expected[y][x], dst.getPixel(x, y), "frame=$frameIndex x=$x y=$y")

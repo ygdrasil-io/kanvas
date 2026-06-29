@@ -4,9 +4,9 @@ import org.graphiks.math.SkIRect
 import org.graphiks.math.SkISize
 import org.graphiks.math.SkMatrix
 import org.graphiks.math.SkRect
-import org.graphiks.kanvas.codec.SkAndroidCodec
-import org.graphiks.kanvas.codec.SkAnimatedImage
-import org.graphiks.kanvas.codec.SkCodec
+import org.graphiks.kanvas.codec.AndroidCodec
+import org.graphiks.kanvas.codec.AnimatedImage
+import org.graphiks.kanvas.codec.Codec
 import org.skia.core.SkCanvas
 import org.skia.core.SkPicture
 import org.skia.core.SkPictureRecorder
@@ -23,7 +23,7 @@ import org.skia.tools.ToolUtils
 /**
  * Port of Skia's
  * [`gm/animated_image_orientation.cpp`](https://github.com/google/skia/blob/main/gm/animated_image_orientation.cpp)
- * — exercises the [SkAnimatedImage] frame-decode pipeline through
+ * — exercises the [AnimatedImage] frame-decode pipeline through
  * every combination of :
  *   * `usePic` : capture each frame as an [SkPicture] vs decode to [org.skia.foundation.SkImage]
  *   * `scale`  : 4 scales (1.25, 1.0, 0.75, 0.5) applied to the decoded info
@@ -38,8 +38,8 @@ import org.skia.tools.ToolUtils
  *
  * ## Port status
  *
- * Body fully ported against the new `org.graphiks.kanvas.codec.{SkCodec,
- * SkAndroidCodec, SkAnimatedImage}` flag-planting surface (all three
+ * Body fully ported against the new `org.graphiks.kanvas.codec.{Codec,
+ * AndroidCodec, AnimatedImage}` flag-planting surface (all three
  * resolve to `TODO("STUB.…")` at runtime). The matching
  * `AnimatedImageTest` is `@Disabled("STUB.ANIMATED_IMAGE")` until
  * those backends are implemented.
@@ -73,8 +73,8 @@ public class AnimatedImageGM(
             ?: error("AnimatedImageGM: resource not found at $path")
         data = d
 
-        val codec = SkCodec.MakeFromData(d.toByteArray())
-            ?: error("AnimatedImageGM: SkCodec.MakeFromData returned null for $path")
+        val codec = Codec.MakeFromData(d.toByteArray())
+            ?: error("AnimatedImageGM: Codec.MakeFromData returned null for $path")
         val dimensions = codec.dimensions()
 
         // Match upstream's formula for the per-frame translation : largest
@@ -103,7 +103,7 @@ public class AnimatedImageGM(
         val srcData = data ?: return
 
         for (usePic in booleanArrayOf(true, false)) {
-            val drawProc: (SkAnimatedImage) -> Unit = { anim ->
+            val drawProc: (AnimatedImage) -> Unit = { anim ->
                 if (usePic) {
                     val pic: SkPicture = anim.makePictureSnapshot()
                     canvas.drawPicture(pic)
@@ -116,10 +116,10 @@ public class AnimatedImageGM(
                 canvas.save()
                 for (doCrop in booleanArrayOf(false, true)) {
                     for (doPostProcess in booleanArrayOf(false, true)) {
-                        val codec = SkCodec.MakeFromData(srcData.toByteArray())
-                            ?: error("SkCodec.MakeFromData returned null mid-loop")
+                        val codec = Codec.MakeFromData(srcData.toByteArray())
+                            ?: error("Codec.MakeFromData returned null mid-loop")
                         val origin = codec.getOrigin()
-                        val androidCodec = SkAndroidCodec.MakeFromCodec(codec)
+                        val androidCodec = AndroidCodec.MakeFromCodec(codec)
                         var info = androidCodec.getInfo()
                         val unscaledSize = if (origin.swapsWidthHeight()) {
                             SkISize.Make(info.height, info.width)
@@ -165,9 +165,9 @@ public class AnimatedImageGM(
                         } else {
                             null
                         }
-                        val animatedImage = SkAnimatedImage.Make(
+                        val animatedImage = AnimatedImage.Make(
                             androidCodec, info, frameCropRect, postProcessor,
-                        ) ?: error("SkAnimatedImage.Make returned null")
+                        ) ?: error("AnimatedImage.Make returned null")
                         animatedImage.setRepetitionCount(0)
 
                         for (frame in 0 until kMaxFrames) {
@@ -188,7 +188,7 @@ public class AnimatedImageGM(
 
                             canvas.translate(translate.toFloat(), 0f)
                             val duration = animatedImage.currentFrameDuration()
-                            if (duration == SkAnimatedImage.kFinished) {
+                            if (duration == AnimatedImage.kFinished) {
                                 break
                             }
                             for (i in 0 until step) {

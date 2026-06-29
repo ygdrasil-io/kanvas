@@ -6,16 +6,16 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.graphiks.kanvas.codec.SkCodec
+import org.graphiks.kanvas.codec.Codec
 import org.graphiks.kanvas.codec.test.CodecNegativeFixtures
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkEncodedImageFormat
 
-class SkWbmpKotlinCodecTest {
+class WbmpCodecTest {
 
     @Test
     fun `decodes packed type zero pixels`() {
-        val codec = SkWbmpKotlinCodec.Decoder.make(
+        val codec = WbmpCodec.Decoder.make(
             wbmp(
                 width = 3,
                 height = 2,
@@ -27,14 +27,14 @@ class SkWbmpKotlinCodecTest {
         )
 
         assertNotNull(codec)
-        assertTrue(codec is SkWbmpKotlinCodec)
+        assertTrue(codec is WbmpCodec)
         assertEquals(SkEncodedImageFormat.kWBMP, codec!!.getEncodedFormat())
         assertEquals(3, codec.getInfo().width)
         assertEquals(2, codec.getInfo().height)
         assertEquals(SkColorType.kRGBA_8888, codec.getInfo().colorType)
 
         val (bitmap, result) = codec.getImage()
-        assertEquals(SkCodec.Result.kSuccess, result)
+        assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
         assertEquals(WHITE, bitmap!!.getPixel(0, 0))
         assertEquals(BLACK, bitmap.getPixel(1, 0))
@@ -51,7 +51,7 @@ class SkWbmpKotlinCodecTest {
             CodecNegativeFixtures.invalidMagic("ASCII non-WBMP payload", "not-a-wbmp"),
         )
         for (case in magicCases) {
-            assertFalse(SkWbmpKotlinCodec.Decoder.matches(case.data), case.name)
+            assertFalse(WbmpCodec.Decoder.matches(case.data), case.name)
         }
 
         val headerCases = listOf(
@@ -59,7 +59,7 @@ class SkWbmpKotlinCodecTest {
             CodecNegativeFixtures.invalidMagic("non-zero WBMP fixed header", byteArrayOf(0, 0x20, 1, 1, 0)),
         )
         for (case in headerCases) {
-            assertNull(SkWbmpKotlinCodec.Decoder.make(case.data), case.name)
+            assertNull(WbmpCodec.Decoder.make(case.data), case.name)
         }
     }
 
@@ -79,7 +79,7 @@ class SkWbmpKotlinCodecTest {
         )
 
         for (case in cases) {
-            assertNull(SkWbmpKotlinCodec.Decoder.make(case.data), case.name)
+            assertNull(WbmpCodec.Decoder.make(case.data), case.name)
         }
     }
 
@@ -108,14 +108,14 @@ class SkWbmpKotlinCodecTest {
         )
 
         for (case in cases) {
-            assertNull(SkWbmpKotlinCodec.Decoder.make(case.data), case.name)
+            assertNull(WbmpCodec.Decoder.make(case.data), case.name)
         }
     }
 
     @Test
     fun `rejects truncated raster`() {
         assertNull(
-            SkWbmpKotlinCodec.Decoder.make(
+            WbmpCodec.Decoder.make(
                 wbmp(
                     width = 9,
                     height = 2,

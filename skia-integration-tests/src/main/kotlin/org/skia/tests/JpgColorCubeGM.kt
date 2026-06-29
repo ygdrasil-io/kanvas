@@ -1,6 +1,6 @@
 package org.skia.tests
 
-import org.graphiks.kanvas.codec.SkCodec
+import org.graphiks.kanvas.codec.Codec
 import org.skia.core.SkCanvas
 import org.skia.encode.SkJpegEncoder
 import org.skia.foundation.SkBitmap
@@ -84,9 +84,9 @@ public class JpgColorCubeGM : GM() {
             }
         }
         val data = SkJpegEncoder.Encode(bmp) ?: return
-        val codec = SkCodec.MakeFromData(data) ?: return
+        val codec = Codec.MakeFromData(data) ?: return
         val (decoded, result) = codec.getImage()
-        if (result != SkCodec.Result.kSuccess || decoded == null) return
+        if (result != Codec.Result.kSuccess || decoded == null) return
         fImage = decoded.asImage()
     }
 

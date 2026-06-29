@@ -10,9 +10,9 @@ import java.nio.ByteBuffer
  * extraction).
  *
  * Mirrors the subset of Skia's `SkImages::*` factories that need an
- * [SkCodec] decoder.
+ * [Codec] decoder.
  */
-public object SkImageCodecs {
+public object ImageCodecs {
 
     /**
      * Mirrors Skia's
@@ -20,7 +20,7 @@ public object SkImageCodecs {
      * std::optional<SkAlphaType>)`.
      *
      * Decodes the encoded byte stream [encoded] (PNG / JPEG / GIF /
-     * BMP / WBMP / WEBP — see [SkCodec.MakeFromData] for the registered
+     * BMP / WBMP / WEBP — see [Codec.MakeFromData] for the registered
      * formats) into a fresh raster [SkImage]. Returns `null` when no
      * registered codec matches the leading bytes, or when the decode
      * itself fails. Despite the upstream name ("deferred"), the raster
@@ -35,9 +35,9 @@ public object SkImageCodecs {
         val view = encoded.duplicate()
         val bytes = ByteArray(view.remaining())
         view.get(bytes)
-        val codec = SkCodec.MakeFromData(bytes) ?: return null
+        val codec = Codec.MakeFromData(bytes) ?: return null
         val (bitmap, result) = codec.getImage()
-        if (result != SkCodec.Result.kSuccess || bitmap == null) return null
+        if (result != Codec.Result.kSuccess || bitmap == null) return null
         return SkImage.Make(bitmap)
     }
 }

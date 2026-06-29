@@ -37,18 +37,18 @@ class CpuRasterKotlinCodecBackendTest {
             "testCodecWithKotlinBackend must not load temporary ImageIO codec providers",
         )
 
-        val decoders = SkCodec.Decoders.all()
-        assertTrue(decoders.any { it.name == "png" && it::class.qualifiedName.orEmpty().contains("Kotlin") })
-        assertTrue(decoders.any { it.name == "jpeg" && it::class.qualifiedName.orEmpty().contains("Kotlin") })
-        assertTrue(decoders.any { it.name == "gif" && it::class.qualifiedName.orEmpty().contains("Kotlin") })
-        assertTrue(decoders.any { it.name == "bmp" && it::class.qualifiedName.orEmpty().contains("Kotlin") })
-        assertTrue(decoders.any { it.name == "wbmp" && it::class.qualifiedName.orEmpty().contains("Kotlin") })
-        assertTrue(decoders.any { it.name == "webp" && it::class.qualifiedName.orEmpty().contains("Kotlin") })
+        val decoders = Codec.Decoders.all()
+        assertTrue(decoders.any { it.name == "png" })
+        assertTrue(decoders.any { it.name == "jpeg" })
+        assertTrue(decoders.any { it.name == "gif" })
+        assertTrue(decoders.any { it.name == "bmp" })
+        assertTrue(decoders.any { it.name == "wbmp" })
+        assertTrue(decoders.any { it.name == "webp" })
         assertTrue(decoders.any { it.name == "ico" })
 
-        val codec = SkCodec.MakeFromData(CodecTestFixtures.simpleRgbaPng())
+        val codec = Codec.MakeFromData(CodecTestFixtures.simpleRgbaPng())
         assertNotNull(codec)
-        assertEquals("org.graphiks.kanvas.codec.png.SkPngKotlinCodec", codec!!::class.qualifiedName)
+        assertEquals("org.graphiks.kanvas.codec.png.PngCodec", codec!!::class.qualifiedName)
         CodecTestFixtures.SIMPLE_RGBA_PIXELS.zip(CodecTestFixtures.decodePixels(codec)).forEach { (expected, actual) ->
             assertArrayEquals(expected, actual)
         }

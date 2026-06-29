@@ -21,7 +21,7 @@
 
 Le module `:kanvas-skia` couvre désormais l'intégralité de la surface API publique upstream Skia non-GPU, sauf :
 - `SkWebpEncoder.kLossy` (VP8 lossy) : `Custom(callback)` factory permet plug-in libwebp via JNI consommateur ; sortie pure-Kotlin = lossless seul.
-- Décodeurs AVIF / JpegXL / RAW étendus : registry public `SkCodec.Decoders.register(...)` permet plug-in via JNI consommateur.
+- Décodeurs AVIF / JpegXL / RAW étendus : registry public `Codec.Decoders.register(...)` permet plug-in via JNI consommateur.
 - `SkShadowTessellator` convexité uniquement : paths concaves/self-intersect → fallback blur legacy.
 - `SkPath.IterVerb` typealias `@Deprecated` toujours là pour source-compat (rename mécanique complet livré dans #414).
 
@@ -281,34 +281,34 @@ simples** mais s'écarte fortement de l'API upstream sur tout ce qui touche aux 
 - **Header** : `include/encode/SkPngRustEncoder.h`, `include/codec/SkPngRustDecoder.h`
 - **Effort estimé** : S (alias d'API si le PNG existant suffit)
 
-### 1.37 `SkAndroidCodec`
-- **Header** : `include/codec/SkAndroidCodec.h`
+### 1.37 `AndroidCodec`
+- **Header** : `include/codec/AndroidCodec.h`
 - **Méthodes** : `MakeFromCodec`, `MakeFromData`, `MakeFromStream`, `getAndroidPixels`, `computeSampleSize`, `getSampledDimensions`, `getSampledSubsetDimensions`
 - **Effort estimé** : L
 
-### 1.38 `SkAvifDecoder`
-- **Header** : `include/codec/SkAvifDecoder.h`
+### 1.38 `AvifDecoder`
+- **Header** : `include/codec/AvifDecoder.h`
 - **Méthodes** : `Decode(SkStream)`, `Decode(SkData)`, `IsAvif(...)`, `Decoder()`
 - **Effort estimé** : XL (dépend libavif).
 
-### 1.39 `SkIcoDecoder`
-- **Header** : `include/codec/SkIcoDecoder.h`
+### 1.39 `IcoDecoder`
+- **Header** : `include/codec/IcoDecoder.h`
 - **Effort estimé** : M
 
-### 1.40 `SkRawDecoder`
-- **Header** : `include/codec/SkRawDecoder.h`
+### 1.40 `RawDecoder`
+- **Header** : `include/codec/RawDecoder.h`
 - **Effort estimé** : XL (dcraw deps).
 
-### 1.41 `SkJpegxlDecoder`
-- **Header** : `include/codec/SkJpegxlDecoder.h`
+### 1.41 `JpegxlDecoder`
+- **Header** : `include/codec/JpegxlDecoder.h`
 - **Effort estimé** : L (libjxl).
 
 ### 1.42 `SkPngChunkReader`
 - **Header** : `include/codec/SkPngChunkReader.h`
 - **Effort estimé** : S
 
-### 1.43 `SkCodecAnimation`
-- **Header** : `include/codec/SkCodecAnimation.h`
+### 1.43 `CodecAnimation`
+- **Header** : `include/codec/CodecAnimation.h`
 - **Effort estimé** : S (constantes + enums)
 
 ### 1.44 `SkEncoder` (base abstract)
@@ -316,8 +316,8 @@ simples** mais s'écarte fortement de l'API upstream sur tout ce qui touche aux 
 - **Méthodes** : `encodeRows(numRows)`, `dest()`
 - **Effort estimé** : S
 
-### 1.45 `SkPixmapUtils`
-- **Header** : `include/codec/SkPixmapUtils.h`
+### 1.45 `PixmapUtils`
+- **Header** : `include/codec/PixmapUtils.h`
 - **Méthodes** : `SwapWidthHeight`, `Orient`
 - **Effort estimé** : S
 
@@ -771,7 +771,7 @@ simples** mais s'écarte fortement de l'API upstream sur tout ce qui touche aux 
 22. ✅ **R1.22** `SkExecutor` (PR #363)
 23. ✅ **R1.23** `SkPathUtils.FillPathWithPaint` (PR #362, voir R-suivi pour cullRect)
 24. ✅ **R1.24** `SkTiledImageUtils` (PR #362, shim — voir R-suivi pour tiling réel)
-25. ✅ **R1.25** `SkPixmapUtils` (PR #362, 2/8 origins — voir R-suivi)
+25. ✅ **R1.25** `PixmapUtils` (PR #362, 2/8 origins — voir R-suivi)
 
 ### Phase R-suivi — Items partiels / stubs de R1 à compléter
 
@@ -785,7 +785,7 @@ Surgis lors de l'implémentation R1. Tous sont **non-bloquants** pour faire comp
 6. ✅ **R-suivi.6** `SkGraphics` cache implémenté (PR #404). `LinkedHashMap` FIFO 128 MiB + eviction + `DumpMemoryStatistics`.
 7. ✅ **R-suivi.7** `SkPathEffect.filterPath(..., cullRect)` overload + `SkDashPathEffect` AABB culling + `SkPathUtils.FillPathWithPaint` un-drop cullRect (PR #400).
 8. ✅ **R-suivi.8** (S6-B PR #412) — `SkTiledImageUtils` real tiling (`DEFAULT_TILE_SIZE = 1024` slice via `SkImage.makeSubset`).
-9. ✅ **R-suivi.9** `SkPixmapUtils.Orient` : les 8 origines EXIF sont câblées (PR #395). `SkPixmapUtilsOrientAllOriginsTest` couvre les 8 mappings.
+9. ✅ **R-suivi.9** `PixmapUtils.Orient` : les 8 origines EXIF sont câblées (PR #395). `PixmapUtilsOrientAllOriginsTest` couvre les 8 mappings.
 10. ✅ **R-suivi.10** `SkNoDrawCanvas` overrides complétés (PR #397). No-ops pour `drawRegion`, `drawImageNine`, `drawAtlas`, `drawVertices`, `drawString`, `drawSimpleText`, `drawTextBlob`, `drawDrawable`, `drawAnnotation`.
 
 **Ajouts batch 3 (R2.3 → R2.10)** :
@@ -828,7 +828,7 @@ Surgis lors de l'implémentation R1. Tous sont **non-bloquants** pour faire comp
 
 **Ajouts batch 8 (R3.5, R3.6, R3.8, R3.9, R3.11)** :
 
-34. ✅ **R-suivi.34** (S5-B PR #408) — `SkAndroidCodec.getAndroidPixels` real impl (full-frame + subset + sampleSize).
+34. ✅ **R-suivi.34** (S5-B PR #408) — `AndroidCodec.getAndroidPixels` real impl (full-frame + subset + sampleSize).
 35. ✅ **R-suivi.35** (S5-B PR #408) — JPEG-aware sample-size (DCT `{1,2,4,8}`).
 36. ✅ **R-suivi.36** (S6-A PR #410) — `SkPDF` text via `SkFont.makeTextPath → drawPath` (native `c` operators). Type0 selectable text deferred.
 37. ✅ **R-suivi.37** `SkPDF` images JPEG/DCT XObject (PR #402). Encode via `SkJpegEncoder` q=90 puis embed `/Filter /DCTDecode`.
@@ -844,7 +844,7 @@ Surgis lors de l'implémentation R1. Tous sont **non-bloquants** pour faire comp
 44. ✅ **R-suivi.44** TTC `ttcIndex` parsing (PR #399). Magic `ttcf` + header + offsets table.
 45. ✅ **R-suivi.45** `SkFontMgr.makeFromStream(SkStream)` overload `open` (PR #399). Drain → `SkData.MakeWithCopy`.
 46. ✅ **R-suivi.46** `SkCustomTypefaceBuilder` glyph draw wiring (PR #403). `SkUserTypeface.makeTextPath` override → routes via `SkFont.makeTextPath` natif sans toucher AWT path.
-47. ✅ **R-suivi.47** (S5-B PR #408 registry + S7-A PR #433 ICO real) — Codec decoders registry public (`SkCodec.Decoders.register/unregister/dispatch`). **`SkIcoDecoder.Decode` real (pure-Kotlin)** : ICONDIR + entries, PNG payloads → `SkPngCodec`, BMP payloads → header synth → `SkBmpCodec`. AVIF/JpegXL/RAW restent stubs (codecs lourds, plug-in via registry).
+47. ✅ **R-suivi.47** (S5-B PR #408 registry + S7-A PR #433 ICO real) — Codec decoders registry public (`Codec.Decoders.register/unregister/dispatch`). **`IcoDecoder.Decode` real (pure-Kotlin)** : ICONDIR + entries, PNG payloads → `SkPngCodec`, BMP payloads → header synth → `SkBmpCodec`. AVIF/JpegXL/RAW restent stubs (codecs lourds, plug-in via registry).
 
 **Ajouts batch S1-S4 (nouveaux items découverts)** :
 
@@ -856,7 +856,7 @@ Surgis lors de l'implémentation R1. Tous sont **non-bloquants** pour faire comp
 
 Sous-items restants (non-bloquants) :
 - `SkWebpEncoder.kLossy` : pure-Kotlin VP8 lossy hors scope ; `Custom(callback)` permet plug-in JNI libwebp
-- Décodeurs AVIF / JpegXL / RAW étendus : codecs lourds, registry `SkCodec.Decoders.register(...)` permet plug-in JNI consommateur (ICO ✅ pure-Kotlin via S7-A #433)
+- Décodeurs AVIF / JpegXL / RAW étendus : codecs lourds, registry `Codec.Decoders.register(...)` permet plug-in JNI consommateur (ICO ✅ pure-Kotlin via S7-A #433)
 - `SkShadowTessellator` self-intersecting paths : fallback blur (concave handled depuis S7-C #435 via ear-clipping triangulator)
 - Détails dans la section "Items implémentés en pure-Kotlin avec limitations documentées" ci-dessous.
 
@@ -868,7 +868,7 @@ Découverts pendant les ports GMs ; promus depuis inline duplicates ou ajoutés 
 52. ✅ **post-S7.2** `SkBitmap.eraseArea(SkIRect, SkColor)` — flagué par Skbug257/LcdBlend (S7-A)
 53. ✅ **post-S7.3** `SkPathBuilder.computeBounds()` — walk coords sans snapshot (S7-A)
 54. ✅ **post-S7.4** `SkImages.DeferredFromPicture(picture, dimensions, …)` + `SkImages.BitDepth` enum (S7-A)
-55. ✅ **post-S7.5** `SkIcoDecoder.Decode` real impl pure-Kotlin (S7-A) — voir R-suivi.47
+55. ✅ **post-S7.5** `IcoDecoder.Decode` real impl pure-Kotlin (S7-A) — voir R-suivi.47
 56. ✅ **post-S7.6** `SkFont.{textToGlyphs, getPos, getXPos, getWidths}` (S7-B) — drop ~6 LOC boilerplate par GM text-bearing
 57. ✅ **post-S7.7** `SkTextBlob.getIntercepts(bounds, paint?)` (S7-B) — débloque `texteffects.cpp` GM
 58. ✅ **post-S7.8** ToolUtils helpers promote (`create_checkerboard_shader/image`, `rotated_checkerboard_shader`, `CreateStringImage`) depuis 4-5 inline duplicates (S7-B)
@@ -914,7 +914,7 @@ Cette section liste les items où l'implémentation pure-Kotlin a été shipped 
 
 #### R-suivi.47 (suivi des decoders réels) — AVIF / JpegXL / RAW
 
-**État** : `SkCodec.Decoders` registry public exposé (S5-B #408). 4 stubs (`SkAvifDecoder`, `SkJpegxlDecoder`, `SkRawDecoder`, `SkIcoDecoder`) self-register avec `IsXxx()` réel + `Decode()` → null. Real decoders restent à brancher.
+**État** : `Codec.Decoders` registry public exposé (S5-B #408). 4 stubs (`AvifDecoder`, `JpegxlDecoder`, `RawDecoder`, `IcoDecoder`) self-register avec `IsXxx()` réel + `Decode()` → null. Real decoders restent à brancher.
 
 | Format | Effort pure-Kotlin | Effort JNI |
 |---|---|---|
@@ -926,7 +926,7 @@ Cette section liste les items où l'implémentation pure-Kotlin a été shipped 
 
 **Recommandation** :
 - **ICO** : pure-Kotlin (1 j, faible coût)
-- **AVIF / JpegXL / RAW étendu** : utiliser `SkCodec.Decoders.register(custom)` côté consommateur pour brancher libavif/libjxl/libraw via JNI ; registry pattern self-register de S5-B #408 gère le re-routing automatique.
+- **AVIF / JpegXL / RAW étendu** : utiliser `Codec.Decoders.register(custom)` côté consommateur pour brancher libavif/libjxl/libraw via JNI ; registry pattern self-register de S5-B #408 gère le re-routing automatique.
 
 #### R-suivi.25 — `SkPath.Verb` rename complet
 
@@ -974,12 +974,12 @@ Cette section liste les items où l'implémentation pure-Kotlin a été shipped 
 2. 🔄 **R3.2** `SkFontMgr` + `SkFontStyleSet` + JVM AWT default backend (PR #391, R-suivi.43/44/45)
 3. 🔄 **R3.3** `SkCustomTypefaceBuilder` + `SkUserTypeface` (PR #390, R-suivi.46)
 4. 🔄 **R3.4** `SkStream` / `SkWStream` arbre complet (PR #382, 8 classes, R-suivi.29)
-5. 🔄 **R3.5** `SkAndroidCodec` (PR #387, R-suivi.34/35)
+5. 🔄 **R3.5** `AndroidCodec` (PR #387, R-suivi.34/35)
 6. 🔄 **R3.6** `SkDocument` + sink PDF (PR #386, R-suivi.36–40, .42)
 7. 🔄 **R3.7** `SkShadowUtils` (PR #383, blur-based, R-suivi.30–33)
 8. 🔄 **R3.8** `SkRasterHandleAllocator` (PR #385)
 9. 🔄 **R3.9** `SkRecorder` / `SkCPURecorder` / `SkCPUContext` (PR #385)
-10. 🔄 **R3.10** Décodeurs étendus : `SkAvifDecoder`, `SkJpegxlDecoder`, `SkRawDecoder`, `SkIcoDecoder` (PR #389, signature-check seul, R-suivi.47)
+10. 🔄 **R3.10** Décodeurs étendus : `AvifDecoder`, `JpegxlDecoder`, `RawDecoder`, `IcoDecoder` (PR #389, signature-check seul, R-suivi.47)
 11. 🔄 **R3.11** YUV multi-plane (`SkYUVAInfo`, `SkYUVAPixmaps`) (PR #387, R-suivi.41 YUV→RGB draw)
 
 ### Critères de promotion entre phases
@@ -1088,22 +1088,22 @@ Cette section liste les items où l'implémentation pure-Kotlin a été shipped 
 | `utils/SkParsePath.h` | `SkParsePath` | ✅ |
 | `utils/SkShadowUtils.h` | `SkShadowUtils` | ❌ |
 | `utils/SkTextUtils.h` | `SkTextUtils` | 🟠 (overloads `GetPath`) |
-| `codec/SkAndroidCodec.h` | `SkAndroidCodec` | ❌ |
-| `codec/SkAvifDecoder.h` | `SkAvifDecoder` | ❌ |
+| `codec/AndroidCodec.h` | `AndroidCodec` | ❌ |
+| `codec/AvifDecoder.h` | `AvifDecoder` | ❌ |
 | `codec/SkBmpDecoder.h` | `SkBmpDecoder` | 🟠 (présent comme `SkBmpCodec`) |
-| `codec/SkCodec.h` | `SkCodec` | 🟠 (manque options/sampling) |
-| `codec/SkCodecAnimation.h` | (constantes) | ❌ |
+| `codec/Codec.h` | `Codec` | 🟠 (manque options/sampling) |
+| `codec/CodecAnimation.h` | (constantes) | ❌ |
 | `codec/SkEncodedImageFormat.h` | `SkEncodedImageFormat` | 🟠 (formats étendus) |
 | `codec/SkEncodedOrigin.h` | `SkEncodedOrigin` | 🚫 (à vérifier dans `org.skia.codec`) |
 | `codec/SkGifDecoder.h` | `SkGifDecoder` | 🟠 (présent comme `SkGifCodec`) |
-| `codec/SkIcoDecoder.h` | `SkIcoDecoder` | ❌ |
+| `codec/IcoDecoder.h` | `IcoDecoder` | ❌ |
 | `codec/SkJpegDecoder.h` | `SkJpegDecoder` | 🟠 (présent comme `SkJpegCodec`) |
-| `codec/SkJpegxlDecoder.h` | `SkJpegxlDecoder` | ❌ |
+| `codec/JpegxlDecoder.h` | `JpegxlDecoder` | ❌ |
 | `codec/SkPngChunkReader.h` | `SkPngChunkReader` | ❌ |
 | `codec/SkPngDecoder.h` | `SkPngDecoder` | 🟠 (présent comme `SkPngCodec`) |
 | `codec/SkPngRustDecoder.h` | `SkPngRustDecoder` | ❌ |
-| `codec/SkPixmapUtils.h` | `SkPixmapUtils` | ❌ |
-| `codec/SkRawDecoder.h` | `SkRawDecoder` | ❌ |
+| `codec/PixmapUtils.h` | `PixmapUtils` | ❌ |
+| `codec/RawDecoder.h` | `RawDecoder` | ❌ |
 | `codec/SkWbmpDecoder.h` | `SkWbmpDecoder` | 🟠 (présent comme `SkWbmpCodec`) |
 | `codec/SkWebpDecoder.h` | `SkWebpDecoder` | 🟠 (présent comme `SkWebpCodec`) |
 

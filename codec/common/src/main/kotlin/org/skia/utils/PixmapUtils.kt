@@ -6,7 +6,7 @@ import org.skia.foundation.SkImageInfo
 
 /**
  * Mirrors Skia's
- * [`SkPixmapUtils`](https://github.com/google/skia/blob/main/include/codec/SkPixmapUtils.h)
+ * [`PixmapUtils`](https://github.com/google/skia/blob/main/include/codec/PixmapUtils.h)
  * namespace (R1 port, R-suivi.9 extension).
  *
  * Two helpers :
@@ -47,7 +47,7 @@ import org.skia.foundation.SkImageInfo
  * by these eight origins, this collapses to the closed-form `(sw-1-sx)`
  * / `(sh-1-sy)` reflection terms used below.
  */
-public object SkPixmapUtils {
+public object PixmapUtils {
 
     /**
      * Copy [src] into [dst], applying the orientation transform [origin].

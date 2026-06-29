@@ -5,7 +5,7 @@ import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.graphiks.kanvas.codec.SkCodec
+import org.graphiks.kanvas.codec.Codec
 import org.graphiks.math.SK_ColorBLACK
 import org.graphiks.math.SK_ColorRED
 import org.graphiks.math.SK_ColorBLUE
@@ -38,7 +38,7 @@ import javax.xml.parsers.DocumentBuilderFactory
  *  - `drawImageRect` honours dst rect ; non-trivial src rect emits
  *    a `<!-- drawImageRect: non-full src rect -->` comment + warning.
  *  - Image data round-trips : the base64 payload decodes back through
- *    [SkCodec] to the original pixel buffer (lossless because PNG).
+ *    [Codec] to the original pixel buffer (lossless because PNG).
  *  - Linear gradient on `paint.shader` → `<defs><linearGradient>`
  *    block + `fill="url(#def-N)"` ; stops emitted in order with hex
  *    + opacity decomposition ; tile mode → `spreadMethod`.
@@ -67,13 +67,13 @@ class SkSVGCanvasImageGradientTest {
     }
 
     @Test
-    fun `drawImage data url is lossless — round-trips through SkCodec`() {
+    fun `drawImage data url is lossless — round-trips through Codec`() {
         val src = makeSolidImage(4, 4, SkColorSetARGB(0xFF, 0x12, 0x34, 0x56))
         val svg = render { canvas -> canvas.drawImage(src, 0f, 0f) }
         val dataUrl = extractDataUrl(svg)
         val pngBytes = Base64.getDecoder().decode(dataUrl.substringAfter("base64,"))
-        val (decoded, result) = SkCodec.MakeFromData(pngBytes)!!.getImage()
-        assertEquals(SkCodec.Result.kSuccess, result)
+        val (decoded, result) = Codec.MakeFromData(pngBytes)!!.getImage()
+        assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(decoded)
         for (y in 0 until 4) for (x in 0 until 4) {
             assertEquals(

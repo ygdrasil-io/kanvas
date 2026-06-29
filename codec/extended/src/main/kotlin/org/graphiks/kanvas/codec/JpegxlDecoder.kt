@@ -5,10 +5,10 @@ import java.io.InputStream
 
 /**
  * R3.10 stub of Skia's
- * [`SkJpegxlDecoder`](https://github.com/google/skia/blob/main/include/codec/SkJpegxlDecoder.h)
+ * [`JpegxlDecoder`](https://github.com/google/skia/blob/main/include/codec/JpegxlDecoder.h)
  * namespace.
  *
- * Mirrors the upstream `SkJpegxlDecoder::{IsJpegxl, Decode}` factory
+ * Mirrors the upstream `JpegxlDecoder::{IsJpegxl, Decode}` factory
  * shape so call sites compile against the full API surface, but **the
  * actual decoder is not yet implemented** — every [Decode] overload
  * returns `null`. Wiring a real JPEG-XL decoder requires a libjxl
@@ -19,25 +19,25 @@ import java.io.InputStream
  * bytes for either the raw codestream marker (`FF 0A`) or the
  * ISO-BMFF box wrapper (`00 00 00 0C 4A 58 4C 20 0D 0A 87 0A`).
  */
-public object SkJpegxlDecoder {
+public object JpegxlDecoder {
 
     /**
      * Stubbed JPEG-XL decode. Always returns `null`. See class kdoc
      * for the R-suivi.28 follow-up that wires up libjxl.
      */
-    public fun Decode(data: SkData): SkCodec? = null
+    public fun Decode(data: SkData): Codec? = null
 
     /**
      * Stubbed JPEG-XL decode. Always returns `null`. See class kdoc
      * for the R-suivi.28 follow-up that wires up libjxl.
      */
-    public fun Decode(data: ByteArray): SkCodec? = null
+    public fun Decode(data: ByteArray): Codec? = null
 
     /**
      * Stubbed JPEG-XL decode. Always returns `null`. See class kdoc
      * for the R-suivi.28 follow-up that wires up libjxl.
      */
-    public fun Decode(stream: InputStream): SkCodec? = null
+    public fun Decode(stream: InputStream): Codec? = null
 
     /**
      * Sniff the leading bytes of [data] for a JPEG-XL signature.
@@ -71,14 +71,14 @@ public object SkJpegxlDecoder {
     )
 
     /**
-     * R-suivi.47 — [SkCodec.Decoder] registration record for JPEG-XL.
-     * Auto-installed into [SkCodec.Decoders] at class-init time. `make`
+     * R-suivi.47 — [Codec.Decoder] registration record for JPEG-XL.
+     * Auto-installed into [Codec.Decoders] at class-init time. `make`
      * returns `null` until R-suivi.28 wires up libjxl.
      */
-    internal val RegistryEntry: SkCodec.Decoder = object : SkCodec.Decoder {
+    internal val RegistryEntry: Codec.Decoder = object : Codec.Decoder {
         override val name: String = "jpegxl"
         override fun matches(data: ByteArray): Boolean = IsJpegxl(data)
-        override fun make(data: ByteArray): SkCodec? = Decode(data)
+        override fun make(data: ByteArray): Codec? = Decode(data)
     }
 
     private fun matchesJpegxl(data: ByteArray, length: Int): Boolean {

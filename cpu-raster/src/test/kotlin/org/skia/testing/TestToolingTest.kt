@@ -7,7 +7,7 @@ import org.junit.jupiter.api.Test
 import org.graphiks.math.SK_ColorBLACK
 import org.graphiks.math.SK_ColorRED
 import org.graphiks.math.SK_ColorWHITE
-import org.graphiks.kanvas.codec.SkCodec
+import org.graphiks.kanvas.codec.Codec
 import org.skia.foundation.SkBitmap
 import java.io.File
 
@@ -85,7 +85,7 @@ class TestToolingTest {
         TestUtils.saveComparisonImage(rendered, reference, comparison, name)
         val out = File("build/debug-images/$name-comparison.png")
         assertTrue(out.exists(), "Triptych PNG was not written at ${out.absolutePath}")
-        val img = SkCodec.MakeFromData(out.readBytes())?.getImage()?.first
+        val img = Codec.MakeFromData(out.readBytes())?.getImage()?.first
         assertNotNull(img)
         // Layout: 3 panels of width `w` separated by 4-pixel gutters,
         // plus a 16-pixel label band on top.

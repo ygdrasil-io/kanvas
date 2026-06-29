@@ -10,19 +10,19 @@ import org.skia.foundation.SkImage
 import org.skia.foundation.SkImageInfo
 import org.graphiks.math.SkIRect
 import org.graphiks.math.SkRect
-import org.skia.utils.SkPixmapUtils
+import org.skia.utils.PixmapUtils
 
 /**
  * Mirrors Skia's
- * [`SkAnimatedImage`](https://github.com/google/skia/blob/main/include/android/SkAnimatedImage.h)
- * — a stateful drawable wrapping an [SkAndroidCodec] (and through it
- * an animated [SkCodec]) that keeps a "current frame" cursor and
+ * [`AnimatedImage`](https://github.com/google/skia/blob/main/include/android/AnimatedImage.h)
+ * — a stateful drawable wrapping an [AndroidCodec] (and through it
+ * an animated [Codec]) that keeps a "current frame" cursor and
  * advances through the animation under client control via
  * [decodeNextFrame].
  *
  * **R-final.8 scope.** The kanvas-skia port surfaces the API the
  * `gm/animated_image_orientation.cpp` GM exercises :
- *  - [Make] — construct from an [SkAndroidCodec] (with optional
+ *  - [Make] — construct from an [AndroidCodec] (with optional
  *    `requestedInfo` / `cropRect` / `postProcess` for the GM's
  *    cropped + scaled + post-processed variants).
  *  - [decodeNextFrame] / [getCurrentFrame] / [makePictureSnapshot]
@@ -34,23 +34,23 @@ import org.skia.utils.SkPixmapUtils
  * **Ownership boundary.** `:codec:animated` owns playback state, frame
  * cursoring, orientation/crop/scale/post-processing, and snapshotting.
  * Container-specific parsing and frame composition remain owned by the
- * format codec that supplies the [SkCodec] (GIF today, future animated
+ * format codec that supplies the [Codec] (GIF today, future animated
  * WebP later). This module therefore does not register any
  * [CodecDecoderProvider] and should stay free of format sniffing logic.
  *
  * **Implementation detail.** Built on top of R-final.5's
- * [SkCodec.getFrameCount] + [SkCodec.getFrameInfo] +
- * [SkCodec.getPixels] (`Options{frameIndex, priorFrame}`). The
+ * [Codec.getFrameCount] + [Codec.getFrameInfo] +
+ * [Codec.getPixels] (`Options{frameIndex, priorFrame}`). The
  * underlying codec owns the disposal-method state machine ; this
  * class just plays back the per-frame pre-composed bitmaps and
  * applies the orientation/crop/scale/post-processing transform
  * pipeline expected by the GM.
  *
- * **Thread model.** Like upstream, [SkAnimatedImage] is **not**
+ * **Thread model.** Like upstream, [AnimatedImage] is **not**
  * thread-safe — callers serialize access to a given instance.
  */
-public class SkAnimatedImage private constructor(
-    private val codec: SkAndroidCodec,
+public class AnimatedImage private constructor(
+    private val codec: AndroidCodec,
     private val origin: SkEncodedOrigin,
     /**
      * Decode size — the dimensions [decodeNextFrame] writes into the
@@ -64,7 +64,7 @@ public class SkAnimatedImage private constructor(
 ) {
 
     private val frameCount: Int = codec.codec().getFrameCount()
-    private val frameInfo: List<SkCodec.FrameInfo> = codec.codec().getFrameInfo()
+    private val frameInfo: List<Codec.FrameInfo> = codec.codec().getFrameInfo()
 
     /**
      * Current frame buffer — re-decoded in place by [decodeNextFrame].
@@ -102,7 +102,7 @@ public class SkAnimatedImage private constructor(
 
     /**
      * Reset the animation cursor to the beginning. Mirrors
-     * `SkAnimatedImage::reset()`.
+     * `AnimatedImage::reset()`.
      */
     public fun reset() {
         finished = false
@@ -110,11 +110,11 @@ public class SkAnimatedImage private constructor(
         decodeFrame(0)
     }
 
-    /** Mirrors `SkAnimatedImage::isFinished()`. */
+    /** Mirrors `AnimatedImage::isFinished()`. */
     public fun isFinished(): Boolean = finished
 
     /**
-     * Mirrors `SkAnimatedImage::decodeNextFrame()`. Advances the
+     * Mirrors `AnimatedImage::decodeNextFrame()`. Advances the
      * cursor to the next frame in the animation, decoding it into
      * [rawFrame] / [displayFrame] and returning the duration the
      * caller should display it for (in ms).
@@ -143,14 +143,14 @@ public class SkAnimatedImage private constructor(
     }
 
     /**
-     * Mirrors `SkAnimatedImage::getCurrentFrame()`. Returns the
+     * Mirrors `AnimatedImage::getCurrentFrame()`. Returns the
      * post-orientation, post-crop, post-postProcess pixels of the
      * current frame as a fresh [SkImage] snapshot.
      */
     public fun getCurrentFrame(): SkImage = displayFrame.asImage()
 
     /**
-     * Mirrors `SkAnimatedImage::currentFrameDuration()`. Returns the
+     * Mirrors `AnimatedImage::currentFrameDuration()`. Returns the
      * duration the *current* frame should be displayed for, in
      * milliseconds — useful for the first frame, which the
      * constructor already decoded internally.
@@ -161,7 +161,7 @@ public class SkAnimatedImage private constructor(
     public fun currentFrameDuration(): Int = currentDuration
 
     /**
-     * Mirrors `SkAnimatedImage::setRepetitionCount()`. `0` means
+     * Mirrors `AnimatedImage::setRepetitionCount()`. `0` means
      * "show every frame once and stop" ; [kRepetitionCountInfinite]
      * means "loop forever". Other positive values mean the number of
      * extra full passes after the first.
@@ -170,14 +170,14 @@ public class SkAnimatedImage private constructor(
         repetitionCount = count
     }
 
-    /** Mirrors `SkAnimatedImage::getRepetitionCount()`. */
+    /** Mirrors `AnimatedImage::getRepetitionCount()`. */
     public fun getRepetitionCount(): Int = repetitionCount
 
-    /** Mirrors `SkAnimatedImage::getFrameCount()`. */
+    /** Mirrors `AnimatedImage::getFrameCount()`. */
     public fun getFrameCount(): Int = frameCount
 
     /**
-     * Mirrors upstream's `SkAnimatedImage::makePictureSnapshot()`
+     * Mirrors upstream's `AnimatedImage::makePictureSnapshot()`
      * (post-R-final.5 surface). Captures the current frame's draw call
      * into an [SkPicture] sized to the post-crop bounds — useful for
      * GMs that compare raster vs picture playback paths.
@@ -200,10 +200,10 @@ public class SkAnimatedImage private constructor(
      * on success.
      */
     private fun decodeFrame(index: Int) {
-        val opts = SkCodec.Options(frameIndex = index)
+        val opts = Codec.Options(frameIndex = index)
         val srcInfo = codec.codec().getInfo()
         val res = codec.codec().getPixels(srcInfo, rawFrame, opts)
-        if (res != SkCodec.Result.kSuccess) {
+        if (res != Codec.Result.kSuccess) {
             finished = true
             currentDuration = kFinished
             return
@@ -221,7 +221,7 @@ public class SkAnimatedImage private constructor(
                 height = orientedH,
                 colorSpace = rawFrame.colorSpace,
                 colorType = rawFrame.colorType,
-            ).also { SkPixmapUtils.Orient(it, rawFrame, origin) }
+            ).also { PixmapUtils.Orient(it, rawFrame, origin) }
         }
 
         // 2) Scale + crop : the GM may pass a `decodeInfo` smaller than
@@ -252,37 +252,37 @@ public class SkAnimatedImage private constructor(
         /**
          * Sentinel returned by [decodeNextFrame] / [currentFrameDuration]
          * when the animation has run to completion. Mirrors
-         * `SkAnimatedImage::kFinished`.
+         * `AnimatedImage::kFinished`.
          */
         public const val kFinished: Int = -1
 
         /**
-         * Mirrors `SkCodec::kRepetitionCountInfinite`. Pass to
+         * Mirrors `Codec::kRepetitionCountInfinite`. Pass to
          * [setRepetitionCount] to keep the animation looping
          * indefinitely.
          */
-        public const val kRepetitionCountInfinite: Int = SkCodec.kRepetitionCountInfinite
+        public const val kRepetitionCountInfinite: Int = Codec.kRepetitionCountInfinite
 
         /**
          * Mirrors upstream's
-         * `SkAnimatedImage::Make(std::unique_ptr<SkAndroidCodec>,
+         * `AnimatedImage::Make(std::unique_ptr<AndroidCodec>,
          *  const SkImageInfo& info, SkIRect cropRect,
          *  sk_sp<SkPicture> postProcess)`.
          *
          * Returns `null` if [codec] is empty (zero frames). The
          * caller surrenders ownership of [codec] in upstream — Kotlin
          * has no `unique_ptr` so we just hold the reference ;
-         * subsequent calls on the original [SkAndroidCodec] will
+         * subsequent calls on the original [AndroidCodec] will
          * race against the animator's frame cursor.
          */
         public fun Make(
-            codec: SkAndroidCodec,
+            codec: AndroidCodec,
             info: SkImageInfo,
             cropRect: SkIRect,
             postProcess: SkPicture?,
-        ): SkAnimatedImage? {
+        ): AnimatedImage? {
             if (codec.codec().getFrameCount() <= 0) return null
-            return SkAnimatedImage(
+            return AnimatedImage(
                 codec = codec,
                 origin = codec.codec().getOrigin(),
                 decodeInfo = info,
@@ -298,7 +298,7 @@ public class SkAnimatedImage private constructor(
          * applied (i.e. swapped width/height for a 90° rotation), and
          * the crop rect spans the full frame.
          */
-        public fun Make(codec: SkAndroidCodec): SkAnimatedImage? {
+        public fun Make(codec: AndroidCodec): AnimatedImage? {
             val src = codec.codec().getInfo()
             val origin = codec.codec().getOrigin()
             val info = if (origin.swapsWidthHeight()) src.makeWH(src.height, src.width) else src
@@ -311,12 +311,12 @@ public class SkAnimatedImage private constructor(
         }
 
         /**
-         * Convenience that takes an [SkCodec] directly — wraps it in
-         * an [SkAndroidCodec] before delegating to [Make]. Mirrors the
+         * Convenience that takes an [Codec] directly — wraps it in
+         * an [AndroidCodec] before delegating to [Make]. Mirrors the
          * pattern used by upstream's `gm/animated_image_orientation.cpp`
          * test rig.
          */
-        public fun MakeFromCodec(codec: SkCodec): SkAnimatedImage? =
-            Make(SkAndroidCodec.MakeFromCodec(codec))
+        public fun MakeFromCodec(codec: Codec): AnimatedImage? =
+            Make(AndroidCodec.MakeFromCodec(codec))
     }
 }

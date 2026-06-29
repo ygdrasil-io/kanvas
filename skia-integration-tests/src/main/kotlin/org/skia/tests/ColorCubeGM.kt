@@ -1,6 +1,6 @@
 package org.skia.tests
 
-import org.graphiks.kanvas.codec.SkCodec
+import org.graphiks.kanvas.codec.Codec
 import org.skia.core.SkCanvas
 import org.skia.encode.SkJpegEncoder
 import org.skia.foundation.SkBitmap
@@ -17,7 +17,7 @@ import org.graphiks.math.SkISize
  * `R × G × B` cube on a 4-step grid : for each patch index
  * `b ∈ [0, 64)` the patch holds `(R, G) = (px * 4, py * 4)` and a
  * constant `B = b * 4`. The bitmap is JPEG-encoded with default
- * [SkJpegEncoder] options, decoded back through [SkCodec], and the
+ * [SkJpegEncoder] options, decoded back through [Codec], and the
  * decoded image is what actually gets drawn.
  *
  * Purpose : exercise the JPEG encoder→decoder round-trip on a dense,
@@ -94,9 +94,9 @@ public class ColorCubeGM : GM() {
             }
         }
         val data = SkJpegEncoder.Encode(bmp) ?: return
-        val codec = SkCodec.MakeFromData(data) ?: return
+        val codec = Codec.MakeFromData(data) ?: return
         val (decoded, result) = codec.getImage()
-        if (result != SkCodec.Result.kSuccess || decoded == null) return
+        if (result != Codec.Result.kSuccess || decoded == null) return
         fImage = decoded.asImage()
     }
 

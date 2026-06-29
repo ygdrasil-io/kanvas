@@ -6,11 +6,11 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
-class SkAnimatedImageGifContractTest {
+class AnimatedImageGifContractTest {
 
     @Test
     fun `plays composed GIF frames through animated image`() {
-        val codec = SkCodec.MakeFromData(
+        val codec = Codec.MakeFromData(
             gif(
                 width = 3,
                 height = 1,
@@ -23,7 +23,7 @@ class SkAnimatedImageGifContractTest {
         )
         assertNotNull(codec)
 
-        val animated = SkAnimatedImage.MakeFromCodec(codec!!)
+        val animated = AnimatedImage.MakeFromCodec(codec!!)
         assertNotNull(animated)
         animated!!
 
@@ -36,8 +36,8 @@ class SkAnimatedImageGifContractTest {
         assertEquals(70, animated.currentFrameDuration())
         assertFrame(animated, RED, BLUE, RED)
 
-        assertEquals(SkAnimatedImage.kFinished, animated.decodeNextFrame())
-        assertEquals(SkAnimatedImage.kFinished, animated.currentFrameDuration())
+        assertEquals(AnimatedImage.kFinished, animated.decodeNextFrame())
+        assertEquals(AnimatedImage.kFinished, animated.currentFrameDuration())
         assertTrue(animated.isFinished())
 
         animated.reset()
@@ -48,7 +48,7 @@ class SkAnimatedImageGifContractTest {
 
     @Test
     fun `uses GIF loop count as default repetition count`() {
-        val codec = SkCodec.MakeFromData(
+        val codec = Codec.MakeFromData(
             gif(
                 width = 2,
                 height = 1,
@@ -62,7 +62,7 @@ class SkAnimatedImageGifContractTest {
         )
         assertNotNull(codec)
 
-        val animated = SkAnimatedImage.MakeFromCodec(codec!!)
+        val animated = AnimatedImage.MakeFromCodec(codec!!)
         assertNotNull(animated)
         animated!!
 
@@ -71,10 +71,10 @@ class SkAnimatedImageGifContractTest {
         assertEquals(70, animated.decodeNextFrame())
         assertEquals(40, animated.decodeNextFrame())
         assertEquals(70, animated.decodeNextFrame())
-        assertEquals(SkAnimatedImage.kFinished, animated.decodeNextFrame())
+        assertEquals(AnimatedImage.kFinished, animated.decodeNextFrame())
     }
 
-    private fun assertFrame(animated: SkAnimatedImage, vararg expected: Int) {
+    private fun assertFrame(animated: AnimatedImage, vararg expected: Int) {
         val image = animated.getCurrentFrame()
         assertEquals(expected.size, image.width)
         assertEquals(1, image.height)

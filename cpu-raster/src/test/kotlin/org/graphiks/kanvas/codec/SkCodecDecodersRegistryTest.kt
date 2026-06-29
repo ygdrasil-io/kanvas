@@ -13,29 +13,29 @@ import org.skia.foundation.SkBitmap
 import org.skia.foundation.skcms.SkcmsICCProfile
 
 /**
- * R-suivi.47 verification — [SkCodec.Decoders] is now a public registry
+ * R-suivi.47 verification — [Codec.Decoders] is now a public registry
  * that supports late registration of additional formats. Verifies :
  *  - the built-in decoders are present at startup,
  *  - the four extended-format stubs (AVIF / JPEG-XL / RAW / ICO) self-
  *    register at class-init time,
  *  - a third-party decoder can be registered and dispatch routes to it,
  *  - re-registering the same name replaces the prior entry,
- *  - [SkCodec.Decoders.unregister] removes an entry cleanly.
+ *  - [Codec.Decoders.unregister] removes an entry cleanly.
  */
-class SkCodecDecodersRegistryTest {
+class CodecDecodersRegistryTest {
 
     @AfterEach
     fun cleanup() {
         // Drop any test fixtures we registered to avoid leaking into
         // sibling test cases.
-        SkCodec.Decoders.unregister(FAKE_NAME)
-        SkCodec.Decoders.unregister(STEAL_AVIF_NAME)
+        Codec.Decoders.unregister(FAKE_NAME)
+        Codec.Decoders.unregister(STEAL_AVIF_NAME)
     }
 
     @Test
     fun `built-in decoders are registered at startup`() {
         // Touch Decoders to trigger init.
-        val names = SkCodec.Decoders.all().map { it.name }
+        val names = Codec.Decoders.all().map { it.name }
         // Built-ins.
         assertTrue("png" in names, "png decoder missing")
         assertTrue("jpeg" in names, "jpeg decoder missing")
@@ -47,7 +47,7 @@ class SkCodecDecodersRegistryTest {
 
     @Test
     fun `extended-format stubs self-register`() {
-        val names = SkCodec.Decoders.all().map { it.name }
+        val names = Codec.Decoders.all().map { it.name }
         assertTrue("avif" in names, "avif stub missing")
         assertTrue("jpegxl" in names, "jpegxl stub missing")
         assertTrue("ico" in names, "ico stub missing")
@@ -56,19 +56,19 @@ class SkCodecDecodersRegistryTest {
 
     @Test
     fun `contains returns true for registered names`() {
-        assertTrue(SkCodec.Decoders.contains("png"))
-        assertTrue(SkCodec.Decoders.contains("avif"))
-        assertFalse(SkCodec.Decoders.contains("definitely-not-a-decoder"))
+        assertTrue(Codec.Decoders.contains("png"))
+        assertTrue(Codec.Decoders.contains("avif"))
+        assertFalse(Codec.Decoders.contains("definitely-not-a-decoder"))
     }
 
     @Test
     fun `register routes dispatch to the new decoder`() {
         val fake = FakeDecoder(FAKE_NAME, signature = byteArrayOf(0xCA.toByte(), 0xFE.toByte()))
-        SkCodec.Decoders.register(fake)
-        assertTrue(SkCodec.Decoders.contains(FAKE_NAME))
+        Codec.Decoders.register(fake)
+        assertTrue(Codec.Decoders.contains(FAKE_NAME))
         // Pass bytes carrying the fake signature : dispatch must call
         // into the fake's `make`.
-        val codec = SkCodec.Decoders.dispatch(byteArrayOf(0xCA.toByte(), 0xFE.toByte(), 0x00, 0x00))
+        val codec = Codec.Decoders.dispatch(byteArrayOf(0xCA.toByte(), 0xFE.toByte(), 0x00, 0x00))
         assertNotNull(codec)
         assertEquals(SkEncodedImageFormat.kPNG, codec!!.getEncodedFormat())
         // The fake's makeCount should be 1.
@@ -79,25 +79,25 @@ class SkCodecDecodersRegistryTest {
     fun `register replaces an existing entry with the same name`() {
         val v1 = FakeDecoder(FAKE_NAME, signature = byteArrayOf(0xAA.toByte()))
         val v2 = FakeDecoder(FAKE_NAME, signature = byteArrayOf(0xBB.toByte()))
-        SkCodec.Decoders.register(v1)
-        SkCodec.Decoders.register(v2)
+        Codec.Decoders.register(v1)
+        Codec.Decoders.register(v2)
         // Only one entry with that name.
-        val count = SkCodec.Decoders.all().count { it.name == FAKE_NAME }
+        val count = Codec.Decoders.all().count { it.name == FAKE_NAME }
         assertEquals(1, count)
         // v2's signature is the one consulted now.
-        assertNotNull(SkCodec.Decoders.dispatch(byteArrayOf(0xBB.toByte(), 0x00)))
-        assertNull(SkCodec.Decoders.dispatch(byteArrayOf(0xAA.toByte(), 0x00)))
+        assertNotNull(Codec.Decoders.dispatch(byteArrayOf(0xBB.toByte(), 0x00)))
+        assertNull(Codec.Decoders.dispatch(byteArrayOf(0xAA.toByte(), 0x00)))
     }
 
     @Test
     fun `unregister removes the entry`() {
-        SkCodec.Decoders.register(FakeDecoder(FAKE_NAME, signature = byteArrayOf(0x42)))
-        assertTrue(SkCodec.Decoders.contains(FAKE_NAME))
-        val removed = SkCodec.Decoders.unregister(FAKE_NAME)
+        Codec.Decoders.register(FakeDecoder(FAKE_NAME, signature = byteArrayOf(0x42)))
+        assertTrue(Codec.Decoders.contains(FAKE_NAME))
+        val removed = Codec.Decoders.unregister(FAKE_NAME)
         assertTrue(removed)
-        assertFalse(SkCodec.Decoders.contains(FAKE_NAME))
+        assertFalse(Codec.Decoders.contains(FAKE_NAME))
         // Second unregister is a no-op.
-        assertFalse(SkCodec.Decoders.unregister(FAKE_NAME))
+        assertFalse(Codec.Decoders.unregister(FAKE_NAME))
     }
 
     @Test
@@ -114,7 +114,7 @@ class SkCodecDecodersRegistryTest {
             this[10] = 'i'.code.toByte(); this[11] = 'f'.code.toByte()
         }
         // Stub returns null — the IS_AVIF check succeeds but Decode is unimplemented.
-        assertNull(SkCodec.Decoders.dispatch(avifMagic))
+        assertNull(Codec.Decoders.dispatch(avifMagic))
     }
 
     @Test
@@ -128,25 +128,25 @@ class SkCodecDecodersRegistryTest {
             this[10] = 'i'.code.toByte(); this[11] = 'f'.code.toByte()
         }
         // Initial state : stub returns null.
-        assertNull(SkCodec.Decoders.dispatch(avifMagic))
+        assertNull(Codec.Decoders.dispatch(avifMagic))
 
         try {
             // Register a real AVIF decoder under the same name.
-            SkCodec.Decoders.register(object : SkCodec.Decoder {
+            Codec.Decoders.register(object : Codec.Decoder {
                 override val name: String = "avif"
-                override fun matches(data: ByteArray): Boolean = SkAvifDecoder.IsAvif(data)
-                override fun make(data: ByteArray): SkCodec? = FakeSkCodec()
+                override fun matches(data: ByteArray): Boolean = AvifDecoder.IsAvif(data)
+                override fun make(data: ByteArray): Codec? = FakeCodec()
             })
-            val codec = SkCodec.Decoders.dispatch(avifMagic)
+            val codec = Codec.Decoders.dispatch(avifMagic)
             assertNotNull(codec, "real AVIF decoder must take over routing")
         } finally {
             // Restore stub via the registry's init contract — register the
             // stub's RegistryEntry signature back. Since we override-by-name,
             // re-installing the stub puts the real null-Decode back in place.
-            SkCodec.Decoders.register(object : SkCodec.Decoder {
+            Codec.Decoders.register(object : Codec.Decoder {
                 override val name: String = "avif"
-                override fun matches(data: ByteArray): Boolean = SkAvifDecoder.IsAvif(data)
-                override fun make(data: ByteArray): SkCodec? = SkAvifDecoder.Decode(data)
+                override fun matches(data: ByteArray): Boolean = AvifDecoder.IsAvif(data)
+                override fun make(data: ByteArray): Codec? = AvifDecoder.Decode(data)
             })
         }
     }
@@ -159,7 +159,7 @@ class SkCodecDecodersRegistryTest {
     private class FakeDecoder(
         override val name: String,
         private val signature: ByteArray,
-    ) : SkCodec.Decoder {
+    ) : Codec.Decoder {
         var makeCount: Int = 0
             private set
 
@@ -171,13 +171,13 @@ class SkCodecDecodersRegistryTest {
             return true
         }
 
-        override fun make(data: ByteArray): SkCodec? {
+        override fun make(data: ByteArray): Codec? {
             makeCount += 1
-            return FakeSkCodec()
+            return FakeCodec()
         }
     }
 
-    private class FakeSkCodec : SkCodec() {
+    private class FakeCodec : Codec() {
         private val info: SkImageInfo = SkImageInfo.Make(1, 1)
         override fun getInfo(): SkImageInfo = info
         override fun getEncodedFormat(): SkEncodedImageFormat = SkEncodedImageFormat.kPNG

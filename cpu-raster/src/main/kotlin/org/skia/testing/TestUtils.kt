@@ -1,6 +1,6 @@
 package org.skia.testing
 
-import org.graphiks.kanvas.codec.SkCodec
+import org.graphiks.kanvas.codec.Codec
 import org.skia.dm.RasterSinkF16
 import org.skia.dm.Sink
 import org.skia.foundation.SkBitmap
@@ -81,7 +81,7 @@ public object TestUtils {
 
     /**
      * Read raw PNG bytes from the classpath. Used by [loadReferenceCodec]
-     * to feed the [SkCodec] dispatcher.
+     * to feed the [Codec] dispatcher.
      */
     private fun readPngBytes(name: String): ByteArray? {
         val path = "$REFERENCE_DIR/$name.png"
@@ -89,7 +89,7 @@ public object TestUtils {
     }
 
     /**
-     * Build an [SkCodec] over the named reference PNG. Returns `null`
+     * Build an [Codec] over the named reference PNG. Returns `null`
      * if the resource is missing or the bytes are not a valid PNG.
      *
      * D3.1 wire-up : the codec replaces the inline iCCP / JVM image
@@ -97,9 +97,9 @@ public object TestUtils {
      * the colour space go through [loadReferenceColorSpace] ; callers
      * that need the decoded bitmap go through [loadReferenceBitmap].
      */
-    public fun loadReferenceCodec(name: String): SkCodec? {
+    public fun loadReferenceCodec(name: String): Codec? {
         val bytes = readPngBytes(name) ?: return null
-        return SkCodec.MakeFromData(bytes)
+        return Codec.MakeFromData(bytes)
     }
 
     /**
@@ -122,7 +122,7 @@ public object TestUtils {
     public fun loadReferenceBitmap(name: String): SkBitmap? {
         val codec = loadReferenceCodec(name) ?: return null
         val (bitmap, result) = codec.getImage()
-        if (result != SkCodec.Result.kSuccess || bitmap == null) return null
+        if (result != Codec.Result.kSuccess || bitmap == null) return null
         return bitmap
     }
 

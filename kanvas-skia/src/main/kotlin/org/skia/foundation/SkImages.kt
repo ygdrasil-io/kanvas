@@ -215,12 +215,12 @@ public object SkImages {
     )
 
     // `DeferredFromEncodedData(ByteBuffer): SkImage?` factory moved to
-    // [org.graphiks.kanvas.codec.SkImageCodecs] (cycle break preparing the
+    // [org.graphiks.kanvas.codec.ImageCodecs] (cycle break preparing the
     // :cpu-raster Gradle module extraction — foundation no longer
     // imports from codec).
 
     // `DeferredFromGenerator` factory moved to
-    // [org.graphiks.kanvas.codec.SkImageCodecs.DeferredFromGenerator] (cycle break
+    // [org.graphiks.kanvas.codec.ImageCodecs.DeferredFromGenerator] (cycle break
     // preparing the :cpu-raster Gradle module extraction — foundation
     // no longer imports from codec).
 

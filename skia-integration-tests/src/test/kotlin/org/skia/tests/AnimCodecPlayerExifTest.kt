@@ -13,7 +13,7 @@ import org.skia.testing.TestUtils
  *   DEF_GM(return new AnimCodecPlayerExifGM("images/stoplight_h.webp");)
  *
  * All three are MISSING_API — the [AnimCodecPlayerExifGM] body requires
- * `SkAnimCodecPlayer` + per-frame `SkCodec` seek, which are not yet
+ * `SkAnimCodecPlayer` + per-frame `Codec` seek, which are not yet
  * implemented in `:kanvas-skia`. The GM class is a flag-planting stub
  * that draws nothing; tests are disabled until the API lands.
  *
@@ -22,7 +22,7 @@ import org.skia.testing.TestUtils
  *  - `AnimCodecPlayerExif_required.gif`
  *  - `AnimCodecPlayerExif_stoplight_h.webp`
  */
-@Disabled("STUB.ANIM_CODEC_PLAYER: requires SkAnimCodecPlayer + SkCodec frame-by-frame seek")
+@Disabled("STUB.ANIM_CODEC_PLAYER: requires SkAnimCodecPlayer + Codec frame-by-frame seek")
 class AnimCodecPlayerExifTest {
 
     /** Covers `DEF_GM(return new AnimCodecPlayerExifGM("images/required.webp");)` */

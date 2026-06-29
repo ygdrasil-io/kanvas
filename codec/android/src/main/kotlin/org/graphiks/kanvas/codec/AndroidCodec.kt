@@ -18,11 +18,11 @@ import java.nio.ByteOrder
 
 /**
  * Mirrors Skia's
- * [`SkAndroidCodec`](https://github.com/google/skia/blob/main/include/codec/SkAndroidCodec.h)
- * — the Android-specific wrapper around [SkCodec] that exposes simpler
+ * [`AndroidCodec`](https://github.com/google/skia/blob/main/include/codec/AndroidCodec.h)
+ * — the Android-specific wrapper around [Codec] that exposes simpler
  * downsampling and subset machinery used by Android's `BitmapFactory`
- * pipeline. Where [SkCodec] is a thin format-agnostic decoder facade,
- * [SkAndroidCodec] layers on top :
+ * pipeline. Where [Codec] is a thin format-agnostic decoder facade,
+ * [AndroidCodec] layers on top :
  *  - [computeSampleSize] / [getSampledDimensions] — pick a power-of-2
  *    sample size and report the resulting integer dimensions ;
  *  - [getSupportedSubset] — clamp a desired pixel-grid sub-rect to the
@@ -32,7 +32,7 @@ import java.nio.ByteOrder
  *    a single [AndroidOptions] struct that bundles sample size +
  *    optional subset.
  *
- * **R3 scope.** The heavy lifting is delegated to [SkCodec] :
+ * **R3 scope.** The heavy lifting is delegated to [Codec] :
  * `getAndroidPixels` decodes the full frame, then post-processes the
  * result via [org.skia.foundation.SkPixmap.scalePixels] /
  * [org.skia.foundation.SkPixmap.extractSubset]. Upstream's "smart
@@ -41,10 +41,10 @@ import java.nio.ByteOrder
  * to the largest value still smaller than the source dimension and
  * divides integer-down for the sampled size.
  */
-public class SkAndroidCodec internal constructor(private val codec: SkCodec) {
+public class AndroidCodec internal constructor(private val codec: Codec) {
 
     /**
-     * Mirrors `SkAndroidCodec::ExifOrientationBehavior`. The upstream
+     * Mirrors `AndroidCodec::ExifOrientationBehavior`. The upstream
      * comment notes this is deprecated — Android now always ignores
      * orientation and asks the client to apply it post-decode. Kept on
      * the Kotlin port for API parity ; not consumed by [getAndroidPixels].
@@ -55,8 +55,8 @@ public class SkAndroidCodec internal constructor(private val codec: SkCodec) {
     }
 
     /**
-     * Mirrors `SkAndroidCodec::AndroidOptions`. Default is "no sampling,
-     * no subset" — equivalent to a plain [SkCodec.getPixels].
+     * Mirrors `AndroidCodec::AndroidOptions`. Default is "no sampling,
+     * no subset" — equivalent to a plain [Codec.getPixels].
      */
     public data class AndroidOptions(
         public val sampleSize: Int = 1,
@@ -65,20 +65,20 @@ public class SkAndroidCodec internal constructor(private val codec: SkCodec) {
     )
 
     /**
-     * Mirrors `SkCodec::ZeroInitialized`. Hint that the pixel buffer has
+     * Mirrors `Codec::ZeroInitialized`. Hint that the pixel buffer has
      * already been zeroed — currently ignored by [getAndroidPixels]
      * (always writes every byte it produces).
      */
     public enum class ZeroInitialized { kYes, kNo }
 
-    /** Underlying [SkCodec]. Mirrors `SkAndroidCodec::codec()`. */
-    public fun codec(): SkCodec = codec
+    /** Underlying [Codec]. Mirrors `AndroidCodec::codec()`. */
+    public fun codec(): Codec = codec
 
-    /** Mirrors `SkAndroidCodec::getInfo()`. */
+    /** Mirrors `AndroidCodec::getInfo()`. */
     public fun getInfo(): SkImageInfo = codec.getInfo()
 
     /**
-     * Mirrors `SkAndroidCodec::getICCProfile()`. The upstream returns a
+     * Mirrors `AndroidCodec::getICCProfile()`. The upstream returns a
      * raw `skcms_ICCProfile*` ; the Kotlin port surfaces the parsed
      * [SkColorSpace] from [getInfo] for ergonomic parity with the rest
      * of `:kanvas-skia` (callers that need the raw profile can reach
@@ -86,11 +86,11 @@ public class SkAndroidCodec internal constructor(private val codec: SkCodec) {
      */
     public fun getICCProfile(): SkColorSpace? = codec.getInfo().colorSpace
 
-    /** Mirrors `SkAndroidCodec::getEncodedFormat()`. */
+    /** Mirrors `AndroidCodec::getEncodedFormat()`. */
     public fun getEncodedFormat(): SkEncodedImageFormat = codec.getEncodedFormat()
 
     /**
-     * Mirrors `int SkAndroidCodec::computeSampleSize(SkISize* size)`.
+     * Mirrors `int AndroidCodec::computeSampleSize(SkISize* size)`.
      *
      * Round to the largest power-of-2 sample size whose sampled
      * dimensions are still `>= size`. The returned `sampleSize` is the
@@ -152,7 +152,7 @@ public class SkAndroidCodec internal constructor(private val codec: SkCodec) {
     }
 
     /**
-     * Mirrors `SkISize SkAndroidCodec::getSampledDimensions(int sampleSize)`.
+     * Mirrors `SkISize AndroidCodec::getSampledDimensions(int sampleSize)`.
      *
      * Integer-down division, clamped to a minimum of `1` per axis (the
      * upstream contract is "always recommend a non-zero output"). When
@@ -167,7 +167,7 @@ public class SkAndroidCodec internal constructor(private val codec: SkCodec) {
     }
 
     /**
-     * Mirrors `bool SkAndroidCodec::getSupportedSubset(SkIRect* desiredSubset)`.
+     * Mirrors `bool AndroidCodec::getSupportedSubset(SkIRect* desiredSubset)`.
      *
      * Returns the largest supported subset contained in [desiredSubset],
      * or `null` if [desiredSubset] doesn't intersect the source bounds.
@@ -189,7 +189,7 @@ public class SkAndroidCodec internal constructor(private val codec: SkCodec) {
     }
 
     /**
-     * Mirrors `SkISize SkAndroidCodec::getSampledSubsetDimensions(int sampleSize, const SkIRect& subset)`.
+     * Mirrors `SkISize AndroidCodec::getSampledSubsetDimensions(int sampleSize, const SkIRect& subset)`.
      *
      * Returns the size of `subset` after integer-down division by
      * [sampleSize], clamped to `1` per axis. If [subset] is empty, the
@@ -203,10 +203,10 @@ public class SkAndroidCodec internal constructor(private val codec: SkCodec) {
     }
 
     /**
-     * Mirrors `SkCodec::Result SkAndroidCodec::getAndroidPixels(const SkImageInfo&, void*, size_t, const AndroidOptions*)`.
+     * Mirrors `Codec::Result AndroidCodec::getAndroidPixels(const SkImageInfo&, void*, size_t, const AndroidOptions*)`.
      *
      * **R-suivi.34 implementation.** Decodes the full frame via the
-     * wrapped [SkCodec.getPixels], then post-processes :
+     * wrapped [Codec.getPixels], then post-processes :
      *  1. **Subset** ([AndroidOptions.subset] non-`null`) — crop the
      *     decoded frame to the requested rect (clamped to source bounds).
      *  2. **Downsample** ([AndroidOptions.sampleSize] > 1) — pick every
@@ -220,7 +220,7 @@ public class SkAndroidCodec internal constructor(private val codec: SkCodec) {
      * The caller's [info] must match the **post-sampling** size : its
      * `width / height` is what the produced bitmap would have been if
      * decoded through [getSampledSubsetDimensions]. If they don't match,
-     * the result is [SkCodec.Result.kInvalidParameters].
+     * the result is [Codec.Result.kInvalidParameters].
      *
      * Pixel format on the wire :
      *  - **kRGBA_8888 / kBGRA_8888** : 4 bytes per pixel in `R G B A` (or
@@ -231,29 +231,29 @@ public class SkAndroidCodec internal constructor(private val codec: SkCodec) {
      *  - **kRGB_565 / kARGB_4444** : 2 bytes per pixel, little-endian on
      *    the wire (`SkImageInfo::minRowBytes` accounts for this).
      *  - **kRGBA_F16Norm** : not supported on this path — Android never
-     *    asks for F16 (see [SkAndroidCodec] kdoc). Returns
-     *    [SkCodec.Result.kInvalidConversion].
+     *    asks for F16 (see [AndroidCodec] kdoc). Returns
+     *    [Codec.Result.kInvalidConversion].
      */
     public fun getAndroidPixels(
         info: SkImageInfo,
         pixels: ByteBuffer,
         rowBytes: Int,
         options: AndroidOptions = AndroidOptions(),
-    ): SkCodec.Result {
-        if (info.width <= 0 || info.height <= 0) return SkCodec.Result.kInvalidParameters
-        if (rowBytes < info.minRowBytes()) return SkCodec.Result.kInvalidParameters
-        if (options.sampleSize < 1) return SkCodec.Result.kInvalidParameters
+    ): Codec.Result {
+        if (info.width <= 0 || info.height <= 0) return Codec.Result.kInvalidParameters
+        if (rowBytes < info.minRowBytes()) return Codec.Result.kInvalidParameters
+        if (options.sampleSize < 1) return Codec.Result.kInvalidParameters
         val bpp = info.bytesPerPixel()
         val requiredBytes = (info.height - 1).toLong() * rowBytes + info.width.toLong() * bpp
-        if (pixels.limit().toLong() < requiredBytes) return SkCodec.Result.kInvalidParameters
+        if (pixels.limit().toLong() < requiredBytes) return Codec.Result.kInvalidParameters
         val srcInfo = codec.getInfo()
-        if (srcInfo.width <= 0 || srcInfo.height <= 0) return SkCodec.Result.kInvalidInput
+        if (srcInfo.width <= 0 || srcInfo.height <= 0) return Codec.Result.kInvalidInput
 
         // F16 isn't carried on this path — the Android pipeline never
         // requests it, and the byte-encoding contract above doesn't
         // cover the float layout.
         if (info.colorType == SkColorType.kRGBA_F16Norm) {
-            return SkCodec.Result.kInvalidConversion
+            return Codec.Result.kInvalidConversion
         }
 
         // 1) Clamp the requested subset to source bounds (matches
@@ -264,7 +264,7 @@ public class SkAndroidCodec internal constructor(private val codec: SkCodec) {
             val t = maxOf(req.top, 0)
             val r = minOf(req.right, srcInfo.width)
             val b = minOf(req.bottom, srcInfo.height)
-            if (l >= r || t >= b) return SkCodec.Result.kInvalidParameters
+            if (l >= r || t >= b) return Codec.Result.kInvalidParameters
             SkIRect.MakeLTRB(l, t, r, b)
         } ?: SkIRect.MakeWH(srcInfo.width, srcInfo.height)
 
@@ -275,7 +275,7 @@ public class SkAndroidCodec internal constructor(private val codec: SkCodec) {
         val expectedW = maxOf(1, subset.width() / s)
         val expectedH = maxOf(1, subset.height() / s)
         if (info.width != expectedW || info.height != expectedH) {
-            return SkCodec.Result.kInvalidParameters
+            return Codec.Result.kInvalidParameters
         }
 
         // 3) Decode the full source frame into a scratch bitmap. The
@@ -289,7 +289,7 @@ public class SkAndroidCodec internal constructor(private val codec: SkCodec) {
             colorType = srcInfo.colorType,
         )
         val decodeResult = codec.getPixels(srcInfo, fullBitmap)
-        if (decodeResult != SkCodec.Result.kSuccess) return decodeResult
+        if (decodeResult != Codec.Result.kSuccess) return decodeResult
 
         // 4) Walk the destination grid, mapping each `(dx, dy)` to its
         //    source coordinate `(subset.left + dx * s, subset.top + dy
@@ -305,7 +305,7 @@ public class SkAndroidCodec internal constructor(private val codec: SkCodec) {
                 writePixelToBuffer(view, rowStart + dx * bpp, info.colorType, c)
             }
         }
-        return SkCodec.Result.kSuccess
+        return Codec.Result.kSuccess
     }
 
     /**
@@ -377,30 +377,30 @@ public class SkAndroidCodec internal constructor(private val codec: SkCodec) {
 
     public companion object {
         /**
-         * Pass ownership of [codec] to a newly-created [SkAndroidCodec].
-         * Mirrors `SkAndroidCodec::MakeFromCodec`. Returns `null` if
+         * Pass ownership of [codec] to a newly-created [AndroidCodec].
+         * Mirrors `AndroidCodec::MakeFromCodec`. Returns `null` if
          * [codec] is `null` (Kotlin signatures don't allow nullable
          * params on `non-null` returns — wrap the call when needed).
          */
-        public fun MakeFromCodec(codec: SkCodec): SkAndroidCodec = SkAndroidCodec(codec)
+        public fun MakeFromCodec(codec: Codec): AndroidCodec = AndroidCodec(codec)
 
         /**
-         * Sniff [stream] and return an [SkAndroidCodec] for it, or `null`
-         * if no registered [SkCodec] decoder matches. Mirrors
-         * `SkAndroidCodec::MakeFromStream`.
+         * Sniff [stream] and return an [AndroidCodec] for it, or `null`
+         * if no registered [Codec] decoder matches. Mirrors
+         * `AndroidCodec::MakeFromStream`.
          */
-        public fun MakeFromStream(stream: InputStream): SkAndroidCodec? =
-            SkCodec.MakeFromStream(stream)?.let(::MakeFromCodec)
+        public fun MakeFromStream(stream: InputStream): AndroidCodec? =
+            Codec.MakeFromStream(stream)?.let(::MakeFromCodec)
 
         /**
-         * Sniff [data] and return an [SkAndroidCodec] for it, or `null`
-         * if no registered [SkCodec] decoder matches. Mirrors
-         * `SkAndroidCodec::MakeFromData`.
+         * Sniff [data] and return an [AndroidCodec] for it, or `null`
+         * if no registered [Codec] decoder matches. Mirrors
+         * `AndroidCodec::MakeFromData`.
          */
-        public fun MakeFromData(data: ByteArray): SkAndroidCodec? =
-            SkCodec.MakeFromData(data)?.let(::MakeFromCodec)
+        public fun MakeFromData(data: ByteArray): AndroidCodec? =
+            Codec.MakeFromData(data)?.let(::MakeFromCodec)
 
         /** [SkData] overload — mirrors the `sk_sp<const SkData>` upstream factory. */
-        public fun MakeFromData(data: SkData): SkAndroidCodec? = MakeFromData(data.toByteArray())
+        public fun MakeFromData(data: SkData): AndroidCodec? = MakeFromData(data.toByteArray())
     }
 }
