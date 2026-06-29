@@ -131,7 +131,7 @@ public object BmpEncoder {
                 var runLen = 1
                 while (i + runLen < w && indices[i + runLen] == colorIdx && runLen < 255) runLen++
 
-                if (runLen >= if (bpp == 4) 2 else 1) {
+                if (runLen >= 2 || bpp == 8) {
                     rleData.write(runLen)
                     if (bpp == 8) {
                         rleData.write(colorIdx)
@@ -147,24 +147,24 @@ public object BmpEncoder {
                         absCount++
                         i++
                     }
-                    rleData.write(0)
-                    rleData.write(absCount)
-                    var j = absStart
-                    while (j < absStart + absCount) {
-                        if (bpp == 8) {
-                            rleData.write(indices[j])
-                            j++
-                        } else {
+                    if (absCount < 3) {
+                        for (j in absStart until absStart + absCount) {
+                            rleData.write(1)
+                            rleData.write((indices[j] shl 4) or 0)
+                        }
+                    } else {
+                        rleData.write(0)
+                        rleData.write(absCount)
+                        var j = absStart
+                        while (j < absStart + absCount) {
                             val hi = indices[j] and 0x0F
                             val lo = if (j + 1 < absStart + absCount) indices[j + 1] and 0x0F else 0
                             rleData.write((hi shl 4) or (lo and 0x0F))
                             j += 2
                         }
-                    }
-                    if (bpp == 4 && ((absCount + 1) / 2) % 2 != 0) {
-                        rleData.write(0)
-                    } else if (bpp == 8 && (absCount and 1) != 0) {
-                        rleData.write(0)
+                        if (((absCount + 1) / 2) % 2 != 0) {
+                            rleData.write(0)
+                        }
                     }
                 }
             }

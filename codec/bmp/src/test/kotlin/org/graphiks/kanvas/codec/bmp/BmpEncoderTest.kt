@@ -212,6 +212,44 @@ class BmpEncoderTest {
         assertNull(bytes, "RLE4 with >16 unique colors should return null")
     }
 
+    @Test
+    fun `RLE4 handles isolated single pixels before a run using encoded runs`() {
+        val src = SkBitmap(4, 1)
+        src.pixels[0] = 0xFFFF0000.toInt()
+        src.pixels[1] = 0xFF00FF00.toInt()
+        src.pixels[2] = 0xFF00FF00.toInt()
+        src.pixels[3] = 0xFF00FF00.toInt()
+        val bytes = BmpEncoder.encode(src, BmpEncoder.Options(
+            compression = BmpEncoder.Compression.RLE4,
+        ))!!
+        assertEquals(2, readU32LE(bytes, 14 + 16))
+        val decoded = decodeBmp(bytes)
+        for (x in 0 until 4) {
+            assertEquals(SkColorGetR(src.getPixel(x, 0)), SkColorGetR(decoded.getPixel(x, 0)), "R($x,0)")
+            assertEquals(SkColorGetG(src.getPixel(x, 0)), SkColorGetG(decoded.getPixel(x, 0)), "G($x,0)")
+            assertEquals(SkColorGetB(src.getPixel(x, 0)), SkColorGetB(decoded.getPixel(x, 0)), "B($x,0)")
+        }
+    }
+
+    @Test
+    fun `RLE4 handles two isolated pixels before a run using encoded runs`() {
+        val src = SkBitmap(4, 1)
+        src.pixels[0] = 0xFFFF0000.toInt()
+        src.pixels[1] = 0xFF0000FF.toInt()
+        src.pixels[2] = 0xFF00FF00.toInt()
+        src.pixels[3] = 0xFF00FF00.toInt()
+        val bytes = BmpEncoder.encode(src, BmpEncoder.Options(
+            compression = BmpEncoder.Compression.RLE4,
+        ))!!
+        assertEquals(2, readU32LE(bytes, 14 + 16))
+        val decoded = decodeBmp(bytes)
+        for (x in 0 until 4) {
+            assertEquals(SkColorGetR(src.getPixel(x, 0)), SkColorGetR(decoded.getPixel(x, 0)), "R($x,0)")
+            assertEquals(SkColorGetG(src.getPixel(x, 0)), SkColorGetG(decoded.getPixel(x, 0)), "G($x,0)")
+            assertEquals(SkColorGetB(src.getPixel(x, 0)), SkColorGetB(decoded.getPixel(x, 0)), "B($x,0)")
+        }
+    }
+
     private fun readU16LE(buf: ByteArray, off: Int): Int =
         (buf[off].toInt() and 0xFF) or ((buf[off + 1].toInt() and 0xFF) shl 8)
 
