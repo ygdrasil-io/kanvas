@@ -1,7 +1,7 @@
 ---
 id: KGPU-M38-003
 title: "Dynamic shader graph assembly"
-status: done
+status: review
 milestone: M38
 priority: P1
 owner_area: runtimeeffects
@@ -143,6 +143,7 @@ rtk ./gradlew --no-daemon :gpu-renderer:test --tests '*ShaderGraph*'
 - blocked → ready (2026-06-28): unblocked — approach is Kanvas assembles WGSL fragments into single module, wgsl4k validates final module (not multi-fragment).
 - ready → review (2026-06-28): shader graph assembly implemented (Kanvas merge, cycle detection, topo sort, prefixing, budget enforcement).
 - `review → done` (2026-06-29): promoted — independent review accepted.
+- `done → review` (2026-06-29): reopened — needs real wgsl4k AST reflection/walker instead of workaround.
 
 ## Linear Labels
 

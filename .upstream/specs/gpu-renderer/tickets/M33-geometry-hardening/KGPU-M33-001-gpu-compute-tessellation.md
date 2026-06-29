@@ -1,7 +1,7 @@
 ---
 id: KGPU-M33-001
 title: "GPU compute tessellation — GPUNative path fill and stroke route"
-status: done
+status: review
 milestone: M33
 priority: P0
 owner_area: geometry
@@ -109,6 +109,7 @@ rtk ./gradlew --no-daemon :gpu-renderer:test --tests '*ComputeTessellation*'
 - `proposed → ready` (2026-06-28): milestone activated, starting implementation.
 - `ready → review` (2026-06-28): compute tessellation plan, route, WGSL resource implemented. Pending independent review.
 - `review → done` (2026-06-28): fixes applied (WGSL syntax, wgsl4k wire, registry, oracle, refusal codes, matrix math, classification, depth limit). Independent review passed.
+- `done → review` (2026-06-29): reopened — needs real wgsl4k AST reflection/walker instead of workaround.
 
 ## Linear Labels
 
