@@ -294,6 +294,18 @@ enum class ColorGlyphRefusalKind {
     LAYER_COUNT_EXCEEDED,
 }
 
+/** Decision produced by the color glyph route planner. */
+sealed interface GPUColorGlyphRouteDecision {
+    /** COLRv0 color route accepted. */
+    data class Accepted(val route: GPUTextRoute.ColorGlyph) : GPUColorGlyphRouteDecision
+
+    /** Color route refused with a stable diagnostic and refusal category. */
+    data class Refused(
+        val diagnostic: GPUTextDiagnostic,
+        val refusalKind: ColorGlyphRefusalKind,
+    ) : GPUColorGlyphRouteDecision
+}
+
 /** Dependency gate for one text representation that is visible to route diagnostics and PM dumps. */
 data class GPUTextRepresentationGate(
     val representation: String,
