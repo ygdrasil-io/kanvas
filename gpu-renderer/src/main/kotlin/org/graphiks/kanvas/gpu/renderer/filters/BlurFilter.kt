@@ -15,13 +15,13 @@ data class BlurFilterResult(
 )
 
 /** Applies separable gaussian blur via horizontal and vertical passes.
- *  Delegates actual kernel computation to [GpuSeparableBlurPlanner]. */
+ *  Delegates actual kernel computation to [GPUSeparableBlurPlanner]. */
 class GaussianBlurFilter(
     private val maxPassCount: Int = 2,
 ) {
     /** Executes the blur for the given parameters and returns pass/kernel stats. */
     fun execute(params: BlurFilterParams): BlurFilterResult {
-        val planner = GpuSeparableBlurPlanner()
+        val planner = GPUSeparableBlurPlanner()
         val plan = planner.plan(
             sigmaX = params.sigmaX,
             sigmaY = params.sigmaY,

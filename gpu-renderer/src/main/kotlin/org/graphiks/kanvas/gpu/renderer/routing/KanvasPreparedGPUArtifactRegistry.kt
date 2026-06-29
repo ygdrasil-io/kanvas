@@ -43,7 +43,7 @@ class KanvasPreparedGPUArtifactRegistry : CPUPreparedGPUArtifactRegistry {
             Triple("UploadedTextureArtifact", 1, "frame-local") to Triple("gpu.uploaded_texture.bind", "texture-upload", "content-key"),
             Triple("PrecomputedGeometryArtifact", 1, "cache-resident") to Triple("gpu.precomputed_geometry.bind", "geometry-buffer", "content-key"),
             Triple("FilterIntermediateArtifact", 1, "recording-local") to Triple("gpu.filter_intermediate.bind", "filter-intermediate", "generation"),
-            Triple("GpuComputeTessellationArtifact", 1, "cache-resident") to Triple("gpu.tessellation.shader", "geometry-buffer", "content-key"),
+            Triple("GPUComputeTessellationArtifact", 1, "cache-resident") to Triple("gpu.tessellation.shader", "geometry-buffer", "content-key"),
         ).map { (artifact, consumer) ->
             ArtifactFamilySpec(
                 type = artifact.first,

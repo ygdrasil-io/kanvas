@@ -9,7 +9,7 @@ class ProductFlagConfigTest {
 
     @Test
     fun `default config has all m13 m14 and m15 flags enabled`() {
-        val config = GpuProductFlagConfig()
+        val config = GPUProductFlagConfig()
 
         assertTrue(config.fillRRectEnabled)
         assertTrue(config.linearGradientEnabled)
@@ -21,7 +21,7 @@ class ProductFlagConfigTest {
 
     @Test
     fun `default config builds capabilities with all m13 m14 and m15 facts`() {
-        val config = GpuProductFlagConfig()
+        val config = GPUProductFlagConfig()
         val capabilities = config.buildCapabilities()
 
         val factsByName = capabilities.facts.associateBy { it.name }
@@ -36,10 +36,10 @@ class ProductFlagConfigTest {
 
     @Test
     fun `disable property overrides fill rrect flag`() {
-        val config = GpuProductFlagConfig.fromSystemProperties(
+        val config = GPUProductFlagConfig.fromSystemProperties(
             propertyReader = { key ->
                 when (key) {
-                    GpuProductFlagConfig.FillRRectDisableProperty -> "true"
+                    GPUProductFlagConfig.FillRRectDisableProperty -> "true"
                     else -> null
                 }
             },
@@ -54,10 +54,10 @@ class ProductFlagConfigTest {
 
     @Test
     fun `disable property overrides linear gradient flag`() {
-        val config = GpuProductFlagConfig.fromSystemProperties(
+        val config = GPUProductFlagConfig.fromSystemProperties(
             propertyReader = { key ->
                 when (key) {
-                    GpuProductFlagConfig.LinearGradientDisableProperty -> "true"
+                    GPUProductFlagConfig.LinearGradientDisableProperty -> "true"
                     else -> null
                 }
             },
@@ -72,10 +72,10 @@ class ProductFlagConfigTest {
 
     @Test
     fun `disable property overrides scissor flag`() {
-        val config = GpuProductFlagConfig.fromSystemProperties(
+        val config = GPUProductFlagConfig.fromSystemProperties(
             propertyReader = { key ->
                 when (key) {
-                    GpuProductFlagConfig.ScissorDisableProperty -> "true"
+                    GPUProductFlagConfig.ScissorDisableProperty -> "true"
                     else -> null
                 }
             },
@@ -90,10 +90,10 @@ class ProductFlagConfigTest {
 
     @Test
     fun `disable property overrides radial gradient flag`() {
-        val config = GpuProductFlagConfig.fromSystemProperties(
+        val config = GPUProductFlagConfig.fromSystemProperties(
             propertyReader = { key ->
                 when (key) {
-                    GpuProductFlagConfig.RadialGradientDisableProperty -> "true"
+                    GPUProductFlagConfig.RadialGradientDisableProperty -> "true"
                     else -> null
                 }
             },
@@ -108,10 +108,10 @@ class ProductFlagConfigTest {
 
     @Test
     fun `disable property overrides sweep gradient flag`() {
-        val config = GpuProductFlagConfig.fromSystemProperties(
+        val config = GPUProductFlagConfig.fromSystemProperties(
             propertyReader = { key ->
                 when (key) {
-                    GpuProductFlagConfig.SweepGradientDisableProperty -> "true"
+                    GPUProductFlagConfig.SweepGradientDisableProperty -> "true"
                     else -> null
                 }
             },
@@ -126,7 +126,7 @@ class ProductFlagConfigTest {
 
     @Test
     fun `disabled flag does not produce capability fact`() {
-        val config = GpuProductFlagConfig(fillRRectEnabled = false)
+        val config = GPUProductFlagConfig(fillRRectEnabled = false)
         val capabilities = config.buildCapabilities()
 
         val factNames = capabilities.facts.map { it.name }
@@ -139,7 +139,7 @@ class ProductFlagConfigTest {
 
     @Test
     fun `disabled radial flag does not produce radial capability fact`() {
-        val config = GpuProductFlagConfig(radialGradientEnabled = false)
+        val config = GPUProductFlagConfig(radialGradientEnabled = false)
         val capabilities = config.buildCapabilities()
 
         val factNames = capabilities.facts.map { it.name }
@@ -152,7 +152,7 @@ class ProductFlagConfigTest {
 
     @Test
     fun `disabled sweep flag does not produce sweep capability fact`() {
-        val config = GpuProductFlagConfig(sweepGradientEnabled = false)
+        val config = GPUProductFlagConfig(sweepGradientEnabled = false)
         val capabilities = config.buildCapabilities()
 
         val factNames = capabilities.facts.map { it.name }
@@ -165,10 +165,10 @@ class ProductFlagConfigTest {
 
     @Test
     fun `disable property overrides path fill flag`() {
-        val config = GpuProductFlagConfig.fromSystemProperties(
+        val config = GPUProductFlagConfig.fromSystemProperties(
             propertyReader = { key ->
                 when (key) {
-                    GpuProductFlagConfig.PathFillDisableProperty -> "true"
+                    GPUProductFlagConfig.PathFillDisableProperty -> "true"
                     else -> null
                 }
             },
@@ -184,7 +184,7 @@ class ProductFlagConfigTest {
 
     @Test
     fun `disabled path fill flag does not produce capability fact`() {
-        val config = GpuProductFlagConfig(pathFillEnabled = false)
+        val config = GPUProductFlagConfig(pathFillEnabled = false)
         val capabilities = config.buildCapabilities()
 
         val factNames = capabilities.facts.map { it.name }
@@ -198,7 +198,7 @@ class ProductFlagConfigTest {
 
     @Test
     fun `empty property reader leaves all flags enabled`() {
-        val config = GpuProductFlagConfig.fromSystemProperties(
+        val config = GPUProductFlagConfig.fromSystemProperties(
             propertyReader = { null },
         )
 
