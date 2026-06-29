@@ -16,7 +16,13 @@ data class GPUColorGlyphLayer(
     val paletteIndex: Int,
     val resolvedColorArgb: Int?,
     val useForeground: Boolean,
-)
+) {
+    init {
+        require(useForeground == (resolvedColorArgb == null)) {
+            "resolvedColorArgb must be null iff useForeground is true."
+        }
+    }
+}
 
 /**
  * GPU-facing COLRv0 color glyph plan: an ordered (bottom -> top) list of

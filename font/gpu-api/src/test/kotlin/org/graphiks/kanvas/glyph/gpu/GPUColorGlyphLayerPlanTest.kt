@@ -76,4 +76,28 @@ class GPUColorGlyphLayerPlanTest {
             plan.toColorLayerDump(),
         )
     }
+
+    @Test
+    fun `foreground layer with a non-null color is rejected`() {
+        assertFailsWith<IllegalArgumentException> {
+            GPUColorGlyphLayer(
+                layerGlyphID = 11u,
+                paletteIndex = 0xFFFF,
+                resolvedColorArgb = 0xFF0000FF.toInt(),
+                useForeground = true,
+            )
+        }
+    }
+
+    @Test
+    fun `non-foreground layer with a null color is rejected`() {
+        assertFailsWith<IllegalArgumentException> {
+            GPUColorGlyphLayer(
+                layerGlyphID = 11u,
+                paletteIndex = 0,
+                resolvedColorArgb = null,
+                useForeground = false,
+            )
+        }
+    }
 }
