@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.gpu.renderer.text
 
+import org.graphiks.kanvas.glyph.gpu.GPUColorGlyphLayerPlan
 import org.graphiks.kanvas.glyph.gpu.GPUTextArtifactReference
 
 /** Text ordering token. */
@@ -75,7 +76,7 @@ sealed interface GPUTextRoute {
     data class Outline(val plan: OutlineGlyphPlan) : GPUTextRoute
 
     /** Color glyph route. */
-    data class ColorGlyph(val plan: ColorGlyphPlan) : GPUTextRoute
+    data class ColorGlyph(val plan: GPUColorGlyphLayerPlan) : GPUTextRoute
 
     /** Bitmap glyph route. */
     data class BitmapGlyph(val plan: BitmapGlyphPlan) : GPUTextRoute
@@ -154,13 +155,6 @@ data class OutlineGlyphPlan(
     val glyphIds: List<Int>,
     val pathArtifactKeys: List<String>,
     val fillRule: String,
-)
-
-/** Color glyph plan. */
-data class ColorGlyphPlan(
-    val glyphIds: List<Int>,
-    val paletteLabel: String,
-    val layerCount: Int,
 )
 
 /** Bitmap glyph plan. */
@@ -242,6 +236,10 @@ object GPUTextDiagnosticCodes {
     const val BITMAP_ROUTE_UNSUPPORTED: String = "unsupported.text.bitmap_route_unsupported"
     const val SVG_PLAN_UNSUPPORTED: String = "unsupported.text.svg_plan_unsupported"
     const val EMOJI_COLOR_GLYPH_UNAVAILABLE: String = "dependency.text.emoji_color_glyph_unavailable"
+    const val COLOR_FONT_FORMAT_UNAVAILABLE: String =
+        "unsupported.text.color_font.format_unavailable"
+    const val COLOR_FONT_LAYER_COUNT_EXCEEDED: String =
+        "unsupported.text.color_font.layer_count_exceeded"
     const val LCD_FUTURE_RESEARCH: String = "unsupported.text.lcd_future_research"
     const val INSTANCE_BUFFER_BUDGET_EXCEEDED: String = "unsupported.text.instance_buffer_budget_exceeded"
     const val BINDING_LAYOUT_UNAVAILABLE: String = "unsupported.text.binding_layout_unavailable"
@@ -285,7 +283,15 @@ object GPUTextDiagnosticCodes {
         SUBPIXEL_PIXEL_GEOMETRY,
         SUBPIXEL_TARGET_FORMAT,
         FALLBACK_EXHAUSTED,
+        COLOR_FONT_FORMAT_UNAVAILABLE,
+        COLOR_FONT_LAYER_COUNT_EXCEEDED,
     )
+}
+
+/** Classifies a color glyph route refusal into its stable category. */
+enum class ColorGlyphRefusalKind {
+    FORMAT_UNAVAILABLE,
+    LAYER_COUNT_EXCEEDED,
 }
 
 /** Dependency gate for one text representation that is visible to route diagnostics and PM dumps. */

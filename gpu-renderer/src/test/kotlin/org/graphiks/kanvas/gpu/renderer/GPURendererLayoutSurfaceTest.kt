@@ -371,7 +371,6 @@ class GPURendererLayoutSurfaceTest {
             "org.graphiks.kanvas.gpu.renderer.text.SDFGlyphAtlasArtifact",
             "org.graphiks.kanvas.gpu.renderer.text.GlyphUploadPlan",
             "org.graphiks.kanvas.gpu.renderer.text.OutlineGlyphPlan",
-            "org.graphiks.kanvas.gpu.renderer.text.ColorGlyphPlan",
             "org.graphiks.kanvas.gpu.renderer.text.BitmapGlyphPlan",
             "org.graphiks.kanvas.gpu.renderer.text.SVGGlyphPlan",
             "org.graphiks.kanvas.gpu.renderer.text.GPUTextDiagnostic",
