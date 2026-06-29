@@ -30,10 +30,10 @@ are satisfied.
 
 | Ticket | Status | Priority | Claim Impact | Route Kind | Product Activation | Adapter Required | Owner Area | Depends On | Legacy Gate |
 |---|---|---|---|---|---|---|---|---|---|
-| [KGPU-M39-001 - MSAA resolve](KGPU-M39-001-msaa-resolve.md) | `review` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `state` | `KGPU-M1-001` | — |
-| [KGPU-M39-002 - Instanced draw batching](KGPU-M39-002-instanced-draw-batching.md) | `review` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `passes` | `KGPU-M1-001` | — |
-| [KGPU-M39-003 - Subpass merging](KGPU-M39-003-subpass-merging.md) | `review` | `P1` | `TargetNative` | `GPUNative` | `false` | `true` | `passes` | `KGPU-M1-001` | — |
-| [KGPU-M39-004 - Deferred display list](KGPU-M39-004-deferred-display-list.md) | `review` | `P1` | `TargetNative` | `GPUNative` | `false` | `true` | `recording` | `KGPU-M1-001` | — |
+| [KGPU-M39-001 - MSAA resolve](KGPU-M39-001-msaa-resolve.md) | `done` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `state` | `KGPU-M1-001` | — |
+| [KGPU-M39-002 - Instanced draw batching](KGPU-M39-002-instanced-draw-batching.md) | `done` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `passes` | `KGPU-M1-001` | — |
+| [KGPU-M39-003 - Subpass merging](KGPU-M39-003-subpass-merging.md) | `done` | `P1` | `TargetNative` | `GPUNative` | `false` | `true` | `passes` | `KGPU-M1-001` | — |
+| [KGPU-M39-004 - Deferred display list](KGPU-M39-004-deferred-display-list.md) | `done` | `P1` | `TargetNative` | `GPUNative` | `false` | `true` | `recording` | `KGPU-M1-001` | — |
 
 ## Validation Bundle
 

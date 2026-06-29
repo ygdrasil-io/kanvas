@@ -1,7 +1,7 @@
 ---
 id: KGPU-M40-003
 title: "Hi-Z occlusion culling"
-status: review
+status: done
 milestone: M40
 priority: P1
 owner_area: analysis
@@ -138,6 +138,7 @@ rtk git diff --check && rtk ./gradlew --no-daemon :gpu-renderer:test --tests '*H
 - `proposed`: Initial ticket.
 - `proposed → ready (2026-06-28)`: M40-001 tile-deferred implemented, unblocking.
 - `ready → review` (2026-06-28): implemented. Pending independent review.
+- `review → done` (2026-06-29): promoted — independent review accepted.
 
 ## Linear Labels
 

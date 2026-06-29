@@ -1,7 +1,7 @@
 ---
 id: KGPU-M39-004
 title: "Deferred display list"
-status: review
+status: done
 milestone: M39
 priority: P1
 owner_area: recording
@@ -133,6 +133,7 @@ rtk ./gradlew --no-daemon :gpu-renderer:test --tests '*DeferredDL*'
 - `proposed`: Initial ticket.
 - `ready` (2026-06-28): promoted — milestone activated, autonomous implementation starting.
 - `ready → review` (2026-06-28): implemented. Pending independent review.
+- `review → done` (2026-06-29): promoted — independent review accepted.
 
 ## Linear Labels
 

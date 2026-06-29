@@ -1,7 +1,7 @@
 ---
 id: KGPU-M39-002
 title: "Instanced draw batching"
-status: review
+status: done
 milestone: M39
 priority: P0
 owner_area: passes
@@ -139,6 +139,7 @@ rtk ./gradlew --no-daemon :gpu-renderer:test --tests '*InstancedBatch*'
 - `proposed`: Initial ticket.
 - `ready` (2026-06-28): promoted — milestone activated, autonomous implementation starting.
 - `ready → review` (2026-06-28): implemented. Pending independent review.
+- `review → done` (2026-06-29): promoted — independent review accepted.
 
 ## Linear Labels
 
