@@ -32,5 +32,12 @@ tasks.withType<JavaCompile> {
 }
 
 tasks.withType<Test> {
-    jvmArgs("-Djdk.xml.maxParameterEntitySizeLimit=0")
+    jvmArgs(
+        "--add-opens=java.base/java.lang=ALL-UNNAMED",
+        "--enable-native-access=ALL-UNNAMED",
+        "-Djdk.xml.maxParameterEntitySizeLimit=0",
+    )
+    if (System.getProperty("os.name").lowercase().contains("mac")) {
+        jvmArgs("-XstartOnFirstThread")
+    }
 }

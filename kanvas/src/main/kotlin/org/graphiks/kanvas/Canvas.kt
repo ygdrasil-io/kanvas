@@ -23,7 +23,7 @@ import org.graphiks.kanvas.gpu.renderer.geometry.PathData
 import org.graphiks.kanvas.gpu.renderer.geometry.PathTessellator
 import org.graphiks.kanvas.gpu.renderer.geometry.Point
 
-class Canvas(private val surface: Surface) {
+class Canvas(private val surface: Surface, private val maxPathVertices: Int = 256) {
     private var commandCounter = 0
     private val source = GPUCommandSource(adapter = "kanvas-api", operation = "draw")
 
@@ -146,7 +146,7 @@ class Canvas(private val surface: Surface) {
         val (material, blend) = lowerPaint(paint)
         val pathDescriptor = path.lower()
         val pathData = path.toPathData()
-        val tessellator = PathTessellator()
+        val tessellator = PathTessellator(maxVertices = maxPathVertices)
         val flattened = tessellator.flatten(pathData)
         val triangleResult = tessellator.triangulate(flattened)
         val vertices = triangleResult.vertices.flatMap { listOf(it.x, it.y) }
