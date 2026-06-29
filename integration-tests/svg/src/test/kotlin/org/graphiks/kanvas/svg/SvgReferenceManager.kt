@@ -6,15 +6,15 @@ import java.io.InputStream
 import javax.imageio.ImageIO
 
 /**
- * Gère le chargement des PNG de référence checkés dans le repo.
- * Les PNG sont stockés dans src/test/resources/generated-references/
- * avec la même structure que les SVG dans src/main/resources/by-render-family/
+ * Manages reference PNG loading from checked-in repository resources.
+ * PNGs are stored under src/test/resources/generated-references/
+ * mirroring the SVG structure under src/main/resources/by-render-family/
  */
 object SvgReferenceManager {
     private const val BYTES_PER_PIXEL = 4
 
     /**
-     * Résout le chemin d'un PNG de référence à partir d'un chemin SVG.
+     * Resolves the reference PNG path from an SVG path.
      * Ex: "/by-render-family/geometric/geometric-1.svg"
      *     → "/generated-references/by-render-family/geometric/geometric-1.png"
      */
@@ -25,9 +25,9 @@ object SvgReferenceManager {
     }
 
     /**
-     * Charge un PNG de référence depuis les ressources et le décode en RGBA.
-     * @param svgPath Chemin vers le SVG (ex: "/by-render-family/geometric/geometric-1.svg")
-     * @return ByteArray RGBA (4 bytes par pixel)
+     * Loads a reference PNG from resources and decodes it to RGBA.
+     * @param svgPath Path to the SVG (ex: "/by-render-family/geometric/geometric-1.svg")
+     * @return RGBA ByteArray (4 bytes per pixel)
      */
     fun loadReferencePng(svgPath: String): ByteArray {
         val pngPath = getReferencePngPath(svgPath)
@@ -41,7 +41,7 @@ object SvgReferenceManager {
     }
 
     /**
-     * Vérifie qu'un PNG de référence existe pour un SVG donné.
+     * Checks whether a reference PNG exists for a given SVG.
      */
     fun hasReferencePng(svgPath: String): Boolean {
         val pngPath = getReferencePngPath(svgPath)

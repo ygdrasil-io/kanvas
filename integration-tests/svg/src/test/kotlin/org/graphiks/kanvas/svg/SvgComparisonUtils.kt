@@ -6,13 +6,13 @@ import javax.imageio.ImageIO
 import kotlin.math.abs
 
 /**
- * Utilitaires pour comparer des images RGBA et générer des rapports détaillés.
+ * Utilities for comparing RGBA images and generating detailed reports.
  */
 object SvgComparisonUtils {
     private const val BYTES_PER_PIXEL = 4
 
     /**
-     * Résultat de la comparaison entre deux images.
+     * Result of comparing two images.
      */
     data class ComparisonResult(
         val similarity: Double,
@@ -26,13 +26,13 @@ object SvgComparisonUtils {
     )
 
     /**
-     * Compare deux buffers RGBA pixel par pixel.
-     * @param actual Buffer RGBA du rendu Kanvas
-     * @param reference Buffer RGBA de la référence
-     * @param width Largeur en pixels
-     * @param height Hauteur en pixels
-     * @param tolerance Tolérance par canal (0-255)
-     * @param minSimilarity Seuil de similarité minimale (0-100)
+     * Compares two RGBA buffers pixel by pixel.
+     * @param actual RGBA buffer from Kanvas rendering
+     * @param reference RGBA buffer from reference
+     * @param width Width in pixels
+     * @param height Height in pixels
+     * @param tolerance Per-channel tolerance (0-255)
+     * @param minSimilarity Minimum similarity threshold (0-100)
      */
     fun compareRgba(
         actual: ByteArray,
@@ -114,7 +114,7 @@ object SvgComparisonUtils {
     }
 
     /**
-     * Convertit une BufferedImage en ByteArray RGBA.
+     * Converts a BufferedImage to an RGBA ByteArray.
      */
     fun bufferedImageToRgba(image: BufferedImage): ByteArray {
         val width = image.width
@@ -135,7 +135,7 @@ object SvgComparisonUtils {
     }
 
     /**
-     * Convertit un ByteArray RGBA en BufferedImage.
+     * Converts an RGBA ByteArray to a BufferedImage.
      */
     fun rgbaToBufferedImage(rgba: ByteArray, width: Int, height: Int): BufferedImage {
         require(rgba.size == width * height * BYTES_PER_PIXEL) { "RGBA buffer size mismatch" }
@@ -154,7 +154,7 @@ object SvgComparisonUtils {
     }
 
     /**
-     * Sauvegarde un ByteArray RGBA en PNG.
+     * Saves an RGBA ByteArray as PNG.
      */
     fun saveRgbaAsPng(rgba: ByteArray, width: Int, height: Int, outputFile: File) {
         outputFile.parentFile?.mkdirs()

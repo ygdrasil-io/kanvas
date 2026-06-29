@@ -67,8 +67,8 @@ class SvgIntegrationTest {
             )
 
             assertTrue(comparison.isPassing) {
-                "SVG $svgPath: similarité=${"%.2f".format(comparison.similarity)}% " +
-                "(seuil: ${comparison.minSimilarity}%)"
+                "SVG $svgPath: similarity=${"%.2f".format(comparison.similarity)}% " +
+                "(threshold: ${comparison.minSimilarity}%)"
             }
         } catch (e: IllegalStateException) {
             throw TestAbortedException("SVG feature not yet supported: ${e.message}", e)
