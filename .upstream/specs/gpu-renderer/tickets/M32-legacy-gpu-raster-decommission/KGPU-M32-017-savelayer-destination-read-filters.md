@@ -2,7 +2,6 @@
 id: KGPU-M32-017
 title: "Legacy decommission: savelayer-destination-read-filters formal refusal (dependency-gated)"
 status: done
-status: review
 milestone: M32
 priority: P1
 owner_area: legacy-cleanup

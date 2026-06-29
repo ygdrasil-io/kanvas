@@ -2,7 +2,6 @@
 id: KGPU-M32-012
 title: "Legacy decommission: rounded-rect-gradients port (solid uniform rrect) / refuse (gradients + non-uniform radii)"
 status: done
-status: review
 milestone: M32
 priority: P0
 owner_area: legacy-cleanup

@@ -2,7 +2,6 @@
 id: KGPU-M32-020
 title: "Legacy decommission: vertices-points-meshes formal refusal (dependency-gated)"
 status: done
-status: review
 milestone: M32
 priority: P1
 owner_area: legacy-cleanup

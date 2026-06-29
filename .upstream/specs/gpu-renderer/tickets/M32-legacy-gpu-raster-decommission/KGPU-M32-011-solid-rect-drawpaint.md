@@ -2,7 +2,6 @@
 id: KGPU-M32-011
 title: "Legacy decommission: solid-rect-drawpaint port (FillRect / drawPaint rect)"
 status: done
-status: review
 milestone: M32
 priority: P0
 owner_area: legacy-cleanup

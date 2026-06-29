@@ -2,7 +2,6 @@
 id: KGPU-M32-010
 title: "Legacy decommission: material-paint port (SolidColor) / refuse (gradients + shader pipeline)"
 status: done
-status: review
 milestone: M32
 priority: P0
 owner_area: legacy-cleanup
