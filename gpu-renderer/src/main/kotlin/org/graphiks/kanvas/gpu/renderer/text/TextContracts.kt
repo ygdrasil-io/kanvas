@@ -233,13 +233,13 @@ object GPUTextDiagnosticCodes {
     const val OUTLINE_ROUTE_UNAVAILABLE: String = "unsupported.text.outline_route_unavailable"
     const val COLOR_PLAN_UNSUPPORTED: String = "unsupported.text.color_plan_unsupported"
     const val COLOR_COMPOSITE_UNSUPPORTED: String = "unsupported.text.color_composite_unsupported"
-    const val BITMAP_ROUTE_UNSUPPORTED: String = "unsupported.text.bitmap_route_unsupported"
-    const val SVG_PLAN_UNSUPPORTED: String = "unsupported.text.svg_plan_unsupported"
-    const val EMOJI_COLOR_GLYPH_UNAVAILABLE: String = "dependency.text.emoji_color_glyph_unavailable"
     const val COLOR_FONT_FORMAT_UNAVAILABLE: String =
         "unsupported.text.color_font.format_unavailable"
     const val COLOR_FONT_LAYER_COUNT_EXCEEDED: String =
         "unsupported.text.color_font.layer_count_exceeded"
+    const val BITMAP_ROUTE_UNSUPPORTED: String = "unsupported.text.bitmap_route_unsupported"
+    const val SVG_PLAN_UNSUPPORTED: String = "unsupported.text.svg_plan_unsupported"
+    const val EMOJI_COLOR_GLYPH_UNAVAILABLE: String = "dependency.text.emoji_color_glyph_unavailable"
     const val LCD_FUTURE_RESEARCH: String = "unsupported.text.lcd_future_research"
     const val INSTANCE_BUFFER_BUDGET_EXCEEDED: String = "unsupported.text.instance_buffer_budget_exceeded"
     const val BINDING_LAYOUT_UNAVAILABLE: String = "unsupported.text.binding_layout_unavailable"
@@ -271,6 +271,8 @@ object GPUTextDiagnosticCodes {
         OUTLINE_ROUTE_UNAVAILABLE,
         COLOR_PLAN_UNSUPPORTED,
         COLOR_COMPOSITE_UNSUPPORTED,
+        COLOR_FONT_FORMAT_UNAVAILABLE,
+        COLOR_FONT_LAYER_COUNT_EXCEEDED,
         BITMAP_ROUTE_UNSUPPORTED,
         SVG_PLAN_UNSUPPORTED,
         EMOJI_COLOR_GLYPH_UNAVAILABLE,
@@ -283,8 +285,6 @@ object GPUTextDiagnosticCodes {
         SUBPIXEL_PIXEL_GEOMETRY,
         SUBPIXEL_TARGET_FORMAT,
         FALLBACK_EXHAUSTED,
-        COLOR_FONT_FORMAT_UNAVAILABLE,
-        COLOR_FONT_LAYER_COUNT_EXCEEDED,
     )
 }
 

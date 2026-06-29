@@ -7,6 +7,7 @@ import org.graphiks.kanvas.glyph.gpu.GPUTextArtifactID
 import org.graphiks.kanvas.glyph.gpu.GPUTextArtifactKey
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.uuid.Uuid
 
@@ -45,7 +46,13 @@ class GPUTextRouteColorGlyphTest {
 
     @Test
     fun `color glyph refusal kind enum exists`() {
-        assertEquals(2, ColorGlyphRefusalKind.entries.size)
+        assertEquals(
+            listOf(
+                ColorGlyphRefusalKind.FORMAT_UNAVAILABLE,
+                ColorGlyphRefusalKind.LAYER_COUNT_EXCEEDED,
+            ),
+            ColorGlyphRefusalKind.entries.toList(),
+        )
     }
 
     @Test
@@ -60,6 +67,6 @@ class GPUTextRouteColorGlyphTest {
         val gates = GPUTextRepresentationGateMatrix.byRepresentation()
         val colorGate = gates.getValue("COLRColorGlyph")
         assertEquals(GPUTextDiagnosticCodes.COLOR_PLAN_UNSUPPORTED, colorGate.diagnosticCode)
-        assertTrue(!colorGate.promoted)
+        assertFalse(colorGate.promoted)
     }
 }
