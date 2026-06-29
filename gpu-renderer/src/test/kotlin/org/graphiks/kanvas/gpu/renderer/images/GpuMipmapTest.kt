@@ -55,6 +55,27 @@ class GpuMipmapTest {
     }
 
     @Test
+    fun `neither compute nor blit available refuses with stable diagnostic`() {
+        val planner = GPUImageMipmapPlanner()
+
+        val result = planner.plan(
+            256,
+            256,
+            MipmapFilter.Box,
+            computeAvailable = false,
+            artifactKey = GPUImageUploadArtifactKey("no-path-image"),
+            blitAvailable = false,
+        )
+
+        assertIs<GPUImageMipmapGenerationResult.Refused>(result)
+        assertEquals("unsupported.image.mipmap_no_generation_path", result.code)
+
+        val diagnostic = result.toRefuseDiagnostic("mipmap-plan")
+        assertTrue(diagnostic.terminal)
+        assertEquals("mipmap-plan", diagnostic.stage)
+    }
+
+    @Test
     fun `compute path generates both blit and compute plans with correct dispatch sizes`() {
         val planner = GPUImageMipmapPlanner()
 

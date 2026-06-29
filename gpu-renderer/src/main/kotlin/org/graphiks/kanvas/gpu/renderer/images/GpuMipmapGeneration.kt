@@ -186,6 +186,7 @@ class GPUImageMipmapPlanner(
         computeAvailable: Boolean,
         artifactKey: GPUImageUploadArtifactKey,
         format: String = "RGBA8Unorm",
+        blitAvailable: Boolean = true,
     ): GPUImageMipmapGenerationResult {
         val clampedWidth = width.coerceAtLeast(1)
         val clampedHeight = height.coerceAtLeast(1)
@@ -197,6 +198,13 @@ class GPUImageMipmapPlanner(
             return GPUImageMipmapGenerationResult.Refused(
                 code = "unsupported.image.mipmap_budget_exceeded",
                 message = "Mip level count $levels (from ${clampedWidth}x$clampedHeight) exceeds adapter limit $maxMipLevels.",
+            )
+        }
+
+        if (!computeAvailable && !blitAvailable) {
+            return GPUImageMipmapGenerationResult.Refused(
+                code = "unsupported.image.mipmap_no_generation_path",
+                message = "Mipmap generation refused: neither compute nor blit path is available for ${clampedWidth}x$clampedHeight.",
             )
         }
 
