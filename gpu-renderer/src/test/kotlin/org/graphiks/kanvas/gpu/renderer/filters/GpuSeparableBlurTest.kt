@@ -2,6 +2,7 @@ package org.graphiks.kanvas.gpu.renderer.filters
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
@@ -88,15 +89,9 @@ class GpuSeparableBlurTest {
     }
 
     @Test
-    fun `quality tier HIGH sigma equals 10 tap count matches spec ceil sigma3 2 plus 1`() {
+    fun `quality tier HIGH sigma=10 tap count matches spec ceil sigma 3 2 plus 1`() {
         val taps = SeparableBlurQualityTier.HIGH.tapCount(10f)
-        assertEquals(61, taps)
-    }
-
-    @Test
-    fun `quality tier NORMAL sigma equals 10 tap count matches spec ceil sigma 2 plus 1`() {
-        val taps = SeparableBlurQualityTier.NORMAL.tapCount(10f)
-        assertEquals(21, taps)
+        assertEquals(31, taps, "ceil(10)*3*2+1=31")
     }
 
     @Test

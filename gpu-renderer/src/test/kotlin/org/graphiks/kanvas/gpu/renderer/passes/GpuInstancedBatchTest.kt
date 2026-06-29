@@ -167,10 +167,11 @@ class GpuInstancedBatchTest {
     }
 
     @Test
-    fun `batch grouper splits groups on pipeline key change`() {
+    fun `batch grouper splits groups on pipeline key change and NonBatched for solo`() {
         val sharedStepId = GPURenderStepID("fill-rect")
         val pipelineA = GPURenderPipelineKey("render:solid-fill")
         val pipelineB = GPURenderPipelineKey("render:gradient-fill")
+        val pipelineC = GPURenderPipelineKey("render:pattern-fill")
         val sharedLayout = "layout-solid-v1"
 
         val packets = listOf(
@@ -178,21 +179,25 @@ class GpuInstancedBatchTest {
             rectPacket(packetId = "packet-2", commandId = 2, sortKey = 200L, stepId = sharedStepId, pipeline = pipelineA, layout = sharedLayout),
             rectPacket(packetId = "packet-3", commandId = 3, sortKey = 300L, stepId = sharedStepId, pipeline = pipelineB, layout = sharedLayout),
             rectPacket(packetId = "packet-4", commandId = 4, sortKey = 400L, stepId = sharedStepId, pipeline = pipelineB, layout = sharedLayout),
+            rectPacket(packetId = "packet-5", commandId = 5, sortKey = 500L, stepId = sharedStepId, pipeline = pipelineC, layout = sharedLayout),
         )
 
         val result = batchForInstancedDraw(packets)
 
-        assertEquals(2, result.size)
+        assertEquals(3, result.size)
         val group0 = assertIs<GpuInstancedBatchResult.Grouped>(result[0])
         val group1 = assertIs<GpuInstancedBatchResult.Grouped>(result[1])
+        val nonBatched = assertIs<GpuInstancedBatchResult.NonBatched>(result[2])
         assertEquals(2, group0.group.packetCount)
         assertEquals(pipelineA, group0.group.renderPipelineKey)
         assertEquals(2, group1.group.packetCount)
         assertEquals(pipelineB, group1.group.renderPipelineKey)
+        assertEquals(GPUDrawPacketID("packet-5"), nonBatched.packetId)
+        assertEquals(GpuInstancedBatchReason.INCOMPATIBLE, nonBatched.reasonCode)
     }
 
     @Test
-    fun `batch grouper splits groups on render step identifier change`() {
+    fun `batch grouper splits groups on render step identifier change with NonBatched`() {
         val fillStepId = GPURenderStepID("fill-rect")
         val pathStepId = GPURenderStepID("fill-path")
         val sharedPipeline = GPURenderPipelineKey("render:solid-fill")
@@ -208,15 +213,14 @@ class GpuInstancedBatchTest {
 
         assertEquals(2, result.size)
         val group0 = assertIs<GpuInstancedBatchResult.Grouped>(result[0])
-        val group1 = assertIs<GpuInstancedBatchResult.Grouped>(result[1])
+        val nonBatched = assertIs<GpuInstancedBatchResult.NonBatched>(result[1])
         assertEquals(fillStepId, group0.group.renderStepId)
-        assertEquals(pathStepId, group1.group.renderStepId)
+        assertEquals(GPUDrawPacketID("packet-3"), nonBatched.packetId)
         assertEquals(2, group0.group.packetCount)
-        assertEquals(1, group1.group.packetCount)
     }
 
     @Test
-    fun `batch grouper splits groups on binding layout change`() {
+    fun `batch grouper splits groups on binding layout change with NonBatched`() {
         val sharedStepId = GPURenderStepID("fill-rect")
         val sharedPipeline = GPURenderPipelineKey("render:solid-fill")
         val layoutA = "layout-solid-v1"
@@ -230,16 +234,16 @@ class GpuInstancedBatchTest {
         val result = batchForInstancedDraw(packets)
 
         assertEquals(2, result.size)
-        val group0 = assertIs<GpuInstancedBatchResult.Grouped>(result[0])
-        val group1 = assertIs<GpuInstancedBatchResult.Grouped>(result[1])
-        assertEquals(layoutA, group0.group.bindingLayoutKey)
-        assertEquals(layoutB, group1.group.bindingLayoutKey)
-        assertEquals(1, group0.group.packetCount)
-        assertEquals(1, group1.group.packetCount)
+        val nonBatched0 = assertIs<GpuInstancedBatchResult.NonBatched>(result[0])
+        val nonBatched1 = assertIs<GpuInstancedBatchResult.NonBatched>(result[1])
+        assertEquals(GPUDrawPacketID("packet-1"), nonBatched0.packetId)
+        assertEquals(GPUDrawPacketID("packet-2"), nonBatched1.packetId)
+        assertEquals(GpuInstancedBatchReason.INCOMPATIBLE, nonBatched0.reasonCode)
+        assertEquals(GpuInstancedBatchReason.INCOMPATIBLE, nonBatched1.reasonCode)
     }
 
     @Test
-    fun `single packet produces a group of size one`() {
+    fun `single packet produces a NonBatched result`() {
         val sharedStepId = GPURenderStepID("fill-rect")
         val sharedPipeline = GPURenderPipelineKey("render:solid-fill")
         val sharedLayout = "layout-solid-v1"
@@ -251,9 +255,9 @@ class GpuInstancedBatchTest {
         val result = batchForInstancedDraw(packets)
 
         assertEquals(1, result.size)
-        val group = assertIs<GpuInstancedBatchResult.Grouped>(result[0])
-        assertEquals(1, group.group.packetCount)
-        assertEquals(listOf(GPUDrawPacketID("packet-1")), group.group.packetIds)
+        val nonBatched = assertIs<GpuInstancedBatchResult.NonBatched>(result[0])
+        assertEquals(GPUDrawPacketID("packet-1"), nonBatched.packetId)
+        assertEquals(GpuInstancedBatchReason.INCOMPATIBLE, nonBatched.reasonCode)
     }
 
     @Test
@@ -275,7 +279,8 @@ class GpuInstancedBatchTest {
 
         val result = batchForInstancedDraw(packets)
 
-        val lines = result.flatMap { batchResult -> batchResult.dumpLines() }
+        val groupResult = assertIs<GpuInstancedBatchResult.Grouped>(result[0])
+        val lines = groupResult.dumpLines()
         assertContains(lines.first(), "passes.instanced-batch group size=2 step=fill-rect pipeline=render:solid-fill layout=layout-solid-v1 packets=packet-1,packet-2")
         assertFalse(lines.joinToString("\n").contains("WGPU"))
         assertFalse(lines.any { line -> line.contains("backend") && line.contains("handle") })

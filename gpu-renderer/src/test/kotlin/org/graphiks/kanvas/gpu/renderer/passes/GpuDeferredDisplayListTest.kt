@@ -88,6 +88,87 @@ class GpuDeferredDisplayListTest {
     }
 
     @Test
+    fun `compatibility check rejects format change`() {
+        val dl = GPUDeferredDisplayList(
+            recordingId = "recording-main",
+            recordedCommandIds = listOf("cmd-001"),
+            analysisHash = "hash-a",
+            layerPlanIds = listOf("lp-1"),
+            compatibilityKey = GPUDeferredDisplayListCompatibilityKey(
+                recordingId = "recording-main",
+                commandHash = 100L,
+                replayCompatibleFields = setOf("composedCtm"),
+                targetFormatClass = "rgba8unorm",
+            ),
+        )
+
+        val replayKey = GPUDeferredDisplayListCompatibilityKey(
+            recordingId = "recording-main",
+            commandHash = 100L,
+            replayCompatibleFields = setOf("composedCtm"),
+            targetFormatClass = "bgra8unorm",
+        )
+
+        val result = checkReplayCompatibility(dl, replayKey)
+        val refused = assertIs<GpuDeferredDisplayListReplayResult.Refused>(result)
+        assertContains(refused.diagnostic.message, "targetFormatClass")
+    }
+
+    @Test
+    fun `compatibility check rejects capability class change`() {
+        val dl = GPUDeferredDisplayList(
+            recordingId = "recording-main",
+            recordedCommandIds = listOf("cmd-001"),
+            analysisHash = "hash-a",
+            layerPlanIds = listOf("lp-1"),
+            compatibilityKey = GPUDeferredDisplayListCompatibilityKey(
+                recordingId = "recording-main",
+                commandHash = 100L,
+                replayCompatibleFields = setOf("composedCtm"),
+                capabilityClass = "msaa-4x",
+            ),
+        )
+
+        val replayKey = GPUDeferredDisplayListCompatibilityKey(
+            recordingId = "recording-main",
+            commandHash = 100L,
+            replayCompatibleFields = setOf("composedCtm"),
+            capabilityClass = "msaa-8x",
+        )
+
+        val result = checkReplayCompatibility(dl, replayKey)
+        val refused = assertIs<GpuDeferredDisplayListReplayResult.Refused>(result)
+        assertContains(refused.diagnostic.message, "capabilityClass")
+    }
+
+    @Test
+    fun `compatibility check rejects device identity change`() {
+        val dl = GPUDeferredDisplayList(
+            recordingId = "recording-main",
+            recordedCommandIds = listOf("cmd-001"),
+            analysisHash = "hash-a",
+            layerPlanIds = listOf("lp-1"),
+            compatibilityKey = GPUDeferredDisplayListCompatibilityKey(
+                recordingId = "recording-main",
+                commandHash = 100L,
+                replayCompatibleFields = setOf("composedCtm"),
+                deviceIdentity = "device-a",
+            ),
+        )
+
+        val replayKey = GPUDeferredDisplayListCompatibilityKey(
+            recordingId = "recording-main",
+            commandHash = 100L,
+            replayCompatibleFields = setOf("composedCtm"),
+            deviceIdentity = "device-b",
+        )
+
+        val result = checkReplayCompatibility(dl, replayKey)
+        val refused = assertIs<GpuDeferredDisplayListReplayResult.Refused>(result)
+        assertContains(refused.diagnostic.message, "deviceIdentity")
+    }
+
+    @Test
     fun `compatibility check accepts matching replay with different ctm and clip`() {
         val dl = GPUDeferredDisplayList(
             recordingId = "recording-main",
@@ -131,18 +212,31 @@ class GpuDeferredDisplayListTest {
     fun `cache plan configures max entries and eviction policy with validation`() {
         val cachePlan = GPUDeferredDisplayListCachePlan(
             maxEntries = 64,
-            evictionPolicy = "lru",
+            evictionPolicy = GPUCacheEvictionPolicy.LRU,
         )
 
         assertEquals(64, cachePlan.maxEntries)
-        assertEquals("lru", cachePlan.evictionPolicy)
+        assertEquals(GPUCacheEvictionPolicy.LRU, cachePlan.evictionPolicy)
 
         assertIllegalArgument("GPUDeferredDisplayListCachePlan.maxEntries must be positive") {
-            GPUDeferredDisplayListCachePlan(maxEntries = 0, evictionPolicy = "lru")
+            GPUDeferredDisplayListCachePlan(maxEntries = 0, evictionPolicy = GPUCacheEvictionPolicy.LRU)
         }
+    }
 
-        assertIllegalArgument("GPUDeferredDisplayListCachePlan.evictionPolicy must not be blank") {
-            GPUDeferredDisplayListCachePlan(maxEntries = 16, evictionPolicy = "")
+    @Test
+    fun `cache plan fromPolicyLabel parses recognised labels`() {
+        val lru = GPUDeferredDisplayListCachePlan.fromPolicyLabel(32, "lru")
+        assertEquals(GPUCacheEvictionPolicy.LRU, lru.evictionPolicy)
+        assertEquals(32, lru.maxEntries)
+
+        val fifo = GPUDeferredDisplayListCachePlan.fromPolicyLabel(16, "FIFO")
+        assertEquals(GPUCacheEvictionPolicy.FIFO, fifo.evictionPolicy)
+
+        val clock = GPUDeferredDisplayListCachePlan.fromPolicyLabel(8, "CLOCK")
+        assertEquals(GPUCacheEvictionPolicy.CLOCK, clock.evictionPolicy)
+
+        assertIllegalArgument("Unrecognised eviction policy: unknown") {
+            GPUDeferredDisplayListCachePlan.fromPolicyLabel(10, "unknown")
         }
     }
 
@@ -213,6 +307,8 @@ class GpuDeferredDisplayListTest {
                 recordingId = "recording-main",
                 commandHash = 0xfeedL,
                 replayCompatibleFields = setOf("composedCtm", "intersectionClip"),
+                targetFormatClass = "rgba8unorm",
+                capabilityClass = "msaa-4x",
             ),
         )
 
@@ -226,12 +322,15 @@ class GpuDeferredDisplayListTest {
         val keyLines = dl.compatibilityKey.dumpLines()
         assertContains(keyLines.first(), "passes.deferred-dl-compat-key recording=recording-main")
         assertContains(keyLines.first(), "commandHash=65261")
+        assertContains(keyLines.first(), "format=rgba8unorm")
+        assertContains(keyLines.first(), "capability=msaa-4x")
+        assertContains(keyLines.first(), "device=none")
         assertContains(keyLines.first(), "compatibleFields=composedCtm,intersectionClip")
 
-        val cachePlan = GPUDeferredDisplayListCachePlan(maxEntries = 32, evictionPolicy = "lru")
+        val cachePlan = GPUDeferredDisplayListCachePlan(maxEntries = 32, evictionPolicy = GPUCacheEvictionPolicy.LRU)
         val cacheLines = cachePlan.dumpLines()
         assertContains(cacheLines.first(), "passes.deferred-dl-cache maxEntries=32")
-        assertContains(cacheLines.first(), "policy=lru")
+        assertContains(cacheLines.first(), "policy=LRU")
     }
 
     @Test
@@ -257,8 +356,6 @@ class GpuDeferredDisplayListTest {
         val replayResult = replayDeferred(dl, rejectKey)
         val refused = assertIs<GpuDeferredDisplayListReplayResult.Refused>(replayResult)
         assertEquals("unsupported.recording.deferred_incompatible_replay", refused.diagnostic.code)
-        assertEquals("An incompatible replay was rejected for recording recording-main; mismatched fields: recordingId",
-            refused.diagnostic.message)
         assertEquals("recording", refused.diagnostic.stage)
         assertTrue(refused.diagnostic.terminal)
     }

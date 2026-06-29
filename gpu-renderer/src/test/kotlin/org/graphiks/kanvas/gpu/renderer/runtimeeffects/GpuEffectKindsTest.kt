@@ -8,13 +8,14 @@ import kotlin.test.assertTrue
 class GpuEffectKindsTest {
 
     @Test
-    fun `Blender ClipShader and Compute kinds are valid enum values`() {
+    fun `Blender ClipShader Compute and ColorFilter kinds are valid enum values`() {
         val kinds = GPURuntimeEffectKind.entries
         assertTrue(GPURuntimeEffectKind.Blender in kinds)
         assertTrue(GPURuntimeEffectKind.ClipShader in kinds)
         assertTrue(GPURuntimeEffectKind.Compute in kinds)
         assertTrue(GPURuntimeEffectKind.Material in kinds)
-        assertEquals(4, kinds.size)
+        assertTrue(GPURuntimeEffectKind.ColorFilter in kinds)
+        assertEquals(5, kinds.size)
     }
 
     @Test
@@ -70,9 +71,10 @@ class GpuEffectKindsTest {
     }
 
     @Test
-    fun `kind validation accepts all four known kinds`() {
+    fun `kind validation accepts all five known kinds`() {
         val acceptedKinds = setOf(
             GPURuntimeEffectKind.Material,
+            GPURuntimeEffectKind.ColorFilter,
             GPURuntimeEffectKind.Blender,
             GPURuntimeEffectKind.ClipShader,
             GPURuntimeEffectKind.Compute,
@@ -90,6 +92,14 @@ class GpuEffectKindsTest {
                 GPURuntimeEffectKind.Material,
                 "fn main(coords: float2, uniformBlock: U) -> float4",
                 GPURuntimeEffectRoutePlacement.MaterialSource,
+            ).routePlacement,
+        )
+        assertEquals(
+            GPURuntimeEffectRoutePlacement.MaterialColorFilter,
+            GPURuntimeEffectKindContract(
+                GPURuntimeEffectKind.ColorFilter,
+                "fn filter(color: float4) -> float4",
+                GPURuntimeEffectRoutePlacement.MaterialColorFilter,
             ).routePlacement,
         )
         assertEquals(
@@ -115,6 +125,41 @@ class GpuEffectKindsTest {
                 "@compute @workgroup_size(...) fn computeMain(...)",
                 GPURuntimeEffectRoutePlacement.FilterComputeNode,
             ).routePlacement,
+        )
+    }
+
+    @Test
+    fun `kind contract defines required capabilities for ColorFilter kind`() {
+        val contract = GPURuntimeEffectKindContract(
+            kind = GPURuntimeEffectKind.ColorFilter,
+            entryPointSignature = "fn filter(color: float4) -> float4",
+            routePlacement = GPURuntimeEffectRoutePlacement.MaterialColorFilter,
+        )
+        assertTrue(contract.requiredCapabilities.contains("color_filter_pipeline"))
+        assertTrue(contract.requiredCapabilities.contains("color_transform"))
+    }
+
+    @Test
+    fun `KanvasRuntimeEffectKindValidator accepts descriptor with valid placements`() {
+        val descriptor = SimpleRTDescriptor.createDescriptor()
+        val result = KanvasRuntimeEffectKindValidator.validate(descriptor, Unit)
+        assertTrue(result is GPURuntimeEffectKindResult.Accepted)
+    }
+
+    @Test
+    fun `KanvasRuntimeEffectKindValidator refuses descriptor with no primary kind`() {
+        val descriptor = SimpleRTDescriptor.createDescriptor().copy(
+            routeContract = GPURuntimeEffectRouteContract(
+                nativeSupported = false,
+                cpuOracleOnly = true,
+                acceptedPlacements = setOf(GPURuntimeEffectRoutePlacement.CPUReferenceOnly),
+            ),
+        )
+        val result = KanvasRuntimeEffectKindValidator.validate(descriptor, Unit)
+        assertTrue(result is GPURuntimeEffectKindResult.Refused)
+        assertEquals(
+            "unsupported.runtime_effect.kind_not_registered",
+            (result as GPURuntimeEffectKindResult.Refused).diagnosticCode,
         )
     }
 }

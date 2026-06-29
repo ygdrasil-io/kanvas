@@ -7,6 +7,35 @@ enum class GpuMsaaCoverageMode {
     AlphaToCoverage,
 }
 
+enum class GPUMultisampleResolveStrategy {
+    WGPU_BUILTIN,
+    CUSTOM_WGSL,
+    COMPUTE_SHADER,
+}
+
+data class GPUMultisamplePlan(
+    val sampleCount: Int,
+    val sampleMask: UInt,
+    val alphaToCoverageEnabled: Boolean,
+) {
+    init {
+        require(sampleCount in setOf(1, 4, 8)) { "GPUMultisamplePlan.sampleCount must be 1, 4, or 8" }
+    }
+}
+
+data class GPUMultisampleResolvePlan(
+    val strategy: GPUMultisampleResolveStrategy,
+)
+
+data class GPUMultisampleTargetDescriptor(
+    val sampleCount: Int,
+    val resolvePlan: GPUMultisampleResolvePlan,
+) {
+    init {
+        require(sampleCount > 0) { "GPUMultisampleTargetDescriptor.sampleCount must be positive" }
+    }
+}
+
 data class GpuMsaaAdapterCapability(
     val adapterLabel: String,
     val maxSampleCount: Int,
@@ -113,6 +142,7 @@ object GpuMsaa {
         const val UNSUPPORTED_MSAA_WEBGPU_MISSING_ADAPTER = "unsupported.msaa.webgpu_missing_adapter"
         const val ADAPTER_CAPABILITY_INSUFFICIENT = "unsupported.msaa.adapter_capability"
         const val ALPHA_TO_COVERAGE_UNSUPPORTED = "unsupported.msaa.alpha_to_coverage"
+        const val MULTISAMPLE_RESOLVE_FORMAT = "unsupported.target.multisample_resolve_format"
     }
 
     fun resolve4x(
@@ -202,3 +232,18 @@ object GpuMsaa {
         )
     }
 }
+
+fun GPUMultisamplePlan.dumpLines(): List<String> =
+    listOf(
+        "msaa.plan sampleCount=$sampleCount sampleMask=$sampleMask alphaToCoverage=$alphaToCoverageEnabled",
+    )
+
+fun GPUMultisampleResolvePlan.dumpLines(): List<String> =
+    listOf(
+        "msaa.resolve-plan strategy=$strategy",
+    )
+
+fun GPUMultisampleTargetDescriptor.dumpLines(): List<String> =
+    listOf(
+        "msaa.target-desc sampleCount=$sampleCount resolveStrategy=${resolvePlan.strategy}",
+    )

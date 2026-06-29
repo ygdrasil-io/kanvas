@@ -263,6 +263,91 @@ class GpuLiveParameterTest {
         assertEquals(3uL, s3.generationCounter)
     }
 
+    @Test
+    fun `setParameter with unregistered ID produces live_parameter_unregistered diagnostic`() {
+        val schema = createTestSchema()
+        val bindings = schema.parameters.mapIndexed { index, param ->
+            GPURuntimeEffectLiveParameterBinding(param.id, index * 16)
+        }
+        val initialState = GPURuntimeEffectLiveState(
+            values = schema.parameters.associate { it.id to it.default },
+            dirtyFlags = emptySet(),
+            generationCounter = 0uL,
+        )
+        val plan = GPURuntimeEffectLiveControlPlan(schema, bindings, initialState)
+
+        val result = plan.setParameter("nonexistent", GPURuntimeEffectLiveValue.FloatValue(0.5f))
+        assertEquals(1, result.diagnostics.size)
+        assertEquals("unsupported.runtime_effect.live_parameter_unregistered", result.diagnostics[0].code)
+        assertEquals("nonexistent", result.diagnostics[0].parameterId)
+        assertTrue(result.dirtyFlags.isEmpty())
+        assertEquals(0uL, result.generationCounter)
+    }
+
+    @Test
+    fun `setParameter with type mismatch produces live_parameter_type_mismatch diagnostic`() {
+        val schema = createTestSchema()
+        val bindings = schema.parameters.mapIndexed { index, param ->
+            GPURuntimeEffectLiveParameterBinding(param.id, index * 16)
+        }
+        val initialState = GPURuntimeEffectLiveState(
+            values = schema.parameters.associate { it.id to it.default },
+            dirtyFlags = emptySet(),
+            generationCounter = 0uL,
+        )
+        val plan = GPURuntimeEffectLiveControlPlan(schema, bindings, initialState)
+
+        val result = plan.setParameter("brightness", GPURuntimeEffectLiveValue.IntValue(3))
+        assertEquals(1, result.diagnostics.size)
+        assertEquals("unsupported.runtime_effect.live_parameter_type_mismatch", result.diagnostics[0].code)
+        assertEquals("brightness", result.diagnostics[0].parameterId)
+        assertTrue(result.dirtyFlags.isEmpty())
+        assertEquals(0uL, result.generationCounter)
+    }
+
+    @Test
+    fun `typeMatches correctly checks all parameter type combinations`() {
+        assertTrue(GPURuntimeEffectLiveValue.FloatValue(1.0f).typeMatches(GPURuntimeEffectLiveParameterType.Float))
+        assertFalse(GPURuntimeEffectLiveValue.FloatValue(1.0f).typeMatches(GPURuntimeEffectLiveParameterType.Int))
+        assertTrue(GPURuntimeEffectLiveValue.Float2Value(0.0f, 0.0f).typeMatches(GPURuntimeEffectLiveParameterType.Float2))
+        assertTrue(GPURuntimeEffectLiveValue.Float3Value(0.0f, 0.0f, 0.0f).typeMatches(GPURuntimeEffectLiveParameterType.Float3))
+        assertTrue(GPURuntimeEffectLiveValue.Float4Value(0.0f, 0.0f, 0.0f, 0.0f).typeMatches(GPURuntimeEffectLiveParameterType.Float4))
+        assertTrue(GPURuntimeEffectLiveValue.IntValue(1).typeMatches(GPURuntimeEffectLiveParameterType.Int))
+        assertTrue(GPURuntimeEffectLiveValue.ColorValue(1.0f, 1.0f, 1.0f, 1.0f).typeMatches(GPURuntimeEffectLiveParameterType.Color))
+        assertFalse(GPURuntimeEffectLiveValue.IntValue(1).typeMatches(GPURuntimeEffectLiveParameterType.Float))
+        assertFalse(GPURuntimeEffectLiveValue.ColorValue(1.0f, 1.0f, 1.0f, 1.0f).typeMatches(GPURuntimeEffectLiveParameterType.Float4))
+    }
+
+    @Test
+    fun `resetToDefaults clears diagnostics`() {
+        val schema = createTestSchema()
+        val bindings = schema.parameters.mapIndexed { index, param ->
+            GPURuntimeEffectLiveParameterBinding(param.id, index * 16)
+        }
+        val modifiedValues = mapOf<String, GPURuntimeEffectLiveValue>(
+            "brightness" to GPURuntimeEffectLiveValue.FloatValue(0.3f),
+            "iterations" to GPURuntimeEffectLiveValue.IntValue(7),
+            "tint" to GPURuntimeEffectLiveValue.ColorValue(0.2f, 0.8f, 0.4f, 0.9f),
+        )
+        val initialState = GPURuntimeEffectLiveState(
+            values = modifiedValues,
+            dirtyFlags = modifiedValues.keys,
+            generationCounter = 5uL,
+            diagnostics = listOf(
+                GPURuntimeEffectLiveParameterDiagnostic(
+                    code = "unsupported.runtime_effect.live_parameter_type_mismatch",
+                    parameterId = "brightness",
+                    message = "type mismatch",
+                ),
+            ),
+        )
+        val plan = GPURuntimeEffectLiveControlPlan(schema, bindings, initialState)
+
+        val resetState = plan.resetToDefaults()
+        assertTrue(resetState.diagnostics.isEmpty())
+        assertTrue(resetState.dirtyFlags.isEmpty())
+    }
+
     private fun createTestSchema(): GPURuntimeEffectLiveParameterSchema {
         val params = listOf(
             GPURuntimeEffectLiveParameterSchema.GPURuntimeEffectLiveParameter(

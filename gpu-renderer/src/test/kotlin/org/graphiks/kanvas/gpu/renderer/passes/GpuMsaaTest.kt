@@ -2,6 +2,7 @@ package org.graphiks.kanvas.gpu.renderer.passes
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertContains
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
@@ -176,6 +177,45 @@ class GpuMsaaTest {
             "msaa.resolve.diagnostic code=unsupported.msaa.adapter_capability " +
                 "message=Adapter maxSampleCount 4 < requested 8 stage=msaa.resolve terminal=true",
             lines[1],
+        )
+    }
+
+    @Test
+    fun `GPUMultisamplePlan validates sample count and serialises deterministically`() {
+        val plan = GPUMultisamplePlan(
+            sampleCount = 4,
+            sampleMask = 0xFu,
+            alphaToCoverageEnabled = false,
+        )
+        assertEquals(4, plan.sampleCount)
+        assertEquals(0xFu, plan.sampleMask)
+        assertContains(plan.dumpLines().first(), "msaa.plan sampleCount=4 sampleMask=15 alphaToCoverage=false")
+    }
+
+    @Test
+    fun `GPUMultisampleResolvePlan captures strategy selection`() {
+        val builtin = GPUMultisampleResolvePlan(GPUMultisampleResolveStrategy.WGPU_BUILTIN)
+        assertEquals(GPUMultisampleResolveStrategy.WGPU_BUILTIN, builtin.strategy)
+        assertContains(builtin.dumpLines().first(), "msaa.resolve-plan strategy=WGPU_BUILTIN")
+
+        val compute = GPUMultisampleResolvePlan(GPUMultisampleResolveStrategy.COMPUTE_SHADER)
+        assertEquals(GPUMultisampleResolveStrategy.COMPUTE_SHADER, compute.strategy)
+    }
+
+    @Test
+    fun `GPUMultisampleTargetDescriptor bridges sample count and resolve strategy`() {
+        val resolvePlan = GPUMultisampleResolvePlan(GPUMultisampleResolveStrategy.CUSTOM_WGSL)
+        val target = GPUMultisampleTargetDescriptor(sampleCount = 4, resolvePlan = resolvePlan)
+        assertEquals(4, target.sampleCount)
+        assertEquals(GPUMultisampleResolveStrategy.CUSTOM_WGSL, target.resolvePlan.strategy)
+        assertContains(target.dumpLines().first(), "msaa.target-desc sampleCount=4 resolveStrategy=CUSTOM_WGSL")
+    }
+
+    @Test
+    fun `multisample resolve format refusal code is defined`() {
+        assertEquals(
+            "unsupported.target.multisample_resolve_format",
+            GpuMsaa.Reason.MULTISAMPLE_RESOLVE_FORMAT,
         )
     }
 }

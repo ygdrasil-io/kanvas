@@ -105,6 +105,17 @@ class GPUInstancedPacketGroup(
 sealed interface GpuInstancedBatchResult {
     /** Packet group suitable for a single instanced draw call. */
     data class Grouped(val group: GPUInstancedPacketGroup) : GpuInstancedBatchResult
+
+    /** Non-batchable packet with a label suitable for a single draw call. */
+    data class NonBatched(
+        val packetId: GPUDrawPacketID,
+        val reasonCode: String,
+        val reasonMessage: String,
+    ) : GpuInstancedBatchResult
+}
+
+object GpuInstancedBatchReason {
+    const val INCOMPATIBLE = "unsupported.stream.instanced_incompatible_packets"
 }
 
 /**
@@ -113,6 +124,9 @@ sealed interface GpuInstancedBatchResult {
  * Packets are grouped if they share the same [GPURenderStepID], [GPURenderPipelineKey], and
  * binding layout key. When any of these axes changes across consecutive packets, a new group
  * is started.
+ *
+ * Solo packets that cannot be batched with neighbours are emitted as
+ * [GpuInstancedBatchResult.NonBatched] with an incompatibility reason for telemetry.
  */
 fun batchForInstancedDraw(packets: List<GPUDrawPacket>): List<GpuInstancedBatchResult> {
     if (packets.isEmpty()) return emptyList()
@@ -122,6 +136,34 @@ fun batchForInstancedDraw(packets: List<GPUDrawPacket>): List<GpuInstancedBatchR
     var currentStepId: GPURenderStepID? = null
     var currentPipelineKey: GPURenderPipelineKey? = null
     var currentLayoutKey: String? = null
+
+    fun emitGroup() {
+        if (currentGroup.isEmpty()) return
+        val stepId = requireNotNull(currentStepId)
+        val pipelineKey = requireNotNull(currentPipelineKey)
+        val layoutKey = requireNotNull(currentLayoutKey)
+
+        if (currentGroup.size >= 2) {
+            results.add(
+                GpuInstancedBatchResult.Grouped(
+                    GPUInstancedPacketGroup(
+                        packets = currentGroup.toList(),
+                        renderStepId = stepId,
+                        renderPipelineKey = pipelineKey,
+                        bindingLayoutKey = layoutKey,
+                    ),
+                ),
+            )
+        } else {
+            results.add(
+                GpuInstancedBatchResult.NonBatched(
+                    packetId = currentGroup[0].packetId,
+                    reasonCode = GpuInstancedBatchReason.INCOMPATIBLE,
+                    reasonMessage = "solo packet cannot form an instanced batch (step=${stepId.value} pipeline=${pipelineKey.value} layout=$layoutKey)",
+                ),
+            )
+        }
+    }
 
     for (packet in packets) {
         val renderPipelineKey = requireNotNull(packet.renderPipelineKey) {
@@ -140,16 +182,7 @@ fun batchForInstancedDraw(packets: List<GPUDrawPacket>): List<GpuInstancedBatchR
                 currentLayoutKey = packet.bindingLayoutHash
             }
         } else {
-            results.add(
-                GpuInstancedBatchResult.Grouped(
-                    GPUInstancedPacketGroup(
-                        packets = currentGroup.toList(),
-                        renderStepId = requireNotNull(currentStepId),
-                        renderPipelineKey = requireNotNull(currentPipelineKey),
-                        bindingLayoutKey = requireNotNull(currentLayoutKey),
-                    ),
-                ),
-            )
+            emitGroup()
             currentGroup = mutableListOf(packet)
             currentStepId = packet.renderStepId
             currentPipelineKey = renderPipelineKey
@@ -157,21 +190,11 @@ fun batchForInstancedDraw(packets: List<GPUDrawPacket>): List<GpuInstancedBatchR
         }
     }
 
-    if (currentGroup.isNotEmpty()) {
-        results.add(
-            GpuInstancedBatchResult.Grouped(
-                GPUInstancedPacketGroup(
-                    packets = currentGroup.toList(),
-                    renderStepId = requireNotNull(currentStepId),
-                    renderPipelineKey = requireNotNull(currentPipelineKey),
-                    bindingLayoutKey = requireNotNull(currentLayoutKey),
-                ),
-            ),
-        )
-    }
+    emitGroup()
 
     return results
 }
+
 
 /** Emits deterministic instanced-draw command evidence lines. */
 fun GPUInstancedDrawCommand.dumpLines(): List<String> =
@@ -213,6 +236,11 @@ fun GpuInstancedBatchResult.dumpLines(): List<String> =
                     "layout=${group.bindingLayoutKey} " +
                     "packets=${group.packetIds.map { packetId -> packetId.value }.joinToString(",")}",
             ) + group.dumpLines()
+        is GpuInstancedBatchResult.NonBatched ->
+            listOf(
+                "passes.instanced-batch non-batched packet=${packetId.value} " +
+                    "code=$reasonCode message=$reasonMessage",
+            )
     }
 
 private const val NONE_DUMP_VALUE = "none"

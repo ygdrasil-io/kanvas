@@ -2,6 +2,12 @@ package org.graphiks.kanvas.gpu.renderer.passes
 
 import org.graphiks.kanvas.gpu.renderer.routing.RefuseDiagnostic
 
+enum class GPUCacheEvictionPolicy {
+    LRU,
+    FIFO,
+    CLOCK,
+}
+
 data class GPUDeferredDisplayList(
     val recordingId: String,
     val recordedCommandIds: List<String>,
@@ -22,6 +28,9 @@ data class GPUDeferredDisplayListCompatibilityKey(
     val recordingId: String,
     val commandHash: Long,
     val replayCompatibleFields: Set<String>,
+    val targetFormatClass: String? = null,
+    val capabilityClass: String? = null,
+    val deviceIdentity: String? = null,
 ) {
     init {
         require(recordingId.isNotBlank()) { "GPUDeferredDisplayListCompatibilityKey.recordingId must not be blank" }
@@ -44,11 +53,23 @@ data class GPUDeferredDisplayListReplayPlan(
 
 data class GPUDeferredDisplayListCachePlan(
     val maxEntries: Int,
-    val evictionPolicy: String,
+    val evictionPolicy: GPUCacheEvictionPolicy,
 ) {
     init {
         require(maxEntries > 0) { "GPUDeferredDisplayListCachePlan.maxEntries must be positive" }
-        require(evictionPolicy.isNotBlank()) { "GPUDeferredDisplayListCachePlan.evictionPolicy must not be blank" }
+    }
+
+    companion object {
+        fun fromPolicyLabel(maxEntries: Int, policyLabel: String): GPUDeferredDisplayListCachePlan {
+            require(policyLabel.isNotBlank()) { "eviction policy label must not be blank" }
+            val policy = when (policyLabel.lowercase()) {
+                "lru" -> GPUCacheEvictionPolicy.LRU
+                "fifo" -> GPUCacheEvictionPolicy.FIFO
+                "clock" -> GPUCacheEvictionPolicy.CLOCK
+                else -> throw IllegalArgumentException("Unrecognised eviction policy: $policyLabel")
+            }
+            return GPUDeferredDisplayListCachePlan(maxEntries = maxEntries, evictionPolicy = policy)
+        }
     }
 }
 
@@ -60,59 +81,64 @@ sealed interface GpuDeferredDisplayListReplayResult {
 fun checkReplayCompatibility(
     displayList: GPUDeferredDisplayList,
     replayKey: GPUDeferredDisplayListCompatibilityKey,
+): GpuDeferredDisplayListReplayResult = checkReplay(
+    displayList, replayKey, "checkReplayCompatibility",
+)
+
+fun replayDeferred(
+    displayList: GPUDeferredDisplayList,
+    replayKey: GPUDeferredDisplayListCompatibilityKey,
+): GpuDeferredDisplayListReplayResult = checkReplay(
+    displayList, replayKey, "replayDeferred",
+)
+
+private fun checkReplay(
+    displayList: GPUDeferredDisplayList,
+    replayKey: GPUDeferredDisplayListCompatibilityKey,
+    origin: String,
 ): GpuDeferredDisplayListReplayResult {
-    if (displayList.compatibilityKey.recordingId != replayKey.recordingId ||
-        displayList.compatibilityKey.commandHash != replayKey.commandHash
+    val storedKey = displayList.compatibilityKey
+    val mismatches = mutableListOf<String>()
+
+    if (storedKey.recordingId != replayKey.recordingId) {
+        mismatches.add("recordingId")
+    }
+    if (storedKey.commandHash != replayKey.commandHash) {
+        mismatches.add("commandHash")
+    }
+    if (storedKey.targetFormatClass != null && replayKey.targetFormatClass != null &&
+        storedKey.targetFormatClass != replayKey.targetFormatClass
     ) {
+        mismatches.add("targetFormatClass")
+    }
+    if (storedKey.capabilityClass != null && replayKey.capabilityClass != null &&
+        storedKey.capabilityClass != replayKey.capabilityClass
+    ) {
+        mismatches.add("capabilityClass")
+    }
+    if (storedKey.deviceIdentity != null && replayKey.deviceIdentity != null &&
+        storedKey.deviceIdentity != replayKey.deviceIdentity
+    ) {
+        mismatches.add("deviceIdentity")
+    }
+
+    if (mismatches.isNotEmpty()) {
         return GpuDeferredDisplayListReplayResult.Refused(
             RefuseDiagnostic(
                 code = "unsupported.recording.deferred_incompatible_replay",
-                message = "An incompatible replay was rejected; mismatched recordingId or commandHash",
+                message = "An incompatible replay was rejected for recording ${displayList.recordingId} from $origin; mismatched fields: ${mismatches.joinToString(",")}",
                 stage = "recording",
                 terminal = true,
             ),
         )
     }
+
     return GpuDeferredDisplayListReplayResult.Accepted(
         GPUDeferredDisplayListReplayPlan(
             displayListId = displayList.recordingId,
             composedCtmIdentity = "ctm-replay:${replayKey.replayCompatibleFields.contains("composedCtm")}",
             intersectionClipIdentity = "clip-replay:${replayKey.replayCompatibleFields.contains("intersectionClip")}",
             targetSurfaceIdentity = "target-replay:${replayKey.replayCompatibleFields.contains("targetSurface")}",
-        ),
-    )
-}
-
-fun replayDeferred(
-    displayList: GPUDeferredDisplayList,
-    replayKey: GPUDeferredDisplayListCompatibilityKey,
-): GpuDeferredDisplayListReplayResult {
-    if (displayList.compatibilityKey.recordingId != replayKey.recordingId) {
-        return GpuDeferredDisplayListReplayResult.Refused(
-            RefuseDiagnostic(
-                code = "unsupported.recording.deferred_incompatible_replay",
-                message = "An incompatible replay was rejected for recording ${displayList.recordingId}; mismatched fields: recordingId",
-                stage = "recording",
-                terminal = true,
-            ),
-        )
-    }
-    if (displayList.compatibilityKey.commandHash != replayKey.commandHash) {
-        return GpuDeferredDisplayListReplayResult.Refused(
-            RefuseDiagnostic(
-                code = "unsupported.recording.deferred_incompatible_replay",
-                message = "An incompatible replay was rejected for recording ${displayList.recordingId}; mismatched fields: commandHash",
-                stage = "recording",
-                terminal = true,
-            ),
-        )
-    }
-    return GpuDeferredDisplayListReplayResult.Accepted(
-        GPUDeferredDisplayListReplayPlan(
-            displayListId = displayList.recordingId,
-            composedCtmIdentity = "ctm-replay:${displayList.recordingId}",
-            intersectionClipIdentity = "clip-replay:${displayList.recordingId}",
-            targetSurfaceIdentity = "target-replay:${displayList.recordingId}",
         ),
     )
 }
@@ -131,6 +157,9 @@ fun GPUDeferredDisplayListCompatibilityKey.dumpLines(): List<String> =
     listOf(
         "passes.deferred-dl-compat-key recording=$recordingId " +
             "commandHash=$commandHash " +
+            "format=${targetFormatClass ?: NONE_DUMP_VALUE} " +
+            "capability=${capabilityClass ?: NONE_DUMP_VALUE} " +
+            "device=${deviceIdentity ?: NONE_DUMP_VALUE} " +
             "compatibleFields=${if (replayCompatibleFields.isEmpty()) NONE_DUMP_VALUE else replayCompatibleFields.sorted().joinToString(",")}",
     )
 

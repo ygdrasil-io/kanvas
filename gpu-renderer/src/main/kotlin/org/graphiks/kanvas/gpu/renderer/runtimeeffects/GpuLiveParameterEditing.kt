@@ -17,6 +17,15 @@ sealed class GPURuntimeEffectLiveValue {
     data class IntValue(val value: Int) : GPURuntimeEffectLiveValue()
     data class ColorValue(val r: Float, val g: Float, val b: Float, val a: Float) : GPURuntimeEffectLiveValue()
 
+    fun typeMatches(parameterType: GPURuntimeEffectLiveParameterType): Boolean = when (this) {
+        is FloatValue -> parameterType == GPURuntimeEffectLiveParameterType.Float
+        is Float2Value -> parameterType == GPURuntimeEffectLiveParameterType.Float2
+        is Float3Value -> parameterType == GPURuntimeEffectLiveParameterType.Float3
+        is Float4Value -> parameterType == GPURuntimeEffectLiveParameterType.Float4
+        is IntValue -> parameterType == GPURuntimeEffectLiveParameterType.Int
+        is ColorValue -> parameterType == GPURuntimeEffectLiveParameterType.Color
+    }
+
     fun serialize(): String = when (this) {
         is FloatValue -> "float:$value"
         is Float2Value -> "float2:$x,$y"
@@ -77,7 +86,16 @@ data class GPURuntimeEffectLiveParameterSchema(
         val max: GPURuntimeEffectLiveValue?,
         val step: GPURuntimeEffectLiveValue?,
     )
+
+    fun parameterById(id: String): GPURuntimeEffectLiveParameter? =
+        parameters.find { it.id == id }
 }
+
+data class GPURuntimeEffectLiveParameterDiagnostic(
+    val code: String,
+    val parameterId: String,
+    val message: String,
+)
 
 data class GPURuntimeEffectLiveParameterBinding(
     val parameterId: String,
@@ -88,6 +106,7 @@ data class GPURuntimeEffectLiveState(
     val values: Map<String, GPURuntimeEffectLiveValue>,
     val dirtyFlags: Set<String>,
     val generationCounter: ULong,
+    val diagnostics: List<GPURuntimeEffectLiveParameterDiagnostic> = emptyList(),
 )
 
 data class GPURuntimeEffectLiveControlPlan(
@@ -96,6 +115,29 @@ data class GPURuntimeEffectLiveControlPlan(
     val state: GPURuntimeEffectLiveState,
 ) {
     fun setParameter(id: String, value: GPURuntimeEffectLiveValue): GPURuntimeEffectLiveState {
+        val parameter = schema.parameterById(id)
+            ?: return state.copy(
+                diagnostics = listOf(
+                    GPURuntimeEffectLiveParameterDiagnostic(
+                        code = "unsupported.runtime_effect.live_parameter_unregistered",
+                        parameterId = id,
+                        message = "No live parameter registered with id '$id'",
+                    ),
+                ),
+            )
+
+        if (!value.typeMatches(parameter.type)) {
+            return state.copy(
+                diagnostics = listOf(
+                    GPURuntimeEffectLiveParameterDiagnostic(
+                        code = "unsupported.runtime_effect.live_parameter_type_mismatch",
+                        parameterId = id,
+                        message = "Type mismatch for parameter '$id': value does not match declared type ${parameter.type}",
+                    ),
+                ),
+            )
+        }
+
         val currentValue = state.values[id]
         if (currentValue == value) {
             return state
@@ -113,6 +155,7 @@ data class GPURuntimeEffectLiveControlPlan(
         return state.copy(
             values = defaultValues,
             dirtyFlags = emptySet(),
+            diagnostics = emptyList(),
             generationCounter = if (changed) state.generationCounter + 1uL else state.generationCounter,
         )
     }

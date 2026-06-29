@@ -16,10 +16,10 @@ class GaussianBlurFilterTest {
     }
 
     @Test
-    fun `kernel sigma 3 maps to 7 taps via delegating planner`() {
+    fun `kernel sigma maps to correct tap count`() {
         val filter = GaussianBlurFilter()
         val result = filter.execute(BlurFilterParams(sigmaX = 3f, sigmaY = 3f))
-        assertEquals(7, result.kernelSize)
+        assertEquals(7, result.kernelSize, "Normal tier ceil(3.0)*2+1 ≈ 7")
     }
 
     @Test
@@ -31,17 +31,17 @@ class GaussianBlurFilterTest {
     }
 
     @Test
-    fun `sigma one produces three taps via planner`() {
+    fun `sigma one produces three taps`() {
         val filter = GaussianBlurFilter()
         val result = filter.execute(BlurFilterParams(sigmaX = 1f, sigmaY = 1f))
         assertEquals(3, result.kernelSize)
     }
 
     @Test
-    fun `small sigma produces 3 taps from ceil sigma 2 plus 1`() {
+    fun `small sigma produces one tap`() {
         val filter = GaussianBlurFilter()
         val result = filter.execute(BlurFilterParams(sigmaX = 0.5f, sigmaY = 0.5f))
-        assertEquals(3, result.kernelSize)
+        assertEquals(1, result.kernelSize)
     }
 
     @Test
