@@ -82,6 +82,8 @@ class ColorGlyphGpuHandoffTest {
         assertEquals(2, gpu.layerCount)
         assertEquals(11u, gpu.layers[0].layerGlyphID)
         assertEquals(0xFFFF0000.toInt(), gpu.layers[0].resolvedColorArgb)
+        assertEquals(0, gpu.layers[0].paletteIndex)
+        assertEquals(0xFFFF, gpu.layers[1].paletteIndex)
         assertFalse(gpu.layers[0].useForeground)
         assertEquals(12u, gpu.layers[1].layerGlyphID)
         assertTrue(gpu.layers[1].useForeground)

@@ -18,6 +18,9 @@ import org.graphiks.kanvas.glyph.gpu.GPUTextArtifactKey
  *
  * @param artifactID stable GPU artifact identity assigned by the caller.
  * @param generation GPU artifact generation assigned by the caller.
+ * @throws IllegalArgumentException if the plan has no layers, or a layer violates
+ * the GPUColorGlyphLayer invariant (resolvedColor non-null iff not foreground).
+ *   Resolved COLRv0 plans always satisfy this; the guard catches malformed input.
  */
 fun ColorGlyphPlan.toGPUColorGlyphLayerPlan(
     artifactID: GPUTextArtifactID,
