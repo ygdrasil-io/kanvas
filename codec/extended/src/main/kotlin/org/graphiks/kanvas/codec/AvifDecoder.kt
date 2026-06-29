@@ -5,10 +5,10 @@ import java.io.InputStream
 
 /**
  * R3.10 stub of Skia's
- * [`SkAvifDecoder`](https://github.com/google/skia/blob/main/include/codec/SkAvifDecoder.h)
+ * [`AvifDecoder`](https://github.com/google/skia/blob/main/include/codec/AvifDecoder.h)
  * namespace.
  *
- * Mirrors the upstream `SkAvifDecoder::{IsAvif, Decode}` factory shape so
+ * Mirrors the upstream `AvifDecoder::{IsAvif, Decode}` factory shape so
  * call sites compile against the full API surface, but **the actual
  * decoder is not yet implemented** — every [Decode] overload returns
  * `null`. Wiring a real AVIF decoder requires a libavif (or crabby-avif)
@@ -17,7 +17,7 @@ import java.io.InputStream
  *
  * The [IsAvif] signature check is real : it sniffs the leading bytes for
  * the ISO-BMFF `ftypavif` / `ftypavis` (still / sequence) brand and is
- * suitable as a routing predicate for [SkCodec.MakeFromData] once the
+ * suitable as a routing predicate for [Codec.MakeFromData] once the
  * full back-end lands. Upstream also accepts the AV1-Image-File-Format
  * `ftypheic`/`ftypmif1` brands when transcoded ; this stub limits the
  * sniff to the two AVIF-specific brands so it can't false-positive on
@@ -25,24 +25,24 @@ import java.io.InputStream
  * registry).
  *
  * Upstream layout : the C++ header exposes two sub-namespaces
- * (`SkAvifDecoder::LibAvif` and `SkAvifDecoder::CrabbyAvif`) for the
+ * (`AvifDecoder::LibAvif` and `AvifDecoder::CrabbyAvif`) for the
  * two competing back-ends. The Kotlin port collapses them into the
  * single outer object — until a real back-end lands there's nothing
  * to disambiguate.
  */
-public object SkAvifDecoder {
+public object AvifDecoder {
 
     /**
      * Stubbed AVIF decode. Always returns `null`. See class kdoc for
      * the R-suivi.28 follow-up that wires up libavif.
      */
-    public fun Decode(data: SkData): SkCodec? = null
+    public fun Decode(data: SkData): Codec? = null
 
     /**
      * Stubbed AVIF decode. Always returns `null`. See class kdoc for
      * the R-suivi.28 follow-up that wires up libavif.
      */
-    public fun Decode(data: ByteArray): SkCodec? = null
+    public fun Decode(data: ByteArray): Codec? = null
 
     /**
      * Stubbed AVIF decode. Always returns `null`. See class kdoc for
@@ -50,9 +50,9 @@ public object SkAvifDecoder {
      *
      * The stream is **not** closed by this call — callers retain
      * ownership of the [InputStream] (idiomatic Kotlin), matching the
-     * convention used by [SkCodec.MakeFromStream].
+     * convention used by [Codec.MakeFromStream].
      */
-    public fun Decode(stream: InputStream): SkCodec? = null
+    public fun Decode(stream: InputStream): Codec? = null
 
     /**
      * Sniff the leading bytes of [data] for the ISO-BMFF `ftypavif` or
@@ -81,16 +81,16 @@ public object SkAvifDecoder {
     private const val SNIFF_LEN = 12
 
     /**
-     * R-suivi.47 — [SkCodec.Decoder] registration record for AVIF.
-     * Auto-installed into [SkCodec.Decoders] at class-init time. Its
+     * R-suivi.47 — [Codec.Decoder] registration record for AVIF.
+     * Auto-installed into [Codec.Decoders] at class-init time. Its
      * `make` returns `null` since the real libavif back-end is
      * R-suivi.28 ; the routing slot exists so future PRs can call
-     * [SkCodec.Decoders.register] with a real entry of the same name.
+     * [Codec.Decoders.register] with a real entry of the same name.
      */
-    internal val RegistryEntry: SkCodec.Decoder = object : SkCodec.Decoder {
+    internal val RegistryEntry: Codec.Decoder = object : Codec.Decoder {
         override val name: String = "avif"
         override fun matches(data: ByteArray): Boolean = IsAvif(data)
-        override fun make(data: ByteArray): SkCodec? = Decode(data)
+        override fun make(data: ByteArray): Codec? = Decode(data)
     }
 
     private fun matchesAvif(data: ByteArray, length: Int): Boolean {

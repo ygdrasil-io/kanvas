@@ -1,7 +1,7 @@
 package org.graphiks.kanvas.codec.bmp
 
 import org.graphiks.kanvas.codec.CodecDecoderProvider
-import org.graphiks.kanvas.codec.SkCodec
+import org.graphiks.kanvas.codec.Codec
 import org.skia.foundation.SkAlphaType
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorSpace
@@ -21,10 +21,10 @@ import org.skia.foundation.skcms.SkcmsICCProfile
  * - indexed 1/4/8 bpp palettes and direct 16/24/32 bpp pixels
  * - bottom-up and top-down row order
  */
-public class SkBmpKotlinCodec private constructor(
+public class BmpCodec private constructor(
     private val bytes: ByteArray,
     private val header: Header,
-) : SkCodec() {
+) : Codec() {
 
     private val cachedInfo: SkImageInfo by lazy {
         SkImageInfo.Make(
@@ -219,7 +219,7 @@ public class SkBmpKotlinCodec private constructor(
     private fun absoluteBytes(count: Int): Int =
         if (header.compression == BI_RLE8) count else (count + 1) / 2
 
-    internal companion object Decoder : SkCodec.Decoder {
+    internal companion object Decoder : Codec.Decoder {
         override val name: String = "bmp"
 
         override fun matches(data: ByteArray): Boolean =
@@ -227,10 +227,10 @@ public class SkBmpKotlinCodec private constructor(
                 data[0] == 'B'.code.toByte() &&
                 data[1] == 'M'.code.toByte()
 
-        override fun make(data: ByteArray): SkCodec? {
+        override fun make(data: ByteArray): Codec? {
             if (!matches(data)) return null
             val header = parseHeader(data) ?: return null
-            return SkBmpKotlinCodec(data, header)
+            return BmpCodec(data, header)
         }
 
         private fun parseHeader(data: ByteArray): Header? {
@@ -351,7 +351,7 @@ private data class BitMasks(
 }
 
 public class BmpKotlinDecoderProvider : CodecDecoderProvider {
-    override fun decoders(): List<SkCodec.Decoder> = listOf(SkBmpKotlinCodec.Decoder)
+    override fun decoders(): List<Codec.Decoder> = listOf(BmpCodec.Decoder)
 }
 
 private const val FILE_HEADER_SIZE: Int = 14

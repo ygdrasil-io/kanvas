@@ -8,13 +8,13 @@ import org.skia.foundation.SkData
 import java.io.ByteArrayInputStream
 
 /**
- * R3.10 verification suite for [SkJpegxlDecoder] — the
- * [SkJpegxlDecoder.IsJpegxl] sniff must match both the raw codestream
+ * R3.10 verification suite for [JpegxlDecoder] — the
+ * [JpegxlDecoder.IsJpegxl] sniff must match both the raw codestream
  * (`FF 0A`) and the ISO-BMFF wrapper signatures, and reject other byte
- * streams. [SkJpegxlDecoder.Decode] is a stub : every overload returns
+ * streams. [JpegxlDecoder.Decode] is a stub : every overload returns
  * `null` until the libjxl back-end lands (R-suivi.28).
  */
-class SkJpegxlDecoderTest {
+class JpegxlDecoderTest {
 
     /** Raw JPEG-XL codestream signature : `FF 0A …`. */
     private fun rawCodestream(): ByteArray =
@@ -29,46 +29,46 @@ class SkJpegxlDecoderTest {
 
     @Test
     fun `IsJpegxl matches the raw codestream FF 0A signature`() {
-        assertTrue(SkJpegxlDecoder.IsJpegxl(rawCodestream()))
+        assertTrue(JpegxlDecoder.IsJpegxl(rawCodestream()))
     }
 
     @Test
     fun `IsJpegxl matches the ISO-BMFF wrapper signature`() {
-        assertTrue(SkJpegxlDecoder.IsJpegxl(isoBmffSignature()))
+        assertTrue(JpegxlDecoder.IsJpegxl(isoBmffSignature()))
         // Extra trailing bytes still match.
-        assertTrue(SkJpegxlDecoder.IsJpegxl(isoBmffSignature() + byteArrayOf(0x12, 0x34)))
+        assertTrue(JpegxlDecoder.IsJpegxl(isoBmffSignature() + byteArrayOf(0x12, 0x34)))
     }
 
     @Test
     fun `IsJpegxl rejects unrelated byte streams`() {
         // PNG header.
-        assertFalse(SkJpegxlDecoder.IsJpegxl(byteArrayOf(
+        assertFalse(JpegxlDecoder.IsJpegxl(byteArrayOf(
             0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
         )))
         // JPEG SOI.
-        assertFalse(SkJpegxlDecoder.IsJpegxl(byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte())))
+        assertFalse(JpegxlDecoder.IsJpegxl(byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte())))
         // Random.
-        assertFalse(SkJpegxlDecoder.IsJpegxl("garbage".toByteArray()))
+        assertFalse(JpegxlDecoder.IsJpegxl("garbage".toByteArray()))
         // Empty.
-        assertFalse(SkJpegxlDecoder.IsJpegxl(ByteArray(0)))
+        assertFalse(JpegxlDecoder.IsJpegxl(ByteArray(0)))
         // A single FF byte is not enough.
-        assertFalse(SkJpegxlDecoder.IsJpegxl(byteArrayOf(0xFF.toByte())))
+        assertFalse(JpegxlDecoder.IsJpegxl(byteArrayOf(0xFF.toByte())))
     }
 
     @Test
     fun `IsJpegxl on stream rewinds the buffer`() {
         val data = isoBmffSignature() + ByteArray(20) { it.toByte() }
         val stream = ByteArrayInputStream(data)
-        assertTrue(SkJpegxlDecoder.IsJpegxl(stream))
+        assertTrue(JpegxlDecoder.IsJpegxl(stream))
         assertTrue(stream.available() == data.size)
     }
 
     @Test
     fun `Decode is stubbed to null for every overload`() {
         val bytes = rawCodestream()
-        assertNull(SkJpegxlDecoder.Decode(bytes))
-        assertNull(SkJpegxlDecoder.Decode(SkData.MakeWithCopy(bytes)))
-        assertNull(SkJpegxlDecoder.Decode(ByteArrayInputStream(bytes)))
-        assertNull(SkJpegxlDecoder.Decode("garbage".toByteArray()))
+        assertNull(JpegxlDecoder.Decode(bytes))
+        assertNull(JpegxlDecoder.Decode(SkData.MakeWithCopy(bytes)))
+        assertNull(JpegxlDecoder.Decode(ByteArrayInputStream(bytes)))
+        assertNull(JpegxlDecoder.Decode("garbage".toByteArray()))
     }
 }

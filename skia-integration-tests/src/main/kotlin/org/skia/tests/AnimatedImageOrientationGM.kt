@@ -1,8 +1,8 @@
 package org.skia.tests
 
-import org.graphiks.kanvas.codec.SkAndroidCodec
-import org.graphiks.kanvas.codec.SkAnimatedImage
-import org.graphiks.kanvas.codec.SkCodec
+import org.graphiks.kanvas.codec.AndroidCodec
+import org.graphiks.kanvas.codec.AnimatedImage
+import org.graphiks.kanvas.codec.Codec
 import org.skia.foundation.SkEncodedOrigin
 import org.skia.core.SkCanvas
 import org.skia.foundation.SkBitmap
@@ -19,7 +19,7 @@ import kotlin.math.floor
  *
  * Lays out the same animated source under the cross-product of :
  *  - `usePic` ∈ { picture-snapshot, getCurrentFrame } — the two
- *    raster-extraction modes [SkAnimatedImage] supports.
+ *    raster-extraction modes [AnimatedImage] supports.
  *  - `scale` ∈ { 1.25, 1.0, 0.75, 0.5 } — four output scales applied
  *    by recreating the codec at the matching `decodeInfo` size.
  *  - `doCrop` ∈ { false, true } — two columns per scale, the second
@@ -29,13 +29,13 @@ import kotlin.math.floor
  *    second composited under a rounded-rect inverse-fill mask
  *    (mirrors upstream's `post_processor` helper).
  *  - `frame` ∈ { 0, 1 } — two rows of the animation, the second
- *    advanced via [SkAnimatedImage.decodeNextFrame].
+ *    advanced via [AnimatedImage.decodeNextFrame].
  *
  * The GM exercises three R-final.8 surfaces simultaneously :
- *  - [SkAnimatedImage] frame iteration.
- *  - [SkCodec.getOrigin] / EXIF orientation propagation through
- *    [SkAndroidCodec] into the animator's decode pipeline.
- *  - The [SkAnimatedImage.makePictureSnapshot] picture-record path.
+ *  - [AnimatedImage] frame iteration.
+ *  - [Codec.getOrigin] / EXIF orientation propagation through
+ *    [AndroidCodec] into the animator's decode pipeline.
+ *  - The [AnimatedImage.makePictureSnapshot] picture-record path.
  *
  * **Resource fall-back.** Upstream registers two GMs :
  *  - `flight_animated_image` (`flightAnim.gif`)
@@ -44,7 +44,7 @@ import kotlin.math.floor
  * When a source cannot be decoded (missing fixture or unsupported
  * animated-WebP feature set), the GM substitutes a synthetic checker so
  * the test remains deterministic while still exercising the
- * [SkAnimatedImage] call chain end-to-end.
+ * [AnimatedImage] call chain end-to-end.
  */
 public open class AnimatedImageOrientationGM(
     private val resourcePath: String,
@@ -60,7 +60,7 @@ public open class AnimatedImageOrientationGM(
     private val fallbackSize: SkISize,
 ) : GM() {
 
-    private var resolved: SkCodec? = null
+    private var resolved: Codec? = null
     private var resolvedW: Int = fallbackSize.width
     private var resolvedH: Int = fallbackSize.height
 
@@ -86,7 +86,7 @@ public open class AnimatedImageOrientationGM(
     private fun init() {
         if (resolved != null) return
         val data = ToolUtils.GetResourceAsData(resourcePath)?.toByteArray()
-        val codec = data?.let { SkCodec.MakeFromData(it) }
+        val codec = data?.let { Codec.MakeFromData(it) }
         if (codec != null) {
             resolved = codec
             val info = codec.getInfo()
@@ -129,7 +129,7 @@ public open class AnimatedImageOrientationGM(
 
     private fun drawCell(
         canvas: SkCanvas,
-        baseCodec: SkCodec,
+        baseCodec: Codec,
         translate: Int,
         scale: Float,
         doCrop: Boolean,
@@ -139,9 +139,9 @@ public open class AnimatedImageOrientationGM(
         // Recreate the codec each cell — upstream does the same so the
         // animator owns a fresh frame cursor (it consumes the codec).
         val data = ToolUtils.GetResourceAsData(resourcePath)?.toByteArray() ?: return
-        val codec = SkCodec.MakeFromData(data) ?: return
+        val codec = Codec.MakeFromData(data) ?: return
         val origin = codec.getOrigin()
-        val androidCodec = SkAndroidCodec.MakeFromCodec(codec)
+        val androidCodec = AndroidCodec.MakeFromCodec(codec)
         val unscaledW = if (origin.swapsWidthHeight()) baseCodec.getInfo().height else baseCodec.getInfo().width
         val unscaledH = if (origin.swapsWidthHeight()) baseCodec.getInfo().width else baseCodec.getInfo().height
         val scaledW = floor(unscaledW * scale).toInt().coerceAtLeast(1)
@@ -171,7 +171,7 @@ public open class AnimatedImageOrientationGM(
         // pixels for ratcheting against the reference. Future work
         // (R-suivi follow-up) can wire in the SkPicture mask.
         val postProcess = null
-        val animatedImage = SkAnimatedImage.Make(
+        val animatedImage = AnimatedImage.Make(
             codec = androidCodec,
             info = info,
             cropRect = cellCrop,
@@ -194,7 +194,7 @@ public open class AnimatedImageOrientationGM(
 
                 canvas.translate(translate.toFloat(), 0f)
                 val duration = animatedImage.currentFrameDuration()
-                if (duration == SkAnimatedImage.kFinished) break
+                if (duration == AnimatedImage.kFinished) break
                 for (i in 0 until frameStep) {
                     animatedImage.decodeNextFrame()
                 }

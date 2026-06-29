@@ -5,18 +5,18 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.graphiks.kanvas.codec.SkCodec
+import org.graphiks.kanvas.codec.Codec
 import org.skia.foundation.SkAlphaType
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkEncodedImageFormat
 
-class SkBmpKotlinCodecTest {
+class BmpCodecTest {
 
     @Test
     fun `rejects non-BMP and unsupported BMP bytes`() {
-        assertNull(SkBmpKotlinCodec.Decoder.make(ByteArray(0)))
-        assertNull(SkBmpKotlinCodec.Decoder.make("not-a-bmp".toByteArray()))
-        assertNull(SkBmpKotlinCodec.Decoder.make(byteArrayOf(0x42, 0x00, 0x00, 0x00)))
+        assertNull(BmpCodec.Decoder.make(ByteArray(0)))
+        assertNull(BmpCodec.Decoder.make("not-a-bmp".toByteArray()))
+        assertNull(BmpCodec.Decoder.make(byteArrayOf(0x42, 0x00, 0x00, 0x00)))
 
         val invalidRleCompressed = bmp(
             width = 1,
@@ -25,12 +25,12 @@ class SkBmpKotlinCodecTest {
             compression = 1,
             rowsTopDown = listOf(listOf(RED)),
         )
-        assertNull(SkBmpKotlinCodec.Decoder.make(invalidRleCompressed))
+        assertNull(BmpCodec.Decoder.make(invalidRleCompressed))
     }
 
     @Test
     fun `decodes bottom-up 24-bit RGB pixels`() {
-        val codec = SkBmpKotlinCodec.Decoder.make(
+        val codec = BmpCodec.Decoder.make(
             bmp(
                 width = 3,
                 height = 2,
@@ -43,13 +43,13 @@ class SkBmpKotlinCodecTest {
         )
 
         assertNotNull(codec)
-        assertTrue(codec is SkBmpKotlinCodec)
+        assertTrue(codec is BmpCodec)
         assertEquals(SkEncodedImageFormat.kBMP, codec!!.getEncodedFormat())
         assertEquals(3, codec.dimensions().width)
         assertEquals(2, codec.dimensions().height)
 
         val (bitmap, result) = codec.getImage()
-        assertEquals(SkCodec.Result.kSuccess, result)
+        assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
         assertEquals(RED, bitmap!!.getPixel(0, 0))
         assertEquals(GREEN, bitmap.getPixel(1, 0))
@@ -62,7 +62,7 @@ class SkBmpKotlinCodecTest {
     @Test
     fun `decodes top-down 32-bit BGRA pixels with alpha`() {
         val semi = argb(0x80, 0x11, 0x22, 0x33)
-        val codec = SkBmpKotlinCodec.Decoder.make(
+        val codec = BmpCodec.Decoder.make(
             bmp(
                 width = 2,
                 height = 2,
@@ -76,7 +76,7 @@ class SkBmpKotlinCodecTest {
         )!!
 
         val (bitmap, result) = codec.getImage()
-        assertEquals(SkCodec.Result.kSuccess, result)
+        assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
         assertEquals(semi, bitmap!!.getPixel(0, 0))
         assertEquals(BLUE, bitmap.getPixel(1, 0))
@@ -93,7 +93,7 @@ class SkBmpKotlinCodecTest {
 
     @Test
     fun `decodes 16-bit 565 bitfields BMP pixels`() {
-        val codec = SkBmpKotlinCodec.Decoder.make(
+        val codec = BmpCodec.Decoder.make(
             bitfieldsBmp(
                 width = 3,
                 height = 2,
@@ -108,7 +108,7 @@ class SkBmpKotlinCodecTest {
         )!!
 
         val (bitmap, result) = codec.getImage()
-        assertEquals(SkCodec.Result.kSuccess, result)
+        assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
         assertEquals(RED, bitmap!!.getPixel(0, 0))
         assertEquals(GREEN, bitmap.getPixel(1, 0))
@@ -120,7 +120,7 @@ class SkBmpKotlinCodecTest {
 
     @Test
     fun `decodes 16-bit 555 bitfields BMP pixels`() {
-        val codec = SkBmpKotlinCodec.Decoder.make(
+        val codec = BmpCodec.Decoder.make(
             bitfieldsBmp(
                 width = 2,
                 height = 2,
@@ -136,7 +136,7 @@ class SkBmpKotlinCodecTest {
         )!!
 
         val (bitmap, result) = codec.getImage()
-        assertEquals(SkCodec.Result.kSuccess, result)
+        assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
         assertEquals(RED, bitmap!!.getPixel(0, 0))
         assertEquals(GREEN, bitmap.getPixel(1, 0))
@@ -147,7 +147,7 @@ class SkBmpKotlinCodecTest {
     @Test
     fun `decodes V4 32-bit bit masks with alpha`() {
         val translucent = argb(0x44, 0x11, 0x22, 0x33)
-        val codec = SkBmpKotlinCodec.Decoder.make(
+        val codec = BmpCodec.Decoder.make(
             v4BitfieldsBmp(
                 width = 2,
                 height = 2,
@@ -163,7 +163,7 @@ class SkBmpKotlinCodecTest {
         )!!
 
         val (bitmap, result) = codec.getImage()
-        assertEquals(SkCodec.Result.kSuccess, result)
+        assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
         assertEquals(translucent, bitmap!!.getPixel(0, 0))
         assertEquals(GREEN, bitmap.getPixel(1, 0))
@@ -173,7 +173,7 @@ class SkBmpKotlinCodecTest {
 
     @Test
     fun `decodes V5 32-bit bit masks and ignores embedded ICC profile for now`() {
-        val codec = SkBmpKotlinCodec.Decoder.make(
+        val codec = BmpCodec.Decoder.make(
             v4BitfieldsBmp(
                 width = 1,
                 height = 1,
@@ -188,7 +188,7 @@ class SkBmpKotlinCodecTest {
         )!!
 
         val (bitmap, result) = codec.getImage()
-        assertEquals(SkCodec.Result.kSuccess, result)
+        assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
         assertEquals(argb(0x80, 0x12, 0x34, 0x56), bitmap!!.getPixel(0, 0))
         assertNull(codec.getICCProfile())
@@ -199,13 +199,13 @@ class SkBmpKotlinCodecTest {
         val bytes = ByteArray(14 + 40)
         writeFileAndInfoHeader(bytes, width = 1, height = 1, bitsPerPixel = 16, compression = 3, pixelOffset = 14 + 40 + 12, topDown = false)
 
-        assertNull(SkBmpKotlinCodec.Decoder.make(bytes))
+        assertNull(BmpCodec.Decoder.make(bytes))
     }
 
     @Test
     fun `decodes RLE8 palette BMP pixels`() {
         val palette = intArrayOf(BLACK, RED, GREEN, BLUE, WHITE)
-        val codec = SkBmpKotlinCodec.Decoder.make(
+        val codec = BmpCodec.Decoder.make(
             rleBmp(
                 width = 4,
                 height = 2,
@@ -223,7 +223,7 @@ class SkBmpKotlinCodecTest {
         )!!
 
         val (bitmap, result) = codec.getImage()
-        assertEquals(SkCodec.Result.kSuccess, result)
+        assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
         assertEquals(GREEN, bitmap!!.getPixel(0, 0))
         assertEquals(BLUE, bitmap.getPixel(1, 0))
@@ -236,7 +236,7 @@ class SkBmpKotlinCodecTest {
     @Test
     fun `decodes RLE4 palette BMP pixels with delta`() {
         val palette = intArrayOf(BLACK, RED, GREEN, BLUE, WHITE)
-        val codec = SkBmpKotlinCodec.Decoder.make(
+        val codec = BmpCodec.Decoder.make(
             rleBmp(
                 width = 4,
                 height = 2,
@@ -256,7 +256,7 @@ class SkBmpKotlinCodecTest {
         )!!
 
         val (bitmap, result) = codec.getImage()
-        assertEquals(SkCodec.Result.kSuccess, result)
+        assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
         assertEquals(GREEN, bitmap!!.getPixel(0, 0))
         assertEquals(WHITE, bitmap.getPixel(1, 0))
@@ -270,7 +270,7 @@ class SkBmpKotlinCodecTest {
 
     @Test
     fun `reports incomplete RLE input while keeping header accepted`() {
-        val codec = SkBmpKotlinCodec.Decoder.make(
+        val codec = BmpCodec.Decoder.make(
             rleBmp(
                 width = 2,
                 height = 1,
@@ -282,12 +282,12 @@ class SkBmpKotlinCodecTest {
         )!!
 
         val (_, result) = codec.getImage()
-        assertEquals(SkCodec.Result.kIncompleteInput, result)
+        assertEquals(Codec.Result.kIncompleteInput, result)
     }
 
     @Test
     fun `reports 8888 sRGB unpremul info`() {
-        val codec = SkBmpKotlinCodec.Decoder.make(
+        val codec = BmpCodec.Decoder.make(
             bmp(width = 1, height = 1, bitsPerPixel = 24, rowsTopDown = listOf(listOf(RED))),
         )!!
         val info = codec.getInfo()
@@ -305,7 +305,7 @@ class SkBmpKotlinCodecTest {
             else -> error("unexpected bpp")
         }
         val palette = colors.copyOf(1 shl bitsPerPixel)
-        val codec = SkBmpKotlinCodec.Decoder.make(
+        val codec = BmpCodec.Decoder.make(
             indexedBmp(
                 width = rows[0].size,
                 height = rows.size,
@@ -315,7 +315,7 @@ class SkBmpKotlinCodecTest {
             ),
         )!!
         val (bitmap, result) = codec.getImage()
-        assertEquals(SkCodec.Result.kSuccess, result)
+        assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
         for (x in rows[0].indices) {
             assertEquals(palette[rows[0][x]], bitmap!!.getPixel(x, 0), "bpp=$bitsPerPixel x=$x")

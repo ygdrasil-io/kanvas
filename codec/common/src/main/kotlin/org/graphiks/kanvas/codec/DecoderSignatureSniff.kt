@@ -4,8 +4,8 @@ import java.io.BufferedInputStream
 import java.io.InputStream
 
 /**
- * Shared helper for the R3.10 extended-codec stubs ([SkAvifDecoder],
- * [SkJpegxlDecoder], [SkRawDecoder], [SkIcoDecoder]).
+ * Shared helper for the R3.10 extended-codec stubs ([AvifDecoder],
+ * [JpegxlDecoder], [RawDecoder], [IcoDecoder]).
  *
  * Reads up to [sniffLen] bytes from [stream], runs [matches] against
  * the buffer, rewinds the stream, and returns the predicate's result.

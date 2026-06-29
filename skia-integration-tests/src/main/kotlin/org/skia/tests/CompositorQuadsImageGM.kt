@@ -1,6 +1,6 @@
 package org.skia.tests
 
-import org.graphiks.kanvas.codec.SkCodec
+import org.graphiks.kanvas.codec.Codec
 import org.skia.core.SkCanvas
 import org.skia.foundation.SkBitmap
 import org.graphiks.math.SkColorSetARGB
@@ -25,7 +25,7 @@ import org.skia.tools.ToolUtils
  * upstream toolchain — the helper that materialises an RGBA bitmap
  * from JPEG-decoded Y/U/V planes. This GM exercises that surface
  * end-to-end :
- *  1. Decode `images/mandrill_h1v1.jpg` via [SkCodec] → RGBA bitmap.
+ *  1. Decode `images/mandrill_h1v1.jpg` via [Codec] → RGBA bitmap.
  *  2. Round-trip the RGBA into 4:2:0 BT.601 Y/U/V planes via
  *     [YUVUtils.yuvFromRgba] (mirrors the libjpeg-native YUV decode
  *     upstream's `LazyYUVImage::Make` does).
@@ -88,9 +88,9 @@ public class CompositorQuadsImageGM : GM() {
     private fun buildYuvMandrill(): SkBitmap? {
         val data = ToolUtils.GetResourceAsData("images/mandrill_h1v1.jpg")?.toByteArray()
             ?: return null
-        val codec = SkCodec.MakeFromData(data) ?: return null
+        val codec = Codec.MakeFromData(data) ?: return null
         val (rgba, result) = codec.getImage()
-        if (result != SkCodec.Result.kSuccess || rgba == null) return null
+        if (result != Codec.Result.kSuccess || rgba == null) return null
 
         // Round-trip RGBA → 4:2:0 BT.601 YUV → RGBA. This both
         // exercises [YUVUtils] symmetrically (encode + decode) and

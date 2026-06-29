@@ -7,7 +7,7 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.graphiks.kanvas.codec.CodecDecoderProvider
-import org.graphiks.kanvas.codec.SkCodec
+import org.graphiks.kanvas.codec.Codec
 import org.graphiks.kanvas.codec.test.CodecNegativeFixtures
 import org.skia.foundation.SkAlphaType
 import org.skia.foundation.SkBitmap
@@ -24,7 +24,7 @@ import java.nio.file.Path
 import java.util.ServiceLoader
 import kotlin.math.roundToInt
 
-class SkJpegKotlinCodecTest {
+class JpegCodecTest {
 
     @Test
     fun `rejects invalid signature and mismatched component scan`() {
@@ -33,11 +33,11 @@ class SkJpegKotlinCodecTest {
             CodecNegativeFixtures.invalidMagic("ASCII non-JPEG payload", "not-a-jpeg"),
         )
         for (case in cases) {
-            assertFalse(SkJpegKotlinCodec.Decoder.matches(case.data), case.name)
-            assertNull(SkJpegKotlinCodec.Decoder.make(case.data), case.name)
+            assertFalse(JpegCodec.Decoder.matches(case.data), case.name)
+            assertNull(JpegCodec.Decoder.make(case.data), case.name)
         }
 
-        assertNull(SkJpegKotlinCodec.Decoder.make(grayscaleJpeg(width = 8, height = 8, componentCount = 3)))
+        assertNull(JpegCodec.Decoder.make(grayscaleJpeg(width = 8, height = 8, componentCount = 3)))
     }
 
     @Test
@@ -49,7 +49,7 @@ class SkJpegKotlinCodecTest {
         )
 
         for (case in cases) {
-            assertNull(SkJpegKotlinCodec.Decoder.make(case.data), case.name)
+            assertNull(JpegCodec.Decoder.make(case.data), case.name)
         }
     }
 
@@ -62,10 +62,10 @@ class SkJpegKotlinCodecTest {
 
     @Test
     fun `decodes baseline grayscale 8x8 jpeg`() {
-        val codec = SkJpegKotlinCodec.Decoder.make(grayscaleJpeg(width = 8, height = 8))
+        val codec = JpegCodec.Decoder.make(grayscaleJpeg(width = 8, height = 8))
 
         assertNotNull(codec)
-        assertTrue(codec is SkJpegKotlinCodec)
+        assertTrue(codec is JpegCodec)
         assertEquals(SkEncodedImageFormat.kJPEG, codec!!.getEncodedFormat())
         assertEquals(8, codec.getInfo().width)
         assertEquals(8, codec.getInfo().height)
@@ -74,7 +74,7 @@ class SkJpegKotlinCodecTest {
         assertTrue(codec.getInfo().colorSpace.isSRGB())
 
         val (bitmap, result) = codec.getImage()
-        assertEquals(SkCodec.Result.kSuccess, result)
+        assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
         for (y in 0 until 8) {
             for (x in 0 until 8) {
@@ -85,9 +85,9 @@ class SkJpegKotlinCodecTest {
 
     @Test
     fun `decodes partial edge blocks`() {
-        val codec = SkJpegKotlinCodec.Decoder.make(grayscaleJpeg(width = 13, height = 9))!!
+        val codec = JpegCodec.Decoder.make(grayscaleJpeg(width = 13, height = 9))!!
         val (bitmap, result) = codec.getImage()
-        assertEquals(SkCodec.Result.kSuccess, result)
+        assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
         assertEquals(13, bitmap!!.width)
         assertEquals(9, bitmap.height)
@@ -96,10 +96,10 @@ class SkJpegKotlinCodecTest {
 
     @Test
     fun `decodes baseline color 444 8x8 jpeg`() {
-        val codec = SkJpegKotlinCodec.Decoder.make(color444Jpeg())!!
+        val codec = JpegCodec.Decoder.make(color444Jpeg())!!
         val (bitmap, result) = codec.getImage()
 
-        assertEquals(SkCodec.Result.kSuccess, result)
+        assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
         for (y in 0 until 8) {
             for (x in 0 until 8) {
@@ -110,7 +110,7 @@ class SkJpegKotlinCodecTest {
 
     @Test
     fun `converts baseline grayscale decode into requested F16`() {
-        val codec = SkJpegKotlinCodec.Decoder.make(grayscaleJpeg(width = 8, height = 8))!!
+        val codec = JpegCodec.Decoder.make(grayscaleJpeg(width = 8, height = 8))!!
         val requested = SkImageInfo.Make(
             width = 8,
             height = 8,
@@ -120,14 +120,14 @@ class SkJpegKotlinCodecTest {
         )
         val dst = SkBitmap(8, 8, requested.colorSpace, requested.colorType)
 
-        assertEquals(SkCodec.Result.kSuccess, codec.getPixels(requested, dst))
+        assertEquals(Codec.Result.kSuccess, codec.getPixels(requested, dst))
         assertF16(dst, 0, 0, 0x80 / 255f, 0x80 / 255f, 0x80 / 255f, 1f)
         assertF16(dst, 7, 7, 0x80 / 255f, 0x80 / 255f, 0x80 / 255f, 1f)
     }
 
     @Test
     fun `converts baseline color decode into requested F16`() {
-        val codec = SkJpegKotlinCodec.Decoder.make(color444Jpeg())!!
+        val codec = JpegCodec.Decoder.make(color444Jpeg())!!
         val requested = SkImageInfo.Make(
             width = 8,
             height = 8,
@@ -137,14 +137,14 @@ class SkJpegKotlinCodecTest {
         )
         val dst = SkBitmap(8, 8, requested.colorSpace, requested.colorType)
 
-        assertEquals(SkCodec.Result.kSuccess, codec.getPixels(requested, dst))
+        assertEquals(Codec.Result.kSuccess, codec.getPixels(requested, dst))
         assertF16(dst, 0, 0, 0xF1 / 255f, 0x69 / 255f, 0x37 / 255f, 1f)
         assertF16(dst, 7, 7, 0xF1 / 255f, 0x69 / 255f, 0x37 / 255f, 1f)
     }
 
     @Test
     fun `rejects unsupported requested JPEG color conversion`() {
-        val codec = SkJpegKotlinCodec.Decoder.make(grayscaleJpeg(width = 8, height = 8))!!
+        val codec = JpegCodec.Decoder.make(grayscaleJpeg(width = 8, height = 8))!!
         val requested = SkImageInfo.Make(
             width = 8,
             height = 8,
@@ -154,15 +154,15 @@ class SkJpegKotlinCodecTest {
         )
         val dst = SkBitmap(8, 8, requested.colorSpace, requested.colorType)
 
-        assertEquals(SkCodec.Result.kInvalidConversion, codec.getPixels(requested, dst))
+        assertEquals(Codec.Result.kInvalidConversion, codec.getPixels(requested, dst))
     }
 
     @Test
     fun `decodes baseline color 422 16x8 jpeg`() {
-        val codec = SkJpegKotlinCodec.Decoder.make(colorJpeg(width = 16, height = 8, ySampling = 0x21))!!
+        val codec = JpegCodec.Decoder.make(colorJpeg(width = 16, height = 8, ySampling = 0x21))!!
         val (bitmap, result) = codec.getImage()
 
-        assertEquals(SkCodec.Result.kSuccess, result)
+        assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
         for (y in 0 until 8) {
             for (x in 0 until 8) {
@@ -176,10 +176,10 @@ class SkJpegKotlinCodecTest {
 
     @Test
     fun `decodes baseline color 420 16x16 jpeg`() {
-        val codec = SkJpegKotlinCodec.Decoder.make(colorJpeg(width = 16, height = 16, ySampling = 0x22))!!
+        val codec = JpegCodec.Decoder.make(colorJpeg(width = 16, height = 16, ySampling = 0x22))!!
         val (bitmap, result) = codec.getImage()
 
-        assertEquals(SkCodec.Result.kSuccess, result)
+        assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
         val expected = intArrayOf(
             yCbCrToArgb(140, 80, 200),
@@ -197,10 +197,10 @@ class SkJpegKotlinCodecTest {
 
     @Test
     fun `decodes baseline Adobe CMYK jpeg`() {
-        val codec = SkJpegKotlinCodec.Decoder.make(cmykJpeg(width = 13, height = 9))!!
+        val codec = JpegCodec.Decoder.make(cmykJpeg(width = 13, height = 9))!!
         val (bitmap, result) = codec.getImage()
 
-        assertEquals(SkCodec.Result.kSuccess, result)
+        assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
         assertEquals(13, bitmap!!.width)
         assertEquals(9, bitmap.height)
@@ -213,11 +213,11 @@ class SkJpegKotlinCodecTest {
 
     @Test
     fun `decodes baseline Adobe YCCK jpeg`() {
-        val codec = SkJpegKotlinCodec.Decoder.make(ycckJpeg(width = 8, height = 8))!!
+        val codec = JpegCodec.Decoder.make(ycckJpeg(width = 8, height = 8))!!
         val (bitmap, result) = codec.getImage()
         val expected = scaleRgb(yCbCrToArgb(140, 80, 200), k = 140)
 
-        assertEquals(SkCodec.Result.kSuccess, result)
+        assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
         assertEquals(8, bitmap!!.width)
         assertEquals(8, bitmap.height)
@@ -230,9 +230,9 @@ class SkJpegKotlinCodecTest {
 
     @Test
     fun `rejects unsupported four component jpeg variants`() {
-        assertNull(SkJpegKotlinCodec.Decoder.make(cmykJpeg(width = 8, height = 8, includeAdobe = false)))
-        assertNull(SkJpegKotlinCodec.Decoder.make(cmykJpeg(width = 8, height = 8, adobeTransform = 1)))
-        assertNull(SkJpegKotlinCodec.Decoder.make(cmykJpeg(width = 16, height = 8, cSampling = 0x21)))
+        assertNull(JpegCodec.Decoder.make(cmykJpeg(width = 8, height = 8, includeAdobe = false)))
+        assertNull(JpegCodec.Decoder.make(cmykJpeg(width = 8, height = 8, adobeTransform = 1)))
+        assertNull(JpegCodec.Decoder.make(cmykJpeg(width = 16, height = 8, cSampling = 0x21)))
     }
 
     @Test
@@ -261,9 +261,9 @@ class SkJpegKotlinCodecTest {
         )
 
         for (case in cases) {
-            val codec = SkJpegKotlinCodec.Decoder.make(readSkiaJpeg(case.name))!!
+            val codec = JpegCodec.Decoder.make(readSkiaJpeg(case.name))!!
             val (bitmap, result) = codec.getImage()
-            assertEquals(SkCodec.Result.kSuccess, result)
+            assertEquals(Codec.Result.kSuccess, result)
             val checked = bitmap!!
             assertEquals(case.width, checked.width, case.name)
             assertEquals(case.height, checked.height, case.name)
@@ -275,9 +275,9 @@ class SkJpegKotlinCodecTest {
 
     @Test
     fun `decodes real world progressive grayscale fixture`() {
-        val codec = SkJpegKotlinCodec.Decoder.make(readSkiaJpeg("grayscale.jpg"))!!
+        val codec = JpegCodec.Decoder.make(readSkiaJpeg("grayscale.jpg"))!!
         val (bitmap, result) = codec.getImage()
-        assertEquals(SkCodec.Result.kSuccess, result)
+        assertEquals(Codec.Result.kSuccess, result)
         val checked = bitmap!!
         assertEquals(128, checked.width)
         assertEquals(128, checked.height)
@@ -288,13 +288,13 @@ class SkJpegKotlinCodecTest {
 
     @Test
     fun `rejects exotic color sampling`() {
-        assertNull(SkJpegKotlinCodec.Decoder.make(colorJpeg(width = 8, height = 16, ySampling = 0x12)))
-        assertNull(SkJpegKotlinCodec.Decoder.make(colorJpeg(width = 16, height = 8, ySampling = 0x21, cbSampling = 0x21)))
+        assertNull(JpegCodec.Decoder.make(colorJpeg(width = 8, height = 16, ySampling = 0x12)))
+        assertNull(JpegCodec.Decoder.make(colorJpeg(width = 16, height = 8, ySampling = 0x21, cbSampling = 0x21)))
     }
 
     @Test
     fun `parses EXIF orientation from big endian APP1`() {
-        val codec = SkJpegKotlinCodec.Decoder.make(
+        val codec = JpegCodec.Decoder.make(
             withAppSegments(
                 grayscaleJpeg(width = 8, height = 6),
                 exifOrientationSegment(orientation = 6, littleEndian = false),
@@ -309,7 +309,7 @@ class SkJpegKotlinCodecTest {
 
     @Test
     fun `parses EXIF orientation from little endian APP1`() {
-        val codec = SkJpegKotlinCodec.Decoder.make(
+        val codec = JpegCodec.Decoder.make(
             withAppSegments(
                 grayscaleJpeg(width = 9, height = 5),
                 exifOrientationSegment(orientation = 8, littleEndian = true),
@@ -338,7 +338,7 @@ class SkJpegKotlinCodecTest {
         )
 
         for ((exifValue, origin) in cases) {
-            val codec = SkJpegKotlinCodec.Decoder.make(
+            val codec = JpegCodec.Decoder.make(
                 withAppSegments(
                     colorJpeg(width = width, height = height, ySampling = 0x22),
                     exifOrientationSegment(orientation = exifValue, littleEndian = exifValue % 2 == 0),
@@ -348,7 +348,7 @@ class SkJpegKotlinCodecTest {
             assertNotNull(codec, "origin=$origin")
             assertEquals(origin, codec!!.getOrigin(), "origin=$origin")
             val (bitmap, result) = codec.getImage()
-            assertEquals(SkCodec.Result.kSuccess, result, "origin=$origin")
+            assertEquals(Codec.Result.kSuccess, result, "origin=$origin")
             assertNotNull(bitmap, "origin=$origin")
             assertEquals(width, bitmap!!.width, "origin=$origin")
             assertEquals(height, bitmap.height, "origin=$origin")
@@ -368,7 +368,7 @@ class SkJpegKotlinCodecTest {
 
     @Test
     fun `out of order ICC APP2 chunks do not crash`() {
-        val codec = SkJpegKotlinCodec.Decoder.make(
+        val codec = JpegCodec.Decoder.make(
             withAppSegments(
                 grayscaleJpeg(width = 8, height = 8),
                 iccSegment(index = 2, count = 2, payload = byteArrayOf(4, 5, 6)),
@@ -379,14 +379,14 @@ class SkJpegKotlinCodecTest {
         assertNotNull(codec)
         assertNull(codec!!.getICCProfile())
         val (_, result) = codec.getImage()
-        assertEquals(SkCodec.Result.kSuccess, result)
+        assertEquals(Codec.Result.kSuccess, result)
     }
 
     @Test
     fun `APP2 ICC chunks are reassembled and parsed`() {
         val iccBytes = SkICC.WriteToICC(SkNamedTransferFn.kSRGB, SkNamedGamut.kSRGB)
         val splitAt = iccBytes.size / 2
-        val codec = SkJpegKotlinCodec.Decoder.make(
+        val codec = JpegCodec.Decoder.make(
             withAppSegments(
                 grayscaleJpeg(width = 8, height = 8),
                 iccSegment(index = 1, count = 2, payload = iccBytes.copyOfRange(0, splitAt)),
@@ -401,15 +401,15 @@ class SkJpegKotlinCodecTest {
         assertTrue(profile.hasTrc)
         assertTrue(profile.hasToXYZD50)
         val (_, result) = codec.getImage()
-        assertEquals(SkCodec.Result.kSuccess, result)
+        assertEquals(Codec.Result.kSuccess, result)
     }
 
     @Test
     fun `decodes grayscale restart marker interval`() {
-        val codec = SkJpegKotlinCodec.Decoder.make(grayscaleRestartJpeg())!!
+        val codec = JpegCodec.Decoder.make(grayscaleRestartJpeg())!!
         val (bitmap, result) = codec.getImage()
 
-        assertEquals(SkCodec.Result.kSuccess, result)
+        assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
         assertEquals(16, bitmap!!.width)
         assertEquals(8, bitmap.height)
@@ -420,7 +420,7 @@ class SkJpegKotlinCodecTest {
     @Test
     fun `rejects restart marker outside entropy scan`() {
         assertNull(
-            SkJpegKotlinCodec.Decoder.make(
+            JpegCodec.Decoder.make(
                 insertAfterSoi(grayscaleJpeg(width = 8, height = 8), byteArrayOf(0xFF.toByte(), 0xD0.toByte())),
             ),
         )
@@ -428,12 +428,12 @@ class SkJpegKotlinCodecTest {
 
     @Test
     fun `rejects entropy restart marker without DRI`() {
-        assertNull(SkJpegKotlinCodec.Decoder.make(grayscaleRestartJpeg(includeDri = false)))
+        assertNull(JpegCodec.Decoder.make(grayscaleRestartJpeg(includeDri = false)))
     }
 
     @Test
     fun `decodes progressive grayscale metadata with empty ac scan`() {
-        val codec = SkJpegKotlinCodec.Decoder.make(progressiveGrayscaleJpeg(width = 11, height = 7, includeAcScan = true))
+        val codec = JpegCodec.Decoder.make(progressiveGrayscaleJpeg(width = 11, height = 7, includeAcScan = true))
 
         assertNotNull(codec)
         assertEquals(SkEncodedImageFormat.kJPEG, codec!!.getEncodedFormat())
@@ -442,21 +442,21 @@ class SkJpegKotlinCodecTest {
         assertEquals(SkColorType.kRGBA_8888, codec.getInfo().colorType)
 
         val (bitmap, result) = codec.getImage()
-        assertEquals(SkCodec.Result.kSuccess, result)
+        assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
         assertEquals(0xFF808080.toInt(), bitmap!!.getPixel(10, 6))
     }
 
     @Test
     fun `decodes progressive grayscale dc first scan`() {
-        val codec = SkJpegKotlinCodec.Decoder.make(progressiveGrayscaleJpeg(width = 13, height = 9))
+        val codec = JpegCodec.Decoder.make(progressiveGrayscaleJpeg(width = 13, height = 9))
 
         assertNotNull(codec)
         assertEquals(13, codec!!.getInfo().width)
         assertEquals(9, codec.getInfo().height)
 
         val (bitmap, result) = codec.getImage()
-        assertEquals(SkCodec.Result.kSuccess, result)
+        assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
         assertEquals(0xFF808080.toInt(), bitmap!!.getPixel(0, 0))
         assertEquals(0xFF808080.toInt(), bitmap.getPixel(12, 8))
@@ -464,13 +464,13 @@ class SkJpegKotlinCodecTest {
 
     @Test
     fun `decodes progressive grayscale dc and ac scans`() {
-        val codec = SkJpegKotlinCodec.Decoder.make(
+        val codec = JpegCodec.Decoder.make(
             progressiveGrayscaleJpeg(width = 8, height = 8, includeAcScan = true, acScanHasCoefficient = true),
         )
 
         assertNotNull(codec)
         val (bitmap, result) = codec!!.getImage()
-        assertEquals(SkCodec.Result.kSuccess, result)
+        assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
         assertTrue(bitmap!!.getPixel(0, 0) != 0xFF808080.toInt())
         assertTrue(bitmap.getPixel(0, 0) > bitmap.getPixel(7, 0))
@@ -478,10 +478,10 @@ class SkJpegKotlinCodecTest {
 
     @Test
     fun `decodes progressive grayscale dc successive refinement scan`() {
-        val codec = SkJpegKotlinCodec.Decoder.make(progressiveGrayscaleDcRefinementJpeg())!!
+        val codec = JpegCodec.Decoder.make(progressiveGrayscaleDcRefinementJpeg())!!
         val (bitmap, result) = codec.getImage()
 
-        assertEquals(SkCodec.Result.kSuccess, result)
+        assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
         assertEquals(16, bitmap!!.width)
         assertEquals(8, bitmap.height)
@@ -497,14 +497,14 @@ class SkJpegKotlinCodecTest {
 
     @Test
     fun `decodes progressive grayscale ac successive refinement scan`() {
-        val initialCodec = SkJpegKotlinCodec.Decoder.make(progressiveGrayscaleAcRefinementJpeg(refine = false))!!
-        val refinedCodec = SkJpegKotlinCodec.Decoder.make(progressiveGrayscaleAcRefinementJpeg(refine = true))!!
+        val initialCodec = JpegCodec.Decoder.make(progressiveGrayscaleAcRefinementJpeg(refine = false))!!
+        val refinedCodec = JpegCodec.Decoder.make(progressiveGrayscaleAcRefinementJpeg(refine = true))!!
 
         val (initialBitmap, initialResult) = initialCodec.getImage()
         val (refinedBitmap, refinedResult) = refinedCodec.getImage()
 
-        assertEquals(SkCodec.Result.kSuccess, initialResult)
-        assertEquals(SkCodec.Result.kSuccess, refinedResult)
+        assertEquals(Codec.Result.kSuccess, initialResult)
+        assertEquals(Codec.Result.kSuccess, refinedResult)
         assertNotNull(initialBitmap)
         assertNotNull(refinedBitmap)
         assertTrue(horizontalContrast(initialBitmap!!) > 0)
@@ -514,14 +514,14 @@ class SkJpegKotlinCodecTest {
 
     @Test
     fun `decodes progressive grayscale ac refinement eobrun across blocks`() {
-        val initialCodec = SkJpegKotlinCodec.Decoder.make(progressiveGrayscaleAcRefinementEobRunJpeg(refine = false))!!
-        val refinedCodec = SkJpegKotlinCodec.Decoder.make(progressiveGrayscaleAcRefinementEobRunJpeg(refine = true))!!
+        val initialCodec = JpegCodec.Decoder.make(progressiveGrayscaleAcRefinementEobRunJpeg(refine = false))!!
+        val refinedCodec = JpegCodec.Decoder.make(progressiveGrayscaleAcRefinementEobRunJpeg(refine = true))!!
 
         val (initialBitmap, initialResult) = initialCodec.getImage()
         val (refinedBitmap, refinedResult) = refinedCodec.getImage()
 
-        assertEquals(SkCodec.Result.kSuccess, initialResult)
-        assertEquals(SkCodec.Result.kSuccess, refinedResult)
+        assertEquals(Codec.Result.kSuccess, initialResult)
+        assertEquals(Codec.Result.kSuccess, refinedResult)
         assertNotNull(initialBitmap)
         assertNotNull(refinedBitmap)
         assertTrue(pixelDistance(initialBitmap!!, refinedBitmap!!, xRange = 0 until 8) > 0)
@@ -531,12 +531,12 @@ class SkJpegKotlinCodecTest {
     @Test
     fun `rejects invalid progressive scan parameters`() {
         assertNull(
-            SkJpegKotlinCodec.Decoder.make(
+            JpegCodec.Decoder.make(
                 progressiveGrayscaleJpeg(width = 8, height = 8, spectralStart = 1, spectralEnd = 0),
             ),
         )
         assertNull(
-            SkJpegKotlinCodec.Decoder.make(
+            JpegCodec.Decoder.make(
                 progressiveGrayscaleJpeg(width = 8, height = 8, successiveApprox = 0xE0),
             ),
         )

@@ -146,7 +146,7 @@
         "name": "png",
         "kind": "portable-codec",
         "module": "codec-png-kotlin",
-        "dispatch": "ToolUtils.GetResourceAsImage -> SkCodec.MakeFromData -> SkCodec.getImage"
+        "dispatch": "ToolUtils.GetResourceAsImage -> Codec.MakeFromData -> Codec.getImage"
       },
       "colorInfo": {
         "colorType": "codec-natural RGBA_8888",
@@ -275,7 +275,7 @@
         "colorType": "RGBA_8888 for supported WebP frame encodings",
         "colorSpace": "sRGB output; VP8X ICC parsed when parseable",
         "alphaType": "codec frame alpha when supported",
-        "policy": "SkAnimatedImage scene pipeline is disabled; no animated renderer support"
+        "policy": "AnimatedImage scene pipeline is disabled; no animated renderer support"
       },
       "origin": {
         "kind": "skia-resource-encoded-animation",
@@ -311,7 +311,7 @@
         "colorType": "RGBA_8888 indexed-frame output",
         "colorSpace": "sRGB output",
         "alphaType": "transparent color index when present",
-        "policy": "SkAnimatedImage scene pipeline is disabled; no animated renderer support"
+        "policy": "AnimatedImage scene pipeline is disabled; no animated renderer support"
       },
       "origin": {
         "kind": "skia-resource-encoded-animation",
@@ -435,7 +435,7 @@
         "module": "codec-extended"
       },
       "colorInfo": "out of scope until real AVIF dependency lands",
-      "origin": "codec-extended/src/main/kotlin/org/skia/codec/SkAvifDecoder.kt",
+      "origin": "codec-extended/src/main/kotlin/org/skia/codec/AvifDecoder.kt",
       "decodeResult": "stub-returns-null",
       "reasonCode": "codec.decoder-unavailable"
     },
@@ -448,7 +448,7 @@
         "module": "codec-extended"
       },
       "colorInfo": "out of scope until real JPEG XL dependency lands",
-      "origin": "codec-extended/src/main/kotlin/org/skia/codec/SkJpegxlDecoder.kt",
+      "origin": "codec-extended/src/main/kotlin/org/skia/codec/JpegxlDecoder.kt",
       "decodeResult": "stub-returns-null",
       "reasonCode": "codec.decoder-unavailable"
     },
@@ -461,7 +461,7 @@
         "module": "codec-extended"
       },
       "colorInfo": "out of scope until real RAW dependency lands",
-      "origin": "codec-extended/src/main/kotlin/org/skia/codec/SkRawDecoder.kt",
+      "origin": "codec-extended/src/main/kotlin/org/skia/codec/RawDecoder.kt",
       "decodeResult": "stub-returns-null",
       "reasonCode": "codec.decoder-unavailable"
     },
@@ -474,7 +474,7 @@
         "module": "codec-extended"
       },
       "colorInfo": "out of scope until FFmpeg-backed dependency lands outside portable runtime",
-      "origin": "codec-extended/src/main/kotlin/org/skia/codec/SkVideoDecoder.kt",
+      "origin": "codec-extended/src/main/kotlin/org/skia/codec/VideoDecoder.kt",
       "decodeResult": "throws-STUB.FFMPEG",
       "reasonCode": "codec.decoder-unavailable"
     }

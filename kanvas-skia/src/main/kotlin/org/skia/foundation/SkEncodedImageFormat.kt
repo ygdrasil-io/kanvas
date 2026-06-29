@@ -3,7 +3,7 @@ package org.skia.foundation
 /**
  * Mirrors Skia's
  * [`SkEncodedImageFormat`](https://github.com/google/skia/blob/main/include/codec/SkEncodedImageFormat.h)
- * — the on-disk container format an [SkCodec] decoded from.
+ * — the on-disk container format an [Codec] decoded from.
  *
  * D3.1 only ships [kPNG]; the other variants are listed for parity with
  * upstream so callers can `switch` exhaustively without us having to

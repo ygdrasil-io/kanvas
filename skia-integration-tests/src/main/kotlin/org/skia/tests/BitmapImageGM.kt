@@ -1,6 +1,6 @@
 package org.skia.tests
 
-import org.graphiks.kanvas.codec.SkCodec
+import org.graphiks.kanvas.codec.Codec
 import org.skia.core.SkCanvas
 import org.skia.core.SkSurface
 import org.skia.foundation.SkAlphaType
@@ -46,7 +46,7 @@ import org.skia.tools.ToolUtils
  *             *errorMsg = "Couldn't load images/mandrill_512_q075.jpg. …";
  *             return DrawResult::kFail;
  *         }
- *         std::unique_ptr<SkCodec> codec(SkCodec::MakeFromStream(GetResourceAsStream(path)));
+ *         std::unique_ptr<Codec> codec(Codec::MakeFromStream(GetResourceAsStream(path)));
  *         auto [codecImage, _] = codec->getImage();
  *
  *         // Top row : legacy (untagged) N32 canvas.
@@ -92,12 +92,12 @@ public class BitmapImageGM : GM() {
         val image = ToolUtils.GetResourceAsImage(path) ?: return
 
         // Matching codec-decoded bitmap. Upstream takes
-        // `SkCodec::MakeFromStream(GetResourceAsStream(path))` and
+        // `Codec::MakeFromStream(GetResourceAsStream(path))` and
         // `codec->getImage()`. We use the same path via
-        // [ToolUtils.GetResourceAsData] -> [SkCodec.MakeFromData] -> [getImage] :
+        // [ToolUtils.GetResourceAsData] -> [Codec.MakeFromData] -> [getImage] :
         // identical decode output (same JPEG bytes, same baseline codec).
         val codecData = ToolUtils.GetResourceAsData(path) ?: return
-        val codec = SkCodec.MakeFromData(codecData.toByteArray()) ?: return
+        val codec = Codec.MakeFromData(codecData.toByteArray()) ?: return
         val (codecBitmap, _) = codec.getImage()
         val codecImage = codecBitmap?.asImage() ?: return
 

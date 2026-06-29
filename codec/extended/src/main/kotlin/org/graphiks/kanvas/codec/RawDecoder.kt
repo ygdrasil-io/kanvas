@@ -5,10 +5,10 @@ import java.io.InputStream
 
 /**
  * R3.10 stub of Skia's
- * [`SkRawDecoder`](https://github.com/google/skia/blob/main/include/codec/SkRawDecoder.h)
+ * [`RawDecoder`](https://github.com/google/skia/blob/main/include/codec/RawDecoder.h)
  * namespace.
  *
- * Mirrors the upstream `SkRawDecoder::{IsRaw, Decode}` factory shape
+ * Mirrors the upstream `RawDecoder::{IsRaw, Decode}` factory shape
  * so call sites compile against the full API surface, but **the
  * actual decoder is not yet implemented** — every [Decode] overload
  * returns `null`. A real RAW decoder requires a libraw (or piex +
@@ -25,25 +25,25 @@ import java.io.InputStream
  * NEF, ARW are all TIFF-based) without false-positively swallowing
  * unrelated data.
  */
-public object SkRawDecoder {
+public object RawDecoder {
 
     /**
      * Stubbed RAW decode. Always returns `null`. See class kdoc for
      * the R-suivi.28 follow-up that wires up libraw / dng_sdk.
      */
-    public fun Decode(data: SkData): SkCodec? = null
+    public fun Decode(data: SkData): Codec? = null
 
     /**
      * Stubbed RAW decode. Always returns `null`. See class kdoc for
      * the R-suivi.28 follow-up that wires up libraw / dng_sdk.
      */
-    public fun Decode(data: ByteArray): SkCodec? = null
+    public fun Decode(data: ByteArray): Codec? = null
 
     /**
      * Stubbed RAW decode. Always returns `null`. See class kdoc for
      * the R-suivi.28 follow-up that wires up libraw / dng_sdk.
      */
-    public fun Decode(stream: InputStream): SkCodec? = null
+    public fun Decode(stream: InputStream): Codec? = null
 
     /**
      * Sniff the leading bytes of [data] for a TIFF-like header.
@@ -55,7 +55,7 @@ public object SkRawDecoder {
      *  - `MM 00 2A` (big-endian TIFF)
      *
      * This is good enough to route the DM-style "is this a CR2 ?"
-     * sniff to the [SkRawDecoder] slot without false-positively
+     * sniff to the [RawDecoder] slot without false-positively
      * stealing JPEG / PNG bytes. Once the real back-end lands, the
      * decode itself will reject any TIFF that isn't a known raw
      * variant.
@@ -75,15 +75,15 @@ public object SkRawDecoder {
     private const val SNIFF_LEN = 4
 
     /**
-     * R-suivi.47 — [SkCodec.Decoder] registration record for RAW. The
+     * R-suivi.47 — [Codec.Decoder] registration record for RAW. The
      * registry installs this **after** the more specific formats since
      * the TIFF-like signature overlaps with plain TIFF files. `make`
      * returns `null` until R-suivi.28 wires up libraw / dng_sdk.
      */
-    internal val RegistryEntry: SkCodec.Decoder = object : SkCodec.Decoder {
+    internal val RegistryEntry: Codec.Decoder = object : Codec.Decoder {
         override val name: String = "raw"
         override fun matches(data: ByteArray): Boolean = IsRaw(data)
-        override fun make(data: ByteArray): SkCodec? = Decode(data)
+        override fun make(data: ByteArray): Codec? = Decode(data)
     }
 
     private fun matchesRaw(data: ByteArray, length: Int): Boolean {

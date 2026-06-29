@@ -11,22 +11,22 @@ import org.skia.tools.ToolUtils
 import java.io.ByteArrayOutputStream
 
 /**
- * R-final.8 verification suite for [SkAnimatedImage].
+ * R-final.8 verification suite for [AnimatedImage].
  *
  * Uses `images/test640x479.gif` (the multi-frame GIF already vendored
  * for [org.skia.tests.AnimatedGifGM]) as the underlying codec source.
  */
-class SkAnimatedImageTest {
+class AnimatedImageTest {
 
-    private fun openCodec(): SkCodec? {
+    private fun openCodec(): Codec? {
         val data = ToolUtils.GetResourceAsData("images/test640x479.gif") ?: return null
-        return SkCodec.MakeFromData(data.toByteArray())
+        return Codec.MakeFromData(data.toByteArray())
     }
 
     @Test
     fun `MakeFromCodec returns a non-null animator for a multi-frame GIF`() {
         val codec = openCodec() ?: return
-        val anim = SkAnimatedImage.MakeFromCodec(codec)
+        val anim = AnimatedImage.MakeFromCodec(codec)
         assertNotNull(anim, "Animator should be created for a multi-frame GIF")
         assertTrue(anim!!.getFrameCount() > 1, "GIF must have > 1 frame")
     }
@@ -47,7 +47,7 @@ class SkAnimatedImageTest {
         )
         assertNotNull(codec, "Animated WebP should be accepted by the pure Kotlin WebP codec")
 
-        val anim = SkAnimatedImage.MakeFromCodec(codec!!)
+        val anim = AnimatedImage.MakeFromCodec(codec!!)
         assertNotNull(anim, "Animator should be created for animated WebP")
         assertEquals(2, anim!!.getFrameCount())
         assertEquals(10, anim.currentFrameDuration())
@@ -60,21 +60,21 @@ class SkAnimatedImageTest {
     @Test
     fun `decodeNextFrame walks the animation then returns kFinished`() {
         val codec = openCodec() ?: return
-        val anim = SkAnimatedImage.MakeFromCodec(codec) ?: return
+        val anim = AnimatedImage.MakeFromCodec(codec) ?: return
         anim.setRepetitionCount(0) // play once, then stop
         var step = 0
         // Constructor already decoded frame 0 ; advance the cursor.
-        while (anim.decodeNextFrame() != SkAnimatedImage.kFinished && step < 1000) {
+        while (anim.decodeNextFrame() != AnimatedImage.kFinished && step < 1000) {
             step++
         }
         assertTrue(anim.isFinished(), "Animator should be finished after exhausting frames")
-        assertEquals(SkAnimatedImage.kFinished, anim.currentFrameDuration())
+        assertEquals(AnimatedImage.kFinished, anim.currentFrameDuration())
     }
 
     @Test
     fun `getCurrentFrame yields a non-null SkImage at every cursor position`() {
         val codec = openCodec() ?: return
-        val anim = SkAnimatedImage.MakeFromCodec(codec) ?: return
+        val anim = AnimatedImage.MakeFromCodec(codec) ?: return
         // Frame 0 (constructor-decoded).
         assertNotNull(anim.getCurrentFrame())
         // Advance one frame.
@@ -85,7 +85,7 @@ class SkAnimatedImageTest {
     @Test
     fun `makePictureSnapshot produces a playable SkPicture`() {
         val codec = openCodec() ?: return
-        val anim = SkAnimatedImage.MakeFromCodec(codec) ?: return
+        val anim = AnimatedImage.MakeFromCodec(codec) ?: return
         val pic = anim.makePictureSnapshot()
         assertNotNull(pic)
         assertTrue(pic.cullRect.width() > 0f, "Picture cull rect must be non-degenerate")
@@ -94,13 +94,13 @@ class SkAnimatedImageTest {
     @Test
     fun `setRepetitionCount infinite keeps the animation looping`() {
         val codec = openCodec() ?: return
-        val anim = SkAnimatedImage.MakeFromCodec(codec) ?: return
-        anim.setRepetitionCount(SkAnimatedImage.kRepetitionCountInfinite)
+        val anim = AnimatedImage.MakeFromCodec(codec) ?: return
+        anim.setRepetitionCount(AnimatedImage.kRepetitionCountInfinite)
         // Walk past the natural frame count — should keep yielding
         // valid (non-kFinished) durations forever.
         repeat(anim.getFrameCount() * 3) {
             val d = anim.decodeNextFrame()
-            assertFalse(d == SkAnimatedImage.kFinished, "Infinite repeat should never return kFinished")
+            assertFalse(d == AnimatedImage.kFinished, "Infinite repeat should never return kFinished")
         }
     }
 
@@ -108,10 +108,10 @@ class SkAnimatedImageTest {
     fun `Make returns null when the codec has zero frames`() {
         // Negative test : the contract is "null on empty codec". We
         // can't easily synthesize a zero-frame codec without a custom
-        // SkCodec subclass — assert via a static codec instead, which
+        // Codec subclass — assert via a static codec instead, which
         // returns frameCount = 1 and so should *not* be null.
         val codec = openCodec() ?: return
-        val anim = SkAnimatedImage.MakeFromCodec(codec)
+        val anim = AnimatedImage.MakeFromCodec(codec)
         assertNotNull(anim, "Multi-frame codec must yield a non-null animator")
         // Sanity : assertNull stays exercised for the negative half.
         assertNull(null)

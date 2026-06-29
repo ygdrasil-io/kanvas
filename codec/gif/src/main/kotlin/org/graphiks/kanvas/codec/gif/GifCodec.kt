@@ -2,7 +2,7 @@ package org.graphiks.kanvas.codec.gif
 
 import org.graphiks.math.SkIRect
 import org.graphiks.kanvas.codec.CodecDecoderProvider
-import org.graphiks.kanvas.codec.SkCodec
+import org.graphiks.kanvas.codec.Codec
 import org.skia.foundation.SkAlphaType
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorSpace
@@ -17,14 +17,14 @@ import org.skia.foundation.skcms.SkcmsICCProfile
  * This first slice decodes indexed GIF frames into sRGB, unpremultiplied
  * RGBA_8888 bitmaps without ImageIO/AWT/JNI. Frames are eagerly parsed and
  * composed so callers can request the first image through the regular
- * [SkCodec.getImage] path, with minimal multi-frame metadata available too.
+ * [Codec.getImage] path, with minimal multi-frame metadata available too.
  */
-public class SkGifKotlinCodec private constructor(
+public class GifCodec private constructor(
     private val frames: List<DecodedFrame>,
     private val canvasWidth: Int,
     private val canvasHeight: Int,
     private val repetitionCount: Int,
-) : SkCodec() {
+) : Codec() {
 
     internal class DecodedFrame(
         val pixels: IntArray,
@@ -83,7 +83,7 @@ public class SkGifKotlinCodec private constructor(
         return Result.kSuccess
     }
 
-    internal companion object Decoder : SkCodec.Decoder {
+    internal companion object Decoder : Codec.Decoder {
         override val name: String = "gif"
 
         override fun matches(data: ByteArray): Boolean =
@@ -95,7 +95,7 @@ public class SkGifKotlinCodec private constructor(
                 (data[4] == '7'.code.toByte() || data[4] == '9'.code.toByte()) &&
                 data[5] == 'a'.code.toByte()
 
-        override fun make(data: ByteArray): SkCodec? {
+        override fun make(data: ByteArray): Codec? {
             if (!matches(data)) return null
             return try {
                 Parser(data).parse()
@@ -110,7 +110,7 @@ public class SkGifKotlinCodec private constructor(
         private var gce: GraphicControl = GraphicControl()
         private var repetitionCount: Int = 0
 
-        fun parse(): SkGifKotlinCodec? {
+        fun parse(): GifCodec? {
             skip(SIGNATURE_SIZE)
             val width = readU16LE()
             val height = readU16LE()
@@ -126,7 +126,7 @@ public class SkGifKotlinCodec private constructor(
             val globalColorTable = if (hasGlobalColorTable) readColorTable(globalColorTableSize) else null
             val frames = ArrayList<DecodedFrame>()
             val canvas = IntArray(width * height)
-            var nextRequiredFrame = SkCodec.kNoFrame
+            var nextRequiredFrame = Codec.kNoFrame
 
             while (offset < bytes.size) {
                 when (readU8()) {
@@ -150,7 +150,7 @@ public class SkGifKotlinCodec private constructor(
             }
 
             if (frames.isEmpty()) return null
-            return SkGifKotlinCodec(frames, width, height, repetitionCount)
+            return GifCodec(frames, width, height, repetitionCount)
         }
 
         private fun readExtension() {
@@ -190,7 +190,7 @@ public class SkGifKotlinCodec private constructor(
             if (app == "NETSCAPE2.0" && payload.size >= 3 && (payload[0].toInt() and 0xFF) == 1) {
                 val loopCount = (payload[1].toInt() and 0xFF) or ((payload[2].toInt() and 0xFF) shl 8)
                 repetitionCount = if (loopCount == 0) {
-                    SkCodec.kRepetitionCountInfinite
+                    Codec.kRepetitionCountInfinite
                 } else {
                     loopCount
                 }
@@ -328,7 +328,7 @@ public class SkGifKotlinCodec private constructor(
 }
 
 public class GifKotlinDecoderProvider : CodecDecoderProvider {
-    override fun decoders(): List<SkCodec.Decoder> = listOf(SkGifKotlinCodec.Decoder)
+    override fun decoders(): List<Codec.Decoder> = listOf(GifCodec.Decoder)
 }
 
 private data class GraphicControl(

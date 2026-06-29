@@ -10,7 +10,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.graphiks.kanvas.codec.CodecDecoderProvider
-import org.graphiks.kanvas.codec.SkCodec
+import org.graphiks.kanvas.codec.Codec
 import org.skia.foundation.SkAlphaType
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorSpace
@@ -22,7 +22,7 @@ import org.skia.foundation.skcms.SkNamedTransferFn
 import java.io.ByteArrayOutputStream
 import java.util.ServiceLoader
 
-class SkWebpKotlinCodecTest {
+class WebpCodecTest {
     private companion object {
         const val VP8_COEFFICIENT_PROBABILITY_COUNT_FOR_TEST: Int = 4 * 8 * 3 * 11
 
@@ -35,10 +35,10 @@ class SkWebpKotlinCodecTest {
 
     @Test
     fun `sniffs RIFF WEBP signature only`() {
-        assertFalse(SkWebpKotlinCodec.Decoder.matches(ByteArray(0)))
-        assertFalse(SkWebpKotlinCodec.Decoder.matches("not-a-webp".toByteArray()))
-        assertFalse(SkWebpKotlinCodec.Decoder.matches(riff("WAVE", chunk("fmt ", byteArrayOf(1, 2, 3, 4)))))
-        assertTrue(SkWebpKotlinCodec.Decoder.matches(vp8xWebp(width = 1, height = 1, flags = 0)))
+        assertFalse(WebpCodec.Decoder.matches(ByteArray(0)))
+        assertFalse(WebpCodec.Decoder.matches("not-a-webp".toByteArray()))
+        assertFalse(WebpCodec.Decoder.matches(riff("WAVE", chunk("fmt ", byteArrayOf(1, 2, 3, 4)))))
+        assertTrue(WebpCodec.Decoder.matches(vp8xWebp(width = 1, height = 1, flags = 0)))
     }
 
     @Test
@@ -50,7 +50,7 @@ class SkWebpKotlinCodecTest {
 
     @Test
     fun `parses VP8X dimensions and flags`() {
-        val codec = SkWebpKotlinCodec.Decoder.make(
+        val codec = WebpCodec.Decoder.make(
             riff(
                 "WEBP",
                 vp8xChunk(width = 321, height = 123, flags = 0x3E),
@@ -68,8 +68,8 @@ class SkWebpKotlinCodecTest {
         )
 
         assertNotNull(codec)
-        assertTrue(codec is SkWebpKotlinCodec)
-        codec as SkWebpKotlinCodec
+        assertTrue(codec is WebpCodec)
+        codec as WebpCodec
         assertEquals(SkEncodedImageFormat.kWEBP, codec.getEncodedFormat())
         assertEquals(321, codec.getInfo().width)
         assertEquals(123, codec.getInfo().height)
@@ -87,14 +87,14 @@ class SkWebpKotlinCodecTest {
     @Test
     fun `extracts VP8X ICC profile chunk`() {
         val iccBytes = SkICC.WriteToICC(SkNamedTransferFn.kSRGB, SkNamedGamut.kSRGB)
-        val codec = SkWebpKotlinCodec.Decoder.make(
+        val codec = WebpCodec.Decoder.make(
             riff(
                 "WEBP",
                 vp8xChunk(width = 2, height = 1, flags = 0x20),
                 chunk("ICCP", iccBytes),
                 vp8lChunk(width = 2, height = 1),
             ),
-        ) as SkWebpKotlinCodec?
+        ) as WebpCodec?
 
         assertNotNull(codec)
         val checkedCodec = codec!!
@@ -109,13 +109,13 @@ class SkWebpKotlinCodecTest {
 
     @Test
     fun `ignores invalid VP8X ICC profile bytes without rejecting metadata`() {
-        val codec = SkWebpKotlinCodec.Decoder.make(
+        val codec = WebpCodec.Decoder.make(
             riff(
                 "WEBP",
                 vp8xChunk(width = 2, height = 1, flags = 0x20),
                 chunk("ICCP", byteArrayOf(1, 2, 3, 4)),
             ),
-        ) as SkWebpKotlinCodec?
+        ) as WebpCodec?
 
         assertNotNull(codec)
         assertTrue(codec!!.metadata.flags.icc)
@@ -131,7 +131,7 @@ class SkWebpKotlinCodecTest {
             0x49, 0x49, 0x2A, 0x00, 0x08, 0x00, 0x00, 0x00,
         )
         val xmp = "<x:xmpmeta><rdf:RDF/></x:xmpmeta>".toByteArray(Charsets.UTF_8)
-        val codec = SkWebpKotlinCodec.Decoder.make(
+        val codec = WebpCodec.Decoder.make(
             riff(
                 "WEBP",
                 vp8xChunk(width = 2, height = 1, flags = 0x0C),
@@ -139,7 +139,7 @@ class SkWebpKotlinCodecTest {
                 chunk("XMP ", xmp),
                 vp8lChunk(width = 2, height = 1),
             ),
-        ) as SkWebpKotlinCodec?
+        ) as WebpCodec?
 
         assertNotNull(codec)
         val metadata = codec!!.metadata
@@ -152,7 +152,7 @@ class SkWebpKotlinCodecTest {
 
     @Test
     fun `parses VP8X alpha chunk for VP8 bitstream`() {
-        val codec = SkWebpKotlinCodec.Decoder.make(
+        val codec = WebpCodec.Decoder.make(
             riff(
                 "WEBP",
                 vp8xChunk(width = 2, height = 2, flags = 0x10),
@@ -166,7 +166,7 @@ class SkWebpKotlinCodecTest {
                 ),
                 vp8Chunk(width = 2, height = 2),
             ),
-        ) as SkWebpKotlinCodec?
+        ) as WebpCodec?
 
         assertNotNull(codec)
         val metadata = codec!!.metadata
@@ -186,12 +186,12 @@ class SkWebpKotlinCodecTest {
             colorType = SkColorType.kRGBA_8888,
             colorSpace = SkColorSpace.makeSRGB(),
         )
-        assertEquals(SkCodec.Result.kUnimplemented, codec.getPixels(codec.getInfo(), dst))
+        assertEquals(Codec.Result.kUnimplemented, codec.getPixels(codec.getInfo(), dst))
     }
 
     @Test
     fun `parses animated WebP frame metadata`() {
-        val codec = SkWebpKotlinCodec.Decoder.make(
+        val codec = WebpCodec.Decoder.make(
             riff(
                 "WEBP",
                 vp8xChunk(width = 4, height = 2, flags = 0x12),
@@ -206,7 +206,7 @@ class SkWebpKotlinCodecTest {
                     frameChunks = arrayOf(vp8lLiteralChunk(2, 2, IntArray(4) { argb(0xFF, 1, 2, 3) })),
                 ),
             ),
-        ) as SkWebpKotlinCodec?
+        ) as WebpCodec?
 
         assertNotNull(codec)
         val checkedCodec = codec!!
@@ -222,7 +222,7 @@ class SkWebpKotlinCodecTest {
         assertFalse(frame.blend)
         assertTrue(frame.disposeToBackground)
         assertEquals(
-            SkCodec.FrameInfo(SkCodec.kNoFrame, 45, SkAlphaType.kUnpremul, SkIRect.MakeXYWH(0, 0, 2, 2)),
+            Codec.FrameInfo(Codec.kNoFrame, 45, SkAlphaType.kUnpremul, SkIRect.MakeXYWH(0, 0, 2, 2)),
             checkedCodec.getFrameInfo().single(),
         )
     }
@@ -232,7 +232,7 @@ class SkWebpKotlinCodecTest {
         val transparent = argb(0, 0, 0, 0)
         val red = argb(0xFF, 200, 0, 0)
         val blue = argb(0xFF, 0, 0, 200)
-        val codec = SkWebpKotlinCodec.Decoder.make(
+        val codec = WebpCodec.Decoder.make(
             riff(
                 "WEBP",
                 vp8xChunk(width = 4, height = 1, flags = 0x12),
@@ -264,17 +264,17 @@ class SkWebpKotlinCodecTest {
             colorSpace = SkColorSpace.makeSRGB(),
         )
 
-        assertEquals(SkCodec.Result.kSuccess, codec.getPixels(codec.getInfo(), dst, SkCodec.Options(frameIndex = 0)))
+        assertEquals(Codec.Result.kSuccess, codec.getPixels(codec.getInfo(), dst, Codec.Options(frameIndex = 0)))
         assertArrayEquals(IntArray(4) { red }, dst.pixels8888)
 
-        assertEquals(SkCodec.Result.kSuccess, codec.getPixels(codec.getInfo(), dst, SkCodec.Options(frameIndex = 1)))
+        assertEquals(Codec.Result.kSuccess, codec.getPixels(codec.getInfo(), dst, Codec.Options(frameIndex = 1)))
         assertArrayEquals(intArrayOf(transparent, transparent, blue, blue), dst.pixels8888)
     }
 
     @Test
     fun `rejects malformed animated WebP chunks`() {
         assertNull(
-            SkWebpKotlinCodec.Decoder.make(
+            WebpCodec.Decoder.make(
                 riff(
                     "WEBP",
                     vp8xChunk(width = 2, height = 2, flags = 0x02),
@@ -291,7 +291,7 @@ class SkWebpKotlinCodecTest {
             ),
         )
         assertNull(
-            SkWebpKotlinCodec.Decoder.make(
+            WebpCodec.Decoder.make(
                 riff(
                     "WEBP",
                     vp8xChunk(width = 2, height = 2, flags = 0x02),
@@ -309,7 +309,7 @@ class SkWebpKotlinCodecTest {
             ),
         )
         assertNull(
-            SkWebpKotlinCodec.Decoder.make(
+            WebpCodec.Decoder.make(
                 riff(
                     "WEBP",
                     vp8xChunk(width = 2, height = 2, flags = 0x02),
@@ -330,7 +330,7 @@ class SkWebpKotlinCodecTest {
 
     @Test
     fun `parses VP8X lossless-compressed alpha chunk metadata`() {
-        val codec = SkWebpKotlinCodec.Decoder.make(
+        val codec = WebpCodec.Decoder.make(
             riff(
                 "WEBP",
                 vp8xChunk(width = 3, height = 1, flags = 0x10),
@@ -340,7 +340,7 @@ class SkWebpKotlinCodecTest {
                 ),
                 vp8Chunk(width = 3, height = 1),
             ),
-        ) as SkWebpKotlinCodec?
+        ) as WebpCodec?
 
         assertNotNull(codec)
         val alpha = codec!!.metadata.alphaChunk
@@ -355,7 +355,7 @@ class SkWebpKotlinCodecTest {
         val validAlpha = alphaChunk(control = 0, payload = byteArrayOf(1, 2, 3, 4))
 
         assertNull(
-            SkWebpKotlinCodec.Decoder.make(
+            WebpCodec.Decoder.make(
                 riff(
                     "WEBP",
                     vp8xChunk(width = 2, height = 2, flags = 0),
@@ -365,7 +365,7 @@ class SkWebpKotlinCodecTest {
             ),
         )
         assertNull(
-            SkWebpKotlinCodec.Decoder.make(
+            WebpCodec.Decoder.make(
                 riff(
                     "WEBP",
                     vp8xChunk(width = 2, height = 2, flags = 0x10),
@@ -376,7 +376,7 @@ class SkWebpKotlinCodecTest {
             ),
         )
         assertNull(
-            SkWebpKotlinCodec.Decoder.make(
+            WebpCodec.Decoder.make(
                 riff(
                     "WEBP",
                     vp8xChunk(width = 2, height = 2, flags = 0x10),
@@ -386,7 +386,7 @@ class SkWebpKotlinCodecTest {
             ),
         )
         assertNull(
-            SkWebpKotlinCodec.Decoder.make(
+            WebpCodec.Decoder.make(
                 riff(
                     "WEBP",
                     vp8xChunk(width = 2, height = 2, flags = 0x10),
@@ -400,14 +400,14 @@ class SkWebpKotlinCodecTest {
     @Test
     fun `keeps odd sized VP8X EXIF chunk payload separate from padding`() {
         val exif = byteArrayOf(1, 2, 3)
-        val codec = SkWebpKotlinCodec.Decoder.make(
+        val codec = WebpCodec.Decoder.make(
             riff(
                 "WEBP",
                 vp8xChunk(width = 1, height = 1, flags = 0x08),
                 chunk("EXIF", exif),
                 vp8lChunk(width = 1, height = 1),
             ),
-        ) as SkWebpKotlinCodec?
+        ) as WebpCodec?
 
         assertNotNull(codec)
         assertArrayEquals(exif, codec!!.metadata.exifData)
@@ -420,7 +420,7 @@ class SkWebpKotlinCodecTest {
         val xmp = byteArrayOf(5, 6, 7, 8)
 
         assertNull(
-            SkWebpKotlinCodec.Decoder.make(
+            WebpCodec.Decoder.make(
                 riff(
                     "WEBP",
                     vp8xChunk(width = 1, height = 1, flags = 0x08),
@@ -431,7 +431,7 @@ class SkWebpKotlinCodecTest {
             ),
         )
         assertNull(
-            SkWebpKotlinCodec.Decoder.make(
+            WebpCodec.Decoder.make(
                 riff(
                     "WEBP",
                     vp8xChunk(width = 1, height = 1, flags = 0x04),
@@ -445,7 +445,7 @@ class SkWebpKotlinCodecTest {
 
     @Test
     fun `parses VP8L dimensions`() {
-        val codec = SkWebpKotlinCodec.Decoder.make(vp8lWebp(width = 4096, height = 2048)) as SkWebpKotlinCodec?
+        val codec = WebpCodec.Decoder.make(vp8lWebp(width = 4096, height = 2048)) as WebpCodec?
 
         assertNotNull(codec)
         assertEquals(WebpBitstreamFormat.VP8L, codec!!.metadata.format)
@@ -456,7 +456,7 @@ class SkWebpKotlinCodecTest {
 
     @Test
     fun `parses VP8 keyframe dimensions`() {
-        val codec = SkWebpKotlinCodec.Decoder.make(vp8Webp(width = 640, height = 480)) as SkWebpKotlinCodec?
+        val codec = WebpCodec.Decoder.make(vp8Webp(width = 640, height = 480)) as WebpCodec?
 
         assertNotNull(codec)
         assertEquals(WebpBitstreamFormat.VP8, codec!!.metadata.format)
@@ -470,7 +470,7 @@ class SkWebpKotlinCodecTest {
     @Test
     fun `rejects VP8 keyframe with first partition outside chunk`() {
         assertNull(
-            SkWebpKotlinCodec.Decoder.make(
+            WebpCodec.Decoder.make(
                 riff(
                     "WEBP",
                     vp8Chunk(width = 2, height = 2, firstPartitionSize = 1),
@@ -1660,7 +1660,7 @@ class SkWebpKotlinCodecTest {
 
     @Test
     fun `returns unimplemented for pixel decode after metadata parse`() {
-        val codec = SkWebpKotlinCodec.Decoder.make(vp8xWebp(width = 2, height = 2, flags = 0))!!
+        val codec = WebpCodec.Decoder.make(vp8xWebp(width = 2, height = 2, flags = 0))!!
         val dst = SkBitmap(
             width = 2,
             height = 2,
@@ -1668,12 +1668,12 @@ class SkWebpKotlinCodecTest {
             colorSpace = SkColorSpace.makeSRGB(),
         )
 
-        assertEquals(SkCodec.Result.kUnimplemented, codec.getPixels(codec.getInfo(), dst))
+        assertEquals(Codec.Result.kUnimplemented, codec.getPixels(codec.getInfo(), dst))
     }
 
     @Test
     fun `returns input error for VP8 lossy with truncated first partition header`() {
-        val codec = SkWebpKotlinCodec.Decoder.make(
+        val codec = WebpCodec.Decoder.make(
             riff("WEBP", vp8ChunkWithPartition(width = 2, height = 2, partition = byteArrayOf(0x00))),
         )!!
         val dst = SkBitmap(
@@ -1683,12 +1683,12 @@ class SkWebpKotlinCodecTest {
             colorSpace = SkColorSpace.makeSRGB(),
         )
 
-        assertEquals(SkCodec.Result.kErrorInInput, codec.getPixels(codec.getInfo(), dst))
+        assertEquals(Codec.Result.kErrorInInput, codec.getPixels(codec.getInfo(), dst))
     }
 
     @Test
     fun `decodes supported VP8 lossy non B_PRED keyframe pixels`() {
-        val codec = SkWebpKotlinCodec.Decoder.make(vp8SupportedNonBPredWebp(width = 2, height = 2))!!
+        val codec = WebpCodec.Decoder.make(vp8SupportedNonBPredWebp(width = 2, height = 2))!!
         val dst = SkBitmap(
             width = 2,
             height = 2,
@@ -1696,14 +1696,14 @@ class SkWebpKotlinCodecTest {
             colorSpace = SkColorSpace.makeSRGB(),
         )
 
-        assertEquals(SkCodec.Result.kSuccess, codec.getPixels(codec.getInfo(), dst))
+        assertEquals(Codec.Result.kSuccess, codec.getPixels(codec.getInfo(), dst))
         assertArrayEquals(IntArray(4) { argb(128, 128, 128) }, dst.pixels8888)
     }
 
     @Test
     fun `composes uncompressed VP8X alpha into supported VP8 lossy pixels`() {
         val alpha = byteArrayOf(0x00, 0x40, 0x80.toByte(), 0xFF.toByte())
-        val codec = SkWebpKotlinCodec.Decoder.make(
+        val codec = WebpCodec.Decoder.make(
             riff(
                 "WEBP",
                 vp8xChunk(width = 2, height = 2, flags = 0x10),
@@ -1719,7 +1719,7 @@ class SkWebpKotlinCodecTest {
         )
 
         assertEquals(SkAlphaType.kUnpremul, codec.getInfo().alphaType)
-        assertEquals(SkCodec.Result.kSuccess, codec.getPixels(codec.getInfo(), dst))
+        assertEquals(Codec.Result.kSuccess, codec.getPixels(codec.getInfo(), dst))
         assertArrayEquals(
             intArrayOf(
                 argb(0, 128, 128, 128),
@@ -1740,7 +1740,7 @@ class SkWebpKotlinCodecTest {
         )
 
         for (control in unsupportedAlphaCases) {
-            val codec = SkWebpKotlinCodec.Decoder.make(
+            val codec = WebpCodec.Decoder.make(
                 riff(
                     "WEBP",
                     vp8xChunk(width = 2, height = 2, flags = 0x10),
@@ -1755,7 +1755,7 @@ class SkWebpKotlinCodecTest {
                 colorSpace = SkColorSpace.makeSRGB(),
             )
 
-            assertEquals(SkCodec.Result.kUnimplemented, codec.getPixels(codec.getInfo(), dst))
+            assertEquals(Codec.Result.kUnimplemented, codec.getPixels(codec.getInfo(), dst))
         }
     }
 
@@ -1768,7 +1768,7 @@ class SkWebpKotlinCodecTest {
         )
 
         for (alphaChunk in malformedAlphaCases) {
-            val codec = SkWebpKotlinCodec.Decoder.make(
+            val codec = WebpCodec.Decoder.make(
                 riff(
                     "WEBP",
                     vp8xChunk(width = 2, height = 2, flags = 0x10),
@@ -1783,7 +1783,7 @@ class SkWebpKotlinCodecTest {
                 colorSpace = SkColorSpace.makeSRGB(),
             )
 
-            assertEquals(SkCodec.Result.kErrorInInput, codec.getPixels(codec.getInfo(), dst))
+            assertEquals(Codec.Result.kErrorInInput, codec.getPixels(codec.getInfo(), dst))
         }
     }
 
@@ -1817,7 +1817,7 @@ class SkWebpKotlinCodecTest {
 
     @Test
     fun `decodes VP8 lossy B_PRED keyframe pixels`() {
-        val codec = SkWebpKotlinCodec.Decoder.make(
+        val codec = WebpCodec.Decoder.make(
             riff(
                 "WEBP",
                 vp8ChunkWithPartitions(
@@ -1835,13 +1835,13 @@ class SkWebpKotlinCodecTest {
             colorSpace = SkColorSpace.makeSRGB(),
         )
 
-        assertEquals(SkCodec.Result.kSuccess, codec.getPixels(codec.getInfo(), dst))
+        assertEquals(Codec.Result.kSuccess, codec.getPixels(codec.getInfo(), dst))
         assertArrayEquals(IntArray(4) { argb(128, 128, 128) }, dst.pixels8888)
     }
 
     @Test
     fun `returns unimplemented for VP8 lossy normal loop filter pending integration`() {
-        val codec = SkWebpKotlinCodec.Decoder.make(
+        val codec = WebpCodec.Decoder.make(
             riff("WEBP", vp8ChunkWithPartition(width = 2, height = 2, partition = vp8FirstPartition(filterLevel = 1))),
         )!!
         val dst = SkBitmap(
@@ -1851,12 +1851,12 @@ class SkWebpKotlinCodecTest {
             colorSpace = SkColorSpace.makeSRGB(),
         )
 
-        assertEquals(SkCodec.Result.kUnimplemented, codec.getPixels(codec.getInfo(), dst))
+        assertEquals(Codec.Result.kUnimplemented, codec.getPixels(codec.getInfo(), dst))
     }
 
     @Test
     fun `decodes VP8 lossy simple loop filter in supported pixel subset`() {
-        val codec = SkWebpKotlinCodec.Decoder.make(
+        val codec = WebpCodec.Decoder.make(
             riff(
                 "WEBP",
                 vp8ChunkWithPartitions(
@@ -1874,7 +1874,7 @@ class SkWebpKotlinCodecTest {
             colorSpace = SkColorSpace.makeSRGB(),
         )
 
-        assertEquals(SkCodec.Result.kSuccess, codec.getPixels(codec.getInfo(), dst))
+        assertEquals(Codec.Result.kSuccess, codec.getPixels(codec.getInfo(), dst))
     }
 
     @Test
@@ -1914,7 +1914,7 @@ class SkWebpKotlinCodecTest {
                     coefficientBytes,
             ),
         )
-        val codec = SkWebpKotlinCodec.Decoder.make(data) as SkWebpKotlinCodec
+        val codec = WebpCodec.Decoder.make(data) as WebpCodec
 
         val result = decodeVp8LossyBitstreamLayout(data, codec.metadata)
 
@@ -1958,7 +1958,7 @@ class SkWebpKotlinCodecTest {
                     byteArrayOf(5, 0),
             ),
         )
-        val codec = SkWebpKotlinCodec.Decoder.make(data) as SkWebpKotlinCodec
+        val codec = WebpCodec.Decoder.make(data) as WebpCodec
         val dst = SkBitmap(
             width = 2,
             height = 2,
@@ -1967,7 +1967,7 @@ class SkWebpKotlinCodecTest {
         )
 
         assertEquals(Vp8LossyBitstreamLayoutDecodeResult.Invalid, decodeVp8LossyBitstreamLayout(data, codec.metadata))
-        assertEquals(SkCodec.Result.kErrorInInput, codec.getPixels(codec.getInfo(), dst))
+        assertEquals(Codec.Result.kErrorInInput, codec.getPixels(codec.getInfo(), dst))
     }
 
     @Test
@@ -1976,7 +1976,7 @@ class SkWebpKotlinCodecTest {
             argb(0xFF, 0x11, 0x22, 0x33),
             argb(0x80, 0x44, 0x66, 0x77),
         )
-        val codec = SkWebpKotlinCodec.Decoder.make(vp8lLiteralWebp(width = 2, height = 1, expected))!!
+        val codec = WebpCodec.Decoder.make(vp8lLiteralWebp(width = 2, height = 1, expected))!!
         val dst = SkBitmap(
             width = 2,
             height = 1,
@@ -1984,7 +1984,7 @@ class SkWebpKotlinCodecTest {
             colorSpace = SkColorSpace.makeSRGB(),
         )
 
-        assertEquals(SkCodec.Result.kSuccess, codec.getPixels(codec.getInfo(), dst))
+        assertEquals(Codec.Result.kSuccess, codec.getPixels(codec.getInfo(), dst))
         for (x in expected.indices) {
             val actual = dst.getPixel(x, 0)
             assertEquals(alpha(expected[x]), alpha(actual))
@@ -2000,7 +2000,7 @@ class SkWebpKotlinCodecTest {
             argb(0x00, 0x00, 0x00, 0x00),
             argb(0x00, 0x00, 0x00, 0x00),
         )
-        val codec = SkWebpKotlinCodec.Decoder.make(vp8lNormalSingleSymbolWebp(width = 2, height = 1))!!
+        val codec = WebpCodec.Decoder.make(vp8lNormalSingleSymbolWebp(width = 2, height = 1))!!
         val dst = SkBitmap(
             width = 2,
             height = 1,
@@ -2008,7 +2008,7 @@ class SkWebpKotlinCodecTest {
             colorSpace = SkColorSpace.makeSRGB(),
         )
 
-        assertEquals(SkCodec.Result.kSuccess, codec.getPixels(codec.getInfo(), dst))
+        assertEquals(Codec.Result.kSuccess, codec.getPixels(codec.getInfo(), dst))
         for (x in expected.indices) {
             val actual = dst.getPixel(x, 0)
             assertEquals(alpha(expected[x]), alpha(actual))
@@ -2025,7 +2025,7 @@ class SkWebpKotlinCodecTest {
             argb(0xFF, 0x11, 0x25, 0x33),
             argb(0xFF, 0x11, 0x25, 0x33),
         )
-        val codec = SkWebpKotlinCodec.Decoder.make(vp8lCopyLengthWebp(width = 3, height = 1))!!
+        val codec = WebpCodec.Decoder.make(vp8lCopyLengthWebp(width = 3, height = 1))!!
         val dst = SkBitmap(
             width = 3,
             height = 1,
@@ -2033,7 +2033,7 @@ class SkWebpKotlinCodecTest {
             colorSpace = SkColorSpace.makeSRGB(),
         )
 
-        assertEquals(SkCodec.Result.kSuccess, codec.getPixels(codec.getInfo(), dst))
+        assertEquals(Codec.Result.kSuccess, codec.getPixels(codec.getInfo(), dst))
         for (x in expected.indices) {
             val actual = dst.getPixel(x, 0)
             assertEquals(alpha(expected[x]), alpha(actual))
@@ -2049,7 +2049,7 @@ class SkWebpKotlinCodecTest {
             argb(0xFF, 0x31, 0x42, 0x53),
             argb(0xFF, 0x31, 0x42, 0x53),
         )
-        val codec = SkWebpKotlinCodec.Decoder.make(vp8lColorCacheWebp(width = 2, height = 1, expected[0]))!!
+        val codec = WebpCodec.Decoder.make(vp8lColorCacheWebp(width = 2, height = 1, expected[0]))!!
         val dst = SkBitmap(
             width = 2,
             height = 1,
@@ -2057,7 +2057,7 @@ class SkWebpKotlinCodecTest {
             colorSpace = SkColorSpace.makeSRGB(),
         )
 
-        assertEquals(SkCodec.Result.kSuccess, codec.getPixels(codec.getInfo(), dst))
+        assertEquals(Codec.Result.kSuccess, codec.getPixels(codec.getInfo(), dst))
         for (x in expected.indices) {
             val actual = dst.getPixel(x, 0)
             assertEquals(alpha(expected[x]), alpha(actual))
@@ -2073,7 +2073,7 @@ class SkWebpKotlinCodecTest {
             argb(0xFF, 0x40, 0x25, 0x58),
             argb(0x80, 0x04, 0xFE, 0x13),
         )
-        val codec = SkWebpKotlinCodec.Decoder.make(vp8lSubtractGreenWebp(width = 2, height = 1, expected))!!
+        val codec = WebpCodec.Decoder.make(vp8lSubtractGreenWebp(width = 2, height = 1, expected))!!
         val dst = SkBitmap(
             width = 2,
             height = 1,
@@ -2081,7 +2081,7 @@ class SkWebpKotlinCodecTest {
             colorSpace = SkColorSpace.makeSRGB(),
         )
 
-        assertEquals(SkCodec.Result.kSuccess, codec.getPixels(codec.getInfo(), dst))
+        assertEquals(Codec.Result.kSuccess, codec.getPixels(codec.getInfo(), dst))
         for (x in expected.indices) {
             val actual = dst.getPixel(x, 0)
             assertEquals(alpha(expected[x]), alpha(actual))
@@ -2099,7 +2099,7 @@ class SkWebpKotlinCodecTest {
 
         for (mode in 0..13) {
             val expected = applyPredictorFixture(width, height, mode, residuals)
-            val codec = SkWebpKotlinCodec.Decoder.make(vp8lPredictorWebp(width, height, mode, residuals))!!
+            val codec = WebpCodec.Decoder.make(vp8lPredictorWebp(width, height, mode, residuals))!!
 
             assertWebpPixels(codec, width, height, expected)
         }
@@ -2111,7 +2111,7 @@ class SkWebpKotlinCodecTest {
         val height = 3
         val residuals = IntArray(width * height) { argb(0x00, 0x01, 0x02, 0x03) }
         val expected = applyPredictorFixture(width, height, mode = 3, residuals)
-        val codec = SkWebpKotlinCodec.Decoder.make(vp8lPredictorWebp(width, height, mode = 3, residuals))!!
+        val codec = WebpCodec.Decoder.make(vp8lPredictorWebp(width, height, mode = 3, residuals))!!
 
         assertEquals(argb(0xFF, 0x01, 0x02, 0x03), expected[0])
         assertEquals(argb(0xFF, 0x02, 0x04, 0x06), expected[1]) // top row uses L.
@@ -2131,7 +2131,7 @@ class SkWebpKotlinCodecTest {
             greenToBlue = 0x10,
             redToBlue = 0xE0,
         )
-        val codec = SkWebpKotlinCodec.Decoder.make(vp8lColorTransformWebp(width = 2, height = 1, multipliers, expected))!!
+        val codec = WebpCodec.Decoder.make(vp8lColorTransformWebp(width = 2, height = 1, multipliers, expected))!!
 
         assertWebpPixels(codec, width = 2, height = 1, expected)
     }
@@ -2149,7 +2149,7 @@ class SkWebpKotlinCodecTest {
             greenToBlue = 0x10,
             redToBlue = 0xE0,
         )
-        val codec = SkWebpKotlinCodec.Decoder.make(
+        val codec = WebpCodec.Decoder.make(
             vp8lCombinedTransformsWebp(
                 width = 2,
                 height = 2,
@@ -2241,7 +2241,7 @@ class SkWebpKotlinCodecTest {
         )
 
         for (case in corpus) {
-            val codec = SkWebpKotlinCodec.Decoder.make(case.encoded) as SkWebpKotlinCodec?
+            val codec = WebpCodec.Decoder.make(case.encoded) as WebpCodec?
             assertNotNull(codec, case.name)
             assertEquals(WebpBitstreamFormat.VP8L, codec!!.metadata.format, case.name)
             assertWebpPixels(codec, case.width, case.height, case.expected)
@@ -2258,7 +2258,7 @@ class SkWebpKotlinCodecTest {
         )
         val indices = intArrayOf(0, 1, 2, 3, 0)
         val expected = IntArray(indices.size) { table[indices[it]] }
-        val codec = SkWebpKotlinCodec.Decoder.make(vp8lColorIndexingWebp(width = 5, height = 1, table, indices))!!
+        val codec = WebpCodec.Decoder.make(vp8lColorIndexingWebp(width = 5, height = 1, table, indices))!!
 
         assertWebpPixels(codec, width = 5, height = 1, expected)
     }
@@ -2268,7 +2268,7 @@ class SkWebpKotlinCodecTest {
         val table = IntArray(17) { i -> argb(0xFF, i, i * 2, i * 3) }
         val indices = intArrayOf(16, 17)
         val expected = intArrayOf(table[16], 0)
-        val codec = SkWebpKotlinCodec.Decoder.make(vp8lColorIndexingWebp(width = 2, height = 1, table, indices))!!
+        val codec = WebpCodec.Decoder.make(vp8lColorIndexingWebp(width = 2, height = 1, table, indices))!!
 
         assertWebpPixels(codec, width = 2, height = 1, expected)
     }
@@ -2286,14 +2286,14 @@ class SkWebpKotlinCodecTest {
             0, 1, 2, 3,
         )
         val expected = IntArray(indices.size) { table[indices[it]] }
-        val codec = SkWebpKotlinCodec.Decoder.make(vp8lColorIndexingCopyWebp(width = 4, height = 2, table, indices))!!
+        val codec = WebpCodec.Decoder.make(vp8lColorIndexingCopyWebp(width = 4, height = 2, table, indices))!!
 
         assertWebpPixels(codec, width = 4, height = 2, expected)
     }
 
     @Test
     fun `VP8L pixel decode rejects invalid color cache size`() {
-        val codec = SkWebpKotlinCodec.Decoder.make(vp8lInvalidColorCacheWebp(width = 1, height = 1))!!
+        val codec = WebpCodec.Decoder.make(vp8lInvalidColorCacheWebp(width = 1, height = 1))!!
         val dst = SkBitmap(
             width = 1,
             height = 1,
@@ -2301,12 +2301,12 @@ class SkWebpKotlinCodecTest {
             colorSpace = SkColorSpace.makeSRGB(),
         )
 
-        assertEquals(SkCodec.Result.kErrorInInput, codec.getPixels(codec.getInfo(), dst))
+        assertEquals(Codec.Result.kErrorInInput, codec.getPixels(codec.getInfo(), dst))
     }
 
     @Test
     fun `VP8L pixel decode rejects truncated normal Huffman code`() {
-        val codec = SkWebpKotlinCodec.Decoder.make(vp8lNormalHuffmanWebp(width = 1, height = 1))!!
+        val codec = WebpCodec.Decoder.make(vp8lNormalHuffmanWebp(width = 1, height = 1))!!
         val dst = SkBitmap(
             width = 1,
             height = 1,
@@ -2314,16 +2314,16 @@ class SkWebpKotlinCodecTest {
             colorSpace = SkColorSpace.makeSRGB(),
         )
 
-        assertEquals(SkCodec.Result.kErrorInInput, codec.getPixels(codec.getInfo(), dst))
+        assertEquals(Codec.Result.kErrorInInput, codec.getPixels(codec.getInfo(), dst))
     }
 
     @Test
     fun `rejects truncated and metadata-less RIFF WEBP`() {
-        assertNull(SkWebpKotlinCodec.Decoder.make(byteArrayOf('R'.code.toByte(), 'I'.code.toByte())))
-        assertNull(SkWebpKotlinCodec.Decoder.make(riff("WEBP", chunk("VP8X", ByteArray(9)))))
-        assertNull(SkWebpKotlinCodec.Decoder.make(riff("WEBP", chunk("ALPH", byteArrayOf(1, 2, 3)))))
+        assertNull(WebpCodec.Decoder.make(byteArrayOf('R'.code.toByte(), 'I'.code.toByte())))
+        assertNull(WebpCodec.Decoder.make(riff("WEBP", chunk("VP8X", ByteArray(9)))))
+        assertNull(WebpCodec.Decoder.make(riff("WEBP", chunk("ALPH", byteArrayOf(1, 2, 3)))))
         val declaredTooLarge = riff("WEBP", chunk("VP8X", ByteArray(10))).copyOf(20)
-        assertNull(SkWebpKotlinCodec.Decoder.make(declaredTooLarge))
+        assertNull(WebpCodec.Decoder.make(declaredTooLarge))
     }
 
     private fun vp8xWebp(width: Int, height: Int, flags: Int): ByteArray {
@@ -2876,7 +2876,7 @@ class SkWebpKotlinCodecTest {
         val encoded: ByteArray,
     )
 
-    private fun assertWebpPixels(codec: SkCodec, width: Int, height: Int, expected: IntArray) {
+    private fun assertWebpPixels(codec: Codec, width: Int, height: Int, expected: IntArray) {
         val dst = SkBitmap(
             width = width,
             height = height,
@@ -2884,7 +2884,7 @@ class SkWebpKotlinCodecTest {
             colorSpace = SkColorSpace.makeSRGB(),
         )
 
-        assertEquals(SkCodec.Result.kSuccess, codec.getPixels(codec.getInfo(), dst))
+        assertEquals(Codec.Result.kSuccess, codec.getPixels(codec.getInfo(), dst))
         for (y in 0 until height) {
             for (x in 0 until width) {
                 val expectedPixel = expected[y * width + x]

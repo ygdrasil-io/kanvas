@@ -11,7 +11,7 @@ import java.util.ServiceLoader
 class CodecAllKotlinAssemblyTest {
     @Test
     fun `registers pure kotlin decoders in dispatch order`() {
-        val decoders = SkCodec.Decoders.all()
+        val decoders = Codec.Decoders.all()
 
         assertEquals(
             listOf(
@@ -54,7 +54,7 @@ class CodecAllKotlinAssemblyTest {
 
     @Test
     fun `decodes shared rgba png fixture through kotlin assembly`() {
-        val codec = SkCodec.MakeFromData(CodecTestFixtures.simpleRgbaPng())
+        val codec = Codec.MakeFromData(CodecTestFixtures.simpleRgbaPng())
 
         assertNotNull(codec)
         val actual = decodePixels(codec!!)

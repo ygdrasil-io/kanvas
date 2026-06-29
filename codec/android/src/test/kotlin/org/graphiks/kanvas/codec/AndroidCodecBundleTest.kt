@@ -13,10 +13,10 @@ import org.skia.foundation.SkImageInfo
 import org.skia.foundation.skcms.SkcmsICCProfile
 import java.nio.ByteBuffer
 
-class SkAndroidCodecKotlinBundleTest {
+class AndroidCodecBundleTest {
     @Test
     fun `MakeFromData decodes PNG through codec providers`() {
-        val codec = SkAndroidCodec.MakeFromData(CodecTestFixtures.simpleRgbaPng())
+        val codec = AndroidCodec.MakeFromData(CodecTestFixtures.simpleRgbaPng())
 
         assertNotNull(codec)
         assertEquals(SkEncodedImageFormat.kPNG, codec!!.getEncodedFormat())
@@ -26,7 +26,7 @@ class SkAndroidCodecKotlinBundleTest {
 
     @Test
     fun `getAndroidPixels crops downsamples and writes RGBA ByteBuffer`() {
-        val codec = SkAndroidCodec.MakeFromData(fiveByFivePng())!!
+        val codec = AndroidCodec.MakeFromData(fiveByFivePng())!!
         val subset = SkIRect.MakeLTRB(1, 1, 5, 5)
         val info = SkImageInfo.MakeN32(width = 2, height = 2)
         val rowBytes = info.minRowBytes()
@@ -36,10 +36,10 @@ class SkAndroidCodecKotlinBundleTest {
             info = info,
             pixels = pixels,
             rowBytes = rowBytes,
-            options = SkAndroidCodec.AndroidOptions(sampleSize = 2, subset = subset),
+            options = AndroidCodec.AndroidOptions(sampleSize = 2, subset = subset),
         )
 
-        assertEquals(SkCodec.Result.kSuccess, result)
+        assertEquals(Codec.Result.kSuccess, result)
         assertRgba(pixels, rowBytes, x = 0, y = 0, color = argbAt(1, 1))
         assertRgba(pixels, rowBytes, x = 1, y = 0, color = argbAt(3, 1))
         assertRgba(pixels, rowBytes, x = 0, y = 1, color = argbAt(1, 3))
@@ -48,7 +48,7 @@ class SkAndroidCodecKotlinBundleTest {
 
     @Test
     fun `getAndroidPixels crops downsamples JPEG through codec providers`() {
-        val codec = SkAndroidCodec.MakeFromData(CodecTestFixtures.simpleGrayscaleJpeg(width = 16, height = 16))!!
+        val codec = AndroidCodec.MakeFromData(CodecTestFixtures.simpleGrayscaleJpeg(width = 16, height = 16))!!
         val pixels = decodeSampledRgba(codec, subset = SkIRect.MakeLTRB(4, 4, 16, 16), sampleSize = 4)
 
         assertEquals(SkEncodedImageFormat.kJPEG, codec.getEncodedFormat())
@@ -60,7 +60,7 @@ class SkAndroidCodecKotlinBundleTest {
     fun `getAndroidPixels crops downsamples GIF through codec providers`() {
         val indexes = List(4) { y -> IntArray(4) { x -> (x + y) and 3 } }
         val palette = intArrayOf(0xFF101820.toInt(), 0xFF305060.toInt(), 0xFF708090.toInt(), 0xFFA0B0C0.toInt())
-        val codec = SkAndroidCodec.MakeFromData(CodecTestFixtures.indexedGif(indexes, palette))!!
+        val codec = AndroidCodec.MakeFromData(CodecTestFixtures.indexedGif(indexes, palette))!!
         val pixels = decodeSampledRgba(codec, subset = SkIRect.MakeLTRB(1, 1, 4, 4), sampleSize = 2)
 
         assertEquals(SkEncodedImageFormat.kGIF, codec.getEncodedFormat())
@@ -70,7 +70,7 @@ class SkAndroidCodecKotlinBundleTest {
     @Test
     fun `getAndroidPixels crops downsamples BMP through codec providers`() {
         val rows = patternedRows(width = 4, height = 4)
-        val codec = SkAndroidCodec.MakeFromData(CodecTestFixtures.rgbBmp(rows))!!
+        val codec = AndroidCodec.MakeFromData(CodecTestFixtures.rgbBmp(rows))!!
         val pixels = decodeSampledRgba(codec, subset = SkIRect.MakeLTRB(1, 1, 4, 4), sampleSize = 2)
 
         assertEquals(SkEncodedImageFormat.kBMP, codec.getEncodedFormat())
@@ -79,25 +79,25 @@ class SkAndroidCodecKotlinBundleTest {
 
     @Test
     fun `getAndroidPixels rejects invalid parameters before decode`() {
-        val codec = SkAndroidCodec.MakeFromData(fiveByFivePng())!!
+        val codec = AndroidCodec.MakeFromData(fiveByFivePng())!!
         val info = SkImageInfo.MakeN32(width = 2, height = 2)
         val rowBytes = info.minRowBytes()
         val pixels = ByteBuffer.allocate(rowBytes * info.height)
 
         assertEquals(
-            SkCodec.Result.kInvalidParameters,
-            codec.getAndroidPixels(info, pixels, rowBytes, SkAndroidCodec.AndroidOptions(sampleSize = 0)),
+            Codec.Result.kInvalidParameters,
+            codec.getAndroidPixels(info, pixels, rowBytes, AndroidCodec.AndroidOptions(sampleSize = 0)),
         )
         assertEquals(
-            SkCodec.Result.kInvalidParameters,
+            Codec.Result.kInvalidParameters,
             codec.getAndroidPixels(info, pixels, rowBytes = rowBytes - 1),
         )
         assertEquals(
-            SkCodec.Result.kInvalidParameters,
+            Codec.Result.kInvalidParameters,
             codec.getAndroidPixels(info, ByteBuffer.allocate(rowBytes * info.height - 1), rowBytes),
         )
         assertEquals(
-            SkCodec.Result.kInvalidParameters,
+            Codec.Result.kInvalidParameters,
             codec.getAndroidPixels(
                 info,
                 ByteBuffer.allocate(rowBytes * info.height).limit(rowBytes * info.height - 1),
@@ -105,19 +105,19 @@ class SkAndroidCodecKotlinBundleTest {
             ),
         )
         assertEquals(
-            SkCodec.Result.kInvalidParameters,
+            Codec.Result.kInvalidParameters,
             codec.getAndroidPixels(
                 info = info,
                 pixels = pixels,
                 rowBytes = rowBytes,
-                options = SkAndroidCodec.AndroidOptions(subset = SkIRect.MakeLTRB(9, 9, 10, 10)),
+                options = AndroidCodec.AndroidOptions(subset = SkIRect.MakeLTRB(9, 9, 10, 10)),
             ),
         )
     }
 
     @Test
     fun `getAndroidPixels reports invalid conversion for F16 output`() {
-        val codec = SkAndroidCodec.MakeFromData(fiveByFivePng())!!
+        val codec = AndroidCodec.MakeFromData(fiveByFivePng())!!
         val info = SkImageInfo.Make(
             width = 5,
             height = 5,
@@ -127,7 +127,7 @@ class SkAndroidCodecKotlinBundleTest {
         val rowBytes = info.minRowBytes()
 
         assertEquals(
-            SkCodec.Result.kInvalidConversion,
+            Codec.Result.kInvalidConversion,
             codec.getAndroidPixels(info, ByteBuffer.allocate(rowBytes * info.height), rowBytes),
         )
     }
@@ -139,13 +139,13 @@ class SkAndroidCodecKotlinBundleTest {
         val pixels = ByteBuffer.allocate(rowBytes * info.height)
 
         assertEquals(
-            SkCodec.Result.kInvalidInput,
-            SkAndroidCodec.MakeFromCodec(StubCodec(info.makeWH(0, 1)))
+            Codec.Result.kInvalidInput,
+            AndroidCodec.MakeFromCodec(StubCodec(info.makeWH(0, 1)))
                 .getAndroidPixels(info, pixels, rowBytes),
         )
         assertEquals(
-            SkCodec.Result.kIncompleteInput,
-            SkAndroidCodec.MakeFromCodec(StubCodec(info, decodeResult = SkCodec.Result.kIncompleteInput))
+            Codec.Result.kIncompleteInput,
+            AndroidCodec.MakeFromCodec(StubCodec(info, decodeResult = Codec.Result.kIncompleteInput))
                 .getAndroidPixels(info, pixels, rowBytes),
         )
     }
@@ -157,7 +157,7 @@ class SkAndroidCodecKotlinBundleTest {
             },
         )
 
-    private fun decodeSampledRgba(codec: SkAndroidCodec, subset: SkIRect, sampleSize: Int): PixelBuffer {
+    private fun decodeSampledRgba(codec: AndroidCodec, subset: SkIRect, sampleSize: Int): PixelBuffer {
         val info = SkImageInfo.MakeN32(width = subset.width() / sampleSize, height = subset.height() / sampleSize)
         val rowBytes = info.minRowBytes()
         val buffer = ByteBuffer.allocate(rowBytes * info.height)
@@ -166,10 +166,10 @@ class SkAndroidCodecKotlinBundleTest {
             info = info,
             pixels = buffer,
             rowBytes = rowBytes,
-            options = SkAndroidCodec.AndroidOptions(sampleSize = sampleSize, subset = subset),
+            options = AndroidCodec.AndroidOptions(sampleSize = sampleSize, subset = subset),
         )
 
-        assertEquals(SkCodec.Result.kSuccess, result)
+        assertEquals(Codec.Result.kSuccess, result)
         return PixelBuffer(buffer, rowBytes)
     }
 
@@ -195,8 +195,8 @@ class SkAndroidCodecKotlinBundleTest {
 
     private class StubCodec(
         private val info: SkImageInfo,
-        private val decodeResult: SkCodec.Result = SkCodec.Result.kSuccess,
-    ) : SkCodec() {
+        private val decodeResult: Codec.Result = Codec.Result.kSuccess,
+    ) : Codec() {
         override fun getInfo(): SkImageInfo = info
         override fun getEncodedFormat(): SkEncodedImageFormat = SkEncodedImageFormat.kPNG
         override fun getICCProfile(): SkcmsICCProfile? = null

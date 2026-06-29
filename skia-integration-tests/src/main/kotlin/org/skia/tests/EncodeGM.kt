@@ -1,6 +1,6 @@
 package org.skia.tests
 
-import org.graphiks.kanvas.codec.SkCodec
+import org.graphiks.kanvas.codec.Codec
 import org.skia.core.SkCanvas
 import org.skia.encode.SkJpegEncoder
 import org.skia.encode.SkPngEncoder
@@ -77,9 +77,9 @@ public class EncodeGM : GM() {
     }
 
     private fun decodeImage(bytes: ByteArray): org.skia.foundation.SkImage? {
-        val codec = SkCodec.MakeFromData(bytes) ?: return null
+        val codec = Codec.MakeFromData(bytes) ?: return null
         val (bitmap, result) = codec.getImage()
-        if (result != SkCodec.Result.kSuccess || bitmap == null) return null
+        if (result != Codec.Result.kSuccess || bitmap == null) return null
         return bitmap.asImage()
     }
 }

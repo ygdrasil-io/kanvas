@@ -7,7 +7,7 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.graphiks.kanvas.codec.CodecDecoderProvider
-import org.graphiks.kanvas.codec.SkCodec
+import org.graphiks.kanvas.codec.Codec
 import org.graphiks.kanvas.codec.test.CodecNegativeFixtures
 import org.skia.foundation.SkAlphaType
 import org.skia.foundation.SkBitmap
@@ -19,7 +19,7 @@ import java.util.ServiceLoader
 import java.util.zip.CRC32
 import java.util.zip.Deflater
 
-class SkPngKotlinCodecTest {
+class PngCodecTest {
 
     @Test
     fun `rejects invalid signature`() {
@@ -29,8 +29,8 @@ class SkPngKotlinCodecTest {
         )
 
         for (case in cases) {
-            assertFalse(SkPngKotlinCodec.Decoder.matches(case.data), case.name)
-            assertNull(SkPngKotlinCodec.Decoder.make(case.data), case.name)
+            assertFalse(PngCodec.Decoder.matches(case.data), case.name)
+            assertNull(PngCodec.Decoder.make(case.data), case.name)
         }
     }
 
@@ -50,12 +50,12 @@ class SkPngKotlinCodecTest {
             intArrayOf(argb(0xAA, 0x15, 0x2A, 0x3F), argb(0x55, 0x48, 0x5B, 0x6E), argb(0x33, 0x79, 0x8A, 0x9B)),
             intArrayOf(argb(0x12, 0x17, 0x2C, 0x41), argb(0x34, 0x4A, 0x5D, 0x70), argb(0x56, 0x7B, 0x8C, 0x9D)),
         )
-        val codec = SkPngKotlinCodec.Decoder.make(
+        val codec = PngCodec.Decoder.make(
             png(width = 3, height = 5, colorType = 6, rows = rows, filters = intArrayOf(0, 1, 2, 3, 4)),
         )
 
         assertNotNull(codec)
-        assertTrue(codec is SkPngKotlinCodec)
+        assertTrue(codec is PngCodec)
         assertEquals(SkEncodedImageFormat.kPNG, codec!!.getEncodedFormat())
         assertEquals(3, codec.getInfo().width)
         assertEquals(5, codec.getInfo().height)
@@ -64,7 +64,7 @@ class SkPngKotlinCodecTest {
         assertTrue(codec.getInfo().colorSpace.isSRGB())
 
         val (bitmap, result) = codec.getImage()
-        assertEquals(SkCodec.Result.kSuccess, result)
+        assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
         for (y in rows.indices) {
             for (x in rows[y].indices) {
@@ -79,12 +79,12 @@ class SkPngKotlinCodecTest {
             intArrayOf(argb(0xFF, 0xFF, 0x00, 0x00), argb(0xFF, 0x00, 0xFF, 0x00)),
             intArrayOf(argb(0xFF, 0x00, 0x00, 0xFF), argb(0xFF, 0xFF, 0xFF, 0xFF)),
         )
-        val codec = SkPngKotlinCodec.Decoder.make(
+        val codec = PngCodec.Decoder.make(
             png(width = 2, height = 2, colorType = 2, rows = rows, filters = intArrayOf(0, 1)),
         )!!
 
         val (bitmap, result) = codec.getImage()
-        assertEquals(SkCodec.Result.kSuccess, result)
+        assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
         assertEquals(rows[0][0], bitmap!!.getPixel(0, 0))
         assertEquals(rows[0][1], bitmap.getPixel(1, 0))
@@ -97,7 +97,7 @@ class SkPngKotlinCodecTest {
         val rows = listOf(
             intArrayOf(argb(0xFF, 0x10, 0x20, 0x30), argb(0xFF, 0x40, 0x50, 0x60)),
         )
-        val codec = SkPngKotlinCodec.Decoder.make(
+        val codec = PngCodec.Decoder.make(
             png(
                 width = 2,
                 height = 1,
@@ -109,7 +109,7 @@ class SkPngKotlinCodecTest {
         )!!
 
         val (bitmap, result) = codec.getImage()
-        assertEquals(SkCodec.Result.kSuccess, result)
+        assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
         assertEquals(argb(0x00, 0x10, 0x20, 0x30), bitmap!!.getPixel(0, 0))
         assertEquals(argb(0xFF, 0x40, 0x50, 0x60), bitmap.getPixel(1, 0))
@@ -127,12 +127,12 @@ class SkPngKotlinCodecTest {
                 )
             }
         }
-        val codec = SkPngKotlinCodec.Decoder.make(
+        val codec = PngCodec.Decoder.make(
             adam7Png(width = 9, height = 9, colorType = 6, rows = rows, filters = intArrayOf(0, 1, 2, 3, 4)),
         )!!
 
         val (bitmap, result) = codec.getImage()
-        assertEquals(SkCodec.Result.kSuccess, result)
+        assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
         for (y in rows.indices) {
             for (x in rows[y].indices) {
@@ -152,12 +152,12 @@ class SkPngKotlinCodecTest {
             byteArrayOf(0, 1, 2),
             byteArrayOf(2, 1, 0),
         )
-        val codec = SkPngKotlinCodec.Decoder.make(
+        val codec = PngCodec.Decoder.make(
             indexedPng(width = 3, height = 2, palette = palette, indexes = indexes, filters = intArrayOf(0, 1)),
         )!!
 
         val (bitmap, result) = codec.getImage()
-        assertEquals(SkCodec.Result.kSuccess, result)
+        assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
         assertEquals(palette[0], bitmap!!.getPixel(0, 0))
         assertEquals(palette[1], bitmap.getPixel(1, 0))
@@ -174,7 +174,7 @@ class SkPngKotlinCodecTest {
             argb(0xFF, 0x00, 0xFF, 0x00),
             argb(0xFF, 0x00, 0x00, 0xFF),
         )
-        val codec = SkPngKotlinCodec.Decoder.make(
+        val codec = PngCodec.Decoder.make(
             indexedPng(
                 width = 3,
                 height = 1,
@@ -186,7 +186,7 @@ class SkPngKotlinCodecTest {
         )!!
 
         val (bitmap, result) = codec.getImage()
-        assertEquals(SkCodec.Result.kSuccess, result)
+        assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
         assertEquals(argb(0xFF, 0xFF, 0x00, 0x00), bitmap!!.getPixel(0, 0))
         assertEquals(argb(0x00, 0x00, 0xFF, 0x00), bitmap.getPixel(1, 0))
@@ -219,7 +219,7 @@ class SkPngKotlinCodecTest {
                 intArrayOf(0, (1 shl bitDepth) - 1, 1, 0, 1),
                 intArrayOf(1, 0, (1 shl bitDepth) - 1, 1, 0),
             )
-            val codec = SkPngKotlinCodec.Decoder.make(
+            val codec = PngCodec.Decoder.make(
                 indexedPng(
                     width = 5,
                     height = 2,
@@ -231,7 +231,7 @@ class SkPngKotlinCodecTest {
             )!!
 
             val (bitmap, result) = codec.getImage()
-            assertEquals(SkCodec.Result.kSuccess, result, "bitDepth=$bitDepth")
+            assertEquals(Codec.Result.kSuccess, result, "bitDepth=$bitDepth")
             assertNotNull(bitmap)
             for (y in indexes.indices) {
                 for (x in indexes[y].indices) {
@@ -266,7 +266,7 @@ class SkPngKotlinCodecTest {
             val indexes = List(7) { y ->
                 IntArray(10) { x -> (x + y * 2) % colorCount }
             }
-            val codec = SkPngKotlinCodec.Decoder.make(
+            val codec = PngCodec.Decoder.make(
                 adam7IndexedPng(
                     width = 10,
                     height = 7,
@@ -278,7 +278,7 @@ class SkPngKotlinCodecTest {
             )!!
 
             val (bitmap, result) = codec.getImage()
-            assertEquals(SkCodec.Result.kSuccess, result, "bitDepth=$bitDepth")
+            assertEquals(Codec.Result.kSuccess, result, "bitDepth=$bitDepth")
             assertNotNull(bitmap)
             for (y in indexes.indices) {
                 for (x in indexes[y].indices) {
@@ -295,7 +295,7 @@ class SkPngKotlinCodecTest {
             val samples = List(9) { y ->
                 IntArray(11) { x -> (x * 3 + y * 5) % (max + 1) }
             }
-            val codec = SkPngKotlinCodec.Decoder.make(
+            val codec = PngCodec.Decoder.make(
                 adam7GrayscalePng(
                     width = 11,
                     height = 9,
@@ -306,7 +306,7 @@ class SkPngKotlinCodecTest {
             )!!
 
             val (bitmap, result) = codec.getImage()
-            assertEquals(SkCodec.Result.kSuccess, result, "bitDepth=$bitDepth")
+            assertEquals(Codec.Result.kSuccess, result, "bitDepth=$bitDepth")
             assertNotNull(bitmap)
             for (y in samples.indices) {
                 for (x in samples[y].indices) {
@@ -329,7 +329,7 @@ class SkPngKotlinCodecTest {
                 )
             }
         }
-        val codec = SkPngKotlinCodec.Decoder.make(
+        val codec = PngCodec.Decoder.make(
             adam7Png(
                 width = 10,
                 height = 8,
@@ -340,7 +340,7 @@ class SkPngKotlinCodecTest {
         )!!
 
         val (bitmap, result) = codec.getImage()
-        assertEquals(SkCodec.Result.kSuccess, result)
+        assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
         for (y in rows.indices) {
             for (x in rows[y].indices) {
@@ -358,7 +358,7 @@ class SkPngKotlinCodecTest {
                 argb(alpha, gray, gray, gray)
             }
         }
-        val codec = SkPngKotlinCodec.Decoder.make(
+        val codec = PngCodec.Decoder.make(
             adam7GrayscaleAlphaPng(
                 width = 10,
                 height = 8,
@@ -368,7 +368,7 @@ class SkPngKotlinCodecTest {
         )!!
 
         val (bitmap, result) = codec.getImage()
-        assertEquals(SkCodec.Result.kSuccess, result)
+        assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
         for (y in rows.indices) {
             for (x in rows[y].indices) {
@@ -383,12 +383,12 @@ class SkPngKotlinCodecTest {
             byteArrayOf(0x00, 0x40, 0x80.toByte()),
             byteArrayOf(0xC0.toByte(), 0xFF.toByte(), 0x20),
         )
-        val codec = SkPngKotlinCodec.Decoder.make(
+        val codec = PngCodec.Decoder.make(
             grayscalePng(width = 3, height = 2, rows = rows, filters = intArrayOf(0, 1), bitDepth = 8),
         )!!
 
         val (bitmap, result) = codec.getImage()
-        assertEquals(SkCodec.Result.kSuccess, result)
+        assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
         assertEquals(argb(0xFF, 0x00, 0x00, 0x00), bitmap!!.getPixel(0, 0))
         assertEquals(argb(0xFF, 0x40, 0x40, 0x40), bitmap.getPixel(1, 0))
@@ -403,7 +403,7 @@ class SkPngKotlinCodecTest {
         val rows = listOf(
             byteArrayOf(0x00, 0x40, 0x80.toByte()),
         )
-        val codec = SkPngKotlinCodec.Decoder.make(
+        val codec = PngCodec.Decoder.make(
             grayscalePng(
                 width = 3,
                 height = 1,
@@ -415,7 +415,7 @@ class SkPngKotlinCodecTest {
         )!!
 
         val (bitmap, result) = codec.getImage()
-        assertEquals(SkCodec.Result.kSuccess, result)
+        assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
         assertEquals(argb(0xFF, 0x00, 0x00, 0x00), bitmap!!.getPixel(0, 0))
         assertEquals(argb(0x00, 0x40, 0x40, 0x40), bitmap.getPixel(1, 0))
@@ -430,7 +430,7 @@ class SkPngKotlinCodecTest {
                 intArrayOf(0, max, 1, 0, max),
                 intArrayOf(max, 0, max / 2, 1, 0),
             )
-            val codec = SkPngKotlinCodec.Decoder.make(
+            val codec = PngCodec.Decoder.make(
                 grayscalePng(
                     width = 5,
                     height = 2,
@@ -441,7 +441,7 @@ class SkPngKotlinCodecTest {
             )!!
 
             val (bitmap, result) = codec.getImage()
-            assertEquals(SkCodec.Result.kSuccess, result, "bitDepth=$bitDepth")
+            assertEquals(Codec.Result.kSuccess, result, "bitDepth=$bitDepth")
             assertNotNull(bitmap)
             for (y in samples.indices) {
                 for (x in samples[y].indices) {
@@ -458,12 +458,12 @@ class SkPngKotlinCodecTest {
             intArrayOf(argb(0xFF, 0x10, 0x10, 0x10), argb(0x80, 0x40, 0x40, 0x40)),
             intArrayOf(argb(0x00, 0x70, 0x70, 0x70), argb(0x20, 0xA0, 0xA0, 0xA0)),
         )
-        val codec = SkPngKotlinCodec.Decoder.make(
+        val codec = PngCodec.Decoder.make(
             grayscaleAlphaPng(width = 2, height = 2, rows = pixels, filters = intArrayOf(0, 1)),
         )!!
 
         val (bitmap, result) = codec.getImage()
-        assertEquals(SkCodec.Result.kSuccess, result)
+        assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
         for (y in pixels.indices) {
             for (x in pixels[y].indices) {
@@ -478,14 +478,14 @@ class SkPngKotlinCodecTest {
             u16Row(0x0000, 0x8000),
             u16Row(0xFFFF, 0x4000),
         )
-        val codec = SkPngKotlinCodec.Decoder.make(
+        val codec = PngCodec.Decoder.make(
             grayscalePng(width = 2, height = 2, rows = rows, filters = intArrayOf(0, 1), bitDepth = 16),
         )!!
 
         assertEquals(SkColorType.kRGBA_F16Norm, codec.getInfo().colorType)
         assertEquals(SkAlphaType.kPremul, codec.getInfo().alphaType)
         val (bitmap, result) = codec.getImage()
-        assertEquals(SkCodec.Result.kSuccess, result)
+        assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
         assertF16(bitmap!!, 0, 0, 0f, 0f, 0f, 1f)
         assertF16(bitmap, 1, 0, 0x8000 / 65535f, 0x8000 / 65535f, 0x8000 / 65535f, 1f)
@@ -495,7 +495,7 @@ class SkPngKotlinCodecTest {
 
     @Test
     fun `decodes grayscale 16-bit tRNS sample into transparent F16`() {
-        val codec = SkPngKotlinCodec.Decoder.make(
+        val codec = PngCodec.Decoder.make(
             grayscalePng(
                 width = 2,
                 height = 1,
@@ -507,7 +507,7 @@ class SkPngKotlinCodecTest {
         )!!
 
         val (bitmap, result) = codec.getImage()
-        assertEquals(SkCodec.Result.kSuccess, result)
+        assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
         assertF16(bitmap!!, 0, 0, 0f, 0f, 0f, 0f)
         assertF16(bitmap, 1, 0, 0x8000 / 65535f, 0x8000 / 65535f, 0x8000 / 65535f, 1f)
@@ -519,12 +519,12 @@ class SkPngKotlinCodecTest {
             longArrayOf(rgba64(0xFFFF, 0x8000, 0x0000, 0x8000), rgba64(0x0000, 0x4000, 0xFFFF, 0xFFFF)),
             longArrayOf(rgba64(0x2000, 0x6000, 0xA000, 0x0000), rgba64(0x1111, 0x2222, 0x3333, 0x4000)),
         )
-        val codec = SkPngKotlinCodec.Decoder.make(
+        val codec = PngCodec.Decoder.make(
             truecolor16Png(width = 2, height = 2, colorType = 6, rows = rows, filters = intArrayOf(0, 1)),
         )!!
 
         val (bitmap, result) = codec.getImage()
-        assertEquals(SkCodec.Result.kSuccess, result)
+        assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
         assertEquals(SkColorType.kRGBA_F16Norm, bitmap!!.colorType)
         assertF16(
@@ -551,7 +551,7 @@ class SkPngKotlinCodecTest {
 
     @Test
     fun `decodes RGB and grayscale alpha 16-bit pixels into premul F16`() {
-        val rgbCodec = SkPngKotlinCodec.Decoder.make(
+        val rgbCodec = PngCodec.Decoder.make(
             truecolor16Png(
                 width = 1,
                 height = 1,
@@ -561,10 +561,10 @@ class SkPngKotlinCodecTest {
             ),
         )!!
         val (rgbBitmap, rgbResult) = rgbCodec.getImage()
-        assertEquals(SkCodec.Result.kSuccess, rgbResult)
+        assertEquals(Codec.Result.kSuccess, rgbResult)
         assertF16(rgbBitmap!!, 0, 0, 0x1111 / 65535f, 0x8000 / 65535f, 1f, 1f)
 
-        val grayAlphaCodec = SkPngKotlinCodec.Decoder.make(
+        val grayAlphaCodec = PngCodec.Decoder.make(
             grayscaleAlpha16Png(
                 width = 1,
                 height = 1,
@@ -575,13 +575,13 @@ class SkPngKotlinCodecTest {
         val (grayAlphaBitmap, grayAlphaResult) = grayAlphaCodec.getImage()
         val gray = 0x8000 / 65535f
         val alpha = 0x4000 / 65535f
-        assertEquals(SkCodec.Result.kSuccess, grayAlphaResult)
+        assertEquals(Codec.Result.kSuccess, grayAlphaResult)
         assertF16(grayAlphaBitmap!!, 0, 0, gray * alpha, gray * alpha, gray * alpha, alpha)
     }
 
     @Test
     fun `decodes RGB 16-bit tRNS color into transparent F16`() {
-        val codec = SkPngKotlinCodec.Decoder.make(
+        val codec = PngCodec.Decoder.make(
             truecolor16Png(
                 width = 2,
                 height = 1,
@@ -595,7 +595,7 @@ class SkPngKotlinCodecTest {
         )!!
 
         val (bitmap, result) = codec.getImage()
-        assertEquals(SkCodec.Result.kSuccess, result)
+        assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
         assertF16(bitmap!!, 0, 0, 0f, 0f, 0f, 0f)
         assertF16(bitmap, 1, 0, 0x8000 / 65535f, 0x4000 / 65535f, 1f, 1f)
@@ -603,7 +603,7 @@ class SkPngKotlinCodecTest {
 
     @Test
     fun `converts 16-bit RGBA natural F16 decode into requested RGBA 8888`() {
-        val codec = SkPngKotlinCodec.Decoder.make(
+        val codec = PngCodec.Decoder.make(
             truecolor16Png(
                 width = 2,
                 height = 1,
@@ -623,14 +623,14 @@ class SkPngKotlinCodecTest {
         )
         val dst = SkBitmap(2, 1, requested.colorSpace, requested.colorType)
 
-        assertEquals(SkCodec.Result.kSuccess, codec.getPixels(requested, dst))
+        assertEquals(Codec.Result.kSuccess, codec.getPixels(requested, dst))
         assertEquals(argb(0x80, 0xFF, 0x80, 0x00), dst.getPixel(0, 0))
         assertEquals(argb(0xFF, 0x00, 0x40, 0xFF), dst.getPixel(1, 0))
     }
 
     @Test
     fun `converts 8-bit RGBA natural 8888 decode into requested F16`() {
-        val codec = SkPngKotlinCodec.Decoder.make(
+        val codec = PngCodec.Decoder.make(
             png(
                 width = 2,
                 height = 1,
@@ -648,14 +648,14 @@ class SkPngKotlinCodecTest {
         )
         val dst = SkBitmap(2, 1, requested.colorSpace, requested.colorType)
 
-        assertEquals(SkCodec.Result.kSuccess, codec.getPixels(requested, dst))
+        assertEquals(Codec.Result.kSuccess, codec.getPixels(requested, dst))
         assertF16(dst, 0, 0, (0x40 / 255f) * (0x80 / 255f), (0x80 / 255f) * (0x80 / 255f), (0xC0 / 255f) * (0x80 / 255f), 0x80 / 255f)
         assertF16(dst, 1, 0, 0f, 0f, 0f, 0f)
     }
 
     @Test
     fun `converts 8-bit PNG into additional bitmap backed color types`() {
-        val codec = SkPngKotlinCodec.Decoder.make(
+        val codec = PngCodec.Decoder.make(
             png(
                 width = 1,
                 height = 1,
@@ -682,14 +682,14 @@ class SkPngKotlinCodecTest {
             )
             val dst = SkBitmap(1, 1, requested.colorSpace, requested.colorType)
 
-            assertEquals(SkCodec.Result.kSuccess, codec.getPixels(requested, dst), colorType.name)
+            assertEquals(Codec.Result.kSuccess, codec.getPixels(requested, dst), colorType.name)
             assertEquals(expected, dst.getPixel(0, 0), colorType.name)
         }
     }
 
     @Test
     fun `keeps 16-bit PNG extra color conversions unsupported`() {
-        val codec = SkPngKotlinCodec.Decoder.make(
+        val codec = PngCodec.Decoder.make(
             truecolor16Png(
                 width = 1,
                 height = 1,
@@ -707,12 +707,12 @@ class SkPngKotlinCodecTest {
         )
         val dst = SkBitmap(1, 1, requested.colorSpace, requested.colorType)
 
-        assertEquals(SkCodec.Result.kInvalidConversion, codec.getPixels(requested, dst))
+        assertEquals(Codec.Result.kInvalidConversion, codec.getPixels(requested, dst))
     }
 
     @Test
     fun `rejects unsupported requested PNG color conversion`() {
-        val codec = SkPngKotlinCodec.Decoder.make(
+        val codec = PngCodec.Decoder.make(
             png(
                 width = 1,
                 height = 1,
@@ -730,12 +730,12 @@ class SkPngKotlinCodecTest {
         )
         val dst = SkBitmap(1, 1, requested.colorSpace, requested.colorType)
 
-        assertEquals(SkCodec.Result.kInvalidConversion, codec.getPixels(requested, dst))
+        assertEquals(Codec.Result.kInvalidConversion, codec.getPixels(requested, dst))
     }
 
     @Test
     fun `iCCP with unsupported synthetic profile falls back to sRGB`() {
-        val codec = SkPngKotlinCodec.Decoder.make(
+        val codec = PngCodec.Decoder.make(
             grayscalePng(
                 width = 1,
                 height = 1,
@@ -753,7 +753,7 @@ class SkPngKotlinCodecTest {
 
     @Test
     fun `iCCP with valid RGB profile exposes parsed ICC profile`() {
-        val codec = SkPngKotlinCodec.Decoder.make(
+        val codec = PngCodec.Decoder.make(
             grayscalePng(
                 width = 1,
                 height = 1,
@@ -796,20 +796,20 @@ class SkPngKotlinCodecTest {
             "IEND" to ByteArray(0),
         )
 
-        val codec = SkPngKotlinCodec.Decoder.make(data)
+        val codec = PngCodec.Decoder.make(data)
 
         assertNotNull(codec)
         assertNull(codec!!.getICCProfile())
         assertTrue(codec.getInfo().colorSpace.isSRGB())
         val (bitmap, result) = codec.getImage()
-        assertEquals(SkCodec.Result.kSuccess, result)
+        assertEquals(Codec.Result.kSuccess, result)
         assertEquals(argb(0xFF, 0x40, 0x40, 0x40), bitmap!!.getPixel(0, 0))
     }
 
     @Test
     fun `rejects malformed gAMA cHRM and sRGB chunks`() {
         assertNull(
-            SkPngKotlinCodec.Decoder.make(
+            PngCodec.Decoder.make(
                 pngFromChunks(
                     "IHDR" to ihdr(width = 1, height = 1, bitDepth = 8, colorType = 0),
                     "gAMA" to byteArrayOf(0, 0, 0),
@@ -819,7 +819,7 @@ class SkPngKotlinCodecTest {
             ),
         )
         assertNull(
-            SkPngKotlinCodec.Decoder.make(
+            PngCodec.Decoder.make(
                 pngFromChunks(
                     "IHDR" to ihdr(width = 1, height = 1, bitDepth = 8, colorType = 0),
                     "cHRM" to ByteArray(31),
@@ -829,7 +829,7 @@ class SkPngKotlinCodecTest {
             ),
         )
         assertNull(
-            SkPngKotlinCodec.Decoder.make(
+            PngCodec.Decoder.make(
                 pngFromChunks(
                     "IHDR" to ihdr(width = 1, height = 1, bitDepth = 8, colorType = 0),
                     "sRGB" to byteArrayOf(4),
@@ -843,7 +843,7 @@ class SkPngKotlinCodecTest {
     @Test
     fun `rejects malformed iCCP chunk`() {
         assertNull(
-            SkPngKotlinCodec.Decoder.make(
+            PngCodec.Decoder.make(
                 grayscalePng(
                     width = 1,
                     height = 1,
@@ -859,7 +859,7 @@ class SkPngKotlinCodecTest {
     @Test
     fun `rejects malformed tRNS chunks`() {
         assertNull(
-            SkPngKotlinCodec.Decoder.make(
+            PngCodec.Decoder.make(
                 grayscalePng(
                     width = 1,
                     height = 1,
@@ -871,7 +871,7 @@ class SkPngKotlinCodecTest {
             ),
         )
         assertNull(
-            SkPngKotlinCodec.Decoder.make(
+            PngCodec.Decoder.make(
                 png(
                     width = 1,
                     height = 1,
@@ -887,7 +887,7 @@ class SkPngKotlinCodecTest {
     @Test
     fun `rejects indexed PNG without palette`() {
         assertNull(
-            SkPngKotlinCodec.Decoder.make(
+            PngCodec.Decoder.make(
                 indexedPng(
                     width = 1,
                     height = 1,
@@ -903,7 +903,7 @@ class SkPngKotlinCodecTest {
     @Test
     fun `rejects invalid PLTE chunk`() {
         assertNull(
-            SkPngKotlinCodec.Decoder.make(
+            PngCodec.Decoder.make(
                 indexedPng(
                     width = 1,
                     height = 1,
@@ -918,7 +918,7 @@ class SkPngKotlinCodecTest {
 
     @Test
     fun `rejects palette index outside PLTE`() {
-        val codec = SkPngKotlinCodec.Decoder.make(
+        val codec = PngCodec.Decoder.make(
             indexedPng(
                 width = 1,
                 height = 1,
@@ -930,7 +930,7 @@ class SkPngKotlinCodecTest {
 
         assertNotNull(codec)
         val (_, result) = codec!!.getImage()
-        assertEquals(SkCodec.Result.kErrorInInput, result)
+        assertEquals(Codec.Result.kErrorInInput, result)
     }
 
     @Test
@@ -944,7 +944,7 @@ class SkPngKotlinCodecTest {
         )
         data[data.lastIndex] = (data.last().toInt() xor 0x01).toByte()
 
-        assertNull(SkPngKotlinCodec.Decoder.make(data))
+        assertNull(PngCodec.Decoder.make(data))
     }
 
     @Test
@@ -957,7 +957,7 @@ class SkPngKotlinCodecTest {
             bitDepth = 8,
         ) + byteArrayOf(0x00)
 
-        assertNull(SkPngKotlinCodec.Decoder.make(data))
+        assertNull(PngCodec.Decoder.make(data))
     }
 
     @Test
@@ -975,7 +975,7 @@ class SkPngKotlinCodecTest {
             ),
         )
 
-        assertNull(SkPngKotlinCodec.Decoder.make(case.data), case.name)
+        assertNull(PngCodec.Decoder.make(case.data), case.name)
     }
 
     @Test
@@ -987,7 +987,7 @@ class SkPngKotlinCodecTest {
             "IEND" to ByteArray(0),
         )
 
-        assertNull(SkPngKotlinCodec.Decoder.make(data))
+        assertNull(PngCodec.Decoder.make(data))
     }
 
     @Test
@@ -1003,7 +1003,7 @@ class SkPngKotlinCodecTest {
             ),
         )
 
-        assertNull(SkPngKotlinCodec.Decoder.make(case.data), case.name)
+        assertNull(PngCodec.Decoder.make(case.data), case.name)
     }
 
     private fun png(

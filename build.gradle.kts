@@ -2833,8 +2833,8 @@ tasks.register("checkSupportedCodecsDoc") {
             "Public encode APIs must return `null` or a documented stub behavior",
         )
         val requiredMetadataMarkers = listOf(
-            "Netscape loop count metadata exposed through `SkCodec.getRepetitionCount()`",
-            "ANIM loop count exposed through `SkCodec.getRepetitionCount()`",
+            "Netscape loop count metadata exposed through `Codec.getRepetitionCount()`",
+            "ANIM loop count exposed through `Codec.getRepetitionCount()`",
         )
 
         val missing = (requiredSections + requiredRows + requiredEncodeMarkers + requiredMetadataMarkers)
@@ -3238,9 +3238,9 @@ tasks.register("checkCpuRasterImageToolingNoAwt") {
             file("cpu-raster/src/main/kotlin/org/skia/testing/TestUtils.kt"),
             file("cpu-raster/src/main/kotlin/org/skia/testing/DiffImage.kt"),
             file("cpu-raster/src/test/kotlin/org/skia/testing/TestToolingTest.kt"),
-            file("cpu-raster/src/test/kotlin/org/graphiks/kanvas/codec/SkAndroidCodecComputeSampleSizeJpegTest.kt"),
-            file("cpu-raster/src/test/kotlin/org/graphiks/kanvas/codec/SkAndroidCodecGetAndroidPixelsTest.kt"),
-            file("cpu-raster/src/test/kotlin/org/graphiks/kanvas/codec/SkAndroidCodecTest.kt"),
+            file("cpu-raster/src/test/kotlin/org/graphiks/kanvas/codec/AndroidCodecComputeSampleSizeJpegTest.kt"),
+            file("cpu-raster/src/test/kotlin/org/graphiks/kanvas/codec/AndroidCodecGetAndroidPixelsTest.kt"),
+            file("cpu-raster/src/test/kotlin/org/graphiks/kanvas/codec/AndroidCodecTest.kt"),
         )
         val violations = mutableListOf<String>()
         filesToCheck

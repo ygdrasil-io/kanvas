@@ -14,24 +14,24 @@ import java.util.ServiceLoader
 public interface CodecDecoder {
     public val name: String
     public fun matches(data: ByteArray): Boolean
-    public fun make(data: ByteArray): SkCodec?
+    public fun make(data: ByteArray): Codec?
 }
 
 public interface CodecRegistry {
-    public fun all(): List<SkCodec.Decoder>
-    public fun register(decoder: SkCodec.Decoder)
+    public fun all(): List<Codec.Decoder>
+    public fun register(decoder: Codec.Decoder)
     public fun unregister(name: String): Boolean
-    public fun dispatch(data: ByteArray): SkCodec?
+    public fun dispatch(data: ByteArray): Codec?
 }
 
 public interface CodecDecoderProvider {
-    public fun decoders(): List<SkCodec.Decoder>
+    public fun decoders(): List<Codec.Decoder>
 }
 
 /**
  * Mirrors Skia's
- * [`SkCodec`](https://github.com/google/skia/blob/main/include/codec/SkCodec.h)
- * — a stateless, type-erased decoder facade. A concrete [SkCodec] is
+ * [`Codec`](https://github.com/google/skia/blob/main/include/codec/Codec.h)
+ * — a stateless, type-erased decoder facade. A concrete [Codec] is
  * obtained from [MakeFromData] / [MakeFromStream] ; the factory sniffs
  * the encoded bytes, picks the matching format-specific subclass, and
  * the caller then drives the decode through [getPixels] (or its
@@ -47,7 +47,7 @@ public interface CodecDecoderProvider {
  *    (F16 for ≥16-bpc PNGs, 8888 otherwise), and the colour space derived
  *    from the embedded ICC profile (or sRGB if the file has none).
  *  - [getPixels] — fills a caller-allocated [SkBitmap], mirroring
- *    `Result SkCodec::getPixels(const SkImageInfo&, void*, size_t,
+ *    `Result Codec::getPixels(const SkImageInfo&, void*, size_t,
  *    const Options*)`. The Kotlin signature collapses `(void*, size_t)`
  *    into the bitmap, since [SkBitmap] already carries its row stride.
  *  - [getImage] — convenience that allocates a fresh bitmap matching
@@ -63,10 +63,10 @@ public interface CodecDecoderProvider {
  * GM tests need them ; they will land alongside the formats that
  * actually use them (e.g. animation with GIF in D3.3).
  */
-public abstract class SkCodec protected constructor() {
+public abstract class Codec protected constructor() {
 
     /**
-     * Mirrors Skia's `SkCodec::Result`. Only [kSuccess] and the four
+     * Mirrors Skia's `Codec::Result`. Only [kSuccess] and the four
      * "input is bad" / "request is bad" variants are produced by the
      * D3.1 PNG path ; the rest are kept for parity so DM-style call
      * sites compile against the full enum.
@@ -93,7 +93,7 @@ public abstract class SkCodec protected constructor() {
 
     /**
      * The ICC profile parsed out of the encoded file, or `null` if it
-     * carried none. Mirrors `SkCodec::getICCProfile()`. The returned
+     * carried none. Mirrors `Codec::getICCProfile()`. The returned
      * profile is the same object the codec used to populate
      * [getInfo]'s colour space, so equality is identity-cheap.
      */
@@ -102,14 +102,14 @@ public abstract class SkCodec protected constructor() {
     /**
      * The EXIF Orientation tag carried by the encoded stream — i.e. how
      * the source pixels were stored relative to the scene's intended
-     * top-left. Mirrors `SkEncodedOrigin SkCodec::getOrigin() const`.
+     * top-left. Mirrors `SkEncodedOrigin Codec::getOrigin() const`.
      *
      * **Default :** [SkEncodedOrigin.kTopLeft] — the encoded grid is
      * already upright. Format-specific subclasses with EXIF-aware
      * decoders override to surface
      * the parsed value ; callers that wish to materialise the rotation
      * post-decode can compose [SkEncodedOrigin.toMatrix] /
-     * [org.skia.utils.SkPixmapUtils.Orient].
+     * [org.skia.utils.PixmapUtils.Orient].
      */
     public open fun getOrigin(): SkEncodedOrigin = SkEncodedOrigin.kTopLeft
 
@@ -119,7 +119,7 @@ public abstract class SkCodec protected constructor() {
     /**
      * Decode into [dst], whose [SkBitmap.width] / [SkBitmap.height] /
      * [SkBitmap.colorType] / [SkBitmap.colorSpace] **must** match the
-     * `info` argument. Mirrors `SkCodec::getPixels(const SkImageInfo&,
+     * `info` argument. Mirrors `Codec::getPixels(const SkImageInfo&,
      * void* dst, size_t rowBytes, const Options*)` — Kotlin folds the
      * `(dst, rowBytes)` pair into a single [SkBitmap] since our bitmap
      * already carries its stride.
@@ -135,7 +135,7 @@ public abstract class SkCodec protected constructor() {
     public fun getPixels(dst: SkBitmap): Result = getPixels(getInfo(), dst)
 
     /**
-     * Mirrors `SkCodec::Result SkCodec::getPixels(const SkImageInfo&,
+     * Mirrors `Codec::Result Codec::getPixels(const SkImageInfo&,
      * void*, size_t, const Options*)`. The Kotlin signature folds
      * `(dst, rowBytes)` into [SkBitmap] (see [getPixels] above) and
      * adds the [opts] hook for animated decoders. Default base-class
@@ -146,8 +146,8 @@ public abstract class SkCodec protected constructor() {
         getPixels(info, dst)
 
     /**
-     * Mirrors `SkCodec::Options`
-     * ([include/codec/SkCodec.h](https://github.com/google/skia/blob/main/include/codec/SkCodec.h#L336)).
+     * Mirrors `Codec::Options`
+     * ([include/codec/Codec.h](https://github.com/google/skia/blob/main/include/codec/Codec.h#L336)).
      *
      * Drives a single decode call. Only the per-frame fields that the
      * raster facade understands are surfaced ; subset / zero-init
@@ -169,8 +169,8 @@ public abstract class SkCodec protected constructor() {
     )
 
     /**
-     * Mirrors `SkCodec::FrameInfo`
-     * ([include/codec/SkCodec.h](https://github.com/google/skia/blob/main/include/codec/SkCodec.h#L684)).
+     * Mirrors `Codec::FrameInfo`
+     * ([include/codec/Codec.h](https://github.com/google/skia/blob/main/include/codec/Codec.h#L684)).
      *
      * Per-frame metadata returned by [getFrameInfo]. The kanvas-skia
      * surface keeps the four fields the GM consumers (`AnimatedGifGM`,
@@ -187,14 +187,14 @@ public abstract class SkCodec protected constructor() {
     )
 
     /**
-     * Mirrors `SkCodec::getFrameCount()` — number of frames in the
+     * Mirrors `Codec::getFrameCount()` — number of frames in the
      * encoded stream. Static formats return `1` ; multi-frame formats
      * (GIF, animated WebP) return their actual frame count.
      */
     public open fun getFrameCount(): Int = 1
 
     /**
-     * Mirrors `SkCodec::getFrameInfo()` (vector overload). Static
+     * Mirrors `Codec::getFrameInfo()` (vector overload). Static
      * codecs return a single-element list describing the lone frame ;
      * multi-frame codecs override with the real per-frame metadata.
      */
@@ -208,7 +208,7 @@ public abstract class SkCodec protected constructor() {
     )
 
     /**
-     * Mirrors `SkCodec::getRepetitionCount()` for animated formats.
+     * Mirrors `Codec::getRepetitionCount()` for animated formats.
      *
      * `0` means the animation should play once and stop,
      * [kRepetitionCountInfinite] means loop forever, and positive values
@@ -218,8 +218,8 @@ public abstract class SkCodec protected constructor() {
 
     /**
      * Allocate a fresh [SkBitmap] matching `info` and decode into it.
-     * Mirrors upstream's `std::tuple<sk_sp<SkImage>, SkCodec::Result>
-     * SkCodec::getImage(const SkImageInfo&)`. Returns `(null, result)`
+     * Mirrors upstream's `std::tuple<sk_sp<SkImage>, Codec::Result>
+     * Codec::getImage(const SkImageInfo&)`. Returns `(null, result)`
      * if the decode failed for any reason other than [Result.kSuccess]
      * (the partial bitmap is dropped — no incremental decoding in
      * D3.1).
@@ -238,7 +238,7 @@ public abstract class SkCodec protected constructor() {
     public companion object {
 
         /**
-         * Mirrors `SkCodec::kNoFrame` — sentinel for [Options.priorFrame]
+         * Mirrors `Codec::kNoFrame` — sentinel for [Options.priorFrame]
          * and [FrameInfo.requiredFrame] indicating the absence of a
          * back-reference / dependency frame.
          */
@@ -254,11 +254,11 @@ public abstract class SkCodec protected constructor() {
          * Sniff the leading bytes of [data] and return a codec that can
          * decode it, or `null` if no registered format matches.
          *
-         * Mirrors `SkCodec::MakeFromData(sk_sp<const SkData>, ...)` ; the
+         * Mirrors `Codec::MakeFromData(sk_sp<const SkData>, ...)` ; the
          * Kotlin overload takes a [ByteArray] for symmetry with
          * [InputStream.readBytes].
          */
-        public fun MakeFromData(data: ByteArray): SkCodec? {
+        public fun MakeFromData(data: ByteArray): Codec? {
             for (decoder in Decoders.all()) {
                 if (decoder.matches(data)) {
                     return decoder.make(data)
@@ -269,7 +269,7 @@ public abstract class SkCodec protected constructor() {
 
         /**
          * Read [stream] to completion and dispatch to [MakeFromData].
-         * Mirrors `SkCodec::MakeFromStream(std::unique_ptr<SkStream>, …)`
+         * Mirrors `Codec::MakeFromStream(std::unique_ptr<SkStream>, …)`
          * ; the Kotlin port reads the whole stream eagerly because the
          * D3.1 facade does not yet support incremental decoding.
          *
@@ -277,7 +277,7 @@ public abstract class SkCodec protected constructor() {
          * ownership of the [InputStream] (idiomatic Kotlin), unlike
          * upstream which takes a `unique_ptr` and consumes it.
          */
-        public fun MakeFromStream(stream: InputStream): SkCodec? =
+        public fun MakeFromStream(stream: InputStream): Codec? =
             MakeFromData(stream.readBytes())
     }
 
@@ -287,8 +287,8 @@ public abstract class SkCodec protected constructor() {
      * **R-suivi.47** — the registry exposes a public [Decoders.register]
      * entry-point so additional formats wired up after the initial
      * D3.1–D3.4 batch (AVIF, JPEG-XL, RAW, ICO — see the stubs under
-     * `org.graphiks.kanvas.codec.{SkAvifDecoder, SkJpegxlDecoder, SkRawDecoder,
-     * SkIcoDecoder}`) can plug themselves in without editing this
+     * `org.graphiks.kanvas.codec.{AvifDecoder, JpegxlDecoder, RawDecoder,
+     * IcoDecoder}`) can plug themselves in without editing this
      * file. Built-in decoders self-register at class-init time via
      * the eager-initialised list below.
      *
@@ -334,7 +334,7 @@ public abstract class SkCodec protected constructor() {
 
         /**
          * Append a [decoder] to the dispatch list. Mirrors upstream's
-         * `SkCodecs::Register` — call once at static-init time per
+         * `Codecs::Register` — call once at static-init time per
          * format. Calling [register] with the same [Decoder.name]
          * twice replaces the prior registration (so a real back-end
          * can transparently supersede its stub).
@@ -371,9 +371,9 @@ public abstract class SkCodec protected constructor() {
          * registered decoder in order and returns the first match's
          * `make` result (or `null` if no signature matches / the
          * matched decoder's `make` returns `null`). Equivalent to
-         * [SkCodec.MakeFromData].
+         * [Codec.MakeFromData].
          */
-        override fun dispatch(data: ByteArray): SkCodec? = MakeFromData(data)
+        override fun dispatch(data: ByteArray): Codec? = MakeFromData(data)
 
         @Synchronized
         private fun ensureProvidersLoaded() {
@@ -387,12 +387,12 @@ public abstract class SkCodec protected constructor() {
     }
 
     /**
-     * Mirrors `SkCodecs::Decoder` — the registration record a concrete
-     * format publishes to the [SkCodec] dispatcher.
+     * Mirrors `Codecs::Decoder` — the registration record a concrete
+     * format publishes to the [Codec] dispatcher.
      *
      * R-suivi.47 — promoted from `internal` to `public` so external
      * codec back-ends (libavif, libjxl, libraw, ICO directory parser…)
-     * can build their own [Decoder] and plug it into [SkCodec.Decoders]
+     * can build their own [Decoder] and plug it into [Codec.Decoders]
      * without sitting under `org.graphiks.kanvas.codec.<format>`.
      */
     public interface Decoder : CodecDecoder {
@@ -407,6 +407,6 @@ public abstract class SkCodec protected constructor() {
          * if the bytes pass [matches] but fail format-specific
          * validation (e.g. truncated PNG header).
          */
-        override fun make(data: ByteArray): SkCodec?
+        override fun make(data: ByteArray): Codec?
     }
 }

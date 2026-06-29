@@ -5,7 +5,7 @@ import org.skia.foundation.stream.SkStream
 
 /**
  * R-final.S **STUB.FFMPEG** — surface stub for upstream's
- * `SkVideoDecoder` (`modules/skvideo/include/SkVideoDecoder.h`). The
+ * `VideoDecoder` (`modules/skvideo/include/VideoDecoder.h`). The
  * real implementation requires FFmpeg's `libavformat` /
  * `libavcodec` for container demuxing + frame decoding, which lives
  * outside a pure-JVM port.
@@ -20,25 +20,25 @@ import org.skia.foundation.stream.SkStream
  * of scope for `:kanvas-skia` itself.
  */
 @Suppress("UNUSED_PARAMETER")
-public object SkVideoDecoder {
+public object VideoDecoder {
 
     /**
-     * Mirrors `SkVideoDecoder::MakeFromStream(std::unique_ptr<SkStream>)`.
+     * Mirrors `VideoDecoder::MakeFromStream(std::unique_ptr<SkStream>)`.
      * Always throws [NotImplementedError] — see the class doc.
      */
     @Suppress("FunctionName")
-    public fun MakeFromStream(stream: SkStream): SkVideoDecoderInstance =
+    public fun MakeFromStream(stream: SkStream): VideoDecoderInstance =
         throw NotImplementedError(
             "STUB.FFMPEG: requires FFmpeg libavformat/libavcodec via JNI — " +
                 "outside the portable codec matrix.",
         )
 
     /**
-     * Mirrors `SkVideoDecoder::MakeFromData(sk_sp<SkData>)` — same
+     * Mirrors `VideoDecoder::MakeFromData(sk_sp<SkData>)` — same
      * fate as [MakeFromStream].
      */
     @Suppress("FunctionName")
-    public fun MakeFromData(bytes: ByteArray): SkVideoDecoderInstance =
+    public fun MakeFromData(bytes: ByteArray): VideoDecoderInstance =
         throw NotImplementedError(
             "STUB.FFMPEG: requires FFmpeg libavformat/libavcodec via JNI — " +
                 "outside the portable codec matrix.",
@@ -46,18 +46,18 @@ public object SkVideoDecoder {
 }
 
 /**
- * Instance handle returned by [SkVideoDecoder.MakeFromStream] /
- * [SkVideoDecoder.MakeFromData]. Mirrors the public surface of
- * upstream's `SkVideoDecoder` instance methods.
+ * Instance handle returned by [VideoDecoder.MakeFromStream] /
+ * [VideoDecoder.MakeFromData]. Mirrors the public surface of
+ * upstream's `VideoDecoder` instance methods.
  *
  * Constructible only from inside this file — but practically
  * unreachable, since both factories throw before returning.
  */
 @Suppress("UNUSED_PARAMETER")
-public class SkVideoDecoderInstance internal constructor() {
+public class VideoDecoderInstance internal constructor() {
 
     /**
-     * Mirrors `sk_sp<SkImage> SkVideoDecoder::nextImage()` — pulls
+     * Mirrors `sk_sp<SkImage> VideoDecoder::nextImage()` — pulls
      * the next decoded frame, or returns `null` at end-of-stream.
      * Always throws.
      */
@@ -65,13 +65,13 @@ public class SkVideoDecoderInstance internal constructor() {
         "STUB.FFMPEG: requires FFmpeg libavformat/libavcodec via JNI.",
     )
 
-    /** Mirrors `SkVideoDecoder::computeFrameRate()`. Always throws. */
+    /** Mirrors `VideoDecoder::computeFrameRate()`. Always throws. */
     public val frameRate: Float
         get() = throw NotImplementedError(
             "STUB.FFMPEG: requires FFmpeg libavformat/libavcodec via JNI.",
         )
 
-    /** Mirrors `SkVideoDecoder::duration()` (microseconds). Always throws. */
+    /** Mirrors `VideoDecoder::duration()` (microseconds). Always throws. */
     public val duration: Long
         get() = throw NotImplementedError(
             "STUB.FFMPEG: requires FFmpeg libavformat/libavcodec via JNI.",

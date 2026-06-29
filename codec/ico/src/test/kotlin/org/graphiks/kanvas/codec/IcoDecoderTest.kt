@@ -10,7 +10,7 @@ import java.util.ServiceLoader
 import java.util.zip.CRC32
 import java.util.zip.Deflater
 
-class SkIcoDecoderTest {
+class IcoDecoderTest {
 
     @Test
     fun `is registered through ServiceLoader`() {
@@ -22,14 +22,14 @@ class SkIcoDecoderTest {
     @Test
     fun `decodes embedded PNG through codec registry`() {
         val pixels = listOf(intArrayOf(RED, GREEN))
-        val codec = SkCodec.MakeFromData(ico(entry(width = 2, height = 1, payload = png(2, 1, pixels))))!!
+        val codec = Codec.MakeFromData(ico(entry(width = 2, height = 1, payload = png(2, 1, pixels))))!!
 
         assertEquals(SkEncodedImageFormat.kPNG, codec.getEncodedFormat())
         assertEquals(2, codec.getInfo().width)
         assertEquals(1, codec.getInfo().height)
 
         val (bitmap, result) = codec.getImage()
-        assertEquals(SkCodec.Result.kSuccess, result)
+        assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
         assertEquals(RED, bitmap!!.getPixel(0, 0))
         assertEquals(GREEN, bitmap.getPixel(1, 0))
@@ -41,14 +41,14 @@ class SkIcoDecoderTest {
             listOf(RED, GREEN),
             listOf(BLUE, WHITE),
         )
-        val codec = SkCodec.MakeFromData(ico(entry(width = 2, height = 2, payload = dib32(2, 2, pixels))))!!
+        val codec = Codec.MakeFromData(ico(entry(width = 2, height = 2, payload = dib32(2, 2, pixels))))!!
 
         assertEquals(SkEncodedImageFormat.kBMP, codec.getEncodedFormat())
         assertEquals(2, codec.getInfo().width)
         assertEquals(2, codec.getInfo().height)
 
         val (bitmap, result) = codec.getImage()
-        assertEquals(SkCodec.Result.kSuccess, result)
+        assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
         assertEquals(RED, bitmap!!.getPixel(0, 0))
         assertEquals(GREEN, bitmap.getPixel(1, 0))
@@ -71,12 +71,12 @@ class SkIcoDecoderTest {
                 ),
             ),
         )
-        val codec = SkCodec.MakeFromData(ico(small, large))!!
+        val codec = Codec.MakeFromData(ico(small, large))!!
 
         assertEquals(3, codec.getInfo().width)
         assertEquals(2, codec.getInfo().height)
         val (bitmap, result) = codec.getImage()
-        assertEquals(SkCodec.Result.kSuccess, result)
+        assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
         assertEquals(GREEN, bitmap!!.getPixel(2, 1))
     }
@@ -95,11 +95,11 @@ class SkIcoDecoderTest {
             bitDepth = 1,
             payload = png(2, 2, listOf(intArrayOf(RED, RED), intArrayOf(RED, RED))),
         )
-        val codec = SkCodec.MakeFromData(ico(dib, embeddedPng))!!
+        val codec = Codec.MakeFromData(ico(dib, embeddedPng))!!
 
         assertEquals(SkEncodedImageFormat.kPNG, codec.getEncodedFormat())
         val (bitmap, result) = codec.getImage()
-        assertEquals(SkCodec.Result.kSuccess, result)
+        assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
         assertEquals(RED, bitmap!!.getPixel(0, 0))
     }
@@ -129,13 +129,13 @@ class SkIcoDecoderTest {
                 ),
             ),
         )
-        val codec = SkCodec.MakeFromData(ico(smallerPng, largerDib))!!
+        val codec = Codec.MakeFromData(ico(smallerPng, largerDib))!!
 
         assertEquals(SkEncodedImageFormat.kBMP, codec.getEncodedFormat())
         assertEquals(3, codec.getInfo().width)
         assertEquals(2, codec.getInfo().height)
         val (bitmap, result) = codec.getImage()
-        assertEquals(SkCodec.Result.kSuccess, result)
+        assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
         assertEquals(GREEN, bitmap!!.getPixel(2, 1))
     }
@@ -149,13 +149,13 @@ class SkIcoDecoderTest {
             height = 15,
             payload = png(15, 15, List(15) { IntArray(15) { RED } }),
         )
-        val codec = SkCodec.MakeFromData(ico(smallerSquare, encodedAsZero))!!
+        val codec = Codec.MakeFromData(ico(smallerSquare, encodedAsZero))!!
 
         assertEquals(SkEncodedImageFormat.kPNG, codec.getEncodedFormat())
         assertEquals(256, codec.getInfo().width)
         assertEquals(1, codec.getInfo().height)
         val (bitmap, result) = codec.getImage()
-        assertEquals(SkCodec.Result.kSuccess, result)
+        assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
         assertEquals(GREEN, bitmap!!.getPixel(255, 0))
     }
@@ -170,14 +170,14 @@ class SkIcoDecoderTest {
             booleanArrayOf(false, true),
             booleanArrayOf(true, false),
         )
-        val codec = SkCodec.MakeFromData(ico(entry(width = 2, height = 2, payload = dib24WithMask(2, 2, pixels, mask))))!!
+        val codec = Codec.MakeFromData(ico(entry(width = 2, height = 2, payload = dib24WithMask(2, 2, pixels, mask))))!!
 
         assertEquals(SkEncodedImageFormat.kBMP, codec.getEncodedFormat())
         assertEquals(2, codec.getInfo().width)
         assertEquals(2, codec.getInfo().height)
 
         val (bitmap, result) = codec.getImage()
-        assertEquals(SkCodec.Result.kSuccess, result)
+        assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
         assertEquals(RED, bitmap!!.getPixel(0, 0))
         assertEquals(TRANSPARENT_GREEN, bitmap.getPixel(1, 0))

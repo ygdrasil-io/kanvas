@@ -5,7 +5,7 @@ import java.io.InputStream
 
 /**
  * Pure-Kotlin Skia
- * [`SkIcoDecoder`](https://github.com/google/skia/blob/main/include/codec/SkIcoDecoder.h)
+ * [`IcoDecoder`](https://github.com/google/skia/blob/main/include/codec/IcoDecoder.h)
  * back-end. The ICO container is a tiny multi-image directory : a 6-byte
  * `ICONDIR` header (`reserved=0, type=1 ICO / 2 CUR, count`) followed by
  * `count` 16-byte `ICONDIRENTRY` records (width, height, palette,
@@ -13,8 +13,8 @@ import java.io.InputStream
  * either a self-contained PNG (sniff `89 50 4E 47`) or a "DIB" (a BMP
  * info-header + pixel data with no `BM` file header). We pick the
  * largest entry by area, prefer PNG when sizes tie, and delegate the
- * payload decode to the matching format-specific [SkCodec] :
- *  - **PNG payloads** route through [SkCodec.MakeFromData] which picks
+ * payload decode to the matching format-specific [Codec] :
+ *  - **PNG payloads** route through [Codec.MakeFromData] which picks
  *    up the registered PNG decoder from the dispatch registry.
  *  - **BMP payloads** are wrapped in a synthetic 14-byte `BITMAPFILEHEADER`
  *    so the registered BMP decoder can decode them
@@ -26,24 +26,24 @@ import java.io.InputStream
  * Legacy ICO DIBs append a 1bpp AND mask after their colour plane. When
  * present, the mask is applied to alpha before synthesising the BMP payload.
  */
-public object SkIcoDecoder {
+public object IcoDecoder {
 
     /** Decode the ICO bytes wrapped in [data]. */
-    public fun Decode(data: SkData): SkCodec? = Decode(data.toByteArray())
+    public fun Decode(data: SkData): Codec? = Decode(data.toByteArray())
 
     /**
-     * Decode the ICO bytes in [data]. Returns the [SkCodec] for the
+     * Decode the ICO bytes in [data]. Returns the [Codec] for the
      * largest embedded image (PNG or BMP), or `null` if the bytes do
      * not parse as an ICONDIR or no embedded image is decodable.
      */
-    public fun Decode(data: ByteArray): SkCodec? {
+    public fun Decode(data: ByteArray): Codec? {
         if (!matchesIco(data, data.size)) return null
         val payload = pickBestPayload(data) ?: return null
-        return SkCodec.MakeFromData(payload)
+        return Codec.MakeFromData(payload)
     }
 
     /** Decode the ICO bytes drained from [stream]. */
-    public fun Decode(stream: InputStream): SkCodec? = Decode(stream.readBytes())
+    public fun Decode(stream: InputStream): Codec? = Decode(stream.readBytes())
 
     /**
      * Sniff the leading 6 bytes of [data] for the ICONDIR header.
@@ -336,13 +336,13 @@ public object SkIcoDecoder {
     }
 
     /**
-     * R-suivi.47 — [SkCodec.Decoder] registration record for ICO/CUR.
-     * Auto-installed into [SkCodec.Decoders] at class-init time.
+     * R-suivi.47 — [Codec.Decoder] registration record for ICO/CUR.
+     * Auto-installed into [Codec.Decoders] at class-init time.
      */
-    internal val RegistryEntry: SkCodec.Decoder = object : SkCodec.Decoder {
+    internal val RegistryEntry: Codec.Decoder = object : Codec.Decoder {
         override val name: String = "ico"
         override fun matches(data: ByteArray): Boolean = IsIco(data)
-        override fun make(data: ByteArray): SkCodec? = Decode(data)
+        override fun make(data: ByteArray): Codec? = Decode(data)
     }
 
     private fun matchesIco(data: ByteArray, length: Int): Boolean {

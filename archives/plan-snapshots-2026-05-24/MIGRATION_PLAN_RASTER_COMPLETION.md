@@ -58,7 +58,7 @@
 3. [Chantiers critiques DM](#chantiers-critiques-dm)
    - [D1 — `SkPathOps`](#d1--skpathops)
    - [D2 — `SkRuntimeEffect` (compatibility shim)](#d2--skruntimeeffect-compatibility-shim--iso-fidelity-exception)
-   - [D3 — Image codecs (`SkCodec` + `encodeToData`)](#d3--image-codecs-skcodec--encodetodata)
+   - [D3 — Image codecs (`Codec` + `encodeToData`)](#d3--image-codecs-skcodec--encodetodata)
    - [D4 — DM sink architecture](#d4--dm-sink-architecture)
 4. [Chantiers fidélité Skia core](#chantiers-fidélité-skia-core)
    - [I1 — `SkTextBlob`](#i1--sktextblob)
@@ -550,16 +550,16 @@ internal object SkRuntimeEffectRegistry {
 
 ---
 
-### D3 — Image codecs (`SkCodec` + `encodeToData`) ✅ shipped
+### D3 — Image codecs (`Codec` + `encodeToData`) ✅ shipped
 
 **Skia upstream files** :
-- `include/codec/SkCodec.h`, `SkPngDecoder.h`, `SkJpegDecoder.h`,
+- `include/codec/Codec.h`, `SkPngDecoder.h`, `SkJpegDecoder.h`,
   `SkWebpDecoder.h`, etc.
 - `include/encode/SkPngEncoder.h`, `SkJpegEncoder.h`, etc.
 - `src/codec/`, `src/images/`
 
 **Kotlin target** :
-- `kanvas-skia/src/main/kotlin/org/skia/codec/SkCodec.kt` (decoder
+- `kanvas-skia/src/main/kotlin/org/skia/codec/Codec.kt` (decoder
   facade)
 - `kanvas-skia/src/main/kotlin/org/skia/encode/SkEncoder.kt` (encoder
   facade)
@@ -572,13 +572,13 @@ manageable while reaching multi-format parity.
 
 **Phase decomposition** :
 
-- **D3.1** ✅ — `SkCodec` decoder facade + PNG. Package
-  `org.skia.codec` ([SkCodec.kt](kanvas-skia/src/main/kotlin/org/skia/codec/SkCodec.kt))
+- **D3.1** ✅ — `Codec` decoder facade + PNG. Package
+  `org.skia.codec` ([Codec.kt](kanvas-skia/src/main/kotlin/org/skia/codec/Codec.kt))
   ships the facade (`Result` enum, `MakeFromData` / `MakeFromStream`,
   `getInfo` / `getEncodedFormat` / `getICCProfile` / `getPixels` /
   `getImage`) plus the `SkEncodedImageFormat` enum.
   [SkPngCodec.kt](kanvas-skia/src/main/kotlin/org/skia/codec/png/SkPngCodec.kt)
-  registers as the first `SkCodec.Decoder`, sniffs the PNG signature,
+  registers as the first `Codec.Decoder`, sniffs the PNG signature,
   walks the `iCCP` chunk for the embedded profile (the DM Rec.2020
   references rely on this), and dispatches to a 16-bpc → F16 path or
   an 8-bpc → 8888 path. `TestUtils.loadReferenceBitmap` /
@@ -595,7 +595,7 @@ manageable while reaching multi-format parity.
 
 - **D3.2** ✅ — JPEG via `imageio`.
   [SkJpegCodec.kt](kanvas-skia/src/main/kotlin/org/skia/codec/jpeg/SkJpegCodec.kt)
-  registers as the second `SkCodec.Decoder` (signature `FF D8 FF`),
+  registers as the second `Codec.Decoder` (signature `FF D8 FF`),
   delegates the bitstream decode to ImageIO, and reconstructs the
   embedded ICC profile from `APP2 / ICC_PROFILE` chunks (multi-marker
   walker, sorted by chunk index, contiguous-coverage validation, raw
@@ -626,7 +626,7 @@ manageable while reaching multi-format parity.
   GIF animation is **deferred** as the plan calls out — only the
   first frame is decoded. WBMP signature is the loose upstream
   triple `(type==0, fixedHeader & 0x9F == 0, valid VLQ width/height)` ;
-  it is registered last in `SkCodec.Decoders` so every other
+  it is registered last in `Codec.Decoders` so every other
   format with a stronger magic gets first refusal.
   - **LOC** : ~298 main + ~219 test = 517 total (cf. plan estimate
     ~250 — overage covers the parallel-but-distinct kdoc per format
@@ -645,7 +645,7 @@ manageable while reaching multi-format parity.
   handles VP8 / VP8L / VP8X bitstreams transparently from the same
   call site the other D3 codecs use.
   [SkWebpCodec.kt](kanvas-skia/src/main/kotlin/org/skia/codec/webp/SkWebpCodec.kt)
-  registers as the 5th `SkCodec.Decoder` (between BMP and WBMP),
+  registers as the 5th `Codec.Decoder` (between BMP and WBMP),
   signature is the 12-byte `RIFF` + 4 size bytes + `WEBP` prefix,
   and the codec emits `kRGBA_8888 / kUnpremul / sRGB` like every
   other D3 sibling. **Read-only** — TwelveMonkeys ships no WEBP

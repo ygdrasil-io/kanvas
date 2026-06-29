@@ -1,6 +1,6 @@
 package org.graphiks.kanvas.gpu.renderer.images
 
-import org.graphiks.kanvas.codec.SkCodec
+import org.graphiks.kanvas.codec.Codec
 import org.graphiks.math.SkColorGetA
 import org.graphiks.math.SkColorGetB
 import org.graphiks.math.SkColorGetG
@@ -30,11 +30,11 @@ data class DecodedImageTexture(
     }
 }
 
-/** Decodes PNG bytes via [SkCodec] (M17/M12 codec pipeline) into tightly packed RGBA8 pixel data. */
+/** Decodes PNG bytes via [Codec] (M17/M12 codec pipeline) into tightly packed RGBA8 pixel data. */
 fun decodePngToRgba(pngBytes: ByteArray, sourceId: String): DecodedImageTexture? {
-    val codec = SkCodec.MakeFromData(pngBytes) ?: return null
+    val codec = Codec.MakeFromData(pngBytes) ?: return null
     val (bitmap, result) = codec.getImage()
-    if (result != SkCodec.Result.kSuccess || bitmap == null) return null
+    if (result != Codec.Result.kSuccess || bitmap == null) return null
 
     val w = bitmap.width
     val h = bitmap.height

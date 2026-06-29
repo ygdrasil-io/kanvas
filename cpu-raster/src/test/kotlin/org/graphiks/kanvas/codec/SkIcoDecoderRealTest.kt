@@ -7,13 +7,13 @@ import org.skia.encode.SkPngEncoder
 import org.skia.foundation.SkBitmap
 
 /**
- * S7-A verification suite for the real (non-stub) [SkIcoDecoder.Decode]
+ * S7-A verification suite for the real (non-stub) [IcoDecoder.Decode]
  * implementation. We hand-build a 16x16 single-image ICO whose payload
  * is a freshly-encoded PNG and verify the decoder routes through the
  * registered PNG decoder and surfaces the encoded image back via
- * [SkCodec.getImage].
+ * [Codec.getImage].
  */
-class SkIcoDecoderRealTest {
+class IcoDecoderRealTest {
 
     private val side = 16
 
@@ -72,14 +72,14 @@ class SkIcoDecoderRealTest {
         val ico = makeIcoWithPng(png!!)
 
         // Round-trip through the dispatcher to mirror real-world calls.
-        val codec = SkIcoDecoder.Decode(ico)
+        val codec = IcoDecoder.Decode(ico)
         assertNotNull(codec, "ICO + embedded PNG must produce a codec")
-        codec as SkCodec
+        codec as Codec
         assertEquals(side, codec.getInfo().width)
         assertEquals(side, codec.getInfo().height)
 
         val (decoded, result) = codec.getImage()
-        assertEquals(SkCodec.Result.kSuccess, result)
+        assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(decoded)
         decoded as SkBitmap
         assertEquals(side, decoded.width)
@@ -123,9 +123,9 @@ class SkIcoDecoderRealTest {
         val entryBig = makeEntry(side, side, pngBig.size, offset = 38 + pngSmall.size)
         val ico = header + entrySmall + entryBig + pngSmall + pngBig
 
-        val codec = SkIcoDecoder.Decode(ico)
+        val codec = IcoDecoder.Decode(ico)
         assertNotNull(codec)
-        codec as SkCodec
+        codec as Codec
         // Largest by area wins → 16x16, not 8x8.
         assertEquals(side, codec.getInfo().width)
         assertEquals(side, codec.getInfo().height)

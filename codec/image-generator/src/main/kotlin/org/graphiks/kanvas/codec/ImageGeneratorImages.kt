@@ -15,18 +15,18 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
 /**
- * A concrete [SkImageGenerator] backed by an [SkCodec] — mirrors
- * Skia's `SkCodecImageGenerator` (`src/codec/SkCodecImageGenerator.h`).
+ * A concrete [SkImageGenerator] backed by an [Codec] — mirrors
+ * Skia's `CodecImageGenerator` (`src/codec/CodecImageGenerator.h`).
  *
  * Decodes the codec on demand into the destination buffer ; the codec's
- * own [SkCodec.getInfo] drives the generator's reported [SkImageInfo].
+ * own [Codec.getInfo] drives the generator's reported [SkImageInfo].
  *
- * **Use** : pair with [SkImageGeneratorImages.DeferredFromGenerator]
+ * **Use** : pair with [ImageGeneratorImages.DeferredFromGenerator]
  * ( (alias removed in iter 3c)) to produce a
  * deferred-decoded [SkImage] from raw encoded bytes.
  */
-public class SkCodecImageGenerator private constructor(
-    private val codec: SkCodec,
+public class CodecImageGenerator private constructor(
+    private val codec: Codec,
 ) : SkImageGenerator(codec.getInfo()) {
 
     override fun onGetPixels(info: SkImageInfo, pixels: ByteBuffer, rowBytes: Int): Boolean {
@@ -37,7 +37,7 @@ public class SkCodecImageGenerator private constructor(
             colorType = SkColorType.kRGBA_8888,
         )
         val res = codec.getPixels(codec.getInfo(), bm)
-        if (res != SkCodec.Result.kSuccess) return false
+        if (res != Codec.Result.kSuccess) return false
         // Pack the 32-bit pixels into the destination ByteBuffer in
         // RGBA byte order (matches the buffer layout the upstream
         // generator's [getPixels] consumers expect).
@@ -60,13 +60,13 @@ public class SkCodecImageGenerator private constructor(
     public companion object {
         /**
          * Mirrors Skia's
-         * `SkCodecImageGenerator::MakeFromEncodedCodec(sk_sp<SkData>)`.
+         * `CodecImageGenerator::MakeFromEncodedCodec(sk_sp<SkData>)`.
          * Returns `null` when the bytes cannot be sniffed by any
-         * registered [SkCodec] decoder.
+         * registered [Codec] decoder.
          */
-        public fun MakeFromEncodedCodec(data: ByteArray): SkCodecImageGenerator? {
-            val codec = SkCodec.MakeFromData(data) ?: return null
-            return SkCodecImageGenerator(codec)
+        public fun MakeFromEncodedCodec(data: ByteArray): CodecImageGenerator? {
+            val codec = Codec.MakeFromData(data) ?: return null
+            return CodecImageGenerator(codec)
         }
     }
 }
@@ -78,7 +78,7 @@ public class SkCodecImageGenerator private constructor(
  * this up without an ownership conflict with the parallel agent
  * responsible for the bitmap / encoded factories.
  */
-public object SkImageGeneratorImages {
+public object ImageGeneratorImages {
 
     /**
      * Mirrors Skia's `SkImages::DeferredFromGenerator(sk_sp<SkImageGenerator>)`.

@@ -1,7 +1,7 @@
 package org.graphiks.kanvas.codec.jpeg
 
 import org.graphiks.kanvas.codec.CodecDecoderProvider
-import org.graphiks.kanvas.codec.SkCodec
+import org.graphiks.kanvas.codec.Codec
 import org.skia.foundation.SkAlphaType
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorSpace
@@ -11,7 +11,7 @@ import org.skia.foundation.SkEncodedOrigin
 import org.skia.foundation.SkImageInfo
 import org.skia.foundation.skcms.SkcmsICCProfile
 import org.skia.foundation.skcms.skcmsParse
-import org.skia.utils.SkPixmapUtils
+import org.skia.utils.PixmapUtils
 import kotlin.math.cos
 import kotlin.math.floor
 import kotlin.math.roundToInt
@@ -26,9 +26,9 @@ import kotlin.math.sqrt
  * 3-component YCbCr JPEGs with 4:4:4, 4:2:2, or 4:2:0 sampling, and
  * baseline Adobe CMYK/YCCK JPEGs.
  */
-public class SkJpegKotlinCodec private constructor(
+public class JpegCodec private constructor(
     private val jpeg: ParsedJpeg,
-) : SkCodec() {
+) : Codec() {
 
     private val cachedInfo: SkImageInfo by lazy {
         SkImageInfo.Make(
@@ -72,7 +72,7 @@ public class SkJpegKotlinCodec private constructor(
         )
         val copyResult = writeDecodedPixels(raw, pixels)
         if (copyResult != Result.kSuccess) return copyResult
-        if (!SkPixmapUtils.Orient(dst, raw, jpeg.origin)) return Result.kInvalidParameters
+        if (!PixmapUtils.Orient(dst, raw, jpeg.origin)) return Result.kInvalidParameters
         return Result.kSuccess
     }
 
@@ -102,7 +102,7 @@ public class SkJpegKotlinCodec private constructor(
         }
     }
 
-    internal companion object Decoder : SkCodec.Decoder {
+    internal companion object Decoder : Codec.Decoder {
         override val name: String = "jpeg"
 
         override fun matches(data: ByteArray): Boolean =
@@ -111,20 +111,20 @@ public class SkJpegKotlinCodec private constructor(
                 data[1] == 0xD8.toByte() &&
                 data[2] == 0xFF.toByte()
 
-        override fun make(data: ByteArray): SkCodec? {
+        override fun make(data: ByteArray): Codec? {
             if (!matches(data)) return null
             val parsed = try {
                 parseJpeg(data)
             } catch (_: IllegalArgumentException) {
                 null
             } ?: return null
-            return SkJpegKotlinCodec(parsed)
+            return JpegCodec(parsed)
         }
     }
 }
 
 public class JpegKotlinDecoderProvider : CodecDecoderProvider {
-    override fun decoders(): List<SkCodec.Decoder> = listOf(SkJpegKotlinCodec.Decoder)
+    override fun decoders(): List<Codec.Decoder> = listOf(JpegCodec.Decoder)
 }
 
 private data class ParsedJpeg(
