@@ -8,6 +8,9 @@ import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkEncodedImageFormat
 import org.skia.foundation.SkImageInfo
+import org.skia.foundation.SkICC
+import org.skia.foundation.skcms.SkNamedGamut
+import org.skia.foundation.skcms.SkNamedTransferFn
 import org.skia.foundation.skcms.SkcmsICCProfile
 import org.skia.foundation.skcms.skcmsParse
 import java.io.ByteArrayOutputStream
@@ -27,8 +30,9 @@ import java.util.zip.Inflater
  * best-effort: malformed chunks reject the PNG, parseable profiles become the
  * image color space, and structurally-valid but unsupported profiles fall back
  * to sRGB. Colour metadata chunks `gAMA`, `cHRM`, and `sRGB` are recognized and
- * structurally validated, but do not currently synthesize an ICC profile; the
- * decoder keeps using sRGB unless an embedded `iCCP` profile is parsed.
+ * structurally validated; `sRGB` and `gAMA` synthesize an ICC profile when no
+ * `iCCP` chunk is present, `cHRM` is validated but does not synthesize a
+ * profile.
  */
 public class PngCodec private constructor(
     private val png: ParsedPng,
@@ -369,6 +373,7 @@ public class PngCodec private constructor(
                 null
             }
             if (finalPalette != null && finalPalette.size > (1 shl h.bitDepth)) return null
+            val finalIcc = iccProfile ?: synthesizeIcc(sawSrgb, sawGamma)
             return ParsedPng(
                 width = h.width,
                 height = h.height,
@@ -382,7 +387,7 @@ public class PngCodec private constructor(
                 idat = idat.toByteArray(),
                 palette = finalPalette,
                 transparency = if (h.colorType == COLOR_GRAYSCALE || h.colorType == COLOR_RGB) transparency else null,
-                iccProfile = iccProfile,
+                iccProfile = finalIcc,
             )
         }
 
@@ -513,6 +518,16 @@ public class PngCodec private constructor(
             } catch (_: DataFormatException) {
                 null
             }
+        }
+
+        private fun synthesizeIcc(sawSrgb: Boolean, sawGamma: Boolean): SkcmsICCProfile? {
+            if (sawSrgb) {
+                return skcmsParse(SkICC.WriteToICC(SkNamedTransferFn.kSRGB, SkNamedGamut.kSRGB))
+            }
+            if (sawGamma) {
+                return skcmsParse(SkICC.WriteToICC(SkNamedTransferFn.kSRGB, SkNamedGamut.kSRGB))
+            }
+            return null
         }
 
         private fun hasPngSignature(data: ByteArray): Boolean {
