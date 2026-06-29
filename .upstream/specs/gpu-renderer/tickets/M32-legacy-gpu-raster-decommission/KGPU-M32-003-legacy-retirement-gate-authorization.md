@@ -2,7 +2,6 @@
 id: KGPU-M32-003
 title: "Legacy retirement-gate authorization for all 12 families (gatePassed)"
 status: done
-status: review
 milestone: M32
 priority: P0
 owner_area: legacy-cleanup

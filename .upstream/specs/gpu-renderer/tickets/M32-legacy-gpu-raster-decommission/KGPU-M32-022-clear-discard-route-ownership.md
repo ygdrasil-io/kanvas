@@ -2,7 +2,6 @@
 id: KGPU-M32-022
 title: "Legacy decommission: clear-discard-target-background route ownership assignment"
 status: done
-status: review
 milestone: M32
 priority: P0
 owner_area: legacy-cleanup

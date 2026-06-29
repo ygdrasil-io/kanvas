@@ -2,7 +2,6 @@
 id: KGPU-M32-014
 title: "Legacy decommission: device-scissor-simple-clips port (WideOpen/DeviceRect) / refuse (complex clips)"
 status: done
-status: review
 milestone: M32
 priority: P0
 owner_area: legacy-cleanup

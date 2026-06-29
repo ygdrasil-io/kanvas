@@ -2,7 +2,6 @@
 id: KGPU-M32-016
 title: "Legacy decommission: images-bitmap-codecs-uploads formal refusal (dependency-gated)"
 status: done
-status: review
 milestone: M32
 priority: P1
 owner_area: legacy-cleanup

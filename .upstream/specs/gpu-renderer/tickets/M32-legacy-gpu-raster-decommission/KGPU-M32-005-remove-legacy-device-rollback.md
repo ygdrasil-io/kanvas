@@ -2,7 +2,6 @@
 id: KGPU-M32-005
 title: "Remove legacy device, rollback branch, and module include (Option B)"
 status: done
-status: review
 milestone: M32
 priority: P0
 owner_area: legacy-cleanup

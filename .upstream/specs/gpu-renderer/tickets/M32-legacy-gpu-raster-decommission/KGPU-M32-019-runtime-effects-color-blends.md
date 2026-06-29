@@ -2,7 +2,6 @@
 id: KGPU-M32-019
 title: "Legacy decommission: runtime-effects-color-blends port (SrcOver blend) / refuse (other blends, color filters, runtime effects, color management)"
 status: done
-status: review
 milestone: M32
 priority: P0
 owner_area: legacy-cleanup
