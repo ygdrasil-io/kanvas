@@ -42,8 +42,11 @@ sealed interface GPUColorGlyphCompositeShaderResult {
  * `layerAtlasRects[i]` is the layer glyph's coverage region as normalized
  * `(originU, originV, sizeU, sizeV)` and is sampled as `origin + quad_uv * size`.
  *
- * Uses the WGSL `loop {}` construct (not `for`) because the current wgsl4k
- * parser rejects `for` loops; `loop {}` is standard WGSL and validates.
+ * Uses the WGSL `loop {}` construct instead of `for (...)`: wgsl4k's
+ * `parseForStatement` has a double-semicolon bug (it expects a second `;` after
+ * the `var` init clause that `parseVariableDeclStatement` already consumed), so a
+ * valid `for (var i...; ...; ...)` fails validation. `loop {}` is standard WGSL
+ * and validates. See reports/wgsl4k-evolution/ for the minimized repro + fix.
  */
 fun colorGlyphCompositeWgsl(maxLayers: Int = COLOR_GLYPH_COMPOSITE_MAX_LAYERS): String = """
 struct Uniforms {
