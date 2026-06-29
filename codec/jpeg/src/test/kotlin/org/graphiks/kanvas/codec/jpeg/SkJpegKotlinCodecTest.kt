@@ -1322,12 +1322,16 @@ class SkJpegKotlinCodecTest {
     }
 
     private fun readSkiaJpeg(name: String): ByteArray {
-        val candidates = listOf(
-            Path.of("skia-integration-tests/src/test/resources/images/$name"),
-            Path.of("../skia-integration-tests/src/test/resources/images/$name"),
-        )
-        val path = candidates.firstOrNull { Files.exists(it) } ?: error("missing Skia JPEG fixture: $name")
-        return Files.readAllBytes(path)
+        val relative = "skia-integration-tests/src/test/resources/images/$name"
+        var dir: Path? = Path.of("").toAbsolutePath()
+        while (dir != null) {
+            val candidate = dir.resolve(relative)
+            if (Files.exists(candidate)) {
+                return Files.readAllBytes(candidate)
+            }
+            dir = dir.parent
+        }
+        error("missing Skia JPEG fixture: $name")
     }
 
     private fun ByteArrayOutputStream.writeU16LE(value: Int) {
