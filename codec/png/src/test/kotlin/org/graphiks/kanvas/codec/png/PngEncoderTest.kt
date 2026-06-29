@@ -8,6 +8,11 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.graphiks.kanvas.codec.Codec
 import org.skia.foundation.SkBitmap
+import org.skia.foundation.SkICC
+import org.skia.foundation.skcms.SkNamedTransferFn
+import org.skia.foundation.skcms.SkNamedGamut
+import org.skia.foundation.SkColorSpace
+import org.skia.foundation.skcms.skcmsParse
 import java.io.ByteArrayOutputStream
 
 class PngEncoderTest {
@@ -78,6 +83,40 @@ class PngEncoderTest {
         assertTrue(bytes.size > 0)
         val decoded = decodePng(bytes)
         assertEquals(4, decoded.width)
+    }
+
+    @Test
+    fun `encode with bitmap color space writes iCCP chunk and round-trips`() {
+        val iccBytes = SkICC.WriteToICC(SkNamedTransferFn.kSRGB, SkNamedGamut.kDisplayP3)
+        val colorSpace = SkColorSpace.make(skcmsParse(iccBytes) ?: error("failed to parse ICC"))!!
+        val src = SkBitmap(4, 4, colorSpace)
+        for (y in 0 until 4) for (x in 0 until 4) {
+            src.pixels[y * 4 + x] = (0xFF shl 24) or ((x * 85) shl 16) or ((y * 85) shl 8)
+        }
+        val bytes = PngEncoder.encode(src)!!
+        val codec = Codec.MakeFromData(bytes)
+        assertNotNull(codec)
+        val profile = codec!!.getICCProfile()
+        assertNotNull(profile, "PNG with iCCP must expose profile on decode")
+        val (decoded, result) = codec.getImage()
+        assertEquals(Codec.Result.kSuccess, result)
+        assertEquals(4, decoded!!.width)
+    }
+
+    @Test
+    fun `interlaced encode round-trips through decoder`() {
+        val src = SkBitmap(8, 8)
+        for (y in 0 until 8) for (x in 0 until 8) {
+            src.pixels[y * 8 + x] = (0xFF shl 24) or ((x * 32) shl 16) or ((y * 32) shl 8)
+        }
+        val bytes = PngEncoder.encode(src, PngEncoder.Options(interlace = true))!!
+        assertEquals(1, bytes[28].toInt() and 0xFF, "IHDR interlace byte must be 1")
+        val decoded = decodePng(bytes)
+        assertEquals(8, decoded.width)
+        assertEquals(8, decoded.height)
+        for (y in 0 until 8) for (x in 0 until 8) {
+            assertEquals(src.getPixel(x, y), decoded.getPixel(x, y), "($x,$y)")
+        }
     }
 
     private fun decodePng(bytes: ByteArray): SkBitmap {

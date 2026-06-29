@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.codec.png
 
 import org.skia.foundation.SkBitmap
+import org.skia.foundation.SkICC
 import org.skia.foundation.SkPixmap
 import org.skia.foundation.stream.SkWStream
 import java.io.ByteArrayOutputStream
@@ -24,6 +25,7 @@ public object PngEncoder {
         val filterFlags: Int = FilterFlag.kAll.mask,
         val zLibLevel: Int = 6,
         val comments: List<String> = emptyList(),
+        val interlace: Boolean = false,
     ) {
         init {
             require(zLibLevel in 0..9) { "zLibLevel must be in [0, 9], got $zLibLevel" }
@@ -71,15 +73,40 @@ public object PngEncoder {
 
     private fun writePng(dst: OutputStream, src: SkBitmap, options: Options) {
         dst.write(PNG_SIGNATURE)
-        writeChunk(dst, TYPE_IHDR, ihdr(src.width, src.height))
+        writeChunk(dst, TYPE_IHDR, ihdr(src.width, src.height, options))
         options.comments.chunked(2).forEach { (keyword, text) ->
             writeChunk(dst, TYPE_TEXT, textChunk(keyword, text))
         }
-        writeChunk(dst, TYPE_IDAT, deflate(filteredRgbaRows(src, options.filterFlags), options.zLibLevel))
+        if (!src.colorSpace.isSRGB()) {
+            val iccProfileData = SkICC.WriteToICC(src.colorSpace.transferFn, src.colorSpace.toXYZD50)
+            val nameBytes = "sRGB".toByteArray()
+            val deflater = Deflater()
+            try {
+                deflater.setInput(iccProfileData)
+                deflater.finish()
+                val compressed = ByteArrayOutputStream()
+                val buf = ByteArray(8192)
+                while (!deflater.finished()) {
+                    val n = deflater.deflate(buf)
+                    if (n == 0 && deflater.needsInput()) break
+                    compressed.write(buf, 0, n)
+                }
+                val iccpData = nameBytes + byteArrayOf(0, 0) + compressed.toByteArray()
+                writeChunk(dst, TYPE_ICCP, iccpData)
+            } finally {
+                deflater.end()
+            }
+        }
+        val pixelBytes = if (options.interlace) {
+            adam7Rows(src, src.width, src.height, options.filterFlags)
+        } else {
+            filteredRgbaRows(src, options.filterFlags)
+        }
+        writeChunk(dst, TYPE_IDAT, deflate(pixelBytes, options.zLibLevel))
         writeChunk(dst, TYPE_IEND, ByteArray(0))
     }
 
-    private fun ihdr(width: Int, height: Int): ByteArray =
+    private fun ihdr(width: Int, height: Int, options: Options): ByteArray =
         ByteArray(13).also { out ->
             writeU32BE(out, 0, width)
             writeU32BE(out, 4, height)
@@ -87,7 +114,7 @@ public object PngEncoder {
             out[9] = 6 // colour type: RGBA
             out[10] = 0 // compression
             out[11] = 0 // filter
-            out[12] = 0 // interlace
+            out[12] = if (options.interlace) 1 else 0 // interlace
         }
 
     private fun textChunk(keyword: String, text: String): ByteArray {
@@ -209,11 +236,10 @@ public object PngEncoder {
             deflater.setInput(bytes)
             deflater.finish()
             val out = ByteArrayOutputStream()
-            val buffer = ByteArray(8192)
+            val buffer = ByteArray(bytes.size + 64)
             while (!deflater.finished()) {
-                val count = deflater.deflate(buffer)
-                if (count == 0 && deflater.needsInput()) break
-                out.write(buffer, 0, count)
+                val n = deflater.deflate(buffer, 0, buffer.size)
+                if (n > 0) out.write(buffer, 0, n)
             }
             out.toByteArray()
         } finally {
@@ -272,6 +298,41 @@ public object PngEncoder {
     private const val TYPE_IDAT = 0x49444154
     private const val TYPE_IEND = 0x49454E44
     private const val TYPE_TEXT = 0x74455874
+    private const val TYPE_ICCP = 0x69434350
+
+    private val adam7Passes = arrayOf(
+        intArrayOf(0, 0, 8, 8),
+        intArrayOf(4, 0, 8, 8),
+        intArrayOf(0, 4, 4, 8),
+        intArrayOf(2, 0, 4, 4),
+        intArrayOf(0, 2, 2, 4),
+        intArrayOf(1, 0, 2, 2),
+        intArrayOf(0, 1, 1, 2),
+    )
+
+    private fun adam7Rows(src: SkBitmap, w: Int, h: Int, filterFlags: Int): ByteArray {
+        val allRows = ByteArrayOutputStream()
+        for (pass in adam7Passes) {
+            val xStart = pass[0]; val yStart = pass[1]
+            val xStep = pass[2]; val yStep = pass[3]
+            val passW = if (w > xStart) (w - xStart + xStep - 1) / xStep else 0
+            val passH = if (h > yStart) (h - yStart + yStep - 1) / yStep else 0
+            if (passW <= 0 || passH <= 0) continue
+            for (py in 0 until passH) {
+                val y = yStart + py * yStep
+                allRows.write(FILTER_NONE)
+                for (px in 0 until passW) {
+                    val x = xStart + px * xStep
+                    val argb = src.getPixelAsSrgb(x, y)
+                    allRows.write((argb ushr 16) and 0xFF)
+                    allRows.write((argb ushr 8) and 0xFF)
+                    allRows.write(argb and 0xFF)
+                    allRows.write((argb ushr 24) and 0xFF)
+                }
+            }
+        }
+        return allRows.toByteArray()
+    }
 
     private object encoderSupport {
         fun pixmapToBitmap(src: SkPixmap): SkBitmap? {
