@@ -64,6 +64,10 @@ import org.graphiks.kanvas.gpu.renderer.geometry.StencilCoverExecutor
 import org.graphiks.kanvas.gpu.renderer.geometry.ConvexFanExecutor
 import org.graphiks.kanvas.gpu.renderer.geometry.isPathConvex
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.textRunRouteUnavailableReason
+import org.graphiks.kanvas.font.atlas.AtlasRegion
+import org.graphiks.kanvas.font.atlas.GlyphAtlasPlacement
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
 private const val BYTES_PER_PIXEL: Int = 4
 
@@ -117,6 +121,7 @@ class RectOnlyOffscreenRenderer {
                     colorMatrixRectCount = drawPlan.colorMatrixRectCount,
                     strokeRectCount = drawPlan.strokeRectCount,
                     textRunRectCount = drawPlan.textRunCount,
+                    colorTextRunRectCount = drawPlan.colorTextRunCount,
                     saveLayerRectCount = drawPlan.saveLayerRectCount,
                     pathFillStencilCount = drawPlan.pathFillStencilCount,
                     pathFillGradientCount = drawPlan.pathFillGradientCount,
@@ -250,7 +255,7 @@ class RectOnlyOffscreenRenderer {
                 "linear-gradient-rect", "radial-gradient-rect", "sweep-gradient-rect",
                 "blur-rect", "color-matrix-rect", "stroke-rect",
                 "bitmap-rect", "runtime-effect", "text-run", "save-layer",
-                "custom-runtime-effect",
+                "custom-runtime-effect", "color-text-run",
             )
             val gradientTypes = setOf(
                 "linear-gradient-rect", "radial-gradient-rect", "sweep-gradient-rect",
@@ -435,6 +440,85 @@ class RectOnlyOffscreenRenderer {
                         )
                     },
                 )
+            }
+
+            val colorTextFills = drawPlan.fills.filter { it.family == "color-text-run" }
+            if (colorTextFills.isNotEmpty()) {
+                val first = colorTextFills.first()
+                val glyphText = first.colorTextRunText ?: "AB"
+                val glyphFontSize = first.colorTextRunFontSize ?: 48f
+                val layerColors = first.colorTextRunLayerColors ?: listOf(
+                    SceneColor(1f, 0f, 0f, 1f),
+                    SceneColor(0f, 0f, 1f, 1f),
+                )
+
+                val atlasResult = GlyphAtlasTextureBuilder().build(glyphText, fontSize = glyphFontSize)
+                val built = atlasResult as? GlyphAtlasTextureResult.Built
+                val atlas = built?.atlas
+                if (atlas != null && atlas.placements.size >= 2) {
+                    val placements = atlas.placements
+                    val targetW = viewportWidth
+                    val targetH = viewportHeight
+                    val uniform = ByteBuffer.allocate(528).order(ByteOrder.LITTLE_ENDIAN)
+
+                    uniform.putFloat(targetW.toFloat())
+                    uniform.putFloat(targetH.toFloat())
+                    uniform.putInt(minOf(layerColors.size, 16))
+                    uniform.putInt(0)
+
+                    for (i in 0 until 16) {
+                        val c = if (i < layerColors.size) layerColors[i] else SceneColor(0f, 0f, 0f, 0f)
+                        uniform.putFloat(c.r * c.a)
+                        uniform.putFloat(c.g * c.a)
+                        uniform.putFloat(c.b * c.a)
+                        uniform.putFloat(c.a)
+                    }
+
+                    val aw = atlas.width.toFloat()
+                    val ah = atlas.height.toFloat()
+                    for (i in 0 until 16) {
+                        if (i < placements.size) {
+                            val p = placements[i]
+                            uniform.putFloat(p.region.x / aw)
+                            uniform.putFloat(p.region.y / ah)
+                            uniform.putFloat(p.region.width / aw)
+                            uniform.putFloat(p.region.height / ah)
+                        } else {
+                            uniform.putFloat(0f)
+                            uniform.putFloat(0f)
+                            uniform.putFloat(0f)
+                            uniform.putFloat(0f)
+                        }
+                    }
+
+                    val uniformBytes = uniform.array()
+
+                    val vertexData = floatArrayOf(
+                        0f, 0f, 0f, 0f,
+                        targetW.toFloat(), 0f, 1f, 0f,
+                        targetW.toFloat(), targetH.toFloat(), 1f, 1f,
+                        0f, targetH.toFloat(), 0f, 1f,
+                    )
+                    val indexData = intArrayOf(0, 1, 2, 0, 2, 3)
+
+                    drawColorGlyphPass(
+                        atlasRgba = atlas.a8Bytes,
+                        atlasWidth = atlas.width,
+                        atlasHeight = atlas.height,
+                        atlasFormat = "r8unorm",
+                        vertexData = vertexData,
+                        indexData = indexData,
+                        draws = listOf(
+                            GPUBackendRawUniformDraw(
+                                uniformBytes = uniformBytes,
+                                scissorX = 0,
+                                scissorY = 0,
+                                scissorWidth = targetW,
+                                scissorHeight = targetH,
+                            ),
+                        ),
+                    )
+                }
             }
 
             val gradientFills = drawPlan.fills.filter { it.family in gradientTypes }
@@ -919,6 +1003,7 @@ internal data class RectOnlyDrawPlan(
     val colorMatrixRectCount: Int = fills.count { it.family == "color-matrix-rect" }
     val strokeRectCount: Int = fills.count { it.family == "stroke-rect" }
     val textRunCount: Int = fills.count { it.family == "text-run" }
+    val colorTextRunCount: Int = fills.count { it.family == "color-text-run" }
     val saveLayerRectCount: Int = fills.count { it.family == "save-layer" }
     val pathFillStencilCount: Int = fills.count { it.family == "path-fill-stencil" }
     val pathFillGradientCount: Int = fills.count { it.family == "path-fill-gradient" }
@@ -1020,6 +1105,9 @@ internal data class RectOnlyFillDraw(
     val shadowOffsetX: Float = 0f,
     val shadowOffsetY: Float = 0f,
     val groupAlpha: Float = 1f,
+    val colorTextRunText: String? = null,
+    val colorTextRunFontSize: Float? = null,
+    val colorTextRunLayerColors: List<SceneColor>? = null,
 )
 
 private data class RectOnlyIndexedDraw(
@@ -1070,6 +1158,7 @@ internal fun prepareRectOnlyDrawPlan(
                 is SceneCommand.CustomRuntimeEffectTile -> add(RectOnlyIndexedDraw(index, command, activeClip))
                 is SceneCommand.TextRun -> add(RectOnlyIndexedDraw(index, command, activeClip))
                 is SceneCommand.MeshRibbon -> add(RectOnlyIndexedDraw(index, command, activeClip))
+                is SceneCommand.ColorTextRun -> add(RectOnlyIndexedDraw(index, command, activeClip))
                 else -> Unit
             }
         }
@@ -1090,6 +1179,7 @@ internal fun prepareRectOnlyDrawPlan(
             val textRunCommand = command as? SceneCommand.TextRun
             val meshRibbonCommand = command as? SceneCommand.MeshRibbon
             val creCommand = command as? SceneCommand.CustomRuntimeEffectTile
+            val colorTextRunCommand = command as? SceneCommand.ColorTextRun
             val paintOrder = command.paintOrder()
             val mappedFamily = when {
                 command is SceneCommand.Stroke -> "stroke-rect"
@@ -1105,13 +1195,13 @@ internal fun prepareRectOnlyDrawPlan(
                 sceneId = sceneId,
                 label = command.label,
                 family = mappedFamily,
-                rect = command.shapeRect(),
-                radius = command.shapeRadius(),
-                startColor = command.shapeStartColor(),
-                endColor = command.shapeEndColor(),
-                bottomLeftColor = command.shapeBottomLeftColor(),
-                bottomRightColor = command.shapeBottomRightColor(),
-                paintKind = command.shapePaintKind(),
+                rect = if (command is SceneCommand.ColorTextRun) SceneRect(0f, 0f, width.toFloat(), height.toFloat()) else command.shapeRect(),
+                radius = if (command is SceneCommand.ColorTextRun) 0f else command.shapeRadius(),
+                startColor = if (command is SceneCommand.ColorTextRun) colorTextRunFallbackColor() else command.shapeStartColor(),
+                endColor = if (command is SceneCommand.ColorTextRun) colorTextRunFallbackColor() else command.shapeEndColor(),
+                bottomLeftColor = if (command is SceneCommand.ColorTextRun) colorTextRunFallbackColor() else command.shapeBottomLeftColor(),
+                bottomRightColor = if (command is SceneCommand.ColorTextRun) colorTextRunFallbackColor() else command.shapeBottomRightColor(),
+                paintKind = if (command is SceneCommand.ColorTextRun) 13f else command.shapePaintKind(),
                 filterKind = 0f,
                 filterStrength = 0f,
                 clip = clip,
@@ -1133,6 +1223,9 @@ internal fun prepareRectOnlyDrawPlan(
                 shadowOffsetX = saveLayerCommand?.shadowOffsetX ?: 0f,
                 shadowOffsetY = saveLayerCommand?.shadowOffsetY ?: 0f,
                 groupAlpha = saveLayerCommand?.groupAlpha ?: 1f,
+                colorTextRunText = colorTextRunCommand?.glyphText,
+                colorTextRunFontSize = colorTextRunCommand?.glyphFontSize,
+                colorTextRunLayerColors = colorTextRunCommand?.layerColors,
             )
         }
     require(fills.isNotEmpty()) {
@@ -1234,6 +1327,9 @@ internal fun prepareRectOnlyDrawPlan(
         }
         if (fills.any { it.family == "vertices" }) {
             addAll(verticesWiringDiagnostics())
+        }
+        if (fills.any { it.family == "color-text-run" }) {
+            addAll(colorTextRunWiringDiagnostics())
         }
     }
 
@@ -1449,6 +1545,17 @@ internal fun verticesWiringDiagnostics(): List<String> = buildList {
     add("vertices:realMesh=true vertexIndexBuffersUploaded=true productActivation=true")
 }
 
+internal fun colorTextRunWiringDiagnostics(): List<String> = listOf(
+    "colorTextRun:route=colr-v0-composite",
+    "colorTextRun:shader=colorGlyphCompositeWgsl",
+    "colorTextRun:maxLayers=16",
+    "colorTextRun:atlasFormat=r8unorm",
+    "colorTextRun:vertexLayout=pos+quad_uv",
+    "colorTextRun:uniformPack=528-byte-le",
+    "colorTextRun:realGpuOutput=true productActivation=true",
+    "colorTextRun:nonClaim=no-bezier-curve-glyph-no-arabic-shaping-no-emoji-no-colrv1",
+)
+
 private fun rectOnlyFillDraw(
     sceneId: String,
     label: String,
@@ -1481,6 +1588,9 @@ private fun rectOnlyFillDraw(
     shadowOffsetX: Float = 0f,
     shadowOffsetY: Float = 0f,
     groupAlpha: Float = 1f,
+    colorTextRunText: String? = null,
+    colorTextRunFontSize: Float? = null,
+    colorTextRunLayerColors: List<SceneColor>? = null,
 ): RectOnlyFillDraw {
     requireInsideTarget(sceneId, label, rect, width, height, "fill shape")
     clip?.let { requireInsideTarget(sceneId, it.label, it.rect, width, height, "clip") }
@@ -1529,6 +1639,9 @@ private fun rectOnlyFillDraw(
         shadowOffsetX = shadowOffsetX,
         shadowOffsetY = shadowOffsetY,
         groupAlpha = groupAlpha,
+        colorTextRunText = colorTextRunText,
+        colorTextRunFontSize = colorTextRunFontSize,
+        colorTextRunLayerColors = colorTextRunLayerColors,
     )
 }
 
@@ -1552,7 +1665,8 @@ internal fun rectOnlyCommandSequenceUnsupportedReason(commands: List<SceneComman
                 command is SceneCommand.RuntimeEffectTile ||
                 command is SceneCommand.CustomRuntimeEffectTile ||
                 command is SceneCommand.TextRun ||
-                command is SceneCommand.MeshRibbon
+                command is SceneCommand.MeshRibbon ||
+                command is SceneCommand.ColorTextRun
             ) {
                 null
             } else {
@@ -1571,7 +1685,7 @@ internal fun rectOnlyCommandSequenceUnsupportedReason(commands: List<SceneComman
         it is SceneCommand.PathFillStencil || it is SceneCommand.PathFillGradient || it is SceneCommand.ConvexFanMesh ||
                 it is SceneCommand.BitmapRect || it is SceneCommand.SaveLayer ||
                 it is SceneCommand.RuntimeEffectTile || it is SceneCommand.CustomRuntimeEffectTile ||
-                it is SceneCommand.TextRun || it is SceneCommand.MeshRibbon
+                it is SceneCommand.TextRun || it is SceneCommand.MeshRibbon || it is SceneCommand.ColorTextRun
         }
     ) {
         return "rect-only offscreen render requires at least one FillRect, FillRRect, Stroke, LinearGradientRect, RadialGradientRect, SweepGradientRect, PathFillStencil, PathFillGradient, ConvexFanMesh, BitmapRect, SaveLayer, RuntimeEffectTile, CustomRuntimeEffectTile, MeshRibbon, or TextRun command"
@@ -1602,6 +1716,7 @@ internal fun rectOnlyRenderedDiagnostics(
     colorMatrixRectCount: Int = 0,
     strokeRectCount: Int = 0,
     textRunRectCount: Int = 0,
+    colorTextRunRectCount: Int = 0,
     saveLayerRectCount: Int = 0,
     pathFillStencilCount: Int = 0,
     pathFillGradientCount: Int = 0,
@@ -1624,6 +1739,7 @@ internal fun rectOnlyRenderedDiagnostics(
             colorMatrixRectCount +
             strokeRectCount +
             textRunRectCount +
+            colorTextRunRectCount +
             saveLayerRectCount +
             pathFillStencilCount +
             pathFillGradientCount +
@@ -1633,7 +1749,7 @@ internal fun rectOnlyRenderedDiagnostics(
             runtimeEffects.size +
             meshRibbons.size > 0,
     ) {
-        "$sceneId rect-only diagnostics require at least one FillRect, FillRRect, LinearGradientRect, BitmapRect, BlurRect, ColorMatrixRect, StrokeRect, TextRun, SaveLayer, RuntimeEffectTile, CustomRuntimeEffectTile, MeshRibbon, PathFillStencil, PathFillGradient, or ConvexFanMesh command"
+        "$sceneId rect-only diagnostics require at least one FillRect, FillRRect, LinearGradientRect, BitmapRect, BlurRect, ColorMatrixRect, StrokeRect, TextRun, ColorTextRun, SaveLayer, RuntimeEffectTile, CustomRuntimeEffectTile, MeshRibbon, PathFillStencil, PathFillGradient, or ConvexFanMesh command"
     }
     return buildList {
         add("rendered $sceneId via WebGPU offscreen")
@@ -1650,6 +1766,7 @@ internal fun rectOnlyRenderedDiagnostics(
         add("colorMatrixRectCommands=$colorMatrixRectCount")
         add("strokeRectCommands=$strokeRectCount")
         add("textRunCommands=$textRunRectCount")
+        add("colorTextRunCommands=$colorTextRunRectCount")
         add("saveLayerRectCommands=$saveLayerRectCount")
         add("pathFillStencilCommands=$pathFillStencilCount")
         add("pathFillGradientCommands=$pathFillGradientCount")
@@ -1695,6 +1812,8 @@ internal fun rectOnlyRenderedDiagnostics(
     }
 }
 
+private fun colorTextRunFallbackColor(): SceneColor = SceneColor(1f, 1f, 1f, 1f)
+
 private fun SceneCommand.paintOrder(): Int =
     when (this) {
         is SceneCommand.FillRect -> paintOrder
@@ -1711,6 +1830,7 @@ private fun SceneCommand.paintOrder(): Int =
         is SceneCommand.PathFillGradient -> paintOrder
         is SceneCommand.ConvexFanMesh -> paintOrder
         is SceneCommand.TextRun -> paintOrder
+        is SceneCommand.ColorTextRun -> paintOrder
         else -> 0
     }
 

@@ -2164,7 +2164,8 @@ object GPURendererSceneRegistry {
         runtimeEffectChildScene,
     ) + m16CandidatePromotionScenes + m17CandidatePromotionScenes +
         m22CandidatePromotionScenes + m23CandidatePromotionScenes +
-        listOf(pathStarGradientScene, textA8HelloScene, gradientPathAndTextScene)
+        listOf(pathStarGradientScene, textA8HelloScene, gradientPathAndTextScene) +
+        m34ColorGlyphScenes
 
     val registry: SceneRegistry<SceneCommand> = SceneRegistry(scenes)
 
