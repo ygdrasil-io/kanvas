@@ -5,7 +5,7 @@ import org.skia.foundation.SkEncodedImageFormat
 import org.skia.core.SkCanvas
 import org.graphiks.kanvas.codec.jpeg.JpegEncoder
 import org.graphiks.kanvas.codec.png.PngEncoder
-import org.skia.encode.SkWebpEncoder
+import org.graphiks.kanvas.codec.webp.WebpEncoder
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkImage
@@ -21,7 +21,7 @@ import org.skia.tools.ToolUtils
  * routes through the same encoders R-final.6 ships :
  *  - `webp-lossless` re-uses the pure-Kotlin lossless WEBP emitter
  *    (R-suivi.23) ;
- *  - `webp-lossy` is a STUB (returns `null` per [SkWebpEncoder] kdoc) —
+ *  - `webp-lossy` is a STUB (returns `null` per [WebpEncoder] kdoc) —
  *    cells short-circuit to blanks until R-final.S binds a real lossy
  *    encoder.
  *
@@ -142,14 +142,14 @@ public open class EncodeColorTypesGM(
         SkEncodedImageFormat.kJPEG -> JpegEncoder.encode(bitmap, JpegEncoder.Options(quality = quality))
         SkEncodedImageFormat.kWEBP -> {
             val compression = if (quality < 100) {
-                SkWebpEncoder.Compression.kLossy
+                WebpEncoder.Compression.kLossy
             } else {
-                SkWebpEncoder.Compression.kLossless
+                WebpEncoder.Compression.kLossless
             }
             val webpQuality = if (quality < 100) quality.toFloat() else 70f
-            SkWebpEncoder.Encode(
+            WebpEncoder.encode(
                 bitmap,
-                SkWebpEncoder.Options(compression = compression, quality = webpQuality),
+                WebpEncoder.Options(compression = compression, quality = webpQuality),
             )
         }
         else -> null

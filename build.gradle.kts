@@ -2826,7 +2826,7 @@ tasks.register("checkSupportedCodecsDoc") {
             "Supported through `JpegEncoder` in `codec/jpeg/`",
             "Supported through `BmpEncoder`.",
             "Supported through `WbmpEncoder` in `codec/wbmp/`.",
-            "Supported through `SkWebpEncoder`",
+            "Supported through `WebpEncoder`",
             "Lossy VP8 encode intentionally returns `null`",
             "Public encode APIs must return `null` or a documented stub behavior",
         )
@@ -2842,7 +2842,7 @@ tasks.register("checkSupportedCodecsDoc") {
             "codec/jpeg/src/test/kotlin/org/graphiks/kanvas/codec/jpeg/JpegEncoderTest.kt",
             "codec/bmp/src/test/kotlin/org/graphiks/kanvas/codec/bmp/BmpEncoderTest.kt",
             "codec/wbmp/src/test/kotlin/org/graphiks/kanvas/codec/wbmp/WbmpEncoderTest.kt",
-            "kanvas-skia/src/test/kotlin/org/skia/encode/SkWebpEncoderTest.kt",
+            "codec/webp/src/test/kotlin/org/graphiks/kanvas/codec/webp/WebpEncoderTest.kt",
         ).filterNot { path -> file(path).isFile }
 
         if (missing.isNotEmpty() || requiredEncodeTestFiles.isNotEmpty()) {

@@ -9,6 +9,7 @@ dependencies {
     implementation(project(":cpu-raster"))
     implementation(project(":codec:jpeg"))
     implementation(project(":codec:png"))
+    implementation(project(":codec:webp"))
     implementation(project(":codec:core"))
     implementation(project(":codec:android"))
     implementation(project(":codec:animated"))

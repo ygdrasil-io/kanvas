@@ -5,7 +5,7 @@ import org.skia.foundation.SkEncodedImageFormat
 import org.skia.core.SkCanvas
 import org.graphiks.kanvas.codec.jpeg.JpegEncoder
 import org.graphiks.kanvas.codec.png.PngEncoder
-import org.skia.encode.SkWebpEncoder
+import org.graphiks.kanvas.codec.webp.WebpEncoder
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkImage
 import org.graphiks.math.SkISize
@@ -30,7 +30,7 @@ import org.skia.tools.ToolUtils
  *     and "unpremul" rows render the same source pixels — visually
  *     indistinguishable, matching upstream when the encode path is
  *     alpha-preserving (PNG, WEBP-lossless).
- *  2. WEBP-lossy ([SkWebpEncoder.Compression.kLossy]) is currently a
+ *  2. WEBP-lossy ([WebpEncoder.Compression.kLossy]) is currently a
  *     documented unsupported path in `SUPPORTED_CODECS.md`, so the
  *     WEBP-lossy column short-circuits to a blank cell.
  *
@@ -125,13 +125,13 @@ public class EncodePlatformGM : GM() {
             )
             SkEncodedImageFormat.kWEBP -> {
                 val compression = if (quality >= 100) {
-                    SkWebpEncoder.Compression.kLossless
+                    WebpEncoder.Compression.kLossless
                 } else {
-                    SkWebpEncoder.Compression.kLossy
+                    WebpEncoder.Compression.kLossy
                 }
-                SkWebpEncoder.Encode(
+                WebpEncoder.encode(
                     bitmap,
-                    SkWebpEncoder.Options(compression = compression, quality = quality.toFloat()),
+                    WebpEncoder.Options(compression = compression, quality = quality.toFloat()),
                 )
             }
             else -> null
