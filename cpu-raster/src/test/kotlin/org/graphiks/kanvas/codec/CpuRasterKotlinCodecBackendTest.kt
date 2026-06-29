@@ -56,7 +56,7 @@ class CpuRasterKotlinCodecBackendTest {
 
     @Test
     fun `full cpu-raster codec suite has no legacy ImageIO codec blockers`() {
-        val codecTestRoot = Path.of("src/test/kotlin/org/skia/codec")
+        val codecTestRoot = Path.of("src/test/kotlin/org/graphiks/kanvas/codec")
         val backendBlockedTests = Files.walk(codecTestRoot).use { paths ->
             paths
                 .filter { path -> path.toString().endsWith("Test.kt") }

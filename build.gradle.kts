@@ -3238,9 +3238,9 @@ tasks.register("checkCpuRasterImageToolingNoAwt") {
             file("cpu-raster/src/main/kotlin/org/skia/testing/TestUtils.kt"),
             file("cpu-raster/src/main/kotlin/org/skia/testing/DiffImage.kt"),
             file("cpu-raster/src/test/kotlin/org/skia/testing/TestToolingTest.kt"),
-            file("cpu-raster/src/test/kotlin/org/skia/codec/SkAndroidCodecComputeSampleSizeJpegTest.kt"),
-            file("cpu-raster/src/test/kotlin/org/skia/codec/SkAndroidCodecGetAndroidPixelsTest.kt"),
-            file("cpu-raster/src/test/kotlin/org/skia/codec/SkAndroidCodecTest.kt"),
+            file("cpu-raster/src/test/kotlin/org/graphiks/kanvas/codec/SkAndroidCodecComputeSampleSizeJpegTest.kt"),
+            file("cpu-raster/src/test/kotlin/org/graphiks/kanvas/codec/SkAndroidCodecGetAndroidPixelsTest.kt"),
+            file("cpu-raster/src/test/kotlin/org/graphiks/kanvas/codec/SkAndroidCodecTest.kt"),
         )
         val violations = mutableListOf<String>()
         filesToCheck
