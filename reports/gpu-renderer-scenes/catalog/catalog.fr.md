@@ -290,6 +290,22 @@ Valide: Valide le descriptor SimpleRT, le layout gColor et la stabilite des tuil
 Ne revendique pas: Ne revendique pas SkSL dynamique, SpiralRT ou runtime effects enfants.
 Preuve: Preuve WebGPU offscreen et Kadre windowed.
 
+### Custom Runtime Effect Valid Tile (`custom-runtime-effect-valid-tile`)
+M32 - RuntimeEffect, Rect - `ShouldRender`
+
+Intention: Enregistre un shader WGSL personnalise produisant une couleur unie, affiche un pave avec ce shader et verifie la sortie GPU.
+Valide: Valide CustomRuntimeEffectTile avec wgslSource et uniformSchema personnalises.
+Ne revendique pas: Ne revendique pas les runtime effects enregistres ni la compilation SkSL dynamique.
+Preuve: Preuve WebGPU offscreen avec sortie GPU verifiee.
+
+### Custom Runtime Effect Unregistered Refusal (`custom-runtime-effect-unregistered-refusal`)
+M32 - RuntimeEffect, Rect - `ShouldRefuse:unsupported.runtime_effect.custom_wgsl_not_registered`
+
+Intention: Tente d'executer un effet personnalise jamais enregistre. Doit refuser avec un diagnostic stable.
+Valide: Valide le refus stable CustomRuntimeEffectTile avec customEffectId null.
+Ne revendique pas: Ne revendique pas l'execution runtime effect non enregistree.
+Preuve: Preuve WebGPU offscreen avec diagnostic de refus.
+
 ### Blend Mode Strip (`blend-mode-strip`)
 M7 - Rect - `ShouldRender`
 
@@ -417,6 +433,270 @@ Intention: Verifier une vue de parite legacy lisible avant toute decision de ret
 Valide: Valide un board de comparaison rrect/rect borne avec lanes de parite, evidence et blockers.
 Ne revendique pas: Ne revendique pas remplacement accepte ni retrait effectif de la route legacy.
 Preuve: Preuve WebGPU offscreen et Kadre windowed.
+
+### Rounded Rect Solids (`rounded-rect-solids`)
+M10 - RRect - `ShouldRender`
+
+Intention: Verifier trois rrects solides avec rayons varies.
+Valide: Valide FillRRect avec rayons petits, moyens et grands.
+Ne revendique pas: Ne revendique pas rayons par coin, gradients ou transforms avances.
+Preuve: Preuve WebGPU offscreen et Kadre windowed.
+
+### Linear Gradient Lanes (`linear-gradient-lanes`)
+M10 - Rect, Gradient - `ShouldRender`
+
+Intention: Verifier trois degradees lineaires bornes avec clamp.
+Valide: Valide LinearGradientRect horizontal, vertical et diagonal.
+Ne revendique pas: Ne revendique pas repeat, mirror, decal, local matrix ou plus de deux arrets.
+Preuve: Preuve WebGPU offscreen et Kadre windowed.
+
+### Scissor Overlay (`scissor-overlay`)
+M10 - Rect, Clip - `ShouldRender`
+
+Intention: Verifier un scissor simple avec rectangles bornes.
+Valide: Valide Clip device-rect et FillRect ordonnes.
+Ne revendique pas: Ne revendique pas clip rrect, stencil-cover ni clip stack complexe.
+Preuve: Preuve WebGPU offscreen et Kadre windowed.
+
+### Radial Swatch (`radial-swatch`)
+M14 - Rect, Gradient - `ShouldRender`
+
+Intention: Verifier trois degradees radiales avec centres et rayons varies.
+Valide: Valide RadialGradientRect avec centres decales et rayons differs.
+Ne revendique pas: Ne revendique pas repeat, mirror, decal, plus de deux arrets ou transforms.
+Preuve: Preuve WebGPU offscreen et Kadre windowed.
+
+### Sweep Disk (`sweep-disk`)
+M14 - Rect, Gradient - `ShouldRender`
+
+Intention: Verifier trois degradees angulaires avec angles de depart/fin varies.
+Valide: Valide SweepGradientRect avec sweeps 360, 180 et 90 degres.
+Ne revendique pas: Ne revendique pas repeat, mirror, decal, plus de deux arrets ou transforms.
+Preuve: Preuve WebGPU offscreen et Kadre windowed.
+
+### Path Fill Stencil (`path-fill-stencil`)
+M15 - Path - `ShouldRender`
+
+Intention: Remplir une etoile non-convexe via stencil-cover deux passes.
+Valide: Valide PathFillStencil avec chemin etoile et fond blanc.
+Ne revendique pas: Ne revendique pas stencil-cover GPU natif ni activation produit.
+Preuve: Preuve WebGPU offscreen avec sortie PNG pour la scene.
+
+### Convex Fan Mesh (`convex-fan-mesh`)
+M15 - Path - `ShouldRender`
+
+Intention: Remplir un octogone convexe via convex fan monopasse.
+Valide: Valide ConvexFanMesh avec octogone regulier et fond blanc.
+Ne revendique pas: Ne revendique pas stencil-cover pour chemins convexes ni activation produit.
+Preuve: Preuve WebGPU offscreen avec sortie PNG pour la scene.
+
+### SaveLayer Isolated (`savelayer-isolated`)
+M18 - Layer - `ShouldRender`
+
+Intention: Rendre un groupe translucide via offscreen saveLayer.
+Valide: Valide SaveLayer avec cible isolee, rendu enfant et composite srcOver.
+Ne revendique pas: Ne revendique pas saveLayer general, filtres, destination-read ou activation produit.
+Preuve: Preuve WebGPU offscreen avec execution saveLayer.
+
+### SaveLayer Group Alpha (`savelayer-group-alpha`)
+M28 - Layer, Blend - `ShouldRender`
+
+Intention: Rendre un saveLayer a group alpha 0.5 avec deux enfants opaques qui se chevauchent.
+Valide: Valide l isolation de couche reelle: la region de chevauchement se compose a 50% uniforme comme le reste.
+Ne revendique pas: Ne revendique pas saveLayer general, filtres, destination-read ou activation produit.
+Preuve: Preuve WebGPU offscreen avec parite GPU/CPU sur le chevauchement.
+
+### Destination Read Strategy (`dst-read-strategy`)
+M18 - Layer, Blend - `ShouldRender`
+
+Intention: Verifier une strategie destination-read par copie ou intermediate.
+Valide: Valide FillRect avec lecture de destination via copie et bind intermediate.
+Ne revendique pas: Ne revendique pas framebuffer fetch, input attachment ou fallback CPU.
+Preuve: Preuve WebGPU offscreen avec strategie dst-read.
+
+### Blur Radius Ladder (`blur-radius-ladder`)
+M19 - Filter - `ShouldRender`
+
+Intention: Verifier un echelon de rayons de flou gaussien.
+Valide: Valide quatre rectangles avec blur radii croissants via separable gaussian.
+Ne revendique pas: Ne revendique pas blur texture output ni kernel CPU.
+Preuve: Preuve WebGPU offscreen avec scene blur.
+
+### Color Matrix Filter (`color-matrix-filter`)
+M19 - Filter - `ShouldRender`
+
+Intention: Verifier trois transformations couleur via matrice 4x5 WGSL.
+Valide: Valide identity, saturation et hue-rotate via color matrix filter.
+Ne revendique pas: Ne revendique pas color matrix filter produit ni pipeline GPU separe.
+Preuve: Preuve WebGPU offscreen avec scene color matrix.
+
+### Gaussian Blur Photo (`gaussian-blur-photo`)
+M19 - Filter - `ShouldRender`
+
+Intention: Verifier un flou gaussien applique a un rectangle colore.
+Valide: Valide GaussianBlur via passes gaussiennes separables sur un FillRect.
+Ne revendique pas: Ne revendique pas blur texture output ni kernel CPU.
+Preuve: Preuve WebGPU offscreen avec scene blur.
+
+### Color Matrix Tint (`color-matrix-tint`)
+M19 - Filter - `ShouldRender`
+
+Intention: Verifier une teinte couleur via matrice 4x5 WGSL.
+Valide: Valide ColorMatrix filter avec transformation sur un FillRect vert.
+Ne revendique pas: Ne revendique pas color matrix filter produit ni pipeline GPU separe.
+Preuve: Preuve WebGPU offscreen avec scene color matrix.
+
+### Stroke and Filter Card (`stroke-and-filter-card`)
+M16,M19 - Stroke, Filter - `ShouldRender`
+
+Intention: Verifier une carte combinant contour stroke et flou gaussien.
+Valide: Valide Stroke et FillRect avec blur dans une meme scene ordonnee.
+Ne revendique pas: Ne revendique pas path coverage ni DAG filtre general.
+Preuve: Preuve WebGPU offscreen avec scene combinee.
+
+### Glyph Atlas Strip (`glyph-atlas-strip`)
+M20 - Text - `ShouldRender`
+
+Intention: Verifier un echantillonnage atlas glyph A8.
+Valide: Valide TextRun avec glyph route a8-atlas et diagnostic rect.
+Ne revendique pas: Ne revendique pas atlas glyph A8 executable ni rendu glyph texture.
+Preuve: Preuve WebGPU offscreen avec scene text.
+
+### SDF Glyph Scale (`sdf-glyph-scale`)
+M20 - Text - `ShouldRender`
+
+Intention: Verifier trois tailles de glyphe SDF avec smoothstep.
+Valide: Valide TextRun avec glyph route sdf-atlas pour 3 tailles de fonte.
+Ne revendique pas: Ne revendique pas atlas SDF executable ni rendu glyph texture.
+Preuve: Preuve WebGPU offscreen avec scene text.
+
+### Runtime Effect Uniform (`runtime-effect-uniform`)
+M21 - RuntimeEffect - `ShouldRender`
+
+Intention: Verifier quatre tuiles SimpleRT avec uniforms gColor differents.
+Valide: Valide RuntimeEffectTile SimpleRT avec variation d uniforms et route registered descriptor.
+Ne revendique pas: Ne revendique pas compilation SkSL dynamique, SpiralRT ou runtime effects enfants.
+Preuve: Preuve WebGPU offscreen et Kadre windowed.
+
+### Runtime Effect Child (`runtime-effect-child`)
+M21 - RuntimeEffect - `ShouldRender`
+
+Intention: Verifier une tuile SimpleRT avec reference a un shader enfant.
+Valide: Valide RuntimeEffectTile avec label child-effect-tile et descriptor registered simple_rt.
+Ne revendique pas: Ne revendique pas enfant runtime effect actif ni pipeline child compose.
+Preuve: Preuve WebGPU offscreen et Kadre windowed.
+
+### Stroke Cap Join (`stroke-cap-join`)
+M16 - Stroke - `ShouldRender`
+
+Intention: Verifier quatre styles de cap et join d expansion stroke.
+Valide: Valide StrokeExpander avec butt, square, miter et bevel via FillRect proxy.
+Ne revendique pas: Ne revendique pas stroke expansion GPU native ni activation produit.
+Preuve: Preuve WebGPU offscreen avec scene stroke.
+
+### Dash Pattern Ladder (`dash-pattern-ladder`)
+M16 - Stroke - `ShouldRender`
+
+Intention: Verifier quatre motifs dash via decomposition d intervalles.
+Valide: Valide DashPathEffect avec shorts, mediums, longs et alternes via FillRect proxy.
+Ne revendique pas: Ne revendique pas dash path effect GPU natif ni activation produit.
+Preuve: Preuve WebGPU offscreen avec scene dash.
+
+### Stroke Rect Outline (`stroke-rect-outline`)
+M16 - Stroke - `ShouldRender`
+
+Intention: Verifier un contour de rectangle stroke bleu simple.
+Valide: Valide Stroke avec strokeColor, strokeWidth et pathKind bounded-rect-path.
+Ne revendique pas: Ne revendique pas path AA ni joins/caps complexes.
+Preuve: Preuve WebGPU offscreen avec scene stroke.
+
+### Tile Mode Strip (`tile-mode-strip`)
+M17 - Image - `ShouldRender`
+
+Intention: Verifier quatre bandes avec modes tile clamp, repeat, mirror et decal.
+Valide: Valide BitmapRect avec intentions de tile mode et echantillonnage nearest/linear.
+Ne revendique pas: Ne revendique pas tile modes GPU natifs ni echantillonnage texture executable.
+Preuve: Preuve WebGPU offscreen avec scene tile-mode.
+
+### Vertices Color Mesh (`vertices-color-mesh`)
+M22 - Vertices - `ShouldRender`
+
+Intention: Rendre un maillage colore via per-vertex colors.
+Valide: Valide VerticesExecutor avec triangle list, vertex colors et MeshRibbon scene.
+Ne revendique pas: Ne revendique pas DrawVertices GPU natif ni activation produit.
+Preuve: Preuve WebGPU offscreen avec scene vertices.
+
+### Mesh Ribbon Depth (`mesh-ribbon-depth`)
+M22 - Vertices - `ShouldRender`
+
+Intention: Rendre trois rubans qui se chevauchent avec ordre de profondeur.
+Valide: Valide MeshRibbon avec trois couches superposees et ordre paintOrder.
+Ne revendique pas: Ne revendique pas mesh batching GPU natif ni activation produit.
+Preuve: Preuve WebGPU offscreen avec scene mesh.
+
+### Performance Budget Review (`performance-budget-review`)
+M23 - Rect, Cache - `ShouldRender`
+
+Intention: Verifier les budgets performance par famille de draw.
+Valide: Valide PerformanceBudgetEvaluator avec seuils pass, warning et fail.
+Ne revendique pas: Ne revendique pas release-blocking ni activation produit.
+Preuve: Preuve WebGPU offscreen avec scene budget.
+
+### Pipeline Cache Telemetry Review (`pipeline-cache-telemetry-review`)
+M23 - Rect, Cache - `ShouldRender`
+
+Intention: Verifier la telemetrie cache pipeline par scene.
+Valide: Valide GPUPipelineCacheTelemetry avec hit rate, eviction et module count.
+Ne revendique pas: Ne revendique pas cache readiness movement ni activation produit.
+Preuve: Preuve WebGPU offscreen avec scene telemetry.
+
+### Frame Gate M23 Baseline (`frame-gate-m23-baseline`)
+M23 - Rect, Cache - `ShouldRender`
+
+Intention: Verifier la politique frame gate M23 60fps/30fps.
+Valide: Valide M23 baseline avec cibles 60fps et avertissement 30fps.
+Ne revendique pas: Ne revendique pas release-blocking gate ni activation produit.
+Preuve: Preuve WebGPU offscreen avec scene frame-gate.
+
+### PM Evidence M23 Bundle (`pm-evidence-m23-bundle`)
+M23 - Rect, Cache - `ShouldRender`
+
+Intention: Verifier le bundle evidence PM final M23.
+Valide: Valide M23PMEvidenceBundle avec familles activees et gates verts.
+Ne revendique pas: Ne revendique pas readiness movement ni activation produit.
+Preuve: Preuve WebGPU offscreen avec scene PM bundle.
+
+### Performance Gates Product Flag (`performance-gates-product-flag`)
+M23 - Rect - `ShouldRender`
+
+Intention: Verifier le flag produit performanceGatesEnabled.
+Valide: Valide performanceGatesEnabled flag et sa propriete systeme disable.
+Ne revendique pas: Ne revendique pas release-blocking ni activation produit.
+Preuve: Preuve WebGPU offscreen avec scene product flag.
+
+### Path Star Gradient (`path-star-gradient`)
+M26 - Path, Gradient - `ShouldRender`
+
+Intention: Remplir une etoile non-convexe via stencil-cover avec degrade lineaire.
+Valide: Valide PathFillGradient avec chemin etoile et degrade ambre vers vert.
+Ne revendique pas: Ne revendique pas stencil-cover GPU natif ni activation produit.
+Preuve: Preuve WebGPU offscreen avec sortie PNG pour la scene.
+
+### Text A8 Hello (`text-a8-hello`)
+M26 - Text - `ShouldRender`
+
+Intention: Verifier un texte Hello Kanvas via atlas A8 active.
+Valide: Valide TextRun avec route a8-atlas et fallback vide (route disponible).
+Ne revendique pas: Ne revendique pas shaping complexe, emoji ou SDF atlas.
+Preuve: Preuve WebGPU offscreen avec sortie PNG pour la scene.
+
+### Gradient Path And Text (`gradient-path-and-text`)
+M26 - Path, Gradient, Text - `ShouldRender`
+
+Intention: Verifier une etoile degradee avec texte superpose via atlas A8.
+Valide: Valide PathFillGradient et TextRun actif en composition.
+Ne revendique pas: Ne revendique pas stencil-cover GPU natif ni activation produit.
+Preuve: Preuve WebGPU offscreen avec sortie PNG pour la scene.
 
 ## Candidates amont
 

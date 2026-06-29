@@ -14,7 +14,9 @@ strokeRectCommands=0
 textRunCommands=0
 saveLayerRectCommands=0
 pathFillStencilCommands=0
+pathFillGradientCommands=0
 convexFanMeshCommands=0
+customRuntimeEffectRectCommands=0
 runtimeEffectCommands=4
 runtimeEffectStableIds=runtime.simple_rt, runtime.simple_rt, runtime.simple_rt, runtime.simple_rt
 runtimeEffectWgslImplementationIds=wgsl/runtime_simple_rt, wgsl/runtime_simple_rt, wgsl/runtime_simple_rt, wgsl/runtime_simple_rt
@@ -26,4 +28,4 @@ fallbackReason=none
 runtimeEffect:wgslSnippetSourceHash=fragment:simple_rt:v1
 runtimeEffect:entryPoint=simple_rt_source
 runtimeEffect:uniformPacker=UniformPacker.simpleRtBytes
-runtimeEffect:realGpuOutput=true proceduralWrapperRemoved=true productActivation=false
+runtimeEffect:realGpuOutput=true proceduralWrapperRemoved=true productActivation=true

@@ -1,5 +1,5 @@
 rendered text-a8-hello via WebGPU offscreen
-adapter=AMD Radeon Pro 5500M
+adapter=Apple M2 Max
 clearCommands=1
 fillRectCommands=1
 fillRRectCommands=0
@@ -16,6 +16,7 @@ saveLayerRectCommands=0
 pathFillStencilCommands=0
 pathFillGradientCommands=0
 convexFanMeshCommands=0
+customRuntimeEffectRectCommands=0
 textA8Atlas:executor accepted=true atlasWidth=0 atlasHeight=0 glyphCount=0 uploadSizeBytes=0
 textA8Atlas:nonclaim:no-gpu-atlas-pages no-backend-texture-allocation no-cpu-bitmap-upload
 textSdf:generator accepted=true width=8 height=8 radius=8.0 sdfBytes=64
