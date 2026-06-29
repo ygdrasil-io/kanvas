@@ -2,7 +2,7 @@
 
 - **Date:** 2026-06-29
 - **Tickets:** KGPU-M34-002 (color font), KGPU-M34-003 (variable font), KGPU-M34-004 (complex shaping)
-- **Decision:** Re-scope honnête. Split claim — `TargetNative` borné (handoff + facts + refus stable) ; `DependencyGated` maintenu pour le rendu GPU.
+- **Decision:** Maintien `blocked` / `DependencyGated` sur les 3 tickets. Le motif de blocage faux est corrigé. Le sous-scope borné (handoff + facts portés + refus stable) est implémenté et testé mais **ne promeut pas** les tickets — l'évidence de rendu GPU de production reste KO.
 - **Source assessment:** `docs/superpowers/specs/2026-06-28-m34-text-blockers-assessment.md`
 
 ## Constat d'audit
@@ -41,7 +41,7 @@ rendu/consommation GPU), et dépend de M6/M10/M11/M4.
 
 ## Split de claim retenu
 
-| Ticket | TargetNative borné (livré + validé) | DependencyGated (non livré) | Gating |
+| Ticket | Implémenté + testé, non promu (reste DependencyGated) | DependencyGated (non livré) | Gating |
 |---|---|---|---|
 | M34-002 | handoff `ColorGlyphPlan` + registre + refus stable `text.gpu.color-plan-unsupported` (no CPU texture) | contrats GPU couleur, rasterisation COLRv0/COLRv1/SVG/emoji | M10/M11 |
 | M34-003 | résolution variable→statique (text-stack) + handoff statique `GPUGlyphRunDescriptor.typefaceID` (aucun champ d'axe GPU) | `GPUVariableFontInstancePlan`, refus out-of-range, CFF2 vraies polices, rendu GPU | M4 |

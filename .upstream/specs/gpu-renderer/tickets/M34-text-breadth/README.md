@@ -26,9 +26,9 @@ output artifacts. M34-001 depends on adapter pixel geometry query.
 | Ticket | Status | Priority | Claim Impact | Route Kind | Product Activation | Adapter Required | Owner Area | Depends On | Legacy Gate |
 |---|---|---|---|---|---|---|---|---|---|
 | [KGPU-M34-001 - Subpixel LCD rendering](KGPU-M34-001-subpixel-lcd-rendering.md) | `review` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `text` | `KGPU-M1-001` | `legacy drawText` |
-| [KGPU-M34-002 - Color font pipeline](KGPU-M34-002-color-font-pipeline.md) | `review` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `text` | `KGPU-M1-001` | `legacy drawText` |
-| [KGPU-M34-003 - Variable font support](KGPU-M34-003-variable-font-support.md) | `review` | `P1` | `TargetNative` | `GPUNative` | `false` | `true` | `text` | `KGPU-M1-001` | `legacy drawText` |
-| [KGPU-M34-004 - Complex shaping integration](KGPU-M34-004-complex-shaping-integration.md) | `review` | `P1` | `TargetNative` | `GPUNative` | `false` | `true` | `text` | `KGPU-M1-001` | `legacy drawText` |
+| [KGPU-M34-002 - Color font pipeline](KGPU-M34-002-color-font-pipeline.md) | `blocked` | `P0` | `DependencyGated` | `GPUNative` | `false` | `true` | `text` | `KGPU-M1-001` | `legacy drawText` |
+| [KGPU-M34-003 - Variable font support](KGPU-M34-003-variable-font-support.md) | `blocked` | `P1` | `DependencyGated` | `GPUNative` | `false` | `true` | `text` | `KGPU-M1-001` | `legacy drawText` |
+| [KGPU-M34-004 - Complex shaping integration](KGPU-M34-004-complex-shaping-integration.md) | `blocked` | `P1` | `DependencyGated` | `GPUNative` | `false` | `true` | `text` | `KGPU-M1-001` | `legacy drawText` |
 | [KGPU-M34-005 - Font fallback chain](KGPU-M34-005-font-fallback-chain.md) | `review` | `P1` | `TargetNative` | `GPUNative` | `false` | `true` | `text` | `KGPU-M1-001` | `legacy drawText` |
 
 ## Validation Bundle
@@ -48,17 +48,19 @@ rtk git diff --check && rtk ./gradlew --no-daemon :gpu-renderer:check
 - Font fallback selection logic lives in the text stack; the GPU renderer
   only splits subruns by fallback identity.
 
-## Re-Scope (2026-06-29)
+## Correction du motif de blocage (2026-06-29)
 
 M34-002/003/004 étaient `blocked` avec un motif faux (« gated on
 pure-kotlin-text artifacts »). L'audit `fichier:ligne` montre que le parsing
 COLRv0/CPAL/CBDT, la résolution fvar/gvar/avar et le shaping/BiDi sont livrés
-et testés. Ces trois tickets passent en `review` / `TargetNative` pour le
-**scope borné** handoff + facts portés + refus stable (`product_activation:
-false`), validé par `ColorFontHandoffRouteTest`, `VariableFontHandoffRouteTest`
-et `ShapingIntegrationHandoffRouteTest`. Le **rendu GPU** (couleur, parité
-variable, scripts complexes, CFF2 vraies polices) reste `DependencyGated` sur
-M6/M10/M11/M4. Évidence : `reports/gpu-renderer/m34-text-breadth-rescope/`.
+et testés. Ces trois tickets **restent `blocked` / `DependencyGated`** car
+l'évidence de **rendu GPU** est toujours KO (`product_activation: false`,
+contrats GPU absents, refus stable, `GPUDrawLayerPlanner` stub). Le sous-scope
+borné handoff + facts portés + refus stable est implémenté et testé
+(`ColorFontHandoffRouteTest`, `VariableFontHandoffRouteTest`,
+`ShapingIntegrationHandoffRouteTest`) mais **ne promeut pas** les tickets. Vrai
+gate : exécution GPU M6/M10/M11 + CFF2 vraies polices M4. Évidence :
+`reports/gpu-renderer/m34-text-breadth-rescope/`.
 
 ## Status Update Rule
 

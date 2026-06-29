@@ -1,11 +1,11 @@
 ---
 id: KGPU-M34-002
 title: "Color font pipeline"
-status: review
+status: blocked
 milestone: M34
 priority: P0
 owner_area: text
-claim_impact: TargetNative
+claim_impact: DependencyGated
 route_kind: GPUNative
 product_activation: false
 release_blocking: false
@@ -31,7 +31,7 @@ Audit `fichier:ligne` : les artefacts text-stack supposés manquants existent en
 réalité. Le motif de blocage initial « gated on pure-kotlin-text COLRv0
 parsing artifacts » est faux et corrigé.
 
-**Livré (TargetNative, `product_activation: false`) — validé :**
+**Implémenté mais non promu — reste `DependencyGated` (handoff + facts portés + refus stable) :**
 
 - Parsing COLRv0 / CPAL : `font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurface.kt:361` et `:232`.
 - Parsing CBDT/CBLC : `font/sfnt/src/main/kotlin/org/graphiks/kanvas/font/sfnt/SFNT.kt:1977`.
@@ -127,9 +127,10 @@ data class GPUSVGOpenTypeGlyphPlan(
 
 ## Acceptance Criteria
 
-> Scope (2026-06-29) : seul le scope borné de la section « Claim Split » est
-> requis pour `review` / `TargetNative`. Les critères de rendu GPU ci-dessous
-> sont `DependencyGated` (M10/M11) et ne bloquent pas le scope borné.
+> Scope (2026-06-29) : le sous-scope borné « Claim Split » (handoff + refus
+> stable) est implémenté et testé, mais ne promeut pas le ticket. Les critères
+> de rendu GPU ci-dessous restent `DependencyGated` (M10/M11) — le ticket reste
+> `blocked`.
 
 - [ ] Contracts defined and dumpable (`GPUColorGlyphLayerPlan`,
       `GPUCBDTCBLCGlyphPlan`).
@@ -162,10 +163,10 @@ data class GPUSVGOpenTypeGlyphPlan(
 ## Dashboard Impact
 
 - Expected row: `gpu-renderer.text.color-font`
-- Expected classification: `TargetNative` pour le handoff + refus stable ;
-  rendu GPU couleur reste `DependencyGated` (M10/M11).
-- Claim promotion allowed: handoff/refus borné validé ; aucun claim de rendu
-  GPU couleur tant que l'évidence GPU (M10/M11) n'est pas livrée.
+- Expected classification: `DependencyGated` (rendu GPU couleur). Le handoff +
+  refus stable est implémenté/testé mais ne promeut pas le ticket.
+- Claim promotion allowed: no — aucun claim de rendu GPU couleur tant que
+  l'évidence GPU (M10/M11) n'est pas livrée.
 
 ## Validation
 
@@ -178,11 +179,14 @@ rtk git diff --check && rtk ./gradlew --no-daemon :gpu-renderer:test --tests '*C
 - `proposed`: Initial ticket. Promotion to `ready` requires text stack COLRv0
   parsing artifacts.
 - `proposed → blocked` (2026-06-28): Blocked on pure-kotlin-text COLRv0 parsing artifacts.
-- `blocked → review` (2026-06-29): re-scope honnête. Le motif « pure-kotlin-text
-  COLRv0 artifacts » est faux : parsing COLRv0/CPAL/CBDT et handoff `ColorGlyphPlan`
-  sont livrés (voir Claim Split). Scope borné handoff + refus stable promu
-  `TargetNative` (`product_activation: false`), validé par `ColorFontHandoffRouteTest`.
-  Rendu GPU couleur reste `DependencyGated` sur M10/M11.
+- `reste blocked` (2026-06-29): correction du motif. Le motif « pure-kotlin-text
+  COLRv0 artifacts » est faux : parsing COLRv0/CPAL/CBDT + handoff `ColorGlyphPlan`
+  sont livrés (voir Claim Split). Le ticket **reste `blocked` / `DependencyGated`**
+  car l'évidence de rendu GPU couleur est toujours KO (`product_activation: false`,
+  contrats GPU absents, refus stable `text.gpu.color-plan-unsupported`). Le
+  sous-scope borné handoff + refus est implémenté et testé
+  (`ColorFontHandoffRouteTest`) mais ne promeut pas le ticket. Vrai gate :
+  exécution GPU M10/M11.
 
 ## Linear Labels
 

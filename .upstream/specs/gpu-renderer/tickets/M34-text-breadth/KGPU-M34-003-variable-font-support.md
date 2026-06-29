@@ -1,11 +1,11 @@
 ---
 id: KGPU-M34-003
 title: "Variable font support"
-status: review
+status: blocked
 milestone: M34
 priority: P1
 owner_area: text
-claim_impact: TargetNative
+claim_impact: DependencyGated
 route_kind: GPUNative
 product_activation: false
 release_blocking: false
@@ -30,7 +30,7 @@ Audit `fichier:ligne` : les artefacts text-stack supposés manquants existent en
 réalité. Le motif « gated on pure-kotlin-text variable font resolution
 artifacts » est faux et corrigé.
 
-**Livré (TargetNative, `product_activation: false`) — validé :**
+**Implémenté mais non promu — reste `DependencyGated` (handoff + facts portés + refus stable) :**
 
 - Parsing fvar/gvar/avar :
   `font/sfnt/src/main/kotlin/org/graphiks/kanvas/font/sfnt/SFNT.kt:10317`,
@@ -103,9 +103,10 @@ data class GPUVariableFontInstancePlan(
 
 ## Acceptance Criteria
 
-> Scope (2026-06-29) : seul le scope borné « Claim Split » est requis pour
-> `review` / `TargetNative`. Le rendu GPU, le refus out-of-range et CFF2 vraies
-> polices ci-dessous restent `DependencyGated` (M4).
+> Scope (2026-06-29) : le sous-scope borné « Claim Split » (handoff statique)
+> est implémenté et testé, mais ne promeut pas le ticket. Le rendu GPU, le refus
+> out-of-range et CFF2 vraies polices ci-dessous restent `DependencyGated` (M4)
+> — le ticket reste `blocked`.
 
 - [ ] Text stack accepts axis-tag/value pairs and produces resolved glyphs.
 - [ ] GPU treats resolved glyphs as static (no variation logic).
@@ -129,11 +130,11 @@ data class GPUVariableFontInstancePlan(
 ## Dashboard Impact
 
 - Expected row: `gpu-renderer.text.variable-font`
-- Expected classification: `TargetNative` pour la résolution text-stack +
-  handoff statique ; rendu GPU, CFF2 vraies polices et refus out-of-range
-  restent `DependencyGated` (M4).
-- Claim promotion allowed: handoff statique borné validé ; aucun claim de rendu
-  GPU ni de support CFF2 vraies polices.
+- Expected classification: `DependencyGated` (rendu GPU / CFF2 vraies polices /
+  refus out-of-range). Résolution text-stack + handoff statique implémentés/testés
+  mais ne promeuvent pas le ticket.
+- Claim promotion allowed: no — aucun claim de rendu GPU ni de support CFF2
+  vraies polices.
 
 ## Validation
 
@@ -146,13 +147,15 @@ rtk git diff --check && rtk ./gradlew --no-daemon :gpu-renderer:test --tests '*V
 - `proposed`: Initial ticket. Promotion to `ready` requires text stack
   variable font resolution artifacts.
 - `proposed → blocked` (2026-06-28): Blocked on pure-kotlin-text variable font resolution artifacts.
-- `blocked → review` (2026-06-29): re-scope honnête. Le motif « pure-kotlin-text
+- `reste blocked` (2026-06-29): correction du motif. Le motif « pure-kotlin-text
   variable font resolution artifacts » est faux : fvar/gvar/avar + résolution
-  variable→statique sont livrés et testés (fixtures). Handoff statique
-  (`GPUGlyphRunDescriptor.typefaceID`, aucun champ d'axe côté GPU) promu
-  `TargetNative` (`product_activation: false`), validé par
-  `VariableFontHandoffRouteTest`. CFF2 vraies polices (M4), refus out-of-range et
-  rendu GPU restent `DependencyGated`.
+  variable→statique sont livrés et testés (fixtures). Le ticket **reste `blocked`
+  / `DependencyGated`** car l'évidence de rendu GPU est toujours KO
+  (`product_activation: false`, `GPUVariableFontInstancePlan` absent, CFF2
+  fixtures-only, pas de refus out-of-range). Le sous-scope borné handoff statique
+  (`GPUGlyphRunDescriptor.typefaceID`, aucun champ d'axe côté GPU) est implémenté
+  et testé (`VariableFontHandoffRouteTest`) mais ne promeut pas le ticket. Vrai
+  gate : CFF2 vraies polices M4 + exécution GPU.
 
 ## Linear Labels
 
