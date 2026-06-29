@@ -203,4 +203,45 @@ class GpuYuvTextureTest {
         assertEquals("unsupported.image.yuv_chroma_siting", refused.diagnostic.code)
         assertTrue(refused.diagnostic.terminal)
     }
+
+    @Test
+    fun `unvalidated converter WGSL module emits terminal refusal`() {
+        val descriptor = GPUYUVMultiPlanDescriptor(
+            colorSpace = YUVColorSpace.BT601,
+            subsampling = ChromaSubsampling.S_444,
+            planeCount = 3,
+            perPlaneDims = listOf(
+                PlaneDimensions(640, 480, 640),
+                PlaneDimensions(640, 480, 640),
+                PlaneDimensions(640, 480, 640),
+            ),
+            bitDepth = 8,
+            chromaSiting = ChromaSiting.Center,
+        )
+
+        val route = GPUYuvTexture.planRoute(descriptor, validatedConverterModules = emptySet())
+
+        val refused = assertIs<GPUYUVMultiPlanTextureRoute.Refused>(route)
+        assertEquals("unsupported.image.yuv_converter_wgsl_unvalidated", refused.diagnostic.code)
+        assertTrue(refused.diagnostic.terminal)
+    }
+
+    @Test
+    fun `default validated converter modules accept BT601 and BT709 routes`() {
+        val bt601 = GPUYUVMultiPlanDescriptor(
+            colorSpace = YUVColorSpace.BT601,
+            subsampling = ChromaSubsampling.S_444,
+            planeCount = 3,
+            perPlaneDims = listOf(
+                PlaneDimensions(8, 8, 8),
+                PlaneDimensions(8, 8, 8),
+                PlaneDimensions(8, 8, 8),
+            ),
+            bitDepth = 8,
+            chromaSiting = ChromaSiting.Center,
+        )
+
+        val accepted = assertIs<GPUYUVMultiPlanTextureRoute.Accepted>(GPUYuvTexture.planRoute(bt601))
+        assertEquals(WgslModuleId("wgsl:yuv-to-rgb:bt601"), accepted.converterPlan.wgslModule)
+    }
 }

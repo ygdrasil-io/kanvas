@@ -79,9 +79,18 @@ sealed interface GPUYUVMultiPlanTextureRoute {
     ) : GPUYUVMultiPlanTextureRoute
 }
 
-object GpuYuvTexture {
+object GPUYuvTexture {
 
-    fun planRoute(descriptor: GPUYUVMultiPlanDescriptor): GPUYUVMultiPlanTextureRoute {
+    /** WGSL converter modules that have passed parser/reflection validation. */
+    val DEFAULT_VALIDATED_CONVERTER_MODULES: Set<WgslModuleId> = setOf(
+        WgslModuleId("wgsl:yuv-to-rgb:bt601"),
+        WgslModuleId("wgsl:yuv-to-rgb:bt709"),
+    )
+
+    fun planRoute(
+        descriptor: GPUYUVMultiPlanDescriptor,
+        validatedConverterModules: Set<WgslModuleId> = DEFAULT_VALIDATED_CONVERTER_MODULES,
+    ): GPUYUVMultiPlanTextureRoute {
         if (descriptor.planeCount < 2 || descriptor.planeCount > 3) {
             return GPUYUVMultiPlanTextureRoute.Refused(
                 diagnostic = RefuseDiagnostic(
@@ -142,6 +151,19 @@ object GpuYuvTexture {
             )
         }
 
+        val converterModule = WgslModuleId("wgsl:yuv-to-rgb:${descriptor.colorSpace.name.lowercase()}")
+        if (converterModule !in validatedConverterModules) {
+            return GPUYUVMultiPlanTextureRoute.Refused(
+                diagnostic = RefuseDiagnostic(
+                    code = "unsupported.image.yuv_converter_wgsl_unvalidated",
+                    message = "YUV multi-plan route refused: converter WGSL module ${converterModule.value} has not passed wgsl4k validation.",
+                    stage = "yuv-multi-plan",
+                    terminal = true,
+                ),
+                descriptor = descriptor,
+            )
+        }
+
         val format = when (descriptor.bitDepth) {
             8 -> SingleChannelTextureFormat.R8Unorm
             10 -> SingleChannelTextureFormat.R16Unorm
@@ -175,7 +197,7 @@ object GpuYuvTexture {
         }
 
         val converterPlan = GPUYUVToRGBCoverterPlan(
-            wgslModule = WgslModuleId("wgsl:yuv-to-rgb:${descriptor.colorSpace.name.lowercase()}"),
+            wgslModule = converterModule,
             matrixCoefficients = matrixCoefficients,
             transferFn = transferFn,
         )
