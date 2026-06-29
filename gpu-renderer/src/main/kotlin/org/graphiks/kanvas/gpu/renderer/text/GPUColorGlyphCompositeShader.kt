@@ -37,6 +37,11 @@ sealed interface GPUColorGlyphCompositeShaderResult {
  * packs them before the draw. Layers beyond [maxLayers] are not iterated (the
  * route planner refuses such plans).
  *
+ * Backend packing contract (Plan 3c): `layerColors[i]` must be premultiplied
+ * RGBA (the fragment blends premultiplied src-over: `accum = src + accum*(1-src.a)`);
+ * `layerAtlasRects[i]` is the layer glyph's coverage region as normalized
+ * `(originU, originV, sizeU, sizeV)` and is sampled as `origin + quad_uv * size`.
+ *
  * Uses the WGSL `loop {}` construct (not `for`) because the current wgsl4k
  * parser rejects `for` loops; `loop {}` is standard WGSL and validates.
  */
