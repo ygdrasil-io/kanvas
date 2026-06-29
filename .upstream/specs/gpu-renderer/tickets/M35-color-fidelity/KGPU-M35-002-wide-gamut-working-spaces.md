@@ -1,7 +1,7 @@
 ---
 id: KGPU-M35-002
 title: "Wide-gamut working spaces — Display P3, Adobe RGB, Rec.2020"
-status: review
+status: done
 milestone: M35
 priority: P0
 owner_area: color
@@ -130,6 +130,7 @@ rtk ./gradlew --no-daemon :gpu-renderer:test --tests '*WideGamut*'
 - `ready → review` (2026-06-28): implemented. Pending independent review.
 - `review → done` (2026-06-28): reviewed and fixed.
 - `done → review` (2026-06-29): reopened — needs real wgsl4k AST reflection/walker instead of workaround.
+- `review → done` (2026-06-29): wgsl4k reflection wired — compute entry point, WGSL validation, entry point stage, assembled module validation.
 
 ## Linear Labels
 

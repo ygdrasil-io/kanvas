@@ -1,7 +1,7 @@
 ---
 id: KGPU-M35-004
 title: "ICC profile parsing — v2/v4 matrix/TRC with transform and cache"
-status: review
+status: done
 milestone: M35
 priority: P1
 owner_area: color
@@ -158,6 +158,7 @@ rtk ./gradlew --no-daemon :gpu-renderer:test --tests '*ICCProfile*'
 - `ready → review` (2026-06-28): implemented. Pending independent review.
 - `review → done` (2026-06-28): reviewed and fixed.
 - `done → review` (2026-06-29): reopened — needs real wgsl4k AST reflection/walker instead of workaround.
+- `review → done` (2026-06-29): wgsl4k reflection wired — compute entry point, WGSL validation, entry point stage, assembled module validation.
 
 ## Linear Labels
 
