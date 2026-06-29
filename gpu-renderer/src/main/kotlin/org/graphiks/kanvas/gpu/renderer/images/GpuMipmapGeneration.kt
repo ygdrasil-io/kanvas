@@ -75,6 +75,8 @@ sealed interface GPUImageMipmapGenerationResult {
         val plan: GPUImageMipmapGenerationPlan,
         val blitPlan: GPUImageMipmapBlitPlan,
         val computePlan: GPUImageMipmapComputePlan?,
+        val artifactKey: GPUImageUploadArtifactKey,
+        val format: String,
     ) : GPUImageMipmapGenerationResult
 
     /** Mipmap generation was refused with a stable diagnostic code. */
@@ -100,11 +102,11 @@ sealed interface GPUImageMipmapGenerationResult {
             )
         }
 
-    /** Derives a deterministic cache plan keyed by level count, filter, and path. */
+    /** Derives a deterministic cache plan keyed by upload artifact, filter, and format. */
     fun cachePlan(): GPUImageMipmapCachePlan =
         when (this) {
             is Generated -> {
-                val keyValue = "mipmap:${plan.levels}L:${plan.filter}:${plan.path}".lowercase()
+                val keyValue = "mipmap:${artifactKey.value}:${plan.filter}:$format".lowercase()
                 val artifactValue = "mipmap-artifact:$keyValue"
                 GPUImageMipmapCachePlan(
                     key = MipmapCacheKey(keyValue),
@@ -182,6 +184,8 @@ class GPUImageMipmapPlanner(
         height: Int,
         filter: MipmapFilter,
         computeAvailable: Boolean,
+        artifactKey: GPUImageUploadArtifactKey,
+        format: String = "RGBA8Unorm",
     ): GPUImageMipmapGenerationResult {
         val clampedWidth = width.coerceAtLeast(1)
         val clampedHeight = height.coerceAtLeast(1)
@@ -224,6 +228,8 @@ class GPUImageMipmapPlanner(
             plan = generationPlan,
             blitPlan = blitPlan,
             computePlan = computePlan,
+            artifactKey = artifactKey,
+            format = format,
         )
     }
 
