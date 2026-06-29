@@ -1,7 +1,7 @@
 package org.skia.svg
 
 import org.skia.core.SkCanvas
-import org.skia.encode.SkPngEncoder
+import org.graphiks.kanvas.codec.png.PngEncoder
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkBitmapShader
 import org.graphiks.math.SkColorGetA
@@ -388,12 +388,12 @@ public open class SkSVGCanvas(
 
     /**
      * Encode [image]'s pixel buffer as a `data:image/png;base64,…`
-     * URL via [SkPngEncoder]. Uses the same encoder as the rest of
+     * URL via [PngEncoder]. Uses the same encoder as the rest of
      * the project so a B2.4 round-trip through [SkSVGCanvas] →
-     * `<image>` → base64 → [SkPngEncoder]'s output matches
+     * `<image>` → base64 → [PngEncoder]'s output matches
      * byte-for-byte what the encoder emits standalone.
      *
-     * Fallback : if [SkPngEncoder.Encode] returns `null` (which
+     * Fallback : if [PngEncoder.encode] returns `null` (which
      * doesn't happen on any current code path but the API permits it),
      * emit a 1×1 transparent PNG so the SVG stays well-formed.
      */
@@ -404,7 +404,7 @@ public open class SkSVGCanvas(
                 bitmap.pixels[y * image.width + x] = image.peekPixel(x, y)
             }
         }
-        val pngBytes = SkPngEncoder.Encode(bitmap) ?: ByteArray(0)
+        val pngBytes = PngEncoder.encode(bitmap) ?: ByteArray(0)
         val base64 = Base64.getEncoder().encodeToString(pngBytes)
         return "data:image/png;base64,$base64"
     }

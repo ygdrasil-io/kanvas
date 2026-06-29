@@ -1,5 +1,6 @@
 package org.skia.encode
 
+import org.graphiks.kanvas.codec.png.PngEncoder
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
@@ -28,7 +29,7 @@ import org.skia.foundation.SkImage
  *    rather than crashing. This convenience API remains PNG/JPEG-only;
  *    direct BMP/WBMP/WebP encoder entry points are tested separately.
  *  - The member agrees pixel-for-pixel with calling
- *    [SkPngEncoder.Encode] directly (so it really is just plumbing,
+ *    [PngEncoder.encode] directly (so it really is just plumbing,
  *    no transformation in between).
  */
 class SkImageEncodeTest {
@@ -82,7 +83,7 @@ class SkImageEncodeTest {
     }
 
     @Test
-    fun `PNG output agrees with calling SkPngEncoder Encode directly`() {
+    fun `PNG output agrees with calling PngEncoder encode directly`() {
         val image = makeImage(4, 4)
         val viaMember = image.encodeToData(SkEncodedImageFormat.kPNG, 100)!!.toByteArray()
         // Reconstruct the bitmap the wrapper builds internally (sRGB,
@@ -91,7 +92,7 @@ class SkImageEncodeTest {
         for (y in 0 until 4) for (x in 0 until 4) {
             bitmap.pixels[y * 4 + x] = image.peekPixel(x, y)
         }
-        val viaDirect = SkPngEncoder.Encode(bitmap)!!
+        val viaDirect = PngEncoder.encode(bitmap)!!
         assertEquals(
             viaMember.toList(),
             viaDirect.toList(),

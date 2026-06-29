@@ -12,9 +12,7 @@ val pureKotlinCodecProjects = setOf(
     "codec:common",
     "codec:test-fixtures",
     "codec:real-image-tests",
-    "codec:png-api",
     "codec:png",
-    "codec:jpeg-api",
     "codec:jpeg",
     "codec:gif",
     "codec:bmp",
@@ -2821,14 +2819,16 @@ tasks.register("checkSupportedCodecsDoc") {
             "| ICO / CUR |",
             "| WebP |",
             "| AVIF / JPEG XL / RAW / video |",
-            "| GIF / ICO / AVIF / HEIF / JPEG XL / RAW / video |",
+            "| GIF |",
+            "| ICO / CUR |",
+            "| AVIF / HEIF / JPEG XL / RAW / video |",
         )
         val requiredEncodeMarkers = listOf(
-            "Supported through `SkPngEncoder`.",
-            "Supported through `SkJpegEncoder`",
-            "Supported through `SkBmpEncoder`.",
-            "Supported through `SkWbmpEncoder`.",
-            "Supported through `SkWebpEncoder`",
+            "Supported through `PngEncoder`.",
+            "Supported through `JpegEncoder` in `codec/jpeg/`",
+            "Supported through `BmpEncoder`.",
+            "Supported through `WbmpEncoder` in `codec/wbmp/`.",
+            "Supported through `WebpEncoder`",
             "Lossy VP8 encode intentionally returns `null`",
             "Public encode APIs must return `null` or a documented stub behavior",
         )
@@ -2840,11 +2840,11 @@ tasks.register("checkSupportedCodecsDoc") {
         val missing = (requiredSections + requiredRows + requiredEncodeMarkers + requiredMetadataMarkers)
             .filterNot { marker -> text.contains(marker) }
         val requiredEncodeTestFiles = listOf(
-            "kanvas-skia/src/test/kotlin/org/skia/encode/SkPngEncoderTest.kt",
-            "kanvas-skia/src/test/kotlin/org/skia/encode/SkJpegEncoderTest.kt",
-            "kanvas-skia/src/test/kotlin/org/skia/encode/SkBmpEncoderTest.kt",
-            "kanvas-skia/src/test/kotlin/org/skia/encode/SkWbmpEncoderTest.kt",
-            "kanvas-skia/src/test/kotlin/org/skia/encode/SkWebpEncoderTest.kt",
+            "codec/png/src/test/kotlin/org/graphiks/kanvas/codec/png/PngEncoderTest.kt",
+            "codec/jpeg/src/test/kotlin/org/graphiks/kanvas/codec/jpeg/JpegEncoderTest.kt",
+            "codec/bmp/src/test/kotlin/org/graphiks/kanvas/codec/bmp/BmpEncoderTest.kt",
+            "codec/wbmp/src/test/kotlin/org/graphiks/kanvas/codec/wbmp/WbmpEncoderTest.kt",
+            "codec/webp/src/test/kotlin/org/graphiks/kanvas/codec/webp/WebpEncoderTest.kt",
         ).filterNot { path -> file(path).isFile }
 
         if (missing.isNotEmpty() || requiredEncodeTestFiles.isNotEmpty()) {
@@ -3143,8 +3143,7 @@ tasks.register("checkPureKotlinPngEncoderNoAwt") {
 
     doLast {
         val filesToCheck = listOf(
-            file("kanvas-skia/src/main/kotlin/org/skia/encode/SkPngEncoder.kt"),
-            file("kanvas-skia/src/main/kotlin/org/skia/encode/EncoderSupport.kt"),
+            file("codec/png/src/main/kotlin/org/graphiks/kanvas/codec/png/PngEncoder.kt"),
         )
         val violations = mutableListOf<String>()
         filesToCheck

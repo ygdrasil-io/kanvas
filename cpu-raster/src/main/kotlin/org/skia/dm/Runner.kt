@@ -1,6 +1,6 @@
 package org.skia.dm
 
-import org.skia.encode.SkPngEncoder
+import org.graphiks.kanvas.codec.png.PngEncoder
 import org.skia.foundation.SkAlphaType
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorSpace
@@ -86,7 +86,7 @@ public class Runner(
         // mirrors upstream's "dm hashes the encoded output, not the
         // raw pixmap" convention so two sinks producing the same
         // visible image produce the same md5.
-        val pngBytes = SkPngEncoder.Encode(bitmap) ?: ByteArray(0)
+        val pngBytes = PngEncoder.encode(bitmap) ?: ByteArray(0)
         val md5 = md5Hex(pngBytes)
         val classification = classifyBitmap(bitmap)
         return RunRecord(

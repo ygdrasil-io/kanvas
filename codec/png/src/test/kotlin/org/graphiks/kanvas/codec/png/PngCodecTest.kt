@@ -777,10 +777,68 @@ class PngCodecTest {
     }
 
     @Test
-    fun `gAMA cHRM and sRGB chunks are accepted but do not synthesize ICC`() {
+    fun `sRGB and gAMA chunks synthesize ICC when sRGB is present`() {
+        val data = pngFromChunks(
+            "IHDR" to ihdr(width = 1, height = 1, bitDepth = 8, colorType = 0),
+            "sRGB" to byteArrayOf(0),
+            "IDAT" to deflate(byteArrayOf(0, 0x40)),
+            "IEND" to ByteArray(0),
+        )
+
+        val codec = PngCodec.Decoder.make(data)
+
+        assertNotNull(codec)
+        val profile = codec!!.getICCProfile()
+        assertNotNull(profile, "sRGB chunk must synthesize ICC when no iCCP is present")
+        assertTrue(codec.getInfo().colorSpace.isSRGB())
+        val (bitmap, result) = codec.getImage()
+        assertEquals(Codec.Result.kSuccess, result)
+        assertEquals(argb(0xFF, 0x40, 0x40, 0x40), bitmap!!.getPixel(0, 0))
+    }
+
+    @Test
+    fun `sRGB and gAMA chunks synthesize ICC when both are present`() {
         val data = pngFromChunks(
             "IHDR" to ihdr(width = 1, height = 1, bitDepth = 8, colorType = 0),
             "gAMA" to u32Chunk(45_455),
+            "sRGB" to byteArrayOf(0),
+            "IDAT" to deflate(byteArrayOf(0, 0x40)),
+            "IEND" to ByteArray(0),
+        )
+
+        val codec = PngCodec.Decoder.make(data)
+
+        assertNotNull(codec)
+        val profile = codec!!.getICCProfile()
+        assertNotNull(profile, "sRGB+gAMA must synthesize ICC when no iCCP is present")
+        val (bitmap, result) = codec.getImage()
+        assertEquals(Codec.Result.kSuccess, result)
+        assertEquals(argb(0xFF, 0x40, 0x40, 0x40), bitmap!!.getPixel(0, 0))
+    }
+
+    @Test
+    fun `gAMA chunk alone synthesizes ICC profile`() {
+        val data = pngFromChunks(
+            "IHDR" to ihdr(width = 1, height = 1, bitDepth = 8, colorType = 0),
+            "gAMA" to u32Chunk(45_455),
+            "IDAT" to deflate(byteArrayOf(0, 0x40)),
+            "IEND" to ByteArray(0),
+        )
+
+        val codec = PngCodec.Decoder.make(data)
+
+        assertNotNull(codec)
+        val profile = codec!!.getICCProfile()
+        assertNotNull(profile, "gAMA chunk must synthesize ICC when no iCCP is present")
+        val (bitmap, result) = codec.getImage()
+        assertEquals(Codec.Result.kSuccess, result)
+        assertEquals(argb(0xFF, 0x40, 0x40, 0x40), bitmap!!.getPixel(0, 0))
+    }
+
+    @Test
+    fun `cHRM chunk without sRGB or gAMA does not synthesize ICC`() {
+        val data = pngFromChunks(
+            "IHDR" to ihdr(width = 1, height = 1, bitDepth = 8, colorType = 0),
             "cHRM" to chrmChunk(
                 whiteX = 31_270,
                 whiteY = 32_900,
@@ -791,7 +849,6 @@ class PngCodecTest {
                 blueX = 15_000,
                 blueY = 6_000,
             ),
-            "sRGB" to byteArrayOf(0),
             "IDAT" to deflate(byteArrayOf(0, 0x40)),
             "IEND" to ByteArray(0),
         )

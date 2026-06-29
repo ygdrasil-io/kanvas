@@ -2,8 +2,8 @@ package org.skia.tests
 
 import org.graphiks.kanvas.codec.Codec
 import org.skia.core.SkCanvas
-import org.skia.encode.SkJpegEncoder
-import org.skia.encode.SkPngEncoder
+import org.graphiks.kanvas.codec.jpeg.JpegEncoder
+import org.graphiks.kanvas.codec.png.PngEncoder
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkFont
 import org.skia.foundation.SkPaint
@@ -14,7 +14,7 @@ import org.skia.tools.ToolUtils
  * Port of Skia's `gm/encode.cpp::EncodeGM`.
  *
  * Loads `images/mandrill_512_q075.jpg`, re-encodes it twice — once as
- * PNG via [SkPngEncoder.Encode], once as JPEG via [SkJpegEncoder.Encode]
+ * PNG via [PngEncoder.encode], once as JPEG via [JpegEncoder.encode]
  * — then re-decodes both encoded blobs back into [SkImage]s and draws
  * them side-by-side at `(0, 0)` and `(512, 0)`. Below the images, the
  * legend "Images should look identical." is drawn with the portable
@@ -23,8 +23,8 @@ import org.skia.tools.ToolUtils
  * The GM exists to validate the encode → decode round-trip for the
  * PNG and JPEG encoders. PNG should be lossless ; JPEG-100 is
  * near-lossless. Differences from upstream come from the JPEG quality
- * setting — upstream uses `SkJpegEncoder::Options{}` which defaults to
- * `quality = 100` ; our [SkJpegEncoder.Encode] default also chooses
+ * setting — upstream uses `JpegEncoder::Options{}` which defaults to
+ * `quality = 100` ; our [JpegEncoder.encode] default also chooses
  * `quality = 100`, so the encoded blobs round-trip with comparable
  * fidelity.
  *
@@ -33,8 +33,8 @@ import org.skia.tools.ToolUtils
  * void onDraw(SkCanvas* canvas) override {
  *     SkBitmap orig;
  *     ToolUtils::GetResourceAsBitmap("images/mandrill_512_q075.jpg", &orig);
- *     sk_sp<SkData> pngData = SkPngEncoder::Encode(orig.pixmap(), {});
- *     sk_sp<SkData> jpgData = SkJpegEncoder::Encode(orig.pixmap(), {});
+ *     sk_sp<SkData> pngData = PngEncoder::encode(orig.pixmap(), {});
+ *     sk_sp<SkData> jpgData = JpegEncoder::Encode(orig.pixmap(), {});
  *     sk_sp<SkImage> pngImage = SkImages::DeferredFromEncodedData(pngData);
  *     sk_sp<SkImage> jpgImage = SkImages::DeferredFromEncodedData(jpgData);
  *     canvas->drawImage(pngImage.get(), 0.0f, 0.0f);
@@ -63,8 +63,8 @@ public class EncodeGM : GM() {
             }
         }
 
-        val pngData = SkPngEncoder.Encode(orig) ?: return
-        val jpgData = SkJpegEncoder.Encode(orig) ?: return
+        val pngData = PngEncoder.encode(orig) ?: return
+        val jpgData = JpegEncoder.encode(orig) ?: return
 
         val pngImage = decodeImage(pngData) ?: return
         val jpgImage = decodeImage(jpgData) ?: return

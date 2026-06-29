@@ -2,7 +2,7 @@ package org.skia.tests
 
 import org.graphiks.kanvas.codec.Codec
 import org.skia.core.SkCanvas
-import org.skia.encode.SkJpegEncoder
+import org.graphiks.kanvas.codec.jpeg.JpegEncoder
 import org.skia.foundation.SkBitmap
 import org.graphiks.math.SkColorSetARGB
 import org.skia.foundation.SkImage
@@ -15,7 +15,7 @@ import org.graphiks.math.SkISize
  * patches, each patch holding the cross-section of the RGB cube at
  * a fixed `B` plane (`B = patchIndex * 4`). Within each patch, the
  * `(x, y)` pixel is `(R, G) = (px * 4, py * 4)`. The bitmap is then
- * encoded through [SkJpegEncoder] with default options and
+ * encoded through [JpegEncoder] with default options and
  * decoded back ; the decoded image is what actually gets drawn.
  *
  * The point of the GM is to exercise the JPEG encoder against a
@@ -44,7 +44,7 @@ import org.graphiks.math.SkISize
  *         bX += 64;
  *         if (bX >= 512) { bX = 0; bY += 64; }
  *     }
- *     sk_sp<SkData> data = SkJpegEncoder::Encode(bmp.pixmap(), {});
+ *     sk_sp<SkData> data = JpegEncoder::Encode(bmp.pixmap(), {});
  *     fImage = SkImages::DeferredFromEncodedData(data);
  * }
  * void onDraw(SkCanvas* canvas) override {
@@ -83,7 +83,7 @@ public class JpgColorCubeGM : GM() {
                 bY += 64
             }
         }
-        val data = SkJpegEncoder.Encode(bmp) ?: return
+        val data = JpegEncoder.encode(bmp) ?: return
         val codec = Codec.MakeFromData(data) ?: return
         val (decoded, result) = codec.getImage()
         if (result != Codec.Result.kSuccess || decoded == null) return

@@ -24,7 +24,7 @@ import org.skia.tools.SkRandom
  *
  * 1. Allocate a 5×5 RGBA bitmap filled with random opaque pixel values
  *    (via `SkRandom`).
- * 2. JPEG-encode it with `SkJpegEncoder::Downsample::k420` (4:2:0) —
+ * 2. JPEG-encode it with `JpegEncoder::Downsample::k420` (4:2:0) —
  *    this is the key step that creates a YUV420-encoded stream with odd
  *    chroma-plane dimensions.
  * 3. Decode and upload via `sk_gpu_test::LazyYUVImage::Make(data)` +
@@ -95,14 +95,14 @@ public class Yuv420OddDimGM : GM() {
         }
 
         // Step 2: JPEG-encode with k420 downsampling (mirrors upstream
-        // `SkJpegEncoder::Options{.fDownsample=k420, .fQuality=100}`).
-        // SkJpegEncoder exists in :kanvas-skia but encodes via ImageIO which
+        // `JpegEncoder::Options{.fDownsample=k420, .fQuality=100}`).
+        // JpegEncoder exists in :kanvas-skia but encodes via ImageIO which
         // always honours standard subsampling — the resulting byte stream is
         // a valid JPEG-with-YUV420.
         // (Encoding step succeeds on the raster side; the GPU upload below is
         //  the actual blocker.)
-        // val options = SkJpegEncoder.Options(quality = 100, downsample = SkJpegEncoder.Downsample.k420)
-        // val data: ByteArray? = SkJpegEncoder.Encode(bmp, options)
+        // val options = JpegEncoder.Options(quality = 100, downsample = JpegEncoder.Downsample.k420)
+        // val data: ByteArray? = JpegEncoder.encode(bmp, options)
         // if (data == null) return null
 
         // Step 3: GPU upload via LazyYUVImage — raster backend has no equivalent.

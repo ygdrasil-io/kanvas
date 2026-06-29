@@ -360,10 +360,10 @@ public class SkImage public constructor(
      *
      * Dispatch table :
      *  - [SkEncodedImageFormat.kPNG] : delegates to
-     *    [org.skia.encode.SkPngEncoder]. The [quality] argument is
+     *    [org.graphiks.kanvas.codec.png.PngEncoder]. The [quality] argument is
      *    ignored (PNG is lossless).
      *  - [SkEncodedImageFormat.kJPEG] : delegates to
-     *    [org.skia.encode.SkJpegEncoder] with the supplied [quality].
+     *    [org.skia.encode.JpegCall] with the supplied [quality].
      *  - Every other format returns `null` — encoders for WEBP / GIF /
      *    BMP / WBMP / HEIF / AVIF / JPEGXL are out of scope. Use the
      *    per-format encoder directly when a richer surface is needed.

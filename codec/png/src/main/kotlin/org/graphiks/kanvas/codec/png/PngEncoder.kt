@@ -1,6 +1,7 @@
-package org.skia.encode
+package org.graphiks.kanvas.codec.png
 
 import org.skia.foundation.SkBitmap
+import org.skia.foundation.SkICC
 import org.skia.foundation.SkPixmap
 import org.skia.foundation.stream.SkWStream
 import java.io.ByteArrayOutputStream
@@ -8,34 +9,8 @@ import java.io.OutputStream
 import java.util.zip.CRC32
 import java.util.zip.Deflater
 
-/**
- * PNG encoder — D3.5 implementation of upstream's
- * [`SkPngEncoder`](https://github.com/google/skia/blob/main/include/encode/SkPngEncoder.h).
- *
- * Mirrors the upstream namespace as a Kotlin `object` carrying the
- * static `Encode` entry points, plus a Kotlin-idiomatic [Options]
- * data class that maps onto the upstream `SkPngEncoder::Options`
- * struct. The bitstream is written directly in Kotlin: PNG signature,
- * `IHDR`, optional `tEXt`, `IDAT`, `IEND`, zlib compression, and CRC.
- *
- * **Honoured options** : [Options.zLibLevel], [Options.comments], and
- * [Options.filterFlags]. When multiple filters are allowed, the encoder
- * chooses the row filter with the smallest absolute-byte score.
- *
- * **Colour space** : the caller's [SkBitmap.colorSpace] is **not**
- * embedded as an `iCCP` chunk. Pixel rows are materialized through
- * [SkBitmap.getPixelAsSrgb], so F16 non-sRGB bitmaps are converted to
- * untagged sRGB RGBA samples at the encoder boundary.
- */
-public object SkPngEncoder {
+public object PngEncoder {
 
-    /**
-     * Mirrors `SkPngEncoder::FilterFlag`. Each flag is a libpng
-     * filter selector ; combining them tells libpng to pick the
-     * smallest-encoded filter per row. [kAll] matches libpng's
-     * default and also matches this encoder's multi-filter row
-     * heuristic.
-     */
     public enum class FilterFlag(public val mask: Int) {
         kZero(0x00),
         kNone(0x08),
@@ -46,20 +21,11 @@ public object SkPngEncoder {
         kAll(0x08 or 0x10 or 0x20 or 0x40 or 0x80),
     }
 
-    /**
-     * Mirrors `SkPngEncoder::Options`.
-     */
     public data class Options(
-        /** Bitfield of [FilterFlag]s. */
         val filterFlags: Int = FilterFlag.kAll.mask,
-        /** Must be in `[0, 9]` ; 9 = max compression. Advisory. */
         val zLibLevel: Int = 6,
-        /**
-         * `tEXt` keyword/value pairs. Even-indexed entries are
-         * keywords ; odd-indexed entries are the corresponding text.
-         * `tEXt` keyword/value pairs written before `IDAT`.
-         */
         val comments: List<String> = emptyList(),
+        val interlace: Boolean = false,
     ) {
         init {
             require(zLibLevel in 0..9) { "zLibLevel must be in [0, 9], got $zLibLevel" }
@@ -69,25 +35,18 @@ public object SkPngEncoder {
         }
     }
 
-    /** Default-options [Options] singleton — saves one allocation per call. */
     private val defaultOptions = Options()
 
-    /**
-     * Encode [src]'s pixels and return the PNG bytes, or `null` on
-     * encoder failure. Mirrors `sk_sp<SkData>
-     * SkPngEncoder::Encode(const SkPixmap&, const Options&)`.
-     */
-    public fun Encode(src: SkBitmap, options: Options = defaultOptions): ByteArray? {
-        val baos = ByteArrayOutputStream()
-        return if (Encode(baos, src, options)) baos.toByteArray() else null
+    init {
+        org.skia.encode.PngCall.setEncoder { bitmap -> encode(bitmap) }
     }
 
-    /**
-     * Encode [src]'s pixels into [dst]. Returns `true` on success.
-     * Mirrors `bool SkPngEncoder::Encode(SkWStream*, const SkPixmap&,
-     * const Options&)`. The caller retains ownership of [dst].
-     */
-    public fun Encode(dst: OutputStream, src: SkBitmap, options: Options = defaultOptions): Boolean {
+    public fun encode(src: SkBitmap, options: Options = defaultOptions): ByteArray? {
+        val baos = ByteArrayOutputStream()
+        return if (encode(baos, src, options)) baos.toByteArray() else null
+    }
+
+    public fun encode(dst: OutputStream, src: SkBitmap, options: Options = defaultOptions): Boolean {
         return try {
             if (src.width <= 0 || src.height <= 0) return false
             writePng(dst, src, options)
@@ -97,58 +56,62 @@ public object SkPngEncoder {
         }
     }
 
-    // ── R-final.6 overloads : SkPixmap + SkWStream ───────────────────────
-    //
-    // The plan calls for `SkPngEncoder.Encode(stream, pixmap, options)` to
-    // mirror the upstream `SkWStream*` + `SkPixmap` signature. The Kotlin
-    // implementation routes through the existing SkBitmap path : the pixmap
-    // is materialised into a fresh 8888 bitmap via `getColor` (which honours
-    // the source colour type), then the bitmap path writes the PNG directly.
-    // Slow for huge images but correct for the GM-sized inputs that exercise
-    // this overload.
-
-    /**
-     * Encode [src]'s pixels into [stream]. Returns `true` on success.
-     * Mirrors upstream's `bool SkPngEncoder::Encode(SkWStream*, const
-     * SkPixmap&, const Options&)`. The caller retains ownership of
-     * [stream]. See class kdoc for the list of honoured options.
-     */
-    public fun Encode(stream: SkWStream, src: SkPixmap, options: Options = defaultOptions): Boolean {
-        val bitmap = EncoderSupport.pixmapToBitmap(src) ?: return false
-        return Encode(stream, bitmap, options)
+    public fun encode(stream: SkWStream, src: SkPixmap, options: Options = defaultOptions): Boolean {
+        val bitmap = encoderSupport.pixmapToBitmap(src) ?: return false
+        return encode(stream, bitmap, options)
     }
 
-    /**
-     * Encode [src]'s pixels into [bytes]. Returns `null` if encoding
-     * fails. Convenience wrapper for the upstream `sk_sp<SkData>
-     * SkPngEncoder::Encode(const SkPixmap&, const Options&)` shape.
-     */
-    public fun Encode(src: SkPixmap, options: Options = defaultOptions): ByteArray? {
-        val bitmap = EncoderSupport.pixmapToBitmap(src) ?: return null
-        return Encode(bitmap, options)
+    public fun encode(src: SkPixmap, options: Options = defaultOptions): ByteArray? {
+        val bitmap = encoderSupport.pixmapToBitmap(src) ?: return null
+        return encode(bitmap, options)
     }
 
-    /**
-     * Convenience overload — writes the encoded bytes into [stream] via
-     * the [SkWStream.write] contract instead of an [OutputStream].
-     * Useful for call sites already plumbing the foundation type.
-     */
-    public fun Encode(stream: SkWStream, src: SkBitmap, options: Options = defaultOptions): Boolean {
-        val bytes = Encode(src, options) ?: return false
+    public fun encode(stream: SkWStream, src: SkBitmap, options: Options = defaultOptions): Boolean {
+        val bytes = encode(src, options) ?: return false
         return stream.write(bytes, bytes.size)
     }
 
     private fun writePng(dst: OutputStream, src: SkBitmap, options: Options) {
         dst.write(PNG_SIGNATURE)
-        writeChunk(dst, TYPE_IHDR, ihdr(src.width, src.height))
+        writeChunk(dst, TYPE_IHDR, ihdr(src.width, src.height, options))
         options.comments.chunked(2).forEach { (keyword, text) ->
             writeChunk(dst, TYPE_TEXT, textChunk(keyword, text))
         }
-        writeChunk(dst, TYPE_IDAT, deflate(filteredRgbaRows(src, options.filterFlags), options.zLibLevel))
+        if (src.colorSpace.isSRGB()) {
+            writeChunk(dst, TYPE_SRGB, byteArrayOf(0))
+            val gammaBytes = ByteArray(4)
+            writeU32BE(gammaBytes, 0, 45455)
+            writeChunk(dst, TYPE_GAMA, gammaBytes)
+        } else {
+            val iccProfileData = SkICC.WriteToICC(src.colorSpace.transferFn, src.colorSpace.toXYZD50)
+            val nameBytes = "sRGB".toByteArray()
+            val deflater = Deflater()
+            try {
+                deflater.setInput(iccProfileData)
+                deflater.finish()
+                val compressed = ByteArrayOutputStream()
+                val buf = ByteArray(8192)
+                while (!deflater.finished()) {
+                    val n = deflater.deflate(buf)
+                    if (n == 0 && deflater.needsInput()) break
+                    compressed.write(buf, 0, n)
+                }
+                val iccpData = nameBytes + byteArrayOf(0, 0) + compressed.toByteArray()
+                writeChunk(dst, TYPE_ICCP, iccpData)
+            } finally {
+                deflater.end()
+            }
+        }
+        val pixelBytes = if (options.interlace) {
+            adam7Rows(src, src.width, src.height, options.filterFlags)
+        } else {
+            filteredRgbaRows(src, options.filterFlags)
+        }
+        writeChunk(dst, TYPE_IDAT, deflate(pixelBytes, options.zLibLevel))
         writeChunk(dst, TYPE_IEND, ByteArray(0))
     }
 
-    private fun ihdr(width: Int, height: Int): ByteArray =
+    private fun ihdr(width: Int, height: Int, options: Options): ByteArray =
         ByteArray(13).also { out ->
             writeU32BE(out, 0, width)
             writeU32BE(out, 4, height)
@@ -156,7 +119,7 @@ public object SkPngEncoder {
             out[9] = 6 // colour type: RGBA
             out[10] = 0 // compression
             out[11] = 0 // filter
-            out[12] = 0 // interlace
+            out[12] = if (options.interlace) 1 else 0 // interlace
         }
 
     private fun textChunk(keyword: String, text: String): ByteArray {
@@ -278,11 +241,10 @@ public object SkPngEncoder {
             deflater.setInput(bytes)
             deflater.finish()
             val out = ByteArrayOutputStream()
-            val buffer = ByteArray(8192)
+            val buffer = ByteArray(bytes.size + 64)
             while (!deflater.finished()) {
-                val count = deflater.deflate(buffer)
-                if (count == 0 && deflater.needsInput()) break
-                out.write(buffer, 0, count)
+                val n = deflater.deflate(buffer, 0, buffer.size)
+                if (n > 0) out.write(buffer, 0, n)
             }
             out.toByteArray()
         } finally {
@@ -341,4 +303,65 @@ public object SkPngEncoder {
     private const val TYPE_IDAT = 0x49444154
     private const val TYPE_IEND = 0x49454E44
     private const val TYPE_TEXT = 0x74455874
+    private const val TYPE_ICCP = 0x69434350
+    private const val TYPE_SRGB = 0x73524742
+    private const val TYPE_GAMA = 0x67414D41
+
+    private val adam7Passes = arrayOf(
+        intArrayOf(0, 0, 8, 8),
+        intArrayOf(4, 0, 8, 8),
+        intArrayOf(0, 4, 4, 8),
+        intArrayOf(2, 0, 4, 4),
+        intArrayOf(0, 2, 2, 4),
+        intArrayOf(1, 0, 2, 2),
+        intArrayOf(0, 1, 1, 2),
+    )
+
+    private fun adam7Rows(src: SkBitmap, w: Int, h: Int, filterFlags: Int): ByteArray {
+        val allowedFilters = allowedFilters(filterFlags)
+        val bpp = RGBA_BYTES_PER_PIXEL
+        val allRows = ByteArrayOutputStream()
+        for (pass in adam7Passes) {
+            val xStart = pass[0]; val yStart = pass[1]
+            val xStep = pass[2]; val yStep = pass[3]
+            val passW = if (w > xStart) (w - xStart + xStep - 1) / xStep else 0
+            val passH = if (h > yStart) (h - yStart + yStep - 1) / yStep else 0
+            if (passW <= 0 || passH <= 0) continue
+            val rowLen = passW * bpp
+            var prevRow = ByteArray(rowLen)
+            val filtered = ByteArray(rowLen)
+            for (py in 0 until passH) {
+                val y = yStart + py * yStep
+                val current = ByteArray(rowLen)
+                var off = 0
+                for (px in 0 until passW) {
+                    val x = xStart + px * xStep
+                    val argb = src.getPixelAsSrgb(x, y)
+                    current[off++] = ((argb ushr 16) and 0xFF).toByte()
+                    current[off++] = ((argb ushr 8) and 0xFF).toByte()
+                    current[off++] = (argb and 0xFF).toByte()
+                    current[off++] = ((argb ushr 24) and 0xFF).toByte()
+                }
+                val filter = chooseFilter(current, prevRow, allowedFilters)
+                allRows.write(filter)
+                writeFilteredRow(filter, current, prevRow, filtered, 0)
+                allRows.write(filtered, 0, rowLen)
+                prevRow = current
+            }
+        }
+        return allRows.toByteArray()
+    }
+
+    private object encoderSupport {
+        fun pixmapToBitmap(src: SkPixmap): SkBitmap? {
+            if (src.width() <= 0 || src.height() <= 0) return null
+            val bitmap = SkBitmap(src.width(), src.height())
+            for (y in 0 until src.height()) {
+                for (x in 0 until src.width()) {
+                    bitmap.pixels[y * src.width() + x] = src.getColor(x, y)
+                }
+            }
+            return bitmap
+        }
+    }
 }

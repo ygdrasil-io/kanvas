@@ -1,7 +1,7 @@
 package org.skia.docs
 
 import org.skia.core.SkCanvas
-import org.skia.encode.SkJpegEncoder
+import org.graphiks.kanvas.codec.jpeg.JpegEncoder
 import org.skia.foundation.SkBitmap
 import org.graphiks.math.SkColor
 import org.skia.foundation.SkDocument
@@ -422,12 +422,12 @@ internal class PdfDocument(
     private fun encodeImageXObject(image: SkImage): Pair<Int, IndirectObject> {
         val objId = nextObjectId()
         // Re-hydrate the image's pixel buffer into a SkBitmap so the
-        // existing SkJpegEncoder can consume it.
+        // existing JpegEncoder can consume it.
         val bmp = SkBitmap(image.width, image.height)
         // SkBitmap and SkImage share the same 8888 row layout; copy
         // the entire pixel buffer in one shot.
         System.arraycopy(image.pixels, 0, bmp.pixels8888, 0, image.width * image.height)
-        val jpegBytes = SkJpegEncoder.Encode(bmp, SkJpegEncoder.Options(quality = 90))
+        val jpegBytes = JpegEncoder.encode(bmp, JpegEncoder.Options(quality = 90))
         val obj: IndirectObject = if (jpegBytes != null) {
             // Standard JPEG XObject — width/height from the source image,
             // 8 bpc DeviceRGB. The /Filter /DCTDecode entry tells PDF

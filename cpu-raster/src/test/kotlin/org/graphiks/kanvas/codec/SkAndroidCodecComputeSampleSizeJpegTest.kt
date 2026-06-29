@@ -4,8 +4,8 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.graphiks.math.SkISize
-import org.skia.encode.SkJpegEncoder
-import org.skia.encode.SkPngEncoder
+import org.graphiks.kanvas.codec.jpeg.JpegEncoder
+import org.graphiks.kanvas.codec.png.PngEncoder
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkEncodedImageFormat
 
@@ -88,7 +88,7 @@ class AndroidCodecComputeSampleSizeJpegTest {
             val g = (y * 255 / maxOf(1, height - 1)).coerceIn(0, 255)
             img.setPixel(x, y, (0xFF shl 24) or (r shl 16) or (g shl 8) or 0x40)
         }
-        return SkJpegEncoder.Encode(img) ?: error("Synthetic JPEG encode failed")
+        return JpegEncoder.encode(img) ?: error("Synthetic JPEG encode failed")
     }
 
     private fun synthPng(width: Int, height: Int): ByteArray {
@@ -96,6 +96,6 @@ class AndroidCodecComputeSampleSizeJpegTest {
         for (y in 0 until height) for (x in 0 until width) {
             img.setPixel(x, y, (0xFF shl 24) or (x * 4) or ((y * 4) shl 8))
         }
-        return SkPngEncoder.Encode(img) ?: error("Synthetic PNG encode failed")
+        return PngEncoder.encode(img) ?: error("Synthetic PNG encode failed")
     }
 }

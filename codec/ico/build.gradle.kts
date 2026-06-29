@@ -7,9 +7,10 @@ dependencies {
     implementation(project(":kanvas-skia"))
     implementation(project(":codec:core"))
     implementation(project(":codec:common"))
+    implementation(project(":codec:png"))
 
     testRuntimeOnly(project(":codec:png"))
-    testRuntimeOnly(project(":codec:bmp"))
+    implementation(project(":codec:bmp"))
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.10.2")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.10.2")

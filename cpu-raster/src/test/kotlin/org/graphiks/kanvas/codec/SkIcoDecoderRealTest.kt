@@ -3,7 +3,7 @@ package org.graphiks.kanvas.codec
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Test
-import org.skia.encode.SkPngEncoder
+import org.graphiks.kanvas.codec.png.PngEncoder
 import org.skia.foundation.SkBitmap
 
 /**
@@ -67,7 +67,7 @@ class IcoDecoderRealTest {
     @Test
     fun `Decode picks the embedded PNG payload and decodes it through the PNG codec`() {
         val source = makeReferenceBitmap()
-        val png: ByteArray? = SkPngEncoder.Encode(source)
+        val png: ByteArray? = PngEncoder.encode(source)
         assertNotNull(png, "test prelude — PNG encoder must produce bytes")
         val ico = makeIcoWithPng(png!!)
 
@@ -111,8 +111,8 @@ class IcoDecoderRealTest {
             out
         }
         val big = makeReferenceBitmap()
-        val pngSmall: ByteArray = SkPngEncoder.Encode(small)!!
-        val pngBig: ByteArray = SkPngEncoder.Encode(big)!!
+val pngSmall: ByteArray = PngEncoder.encode(small)!!
+val pngBig: ByteArray = PngEncoder.encode(big)!!
 
         // Header (6) + 2 entries (16 each) = 38 bytes.
         val header = byteArrayOf(

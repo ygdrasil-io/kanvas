@@ -2,7 +2,7 @@ package org.skia.tests
 
 import org.graphiks.kanvas.codec.Codec
 import org.skia.core.SkCanvas
-import org.skia.encode.SkJpegEncoder
+import org.graphiks.kanvas.codec.jpeg.JpegEncoder
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkImage
 import org.graphiks.math.SkISize
@@ -12,10 +12,10 @@ import org.skia.tools.ToolUtils
  * Port of Skia's `gm/encode_alpha_jpeg.cpp::EncodeJpegAlphaOptsGM`.
  *
  * Loads `images/rainbow-gradient.png` and encodes it through
- * [SkJpegEncoder] eight times at the four corners of a 4×2 grid :
+ * [JpegEncoder] eight times at the four corners of a 4×2 grid :
  * the columns vary the source pixel layout (8888 premul, 8888
  * unpremul, F16 premul, F16 unpremul) and the rows vary the
- * [SkJpegEncoder.Options.alphaOption] dispatch ([AlphaOption.kIgnore]
+ * [JpegEncoder.Options.alphaOption] dispatch ([AlphaOption.kIgnore]
  * on top, [AlphaOption.kBlendOnBlack] on the bottom).
  *
  * The "premul vs unpremul" axis exists in upstream because libjpeg-turbo
@@ -45,8 +45,8 @@ import org.skia.tools.ToolUtils
  *             canvas->imageInfo().colorSpace() ? SkColorSpace::MakeSRGB() : nullptr);
  *     read_into_pixmap(&src, info, fStorage.get(), srcImg);
  *
- *     auto img0 = encode_pixmap_and_make_image(src, SkJpegEncoder::AlphaOption::kIgnore);
- *     auto img1 = encode_pixmap_and_make_image(src, SkJpegEncoder::AlphaOption::kBlendOnBlack);
+ *     auto img0 = encode_pixmap_and_make_image(src, JpegEncoder::AlphaOption::kIgnore);
+ *     auto img1 = encode_pixmap_and_make_image(src, JpegEncoder::AlphaOption::kBlendOnBlack);
  *     canvas->drawImage(img0, 0.0f, 0.0f);
  *     canvas->drawImage(img1, 0.0f, 100.0f);
  *
@@ -79,8 +79,8 @@ public class EncodeAlphaJpegGM : GM() {
 
         val xCoords = floatArrayOf(0f, 100f, 200f, 300f)
         for (xLeft in xCoords) {
-            val img0 = encodeAndDecode(src, SkJpegEncoder.AlphaOption.kIgnore) ?: continue
-            val img1 = encodeAndDecode(src, SkJpegEncoder.AlphaOption.kBlendOnBlack) ?: continue
+            val img0 = encodeAndDecode(src, JpegEncoder.AlphaOption.kIgnore) ?: continue
+            val img1 = encodeAndDecode(src, JpegEncoder.AlphaOption.kBlendOnBlack) ?: continue
             c.drawImage(img0, xLeft, 0f)
             c.drawImage(img1, xLeft, 100f)
         }
@@ -91,11 +91,8 @@ public class EncodeAlphaJpegGM : GM() {
      * blob back into an [SkImage], and return it. Returns `null` if
      * the encode or decode fails.
      */
-    private fun encodeAndDecode(src: SkBitmap, alphaOption: SkJpegEncoder.AlphaOption): SkImage? {
-        val bytes = SkJpegEncoder.Encode(
-            src,
-            SkJpegEncoder.Options(alphaOption = alphaOption),
-        ) ?: return null
+    private fun encodeAndDecode(src: SkBitmap, alphaOption: JpegEncoder.AlphaOption): SkImage? {
+        val bytes = JpegEncoder.encode(src, JpegEncoder.Options(alphaOption = alphaOption)) ?: return null
         val codec = Codec.MakeFromData(bytes) ?: return null
         val (bitmap, result) = codec.getImage()
         if (result != Codec.Result.kSuccess || bitmap == null) return null

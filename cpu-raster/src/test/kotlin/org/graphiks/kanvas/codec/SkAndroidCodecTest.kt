@@ -8,7 +8,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.graphiks.math.SkIRect
 import org.graphiks.math.SkISize
-import org.skia.encode.SkPngEncoder
+import org.graphiks.kanvas.codec.png.PngEncoder
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkData
 import org.skia.foundation.SkEncodedImageFormat
@@ -175,7 +175,7 @@ class AndroidCodecTest {
                 img.setPixel(x, y, (0xFF shl 24) or (x * 8) or ((y * 8) shl 8))
             }
         }
-        return SkPngEncoder.Encode(img) ?: error("Synthetic PNG encode failed")
+        return PngEncoder.encode(img) ?: error("Synthetic PNG encode failed")
     }
 
     @Test
