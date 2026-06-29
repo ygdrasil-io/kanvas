@@ -157,7 +157,7 @@ object SvgComparisonUtils {
      * Sauvegarde un ByteArray RGBA en PNG.
      */
     fun saveRgbaAsPng(rgba: ByteArray, width: Int, height: Int, outputFile: File) {
-        outputFile.parentFile.mkdirs()
+        outputFile.parentFile?.mkdirs()
         val image = rgbaToBufferedImage(rgba, width, height)
         ImageIO.write(image, "png", outputFile)
     }

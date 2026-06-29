@@ -13,9 +13,8 @@ object SvgReferenceManager {
      */
     fun getReferencePngPath(svgPath: String): String {
         require(svgPath.endsWith(".svg")) { "svgPath must end with .svg" }
-        return svgPath
-            .replace(".svg", ".png")
-            .replaceFirst("by-render-family", "generated-references/by-render-family")
+        val pngPath = svgPath.removeSuffix(".svg") + ".png"
+        return pngPath.replaceFirst("by-render-family", "generated-references/by-render-family")
     }
 
     /**
@@ -38,22 +37,4 @@ object SvgReferenceManager {
         return object {}.javaClass.getResource(pngPath) != null
     }
 
-    /**
-     * Liste tous les SVG dans by-render-family/.
-     */
-    fun listAllSvgPaths(): List<String> {
-        val loader = object {}.javaClass.classLoader
-        val resources = loader.resources("by-render-family")
-        return resources.toList().flatMap { url ->
-            val path = url.path.removePrefix("/")
-            if (path.endsWith(".svg")) {
-                listOf("/$path")
-            } else {
-                loader.resources(path).toList().mapNotNull { subUrl ->
-                    val subPath = subUrl.path.removePrefix("/")
-                    if (subPath.endsWith(".svg")) "/$subPath" else null
-                }
-            }
-        }
-    }
 }

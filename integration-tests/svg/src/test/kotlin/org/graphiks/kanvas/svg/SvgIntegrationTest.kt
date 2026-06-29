@@ -205,9 +205,13 @@ class SvgIntegrationTest {
     }
 
     @Test
-    fun `test single SVG for debugging`() {
+    fun `test icon-geometric SVGs`() {
         requireWebGpu()
-        val svgPath = "/by-render-family/geometric/geometric-1.svg"
-        testSvg(svgPath, 100.0, 0)
+        listOf(
+            "/by-render-family/geometric/icon-computer.svg",
+            "/by-render-family/geometric/laptop-computer.svg"
+        ).forEach { svgPath ->
+            testSvg(svgPath, getMinSimilarity(svgPath), getTolerance(svgPath))
+        }
     }
 }
