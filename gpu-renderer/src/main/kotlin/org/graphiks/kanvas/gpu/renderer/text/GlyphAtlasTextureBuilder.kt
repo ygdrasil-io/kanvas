@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.gpu.renderer.text
 
+import org.graphiks.kanvas.font.atlas.GlyphAtlasPlacement
 import org.graphiks.kanvas.font.atlas.GlyphAtlasUploadPlan
 import org.graphiks.kanvas.font.atlas.GlyphAtlasUploadPlanner
 import org.graphiks.kanvas.font.glyph.A8Bitmap
@@ -15,6 +16,7 @@ data class GlyphAtlasTexture(
     val glyphCount: Int,
     val fontFamily: String,
     val evidenceDumpLines: List<String>,
+    val placements: List<GlyphAtlasPlacement> = emptyList(),
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -94,6 +96,7 @@ class GlyphAtlasTextureBuilder(
                         glyphCount = entries.size,
                         fontFamily = fontFamily,
                         evidenceDumpLines = evidence,
+                        placements = plan.placements,
                     ),
                 )
             }
