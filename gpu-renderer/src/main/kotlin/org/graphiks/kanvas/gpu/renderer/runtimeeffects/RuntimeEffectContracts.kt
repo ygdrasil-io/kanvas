@@ -581,6 +581,7 @@ data class GPURuntimeEffectDescriptor(
     val wgslPlan: GPURuntimeEffectWGSLPlan,
     val routeContract: GPURuntimeEffectRouteContract,
     val liveEditPlan: GPURuntimeEffectLiveEditPlan,
+    val liveParameterSchema: GPURuntimeEffectLiveParameterSchema? = null,
     val diagnostics: List<GPURuntimeEffectDiagnostic> = emptyList(),
 )
 

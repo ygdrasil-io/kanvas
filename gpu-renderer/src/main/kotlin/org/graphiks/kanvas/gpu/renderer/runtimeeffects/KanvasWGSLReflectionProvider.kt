@@ -1,9 +1,8 @@
 package org.graphiks.kanvas.gpu.renderer.runtimeeffects
 
-import org.graphiks.wgsl.ir.StorageClass
-import org.graphiks.wgsl.ir.TypeInner
 import org.graphiks.wgsl.parser.Lowerer
 import org.graphiks.wgsl.parser.parseWgslResult
+import org.graphiks.wgsl.proc.reflectWgslModule
 
 /** Reflects on parsed WGSL via wgsl4k with fixture fallback, extracting entry point and resource counts. */
 class KanvasWGSLReflectionProvider : WGSLReflectionProvider {
@@ -23,19 +22,14 @@ class KanvasWGSLReflectionProvider : WGSLReflectionProvider {
         val parsed = parseWgslResult(source)
         val lowered = Lowerer().lower(parsed.translationUnit)
 
-        val uniformCount = lowered.globalVariables.count {
-            it.storageClass == StorageClass.Uniform
-        }
-        val textureCount = lowered.globalVariables.count {
-            val inner = lowered.types[it.type]?.inner
-            inner is TypeInner.Opaque
-        }
-        val seenGroups = mutableSetOf<Int>()
-        for (global in lowered.globalVariables) {
-            global.binding?.let { binding -> seenGroups.add(binding.group) }
-        }
-        val bindGroupCount = seenGroups.size
-        val entryPointName = lowered.entryPoints.firstOrNull()?.name ?: "main"
+        val report = lowered.reflectWgslModule(
+            sourceId = module.sourceHash.ifBlank { "custom-module" },
+        )
+
+        val uniformCount = report.bindings.count { it.resourceKind == "uniformBuffer" }
+        val textureCount = report.bindings.count { it.resourceKind in TEXTURE_RESOURCE_KINDS }
+        val bindGroupCount = report.bindings.map { it.group }.distinct().size
+        val entryPointName = report.entryPoints.firstOrNull()?.name ?: "main"
         val moduleHash = WGSLHashUtils.sha256("custom-module:$uniformCount:$textureCount:$bindGroupCount")
         val reflectionHash = WGSLHashUtils.sha256("$moduleHash:$entryPointName:reflection-v1")
 
@@ -46,6 +40,7 @@ class KanvasWGSLReflectionProvider : WGSLReflectionProvider {
             textureCount = textureCount,
             bindGroupCount = bindGroupCount,
             reflectionHash = reflectionHash,
+            report = report,
         )
     }
 
@@ -61,5 +56,7 @@ class KanvasWGSLReflectionProvider : WGSLReflectionProvider {
         )
     }
 
-
+    private companion object {
+        val TEXTURE_RESOURCE_KINDS = setOf("sampledTexture", "multisampledTexture", "storageTexture")
+    }
 }

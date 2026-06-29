@@ -1,7 +1,7 @@
 ---
 id: KGPU-M34-004
 title: "Complex shaping integration"
-status: proposed
+status: blocked
 milestone: M34
 priority: P1
 owner_area: text
@@ -18,8 +18,44 @@ legacy_gate: "legacy drawText"
 
 ## PM Note
 
-Le shaping complexe (arabe, devanagari, CJK) et le BiDi sont délégués au text
-stack. Ce ticket définit le contrat d'intégration.
+Le shaping complexe et le BiDi (UAX #9) sont implémentés et testés dans le text
+stack (fixtures arabe/devanagari/thai/CJK). Les facts de shaping (script,
+bidiLevel) sont portés par `GPUGlyphRunDescriptor` jusqu'au handoff GPU. La
+consommation GPU de ces facts pour l'ordre de paint (`GPUBiDiRunPlan`,
+`GPUDrawLayerPlanner`) et le rendu des scripts complexes restent
+DependencyGated (M6 par-script, exécution GPU M10/M11).
+
+## Claim Split & Re-Scope (2026-06-29)
+
+Audit `fichier:ligne` : les artefacts text-stack supposés manquants existent en
+réalité. Le motif « gated on pure-kotlin-text shaping/BiDi output artifacts »
+est faux et corrigé.
+
+**Implémenté mais non promu — reste `DependencyGated` (handoff + facts portés + refus stable) :**
+
+- Moteur shaping OpenType (segmentation → script runs → bidi → cmap → GSUB →
+  GPOS → clusters) :
+  `font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/ShapingTypes.kt:684`.
+- Résolveur BiDi UAX #9 (X2–X9, W1–W7, N0–N2, run building) :
+  `font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/BidiSegmentation.kt:84`.
+- Fixtures arabe / devanagari / thai-CJK :
+  `font/text/src/test/kotlin/org/graphiks/kanvas/text/ArabicShapingFixtureTest.kt`,
+  `DevanagariShapingFixtureTest.kt`, `ThaiCjkBoundaryFixtureTest.kt`.
+- Facts de shaping portés au handoff GPU : `GPUGlyphRunDescriptor.script` et
+  `.bidiLevel`
+  (`font/gpu-api/src/main/kotlin/org/graphiks/kanvas/glyph/gpu/GPUTextArtifacts.kt:86-87`).
+- Validation : `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/text/ShapingIntegrationHandoffRouteTest.kt` (3 tests PASSED).
+
+**Dependency-Gated (non livré) :**
+
+- Contrats GPU `GPUShapingIntegrationContract`, `GPUBiDiRunPlan`,
+  `GPUScriptComplexityClass`, `GPUTextDirection` : absents (sketch de spec).
+- Consommation BiDi pour l'ordre de paint : `GPUDrawLayerPlanner` est un stub
+  (`gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/layers/LayerContracts.kt:653` = `TODO`).
+- Politique de budget atlas CJK ; code
+  `unsupported.text.shaping_script_unavailable`.
+- Rendu GPU des scripts complexes (par-script M6, exécution GPU M10/M11).
+  `product_activation` reste `false`.
 
 ## Problem
 
@@ -84,12 +120,10 @@ data class GPUBiDiRunPlan(
 
 ## Acceptance Criteria
 
-- [ ] Text stack emits per-run shaping facts (script, direction, BiDi levels).
-- [ ] GPU consumes `GPUBiDiRunPlan` for paint order.
-- [ ] CJK class → atlas budget policy adjustment.
-- [ ] Unsupported script → `RefuseDiagnostic`.
-
-## Required Evidence
+> Scope (2026-06-29) : le sous-scope borné « Claim Split » (facts de shaping
+> portés au handoff) est implémenté et testé, mais ne promeut pas le ticket. La
+> consommation BiDi GPU et le rendu des scripts complexes ci-dessous restent
+> `DependencyGated` (M6/M10/M11) — le ticket reste `blocked`.
 
 - `GPUShapingIntegrationContract` dump with Arabic or Devanagari script.
 - `GPUBiDiRunPlan` dump for a mixed LTR/RTL run.
@@ -104,9 +138,11 @@ data class GPUBiDiRunPlan(
 ## Dashboard Impact
 
 - Expected row: `gpu-renderer.text.shaping-integration`
-- Expected classification: `DependencyGated`
-- Claim promotion allowed: no, unless all Required Evidence is attached and
-  validation has passed.
+- Expected classification: `DependencyGated` (consommation BiDi GPU + rendu
+  scripts complexes). Shaping/BiDi text-stack + facts portés au handoff
+  implémentés/testés mais ne promeuvent pas le ticket.
+- Claim promotion allowed: no — aucun claim de consommation BiDi GPU ni de rendu
+  de scripts complexes.
 
 ## Validation
 
@@ -118,6 +154,17 @@ rtk git diff --check && rtk ./gradlew --no-daemon :gpu-renderer:test --tests '*S
 
 - `proposed`: Initial ticket. Promotion to `ready` requires text stack
   shaping/BiDi output artifacts.
+- `proposed → blocked` (2026-06-28): Blocked on pure-kotlin-text shaping/BiDi output artifacts.
+- `reste blocked` (2026-06-29): correction du motif. Le motif « pure-kotlin-text
+  shaping/BiDi output artifacts » est faux : moteur shaping OpenType + BiDi
+  UAX #9 + fixtures arabe/devanagari/thai-CJK sont livrés. Le ticket **reste
+  `blocked` / `DependencyGated`** car l'évidence de rendu GPU est toujours KO
+  (`product_activation: false`, contrats GPU `GPUBiDiRunPlan` /
+  `GPUShapingIntegrationContract` absents, `GPUDrawLayerPlanner` = stub `TODO`).
+  Le sous-scope borné facts de shaping
+  (`GPUGlyphRunDescriptor.script` / `bidiLevel`) portés au handoff est implémenté
+  et testé (`ShapingIntegrationHandoffRouteTest`) mais ne promeut pas le ticket.
+  Vrai gate : exécution GPU M6/M10/M11.
 
 ## Linear Labels
 

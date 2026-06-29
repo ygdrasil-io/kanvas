@@ -1,7 +1,7 @@
 ---
 id: KGPU-M34-001
 title: "Subpixel LCD rendering"
-status: proposed
+status: done
 milestone: M34
 priority: P0
 owner_area: text
@@ -130,6 +130,9 @@ rtk git diff --check && rtk ./gradlew --no-daemon :gpu-renderer:test --tests '*S
 ## Status Notes
 
 - `proposed`: Initial ticket.
+- `proposed → ready` (2026-06-28): milestone activated, autonomous implementation starting.
+- `ready → review` (2026-06-28): implemented. Pending independent review.
+- `review → done` (2026-06-28): reviewed and fixed.
 
 ## Linear Labels
 

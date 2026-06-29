@@ -38,6 +38,8 @@
 | `runtime-effect-descriptor-gate-board` | Runtime Effect Descriptor Gate Board | Rect,RRect,Clip,RuntimeEffect | KGPU M7 | `KGPU-M7-001` |  | `ShouldRender` |
 | `runtime-effect-refusal-gate-board` | Runtime Effect Refusal Gate Board | Rect,RRect,Clip,RuntimeEffect | KGPU M7 | `KGPU-M7-002` |  | `ShouldRender` |
 | `runtime-effect-uniform-ladder` | Runtime Effect Uniform Ladder | RuntimeEffect,RRect,Clip | KGPU M7 |  |  | `ShouldRender` |
+| `custom-runtime-effect-valid-tile` | Custom Runtime Effect Valid Tile | RuntimeEffect,Rect | KGPU M32 | `KGPU-M32-019` |  | `ShouldRender` |
+| `custom-runtime-effect-unregistered-refusal` | Custom Runtime Effect Unregistered Refusal | RuntimeEffect,Rect | KGPU M32 | `KGPU-M32-019` |  | `ShouldRefuse:unsupported.runtime_effect.custom_wgsl_not_registered` |
 | `blend-mode-strip` | Blend Mode Strip | Rect | KGPU M7 |  |  | `ShouldRender` |
 | `translucent-card-overlap` | Translucent Card Overlap | Rect,Blend | KGPU M7 | `KGPU-M7-003` |  | `ShouldRender` |
 | `sdr-color-boundary-board` | SDR Color Boundary Board | Rect,RRect,Clip | KGPU M7 | `KGPU-M7-004` |  | `ShouldRender` |
@@ -54,3 +56,36 @@
 | `shadow-parity-migration-gate-board` | Shadow Parity Migration Gate Board | Rect,RRect,Clip,LegacyComparison | KGPU M10 | `KGPU-M10-002` |  | `ShouldRender` |
 | `legacy-retirement-blocker-board` | Legacy Retirement Blocker Board | Rect,RRect,Clip,LegacyComparison | KGPU M10 | `KGPU-M10-003` |  | `ShouldRender` |
 | `legacy-parity-snapshot-board` | Legacy Parity Snapshot Board | LegacyComparison,Rect,RRect | KGPU M10 |  |  | `ShouldRender` |
+| `rounded-rect-solids` | Rounded Rect Solids | RRect | KGPU M10 |  |  | `ShouldRender` |
+| `linear-gradient-lanes` | Linear Gradient Lanes | Rect,Gradient | KGPU M10 |  |  | `ShouldRender` |
+| `scissor-overlay` | Scissor Overlay | Rect,Clip | KGPU M10 |  |  | `ShouldRender` |
+| `radial-swatch` | Radial Swatch | Rect,Gradient | KGPU M14 |  |  | `ShouldRender` |
+| `sweep-disk` | Sweep Disk | Rect,Gradient | KGPU M14 |  |  | `ShouldRender` |
+| `path-fill-stencil` | Path Fill Stencil | Path | KGPU M15 | `KGPU-M15-002` |  | `ShouldRender` |
+| `convex-fan-mesh` | Convex Fan Mesh | Path | KGPU M15 | `KGPU-M15-003` |  | `ShouldRender` |
+| `savelayer-isolated` | SaveLayer Isolated | Layer | KGPU M18 |  |  | `ShouldRender` |
+| `savelayer-group-alpha` | SaveLayer Group Alpha | Layer,Blend | KGPU M28 | `KGPU-M28-006` |  | `ShouldRender` |
+| `dst-read-strategy` | Destination Read Strategy | Layer,Blend | KGPU M18 |  |  | `ShouldRender` |
+| `blur-radius-ladder` | Blur Radius Ladder | Filter | KGPU M19 |  |  | `ShouldRender` |
+| `color-matrix-filter` | Color Matrix Filter | Filter | KGPU M19 |  |  | `ShouldRender` |
+| `gaussian-blur-photo` | Gaussian Blur Photo | Filter | KGPU M19 |  |  | `ShouldRender` |
+| `color-matrix-tint` | Color Matrix Tint | Filter | KGPU M19 |  |  | `ShouldRender` |
+| `stroke-and-filter-card` | Stroke and Filter Card | Stroke,Filter | KGPU M16,M19 |  |  | `ShouldRender` |
+| `glyph-atlas-strip` | Glyph Atlas Strip | Text | KGPU M20 |  |  | `ShouldRender` |
+| `sdf-glyph-scale` | SDF Glyph Scale | Text | KGPU M20 |  |  | `ShouldRender` |
+| `runtime-effect-uniform` | Runtime Effect Uniform | RuntimeEffect | KGPU M21 |  |  | `ShouldRender` |
+| `runtime-effect-child` | Runtime Effect Child | RuntimeEffect | KGPU M21 |  |  | `ShouldRender` |
+| `stroke-cap-join` | Stroke Cap Join | Stroke | KGPU M16 |  |  | `ShouldRender` |
+| `dash-pattern-ladder` | Dash Pattern Ladder | Stroke | KGPU M16 |  |  | `ShouldRender` |
+| `stroke-rect-outline` | Stroke Rect Outline | Stroke | KGPU M16 |  |  | `ShouldRender` |
+| `tile-mode-strip` | Tile Mode Strip | Image | KGPU M17 |  |  | `ShouldRender` |
+| `vertices-color-mesh` | Vertices Color Mesh | Vertices | KGPU M22 |  |  | `ShouldRender` |
+| `mesh-ribbon-depth` | Mesh Ribbon Depth | Vertices | KGPU M22 |  |  | `ShouldRender` |
+| `performance-budget-review` | Performance Budget Review | Rect,Cache | KGPU M23 | `KGPU-M23-001` |  | `ShouldRender` |
+| `pipeline-cache-telemetry-review` | Pipeline Cache Telemetry Review | Rect,Cache | KGPU M23 | `KGPU-M23-002` |  | `ShouldRender` |
+| `frame-gate-m23-baseline` | Frame Gate M23 Baseline | Rect,Cache | KGPU M23 | `KGPU-M23-003` |  | `ShouldRender` |
+| `pm-evidence-m23-bundle` | PM Evidence M23 Bundle | Rect,Cache | KGPU M23 | `KGPU-M23-004` |  | `ShouldRender` |
+| `performance-gates-product-flag` | Performance Gates Product Flag | Rect | KGPU M23 |  |  | `ShouldRender` |
+| `path-star-gradient` | Path Star Gradient | Path,Gradient | KGPU M26 |  |  | `ShouldRender` |
+| `text-a8-hello` | Text A8 Hello | Text | KGPU M26 |  |  | `ShouldRender` |
+| `gradient-path-and-text` | Gradient Path And Text | Path,Gradient,Text | KGPU M26 |  |  | `ShouldRender` |

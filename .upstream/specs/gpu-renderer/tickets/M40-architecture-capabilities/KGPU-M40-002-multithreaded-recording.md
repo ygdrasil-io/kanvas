@@ -1,7 +1,7 @@
 ---
 id: KGPU-M40-002
 title: "Multi-threaded recording"
-status: proposed
+status: done
 milestone: M40
 priority: P1
 owner_area: recording
@@ -126,6 +126,9 @@ rtk git diff --check && rtk ./gradlew --no-daemon :gpu-renderer:test --tests '*M
 ## Status Notes
 
 - `proposed`: Initial ticket.
+- `proposed → ready (2026-06-28)`: M40-001 tile-deferred implemented, unblocking.
+- `ready → review` (2026-06-28): implemented. Pending independent review.
+- `review → done` (2026-06-29): promoted — independent review accepted.
 
 ## Linear Labels
 

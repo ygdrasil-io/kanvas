@@ -1,18 +1,8 @@
 package org.graphiks.kanvas.gpu.renderer.wgsl
 
-import org.graphiks.wgsl.ast.IntLiteral
-import org.graphiks.wgsl.ast.MatrixType
-import org.graphiks.wgsl.ast.NamedType
-import org.graphiks.wgsl.ast.ScalarType
-import org.graphiks.wgsl.ast.StructDecl
-import org.graphiks.wgsl.ast.StructType
-import org.graphiks.wgsl.ast.VariableDecl
-import org.graphiks.wgsl.ast.VectorType
-import org.graphiks.wgsl.ir.StorageClass
-import org.graphiks.wgsl.ir.TypeInner
 import org.graphiks.wgsl.parser.Lowerer
 import org.graphiks.wgsl.parser.parseWgslResult
-import org.graphiks.wgsl.proc.Layouter
+import org.graphiks.wgsl.proc.reflectWgslModule
 import java.security.MessageDigest
 
 /**
@@ -146,84 +136,43 @@ private fun parserBackedReflection(
         return Pair(reflection, diagnostic)
     }
 
-    // Build struct name → layout hash reverse map from input
-    val layoutHashByStructName = input.uniformLayouts.associate { layout ->
-        layout.structName() to layout.layoutHash
-    }
-
-    // Build variable name → struct name mapping from AST
-    val structDeclByName = parsed.translationUnit.declarations
-        .filterIsInstance<StructDecl>()
-        .associateBy { it.name }
-
-    // Build struct field type info from AST for type name resolution
-    val structFieldTypeNames = structDeclByName.mapValues { (_, structDecl) ->
-        structDecl.members.map { member ->
-            member.name to astTypeToWgslName(member.type)
-        }
-    }
-
-    val variableStructName = mutableMapOf<String, String>()
-    parsed.translationUnit.declarations
-        .filterIsInstance<VariableDecl>()
-        .forEach { decl ->
-            val typeName = when (val t = decl.type) {
-                is StructType -> t.name
-                is NamedType -> t.name
-                else -> null
-            }
-            if (typeName != null) {
-                variableStructName[decl.name] = typeName
-            }
-        }
-
-    // Use Lowerer + Layouter to compute real member offsets
+    // Lower the parsed translation unit and reflect it through the full
+    // wgsl4k WgslReflectionReport rather than reflecting structs manually.
     val module = Lowerer().lower(parsed.translationUnit)
-    val layouter = Layouter().also { it.update(module) }
-    val types = module.types
+    val report = module.reflectWgslModule(
+        sourceId = input.moduleLabel,
+        moduleHash = moduleHash.value,
+    )
 
-    val reflectedUniforms = mutableListOf<WGSLUniformLayout>()
-
-    module.globalVariables.forEach { global ->
-        if (global.storageClass == StorageClass.Uniform) {
-            when (val inner = types[global.type].inner) {
-                is TypeInner.Struct -> {
-                    val structName = variableStructName[global.name]
-                    val typeNames = structName?.let { structFieldTypeNames[it] } ?: emptyList()
-
-                    var cursor = 0
-                    val fields = inner.members.mapIndexed { index, member ->
-                        val memberLayout = layouter[member.type]
-                        cursor = memberLayout.alignment.roundUp(cursor)
-                        val typeName = typeNames.getOrNull(index)?.second ?: member.name
-                        val field = WGSLUniformFieldLayout(
-                            name = member.name,
-                            type = typeName,
-                            offset = cursor.toLong(),
-                            sizeBytes = memberLayout.size.toLong(),
-                            alignment = memberLayout.alignment.roundUp(1),
-                        )
-                        cursor += memberLayout.size
-                        field
-                    }
-
-                    val layoutHash = structName?.let { layoutHashByStructName[it] }
-
-                    if (layoutHash != null) {
-                        reflectedUniforms += WGSLUniformLayout(
-                            layoutHash = layoutHash,
-                            fields = fields.map { it.name },
-                            fieldLayouts = fields,
-                            sizeBytes = cursor.toLong(),
-                            alignment = 16,
-                            numericRepresentation = "f32/u32",
-                        )
-                    }
-                }
-                else -> {}
-            }
-        }
+    // Reflected layouts are keyed back to descriptor-owned layout hashes by
+    // their member-name signature; the report supplies real offsets/types.
+    val inputLayoutByFieldNames = input.uniformLayouts.associateBy { layout ->
+        layout.fieldLayouts.map { field -> field.name }
     }
+
+    val reflectedUniforms = report.layouts
+        .filter { layout -> layout.addressSpace == "uniform" }
+        .mapNotNull { layout ->
+            val fields = layout.members.map { member ->
+                WGSLUniformFieldLayout(
+                    name = member.name,
+                    type = member.type,
+                    offset = member.offset.toLong(),
+                    sizeBytes = member.size.toLong(),
+                    alignment = member.alignment,
+                )
+            }
+            val layoutHash = inputLayoutByFieldNames[fields.map { it.name }]?.layoutHash
+                ?: return@mapNotNull null
+            WGSLUniformLayout(
+                layoutHash = layoutHash,
+                fields = fields.map { it.name },
+                fieldLayouts = fields,
+                sizeBytes = layout.size.toLong(),
+                alignment = layout.alignment,
+                numericRepresentation = "f32/u32",
+            )
+        }
 
     val parserState = WGSLParserState(
         status = "parser-backed",
@@ -467,18 +416,6 @@ private fun WGSLBindingLayout.variableName(): String =
             if (index == 0) part else part.replaceFirstChar { char -> char.uppercase() }
         }.joinToString("")
     }
-
-/** Converts a wgsl4k AST type to a WGSL type name string. */
-private fun astTypeToWgslName(type: Any): String {
-    return when (type) {
-        is ScalarType -> type.kind.name.lowercase()
-        is VectorType -> "vec${type.size}<${astTypeToWgslName(type.elementType)}>"
-        is MatrixType -> "mat${type.columns}x${type.rows}<${astTypeToWgslName(type.elementType)}>"
-        is NamedType -> type.name
-        is StructType -> type.name
-        else -> type.toString()
-    }
-}
 
 /** Creates a short stable hash for key and module fixtures. */
 private fun String.stableHash(): String {

@@ -1,6 +1,7 @@
 ---
 id: KGPU-M32-003
 title: "Legacy retirement-gate authorization for all 12 families (gatePassed)"
+status: done
 status: review
 milestone: M32
 priority: P0
@@ -134,6 +135,8 @@ shasum -a 256 reports/gpu-renderer/2026-06-26-m32-003-rollback-validation.md
 ## Status Notes
 
 - `proposed`: Phase 3 ticket created in M32 scaffold.
+  - review → done (2026-06-28): gate authorization confirmed, evidence reviewed, all 12 families authorized.
+  - `review` (2026-06-26): Evidence produced. Clear-discard placeholder resolved
 - `review` (2026-06-26): Evidence produced. Clear-discard placeholder resolved
   (KGPU-M32-022). Real rollback validation (2 tests PASS) + sha256 of committed
   report (`sha256:c8180d28a14b34dcd15db4fcfe67eac4ab5c366f2741683a5a4757715f8d4d26`).

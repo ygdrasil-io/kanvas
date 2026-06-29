@@ -5,7 +5,7 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilityFact
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUImplementationIdentity
 
 /** Product flag configuration controlling GPU renderer feature enablement. */
-data class GpuProductFlagConfig(
+data class GPUProductFlagConfig(
     val fillRRectEnabled: Boolean = true,
     val linearGradientEnabled: Boolean = true,
     val scissorEnabled: Boolean = true,
@@ -30,7 +30,7 @@ data class GpuProductFlagConfig(
 ) {
     /** Builds a GPUCapabilities instance from the current flag configuration. */
     fun buildCapabilities(
-        implementation: GPUImplementationIdentity = GpuProductFlagConfig.defaultImplementation(),
+        implementation: GPUImplementationIdentity = GPUProductFlagConfig.defaultImplementation(),
     ): GPUCapabilities {
         val facts = mutableListOf<GPUCapabilityFact>()
         if (fillRRectEnabled) {
@@ -307,7 +307,7 @@ data class GpuProductFlagConfig(
         /** Creates a configuration from system properties with disable toggles. */
         fun fromSystemProperties(
             propertyReader: (String) -> String? = System::getProperty,
-        ): GpuProductFlagConfig {
+        ): GPUProductFlagConfig {
             val fillRRectDisabled = propertyReader(FillRRectDisableProperty).toBoolean()
             val linearGradientDisabled = propertyReader(LinearGradientDisableProperty).toBoolean()
             val scissorDisabled = propertyReader(ScissorDisableProperty).toBoolean()
@@ -329,7 +329,7 @@ data class GpuProductFlagConfig(
             val performanceGatesDisabled = propertyReader(PerformanceGatesDisableProperty).toBoolean()
             val verticesDisabled = propertyReader(VerticesDisableProperty).toBoolean()
             val productActivationDisabled = propertyReader(ProductActivationDisableProperty).toBoolean()
-            return GpuProductFlagConfig(
+            return GPUProductFlagConfig(
                 fillRRectEnabled = !fillRRectDisabled,
                 linearGradientEnabled = !linearGradientDisabled,
                 scissorEnabled = !scissorDisabled,

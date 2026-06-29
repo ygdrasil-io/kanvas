@@ -1,0 +1,552 @@
+package org.graphiks.kanvas.gpu.renderer.passes
+
+import kotlin.test.Test
+import kotlin.test.assertContains
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertIs
+import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
+import org.graphiks.kanvas.gpu.renderer.routing.RefuseDiagnostic
+
+class GPUMultiThreadedRecordingTest {
+
+    @Test
+    fun `thread-bound arena carries thread identity and capacity`() {
+        val arena = arena(
+            arenaId = "arena-0",
+            threadId = "thread-worker-1",
+            capacity = 1024,
+            fragments = emptyList(),
+        )
+
+        assertEquals(GPURecordingArenaId("arena-0"), arena.arenaId)
+        assertEquals(GPURecordingThreadId("thread-worker-1"), arena.threadId)
+        assertEquals(1024, arena.capacity)
+        assertEquals(0, arena.fragmentCount)
+        assertTrue(arena.fragments.isEmpty())
+    }
+
+    @Test
+    fun `ordering tokens are strictly monotonic`() {
+        val recorder = GPURecordingTokenIssuer()
+
+        val t0 = recorder.issue()
+        val t1 = recorder.issue()
+        val t2 = recorder.issue()
+        val t3 = recorder.issue()
+
+        assertTrue(t0.sequenceNumber > 0)
+        assertTrue(t1.sequenceNumber > t0.sequenceNumber)
+        assertTrue(t2.sequenceNumber > t1.sequenceNumber)
+        assertTrue(t3.sequenceNumber > t2.sequenceNumber)
+    }
+
+    @Test
+    fun `fragment records command count between begin and end tokens`() {
+        val issuer = GPURecordingTokenIssuer()
+        val begin = issuer.issue()
+        val end = issuer.issue()
+
+        val fragment = GPURecordingFragment(
+            fragmentId = "frag-1",
+            arenaId = GPURecordingArenaId("arena-0"),
+            commandCount = 12,
+            beginToken = begin,
+            endToken = end,
+        )
+
+        assertEquals("frag-1", fragment.fragmentId)
+        assertEquals(12, fragment.commandCount)
+        assertEquals(begin, fragment.beginToken)
+        assertEquals(end, fragment.endToken)
+        assertTrue(fragment.beginToken.sequenceNumber < fragment.endToken.sequenceNumber)
+    }
+
+    @Test
+    fun `fragment requires begin token precedes end token`() {
+        val issuer = GPURecordingTokenIssuer()
+        val earlier = issuer.issue()
+        val later = issuer.issue()
+
+        assertIllegalArgument("GPURecordingFragment.beginToken must precede endToken") {
+            GPURecordingFragment(
+                fragmentId = "frag-1",
+                arenaId = GPURecordingArenaId("arena-0"),
+                commandCount = 1,
+                beginToken = later,
+                endToken = earlier,
+            )
+        }
+    }
+
+    @Test
+    fun `deterministic merge combines fragments from a single arena in recording order`() {
+        val issuer = GPURecordingTokenIssuer()
+        val arenaId = GPURecordingArenaId("arena-0")
+        val threadId = GPURecordingThreadId("thread-worker-1")
+
+        val arena = arena(
+            arenaId = "arena-0",
+            threadId = threadId.value,
+            capacity = 4096,
+            fragments = listOf(
+                frag("frag-1", arenaId, 3, issuer.issue(), issuer.issue()),
+                frag("frag-2", arenaId, 5, issuer.issue(), issuer.issue()),
+                frag("frag-3", arenaId, 2, issuer.issue(), issuer.issue()),
+            ),
+        )
+
+        val analysis = mergeArenas(listOf(arena))
+
+        assertEquals(1, analysis.arenaCount)
+        assertEquals(3, analysis.fragmentCount)
+        assertEquals(10, analysis.totalCommands)
+        assertEquals(0, analysis.refusedPairs.size)
+        assertEquals(
+            listOf("frag-1", "frag-2", "frag-3"),
+            analysis.mergedFragments.map { frag -> frag.fragmentId },
+        )
+    }
+
+    @Test
+    fun `deterministic merge orders fragments across arenas by begin token sequence number`() {
+        val issuer = GPURecordingTokenIssuer()
+        val arena0Id = GPURecordingArenaId("arena-0")
+        val arena1Id = GPURecordingArenaId("arena-1")
+
+        val fragmentA = frag("frag-A", arena0Id, 2, issuer.issue(), issuer.issue())
+        val fragmentB = frag("frag-B", arena1Id, 3, issuer.issue(), issuer.issue())
+        val fragmentC = frag("frag-C", arena0Id, 1, issuer.issue(), issuer.issue())
+        val fragmentD = frag("frag-D", arena1Id, 4, issuer.issue(), issuer.issue())
+
+        val arena0 = arena("arena-0", "thread-worker-1", 4096, listOf(fragmentA, fragmentC))
+        val arena1 = arena("arena-1", "thread-worker-2", 4096, listOf(fragmentB, fragmentD))
+
+        val analysis = mergeArenas(listOf(arena0, arena1))
+
+        assertEquals(2, analysis.arenaCount)
+        assertEquals(4, analysis.fragmentCount)
+        assertEquals(10, analysis.totalCommands)
+        assertEquals(0, analysis.refusedPairs.size)
+
+        val beginSeqs = analysis.mergedFragments.map { frag -> frag.beginToken.sequenceNumber }
+        assertEquals(beginSeqs.sorted(), beginSeqs)
+    }
+
+    @Test
+    fun `fragment ordering within each arena is preserved during merge`() {
+        val issuer = GPURecordingTokenIssuer()
+        val arena0Id = GPURecordingArenaId("arena-0")
+        val arena1Id = GPURecordingArenaId("arena-1")
+
+        val f0a = frag("f0-a", arena0Id, 1, issuer.issue(), issuer.issue())
+        val f0b = frag("f0-b", arena0Id, 2, issuer.issue(), issuer.issue())
+        val f0c = frag("f0-c", arena0Id, 3, issuer.issue(), issuer.issue())
+        val f1a = frag("f1-a", arena1Id, 4, issuer.issue(), issuer.issue())
+        val f1b = frag("f1-b", arena1Id, 5, issuer.issue(), issuer.issue())
+
+        val arena0 = arena("arena-0", "t-1", 4096, listOf(f0a, f0b, f0c))
+        val arena1 = arena("arena-1", "t-2", 4096, listOf(f1a, f1b))
+
+        val analysis = mergeArenas(listOf(arena0, arena1))
+
+        val merged = analysis.mergedFragments
+
+        val arena0Indices = merged.withIndex().filter { (_, frag) -> frag.arenaId == arena0Id }.map { (i, _) -> i }
+        val arena1Indices = merged.withIndex().filter { (_, frag) -> frag.arenaId == arena1Id }.map { (i, _) -> i }
+
+        assertEquals(arena0Indices.sorted(), arena0Indices)
+        assertEquals(arena1Indices.sorted(), arena1Indices)
+    }
+
+    @Test
+    fun `merge with no arenas returns empty analysis`() {
+        val analysis = mergeArenas(emptyList())
+
+        assertEquals(0, analysis.arenaCount)
+        assertEquals(0, analysis.fragmentCount)
+        assertEquals(0, analysis.totalCommands)
+        assertEquals(0, analysis.refusedPairs.size)
+        assertTrue(analysis.mergedFragments.isEmpty())
+    }
+
+    @Test
+    fun `merge with empty fragments produces correct counts`() {
+        val arena = arena(
+            arenaId = "arena-0",
+            threadId = "thread-worker-1",
+            capacity = 1024,
+            fragments = emptyList(),
+        )
+
+        val analysis = mergeArenas(listOf(arena))
+
+        assertEquals(1, analysis.arenaCount)
+        assertEquals(0, analysis.fragmentCount)
+        assertEquals(0, analysis.totalCommands)
+        assertTrue(analysis.mergedFragments.isEmpty())
+    }
+
+    @Test
+    fun `dump lines produce deterministic evidence without backend handles`() {
+        val issuer = GPURecordingTokenIssuer()
+        val arenaId = GPURecordingArenaId("arena-0")
+
+        val arena = arena(
+            arenaId = "arena-0",
+            threadId = "thread-worker-1",
+            capacity = 4096,
+            fragments = listOf(
+                frag("frag-1", arenaId, 3, issuer.issue(), issuer.issue()),
+                frag("frag-2", arenaId, 5, issuer.issue(), issuer.issue()),
+            ),
+        )
+
+        val analysis = mergeArenas(listOf(arena))
+        val lines = analysis.dumpLines()
+
+        assertContains(lines.first(), "passes.mt-recording mergedFragments=2 totalCommands=8 arenaCount=1")
+        assertFalse(lines.joinToString("\n").contains("WGPU"))
+        assertFalse(lines.any { line -> line.contains("backend") && line.contains("handle") })
+        assertTrue(lines.any { line -> line.contains("frag-1") && line.contains("arena=arena-0") })
+        assertTrue(lines.any { line -> line.contains("frag-2") && line.contains("arena=arena-0") })
+    }
+
+    @Test
+    fun `arena dump lines expose thread fragment and capacity evidence`() {
+        val issuer = GPURecordingTokenIssuer()
+        val arenaId = GPURecordingArenaId("arena-0")
+
+        val arena = arena(
+            arenaId = "arena-0",
+            threadId = "thread-worker-1",
+            capacity = 2048,
+            fragments = listOf(
+                frag("frag-1", arenaId, 4, issuer.issue(), issuer.issue()),
+            ),
+        )
+
+        val lines = arena.dumpLines()
+        assertContains(lines.first(), "passes.mt-arena id=arena-0 thread=thread-worker-1 capacity=2048 fragments=1")
+        assertFalse(lines.joinToString("\n").contains("WGPU"))
+    }
+
+    @Test
+    fun `merge refuses arenas with overlapping token ranges from same thread`() {
+        val issuer = GPURecordingTokenIssuer()
+        val arenaId = GPURecordingArenaId("arena-0")
+
+        val begin1 = issuer.issue()
+        val mid = issuer.issue()
+        val end1 = issuer.issue()
+        val begin2 = issuer.issue()
+        val end2 = issuer.issue()
+
+        val arena = arena(
+            arenaId = "arena-0",
+            threadId = "thread-worker-1",
+            capacity = 4096,
+            fragments = listOf(
+                GPURecordingFragment("frag-1", arenaId, 3, begin1, end1),
+                GPURecordingFragment("frag-2", arenaId, 2, begin2, end2),
+            ),
+        )
+
+        val analysis = mergeArenas(listOf(arena))
+
+        assertEquals(0, analysis.refusedPairs.size)
+        assertEquals(2, analysis.fragmentCount)
+    }
+
+    @Test
+    fun `fragment validation requires non-blank fragment and arena identifiers`() {
+        assertIllegalArgument("GPURecordingFragment.fragmentId must not be blank") {
+            GPURecordingFragment(
+                fragmentId = "",
+                arenaId = GPURecordingArenaId("arena-0"),
+                commandCount = 1,
+                beginToken = GPURecordingToken(1, 0),
+                endToken = GPURecordingToken(2, 0),
+            )
+        }
+
+        assertIllegalArgument("GPURecordingFragment.commandCount must be non-negative") {
+            GPURecordingFragment(
+                fragmentId = "frag-1",
+                arenaId = GPURecordingArenaId("arena-0"),
+                commandCount = -1,
+                beginToken = GPURecordingToken(1, 0),
+                endToken = GPURecordingToken(2, 0),
+            )
+        }
+    }
+
+    @Test
+    fun `arena validation requires non-blank thread id and positive capacity`() {
+        assertIllegalArgument("GPURecordingThreadId.value must not be blank") {
+            GPURecordingArena(
+                arenaId = GPURecordingArenaId("arena-0"),
+                threadId = GPURecordingThreadId(""),
+                capacity = 1024,
+                fragments = emptyList(),
+            )
+        }
+
+        assertIllegalArgument("GPURecordingArena.capacity must be positive") {
+            GPURecordingArena(
+                arenaId = GPURecordingArenaId("arena-0"),
+                threadId = GPURecordingThreadId("t-1"),
+                capacity = 0,
+                fragments = emptyList(),
+            )
+        }
+    }
+
+    @Test
+    fun `merge preserves arena count for multiple arenas each with fragments`() {
+        val issuer = GPURecordingTokenIssuer()
+        val a0 = GPURecordingArenaId("arena-0")
+        val a1 = GPURecordingArenaId("arena-1")
+        val a2 = GPURecordingArenaId("arena-2")
+
+        val arena0 = arena("arena-0", "t-0", 1024, listOf(
+            frag("f0-1", a0, 1, issuer.issue(), issuer.issue()),
+            frag("f0-2", a0, 2, issuer.issue(), issuer.issue()),
+        ))
+        val arena1 = arena("arena-1", "t-1", 1024, listOf(
+            frag("f1-1", a1, 3, issuer.issue(), issuer.issue()),
+        ))
+        val arena2 = arena("arena-2", "t-2", 1024, listOf(
+            frag("f2-1", a2, 4, issuer.issue(), issuer.issue()),
+            frag("f2-2", a2, 5, issuer.issue(), issuer.issue()),
+            frag("f2-3", a2, 6, issuer.issue(), issuer.issue()),
+        ))
+
+        val analysis = mergeArenas(listOf(arena0, arena1, arena2))
+
+        assertEquals(3, analysis.arenaCount)
+        assertEquals(6, analysis.fragmentCount)
+        assertEquals(21, analysis.totalCommands)
+        assertEquals(0, analysis.refusedPairs.size)
+    }
+
+    // -- Spec refusal codes, scope-split, merge cycle, telemetry, arena release --
+
+    @Test
+    fun `recording reason constants match spec refusal codes exactly`() {
+        assertEquals(
+            "unsupported.recording.fragment_split_unsafe",
+            GPUMultiThreadedRecordingReason.FRAGMENT_SPLIT_UNSAFE,
+        )
+        assertEquals(
+            "unsupported.recording.fragment_merge_cycle",
+            GPUMultiThreadedRecordingReason.FRAGMENT_MERGE_CYCLE,
+        )
+    }
+
+    @Test
+    fun `merge refuses fragment split across atomic scope boundary`() {
+        val issuer = GPURecordingTokenIssuer()
+        val a0 = GPURecordingArenaId("arena-0")
+        val a1 = GPURecordingArenaId("arena-1")
+
+        val fragmentA = GPURecordingFragment(
+            fragmentId = "frag-A", arenaId = a0, commandCount = 2,
+            beginToken = issuer.issue(), endToken = issuer.issue(),
+            atomicScopeIds = setOf("atomic-clip-1"),
+        )
+        val fragmentB = GPURecordingFragment(
+            fragmentId = "frag-B", arenaId = a1, commandCount = 2,
+            beginToken = issuer.issue(), endToken = issuer.issue(),
+            atomicScopeIds = setOf("atomic-clip-1"),
+        )
+
+        val analysis = mergeArenas(
+            listOf(
+                arena("arena-0", "t-0", 1024, listOf(fragmentA)),
+                arena("arena-1", "t-1", 1024, listOf(fragmentB)),
+            ),
+        )
+
+        assertTrue(analysis.refusedPairs.isNotEmpty())
+        assertTrue(
+            analysis.refusedPairs.any { it.diagnostic.code == GPUMultiThreadedRecordingReason.FRAGMENT_SPLIT_UNSAFE },
+        )
+        assertTrue(
+            analysis.refusedPairs.first { it.diagnostic.code == GPUMultiThreadedRecordingReason.FRAGMENT_SPLIT_UNSAFE }
+                .diagnostic.terminal,
+        )
+    }
+
+    @Test
+    fun `merge accepts atomic scope confined to a single fragment`() {
+        val issuer = GPURecordingTokenIssuer()
+        val a0 = GPURecordingArenaId("arena-0")
+
+        val fragmentA = GPURecordingFragment(
+            fragmentId = "frag-A", arenaId = a0, commandCount = 4,
+            beginToken = issuer.issue(), endToken = issuer.issue(),
+            atomicScopeIds = setOf("atomic-clip-1", "layer-7"),
+        )
+
+        val analysis = mergeArenas(listOf(arena("arena-0", "t-0", 1024, listOf(fragmentA))))
+
+        assertEquals(0, analysis.refusedPairs.size)
+        assertFalse(analysis.aborted)
+    }
+
+    @Test
+    fun `merge aborts on cross-fragment dependency cycle`() {
+        val issuer = GPURecordingTokenIssuer()
+        val a0 = GPURecordingArenaId("arena-0")
+        val a1 = GPURecordingArenaId("arena-1")
+
+        val fragmentX = GPURecordingFragment(
+            fragmentId = "frag-X", arenaId = a0, commandCount = 1,
+            beginToken = issuer.issue(), endToken = issuer.issue(),
+            dependsOnFragmentIds = setOf("frag-Y"),
+        )
+        val fragmentY = GPURecordingFragment(
+            fragmentId = "frag-Y", arenaId = a1, commandCount = 1,
+            beginToken = issuer.issue(), endToken = issuer.issue(),
+            dependsOnFragmentIds = setOf("frag-X"),
+        )
+
+        val analysis = mergeArenas(
+            listOf(
+                arena("arena-0", "t-0", 1024, listOf(fragmentX)),
+                arena("arena-1", "t-1", 1024, listOf(fragmentY)),
+            ),
+        )
+
+        assertTrue(analysis.aborted)
+        assertTrue(
+            analysis.refusedPairs.any { it.diagnostic.code == GPUMultiThreadedRecordingReason.FRAGMENT_MERGE_CYCLE },
+        )
+    }
+
+    @Test
+    fun `merge with acyclic dependencies does not abort`() {
+        val issuer = GPURecordingTokenIssuer()
+        val a0 = GPURecordingArenaId("arena-0")
+
+        val fragmentY = GPURecordingFragment(
+            fragmentId = "frag-Y", arenaId = a0, commandCount = 1,
+            beginToken = issuer.issue(), endToken = issuer.issue(),
+        )
+        val fragmentX = GPURecordingFragment(
+            fragmentId = "frag-X", arenaId = a0, commandCount = 1,
+            beginToken = issuer.issue(), endToken = issuer.issue(),
+            dependsOnFragmentIds = setOf("frag-Y"),
+        )
+
+        val analysis = mergeArenas(listOf(arena("arena-0", "t-0", 1024, listOf(fragmentY, fragmentX))))
+
+        assertFalse(analysis.aborted)
+        assertEquals(0, analysis.refusedPairs.size)
+    }
+
+    @Test
+    fun `concurrency telemetry captures fragment count merge duration and contention events`() {
+        val issuer = GPURecordingTokenIssuer()
+        val a0 = GPURecordingArenaId("arena-0")
+        val a1 = GPURecordingArenaId("arena-1")
+
+        val fragmentA = GPURecordingFragment(
+            fragmentId = "frag-A", arenaId = a0, commandCount = 2,
+            beginToken = issuer.issue(), endToken = issuer.issue(),
+            atomicScopeIds = setOf("atomic-clip-1"),
+        )
+        val fragmentB = GPURecordingFragment(
+            fragmentId = "frag-B", arenaId = a1, commandCount = 2,
+            beginToken = issuer.issue(), endToken = issuer.issue(),
+            atomicScopeIds = setOf("atomic-clip-1"),
+        )
+        val analysis = mergeArenas(
+            listOf(
+                arena("arena-0", "t-0", 1024, listOf(fragmentA)),
+                arena("arena-1", "t-1", 1024, listOf(fragmentB)),
+            ),
+        )
+
+        val telemetry = buildConcurrencyTelemetry(analysis, mergeDurationMs = 1.5)
+
+        assertEquals(2, telemetry.fragmentCount)
+        assertEquals(1.5, telemetry.mergeDurationMs)
+        assertEquals(analysis.refusedPairs.size, telemetry.contentionEvents)
+        assertTrue(telemetry.dumpLines().first().contains("passes.mt-telemetry"))
+    }
+
+    @Test
+    fun `arena release report shows zero leak when all arenas released`() {
+        val released = GPURecordingArena(
+            arenaId = GPURecordingArenaId("arena-0"),
+            threadId = GPURecordingThreadId("t-0"),
+            capacity = 4096,
+            fragments = emptyList(),
+            allocationBytes = 4096,
+            released = true,
+        )
+
+        val report = arenaReleaseReport(listOf(released))
+
+        assertTrue(report.allReleased)
+        assertEquals(0L, report.leakedBytes)
+        assertTrue(report.dumpLines().first().contains("leakedBytes=0"))
+    }
+
+    @Test
+    fun `arena release report reports leaked bytes when an arena is not released`() {
+        val leaking = GPURecordingArena(
+            arenaId = GPURecordingArenaId("arena-0"),
+            threadId = GPURecordingThreadId("t-0"),
+            capacity = 4096,
+            fragments = emptyList(),
+            allocationBytes = 4096,
+            released = false,
+        )
+
+        val report = arenaReleaseReport(listOf(leaking))
+
+        assertFalse(report.allReleased)
+        assertEquals(4096L, report.leakedBytes)
+    }
+
+    private fun arena(
+        arenaId: String,
+        threadId: String,
+        capacity: Int,
+        fragments: List<GPURecordingFragment>,
+    ): GPURecordingArena =
+        GPURecordingArena(
+            arenaId = GPURecordingArenaId(arenaId),
+            threadId = GPURecordingThreadId(threadId),
+            capacity = capacity,
+            fragments = fragments,
+        )
+
+    private fun frag(
+        fragmentId: String,
+        arenaId: GPURecordingArenaId,
+        commandCount: Int,
+        beginToken: GPURecordingToken,
+        endToken: GPURecordingToken,
+    ): GPURecordingFragment =
+        GPURecordingFragment(
+            fragmentId = fragmentId,
+            arenaId = arenaId,
+            commandCount = commandCount,
+            beginToken = beginToken,
+            endToken = endToken,
+        )
+
+    private fun assertIllegalArgument(expectedMessageFragment: String, block: () -> Unit) {
+        try {
+            block()
+            throw AssertionError("Expected IllegalArgumentException with message containing: $expectedMessageFragment")
+        } catch (e: IllegalArgumentException) {
+            assertContains(e.message ?: "", expectedMessageFragment)
+        }
+    }
+}

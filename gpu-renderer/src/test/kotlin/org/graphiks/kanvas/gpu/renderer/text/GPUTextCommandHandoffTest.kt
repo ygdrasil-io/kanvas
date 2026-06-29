@@ -112,6 +112,9 @@ class GPUTextCommandHandoffTest {
             "unsupported.text.destination_read_unaccepted",
             "unsupported.text.clip_route_unaccepted",
             "unsupported.text.cpu_rendered_texture_forbidden",
+            "unsupported.text.subpixel_pixel_geometry",
+            "unsupported.text.subpixel_target_format",
+            "unsupported.text.fallback_exhausted",
         )
 
         assertEquals(expectedCodes, GPUTextDiagnosticCodes.all)
