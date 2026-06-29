@@ -90,7 +90,7 @@ data class GPUIccProfileParsePlan(
             sourceId = "color.icc.transform.${version.name.lowercase()}",
             wgslSource = transformSource,
         )
-        if (validation is GpuColorWgslValidation.Rejected) {
+        if (validation is GPUColorWgslValidation.Rejected) {
             return GPUIccProfileRoute.Refused(
                 RefuseDiagnostic(
                     code = "unsupported.color.icc_wgsl_validation",
@@ -105,7 +105,7 @@ data class GPUIccProfileParsePlan(
             parsePlan = this,
             matrixTrc = matrixTrc,
             wgslSource = transformSource,
-            wgslReflection = (validation as GpuColorWgslValidation.Validated).reflection,
+            wgslReflection = (validation as GPUColorWgslValidation.Validated).reflection,
         )
         val cache = GPUIccProfileCachePlan(
             cacheKey = GPUIccProfileCachePlan.computeCacheKey(header.toString().encodeToByteArray()),
@@ -124,7 +124,7 @@ data class GPUIccProfileTransformPlan(
     val parsePlan: GPUIccProfileParsePlan,
     val matrixTrc: GPUIccMatrixTrc,
     val wgslSource: String,
-    val wgslReflection: GpuColorWgslReflection? = null,
+    val wgslReflection: GPUColorWgslReflection? = null,
 )
 
 data class GPUIccProfileCachePlan(

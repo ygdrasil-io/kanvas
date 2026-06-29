@@ -88,7 +88,7 @@ data class GPUWideGamutWorkingSpacePlan(
             sourceId = "color.wide_gamut.${primaries.name.lowercase()}",
             wgslSource = conversion.wgslSource,
         )
-        if (validation is GpuColorWgslValidation.Rejected) {
+        if (validation is GPUColorWgslValidation.Rejected) {
             return GPUWideGamutRoute.Refused(
                 RefuseDiagnostic(
                     code = "unsupported.color.wide_gamut_wgsl_validation",
@@ -102,7 +102,7 @@ data class GPUWideGamutWorkingSpacePlan(
         return GPUWideGamutRoute.Accepted(
             workingSpace = this,
             conversion = conversion.copy(
-                wgslReflection = (validation as GpuColorWgslValidation.Validated).reflection,
+                wgslReflection = (validation as GPUColorWgslValidation.Validated).reflection,
             ),
             intermediateFormat = intermediateFormat,
         )
@@ -115,7 +115,7 @@ data class GPUWideGamutConversionPlan(
     val matrix: FloatArray,
     val transferConversion: GPUHdrTransferFunctionPlan?,
     val wgslSource: String,
-    val wgslReflection: GpuColorWgslReflection? = null,
+    val wgslReflection: GPUColorWgslReflection? = null,
 )
 
 sealed interface GPUWideGamutRoute {

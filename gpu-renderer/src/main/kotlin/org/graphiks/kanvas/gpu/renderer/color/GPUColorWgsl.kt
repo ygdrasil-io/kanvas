@@ -11,15 +11,15 @@ import org.graphiks.wgsl.proc.reflectWgslModule
  * parsed and reflected through wgsl4k (or when wgsl4k is unavailable at runtime
  * and validation is declared, mirroring [org.graphiks.kanvas.gpu.renderer.runtimeeffects]).
  */
-data class GpuColorWgslReflection(
+data class GPUColorWgslReflection(
     val report: WgslReflectionReport,
     val validated: Boolean = true,
 )
 
 /** Outcome of validating a generated color WGSL shader through wgsl4k. */
-sealed interface GpuColorWgslValidation {
-    data class Validated(val reflection: GpuColorWgslReflection?) : GpuColorWgslValidation
-    data class Rejected(val reason: String, val message: String) : GpuColorWgslValidation
+sealed interface GPUColorWgslValidation {
+    data class Validated(val reflection: GPUColorWgslReflection?) : GPUColorWgslValidation
+    data class Rejected(val reason: String, val message: String) : GPUColorWgslValidation
 }
 
 /**
@@ -28,31 +28,31 @@ sealed interface GpuColorWgslValidation {
  * the runtime classpath the validation is declared (fixture mode), matching the
  * shader-graph fallback so non-GPU environments still resolve a reflection.
  */
-fun validateColorWgsl(sourceId: String, wgslSource: String): GpuColorWgslValidation =
+fun validateColorWgsl(sourceId: String, wgslSource: String): GPUColorWgslValidation =
     try {
         parserBackedValidateColorWgsl(sourceId, wgslSource)
     } catch (_: NoClassDefFoundError) {
-        GpuColorWgslValidation.Validated(
-            GpuColorWgslReflection(WgslReflectionReport(sourceId = sourceId), validated = true),
+        GPUColorWgslValidation.Validated(
+            GPUColorWgslReflection(WgslReflectionReport(sourceId = sourceId), validated = true),
         )
     } catch (_: ClassNotFoundException) {
-        GpuColorWgslValidation.Validated(
-            GpuColorWgslReflection(WgslReflectionReport(sourceId = sourceId), validated = true),
+        GPUColorWgslValidation.Validated(
+            GPUColorWgslReflection(WgslReflectionReport(sourceId = sourceId), validated = true),
         )
     }
 
-private fun parserBackedValidateColorWgsl(sourceId: String, wgslSource: String): GpuColorWgslValidation {
+private fun parserBackedValidateColorWgsl(sourceId: String, wgslSource: String): GPUColorWgslValidation {
     val parsed = parseWgslResult(wgslSource)
     if (!parsed.isSuccess) {
         val errorMessages = parsed.errors.joinToString("; ") { it.message }
-        return GpuColorWgslValidation.Rejected(
+        return GPUColorWgslValidation.Rejected(
             reason = "wgsl4k_parse_error",
             message = "wgsl4k parse produced diagnostics: $errorMessages",
         )
     }
     val module = Lowerer().lower(parsed.translationUnit)
     val report = module.reflectWgslModule(sourceId = sourceId)
-    return GpuColorWgslValidation.Validated(
-        GpuColorWgslReflection(report = report, validated = true),
+    return GPUColorWgslValidation.Validated(
+        GPUColorWgslReflection(report = report, validated = true),
     )
 }
