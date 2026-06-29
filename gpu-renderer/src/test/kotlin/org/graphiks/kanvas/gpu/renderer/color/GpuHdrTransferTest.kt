@@ -3,6 +3,7 @@ package org.graphiks.kanvas.gpu.renderer.color
 import kotlin.test.Test
 import kotlin.test.assertIs
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class GPUHdrTransferTest {
@@ -92,5 +93,27 @@ class GPUHdrTransferTest {
     fun `tone map Hable produces bounded output`() {
         val result = GPUHdrToneMapStrategy.Hable.apply(2.0f)
         assertTrue { result in 0.0f..1.0f }
+    }
+
+    @Test
+    fun `HDR transfer plan validates generated EOTF WGSL through wgsl4k`() {
+        for (tf in GPUHdrTransferFunction.entries) {
+            val route = GPUHdrTransferFunctionPlan.forTransfer(tf).analyze()
+            assertIs<GPUHdrTransferRoute.Accepted>(route)
+            val reflection = route.eotfPlan.wgslReflection
+            assertNotNull(reflection, "EOTF WGSL for $tf should carry a wgsl4k reflection")
+            assertTrue(reflection.validated, "EOTF WGSL for $tf should validate through wgsl4k")
+        }
+    }
+
+    @Test
+    fun `HDR transfer plan validates generated tone-map WGSL through wgsl4k`() {
+        val route = GPUHdrTransferFunctionPlan.forTransfer(GPUHdrTransferFunction.PQ).analyze()
+        assertIs<GPUHdrTransferRoute.Accepted>(route)
+        val toneMap = route.toneMapPlan
+        assertNotNull(toneMap, "PQ route should produce a tone-map plan")
+        val reflection = toneMap.wgslReflection
+        assertNotNull(reflection, "tone-map WGSL should carry a wgsl4k reflection")
+        assertTrue(reflection.validated, "tone-map WGSL should validate through wgsl4k")
     }
 }

@@ -235,16 +235,50 @@ data class GPUHdrTransferFunctionPlan(
                 )
             )
         }
+        val eotfValidation = validateColorWgsl(
+            sourceId = "color.hdr.eotf.${transferFunction.name.lowercase()}",
+            wgslSource = wgslSource,
+        )
+        if (eotfValidation is GpuColorWgslValidation.Rejected) {
+            return GPUHdrTransferRoute.Refused(
+                RefuseDiagnostic(
+                    code = "unsupported.color.hdr_wgsl_validation",
+                    message = "HDR EOTF WGSL for $transferFunction failed wgsl4k validation " +
+                        "(${eotfValidation.reason}): ${eotfValidation.message}",
+                    stage = "color.hdr_transfer",
+                    terminal = true,
+                )
+            )
+        }
         val eotfPlan = GPUHdrEotfPlan(
             eotf = transferFunction,
             displayPeakLuminance = displayPeakLuminance,
             wgslSource = wgslSource,
+            wgslReflection = (eotfValidation as GpuColorWgslValidation.Validated).reflection,
         )
         val toneMapPlan = if (transferFunction != GPUHdrTransferFunction.scRGBLinear) {
+            val strategy = toneMapStrategy ?: GPUHdrToneMapStrategy.ACES
+            val toneMapSource = generateToneMapShader(strategy)
+            val toneMapValidation = validateColorWgsl(
+                sourceId = "color.hdr.tonemap.${strategy.name.lowercase()}",
+                wgslSource = toneMapSource,
+            )
+            if (toneMapValidation is GpuColorWgslValidation.Rejected) {
+                return GPUHdrTransferRoute.Refused(
+                    RefuseDiagnostic(
+                        code = "unsupported.color.hdr_wgsl_validation",
+                        message = "HDR tone-map WGSL for $strategy failed wgsl4k validation " +
+                            "(${toneMapValidation.reason}): ${toneMapValidation.message}",
+                        stage = "color.hdr_transfer",
+                        terminal = true,
+                    )
+                )
+            }
             GPUHdrToneMapPlan(
-                strategy = toneMapStrategy ?: GPUHdrToneMapStrategy.ACES,
+                strategy = strategy,
                 displayPeakLuminance = displayPeakLuminance,
-                wgslSource = generateToneMapShader(toneMapStrategy ?: GPUHdrToneMapStrategy.ACES),
+                wgslSource = toneMapSource,
+                wgslReflection = (toneMapValidation as GpuColorWgslValidation.Validated).reflection,
             )
         } else null
         return GPUHdrTransferRoute.Accepted(
@@ -259,12 +293,14 @@ data class GPUHdrEotfPlan(
     val eotf: GPUHdrTransferFunction,
     val displayPeakLuminance: Float,
     val wgslSource: String,
+    val wgslReflection: GpuColorWgslReflection? = null,
 )
 
 data class GPUHdrToneMapPlan(
     val strategy: GPUHdrToneMapStrategy,
     val displayPeakLuminance: Float,
     val wgslSource: String,
+    val wgslReflection: GpuColorWgslReflection? = null,
 )
 
 sealed interface GPUHdrTransferRoute {
