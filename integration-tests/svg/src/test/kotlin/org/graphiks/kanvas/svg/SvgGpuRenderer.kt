@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.svg
 
+import org.graphiks.kanvas.RenderOptions
 import org.graphiks.kanvas.Canvas
 import org.graphiks.kanvas.Surface
 
@@ -14,7 +15,7 @@ object SvgGpuRenderer {
         height: Int = DEFAULT_HEIGHT
     ): Triple<ByteArray, Int, Int> {
         val surface = Surface(width = width, height = height)
-        val canvas = Canvas(surface, maxPathVertices = PATH_VERTEX_BUDGET)
+        val canvas = Canvas(surface, RenderOptions(maxPathVertices = PATH_VERTEX_BUDGET))
         val renderer = SvgRenderer(canvas)
         renderer.render(svg)
         val result = surface.renderToRgba()
