@@ -197,12 +197,17 @@ fun buildHiZPyramid(
 
 // -- Occlusion test --
 
-fun testHiZOcclusion(
+/**
+ * Selects the highest pyramid level whose projected draw-bounds footprint is <= 4 texels.
+ *
+ * Returns `null` when the result is `Uncertain` (empty pyramid, bounds fully outside the base, or a
+ * level whose projected footprint is zero texels).
+ */
+private fun selectHiZLevel(
     pyramid: GPUHiZPyramid,
     drawBounds: GpuTileBounds,
-    drawMinDepth: Float,
-): GPUHiZOcclusionResult {
-    if (pyramid.levels.isEmpty()) return GPUHiZOcclusionResult.Uncertain
+): Int? {
+    if (pyramid.levels.isEmpty()) return null
 
     val baseW = pyramid.baseWidth
     val baseH = pyramid.baseHeight
@@ -211,13 +216,12 @@ fun testHiZOcclusion(
     val bottom = drawBounds.y + drawBounds.height
 
     if (right <= 0 || bottom <= 0 || drawBounds.x >= baseW || drawBounds.y >= baseH) {
-        return GPUHiZOcclusionResult.Uncertain
+        return null
     }
 
     var selectedLevel = pyramid.levels.size - 1
 
     for (li in (pyramid.levels.size - 1) downTo 0) {
-        val level = pyramid.levels[li]
         val scale = 1 shl li
 
         val projX0 = drawBounds.x / scale
@@ -229,17 +233,29 @@ fun testHiZOcclusion(
         val texelCountY = max(0, projY1 - projY0)
         val texelCount = texelCountX * texelCountY
 
-        if (texelCount >= 1 && texelCount <= 4) {
+        if (texelCount in 1..4) {
             selectedLevel = li
             break
         }
         if (texelCount == 0) {
-            return GPUHiZOcclusionResult.Uncertain
+            return null
         }
     }
 
+    return selectedLevel
+}
+
+/** Maximum pyramid depth over the projected draw-bounds region at [selectedLevel]. */
+private fun hiZRegionMaxDepth(
+    pyramid: GPUHiZPyramid,
+    drawBounds: GpuTileBounds,
+    selectedLevel: Int,
+): Float {
     val level = pyramid.levels[selectedLevel]
     val scale = 1 shl selectedLevel
+
+    val right = drawBounds.x + drawBounds.width
+    val bottom = drawBounds.y + drawBounds.height
 
     val projX0 = max(0, drawBounds.x / scale)
     val projY0 = max(0, drawBounds.y / scale)
@@ -252,6 +268,16 @@ fun testHiZOcclusion(
             regionMaxDepth = max(regionMaxDepth, level.depthData[py * level.width + px])
         }
     }
+    return regionMaxDepth
+}
+
+fun testHiZOcclusion(
+    pyramid: GPUHiZPyramid,
+    drawBounds: GpuTileBounds,
+    drawMinDepth: Float,
+): GPUHiZOcclusionResult {
+    val selectedLevel = selectHiZLevel(pyramid, drawBounds) ?: return GPUHiZOcclusionResult.Uncertain
+    val regionMaxDepth = hiZRegionMaxDepth(pyramid, drawBounds, selectedLevel)
 
     return if (drawMinDepth > regionMaxDepth) {
         GPUHiZOcclusionResult.Occluded
@@ -260,12 +286,111 @@ fun testHiZOcclusion(
     }
 }
 
+// -- Occlusion test descriptor (design sketch type) --
+
+/**
+ * Per-draw Hi-Z occlusion test descriptor (spec design-sketch `GPUHiZOcclusionTest`; suffixed
+ * `Descriptor` to avoid a case-insensitive filesystem collision with the `GpuHiZOcclusionTest`
+ * JUnit class): the pyramid, projected draw bounds, draw minimum depth, and the pyramid level
+ * selected for the comparison (`-1` when the test is `Uncertain`).
+ */
+data class GPUHiZOcclusionTestDescriptor(
+    val pyramid: GPUHiZPyramid,
+    val drawBounds: GpuTileBounds,
+    val drawMinDepth: Float,
+    val selectedLevel: Int,
+) {
+    /** Evaluates the occlusion result against the selected pyramid level. */
+    fun evaluate(): GPUHiZOcclusionResult {
+        if (selectedLevel < 0 || selectedLevel >= pyramid.levels.size) {
+            return GPUHiZOcclusionResult.Uncertain
+        }
+        val regionMaxDepth = hiZRegionMaxDepth(pyramid, drawBounds, selectedLevel)
+        return if (drawMinDepth > regionMaxDepth) {
+            GPUHiZOcclusionResult.Occluded
+        } else {
+            GPUHiZOcclusionResult.Visible
+        }
+    }
+}
+
+/** Builds a [GPUHiZOcclusionTestDescriptor], recording the selected pyramid level for evidence. */
+fun buildHiZOcclusionTest(
+    pyramid: GPUHiZPyramid,
+    drawBounds: GpuTileBounds,
+    drawMinDepth: Float,
+): GPUHiZOcclusionTestDescriptor = GPUHiZOcclusionTestDescriptor(
+    pyramid = pyramid,
+    drawBounds = drawBounds,
+    drawMinDepth = drawMinDepth,
+    selectedLevel = selectHiZLevel(pyramid, drawBounds) ?: -1,
+)
+
 // -- Culling rate --
 
 fun computeHiZCullingRate(results: List<GPUHiZOcclusionResult>): Float {
     if (results.isEmpty()) return 0.0f
     val occludedCount = results.count { it is GPUHiZOcclusionResult.Occluded }
     return occludedCount.toFloat() / results.size.toFloat()
+}
+
+// -- False-negative efficiency --
+
+/**
+ * Hi-Z occlusion efficiency relative to a ground-truth occlusion oracle.
+ *
+ * A false negative is a truly-occluded draw that Hi-Z failed to cull (reported `Visible` or
+ * `Uncertain`). Efficiency is the fraction of truly-occluded draws that Hi-Z correctly culled.
+ */
+data class GPUHiZEfficiencyReport(
+    val trulyOccludedCount: Int,
+    val correctlyCulledCount: Int,
+    val falseNegativeCount: Int,
+    val efficiency: Float,
+) {
+    fun dumpLines(): List<String> = listOf(
+        "passes.hi-z-efficiency trulyOccluded=$trulyOccludedCount correctlyCulled=$correctlyCulledCount " +
+            "falseNegatives=$falseNegativeCount efficiency=$efficiency",
+    )
+}
+
+/**
+ * Measures false negatives and culling efficiency against a ground-truth occlusion oracle.
+ *
+ * [groundTruthOccluded] is the per-draw oracle verdict (`true` = the draw is actually occluded);
+ * its size must match [results].
+ */
+fun computeHiZFalseNegativeEfficiency(
+    results: List<GPUHiZOcclusionResult>,
+    groundTruthOccluded: List<Boolean>,
+): GPUHiZEfficiencyReport {
+    require(results.size == groundTruthOccluded.size) {
+        "results and groundTruthOccluded must have the same size"
+    }
+
+    var trulyOccluded = 0
+    var correctlyCulled = 0
+    var falseNegatives = 0
+
+    for (i in results.indices) {
+        if (groundTruthOccluded[i]) {
+            trulyOccluded++
+            if (results[i] is GPUHiZOcclusionResult.Occluded) {
+                correctlyCulled++
+            } else {
+                falseNegatives++
+            }
+        }
+    }
+
+    val efficiency = if (trulyOccluded == 0) 1.0f else correctlyCulled.toFloat() / trulyOccluded.toFloat()
+
+    return GPUHiZEfficiencyReport(
+        trulyOccludedCount = trulyOccluded,
+        correctlyCulledCount = correctlyCulled,
+        falseNegativeCount = falseNegatives,
+        efficiency = efficiency,
+    )
 }
 
 // -- Memory budget --

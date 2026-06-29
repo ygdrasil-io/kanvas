@@ -363,6 +363,75 @@ class GpuHiZOcclusionTest {
         assertEquals(1, pyramid.levels[0].height)
     }
 
+    // -- Occlusion test descriptor (selectedLevel) and false-negative efficiency --
+
+    @Test
+    fun `hi-z occlusion test descriptor selects a level and evaluates Occluded`() {
+        val depth = FloatArray(64) { 0.3f }
+        val pyramid = buildHiZPyramid(depth, 8, 8, GPUDepthFormat.DEPTH32FLOAT)
+
+        val descriptor = buildHiZOcclusionTest(pyramid, bounds(0, 0, 8, 8), drawMinDepth = 0.8f)
+
+        assertEquals(pyramid, descriptor.pyramid)
+        assertEquals(bounds(0, 0, 8, 8), descriptor.drawBounds)
+        assertEquals(0.8f, descriptor.drawMinDepth)
+        assertTrue(descriptor.selectedLevel in 0 until pyramid.levels.size)
+        assertIs<GPUHiZOcclusionResult.Occluded>(descriptor.evaluate())
+    }
+
+    @Test
+    fun `hi-z occlusion test descriptor evaluation matches testHiZOcclusion`() {
+        val depth = FloatArray(64) { 0.8f }
+        val pyramid = buildHiZPyramid(depth, 8, 8, GPUDepthFormat.DEPTH32FLOAT)
+
+        val descriptor = buildHiZOcclusionTest(pyramid, bounds(0, 0, 8, 8), drawMinDepth = 0.2f)
+        val direct = testHiZOcclusion(pyramid, bounds(0, 0, 8, 8), drawMinDepth = 0.2f)
+
+        assertEquals(direct::class, descriptor.evaluate()::class)
+        assertIs<GPUHiZOcclusionResult.Visible>(descriptor.evaluate())
+    }
+
+    @Test
+    fun `false negative efficiency reports correctly culled occluded draws`() {
+        val results = listOf(
+            GPUHiZOcclusionResult.Occluded,
+            GPUHiZOcclusionResult.Occluded,
+            GPUHiZOcclusionResult.Visible,
+            GPUHiZOcclusionResult.Uncertain,
+        )
+        val groundTruthOccluded = listOf(true, true, true, true)
+
+        val report = computeHiZFalseNegativeEfficiency(results, groundTruthOccluded)
+
+        assertEquals(4, report.trulyOccludedCount)
+        assertEquals(2, report.correctlyCulledCount)
+        assertEquals(2, report.falseNegativeCount)
+        assertEquals(0.5f, report.efficiency)
+    }
+
+    @Test
+    fun `false negative efficiency is full when all truly-occluded draws are culled`() {
+        val results = listOf(GPUHiZOcclusionResult.Occluded, GPUHiZOcclusionResult.Visible)
+        val groundTruthOccluded = listOf(true, false)
+
+        val report = computeHiZFalseNegativeEfficiency(results, groundTruthOccluded)
+
+        assertEquals(1, report.trulyOccludedCount)
+        assertEquals(1, report.correctlyCulledCount)
+        assertEquals(0, report.falseNegativeCount)
+        assertEquals(1.0f, report.efficiency)
+    }
+
+    @Test
+    fun `false negative efficiency requires matching list sizes`() {
+        assertIllegalArgument("must have the same size") {
+            computeHiZFalseNegativeEfficiency(
+                listOf(GPUHiZOcclusionResult.Occluded),
+                listOf(true, false),
+            )
+        }
+    }
+
     // -- Validation helpers --
 
     private fun assertIllegalArgument(expectedMessageFragment: String, block: () -> Unit) {
