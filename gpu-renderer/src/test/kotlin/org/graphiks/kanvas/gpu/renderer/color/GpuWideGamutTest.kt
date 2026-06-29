@@ -3,6 +3,7 @@ package org.graphiks.kanvas.gpu.renderer.color
 import kotlin.test.Test
 import kotlin.test.assertIs
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class GPUWideGamutTest {
@@ -53,5 +54,16 @@ class GPUWideGamutTest {
     fun `intermediate format produces correct descriptor`() {
         assertEquals("rgba16float", GPUWideGamutIntermediateFormat.rgba16float.descriptor)
         assertEquals("rgba32float", GPUWideGamutIntermediateFormat.rgba32float.descriptor)
+    }
+
+    @Test
+    fun `wide-gamut route validates generated conversion WGSL through wgsl4k`() {
+        for (primaries in GPUWideGamutPrimaries.entries) {
+            val route = GPUWideGamutWorkingSpacePlan.forPrimaries(primaries).analyze()
+            assertIs<GPUWideGamutRoute.Accepted>(route)
+            val reflection = route.conversion.wgslReflection
+            assertNotNull(reflection, "conversion WGSL for $primaries should carry a wgsl4k reflection")
+            assertTrue(reflection.validated, "conversion WGSL for $primaries should validate through wgsl4k")
+        }
     }
 }
