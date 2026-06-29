@@ -12,9 +12,7 @@ val pureKotlinCodecProjects = setOf(
     "codec:common",
     "codec:test-fixtures",
     "codec:real-image-tests",
-    "codec:png-api",
     "codec:png",
-    "codec:jpeg-api",
     "codec:jpeg",
     "codec:gif",
     "codec:bmp",
@@ -2827,7 +2825,7 @@ tasks.register("checkSupportedCodecsDoc") {
             "Supported through `SkPngEncoder`.",
             "Supported through `SkJpegEncoder`",
             "Supported through `BmpEncoder`.",
-            "Supported through `SkWbmpEncoder`.",
+            "Supported through `WbmpEncoder` in `codec/wbmp/`.",
             "Supported through `SkWebpEncoder`",
             "Lossy VP8 encode intentionally returns `null`",
             "Public encode APIs must return `null` or a documented stub behavior",
@@ -2843,7 +2841,7 @@ tasks.register("checkSupportedCodecsDoc") {
             "kanvas-skia/src/test/kotlin/org/skia/encode/SkPngEncoderTest.kt",
             "kanvas-skia/src/test/kotlin/org/skia/encode/SkJpegEncoderTest.kt",
             "codec/bmp/src/test/kotlin/org/graphiks/kanvas/codec/bmp/BmpEncoderTest.kt",
-            "kanvas-skia/src/test/kotlin/org/skia/encode/SkWbmpEncoderTest.kt",
+            "codec/wbmp/src/test/kotlin/org/graphiks/kanvas/codec/wbmp/WbmpEncoderTest.kt",
             "kanvas-skia/src/test/kotlin/org/skia/encode/SkWebpEncoderTest.kt",
         ).filterNot { path -> file(path).isFile }
 

@@ -7,7 +7,6 @@ dependencies {
     implementation(project(":kanvas-skia"))
     implementation(project(":codec:core"))
     implementation(project(":codec:common"))
-    implementation(project(":codec:jpeg-api"))
 
     testImplementation(project(":math"))
     testImplementation(project(":codec:test-fixtures"))

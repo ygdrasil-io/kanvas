@@ -7,7 +7,6 @@ dependencies {
     implementation(project(":kanvas-skia"))
     implementation(project(":codec:core"))
     implementation(project(":codec:common"))
-    implementation(project(":codec:png-api"))
 
     testImplementation(project(":codec:test-fixtures"))
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
