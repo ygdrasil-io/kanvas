@@ -1,10 +1,11 @@
-package org.skia.encode
+package org.graphiks.kanvas.codec.jpeg
 
 import org.graphiks.math.SkColorGetA
 import org.graphiks.math.SkColorGetB
 import org.graphiks.math.SkColorGetG
 import org.graphiks.math.SkColorGetR
 import org.skia.foundation.SkBitmap
+import org.skia.foundation.SkColorType
 import org.skia.foundation.SkPixmap
 import org.skia.foundation.stream.SkWStream
 import java.io.ByteArrayOutputStream
@@ -12,48 +13,22 @@ import java.io.OutputStream
 import kotlin.math.cos
 import kotlin.math.roundToInt
 
-/**
- * JPEG encoder — pure Kotlin baseline sequential 8-bit implementation of
- * upstream's [`SkJpegEncoder`](https://github.com/google/skia/blob/main/include/encode/SkJpegEncoder.h).
- *
- * The encoder writes JFIF-compatible SOI/APP0/DQT/SOF0/DHT/SOS/EOI markers,
- * uses the standard JPEG Huffman tables, maps [Options.quality] to scaled
- * luminance/chrominance quantization tables, and honours [Options.downsample]
- * as 4:2:0, 4:2:2, or 4:4:4 YCbCr sampling.
- */
-public object SkJpegEncoder {
+public object JpegEncoder {
 
-    /** Mirrors `SkJpegEncoder::AlphaOption`. */
     public enum class AlphaOption {
-        /** Drop the alpha channel entirely. Default ; matches upstream. */
         kIgnore,
-
-        /**
-         * Composite the source pixmap onto a black background before
-         * encoding. RGB channels are scaled by `alpha / 255` so a
-         * fully-transparent pixel encodes to black and a fully-opaque
-         * pixel preserves its colour exactly.
-         */
         kBlendOnBlack,
     }
 
-    /** Mirrors `SkJpegEncoder::Downsample`. */
     public enum class Downsample {
-        /** 4:2:0 — chroma reduced by 2 in both directions. Default. */
         k420,
-        /** 4:2:2 — chroma reduced by 2 horizontally. */
         k422,
-        /** 4:4:4 — no chroma reduction. */
         k444,
     }
 
-    /** Mirrors `SkJpegEncoder::Options`. */
     public data class Options(
-        /** Encoder quality in `[0, 100]`. 100 = least quantization. */
         val quality: Int = 100,
-        /** Chroma subsampling mode. */
         val downsample: Downsample = Downsample.k420,
-        /** Alpha handling before conversion to opaque YCbCr. */
         val alphaOption: AlphaOption = AlphaOption.kIgnore,
     ) {
         init {
@@ -63,22 +38,18 @@ public object SkJpegEncoder {
 
     private val defaultOptions = Options()
 
-    /**
-     * Encode [src]'s pixels and return the JPEG bytes, or `null` on
-     * encoder failure. Mirrors `sk_sp<SkData>
-     * SkJpegEncoder::Encode(const SkPixmap&, const Options&)`.
-     */
-    public fun Encode(src: SkBitmap, options: Options = defaultOptions): ByteArray? {
-        val baos = ByteArrayOutputStream()
-        return if (Encode(baos, src, options)) baos.toByteArray() else null
+    init {
+        org.skia.encode.JpegCall.setEncoder { bitmap, quality ->
+            encode(bitmap, Options(quality = quality))
+        }
     }
 
-    /**
-     * Encode [src]'s pixels into [dst]. Returns `true` on success.
-     * Mirrors `bool SkJpegEncoder::Encode(SkWStream*, const SkPixmap&,
-     * const Options&)`. The caller retains ownership of [dst].
-     */
-    public fun Encode(dst: OutputStream, src: SkBitmap, options: Options = defaultOptions): Boolean {
+    public fun encode(src: SkBitmap, options: Options = defaultOptions): ByteArray? {
+        val baos = ByteArrayOutputStream()
+        return if (encode(baos, src, options)) baos.toByteArray() else null
+    }
+
+    public fun encode(dst: OutputStream, src: SkBitmap, options: Options = defaultOptions): Boolean {
         return try {
             if (src.width <= 0 || src.height <= 0) return false
             JpegWriter(dst, src, options).write()
@@ -88,51 +59,49 @@ public object SkJpegEncoder {
         }
     }
 
-    // -- R-final.6 overloads : SkPixmap + SkWStream ------------------------
-
-    /**
-     * Encode [src]'s pixels into [stream]. Returns `true` on success.
-     * Mirrors upstream's `bool SkJpegEncoder::Encode(SkWStream*, const
-     * SkPixmap&, const Options&)`.
-     */
-    public fun Encode(stream: SkWStream, src: SkPixmap, options: Options = defaultOptions): Boolean {
-        val bitmap = EncoderSupport.pixmapToBitmap(src) ?: return false
-        return Encode(stream, bitmap, options)
+    public fun encode(stream: SkWStream, src: SkPixmap, options: Options = defaultOptions): Boolean {
+        val bitmap = encoderSupport.pixmapToBitmap(src) ?: return false
+        return encode(stream, bitmap, options)
     }
 
-    /**
-     * Encode [src]'s pixels and return the JPEG bytes, or `null` on
-     * encoder failure. Convenience wrapper for upstream's
-     * `sk_sp<SkData> SkJpegEncoder::Encode(const SkPixmap&, const
-     * Options&)`.
-     */
-    public fun Encode(src: SkPixmap, options: Options = defaultOptions): ByteArray? {
-        val bitmap = EncoderSupport.pixmapToBitmap(src) ?: return null
-        return Encode(bitmap, options)
+    public fun encode(src: SkPixmap, options: Options = defaultOptions): ByteArray? {
+        val bitmap = encoderSupport.pixmapToBitmap(src) ?: return null
+        return encode(bitmap, options)
     }
 
-    /**
-     * Convenience overload — writes the encoded bytes into [stream] via
-     * the [SkWStream.write] contract instead of an [OutputStream].
-     */
-    public fun Encode(stream: SkWStream, src: SkBitmap, options: Options = defaultOptions): Boolean {
-        val bytes = Encode(src, options) ?: return false
+    public fun encode(stream: SkWStream, src: SkBitmap, options: Options = defaultOptions): Boolean {
+        val bytes = encode(src, options) ?: return false
         return stream.write(bytes, bytes.size)
+    }
+
+    private object encoderSupport {
+        fun pixmapToBitmap(src: SkPixmap): SkBitmap? {
+            if (src.width() <= 0 || src.height() <= 0) return null
+            if (src.colorType() == SkColorType.kUnknown) return null
+            val cs = src.colorSpace() ?: org.skia.foundation.SkColorSpace.makeSRGB()
+            val bm = SkBitmap(src.width(), src.height(), cs, SkColorType.kRGBA_8888)
+            for (y in 0 until src.height()) {
+                for (x in 0 until src.width()) {
+                    bm.setPixel(x, y, src.getColor(x, y))
+                }
+            }
+            return bm
+        }
     }
 }
 
 private class JpegWriter(
     private val out: OutputStream,
     private val bitmap: SkBitmap,
-    private val options: SkJpegEncoder.Options,
+    private val options: JpegEncoder.Options,
 ) {
     private val sampling = Sampling.from(options.downsample)
     private val qLuma = scaledQuantTable(STD_LUMA_Q, options.quality)
     private val qChroma = scaledQuantTable(STD_CHROMA_Q, options.quality)
-    private val dcLuma = HuffmanTable(STD_DC_LUMA_BITS, STD_DC_VALUES)
-    private val acLuma = HuffmanTable(STD_AC_LUMA_BITS, STD_AC_LUMA_VALUES)
-    private val dcChroma = HuffmanTable(STD_DC_CHROMA_BITS, STD_DC_VALUES)
-    private val acChroma = HuffmanTable(STD_AC_CHROMA_BITS, STD_AC_CHROMA_VALUES)
+    private val dcLuma = EncoderHuffmanTable(STD_DC_LUMA_BITS, STD_DC_VALUES)
+    private val acLuma = EncoderHuffmanTable(STD_AC_LUMA_BITS, STD_AC_LUMA_VALUES)
+    private val dcChroma = EncoderHuffmanTable(STD_DC_CHROMA_BITS, STD_DC_VALUES)
+    private val acChroma = EncoderHuffmanTable(STD_AC_CHROMA_BITS, STD_AC_CHROMA_VALUES)
     private val rgb = IntArray(bitmap.width * bitmap.height)
     private val previousDc = IntArray(3)
 
@@ -171,8 +140,8 @@ private class JpegWriter(
                 val g = SkColorGetG(argb)
                 val b = SkColorGetB(argb)
                 val packed = when (options.alphaOption) {
-                    SkJpegEncoder.AlphaOption.kIgnore -> packRgb(r, g, b)
-                    SkJpegEncoder.AlphaOption.kBlendOnBlack -> {
+                    JpegEncoder.AlphaOption.kIgnore -> packRgb(r, g, b)
+                    JpegEncoder.AlphaOption.kBlendOnBlack -> {
                         packRgb(
                             (r * a + 127) / 255,
                             (g * a + 127) / 255,
@@ -268,8 +237,8 @@ private class JpegWriter(
         bits: EntropyWriter,
         coeffs: IntArray,
         component: Int,
-        dcTable: HuffmanTable,
-        acTable: HuffmanTable,
+        dcTable: EncoderHuffmanTable,
+        acTable: EncoderHuffmanTable,
     ) {
         val diff = coeffs[0] - previousDc[component]
         previousDc[component] = coeffs[0]
@@ -301,12 +270,12 @@ private class JpegWriter(
 
     private fun writeApp0() {
         val payload = byteArrayOf(
-            0x4A, 0x46, 0x49, 0x46, 0x00, // JFIF\0
-            0x01, 0x01, // version 1.1
-            0x00, // no density units
-            0x00, 0x01, // X density
-            0x00, 0x01, // Y density
-            0x00, 0x00, // thumbnail
+            0x4A, 0x46, 0x49, 0x46, 0x00,
+            0x01, 0x01,
+            0x00,
+            0x00, 0x01,
+            0x00, 0x01,
+            0x00, 0x00,
         )
         writeSegment(APP0, payload)
     }
@@ -317,7 +286,7 @@ private class JpegWriter(
 
     private fun writeSof0() {
         val payload = ByteArrayOutputStream()
-        payload.write(8) // precision
+        payload.write(8)
         writeU16BE(payload, bitmap.height)
         writeU16BE(payload, bitmap.width)
         payload.write(3)
@@ -344,9 +313,9 @@ private class JpegWriter(
     private fun writeSos() {
         val payload = byteArrayOf(
             0x03,
-            0x01, 0x00, // Y: DC0 AC0
-            0x02, 0x11, // Cb: DC1 AC1
-            0x03, 0x11, // Cr: DC1 AC1
+            0x01, 0x00,
+            0x02, 0x11,
+            0x03, 0x11,
             0x00, 0x3F, 0x00,
         )
         writeSegment(SOS, payload)
@@ -374,11 +343,11 @@ private data class Sampling(
     val maxV: Int = yV
 
     companion object {
-        fun from(downsample: SkJpegEncoder.Downsample): Sampling =
+        fun from(downsample: JpegEncoder.Downsample): Sampling =
             when (downsample) {
-                SkJpegEncoder.Downsample.k420 -> Sampling(yH = 2, yV = 2)
-                SkJpegEncoder.Downsample.k422 -> Sampling(yH = 2, yV = 1)
-                SkJpegEncoder.Downsample.k444 -> Sampling(yH = 1, yV = 1)
+                JpegEncoder.Downsample.k420 -> Sampling(yH = 2, yV = 2)
+                JpegEncoder.Downsample.k422 -> Sampling(yH = 2, yV = 1)
+                JpegEncoder.Downsample.k444 -> Sampling(yH = 1, yV = 1)
             }
     }
 }
@@ -410,7 +379,7 @@ private class EntropyWriter(private val out: OutputStream) {
     }
 }
 
-private class HuffmanTable(bits: IntArray, values: IntArray) {
+private class EncoderHuffmanTable(bits: IntArray, values: IntArray) {
     private val codes = IntArray(256)
     private val lengths = IntArray(256)
 

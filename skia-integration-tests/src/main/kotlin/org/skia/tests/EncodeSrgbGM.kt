@@ -3,7 +3,7 @@ package org.skia.tests
 import org.graphiks.kanvas.codec.Codec
 import org.skia.foundation.SkEncodedImageFormat
 import org.skia.core.SkCanvas
-import org.skia.encode.SkJpegEncoder
+import org.graphiks.kanvas.codec.jpeg.JpegEncoder
 import org.graphiks.kanvas.codec.png.PngEncoder
 import org.skia.encode.SkWebpEncoder
 import org.skia.foundation.SkBitmap
@@ -132,7 +132,7 @@ public open class EncodeSrgbGM(
     private fun encodeAndDecode(bitmap: SkBitmap): SkImage? {
         val bytes = when (format) {
             SkEncodedImageFormat.kPNG -> PngEncoder.encode(bitmap)
-            SkEncodedImageFormat.kJPEG -> SkJpegEncoder.Encode(bitmap)
+            SkEncodedImageFormat.kJPEG -> JpegEncoder.encode(bitmap)
             // Upstream's third variant — VP8L lossless via SkWebpEncoder.
             // The TwelveMonkeys imageio-webp codec (on :cpu-raster's runtime
             // classpath) decodes the round-tripped bytes back to an SkImage.

@@ -3,7 +3,7 @@ package org.skia.tests
 import org.graphiks.kanvas.codec.Codec
 import org.skia.foundation.SkEncodedImageFormat
 import org.skia.core.SkCanvas
-import org.skia.encode.SkJpegEncoder
+import org.graphiks.kanvas.codec.jpeg.JpegEncoder
 import org.graphiks.kanvas.codec.png.PngEncoder
 import org.skia.encode.SkWebpEncoder
 import org.skia.foundation.SkBitmap
@@ -139,9 +139,7 @@ public open class EncodeColorTypesGM(
 
     private fun encode(bitmap: SkBitmap): ByteArray? = when (format) {
         SkEncodedImageFormat.kPNG -> PngEncoder.encode(bitmap)
-        SkEncodedImageFormat.kJPEG -> SkJpegEncoder.Encode(
-            bitmap, SkJpegEncoder.Options(quality = quality),
-        )
+        SkEncodedImageFormat.kJPEG -> JpegEncoder.encode(bitmap, JpegEncoder.Options(quality = quality))
         SkEncodedImageFormat.kWEBP -> {
             val compression = if (quality < 100) {
                 SkWebpEncoder.Compression.kLossy

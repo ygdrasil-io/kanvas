@@ -3,7 +3,7 @@ package org.skia.tests
 import org.graphiks.math.SkISize
 import org.graphiks.kanvas.codec.Codec
 import org.skia.core.SkCanvas
-import org.skia.encode.SkJpegEncoder
+import org.graphiks.kanvas.codec.jpeg.JpegEncoder
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkImage
@@ -14,8 +14,8 @@ import org.skia.tools.ToolUtils
  * [`gm/encode_alpha_jpeg.cpp::EncodeJpegAlphaOptsGM`](https://github.com/google/skia/blob/main/gm/encode_alpha_jpeg.cpp)
  * (400 × 200).
  *
- * Exercises [SkJpegEncoder.Options.alphaOption] ([SkJpegEncoder.AlphaOption.kIgnore]
- * vs [SkJpegEncoder.AlphaOption.kBlendOnBlack]) — JPEG itself has no
+ * Exercises [JpegEncoder.Options.alphaOption] ([JpegEncoder.AlphaOption.kIgnore]
+ * vs [JpegEncoder.AlphaOption.kBlendOnBlack]) — JPEG itself has no
  * alpha channel, so the encoder either drops alpha entirely or composites
  * the source onto a black background before encoding.
  *
@@ -28,7 +28,7 @@ import org.skia.tools.ToolUtils
  * encoder applies before chroma conversion.
  *
  * **Kanvas-skia adaptation** :
- *  - [SkJpegEncoder] always reads pixels through [SkBitmap.getPixel],
+ *  - [JpegEncoder] always reads pixels through [SkBitmap.getPixel],
  *    which yields non-premultiplied 8-bit ARGB regardless of the
  *    source's storage layout. The premul / unpremul axis therefore
  *    collapses (the two columns within a colour-type group are
@@ -58,8 +58,8 @@ import org.skia.tools.ToolUtils
  *     SkImageInfo info = SkImageInfo::MakeN32Premul(srcImg->width(), srcImg->height(),
  *             canvas->imageInfo().colorSpace() ? SkColorSpace::MakeSRGB() : nullptr);
  *     read_into_pixmap(&src, info, fStorage.get(), srcImg);
- *     auto img0 = encode_pixmap_and_make_image(src, SkJpegEncoder::AlphaOption::kIgnore);
- *     auto img1 = encode_pixmap_and_make_image(src, SkJpegEncoder::AlphaOption::kBlendOnBlack);
+ *     auto img0 = encode_pixmap_and_make_image(src, JpegEncoder::AlphaOption::kIgnore);
+ *     auto img1 = encode_pixmap_and_make_image(src, JpegEncoder::AlphaOption::kBlendOnBlack);
  *     canvas->drawImage(img0, 0.0f, 0.0f);
  *     canvas->drawImage(img1, 0.0f, 100.0f);
  *     // …repeat for unpremul / F16 premul / F16 unpremul …
@@ -90,8 +90,8 @@ public class EncodeJpegAlphaOptsGM : GM() {
 
         for ((column, bitmap) in sources.withIndex()) {
             val x = column * 100f
-            val ignore = encodeAndDecode(bitmap, SkJpegEncoder.AlphaOption.kIgnore) ?: continue
-            val blend = encodeAndDecode(bitmap, SkJpegEncoder.AlphaOption.kBlendOnBlack) ?: continue
+            val ignore = encodeAndDecode(bitmap, JpegEncoder.AlphaOption.kIgnore) ?: continue
+            val blend = encodeAndDecode(bitmap, JpegEncoder.AlphaOption.kBlendOnBlack) ?: continue
             c.drawImage(ignore, x, 0f)
             c.drawImage(blend, x, 100f)
         }
@@ -125,11 +125,11 @@ public class EncodeJpegAlphaOptsGM : GM() {
      */
     private fun encodeAndDecode(
         src: SkBitmap,
-        alphaOption: SkJpegEncoder.AlphaOption,
+        alphaOption: JpegEncoder.AlphaOption,
     ): SkImage? {
-        val bytes = SkJpegEncoder.Encode(
+        val bytes = JpegEncoder.encode(
             src,
-            SkJpegEncoder.Options(alphaOption = alphaOption),
+            JpegEncoder.Options(alphaOption = alphaOption),
         ) ?: return null
         val codec = Codec.MakeFromData(bytes) ?: return null
         val (bitmap, result) = codec.getImage()

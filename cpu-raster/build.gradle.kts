@@ -16,6 +16,7 @@ dependencies {
     implementation(project(":codec:core"))
     implementation(project(":codec:common"))
     implementation(project(":codec"))
+    implementation(project(":codec:jpeg"))
     implementation(project(":codec:ico"))
     implementation(project(":codec:android"))
     implementation(project(":codec:animated"))

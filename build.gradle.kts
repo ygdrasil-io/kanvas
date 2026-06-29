@@ -2823,7 +2823,7 @@ tasks.register("checkSupportedCodecsDoc") {
         )
         val requiredEncodeMarkers = listOf(
             "Supported through `PngEncoder`.",
-            "Supported through `SkJpegEncoder`",
+            "Supported through `JpegEncoder` in `codec/jpeg/`",
             "Supported through `BmpEncoder`.",
             "Supported through `WbmpEncoder` in `codec/wbmp/`.",
             "Supported through `SkWebpEncoder`",
@@ -2839,7 +2839,7 @@ tasks.register("checkSupportedCodecsDoc") {
             .filterNot { marker -> text.contains(marker) }
         val requiredEncodeTestFiles = listOf(
             "codec/png/src/test/kotlin/org/graphiks/kanvas/codec/png/PngEncoderTest.kt",
-            "kanvas-skia/src/test/kotlin/org/skia/encode/SkJpegEncoderTest.kt",
+            "codec/jpeg/src/test/kotlin/org/graphiks/kanvas/codec/jpeg/JpegEncoderTest.kt",
             "codec/bmp/src/test/kotlin/org/graphiks/kanvas/codec/bmp/BmpEncoderTest.kt",
             "codec/wbmp/src/test/kotlin/org/graphiks/kanvas/codec/wbmp/WbmpEncoderTest.kt",
             "kanvas-skia/src/test/kotlin/org/skia/encode/SkWebpEncoderTest.kt",
