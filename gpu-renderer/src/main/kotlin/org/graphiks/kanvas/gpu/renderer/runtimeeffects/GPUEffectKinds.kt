@@ -1,5 +1,9 @@
 package org.graphiks.kanvas.gpu.renderer.runtimeeffects
 
+import org.graphiks.wgsl.parser.Lowerer
+import org.graphiks.wgsl.parser.parseWgslResult
+import org.graphiks.wgsl.proc.reflectWgslModule
+
 enum class GPURuntimeEffectKind {
     Material,
     ColorFilter,
@@ -40,15 +44,72 @@ object KanvasRuntimeEffectKindValidator : GPURuntimeEffectKindValidator {
         wgslModule: Any,
     ): GPURuntimeEffectKindResult {
         val kind = effect.routeContract.acceptedPlacements.primaryKind()
-        return if (kind != null) {
-            GPURuntimeEffectKindResult.Accepted
-        } else {
-            GPURuntimeEffectKindResult.Refused(
+            ?: return GPURuntimeEffectKindResult.Refused(
                 diagnosticCode = "unsupported.runtime_effect.kind_not_registered",
                 reason = "No primary kind derived from accepted placements: ${effect.routeContract.acceptedPlacements}",
             )
+        if (wgslModule is String) {
+            val stageResult = validateEntryPointStage(kind, wgslModule)
+            if (stageResult is GPURuntimeEffectKindResult.Refused) {
+                return stageResult
+            }
+        }
+        return GPURuntimeEffectKindResult.Accepted
+    }
+
+    /**
+     * Reflects [wgslSource] via wgsl4k and returns the first entry point stage
+     * (`vertex`, `fragment`, or `compute`), or null when the source cannot be
+     * parsed/lowered or wgsl4k is unavailable on the classpath.
+     */
+    fun entryPointStage(wgslSource: String): String? =
+        try {
+            val parsed = parseWgslResult(wgslSource)
+            if (!parsed.isSuccess) {
+                null
+            } else {
+                Lowerer().lower(parsed.translationUnit)
+                    .reflectWgslModule(sourceId = "runtime-effect-kind-validation")
+                    .entryPoints
+                    .firstOrNull()
+                    ?.stage
+            }
+        } catch (_: NoClassDefFoundError) {
+            null
+        } catch (_: ClassNotFoundException) {
+            null
+        }
+
+    /**
+     * Validates that the WGSL [wgslSource] entry point stage matches the stage
+     * required by [kind]. Returns [GPURuntimeEffectKindResult.Accepted] when the
+     * stage cannot be determined so reflection availability never blocks a kind.
+     */
+    fun validateEntryPointStage(
+        kind: GPURuntimeEffectKind,
+        wgslSource: String,
+    ): GPURuntimeEffectKindResult {
+        val stage = entryPointStage(wgslSource) ?: return GPURuntimeEffectKindResult.Accepted
+        val expectedStage = kind.expectedEntryPointStage()
+        return if (stage == expectedStage) {
+            GPURuntimeEffectKindResult.Accepted
+        } else {
+            GPURuntimeEffectKindResult.Refused(
+                diagnosticCode = "unsupported.runtime_effect.entry_point_stage_mismatch",
+                reason = "WGSL entry point stage '$stage' does not match expected '$expectedStage' for kind $kind",
+            )
         }
     }
+}
+
+/** Maps each runtime-effect kind to the WGSL entry point stage it requires. */
+private fun GPURuntimeEffectKind.expectedEntryPointStage(): String = when (this) {
+    GPURuntimeEffectKind.Compute -> "compute"
+    GPURuntimeEffectKind.Material,
+    GPURuntimeEffectKind.ColorFilter,
+    GPURuntimeEffectKind.Blender,
+    GPURuntimeEffectKind.ClipShader,
+    -> "fragment"
 }
 
 private fun Set<GPURuntimeEffectRoutePlacement>.primaryKind(): GPURuntimeEffectKind? =

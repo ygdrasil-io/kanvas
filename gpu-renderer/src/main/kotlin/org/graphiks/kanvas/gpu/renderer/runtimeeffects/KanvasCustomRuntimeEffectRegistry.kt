@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.runtimeeffects
 
+import org.graphiks.wgsl.proc.WgslReflectionReport
+
 /**
  * Concrete custom runtime-effect registry wired to wgsl4k validation and security checks.
  * Isolated from [KanvasRuntimeEffectRegistry]; does not share caches with registered effects.
@@ -119,4 +121,6 @@ data class WGSLReflectionResult(
     val textureCount: Int,
     val bindGroupCount: Int,
     val reflectionHash: String,
+    /** Full wgsl4k reflection report when produced by a live parse; null on fixture fallback. */
+    val report: WgslReflectionReport? = null,
 )
