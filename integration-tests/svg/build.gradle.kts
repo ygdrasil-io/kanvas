@@ -41,3 +41,28 @@ tasks.withType<Test> {
         jvmArgs("-XstartOnFirstThread")
     }
 }
+
+tasks.register<JavaExec>("generateSvgRenders") {
+    group = "verification"
+    description = "Generates Kanvas render PNGs for all SVG test inputs."
+
+    dependsOn(tasks.named("testClasses"))
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass.set("org.graphiks.kanvas.svg.SvgRenderGeneratorKt")
+
+    val svgInputDir = layout.projectDirectory.dir("src/main/resources/by-render-family")
+    val renderOutputDir = layout.projectDirectory.dir("src/test/resources/generated-renders")
+
+    args(svgInputDir.asFile.absolutePath, renderOutputDir.asFile.absolutePath)
+
+    jvmArgs(buildList {
+        add("--add-opens=java.base/java.lang=ALL-UNNAMED")
+        add("--enable-native-access=ALL-UNNAMED")
+        if (org.gradle.internal.os.OperatingSystem.current().isMacOsX) {
+            add("-XstartOnFirstThread")
+        }
+    })
+
+    outputs.dir(renderOutputDir)
+    outputs.upToDateWhen { false }
+}
