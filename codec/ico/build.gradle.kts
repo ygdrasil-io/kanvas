@@ -7,6 +7,7 @@ dependencies {
     implementation(project(":kanvas-skia"))
     implementation(project(":codec:core"))
     implementation(project(":codec:common"))
+    implementation(project(":codec:png"))
 
     testRuntimeOnly(project(":codec:png"))
     testRuntimeOnly(project(":codec:bmp"))

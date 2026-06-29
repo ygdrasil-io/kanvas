@@ -2819,7 +2819,9 @@ tasks.register("checkSupportedCodecsDoc") {
             "| ICO / CUR |",
             "| WebP |",
             "| AVIF / JPEG XL / RAW / video |",
-            "| GIF / ICO / AVIF / HEIF / JPEG XL / RAW / video |",
+            "| GIF |",
+            "| ICO / CUR |",
+            "| AVIF / HEIF / JPEG XL / RAW / video |",
         )
         val requiredEncodeMarkers = listOf(
             "Supported through `PngEncoder`.",
