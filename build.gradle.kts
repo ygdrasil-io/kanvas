@@ -2826,7 +2826,7 @@ tasks.register("checkSupportedCodecsDoc") {
         val requiredEncodeMarkers = listOf(
             "Supported through `SkPngEncoder`.",
             "Supported through `SkJpegEncoder`",
-            "Supported through `SkBmpEncoder`.",
+            "Supported through `BmpEncoder`.",
             "Supported through `SkWbmpEncoder`.",
             "Supported through `SkWebpEncoder`",
             "Lossy VP8 encode intentionally returns `null`",
@@ -2842,7 +2842,7 @@ tasks.register("checkSupportedCodecsDoc") {
         val requiredEncodeTestFiles = listOf(
             "kanvas-skia/src/test/kotlin/org/skia/encode/SkPngEncoderTest.kt",
             "kanvas-skia/src/test/kotlin/org/skia/encode/SkJpegEncoderTest.kt",
-            "kanvas-skia/src/test/kotlin/org/skia/encode/SkBmpEncoderTest.kt",
+            "codec/bmp/src/test/kotlin/org/graphiks/kanvas/codec/bmp/BmpEncoderTest.kt",
             "kanvas-skia/src/test/kotlin/org/skia/encode/SkWbmpEncoderTest.kt",
             "kanvas-skia/src/test/kotlin/org/skia/encode/SkWebpEncoderTest.kt",
         ).filterNot { path -> file(path).isFile }

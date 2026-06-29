@@ -35,7 +35,7 @@ import java.io.OutputStream
  * encoder allocates one `ByteArrayOutputStream` sized to the exact
  * file length up front so the write loop is a single sequential pass.
  */
-public object SkBmpEncoder {
+public object BmpEncoder {
 
     /** Pixel layout selector. Mirrors the spirit of `SkColorType` for BMP. */
     public enum class BmpFormat {
