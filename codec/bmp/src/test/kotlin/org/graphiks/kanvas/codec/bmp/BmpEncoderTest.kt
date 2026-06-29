@@ -18,8 +18,7 @@ class BmpEncoderTest {
     @Test
     fun `Encode returns non-null bytes starting with BM signature`() {
         val bitmap = makeGradient(4, 4)
-        val bytes = BmpEncoder.encode(bitmap)
-        assertNotNull(bytes)
+        val bytes = BmpEncoder.encode(bitmap)!!
         assertTrue(bytes.size > 14 + 40, "BMP must carry both headers + pixel data")
         assertEquals('B'.code.toByte(), bytes[0])
         assertEquals('M'.code.toByte(), bytes[1])
