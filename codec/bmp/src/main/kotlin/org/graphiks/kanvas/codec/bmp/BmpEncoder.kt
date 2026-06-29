@@ -107,6 +107,7 @@ public object BmpEncoder {
             colorSet.add(bitmap.getPixel(x, y) and 0x00FFFFFF)
         }
         if (colorSet.size > 256) return null
+        if (options.compression == Compression.RLE4 && colorSet.size > 16) return null
 
         val palette = colorSet.toList()
         val w = bitmap.width
@@ -155,7 +156,9 @@ public object BmpEncoder {
                             j += 2
                         }
                     }
-                    if (bpp == 4 && (absCount and 1) != 0) {
+                    if (bpp == 4 && ((absCount + 1) / 2) % 2 != 0) {
+                        rleData.write(0)
+                    } else if (bpp == 8 && (absCount and 1) != 0) {
                         rleData.write(0)
                     }
                 }

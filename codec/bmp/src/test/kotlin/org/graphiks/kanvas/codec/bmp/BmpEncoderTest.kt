@@ -176,6 +176,39 @@ class BmpEncoderTest {
         assertNull(bytes, "RLE8 with >256 palette colors should return null")
     }
 
+    @Test
+    fun `RLE8 encodes alternating pixels using absolute mode`() {
+        val src = SkBitmap(4, 1)
+        src.pixels[0] = 0xFFFF0000.toInt()
+        src.pixels[1] = 0xFF00FF00.toInt()
+        src.pixels[2] = 0xFF0000FF.toInt()
+        src.pixels[3] = 0xFFFF0000.toInt()
+        val bytes = BmpEncoder.encode(src, BmpEncoder.Options(
+            compression = BmpEncoder.Compression.RLE8,
+        ))!!
+        assertEquals(1, readU32LE(bytes, 14 + 16), "compression must be BI_RLE8")
+        val decoded = decodeBmp(bytes)
+        for (x in 0 until 4) {
+            assertEquals(SkColorGetR(src.getPixel(x, 0)), SkColorGetR(decoded.getPixel(x, 0)), "R($x,0)")
+            assertEquals(SkColorGetG(src.getPixel(x, 0)), SkColorGetG(decoded.getPixel(x, 0)), "G($x,0)")
+            assertEquals(SkColorGetB(src.getPixel(x, 0)), SkColorGetB(decoded.getPixel(x, 0)), "B($x,0)")
+        }
+    }
+
+    @Test
+    fun `RLE4 rejects more than 16 colors`() {
+        val src = SkBitmap(5, 5)
+        for (y in 0 until 5) for (x in 0 until 5) {
+            val r = x * 50
+            val g = y * 50
+            src.pixels[y * 5 + x] = (0xFF shl 24) or (r shl 16) or (g shl 8)
+        }
+        val bytes = BmpEncoder.encode(src, BmpEncoder.Options(
+            compression = BmpEncoder.Compression.RLE4,
+        ))
+        assertNull(bytes, "RLE4 with >16 unique colors should return null")
+    }
+
     private fun readU16LE(buf: ByteArray, off: Int): Int =
         (buf[off].toInt() and 0xFF) or ((buf[off + 1].toInt() and 0xFF) shl 8)
 }
