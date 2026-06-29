@@ -7,7 +7,6 @@ import org.graphiks.kanvas.glyph.gpu.GPUTextArtifactID
 import org.graphiks.kanvas.glyph.gpu.GPUTextArtifactKey
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.uuid.Uuid
 
@@ -63,10 +62,10 @@ class GPUTextRouteColorGlyphTest {
     }
 
     @Test
-    fun `COLRColorGlyph gate stays not promoted for now`() {
+    fun `COLRColorGlyph gate is promoted with render evidence`() {
         val gates = GPUTextRepresentationGateMatrix.byRepresentation()
         val colorGate = gates.getValue("COLRColorGlyph")
         assertEquals(GPUTextDiagnosticCodes.COLOR_PLAN_UNSUPPORTED, colorGate.diagnosticCode)
-        assertFalse(colorGate.promoted)
+        assertTrue(colorGate.promoted)
     }
 }

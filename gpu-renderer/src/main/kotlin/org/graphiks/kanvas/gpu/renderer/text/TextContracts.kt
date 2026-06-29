@@ -340,6 +340,7 @@ object GPUTextRepresentationGateMatrix {
             representation = "COLRColorGlyph",
             diagnosticCode = GPUTextDiagnosticCodes.COLOR_PLAN_UNSUPPORTED,
             legacyGates = listOf("coloremoji_blendmodes"),
+            promoted = true,
         ),
         GPUTextRepresentationGate(
             representation = "BitmapGlyph",
