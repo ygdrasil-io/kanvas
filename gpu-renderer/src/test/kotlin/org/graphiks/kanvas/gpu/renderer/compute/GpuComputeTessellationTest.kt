@@ -212,4 +212,51 @@ class GPUComputeTessellationTest {
         assertEquals(a.descriptorHash, b.descriptorHash)
         assertEquals("GPUComputeTessellationArtifact", a.artifactType)
     }
+
+    @Test
+    fun `reflectComputeModule resolves a compute entry point`() {
+        val plan = GPUComputeTessellationPlan.forPathFill(256, 64)
+        val report = GPUComputeTessellationPlan.reflectComputeModule(plan.wgslSource())
+        assertTrue { report != null }
+        assertEquals("compute", report!!.entryPoints.firstOrNull()?.stage)
+        assertEquals("compute_main", report.entryPoints.first().name)
+    }
+
+    @Test
+    fun `reflectComputeModule reports storage buffer bindings`() {
+        val plan = GPUComputeTessellationPlan.forPathFill(256, 64)
+        val report = GPUComputeTessellationPlan.reflectComputeModule(plan.wgslSource())
+        assertTrue { report != null }
+        val storageBindings = report!!.bindings.filter { it.resourceKind == "storageBuffer" }
+        assertEquals(2, storageBindings.size)
+    }
+
+    @Test
+    fun `reflectComputeModule discriminates non-compute stage`() {
+        val vertexShader = """
+            @vertex
+            fn vs_main() -> @builtin(position) vec4<f32> {
+                return vec4<f32>(0.0, 0.0, 0.0, 1.0);
+            }
+        """.trimIndent()
+        val report = GPUComputeTessellationPlan.reflectComputeModule(vertexShader)
+        assertTrue { report != null }
+        assertEquals("vertex", report!!.entryPoints.firstOrNull()?.stage)
+    }
+
+    @Test
+    fun `override workgroup size is reported as unresolved by wgsl4k`() {
+        val plan = GPUComputeTessellationPlan.forPathFill(256, 64)
+        val report = GPUComputeTessellationPlan.reflectComputeModule(plan.wgslSource())
+        assertTrue { report != null }
+        val workgroupSize = report!!.entryPoints.first().workgroupSize
+        assertTrue { workgroupSize == null || workgroupSize.all { it == 1 } }
+    }
+
+    @Test
+    fun `reflection-validated route accepts the real compute tessellation shader`() {
+        val plan = GPUComputeTessellationPlan.forPathFill(256, 64)
+        val route = plan.analyze(capabilities = GPUCapabilities(computeSupported = true))
+        assertIs<GPUComputeTessellationRoute.Accepted>(route)
+    }
 }

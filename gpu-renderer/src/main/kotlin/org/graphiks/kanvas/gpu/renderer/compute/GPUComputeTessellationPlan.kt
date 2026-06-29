@@ -9,6 +9,10 @@ import org.graphiks.kanvas.gpu.renderer.wgsl.WGSLFragment
 import org.graphiks.kanvas.gpu.renderer.wgsl.WGSLModuleHash
 import org.graphiks.kanvas.gpu.renderer.wgsl.WGSLParserState
 import org.graphiks.kanvas.gpu.renderer.wgsl.WGSLReflectionResult
+import org.graphiks.wgsl.parser.Lowerer
+import org.graphiks.wgsl.parser.parseWgslResult
+import org.graphiks.wgsl.proc.WgslReflectionReport
+import org.graphiks.wgsl.proc.reflectWgslModule
 import java.security.MessageDigest
 import kotlin.math.ceil
 import kotlin.math.cos
@@ -19,6 +23,7 @@ data class GPUComputeTessellationPlan(
     val dispatchGrid: DispatchGrid,
     val pipelineKey: GPUComputePipelineKey,
     val vertexCount: Int,
+    val expectedWorkgroupSize: Int,
 ) {
     companion object {
         const val MAX_VERTEX_BUDGET = 1_000_000
@@ -43,6 +48,7 @@ data class GPUComputeTessellationPlan(
                 dispatchGrid = DispatchGrid(x = workgroups),
                 pipelineKey = pipelineKey,
                 vertexCount = vertexCount,
+                expectedWorkgroupSize = workgroupSize,
             )
         }
 
@@ -144,6 +150,23 @@ data class GPUComputeTessellationPlan(
                 listOf("wgsl4k validation error: ${e.javaClass.simpleName}: ${e.message}")
             }
         }
+
+        fun reflectComputeModule(source: String): WgslReflectionReport? {
+            return try {
+                val parsed = parseWgslResult(source)
+                if (parsed.errors.isNotEmpty()) {
+                    return null
+                }
+                val lowered = Lowerer().lower(parsed.translationUnit)
+                lowered.reflectWgslModule(sourceId = "compute-tessellation")
+            } catch (_: NoClassDefFoundError) {
+                null
+            } catch (_: ClassNotFoundException) {
+                null
+            } catch (_: LinkageError) {
+                null
+            }
+        }
     }
 
     fun analyze(capabilities: GPUCapabilities): GPUComputeTessellationRoute {
@@ -173,12 +196,54 @@ data class GPUComputeTessellationPlan(
                 ),
             )
         }
+        val reflection = reflectComputeModule(wgslSource())
+        if (reflection != null) {
+            val reflectionRefusal = validateReflection(reflection)
+            if (reflectionRefusal != null) {
+                return GPUComputeTessellationRoute.Refused(reflectionRefusal)
+            }
+        }
         return GPUComputeTessellationRoute.Accepted(
             GPUComputeTessellationArtifact(
                 planKey = pipelineKey.value,
                 vertexCount = vertexCount,
             ),
         )
+    }
+
+    private fun validateReflection(reflection: WgslReflectionReport): RefuseDiagnostic? {
+        val entryPoint = reflection.entryPoints.firstOrNull()
+        if (entryPoint == null || entryPoint.stage != "compute") {
+            return RefuseDiagnostic(
+                code = "unsupported.tessellation.entry_point_not_compute",
+                message = "expected a compute entry point, found stage=${entryPoint?.stage ?: "none"}",
+                stage = "tessellation.reflection",
+                terminal = true,
+            )
+        }
+        val storageBindings = reflection.bindings.filter { it.resourceKind == "storageBuffer" }
+        if (storageBindings.isEmpty()) {
+            return RefuseDiagnostic(
+                code = "unsupported.tessellation.missing_storage_bindings",
+                message = "compute tessellation requires storage buffer bindings, found none",
+                stage = "tessellation.reflection",
+                terminal = true,
+            )
+        }
+        val reflectedWorkgroupSize = entryPoint.workgroupSize
+        if (reflectedWorkgroupSize != null) {
+            val firstDimension = reflectedWorkgroupSize.firstOrNull() ?: 1
+            val unresolvedOverrideWorkgroupSize = reflectedWorkgroupSize.all { it == 1 }
+            if (!unresolvedOverrideWorkgroupSize && firstDimension != expectedWorkgroupSize) {
+                return RefuseDiagnostic(
+                    code = "unsupported.tessellation.workgroup_size_mismatch",
+                    message = "WGSL workgroup size $firstDimension does not match plan workgroup size $expectedWorkgroupSize",
+                    stage = "tessellation.reflection",
+                    terminal = true,
+                )
+            }
+        }
+        return null
     }
 
     fun wgslSource(): String =
