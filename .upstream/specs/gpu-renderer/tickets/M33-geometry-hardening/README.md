@@ -22,9 +22,9 @@ Depends on M0 (R0-R6 boundary review) and M1 (first-route product activation) fo
 
 | Ticket | Status | Priority | Claim Impact | Route Kind | Product Activation | Adapter Required | Owner Area | Depends On | Legacy Gate |
 |---|---|---|---|---|---|---|---|---|---|
-| [KGPU-M33-001 - GPU compute tessellation](KGPU-M33-001-gpu-compute-tessellation.md) | `review` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `geometry` | `KGPU-M1-001` | `legacy path fill` |
-| [KGPU-M33-002 - Advanced stroke expansion](KGPU-M33-002-advanced-stroke-path-effects.md) | `review` | `P1` | `TargetNative` | `GPUNative` | `false` | `true` | `geometry` | `KGPU-M1-001` | `legacy stroke` |
-| [KGPU-M33-003 - Perspective transform acceptance](KGPU-M33-003-perspective-transform-acceptance.md) | `review` | `P1` | `TargetNative` | `GPUNative` | `false` | `true` | `coordinates` | `KGPU-M1-001` | `legacy drawRect` |
+| [KGPU-M33-001 - GPU compute tessellation](KGPU-M33-001-gpu-compute-tessellation.md) | `done` | `P0` | `TargetNative` | `GPUNative` | `false` | `true` | `geometry` | `KGPU-M1-001` | `legacy path fill` |
+| [KGPU-M33-002 - Advanced stroke expansion](KGPU-M33-002-advanced-stroke-path-effects.md) | `done` | `P1` | `TargetNative` | `GPUNative` | `false` | `true` | `geometry` | `KGPU-M1-001` | `legacy stroke` |
+| [KGPU-M33-003 - Perspective transform acceptance](KGPU-M33-003-perspective-transform-acceptance.md) | `done` | `P1` | `TargetNative` | `GPUNative` | `false` | `true` | `coordinates` | `KGPU-M1-001` | `legacy drawRect` |
 
 ## Validation Bundle
 
