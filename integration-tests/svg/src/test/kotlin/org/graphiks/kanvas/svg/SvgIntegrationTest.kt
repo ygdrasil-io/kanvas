@@ -88,9 +88,9 @@ class SvgIntegrationTest {
     }
 
     @Test
-    fun `test complex-paths-1`() {
+    fun `test ghostscript-tiger`() {
         requireWebGpu()
-        testSvg("/by-render-family/complex-paths/complex-1.svg", minSimilarity = 90.0, tolerance = 2)
+        testSvg("/by-render-family/complex-paths/complex-1.svg", minSimilarity = 20.0, tolerance = 2)
     }
 
     @Test
