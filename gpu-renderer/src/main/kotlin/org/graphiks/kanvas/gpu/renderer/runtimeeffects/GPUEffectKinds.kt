@@ -43,6 +43,12 @@ object KanvasRuntimeEffectKindValidator : GPURuntimeEffectKindValidator {
         effect: GPURuntimeEffectDescriptor,
         wgslModule: Any,
     ): GPURuntimeEffectKindResult {
+        if (wgslModule is String) {
+            val stage = entryPointStage(wgslModule)
+            if (stage != null) {
+                return validateByEntryPointStage(stage, effect)
+            }
+        }
         val kind = effect.routeContract.acceptedPlacements.primaryKind()
             ?: return GPURuntimeEffectKindResult.Refused(
                 diagnosticCode = "unsupported.runtime_effect.kind_not_registered",
@@ -53,6 +59,38 @@ object KanvasRuntimeEffectKindValidator : GPURuntimeEffectKindValidator {
             if (stageResult is GPURuntimeEffectKindResult.Refused) {
                 return stageResult
             }
+        }
+        return GPURuntimeEffectKindResult.Accepted
+    }
+
+    private fun validateByEntryPointStage(
+        stage: String,
+        effect: GPURuntimeEffectDescriptor,
+    ): GPURuntimeEffectKindResult {
+        val placementKind = effect.routeContract.acceptedPlacements.primaryKind()
+        when (stage) {
+            "compute" -> {
+                if (placementKind != null && placementKind != GPURuntimeEffectKind.Compute) {
+                    return GPURuntimeEffectKindResult.Refused(
+                        diagnosticCode = "unsupported.runtime_effect.entry_point_stage_mismatch",
+                        reason = "WGSL entry point stage '$stage' requires Compute kind, but placement implies $placementKind",
+                    )
+                }
+            }
+            "vertex", "fragment" -> {
+                if (placementKind == GPURuntimeEffectKind.Compute) {
+                    return GPURuntimeEffectKindResult.Refused(
+                        diagnosticCode = "unsupported.runtime_effect.entry_point_stage_mismatch",
+                        reason = "WGSL entry point stage '$stage' implies non-compute kind, but placement implies Compute",
+                    )
+                }
+            }
+        }
+        if (placementKind == null) {
+            return GPURuntimeEffectKindResult.Refused(
+                diagnosticCode = "unsupported.runtime_effect.kind_not_registered",
+                reason = "WGSL entry point stage '$stage' could not be matched to a registered kind from placements: ${effect.routeContract.acceptedPlacements}",
+            )
         }
         return GPURuntimeEffectKindResult.Accepted
     }
