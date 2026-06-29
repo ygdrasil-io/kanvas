@@ -85,10 +85,27 @@ data class GPUIccProfileParsePlan(
                 )
             )
         }
+        val transformSource = generateTransformShader(matrixTrc)
+        val validation = validateColorWgsl(
+            sourceId = "color.icc.transform.${version.name.lowercase()}",
+            wgslSource = transformSource,
+        )
+        if (validation is GpuColorWgslValidation.Rejected) {
+            return GPUIccProfileRoute.Refused(
+                RefuseDiagnostic(
+                    code = "unsupported.color.icc_wgsl_validation",
+                    message = "ICC transform WGSL failed wgsl4k validation " +
+                        "(${validation.reason}): ${validation.message}",
+                    stage = "icc.parse",
+                    terminal = true,
+                )
+            )
+        }
         val transform = GPUIccProfileTransformPlan(
             parsePlan = this,
             matrixTrc = matrixTrc,
-            wgslSource = generateTransformShader(matrixTrc),
+            wgslSource = transformSource,
+            wgslReflection = (validation as GpuColorWgslValidation.Validated).reflection,
         )
         val cache = GPUIccProfileCachePlan(
             cacheKey = GPUIccProfileCachePlan.computeCacheKey(header.toString().encodeToByteArray()),
@@ -107,6 +124,7 @@ data class GPUIccProfileTransformPlan(
     val parsePlan: GPUIccProfileParsePlan,
     val matrixTrc: GPUIccMatrixTrc,
     val wgslSource: String,
+    val wgslReflection: GpuColorWgslReflection? = null,
 )
 
 data class GPUIccProfileCachePlan(

@@ -104,6 +104,22 @@ class GPUIccProfileTest {
         assertTrue { tags.any { it.signature == "bTRC" } }
     }
 
+    @Test
+    fun `ICC accepted route validates generated transform WGSL through wgsl4k`() {
+        for (version in listOf(GPUIccVersion.v2, GPUIccVersion.v4)) {
+            val route = GPUIccProfileParsePlan.parse(
+                version = version,
+                header = sampleHeader(),
+                tagTable = sampleTags(),
+                hasMatrixTrc = true,
+            ).analyze()
+            assertIs<GPUIccProfileRoute.Accepted>(route)
+            val reflection = route.transform.wgslReflection
+            assertNotNull(reflection, "ICC transform WGSL for $version should carry a wgsl4k reflection")
+            assertTrue(reflection.validated, "ICC transform WGSL for $version should validate through wgsl4k")
+        }
+    }
+
     private fun sampleHeader() = GPUIccHeader(
         profileSize = 1024u,
         preferredCmm = "lcms",
