@@ -23,6 +23,14 @@ sourceSets {
     }
 }
 
+tasks.named<ProcessResources>("processTestResources") {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+
 tasks.withType<JavaCompile> {
     options.encoding = "UTF-8"
+}
+
+tasks.withType<Test> {
+    jvmArgs("-Djdk.xml.maxParameterEntitySizeLimit=0")
 }

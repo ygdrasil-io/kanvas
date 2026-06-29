@@ -1,8 +1,10 @@
 package org.graphiks.kanvas.svg
 
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
+import org.opentest4j.TestAbortedException
 import java.io.File
 
 /**
@@ -11,6 +13,18 @@ import java.io.File
 class SvgIntegrationTest {
     @TempDir
     lateinit var tempDir: File
+
+    private fun requireWebGpu() {
+        if (!gpuAvailable) {
+            throw TestAbortedException("WebGPU not available on this machine")
+        }
+    }
+
+    companion object {
+        private val gpuAvailable: Boolean by lazy {
+            GPUBackendRuntimeFactory.createOrNull() != null
+        }
+    }
 
     private fun testSvg(svgPath: String, minSimilarity: Double, tolerance: Int = 0) {
         val svgContent = object {}.javaClass.getResource(svgPath)?.readText()
@@ -85,6 +99,7 @@ class SvgIntegrationTest {
 
     @Test
     fun `test geometric SVGs`() {
+        requireWebGpu()
         listOf(
             "/by-render-family/geometric/geometric-1.svg",
             "/by-render-family/geometric/geometric-2.svg",
@@ -96,6 +111,7 @@ class SvgIntegrationTest {
 
     @Test
     fun `test gradient SVGs`() {
+        requireWebGpu()
         listOf(
             "/by-render-family/gradients/gradient-1.svg",
             "/by-render-family/gradients/gradient-2.svg",
@@ -107,6 +123,7 @@ class SvgIntegrationTest {
 
     @Test
     fun `test transparency SVGs`() {
+        requireWebGpu()
         listOf(
             "/by-render-family/transparencies/transparent-1.svg",
             "/by-render-family/transparencies/transparent-2.svg",
@@ -118,6 +135,7 @@ class SvgIntegrationTest {
 
     @Test
     fun `test complex-path SVGs`() {
+        requireWebGpu()
         listOf(
             "/by-render-family/complex-paths/complex-1.svg",
             "/by-render-family/complex-paths/complex-2.svg",
@@ -129,6 +147,7 @@ class SvgIntegrationTest {
 
     @Test
     fun `test layer SVGs`() {
+        requireWebGpu()
         listOf(
             "/by-render-family/layers/layer-1.svg",
             "/by-render-family/layers/layer-2.svg"
@@ -139,6 +158,7 @@ class SvgIntegrationTest {
 
     @Test
     fun `test shadow SVGs`() {
+        requireWebGpu()
         listOf(
             "/by-render-family/shadows/shadow-1.svg",
             "/by-render-family/shadows/shadow-2.svg",
@@ -150,6 +170,7 @@ class SvgIntegrationTest {
 
     @Test
     fun `test texture SVGs`() {
+        requireWebGpu()
         listOf(
             "/by-render-family/textures/texture-1.svg",
             "/by-render-family/textures/texture-2.svg",
@@ -161,6 +182,7 @@ class SvgIntegrationTest {
 
     @Test
     fun `test typography SVGs`() {
+        requireWebGpu()
         listOf(
             "/by-render-family/typography/typography-1.svg",
             "/by-render-family/typography/typography-2.svg",
@@ -172,6 +194,7 @@ class SvgIntegrationTest {
 
     @Test
     fun `test realistic SVGs`() {
+        requireWebGpu()
         listOf(
             "/by-render-family/realistic/detailed-1.svg",
             "/by-render-family/realistic/detailed-2.svg",
@@ -183,6 +206,7 @@ class SvgIntegrationTest {
 
     @Test
     fun `test single SVG for debugging`() {
+        requireWebGpu()
         val svgPath = "/by-render-family/geometric/geometric-1.svg"
         testSvg(svgPath, 100.0, 0)
     }
