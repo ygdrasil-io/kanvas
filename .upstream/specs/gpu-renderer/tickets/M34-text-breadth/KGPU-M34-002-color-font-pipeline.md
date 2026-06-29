@@ -1,13 +1,13 @@
 ---
 id: KGPU-M34-002
 title: "Color font pipeline"
-status: blocked
+status: review
 milestone: M34
 priority: P0
 owner_area: text
-claim_impact: DependencyGated
+claim_impact: TargetNative
 route_kind: GPUNative
-product_activation: false
+product_activation: true
 release_blocking: false
 adapter_required: true
 depends_on: [KGPU-M1-001]
@@ -175,6 +175,17 @@ rtk git diff --check && rtk ./gradlew --no-daemon :gpu-renderer:test --tests '*C
   sous-scope borné handoff + refus est implémenté et testé
   (`ColorFontHandoffRouteTest`) mais ne promeut pas le ticket. Vrai gate :
   exécution GPU M10/M11.
+- `blocked → review` (2026-06-29): **promotion**. Le rendu GPU COLRv0 est implémenté
+  de bout en bout (Plans 1–3c): handoff `GPUColorGlyphLayerPlan` + pont,
+  `GPUColorGlyphRoutePlanner`, shader WGSL composite validé wgsl4k (`loop {}`),
+  intégration recording, `drawColorGlyphPass` backend + cache-keys + atlas
+  placements. **Preuve de rendu sur GPU réel** (Apple M2 Max): `GPUColorGlyphRenderSmokeTest`
+  (`skipped=0, failures=0`) + scène enregistrée `colr-v0-color-glyph` avec
+  `reports/gpu-renderer-scenes/offscreen/colr-v0-color-glyph/render.png` committée
+  (décodée: 664 px rouges + 1963 bleus). Gate `COLRColorGlyph` => `promoted = true`,
+  `product_activation: true`. Régression: 1077 tests, seuls les 4 échecs
+  pré-existants de master restent (hors M34). **En attente de revue indépendante
+  d'acceptation pour passer à `done`** (règle `STATUS.md`).
 
 ## Linear Labels
 
