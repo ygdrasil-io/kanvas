@@ -37,6 +37,30 @@ class Path(
         verbs.add(PathVerb.Close)
     }
 
+    fun addCircle(cx: Float, cy: Float, radius: Float): Path = apply {
+        val k = 0.5522847498f
+        moveTo(cx + radius, cy)
+        cubicTo(cx + radius, cy - k * radius, cx + k * radius, cy - radius, cx, cy - radius)
+        cubicTo(cx - k * radius, cy - radius, cx - radius, cy - k * radius, cx - radius, cy)
+        cubicTo(cx - radius, cy + k * radius, cx - k * radius, cy + radius, cx, cy + radius)
+        cubicTo(cx + k * radius, cy + radius, cx + radius, cy + k * radius, cx + radius, cy)
+        close()
+    }
+
+    fun addOval(oval: Rect): Path = apply {
+        val cx = oval.left + oval.width / 2f
+        val cy = oval.top + oval.height / 2f
+        val rx = oval.width / 2f
+        val ry = oval.height / 2f
+        val k = 0.5522847498f
+        moveTo(cx + rx, cy)
+        cubicTo(cx + rx, cy - k * ry, cx + k * rx, cy - ry, cx, cy - ry)
+        cubicTo(cx - k * rx, cy - ry, cx - rx, cy - k * ry, cx - rx, cy)
+        cubicTo(cx - rx, cy + k * ry, cx - k * rx, cy + ry, cx, cy + ry)
+        cubicTo(cx + k * rx, cy + ry, cx + rx, cy + k * ry, cx + rx, cy)
+        close()
+    }
+
     internal fun toPathData(): PathData {
         val allPoints = mutableListOf<Point>()
         for (verb in verbs) {
