@@ -1,11 +1,8 @@
 ---
 id: KGPU-M32-018
 title: "Legacy decommission: text-glyphs port (A8 text fill) / refuse (color/SDF/emoji text)"
-<<<<<<< HEAD
 status: done
-=======
 status: review
->>>>>>> master
 milestone: M32
 priority: P0
 owner_area: legacy-cleanup
@@ -156,10 +153,7 @@ rtk git diff --check
 
 
 - `review` (2026-06-26): promoted after maintainer review of PR #1892 (https://github.com/ygdrasil-io/kanvas/pull/1892) — no blocking issues found.
-<<<<<<< HEAD
 - `review → done` (2026-06-28): independently reviewed, evidence accepted, port-or-refuse decision validated.
-=======
->>>>>>> master
 
 ## Linear Labels
 

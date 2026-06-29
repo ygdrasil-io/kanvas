@@ -1,11 +1,8 @@
 ---
 id: KGPU-M32-005
 title: "Remove legacy device, rollback branch, and module include (Option B)"
-<<<<<<< HEAD
 status: done
-=======
 status: review
->>>>>>> master
 milestone: M32
 priority: P0
 owner_area: legacy-cleanup
@@ -150,10 +147,7 @@ rtk git diff --check
   recorded in deletion report. Deletion evidence at
   `reports/gpu-renderer/2026-06-26-m32-005-legacy-device-deletion.md`.
   Commit: 4bfdd9f.
-<<<<<<< HEAD
 - `review → done` (2026-06-28): independently reviewed, evidence accepted, port-or-refuse decision validated.
-=======
->>>>>>> master
 
 ## Linear Labels
 

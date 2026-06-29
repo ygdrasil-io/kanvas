@@ -1,9 +1,6 @@
 .gradle
-<<<<<<< HEAD
 .gradle-preflight
 docs/superpowers/
-=======
->>>>>>> master
 build/
 .superpowers/
 !gradle/wrapper/gradle-wrapper.jar

@@ -1,11 +1,7 @@
 ---
 id: KGPU-M36-004
 title: "Hardware codec descriptor"
-<<<<<<< HEAD
 status: blocked
-=======
-status: proposed
->>>>>>> master
 milestone: M36
 priority: P1
 owner_area: images
@@ -134,10 +130,7 @@ rtk ./gradlew --no-daemon :gpu-renderer:test --tests '*HardwareCodec*'
 ## Status Notes
 
 - `proposed`: Initial ticket.
-<<<<<<< HEAD
 - `blocked` (2026-06-28): Blocked on KanvasImageCodec registry and nondeterminism policy
-=======
->>>>>>> master
 
 ## Linear Labels
 

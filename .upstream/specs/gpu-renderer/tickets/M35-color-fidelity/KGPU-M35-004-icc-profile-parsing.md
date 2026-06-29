@@ -1,11 +1,7 @@
 ---
 id: KGPU-M35-004
 title: "ICC profile parsing — v2/v4 matrix/TRC with transform and cache"
-<<<<<<< HEAD
 status: done
-=======
-status: proposed
->>>>>>> master
 milestone: M35
 priority: P1
 owner_area: color
@@ -158,12 +154,9 @@ rtk ./gradlew --no-daemon :gpu-renderer:test --tests '*ICCProfile*'
 ## Status Notes
 
 - `proposed`: Initial ticket. Awaiting M35 milestone acceptance.
-<<<<<<< HEAD
 - `proposed → ready` (2026-06-28): milestone activated, autonomous implementation starting.
 - `ready → review` (2026-06-28): implemented. Pending independent review.
 - `review → done` (2026-06-28): reviewed and fixed.
-=======
->>>>>>> master
 
 ## Linear Labels
 

@@ -1,11 +1,7 @@
 ---
 id: KGPU-M37-003
 title: "Drop shadow filter"
-<<<<<<< HEAD
 status: done
-=======
-status: proposed
->>>>>>> master
 milestone: M37
 priority: P1
 owner_area: filters
@@ -175,13 +171,10 @@ rtk ./gradlew --no-daemon :gpu-renderer:test --tests '*DropShadow*'
 ## Status Notes
 
 - `proposed`: Initial ticket.
-<<<<<<< HEAD
 - `blocked` (2026-06-28): Blocked on KGPU-M37-001 (separable blur) — will unblock after M37-001 implemented
 - `blocked → ready` (2026-06-28): M37-001 separable blur implemented, unblocking.
 - `ready → review` (2026-06-28): implemented. Pending independent review.
 - `review → done` (2026-06-29): promoted to done after independent review accepted linked evidence; no hidden product activation.
-=======
->>>>>>> master
 
 ## Linear Labels
 
