@@ -7,6 +7,9 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.graphiks.kanvas.codec.Codec
 import org.skia.foundation.SkBitmap
+import org.skia.foundation.SkICC
+import org.skia.foundation.skcms.SkNamedGamut
+import org.skia.foundation.skcms.SkNamedTransferFn
 import org.graphiks.math.SkColorGetA
 import org.graphiks.math.SkColorGetB
 import org.graphiks.math.SkColorGetG
@@ -211,4 +214,27 @@ class BmpEncoderTest {
 
     private fun readU16LE(buf: ByteArray, off: Int): Int =
         (buf[off].toInt() and 0xFF) or ((buf[off + 1].toInt() and 0xFF) shl 8)
+
+    @Test
+    fun `V5 encode with ICC profile round-trips through decoder`() {
+        val src = SkBitmap(2, 2)
+        src.pixels[0] = 0xFFFF0000.toInt()
+        src.pixels[1] = 0xFF00FF00.toInt()
+        src.pixels[2] = 0xFF0000FF.toInt()
+        src.pixels[3] = 0xFFFFFFFF.toInt()
+        val iccBytes = createValidIccProfile()
+        val bytes = BmpEncoder.encode(src, BmpEncoder.Options(iccProfile = iccBytes))!!
+        val dibSize = readU32LE(bytes, 14)
+        assertEquals(124, dibSize, "V5 header must be 124 bytes")
+        val profile = decodedCodec(bytes)?.getICCProfile()
+        assertNotNull(profile, "encoded V5 BMP with ICC must expose profile on decode")
+    }
+
+    private fun createValidIccProfile(): ByteArray {
+        return SkICC.WriteToICC(SkNamedTransferFn.kSRGB, SkNamedGamut.kSRGB)
+    }
+
+    private fun decodedCodec(bytes: ByteArray): Codec? {
+        return Codec.MakeFromData(bytes)
+    }
 }

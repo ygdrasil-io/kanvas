@@ -24,6 +24,7 @@ public object BmpEncoder {
     public data class Options(
         val format: BmpFormat = BmpFormat.kBGRA_8888,
         val compression: Compression = Compression.NONE,
+        val iccProfile: ByteArray? = null,
     )
 
     private val defaultOptions = Options()
@@ -32,6 +33,10 @@ public object BmpEncoder {
         val w = bitmap.width
         val h = bitmap.height
         if (w <= 0 || h <= 0) return null
+
+        if (options.iccProfile != null) {
+            return encodeV5(bitmap, options)
+        }
 
         if (options.compression != Compression.NONE) {
             return encodeRle(bitmap, options)
@@ -198,4 +203,69 @@ public object BmpEncoder {
         out.write(rleBytes)
         return out.toByteArray()
     }
+
+    private fun encodeV5(bitmap: SkBitmap, options: Options): ByteArray? {
+        val w = bitmap.width
+        val h = bitmap.height
+        if (w <= 0 || h <= 0) return null
+
+        val bpp = if (options.format == BmpFormat.kBGRA_8888) 4 else 3
+        val rowSize = (w * bpp + 3) and 3.inv()
+        val pixelDataSize = rowSize * h
+        val iccSize = options.iccProfile!!.size
+        val dataOffset = FILE_HEADER_SIZE + DIB_V5_HEADER_SIZE
+        val fileSize = dataOffset + pixelDataSize + iccSize
+
+        val out = ByteArrayOutputStream(fileSize)
+        out.write('B'.code); out.write('M'.code)
+        writeU32LE(out, fileSize)
+        writeU16LE(out, 0); writeU16LE(out, 0)
+        writeU32LE(out, dataOffset)
+        // V5 header (124 bytes)
+        writeU32LE(out, DIB_V5_HEADER_SIZE)
+        writeU32LE(out, w)
+        writeU32LE(out, -h)
+        writeU16LE(out, 1)
+        writeU16LE(out, bpp * 8)
+        writeU32LE(out, 3) // BI_BITFIELDS
+        writeU32LE(out, pixelDataSize)
+        writeU32LE(out, 2835); writeU32LE(out, 2835)
+        writeU32LE(out, 0); writeU32LE(out, 0)
+        // Bit masks (12 bytes at DIB offset 40..52): BGRA
+        writeU32LE(out, 0x00FF0000) // red mask
+        writeU32LE(out, 0x0000FF00) // green mask
+        writeU32LE(out, 0x000000FF) // blue mask
+        writeU32LE(out, -0x1000000)  // alpha mask (0xFF000000)
+        // CSType = LCS_sRGB = 'sRGB' = 0x73524742 (LE)
+        writeU32LE(out, 0x73524742.toInt())
+        // Endpoints CIEXYZTRIPLE (36 bytes): zeroed
+        for (i in 0 until 36) out.write(0)
+        // Gamma (12 bytes): zeroed
+        for (i in 0 until 12) out.write(0)
+        // Intent (4 bytes): zeroed
+        for (i in 0 until 4) out.write(0)
+        // ICC profile offset and size (DIB bytes 112-123)
+        writeU32LE(out, dataOffset + pixelDataSize)
+        writeU32LE(out, iccSize)
+        // Reserved (4 bytes)
+        out.write(0); out.write(0); out.write(0); out.write(0)
+
+        // Pixel data (BGRA/BGR, top-down via negative height)
+        val pad = rowSize - w * bpp
+        for (y in 0 until h) {
+            for (x in 0 until w) {
+                val argb = bitmap.getPixel(x, y)
+                out.write(SkColorGetB(argb))
+                out.write(SkColorGetG(argb))
+                out.write(SkColorGetR(argb))
+                if (bpp == 4) out.write(SkColorGetA(argb))
+            }
+            for (i in 0 until pad) out.write(0)
+        }
+        // ICC profile data appended after pixel rows
+        out.write(options.iccProfile!!)
+        return out.toByteArray()
+    }
+
+    private const val DIB_V5_HEADER_SIZE = 124
 }
