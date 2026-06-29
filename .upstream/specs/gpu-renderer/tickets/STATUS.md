@@ -44,10 +44,10 @@ product activation, and updates the owning milestone table in the same change.
 | M35 | 0 | 0 | 0 | 1 | 3 | 0 |
 | M36 | 0 | 0 | 0 | 2 | 2 | 0 |
 | M37 | 0 | 0 | 0 | 0 | 6 | 0 |
-| M38 | 0 | 0 | 0 | 1 | 2 | 0 |
+| M38 | 0 | 1 | 0 | 0 | 2 | 0 |
 | M39 | 0 | 0 | 0 | 0 | 4 | 0 |
 | M40 | 0 | 0 | 0 | 0 | 3 | 0 |
-| **Total** | **0** | **1** | **0** | **7** | **24** | **183** |
+| **Total** | **0** | **2** | **0** | **6** | **24** | **183** |
 
 ## Status Update Rule
 
