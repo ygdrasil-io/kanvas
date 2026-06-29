@@ -239,7 +239,7 @@ data class GPUHdrTransferFunctionPlan(
             sourceId = "color.hdr.eotf.${transferFunction.name.lowercase()}",
             wgslSource = wgslSource,
         )
-        if (eotfValidation is GpuColorWgslValidation.Rejected) {
+        if (eotfValidation is GPUColorWgslValidation.Rejected) {
             return GPUHdrTransferRoute.Refused(
                 RefuseDiagnostic(
                     code = "unsupported.color.hdr_wgsl_validation",
@@ -254,7 +254,7 @@ data class GPUHdrTransferFunctionPlan(
             eotf = transferFunction,
             displayPeakLuminance = displayPeakLuminance,
             wgslSource = wgslSource,
-            wgslReflection = (eotfValidation as GpuColorWgslValidation.Validated).reflection,
+            wgslReflection = (eotfValidation as GPUColorWgslValidation.Validated).reflection,
         )
         val toneMapPlan = if (transferFunction != GPUHdrTransferFunction.scRGBLinear) {
             val strategy = toneMapStrategy ?: GPUHdrToneMapStrategy.ACES
@@ -263,7 +263,7 @@ data class GPUHdrTransferFunctionPlan(
                 sourceId = "color.hdr.tonemap.${strategy.name.lowercase()}",
                 wgslSource = toneMapSource,
             )
-            if (toneMapValidation is GpuColorWgslValidation.Rejected) {
+            if (toneMapValidation is GPUColorWgslValidation.Rejected) {
                 return GPUHdrTransferRoute.Refused(
                     RefuseDiagnostic(
                         code = "unsupported.color.hdr_wgsl_validation",
@@ -278,7 +278,7 @@ data class GPUHdrTransferFunctionPlan(
                 strategy = strategy,
                 displayPeakLuminance = displayPeakLuminance,
                 wgslSource = toneMapSource,
-                wgslReflection = (toneMapValidation as GpuColorWgslValidation.Validated).reflection,
+                wgslReflection = (toneMapValidation as GPUColorWgslValidation.Validated).reflection,
             )
         } else null
         return GPUHdrTransferRoute.Accepted(
@@ -293,14 +293,14 @@ data class GPUHdrEotfPlan(
     val eotf: GPUHdrTransferFunction,
     val displayPeakLuminance: Float,
     val wgslSource: String,
-    val wgslReflection: GpuColorWgslReflection? = null,
+    val wgslReflection: GPUColorWgslReflection? = null,
 )
 
 data class GPUHdrToneMapPlan(
     val strategy: GPUHdrToneMapStrategy,
     val displayPeakLuminance: Float,
     val wgslSource: String,
-    val wgslReflection: GpuColorWgslReflection? = null,
+    val wgslReflection: GPUColorWgslReflection? = null,
 )
 
 sealed interface GPUHdrTransferRoute {

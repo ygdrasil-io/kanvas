@@ -55,7 +55,7 @@ class CodecProvenanceMatrixTest(unittest.TestCase):
         subset = rows["bitmap-subset-local-matrix-repeat"]
         self.assertEqual("pass", subset["status"])
         self.assertEqual("PNG", subset["format"])
-        self.assertEqual("codec-png-kotlin", subset["decoder"]["module"])
+        self.assertEqual("codec/png", subset["decoder"]["module"])
         self.assertEqual("kSuccess", subset["decodeResult"]["status"])
         self.assertEqual("images/color_wheel.png", subset["origin"]["resource"])
         self.assertEqual("bounded-bitmap-sampling-only", subset["supportClaim"])
@@ -78,11 +78,11 @@ class CodecProvenanceMatrixTest(unittest.TestCase):
         formats = {row["format"]: row for row in evidence["codecFormatRows"]}
 
         self.assertEqual("supported", formats["PNG"]["status"])
-        self.assertEqual("codec-png-kotlin", formats["PNG"]["decoder"]["module"])
+        self.assertEqual("codec/png", formats["PNG"]["decoder"]["module"])
         self.assertEqual("kSuccess-for-covered-real-fixtures", formats["PNG"]["decodeResult"])
 
         self.assertEqual("supported", formats["ICO / CUR"]["status"])
-        self.assertEqual("codec-ico-kotlin", formats["ICO / CUR"]["decoder"]["module"])
+        self.assertEqual("codec/ico", formats["ICO / CUR"]["decoder"]["module"])
         self.assertEqual("delegates-to-selected-payload-decoder", formats["ICO / CUR"]["decodeResult"])
 
         for name in ["AVIF", "JPEG XL", "RAW", "video"]:
@@ -101,7 +101,7 @@ class CodecProvenanceMatrixTest(unittest.TestCase):
                 "rowId": "fake-avif-pass",
                 "status": "pass",
                 "format": "AVIF",
-                "decoder": {"name": "avif", "kind": "stub", "module": "codec-extended"},
+                "decoder": {"name": "avif", "kind": "stub", "module": "codec/extended"},
                 "colorInfo": {"policy": "unknown"},
                 "origin": {"kind": "synthetic"},
                 "decodeResult": {"status": "kSuccess"},
@@ -140,7 +140,7 @@ class CodecProvenanceMatrixTest(unittest.TestCase):
         self.assertEqual(evidence["summary"], payload["summary"])
         self.assertIn("# KAN-047 Codec Provenance Matrix", markdown)
         self.assertIn("bitmap-subset-local-matrix-repeat", markdown)
-        self.assertIn("codec-png-kotlin", markdown)
+        self.assertIn("codec/png", markdown)
         self.assertIn("codec.animated-frame-unsupported", markdown)
         self.assertIn("No stub codec renders a scene pass", markdown)
 

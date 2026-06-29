@@ -2,7 +2,6 @@
 id: KGPU-M32-018
 title: "Legacy decommission: text-glyphs port (A8 text fill) / refuse (color/SDF/emoji text)"
 status: done
-status: review
 milestone: M32
 priority: P0
 owner_area: legacy-cleanup

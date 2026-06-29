@@ -49,7 +49,7 @@ thresholds, JNI, ImageIO/AWT usage, or animated scene support.
 ## Claim Guards
 
 - No stub codec renders a scene pass.
-- Deterministic fixtures stay distinct from real `SkCodec` decode.
+- Deterministic fixtures stay distinct from real `Codec` decode.
 - `bitmap-subset-local-matrix-repeat` cites `codec-png-kotlin`, but its support
   claim remains bounded bitmap sampling, not broad codec or color-managed decode.
 - Animated WebP/GIF scene rows remain dependency-gated via

@@ -1,6 +1,6 @@
 package org.skia.tests
 
-import org.skia.codec.SkImageGeneratorImages
+import org.graphiks.kanvas.codec.ImageGeneratorImages
 import org.skia.core.SkCanvas
 import org.skia.core.SkSurface
 import org.skia.core.SrcRectConstraint
@@ -151,7 +151,7 @@ public class ImageMaskSubsetGM : GM() {
         },
         // SkImage_Lazy: deferred via SkImageGenerator.
         { _, info ->
-            SkImageGeneratorImages.DeferredFromGenerator(MaskGenerator(info))
+            ImageGeneratorImages.DeferredFromGenerator(MaskGenerator(info))
         },
     )
 

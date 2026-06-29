@@ -17,7 +17,7 @@ import java.io.OutputStream
  * `include/encode/` covers only PNG / JPEG / WebP / Rust-PNG) ;
  * kanvas-skia carries this object so call sites that expect a
  * symmetric encode/decode pair (the BMP **decoder** lives at
- * `kanvas-skia/src/main/kotlin/org/skia/codec/bmp/`) compile against
+ * `codec/bmp/src/main/kotlin/org/graphiks/kanvas/codec/bmp/`) compile against
  * a real type rather than a `null`-returning stub.
  *
  * The BMP framing emitted here is the classical

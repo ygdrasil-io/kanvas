@@ -7,7 +7,7 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.skia.codec.SkCodec
+import org.graphiks.kanvas.codec.Codec
 import org.skia.core.SkAlphaType
 import org.skia.core.SkColorSpaceXformSteps
 import org.skia.foundation.SkBitmap
@@ -24,7 +24,7 @@ import java.io.ByteArrayOutputStream
  * Covers :
  *  - `Encode(bitmap, options)` returns non-null bytes for an 8888
  *    bitmap.
- *  - Encode → decode round-trip via [SkCodec] is **byte-identical**
+ *  - Encode → decode round-trip via [Codec] is **byte-identical**
  *    on opaque pixels — PNG is lossless.
  *  - Encode-to-stream agrees with encode-to-bytes.
  *  - Real fixture bitmaps from the shared codec corpus round-trip
@@ -52,9 +52,9 @@ class SkPngEncoderTest {
     fun `encode then decode round-trips opaque pixels byte-identical`() {
         val src = makeGradient(8, 8) // alpha = 0xFF for every pixel
         val bytes = SkPngEncoder.Encode(src)!!
-        val codec = SkCodec.MakeFromData(bytes)!!
+        val codec = Codec.MakeFromData(bytes)!!
         val (decoded, result) = codec.getImage()
-        assertEquals(SkCodec.Result.kSuccess, result)
+        assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(decoded)
         assertEquals(src.width, decoded!!.width)
         assertEquals(src.height, decoded.height)
@@ -248,9 +248,9 @@ class SkPngEncoderTest {
     }
 
     private fun decode(bytes: ByteArray): SkBitmap {
-        val codec = SkCodec.MakeFromData(bytes)!!
+        val codec = Codec.MakeFromData(bytes)!!
         val (decoded, result) = codec.getImage()
-        assertEquals(SkCodec.Result.kSuccess, result)
+        assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(decoded)
         return decoded!!
     }

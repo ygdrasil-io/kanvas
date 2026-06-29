@@ -292,7 +292,7 @@ when rendered in a stock SVG engine (browser, Batik) is.
 - **Tests** :
   [SkSVGCanvasImageGradientTest.kt](kanvas-skia/src/test/kotlin/org/skia/svg/SkSVGCanvasImageGradientTest.kt)
   (14) — drawImage `<image>` emission with correct dimensions,
-  data-URL round-trip via [SkCodec](kanvas-skia/src/main/kotlin/org/skia/codec/SkCodec.kt)
+  data-URL round-trip via [Codec](kanvas-skia/src/main/kotlin/org/skia/codec/Codec.kt)
   (lossless because PNG), drawImageRect with full src vs sub-rect
   src (sub-rect path emits comment + warning), CTM honoured on
   `<image>`, linear gradient defs + fill URL + spread method

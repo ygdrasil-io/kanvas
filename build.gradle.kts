@@ -6,34 +6,34 @@ import org.gradle.api.tasks.testing.Test
 import javax.xml.parsers.DocumentBuilderFactory
 
 val pureKotlinCodecProjects = setOf(
-    "codec-api",
-    "codec-core",
-    "codec-common",
-    "codec-test-fixtures",
-    "codec-real-image-tests",
-    "codec-all-kotlin",
-    "codec-png-api",
-    "codec-png-kotlin",
-    "codec-jpeg-api",
-    "codec-jpeg-kotlin",
-    "codec-gif-kotlin",
-    "codec-bmp-kotlin",
-    "codec-wbmp-kotlin",
-    "codec-webp-kotlin",
-    "codec-ico-kotlin",
-    "codec-android",
-    "codec-animated",
-    "codec-extended",
+    "codec",
+    "codec:api",
+    "codec:core",
+    "codec:common",
+    "codec:test-fixtures",
+    "codec:real-image-tests",
+    "codec:png-api",
+    "codec:png",
+    "codec:jpeg-api",
+    "codec:jpeg",
+    "codec:gif",
+    "codec:bmp",
+    "codec:wbmp",
+    "codec:webp",
+    "codec:ico",
+    "codec:android",
+    "codec:animated",
+    "codec:extended",
 )
 
 val forbiddenCodecBackendProjects = setOf(
-    "codec-all-awt",
-    "codec-png-imageio",
-    "codec-jpeg-imageio",
-    "codec-gif-imageio",
-    "codec-bmp-imageio",
-    "codec-wbmp-imageio",
-    "codec-webp-imageio",
+    "all-awt",
+    "png-imageio",
+    "jpeg-imageio",
+    "gif-imageio",
+    "bmp-imageio",
+    "wbmp-imageio",
+    "webp-imageio",
 )
 
 val productionDependencyConfigurations = setOf(
@@ -2833,8 +2833,8 @@ tasks.register("checkSupportedCodecsDoc") {
             "Public encode APIs must return `null` or a documented stub behavior",
         )
         val requiredMetadataMarkers = listOf(
-            "Netscape loop count metadata exposed through `SkCodec.getRepetitionCount()`",
-            "ANIM loop count exposed through `SkCodec.getRepetitionCount()`",
+            "Netscape loop count metadata exposed through `Codec.getRepetitionCount()`",
+            "ANIM loop count exposed through `Codec.getRepetitionCount()`",
         )
 
         val missing = (requiredSections + requiredRows + requiredEncodeMarkers + requiredMetadataMarkers)
@@ -2869,14 +2869,14 @@ tasks.register("checkRealImageFixtureDocumentation") {
     description = "Fails if real codec image fixtures are missing source/license documentation."
 
     doLast {
-        val doc = file("codec-real-image-tests/FIXTURES.md")
-        val notice = file("codec-real-image-tests/THIRD_PARTY_FIXTURE_NOTICES.md")
-        val fixtureRoot = file("codec-real-image-tests/src/test/resources/codec-real-images")
+        val doc = file("codec/real-image-tests/FIXTURES.md")
+        val notice = file("codec/real-image-tests/THIRD_PARTY_FIXTURE_NOTICES.md")
+        val fixtureRoot = file("codec/real-image-tests/src/test/resources/codec-real-images")
         if (!doc.isFile) {
-            throw GradleException("Missing codec-real-image-tests/FIXTURES.md provenance document.")
+            throw GradleException("Missing codec/real-image-tests/FIXTURES.md provenance document.")
         }
         if (!notice.isFile) {
-            throw GradleException("Missing codec-real-image-tests/THIRD_PARTY_FIXTURE_NOTICES.md notice document.")
+            throw GradleException("Missing codec/real-image-tests/THIRD_PARTY_FIXTURE_NOTICES.md notice document.")
         }
         if (!fixtureRoot.isDirectory) {
             throw GradleException("Missing real image fixture resource directory: ${fixtureRoot.relativeTo(rootDir)}")
@@ -2938,7 +2938,7 @@ tasks.register("checkRealImageFixtureDocumentation") {
                 notes.isBlank() -> "$path must record notes"
                 family == "Skia upstream" && license != "Skia license" -> "$path Skia-derived row must use 'Skia license'"
                 family.startsWith("Repository generated") && license != "Repository test fixture" -> "$path generated row must use 'Repository test fixture'"
-                family == "Browser" && !source.startsWith("`codec-real-image-tests/sources/") -> "$path browser row must record the local browser source path"
+                family == "Browser" && !source.startsWith("`codec/real-image-tests/sources/") -> "$path browser row must record the local browser source path"
                 else -> null
             }
         }
@@ -3092,7 +3092,7 @@ tasks.register("checkProductionCodecRuntimeNoAwt") {
             throw GradleException(
                 buildString {
                     appendLine("Production modules must not depend on temporary AWT/ImageIO codec backends.")
-                    appendLine("Use :codec-all-kotlin for runtime codec dispatch.")
+                    appendLine("Use :codec for runtime codec dispatch.")
                     violations.sorted().forEach { appendLine("- $it") }
                 }
             )
@@ -3106,7 +3106,7 @@ tasks.register("checkProductionCodecImageClasspathNoJavaDesktop") {
 
     doLast {
         val violations = mutableListOf<String>()
-        val projectsToCheck = (pureKotlinCodecProjects + "codec-image-generator" + "kanvas-skia" + "cpu-raster")
+        val projectsToCheck = (pureKotlinCodecProjects + "codec:image-generator" + "kanvas-skia" + "cpu-raster")
             .mapNotNull { name -> findProject(":$name") }
 
         projectsToCheck.forEach { checkedProject ->
@@ -3238,9 +3238,9 @@ tasks.register("checkCpuRasterImageToolingNoAwt") {
             file("cpu-raster/src/main/kotlin/org/skia/testing/TestUtils.kt"),
             file("cpu-raster/src/main/kotlin/org/skia/testing/DiffImage.kt"),
             file("cpu-raster/src/test/kotlin/org/skia/testing/TestToolingTest.kt"),
-            file("cpu-raster/src/test/kotlin/org/skia/codec/SkAndroidCodecComputeSampleSizeJpegTest.kt"),
-            file("cpu-raster/src/test/kotlin/org/skia/codec/SkAndroidCodecGetAndroidPixelsTest.kt"),
-            file("cpu-raster/src/test/kotlin/org/skia/codec/SkAndroidCodecTest.kt"),
+            file("cpu-raster/src/test/kotlin/org/graphiks/kanvas/codec/AndroidCodecComputeSampleSizeJpegTest.kt"),
+            file("cpu-raster/src/test/kotlin/org/graphiks/kanvas/codec/AndroidCodecGetAndroidPixelsTest.kt"),
+            file("cpu-raster/src/test/kotlin/org/graphiks/kanvas/codec/AndroidCodecTest.kt"),
         )
         val violations = mutableListOf<String>()
         filesToCheck
@@ -3267,7 +3267,7 @@ tasks.register("checkCpuRasterImageToolingNoAwt") {
 
 tasks.register("checkCodecKotlinSwitchCriteria") {
     group = "verification"
-    description = "Runs the non-destructive codec-all-kotlin switch-readiness checks."
+    description = "Runs the non-destructive :codec switch-readiness checks."
 
     dependsOn(
         "checkSupportedCodecsDoc",
@@ -3277,9 +3277,9 @@ tasks.register("checkCodecKotlinSwitchCriteria") {
         "checkPureKotlinPngEncoderNoAwt",
         "checkProductionImageEncodeNoAwt",
         "checkImageEncodeTestsNoAwt",
-        ":codec-all-kotlin:test",
-        ":codec-real-image-tests:test",
-        ":codec-all-kotlin:jar",
+        ":codec:test",
+        ":codec:real-image-tests:test",
+        ":codec:jar",
         ":cpu-raster:testCodecWithKotlinBackend",
     )
 }
@@ -3292,16 +3292,16 @@ tasks.register("checkCodecImageComplete") {
         "checkCodecKotlinSwitchCriteria",
         "checkCpuRasterImageToolingNoAwt",
         "checkProductionCodecImageClasspathNoJavaDesktop",
-        ":codec-png-kotlin:test",
-        ":codec-jpeg-kotlin:test",
-        ":codec-gif-kotlin:test",
-        ":codec-bmp-kotlin:test",
-        ":codec-wbmp-kotlin:test",
-        ":codec-ico-kotlin:test",
-        ":codec-webp-kotlin:test",
-        ":codec-animated:test",
-        ":codec-android:test",
-        ":codec-image-generator:test",
+        ":codec:png:test",
+        ":codec:jpeg:test",
+        ":codec:gif:test",
+        ":codec:bmp:test",
+        ":codec:wbmp:test",
+        ":codec:ico:test",
+        ":codec:webp:test",
+        ":codec:animated:test",
+        ":codec:android:test",
+        ":codec:image-generator:test",
         ":kanvas-skia:test",
     )
 }

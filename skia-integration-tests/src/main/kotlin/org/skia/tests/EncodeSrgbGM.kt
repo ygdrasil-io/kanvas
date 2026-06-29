@@ -1,6 +1,6 @@
 package org.skia.tests
 
-import org.skia.codec.SkCodec
+import org.graphiks.kanvas.codec.Codec
 import org.skia.foundation.SkEncodedImageFormat
 import org.skia.core.SkCanvas
 import org.skia.encode.SkJpegEncoder
@@ -33,7 +33,7 @@ import org.skia.tools.ToolUtils
  * matches because:
  *  - the source bitmaps are read back into the test as raw 8888
  *    sRGB pixels regardless of whether the encoder embedded a
- *    profile (our [SkCodec] decoders default to sRGB on missing
+ *    profile (our [Codec] decoders default to sRGB on missing
  *    `iCCP`, matching the upstream behaviour for our test pipeline);
  *  - the JPEG encoder strips colour-space metadata in both ports.
  *
@@ -139,9 +139,9 @@ public open class EncodeSrgbGM(
             SkEncodedImageFormat.kWEBP -> SkWebpEncoder.Encode(bitmap)
             else -> null
         } ?: return null
-        val codec = SkCodec.MakeFromData(bytes) ?: return null
+        val codec = Codec.MakeFromData(bytes) ?: return null
         val (out, result) = codec.getImage()
-        if (result != SkCodec.Result.kSuccess || out == null) return null
+        if (result != Codec.Result.kSuccess || out == null) return null
         return out.asImage()
     }
 }

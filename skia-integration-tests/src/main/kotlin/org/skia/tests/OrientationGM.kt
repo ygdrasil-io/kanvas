@@ -1,8 +1,8 @@
 package org.skia.tests
 
 import org.skia.core.SkCanvas
-import org.skia.codec.SkCodecImageGenerator
-import org.skia.codec.SkImageGeneratorImages
+import org.graphiks.kanvas.codec.CodecImageGenerator
+import org.graphiks.kanvas.codec.ImageGeneratorImages
 import org.skia.foundation.SkImages
 import org.graphiks.math.SkISize
 import org.skia.tools.ToolUtils
@@ -27,8 +27,8 @@ import org.skia.tools.ToolUtils
  * coverage beyond what `_444` already exercises.
  *
  * **R-final.5 wiring.** [RespectOrientationJpegGM] is the entry point
- * that explicitly funnels through [SkImageGeneratorImages.DeferredFromGenerator] +
- * [SkCodecImageGenerator] — the API surface this sprint adds. The
+ * that explicitly funnels through [ImageGeneratorImages.DeferredFromGenerator] +
+ * [CodecImageGenerator] — the API surface this sprint adds. The
  * sibling [Orientation444GM] uses the standard
  * [ToolUtils.GetResourceAsImage] path and ships alongside as a
  * smoke-test of the same eight JPEGs through the canonical decode.
@@ -37,8 +37,8 @@ import org.skia.tools.ToolUtils
  * The JPEG codec now parses the EXIF Orientation
  * tag (0x0112) out of the APP1 segment and applies the corresponding
  * rotation/flip to the decoded pixels via
- * [org.skia.utils.SkPixmapUtils.Orient] — surfaced through
- * [org.skia.codec.SkCodec.getOrigin]. Both GMs are therefore expected
+ * [org.skia.utils.PixmapUtils.Orient] — surfaced through
+ * [org.graphiks.kanvas.codec.Codec.getOrigin]. Both GMs are therefore expected
  * to render at high pixel-fidelity vs. the upstream PNG references
  * (each of the eight tiles displays the same RGB-quadrant + corner-
  * label layout, only the centre digit changes).
@@ -75,14 +75,14 @@ public class Orientation444GM : GM() {
 
 /**
  * Port of Skia's `respect_orientation_jpeg` GM (same `gm/orientation.cpp`
- * file). Loads each JPEG via [SkImageGeneratorImages.DeferredFromGenerator]
- * + [SkCodecImageGenerator.MakeFromEncodedCodec] — the explicit
+ * file). Loads each JPEG via [ImageGeneratorImages.DeferredFromGenerator]
+ * + [CodecImageGenerator.MakeFromEncodedCodec] — the explicit
  * generator path the upstream `make_images` test exercise targets.
  *
  * The grid layout matches [Orientation444GM] (4×2, 400 × 160), with the
- * sole behavioural difference being the [SkImageGeneratorImages.DeferredFromGenerator]
+ * sole behavioural difference being the [ImageGeneratorImages.DeferredFromGenerator]
  * detour (which on upstream Skia threads the EXIF tag through
- * `SkCodecImageGenerator::onGetPixels`).
+ * `CodecImageGenerator::onGetPixels`).
  */
 public class RespectOrientationJpegGM : GM() {
 
@@ -95,8 +95,8 @@ public class RespectOrientationJpegGM : GM() {
         for (i in 1..8) {
             val data = ToolUtils.GetResourceAsData("images/orientation/${i}_444.jpg")
             val image = if (data != null) {
-                val gen = SkCodecImageGenerator.MakeFromEncodedCodec(data.toByteArray())
-                if (gen != null) SkImageGeneratorImages.DeferredFromGenerator(gen) else null
+                val gen = CodecImageGenerator.MakeFromEncodedCodec(data.toByteArray())
+                if (gen != null) ImageGeneratorImages.DeferredFromGenerator(gen) else null
             } else {
                 null
             }

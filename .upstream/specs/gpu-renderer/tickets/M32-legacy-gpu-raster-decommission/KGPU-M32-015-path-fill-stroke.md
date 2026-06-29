@@ -2,7 +2,6 @@
 id: KGPU-M32-015
 title: "Legacy decommission: path-fill-stroke port (path fill) / refuse (path stroke)"
 status: done
-status: review
 milestone: M32
 priority: P0
 owner_area: legacy-cleanup

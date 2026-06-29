@@ -5,7 +5,7 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.skia.codec.SkCodec
+import org.graphiks.kanvas.codec.Codec
 import org.skia.foundation.SkEncodedImageFormat
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorSpace
@@ -18,11 +18,11 @@ import org.skia.foundation.SkImage
  * Phase R2.12 promoted the historical [SkImage.encodeToData] extension
  * to a member returning `SkData?` (matching the upstream
  * `sk_sp<SkData>` shape). This file still lives in the encode package
- * because the round-trip assertions need [SkCodec] and the per-format
+ * because the round-trip assertions need [Codec] and the per-format
  * encoders, but the call site now goes through the [SkImage] member.
  *
  * Covers :
- *  - default format (PNG) round-trips byte-identical via [SkCodec].
+ *  - default format (PNG) round-trips byte-identical via [Codec].
  *  - JPEG dispatch honours the [quality] argument (lower → smaller).
  *  - Unsupported formats (GIF / BMP / WBMP / WEBP / …) return `null`
  *    rather than crashing. This convenience API remains PNG/JPEG-only;
@@ -43,9 +43,9 @@ class SkImageEncodeTest {
         assertEquals(0x89.toByte(), bytes[0])
         assertEquals(0x50.toByte(), bytes[1])
         // Decoded pixels must equal what the image exposes via peekPixel.
-        val codec = SkCodec.MakeFromData(bytes)!!
+        val codec = Codec.MakeFromData(bytes)!!
         val (decoded, result) = codec.getImage()
-        assertEquals(SkCodec.Result.kSuccess, result)
+        assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(decoded)
         for (y in 0 until 8) for (x in 0 until 8) {
             assertEquals(

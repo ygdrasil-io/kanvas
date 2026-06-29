@@ -10,7 +10,7 @@ dependencies {
     api(project(":math"))
 
     implementation(project(":font:scaler"))
-    implementation(project(":codec-png-kotlin"))
+    implementation(project(":codec:png"))
     implementation(kotlin("stdlib"))
     testImplementation(kotlin("test"))
 }

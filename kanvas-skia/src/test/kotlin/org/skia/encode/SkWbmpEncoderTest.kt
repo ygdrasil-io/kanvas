@@ -5,7 +5,7 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.skia.codec.SkCodec
+import org.graphiks.kanvas.codec.Codec
 import org.skia.foundation.SkBitmap
 import java.io.ByteArrayOutputStream
 
@@ -138,10 +138,10 @@ class SkWbmpEncoderTest {
     }
 
     private fun decodeWbmp(bytes: ByteArray): SkBitmap {
-        val codec = SkCodec.MakeFromData(bytes)
+        val codec = Codec.MakeFromData(bytes)
         assertNotNull(codec, "pure Kotlin WBMP codec must decode WBMP bytes")
         val (bitmap, result) = codec!!.getImage()
-        assertEquals(SkCodec.Result.kSuccess, result)
+        assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
         return bitmap!!
     }

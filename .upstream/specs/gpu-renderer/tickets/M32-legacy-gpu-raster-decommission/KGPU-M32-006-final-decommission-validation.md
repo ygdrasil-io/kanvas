@@ -1,7 +1,7 @@
 ---
 id: KGPU-M32-006
 title: "Legacy decommission: final decommission validation + evidence bundle + PR"
-status: proposed
+status: done
 milestone: M32
 priority: P0
 owner_area: legacy-cleanup
@@ -74,7 +74,7 @@ rtk git diff --check && rtk ./gradlew --no-daemon :gpu-raster:test :gpu-renderer
 
 ## Status Notes
 
-- `proposed`: Ticket created from M32 README scaffold.
+- `done`: gpu-raster module removed (03d12fdc), tests pass (589 green, HEAD c50fec44), evidence bundle at `reports/gpu-renderer/2026-06-26-m32-*.md`. PR delivered and independent review completed.
 
 ## Linear Labels
 

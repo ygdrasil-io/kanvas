@@ -20,7 +20,7 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUTextureDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUTextureResourceRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUTextureViewDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUUseToken
-import org.skia.codec.SkCodec
+import org.graphiks.kanvas.codec.Codec
 import java.security.MessageDigest
 
 /** Image upload artifact key. */
@@ -247,7 +247,7 @@ class GPUImageDecodePlanner {
             )
         }
 
-        val codec = SkCodec.MakeFromData(bytes)
+        val codec = Codec.MakeFromData(bytes)
         if (codec == null) {
             return GPUImageDecodePlan.Refused(
                 code = "dependency.image.decode.codec_not_found",
@@ -256,7 +256,7 @@ class GPUImageDecodePlanner {
         }
 
         val (bitmap, result) = codec.getImage()
-        if (result != SkCodec.Result.kSuccess || bitmap == null) {
+        if (result != Codec.Result.kSuccess || bitmap == null) {
             return GPUImageDecodePlan.Refused(
                 code = "dependency.image.decode.failed",
                 reason = "Decode failed for $mimeType with result $result.",

@@ -7,10 +7,10 @@ import org.graphiks.math.SkISize
  * Placeholder port of upstream Skia `gm/animcodecplayer_exif.cpp::AnimCodecPlayerExifGM`.
  *
  * Original draws every frame of an animated codec into a grid (with EXIF
- * orientation applied). Requires `SkAnimCodecPlayer` + `SkCodec` decode
+ * orientation applied). Requires `SkAnimCodecPlayer` + `Codec` decode
  * pipeline that doesn't exist in `:kanvas-skia` yet.
  *
- * TODO: missing API — `SkAnimCodecPlayer`, `SkCodec::MakeFromData`,
+ * TODO: missing API — `SkAnimCodecPlayer`, `Codec::MakeFromData`,
  * frame-by-frame seek (`fPlayer->seek(duration)`), and per-frame
  * `getFrameInfo()` metadata. Flag-planting stub: empty draw, fixed size.
  */
@@ -22,6 +22,6 @@ public class AnimCodecPlayerExifGM(
     override fun getISize(): SkISize = SkISize.Make(100, 100)
 
     override fun onDraw(canvas: SkCanvas?) {
-        // TODO: missing API — SkAnimCodecPlayer + SkCodec frame seek pipeline.
+        // TODO: missing API — SkAnimCodecPlayer + Codec frame seek pipeline.
     }
 }

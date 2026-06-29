@@ -8,7 +8,7 @@ import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
-import org.skia.codec.SkCodec
+import org.graphiks.kanvas.codec.Codec
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkColorType
@@ -323,10 +323,10 @@ class SkWebpEncoderTest {
     }
 
     private fun decodeWebp(bytes: ByteArray): SkBitmap {
-        val codec = SkCodec.MakeFromData(bytes)
+        val codec = Codec.MakeFromData(bytes)
         assertNotNull(codec, "pure Kotlin WebP codec must decode the produced WebP")
         val (bitmap, result) = codec!!.getImage()
-        assertEquals(SkCodec.Result.kSuccess, result)
+        assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
         return bitmap!!
     }

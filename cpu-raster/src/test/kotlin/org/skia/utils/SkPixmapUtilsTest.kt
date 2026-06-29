@@ -10,14 +10,14 @@ import org.graphiks.math.SkColor
 import org.skia.foundation.SkImageInfo
 
 /**
- * Unit tests for [SkPixmapUtils.Orient] and [SkPixmapUtils.SwapWidthHeight].
+ * Unit tests for [PixmapUtils.Orient] and [PixmapUtils.SwapWidthHeight].
  *
  * Origin coverage (R-suivi.9 complete — all 8 origins implemented).
- * See [SkPixmapUtilsOrientAllOriginsTest] for exhaustive coverage of
+ * See [PixmapUtilsOrientAllOriginsTest] for exhaustive coverage of
  * the six rotation/transpose origins on a 4×4 source ; this file keeps
  * the original 2×2 row-flip smoke tests.
  */
-class SkPixmapUtilsTest {
+class PixmapUtilsTest {
 
     private val opaqueRed: SkColor = (0xFFFF0000).toInt()
     private val opaqueBlue: SkColor = (0xFF0000FF).toInt()
@@ -38,7 +38,7 @@ class SkPixmapUtilsTest {
     fun `Orient kTopLeft is an identity copy`() {
         val src = twoToneBitmap()
         val dst = SkBitmap(2, 2)
-        val ok = SkPixmapUtils.Orient(dst, src, SkEncodedOrigin.kTopLeft)
+        val ok = PixmapUtils.Orient(dst, src, SkEncodedOrigin.kTopLeft)
         assertTrue(ok)
         assertEquals(opaqueRed, dst.getPixel(0, 0))
         assertEquals(opaqueRed, dst.getPixel(1, 0))
@@ -50,7 +50,7 @@ class SkPixmapUtilsTest {
     fun `Orient kBottomLeft flips rows vertically`() {
         val src = twoToneBitmap()
         val dst = SkBitmap(2, 2)
-        val ok = SkPixmapUtils.Orient(dst, src, SkEncodedOrigin.kBottomLeft)
+        val ok = PixmapUtils.Orient(dst, src, SkEncodedOrigin.kBottomLeft)
         assertTrue(ok)
         // Source row 0 (red) should now be at the bottom (y = 1).
         assertEquals(opaqueRed, dst.getPixel(0, 1))
@@ -64,14 +64,14 @@ class SkPixmapUtilsTest {
     fun `Orient with mismatched dimensions returns false`() {
         val src = twoToneBitmap()
         val dst = SkBitmap(3, 3)
-        val ok = SkPixmapUtils.Orient(dst, src, SkEncodedOrigin.kTopLeft)
+        val ok = PixmapUtils.Orient(dst, src, SkEncodedOrigin.kTopLeft)
         assertFalse(ok)
     }
 
     @Test
     fun `SwapWidthHeight swaps the two dimensions`() {
         val info = SkImageInfo.Make(width = 7, height = 11)
-        val swapped = SkPixmapUtils.SwapWidthHeight(info)
+        val swapped = PixmapUtils.SwapWidthHeight(info)
         assertEquals(11, swapped.width)
         assertEquals(7, swapped.height)
         assertEquals(info.colorType, swapped.colorType)

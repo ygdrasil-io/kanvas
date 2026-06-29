@@ -2,7 +2,6 @@
 id: KGPU-M32-013
 title: "Legacy decommission: rect-rrect-stroke formal refusal"
 status: done
-status: review
 milestone: M32
 priority: P1
 owner_area: legacy-cleanup

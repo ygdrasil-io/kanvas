@@ -5,7 +5,7 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.skia.codec.SkCodec
+import org.graphiks.kanvas.codec.Codec
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkColorType
@@ -16,7 +16,7 @@ import org.skia.foundation.SkColorType
  * Covers :
  *  - `Encode(bitmap, options)` returns non-null bytes with the JPEG
  *    SOI signature.
- *  - Encode → decode round-trip via [SkCodec] preserves opaque
+ *  - Encode → decode round-trip via [Codec] preserves opaque
  *    pixels within JPEG quantisation tolerance (lossy ; relaxed
  *    delta).
  *  - Lower [SkJpegEncoder.Options.quality] produces a smaller file
@@ -49,9 +49,9 @@ class SkJpegEncoderTest {
     fun `flat-colour JPEG round-trips within quantisation tolerance`() {
         val src = makeFlat(16, 16, 0xFF808080.toInt())
         val bytes = SkJpegEncoder.Encode(src, SkJpegEncoder.Options(quality = 100))!!
-        val codec = SkCodec.MakeFromData(bytes)!!
+        val codec = Codec.MakeFromData(bytes)!!
         val (decoded, result) = codec.getImage()
-        assertEquals(SkCodec.Result.kSuccess, result)
+        assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(decoded)
         // JPEG is lossy ; even a flat mid-grey can drift a few ulps
         // on the chroma channels through the subsampling pipeline.
@@ -97,7 +97,7 @@ class SkJpegEncoderTest {
         // an opaque JPEG (alpha is dropped per kIgnore default).
         val src = makeFlat(8, 8, 0x80FFFFFF.toInt())
         val bytes = SkJpegEncoder.Encode(src)!!
-        val (decoded, _) = SkCodec.MakeFromData(bytes)!!.getImage()
+        val (decoded, _) = Codec.MakeFromData(bytes)!!.getImage()
         assertNotNull(decoded)
         for (y in 0 until 8) for (x in 0 until 8) {
             val a = (decoded!!.getPixel(x, y) ushr 24) and 0xFF
@@ -186,8 +186,8 @@ class SkJpegEncoderTest {
     }
 
     private fun decode(bytes: ByteArray): SkBitmap {
-        val (decoded, result) = SkCodec.MakeFromData(bytes)!!.getImage()
-        assertEquals(SkCodec.Result.kSuccess, result)
+        val (decoded, result) = Codec.MakeFromData(bytes)!!.getImage()
+        assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(decoded)
         return decoded!!
     }

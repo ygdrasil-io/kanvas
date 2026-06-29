@@ -1,7 +1,7 @@
 ---
 id: KGPU-M32-004
 title: "Legacy decommission: relocate shared WGSL / conformance / runtime-shader / gate infra out of :gpu-raster"
-status: proposed
+status: done
 milestone: M32
 priority: P0
 owner_area: legacy-cleanup
@@ -78,7 +78,7 @@ rtk git diff --check && rtk ./gradlew --no-daemon :gpu-raster:test
 
 ## Status Notes
 
-- `proposed`: Ticket created from M32 README scaffold.
+- `done`: gpu-raster module removed entirely (commit 03d12fdc). Shared WGSL/conformance/gate infra was either migrated to `:gpu-renderer` or deleted with the module. Zero functional gpu-raster references remain outside doc comments.
 
 ## Linear Labels
 

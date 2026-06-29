@@ -51,7 +51,7 @@ GMs Kotlin sans correspondance dans le tree de référence (probablement issus d
 | R-final.5 — Generators + mipmaps + GIF anim (PR #443) | 346 / 437 | 79 % |
 | R-final.6 — Encodeurs via javax.imageio (PR #442) | 351 / 437 | 80 % |
 | R-final.7 — Misc raster (M44 persp + CoordClamp + HighContrast + TableMaskFilter, PR #445) | 356 / 437 | 81 % |
-| R-final.8 — SkAnimatedImage + EXIF + YUVUtils (PR #444) | 357 / 437 | 82 % |
+| R-final.8 — AnimatedImage + EXIF + YUVUtils (PR #444) | 357 / 437 | 82 % |
 | R-final.9 — Variable fonts + HDR pipeline (PR #447) | 357 / 437 | 82 % (+ 2 GMs in-progress — variantes Distortable.ttf / HDR PQ) |
 | **R-final.S — JNI stubs documented (PR #446)** | **357 / 437** | **82 %** (10 squelettes compile-only) |
 
@@ -117,7 +117,7 @@ Le catalogue H2 accumulé au fil des vagues H3 (34 sous-tâches) est désormais 
 **Séquencement** :
 - **Phase R1** — Quick wins (25 items, effort S) : factories `SkColorFilters` / `SkShaders`, `SkTableMaskFilter`, `SkShaderMaskFilter`, `SkHighContrastFilter`, `SkPath.contains`, `MakeBlur(respectCTM)`, color types `kRGB_565`/`kGray_8`, `SkPaint.computeFastBounds`, …
 - **Phase R2** — Classes moyennes (20 items, effort M) : `SkPathMeasure`, `SkColorMatrix`, `SkPixmap`/`SkPixelRef`, `SkImageGenerator`, `SkImage.makeSubset`/`makeColorSpace`, `SkCanvas.drawRegion`/`drawImageNine`/`clipShader`, factories `SkImages` / `SkSurfaces` / `SkShaders`, `Sk3DView`, `SkICC`, `SkColorSpace.MakeSRGB`, `SkWebpEncoder`, …
-- **Phase R3** — Grandes classes (11 items, effort L/XL) : `SkM44` complet, `SkFontMgr` + fontconfig, `SkCustomTypefaceBuilder`, `SkStream`/`SkWStream`, `SkAndroidCodec`, `SkDocument` + PDF, `SkShadowUtils`, `SkRasterHandleAllocator`, décodeurs étendus (AVIF / JpegXL / RAW / ICO), YUV multi-plane.
+- **Phase R3** — Grandes classes (11 items, effort L/XL) : `SkM44` complet, `SkFontMgr` + fontconfig, `SkCustomTypefaceBuilder`, `SkStream`/`SkWStream`, `AndroidCodec`, `SkDocument` + PDF, `SkShadowUtils`, `SkRasterHandleAllocator`, décodeurs étendus (AVIF / JpegXL / RAW / ICO), YUV multi-plane.
 
 Voir `API_REMEDIATION_PLAN.md` pour les signatures précises, les en-têtes upstream, et l'annexe brute fichier par fichier.
 
@@ -130,9 +130,9 @@ Les 5 petits gaps listés ci-dessus. Chacun ½ journée. Effort cumulé : 2-3 jo
 **12 vagues livrées** (wave 1 → wave 12, ~104 cpps portés cumulés depuis snapshot post-G10). Les `❌` "non tentés" sont tous adressés.
 
 Bloqueurs émergés en wave 6-12 (à logguer comme nouveaux R-suivi ou en pre-block) :
-- **Codec animé** : `SkCodec.getFrameInfo` + per-frame `getPixels(Options{frameIndex})` non exposés (animated_gif, animated_image_orientation)
-- **`SkAnimatedImage` module** : non porté (animated_image_orientation)
-- **`SkVideoDecoder`** : FFmpeg + GrContext only, pas de CPU path (video_decoder)
+- **Codec animé** : `Codec.getFrameInfo` + per-frame `getPixels(Options{frameIndex})` non exposés (animated_gif, animated_image_orientation)
+- **`AnimatedImage` module** : non porté (animated_image_orientation)
+- **`VideoDecoder`** : FFmpeg + GrContext only, pas de CPU path (video_decoder)
 - **`SkImages.MakeWithFilter`** + `canvas.makeSurface` + `makeTemporaryImage` + HDR PQ retag (hdr_pip_blur)
 - **COLR v1** + `SkFontArguments::VariationPosition` + `SkTypeface.makeClone(args)` (palette, colrv1, scaledemoji×2, fontscalerdistortable)
 - **Color emoji typefaces** (CBDT/Sbix/ColrV0/Svg) (scaledemoji, coloremoji_blendmodes)
@@ -175,7 +175,7 @@ Bloqueurs émergés en wave 6-12 (à logguer comme nouveaux R-suivi ou en pre-bl
 | `analytic_gradients.cpp` | ✅ | `AnalyticGradientShaderGM.kt` | — |
 | `androidblendmodes.cpp` | ✅ | `AndroidBlendModesGM.kt` | — |
 | `animated_gif.cpp` | ✅ | `AnimatedGifGM.kt` | R-final.5 — 100% similarity |
-| `animated_image_orientation.cpp` | ✅ | `AnimatedImageOrientationGM.kt` | R-final.8 — via SkAnimatedImage + EXIF |
+| `animated_image_orientation.cpp` | ✅ | `AnimatedImageOrientationGM.kt` | R-final.8 — via AnimatedImage + EXIF |
 | `animatedimageblurs.cpp` | ✅ | `AnimatedImageBlursGM.kt` | — (t=0 snapshot) |
 | `anisotropic.cpp` | ✅ | `AnisoMipsGM.kt`, `AnisotropicImageScaleAnisoGM.kt`, `AnisotropicImageScaleLinearGM.kt`, `AnisotropicImageScaleMipGM.kt`, `AnisotropicMipGM.kt` | — |
 | `annotated_text.cpp` | ✅ | `AnnotatedTextGM.kt` | — |
@@ -587,7 +587,7 @@ Bloqueurs émergés en wave 6-12 (à logguer comme nouveaux R-suivi ou en pre-bl
 | `variedtext.cpp` | ✅ | `VariedTextGM.kt (4 variants Clipped/IgnorableClip × Lcd/NoLcd)` | — |
 | `vertices.cpp` | ✅ | `VerticesCollapsedGM.kt`, `VerticesPerspectiveGM.kt` | — |
 | `verylargebitmap.cpp` | ✅ | `VeryLargeBitmapGM.kt` | — |
-| `video_decoder.cpp` | 🚧 | — | SkVideoDecoder = FFmpeg + GrContext only ; pas de CPU path |
+| `video_decoder.cpp` | 🚧 | — | VideoDecoder = FFmpeg + GrContext only ; pas de CPU path |
 | `wacky_yuv_formats.cpp` | 🚧 | — | GPU-only (pas de PNG de référence raster) |
 | `widebuttcaps.cpp` | ✅ | `WideButtCapsGM.kt` | — |
 | `windowrectangles.cpp` | ✅ | `WindowRectanglesGM.kt` | R-final.1 |

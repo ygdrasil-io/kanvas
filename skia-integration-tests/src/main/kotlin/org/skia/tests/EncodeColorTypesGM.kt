@@ -1,6 +1,6 @@
 package org.skia.tests
 
-import org.skia.codec.SkCodec
+import org.graphiks.kanvas.codec.Codec
 import org.skia.foundation.SkEncodedImageFormat
 import org.skia.core.SkCanvas
 import org.skia.encode.SkJpegEncoder
@@ -158,9 +158,9 @@ public open class EncodeColorTypesGM(
     }
 
     private fun decodeImage(bytes: ByteArray): SkImage? {
-        val codec = SkCodec.MakeFromData(bytes) ?: return null
+        val codec = Codec.MakeFromData(bytes) ?: return null
         val (bitmap, result) = codec.getImage()
-        if (result != SkCodec.Result.kSuccess || bitmap == null) return null
+        if (result != Codec.Result.kSuccess || bitmap == null) return null
         return bitmap.asImage()
     }
 }

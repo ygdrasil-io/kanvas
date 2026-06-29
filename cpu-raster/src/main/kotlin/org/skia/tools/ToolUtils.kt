@@ -1,6 +1,6 @@
 package org.skia.tools
 
-import org.skia.codec.SkCodec
+import org.graphiks.kanvas.codec.Codec
 import org.skia.core.SkCanvas
 import org.skia.core.SkSurface
 import org.skia.foundation.SkBitmap
@@ -262,22 +262,22 @@ public object ToolUtils {
     /**
      * Mirrors `sk_sp<SkImage> ToolUtils::GetResourceAsImage(const char*)`
      * (`tools/DecodeUtils.h:31`). Loads the encoded bytes via
-     * [GetResourceAsData], dispatches them through [SkCodec.MakeFromData],
+     * [GetResourceAsData], dispatches them through [Codec.MakeFromData],
      * and returns the decoded [SkImage]. Returns `null` if the resource
      * is missing, no codec recognises its container format, or the decode
      * fails — mirrors upstream's `nullptr` short-circuits.
      *
      * The Kotlin port collapses upstream's `SkImages::DeferredFromEncodedData`
-     * → lazy decode pipeline into an eager decode through [SkCodec.getImage].
+     * → lazy decode pipeline into an eager decode through [Codec.getImage].
      * `:kanvas-skia` has no GPU upload path that would benefit from lazy
      * decoding, and eager-decode keeps every test deterministic regardless
      * of how many times the caller samples the image.
      */
     public fun GetResourceAsImage(path: String): SkImage? {
         val data = GetResourceAsData(path) ?: return null
-        val codec = SkCodec.MakeFromData(data.toByteArray()) ?: return null
+        val codec = Codec.MakeFromData(data.toByteArray()) ?: return null
         val (bitmap, result) = codec.getImage()
-        if (result != SkCodec.Result.kSuccess || bitmap == null) return null
+        if (result != Codec.Result.kSuccess || bitmap == null) return null
         return bitmap.asImage()
     }
 
@@ -293,14 +293,14 @@ public object ToolUtils {
      * Upstream's signature takes a `SkBitmap*` that the function
      * `allocPixels`-resizes on success ; our [SkBitmap] is constructed
      * with fixed dimensions and the caller is responsible for sizing
-     * [dst] to the codec's [SkCodec.getInfo] (typically queried via
-     * [GetResourceAsData] + [SkCodec.MakeFromData] for the dimensions
+     * [dst] to the codec's [Codec.getInfo] (typically queried via
+     * [GetResourceAsData] + [Codec.MakeFromData] for the dimensions
      * before allocating the bitmap).
      */
     public fun GetResourceAsBitmap(path: String, dst: SkBitmap): Boolean {
         val data = GetResourceAsData(path) ?: return false
-        val codec = SkCodec.MakeFromData(data.toByteArray()) ?: return false
-        return codec.getPixels(dst) == SkCodec.Result.kSuccess
+        val codec = Codec.MakeFromData(data.toByteArray()) ?: return false
+        return codec.getPixels(dst) == Codec.Result.kSuccess
     }
 
     /**

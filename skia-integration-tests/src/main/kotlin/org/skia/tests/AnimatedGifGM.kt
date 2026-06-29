@@ -1,6 +1,6 @@
 package org.skia.tests
 
-import org.skia.codec.SkCodec
+import org.graphiks.kanvas.codec.Codec
 import org.skia.core.SkCanvas
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkImage
@@ -19,14 +19,14 @@ import org.graphiks.math.SkISize
  * `:kanvas-skia`'s test harness, so we statically pick frame 0 there.
  *
  * **Surface tested.** This GM is the canonical consumer for the
- * R-final.5 `SkCodec` multi-frame surface :
- *  - [SkCodec.getFrameCount] — returns the number of decoded frames.
- *  - [SkCodec.getFrameInfo] — per-frame `requiredFrame` / `durationMs`.
- *  - [SkCodec.getPixels] with [SkCodec.Options]`(frameIndex, priorFrame)`.
+ * R-final.5 `Codec` multi-frame surface :
+ *  - [Codec.getFrameCount] — returns the number of decoded frames.
+ *  - [Codec.getFrameInfo] — per-frame `requiredFrame` / `durationMs`.
+ *  - [Codec.getPixels] with [Codec.Options]`(frameIndex, priorFrame)`.
  *
  * The GM honours the upstream `priorFrame` optimisation : if the
  * required frame's pixels are already on-hand (cached in `frames[]`),
- * we feed them through [SkCodec.Options.priorFrame] so the codec
+ * we feed them through [Codec.Options.priorFrame] so the codec
  * shortcuts the dependency-chain reconstruction. kanvas-skia's
  * The GIF codec pre-composes every frame at construction time, so the
  * hint is informational on this back-end — but the upstream-faithful
@@ -36,8 +36,8 @@ import org.graphiks.math.SkISize
  */
 public class AnimatedGifGM : GM() {
 
-    private var codec: SkCodec? = null
-    private var frameInfos: List<SkCodec.FrameInfo> = emptyList()
+    private var codec: Codec? = null
+    private var frameInfos: List<Codec.FrameInfo> = emptyList()
     private val frames: MutableList<SkBitmap?> = mutableListOf()
 
     override fun getName(): String = "animatedGif"
@@ -59,7 +59,7 @@ public class AnimatedGifGM : GM() {
         if (codec != null) return true
         val data = org.skia.tools.ToolUtils.GetResourceAsData("images/test640x479.gif")
             ?: return false
-        codec = SkCodec.MakeFromData(data.toByteArray()) ?: return false
+        codec = Codec.MakeFromData(data.toByteArray()) ?: return false
         frameInfos = codec!!.getFrameInfo()
         // Initialise the per-frame bitmap cache.
         repeat(frameInfos.size) { frames += null }
@@ -97,9 +97,9 @@ public class AnimatedGifGM : GM() {
             val info: SkImageInfo = cd.getInfo()
             bm = SkBitmap(info.width, info.height, info.colorSpace, info.colorType)
 
-            var priorFrame = SkCodec.kNoFrame
+            var priorFrame = Codec.kNoFrame
             val required = frameInfos[frameIndex].requiredFrame
-            if (required != SkCodec.kNoFrame) {
+            if (required != Codec.kNoFrame) {
                 val requiredBm = frames.getOrNull(required)
                 if (requiredBm != null) {
                     // Seed the destination with the required frame's
@@ -111,9 +111,9 @@ public class AnimatedGifGM : GM() {
                 }
             }
 
-            val opts = SkCodec.Options(frameIndex = frameIndex, priorFrame = priorFrame)
+            val opts = Codec.Options(frameIndex = frameIndex, priorFrame = priorFrame)
             val res = cd.getPixels(info, bm, opts)
-            if (res != SkCodec.Result.kSuccess) {
+            if (res != Codec.Result.kSuccess) {
                 return
             }
             frames[frameIndex] = bm

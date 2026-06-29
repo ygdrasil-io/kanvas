@@ -5,7 +5,7 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.skia.codec.SkCodec
+import org.graphiks.kanvas.codec.Codec
 import org.skia.foundation.SkBitmap
 import org.graphiks.math.SkColorGetA
 import org.graphiks.math.SkColorGetB
@@ -20,7 +20,7 @@ import java.io.ByteArrayOutputStream
  *  - the framing starts with the `'BM'` signature and a well-formed
  *    `BITMAPFILEHEADER` + `BITMAPINFOHEADER` ;
  *  - encode → decode round-trips opaque RGB pixels byte-identical
- *    through [SkCodec] / codec-bmp-kotlin ;
+ *    through [Codec] / :codec:bmp ;
  *  - the [SkBmpEncoder.BmpFormat.kBGR_888] code path drops alpha and
  *    pads rows correctly when the width is not a multiple of 4 bytes.
  */
@@ -170,10 +170,10 @@ class SkBmpEncoderTest {
     }
 
     private fun decodeBmp(bytes: ByteArray): SkBitmap {
-        val codec = SkCodec.MakeFromData(bytes)
+        val codec = Codec.MakeFromData(bytes)
         assertNotNull(codec, "pure Kotlin BMP codec must decode the produced BMP")
         val (bitmap, result) = codec!!.getImage()
-        assertEquals(SkCodec.Result.kSuccess, result)
+        assertEquals(Codec.Result.kSuccess, result)
         assertNotNull(bitmap)
         return bitmap!!
     }

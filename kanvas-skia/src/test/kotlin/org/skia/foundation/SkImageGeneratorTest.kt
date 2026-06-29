@@ -16,13 +16,13 @@ import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.skia.codec.SkImageGeneratorImages
+import org.graphiks.kanvas.codec.ImageGeneratorImages
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
 /**
  * Phase R2 — exercises [SkImageGenerator] (abstract base) and the
- * [SkImageGeneratorImages.DeferredFromGenerator] factory.
+ * [ImageGeneratorImages.DeferredFromGenerator] factory.
  */
 class SkImageGeneratorTest {
 
@@ -143,7 +143,7 @@ class SkImageGeneratorTest {
     fun `DeferredFromGenerator returns a populated SkImage`() {
         val info = SkImageInfo.Make(3, 2, SkColorType.kRGBA_8888, SkAlphaType.kUnpremul)
         val gen = ConstantColorGenerator(info, 0xCC112233.toInt())
-        val img = SkImageGeneratorImages.DeferredFromGenerator(gen)
+        val img = ImageGeneratorImages.DeferredFromGenerator(gen)
         assertNotNull(img)
         img!!
         assertEquals(3, img.width)
