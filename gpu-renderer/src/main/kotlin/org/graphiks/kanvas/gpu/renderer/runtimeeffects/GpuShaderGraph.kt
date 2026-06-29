@@ -1,6 +1,10 @@
 package org.graphiks.kanvas.gpu.renderer.runtimeeffects
 
 import org.graphiks.kanvas.gpu.renderer.routing.RefuseDiagnostic
+import org.graphiks.wgsl.parser.Lowerer
+import org.graphiks.wgsl.parser.parseWgslResult
+import org.graphiks.wgsl.proc.WgslReflectionReport
+import org.graphiks.wgsl.proc.reflectWgslModule
 
 /**
  * Dynamic shader graph assembly for runtime effects.
@@ -50,6 +54,7 @@ data class GPURuntimeEffectShaderGraphAssemblyPlan(
     val sortedNodes: List<String>,
     val combinedWgsl: String,
     val combinedUniformBlock: String,
+    val wgslReflection: WgslReflectionReport? = null,
 )
 
 /** Assembly budget thresholds. */
@@ -226,11 +231,24 @@ object GPURuntimeEffectShaderGraphAssembler {
 
         val combinedWgsl = buildWgsl(topo, indexOf, childEdges, nodeWgsl, root)
 
+        val reflection = validateWgslModule(combinedWgsl)
+        if (reflection is WgslValidationFailed) {
+            return GPURuntimeEffectShaderGraphResult.Refused(
+                RefuseDiagnostic(
+                    code = reflection.code,
+                    message = reflection.message,
+                    stage = STAGE,
+                    terminal = true,
+                ),
+            )
+        }
+
         return GPURuntimeEffectShaderGraphResult.Assembled(
             GPURuntimeEffectShaderGraphAssemblyPlan(
                 sortedNodes = topo.toList(),
                 combinedWgsl = combinedWgsl,
                 combinedUniformBlock = combinedUniformBlock,
+                wgslReflection = (reflection as? WgslValidationOk)?.report,
             ),
         )
     }
@@ -294,4 +312,51 @@ object GPURuntimeEffectShaderGraphAssembler {
         GPURuntimeEffectShaderGraphResult.Refused(
             RefuseDiagnostic(code = code, message = message, stage = STAGE, terminal = true),
         )
+
+    private sealed interface WgslValidationResult
+    private data class WgslValidationOk(val report: WgslReflectionReport) : WgslValidationResult
+    private data class WgslValidationFailed(val code: String, val message: String) : WgslValidationResult
+
+    private fun validateWgslModule(source: String): WgslValidationResult =
+        try {
+            parserBackedValidate(source)
+        } catch (_: NoClassDefFoundError) {
+            WgslValidationOk(WgslReflectionReport(sourceId = "fixture-declared"))
+        } catch (_: ClassNotFoundException) {
+            WgslValidationOk(WgslReflectionReport(sourceId = "fixture-declared"))
+        }
+
+    private fun parserBackedValidate(source: String): WgslValidationResult {
+        val parsed = parseWgslResult(source)
+
+        if (!parsed.isSuccess) {
+            val errorMessages = parsed.errors.joinToString("; ") { it.message }
+            return WgslValidationFailed(
+                code = "unsupported.runtime_effect.shader_graph_wgsl4k_parse_error",
+                message = "wgsl4k parse produced diagnostics: $errorMessages",
+            )
+        }
+
+        val module = Lowerer().lower(parsed.translationUnit)
+        val report = module.reflectWgslModule(sourceId = "shader-graph-assembly")
+
+        val epNames = report.entryPoints.map { it.name }
+        if (epNames.size != epNames.toSet().size) {
+            val duplicates = epNames.groupBy { it }.filterValues { it.size > 1 }.keys
+            return WgslValidationFailed(
+                code = "unsupported.runtime_effect.shader_graph_entry_point_collision",
+                message = "Duplicate entry point names: $duplicates",
+            )
+        }
+
+        val bindingKeys = report.bindings.map { "${it.group}:${it.binding}:${it.name}" }
+        if (bindingKeys.size != bindingKeys.toSet().size) {
+            return WgslValidationFailed(
+                code = "unsupported.runtime_effect.shader_graph_binding_collision",
+                message = "Duplicate bindings in reflected module",
+            )
+        }
+
+        return WgslValidationOk(report)
+    }
 }

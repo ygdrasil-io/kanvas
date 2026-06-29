@@ -3,6 +3,7 @@ package org.graphiks.kanvas.gpu.renderer.runtimeeffects
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.test.fail
 
@@ -357,6 +358,85 @@ class GPUShaderGraphTest {
             ),
         )
         assertEquals("unsupported.runtime_effect.shader_graph_missing_wgsl", code)
+    }
+
+    @Test
+    fun `valid assembly produces wgsl4k reflection report with successful validation`() {
+        val graph = GPURuntimeEffectShaderGraph(
+            nodes = listOf(
+                GPURuntimeEffectShaderGraphNode("root", mapOf("fg" to "child")),
+                GPURuntimeEffectShaderGraphNode("child", emptyMap()),
+            ),
+            edges = listOf(GPURuntimeEffectShaderGraphEdge("root", "child", "fg")),
+        )
+        val result = GPURuntimeEffectShaderGraphAssembler.assemble(
+            graph = graph,
+            nodeWgsl = mapOf(
+                "root" to "return evaluateChild_fg(coord);",
+                "child" to "return vec4<f32>(1.0, 0.0, 0.0, 1.0);",
+            ),
+            budget = generousBudget(),
+        )
+        val plan = assembled(result)
+        assertNotNull(plan.wgslReflection, "expected wgsl4k reflection report on assembled plan")
+        assertTrue(
+            plan.wgslReflection!!.validation.success,
+            "expected validation to succeed, got: ${plan.wgslReflection!!.validation.diagnostics}",
+        )
+    }
+
+    @Test
+    fun `invalid wgsl node body causes refusal during wgsl4k parse`() {
+        val graph = GPURuntimeEffectShaderGraph(
+            nodes = listOf(GPURuntimeEffectShaderGraphNode("a", emptyMap())),
+            edges = emptyList(),
+        )
+        val code = refused(
+            GPURuntimeEffectShaderGraphAssembler.assemble(
+                graph = graph,
+                nodeWgsl = mapOf("a" to "return vec4<f32>(1.0 NOTVALID;"),
+                budget = generousBudget(),
+            ),
+        )
+        assertEquals("unsupported.runtime_effect.shader_graph_wgsl4k_parse_error", code)
+    }
+
+    @Test
+    fun `valid assembly reflection has no duplicate entry point names`() {
+        val graph = GPURuntimeEffectShaderGraph(
+            nodes = listOf(
+                GPURuntimeEffectShaderGraphNode("root", mapOf("l" to "b", "r" to "c")),
+                GPURuntimeEffectShaderGraphNode("b", emptyMap()),
+                GPURuntimeEffectShaderGraphNode("c", emptyMap()),
+            ),
+            edges = listOf(
+                GPURuntimeEffectShaderGraphEdge("root", "b", "l"),
+                GPURuntimeEffectShaderGraphEdge("root", "c", "r"),
+            ),
+        )
+        val result = GPURuntimeEffectShaderGraphAssembler.assemble(
+            graph = graph,
+            nodeWgsl = mapOf(
+                "root" to "return evaluateChild_l(coord) + evaluateChild_r(coord);",
+                "b" to "return vec4<f32>(1.0);",
+                "c" to "return vec4<f32>(0.5);",
+            ),
+            budget = generousBudget(),
+        )
+        val plan = assembled(result)
+        val report = plan.wgslReflection ?: fail("expected wgsl4k reflection report")
+        val epNames = report.entryPoints.map { it.name }
+        val uniqueEpNames = epNames.toSet()
+        assertEquals(
+            epNames.size, uniqueEpNames.size,
+            "duplicate entry point names detected: $epNames",
+        )
+        val bindingKeys = report.bindings.map { "${it.group}/${it.binding}/${it.name}" }
+        val uniqueBindingKeys = bindingKeys.toSet()
+        assertEquals(
+            bindingKeys.size, uniqueBindingKeys.size,
+            "duplicate binding keys detected: $bindingKeys",
+        )
     }
 
     @Test
