@@ -69,4 +69,68 @@ class GPUColorGlyphRoutePlannerTest {
             refused.diagnostic.code,
         )
     }
+
+    private fun colorDrawTextRunCommand(
+        plans: List<GPUColorGlyphLayerPlan>,
+    ): org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand.DrawTextRun {
+        val target = org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts(
+            width = 128, height = 64, colorFormat = "rgba8unorm",
+        )
+        val bounds = org.graphiks.kanvas.gpu.renderer.commands.GPUBounds(0f, 0f, 128f, 64f)
+        return org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand.DrawTextRun(
+            commandId = org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID(42),
+            textLayoutResultId = "layout-42",
+            glyphRunId = "run-7",
+            glyphRunDescriptorRefs = listOf("run-7"),
+            artifactRefs = emptyList(),
+            artifactKeyHashes = emptyList(),
+            atlasGenerationTokens = emptyList(),
+            uploadDependencyFacts = emptyList(),
+            routeDiagnostics = emptyList(),
+            transform = org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts.identity(),
+            clip = org.graphiks.kanvas.gpu.renderer.commands.GPUClipFacts.wideOpen(bounds = bounds),
+            layer = org.graphiks.kanvas.gpu.renderer.commands.GPULayerFacts.root(target = target),
+            material = org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor.SolidColor(
+                r = 0f, g = 0f, b = 0f, a = 1f,
+            ),
+            bounds = bounds,
+            ordering = org.graphiks.kanvas.gpu.renderer.commands.GPUOrderingFacts(
+                paintOrder = 4, dependsOnDestination = false, requiresBarrier = false,
+            ),
+            source = org.graphiks.kanvas.gpu.renderer.commands.GPUCommandSource(
+                adapter = "unit-test", operation = "drawTextRun",
+            ),
+            colorGlyphPlans = plans,
+        )
+    }
+
+    @Test
+    fun `plans a COLRv0 command as a native color route`() {
+        val command = colorDrawTextRunCommand(listOf(plan(2)))
+
+        val routePlan = GPUColorGlyphRoutePlanner().plan(command)
+
+        assertIs<org.graphiks.kanvas.gpu.renderer.analysis.GPUDrawAnalysisDecision.Candidate>(
+            routePlan.analysisDecision,
+        )
+        assertEquals(
+            "native.draw_text_run.colrv0_composite",
+            routePlan.analysisRecord.routeDecisionLabel,
+        )
+    }
+
+    @Test
+    fun `plans an over-budget COLRv0 command as a refusal`() {
+        val command = colorDrawTextRunCommand(listOf(plan(17)))
+
+        val routePlan = GPUColorGlyphRoutePlanner().plan(command)
+
+        val refuse = assertIs<org.graphiks.kanvas.gpu.renderer.analysis.GPUDrawAnalysisDecision.Refuse>(
+            routePlan.analysisDecision,
+        )
+        assertEquals(
+            "unsupported.text.color_font.layer_count_exceeded",
+            refuse.diagnostic.code,
+        )
+    }
 }
