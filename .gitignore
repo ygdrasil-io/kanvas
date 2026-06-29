@@ -1,4 +1,5 @@
 .gradle
+.gradle-preflight
 build/
 .superpowers/
 !gradle/wrapper/gradle-wrapper.jar
