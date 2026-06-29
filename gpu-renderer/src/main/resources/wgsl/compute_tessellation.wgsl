@@ -1,7 +1,3 @@
-struct VertexInput {
-    position: vec2<f32>,
-}
-
 struct VertexOutput {
     position: vec2<f32>,
     coverage: f32,
@@ -19,8 +15,5 @@ fn compute_main(@builtin(global_invocation_id) gid: vec3<u32>) {
         return;
     }
     let pos = vertices[idx];
-    outputs[idx] = VertexOutput(
-        position: pos,
-        coverage: 1.0,
-    );
+    outputs[idx] = VertexOutput(pos, 1.0);
 }
