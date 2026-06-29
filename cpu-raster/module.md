@@ -8,7 +8,7 @@ This module is the largest in the port by far : it carries the bulk of Skia's CP
 
 Cross-test infrastructure shared between `:cpu-raster` and `:gpu-raster`. Hosts `TestUtils` (reference-PNG loading, bitmap diff, debug image dumps), `BitmapComparison` (per-channel diff stats), `SimilarityTracker` (ratchet floor management), `TestReport` (machine-readable result aggregation), and `DiffImage` (rendered ｜ diff ｜ reference triptych).
 
-# Package org.skia.codec
+# Package org.graphiks.kanvas.codec
 
 Image codec dispatch (`SkCodec`, format-specific decoders : PNG, JPEG, WEBP, AVIF, RAW, ICO, JPEG-XL).
 

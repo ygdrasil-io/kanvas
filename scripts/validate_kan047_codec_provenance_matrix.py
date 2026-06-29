@@ -10,7 +10,7 @@ OUTPUT_JSON = "kan-047-codec-provenance-matrix.json"
 OUTPUT_MARKDOWN = "kan-047-codec-provenance-matrix.md"
 
 SUPPORTED_CODECS = "SUPPORTED_CODECS.md"
-FIXTURE_PROVENANCE = "codec-real-image-tests/FIXTURES.md"
+FIXTURE_PROVENANCE = "codec/real-image-tests/FIXTURES.md"
 TARGET_RENDERER = ".upstream/target/skia-like-realtime-renderer-target.md"
 SPEC_RENDERING_FEATURE = ".upstream/specs/skia-like-realtime/01-rendering-feature-expansion.md"
 
@@ -72,13 +72,13 @@ def source_audit(root: Path) -> dict[str, Any]:
         root,
         SUPPORTED_CODECS,
         [
-            "| PNG | Supported through `codec-png-kotlin`",
-            "| JPEG | Supported through `codec-jpeg-kotlin`",
-            "| GIF | Supported through `codec-gif-kotlin`",
-            "| BMP | Supported through `codec-bmp-kotlin`",
-            "| WBMP | Supported through `codec-wbmp-kotlin`",
-            "| ICO / CUR | Supported through `codec-ico-kotlin`",
-            "| WebP | Supported through `codec-webp-kotlin`",
+            "| PNG | Supported through `codec/png`",
+            "| JPEG | Supported through `codec/jpeg`",
+            "| GIF | Supported through `codec/gif`",
+            "| BMP | Supported through `codec/bmp`",
+            "| WBMP | Supported through `codec/wbmp`",
+            "| ICO / CUR | Supported through `codec/ico`",
+            "| WebP | Supported through `codec/webp`",
             "| AVIF / JPEG XL / RAW / video | Not supported in the portable pure Kotlin runtime.",
             "must not silently fall back to AWT/ImageIO/JNI",
         ],
@@ -135,10 +135,10 @@ def source_audit(root: Path) -> dict[str, Any]:
             "STUB.ANIMATED_IMAGE",
         ],
     )
-    require_text(root, "codec-extended/src/main/kotlin/org/skia/codec/SkAvifDecoder.kt", ["Always returns `null`"])
-    require_text(root, "codec-extended/src/main/kotlin/org/skia/codec/SkJpegxlDecoder.kt", ["Always returns `null`"])
-    require_text(root, "codec-extended/src/main/kotlin/org/skia/codec/SkRawDecoder.kt", ["Always returns `null`"])
-    require_text(root, "codec-extended/src/main/kotlin/org/skia/codec/SkVideoDecoder.kt", ["STUB.FFMPEG"])
+    require_text(root, "codec/extended/src/main/kotlin/org/graphiks/kanvas/codec/SkAvifDecoder.kt", ["Always returns `null`"])
+    require_text(root, "codec/extended/src/main/kotlin/org/graphiks/kanvas/codec/SkJpegxlDecoder.kt", ["Always returns `null`"])
+    require_text(root, "codec/extended/src/main/kotlin/org/graphiks/kanvas/codec/SkRawDecoder.kt", ["Always returns `null`"])
+    require_text(root, "codec/extended/src/main/kotlin/org/graphiks/kanvas/codec/SkVideoDecoder.kt", ["STUB.FFMPEG"])
     return {
         "supportedCodecs": SUPPORTED_CODECS,
         "fixtureProvenance": FIXTURE_PROVENANCE,
@@ -274,7 +274,7 @@ def kan046_scene_rows(root: Path) -> list[dict[str, Any]]:
             "decoder": {
                 "name": "png",
                 "kind": "portable-codec",
-                "module": "codec-png-kotlin",
+                "module": "codec/png",
                 "dispatch": "ToolUtils.GetResourceAsImage -> SkCodec.MakeFromData -> SkCodec.getImage",
             },
             "colorInfo": {
@@ -369,7 +369,7 @@ def animated_scene_rows() -> list[dict[str, Any]]:
             "decoder": {
                 "name": "webp",
                 "kind": "portable-codec-plus-missing-scene-pipeline",
-                "module": "codec-webp-kotlin",
+                "module": "codec/webp",
             },
             "colorInfo": {
                 "colorType": "RGBA_8888 for supported WebP frame encodings",
@@ -398,7 +398,7 @@ def animated_scene_rows() -> list[dict[str, Any]]:
             "decoder": {
                 "name": "gif",
                 "kind": "portable-codec-plus-missing-scene-pipeline",
-                "module": "codec-gif-kotlin",
+                "module": "codec/gif",
             },
             "colorInfo": {
                 "colorType": "RGBA_8888 indexed-frame output",
@@ -424,13 +424,13 @@ def animated_scene_rows() -> list[dict[str, Any]]:
 
 def codec_format_rows() -> list[dict[str, Any]]:
     supported = [
-        ("PNG", "png", "codec-png-kotlin", "kSuccess-for-covered-real-fixtures", "iCCP best effort; sRGB/gAMA/cHRM structurally validated; 16 bpc PNG decodes to RGBA_F16Norm where covered"),
-        ("JPEG", "jpeg", "codec-jpeg-kotlin", "kSuccess-for-covered-real-fixtures", "APP2 ICC parsed when complete; EXIF orientation 1 through 8 parsed and applied"),
-        ("GIF", "gif", "codec-gif-kotlin", "kSuccess-for-covered-real-fixtures", "indexed GIF frames and tested frame metadata decode; not a renderer animated-image support claim"),
-        ("BMP", "bmp", "codec-bmp-kotlin", "kSuccess-for-covered-real-fixtures", "V4/V5 ICC accepted but ignored; output uses sRGB"),
-        ("WBMP", "wbmp", "codec-wbmp-kotlin", "kSuccess-for-covered-real-fixtures", "type-0 monochrome WBMP output as opaque black/white RGBA"),
-        ("ICO / CUR", "ico", "codec-ico-kotlin", "delegates-to-selected-payload-decoder", "container selects largest entry and delegates PNG/BMP payload color/origin behavior"),
-        ("WebP", "webp", "codec-webp-kotlin", "kSuccess-or-kUnimplemented-by-covered-encoding", "VP8L lossless and selected VP8 paths covered; unsupported frame encodings return kUnimplemented"),
+        ("PNG", "png", "codec/png", "kSuccess-for-covered-real-fixtures", "iCCP best effort; sRGB/gAMA/cHRM structurally validated; 16 bpc PNG decodes to RGBA_F16Norm where covered"),
+        ("JPEG", "jpeg", "codec/jpeg", "kSuccess-for-covered-real-fixtures", "APP2 ICC parsed when complete; EXIF orientation 1 through 8 parsed and applied"),
+        ("GIF", "gif", "codec/gif", "kSuccess-for-covered-real-fixtures", "indexed GIF frames and tested frame metadata decode; not a renderer animated-image support claim"),
+        ("BMP", "bmp", "codec/bmp", "kSuccess-for-covered-real-fixtures", "V4/V5 ICC accepted but ignored; output uses sRGB"),
+        ("WBMP", "wbmp", "codec/wbmp", "kSuccess-for-covered-real-fixtures", "type-0 monochrome WBMP output as opaque black/white RGBA"),
+        ("ICO / CUR", "ico", "codec/ico", "delegates-to-selected-payload-decoder", "container selects largest entry and delegates PNG/BMP payload color/origin behavior"),
+        ("WebP", "webp", "codec/webp", "kSuccess-or-kUnimplemented-by-covered-encoding", "VP8L lossless and selected VP8 paths covered; unsupported frame encodings return kUnimplemented"),
     ]
     rows: list[dict[str, Any]] = [
         {
@@ -442,7 +442,7 @@ def codec_format_rows() -> list[dict[str, Any]]:
                 "module": module,
             },
             "colorInfo": color,
-            "origin": "codec-real-image-tests/FIXTURES.md plus format-specific unit tests",
+            "origin": "codec/real-image-tests/FIXTURES.md plus format-specific unit tests",
             "decodeResult": result,
             "reasonCode": "none",
         }
@@ -453,36 +453,36 @@ def codec_format_rows() -> list[dict[str, Any]]:
             {
                 "format": "AVIF",
                 "status": "dependency-gated",
-                "decoder": {"name": "avif", "kind": "stub", "module": "codec-extended"},
+                "decoder": {"name": "avif", "kind": "stub", "module": "codec/extended"},
                 "colorInfo": "out of scope until real AVIF dependency lands",
-                "origin": "codec-extended/src/main/kotlin/org/skia/codec/SkAvifDecoder.kt",
+                "origin": "codec/extended/src/main/kotlin/org/graphiks/kanvas/codec/SkAvifDecoder.kt",
                 "decodeResult": "stub-returns-null",
                 "reasonCode": "codec.decoder-unavailable",
             },
             {
                 "format": "JPEG XL",
                 "status": "dependency-gated",
-                "decoder": {"name": "jpegxl", "kind": "stub", "module": "codec-extended"},
+                "decoder": {"name": "jpegxl", "kind": "stub", "module": "codec/extended"},
                 "colorInfo": "out of scope until real JPEG XL dependency lands",
-                "origin": "codec-extended/src/main/kotlin/org/skia/codec/SkJpegxlDecoder.kt",
+                "origin": "codec/extended/src/main/kotlin/org/graphiks/kanvas/codec/SkJpegxlDecoder.kt",
                 "decodeResult": "stub-returns-null",
                 "reasonCode": "codec.decoder-unavailable",
             },
             {
                 "format": "RAW",
                 "status": "dependency-gated",
-                "decoder": {"name": "raw", "kind": "stub", "module": "codec-extended"},
+                "decoder": {"name": "raw", "kind": "stub", "module": "codec/extended"},
                 "colorInfo": "out of scope until real RAW dependency lands",
-                "origin": "codec-extended/src/main/kotlin/org/skia/codec/SkRawDecoder.kt",
+                "origin": "codec/extended/src/main/kotlin/org/graphiks/kanvas/codec/SkRawDecoder.kt",
                 "decodeResult": "stub-returns-null",
                 "reasonCode": "codec.decoder-unavailable",
             },
             {
                 "format": "video",
                 "status": "dependency-gated",
-                "decoder": {"name": "ffmpeg-video", "kind": "stub", "module": "codec-extended"},
+                "decoder": {"name": "ffmpeg-video", "kind": "stub", "module": "codec/extended"},
                 "colorInfo": "out of scope until FFmpeg-backed dependency lands outside portable runtime",
-                "origin": "codec-extended/src/main/kotlin/org/skia/codec/SkVideoDecoder.kt",
+                "origin": "codec/extended/src/main/kotlin/org/graphiks/kanvas/codec/SkVideoDecoder.kt",
                 "decodeResult": "throws-STUB.FFMPEG",
                 "reasonCode": "codec.decoder-unavailable",
             },
@@ -738,7 +738,7 @@ thresholds, JNI, ImageIO/AWT usage, or animated scene support.
 
 - No stub codec renders a scene pass.
 - Deterministic fixtures stay distinct from real `SkCodec` decode.
-- `bitmap-subset-local-matrix-repeat` cites `codec-png-kotlin`, but its support
+- `bitmap-subset-local-matrix-repeat` cites `codec/png`, but its support
   claim remains bounded bitmap sampling, not broad codec or color-managed decode.
 - Animated WebP/GIF scene rows remain dependency-gated via
   `codec.animated-frame-unsupported`.

@@ -19,7 +19,7 @@ legacy_gate: null
 ## PM Note
 
 `KanvasImage` integre le pipeline de decodage d'images (PNG, JPEG, WebP) de
-`:codec-core` vers une texture GPU utilisable par `KanvasShader` et `drawImage`.
+`:codec:core` vers une texture GPU utilisable par `KanvasShader` et `drawImage`.
 Ce ticket connecte les codecs Kanvas a l'API native pour que le PM voie des
 images reelles dans le rendu Kanvas.
 
@@ -102,7 +102,7 @@ silent fallback to a solid-color rect.
 
 ```bash
 rtk ./gradlew --no-daemon :kanvas:test
-rtk ./gradlew --no-daemon :codec-core:test
+rtk ./gradlew --no-daemon :codec:core:test
 rtk ./gradlew --no-daemon :gpu-renderer:test
 ```
 

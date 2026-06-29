@@ -1,8 +1,8 @@
 package org.skia.tests
 
-import org.skia.codec.SkAndroidCodec
-import org.skia.codec.SkAnimatedImage
-import org.skia.codec.SkCodec
+import org.graphiks.kanvas.codec.SkAndroidCodec
+import org.graphiks.kanvas.codec.SkAnimatedImage
+import org.graphiks.kanvas.codec.SkCodec
 import org.skia.foundation.SkEncodedOrigin
 import org.skia.core.SkCanvas
 import org.skia.foundation.SkBitmap

@@ -236,7 +236,7 @@ Implementation should be split in this order:
 
 1. Keep CBDT/CBLC metadata parsing green against the generated PNG fixture.
 2. Render the selected CBDT/CBLC PNG strike through the pure Kotlin codec path
-   if `codec-png-kotlin` is available to the target module without introducing
+   if `:codec:png` is available to the target module without introducing
    AWT or JNI.
 3. Render the selected sbix PNG strike as a separate slice after preserving the
    current sbix metadata tests.

@@ -7,7 +7,7 @@ import org.junit.jupiter.api.Test
 import org.graphiks.math.SK_ColorBLACK
 import org.graphiks.math.SK_ColorRED
 import org.graphiks.math.SK_ColorWHITE
-import org.skia.codec.SkCodec
+import org.graphiks.kanvas.codec.SkCodec
 import org.skia.foundation.SkBitmap
 import java.io.File
 

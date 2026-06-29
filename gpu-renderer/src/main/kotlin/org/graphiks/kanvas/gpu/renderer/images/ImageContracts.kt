@@ -20,7 +20,7 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUTextureDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUTextureResourceRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUTextureViewDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUUseToken
-import org.skia.codec.SkCodec
+import org.graphiks.kanvas.codec.SkCodec
 import java.security.MessageDigest
 
 /** Image upload artifact key. */

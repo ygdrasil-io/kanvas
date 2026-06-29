@@ -1,6 +1,6 @@
 package org.skia.testing
 
-import org.skia.codec.SkCodec
+import org.graphiks.kanvas.codec.SkCodec
 import org.skia.dm.RasterSinkF16
 import org.skia.dm.Sink
 import org.skia.foundation.SkBitmap

@@ -4,9 +4,9 @@ import org.graphiks.math.SkIRect
 import org.graphiks.math.SkISize
 import org.graphiks.math.SkMatrix
 import org.graphiks.math.SkRect
-import org.skia.codec.SkAndroidCodec
-import org.skia.codec.SkAnimatedImage
-import org.skia.codec.SkCodec
+import org.graphiks.kanvas.codec.SkAndroidCodec
+import org.graphiks.kanvas.codec.SkAnimatedImage
+import org.graphiks.kanvas.codec.SkCodec
 import org.skia.core.SkCanvas
 import org.skia.core.SkPicture
 import org.skia.core.SkPictureRecorder
@@ -38,7 +38,7 @@ import org.skia.tools.ToolUtils
  *
  * ## Port status
  *
- * Body fully ported against the new `org.skia.codec.{SkCodec,
+ * Body fully ported against the new `org.graphiks.kanvas.codec.{SkCodec,
  * SkAndroidCodec, SkAnimatedImage}` flag-planting surface (all three
  * resolve to `TODO("STUB.…")` at runtime). The matching
  * `AnimatedImageTest` is `@Disabled("STUB.ANIMATED_IMAGE")` until

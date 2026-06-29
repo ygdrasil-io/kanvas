@@ -13,18 +13,18 @@ dependencies {
     implementation(kotlin("stdlib"))
     implementation(project(":math"))
     implementation(project(":kanvas-skia"))
-    implementation(project(":codec-core"))
-    implementation(project(":codec-common"))
-    implementation(project(":codec-all-kotlin"))
-    implementation(project(":codec-ico-kotlin"))
-    implementation(project(":codec-android"))
-    implementation(project(":codec-animated"))
-    implementation(project(":codec-extended"))
-    implementation(project(":codec-image-generator"))
+    implementation(project(":codec:core"))
+    implementation(project(":codec:common"))
+    implementation(project(":codec"))
+    implementation(project(":codec:ico"))
+    implementation(project(":codec:android"))
+    implementation(project(":codec:animated"))
+    implementation(project(":codec:extended"))
+    implementation(project(":codec:image-generator"))
 
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
     testImplementation("org.junit.jupiter:junit-jupiter-params:5.10.2")
-    testImplementation(project(":codec-test-fixtures"))
+    testImplementation(project(":codec:test-fixtures"))
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.10.2")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.10.2")
     // D1.4 — PathOps regression harness loads upstream Skia
@@ -54,7 +54,7 @@ val kotlinCodecBackendRuntime by configurations.creating {
 }
 
 dependencies {
-    kotlinCodecBackendRuntime(project(":codec-all-kotlin"))
+    kotlinCodecBackendRuntime(project(":codec"))
 }
 
 fun Test.useKotlinCodecBackendRuntime() {
@@ -69,23 +69,23 @@ fun Test.useKotlinCodecBackendRuntime() {
 
 tasks.register<Test>("testCodecWithKotlinBackend") {
     group = "verification"
-    description = "Runs the cpu-raster codec backend smoke test with codec-all-kotlin instead of the temporary AWT/ImageIO codec bundle."
+    description = "Runs the cpu-raster codec backend smoke test with :codec instead of the temporary AWT/ImageIO codec bundle."
 
     useKotlinCodecBackendRuntime()
 
     filter {
-        includeTestsMatching("org.skia.codec.CpuRasterKotlinCodecBackendTest")
+        includeTestsMatching("org.graphiks.kanvas.codec.CpuRasterKotlinCodecBackendTest")
     }
 }
 
 tasks.register<Test>("testCodecSuiteWithKotlinBackend") {
     group = "verification"
-    description = "Runs the backend-agnostic cpu-raster codec suite subset with codec-all-kotlin."
+    description = "Runs the backend-agnostic cpu-raster codec suite subset with :codec."
 
     useKotlinCodecBackendRuntime()
 
     filter {
-        includeTestsMatching("org.skia.codec.*")
+        includeTestsMatching("org.graphiks.kanvas.codec.*")
     }
 }
 
