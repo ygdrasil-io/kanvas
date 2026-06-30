@@ -7,5 +7,9 @@ object SkiaGmRegistry {
         gms.add(gm)
     }
 
-    fun all(): List<SkiaGm> = gms.toList()
+    fun all(): List<SkiaGm> {
+        val list = gms.toList()
+        require(list.isNotEmpty()) { "No SkiaGms registered. Ensure GM classes are loaded." }
+        return list
+    }
 }
