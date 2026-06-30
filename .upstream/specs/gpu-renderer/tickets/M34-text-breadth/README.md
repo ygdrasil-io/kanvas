@@ -34,13 +34,13 @@ borné handoff + facts portés + refus stable est implémenté et testé
 gate : exécution GPU M6/M10/M11 + CFF2 vraies polices M4. Évidence :
 `reports/gpu-renderer/m34-text-breadth-rescope/`.
 
-## Promotion KGPU-M34-002 (2026-06-29)
+## Promotion KGPU-M34-002 (2026-06-29) — done
 
-KGPU-M34-002 (color font pipeline) est passé de `blocked` à `review` avec
-rendu GPU COLRv0 implémenté (Plans 1–3c), preuve de rendu sur GPU réel, gate
-`COLRColorGlyph` promu (`promoted = true`), scène enregistrée
-`colr-v0-color-glyph` + `render.png` committée. En attente de revue indépendante
-pour `done` (règle `STATUS.md`). Tickets 003 et 004 restent `blocked`.
+KGPU-M34-002 (color font pipeline) est passé de `blocked` à `done` : rendu GPU
+COLRv0 implémenté (Plans 1–3c), preuve de rendu sur GPU réel + **parité CPU↔GPU
+100%** (`reports/.../colr-v0-color-glyph/parity.txt`: `similarity=1.0000`, maxΔ=0),
+gate `COLRColorGlyph` promu (`promoted = true`), accepté par 3 revues
+indépendantes. Tickets 003 et 004 restent `blocked`.
 
 ## Status Update Rule
 

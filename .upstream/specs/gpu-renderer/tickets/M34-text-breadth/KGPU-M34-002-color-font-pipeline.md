@@ -1,7 +1,7 @@
 ---
 id: KGPU-M34-002
 title: "Color font pipeline"
-status: review
+status: done
 milestone: M34
 priority: P0
 owner_area: text
@@ -186,6 +186,11 @@ rtk git diff --check && rtk ./gradlew --no-daemon :gpu-renderer:test --tests '*C
   `product_activation: true`. Régression: 1077 tests, seuls les 4 échecs
   pré-existants de master restent (hors M34). **En attente de revue indépendante
   d'acceptation pour passer à `done`** (règle `STATUS.md`).
+- `review → done` (2026-06-29): **accepté.** 3 revues indépendantes APPROVE (PR #1905,
+  wgsl4k PR #13, commit `88a1c6c`/`general-flash`) + parité **CPU↔GPU 100%**
+  (`reports/.../colr-v0-color-glyph/parity.txt`: `similarity=1.0000`, `matchingPixels=4096/4096`,
+  maxΔ=0) — référence CPU, rendu GPU, diff/stat, diagnostics de route et politique
+  de refus tous présents. Pas d'activation cachée.
 
 ## Linear Labels
 
