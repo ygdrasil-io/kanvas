@@ -15,7 +15,7 @@ Defines the `Canvas` class — the central recording API for all drawing operati
 class Canvas internal constructor(private val buffer: DisplayListBuffer)
 ```
 
-#### Drawing Methods (core, 7 methods)
+#### Drawing Methods (core, 6 methods)
 
 | Method | Signature |
 |--------|-----------|

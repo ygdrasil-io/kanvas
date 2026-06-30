@@ -38,7 +38,7 @@ value class GPUHandle(val id: Long)
 
 ```kotlin
 interface RenderPass {
-    val pipeline: GPUHandle
+    fun setPipeline(handle: GPUHandle)
     fun bindVertexBuffer(slot: Int, buffer: GPUHandle)
     fun bindUniform(group: Int, binding: Int, buffer: GPUHandle)
     fun bindTexture(group: Int, binding: Int, texture: GPUHandle)
@@ -172,6 +172,7 @@ data class VertexLayout(val attributes: List<VertexAttribute>, val stride: Int, 
 data class VertexAttribute(val format: VertexFormat, val offset: Int, val shaderLocation: Int)
 data class RenderPassDescriptor(val colorAttachments: List<ColorAttachment>, val depthStencilAttachment: DepthStencilAttachment?)
 data class ColorAttachment(val texture: GPUHandle, val loadOp: LoadOp, val storeOp: StoreOp, val clearColor: Color)
+data class DepthStencilAttachment(val texture: GPUHandle)
 
 data class UniformSlot(val name: String, val binding: Int, val type: UniformType, val size: Int)
 data class TextureSlot(val name: String, val binding: Int)
