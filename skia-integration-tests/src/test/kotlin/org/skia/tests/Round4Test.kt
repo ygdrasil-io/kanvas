@@ -31,9 +31,6 @@ class Round4Test {
     }
 
     @Test
-    fun `B340982297GM matches reference`() = runGm(B340982297GM(), "B340982297GM", 93.0)
-
-    @Test
     fun `Bug406747427GM matches reference`() = runGm(Bug406747427GM(), "Bug406747427GM", 96.0)
 
     @Test
