@@ -1,6 +1,6 @@
 package org.graphiks.kanvas.svg
 
-import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
+import org.graphiks.kanvas.test.GpuAvailability
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
@@ -10,18 +10,6 @@ import java.io.File
 class SvgIntegrationTest {
     @TempDir
     lateinit var tempDir: File
-
-    private fun requireWebGpu() {
-        if (!gpuAvailable) {
-            throw TestAbortedException("WebGPU not available on this machine")
-        }
-    }
-
-    companion object {
-        private val gpuAvailable: Boolean by lazy {
-            GPUBackendRuntimeFactory.createOrNull() != null
-        }
-    }
 
     private fun testSvg(svgPath: String, minSimilarity: Double, tolerance: Int = 0) {
         val svgContent = object {}.javaClass.getResource(svgPath)?.readText()
@@ -40,7 +28,7 @@ class SvgIntegrationTest {
 
             val referenceRgba = SvgReferenceManager.loadReferencePng(svgPath)
 
-            val comparison = SvgComparisonUtils.compareRgba(
+            val comparison = compareRgba(
                 actual = actualRgba,
                 reference = referenceRgba,
                 width = width,
@@ -53,10 +41,10 @@ class SvgIntegrationTest {
             val outputDir = File(tempDir, svgName)
             outputDir.mkdirs()
 
-            SvgComparisonUtils.saveRgbaAsPng(actualRgba, width, height, File(outputDir, "kanvas.png"))
-            SvgComparisonUtils.saveRgbaAsPng(referenceRgba, width, height, File(outputDir, "reference.png"))
+            saveRgbaAsPng(actualRgba, width, height, File(outputDir, "kanvas.png"))
+            saveRgbaAsPng(referenceRgba, width, height, File(outputDir, "reference.png"))
             comparison.diffRgba?.let { diff ->
-                SvgComparisonUtils.saveRgbaAsPng(diff, width, height, File(outputDir, "diff.png"))
+                saveRgbaAsPng(diff, width, height, File(outputDir, "diff.png"))
             }
 
             println(
@@ -77,46 +65,43 @@ class SvgIntegrationTest {
 
     @Test
     fun `test geometric-1`() {
-        requireWebGpu()
+        GpuAvailability.requireWebGpu()
         testSvg("/by-render-family/geometric/geometric-1.svg", minSimilarity = 50.0, tolerance = 2)
     }
 
     @Test
     fun `test geometric-2`() {
-        requireWebGpu()
+        GpuAvailability.requireWebGpu()
         testSvg("/by-render-family/geometric/geometric-2.svg", minSimilarity = 30.0, tolerance = 2)
     }
 
     @Test
     fun `test ghostscript-tiger`() {
-        requireWebGpu()
-        // Missing: stroke-linejoin/linecap, precise anti-aliasing matches reference
+        GpuAvailability.requireWebGpu()
         testSvg("/by-render-family/complex-paths/complex-1.svg", minSimilarity = 20.0, tolerance = 2)
     }
 
     @Test
     fun `test complex-paths-2`() {
-        requireWebGpu()
-        // Missing: <filter>/<feColorMatrix>, <clipPath>, precise anti-aliasing
+        GpuAvailability.requireWebGpu()
         testSvg("/by-render-family/complex-paths/complex-2.svg", minSimilarity = 45.0, tolerance = 2)
     }
 
     @Test
     fun `test complex-paths-3`() {
-        requireWebGpu()
-        // Missing: precise anti-aliasing, stroke rendering precision
+        GpuAvailability.requireWebGpu()
         testSvg("/by-render-family/complex-paths/complex-3.svg", minSimilarity = 45.0, tolerance = 2)
     }
 
     @Test
     fun `test texture-2`() {
-        requireWebGpu()
+        GpuAvailability.requireWebGpu()
         testSvg("/by-render-family/textures/texture-2.svg", minSimilarity = 5.0, tolerance = 5)
     }
 
     @Test
     fun `test texture-3`() {
-        requireWebGpu()
+        GpuAvailability.requireWebGpu()
         testSvg("/by-render-family/textures/texture-3.svg", minSimilarity = 1.0, tolerance = 5)
     }
 }

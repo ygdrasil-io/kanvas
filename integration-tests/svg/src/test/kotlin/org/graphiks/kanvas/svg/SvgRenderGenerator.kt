@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.svg
 
+import org.graphiks.kanvas.test.ComparisonUtils
 import java.io.File
 
 fun main(args: Array<String>) {
@@ -34,7 +35,7 @@ fun main(args: Array<String>) {
                 width = 800,
                 height = 600
             )
-            SvgComparisonUtils.saveRgbaAsPng(rgba, width, height, outputFile)
+            ComparisonUtils.saveRgbaAsPng(rgba, width, height, outputFile)
             println("[RENDER] $relativePath -> ${outputFile.name} (${width}x$height)")
             rendered++
         } catch (e: IllegalStateException) {
