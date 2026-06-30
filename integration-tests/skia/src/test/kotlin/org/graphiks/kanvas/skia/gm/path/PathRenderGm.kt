@@ -6,8 +6,6 @@ import org.graphiks.kanvas.Path
 import org.graphiks.kanvas.KanvasFillType
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.skia.SkiaGmRegistry
-
 class PathRenderGm : SkiaGm {
     override val name = "path-render"
     override val renderFamily = RenderFamily.PATH
@@ -64,7 +62,4 @@ class PathRenderGm : SkiaGm {
         })
     }
 
-    companion object {
-        init { SkiaGmRegistry.register(PathRenderGm()) }
-    }
 }

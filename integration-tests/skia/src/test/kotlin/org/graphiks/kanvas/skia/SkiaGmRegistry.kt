@@ -1,15 +1,11 @@
 package org.graphiks.kanvas.skia
 
+import java.util.ServiceLoader
+
 object SkiaGmRegistry {
-    private val gms = mutableListOf<SkiaGm>()
-
-    fun register(gm: SkiaGm) {
-        gms.add(gm)
-    }
-
     fun all(): List<SkiaGm> {
-        val list = gms.toList()
-        require(list.isNotEmpty()) { "No SkiaGms registered. Ensure GM classes are loaded." }
-        return list
+        val gms = ServiceLoader.load(SkiaGm::class.java).toList()
+        require(gms.isNotEmpty()) { "No SkiaGms registered. Ensure META-INF/services/${SkiaGm::class.qualifiedName} lists all GM classes." }
+        return gms
     }
 }
