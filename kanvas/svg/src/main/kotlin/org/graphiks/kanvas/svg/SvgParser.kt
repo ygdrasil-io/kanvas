@@ -76,6 +76,8 @@ class SvgParser {
                         "polyline" -> polylines.add(parsePolyline(reader))
                         "g" -> groups.add(parseGroup(reader))
                         "defs" -> defs.add(parseDefs(reader))
+                        "linearGradient" -> defs.add(SvgDefs(gradients = listOf(parseLinearGradient(reader))))
+                        "radialGradient" -> defs.add(SvgDefs(gradients = listOf(parseRadialGradient(reader))))
                     }
                 }
             }
@@ -268,6 +270,7 @@ class SvgParser {
         val polygons = mutableListOf<SvgPolygon>()
         val polylines = mutableListOf<SvgPolyline>()
         val groups = mutableListOf<SvgGroup>()
+        val gradients = mutableListOf<SvgGradient>()
 
         while (reader.hasNext()) {
             val event = reader.next()
@@ -282,6 +285,8 @@ class SvgParser {
                         "polygon" -> polygons.add(parsePolygon(reader))
                         "polyline" -> polylines.add(parsePolyline(reader))
                         "g" -> groups.add(parseGroup(reader))
+                        "linearGradient" -> gradients.add(parseLinearGradient(reader))
+                        "radialGradient" -> gradients.add(parseRadialGradient(reader))
                     }
                 }
                 XMLStreamConstants.END_ELEMENT -> {
@@ -295,6 +300,7 @@ class SvgParser {
             fill = fill, stroke = stroke,
             strokeWidth = strokeWidth, strokeOpacity = strokeOpacity,
             fillOpacity = fillOpacity,
+            gradients = gradients,
             rects = rects, paths = paths, circles = circles,
             ellipses = ellipses, lines = lines, polygons = polygons,
             polylines = polylines, groups = groups
@@ -388,9 +394,11 @@ class SvgParser {
     }
 
     private fun parseStop(reader: XMLStreamReader): SvgStop {
+        val styleAttrs = parseStyleAttribute(reader.getAttributeValue(null, "style"))
         val offset = reader.getAttributeValue(null, "offset")?.toFloatOrNull()
-        val stopColor = reader.getAttributeValue(null, "stop-color") ?: "#000000"
+        val stopColor = reader.getAttributeValue(null, "stop-color") ?: styleAttrs["stop-color"] ?: "#000000"
         val stopOpacity = reader.getAttributeValue(null, "stop-opacity")?.toFloatOrNull()
+            ?: styleAttrs["stop-opacity"]?.toFloatOrNull()
 
         skipElement(reader)
         
