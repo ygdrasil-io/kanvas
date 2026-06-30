@@ -9,7 +9,7 @@ object SkiaGmRenderer {
     private const val DEFAULT_HEIGHT = 600
     private const val PATH_VERTEX_BUDGET = 16384
 
-    fun render(gm: SkiaGm, width: Int = DEFAULT_WIDTH, height: Int = DEFAULT_HEIGHT): SkiaRenderResult {
+    fun render(gm: SkiaGm, width: Int = gm.width, height: Int = gm.height): SkiaRenderResult {
         val surface = Surface(width = width, height = height)
         val canvas = Canvas(surface, RenderOptions(maxPathVertices = PATH_VERTEX_BUDGET))
         gm.draw(canvas, width, height)

@@ -11,6 +11,8 @@ class Crbug788500Gm : SkiaGm {
     override val name = "crbug_788500"
     override val renderFamily = RenderFamily.PATH
     override val minSimilarity = 90.0
+    override val width = 300
+    override val height = 300
 
     override fun draw(canvas: Canvas, width: Int, height: Int) {
         val path = Path().apply {

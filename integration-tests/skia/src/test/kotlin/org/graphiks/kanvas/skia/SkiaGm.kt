@@ -17,5 +17,7 @@ interface SkiaGm {
     val renderFamily: RenderFamily
     val minSimilarity: Double
     val tolerance: Int get() = 2
+    val width: Int get() = 800
+    val height: Int get() = 600
     fun draw(canvas: Canvas, width: Int, height: Int)
 }
