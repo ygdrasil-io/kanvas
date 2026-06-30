@@ -106,7 +106,15 @@ class SvgTransformParser {
                 val rad = Math.toRadians(angle.toDouble()).toFloat()
                 val cos = kotlin.math.cos(rad)
                 val sin = kotlin.math.sin(rad)
-                Tuple6(0f, 0f, cos, cos, sin, -sin)
+                val cx = args.getOrElse(1) { Float.NaN }
+                val cy = args.getOrElse(2) { Float.NaN }
+                if (cx.isNaN() || cy.isNaN()) {
+                    Tuple6(0f, 0f, cos, cos, sin, -sin)
+                } else {
+                    val tx = cx - cx * cos - cy * sin
+                    val ty = cy + cx * sin - cy * cos
+                    Tuple6(tx, ty, cos, cos, sin, -sin)
+                }
             }
             "skewx" -> {
                 val angle = args.getOrElse(0) { 0f }

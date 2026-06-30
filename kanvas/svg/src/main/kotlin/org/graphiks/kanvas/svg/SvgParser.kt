@@ -102,10 +102,10 @@ class SvgParser {
 
     private fun parseRect(reader: XMLStreamReader): SvgRect {
         val styleAttrs = parseStyleAttribute(reader.getAttributeValue(null, "style"))
-        val x = reader.getAttributeValue(null, "x")?.toFloatOrNull() ?: 0f
-        val y = reader.getAttributeValue(null, "y")?.toFloatOrNull() ?: 0f
-        val width = reader.getAttributeValue(null, "width")?.toFloatOrNull() ?: 0f
-        val height = reader.getAttributeValue(null, "height")?.toFloatOrNull() ?: 0f
+        val x = parseCoord(reader.getAttributeValue(null, "x"))
+        val y = parseCoord(reader.getAttributeValue(null, "y"))
+        val width = parseCoord(reader.getAttributeValue(null, "width"))
+        val height = parseCoord(reader.getAttributeValue(null, "height"))
         val rx = reader.getAttributeValue(null, "rx")?.toFloatOrNull()
         val ry = reader.getAttributeValue(null, "ry")?.toFloatOrNull()
         val fill = noneToNull(reader.getAttributeValue(null, "fill") ?: styleAttrs["fill"])
@@ -403,6 +403,15 @@ class SvgParser {
         skipElement(reader)
         
         return SvgStop(offset = offset, stopColor = stopColor, stopOpacity = stopOpacity)
+    }
+
+    private fun parseCoord(value: String?): Float {
+        if (value == null) return 0f
+        if (value.endsWith("%")) {
+            val pct = value.dropLast(1).toFloatOrNull() ?: return 0f
+            return if (pct > 0f) 999f * pct / 100f else 0f
+        }
+        return value.toFloatOrNull() ?: 0f
     }
 
     private fun parseStyleAttribute(style: String?): Map<String, String> {
