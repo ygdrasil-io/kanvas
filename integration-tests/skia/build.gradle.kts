@@ -16,6 +16,12 @@ dependencies {
     testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.10.2")
 }
 
+sourceSets {
+    test {
+        resources.srcDir("../skia-integration-tests/src/test/resources")
+    }
+}
+
 tasks.withType<Test> {
     jvmArgs(
         "--add-opens=java.base/java.lang=ALL-UNNAMED",

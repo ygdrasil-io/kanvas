@@ -23,14 +23,10 @@ class SkiaGmRunner {
     fun `render GM`(gm: SkiaGm) {
         GpuAvailability.requireWebGpu()
         val result = SkiaGmRenderer.render(gm)
-        val refPath = "/generated-references/${gm.renderFamily.name.lowercase()}/${gm.name}.png"
+        val refPath = "/original-888/${gm.name}.png"
 
         if (!ReferenceManager.hasReference(refPath)) {
-            ReferenceManager.savePng(
-                result.rgba, result.width, result.height,
-                File(tempDir, "${gm.name}.png"),
-            )
-            error("Reference PNG not found for ${gm.name}. Run generateSkiaReferences task.")
+            error("Reference PNG not found at $refPath. Ensure :skia-integration-tests resources are on classpath.")
         }
 
         val reference = ReferenceManager.loadReference(refPath)
