@@ -19,6 +19,22 @@ class SvgRenderer(
     private val gradientParser = SvgGradientParser()
     private val transformParser = SvgTransformParser()
 
+    private data class SvgStyle(
+        val fill: String? = null,
+        val stroke: String? = null,
+        val strokeWidth: Float? = null,
+        val strokeOpacity: Float? = null,
+        val fillOpacity: Float? = null,
+    ) {
+        fun merge(child: SvgStyle): SvgStyle = SvgStyle(
+            fill = child.fill ?: this.fill,
+            stroke = child.stroke ?: this.stroke,
+            strokeWidth = child.strokeWidth ?: this.strokeWidth,
+            strokeOpacity = child.strokeOpacity ?: this.strokeOpacity,
+            fillOpacity = child.fillOpacity ?: this.fillOpacity,
+        )
+    }
+
     private val gradientMap = mutableMapOf<String, Shader>()
     private val viewBoxRegex = Regex("^(-?\\d+\\.?\\d*) (-?\\d+\\.?\\d*) (-?\\d+\\.?\\d*) (-?\\d+\\.?\\d*)$")
     private val lengthRegex = Regex("^(-?\\d+\\.?\\d*)(px|mm|cm|in|pt|pc|%)?$")
@@ -36,7 +52,7 @@ class SvgRenderer(
         paintParser.setGradientMap(gradientMap)
         
         val viewBoxTransform = calculateViewBoxTransform(svg)
-        renderElements(svg, viewBoxTransform, 1f)
+        renderElements(svg, viewBoxTransform, 1f, SvgStyle())
     }
 
     private fun parseLength(value: String): Float? {
@@ -110,31 +126,41 @@ class SvgRenderer(
         }
     }
 
-    private fun renderElements(svg: Svg, parentTransform: GPUTransformFacts, parentOpacity: Float) {
-        svg.rects.forEach { renderRect(it, parentTransform, parentOpacity) }
-        svg.paths.forEach { renderPath(it, parentTransform, parentOpacity) }
-        svg.circles.forEach { renderCircle(it, parentTransform, parentOpacity) }
-        svg.ellipses.forEach { renderEllipse(it, parentTransform, parentOpacity) }
-        svg.lines.forEach { renderLine(it, parentTransform, parentOpacity) }
-        svg.polygons.forEach { renderPolygon(it, parentTransform, parentOpacity) }
-        svg.polylines.forEach { renderPolyline(it, parentTransform, parentOpacity) }
-        svg.groups.forEach { renderGroup(it, parentTransform, parentOpacity) }
+    private fun renderElements(svg: Svg, parentTransform: GPUTransformFacts, parentOpacity: Float, style: SvgStyle) {
+        svg.rects.forEach { renderRect(it, parentTransform, parentOpacity, style) }
+        svg.paths.forEach { renderPath(it, parentTransform, parentOpacity, style) }
+        svg.circles.forEach { renderCircle(it, parentTransform, parentOpacity, style) }
+        svg.ellipses.forEach { renderEllipse(it, parentTransform, parentOpacity, style) }
+        svg.lines.forEach { renderLine(it, parentTransform, parentOpacity, style) }
+        svg.polygons.forEach { renderPolygon(it, parentTransform, parentOpacity, style) }
+        svg.polylines.forEach { renderPolyline(it, parentTransform, parentOpacity, style) }
+        svg.groups.forEach { renderGroup(it, parentTransform, parentOpacity, style) }
     }
 
-    private fun renderGroup(group: SvgGroup, parentTransform: GPUTransformFacts, parentOpacity: Float) {
+    private fun renderGroup(group: SvgGroup, parentTransform: GPUTransformFacts, parentOpacity: Float, style: SvgStyle) {
         val groupTransform = transformParser.parse(group.transform)
         val combinedTransform = combineTransforms(parentTransform, groupTransform)
         val groupOpacity = group.opacity ?: 1f
         val newOpacity = parentOpacity * groupOpacity
 
-        group.rects.forEach { renderRect(it, combinedTransform, newOpacity) }
-        group.paths.forEach { renderPath(it, combinedTransform, newOpacity) }
-        group.circles.forEach { renderCircle(it, combinedTransform, newOpacity) }
-        group.ellipses.forEach { renderEllipse(it, combinedTransform, newOpacity) }
-        group.lines.forEach { renderLine(it, combinedTransform, newOpacity) }
-        group.polygons.forEach { renderPolygon(it, combinedTransform, newOpacity) }
-        group.polylines.forEach { renderPolyline(it, combinedTransform, newOpacity) }
-        group.groups.forEach { renderGroup(it, combinedTransform, newOpacity) }
+        val groupStyle = style.merge(
+            SvgStyle(
+                fill = group.fill,
+                stroke = group.stroke,
+                strokeWidth = group.strokeWidth,
+                strokeOpacity = group.strokeOpacity,
+                fillOpacity = group.fillOpacity,
+            )
+        )
+
+        group.rects.forEach { renderRect(it, combinedTransform, newOpacity, groupStyle) }
+        group.paths.forEach { renderPath(it, combinedTransform, newOpacity, groupStyle) }
+        group.circles.forEach { renderCircle(it, combinedTransform, newOpacity, groupStyle) }
+        group.ellipses.forEach { renderEllipse(it, combinedTransform, newOpacity, groupStyle) }
+        group.lines.forEach { renderLine(it, combinedTransform, newOpacity, groupStyle) }
+        group.polygons.forEach { renderPolygon(it, combinedTransform, newOpacity, groupStyle) }
+        group.polylines.forEach { renderPolyline(it, combinedTransform, newOpacity, groupStyle) }
+        group.groups.forEach { renderGroup(it, combinedTransform, newOpacity, groupStyle) }
     }
 
     private fun combineTransforms(parent: GPUTransformFacts, child: GPUTransformFacts): GPUTransformFacts {
@@ -152,13 +178,13 @@ class SvgRenderer(
         )
     }
 
-    private fun renderRect(rect: SvgRect, parentTransform: GPUTransformFacts, parentOpacity: Float = 1f) {
+    private fun renderRect(rect: SvgRect, parentTransform: GPUTransformFacts, parentOpacity: Float = 1f, style: SvgStyle = SvgStyle()) {
         val elementTransform = transformParser.parse(rect.transform)
         val combinedTransform = combineTransforms(parentTransform, elementTransform)
         
         val opacity = rect.opacity ?: parentOpacity
-        val fillOpacity = rect.fillOpacity ?: 1f
-        val strokeOpacity = rect.strokeOpacity ?: 1f
+        val fillOpacity = rect.fillOpacity ?: style.fillOpacity ?: 1f
+        val strokeOpacity = rect.strokeOpacity ?: style.strokeOpacity ?: 1f
 
         val (tx, ty, sx, sy) = extractTransformComponents(combinedTransform)
         val x = rect.x * sx + tx
@@ -166,51 +192,57 @@ class SvgRenderer(
         val width = rect.width * sx
         val height = rect.height * sy
 
-        if (rect.fill != null) {
-            val fillPaint = paintParser.parseFill(rect.fill, fillOpacity * opacity)
+        val effectiveFill = rect.fill ?: style.fill
+        if (effectiveFill != null) {
+            val fillPaint = paintParser.parseFill(effectiveFill, fillOpacity * opacity)
             val kanvasRect = Rect.fromXYWH(x, y, width, height)
             canvas.drawRect(kanvasRect, fillPaint)
         }
 
-        if (rect.stroke != null && rect.strokeWidth != null && rect.strokeWidth > 0) {
-            val strokePaint = paintParser.parseStroke(rect.stroke, rect.strokeWidth, strokeOpacity * opacity)
+        val effectiveStroke = rect.stroke ?: style.stroke
+        val effectiveStrokeWidth = rect.strokeWidth ?: style.strokeWidth
+        if (effectiveStroke != null && effectiveStrokeWidth != null && effectiveStrokeWidth > 0) {
+            val strokePaint = paintParser.parseStroke(effectiveStroke, effectiveStrokeWidth, strokeOpacity * opacity)
             val kanvasRect = Rect.fromXYWH(x, y, width, height)
             canvas.drawRect(kanvasRect, strokePaint)
         }
     }
 
-    private fun renderPath(path: SvgPath, parentTransform: GPUTransformFacts, parentOpacity: Float = 1f) {
+    private fun renderPath(path: SvgPath, parentTransform: GPUTransformFacts, parentOpacity: Float = 1f, style: SvgStyle = SvgStyle()) {
         val elementTransform = transformParser.parse(path.transform)
         val combinedTransform = combineTransforms(parentTransform, elementTransform)
         
         val opacity = path.opacity ?: parentOpacity
-        val fillOpacity = path.fillOpacity ?: 1f
-        val strokeOpacity = path.strokeOpacity ?: 1f
+        val fillOpacity = path.fillOpacity ?: style.fillOpacity ?: 1f
+        val strokeOpacity = path.strokeOpacity ?: style.strokeOpacity ?: 1f
 
         val kanvasPath = pathParser.parse(path.d)
         val (tx, ty, sx, sy) = extractTransformComponents(combinedTransform)
         val transformedPath = kanvasPath.transform(tx, ty, sx, sy)
 
-        if (path.fill != null) {
-            val fillPaint = paintParser.parseFill(path.fill, fillOpacity * opacity)
+        val effectiveFill = path.fill ?: style.fill
+        if (effectiveFill != null) {
+            val fillPaint = paintParser.parseFill(effectiveFill, fillOpacity * opacity)
             canvas.drawPath(transformedPath, fillPaint)
         }
 
-        if (path.stroke != null && path.strokeWidth != null && path.strokeWidth > 0) {
-            val strokePaint = paintParser.parseStroke(path.stroke, path.strokeWidth, strokeOpacity * opacity)
+        val effectiveStroke = path.stroke ?: style.stroke
+        val effectiveStrokeWidth = path.strokeWidth ?: style.strokeWidth
+        if (effectiveStroke != null && effectiveStrokeWidth != null && effectiveStrokeWidth > 0) {
+            val strokePaint = paintParser.parseStroke(effectiveStroke, effectiveStrokeWidth, strokeOpacity * opacity)
             canvas.drawPath(transformedPath, strokePaint)
         }
     }
 
 
 
-    private fun renderCircle(circle: SvgCircle, parentTransform: GPUTransformFacts, parentOpacity: Float = 1f) {
+    private fun renderCircle(circle: SvgCircle, parentTransform: GPUTransformFacts, parentOpacity: Float = 1f, style: SvgStyle = SvgStyle()) {
         val elementTransform = transformParser.parse(circle.transform)
         val combinedTransform = combineTransforms(parentTransform, elementTransform)
         
         val opacity = circle.opacity ?: parentOpacity
-        val fillOpacity = circle.fillOpacity ?: 1f
-        val strokeOpacity = circle.strokeOpacity ?: 1f
+        val fillOpacity = circle.fillOpacity ?: style.fillOpacity ?: 1f
+        val strokeOpacity = circle.strokeOpacity ?: style.strokeOpacity ?: 1f
 
         val (tx, ty, sx, sy) = extractTransformComponents(combinedTransform)
         val cx = circle.cx * sx + tx
@@ -220,24 +252,27 @@ class SvgRenderer(
         val path = Path()
         path.addCircle(cx, cy, r)
 
-        if (circle.fill != null) {
-            val fillPaint = paintParser.parseFill(circle.fill, fillOpacity * opacity)
+        val effectiveFill = circle.fill ?: style.fill
+        if (effectiveFill != null) {
+            val fillPaint = paintParser.parseFill(effectiveFill, fillOpacity * opacity)
             canvas.drawPath(path, fillPaint)
         }
 
-        if (circle.stroke != null && circle.strokeWidth != null && circle.strokeWidth > 0) {
-            val strokePaint = paintParser.parseStroke(circle.stroke, circle.strokeWidth, strokeOpacity * opacity)
+        val effectiveStroke = circle.stroke ?: style.stroke
+        val effectiveStrokeWidth = circle.strokeWidth ?: style.strokeWidth
+        if (effectiveStroke != null && effectiveStrokeWidth != null && effectiveStrokeWidth > 0) {
+            val strokePaint = paintParser.parseStroke(effectiveStroke, effectiveStrokeWidth, strokeOpacity * opacity)
             canvas.drawPath(path, strokePaint)
         }
     }
 
-    private fun renderEllipse(ellipse: SvgEllipse, parentTransform: GPUTransformFacts, parentOpacity: Float = 1f) {
+    private fun renderEllipse(ellipse: SvgEllipse, parentTransform: GPUTransformFacts, parentOpacity: Float = 1f, style: SvgStyle = SvgStyle()) {
         val elementTransform = transformParser.parse(ellipse.transform)
         val combinedTransform = combineTransforms(parentTransform, elementTransform)
         
         val opacity = ellipse.opacity ?: parentOpacity
-        val fillOpacity = ellipse.fillOpacity ?: 1f
-        val strokeOpacity = ellipse.strokeOpacity ?: 1f
+        val fillOpacity = ellipse.fillOpacity ?: style.fillOpacity ?: 1f
+        val strokeOpacity = ellipse.strokeOpacity ?: style.strokeOpacity ?: 1f
 
         val (tx, ty, sx, sy) = extractTransformComponents(combinedTransform)
         val cx = ellipse.cx * sx + tx
@@ -248,23 +283,26 @@ class SvgRenderer(
         val path = Path()
         path.addOval(Rect.fromXYWH(cx - rx, cy - ry, rx * 2, ry * 2))
 
-        if (ellipse.fill != null) {
-            val fillPaint = paintParser.parseFill(ellipse.fill, fillOpacity * opacity)
+        val effectiveFill = ellipse.fill ?: style.fill
+        if (effectiveFill != null) {
+            val fillPaint = paintParser.parseFill(effectiveFill, fillOpacity * opacity)
             canvas.drawPath(path, fillPaint)
         }
 
-        if (ellipse.stroke != null && ellipse.strokeWidth != null && ellipse.strokeWidth > 0) {
-            val strokePaint = paintParser.parseStroke(ellipse.stroke, ellipse.strokeWidth, strokeOpacity * opacity)
+        val effectiveStroke = ellipse.stroke ?: style.stroke
+        val effectiveStrokeWidth = ellipse.strokeWidth ?: style.strokeWidth
+        if (effectiveStroke != null && effectiveStrokeWidth != null && effectiveStrokeWidth > 0) {
+            val strokePaint = paintParser.parseStroke(effectiveStroke, effectiveStrokeWidth, strokeOpacity * opacity)
             canvas.drawPath(path, strokePaint)
         }
     }
 
-    private fun renderLine(line: SvgLine, parentTransform: GPUTransformFacts, parentOpacity: Float = 1f) {
+    private fun renderLine(line: SvgLine, parentTransform: GPUTransformFacts, parentOpacity: Float = 1f, style: SvgStyle = SvgStyle()) {
         val elementTransform = transformParser.parse(line.transform)
         val combinedTransform = combineTransforms(parentTransform, elementTransform)
         
         val opacity = line.opacity ?: parentOpacity
-        val strokeOpacity = line.strokeOpacity ?: 1f
+        val strokeOpacity = line.strokeOpacity ?: style.strokeOpacity ?: 1f
 
         val (tx, ty, sx, sy) = extractTransformComponents(combinedTransform)
         val x1 = line.x1 * sx + tx
@@ -272,8 +310,10 @@ class SvgRenderer(
         val x2 = line.x2 * sx + tx
         val y2 = line.y2 * sy + ty
 
-        if (line.stroke != null && line.strokeWidth != null && line.strokeWidth > 0) {
-            val strokePaint = paintParser.parseStroke(line.stroke, line.strokeWidth, strokeOpacity * opacity)
+        val effectiveStroke = line.stroke ?: style.stroke
+        val effectiveStrokeWidth = line.strokeWidth ?: style.strokeWidth
+        if (effectiveStroke != null && effectiveStrokeWidth != null && effectiveStrokeWidth > 0) {
+            val strokePaint = paintParser.parseStroke(effectiveStroke, effectiveStrokeWidth, strokeOpacity * opacity)
             val path = Path()
             path.moveTo(x1, y1)
             path.lineTo(x2, y2)
@@ -281,39 +321,44 @@ class SvgRenderer(
         }
     }
 
-    private fun renderPolygon(polygon: SvgPolygon, parentTransform: GPUTransformFacts, parentOpacity: Float = 1f) {
+    private fun renderPolygon(polygon: SvgPolygon, parentTransform: GPUTransformFacts, parentOpacity: Float = 1f, style: SvgStyle = SvgStyle()) {
         val elementTransform = transformParser.parse(polygon.transform)
         val combinedTransform = combineTransforms(parentTransform, elementTransform)
         
         val opacity = polygon.opacity ?: parentOpacity
-        val fillOpacity = polygon.fillOpacity ?: 1f
-        val strokeOpacity = polygon.strokeOpacity ?: 1f
+        val fillOpacity = polygon.fillOpacity ?: style.fillOpacity ?: 1f
+        val strokeOpacity = polygon.strokeOpacity ?: style.strokeOpacity ?: 1f
 
         val path = parsePoints(polygon.points, combinedTransform)
         path.close()
 
-        if (polygon.fill != null) {
-            val fillPaint = paintParser.parseFill(polygon.fill, fillOpacity * opacity)
+        val effectiveFill = polygon.fill ?: style.fill
+        if (effectiveFill != null) {
+            val fillPaint = paintParser.parseFill(effectiveFill, fillOpacity * opacity)
             canvas.drawPath(path, fillPaint)
         }
 
-        if (polygon.stroke != null && polygon.strokeWidth != null && polygon.strokeWidth > 0) {
-            val strokePaint = paintParser.parseStroke(polygon.stroke, polygon.strokeWidth, strokeOpacity * opacity)
+        val effectiveStroke = polygon.stroke ?: style.stroke
+        val effectiveStrokeWidth = polygon.strokeWidth ?: style.strokeWidth
+        if (effectiveStroke != null && effectiveStrokeWidth != null && effectiveStrokeWidth > 0) {
+            val strokePaint = paintParser.parseStroke(effectiveStroke, effectiveStrokeWidth, strokeOpacity * opacity)
             canvas.drawPath(path, strokePaint)
         }
     }
 
-    private fun renderPolyline(polyline: SvgPolyline, parentTransform: GPUTransformFacts, parentOpacity: Float = 1f) {
+    private fun renderPolyline(polyline: SvgPolyline, parentTransform: GPUTransformFacts, parentOpacity: Float = 1f, style: SvgStyle = SvgStyle()) {
         val elementTransform = transformParser.parse(polyline.transform)
         val combinedTransform = combineTransforms(parentTransform, elementTransform)
         
         val opacity = polyline.opacity ?: parentOpacity
-        val strokeOpacity = polyline.strokeOpacity ?: 1f
+        val strokeOpacity = polyline.strokeOpacity ?: style.strokeOpacity ?: 1f
 
         val path = parsePoints(polyline.points, combinedTransform)
 
-        if (polyline.stroke != null && polyline.strokeWidth != null && polyline.strokeWidth > 0) {
-            val strokePaint = paintParser.parseStroke(polyline.stroke, polyline.strokeWidth, strokeOpacity * opacity)
+        val effectiveStroke = polyline.stroke ?: style.stroke
+        val effectiveStrokeWidth = polyline.strokeWidth ?: style.strokeWidth
+        if (effectiveStroke != null && effectiveStrokeWidth != null && effectiveStrokeWidth > 0) {
+            val strokePaint = paintParser.parseStroke(effectiveStroke, effectiveStrokeWidth, strokeOpacity * opacity)
             canvas.drawPath(path, strokePaint)
         }
     }

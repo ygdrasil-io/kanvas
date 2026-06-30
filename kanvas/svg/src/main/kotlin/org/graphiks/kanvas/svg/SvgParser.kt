@@ -246,6 +246,11 @@ class SvgParser {
     private fun parseGroup(reader: XMLStreamReader): SvgGroup {
         val transform = reader.getAttributeValue(null, "transform")
         val opacity = reader.getAttributeValue(null, "opacity")?.toFloatOrNull()
+        val fill = reader.getAttributeValue(null, "fill")
+        val stroke = reader.getAttributeValue(null, "stroke")
+        val strokeWidth = reader.getAttributeValue(null, "stroke-width")?.toFloatOrNull()
+        val strokeOpacity = reader.getAttributeValue(null, "stroke-opacity")?.toFloatOrNull()
+        val fillOpacity = reader.getAttributeValue(null, "fill-opacity")?.toFloatOrNull()
 
         val rects = mutableListOf<SvgRect>()
         val paths = mutableListOf<SvgPath>()
@@ -279,6 +284,9 @@ class SvgParser {
 
         return SvgGroup(
             transform = transform, opacity = opacity,
+            fill = fill, stroke = stroke,
+            strokeWidth = strokeWidth, strokeOpacity = strokeOpacity,
+            fillOpacity = fillOpacity,
             rects = rects, paths = paths, circles = circles,
             ellipses = ellipses, lines = lines, polygons = polygons,
             polylines = polylines, groups = groups
