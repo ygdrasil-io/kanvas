@@ -145,19 +145,19 @@ class SvgIntegrationTest {
     fun `test gradient-1`() {
         requireWebGpu()
         // Missing: rotate(angle,cx,cy) transform support (12 groups with rotate)
-        testSvg("/by-render-family/gradients/gradient-1.svg", minSimilarity = 0.0, tolerance = 5)
+        testSvg("/by-render-family/gradients/gradient-1.svg", minSimilarity = 60.0, tolerance = 5)
     }
 
     @Test
     fun `test gradient-2`() {
         requireWebGpu()
-        testSvg("/by-render-family/gradients/gradient-2.svg", minSimilarity = 0.0, tolerance = 5)
+        testSvg("/by-render-family/gradients/gradient-2.svg", minSimilarity = 60.0, tolerance = 5)
     }
 
     @Test
     fun `test gradient-3`() {
         requireWebGpu()
-        testSvg("/by-render-family/gradients/gradient-3.svg", minSimilarity = 0.0, tolerance = 5)
+        testSvg("/by-render-family/gradients/gradient-3.svg", minSimilarity = 75.0, tolerance = 5)
     }
 
     @Test
