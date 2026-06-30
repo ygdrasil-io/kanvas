@@ -19,7 +19,7 @@ class SvgPaintParser {
         }
         
         if (fill.startsWith("url(") && fill.endsWith(")")) {
-            val id = fill.substring(5, fill.length - 1).trim()
+            val id = fill.substring(4, fill.length - 1).trim().removePrefix("#")
             val shader = gradientMap[id]
             if (shader != null) {
                 val paint = Paint()
@@ -54,7 +54,7 @@ class SvgPaintParser {
         }
         
         if (stroke.startsWith("url(") && stroke.endsWith(")")) {
-            val id = stroke.substring(5, stroke.length - 1).trim()
+            val id = stroke.substring(4, stroke.length - 1).trim().removePrefix("#")
             val shader = gradientMap[id]
             if (shader != null) {
                 val paint = Paint()
