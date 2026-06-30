@@ -4,9 +4,13 @@ import org.graphiks.kanvas.Canvas
 import java.io.File
 import java.io.InputStream
 
-class SvgCanvas(private val canvas: Canvas) {
+class SvgCanvas(
+    private val canvas: Canvas,
+    private val targetWidth: Float = 800f,
+    private val targetHeight: Float = 600f,
+) {
     private val parser = SvgParser()
-    private val renderer = SvgRenderer(canvas)
+    private val renderer = SvgRenderer(canvas, targetWidth, targetHeight)
 
     fun drawSvg(svg: String) {
         val root = parser.parse(svg)
