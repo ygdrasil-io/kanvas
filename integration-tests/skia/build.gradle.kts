@@ -16,12 +16,6 @@ dependencies {
     testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.10.2")
 }
 
-sourceSets {
-    test {
-        resources.srcDir("../../skia-integration-tests/src/test/resources")
-    }
-}
-
 tasks.withType<Test> {
     jvmArgs(
         "--add-opens=java.base/java.lang=ALL-UNNAMED",
@@ -32,13 +26,13 @@ tasks.withType<Test> {
     }
 }
 
-tasks.register<JavaExec>("generateSkiaReferences") {
+tasks.register<JavaExec>("generateSkiaRenders") {
     group = "verification"
-    description = "Generates reference PNGs for all Skia GMs."
+    description = "Generates Kanvas render PNGs for all Skia GMs."
     dependsOn(tasks.named("testClasses"))
     classpath = sourceSets["test"].runtimeClasspath
     mainClass.set("org.graphiks.kanvas.skia.SkiaRenderGeneratorKt")
-    val outputDir = layout.projectDirectory.dir("src/test/resources/generated-references")
+    val outputDir = layout.projectDirectory.dir("src/test/resources/generated-renders")
     args(outputDir.asFile.absolutePath)
     jvmArgs(buildList {
         add("--add-opens=java.base/java.lang=ALL-UNNAMED")
