@@ -16,6 +16,7 @@ data class Image(
     val width: Int,
     val height: Int,
     val colorType: ColorType = ColorType.RGBA_8888,
+    val colorSpace: ColorSpace = ColorSpace.SRGB,
     val sourceId: String,
 ) {
     companion object {
@@ -26,7 +27,8 @@ data class Image(
 
 - Metadata carrier — the actual pixel data is managed by the GPU backend
 - `sourceId`: unique identifier for texture lookup in GPU resource cache
-- `decode()`: placeholder in this phase (returns width=0, height=0); real implementation via codec SPI deferred
+- `colorSpace`: forwarded to `GPUColorSpaceDescriptor` in `:gpu-renderer` for color conversion; defaults to sRGB
+- `decode()`: placeholder in this phase (returns width=0, height=0); real implementation via codec SPI deferred (codec will extract color space from image metadata — e.g., ICC profile from JPEG, gAMA/cHRM from PNG, NCLC/colr from HEIF)
 
 ### ColorType
 

@@ -5,7 +5,7 @@ Date: 2026-07-01
 
 ## Purpose
 
-Defines the fundamental value types used throughout the Kanvas API: Color, Point, Size, Rect, RRect (with CornerRadii), and Matrix33. These are the building blocks that all other API types depend on.
+Defines the fundamental value types used throughout the Kanvas API: Color, Point, Size, Rect, RRect (with CornerRadii), Matrix33, and ColorSpace. These are the building blocks that all other API types depend on.
 
 ## Contracts
 
@@ -77,9 +77,24 @@ class Matrix33 private constructor(private val values: FloatArray)
 - **Operators:** `times(Matrix33)`, `times(Point)`
 - **Equality:** content-based via `values.contentEquals()`
 
+### ColorSpace
+
+```kotlin
+sealed interface ColorSpace {
+    data object SRGB : ColorSpace
+    data object DisplayP3 : ColorSpace
+    data object LinearSRGB : ColorSpace
+    data class Custom(val name: String, val iccProfile: ByteArray? = null) : ColorSpace
+}
+```
+
+- **Default:** `ColorSpace.SRGB` — all drawing defaults to sRGB unless overridden
+- **Carrier only:** Kanvas does not perform color conversion — `ColorSpace` is metadata forwarded to `:gpu-renderer` where `GPUColorSpaceDescriptor` and `GPUColorManagementPlan` handle transforms
+- **ICC profiles:** `Custom(name, profile)` carries raw ICC profile bytes; validation and parsing delegated to the GPU pipeline
+- **Rationale:** Sealed interface allows exhaustive `when` matching for sRGB/P3/Linear paths while leaving an escape hatch for arbitrary profiles. The facade never interprets profile bytes.
+
 ## Non-Goals
 
-- Color spaces beyond sRGB are not modeled in this pack
 - Matrix44 (4×4) is not included — the 3×3 covers all 2D affine + perspective transforms
 - Point does not support integer variants (Skia's SkIPoint) — use Float coordinates universally
 - Rect does not include integer variant (Skia's SkIRect) — see `04-canvas-and-drawing.md` for clip bounds

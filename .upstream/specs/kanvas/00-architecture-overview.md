@@ -13,7 +13,7 @@ The `:kanvas` module lives at `kanvas/` and uses the base package `org.graphiks.
 
 | Sub-package | Responsibility |
 |-------------|----------------|
-| `types/` | Core value types: Color, Point, Size, Rect, RRect, Matrix33 |
+| `types/` | Core value types: Color, Point, Size, Rect, RRect, Matrix33, ColorSpace |
 | `paint/` | Paint data class and all effect sealed hierarchies |
 | `geometry/` | Path, FillType, PathVerb, ClipStack |
 | `canvas/` | Canvas, DisplayOp sealed hierarchy, extensions |

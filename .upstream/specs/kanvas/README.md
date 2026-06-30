@@ -38,15 +38,15 @@ These specs implement the design approved in `docs/superpowers/specs/2026-06-30-
 | Spec | Purpose |
 |------|---------|
 | `00-architecture-overview.md` | Module structure, package layout, naming conventions, data flow |
-| `01-core-types.md` | Color, Point, Size, Rect, RRect, Matrix33 |
+| `01-core-types.md` | Color, Point, Size, Rect, RRect, Matrix33, ColorSpace |
 | `02-paint-and-effects.md` | Paint, BlendMode, Shader, ColorFilter, MaskFilter, PathEffect, ImageFilter, Blender |
 | `03-path-and-geometry.md` | Path, FillType, PathVerb, ClipStack |
 | `04-canvas-and-drawing.md` | Canvas, DisplayOp, drawing methods, state, transforms, clips |
 | `05-gpu-pipeline.md` | GPUContext, RenderPass, RenderPipeline, ShaderModule, RuntimeEffect, UniformBlock |
 | `06-diagnostics-and-refusals.md` | Diagnostic, Diagnostics, refusal levels, error policy |
-| `07-surface-and-rendering.md` | Surface, RenderResult, RenderStats, toPng() |
+| `07-surface-and-rendering.md` | Surface, RenderResult, RenderStats, ColorSpace handoff, toPng() |
 | `08-dsl-and-extensions.md` | @KanvasDsl, PathScope, PaintScope, CanvasScope, ShaderScopes, operators |
-| `09-image-and-text.md` | Image, ColorType, TextBlob, KanvasTypeface, KanvasGlyphRun |
+| `09-image-and-text.md` | Image, ColorType, ColorSpace, TextBlob, KanvasTypeface, KanvasGlyphRun |
 
 ## Target Shape
 
@@ -87,5 +87,4 @@ WebGPU backend (:gpu-renderer)
 - `SkFont` / `SkFontMgr` (delegated to `:font`)
 - `SkRegion`, `SkPathMeasure`
 - Path ops (union, intersect, difference)
-- Color spaces beyond sRGB
 - Text shaping Unicode→glyph (delegated to `:font`)

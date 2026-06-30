@@ -16,6 +16,7 @@ class Surface(
     val width: Int,
     val height: Int,
     val format: PixelFormat = PixelFormat.RGBA8,
+    val colorSpace: ColorSpace = ColorSpace.SRGB,
 )
 ```
 
@@ -27,6 +28,7 @@ class Surface(
 - **GPU access:**
   - `gpu: GPUContext` — provides direct GPU pipeline access (advanced)
   - `renderPass(desc: RenderPassDescriptor, block: RenderPass.() -> Unit)` — shortcut to begin + execute + end a render pass
+- **Color space:** `colorSpace` defines the target color space for the render target. Forwarded to `GPUColorSpaceDescriptor` and `GPUColorStorePlan` in `:gpu-renderer`. Defaults to sRGB.
 
 ### PixelFormat
 
@@ -41,6 +43,7 @@ data class RenderResult(
     val pixels: UByteArray,
     val width: Int,
     val height: Int,
+    val colorSpace: ColorSpace,
     val diagnostics: Diagnostics,
     val stats: RenderStats,
 ) {
@@ -51,6 +54,7 @@ data class RenderResult(
 ```
 
 - `pixels`: raw RGBA bytes (width × height × 4)
+- `colorSpace`: the color space of the returned pixel data (reflects Surface's target color space)
 - `assertClean()`: guard for tests — ensures no diagnostics were emitted
 
 ### RenderStats
@@ -75,7 +79,8 @@ fun RenderResult.toPng(): ByteArray
 
 - Extension on `RenderResult`
 - Uses `ImageEncoderRegistry.find("png")` via ServiceLoader on `:codec:api`
-- Call site: `encoder.encode(pixels, width, height, ImageEncoder.Metadata(ImageEncoder.PixelLayout.RGBA8))`
+- Call site: `encoder.encode(pixels, width, height, ImageEncoder.Metadata(PixelLayout.RGBA8, colorSpace))`
+- The encoder is responsible for tagging the PNG with the correct color profile chunk (sRGB chunk for `ColorSpace.SRGB`, iCCP chunk for `DisplayP3`/`Custom` profiles)
 - If no PNG encoder registered: throws `IllegalStateException("Add :codec:png to your dependencies to enable PNG export")`
 - No hard dependency on `:codec:png` in `:kanvas`
 
@@ -84,7 +89,7 @@ fun RenderResult.toPng(): ByteArray
 ```kotlin
 interface ImageEncoder {
     fun encode(pixels: ByteArray, width: Int, height: Int, metadata: Metadata): ByteArray
-    data class Metadata(val format: PixelLayout)
+    data class Metadata(val format: PixelLayout, val colorSpace: ColorSpace)
     enum class PixelLayout { RGBA8, BGRA8 }
 }
 
@@ -94,6 +99,7 @@ object ImageEncoderRegistry {
 }
 ```
 
+- `Metadata.colorSpace` tells the encoder which profile to embed in the output
 - `ImageEncoder` is defined in `:codec:api`
 - `ImageEncoderRegistry` is a ServiceLoader-backed registry
 - Concrete encoders (`PngEncoder`) live in `:codec:png`
