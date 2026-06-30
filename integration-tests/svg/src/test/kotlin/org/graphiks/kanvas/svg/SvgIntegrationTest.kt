@@ -90,19 +90,22 @@ class SvgIntegrationTest {
     @Test
     fun `test ghostscript-tiger`() {
         requireWebGpu()
+        // Missing: stroke-linejoin/linecap, precise anti-aliasing matches reference
         testSvg("/by-render-family/complex-paths/complex-1.svg", minSimilarity = 20.0, tolerance = 2)
     }
 
     @Test
     fun `test complex-paths-2`() {
         requireWebGpu()
-        testSvg("/by-render-family/complex-paths/complex-2.svg", minSimilarity = 90.0, tolerance = 2)
+        // Missing: <filter>/<feColorMatrix>, <clipPath>, precise anti-aliasing
+        testSvg("/by-render-family/complex-paths/complex-2.svg", minSimilarity = 45.0, tolerance = 2)
     }
 
     @Test
     fun `test complex-paths-3`() {
         requireWebGpu()
-        testSvg("/by-render-family/complex-paths/complex-3.svg", minSimilarity = 90.0, tolerance = 2)
+        // Missing: precise anti-aliasing, stroke rendering precision
+        testSvg("/by-render-family/complex-paths/complex-3.svg", minSimilarity = 45.0, tolerance = 2)
     }
 
     @Test

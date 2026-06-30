@@ -33,8 +33,116 @@ class Path(
         verbs.add(PathVerb.CubicTo(c1 = Point(c1x, c1y), c2 = Point(c2x, c2y), p = Point(x, y)))
     }
 
+    fun arcTo(
+        rx: Float, ry: Float,
+        xAxisRotation: Float,
+        largeArcFlag: Boolean, sweepFlag: Boolean,
+        x: Float, y: Float,
+    ): Path = apply {
+        val x1 = currentX()
+        val y1 = currentY()
+        if (x1 == x && y1 == y) return@apply
+        var effectiveRx = rx; var effectiveRy = ry
+        if (effectiveRx <= 0f || effectiveRy <= 0f) { lineTo(x, y); return@apply }
+
+        val phi = Math.toRadians(xAxisRotation.toDouble()).toFloat()
+        val cosPhi = kotlin.math.cos(phi)
+        val sinPhi = kotlin.math.sin(phi)
+
+        val dx2 = (x1 - x) / 2f
+        val dy2 = (y1 - y) / 2f
+        val x1p = cosPhi * dx2 + sinPhi * dy2
+        val y1p = -sinPhi * dx2 + cosPhi * dy2
+
+        val x1ps = x1p * x1p
+        val y1ps = y1p * y1p
+
+        val lambda = x1ps / (effectiveRx * effectiveRx) + y1ps / (effectiveRy * effectiveRy)
+        if (lambda > 1f) {
+            val scale = kotlin.math.sqrt(lambda)
+            effectiveRx *= scale; effectiveRy *= scale
+        }
+
+        val rxs = effectiveRx * effectiveRx
+        val rys = effectiveRy * effectiveRy
+        val sign = if (largeArcFlag != sweepFlag) 1f else -1f
+        val denom = rxs * y1ps + rys * x1ps
+        val num = (rxs * rys - denom) / denom
+        val coeff = sign * kotlin.math.sqrt(kotlin.math.max(num, 0f))
+        val cxp = coeff * ((effectiveRx * y1p) / effectiveRy)
+        val cyp = coeff * (-(effectiveRy * x1p) / effectiveRx)
+
+        val cx = cosPhi * cxp - sinPhi * cyp + (x1 + x) / 2f
+        val cy = sinPhi * cxp + cosPhi * cyp + (y1 + y) / 2f
+
+        val ux = (x1p - cxp) / effectiveRx
+        val uy = (y1p - cyp) / effectiveRy
+        val vx = (-x1p - cxp) / effectiveRx
+        val vy = (-y1p - cyp) / effectiveRy
+
+        var theta1 = kotlin.math.atan2(uy, ux)
+        var deltaTheta = kotlin.math.atan2(vy, vx) - theta1
+
+        if (!sweepFlag && deltaTheta > 0f) deltaTheta -= (2f * Math.PI).toFloat()
+        if (sweepFlag && deltaTheta < 0f) deltaTheta += (2f * Math.PI).toFloat()
+
+        val segments = kotlin.math.ceil(kotlin.math.abs(deltaTheta) / (Math.PI / 2.0).toFloat()).toInt().coerceAtLeast(1)
+        val segAngle = deltaTheta / segments
+        val kappa = (4f / 3f) * kotlin.math.tan(segAngle / 4f)
+
+        var currentAngle = theta1
+        for (i in 0 until segments) {
+            val sa = currentAngle
+            val ea = currentAngle + segAngle
+            val cosSa = kotlin.math.cos(sa); val sinSa = kotlin.math.sin(sa)
+            val cosEa = kotlin.math.cos(ea); val sinEa = kotlin.math.sin(ea)
+
+            val computedEx = cosPhi * effectiveRx * cosEa - sinPhi * effectiveRy * sinEa + cx
+            val computedEy = sinPhi * effectiveRx * cosEa + cosPhi * effectiveRy * sinEa + cy
+
+            val c1x = cosPhi * effectiveRx * (cosSa - kappa * sinSa) - sinPhi * effectiveRy * (sinSa + kappa * cosSa) + cx
+            val c1y = sinPhi * effectiveRx * (cosSa - kappa * sinSa) + cosPhi * effectiveRy * (sinSa + kappa * cosSa) + cy
+            val c2x = cosPhi * effectiveRx * (cosEa + kappa * sinEa) - sinPhi * effectiveRy * (sinEa - kappa * cosEa) + cx
+            val c2y = sinPhi * effectiveRx * (cosEa + kappa * sinEa) + cosPhi * effectiveRy * (sinEa - kappa * cosEa) + cy
+
+            val exactEnd = (i == segments - 1)
+            val resultEx = if (exactEnd) x else computedEx
+            val resultEy = if (exactEnd) y else computedEy
+
+            verbs.add(PathVerb.CubicTo(c1 = Point(c1x, c1y), c2 = Point(c2x, c2y), p = Point(resultEx, resultEy)))
+
+            currentAngle = ea
+        }
+    }
+
     fun close(): Path = apply {
         verbs.add(PathVerb.Close)
+    }
+
+    private fun currentX(): Float {
+        for (i in verbs.indices.reversed()) {
+            when (val v = verbs[i]) {
+                is PathVerb.MoveTo -> return v.p.x
+                is PathVerb.LineTo -> return v.p.x
+                is PathVerb.QuadTo -> return v.p.x
+                is PathVerb.CubicTo -> return v.p.x
+                is PathVerb.Close -> {}
+            }
+        }
+        return 0f
+    }
+
+    private fun currentY(): Float {
+        for (i in verbs.indices.reversed()) {
+            when (val v = verbs[i]) {
+                is PathVerb.MoveTo -> return v.p.y
+                is PathVerb.LineTo -> return v.p.y
+                is PathVerb.QuadTo -> return v.p.y
+                is PathVerb.CubicTo -> return v.p.y
+                is PathVerb.Close -> {}
+            }
+        }
+        return 0f
     }
 
     fun addCircle(cx: Float, cy: Float, radius: Float): Path = apply {

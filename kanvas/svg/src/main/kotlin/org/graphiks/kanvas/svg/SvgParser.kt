@@ -99,19 +99,20 @@ class SvgParser {
     }
 
     private fun parseRect(reader: XMLStreamReader): SvgRect {
+        val styleAttrs = parseStyleAttribute(reader.getAttributeValue(null, "style"))
         val x = reader.getAttributeValue(null, "x")?.toFloatOrNull() ?: 0f
         val y = reader.getAttributeValue(null, "y")?.toFloatOrNull() ?: 0f
         val width = reader.getAttributeValue(null, "width")?.toFloatOrNull() ?: 0f
         val height = reader.getAttributeValue(null, "height")?.toFloatOrNull() ?: 0f
         val rx = reader.getAttributeValue(null, "rx")?.toFloatOrNull()
         val ry = reader.getAttributeValue(null, "ry")?.toFloatOrNull()
-        val fill = reader.getAttributeValue(null, "fill")
-        val stroke = reader.getAttributeValue(null, "stroke")
-        val strokeWidth = reader.getAttributeValue(null, "stroke-width")?.toFloatOrNull()
-        val strokeOpacity = reader.getAttributeValue(null, "stroke-opacity")?.toFloatOrNull()
-        val fillOpacity = reader.getAttributeValue(null, "fill-opacity")?.toFloatOrNull()
+        val fill = noneToNull(reader.getAttributeValue(null, "fill") ?: styleAttrs["fill"])
+        val stroke = noneToNull(reader.getAttributeValue(null, "stroke") ?: styleAttrs["stroke"])
+        val strokeWidth = reader.getAttributeValue(null, "stroke-width")?.toFloatOrNull() ?: styleAttrs["stroke-width"]?.toFloatOrNull()
+        val strokeOpacity = reader.getAttributeValue(null, "stroke-opacity")?.toFloatOrNull() ?: styleAttrs["stroke-opacity"]?.toFloatOrNull()
+        val fillOpacity = reader.getAttributeValue(null, "fill-opacity")?.toFloatOrNull() ?: styleAttrs["fill-opacity"]?.toFloatOrNull()
         val transform = reader.getAttributeValue(null, "transform")
-        val opacity = reader.getAttributeValue(null, "opacity")?.toFloatOrNull()
+        val opacity = reader.getAttributeValue(null, "opacity")?.toFloatOrNull() ?: styleAttrs["opacity"]?.toFloatOrNull()
 
         skipElement(reader)
         
@@ -124,14 +125,15 @@ class SvgParser {
     }
 
     private fun parsePath(reader: XMLStreamReader): SvgPath {
+        val styleAttrs = parseStyleAttribute(reader.getAttributeValue(null, "style"))
         val d = reader.getAttributeValue(null, "d") ?: ""
-        val fill = reader.getAttributeValue(null, "fill")
-        val stroke = reader.getAttributeValue(null, "stroke")
-        val strokeWidth = reader.getAttributeValue(null, "stroke-width")?.toFloatOrNull()
-        val strokeOpacity = reader.getAttributeValue(null, "stroke-opacity")?.toFloatOrNull()
-        val fillOpacity = reader.getAttributeValue(null, "fill-opacity")?.toFloatOrNull()
+        val fill = noneToNull(reader.getAttributeValue(null, "fill") ?: styleAttrs["fill"])
+        val stroke = noneToNull(reader.getAttributeValue(null, "stroke") ?: styleAttrs["stroke"])
+        val strokeWidth = reader.getAttributeValue(null, "stroke-width")?.toFloatOrNull() ?: styleAttrs["stroke-width"]?.toFloatOrNull()
+        val strokeOpacity = reader.getAttributeValue(null, "stroke-opacity")?.toFloatOrNull() ?: styleAttrs["stroke-opacity"]?.toFloatOrNull()
+        val fillOpacity = reader.getAttributeValue(null, "fill-opacity")?.toFloatOrNull() ?: styleAttrs["fill-opacity"]?.toFloatOrNull()
         val transform = reader.getAttributeValue(null, "transform")
-        val opacity = reader.getAttributeValue(null, "opacity")?.toFloatOrNull()
+        val opacity = reader.getAttributeValue(null, "opacity")?.toFloatOrNull() ?: styleAttrs["opacity"]?.toFloatOrNull()
 
         skipElement(reader)
         
@@ -143,16 +145,17 @@ class SvgParser {
     }
 
     private fun parseCircle(reader: XMLStreamReader): SvgCircle {
+        val styleAttrs = parseStyleAttribute(reader.getAttributeValue(null, "style"))
         val cx = reader.getAttributeValue(null, "cx")?.toFloatOrNull() ?: 0f
         val cy = reader.getAttributeValue(null, "cy")?.toFloatOrNull() ?: 0f
         val r = reader.getAttributeValue(null, "r")?.toFloatOrNull() ?: 0f
-        val fill = reader.getAttributeValue(null, "fill")
-        val stroke = reader.getAttributeValue(null, "stroke")
-        val strokeWidth = reader.getAttributeValue(null, "stroke-width")?.toFloatOrNull()
-        val strokeOpacity = reader.getAttributeValue(null, "stroke-opacity")?.toFloatOrNull()
-        val fillOpacity = reader.getAttributeValue(null, "fill-opacity")?.toFloatOrNull()
+        val fill = noneToNull(reader.getAttributeValue(null, "fill") ?: styleAttrs["fill"])
+        val stroke = noneToNull(reader.getAttributeValue(null, "stroke") ?: styleAttrs["stroke"])
+        val strokeWidth = reader.getAttributeValue(null, "stroke-width")?.toFloatOrNull() ?: styleAttrs["stroke-width"]?.toFloatOrNull()
+        val strokeOpacity = reader.getAttributeValue(null, "stroke-opacity")?.toFloatOrNull() ?: styleAttrs["stroke-opacity"]?.toFloatOrNull()
+        val fillOpacity = reader.getAttributeValue(null, "fill-opacity")?.toFloatOrNull() ?: styleAttrs["fill-opacity"]?.toFloatOrNull()
         val transform = reader.getAttributeValue(null, "transform")
-        val opacity = reader.getAttributeValue(null, "opacity")?.toFloatOrNull()
+        val opacity = reader.getAttributeValue(null, "opacity")?.toFloatOrNull() ?: styleAttrs["opacity"]?.toFloatOrNull()
 
         skipElement(reader)
         
@@ -164,17 +167,18 @@ class SvgParser {
     }
 
     private fun parseEllipse(reader: XMLStreamReader): SvgEllipse {
+        val styleAttrs = parseStyleAttribute(reader.getAttributeValue(null, "style"))
         val cx = reader.getAttributeValue(null, "cx")?.toFloatOrNull() ?: 0f
         val cy = reader.getAttributeValue(null, "cy")?.toFloatOrNull() ?: 0f
         val rx = reader.getAttributeValue(null, "rx")?.toFloatOrNull() ?: 0f
         val ry = reader.getAttributeValue(null, "ry")?.toFloatOrNull() ?: 0f
-        val fill = reader.getAttributeValue(null, "fill")
-        val stroke = reader.getAttributeValue(null, "stroke")
-        val strokeWidth = reader.getAttributeValue(null, "stroke-width")?.toFloatOrNull()
-        val strokeOpacity = reader.getAttributeValue(null, "stroke-opacity")?.toFloatOrNull()
-        val fillOpacity = reader.getAttributeValue(null, "fill-opacity")?.toFloatOrNull()
+        val fill = noneToNull(reader.getAttributeValue(null, "fill") ?: styleAttrs["fill"])
+        val stroke = noneToNull(reader.getAttributeValue(null, "stroke") ?: styleAttrs["stroke"])
+        val strokeWidth = reader.getAttributeValue(null, "stroke-width")?.toFloatOrNull() ?: styleAttrs["stroke-width"]?.toFloatOrNull()
+        val strokeOpacity = reader.getAttributeValue(null, "stroke-opacity")?.toFloatOrNull() ?: styleAttrs["stroke-opacity"]?.toFloatOrNull()
+        val fillOpacity = reader.getAttributeValue(null, "fill-opacity")?.toFloatOrNull() ?: styleAttrs["fill-opacity"]?.toFloatOrNull()
         val transform = reader.getAttributeValue(null, "transform")
-        val opacity = reader.getAttributeValue(null, "opacity")?.toFloatOrNull()
+        val opacity = reader.getAttributeValue(null, "opacity")?.toFloatOrNull() ?: styleAttrs["opacity"]?.toFloatOrNull()
 
         skipElement(reader)
         
@@ -186,15 +190,16 @@ class SvgParser {
     }
 
     private fun parseLine(reader: XMLStreamReader): SvgLine {
+        val styleAttrs = parseStyleAttribute(reader.getAttributeValue(null, "style"))
         val x1 = reader.getAttributeValue(null, "x1")?.toFloatOrNull() ?: 0f
         val y1 = reader.getAttributeValue(null, "y1")?.toFloatOrNull() ?: 0f
         val x2 = reader.getAttributeValue(null, "x2")?.toFloatOrNull() ?: 0f
         val y2 = reader.getAttributeValue(null, "y2")?.toFloatOrNull() ?: 0f
-        val stroke = reader.getAttributeValue(null, "stroke")
-        val strokeWidth = reader.getAttributeValue(null, "stroke-width")?.toFloatOrNull()
-        val strokeOpacity = reader.getAttributeValue(null, "stroke-opacity")?.toFloatOrNull()
+        val stroke = noneToNull(reader.getAttributeValue(null, "stroke") ?: styleAttrs["stroke"])
+        val strokeWidth = reader.getAttributeValue(null, "stroke-width")?.toFloatOrNull() ?: styleAttrs["stroke-width"]?.toFloatOrNull()
+        val strokeOpacity = reader.getAttributeValue(null, "stroke-opacity")?.toFloatOrNull() ?: styleAttrs["stroke-opacity"]?.toFloatOrNull()
         val transform = reader.getAttributeValue(null, "transform")
-        val opacity = reader.getAttributeValue(null, "opacity")?.toFloatOrNull()
+        val opacity = reader.getAttributeValue(null, "opacity")?.toFloatOrNull() ?: styleAttrs["opacity"]?.toFloatOrNull()
 
         skipElement(reader)
         
@@ -206,14 +211,15 @@ class SvgParser {
     }
 
     private fun parsePolygon(reader: XMLStreamReader): SvgPolygon {
+        val styleAttrs = parseStyleAttribute(reader.getAttributeValue(null, "style"))
         val points = reader.getAttributeValue(null, "points") ?: ""
-        val fill = reader.getAttributeValue(null, "fill")
-        val stroke = reader.getAttributeValue(null, "stroke")
-        val strokeWidth = reader.getAttributeValue(null, "stroke-width")?.toFloatOrNull()
-        val strokeOpacity = reader.getAttributeValue(null, "stroke-opacity")?.toFloatOrNull()
-        val fillOpacity = reader.getAttributeValue(null, "fill-opacity")?.toFloatOrNull()
+        val fill = noneToNull(reader.getAttributeValue(null, "fill") ?: styleAttrs["fill"])
+        val stroke = noneToNull(reader.getAttributeValue(null, "stroke") ?: styleAttrs["stroke"])
+        val strokeWidth = reader.getAttributeValue(null, "stroke-width")?.toFloatOrNull() ?: styleAttrs["stroke-width"]?.toFloatOrNull()
+        val strokeOpacity = reader.getAttributeValue(null, "stroke-opacity")?.toFloatOrNull() ?: styleAttrs["stroke-opacity"]?.toFloatOrNull()
+        val fillOpacity = reader.getAttributeValue(null, "fill-opacity")?.toFloatOrNull() ?: styleAttrs["fill-opacity"]?.toFloatOrNull()
         val transform = reader.getAttributeValue(null, "transform")
-        val opacity = reader.getAttributeValue(null, "opacity")?.toFloatOrNull()
+        val opacity = reader.getAttributeValue(null, "opacity")?.toFloatOrNull() ?: styleAttrs["opacity"]?.toFloatOrNull()
 
         skipElement(reader)
         
@@ -225,14 +231,15 @@ class SvgParser {
     }
 
     private fun parsePolyline(reader: XMLStreamReader): SvgPolyline {
+        val styleAttrs = parseStyleAttribute(reader.getAttributeValue(null, "style"))
         val points = reader.getAttributeValue(null, "points") ?: ""
-        val stroke = reader.getAttributeValue(null, "stroke")
-        val strokeWidth = reader.getAttributeValue(null, "stroke-width")?.toFloatOrNull()
-        val strokeOpacity = reader.getAttributeValue(null, "stroke-opacity")?.toFloatOrNull()
-        val fill = reader.getAttributeValue(null, "fill")
-        val fillOpacity = reader.getAttributeValue(null, "fill-opacity")?.toFloatOrNull()
+        val stroke = noneToNull(reader.getAttributeValue(null, "stroke") ?: styleAttrs["stroke"])
+        val strokeWidth = reader.getAttributeValue(null, "stroke-width")?.toFloatOrNull() ?: styleAttrs["stroke-width"]?.toFloatOrNull()
+        val strokeOpacity = reader.getAttributeValue(null, "stroke-opacity")?.toFloatOrNull() ?: styleAttrs["stroke-opacity"]?.toFloatOrNull()
+        val fill = noneToNull(reader.getAttributeValue(null, "fill") ?: styleAttrs["fill"])
+        val fillOpacity = reader.getAttributeValue(null, "fill-opacity")?.toFloatOrNull() ?: styleAttrs["fill-opacity"]?.toFloatOrNull()
         val transform = reader.getAttributeValue(null, "transform")
-        val opacity = reader.getAttributeValue(null, "opacity")?.toFloatOrNull()
+        val opacity = reader.getAttributeValue(null, "opacity")?.toFloatOrNull() ?: styleAttrs["opacity"]?.toFloatOrNull()
 
         skipElement(reader)
         
@@ -244,8 +251,14 @@ class SvgParser {
     }
 
     private fun parseGroup(reader: XMLStreamReader): SvgGroup {
+        val styleAttrs = parseStyleAttribute(reader.getAttributeValue(null, "style"))
         val transform = reader.getAttributeValue(null, "transform")
-        val opacity = reader.getAttributeValue(null, "opacity")?.toFloatOrNull()
+        val opacity = reader.getAttributeValue(null, "opacity")?.toFloatOrNull() ?: styleAttrs["opacity"]?.toFloatOrNull()
+        val fill = noneToNull(reader.getAttributeValue(null, "fill") ?: styleAttrs["fill"])
+        val stroke = noneToNull(reader.getAttributeValue(null, "stroke") ?: styleAttrs["stroke"])
+        val strokeWidth = reader.getAttributeValue(null, "stroke-width")?.toFloatOrNull() ?: styleAttrs["stroke-width"]?.toFloatOrNull()
+        val strokeOpacity = reader.getAttributeValue(null, "stroke-opacity")?.toFloatOrNull() ?: styleAttrs["stroke-opacity"]?.toFloatOrNull()
+        val fillOpacity = reader.getAttributeValue(null, "fill-opacity")?.toFloatOrNull() ?: styleAttrs["fill-opacity"]?.toFloatOrNull()
 
         val rects = mutableListOf<SvgRect>()
         val paths = mutableListOf<SvgPath>()
@@ -279,6 +292,9 @@ class SvgParser {
 
         return SvgGroup(
             transform = transform, opacity = opacity,
+            fill = fill, stroke = stroke,
+            strokeWidth = strokeWidth, strokeOpacity = strokeOpacity,
+            fillOpacity = fillOpacity,
             rects = rects, paths = paths, circles = circles,
             ellipses = ellipses, lines = lines, polygons = polygons,
             polylines = polylines, groups = groups
@@ -380,6 +396,23 @@ class SvgParser {
         
         return SvgStop(offset = offset, stopColor = stopColor, stopOpacity = stopOpacity)
     }
+
+    private fun parseStyleAttribute(style: String?): Map<String, String> {
+        if (style.isNullOrBlank()) return emptyMap()
+        val map = mutableMapOf<String, String>()
+        for (pair in style.split(";")) {
+            val colon = pair.indexOf(":")
+            if (colon < 0) continue
+            val key = pair.substring(0, colon).trim()
+            val value = pair.substring(colon + 1).trim()
+            if (key.isNotEmpty() && value.isNotEmpty()) {
+                map[key] = value
+            }
+        }
+        return map
+    }
+
+    private fun noneToNull(value: String?): String? = if (value == "none") null else value
 
     private fun skipElement(reader: XMLStreamReader) {
         var depth = 1

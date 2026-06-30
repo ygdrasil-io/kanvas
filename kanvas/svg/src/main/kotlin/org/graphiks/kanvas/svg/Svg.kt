@@ -143,6 +143,11 @@ data class SvgPolyline(
 data class SvgGroup(
     val transform: String? = null,
     val opacity: Float? = null,
+    val fill: String? = null,
+    val stroke: String? = null,
+    val strokeWidth: Float? = null,
+    val strokeOpacity: Float? = null,
+    val fillOpacity: Float? = null,
     val rects: List<SvgRect> = emptyList(),
     val paths: List<SvgPath> = emptyList(),
     val circles: List<SvgCircle> = emptyList(),
