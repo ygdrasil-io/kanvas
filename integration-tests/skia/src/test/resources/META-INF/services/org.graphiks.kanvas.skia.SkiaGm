@@ -1,2 +1,12 @@
 org.graphiks.kanvas.skia.gm.path.Crbug788500Gm
 org.graphiks.kanvas.skia.gm.path.B340982297Gm
+org.graphiks.kanvas.skia.gm.path.ConjoinedPolygonsGm
+org.graphiks.kanvas.skia.gm.path.PathHugeCrbug800804Gm
+org.graphiks.kanvas.skia.gm.path.EmptyPathGm
+org.graphiks.kanvas.skia.gm.path.ConcavePathsGm
+org.graphiks.kanvas.skia.gm.path.SmallPathsGm
+org.graphiks.kanvas.skia.gm.path.NonClosedPathsGm
+org.graphiks.kanvas.skia.gm.path.PolygonsGm
+org.graphiks.kanvas.skia.gm.path.ThinConcavePathsGm
+org.graphiks.kanvas.skia.gm.path.Crbug996140Gm
+org.graphiks.kanvas.skia.gm.path.FillTypesGm
