@@ -1,6 +1,6 @@
 package org.graphiks.kanvas.canvas
 
-import org.graphiks.kanvas.TextBlob
+import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.Paint
