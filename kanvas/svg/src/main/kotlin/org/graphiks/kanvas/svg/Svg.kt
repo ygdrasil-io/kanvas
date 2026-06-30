@@ -148,6 +148,7 @@ data class SvgGroup(
     val strokeWidth: Float? = null,
     val strokeOpacity: Float? = null,
     val fillOpacity: Float? = null,
+    val gradients: List<SvgGradient> = emptyList(),
     val rects: List<SvgRect> = emptyList(),
     val paths: List<SvgPath> = emptyList(),
     val circles: List<SvgCircle> = emptyList(),

@@ -105,22 +105,24 @@ class SvgRenderer(
     }
 
     private fun processDefs(defs: List<SvgDefs>) {
-        defs.forEach { def ->
-            def.gradients.forEach { gradient ->
-                when (gradient) {
-                    is SvgGradient.LinearGradient -> {
-                        gradientMap[gradient.id] = gradientParser.parseLinearGradient(
-                            gradient.x1, gradient.y1,
-                            gradient.x2, gradient.y2,
-                            gradient.stops,
-                        )
-                    }
-                    is SvgGradient.RadialGradient -> {
-                        gradientMap[gradient.id] = gradientParser.parseRadialGradient(
-                            gradient.cx, gradient.cy, gradient.r,
-                            gradient.stops,
-                        )
-                    }
+        defs.forEach { def -> processGradients(def.gradients) }
+    }
+
+    private fun processGradients(gradients: List<SvgGradient>) {
+        gradients.forEach { gradient ->
+            when (gradient) {
+                is SvgGradient.LinearGradient -> {
+                    gradientMap[gradient.id] = gradientParser.parseLinearGradient(
+                        gradient.x1, gradient.y1,
+                        gradient.x2, gradient.y2,
+                        gradient.stops,
+                    )
+                }
+                is SvgGradient.RadialGradient -> {
+                    gradientMap[gradient.id] = gradientParser.parseRadialGradient(
+                        gradient.cx, gradient.cy, gradient.r,
+                        gradient.stops,
+                    )
                 }
             }
         }
@@ -142,6 +144,8 @@ class SvgRenderer(
         val combinedTransform = combineTransforms(parentTransform, groupTransform)
         val groupOpacity = group.opacity ?: 1f
         val newOpacity = parentOpacity * groupOpacity
+
+        processGradients(group.gradients)
 
         val groupStyle = style.merge(
             SvgStyle(
