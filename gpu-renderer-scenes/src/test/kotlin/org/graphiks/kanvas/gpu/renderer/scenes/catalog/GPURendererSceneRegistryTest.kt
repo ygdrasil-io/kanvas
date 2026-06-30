@@ -1904,6 +1904,12 @@ class GPURendererSceneRegistryTest {
                 commandFamilies = listOf("clear", "path-fill-gradient", "text-run"),
                 roadmapLinks = listOf(RoadmapExpectation("M26")),
             ),
+            SceneExpectationRow(
+                sceneId = "colr-v0-color-glyph",
+                tags = setOf(SceneTag.Text),
+                commandFamilies = listOf("clear", "color-text-run"),
+                roadmapLinks = listOf(RoadmapExpectation("M34", ticketId = "KGPU-M34-002")),
+            ),
         )
     }
 }

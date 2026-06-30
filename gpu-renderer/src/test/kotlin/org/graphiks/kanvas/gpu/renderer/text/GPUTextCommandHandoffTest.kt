@@ -17,6 +17,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 import kotlin.uuid.Uuid
 
 class GPUTextCommandHandoffTest {
@@ -103,6 +104,8 @@ class GPUTextCommandHandoffTest {
             "unsupported.text.outline_route_unavailable",
             "unsupported.text.color_plan_unsupported",
             "unsupported.text.color_composite_unsupported",
+            "unsupported.text.color_font.format_unavailable",
+            "unsupported.text.color_font.layer_count_exceeded",
             "unsupported.text.bitmap_route_unsupported",
             "unsupported.text.svg_plan_unsupported",
             "dependency.text.emoji_color_glyph_unavailable",
@@ -135,7 +138,8 @@ class GPUTextCommandHandoffTest {
         )
         assertEquals(GPUTextDiagnosticCodes.LCD_FUTURE_RESEARCH, gates.getValue("LCDMask").diagnosticCode)
         assertEquals(GPUTextDiagnosticCodes.CPU_RENDERED_TEXTURE_FORBIDDEN, gates.getValue("CPURenderedTextTexture").diagnosticCode)
-        assertFalse(gates.values.any { gate -> gate.promoted })
+        assertTrue(gates.getValue("COLRColorGlyph").promoted)
+        assertFalse(gates.minus("COLRColorGlyph").values.any { gate -> gate.promoted })
     }
 
     @Test
@@ -146,7 +150,7 @@ class GPUTextCommandHandoffTest {
             listOf(
                 "A8MaskAtlas|unsupported.text.a8_atlas_route_unavailable|dftext|not-promoted",
                 "SDFMaskAtlas|unsupported.text.sdf_route_unavailable|dftext|not-promoted",
-                "COLRColorGlyph|unsupported.text.color_plan_unsupported|coloremoji_blendmodes|not-promoted",
+                "COLRColorGlyph|unsupported.text.color_plan_unsupported|coloremoji_blendmodes|promoted",
                 "BitmapGlyph|unsupported.text.bitmap_route_unsupported|scaledemoji_rendering|not-promoted",
                 "SVGGlyph|unsupported.text.svg_plan_unsupported|scaledemoji_rendering|not-promoted",
                 "EmojiColorGlyph|dependency.text.emoji_color_glyph_unavailable|scaledemoji_rendering,coloremoji_blendmodes|not-promoted",

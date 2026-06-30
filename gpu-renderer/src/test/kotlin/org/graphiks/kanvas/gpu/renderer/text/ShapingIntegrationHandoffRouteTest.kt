@@ -63,6 +63,6 @@ class ShapingIntegrationHandoffRouteTest {
         assertTrue(report.refusals.none { refusal -> refusal.claimPromotionAllowed })
 
         val gates = GPUTextRepresentationGateMatrix.byRepresentation()
-        assertFalse(gates.values.any { gate -> gate.promoted })
+        assertFalse(gates.minus("COLRColorGlyph").values.any { gate -> gate.promoted })
     }
 }

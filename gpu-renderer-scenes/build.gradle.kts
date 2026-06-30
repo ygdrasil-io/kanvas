@@ -11,6 +11,7 @@ val kadreSourceSet = sourceSets.create("kadre") {
 dependencies {
     implementation(kotlin("stdlib"))
     implementation(project(":gpu-renderer"))
+    implementation(project(":font"))
     implementation(project(":kanvas"))
     implementation("io.ygdrasil:wgpu4k-toolkit:0.2.0-SNAPSHOT")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")

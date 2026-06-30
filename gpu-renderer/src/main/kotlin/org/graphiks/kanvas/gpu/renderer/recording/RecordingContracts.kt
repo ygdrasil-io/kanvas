@@ -6,6 +6,7 @@ import org.graphiks.kanvas.gpu.renderer.product.GPUProductFlagConfig
 import org.graphiks.kanvas.gpu.renderer.analysis.GPUDrawAnalysisRecord
 import org.graphiks.kanvas.gpu.renderer.analysis.GPUAnalysisDependency
 import org.graphiks.kanvas.gpu.renderer.analysis.GPUAnalysisDiagnostic
+import org.graphiks.kanvas.gpu.renderer.analysis.GPUColorGlyphRoutePlanner
 import org.graphiks.kanvas.gpu.renderer.analysis.GPUFirstRoutePlan
 import org.graphiks.kanvas.gpu.renderer.analysis.GPUFirstRoutePlanner
 import org.graphiks.kanvas.gpu.renderer.analysis.SortKey
@@ -276,6 +277,9 @@ class GPURecorder(
         }
 
     private fun planDrawTextRun(command: NormalizedDrawCommand.DrawTextRun): GPUFirstRoutePlan {
+        if (command.colorGlyphPlans.isNotEmpty()) {
+            return GPUColorGlyphRoutePlanner().plan(command)
+        }
         val descriptor = command.glyphRunDescriptor
         if (descriptor != null) {
             val textRouteDecision = GPUTextA8RoutePlanner().planTextRoute(descriptor)

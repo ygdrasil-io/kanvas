@@ -462,6 +462,33 @@ sealed interface SceneCommand {
         }
     }
 
+    data class ColorTextRun(
+        override val label: String,
+        val text: String? = null,
+        val fontSize: Float? = null,
+        val layerColors: List<SceneColor>? = null,
+        val paintOrder: Int = 0,
+        val glyphText: String = "AB",
+        val glyphFontSize: Float = 48f,
+    ) : SceneCommand {
+        override val family: String = "color-text-run"
+        val hasFixturePayload: Boolean = text != null && fontSize != null && layerColors != null
+
+        init {
+            requireSceneCommandLabel(label)
+            val payloadFieldCount = listOf(text, fontSize, layerColors).count { it != null }
+            require(payloadFieldCount == 0 || payloadFieldCount == 3) {
+                "SceneCommand.ColorTextRun fixture payload requires text, fontSize, and layerColors"
+            }
+            requireOptionalField(text, "SceneCommand.ColorTextRun.text")
+            layerColors?.let { require(it.isNotEmpty()) { "SceneCommand.ColorTextRun.layerColors must not be empty" } }
+            require(fontSize == null || fontSize > 0f) { "SceneCommand.ColorTextRun.fontSize must be positive" }
+            require(paintOrder >= 0) { "SceneCommand.ColorTextRun.paintOrder must be non-negative" }
+            require(glyphText.isNotBlank()) { "SceneCommand.ColorTextRun.glyphText must not be blank" }
+            require(glyphFontSize > 0f) { "SceneCommand.ColorTextRun.glyphFontSize must be positive" }
+        }
+    }
+
     data class MeshRibbon(
         override val label: String,
         val bounds: SceneRect? = null,

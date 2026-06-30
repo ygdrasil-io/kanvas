@@ -256,6 +256,17 @@ interface GPUBackendRenderRecorder {
         indexData: IntArray,
         draws: List<GPUBackendRawUniformDraw>,
     )
+
+    /** Draws indexed glyph quads for COLRv0 composite color glyphs. Same vertex/index/atlas structure as drawTextAtlasPass with a per-layer composite WGSL shader. */
+    fun drawColorGlyphPass(
+        atlasRgba: ByteArray,
+        atlasWidth: Int,
+        atlasHeight: Int,
+        atlasFormat: String,
+        vertexData: FloatArray,
+        indexData: IntArray,
+        draws: List<GPUBackendRawUniformDraw>,
+    )
 }
 
 /** Raw uniform bytes for a fullscreen draw, bypassing provider materialization contracts. */

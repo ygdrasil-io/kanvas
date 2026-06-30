@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.gpu.renderer.text
 
+import org.graphiks.kanvas.glyph.gpu.GPUColorGlyphLayerPlan
 import org.graphiks.kanvas.glyph.gpu.GPUTextArtifactReference
 
 /** Text ordering token. */
@@ -75,7 +76,7 @@ sealed interface GPUTextRoute {
     data class Outline(val plan: OutlineGlyphPlan) : GPUTextRoute
 
     /** Color glyph route. */
-    data class ColorGlyph(val plan: ColorGlyphPlan) : GPUTextRoute
+    data class ColorGlyph(val plan: GPUColorGlyphLayerPlan) : GPUTextRoute
 
     /** Bitmap glyph route. */
     data class BitmapGlyph(val plan: BitmapGlyphPlan) : GPUTextRoute
@@ -156,13 +157,6 @@ data class OutlineGlyphPlan(
     val fillRule: String,
 )
 
-/** Color glyph plan. */
-data class ColorGlyphPlan(
-    val glyphIds: List<Int>,
-    val paletteLabel: String,
-    val layerCount: Int,
-)
-
 /** Bitmap glyph plan. */
 data class BitmapGlyphPlan(
     val glyphIds: List<Int>,
@@ -239,6 +233,10 @@ object GPUTextDiagnosticCodes {
     const val OUTLINE_ROUTE_UNAVAILABLE: String = "unsupported.text.outline_route_unavailable"
     const val COLOR_PLAN_UNSUPPORTED: String = "unsupported.text.color_plan_unsupported"
     const val COLOR_COMPOSITE_UNSUPPORTED: String = "unsupported.text.color_composite_unsupported"
+    const val COLOR_FONT_FORMAT_UNAVAILABLE: String =
+        "unsupported.text.color_font.format_unavailable"
+    const val COLOR_FONT_LAYER_COUNT_EXCEEDED: String =
+        "unsupported.text.color_font.layer_count_exceeded"
     const val BITMAP_ROUTE_UNSUPPORTED: String = "unsupported.text.bitmap_route_unsupported"
     const val SVG_PLAN_UNSUPPORTED: String = "unsupported.text.svg_plan_unsupported"
     const val EMOJI_COLOR_GLYPH_UNAVAILABLE: String = "dependency.text.emoji_color_glyph_unavailable"
@@ -273,6 +271,8 @@ object GPUTextDiagnosticCodes {
         OUTLINE_ROUTE_UNAVAILABLE,
         COLOR_PLAN_UNSUPPORTED,
         COLOR_COMPOSITE_UNSUPPORTED,
+        COLOR_FONT_FORMAT_UNAVAILABLE,
+        COLOR_FONT_LAYER_COUNT_EXCEEDED,
         BITMAP_ROUTE_UNSUPPORTED,
         SVG_PLAN_UNSUPPORTED,
         EMOJI_COLOR_GLYPH_UNAVAILABLE,
@@ -286,6 +286,24 @@ object GPUTextDiagnosticCodes {
         SUBPIXEL_TARGET_FORMAT,
         FALLBACK_EXHAUSTED,
     )
+}
+
+/** Classifies a color glyph route refusal into its stable category. */
+enum class ColorGlyphRefusalKind {
+    FORMAT_UNAVAILABLE,
+    LAYER_COUNT_EXCEEDED,
+}
+
+/** Decision produced by the color glyph route planner. */
+sealed interface GPUColorGlyphRouteDecision {
+    /** COLRv0 color route accepted. */
+    data class Accepted(val route: GPUTextRoute.ColorGlyph) : GPUColorGlyphRouteDecision
+
+    /** Color route refused with a stable diagnostic and refusal category. */
+    data class Refused(
+        val diagnostic: GPUTextDiagnostic,
+        val refusalKind: ColorGlyphRefusalKind,
+    ) : GPUColorGlyphRouteDecision
 }
 
 /** Dependency gate for one text representation that is visible to route diagnostics and PM dumps. */
@@ -322,6 +340,7 @@ object GPUTextRepresentationGateMatrix {
             representation = "COLRColorGlyph",
             diagnosticCode = GPUTextDiagnosticCodes.COLOR_PLAN_UNSUPPORTED,
             legacyGates = listOf("coloremoji_blendmodes"),
+            promoted = true,
         ),
         GPUTextRepresentationGate(
             representation = "BitmapGlyph",
