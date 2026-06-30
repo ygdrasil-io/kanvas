@@ -6,7 +6,6 @@ import org.graphiks.kanvas.Paint
 import org.graphiks.kanvas.Path
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.skia.SkiaGmRegistry
 
 class Crbug788500Gm : SkiaGm {
     override val name = "crbug_788500"
@@ -23,9 +22,5 @@ class Crbug788500Gm : SkiaGm {
         canvas.drawPath(path, Paint().apply {
             r = 0f; g = 0f; b = 0f; a = 1f
         })
-    }
-
-    companion object {
-        init { SkiaGmRegistry.register(Crbug788500Gm()) }
     }
 }

@@ -18,7 +18,7 @@ dependencies {
 
 sourceSets {
     test {
-        resources.srcDir("../skia-integration-tests/src/test/resources")
+        resources.srcDir("../../skia-integration-tests/src/test/resources")
     }
 }
 
