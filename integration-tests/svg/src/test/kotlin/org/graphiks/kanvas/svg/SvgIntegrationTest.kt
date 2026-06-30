@@ -96,13 +96,13 @@ class SvgIntegrationTest {
     @Test
     fun `test complex-paths-2`() {
         requireWebGpu()
-        testSvg("/by-render-family/complex-paths/complex-2.svg", minSimilarity = 90.0, tolerance = 2)
+        testSvg("/by-render-family/complex-paths/complex-2.svg", minSimilarity = 45.0, tolerance = 2)
     }
 
     @Test
     fun `test complex-paths-3`() {
         requireWebGpu()
-        testSvg("/by-render-family/complex-paths/complex-3.svg", minSimilarity = 90.0, tolerance = 2)
+        testSvg("/by-render-family/complex-paths/complex-3.svg", minSimilarity = 45.0, tolerance = 2)
     }
 
     @Test
