@@ -97,8 +97,6 @@ class Path(
             val cosSa = kotlin.math.cos(sa); val sinSa = kotlin.math.sin(sa)
             val cosEa = kotlin.math.cos(ea); val sinEa = kotlin.math.sin(ea)
 
-            val sx = cosPhi * effectiveRx * cosSa - sinPhi * effectiveRy * sinSa + cx
-            val sy = sinPhi * effectiveRx * cosSa + cosPhi * effectiveRy * sinSa + cy
             val computedEx = cosPhi * effectiveRx * cosEa - sinPhi * effectiveRy * sinEa + cx
             val computedEy = sinPhi * effectiveRx * cosEa + cosPhi * effectiveRy * sinEa + cy
 
@@ -111,9 +109,6 @@ class Path(
             val resultEx = if (exactEnd) x else computedEx
             val resultEy = if (exactEnd) y else computedEy
 
-            if (i == 0) {
-                verbs.add(PathVerb.LineTo(Point(sx, sy)))
-            }
             verbs.add(PathVerb.CubicTo(c1 = Point(c1x, c1y), c2 = Point(c2x, c2y), p = Point(resultEx, resultEy)))
 
             currentAngle = ea

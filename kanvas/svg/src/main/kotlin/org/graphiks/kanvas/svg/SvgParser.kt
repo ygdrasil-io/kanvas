@@ -397,9 +397,9 @@ class SvgParser {
         return SvgStop(offset = offset, stopColor = stopColor, stopOpacity = stopOpacity)
     }
 
-    private fun parseStyleAttribute(style: String?): Map<String, String?> {
+    private fun parseStyleAttribute(style: String?): Map<String, String> {
         if (style.isNullOrBlank()) return emptyMap()
-        val map = mutableMapOf<String, String?>()
+        val map = mutableMapOf<String, String>()
         for (pair in style.split(";")) {
             val colon = pair.indexOf(":")
             if (colon < 0) continue

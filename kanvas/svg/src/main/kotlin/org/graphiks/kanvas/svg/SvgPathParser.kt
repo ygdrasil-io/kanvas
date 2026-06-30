@@ -38,6 +38,7 @@ class SvgPathParser {
                                 path.lineTo(x, y)
                             }
                             currentX = x; currentY = y
+                            lastControlX = x; lastControlY = y
                             i += 2
                         }
                     }
@@ -148,11 +149,15 @@ class SvgPathParser {
                         path.close()
                         currentX = startX
                         currentY = startY
+                        lastControlX = startX
+                        lastControlY = startY
+                        lastWasQuadratic = false
                     }
                 }
             }
             return path
         } catch (e: Exception) {
+            System.err.println("Failed to parse SVG path: ${e.message}")
             return Path()
         }
     }
