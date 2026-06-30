@@ -4,6 +4,7 @@ import org.graphiks.kanvas.Canvas
 import org.graphiks.kanvas.KanvasFillType
 import org.graphiks.kanvas.Paint
 import org.graphiks.kanvas.Path
+import org.graphiks.kanvas.Rect
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.SkiaGm
 
@@ -15,6 +16,10 @@ class Crbug788500Gm : SkiaGm {
     override val height = 300
 
     override fun draw(canvas: Canvas, width: Int, height: Int) {
+        canvas.drawRect(
+            Rect(0f, 0f, width.toFloat(), height.toFloat()),
+            Paint().apply { r = 1f; g = 1f; b = 1f; a = 1f },
+        )
         val path = Path().apply {
             fillType = KanvasFillType.EVEN_ODD
             moveTo(0f, 0f)
