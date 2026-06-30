@@ -18,6 +18,9 @@ object SkiaGmRenderer {
             rgba = result.rgba,
             width = width,
             height = height,
+            dispatchedCount = result.dispatchedCount,
+            refusedCount = result.refusedCount,
+            diagnostics = result.diagnostics,
         )
     }
 }
@@ -26,4 +29,7 @@ data class SkiaRenderResult(
     val rgba: ByteArray,
     val width: Int,
     val height: Int,
+    val dispatchedCount: Int = 0,
+    val refusedCount: Int = 0,
+    val diagnostics: List<String> = emptyList(),
 )
