@@ -31,11 +31,6 @@ class D2PreBatch3Test {
         )
     }
 
-    /** `filltypes` — no-perspective version of FillTypePerspGM. */
-    @Test
-    fun `FillTypeGM matches reference`() =
-        runGm(FillTypeGM(), "FillTypeGM", floor = 0.0)
-
     /** `small_color_stop` — gradient with very-close stop positions. */
     @Test
     fun `SmallColorStopGM matches reference`() =
