@@ -183,7 +183,6 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | ComposeShaderAlphaGM | 25.82% | = | 8 | 42,607 / 165,000 | 0, 63, 43, 46 | 0, 31, 18, 26 |
 | ComposeShaderGM | 32.04% | = | 16 | 4,614 / 14,400 | 0, 63, 43, 45 | 0, 46, 30, 30 |
 | CompositorQuadsImageGM | 53.37% | = | 4 | 356,252 / 667,545 | 0, 255, 255, 255 | 0, 70, 73, 85 |
-| ConcavePathsGM | 98.85% | = | 1 | 296,549 / 300,000 | 0, 64, 65, 65 | 0, 13, 12, 12 |
 | ConicPathsGM | 95.54% | = | 1 | 843,806 / 883,200 | 0, 255, 255, 255 | 0, 11, 11, 11 |
 | ConicalGradients2ptEdgeGM | 92.88% | = | 1 | 635,850 / 684,600 | 0, 63, 43, 46 | 0, 32, 20, 11 |
 | ConicalGradients2ptEdgeMirrorGM | 80.31% | = | 1 | 549,792 / 684,600 | 0, 130, 130, 130 | 0, 32, 21, 12 |
@@ -198,7 +197,6 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | ConicalGradients2ptOutsideNoDitherGM | 92.57% | = | 1 | 633,710 / 684,600 | 0, 217, 217, 217 | 0, 33, 22, 13 |
 | ConicalGradients2ptOutsideRepeatGM | 89.24% | = | 1 | 610,903 / 684,600 | 0, 107, 52, 173 | 0, 32, 22, 13 |
 | ConicalGradientsGM | 82.34% | = | 1 | 563,724 / 684,600 | 0, 63, 43, 46 | 0, 32, 21, 12 |
-| ConjoinedPolygonsGM | 99.23% | = | 1 | 158,766 / 160,000 | 0, 34, 33, 33 | 0, 11, 10, 10 |
 | ContourStartGM | 90.87% | = | 4 | 654,279 / 720,000 | 0, 195, 238, 251 | 0, 120, 97, 147 |
 | ConvexLineOnlyPathsFillGM | 95.10% | = | 1 | 249,308 / 262,144 | 0, 86, 85, 85 | 0, 13, 12, 12 |
 | ConvexLineOnlyPathsStrokeAndFillGM | 94.30% | -0.01% | 1 | 247,209 / 262,144 | 0, 255, 255, 255 | 0, 15, 15, 15 |
@@ -240,7 +238,6 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | Crbug938592GM | 99.80% | = | 1 | 149,700 / 150,000 | 0, 57, 186, 50 | 0, 57, 186, 50 |
 | Crbug946965GM | 97.28% | = | 1 | 10,944 / 11,250 | 0, 52, 51, 51 | 0, 15, 14, 14 |
 | Crbug947055GM | 96.56% | = | 1 | 9,656 / 10,000 | 0, 66, 68, 26 | 0, 49, 34, 15 |
-| Crbug996140GM | 74.69% | = | 1 | 67,220 / 90,000 | 0, 212, 242, 68 | 0, 163, 187, 10 |
 | CropImageFilterGM_clamp_clamp | 7.12% | = | 1 | 14,457 / 203,112 | 0, 209, 184, 179 | 0, 59, 36, 41 |
 | CropImageFilterGM_decal_decal | 82.43% | = | 1 | 167,416 / 203,112 | 0, 175, 130, 167 | 0, 55, 23, 44 |
 | CropImageFilterGM_mirror_mirror | 7.12% | = | 1 | 14,457 / 203,112 | 0, 210, 194, 179 | 0, 59, 39, 39 |
@@ -293,7 +290,6 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | DstReadShuffleGM | 58.05% | = | 1 | 209,225 / 360,400 | 0, 130, 120, 142 | 0, 7, 6, 5 |
 | EmbossGM | 69.82% | -0.48% | 1 | 50,267 / 72,000 | 0, 200, 145, 234 | 0, 78, 25, 13 |
 | EmbossmaskfilterGM | 76.62% | -0.04% | 1 | 470,747 / 614,400 | 255, 255, 255, 255 | 15, 28, 24, 23 |
-| EmptyPathGM | 87.62% | -0.02% | 1 | 147,208 / 168,000 | 0, 253, 253, 253 | 0, 51, 48, 57 |
 | EmptyShaderGM | 65.87% | = | 1 | 7,420 / 11,264 | 0, 155, 185, 180 | 0, 117, 173, 77 |
 | EmptyStrokeGM | 95.39% | = | 1 | 45,788 / 48,000 | 0, 255, 255, 255 | 0, 237, 249, 253 |
 | EncodeAlphaJpegGM | 83.53% | = | 64 | 66,820 / 80,000 | 0, 249, 254, 253 | 0, 116, 103, 105 |
@@ -311,7 +307,6 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | FillCircleGM | 95.26% | = | 1 | 257,574 / 270,400 | 0, 38, 52, 57 | 0, 5, 5, 5 |
 | FillTypeGM | 99.48% | = | 1 | 697,770 / 701,400 | 0, 255, 255, 255 | 0, 28, 28, 28 |
 | FillTypePerspGM | 10.02% | = | 1 | 70,280 / 701,400 | 0, 242, 239, 241 | 0, 39, 17, 87 |
-| FillTypesGM | 99.48% | = | 1 | 697,770 / 701,400 | 0, 255, 255, 255 | 0, 28, 28, 28 |
 | FillrectGradientGM | 67.62% | = | 1 | 43,816 / 64,800 | 0, 207, 241, 171 | 0, 30, 33, 30 |
 | FilterBugGM | 98.67% | = | 4 | 22,200 / 22,500 | 0, 15, 15, 15 | 0, 11, 11, 11 |
 | FilterFastBoundsGM | 89.51% | = | 1 | 563,908 / 630,000 | 0, 250, 254, 223 | 0, 108, 120, 112 |
@@ -377,7 +372,6 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | HitTestPathGM | 85.87% | = | 1 | 276,494 / 322,000 | 0, 164, 236, 237 | 0, 57, 47, 22 |
 | HslBlendGM | 80.29% | -0.03% | 8 | 48,176 / 60,000 | 0, 255, 255, 255 | 0, 51, 60, 47 |
 | HslGM | 35.54% | = | 8 | 244,575 / 688,200 | 0, 255, 255, 255 | 0, 21, 16, 9 |
-| HugePathCrbug800804GM | 89.33% | = | 1 | 26,800 / 30,000 | 0, 255, 255, 255 | 0, 102, 102, 102 |
 | ImageBlurClampModeGM | 87.52% | = | 1 | 684,382 / 782,000 | 0, 30, 48, 44 | 0, 1, 2, 1 |
 | ImageBlurGM | 46.95% | -0.46% | 8 | 117,383 / 250,000 | 0, 81, 102, 129 | 0, 12, 10, 12 |
 | ImageBlurLargeGM | 40.89% | -0.04% | 8 | 102,225 / 250,000 | 0, 49, 39, 61 | 0, 13, 11, 15 |
@@ -495,7 +489,6 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | NewSurfaceGM | 100.00% | = | 1 | 42,000 / 42,000 | 0, 0, 0, 0 | 0, 0, 0, 0 |
 | NinePatchStretchGM | 99.75% | = | 1 | 606,498 / 608,000 | 0, 26, 46, 51 | 0, 5, 10, 11 |
 | NinepatchEdgeCase349428795GM | 76.73% | = | 1 | 57,548 / 75,000 | 0, 108, 233, 178 | 0, 49, 98, 84 |
-| NonClosedPathsGM | 96.82% | = | 1 | 2,267,829 / 2,342,400 | 0, 255, 255, 255 | 0, 56, 55, 55 |
 | NotNative32BitmapConfigGM | 95.21% | = | 8 | 15,599 / 16,384 | 0, 255, 255, 255 | 0, 121, 150, 120 |
 | OffsetImageFilterGM | 84.52% | = | 1 | 50,709 / 60,000 | 0, 165, 154, 193 | 0, 100, 98, 116 |
 | OneBadArcGM | 83.67% | = | 1 | 8,367 / 10,000 | 0, 34, 100, 108 | 0, 15, 28, 21 |
@@ -555,7 +548,6 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | Poly2PolyGM | 99.36% | -0.00% | 1 | 696,893 / 701,400 | 0, 78, 196, 237 | 0, 32, 60, 79 |
 | PolygonOffsetGM_convex | 79.44% | = | 8 | 208,236 / 262,144 | 0, 234, 240, 244 | 0, 69, 71, 85 |
 | PolygonOffsetGM_simple | 73.31% | = | 8 | 192,186 / 262,144 | 0, 255, 255, 255 | 0, 92, 101, 127 |
-| PolygonsGM | 86.05% | = | 1 | 824,024 / 957,600 | 0, 63, 113, 83 | 0, 7, 5, 4 |
 | PosterCircleGM | 96.46% | = | 4 | 260,438 / 270,000 | 0, 104, 76, 112 | 0, 16, 14, 17 |
 | PreserveFillRuleBigGM | 97.62% | = | 1 | 156,190 / 160,000 | 0, 52, 6, 75 | 0, 17, 2, 20 |
 | PreserveFillRuleLittleGM | 78.00% | = | 1 | 1,248 / 1,600 | 0, 38, 5, 50 | 0, 16, 1, 20 |
@@ -660,7 +652,6 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | SmallArcGM | 99.80% | = | 1 | 579,477 / 580,644 | 0, 53, 196, 237 | 0, 41, 152, 185 |
 | SmallCirclesGM | 85.24% | = | 1 | 153,969 / 180,625 | 0, 33, 33, 33 | 0, 10, 10, 10 |
 | SmallColorStopGM | 100.00% | = | 1 | 15,000 / 15,000 | 0, 0, 0, 0 | 0, 0, 0, 0 |
-| SmallPathsGM | 97.07% | = | 1 | 318,063 / 327,680 | 0, 255, 255, 255 | 0, 24, 24, 24 |
 | SmallembossGM | 100.00% | = | 1 | 2,500 / 2,500 | 0, 0, 0, 0 | 0, 0, 0, 0 |
 | SnapWithMipsGM | 99.65% | = | 8 | 5,979 / 6,000 | 0, 25, 25, 33 | 0, 13, 14, 15 |
 | SpiralRTGM | 0.00% | = | 1 | 0 / 262,144 | 0, 202, 196, 68 | 0, 48, 15, 31 |
@@ -711,7 +702,6 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | TextScaleSkewRotateGM | 89.00% | = | 1 | 29,162 / 32,768 | 0, 190, 191, 191 | 0, 48, 48, 48 |
 | TextureimageAndShaderGM | 100.00% | = | 8 | 5,000 / 5,000 | 0, 0, 0, 0 | 0, 0, 0, 0 |
 | ThinAaDashLinesGM | 80.48% | = | 1 | 29,216 / 36,300 | 0, 70, 70, 70 | 0, 34, 34, 34 |
-| ThinConcavePathsGM | 98.05% | = | 1 | 215,702 / 220,000 | 0, 79, 78, 78 | 0, 16, 16, 16 |
 | ThinRectsGM | 92.10% | = | 1 | 70,736 / 76,800 | 0, 18, 17, 16 | 0, 12, 12, 10 |
 | ThinRoundRectsGM | 92.14% | = | 1 | 70,765 / 76,800 | 0, 82, 81, 81 | 0, 28, 33, 23 |
 | ThinStrokedRectsGM | 88.87% | = | 1 | 68,251 / 76,800 | 0, 202, 196, 237 | 0, 63, 28, 16 |

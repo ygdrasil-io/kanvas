@@ -33,26 +33,5 @@ class Round4Test {
     @Test
     fun `Bug406747427GM matches reference`() = runGm(Bug406747427GM(), "Bug406747427GM", 96.0)
 
-    @Test
-    fun `PathHugeCrbug800804GM matches reference`() =
-        runGm(PathHugeCrbug800804GM(), "PathHugeCrbug800804GM", 88.0)
-
-    @Test
-    fun `Crbug996140GM matches reference`() = runGm(Crbug996140GM(), "Crbug996140GM", 70.0)
-
-    @Test
-    fun `ConjoinedPolygonsGM matches reference`() =
-        runGm(ConjoinedPolygonsGM(), "ConjoinedPolygonsGM", 98.0)
-
-    // FillTypesGM lifted from 50.81 % → 99.48 % by Phase 6s `eraseColor`
-    // colorspace xform — the residual sub-tolerance edge drift is now
-    // dominated by the (correct) AA-edge supersampling, not BG bias.
-    @Test
-    fun `FillTypesGM matches reference`() = runGm(FillTypesGM(), "FillTypesGM", 98.0)
-
-    @Test
-    fun `PolygonsGM matches reference`() = runGm(PolygonsGM(), "PolygonsGM", 85.0)
-
-    @Test
-    fun `SmallPathsGM matches reference`() = runGm(SmallPathsGM(), "SmallPathsGM", 96.0)
+    // (migrated to integration-tests/skia module — see path GM list)
 }
