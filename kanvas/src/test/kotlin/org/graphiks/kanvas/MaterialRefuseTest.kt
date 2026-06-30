@@ -97,8 +97,8 @@ class MaterialRefuseTest {
     // --- KGPU-M32-010 / -012: gradient materials refuse (dispatch guard) ---
 
     @Test
-    fun `linear gradient rect refuses with unsupported_material`() {
-        assertEquals("unsupported_material:LinearGradient", rectCmd(linearGradient()).fillGuardRefusalReasonOrNull())
+    fun `linear gradient rect is accepted by dispatch`() {
+        assertNull(rectCmd(linearGradient()).fillGuardRefusalReasonOrNull())
     }
 
     @Test
@@ -117,8 +117,8 @@ class MaterialRefuseTest {
     }
 
     @Test
-    fun `linear gradient path refuses with unsupported_material`() {
-        assertEquals("unsupported_material:LinearGradient", pathCmd(linearGradient()).fillGuardRefusalReasonOrNull())
+    fun `linear gradient path is accepted by dispatch`() {
+        assertNull(pathCmd(linearGradient()).fillGuardRefusalReasonOrNull())
     }
 
     // --- KGPU-M32-016: ImageDraw material refuses (dispatch guard, kanvas-level) ---
@@ -153,7 +153,7 @@ class MaterialRefuseTest {
             )
         } as NormalizedDrawCommand.FillRect
         assertEquals(GPUMaterialKind.LinearGradient, cmd.material.kind)
-        assertEquals("unsupported_material:LinearGradient", cmd.fillGuardRefusalReasonOrNull())
+        assertNull(cmd.fillGuardRefusalReasonOrNull())
     }
 
     // --- FIX REGRESSION: image-shader (Shader.Bitmap) must NOT silently solid-fill ---

@@ -64,7 +64,11 @@ internal fun NormalizedDrawCommand.fillGuardRefusalReasonOrNull(): String? {
     strokeRefusalReasonOrNull()?.let { return it }
     if (this is NormalizedDrawCommand.DrawTextRun) return null
     val material = this.material
-    if (material !is GPUMaterialDescriptor.SolidColor) {
+    val acceptedByDispatch = this is NormalizedDrawCommand.FillRect ||
+        this is NormalizedDrawCommand.FillPath
+    if (material !is GPUMaterialDescriptor.SolidColor &&
+        (!acceptedByDispatch || material !is GPUMaterialDescriptor.LinearGradient)
+    ) {
         return "unsupported_material:${material.kind.name}"
     }
     if (transform.type != GPUTransformType.Identity) {
@@ -102,7 +106,7 @@ internal fun NormalizedDrawCommand.FillRRect.nonUniformRadiiRefusalReasonOrNull(
     }
 }
 
-private val SOLID_RECT_WGSL: String = """
+    private val SOLID_RECT_WGSL: String = """
     struct Uniforms {
         color: vec4f,
     };
@@ -119,6 +123,36 @@ private val SOLID_RECT_WGSL: String = """
     @fragment
     fn fs_main() -> @location(0) vec4f {
         return uniforms.color;
+    }
+""".trimIndent()
+
+    private val LINEAR_GRADIENT_WGSL: String = """
+    struct Uniforms {
+        start: vec2f,
+        end: vec2f,
+        startColor: vec4f,
+        endColor: vec4f,
+    };
+
+    @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+
+    @vertex
+    fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
+        let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
+        let y = f32(idx & 2u) * 2.0 - 1.0;
+        return vec4f(x, y, 0.0, 1.0);
+    }
+
+    @fragment
+    fn fs_main(@builtin(position) coord: vec4f) -> @location(0) vec4f {
+        let dir = uniforms.end - uniforms.start;
+        let lenSq = dot(dir, dir);
+        var t = -1.0e30;
+        if (lenSq >= 1.0e-12) {
+            t = dot(coord.xy - uniforms.start, dir) / lenSq;
+        }
+        let tClamped = clamp(t, 0.0, 1.0);
+        return mix(uniforms.startColor, uniforms.endColor, tClamped);
     }
 """.trimIndent()
 
@@ -263,15 +297,6 @@ class Surface(
 
         cmd.fillGuardRefusalReasonOrNull()?.let { refuse(it); return }
 
-        val material = cmd.material as GPUMaterialDescriptor.SolidColor
-
-        val rgba = floatArrayOf(
-            material.r * material.a,
-            material.g * material.a,
-            material.b * material.a,
-            material.a,
-        )
-
         val rect = cmd.rect
         val clipBounds = cmd.clip.bounds
         val sx = maxOf(rect.left, clipBounds.left).toInt().coerceIn(0, width - 1)
@@ -279,11 +304,45 @@ class Surface(
         val sw = (minOf(rect.right, clipBounds.right).toInt() - sx).coerceIn(1, width - sx)
         val sh = (minOf(rect.bottom, clipBounds.bottom).toInt() - sy).coerceIn(1, height - sy)
 
-        drawFullscreenPass(
-            wgsl = SOLID_RECT_WGSL,
-            colorFormat = GPU_COLOR_FORMAT,
-            draws = listOf(GPUBackendRectDraw(rgbaPremul = rgba, scissorX = sx, scissorY = sy, scissorWidth = sw, scissorHeight = sh)),
-        )
+        when (val material = cmd.material) {
+            is GPUMaterialDescriptor.SolidColor -> {
+                val rgba = floatArrayOf(
+                    material.r * material.a,
+                    material.g * material.a,
+                    material.b * material.a,
+                    material.a,
+                )
+                drawFullscreenPass(
+                    wgsl = SOLID_RECT_WGSL,
+                    colorFormat = GPU_COLOR_FORMAT,
+                    draws = listOf(GPUBackendRectDraw(rgbaPremul = rgba, scissorX = sx, scissorY = sy, scissorWidth = sw, scissorHeight = sh)),
+                )
+            }
+            is GPUMaterialDescriptor.LinearGradient -> {
+                val bb = java.nio.ByteBuffer.allocate(48).order(java.nio.ByteOrder.nativeOrder())
+                bb.putFloat(material.startX)
+                bb.putFloat(material.startY)
+                bb.putFloat(material.endX)
+                bb.putFloat(material.endY)
+                bb.putFloat(material.startR * material.startA)
+                bb.putFloat(material.startG * material.startA)
+                bb.putFloat(material.startB * material.startA)
+                bb.putFloat(material.startA)
+                bb.putFloat(material.endR * material.endA)
+                bb.putFloat(material.endG * material.endA)
+                bb.putFloat(material.endB * material.endA)
+                bb.putFloat(material.endA)
+                drawFullscreenRawUniformPass(
+                    wgsl = LINEAR_GRADIENT_WGSL,
+                    colorFormat = GPU_COLOR_FORMAT,
+                    draws = listOf(GPUBackendRawUniformDraw(uniformBytes = bb.array(), scissorX = sx, scissorY = sy, scissorWidth = sw, scissorHeight = sh)),
+                )
+            }
+            else -> {
+                refuse("unsupported_material:${material.kind.name}")
+                return
+            }
+        }
         dispatched.add(cmd.commandId.toString())
         diagnostics.add("dispatch:${cmd.diagnosticName}")
     }
@@ -372,8 +431,6 @@ fn fs_main() -> @location(0) vec4f {
 
         cmd.fillGuardRefusalReasonOrNull()?.let { refuse(it); return }
 
-        val material = cmd.material as GPUMaterialDescriptor.SolidColor
-
         val tessVertices = cmd.tessellatedVertices
         val vertexCount = cmd.totalVertexCount
         if (vertexCount < 3 || tessVertices.size < 6) {
@@ -425,27 +482,64 @@ fn fs_main() -> @location(0) vec4f {
         )
 
         // Stencil test pass: fill where stencil != 0
-        val colorBb = java.nio.ByteBuffer.allocate(16).order(java.nio.ByteOrder.nativeOrder())
-        colorBb.putFloat(material.r * material.a)
-        colorBb.putFloat(material.g * material.a)
-        colorBb.putFloat(material.b * material.a)
-        colorBb.putFloat(material.a)
-
-        drawFullscreenStencilPass(
-            wgsl = SOLID_RECT_WGSL,
-            colorFormat = GPU_COLOR_FORMAT,
-            stencilMode = GPUBackendStencilMode.Test,
-            triangleData = null,
-            draws = listOf(
-                GPUBackendRawUniformDraw(
-                    uniformBytes = colorBb.array(),
-                    scissorX = sx,
-                    scissorY = sy,
-                    scissorWidth = sw,
-                    scissorHeight = sh,
-                ),
-            ),
-        )
+        when (val material = cmd.material) {
+            is GPUMaterialDescriptor.SolidColor -> {
+                val colorBb = java.nio.ByteBuffer.allocate(16).order(java.nio.ByteOrder.nativeOrder())
+                colorBb.putFloat(material.r * material.a)
+                colorBb.putFloat(material.g * material.a)
+                colorBb.putFloat(material.b * material.a)
+                colorBb.putFloat(material.a)
+                drawFullscreenStencilPass(
+                    wgsl = SOLID_RECT_WGSL,
+                    colorFormat = GPU_COLOR_FORMAT,
+                    stencilMode = GPUBackendStencilMode.Test,
+                    triangleData = null,
+                    draws = listOf(
+                        GPUBackendRawUniformDraw(
+                            uniformBytes = colorBb.array(),
+                            scissorX = sx,
+                            scissorY = sy,
+                            scissorWidth = sw,
+                            scissorHeight = sh,
+                        ),
+                    ),
+                )
+            }
+            is GPUMaterialDescriptor.LinearGradient -> {
+                val bb = java.nio.ByteBuffer.allocate(48).order(java.nio.ByteOrder.nativeOrder())
+                bb.putFloat(material.startX)
+                bb.putFloat(material.startY)
+                bb.putFloat(material.endX)
+                bb.putFloat(material.endY)
+                bb.putFloat(material.startR * material.startA)
+                bb.putFloat(material.startG * material.startA)
+                bb.putFloat(material.startB * material.startA)
+                bb.putFloat(material.startA)
+                bb.putFloat(material.endR * material.endA)
+                bb.putFloat(material.endG * material.endA)
+                bb.putFloat(material.endB * material.endA)
+                bb.putFloat(material.endA)
+                drawFullscreenStencilPass(
+                    wgsl = LINEAR_GRADIENT_WGSL,
+                    colorFormat = GPU_COLOR_FORMAT,
+                    stencilMode = GPUBackendStencilMode.Test,
+                    triangleData = null,
+                    draws = listOf(
+                        GPUBackendRawUniformDraw(
+                            uniformBytes = bb.array(),
+                            scissorX = sx,
+                            scissorY = sy,
+                            scissorWidth = sw,
+                            scissorHeight = sh,
+                        ),
+                    ),
+                )
+            }
+            else -> {
+                refuse("unsupported_material:${material.kind.name}")
+                return
+            }
+        }
 
         dispatched.add(cmd.commandId.toString())
         diagnostics.add("dispatch:${cmd.diagnosticName}")
