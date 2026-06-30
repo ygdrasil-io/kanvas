@@ -26,6 +26,7 @@ class Surface(
   - `render(): RenderResult` — compiles DisplayList → executes on GPU → returns pixels + diagnostics
 - **GPU access:**
   - `gpu: GPUContext` — provides direct GPU pipeline access (advanced)
+  - `renderPass(desc: RenderPassDescriptor, block: RenderPass.() -> Unit)` — shortcut to begin + execute + end a render pass
 
 ### PixelFormat
 
@@ -74,6 +75,7 @@ fun RenderResult.toPng(): ByteArray
 
 - Extension on `RenderResult`
 - Uses `ImageEncoderRegistry.find("png")` via ServiceLoader on `:codec:api`
+- Call site: `encoder.encode(pixels, width, height, ImageEncoder.Metadata(ImageEncoder.PixelLayout.RGBA8))`
 - If no PNG encoder registered: throws `IllegalStateException("Add :codec:png to your dependencies to enable PNG export")`
 - No hard dependency on `:codec:png` in `:kanvas`
 

@@ -149,9 +149,25 @@ sealed interface UniformValue {
 data class BlendConfig(
     val colorSrc: BlendFactor = BlendFactor.SRC_ALPHA,
     val colorDst: BlendFactor = BlendFactor.ONE_MINUS_SRC_ALPHA,
+    val alphaSrc: BlendFactor = BlendFactor.ONE,
+    val alphaDst: BlendFactor = BlendFactor.ONE_MINUS_SRC_ALPHA,
     val colorOp: BlendOp = BlendOp.ADD,
+    val alphaOp: BlendOp = BlendOp.ADD,
+) {
+    companion object { val SRC_OVER = BlendConfig() }
+}
+data class DepthStencilConfig(
+    val depthCompare: CompareOp = CompareOp.LESS,
+    val depthWrite: Boolean = true,
+    val stencilFront: StencilFaceConfig? = null,
+    val stencilBack: StencilFaceConfig? = null,
 )
-data class DepthStencilConfig(val depthCompare: CompareOp, val depthWrite: Boolean)
+data class StencilFaceConfig(
+    val compare: CompareOp = CompareOp.ALWAYS,
+    val failOp: StencilOp = StencilOp.KEEP,
+    val depthFailOp: StencilOp = StencilOp.KEEP,
+    val passOp: StencilOp = StencilOp.REPLACE,
+)
 data class VertexLayout(val attributes: List<VertexAttribute>, val stride: Int, val stepMode: VertexStepMode)
 data class VertexAttribute(val format: VertexFormat, val offset: Int, val shaderLocation: Int)
 data class RenderPassDescriptor(val colorAttachments: List<ColorAttachment>, val depthStencilAttachment: DepthStencilAttachment?)
@@ -162,9 +178,10 @@ data class TextureSlot(val name: String, val binding: Int)
 data class UniformLayout(val slots: List<UniformSlot>)
 data class ChildSlot(val name: String, val type: ChildType)
 
-enum class BlendFactor { ZERO, ONE, SRC_ALPHA, ONE_MINUS_SRC_ALPHA, ... }
+enum class BlendFactor { ZERO, ONE, SRC_COLOR, ONE_MINUS_SRC_COLOR, DST_COLOR, ONE_MINUS_DST_COLOR, SRC_ALPHA, ONE_MINUS_SRC_ALPHA, DST_ALPHA, ONE_MINUS_DST_ALPHA, CONSTANT_COLOR, ONE_MINUS_CONSTANT_COLOR, CONSTANT_ALPHA, ONE_MINUS_CONSTANT_ALPHA, SRC_ALPHA_SATURATED, ... }
 enum class BlendOp { ADD, SUBTRACT, REVERSE_SUBTRACT, MIN, MAX }
 enum class CompareOp { NEVER, LESS, EQUAL, LESS_EQUAL, GREATER, NOT_EQUAL, GREATER_EQUAL, ALWAYS }
+enum class StencilOp { KEEP, ZERO, REPLACE, INVERT, INCREMENT_CLAMP, DECREMENT_CLAMP, INCREMENT_WRAP, DECREMENT_WRAP }
 enum class VertexFormat { FLOAT32, FLOAT32x2, FLOAT32x3, FLOAT32x4, UINT8x4, ... }
 enum class VertexStepMode { VERTEX, INSTANCE }
 enum class PrimitiveTopology { TRIANGLE_LIST, TRIANGLE_STRIP, LINE_STRIP, LINE_LIST, POINT_LIST }

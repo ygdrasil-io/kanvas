@@ -62,7 +62,7 @@ RenderResult(pixels, diagnostics, stats)
 - `:kanvas` → `:gpu-renderer` (api), `:font:gpu-api` (api)
 - `:kanvas` → `:codec:api` (implementation, for SPI image encoding)
 - `:kanvas` → `:font` (implementation, for text lowering)
-- `:kanvas:svg` → `:kanvas` (api)
+- `:kanvas:svg` → `:kanvas` (api) — SVG→Kanvas bridge, defined in a separate spec pass
 
 ## Non-Goals
 

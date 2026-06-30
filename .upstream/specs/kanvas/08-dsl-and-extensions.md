@@ -45,8 +45,8 @@ class PaintScope {
     var color: Color
     var shader: Shader?
     var blendMode: BlendMode
-    var blur: (BlurStyle, Float) -> Unit  // shortcut for maskFilter = MaskFilter.Blur
-    var stroke: (Float) -> Unit           // shortcut for style + strokeWidth
+    fun blur(style: BlurStyle, sigma: Float)    // shortcut for maskFilter = MaskFilter.Blur
+    fun stroke(width: Float)                     // shortcut for style + strokeWidth
     // ... all Paint properties
 }
 ```
