@@ -75,6 +75,24 @@ class Path(
         return PathData(verbs = verbs.toList(), points = allPoints)
     }
 
+    fun transform(tx: Float, ty: Float, sx: Float, sy: Float): Path {
+        val result = Path(fillType)
+        for (verb in verbs) {
+            when (verb) {
+                is PathVerb.MoveTo -> result.moveTo(verb.p.x * sx + tx, verb.p.y * sy + ty)
+                is PathVerb.LineTo -> result.lineTo(verb.p.x * sx + tx, verb.p.y * sy + ty)
+                is PathVerb.QuadTo -> {
+                    result.quadTo(verb.c.x * sx + tx, verb.c.y * sy + ty, verb.p.x * sx + tx, verb.p.y * sy + ty)
+                }
+                is PathVerb.CubicTo -> {
+                    result.cubicTo(verb.c1.x * sx + tx, verb.c1.y * sy + ty, verb.c2.x * sx + tx, verb.c2.y * sy + ty, verb.p.x * sx + tx, verb.p.y * sy + ty)
+                }
+                is PathVerb.Close -> result.close()
+            }
+        }
+        return result
+    }
+
     fun lower(): GPUPathDescriptor {
         val isInverse = fillType == KanvasFillType.INVERSE_WINDING || fillType == KanvasFillType.INVERSE_EVEN_ODD
         val pointCount = verbs.count { it !is PathVerb.Close }

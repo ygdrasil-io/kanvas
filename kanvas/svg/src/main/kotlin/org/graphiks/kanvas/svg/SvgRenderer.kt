@@ -9,14 +9,19 @@ import org.graphiks.kanvas.Rect
 import org.graphiks.kanvas.Shader
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
 
-class SvgRenderer(private val canvas: Canvas) {
+class SvgRenderer(
+    private val canvas: Canvas,
+    private val targetWidth: Float = 800f,
+    private val targetHeight: Float = 600f,
+) {
     private val pathParser = SvgPathParser()
     private val paintParser = SvgPaintParser()
     private val gradientParser = SvgGradientParser()
     private val transformParser = SvgTransformParser()
 
     private val gradientMap = mutableMapOf<String, Shader>()
-    private val viewBoxRegex = Regex("^(\\d+\\.?\\d*) (\\d+\\.?\\d*) (\\d+\\.?\\d*) (\\d+\\.?\\d*)$")
+    private val viewBoxRegex = Regex("^(-?\\d+\\.?\\d*) (-?\\d+\\.?\\d*) (-?\\d+\\.?\\d*) (-?\\d+\\.?\\d*)$")
+    private val lengthRegex = Regex("^(-?\\d+\\.?\\d*)(px|mm|cm|in|pt|pc|%)?$")
 
     private fun extractTransformComponents(transform: GPUTransformFacts): Quadruple<Float, Float, Float, Float> {
         val tx = transform.translateX
@@ -34,27 +39,45 @@ class SvgRenderer(private val canvas: Canvas) {
         renderElements(svg, viewBoxTransform, 1f)
     }
 
+    private fun parseLength(value: String): Float? {
+        val match = lengthRegex.matchEntire(value.trim())
+        return match?.groupValues?.get(1)?.toFloatOrNull()
+    }
+
     private fun calculateViewBoxTransform(svg: Svg): GPUTransformFacts {
-        val viewBox = svg.viewBox ?: return GPUTransformFacts.identity()
-        val width = svg.width?.toFloatOrNull() ?: 800f
-        val height = svg.height?.toFloatOrNull() ?: 600f
-        
-        val match = viewBoxRegex.matchEntire(viewBox) ?: return GPUTransformFacts.identity()
-        val groupValues = match.groupValues
-        if (groupValues.size < 5) return GPUTransformFacts.identity()
-        
-        val minX = groupValues[1].toFloatOrNull() ?: 0f
-        val minY = groupValues[2].toFloatOrNull() ?: 0f
-        val vbWidth = groupValues[3].toFloatOrNull() ?: 0f
-        val vbHeight = groupValues[4].toFloatOrNull() ?: 0f
-        
-        if (vbWidth <= 0 || vbHeight <= 0) return GPUTransformFacts.identity()
-        
-        val scaleX = width / vbWidth
-        val scaleY = height / vbHeight
+        val viewBox = svg.viewBox
+        val svgWidth = svg.width?.let { parseLength(it) } ?: 0f
+        val svgHeight = svg.height?.let { parseLength(it) } ?: 0f
+
+        val sourceW: Float
+        val sourceH: Float
+        val minX: Float
+        val minY: Float
+
+        if (viewBox != null) {
+            val match = viewBoxRegex.matchEntire(viewBox)
+            if (match == null) return GPUTransformFacts.identity()
+            val gv = match.groupValues
+            if (gv.size < 5) return GPUTransformFacts.identity()
+            val mx = gv[1].toFloatOrNull() ?: 0f
+            val my = gv[2].toFloatOrNull() ?: 0f
+            val vw = gv[3].toFloatOrNull() ?: 0f
+            val vh = gv[4].toFloatOrNull() ?: 0f
+            if (vw <= 0 || vh <= 0) return GPUTransformFacts.identity()
+            minX = mx; minY = my
+            sourceW = vw; sourceH = vh
+        } else if (svgWidth > 0 && svgHeight > 0) {
+            minX = 0f; minY = 0f
+            sourceW = svgWidth; sourceH = svgHeight
+        } else {
+            return GPUTransformFacts.identity()
+        }
+
+        val scaleX = targetWidth / sourceW
+        val scaleY = targetHeight / sourceH
         val translateX = -minX * scaleX
         val translateY = -minY * scaleY
-        
+
         return GPUTransformFacts.affine(
             scaleX = scaleX,
             skewX = 0f,
@@ -165,15 +188,17 @@ class SvgRenderer(private val canvas: Canvas) {
         val strokeOpacity = path.strokeOpacity ?: 1f
 
         val kanvasPath = pathParser.parse(path.d)
+        val (tx, ty, sx, sy) = extractTransformComponents(combinedTransform)
+        val transformedPath = kanvasPath.transform(tx, ty, sx, sy)
 
         if (path.fill != null) {
             val fillPaint = paintParser.parseFill(path.fill, fillOpacity * opacity)
-            canvas.drawPath(kanvasPath, fillPaint)
+            canvas.drawPath(transformedPath, fillPaint)
         }
 
         if (path.stroke != null && path.strokeWidth != null && path.strokeWidth > 0) {
             val strokePaint = paintParser.parseStroke(path.stroke, path.strokeWidth, strokeOpacity * opacity)
-            canvas.drawPath(kanvasPath, strokePaint)
+            canvas.drawPath(transformedPath, strokePaint)
         }
     }
 

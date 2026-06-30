@@ -16,7 +16,7 @@ object SvgGpuRenderer {
     ): Triple<ByteArray, Int, Int> {
         val surface = Surface(width = width, height = height)
         val canvas = Canvas(surface, RenderOptions(maxPathVertices = PATH_VERTEX_BUDGET))
-        val renderer = SvgRenderer(canvas)
+        val renderer = SvgRenderer(canvas, targetWidth = width.toFloat(), targetHeight = height.toFloat())
         renderer.render(svg)
         val result = surface.renderToRgba()
         return Triple(result.rgba, width, height)
