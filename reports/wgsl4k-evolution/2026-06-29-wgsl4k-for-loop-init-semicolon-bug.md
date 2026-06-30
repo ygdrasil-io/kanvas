@@ -66,8 +66,15 @@ In `parseForStatement` (`Parser.kt:~2452`), remove the redundant
 parser test that asserts `parser.errors.isEmpty()` for
 `for (var i: u32 = 0u; i < 10u; i = i + 1u) { }`.
 
-## Kanvas impact
+## Resolution (2026-06-29)
 
-The COLRv0 composite shader (`gpu-renderer/.../text/GPUColorGlyphCompositeShader.kt`)
-uses `loop {}` — a correct, standard-WGSL workaround, not a hack. No kanvas change
-is required once wgsl4k fixes the bug; the shader could later switch back to `for`.
+- Fix merged: `ygdrasil-io/wgsl4k` PR #13 → `master` (`6f6521c`). Independent review APPROVE; 731 parser tests green incl. the new regression test.
+- Republished snapshot: the wgsl4k publish workflow publishes under the
+  **renamed** coordinates `org.graphiks:wgsl-parser-jvm` / `wgsl-core-jvm`
+  (build `1.0.0-20260629.231604-1`, with the fix). The old `parser-jvm` /
+  `core-jvm` coordinates stayed stale at the May-27 buggy build (`1.0.0-20260527.155507-1`).
+- Kanvas updated `gpu-renderer/build.gradle.kts` to the new coordinates, and the
+  COLRv0 composite shader (`GPUColorGlyphCompositeShader.kt`) now uses standard
+  `for (...)` — it validates against the fixed parser. The `loop {}` workaround
+  is no longer needed.
+

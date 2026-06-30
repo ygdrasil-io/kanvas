@@ -41,12 +41,6 @@ sealed interface GPUColorGlyphCompositeShaderResult {
  * RGBA (the fragment blends premultiplied src-over: `accum = src + accum*(1-src.a)`);
  * `layerAtlasRects[i]` is the layer glyph's coverage region as normalized
  * `(originU, originV, sizeU, sizeV)` and is sampled as `origin + quad_uv * size`.
- *
- * Uses the WGSL `loop {}` construct instead of `for (...)`: wgsl4k's
- * `parseForStatement` has a double-semicolon bug (it expects a second `;` after
- * the `var` init clause that `parseVariableDeclStatement` already consumed), so a
- * valid `for (var i...; ...; ...)` fails validation. `loop {}` is standard WGSL
- * and validates. See reports/wgsl4k-evolution/ for the minimized repro + fix.
  */
 fun colorGlyphCompositeWgsl(maxLayers: Int = COLOR_GLYPH_COMPOSITE_MAX_LAYERS): String = """
 struct Uniforms {
@@ -91,12 +85,8 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     var accum: vec4f = vec4f(0.0, 0.0, 0.0, 0.0);
     var colors = uniforms.layerColors;
     var rects = uniforms.layerAtlasRects;
-    var i: u32 = 0u;
-    loop {
+    for (var i: u32 = 0u; i < ${maxLayers}u; i = i + 1u) {
         if (i >= uniforms.layerCount) {
-            break;
-        }
-        if (i >= ${maxLayers}u) {
             break;
         }
         let rect = rects[i];
@@ -104,7 +94,6 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         let coverage = textureSample(coverage_atlas, coverage_sampler, atlas_uv).r;
         let src = colors[i] * coverage;
         accum = src + accum * (1.0 - src.a);
-        i = i + 1u;
     }
     return accum;
 }
