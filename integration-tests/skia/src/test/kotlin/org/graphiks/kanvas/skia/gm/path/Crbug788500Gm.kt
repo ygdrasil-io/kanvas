@@ -8,6 +8,10 @@ import org.graphiks.kanvas.Rect
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.SkiaGm
 
+/**
+ * Port of Skia's `gm/crbug_788500.cpp`.
+ * @see https://github.com/google/skia/blob/main/gm/crbug_788500.cpp
+ */
 class Crbug788500Gm : SkiaGm {
     override val name = "crbug_788500"
     override val renderFamily = RenderFamily.PATH

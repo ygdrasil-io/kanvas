@@ -7,6 +7,11 @@ import org.graphiks.kanvas.Rect
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.SkiaGm
 
+/**
+ * Port of Skia's `gm/strokes.cpp` (DEF_SIMPLE_GM b_340982297).
+ * Two AA-filled self-intersecting line polygons.
+ * @see https://github.com/google/skia/blob/main/gm/strokes.cpp
+ */
 class B340982297Gm : SkiaGm {
     override val name = "b_340982297"
     override val renderFamily = RenderFamily.PATH
