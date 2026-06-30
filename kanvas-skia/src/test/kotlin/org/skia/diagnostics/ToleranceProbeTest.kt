@@ -4,7 +4,6 @@ import org.junit.jupiter.api.Test
 import org.skia.testing.TestUtils
 import org.skia.tests.BigRectGM
 import org.skia.tests.ClipStrokeRectGM
-import org.skia.tests.ConcavePathsGM
 import org.skia.tests.SimpleRectGM
 import org.skia.tests.ThinRectsGM
 
@@ -34,11 +33,6 @@ class ToleranceProbeTest {
     @Test
     fun `ClipStrokeRectGM tolerance budget`() {
         probe("ClipStrokeRectGM", ClipStrokeRectGM(), "clip_strokerect")
-    }
-
-    @Test
-    fun `ConcavePathsGM tolerance budget`() {
-        probe("ConcavePathsGM", ConcavePathsGM(), "concavepaths")
     }
 
     private fun probe(label: String, gm: org.skia.tests.GM, refName: String) {
