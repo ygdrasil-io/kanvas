@@ -9,6 +9,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendOffscreenTexture
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRawUniformDraw
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRenderRecorder
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
 import org.graphiks.kanvas.gpu.renderer.execution.GPUClearColor
 import org.graphiks.kanvas.gpu.renderer.execution.GPUOffscreenTargetRequest
@@ -24,6 +25,8 @@ import org.graphiks.kanvas.surface.RenderStats
 import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.types.PointMode
 import org.graphiks.kanvas.types.Rect
+import org.graphiks.kanvas.text.GpuTextBlob
+import org.graphiks.kanvas.text.TextBridge
 
 internal fun renderViaGpu(
     buffer: DisplayListBuffer,
@@ -213,12 +216,15 @@ internal fun renderViaGpu(
                         sceneHasContent = true
                     }
                     is DisplayOp.DrawText -> {
-                        val cmd = op.toNormalizedCommand(cmdId, targets)
-                        // Text route requires glyphRunDescriptor populated by the font module.
-                        // planDrawTextRun() in RecordingContracts will refuse gracefully
-                        // until the ShapingResult→TextBlob bridge provides real glyph data.
-                        t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
-                            drawTextAtlasPassOrDegrade(cmd, dispatched, diagnostics)
+                        val gpuBlob = TextBridge.rasterize(op.blob)
+                        if (gpuBlob != null) {
+                            val cmd = op.toNormalizedCommand(cmdId, targets)
+                            t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
+                                drawTextAtlasPass(gpuBlob, cmd.blend.blendMode, dispatched, diagnostics)
+                            }
+                            sceneHasContent = true
+                        } else {
+                            diagnostics.degrade("degrade:drawText:${cmdId.value}", "drawText", "rasterize_failed")
                         }
                     }
                     is DisplayOp.SetTransform,
@@ -570,9 +576,15 @@ internal fun renderViaGpu(
                                     diagnostics.degrade("unimplemented:drawPicture:nested:${nestedCmdId.value}", "drawPicture", "gpu_nested_vertices_unimplemented")
                                 }
                                 is DisplayOp.DrawText -> {
-                                    val cmd = nestedOp.toNormalizedCommand(nestedCmdId, targets)
-                                    t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
-                                        drawTextAtlasPassOrDegrade(cmd, dispatched, diagnostics)
+                                    val gpuBlob = TextBridge.rasterize(nestedOp.blob)
+                                    if (gpuBlob != null) {
+                                        val cmd = nestedOp.toNormalizedCommand(nestedCmdId, targets)
+                                        t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
+                                            drawTextAtlasPass(gpuBlob, cmd.blend.blendMode, dispatched, diagnostics)
+                                        }
+                                        sceneHasContent = true
+                                    } else {
+                                        diagnostics.degrade("degrade:drawPicture:nested:${nestedCmdId.value}", "drawPicture", "nested_text_rasterize_failed")
                                     }
                                 }
                                 is DisplayOp.SetTransform,
@@ -764,20 +776,42 @@ private fun computeAtlasDst(texRect: Rect, xform: Matrix33): Rect {
     return Rect.fromLTRB(l, t, r, b)
 }
 
-/** Bridge: DrawText → GPU text atlas pass. Degrades gracefully until font module provides real glyph data and atlas. */
-private fun drawTextAtlasPassOrDegrade(
-    cmd: NormalizedDrawCommand.DrawTextRun,
+/** Dispatch text atlas pass from a rasterized [GpuTextBlob]. */
+private fun GPUBackendRenderRecorder.drawTextAtlasPass(
+    gpuBlob: GpuTextBlob,
+    blendMode: GPUBlendMode?,
     dispatched: MutableList<String>,
     diagnostics: Diagnostics,
 ) {
-    // Text GPU dispatch requires a populated GlyphRunDescriptor with atlas plan,
-    // vertex data (glyph quad positions), and a built A8 glyph atlas texture.
-    // Until the font module provides these via the ShapingResult→TextBlob bridge,
-    // we degrade gracefully instead of hard-fataling.
-    if (cmd.glyphRunDescriptor == null) {
-        diagnostics.degrade("degrade:drawText:${cmd.commandId.value}", "drawText", "no_glyph_descriptor")
-        return
-    }
-    // Full GPU text dispatch would call: t.drawTextAtlasPass(atlasRgba, ...)
-    diagnostics.degrade("degrade:drawText:${cmd.commandId.value}", "drawText", "text_atlas_not_implemented")
+    // Build fullscreen quad vertex data (2 triangles for each glyph)
+    // and per-glyph uniform draws with UV offsets.
+    // For MVP: draw the full atlas as a single textured quad.
+    val vertexData = floatArrayOf(
+        -1f, -1f, 0f, 0f,
+         1f, -1f, 1f, 0f,
+         1f,  1f, 1f, 1f,
+        -1f, -1f, 0f, 0f,
+         1f,  1f, 1f, 1f,
+        -1f,  1f, 0f, 1f,
+    )
+    val indexData = intArrayOf(0, 1, 2, 3, 4, 5)
+    drawTextAtlasPass(
+        atlasRgba = gpuBlob.atlasRgba,
+        atlasWidth = gpuBlob.atlasWidth,
+        atlasHeight = gpuBlob.atlasHeight,
+        atlasFormat = "a8unorm",
+        vertexData = vertexData,
+        indexData = indexData,
+        draws = listOf(
+            GPUBackendRawUniformDraw(
+                uniformBytes = ByteArray(16),
+                scissorX = 0,
+                scissorY = 0,
+                scissorWidth = gpuBlob.atlasWidth,
+                scissorHeight = gpuBlob.atlasHeight,
+            ),
+        ),
+        blendMode = blendMode,
+    )
+    dispatched.add("text:${gpuBlob.textBlob.hashCode()}")
 }

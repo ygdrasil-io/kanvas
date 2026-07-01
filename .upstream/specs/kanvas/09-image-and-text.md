@@ -90,6 +90,57 @@ data class TextBlob(
 - When `typeface` is non-null, the font pipeline can produce an A8 glyph atlas
 - Without `typeface`: placeholder rendering with empty atlas (diagnostic: `DEGRADE`)
 
+### GpuTextBlob
+
+```kotlin
+package org.graphiks.kanvas.text
+
+/**
+ * GPU-ready text blob wrapping a [TextBlob] with rasterized glyph atlas data.
+ *
+ * Approach B (Skia-like): [TextBlob] stays lightweight (glyph IDs + positions).
+ * [GpuTextBlob] is produced internally by [TextBridge] when the GPU renderer
+ * needs glyph raster data. The atlas and UVs are never stored in [TextBlob].
+ *
+ * The glyph atlas cache is not part of the MVP — each [GpuTextBlob] carries
+ * its own atlas. A shared [GlyphAtlasCache] can be added later as an internal
+ * optimization without changing the public API.
+ */
+data class GpuTextBlob(
+    val textBlob: TextBlob,
+    val atlasRgba: ByteArray,       // A8 glyph atlas pixels (width × height)
+    val atlasWidth: Int,
+    val atlasHeight: Int,
+)
+
+/** Per-glyph UV coordinates into the atlas texture. */
+data class GlyphUv(val left: Float, val top: Float, val right: Float, val bottom: Float)
+```
+
+### TextBridge
+
+```kotlin
+package org.graphiks.kanvas.text
+
+/**
+ * Bridges the :font module's shaping/rasterization pipeline into
+ * Kanvas public API types.
+ *
+ * Produces [GpuTextBlob] from [TextBlob] by:
+ * 1. Loading the typeface via [KanvasTypeface.resourcePath]
+ * 2. Scaling glyphs (delegates to [GlyphScaler] in :font)
+ * 3. Rasterizing glyphs to A8 alpha (delegates to [A8Rasterizer] in :font)
+ * 4. Packing glyphs into an atlas (delegates to [GlyphAtlasUploadPlanner] in :font)
+ * 5. Computing per-glyph UVs from atlas placement
+ *
+ * When the :font module is not on the classpath, [rasterize] returns null
+ * and the GPU renderer degrades gracefully.
+ */
+object TextBridge {
+    fun rasterize(blob: TextBlob): GpuTextBlob?
+}
+```
+
 ## Non-Goals
 
 - Font and font management — not part of the Kanvas facade; delegated to `:font`
