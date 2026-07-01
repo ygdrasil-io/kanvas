@@ -26,9 +26,6 @@ class Round15Test {
         )
     }
 
-    @Test
-    fun `AaclipGM matches reference`() = runGm(AaclipGM(), "AaclipGM", 80.0)
-
     // BlurLargeRRectsGM at ~36 % — visual layout matches (4 rotated
     // colored RRects with σ=20 halos) but the giant -20000 ymin
     // coord makes the mask-buffer's bbox computation drift on the

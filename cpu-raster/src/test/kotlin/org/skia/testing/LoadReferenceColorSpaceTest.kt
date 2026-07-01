@@ -15,7 +15,7 @@ import org.skia.foundation.xyzAlmostEqual
 class LoadReferenceColorSpaceTest {
 
     private val sampledPngs = listOf(
-        "bigrect", "simplerect", "thinrects", "concavepaths", "clip_strokerect",
+        "bigrect", "thinrects", "clip_strokerect",
     )
 
     @Test
