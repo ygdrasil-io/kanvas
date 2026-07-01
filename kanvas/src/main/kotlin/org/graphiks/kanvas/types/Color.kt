@@ -16,6 +16,14 @@ value class Color(val packed: UInt) {
         val BLUE: Color = Color(0xFF0000FFu)
         val TRANSPARENT: Color = Color(0x00000000u)
     }
+
+    override fun toString(): String {
+        val a = ((packed shr 24) and 0xFFu).toInt()
+        val r = ((packed shr 16) and 0xFFu).toInt()
+        val g = ((packed shr 8) and 0xFFu).toInt()
+        val b = ((packed shr 0) and 0xFFu).toInt()
+        return "#${a.toString(16).padStart(2, '0')}${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}"
+    }
 }
 
 val Color.r: Float get() = ((packed shr 16) and 0xFFu).toFloat() / 255f

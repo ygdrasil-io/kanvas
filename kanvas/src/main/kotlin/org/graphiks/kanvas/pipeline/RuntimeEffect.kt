@@ -12,7 +12,10 @@ class RuntimeEffect private constructor(
 ) {
     fun makeShader(uniforms: UniformBlock): Shader.RuntimeEffect = Shader.RuntimeEffect(this, uniforms)
     fun makeColorFilter(uniforms: UniformBlock): ColorFilter {
-        throw UnsupportedOperationException("RuntimeEffect as ColorFilter not yet implemented")
+        throw UnsupportedOperationException(
+            "RuntimeEffect.makeColorFilter: color filter compilation not yet implemented (requires wgsl4k color filter lowering). " +
+            "Use makeShader() instead to use this effect as a paint shader."
+        )
     }
     fun makeBlender(uniforms: UniformBlock): Blender {
         throw UnsupportedOperationException("RuntimeEffect as Blender not yet implemented")

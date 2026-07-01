@@ -8,7 +8,8 @@ import org.graphiks.kanvas.geometry.Path as KanvasPath
  * Inside a lambda with [PathScope] as its receiver, call path-building
  * methods such as [moveTo], [lineTo], [quadTo], [cubicTo], [arcTo], and
  * [close] to describe a sequence of segments. The resulting [KanvasPath]
- * is produced via the [KanvasPath.Companion.invoke] factory function.
+ * is produced via [KanvasPath.Companion.invoke] factory function defined
+ * in the [KanvasPath] companion.
  *
  * @sample
  * val p = KanvasPath {
@@ -59,15 +60,4 @@ class PathScope {
 
     /** Returns the accumulated [KanvasPath] and resets the builder. */
     internal fun build(): KanvasPath = path
-}
-
-/**
- * DSL factory for [KanvasPath].
- *
- * Usage: `val p = KanvasPath { moveTo(0f, 0f); lineTo(100f, 0f) }`
- */
-fun KanvasPath.Companion.invoke(block: PathScope.() -> Unit): KanvasPath {
-    val scope = PathScope()
-    scope.block()
-    return scope.build()
 }

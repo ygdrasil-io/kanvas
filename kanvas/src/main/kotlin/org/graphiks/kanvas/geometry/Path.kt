@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.geometry
 
+import org.graphiks.kanvas.dsl.PathScope
 import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.RRect
@@ -97,7 +98,11 @@ class Path internal constructor() {
     internal fun points(): List<Point> = points.toList()
 
     companion object {
-        operator fun invoke(block: Path.() -> Unit): Path = Path().apply(block)
+        operator fun invoke(block: PathScope.() -> Unit): Path {
+            val scope = PathScope()
+            scope.block()
+            return scope.build()
+        }
     }
 }
 

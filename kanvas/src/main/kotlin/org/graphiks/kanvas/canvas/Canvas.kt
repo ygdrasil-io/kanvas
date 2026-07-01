@@ -18,7 +18,7 @@ import org.graphiks.kanvas.types.*
 class Canvas internal constructor(private val buffer: DisplayListBuffer) {
     private var currentTransform = Matrix33.identity()
     private var currentClip: ClipStack = ClipStack.WideOpen
-    private var saveStack = mutableListOf<CanvasState>()
+    private var saveStack = mutableListOf<Pair<CanvasState, Boolean>>() // (state, isLayer)
 
     /** The current transform matrix. */
     val matrix: Matrix33 get() = currentTransform
@@ -29,13 +29,13 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
     /**
      * The local clip bounds, expressed in the current coordinate system.
      *
-     * Returns an infinite rect when the clip is wide-open, the device rect when
+     * Returns [Rect.EMPTY] when the clip is wide-open, the device rect when
      * clipping to a single axis-aligned rectangle, or [Rect.EMPTY] for complex
      * clip stacks.
      */
     val localClipBounds: Rect
         get() = when (val clip = currentClip) {
-            ClipStack.WideOpen -> Rect.fromLTRB(Float.NEGATIVE_INFINITY, Float.NEGATIVE_INFINITY, Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
+            ClipStack.WideOpen -> Rect.EMPTY
             is ClipStack.DeviceRect -> clip.rect
             is ClipStack.Complex -> Rect.EMPTY
         }
@@ -85,7 +85,7 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
      * @return The new save count (depth of the save stack).
      */
     fun save(): Int {
-        saveStack.add(CanvasState(currentTransform, currentClip))
+        saveStack.add(CanvasState(currentTransform, currentClip) to false)
         return saveStack.size
     }
 
@@ -98,18 +98,18 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
      */
     fun saveLayer(bounds: Rect? = null, paint: Paint? = null): Int {
         buffer.append(DisplayOp.BeginLayer(bounds, paint))
-        saveStack.add(CanvasState(currentTransform, currentClip))
+        saveStack.add(CanvasState(currentTransform, currentClip) to true)
         return saveStack.size
     }
 
     /** Restore the most recently saved state and end the current layer if one was active. */
     fun restore() {
         if (saveStack.isNotEmpty()) {
-            val state = saveStack.removeLast()
+            val (state, isLayer) = saveStack.removeLast()
             currentTransform = state.transform
             currentClip = state.clip
+            if (isLayer) buffer.append(DisplayOp.EndLayer)
         }
-        buffer.append(DisplayOp.EndLayer)
     }
 
     /**
@@ -160,32 +160,50 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
     fun resetMatrix() { setMatrix(Matrix33.identity()) }
 
     /**
-     * Replace the current clip with an axis-aligned rectangle.
+     * Intersect the current clip with an axis-aligned rectangle.
      *
      * @param antiAlias Whether the clip edges should be anti-aliased.
      */
     fun clipRect(rect: Rect, op: ClipOp = ClipOp.INTERSECT, antiAlias: Boolean = true) {
-        currentClip = ClipStack.DeviceRect(rect)
+        val newOp = ClipStackOp.RectOp(rect, op)
+        val prevClip = currentClip
+        currentClip = when (prevClip) {
+            ClipStack.WideOpen -> ClipStack.Complex(listOf(newOp))
+            is ClipStack.DeviceRect -> ClipStack.Complex(listOf(ClipStackOp.RectOp(prevClip.rect, ClipOp.INTERSECT), newOp))
+            is ClipStack.Complex -> ClipStack.Complex(prevClip.ops + newOp)
+        }
         buffer.append(DisplayOp.SetClip(currentClip))
     }
 
     /**
-     * Replace the current clip with a rounded rectangle.
+     * Intersect the current clip with a rounded rectangle.
      *
      * @param antiAlias Whether the clip edges should be anti-aliased.
      */
     fun clipRRect(rrect: RRect, op: ClipOp = ClipOp.INTERSECT, antiAlias: Boolean = true) {
-        currentClip = ClipStack.Complex(listOf(ClipStackOp.RRect(rrect, op)))
+        val newOp = ClipStackOp.RRectOp(rrect, op)
+        val prevClip = currentClip
+        currentClip = when (prevClip) {
+            ClipStack.WideOpen -> ClipStack.Complex(listOf(newOp))
+            is ClipStack.DeviceRect -> ClipStack.Complex(listOf(ClipStackOp.RectOp(prevClip.rect, ClipOp.INTERSECT), newOp))
+            is ClipStack.Complex -> ClipStack.Complex(prevClip.ops + newOp)
+        }
         buffer.append(DisplayOp.SetClip(currentClip))
     }
 
     /**
-     * Replace the current clip with an arbitrary [path].
+     * Intersect the current clip with an arbitrary [path].
      *
      * @param antiAlias Whether the clip edges should be anti-aliased.
      */
     fun clipPath(path: Path, op: ClipOp = ClipOp.INTERSECT, antiAlias: Boolean = true) {
-        currentClip = ClipStack.Complex(listOf(ClipStackOp.Path(path, op)))
+        val newOp = ClipStackOp.PathOp(path, op)
+        val prevClip = currentClip
+        currentClip = when (prevClip) {
+            ClipStack.WideOpen -> ClipStack.Complex(listOf(newOp))
+            is ClipStack.DeviceRect -> ClipStack.Complex(listOf(ClipStackOp.RectOp(prevClip.rect, ClipOp.INTERSECT), newOp))
+            is ClipStack.Complex -> ClipStack.Complex(prevClip.ops + newOp)
+        }
         buffer.append(DisplayOp.SetClip(currentClip))
     }
 

@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.types
 
 import kotlin.math.cos
+import kotlin.math.PI
 import kotlin.math.sin
 
 class Matrix33 private constructor(private val values: FloatArray) {
@@ -22,9 +23,9 @@ class Matrix33 private constructor(private val values: FloatArray) {
         fun scale(sx: Float, sy: Float) = Matrix33(floatArrayOf(sx, 0f, 0f, 0f, sy, 0f, 0f, 0f, 1f))
 
         fun rotate(degrees: Float): Matrix33 {
-            val r = Math.toRadians(degrees.toDouble())
-            val c = cos(r).toFloat()
-            val s = sin(r).toFloat()
+            val r = degrees * PI.toFloat() / 180f
+            val c = cos(r)
+            val s = sin(r)
             return Matrix33(floatArrayOf(c, -s, 0f, s, c, 0f, 0f, 0f, 1f))
         }
 

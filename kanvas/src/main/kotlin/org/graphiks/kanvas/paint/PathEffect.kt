@@ -1,7 +1,7 @@
 package org.graphiks.kanvas.paint
 
 sealed interface PathEffect {
-    data class Dash(val intervals: FloatArray, val phase: Float) : PathEffect {
+    data class Dash(val intervals: FloatArray, val phase: Float = 0f) : PathEffect {
         override fun equals(other: Any?): Boolean {
             if (this === other) return true
             if (other !is Dash) return false

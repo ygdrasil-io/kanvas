@@ -76,4 +76,16 @@ class KanvasSmokeTest {
         assertEquals(3f, rect.right)
         assertEquals(4f, rect.bottom)
     }
+
+    @Test
+    fun `canvas drawRect produces correct DisplayOp`() {
+        val surface = Surface(width = 320, height = 240)
+        surface.canvas {
+            drawRect(Rect.fromXYWH(10f, 10f, 100f, 80f), Paint.fill(Color.RED))
+        }
+        val result = surface.render()
+        assertEquals(1, result.stats.opsDispatched)
+        assertEquals(0, result.stats.opsRefused)
+        assertEquals(0, result.diagnostics.fatalCount)
+    }
 }

@@ -3,6 +3,7 @@ package org.graphiks.kanvas.canvas
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.types.CornerRadii
 import org.graphiks.kanvas.types.RRect
 import org.graphiks.kanvas.types.Rect
 
@@ -27,10 +28,20 @@ fun Canvas.drawArc(rect: Rect, startAngle: Float, sweepAngle: Float, useCenter: 
     val path = Path()
     val cx = rect.center.x; val cy = rect.center.y
     val rx = rect.width / 2f; val ry = rect.height / 2f
-    path.moveTo(cx, cy)
-    path.arcTo(rx, ry, 0f, false, sweepAngle > 0, cx + rx, cy)
+    val startRad = Math.toRadians(startAngle.toDouble()).toFloat()
+    val sweepRad = Math.toRadians(sweepAngle.toDouble()).toFloat()
+    val endRad = startRad + sweepRad
+    val largeArc = kotlin.math.abs(sweepAngle) >= 180f
+    val sweep = sweepAngle > 0f
+    val sx = cx + rx * kotlin.math.cos(startRad)
+    val sy = cy + ry * kotlin.math.sin(startRad)
+    val ex = cx + rx * kotlin.math.cos(endRad)
+    val ey = cy + ry * kotlin.math.sin(endRad)
+    if (useCenter) path.moveTo(cx, cy)
+    path.moveTo(sx, sy)
+    path.arcTo(rx, ry, 0f, largeArc, sweep, ex, ey)
     if (useCenter) path.close()
-    this.drawPath(path, paint)
+    drawPath(path, paint)
 }
 
 /** Draw a line from (x0, y0) to (x1, y1) with the given stroke [paint]. */
@@ -40,8 +51,8 @@ fun Canvas.drawLine(x0: Float, y0: Float, x1: Float, y1: Float, paint: Paint) {
 
 /** Draw a rectangle with rounded corners using corner radii (rx, ry). */
 fun Canvas.drawRoundRect(rect: Rect, rx: Float, ry: Float, paint: Paint) {
-    val rrect = RRect(rect, rx)
-    this.drawRRect(rrect, paint)
+    val r = CornerRadii(rx, ry)
+    drawRRect(RRect(rect, r, r, r, r), paint)
 }
 
 /** Draw an [image] at position (x, y) using its natural dimensions. */
@@ -70,12 +81,12 @@ inline fun Canvas.withSaveLayer(bounds: Rect? = null, paint: Paint? = null, bloc
 
 /** Push an axis-aligned rectangular clip, execute [block], then restore the previous clip. */
 inline fun Canvas.withClipRect(rect: Rect, block: Canvas.() -> Unit) {
-    this.clipRect(rect); try { block() } finally { }
+    save(); clipRect(rect); try { block() } finally { restore() }
 }
 
 /** Push a path clip, execute [block], then restore the previous clip. */
 inline fun Canvas.withClipPath(path: Path, block: Canvas.() -> Unit) {
-    this.clipPath(path); try { block() } finally { }
+    save(); clipPath(path); try { block() } finally { restore() }
 }
 
 /**

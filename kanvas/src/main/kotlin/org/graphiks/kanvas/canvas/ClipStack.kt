@@ -1,9 +1,6 @@
 package org.graphiks.kanvas.canvas
 
-import org.graphiks.kanvas.geometry.Path as GeometryPath
 import org.graphiks.kanvas.pipeline.ClipOp
-import org.graphiks.kanvas.types.RRect as TypesRRect
-import org.graphiks.kanvas.types.Rect as TypesRect
 
 /**
  * Represents the current clipping state of a [Canvas].
@@ -16,7 +13,7 @@ sealed interface ClipStack {
     data object WideOpen : ClipStack
 
     /** Clipping to a single axis-aligned device rectangle. */
-    data class DeviceRect(val rect: TypesRect) : ClipStack
+    data class DeviceRect(val rect: org.graphiks.kanvas.types.Rect) : ClipStack
 
     /** Clipping to a list of clip operations (paths, round-rects, etc.). */
     data class Complex(val ops: List<ClipStackOp>) : ClipStack
@@ -30,11 +27,11 @@ sealed interface ClipStack {
  */
 sealed interface ClipStackOp {
     /** Axis-aligned rectangle clip operation. */
-    data class Rect(val rect: TypesRect, val op: ClipOp) : ClipStackOp
+    data class RectOp(val rect: org.graphiks.kanvas.types.Rect, val op: ClipOp) : ClipStackOp
 
     /** Rounded-rectangle clip operation. */
-    data class RRect(val rrect: TypesRRect, val op: ClipOp) : ClipStackOp
+    data class RRectOp(val rrect: org.graphiks.kanvas.types.RRect, val op: ClipOp) : ClipStackOp
 
     /** Arbitrary path clip operation. */
-    data class Path(val path: GeometryPath, val op: ClipOp) : ClipStackOp
+    data class PathOp(val path: org.graphiks.kanvas.geometry.Path, val op: ClipOp) : ClipStackOp
 }

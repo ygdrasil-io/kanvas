@@ -31,25 +31,25 @@ class PathTest {
     @Test
     fun `Path addRect`() {
         val path = Path().addRect(Rect.fromLTRB(0f, 0f, 100f, 80f))
-        assertTrue(true)
+        assertTrue(path.verbs().size >= 5) // 4 lines + close
     }
 
     @Test
     fun `Path addOval`() {
         val path = Path().addOval(Rect.fromLTRB(0f, 0f, 100f, 80f))
-        assertTrue(true)
+        assertTrue(path.verbs().size >= 5) // 4 cubics + close
     }
 
     @Test
     fun `Path addCircle`() {
         val path = Path().addCircle(50f, 50f, 30f)
-        assertTrue(true)
+        assertTrue(path.verbs().size >= 5) // 4 cubics + close
     }
 
     @Test
     fun `Path addRRect`() {
         val path = Path().addRRect(RRect(Rect.fromLTRB(0f, 0f, 100f, 80f), 10f))
-        assertTrue(true)
+        assertTrue(path.verbs().size >= 5) // multiple lines + arcs + close
     }
 
     @Test

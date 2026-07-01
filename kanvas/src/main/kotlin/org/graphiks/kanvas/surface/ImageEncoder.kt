@@ -61,7 +61,11 @@ object ImageEncoderRegistry {
 fun RenderResult.toPng(): ByteArray {
     val encoder = ImageEncoderRegistry.find("png")
         ?: error("No PNG encoder registered. Add :codec:png to your dependencies to enable PNG export.")
-    return encoder.encode(pixels.toByteArray(), width, height, ImageEncoder.Metadata(ImageEncoder.PixelLayout.RGBA8))
+    val layout = when (format) {
+        PixelFormat.RGBA8 -> ImageEncoder.PixelLayout.RGBA8
+        PixelFormat.BGRA8 -> ImageEncoder.PixelLayout.BGRA8
+    }
+    return encoder.encode(pixels.toByteArray(), width, height, ImageEncoder.Metadata(layout))
 }
 
 /**
