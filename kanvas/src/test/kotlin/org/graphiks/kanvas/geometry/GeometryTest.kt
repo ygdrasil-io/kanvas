@@ -247,4 +247,58 @@ class GeometryTest {
         assertNotNull(wound)
         assertEquals(FillType.WINDING, wound!!.fillType)
     }
+
+    @Test
+    fun `PathOps union of two intersecting triangles`() {
+        val p1 = Path().apply { moveTo(0f, 0f); lineTo(100f, 0f); lineTo(50f, 80f); close() }
+        val p2 = Path().apply { moveTo(0f, 80f); lineTo(50f, 0f); lineTo(100f, 80f); close() }
+        val result = PathOps.op(p1, p2, PathOp.UNION)
+        assertNotNull(result)
+        assertFalse(result!!.isEmpty())
+        assertTrue(result.contains(Point(50f, 40f)))
+    }
+
+    @Test
+    fun `PathOps intersect of two overlapping circles`() {
+        val p1 = Path().addCircle(50f, 50f, 30f)
+        val p2 = Path().addCircle(70f, 50f, 30f)
+        val result = PathOps.op(p1, p2, PathOp.INTERSECT)
+        assertNotNull(result)
+        assertFalse(result!!.isEmpty())
+    }
+
+    @Test
+    fun `PathOps difference cuts hole`() {
+        val outer = Path().addRect(Rect.fromLTRB(0f, 0f, 100f, 100f))
+        val inner = Path().addCircle(50f, 50f, 20f)
+        val result = PathOps.op(outer, inner, PathOp.DIFFERENCE)
+        assertNotNull(result)
+        assertFalse(result!!.contains(Point(50f, 50f)))
+    }
+
+    @Test
+    fun `PathOps intersect null for non-overlapping paths`() {
+        val p1 = Path().apply { moveTo(0f, 0f); lineTo(10f, 0f); lineTo(5f, 10f); close() }
+        val p2 = Path().apply { moveTo(100f, 100f); lineTo(110f, 100f); lineTo(105f, 110f); close() }
+        val result = PathOps.op(p1, p2, PathOp.INTERSECT)
+        assertTrue(result == null || result.isEmpty())
+    }
+
+    @Test
+    fun `PathOps xor of overlapping shapes`() {
+        val p1 = Path().apply { moveTo(0f, 0f); lineTo(60f, 0f); lineTo(30f, 50f); close() }
+        val p2 = Path().apply { moveTo(30f, 25f); lineTo(90f, 0f); lineTo(60f, 75f); close() }
+        val result = PathOps.op(p1, p2, PathOp.XOR)
+        assertNotNull(result)
+        assertFalse(result!!.isEmpty())
+    }
+
+    @Test
+    fun `PathOps reverse difference`() {
+        val p1 = Path().apply { moveTo(0f, 0f); lineTo(100f, 0f); lineTo(50f, 80f); close() }
+        val p2 = Path().apply { moveTo(0f, 80f); lineTo(50f, 0f); lineTo(100f, 80f); close() }
+        val result = PathOps.op(p1, p2, PathOp.REVERSE_DIFFERENCE)
+        assertNotNull(result)
+        assertFalse(result!!.isEmpty())
+    }
 }
