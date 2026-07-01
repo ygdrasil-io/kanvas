@@ -226,10 +226,10 @@ internal fun BlendMode.toGpuBlendFacts(): GPUBlendFacts {
         else -> return GPUBlendFacts.unsupported(this.name)
     }
     return GPUBlendFacts(
-        kind = if (mode.requiresDestinationRead) GPUBlendKind.Unsupported else GPUBlendKind.Custom,
+        kind = GPUBlendKind.Custom,
         modeLabel = mode.wgpuLabel,
         requiresDestinationRead = mode.requiresDestinationRead,
-        blendMode = if (mode.requiresDestinationRead) null else mode,
+        blendMode = mode,
     )
 }
 

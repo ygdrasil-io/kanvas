@@ -338,6 +338,7 @@ internal val COPY_WGSL: String = """
         return textureSample(inputTex, inputSam, uv);
     }
 """.trimIndent()
+
 internal val BLEND_FORMULA_WGSL: String = """
     struct Uniforms {
         blendMode: u32,
