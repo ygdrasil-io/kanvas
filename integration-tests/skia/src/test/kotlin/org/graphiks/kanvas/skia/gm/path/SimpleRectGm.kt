@@ -24,7 +24,7 @@ import kotlin.random.Random
 class SimpleRectGm : SkiaGm {
     override val name = "simplerect"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 0.0
+    override val minSimilarity = 17.8
     override val width = 800
     override val height = 800
 

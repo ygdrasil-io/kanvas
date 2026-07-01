@@ -16,7 +16,7 @@ import kotlin.math.sin
 class SmallPathsGm : SkiaGm {
     override val name = "smallpaths"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 0.0
+    override val minSimilarity = 84.4
     override val width = 640
     override val height = 512
 

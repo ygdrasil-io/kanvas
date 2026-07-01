@@ -16,7 +16,7 @@ import org.graphiks.kanvas.types.Color
 class BlurCirclesGm : SkiaGm {
     override val name = "blurcircles"
     override val renderFamily = RenderFamily.BLUR
-    override val minSimilarity = 0.0
+    override val minSimilarity = 75.7
     override val width = 950
     override val height = 950
 

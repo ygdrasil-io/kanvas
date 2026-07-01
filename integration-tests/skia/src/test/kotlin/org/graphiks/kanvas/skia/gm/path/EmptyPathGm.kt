@@ -20,7 +20,7 @@ import kotlin.random.Random
 class EmptyPathGm : SkiaGm {
     override val name = "emptypath"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 0.0
+    override val minSimilarity = 74.5
     override val width = 600
     override val height = 280
 

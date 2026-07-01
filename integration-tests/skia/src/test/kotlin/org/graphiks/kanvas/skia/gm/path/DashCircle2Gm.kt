@@ -22,7 +22,7 @@ import kotlin.math.PI
 class DashCircle2Gm : SkiaGm {
     override val name = "dashcircle2"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 0.0
+    override val minSimilarity = 69.2
     override val width = 635
     override val height = 900
 

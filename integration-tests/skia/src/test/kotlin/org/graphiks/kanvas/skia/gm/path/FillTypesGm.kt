@@ -12,7 +12,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 class FillTypesGm : SkiaGm {
     override val name = "filltypes"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 0.0
+    override val minSimilarity = 10.0
     override val width = 835
     override val height = 840
 

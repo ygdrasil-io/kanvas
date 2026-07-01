@@ -15,7 +15,7 @@ import org.graphiks.kanvas.types.Rect
 class FadeFilterGm : SkiaGm {
     override val name = "fadefilter"
     override val renderFamily = RenderFamily.COMPOSITE
-    override val minSimilarity = 0.0
+    override val minSimilarity = 70.0
     override val width = 256
     override val height = 256
 

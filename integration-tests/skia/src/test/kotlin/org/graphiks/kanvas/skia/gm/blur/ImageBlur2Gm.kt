@@ -17,7 +17,7 @@ import kotlin.random.Random
 class ImageBlur2Gm : SkiaGm {
     override val name = "imageblur2"
     override val renderFamily = RenderFamily.BLUR
-    override val minSimilarity = 0.0
+    override val minSimilarity = 5.0
     override val width = 500
     override val height = 500
 
