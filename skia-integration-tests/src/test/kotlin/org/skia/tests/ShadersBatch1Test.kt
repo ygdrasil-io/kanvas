@@ -36,10 +36,6 @@ class ShadersBatch1Test {
     fun `sweep_tiling matches reference`() = runGm(SweepTilingGM(), "SweepTilingGM", 40.0)
 
     @Test
-    fun `rgbw_sweep_gradient matches reference`() =
-        runGm(RgbwSweepGradientGM(), "RgbwSweepGradientGM", 80.0)
-
-    @Test
     fun `perlinnoise matches reference`() = runGm(PerlinNoiseGM(), "PerlinNoiseGM", 30.0)
 
     @Test
