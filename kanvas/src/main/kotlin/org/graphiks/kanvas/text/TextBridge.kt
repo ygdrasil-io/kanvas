@@ -1,6 +1,13 @@
 package org.graphiks.kanvas.text
 
+import org.graphiks.kanvas.font.atlas.GlyphAtlasUploadPlan
+import org.graphiks.kanvas.font.atlas.GlyphAtlasUploadPlanner
+import org.graphiks.kanvas.font.glyph.A8Bitmap
+import org.graphiks.kanvas.font.glyph.A8Rasterizer
+import org.graphiks.kanvas.font.glyph.GlyphStrikeKey
+import org.graphiks.kanvas.font.scaler.GlyphScaler
 import org.graphiks.kanvas.types.Point
+import org.graphiks.kanvas.types.Rect
 
 /**
  * Bridges the :font module's shaping/rasterization pipeline into Kanvas types.
@@ -86,11 +93,63 @@ object TextBridge {
 
     /** Font module-backed rasterization. Delegates to GlyphScaler + A8Rasterizer + GlyphAtlasUploadPlanner. */
     private fun rasterizeViaFont(blob: TextBlob): GpuTextBlob? {
-        // The font module integration loads SFNT bytes from the typeface resource,
-        // scales each glyph, rasterizes to A8, and packs into an atlas.
-        // For the MVP: return a 1x1 placeholder atlas until font module wiring is complete.
-        val atlas = ByteArray(1) { 0 }
-        return GpuTextBlob(blob, atlas, 1, 1)
+        val typeface = blob.typeface ?: return null
+        val fontStream = javaClass.classLoader.getResourceAsStream(typeface.resourcePath)
+            ?: ClassLoader.getSystemResourceAsStream(typeface.resourcePath)
+            ?: return null
+
+        val fontBytes = fontStream.readBytes()
+        fontStream.close()
+
+        val scaler = GlyphScaler.fromBytes(fontBytes)
+        val rasterizer = A8Rasterizer()
+        val planner = GlyphAtlasUploadPlanner()
+
+        val entries = mutableListOf<Pair<GlyphStrikeKey, A8Bitmap>>()
+        val glyphIndexToEntry = mutableMapOf<Int, Int>()
+        val totalGlyphCount = blob.glyphRuns.sumOf { it.glyphs.size }
+
+        var globalIdx = 0
+        for (run in blob.glyphRuns) {
+            for (glyphId in run.glyphs) {
+                try {
+                    val scaled = scaler.scaleGlyph(glyphId.toInt(), blob.fontSize)
+                    val bitmap = rasterizer.rasterize(scaled)
+                    if (bitmap != null) {
+                        val key = GlyphStrikeKey(glyphId.toInt(), blob.fontSize, 0, 0)
+                        glyphIndexToEntry[globalIdx] = entries.size
+                        entries.add(key to bitmap)
+                    }
+                } catch (_: Exception) {
+                }
+                globalIdx++
+            }
+        }
+
+        val plan = planner.plan(entries)
+        if (plan !is GlyphAtlasUploadPlan.Accepted) return null
+
+        val uvs = MutableList<Rect?>(totalGlyphCount) { null }
+
+        for ((entryIdx, placement) in plan.placements.withIndex()) {
+            val (strikeKey, _) = entries[entryIdx]
+            val r = placement.region
+            val u = r.x.toFloat() / plan.atlasWidth
+            val v = r.y.toFloat() / plan.atlasHeight
+            val u2 = (r.x + r.width).toFloat() / plan.atlasWidth
+            val v2 = (r.y + r.height).toFloat() / plan.atlasHeight
+            val uv = Rect.fromLTRB(u, v, u2, v2)
+
+            for ((globalIdx, entryIdx2) in glyphIndexToEntry) {
+                if (entryIdx2 == entryIdx) {
+                    uvs[globalIdx] = uv
+                }
+            }
+        }
+
+        val finalUvs = uvs.map { it ?: Rect.fromLTRB(0f, 0f, 0f, 0f) }
+
+        return GpuTextBlob(blob, plan.atlasBytes, plan.atlasWidth, plan.atlasHeight, finalUvs)
     }
 }
 

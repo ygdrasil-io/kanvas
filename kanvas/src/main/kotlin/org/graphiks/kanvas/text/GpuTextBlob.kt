@@ -18,12 +18,11 @@ data class GpuTextBlob(
     val atlasRgba: ByteArray,       // A8 glyph atlas pixels (width × height)
     val atlasWidth: Int,
     val atlasHeight: Int,
+    private val glyphUvData: List<Rect>? = null,
 ) {
     /** Per-glyph UV coordinates into the atlas texture, computed by TextBridge. */
     val glyphUvs: List<Rect> by lazy {
-        // UVs are populated by TextBridge after atlas packing.
-        // Default: each glyph maps to full atlas (placeholder until real packing).
-        List(textBlob.glyphRuns.sumOf { it.glyphs.size }) {
+        glyphUvData ?: List(textBlob.glyphRuns.sumOf { it.glyphs.size }) {
             Rect.fromLTRB(0f, 0f, 1f, 1f)
         }
     }
