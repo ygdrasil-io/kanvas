@@ -5,6 +5,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.commands.GPUClipFacts
+import org.graphiks.kanvas.paint.PathEffect
 import org.graphiks.kanvas.gpu.renderer.commands.GPUCommandSource
 import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBlendFacts
@@ -93,6 +94,10 @@ internal fun DisplayOp.DrawPath.toNormalizedCommand(
         source = GPUCommandSource(adapter = "kanvas-surface", operation = "drawPath"),
         stroke = paint.isStroke(),
         strokeWidth = paint.strokeWidth,
+        dashIntervals = (paint.pathEffect as? PathEffect.Dash)?.intervals,
+        dashPhase = (paint.pathEffect as? PathEffect.Dash)?.phase ?: 0f,
+        strokeCap = paint.strokeCap.name.lowercase(),
+        strokeJoin = paint.strokeJoin.name.lowercase(),
         antiAlias = paint.antiAlias,
         blend = paint.blendMode.toGpuBlendFacts(),
     )

@@ -6,6 +6,8 @@ import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRawUniformDraw
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRenderRecorder
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendStencilMode
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendTriangleData
+import org.graphiks.kanvas.paint.StrokeCap
+import org.graphiks.kanvas.paint.StrokeJoin
 import org.graphiks.kanvas.surface.Diagnostics
 import org.graphiks.kanvas.surface.RenderConfig
 
@@ -64,7 +66,9 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
 
     // If stroke, convert to filled geometry
     val (strokeVertices, strokeContours) = if (cmd.stroke) {
-        val sg = strokeToFillGeometry(tessVertices, contourStarts, cmd.strokeWidth)
+        val cap = when (cmd.strokeCap) { "round" -> StrokeCap.ROUND; "square" -> StrokeCap.SQUARE; else -> StrokeCap.BUTT }
+        val join = when (cmd.strokeJoin) { "round" -> StrokeJoin.ROUND; "bevel" -> StrokeJoin.BEVEL; else -> StrokeJoin.MITER }
+        val sg = strokeToFillGeometry(tessVertices, contourStarts, cmd.strokeWidth, dashArray = cmd.dashIntervals, dashPhase = cmd.dashPhase, capStyle = cap, joinStyle = join)
         Pair(sg.vertices, sg.contourStarts)
     } else {
         Pair(tessVertices, contourStarts)

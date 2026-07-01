@@ -958,6 +958,14 @@ sealed interface NormalizedDrawCommand {
         val stroke: Boolean = false,
         /** Stroke width used when [stroke] is true. Default 1f. */
         val strokeWidth: Float = 1f,
+        /** Dash intervals for path effects. Null means no dashing. */
+        val dashIntervals: FloatArray? = null,
+        /** Dash phase offset. */
+        val dashPhase: Float = 0f,
+        /** Stroke cap style: "butt", "round", "square". */
+        val strokeCap: String = "butt",
+        /** Stroke join style: "miter", "round", "bevel". */
+        val strokeJoin: String = "miter",
         val antiAlias: Boolean = true,
     ) : NormalizedDrawCommand {
         override val drawKind: GPUDrawKind = GPUDrawKind.FillPath
