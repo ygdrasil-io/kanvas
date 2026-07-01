@@ -2910,6 +2910,23 @@ private fun Map<String, Long>.firstNonZeroPointer(vararg keys: String): Long? =
 private fun GPUClearColor.toWgpuColor(): Color =
     Color(r = red, g = green, b = blue, a = alpha)
 
+private fun blendFactor(label: String): GPUBlendFactor = when (label) {
+    "Zero" -> GPUBlendFactor.Zero
+    "One" -> GPUBlendFactor.One
+    "SrcColor", "Src" -> GPUBlendFactor.Src
+    "OneMinusSrcColor", "OneMinusSrc" -> GPUBlendFactor.OneMinusSrc
+    "DstColor", "Dst" -> GPUBlendFactor.Dst
+    "OneMinusDstColor", "OneMinusDst" -> GPUBlendFactor.OneMinusDst
+    "SrcAlpha" -> GPUBlendFactor.SrcAlpha
+    "OneMinusSrcAlpha" -> GPUBlendFactor.OneMinusSrcAlpha
+    "DstAlpha" -> GPUBlendFactor.DstAlpha
+    "OneMinusDstAlpha" -> GPUBlendFactor.OneMinusDstAlpha
+    "SrcAlphaSaturated" -> GPUBlendFactor.SrcAlphaSaturated
+    "Constant" -> GPUBlendFactor.Constant
+    "OneMinusConstant" -> GPUBlendFactor.OneMinusConstant
+    else -> GPUBlendFactor.One
+}
+
 private fun blendStateFor(blendMode: GPUBlendMode?): BlendState {
     return if (blendMode == null || blendMode == GPUBlendMode.SRC_OVER) {
         BlendState(
@@ -2917,18 +2934,26 @@ private fun blendStateFor(blendMode: GPUBlendMode?): BlendState {
             alpha = BlendComponent(GPUBlendOperation.Add, GPUBlendFactor.One, GPUBlendFactor.OneMinusSrcAlpha),
         )
     } else {
-        BlendState(
-            color = BlendComponent(
-                operation = GPUBlendOperation.Add,
-                srcFactor = GPUBlendFactor.valueOf(blendMode.colorSrcFactor),
-                dstFactor = GPUBlendFactor.valueOf(blendMode.colorDstFactor),
-            ),
-            alpha = BlendComponent(
-                operation = GPUBlendOperation.Add,
-                srcFactor = GPUBlendFactor.valueOf(blendMode.alphaSrcFactor),
-                dstFactor = GPUBlendFactor.valueOf(blendMode.alphaDstFactor),
-            ),
-        )
+        try {
+            BlendState(
+                color = BlendComponent(
+                    operation = GPUBlendOperation.Add,
+                    srcFactor = blendFactor(blendMode.colorSrcFactor),
+                    dstFactor = blendFactor(blendMode.colorDstFactor),
+                ),
+                alpha = BlendComponent(
+                    operation = GPUBlendOperation.Add,
+                    srcFactor = blendFactor(blendMode.alphaSrcFactor),
+                    dstFactor = blendFactor(blendMode.alphaDstFactor),
+                ),
+            )
+        } catch (_: Throwable) {
+            // Fall back to SrcOver if blend state creation fails
+            BlendState(
+                color = BlendComponent(GPUBlendOperation.Add, GPUBlendFactor.One, GPUBlendFactor.OneMinusSrcAlpha),
+                alpha = BlendComponent(GPUBlendOperation.Add, GPUBlendFactor.One, GPUBlendFactor.OneMinusSrcAlpha),
+            )
+        }
     }
 }
 
