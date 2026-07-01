@@ -95,6 +95,61 @@ internal val RRECT_WGSL: String = """
     }
 """.trimIndent()
 
+internal val RADIAL_GRADIENT_WGSL: String = """
+    struct Uniforms {
+        center: vec2f,
+        radius: f32,
+        startColor: vec4f,
+        endColor: vec4f,
+    };
+
+    @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+
+    @vertex
+    fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
+        let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
+        let y = f32(idx & 2u) * 2.0 - 1.0;
+        return vec4f(x, y, 0.0, 1.0);
+    }
+
+    @fragment
+    fn fs_main(@builtin(position) coord: vec4f) -> @location(0) vec4f {
+        let dir = coord.xy - uniforms.center;
+        let dist = length(dir);
+        let t = dist / uniforms.radius;
+        let tClamped = clamp(t, 0.0, 1.0);
+        return mix(uniforms.startColor, uniforms.endColor, tClamped);
+    }
+""".trimIndent()
+
+internal val SWEEP_GRADIENT_WGSL: String = """
+    struct Uniforms {
+        center: vec2f,
+        angles: vec2f,
+        startColor: vec4f,
+        endColor: vec4f,
+    };
+
+    @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+
+    @vertex
+    fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
+        let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
+        let y = f32(idx & 2u) * 2.0 - 1.0;
+        return vec4f(x, y, 0.0, 1.0);
+    }
+
+    @fragment
+    fn fs_main(@builtin(position) coord: vec4f) -> @location(0) vec4f {
+        let dir = coord.xy - uniforms.center;
+        let angle = atan2(dir.y, dir.x);
+        let range = uniforms.angles.y - uniforms.angles.x;
+        let t = select((angle - uniforms.angles.x) / range, 0.0, range < 1.0e-10);
+        let tClamped = clamp(t, 0.0, 1.0);
+        return mix(uniforms.startColor, uniforms.endColor, tClamped);
+    }
+""".trimIndent()
+
 internal fun stencilWriteWgsl(width: Int, height: Int): String = """
 struct VertexInput {
     @location(0) position: vec2f,
