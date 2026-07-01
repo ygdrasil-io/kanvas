@@ -6,6 +6,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.types.CornerRadii
 import org.graphiks.kanvas.types.RRect
 import org.graphiks.kanvas.types.Rect
+import kotlin.math.PI
 
 /** Draw an oval inscribed in [rect] filled/stroked with [paint]. */
 fun Canvas.drawOval(rect: Rect, paint: Paint) {
@@ -28,8 +29,8 @@ fun Canvas.drawArc(rect: Rect, startAngle: Float, sweepAngle: Float, useCenter: 
     val path = Path()
     val cx = rect.center.x; val cy = rect.center.y
     val rx = rect.width / 2f; val ry = rect.height / 2f
-    val startRad = Math.toRadians(startAngle.toDouble()).toFloat()
-    val sweepRad = Math.toRadians(sweepAngle.toDouble()).toFloat()
+    val startRad = startAngle * PI.toFloat() / 180f
+    val sweepRad = sweepAngle * PI.toFloat() / 180f
     val endRad = startRad + sweepRad
     val largeArc = kotlin.math.abs(sweepAngle) >= 180f
     val sweep = sweepAngle > 0f

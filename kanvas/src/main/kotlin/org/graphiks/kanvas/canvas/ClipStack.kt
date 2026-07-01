@@ -13,7 +13,7 @@ sealed interface ClipStack {
     data object WideOpen : ClipStack
 
     /** Clipping to a single axis-aligned device rectangle. */
-    data class DeviceRect(val rect: org.graphiks.kanvas.types.Rect) : ClipStack
+    data class DeviceRect(val rect: org.graphiks.kanvas.types.Rect, val antiAlias: Boolean = true) : ClipStack
 
     /** Clipping to a list of clip operations (paths, round-rects, etc.). */
     data class Complex(val ops: List<ClipStackOp>) : ClipStack
@@ -26,12 +26,13 @@ sealed interface ClipStack {
  * whether it intersects with or replaces the prior clip.
  */
 sealed interface ClipStackOp {
+    val antiAlias: Boolean
     /** Axis-aligned rectangle clip operation. */
-    data class RectOp(val rect: org.graphiks.kanvas.types.Rect, val op: ClipOp) : ClipStackOp
+    data class RectOp(val rect: org.graphiks.kanvas.types.Rect, val op: ClipOp, override val antiAlias: Boolean = true) : ClipStackOp
 
     /** Rounded-rectangle clip operation. */
-    data class RRectOp(val rrect: org.graphiks.kanvas.types.RRect, val op: ClipOp) : ClipStackOp
+    data class RRectOp(val rrect: org.graphiks.kanvas.types.RRect, val op: ClipOp, override val antiAlias: Boolean = true) : ClipStackOp
 
     /** Arbitrary path clip operation. */
-    data class PathOp(val path: org.graphiks.kanvas.geometry.Path, val op: ClipOp) : ClipStackOp
+    data class PathOp(val path: org.graphiks.kanvas.geometry.Path, val op: ClipOp, override val antiAlias: Boolean = true) : ClipStackOp
 }

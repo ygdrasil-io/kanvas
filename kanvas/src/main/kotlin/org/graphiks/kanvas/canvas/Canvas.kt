@@ -165,11 +165,11 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
      * @param antiAlias Whether the clip edges should be anti-aliased.
      */
     fun clipRect(rect: Rect, op: ClipOp = ClipOp.INTERSECT, antiAlias: Boolean = true) {
-        val newOp = ClipStackOp.RectOp(rect, op)
+        val newOp = ClipStackOp.RectOp(rect, op, antiAlias)
         val prevClip = currentClip
         currentClip = when (prevClip) {
-            ClipStack.WideOpen -> ClipStack.Complex(listOf(newOp))
-            is ClipStack.DeviceRect -> ClipStack.Complex(listOf(ClipStackOp.RectOp(prevClip.rect, ClipOp.INTERSECT), newOp))
+            ClipStack.WideOpen -> if (op == ClipOp.INTERSECT) ClipStack.DeviceRect(rect, antiAlias) else ClipStack.Complex(listOf(newOp))
+            is ClipStack.DeviceRect -> ClipStack.Complex(listOf(ClipStackOp.RectOp(prevClip.rect, ClipOp.INTERSECT, prevClip.antiAlias), newOp))
             is ClipStack.Complex -> ClipStack.Complex(prevClip.ops + newOp)
         }
         buffer.append(DisplayOp.SetClip(currentClip))
@@ -181,11 +181,11 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
      * @param antiAlias Whether the clip edges should be anti-aliased.
      */
     fun clipRRect(rrect: RRect, op: ClipOp = ClipOp.INTERSECT, antiAlias: Boolean = true) {
-        val newOp = ClipStackOp.RRectOp(rrect, op)
+        val newOp = ClipStackOp.RRectOp(rrect, op, antiAlias)
         val prevClip = currentClip
         currentClip = when (prevClip) {
             ClipStack.WideOpen -> ClipStack.Complex(listOf(newOp))
-            is ClipStack.DeviceRect -> ClipStack.Complex(listOf(ClipStackOp.RectOp(prevClip.rect, ClipOp.INTERSECT), newOp))
+            is ClipStack.DeviceRect -> ClipStack.Complex(listOf(ClipStackOp.RectOp(prevClip.rect, ClipOp.INTERSECT, prevClip.antiAlias), newOp))
             is ClipStack.Complex -> ClipStack.Complex(prevClip.ops + newOp)
         }
         buffer.append(DisplayOp.SetClip(currentClip))
@@ -197,11 +197,11 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
      * @param antiAlias Whether the clip edges should be anti-aliased.
      */
     fun clipPath(path: Path, op: ClipOp = ClipOp.INTERSECT, antiAlias: Boolean = true) {
-        val newOp = ClipStackOp.PathOp(path, op)
+        val newOp = ClipStackOp.PathOp(path, op, antiAlias)
         val prevClip = currentClip
         currentClip = when (prevClip) {
             ClipStack.WideOpen -> ClipStack.Complex(listOf(newOp))
-            is ClipStack.DeviceRect -> ClipStack.Complex(listOf(ClipStackOp.RectOp(prevClip.rect, ClipOp.INTERSECT), newOp))
+            is ClipStack.DeviceRect -> ClipStack.Complex(listOf(ClipStackOp.RectOp(prevClip.rect, ClipOp.INTERSECT, prevClip.antiAlias), newOp))
             is ClipStack.Complex -> ClipStack.Complex(prevClip.ops + newOp)
         }
         buffer.append(DisplayOp.SetClip(currentClip))
