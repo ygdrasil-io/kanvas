@@ -15,6 +15,12 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.filters.GPUSimpleFilterRenderNodePlanner
+import org.graphiks.kanvas.gpu.renderer.geometry.GPUShapeDescriptor
+import org.graphiks.kanvas.gpu.renderer.geometry.GPUPathDescriptor
+import org.graphiks.kanvas.gpu.renderer.geometry.GPUStrokeDescriptor
+import org.graphiks.kanvas.gpu.renderer.geometry.strokeRefusalCode
+import org.graphiks.kanvas.gpu.renderer.geometry.strokePathRefusalCode
+import org.graphiks.kanvas.gpu.renderer.geometry.refusalCode
 import org.graphiks.kanvas.gpu.renderer.filters.GPUSimpleFilterRenderNodeRequest
 import org.graphiks.kanvas.gpu.renderer.filters.GPUFilterNodePlan
 import org.graphiks.kanvas.gpu.renderer.filters.GPUFilterNodeRoute
@@ -321,11 +327,63 @@ class GPUFirstRoutePlanner(
         }
 
         return when {
+            command.stroke -> preparedStrokeRouteDecision(command)
             capabilities.hasFact(firstStencilCoverCapabilityName) ->
                 nativeFillPathRouteDecision(command)
             else ->
                 preparedFillPathRouteDecision(command)
         }
+    }
+
+    /** Builds a prepared FillStroke CPUPreparedGPU route and pass for stroked paths. */
+    private fun preparedStrokeRouteDecision(command: NormalizedDrawCommand.FillPath): GPUFirstRoutePlan {
+        val recordId = "analysis.fill_path.${command.commandId.value}"
+        val pipelineKey = "pending.pipeline.fill_stroke.tessellated.rgba8unorm.src_over"
+        val renderStep = "path.stroke.tessellated"
+        val consumerKind = "stroke-strip.render-step"
+        val artifactKey = "prepared.stroke.${command.pathKey.sanitizeForAnalysisKey()}.w${command.strokeWidth}.${command.strokeCap.lowercase()}.${command.strokeJoin.lowercase()}.e${command.edgeCount}"
+        val invalidationFacts = listOf("path-content-hash", "stroke-width", "cap", "join", "miter", "transform-class", "bounds-proof")
+        val analysisRecord = GPUDrawAnalysisRecord(
+            recordId = recordId,
+            commandIdValue = command.commandId.value,
+            commandFamily = "FillPath",
+            boundsHash = command.bounds.stableHash(),
+            routeDecisionLabel = "prepared.path_stroke.tessellated",
+            materialKeyHash = "pending.material.${command.material.kind.name.lowercase()}",
+            renderStepCandidates = listOf(renderStep),
+            sortKey = SortKey(command.ordering.paintOrder.toLong()),
+            diagnostics = command.transform.analysisDiagnostics(recordId = recordId) +
+                command.pathFactsDiagnostics(recordId = recordId),
+        )
+        val routeDecision = GPUFirstRouteDecisionBuilder.preparedFillStroke(
+            commandIdValue = command.commandId.value,
+            artifactKey = artifactKey,
+            consumerKind = consumerKind,
+            invalidationFacts = invalidationFacts,
+        )
+        val analysisDecision = GPUDrawAnalysisDecision.Candidate(
+            recordId = recordId,
+            routeDecisionLabel = "prepared.path_stroke.tessellated",
+            resourceDeclarations = listOf("tessellated_vertices:path_stroke.${command.commandId.value}"),
+            renderStepCandidates = listOf(renderStep),
+        )
+        val pass = GPUFirstRoutePassBuilder.acceptedFillPath(
+            commandIdValue = command.commandId.value,
+            analysisRecordId = recordId,
+            sortKey = command.ordering.paintOrder.toLong(),
+            renderStepIdentity = renderStep,
+            pipelineKeyHash = pipelineKey,
+            boundsHash = command.bounds.stableHash(),
+            scissorBoundsHash = command.scissorBoundsHash(),
+            originalPaintOrder = command.ordering.paintOrder,
+            targetStateHash = command.targetStateHash(),
+        )
+        return GPUFirstRoutePlan(
+            analysisRecord = analysisRecord,
+            analysisDecision = analysisDecision,
+            routeDecision = routeDecision,
+            pass = pass,
+        )
     }
 
     /** Builds a prepared FillPath CPUPreparedGPU route and pass. */
@@ -1024,7 +1082,40 @@ class GPUFirstRoutePlanner(
     /** Returns the canonical FillPath refusal code, or null when analysis may keep a candidate. */
     private fun NormalizedDrawCommand.FillPath.refusalCode(): String? =
         coordinateRefusalCode() ?: when {
-            stroke -> "unsupported.stroke.unimplemented"
+            stroke -> {
+                val aaMode = if (antiAlias) "coverage-aa" else "none"
+                val shapeDesc = GPUShapeDescriptor(
+                    shapeKind = "path-stroke",
+                    boundsLabel = bounds.stableHash(),
+                    antiAliasMode = aaMode,
+                    provenance = "gpu-renderer",
+                )
+                val pathDesc = GPUPathDescriptor(
+                    pathKey = pathKey,
+                    verbCount = pathDescriptor.verbCount,
+                    pointCount = pathDescriptor.pointCount,
+                    fillRule = pathDescriptor.fillRule,
+                    inverseFill = pathDescriptor.inverseFill,
+                    finiteProof = pathDescriptor.finiteProof,
+                    volatility = pathDescriptor.volatility,
+                    transformClass = pathDescriptor.transformClass,
+                    edgeCount = pathDescriptor.edgeCount,
+                )
+                val strokeDesc = GPUStrokeDescriptor(
+                    width = strokeWidth,
+                    cap = strokeCap.replaceFirstChar { it.uppercaseChar() },
+                    join = strokeJoin.replaceFirstChar { it.uppercaseChar() },
+                    miter = 4f,
+                    dashOrPathEffectRef = dashIntervals?.let { "dash:${it.joinToString(",")}" },
+                    transformClass = transform.type.name.lowercase(),
+                    finiteWidth = strokeWidth > 0f && strokeWidth.isFinite(),
+                    hairline = strokeWidth <= 0f,
+                    edgeCount = edgeCount,
+                )
+                shapeDesc.strokeRefusalCode()
+                    ?: pathDesc.strokePathRefusalCode()
+                    ?: strokeDesc.refusalCode(maxEdges = 128)
+            }
             pathDescriptor.edgeCount < 0 -> "unsupported.geometry.path_invalid_edges"
             transform.type == GPUTransformType.Perspective -> "unsupported.transform.perspective"
             transform.type == GPUTransformType.Singular -> "unsupported.transform.singular"

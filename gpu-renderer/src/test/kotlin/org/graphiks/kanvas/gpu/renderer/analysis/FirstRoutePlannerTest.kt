@@ -668,9 +668,9 @@ class FirstRoutePlannerTest {
         assertEquals("unsupported.pipeline.capability_missing", plan.pass.diagnostics.single().code)
     }
 
-    /** FillPath with stroke refuses diagnostically. */
+    /** FillPath with basic stroke (butt cap, miter join) builds prepared CPU stroke route. */
     @Test
-    fun `fill path with stroke refuses diagnostically`() {
+    fun `fill path with basic stroke builds prepared CPU route`() {
         val command = GPUFillPathCommandBuilder.build(
             commandId = GPUDrawCommandID(26),
             pathKey = "path:triangle:v1",
@@ -694,8 +694,25 @@ class FirstRoutePlannerTest {
         )
 
         val plan = GPUFirstRoutePlanner(capabilities = firstSlicePathFillCapabilities()).plan(command)
-        assertIs<GPURouteDecision.Refused>(plan.routeDecision)
-        assertEquals("unsupported.stroke.unimplemented", plan.pass.diagnostics.single().code)
+        val routeDecision = assertIs<GPURouteDecision.Prepared>(plan.routeDecision)
+        val analysisDecision = assertIs<GPUDrawAnalysisDecision.Candidate>(plan.analysisDecision)
+
+        assertEquals("analysis.fill_path.26", plan.analysisRecord.recordId)
+        assertEquals("FillPath", plan.analysisRecord.commandFamily)
+        assertEquals("prepared.path_stroke.tessellated", analysisDecision.routeDecisionLabel)
+        assertEquals("stroke-strip.render-step", routeDecision.route.consumerKind)
+        assertEquals("stroke-tessellation", routeDecision.route.artifactType)
+        assertEquals("path.stroke.tessellated", plan.pass.invocations.single().renderStepId.value)
+        assertEquals(listOf("pending.pipeline.fill_stroke.tessellated.rgba8unorm.src_over"), plan.pass.pipelineKeys)
+        assertEquals("pending.pipeline.fill_stroke.tessellated.rgba8unorm.src_over", plan.pass.invocations.single().pipelineKeyHash)
+        assertEquals("analysis.fill_path.26", plan.pass.invocations.single().analysisRecordId)
+        assertEquals(26, plan.pass.invocations.single().commandIdValue)
+        assertEquals("path_fill", plan.pass.invocations.single().role)
+        assertEquals("pass.path_fill.26", plan.pass.passId)
+        assertEquals(
+            "prepared.stroke.path_triangle_v1.w1.0.butt.miter.e3",
+            routeDecision.route.artifactKey.value,
+        )
     }
 
     /** Accepted DrawImageRect with decoded pixels builds CPU-prepared GPU route. */

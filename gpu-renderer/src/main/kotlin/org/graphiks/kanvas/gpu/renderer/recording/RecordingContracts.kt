@@ -270,7 +270,7 @@ class GPURecorder(
             is NormalizedDrawCommand.FillRect -> GPUFirstRoutePlanner(capabilities = capabilities).plan(command)
             is NormalizedDrawCommand.FillRRect -> GPUFirstRoutePlanner(capabilities = capabilities).plan(command)
             is NormalizedDrawCommand.DrawTextRun -> planDrawTextRun(command)
-            is NormalizedDrawCommand.FillPath -> refusedFillPathPlan(command)
+            is NormalizedDrawCommand.FillPath -> GPUFirstRoutePlanner(capabilities = capabilities).plan(command)
             is NormalizedDrawCommand.DrawImageRect -> GPUFirstRoutePlanner(capabilities = capabilities).plan(command)
             is NormalizedDrawCommand.ApplyFilter -> GPUFirstRoutePlanner(capabilities = capabilities).plan(command)
             is NormalizedDrawCommand.DrawLayer -> GPUFirstRoutePlanner(capabilities = capabilities).plan(command)

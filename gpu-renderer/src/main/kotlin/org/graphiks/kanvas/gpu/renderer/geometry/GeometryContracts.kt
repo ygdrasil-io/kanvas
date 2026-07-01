@@ -1552,7 +1552,7 @@ private fun String.toMaterializationPreimageLabel(): String =
 private const val pathFillNonClaimLine =
     "nonclaim:no-product-activation no-adapter-backed-execution no-hidden-cpu-texture-fallback no-broad-path-aa"
 
-private fun GPUShapeDescriptor.strokeRefusalCode(): String? =
+internal fun GPUShapeDescriptor.strokeRefusalCode(): String? =
     when {
         shapeKind != "path-stroke" -> "unsupported.geometry.shape_kind"
         boundsLabel.isBlank() -> "unsupported.geometry.path_nonfinite"
@@ -1560,7 +1560,7 @@ private fun GPUShapeDescriptor.strokeRefusalCode(): String? =
         else -> null
     }
 
-private fun GPUPathDescriptor.strokePathRefusalCode(): String? =
+internal fun GPUPathDescriptor.strokePathRefusalCode(): String? =
     when {
         !pathKey.isCanonicalPathKey() -> "unsupported.geometry.path_key_nondeterministic"
         verbCount <= 0 || pointCount <= 0 -> "unsupported.geometry.descriptor_invalid"
@@ -1570,7 +1570,7 @@ private fun GPUPathDescriptor.strokePathRefusalCode(): String? =
         else -> null
     }
 
-private fun GPUStrokeDescriptor.refusalCode(maxEdges: Int): String? =
+internal fun GPUStrokeDescriptor.refusalCode(maxEdges: Int): String? =
     when {
         !finiteWidth || !width.isFinite() || width <= 0f -> "unsupported.stroke.width_invalid"
         hairline -> "unsupported.stroke.hairline_policy"
