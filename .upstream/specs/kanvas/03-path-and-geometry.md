@@ -34,7 +34,7 @@ enum class PathVerb { MOVE, LINE, QUAD, CUBIC, ARC_TO, CLOSE }
 enum class FillType { WINDING, EVEN_ODD, INVERSE_WINDING, INVERSE_EVEN_ODD }
 ```
 
-- Maps to Skia's `SkPathFillType`: kWinding, kEvenOdd, kInverseWinding, kInverseEvenOdd
+- Maps to Skia's PathFillType: kWinding, kEvenOdd, kInverseWinding, kInverseEvenOdd
 
 ### ClipStack
 
@@ -59,10 +59,10 @@ sealed interface ClipStackOp {
 
 ## Non-Goals
 
-- Path measurement (`SkPathMeasure`) — deferred
+- Path measurement (Skia PathMeasure) — deferred
 - Path boolean operations (union, intersect, difference, xor, simplify) — deferred
 - Path queries: `isConvex`, `isOval`, `isRRect`, `isRect`, `isLine`, `isInterpolatable` — deferred
 - `conicTo` — arcTo handles conic-like curves; conics can be approximated by quads
 - `Direction` enum (CW/CCW) — circle/oval always use clockwise
-- `SkRegion` — not included; clip uses `ClipStack`
+- Region (Skia) — not included; clip uses `ClipStack`
 - Path serialization (`serialize` / `ReadFromMemory`) — deferred

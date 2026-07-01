@@ -68,7 +68,7 @@ data class TextBlob(
 )
 ```
 
-- Multi-run text container (mutable-free, like Skia's `SkTextBlob`)
+- Multi-run text container (mutable-free, like Skia's TextBlob)
 - When `typeface` is non-null, the font pipeline can produce an A8 glyph atlas
 - Without `typeface`: placeholder rendering with empty atlas (diagnostic: `DEGRADE`)
 
@@ -76,7 +76,7 @@ data class TextBlob(
 
 - `Image.decode` real implementation — requires codec SPI integration (deferred)
 - Image encode beyond PNG — JPEG, WebP, etc. require codec SPI (deferred)
-- `SkFont` / `SkFontMgr` — font management is not in the Kanvas facade
+- Font / FontMgr (Skia) — font management is not in the Kanvas facade
 - Text shaping (Bidi, Kerning, GPOS/GSUB) — delegated to `:font`
 - `TextBlob.bounds()`, `TextBlob.serialize()` — deferred
 - `makeFromString`, `makeFromRSXform` — text shaping not yet in facade

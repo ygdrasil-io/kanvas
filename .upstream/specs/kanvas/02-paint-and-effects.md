@@ -49,7 +49,7 @@ enum class BlendMode {
 }
 ```
 
-- Covers all 28 Skia `SkBlendMode` values plus `MODULATE` (29 total)
+- Covers all 28 Skia BlendMode values plus `MODULATE` (29 total)
 - Porter-Duff compositing operators + separable/non-separable blend modes
 
 ### Shader
@@ -69,7 +69,7 @@ sealed interface Shader {
 }
 ```
 
-- 10 subtypes covering Skia's `SkShader` factory surface
+- 10 subtypes covering Skia's Shader factory surface
 - `WithLocalMatrix` and `WithColorFilter` are composables (wrapping an inner shader)
 - `Image` references `Image` from `09-image-and-text.md`
 - `RuntimeEffect` references `RuntimeEffect` and `UniformBlock` from `05-gpu-pipeline.md`
@@ -146,7 +146,7 @@ data class GradientStop(val position: Float, val color: Color)
 - `PerlinNoise` / `FractalNoise` shader subtypes (deferred)
 - `CoordClamp` shader (deferred)
 - `Sk1DPathEffect`, `Sk2DPathEffect`, `TrimPathEffect` (deferred)
-- Full `SkImageFilters` factory surface — deferred:
+- Full Skia ImageFilters factory surface — deferred:
   - **Lighting**: DistantLit/PointLit/SpotLit Diffuse + Specular (6 variants)
   - **Morphology**: Dilate, Erode
   - **Transform**: MatrixTransform, Offset, Tile, Merge
@@ -154,4 +154,4 @@ data class GradientStop(val position: Float, val color: Color)
   - **Compositing**: Crop, RuntimeShader image filter
 - `ColorFilter.HSLAMatrix`, `Lerp`, `HighContrast`, `LumaColorFilter`, `OverdrawColorFilter` (deferred)
 - `MaskFilter.Shader`, `MaskFilter.Table` (deferred)
-- Shader color space interpolation (`SkGradient::Interpolation`) — hardcoded sRGB for now
+- Shader color space interpolation (Skia Gradient interpolation) — hardcoded sRGB for now

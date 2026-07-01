@@ -128,6 +128,6 @@ interface DisplayListBuffer {
 ## Non-Goals
 
 - `drawVertices`, `drawAtlas`, `drawDrawable`, `drawPatch`, `drawAnnotation`, `drawDRRect`, `drawImageNine`, `drawImageLattice`, `drawColor`/`clear`, `quickReject`, `readPixels`/`writePixels` — deferred
-- `SkDrawable` — deferred
+- Drawable (Skia) — deferred
 - LCD text rendering flags — deferred
 - `drawPicture` serialization — deferred (blocked by image encode/decode SPI)

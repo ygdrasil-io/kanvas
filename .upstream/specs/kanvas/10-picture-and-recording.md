@@ -7,7 +7,7 @@ Date: 2026-07-01
 
 Defines `Picture` — an immutable snapshot of recorded drawing commands that can be replayed on any `Canvas`. Also defines `PictureRecorder` for capturing commands into a `Picture`, and `Canvas.drawPicture()` for composing pictures.
 
-This is the Kanvas counterpart to Skia's `SkPicture` + `SkPictureRecorder` + `SkCanvas::drawPicture`.
+This is the Kanvas counterpart to Skia's Picture + PictureRecorder + Canvas.drawPicture.
 
 ## Design Rationale
 
@@ -249,8 +249,8 @@ fun finishRecordingAsPicture(): Picture {
 ## Non-Goals (for Wave 1)
 
 - `Picture.serialize()` / `Picture.fromByteArray()` — blocked by image encode/decode SPI
-- `Picture.makeShader()` — SkPicture-to-shader conversion deferred
+- `Picture.makeShader()` — picture-to-shader conversion deferred
 - `Picture.makePlaceholder()` — placeholder pictures deferred
 - `AbortCallback` / interruptible playback — deferred
-- `SkDrawable` — the Drawable abstraction is deferred
+- Drawable — the Skia Drawable abstraction is deferred
 - Picture GPU backend integration beyond `DisplayOp.DrawPicture` dispatch in the op mapper

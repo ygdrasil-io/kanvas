@@ -19,7 +19,7 @@ These specs implement the design approved in `docs/superpowers/specs/2026-06-30-
 
 1. Do not port Ganesh or Graphite. Kanvas is a native Kotlin API.
 2. Types never carry a "Kanvas" prefix. GPU abstractions use `GPU` (not `Gpu`).
-3. `SkRuntimeEffect` is a compatibility facade backed by registered Kotlin/WGSL implementations.
+3. `RuntimeEffect` is a compatibility facade backed by registered Kotlin/WGSL implementations.
 4. Pipeline is programmable — `ShaderModule`, `RenderPipeline`, `RenderPass`, `RuntimeEffect` are public.
 5. Refusals use structured diagnostics (`FATAL` / `DEGRADE` / `WARN`), not silent dropping.
 6. The API is immutable-by-default. `Paint`, `Rect`, `RRect`, `Point`, `Color` are immutable data/value classes.
@@ -112,14 +112,14 @@ The following Skia API surface areas are not yet covered by Kanvas. Items marked
 | C6 | Canvas | `readPixels` / `writePixels` — pixel access from canvas | Deferred | — |
 | C7 | Canvas | `drawVertices`, `drawMesh`, `drawAtlas`, `drawPatch`, `drawAnnotation` | Deferred | — |
 | C8 | Canvas | `drawDrawable` — drawable interface | Deferred | — |
-| D1 | Geometry | `SkPathMeasure` — path measurement (length, tangent, segment) | Deferred | — |
+| D1 | Geometry | PathMeasure (Skia) — path measurement (length, tangent, segment) | Deferred | — |
 | D2 | Geometry | Path ops (union, intersect, difference, xor, simplify) | Deferred | — |
 | D3 | Geometry | Path queries (`isConvex`, `isOval`, `isRRect`, `isRect`, `isLine`, `isInterpolatable`) | Deferred | — |
 | E1 | Effects | `Sk1DPathEffect`, `Sk2DPathEffect`, `TrimPathEffect` | Deferred | — |
 | E2 | Shader | `PerlinNoise` / `FractalNoise` — procedural noise shaders | Deferred | — |
 | E3 | Shader | `CoordClamp` — coordinate clamping | Deferred | — |
 | E4 | ColorFilter | `HSLAMatrix`, `Lerp`, `HighContrast`, `LumaColorFilter`, `OverdrawColorFilter` | Deferred | — |
-| E5 | MaskFilter | `SkShaderMaskFilter`, `SkTableMaskFilter` | Deferred | — |
+| E5 | MaskFilter | ShaderMaskFilter, TableMaskFilter (Skia) | Deferred | — |
 | E6 | ImageFilter | Lighting (6 variants), Magnifier, MatrixConvolution, DisplacementMap, Dilate/Erode, Offset, Tile, Merge, Crop | Deferred | — |
 | E7 | ImageFilter | Shader-based image filter | Deferred | — |
 | R1 | Runtime | `RuntimeEffect.makeShader/makeColorFilter/makeBlender` — stub, blocked by wgsl4k | Deferred | Blocked |
@@ -129,10 +129,10 @@ The following Skia API surface areas are not yet covered by Kanvas. Items marked
 | I1 | Image | `Image.decode()` — placeholder (returns 0x0 image) | Deferred | — |
 | I2 | Image | Image encode beyond PNG (JPEG, WebP) | Deferred | — |
 | S1 | Serialize | `Picture.serialize()`, `Picture.MakeFromData()` | Deferred | Blocked by image encode |
-| T1 | Text | `SkFont`, `SkFontMgr`, full SkTypeface | Delegated | `:font` module |
+| T1 | Text | Font / FontMgr / Typeface (Skia) | Delegated | `:font` module |
 | T2 | Text | Text shaping (Unicode→glyph), Bidi, kerning, GPOS/GSUB | Delegated | `:font` module |
 | T3 | Text | `TextBlob.makeFromString`, `makeFromRSXform`, `bounds()`, `serialize()` | Delegated | `:font` module |
-| G1 | Region | `SkRegion` — boolean operations on rectangular regions | Deferred | — |
+| G1 | Region | Region (Skia) — boolean operations on rectangular regions | Deferred | — |
 | G2 | Shader | `makeWithWorkingColorSpace`, color space interpolation | Hardcoded sRGB | Deferred |
 | G3 | Document | PDF, XPS, SVG canvas backends | Out of scope | — |
 | G4 | GPU | Graphite / Ganesh GPU backends | Out of scope | Arch decision |
@@ -149,9 +149,9 @@ The following Skia API surface areas are not yet covered by Kanvas. Items marked
 The following are explicitly NOT in Kanvas scope:
 
 - **Canvas**: `drawVertices`, `drawAtlas`, `drawDrawable`, `drawPatch`, `drawAnnotation`, `drawDRRect`, `drawImageNine`, `drawImageLattice`, `drawColor`/`clear`, `quickReject`, `readPixels`/`writePixels`
-- **Geometry**: `SkRegion`, `SkPathMeasure`, path boolean operations
+- **Geometry**: Region, PathMeasure (Skia), path boolean operations
 - **Effects**: `Sk1DPathEffect`, `Sk2DPathEffect`, `TrimPathEffect`, `PerlinNoise`/`FractalNoise`, Lighting/Morphology/Displacement ImageFilters
-- **Text**: `SkFont` / `SkFontMgr` (delegated to `:font`), text shaping (delegated to `:font`)
+- **Text**: Font / FontMgr (Skia, delegated to `:font`), text shaping (delegated to `:font`)
 - **Document**: PDF, XPS, SVG canvas backends
 - **GPU**: Ganesh and Graphite backends (architectural decision)
 
