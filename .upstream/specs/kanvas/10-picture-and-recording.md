@@ -7,7 +7,7 @@ Date: 2026-07-01
 
 Defines `Picture` — an immutable snapshot of recorded drawing commands that can be replayed on any `Canvas`. Also defines `PictureRecorder` for capturing commands into a `Picture`, and `Canvas.drawPicture()` for composing pictures.
 
-This is the Kanvas counterpart to Skia's Picture + PictureRecorder + Canvas.drawPicture.
+This is the Kanvas counterpart to upstream Picture + PictureRecorder + Canvas.drawPicture.
 
 ## Design Rationale
 
@@ -17,7 +17,7 @@ Kanvas already has a display list mechanism (`DisplayOp`, `DisplayListBuffer`). 
 - **Composability**: Pictures can contain other pictures via `DisplayOp.DrawPicture`.
 - **Inspection**: Access to cull rect, approximate op count, and byte usage.
 
-Unlike Skia, Kanvas does **not** implement custom binary serialization in Wave 1. The display list is always held in memory. Serialization (`toByteArray()` / `fromByteArray()`) is deferred to a later wave (blocked by image encode/decode SPI).
+Unlike the upstream C++ API, Kanvas does **not** implement custom binary serialization. The display list is always held in memory. Serialization (`toByteArray()` / `fromByteArray()`) is excluded from the Kanvas Picture target.
 
 ## Contracts
 
@@ -246,11 +246,10 @@ fun finishRecordingAsPicture(): Picture {
 }
 ```
 
-## Non-Goals (for Wave 1)
+## Non-Goals
 
-- `Picture.serialize()` / `Picture.fromByteArray()` — blocked by image encode/decode SPI
-- `Picture.makeShader()` — picture-to-shader conversion deferred
-- `Picture.makePlaceholder()` — placeholder pictures deferred
-- `AbortCallback` / interruptible playback — deferred
-- Drawable — the Skia Drawable abstraction is deferred
-- Picture GPU backend integration beyond `DisplayOp.DrawPicture` dispatch in the op mapper
+- Picture binary serialization
+- Picture-to-shader conversion (`makeShader`)
+- Placeholder pictures
+- Interruptible playback
+- Custom drawable abstractions — Kanvas uses `Canvas.drawPicture` for composition

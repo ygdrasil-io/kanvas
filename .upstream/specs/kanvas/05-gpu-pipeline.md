@@ -208,23 +208,10 @@ data class CompiledFrame(val passes: List<RenderPass>, val diagnostics: Diagnost
 - Produces `RenderPass[]` for execution + `Diagnostics` for refusals
 - **Picture expansion**: When encountering `DisplayOp.DrawPicture`, the compiler recursively expands the nested `Picture.ops` into the display list. Each nested draw op inherits the outer `DrawPicture`'s transform and clip (concatenated), and carries the `DrawPicture`'s optional `Paint` for alpha modulation.
 
-### Pipeline Status (2026-07-01)
-
-The 7 `RenderPipeline` companion constants (`SOLID_COLOR_FILL`, `LINEAR_GRADIENT_FILL`, `ROUNDED_RECT_SDF`, `TEXT_ATLAS_GLYPH`, `STENCIL_COVER`, `IMAGE_DRAW`, `BLUR_PASS`) currently use placeholder WGSL shaders (`return vec4f();`). Real shader implementations are deferred to the WGSL pipeline wave.
-
-The GPU OpMapper (`surface/gpu/GPUOpMapper.kt`) currently handles:
-- `DrawRect` → solid color fill / gradient fill
-- `DrawPath` → tessellation dispatch (stroke paths converted to geometry)
-- `DrawRRect` → SDF-based rounded rect fill
-
-Support for `DisplayOp.DrawPicture` in the OpMapper is added in Wave 1: the mapper expands the picture's ops recursively, applying the outer transform/clip. Each nested op is processed as if it were directly in the display list.
-
 ## Non-Goals
 
-- Real WGSL shader implementations (current placeholders) — deferred to WGSL pipeline wave
-- Compute pipeline interface — deferred
-- Multi-pass render graph DAG — current model is linear pass list
-- GPU buffer/texture lifecycle management (create/destroy) — delegated to `:gpu-renderer`
-- WGSL parser/reflection implementation — delegated to `wgsl4k` library
-- `RuntimeEffect.makeColorFilter()` / `makeBlender()` — blocked by wgsl4k integration
-- `RuntimeEffect.compile()` — blocked by wgsl4k integration
+- Compute shader pipelines
+- Multi-pass render graph with dependencies — the compiler produces a linear pass list
+- GPU buffer and texture lifecycle management — delegated to `:gpu-renderer`
+- WGSL parsing, reflection, and code generation — delegated to the `wgsl4k` library
+- Runtime shader effects beyond the `RuntimeEffect` descriptor registration — `makeColorFilter`, `makeBlender`, and `compile` require `wgsl4k` integration

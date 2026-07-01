@@ -49,7 +49,7 @@ enum class BlendMode {
 }
 ```
 
-- Covers all 28 Skia BlendMode values plus `MODULATE` (29 total)
+- Covers all 29 Porter-Duff compositing operators and separable/non-separable blend modes
 - Porter-Duff compositing operators + separable/non-separable blend modes
 
 ### Shader
@@ -69,7 +69,7 @@ sealed interface Shader {
 }
 ```
 
-- 10 subtypes covering Skia's Shader factory surface
+- 10 shader subtypes covering solid colors, four gradient types, image, blend, runtime effects, and local matrix/color filter composition
 - `WithLocalMatrix` and `WithColorFilter` are composables (wrapping an inner shader)
 - `Image` references `Image` from `09-image-and-text.md`
 - `RuntimeEffect` references `RuntimeEffect` and `UniformBlock` from `05-gpu-pipeline.md`
@@ -120,7 +120,7 @@ sealed interface ImageFilter {
 ```
 
 - Each filter may carry an optional `input: ImageFilter?` forming a DAG
-- Extensible: Offset, Dilate/Erode, Displacement, Lighting deferred
+- The sealed hierarchy is extensible — additional filter types (offset, morphology, displacement, lighting) are outside Kanvas scope
 
 ### Blender
 
@@ -143,15 +143,10 @@ data class GradientStop(val position: Float, val color: Color)
 
 ## Non-Goals
 
-- `PerlinNoise` / `FractalNoise` shader subtypes (deferred)
-- `CoordClamp` shader (deferred)
-- `Sk1DPathEffect`, `Sk2DPathEffect`, `TrimPathEffect` (deferred)
-- Full Skia ImageFilters factory surface — deferred:
-  - **Lighting**: DistantLit/PointLit/SpotLit Diffuse + Specular (6 variants)
-  - **Morphology**: Dilate, Erode
-  - **Transform**: MatrixTransform, Offset, Tile, Merge
-  - **Advanced**: Magnifier, MatrixConvolution, DisplacementMap
-  - **Compositing**: Crop, RuntimeShader image filter
-- `ColorFilter.HSLAMatrix`, `Lerp`, `HighContrast`, `LumaColorFilter`, `OverdrawColorFilter` (deferred)
-- `MaskFilter.Shader`, `MaskFilter.Table` (deferred)
-- Shader color space interpolation (Skia Gradient interpolation) — hardcoded sRGB for now
+- Procedural noise shaders (Perlin noise, fractal turbulence)
+- Shader coordinate clamping
+- Path-based shape effects (pattern repeat along path, path deformation, path trimming)
+- Image filter graph beyond core compositing — Kanvas provides blur, drop-shadow, color-filter, compose, and blend nodes. Morphological filters, lighting effects, displacement mapping, magnifier, matrix convolution, coordinate offset, tile repetition, and merge are not part of the Kanvas target.
+- Color filter types beyond the six core nodes: matrix, blend, compose, lookup table, lighting, and gamma conversion. HSLA matrix, linear interpolation of two filters, high-contrast, luma-extraction, and overdraw visualization are excluded.
+- Mask filter types beyond gaussian blur — shader-based masks and lookup-table masks are excluded.
+- Shader color space interpolation — the pipeline uses sRGB with premultiplied alpha throughout.

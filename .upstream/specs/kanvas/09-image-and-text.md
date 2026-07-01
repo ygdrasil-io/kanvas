@@ -28,7 +28,7 @@ data class Image(
 - Metadata carrier — the actual pixel data is managed by the GPU backend
 - `sourceId`: unique identifier for texture lookup in GPU resource cache
 - `colorSpace`: forwarded to `GPUColorSpaceDescriptor` in `:gpu-renderer` for color conversion; defaults to sRGB
-- `decode()`: placeholder in this phase (returns width=0, height=0); real implementation via codec SPI deferred (codec will extract color space from image metadata — e.g., ICC profile from JPEG, gAMA/cHRM from PNG, NCLC/colr from HEIF)
+- `decode()`: metadata placeholder — returns a zero-size image. Real codec integration extracts color space from image metadata (ICC profile from JPEG, gAMA/cHRM from PNG, NCLC/colr from HEIF) and lives outside the `:kanvas` module.
 
 ### ColorType
 
@@ -68,17 +68,16 @@ data class TextBlob(
 )
 ```
 
-- Multi-run text container (mutable-free, like Skia's TextBlob)
+- Multi-run text container (mutable-free, pre-shaped glyph runs only)
 - When `typeface` is non-null, the font pipeline can produce an A8 glyph atlas
 - Without `typeface`: placeholder rendering with empty atlas (diagnostic: `DEGRADE`)
 
 ## Non-Goals
 
-- `Image.decode` real implementation — requires codec SPI integration (deferred)
-- Image encode beyond PNG — JPEG, WebP, etc. require codec SPI (deferred)
-- Font / FontMgr (Skia) — font management is not in the Kanvas facade
-- Text shaping (Bidi, Kerning, GPOS/GSUB) — delegated to `:font`
-- `TextBlob.bounds()`, `TextBlob.serialize()` — deferred
-- `makeFromString`, `makeFromRSXform` — text shaping not yet in facade
-- `TextBlob.getIntercepts()` — deferred
-- `Image.makeShader()` convenience — deferred (use `Shader.Image` directly)
+- Real `Image.decode` implementation — requires codec integration
+- Image encoding beyond PNG
+- Font and font management — not part of the Kanvas facade; text shaping is delegated to `:font`
+- Text shaping (bidi, kerning, glyph substitution and positioning) — delegated to `:font`
+- `TextBlob.bounds()`, `TextBlob.serialize()`, `TextBlob.getIntercepts()`
+- String-to-glyph conversion (`makeFromString`, `makeFromRSXform`)
+- `Image.makeShader()` convenience — use `Shader.Image` directly

@@ -106,7 +106,6 @@ object ImageEncoderRegistry {
 
 ## Non-Goals
 
-- GPU pipeline wiring — `render()` returns placeholder pixels in this phase; real GPU dispatch is integrated later
-- `makeSurface()` / `makeImageSnapshot()` — deferred
-- Pixel readback beyond full RGBA frame — deferred
-- `toJpeg()`, `toWebP()` — follow same SPI pattern, deferred
+- `makeSurface()` / `makeImageSnapshot()` — multi-surface composition is not a Kanvas concern
+- Pixel readback beyond full RGBA frame
+- Image encoding beyond PNG (`toPng`); other formats follow the same SPI pattern but are not part of Kanvas

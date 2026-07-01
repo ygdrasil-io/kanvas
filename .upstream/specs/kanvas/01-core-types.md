@@ -96,5 +96,5 @@ sealed interface ColorSpace {
 ## Non-Goals
 
 - Matrix44 (4×4) is not included — the 3×3 covers all 2D affine + perspective transforms
-- Point does not support integer variants (Skia's IPoint) — use Float coordinates universally
-- Rect does not include integer variant (Skia's IRect) — see `04-canvas-and-drawing.md` for clip bounds
+- Point does not support integer coordinate variants — use Float coordinates universally
+- Rect does not include integer coordinate variant — see `04-canvas-and-drawing.md` for clip bounds

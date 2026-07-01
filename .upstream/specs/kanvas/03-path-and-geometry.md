@@ -34,7 +34,7 @@ enum class PathVerb { MOVE, LINE, QUAD, CUBIC, ARC_TO, CLOSE }
 enum class FillType { WINDING, EVEN_ODD, INVERSE_WINDING, INVERSE_EVEN_ODD }
 ```
 
-- Maps to Skia's PathFillType: kWinding, kEvenOdd, kInverseWinding, kInverseEvenOdd
+- Maps to the four canonical fill type variants: winding, even-odd, inverse winding, inverse even-odd
 
 ### ClipStack
 
@@ -59,10 +59,10 @@ sealed interface ClipStackOp {
 
 ## Non-Goals
 
-- Path measurement (Skia PathMeasure) — deferred
-- Path boolean operations (union, intersect, difference, xor, simplify) — deferred
-- Path queries: `isConvex`, `isOval`, `isRRect`, `isRect`, `isLine`, `isInterpolatable` — deferred
-- `conicTo` — arcTo handles conic-like curves; conics can be approximated by quads
-- `Direction` enum (CW/CCW) — circle/oval always use clockwise
-- Region (Skia) — not included; clip uses `ClipStack`
-- Path serialization (`serialize` / `ReadFromMemory`) — deferred
+- Path measurement (arc length, tangent orientation, segment extraction)
+- Path boolean operations (union, intersection, difference, exclusive-or, simplification)
+- Path introspection queries (convexity detection, oval/rectangle/line detection, interpolatability)
+- Conic section curves — `arcTo` covers elliptical arcs; conics can be approximated by quadratic Bezier segments
+- Explicit winding direction control — circles and ovals always use clockwise orientation
+- Region-based clipping geometry — Kanvas uses `ClipStack` rather than stand-alone region objects
+- Path binary serialization

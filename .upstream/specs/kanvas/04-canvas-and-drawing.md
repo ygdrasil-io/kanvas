@@ -127,7 +127,15 @@ interface DisplayListBuffer {
 
 ## Non-Goals
 
-- `drawVertices`, `drawAtlas`, `drawDrawable`, `drawPatch`, `drawAnnotation`, `drawDRRect`, `drawImageNine`, `drawImageLattice`, `drawColor`/`clear`, `quickReject`, `readPixels`/`writePixels` — deferred
-- Drawable (Skia) — deferred
-- LCD text rendering flags — deferred
-- `drawPicture` serialization — deferred (blocked by image encode/decode SPI)
+- Point rendering (`drawPoint`, `drawPoints`)
+- Double rounded rectangle (`drawDRRect`)
+- Nine-patch and lattice image drawing (`drawImageNine`, `drawImageLattice`)
+- Full-canvas color fill or clear (`drawColor`, `clear`)
+- Visibility culling queries (`quickReject`, `isClipEmpty`, `isClipRect`)
+- Direct pixel readback or injection (`readPixels`, `writePixels`)
+- Triangle mesh rendering (`drawVertices`)
+- Sprite atlas batching (`drawAtlas`)
+- Coons patch rendering (`drawPatch`)
+- Annotation markers (`drawAnnotation`)
+- LCD sub-pixel text rendering
+- Picture binary serialization

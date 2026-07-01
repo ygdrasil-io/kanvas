@@ -72,4 +72,4 @@ RenderResult(pixels, diagnostics, stats)
 
 - This spec does not define the GPU backend execution model — see `../gpu-renderer/`
 - File-level grouping within sub-packages is not prescribed (decided during implementation)
-- `:kanvas` does not depend on `:kanvas-skia` or any Skia native bindings
+- `:kanvas` does not depend on `:kanvas-skia` or any native C++ rendering bindings
