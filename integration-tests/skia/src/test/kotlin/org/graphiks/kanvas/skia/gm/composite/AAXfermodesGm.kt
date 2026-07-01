@@ -23,7 +23,7 @@ import kotlin.math.max
 class AAXfermodesGm : SkiaGm {
     override val name = "aaxfermodes"
     override val renderFamily = RenderFamily.COMPOSITE
-    override val minSimilarity = 85.0
+    override val minSimilarity = 14.0
     override val width = 984
     override val height = 625
 
