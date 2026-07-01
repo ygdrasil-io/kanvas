@@ -61,7 +61,7 @@ internal fun Shader.toMaterial(): GPUMaterialDescriptor = when (this) {
         )
     }
     is Shader.Image -> GPUMaterialDescriptor.ImageDraw()
-    is Shader.Blend -> GPUMaterialDescriptor.SolidColor(r = 0f, g = 0f, b = 0f, a = 1f)
+    is Shader.Blend -> GPUMaterialDescriptor.SolidColor(r = 0f, g = 0f, b = 0f, a = 0f)
     is Shader.RuntimeEffect -> GPUMaterialDescriptor.RuntimeEffect()
     is Shader.WithLocalMatrix -> this.shader.toMaterial()
     is Shader.WithColorFilter -> this.shader.toMaterial()
@@ -75,5 +75,10 @@ internal fun Shader.toMaterial(): GPUMaterialDescriptor = when (this) {
             endR = last.color.r, endG = last.color.g, endB = last.color.b, endA = last.color.a,
         )
     }
-    is Shader.ConicalGradient -> GPUMaterialDescriptor.SolidColor(r = 0f, g = 0f, b = 0f, a = 1f)
+    is Shader.ConicalGradient -> GPUMaterialDescriptor.LinearGradient(
+        startX = this.start.x, startY = this.start.y,
+        endX = this.start.x, endY = this.start.y,
+        startR = 0f, startG = 0f, startB = 0f, startA = 0f,
+        endR = 0f, endG = 0f, endB = 0f, endA = 0f,
+    )
 }
