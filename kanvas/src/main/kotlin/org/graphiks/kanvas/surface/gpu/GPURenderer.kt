@@ -114,7 +114,7 @@ internal fun renderViaGpu(
                                     dispatchFillRect(cmd, dispatched, diagnostics, width, height, config)
                                 }
                             } else {
-                                t.encodeOffscreenTexture(sceneLabel, null) {
+                                t.encodeOffscreenTexture(sceneLabel, GPUClearColor(0.0, 0.0, 0.0, 0.0)) {
                                     dispatchFillRect(cmd, dispatched, diagnostics, width, height, config)
                                 }
                             }
@@ -145,7 +145,7 @@ internal fun renderViaGpu(
                                 dispatchFillPath(cmd, dispatched, diagnostics, width, height, config)
                             }
                         } else {
-                            t.encodeOffscreenTexture(sceneLabel, null) {
+                            t.encodeOffscreenTexture(sceneLabel, GPUClearColor(0.0, 0.0, 0.0, 0.0)) {
                                 dispatchFillPath(cmd, dispatched, diagnostics, width, height, config)
                             }
                         }
@@ -160,7 +160,7 @@ internal fun renderViaGpu(
                                 dispatchFillRRect(cmd, dispatched, diagnostics, width, height, config)
                             }
                         } else {
-                            t.encodeOffscreenTexture(sceneLabel, null) {
+                            t.encodeOffscreenTexture(sceneLabel, GPUClearColor(0.0, 0.0, 0.0, 0.0)) {
                                 dispatchFillRRect(cmd, dispatched, diagnostics, width, height, config)
                             }
                         }
@@ -210,4 +210,43 @@ internal fun renderViaGpu(
             )
         }
     }
+}
+
+internal fun org.graphiks.kanvas.geometry.Path.toPathTessellatorData(): PathData {
+    val verbs = mutableListOf<org.graphiks.kanvas.gpu.renderer.geometry.PathVerb>()
+    val points = mutableListOf<Point>()
+    val kanvasVerbs = this.verbs()
+    val kanvasPoints = this.points()
+    var pi = 0
+    for (verb in kanvasVerbs) {
+        when (verb) {
+            PathVerb.MOVE -> {
+                val p = kanvasPoints[pi++]
+                verbs.add(org.graphiks.kanvas.gpu.renderer.geometry.PathVerb.MoveTo(Point(p.x, p.y)))
+            }
+            PathVerb.LINE -> {
+                val p = kanvasPoints[pi++]
+                verbs.add(org.graphiks.kanvas.gpu.renderer.geometry.PathVerb.LineTo(Point(p.x, p.y)))
+            }
+            PathVerb.QUAD -> {
+                val c = kanvasPoints[pi++]; val p = kanvasPoints[pi++]
+                verbs.add(
+                    org.graphiks.kanvas.gpu.renderer.geometry.PathVerb.QuadTo(
+                        Point(c.x, c.y), Point(p.x, p.y),
+                    ),
+                )
+            }
+            PathVerb.CUBIC -> {
+                val c1 = kanvasPoints[pi++]; val c2 = kanvasPoints[pi++]; val p = kanvasPoints[pi++]
+                verbs.add(
+                    org.graphiks.kanvas.gpu.renderer.geometry.PathVerb.CubicTo(
+                        Point(c1.x, c1.y), Point(c2.x, c2.y), Point(p.x, p.y),
+                    ),
+                )
+            }
+            PathVerb.ARC_TO -> { pi += 4 }
+            PathVerb.CLOSE -> verbs.add(org.graphiks.kanvas.gpu.renderer.geometry.PathVerb.Close)
+        }
+    }
+    return PathData(verbs = verbs, points = points)
 }
