@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.svg
 
+import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.test.ComparisonUtils
 import java.io.File
 
@@ -11,6 +12,7 @@ fun main(args: Array<String>) {
 
     val inputDir = File(args[0])
     val outputDir = File(args[1])
+    val config = RenderConfig.fromEnvironment()
 
     require(inputDir.exists()) { "Input directory not found: $inputDir" }
 
@@ -33,7 +35,8 @@ fun main(args: Array<String>) {
             val (rgba, width, height) = SvgGpuRenderer.renderSvgContentToRgba(
                 svgContent = svgContent,
                 width = 800,
-                height = 600
+                height = 600,
+                config = config,
             )
             ComparisonUtils.saveRgbaAsPng(rgba, width, height, outputFile)
             println("[RENDER] $relativePath -> ${outputFile.name} (${width}x$height)")

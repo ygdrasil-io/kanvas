@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.skia
 
+import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.test.ComparisonUtils
 import java.io.File
 
@@ -10,6 +11,7 @@ fun main(args: Array<String>) {
     }
 
     val outputDir = File(args[0])
+    val config = RenderConfig.fromEnvironment()
     val gms = SkiaGmRegistry.all()
 
     if (gms.isEmpty()) {
@@ -26,7 +28,7 @@ fun main(args: Array<String>) {
         val outputFile = File(familyDir, "${gm.name}.png")
 
         try {
-            val result = SkiaGmRenderer.render(gm)
+            val result = SkiaGmRenderer.render(gm, config = config)
             ComparisonUtils.saveRgbaAsPng(result.rgba, result.width, result.height, outputFile)
             println("[RENDER] ${gm.renderFamily.name.lowercase()}/${gm.name}.png (${result.width}x${result.height}, dispatch=${result.dispatchedCount}, refuse=${result.refusedCount})")
             result.diagnostics.forEach { d -> println("  ${d}") }

@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.svg
 
 import org.graphiks.kanvas.canvas.Canvas
+import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.surface.Surface
 
 object SvgGpuRenderer {
@@ -10,9 +11,10 @@ object SvgGpuRenderer {
     fun renderToRgba(
         svg: Svg,
         width: Int = DEFAULT_WIDTH,
-        height: Int = DEFAULT_HEIGHT
+        height: Int = DEFAULT_HEIGHT,
+        config: RenderConfig = RenderConfig.DEFAULT,
     ): Triple<ByteArray, Int, Int> {
-        val surface = Surface(width = width, height = height)
+        val surface = Surface(width = width, height = height, config = config)
         val canvas = surface.canvas()
         val renderer = SvgRenderer(canvas, targetWidth = width.toFloat(), targetHeight = height.toFloat())
         renderer.render(svg)
@@ -23,10 +25,11 @@ object SvgGpuRenderer {
     fun renderSvgContentToRgba(
         svgContent: String,
         width: Int = DEFAULT_WIDTH,
-        height: Int = DEFAULT_HEIGHT
+        height: Int = DEFAULT_HEIGHT,
+        config: RenderConfig = RenderConfig.DEFAULT,
     ): Triple<ByteArray, Int, Int> {
         val parser = SvgParser()
         val svg = parser.parse(svgContent)
-        return renderToRgba(svg, width, height)
+        return renderToRgba(svg, width, height, config)
     }
 }
