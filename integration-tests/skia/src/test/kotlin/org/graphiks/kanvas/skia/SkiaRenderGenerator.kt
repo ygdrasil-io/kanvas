@@ -33,7 +33,7 @@ fun main(args: Array<String>) {
             println("[RENDER] ${gm.renderFamily.name.lowercase()}/${gm.name}.png (${result.width}x${result.height}, dispatch=${result.dispatchedCount}, refuse=${result.refusedCount})")
             result.diagnostics.forEach { d -> println("  ${d}") }
             rendered++
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             println("[FAIL] ${gm.name} — ${e.message}")
             failed++
         }
