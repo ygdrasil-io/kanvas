@@ -66,7 +66,7 @@ data class Image(
 /** Convert packed ARGB IntArray to RGBA ByteArray. */
 private fun IntArrayToRGBA(argb: IntArray, width: Int, height: Int): ByteArray {
     val rgba = ByteArray(width * height * 4)
-    val buf = ByteBuffer.wrap(rgba).order(ByteOrder.nativeOrder())
+    val buf = ByteBuffer.wrap(rgba).order(ByteOrder.LITTLE_ENDIAN)
     for (pixel in argb) {
         val a = (pixel ushr 24) and 0xFF
         val r = (pixel ushr 16) and 0xFF
