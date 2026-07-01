@@ -49,12 +49,15 @@ org.graphiks.kanvas.skia.gm.composite.ComposeShaderGm
 org.graphiks.kanvas.skia.gm.composite.ComposeShaderGridGm
 org.graphiks.kanvas.skia.gm.composite.FadeFilterGm
 org.graphiks.kanvas.skia.gm.composite.HairModesGm
+org.graphiks.kanvas.skia.gm.composite.LuminosityOverflowGm
 org.graphiks.kanvas.skia.gm.composite.ModeColorFilterGm
 org.graphiks.kanvas.skia.gm.composite.ModeColorFiltersGm
+org.graphiks.kanvas.skia.gm.composite.PlusMergesAaGm
 org.graphiks.kanvas.skia.gm.composite.Xfermodes2Gm
 org.graphiks.kanvas.skia.gm.composite.XfermodesGm
 org.graphiks.kanvas.skia.gm.gradient.ClampedGradientsGm
 org.graphiks.kanvas.skia.gm.gradient.ConicalGradients2ptInsideGm
+org.graphiks.kanvas.skia.gm.gradient.ConicalGradients2ptOutsideGm
 org.graphiks.kanvas.skia.gm.gradient.Crbug938592Gm
 org.graphiks.kanvas.skia.gm.gradient.EmptyShaderGm
 org.graphiks.kanvas.skia.gm.gradient.FillrectGradientGm
@@ -63,6 +66,7 @@ org.graphiks.kanvas.skia.gm.gradient.GradientManyHardStopsGm
 org.graphiks.kanvas.skia.gm.gradient.GradientManyStopsGm
 org.graphiks.kanvas.skia.gm.gradient.GradientMatrixGm
 org.graphiks.kanvas.skia.gm.gradient.GradientsAlphaManyStopsGm
+org.graphiks.kanvas.skia.gm.gradient.GradientsColorSpaceTilemodeGm
 org.graphiks.kanvas.skia.gm.gradient.GradientsDegenerate2PointGm
 org.graphiks.kanvas.skia.gm.gradient.GradientsDupColorStopsGm
 org.graphiks.kanvas.skia.gm.gradient.GradientsGm
@@ -112,6 +116,7 @@ org.graphiks.kanvas.skia.gm.path.Bug6987Gm
 org.graphiks.kanvas.skia.gm.path.Bug7792Gm
 org.graphiks.kanvas.skia.gm.path.Bug9331Gm
 org.graphiks.kanvas.skia.gm.path.CircleSizesGm
+org.graphiks.kanvas.skia.gm.path.CircularArcStrokeMatrixGm
 org.graphiks.kanvas.skia.gm.path.CircularArcsFillGm
 org.graphiks.kanvas.skia.gm.path.CircularArcsHairlineGm
 org.graphiks.kanvas.skia.gm.path.CircularArcsStrokeButtGm
@@ -130,8 +135,11 @@ org.graphiks.kanvas.skia.gm.path.CollapsePathsGm
 org.graphiks.kanvas.skia.gm.path.ConcavePathsGm
 org.graphiks.kanvas.skia.gm.path.ConjoinedPolygonsGm
 org.graphiks.kanvas.skia.gm.path.ContourStartGm
+org.graphiks.kanvas.skia.gm.path.ConvexLineOnlyPathsGm
+org.graphiks.kanvas.skia.gm.path.ConvexLineOnlyPathsStrokeAndFillGm
 org.graphiks.kanvas.skia.gm.path.ConvexPathsGm
 org.graphiks.kanvas.skia.gm.path.CornerDiscretePathEffectGm
+org.graphiks.kanvas.skia.gm.path.Crbug10141204Gm
 org.graphiks.kanvas.skia.gm.path.Crbug1086705Gm
 org.graphiks.kanvas.skia.gm.path.Crbug1113794Gm
 org.graphiks.kanvas.skia.gm.path.Crbug1257515Gm
@@ -143,6 +151,7 @@ org.graphiks.kanvas.skia.gm.path.Crbug887103Gm
 org.graphiks.kanvas.skia.gm.path.Crbug888453Gm
 org.graphiks.kanvas.skia.gm.path.Crbug908646Gm
 org.graphiks.kanvas.skia.gm.path.Crbug913349Gm
+org.graphiks.kanvas.skia.gm.path.Crbug947055Gm
 org.graphiks.kanvas.skia.gm.path.Crbug996140Gm
 org.graphiks.kanvas.skia.gm.path.CubicStrokeGm
 org.graphiks.kanvas.skia.gm.path.DRRectGm
@@ -158,9 +167,13 @@ org.graphiks.kanvas.skia.gm.path.DashingGm
 org.graphiks.kanvas.skia.gm.path.DegenerateSegmentsGm
 org.graphiks.kanvas.skia.gm.path.EmptyPathGm
 org.graphiks.kanvas.skia.gm.path.EmptyStrokeGm
+org.graphiks.kanvas.skia.gm.path.FiddleGm
 org.graphiks.kanvas.skia.gm.path.FillCircleGm
 org.graphiks.kanvas.skia.gm.path.FillTypesGm
 org.graphiks.kanvas.skia.gm.path.HairlineSubdivGm
+org.graphiks.kanvas.skia.gm.path.HairlinesGm
+org.graphiks.kanvas.skia.gm.path.HairlinesRoundcapGm
+org.graphiks.kanvas.skia.gm.path.HairlinesSquarecapGm
 org.graphiks.kanvas.skia.gm.path.InversePathsGm
 org.graphiks.kanvas.skia.gm.path.LabyrinthButtGm
 org.graphiks.kanvas.skia.gm.path.LabyrinthRoundGm
@@ -191,9 +204,11 @@ org.graphiks.kanvas.skia.gm.path.QuadCapGm
 org.graphiks.kanvas.skia.gm.path.RRectDrawAaGm
 org.graphiks.kanvas.skia.gm.path.RRectDrawBwGm
 org.graphiks.kanvas.skia.gm.path.RRectGm
+org.graphiks.kanvas.skia.gm.path.RectPolyStrokeGm
 org.graphiks.kanvas.skia.gm.path.RotatedCubicPathGm
 org.graphiks.kanvas.skia.gm.path.ScaledRectsGm
 org.graphiks.kanvas.skia.gm.path.ScaledStrokesGm
+org.graphiks.kanvas.skia.gm.path.ShallowAnglePathArcToGm
 org.graphiks.kanvas.skia.gm.path.SimpleRectGm
 org.graphiks.kanvas.skia.gm.path.Skbug12244Gm
 org.graphiks.kanvas.skia.gm.path.Skbug4868Gm
@@ -212,7 +227,6 @@ org.graphiks.kanvas.skia.gm.path.StrokedLinesGm
 org.graphiks.kanvas.skia.gm.path.StrokerectAnisotropic5408Gm
 org.graphiks.kanvas.skia.gm.path.StrokerectAnisotropicGm
 org.graphiks.kanvas.skia.gm.path.Strokes2Gm
-org.graphiks.kanvas.skia.gm.path.Strokes4Gm
 org.graphiks.kanvas.skia.gm.path.Strokes4Gm
 org.graphiks.kanvas.skia.gm.path.StrokesGm
 org.graphiks.kanvas.skia.gm.path.TeenyStrokesGm
