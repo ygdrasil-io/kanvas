@@ -3,6 +3,7 @@ package org.graphiks.kanvas.gpu.renderer.analysis
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
@@ -28,6 +29,8 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUPathFacts
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
+import org.graphiks.kanvas.gpu.renderer.commands.NormalizedMaskFilter
+import org.graphiks.kanvas.gpu.renderer.commands.NormalizedBlurStyle
 import org.graphiks.kanvas.gpu.renderer.filters.GPUFilterGraphDescriptor
 import org.graphiks.kanvas.gpu.renderer.filters.GPUFilterNodeDescriptor
 import org.graphiks.kanvas.gpu.renderer.filters.GPUFilterNodeID
@@ -577,9 +580,9 @@ class FirstRoutePlannerTest {
         assertEquals("native.path_fill.stencil_cover", plan.analysisRecord.routeDecisionLabel)
     }
 
-    /** FillPath refuses when tessellated vertices are empty. */
+    /** FillPath with empty vertices is now accepted (empty non-inverse paths draw nothing). */
     @Test
-    fun `fill path with empty vertices refuses diagnostically`() {
+    fun `fill path with empty vertices accepted as empty draw`() {
         val command = GPUFillPathCommandBuilder.build(
             commandId = GPUDrawCommandID(23),
             pathKey = "path:triangle:v1",
@@ -602,8 +605,8 @@ class FirstRoutePlannerTest {
         )
 
         val plan = GPUFirstRoutePlanner(capabilities = firstSlicePathFillCapabilities()).plan(command)
-        assertIs<GPURouteDecision.Refused>(plan.routeDecision)
-        assertEquals("unsupported.geometry.path_empty", plan.pass.diagnostics.single().code)
+        assertIs<GPURouteDecision.Prepared>(plan.routeDecision)
+        assertEquals("prepared.path_fill.tessellated", plan.analysisRecord.routeDecisionLabel)
     }
 
     /** FillPath refuses for unsupported material kinds. */
@@ -668,9 +671,9 @@ class FirstRoutePlannerTest {
         assertEquals("unsupported.pipeline.capability_missing", plan.pass.diagnostics.single().code)
     }
 
-    /** FillPath with stroke refuses diagnostically. */
+    /** FillPath with basic stroke (butt cap, miter join) builds prepared CPU stroke route. */
     @Test
-    fun `fill path with stroke refuses diagnostically`() {
+    fun `fill path with basic stroke builds prepared CPU route`() {
         val command = GPUFillPathCommandBuilder.build(
             commandId = GPUDrawCommandID(26),
             pathKey = "path:triangle:v1",
@@ -694,8 +697,191 @@ class FirstRoutePlannerTest {
         )
 
         val plan = GPUFirstRoutePlanner(capabilities = firstSlicePathFillCapabilities()).plan(command)
-        assertIs<GPURouteDecision.Refused>(plan.routeDecision)
-        assertEquals("unsupported.stroke.unimplemented", plan.pass.diagnostics.single().code)
+        val routeDecision = assertIs<GPURouteDecision.Prepared>(plan.routeDecision)
+        val analysisDecision = assertIs<GPUDrawAnalysisDecision.Candidate>(plan.analysisDecision)
+
+        assertEquals("analysis.fill_path.26", plan.analysisRecord.recordId)
+        assertEquals("FillPath", plan.analysisRecord.commandFamily)
+        assertEquals("prepared.path_stroke.tessellated", analysisDecision.routeDecisionLabel)
+        assertEquals("stroke-strip.render-step", routeDecision.route.consumerKind)
+        assertEquals("stroke-tessellation", routeDecision.route.artifactType)
+        assertEquals("path.stroke.tessellated", plan.pass.invocations.single().renderStepId.value)
+        assertEquals(listOf("pending.pipeline.fill_stroke.tessellated.rgba8unorm.src_over"), plan.pass.pipelineKeys)
+        assertEquals("pending.pipeline.fill_stroke.tessellated.rgba8unorm.src_over", plan.pass.invocations.single().pipelineKeyHash)
+        assertEquals("analysis.fill_path.26", plan.pass.invocations.single().analysisRecordId)
+        assertEquals(26, plan.pass.invocations.single().commandIdValue)
+        assertEquals("path_fill", plan.pass.invocations.single().role)
+        assertEquals("pass.path_fill.26", plan.pass.passId)
+        assertEquals(
+            "prepared.stroke.path_triangle_v1.w1.0.butt.miter.e3",
+            routeDecision.route.artifactKey.value,
+        )
+    }
+
+    /** FillPath with stroke and SimpleRepeat dash (≤4 elements) builds prepared CPU stroke route. */
+    @Test
+    fun `fill path with stroke and simple repeat dash builds prepared CPU route`() {
+        val command = GPUFillPathCommandBuilder.build(
+            commandId = GPUDrawCommandID(28),
+            pathKey = "path:line:v1",
+            pathDescriptor = GPUPathFacts(
+                pathKey = "path:line:v1",
+                verbCount = 2,
+                pointCount = 2,
+                fillRule = "NonZero",
+                inverseFill = false,
+                finiteProof = "finite",
+                volatility = "immutable",
+                transformClass = "identity",
+                edgeCount = 1,
+            ),
+            tessellatedVertices = listOf(0f, 0f, 100f, 0f),
+            contourStarts = listOf(0),
+            edgeCount = 1,
+            target = GPUTargetFacts(width = 128, height = 64, colorFormat = "rgba8unorm"),
+            material = GPUMaterialDescriptor.SolidColor(r = 1f, g = 0f, b = 0f, a = 1f),
+            stroke = true,
+            strokeWidth = 6f,
+            dashIntervals = floatArrayOf(10f, 10f),
+            dashPhase = 0f,
+        )
+
+        val plan = GPUFirstRoutePlanner(capabilities = firstSlicePathFillCapabilities()).plan(command)
+        val routeDecision = assertIs<GPURouteDecision.Prepared>(plan.routeDecision)
+        val analysisDecision = assertIs<GPUDrawAnalysisDecision.Candidate>(plan.analysisDecision)
+
+        assertEquals("analysis.fill_path.28", plan.analysisRecord.recordId)
+        assertEquals("FillPath", plan.analysisRecord.commandFamily)
+        assertEquals("prepared.path_stroke.tessellated", analysisDecision.routeDecisionLabel)
+        assertEquals("stroke-strip.render-step", routeDecision.route.consumerKind)
+        assertEquals("stroke-tessellation", routeDecision.route.artifactType)
+        assertEquals("path.stroke.tessellated", plan.pass.invocations.single().renderStepId.value)
+        assertContains(
+            routeDecision.route.artifactKey.value,
+            "prepared.stroke.path_line_v1.w6.0.butt.miter.d10.0_10.0.e",
+        )
+    }
+
+    /** FillPath with stroke and ComplexPattern dash (>4 elements) still refused. */
+    @Test
+    fun `fill path with stroke and complex dash pattern refused`() {
+        val command = GPUFillPathCommandBuilder.build(
+            commandId = GPUDrawCommandID(29),
+            pathKey = "path:line:v1",
+            pathDescriptor = GPUPathFacts(
+                pathKey = "path:line:v1",
+                verbCount = 2,
+                pointCount = 2,
+                fillRule = "NonZero",
+                inverseFill = false,
+                finiteProof = "finite",
+                volatility = "immutable",
+                transformClass = "identity",
+                edgeCount = 1,
+            ),
+            tessellatedVertices = listOf(0f, 0f, 100f, 0f),
+            contourStarts = listOf(0),
+            edgeCount = 1,
+            target = GPUTargetFacts(width = 128, height = 64, colorFormat = "rgba8unorm"),
+            material = GPUMaterialDescriptor.SolidColor(r = 1f, g = 0f, b = 0f, a = 1f),
+            stroke = true,
+            strokeWidth = 6f,
+            dashIntervals = floatArrayOf(10f, 5f, 3f, 2f, 1f, 1f),
+            dashPhase = 0f,
+        )
+
+        val plan = GPUFirstRoutePlanner(capabilities = firstSlicePathFillCapabilities()).plan(command)
+        val routeDecision = assertIs<GPURouteDecision.Refused>(plan.routeDecision)
+        assertEquals("unsupported.stroke.dash_complex", routeDecision.diagnostic.code)
+    }
+
+    /** Accepted FillPath with blur MaskFilter builds blur-aware prepared CPU route. */
+    @Test
+    fun `fill path with blur mask filter builds blur mask prepared route`() {
+        val command = GPUFillPathCommandBuilder.build(
+            commandId = GPUDrawCommandID(27),
+            pathKey = "path:triangle:v1",
+            pathDescriptor = GPUPathFacts(
+                pathKey = "path:triangle:v1",
+                verbCount = 4,
+                pointCount = 3,
+                fillRule = "NonZero",
+                inverseFill = false,
+                finiteProof = "finite",
+                volatility = "immutable",
+                transformClass = "identity",
+                edgeCount = 3,
+            ),
+            tessellatedVertices = listOf(0f, 0f, 16f, 0f, 8f, 16f),
+            contourStarts = listOf(0),
+            edgeCount = 3,
+            target = GPUTargetFacts(width = 64, height = 64, colorFormat = "rgba8unorm"),
+            material = GPUMaterialDescriptor.SolidColor(r = 1f, g = 0.25f, b = 0.5f, a = 1f),
+            maskFilter = NormalizedMaskFilter.Blur(
+                style = NormalizedBlurStyle.NORMAL,
+                sigma = 6.2735f,
+            ),
+        )
+
+        val plan = GPUFirstRoutePlanner(capabilities = firstSlicePathFillCapabilities()).plan(command)
+        val routeDecision = assertIs<GPURouteDecision.Prepared>(plan.routeDecision)
+        val analysisDecision = assertIs<GPUDrawAnalysisDecision.Candidate>(plan.analysisDecision)
+
+        assertEquals("analysis.fill_path.27", plan.analysisRecord.recordId)
+        assertEquals("FillPath", plan.analysisRecord.commandFamily)
+        assertEquals("prepared.path_fill.blur_mask", analysisDecision.routeDecisionLabel)
+        assertEquals("blur-mask.sample.path-fill", routeDecision.route.consumerKind)
+        assertEquals("path.fill.blur_mask", plan.pass.invocations.single().renderStepId.value)
+        assertEquals(listOf("pending.pipeline.fill_path.blur_mask.rgba8unorm.src_over"), plan.pass.pipelineKeys)
+        assertEquals("pending.pipeline.fill_path.blur_mask.rgba8unorm.src_over", plan.pass.invocations.single().pipelineKeyHash)
+        assertEquals("analysis.fill_path.27", plan.pass.invocations.single().analysisRecordId)
+        assertEquals(27, plan.pass.invocations.single().commandIdValue)
+        assertEquals("path_fill", plan.pass.invocations.single().role)
+        assertEquals("pass.path_fill.27", plan.pass.passId)
+        assertEquals(
+            "blur-mask.path-fill.path_triangle_v1.blur:normal_sigma=6.2735",
+            routeDecision.route.artifactKey.value,
+        )
+    }
+
+    /** Accepted FillPath with all blur style variants produces expected blur mask routes. */
+    @Test
+    fun `fill path with all blur style variants produces blur mask routes`() {
+        val styles = listOf(
+            NormalizedBlurStyle.NORMAL,
+            NormalizedBlurStyle.SOLID,
+            NormalizedBlurStyle.OUTER,
+            NormalizedBlurStyle.INNER,
+        )
+        for (style in styles) {
+            val command = GPUFillPathCommandBuilder.build(
+                commandId = GPUDrawCommandID(31),
+                pathKey = "path:rect:v1",
+                pathDescriptor = GPUPathFacts(
+                    pathKey = "path:rect:v1",
+                    verbCount = 5,
+                    pointCount = 4,
+                    fillRule = "NonZero",
+                    inverseFill = false,
+                    finiteProof = "finite",
+                    volatility = "immutable",
+                    transformClass = "identity",
+                    edgeCount = 4,
+                ),
+                tessellatedVertices = listOf(0f, 0f, 32f, 0f, 32f, 32f, 0f, 32f),
+                contourStarts = listOf(0),
+                edgeCount = 4,
+                target = GPUTargetFacts(width = 64, height = 64, colorFormat = "rgba8unorm"),
+                material = GPUMaterialDescriptor.SolidColor(r = 0f, g = 0.5f, b = 1f, a = 1f),
+                maskFilter = NormalizedMaskFilter.Blur(style = style, sigma = 3f),
+            )
+
+            val plan = GPUFirstRoutePlanner(capabilities = firstSlicePathFillCapabilities()).plan(command)
+            val analysisDecision = assertIs<GPUDrawAnalysisDecision.Candidate>(plan.analysisDecision)
+
+            assertEquals("prepared.path_fill.blur_mask", analysisDecision.routeDecisionLabel)
+            assertContains(plan.pass.invocations.single().renderStepId.value, "blur_mask")
+        }
     }
 
     /** Accepted DrawImageRect with decoded pixels builds CPU-prepared GPU route. */

@@ -14,7 +14,14 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPURRectCornerRadii
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
+import org.graphiks.kanvas.gpu.renderer.commands.NormalizedMaskFilter
 import org.graphiks.kanvas.gpu.renderer.filters.GPUSimpleFilterRenderNodePlanner
+import org.graphiks.kanvas.gpu.renderer.geometry.GPUShapeDescriptor
+import org.graphiks.kanvas.gpu.renderer.geometry.GPUPathDescriptor
+import org.graphiks.kanvas.gpu.renderer.geometry.GPUStrokeDescriptor
+import org.graphiks.kanvas.gpu.renderer.geometry.strokeRefusalCode
+import org.graphiks.kanvas.gpu.renderer.geometry.strokePathRefusalCode
+import org.graphiks.kanvas.gpu.renderer.geometry.refusalCode
 import org.graphiks.kanvas.gpu.renderer.filters.GPUSimpleFilterRenderNodeRequest
 import org.graphiks.kanvas.gpu.renderer.filters.GPUFilterNodePlan
 import org.graphiks.kanvas.gpu.renderer.filters.GPUFilterNodeRoute
@@ -27,6 +34,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPass
 import org.graphiks.kanvas.gpu.renderer.passes.GPUFirstRoutePassBuilder
 import org.graphiks.kanvas.gpu.renderer.routing.GPUFirstRouteDecisionBuilder
 import org.graphiks.kanvas.gpu.renderer.routing.GPURouteDecision
+import org.graphiks.kanvas.gpu.renderer.stroke.DashVertexExpansion
 
 /** Compact stable sort-key value. */
 @JvmInline
@@ -135,6 +143,10 @@ class GPUFirstRoutePlanner(
             return refusedPlan(command = command, code = code)
         }
 
+        command.maskFilter?.let {
+            return blurMaskFillRectRouteDecision(command)
+        }
+
         val isLinearGradient = command.material is GPUMaterialDescriptor.LinearGradient
         val recordId = "analysis.fill_rect.${command.commandId.value}"
         val pipelineKey: String
@@ -209,6 +221,61 @@ class GPUFirstRoutePlanner(
         )
     }
 
+    /** Builds a blur-mask FillRect prepared GPU route that signals offscreen blur processing. */
+    private fun blurMaskFillRectRouteDecision(command: NormalizedDrawCommand.FillRect): GPUFirstRoutePlan {
+        val recordId = "analysis.fill_rect.${command.commandId.value}"
+        val pipelineKey = "pending.pipeline.fill_rect.blur_mask.rgba8unorm.src_over"
+        val renderStep = blurMaskFilterRenderStep
+        val consumerKind = "blur-mask.sample.rect-fill"
+        val mf = requireNotNull(command.maskFilter)
+        val blurDesc = when (mf) {
+            is NormalizedMaskFilter.Blur -> "blur:${mf.style.name.lowercase()}_sigma=${mf.sigma}"
+        }
+        val artifactKey = "blur-mask.rect-fill.rect${command.commandId.value}.${blurDesc}"
+        val invalidationFacts = listOf("rect-bounds", "blur-sigma", "blur-style", "material-kind", "transform-class")
+        val analysisRecord = GPUDrawAnalysisRecord(
+            recordId = recordId,
+            commandIdValue = command.commandId.value,
+            commandFamily = "FillRect",
+            boundsHash = command.bounds.stableHash(),
+            routeDecisionLabel = "prepared.fill_rect.blur_mask",
+            materialKeyHash = "pending.material.${command.material.kind.name.lowercase()}",
+            renderStepCandidates = listOf(renderStep),
+            sortKey = SortKey(command.ordering.paintOrder.toLong()),
+            diagnostics = command.transform.analysisDiagnostics(recordId = recordId),
+        )
+        val routeDecision = GPUFirstRouteDecisionBuilder.preparedFillPath(
+            commandIdValue = command.commandId.value,
+            artifactKey = artifactKey,
+            consumerKind = consumerKind,
+            invalidationFacts = invalidationFacts,
+        )
+        val analysisDecision = GPUDrawAnalysisDecision.Candidate(
+            recordId = recordId,
+            routeDecisionLabel = "prepared.fill_rect.blur_mask",
+            resourceDeclarations = listOf("blur_mask_artifacts:blur_rect.${command.commandId.value}"),
+            renderStepCandidates = listOf(renderStep),
+        )
+        val pass = GPUFirstRoutePassBuilder.acceptedFillRect(
+            commandIdValue = command.commandId.value,
+            analysisRecordId = recordId,
+            sortKey = command.ordering.paintOrder.toLong(),
+            renderStepIdentity = renderStep,
+            pipelineKeyHash = pipelineKey,
+            boundsHash = command.bounds.stableHash(),
+            scissorBoundsHash = command.scissorBoundsHash(),
+            originalPaintOrder = command.ordering.paintOrder,
+            targetStateHash = command.targetStateHash(),
+        )
+
+        return GPUFirstRoutePlan(
+            analysisRecord = analysisRecord,
+            analysisDecision = analysisDecision,
+            routeDecision = routeDecision,
+            pass = pass,
+        )
+    }
+
     /**
      * Plans FillRRect as native only when first-expansion facts are supported.
      *
@@ -221,6 +288,10 @@ class GPUFirstRoutePlanner(
 
         command.refusalCode()?.let { code ->
             return refusedPlan(command = command, code = code)
+        }
+
+        command.maskFilter?.let {
+            return blurMaskFillRRectRouteDecision(command)
         }
 
         val isLinearGradient = command.material is GPUMaterialDescriptor.LinearGradient
@@ -303,6 +374,62 @@ class GPUFirstRoutePlanner(
         )
     }
 
+    /** Builds a blur-mask FillRRect prepared GPU route that signals offscreen blur processing. */
+    private fun blurMaskFillRRectRouteDecision(command: NormalizedDrawCommand.FillRRect): GPUFirstRoutePlan {
+        val recordId = "analysis.fill_rrect.${command.commandId.value}"
+        val pipelineKey = "pending.pipeline.fill_rrect.blur_mask.rgba8unorm.src_over"
+        val renderStep = blurMaskFilterRenderStep
+        val consumerKind = "blur-mask.sample.rrect-fill"
+        val mf = requireNotNull(command.maskFilter)
+        val blurDesc = when (mf) {
+            is NormalizedMaskFilter.Blur -> "blur:${mf.style.name.lowercase()}_sigma=${mf.sigma}"
+        }
+        val artifactKey = "blur-mask.rrect-fill.rrect${command.commandId.value}.${blurDesc}"
+        val invalidationFacts = listOf("rrect-geometry", "blur-sigma", "blur-style", "material-kind", "transform-class")
+        val analysisRecord = GPUDrawAnalysisRecord(
+            recordId = recordId,
+            commandIdValue = command.commandId.value,
+            commandFamily = "FillRRect",
+            boundsHash = command.bounds.stableHash(),
+            routeDecisionLabel = "prepared.fill_rrect.blur_mask",
+            materialKeyHash = "pending.material.${command.material.kind.name.lowercase()}",
+            renderStepCandidates = listOf(renderStep),
+            sortKey = SortKey(command.ordering.paintOrder.toLong()),
+            diagnostics = command.transform.analysisDiagnostics(recordId = recordId) +
+                command.rrect.analysisDiagnostics(recordId = recordId),
+        )
+        val routeDecision = GPUFirstRouteDecisionBuilder.preparedFillPath(
+            commandIdValue = command.commandId.value,
+            artifactKey = artifactKey,
+            consumerKind = consumerKind,
+            invalidationFacts = invalidationFacts,
+        )
+        val analysisDecision = GPUDrawAnalysisDecision.Candidate(
+            recordId = recordId,
+            routeDecisionLabel = "prepared.fill_rrect.blur_mask",
+            resourceDeclarations = listOf("blur_mask_artifacts:blur_rrect.${command.commandId.value}"),
+            renderStepCandidates = listOf(renderStep),
+        )
+        val pass = GPUFirstRoutePassBuilder.acceptedFillRRect(
+            commandIdValue = command.commandId.value,
+            analysisRecordId = recordId,
+            sortKey = command.ordering.paintOrder.toLong(),
+            renderStepIdentity = renderStep,
+            pipelineKeyHash = pipelineKey,
+            boundsHash = command.bounds.stableHash(),
+            scissorBoundsHash = command.scissorBoundsHash(),
+            originalPaintOrder = command.ordering.paintOrder,
+            targetStateHash = command.targetStateHash(),
+        )
+
+        return GPUFirstRoutePlan(
+            analysisRecord = analysisRecord,
+            analysisDecision = analysisDecision,
+            routeDecision = routeDecision,
+            pass = pass,
+        )
+    }
+
     /**
      * Plans FillPath as CPU-prepared GPU route by default, or native stencil-cover
      * when capability and product facts promote it.
@@ -321,11 +448,75 @@ class GPUFirstRoutePlanner(
         }
 
         return when {
+            command.maskFilter != null -> blurMaskFillPathRouteDecision(command)
+            command.stroke -> preparedStrokeRouteDecision(command)
             capabilities.hasFact(firstStencilCoverCapabilityName) ->
                 nativeFillPathRouteDecision(command)
             else ->
                 preparedFillPathRouteDecision(command)
         }
+    }
+
+    /** Builds a prepared FillStroke CPUPreparedGPU route and pass for stroked paths. */
+    private fun preparedStrokeRouteDecision(command: NormalizedDrawCommand.FillPath): GPUFirstRoutePlan {
+        val recordId = "analysis.fill_path.${command.commandId.value}"
+        val pipelineKey = "pending.pipeline.fill_stroke.tessellated.rgba8unorm.src_over"
+        val renderStep = "path.stroke.tessellated"
+        val consumerKind = "stroke-strip.render-step"
+
+        val dashResult = command.dashIntervals?.let { intervals ->
+            DashVertexExpansion.expandVertices(
+                tessellatedVertices = command.tessellatedVertices,
+                dashIntervals = intervals,
+                dashPhase = command.dashPhase,
+                strokeWidth = command.strokeWidth,
+            )
+        }
+        val expandedEdgeCount = dashResult?.edgeCount ?: command.edgeCount
+        val dashSuffix = command.dashIntervals?.let { "d${it.joinToString("_")}." } ?: ""
+        val artifactKey = "prepared.stroke.${command.pathKey.sanitizeForAnalysisKey()}.w${command.strokeWidth}.${command.strokeCap.lowercase()}.${command.strokeJoin.lowercase()}.${dashSuffix}e$expandedEdgeCount"
+        val invalidationFacts = listOf("path-content-hash", "stroke-width", "cap", "join", "miter", "transform-class", "bounds-proof", "dash-intervals")
+        val analysisRecord = GPUDrawAnalysisRecord(
+            recordId = recordId,
+            commandIdValue = command.commandId.value,
+            commandFamily = "FillPath",
+            boundsHash = command.bounds.stableHash(),
+            routeDecisionLabel = "prepared.path_stroke.tessellated",
+            materialKeyHash = "pending.material.${command.material.kind.name.lowercase()}",
+            renderStepCandidates = listOf(renderStep),
+            sortKey = SortKey(command.ordering.paintOrder.toLong()),
+            diagnostics = command.transform.analysisDiagnostics(recordId = recordId) +
+                command.pathFactsDiagnostics(recordId = recordId),
+        )
+        val routeDecision = GPUFirstRouteDecisionBuilder.preparedFillStroke(
+            commandIdValue = command.commandId.value,
+            artifactKey = artifactKey,
+            consumerKind = consumerKind,
+            invalidationFacts = invalidationFacts,
+        )
+        val analysisDecision = GPUDrawAnalysisDecision.Candidate(
+            recordId = recordId,
+            routeDecisionLabel = "prepared.path_stroke.tessellated",
+            resourceDeclarations = listOf("tessellated_vertices:path_stroke.${command.commandId.value}"),
+            renderStepCandidates = listOf(renderStep),
+        )
+        val pass = GPUFirstRoutePassBuilder.acceptedFillPath(
+            commandIdValue = command.commandId.value,
+            analysisRecordId = recordId,
+            sortKey = command.ordering.paintOrder.toLong(),
+            renderStepIdentity = renderStep,
+            pipelineKeyHash = pipelineKey,
+            boundsHash = command.bounds.stableHash(),
+            scissorBoundsHash = command.scissorBoundsHash(),
+            originalPaintOrder = command.ordering.paintOrder,
+            targetStateHash = command.targetStateHash(),
+        )
+        return GPUFirstRoutePlan(
+            analysisRecord = analysisRecord,
+            analysisDecision = analysisDecision,
+            routeDecision = routeDecision,
+            pass = pass,
+        )
     }
 
     /** Builds a prepared FillPath CPUPreparedGPU route and pass. */
@@ -358,6 +549,62 @@ class GPUFirstRoutePlanner(
             recordId = recordId,
             routeDecisionLabel = "prepared.path_fill.tessellated",
             resourceDeclarations = listOf("tessellated_vertices:path_fill.${command.commandId.value}"),
+            renderStepCandidates = listOf(renderStep),
+        )
+        val pass = GPUFirstRoutePassBuilder.acceptedFillPath(
+            commandIdValue = command.commandId.value,
+            analysisRecordId = recordId,
+            sortKey = command.ordering.paintOrder.toLong(),
+            renderStepIdentity = renderStep,
+            pipelineKeyHash = pipelineKey,
+            boundsHash = command.bounds.stableHash(),
+            scissorBoundsHash = command.scissorBoundsHash(),
+            originalPaintOrder = command.ordering.paintOrder,
+            targetStateHash = command.targetStateHash(),
+        )
+
+        return GPUFirstRoutePlan(
+            analysisRecord = analysisRecord,
+            analysisDecision = analysisDecision,
+            routeDecision = routeDecision,
+            pass = pass,
+        )
+    }
+
+    /** Builds a blur-mask FillPath prepared GPU route that signals offscreen blur processing. */
+    private fun blurMaskFillPathRouteDecision(command: NormalizedDrawCommand.FillPath): GPUFirstRoutePlan {
+        val recordId = "analysis.fill_path.${command.commandId.value}"
+        val pipelineKey = "pending.pipeline.fill_path.blur_mask.rgba8unorm.src_over"
+        val renderStep = blurMaskFilterRenderStep
+        val consumerKind = "blur-mask.sample.path-fill"
+        val mf = requireNotNull(command.maskFilter)
+        val blurDesc = when (mf) {
+            is NormalizedMaskFilter.Blur -> "blur:${mf.style.name.lowercase()}_sigma=${mf.sigma}"
+        }
+        val artifactKey = "blur-mask.path-fill.${command.pathKey.sanitizeForAnalysisKey()}.${blurDesc}"
+        val invalidationFacts = listOf("path-content-hash", "blur-sigma", "blur-style", "fill-rule", "transform-class", "bounds-proof", "tessellation-hash")
+        val analysisRecord = GPUDrawAnalysisRecord(
+            recordId = recordId,
+            commandIdValue = command.commandId.value,
+            commandFamily = "FillPath",
+            boundsHash = command.bounds.stableHash(),
+            routeDecisionLabel = "prepared.path_fill.blur_mask",
+            materialKeyHash = "pending.material.${command.material.kind.name.lowercase()}",
+            renderStepCandidates = listOf(renderStep),
+            sortKey = SortKey(command.ordering.paintOrder.toLong()),
+            diagnostics = command.transform.analysisDiagnostics(recordId = recordId) +
+                command.pathFactsDiagnostics(recordId = recordId),
+        )
+        val routeDecision = GPUFirstRouteDecisionBuilder.preparedFillPath(
+            commandIdValue = command.commandId.value,
+            artifactKey = artifactKey,
+            consumerKind = consumerKind,
+            invalidationFacts = invalidationFacts,
+        )
+        val analysisDecision = GPUDrawAnalysisDecision.Candidate(
+            recordId = recordId,
+            routeDecisionLabel = "prepared.path_fill.blur_mask",
+            resourceDeclarations = listOf("blur_mask_artifacts:blur_path.${command.commandId.value}"),
             renderStepCandidates = listOf(renderStep),
         )
         val pass = GPUFirstRoutePassBuilder.acceptedFillPath(
@@ -958,7 +1205,11 @@ class GPUFirstRoutePlanner(
 
     /** Returns the canonical first-route refusal code, or null when analysis may keep a native candidate. */
     private fun NormalizedDrawCommand.FillRect.refusalCode(): String? =
-        coordinateRefusalCode() ?: when {
+        coordinateRefusalCode() ?: maskFilter?.let { mf ->
+            when (mf) {
+                is NormalizedMaskFilter.Blur -> mf.refusalCode()
+            }
+        } ?: when {
             transform.type == GPUTransformType.Perspective -> "unsupported.transform.perspective"
             transform.type == GPUTransformType.Singular -> "unsupported.transform.singular"
             transform.type !in acceptedTransformTypes -> "unsupported.transform.class_downgrade"
@@ -994,7 +1245,11 @@ class GPUFirstRoutePlanner(
 
     /** Returns the canonical first-expansion rrect refusal code, or null when analysis may keep a native candidate. */
     private fun NormalizedDrawCommand.FillRRect.refusalCode(): String? =
-        coordinateRefusalCode() ?: when {
+        coordinateRefusalCode() ?: maskFilter?.let { mf ->
+            when (mf) {
+                is NormalizedMaskFilter.Blur -> mf.refusalCode()
+            }
+        } ?: when {
             !rrect.hasAcceptedRadii() -> "unsupported.geometry.rrect_radii"
             transform.type == GPUTransformType.Perspective -> "unsupported.transform.perspective"
             transform.type == GPUTransformType.Singular -> "unsupported.transform.singular"
@@ -1023,10 +1278,45 @@ class GPUFirstRoutePlanner(
 
     /** Returns the canonical FillPath refusal code, or null when analysis may keep a candidate. */
     private fun NormalizedDrawCommand.FillPath.refusalCode(): String? =
-        coordinateRefusalCode() ?: when {
-            stroke -> "unsupported.stroke.unimplemented"
-            pathDataEmpty() -> "unsupported.geometry.path_empty"
-            pathDescriptor.verbCount <= 0 || pathDescriptor.pointCount <= 0 -> "unsupported.geometry.path_empty"
+        coordinateRefusalCode() ?: maskFilter?.let { mf ->
+            when (mf) {
+                is NormalizedMaskFilter.Blur -> mf.refusalCode()
+            }
+        } ?: when {
+            stroke -> {
+                val aaMode = if (antiAlias) "coverage-aa" else "none"
+                val shapeDesc = GPUShapeDescriptor(
+                    shapeKind = "path-stroke",
+                    boundsLabel = bounds.stableHash(),
+                    antiAliasMode = aaMode,
+                    provenance = "gpu-renderer",
+                )
+                val pathDesc = GPUPathDescriptor(
+                    pathKey = pathKey,
+                    verbCount = pathDescriptor.verbCount,
+                    pointCount = pathDescriptor.pointCount,
+                    fillRule = pathDescriptor.fillRule,
+                    inverseFill = pathDescriptor.inverseFill,
+                    finiteProof = pathDescriptor.finiteProof,
+                    volatility = pathDescriptor.volatility,
+                    transformClass = pathDescriptor.transformClass,
+                    edgeCount = pathDescriptor.edgeCount,
+                )
+                val strokeDesc = GPUStrokeDescriptor(
+                    width = strokeWidth,
+                    cap = strokeCap.replaceFirstChar { it.uppercaseChar() },
+                    join = strokeJoin.replaceFirstChar { it.uppercaseChar() },
+                    miter = 4f,
+                    dashOrPathEffectRef = dashIntervals?.let { "dash:${it.joinToString(",")}" },
+                    transformClass = transform.type.name.lowercase(),
+                    finiteWidth = strokeWidth > 0f && strokeWidth.isFinite(),
+                    hairline = strokeWidth <= 0f,
+                    edgeCount = edgeCount,
+                )
+                shapeDesc.strokeRefusalCode()
+                    ?: pathDesc.strokePathRefusalCode()
+                    ?: strokeDesc.refusalCode(maxEdges = 128)
+            }
             pathDescriptor.edgeCount < 0 -> "unsupported.geometry.path_invalid_edges"
             transform.type == GPUTransformType.Perspective -> "unsupported.transform.perspective"
             transform.type == GPUTransformType.Singular -> "unsupported.transform.singular"
@@ -1050,10 +1340,6 @@ class GPUFirstRoutePlanner(
             !capabilities.hasFact(firstPathFillCapabilityName) -> "unsupported.pipeline.capability_missing"
             else -> null
         }
-
-    /** Returns true when FillPath has no tessellated vertex data. */
-    private fun NormalizedDrawCommand.FillPath.pathDataEmpty(): Boolean =
-        tessellatedVertices.isEmpty() || contourStarts.isEmpty() || totalVertexCount <= 0
 
     /** Returns true only for explicit validity-affecting capability facts in the immutable snapshot. */
     private fun GPUCapabilities.hasFact(name: String): Boolean =
@@ -1385,7 +1671,17 @@ class GPUFirstRoutePlanner(
 
         /** Transform classes accepted by the ApplyFilter route. */
         val acceptedApplyFilterTransformTypes = setOf(GPUTransformType.Identity, GPUTransformType.Translate)
+
+        /** Render step identity for blur mask filter route. */
+        const val blurMaskFilterRenderStep = "path.fill.blur_mask"
     }
+}
+
+/** Returns a terminal refusal code for a blur mask filter, or null when blur is valid and may be accepted. */
+private fun NormalizedMaskFilter.Blur.refusalCode(): String? = when {
+    !sigma.isFinite() || sigma < 0f -> "unsupported.mask_filter.blur_sigma_invalid"
+    style.name.isBlank() -> "unsupported.mask_filter.blur_style_invalid"
+    else -> null
 }
 
 /** Returns a terminal coordinate or bounds refusal code before route acceptance. */

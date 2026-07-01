@@ -1518,8 +1518,7 @@ private fun GPUPathDescriptor.refusalCode(maxEdges: Int): String? =
     when {
         !pathKey.isCanonicalPathKey() -> "unsupported.path.noncanonical_key"
         verbCount <= 0 || pointCount <= 0 -> "unsupported.path.empty"
-        fillRule !in setOf("NonZero", "EvenOdd") -> "unsupported.path.fill_rule"
-        inverseFill -> "unsupported.path.inverse_fill"
+        fillRule !in setOf("NonZero", "EvenOdd", "InverseWinding", "InverseEvenOdd") -> "unsupported.path.fill_rule"
         transformClass == "perspective" -> "unsupported.transform.path_perspective"
         transformClass !in setOf("identity", "translate") -> "unsupported.transform.path_class"
         edgeCount < 0 || edgeCount > maxEdges -> "unsupported.path.edge_budget"
@@ -1553,7 +1552,7 @@ private fun String.toMaterializationPreimageLabel(): String =
 private const val pathFillNonClaimLine =
     "nonclaim:no-product-activation no-adapter-backed-execution no-hidden-cpu-texture-fallback no-broad-path-aa"
 
-private fun GPUShapeDescriptor.strokeRefusalCode(): String? =
+internal fun GPUShapeDescriptor.strokeRefusalCode(): String? =
     when {
         shapeKind != "path-stroke" -> "unsupported.geometry.shape_kind"
         boundsLabel.isBlank() -> "unsupported.geometry.path_nonfinite"
@@ -1561,7 +1560,7 @@ private fun GPUShapeDescriptor.strokeRefusalCode(): String? =
         else -> null
     }
 
-private fun GPUPathDescriptor.strokePathRefusalCode(): String? =
+internal fun GPUPathDescriptor.strokePathRefusalCode(): String? =
     when {
         !pathKey.isCanonicalPathKey() -> "unsupported.geometry.path_key_nondeterministic"
         verbCount <= 0 || pointCount <= 0 -> "unsupported.geometry.descriptor_invalid"
@@ -1571,15 +1570,21 @@ private fun GPUPathDescriptor.strokePathRefusalCode(): String? =
         else -> null
     }
 
-private fun GPUStrokeDescriptor.refusalCode(maxEdges: Int): String? =
+internal fun GPUStrokeDescriptor.refusalCode(maxEdges: Int): String? =
     when {
         !finiteWidth || !width.isFinite() || width <= 0f -> "unsupported.stroke.width_invalid"
         hairline -> "unsupported.stroke.hairline_policy"
         cap != "Butt" -> "unsupported.stroke.cap"
         join != "Miter" -> "unsupported.stroke.join"
         miter < 1f -> "unsupported.stroke.miter_limit"
-        dashOrPathEffectRef?.startsWith("dash:") == true -> "unsupported.stroke.dash_complex"
-        dashOrPathEffectRef != null -> "unsupported.stroke.path_effect_unregistered"
+        dashOrPathEffectRef != null -> {
+            val ref = dashOrPathEffectRef
+            if (ref.startsWith("dash:")) {
+                val elementCount = ref.removePrefix("dash:").count { it == ',' } + 1
+                if (elementCount > 4) "unsupported.stroke.dash_complex"
+                else null
+            } else "unsupported.stroke.path_effect_unregistered"
+        }
         transformClass == "nonuniform" -> "unsupported.stroke.nonuniform_transform"
         transformClass !in setOf("identity", "translate") -> "unsupported.geometry.perspective_path"
         edgeCount < 0 || edgeCount > maxEdges -> "unsupported.stroke.expansion_budget_exceeded"
@@ -1613,8 +1618,7 @@ private fun GPUPathDescriptor.stencilCoverPathRefusalCode(maxEdges: Int): String
     when {
         !pathKey.isCanonicalPathKey() -> "unsupported.geometry.path_key_nondeterministic"
         verbCount <= 0 || pointCount <= 0 -> "unsupported.geometry.descriptor_invalid"
-        fillRule !in setOf("NonZero", "EvenOdd") -> "unsupported.geometry.path_fill_rule"
-        inverseFill -> "unsupported.geometry.path_empty_inverse_unbounded"
+        fillRule !in setOf("NonZero", "EvenOdd", "InverseWinding", "InverseEvenOdd") -> "unsupported.geometry.path_fill_rule"
         transformClass == "perspective" -> "unsupported.geometry.perspective_path"
         transformClass !in setOf("identity", "translate") -> "unsupported.transform.path_class"
         edgeCount < 0 || edgeCount > maxEdges -> "unsupported.geometry.path_edge_budget_exceeded"
