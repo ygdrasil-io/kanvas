@@ -2,7 +2,7 @@ package org.graphiks.kanvas.surface
 
 data class RenderConfig(
     val gpuColorFormat: GPUColorFormat = GPUColorFormat.RGBA8_UNORM,
-    val maxPathVertices: UInt = 16384u,
+    val maxPathVertices: UInt = 131072u,
     val curveTolerance: Float = 0.25f,
     val maxImagePixels: UInt = 67_108_864u,
     val diagnosticLevel: DiagnosticLevel = DiagnosticLevel.WARN,

@@ -92,6 +92,32 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
                 ),
             )
         }
+        is GPUMaterialDescriptor.LinearGradient -> {
+            val bb = java.nio.ByteBuffer.allocate(48).order(java.nio.ByteOrder.nativeOrder())
+            bb.putFloat(material.startX); bb.putFloat(material.startY)
+            bb.putFloat(material.endX); bb.putFloat(material.endY)
+            bb.putFloat(material.startR * material.startA)
+            bb.putFloat(material.startG * material.startA)
+            bb.putFloat(material.startB * material.startA)
+            bb.putFloat(material.startA)
+            bb.putFloat(material.endR * material.endA)
+            bb.putFloat(material.endG * material.endA)
+            bb.putFloat(material.endB * material.endA)
+            bb.putFloat(material.endA)
+            drawFullscreenStencilPass(
+                wgsl = LINEAR_GRADIENT_WGSL,
+                colorFormat = config.gpuColorFormat.wgpuLabel,
+                stencilMode = GPUBackendStencilMode.Test,
+                triangleData = null,
+                draws = listOf(
+                    GPUBackendRawUniformDraw(
+                        uniformBytes = bb.array(),
+                        scissorX = sx, scissorY = sy,
+                        scissorWidth = sw, scissorHeight = sh,
+                    ),
+                ),
+            )
+        }
         else -> {
             refuse("unsupported_material:${material.kind.name}")
             return

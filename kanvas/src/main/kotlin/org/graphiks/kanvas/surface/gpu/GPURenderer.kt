@@ -142,10 +142,72 @@ internal fun org.graphiks.kanvas.geometry.Path.toPathTessellatorData(): PathData
                     ),
                 )
             }
-            PathVerb.ARC_TO -> { pi += 4 }
+            PathVerb.ARC_TO -> {
+                val p0 = kanvasPoints[pi++]
+                val p1 = kanvasPoints[pi++]
+                val p2 = kanvasPoints[pi++]
+                val p3 = kanvasPoints[pi++]
+                val lastP = points.lastOrNull() ?: Point(0f, 0f)
+                decomposeArcToCubics(lastP.x, lastP.y, p0.x, p0.y, p1.x, p1.y > 0f, p2.x > 0f, p3.x, p3.y, verbs, points)
+            }
             PathVerb.CLOSE -> verbs.add(org.graphiks.kanvas.gpu.renderer.geometry.PathVerb.Close)
         }
     }
     return PathData(verbs = verbs, points = points)
+}
+
+private fun decomposeArcToCubics(
+    x1: Float, y1: Float, rx: Float, ry: Float, xAxisRotation: Float,
+    largeArc: Boolean, sweep: Boolean, x2: Float, y2: Float,
+    verbs: MutableList<org.graphiks.kanvas.gpu.renderer.geometry.PathVerb>,
+    points: MutableList<Point>,
+) {
+    if (x1 == x2 && y1 == y2) return
+    var erx = rx; var ery = ry
+    if (erx <= 0f || ery <= 0f) {
+        verbs.add(org.graphiks.kanvas.gpu.renderer.geometry.PathVerb.LineTo(Point(x2, y2)))
+        points.add(Point(x2, y2))
+        return
+    }
+    val phi = Math.toRadians(xAxisRotation.toDouble()).toFloat()
+    val cosPhi = kotlin.math.cos(phi); val sinPhi = kotlin.math.sin(phi)
+    val dx2 = (x1 - x2) / 2f; val dy2 = (y1 - y2) / 2f
+    val x1p = cosPhi * dx2 + sinPhi * dy2
+    val y1p = -sinPhi * dx2 + cosPhi * dy2
+    var rxs = erx * erx; var rys = ery * ery
+    val lambda = x1p * x1p / rxs + y1p * y1p / rys
+    if (lambda > 1f) { val s = kotlin.math.sqrt(lambda); erx *= s; ery *= s; rxs = erx * erx; rys = ery * ery }
+    val sign = if (largeArc != sweep) 1f else -1f
+    val num = rxs * rys - rxs * y1p * y1p - rys * x1p * x1p
+    val den = rxs * y1p * y1p + rys * x1p * x1p
+    val coeff = sign * kotlin.math.sqrt(kotlin.math.max(num / den, 0f))
+    val cxp = coeff * ((erx * y1p) / ery)
+    val cyp = coeff * (-(ery * x1p) / erx)
+    val cx = cosPhi * cxp - sinPhi * cyp + (x1 + x2) / 2f
+    val cy = sinPhi * cxp + cosPhi * cyp + (y1 + y2) / 2f
+    val ux = (x1p - cxp) / erx; val uy = (y1p - cyp) / ery
+    val vx = (-x1p - cxp) / erx; val vy = (-y1p - cyp) / ery
+    var theta1 = kotlin.math.atan2(uy, ux)
+    var dtheta = kotlin.math.atan2(vy, vx) - theta1
+    if (!sweep && dtheta > 0f) dtheta -= (2f * Math.PI).toFloat()
+    if (sweep && dtheta < 0f) dtheta += (2f * Math.PI).toFloat()
+    val segments = kotlin.math.ceil(kotlin.math.abs(dtheta) / (Math.PI / 2.0).toFloat()).toInt().coerceAtLeast(1)
+    val segAngle = dtheta / segments
+    val kappa = (4f / 3f) * kotlin.math.tan(segAngle / 4f)
+    var angle = theta1
+    for (i in 0 until segments) {
+        val a1 = angle; val a2 = angle + segAngle
+        val ca1 = kotlin.math.cos(a1); val sa1 = kotlin.math.sin(a1)
+        val ca2 = kotlin.math.cos(a2); val sa2 = kotlin.math.sin(a2)
+        val p0x = cx + erx * ca1; val p0y = cy + ery * sa1
+        val p3x = cx + erx * ca2; val p3y = cy + ery * sa2
+        val cp1x = p0x - kappa * erx * sa1; val cp1y = p0y + kappa * ery * ca1
+        val cp2x = p3x + kappa * erx * sa2; val cp2y = p3y - kappa * ery * ca2
+        verbs.add(org.graphiks.kanvas.gpu.renderer.geometry.PathVerb.CubicTo(
+            Point(cp1x, cp1y), Point(cp2x, cp2y), Point(p3x, p3y),
+        ))
+        points.add(Point(cp1x, cp1y)); points.add(Point(cp2x, cp2y)); points.add(Point(p3x, p3y))
+        angle = a2
+    }
 }
 
