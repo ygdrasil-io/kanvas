@@ -8,6 +8,7 @@ dependencies {
     api(project(":font:gpu-api"))
     implementation(kotlin("stdlib"))
     implementation(project(":codec:api"))
+    implementation(project(":kanvas-skia"))
     implementation(project(":font"))
     compileOnly("org.graphiks:wgsl-core-jvm:1.0.0-SNAPSHOT")
     compileOnly("org.graphiks:wgsl-parser-jvm:1.0.0-SNAPSHOT")
