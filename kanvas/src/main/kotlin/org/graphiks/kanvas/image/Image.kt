@@ -29,13 +29,15 @@ data class Image(
         if (this === other) return true
         if (other !is Image) return false
         return width == other.width && height == other.height &&
-            colorType == other.colorType && sourceId == other.sourceId
+            colorType == other.colorType && colorSpace == other.colorSpace &&
+            sourceId == other.sourceId
     }
 
     override fun hashCode(): Int {
         var result = width
         result = 31 * result + height
         result = 31 * result + colorType.hashCode()
+        result = 31 * result + colorSpace.hashCode()
         result = 31 * result + sourceId.hashCode()
         return result
     }

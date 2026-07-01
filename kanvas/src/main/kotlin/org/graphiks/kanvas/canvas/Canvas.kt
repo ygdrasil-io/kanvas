@@ -6,9 +6,6 @@ import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.pipeline.ClipOp
 import org.graphiks.kanvas.types.*
-import org.graphiks.kanvas.types.PointMode
-import org.graphiks.kanvas.types.Lattice
-import org.graphiks.kanvas.types.Vertices
 import org.graphiks.kanvas.picture.Picture
 import org.graphiks.kanvas.paint.BlendMode
 
