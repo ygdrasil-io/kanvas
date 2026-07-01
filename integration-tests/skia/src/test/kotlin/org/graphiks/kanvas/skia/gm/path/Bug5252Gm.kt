@@ -25,7 +25,7 @@ import org.graphiks.kanvas.types.Rect
 class Bug5252Gm : SkiaGm {
     override val name = "bug5252"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 0.0
+    override val minSimilarity = 84.0
     override val width = 500
     override val height = 500
 

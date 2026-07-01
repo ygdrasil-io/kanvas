@@ -17,7 +17,7 @@ import org.graphiks.kanvas.types.Rect
 class AnalyticAntialiasConvexGm : SkiaGm {
     override val name = "analytic_antialias_convex"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 0.0
+    override val minSimilarity = 88.8
     override val width = 800
     override val height = 800
 

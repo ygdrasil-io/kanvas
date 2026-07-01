@@ -18,7 +18,7 @@ import org.graphiks.kanvas.types.Color
 class SmallArcGm : SkiaGm {
     override val name = "smallarc"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 0.0
+    override val minSimilarity = 90.0
     override val width = 762
     override val height = 762
 

@@ -17,7 +17,7 @@ import org.graphiks.kanvas.types.Rect
 class B119394958Gm : SkiaGm {
     override val name = "b_119394958"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 0.0
+    override val minSimilarity = 27.9
     override val width = 100
     override val height = 100
 

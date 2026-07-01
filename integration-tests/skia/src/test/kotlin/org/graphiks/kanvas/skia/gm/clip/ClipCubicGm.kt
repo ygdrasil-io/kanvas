@@ -28,7 +28,7 @@ import org.graphiks.kanvas.types.Rect
 class ClipCubicGm : SkiaGm {
     override val name = "clipcubic"
     override val renderFamily = RenderFamily.CLIP
-    override val minSimilarity = 0.0
+    override val minSimilarity = 61.9
     override val width = 400
     override val height = 410
 

@@ -18,7 +18,7 @@ import org.graphiks.kanvas.types.Rect
 class OneBadArcGm : SkiaGm {
     override val name = "onebadarc"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 0.0
+    override val minSimilarity = 79.3
     override val width = 100
     override val height = 100
 

@@ -96,7 +96,7 @@ private object LabyrinthHelper {
 class LabyrinthSquareGm : SkiaGm {
     override val name = "labyrinth_square"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 0.0
+    override val minSimilarity = 39.5
     override val width = LabyrinthHelper.WIDTH
     override val height = LabyrinthHelper.HEIGHT
 

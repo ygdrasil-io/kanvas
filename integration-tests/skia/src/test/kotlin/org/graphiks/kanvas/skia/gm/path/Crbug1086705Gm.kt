@@ -32,7 +32,7 @@ import kotlin.math.sin
 class Crbug1086705Gm : SkiaGm {
     override val name = "crbug_1086705"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 0.0
+    override val minSimilarity = 94.8
     override val width = 200
     override val height = 200
 

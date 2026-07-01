@@ -14,7 +14,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 class PathSkbug11886Gm : SkiaGm {
     override val name = "path_skbug_11886"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 0.0
+    override val minSimilarity = 93.9
     override val width = 256
     override val height = 256
 

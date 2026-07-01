@@ -22,7 +22,7 @@ import kotlin.math.sin
 class StringArtGm : SkiaGm {
     override val name = "stringart"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 0.0
+    override val minSimilarity = 77.9
     override val width = K_WIDTH
     override val height = K_HEIGHT
 

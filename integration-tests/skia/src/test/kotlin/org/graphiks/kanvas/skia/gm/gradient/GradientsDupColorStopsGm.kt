@@ -20,7 +20,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 class GradientsDupColorStopsGm : SkiaGm {
     override val name = "gradients_dup_color_stops"
     override val renderFamily = RenderFamily.GRADIENT
-    override val minSimilarity = 0.0
+    override val minSimilarity = 21.6
     override val width = 704
     override val height = 564
 

@@ -15,7 +15,7 @@ import org.graphiks.kanvas.types.Rect
 class BadPaintGm : SkiaGm {
     override val name = "badpaint"
     override val renderFamily = RenderFamily.COMPOSITE
-    override val minSimilarity = 0.0
+    override val minSimilarity = 31.0
     override val width = 100
     override val height = 100
 

@@ -16,7 +16,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 class CircularArcsFillGm : SkiaGm {
     override val name = "circular_arcs_fill"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 0.0
+    override val minSimilarity = 61.8
     override val width = 1000
     override val height = 1000
 

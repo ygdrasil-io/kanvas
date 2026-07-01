@@ -19,7 +19,7 @@ import org.graphiks.kanvas.types.Rect
 class MaddashGm : SkiaGm {
     override val name = "maddash"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 0.0
+    override val minSimilarity = 69.4
     override val width = 1600
     override val height = 1600
 

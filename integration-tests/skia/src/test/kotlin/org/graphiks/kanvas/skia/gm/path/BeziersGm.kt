@@ -18,7 +18,7 @@ import kotlin.random.Random
 class BeziersGm : SkiaGm {
     override val name = "beziers"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 0.0
+    override val minSimilarity = 45.5
     override val width = 400
     override val height = 800
 

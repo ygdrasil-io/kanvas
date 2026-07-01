@@ -19,7 +19,7 @@ import org.graphiks.kanvas.types.Rect
 class RadialGradient3NoditherGm : SkiaGm {
     override val name = "radial_gradient3_nodither"
     override val renderFamily = RenderFamily.GRADIENT
-    override val minSimilarity = 0.0
+    override val minSimilarity = 9.8
     override val width = 500
     override val height = 500
 

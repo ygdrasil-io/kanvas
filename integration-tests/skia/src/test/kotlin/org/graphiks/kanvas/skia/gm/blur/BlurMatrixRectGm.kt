@@ -18,7 +18,7 @@ import org.graphiks.kanvas.types.Rect
 class BlurMatrixRectGm : SkiaGm {
     override val name = "blur_matrix_rect"
     override val renderFamily = RenderFamily.BLUR
-    override val minSimilarity = 0.0
+    override val minSimilarity = 87.0
     override val width = 650
     override val height = 685
 

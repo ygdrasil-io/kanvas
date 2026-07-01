@@ -18,7 +18,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 class SquareHairGm : SkiaGm {
     override val name = "squarehair"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 0.0
+    override val minSimilarity = 90.1
     override val width = 240
     override val height = 360
 

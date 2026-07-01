@@ -15,7 +15,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 class CubicStrokeGm : SkiaGm {
     override val name = "CubicStroke"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 12.2
+    override val minSimilarity = 13.7
     override val width = 384
     override val height = 384
 

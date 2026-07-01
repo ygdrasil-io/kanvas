@@ -25,7 +25,7 @@ import org.graphiks.kanvas.types.Color
 class SimpleBlurRoundRectGm : SkiaGm {
     override val name = "simpleblurroundrect"
     override val renderFamily = RenderFamily.BLUR
-    override val minSimilarity = 0.0
+    override val minSimilarity = 64.3
     override val width = 1000
     override val height = 500
 

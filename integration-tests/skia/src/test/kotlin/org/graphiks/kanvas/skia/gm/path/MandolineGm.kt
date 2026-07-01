@@ -21,7 +21,7 @@ import kotlin.math.sqrt
 class MandolineGm : SkiaGm {
     override val name = "mandoline"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 0.0
+    override val minSimilarity = 84.8
     override val width = 560
     override val height = 475
 

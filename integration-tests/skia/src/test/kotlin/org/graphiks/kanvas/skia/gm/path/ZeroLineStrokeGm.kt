@@ -17,7 +17,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 class ZeroLineStrokeGm : SkiaGm {
     override val name = "zerolinestroke"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 0.0
+    override val minSimilarity = 69.1
     override val width = 90
     override val height = 120
 

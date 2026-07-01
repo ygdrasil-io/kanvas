@@ -17,7 +17,7 @@ import org.graphiks.kanvas.types.Rect
 class NestedHairlineSquareGm : SkiaGm {
     override val name = "nested_hairline_square"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 0.0
+    override val minSimilarity = 92.6
     override val width = 64
     override val height = 64
 
