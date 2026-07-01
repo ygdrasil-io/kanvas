@@ -22,7 +22,7 @@ import kotlin.random.Random
 class StrokeRectsGm : SkiaGm {
     override val name = "strokerects"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 55.2
+    override val minSimilarity = 58.17
     override val width = W * 2
     override val height = H * 2
 
