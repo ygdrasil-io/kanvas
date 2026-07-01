@@ -75,80 +75,180 @@ internal fun GPUBackendRenderRecorder.dispatchFillRect(
             }
         }
         is GPUMaterialDescriptor.LinearGradient -> {
-            val bb = java.nio.ByteBuffer.allocate(48).order(java.nio.ByteOrder.nativeOrder())
-            bb.putFloat(material.startX); bb.putFloat(material.startY)
-            bb.putFloat(material.endX); bb.putFloat(material.endY)
-            bb.putFloat(srgbToLinear(material.startR) * material.startA)
-            bb.putFloat(srgbToLinear(material.startG) * material.startA)
-            bb.putFloat(srgbToLinear(material.startB) * material.startA)
-            bb.putFloat(material.startA)
-            bb.putFloat(srgbToLinear(material.endR) * material.endA)
-            bb.putFloat(srgbToLinear(material.endG) * material.endA)
-            bb.putFloat(srgbToLinear(material.endB) * material.endA)
-            bb.putFloat(material.endA)
-            drawFullscreenRawUniformPass(
-                wgsl = LINEAR_GRADIENT_WGSL,
-                colorFormat = config.gpuColorFormat.wgpuLabel,
-                draws = listOf(
-                    GPUBackendRawUniformDraw(
-                        uniformBytes = bb.array(),
-                        scissorX = sx, scissorY = sy,
-                        scissorWidth = sw, scissorHeight = sh,
+            val multiStop = material.allStopPositions != null && material.allStopPositions!!.size > 2
+            if (multiStop) {
+                val n = material.allStopPositions!!.size.coerceAtMost(8)
+                val bb = java.nio.ByteBuffer.allocate(32 + n * 32).order(java.nio.ByteOrder.nativeOrder())
+                bb.putFloat(material.startX); bb.putFloat(material.startY)
+                bb.putFloat(material.endX); bb.putFloat(material.endY)
+                bb.putInt(n); bb.putInt(0) // stopCount + padding
+                for (i in 0 until n) {
+                    val pos = material.allStopPositions!!.getOrElse(i) { i.toFloat() / (n - 1).coerceAtLeast(1) }
+                    bb.putFloat(pos); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f)
+                    if (material.allStopColors != null && i * 4 + 3 < material.allStopColors!!.size) {
+                        bb.putFloat(srgbToLinear(material.allStopColors!![i * 4]) * material.allStopColors!![i * 4 + 3])
+                        bb.putFloat(srgbToLinear(material.allStopColors!![i * 4 + 1]) * material.allStopColors!![i * 4 + 3])
+                        bb.putFloat(srgbToLinear(material.allStopColors!![i * 4 + 2]) * material.allStopColors!![i * 4 + 3])
+                        bb.putFloat(material.allStopColors!![i * 4 + 3])
+                    } else {
+                        bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f)
+                    }
+                }
+                drawFullscreenRawUniformPass(
+                    wgsl = LINEAR_GRADIENT_MULTI_WGSL,
+                    colorFormat = config.gpuColorFormat.wgpuLabel,
+                    draws = listOf(
+                        GPUBackendRawUniformDraw(
+                            uniformBytes = bb.array(),
+                            scissorX = sx, scissorY = sy,
+                            scissorWidth = sw, scissorHeight = sh,
+                        ),
                     ),
-                ),
-                blendMode = blendMode,
-            )
+                    blendMode = blendMode,
+                )
+            } else {
+                val bb = java.nio.ByteBuffer.allocate(48).order(java.nio.ByteOrder.nativeOrder())
+                bb.putFloat(material.startX); bb.putFloat(material.startY)
+                bb.putFloat(material.endX); bb.putFloat(material.endY)
+                bb.putFloat(srgbToLinear(material.startR) * material.startA)
+                bb.putFloat(srgbToLinear(material.startG) * material.startA)
+                bb.putFloat(srgbToLinear(material.startB) * material.startA)
+                bb.putFloat(material.startA)
+                bb.putFloat(srgbToLinear(material.endR) * material.endA)
+                bb.putFloat(srgbToLinear(material.endG) * material.endA)
+                bb.putFloat(srgbToLinear(material.endB) * material.endA)
+                bb.putFloat(material.endA)
+                drawFullscreenRawUniformPass(
+                    wgsl = LINEAR_GRADIENT_WGSL,
+                    colorFormat = config.gpuColorFormat.wgpuLabel,
+                    draws = listOf(
+                        GPUBackendRawUniformDraw(
+                            uniformBytes = bb.array(),
+                            scissorX = sx, scissorY = sy,
+                            scissorWidth = sw, scissorHeight = sh,
+                        ),
+                    ),
+                    blendMode = blendMode,
+                )
+            }
         }
         is GPUMaterialDescriptor.RadialGradient -> {
-            val bb = java.nio.ByteBuffer.allocate(48).order(java.nio.ByteOrder.nativeOrder())
-            bb.putFloat(material.centerX); bb.putFloat(material.centerY)
-            bb.putFloat(material.radius)
-            bb.putFloat(0f) // padding — vec4f alignment at offset 16
-            bb.putFloat(srgbToLinear(material.startR) * material.startA)
-            bb.putFloat(srgbToLinear(material.startG) * material.startA)
-            bb.putFloat(srgbToLinear(material.startB) * material.startA)
-            bb.putFloat(material.startA)
-            bb.putFloat(srgbToLinear(material.endR) * material.endA)
-            bb.putFloat(srgbToLinear(material.endG) * material.endA)
-            bb.putFloat(srgbToLinear(material.endB) * material.endA)
-            bb.putFloat(material.endA)
-            drawFullscreenRawUniformPass(
-                wgsl = RADIAL_GRADIENT_WGSL,
-                colorFormat = config.gpuColorFormat.wgpuLabel,
-                draws = listOf(
-                    GPUBackendRawUniformDraw(
-                        uniformBytes = bb.array(),
-                        scissorX = sx, scissorY = sy,
-                        scissorWidth = sw, scissorHeight = sh,
+            val multiStop = material.allStopPositions != null && material.allStopPositions!!.size > 2
+            if (multiStop) {
+                val n = material.allStopPositions!!.size.coerceAtMost(8)
+                val bb = java.nio.ByteBuffer.allocate(32 + n * 32).order(java.nio.ByteOrder.nativeOrder())
+                bb.putFloat(material.centerX); bb.putFloat(material.centerY)
+                bb.putFloat(material.radius)
+                bb.putFloat(0f) // padding for vec2f + f32 alignment to u32
+                bb.putInt(n); bb.putInt(0) // stopCount + padding
+                for (i in 0 until n) {
+                    val pos = material.allStopPositions!!.getOrElse(i) { i.toFloat() / (n - 1).coerceAtLeast(1) }
+                    bb.putFloat(pos); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f)
+                    if (material.allStopColors != null && i * 4 + 3 < material.allStopColors!!.size) {
+                        bb.putFloat(srgbToLinear(material.allStopColors!![i * 4]) * material.allStopColors!![i * 4 + 3])
+                        bb.putFloat(srgbToLinear(material.allStopColors!![i * 4 + 1]) * material.allStopColors!![i * 4 + 3])
+                        bb.putFloat(srgbToLinear(material.allStopColors!![i * 4 + 2]) * material.allStopColors!![i * 4 + 3])
+                        bb.putFloat(material.allStopColors!![i * 4 + 3])
+                    } else {
+                        bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f)
+                    }
+                }
+                drawFullscreenRawUniformPass(
+                    wgsl = RADIAL_GRADIENT_MULTI_WGSL,
+                    colorFormat = config.gpuColorFormat.wgpuLabel,
+                    draws = listOf(
+                        GPUBackendRawUniformDraw(
+                            uniformBytes = bb.array(),
+                            scissorX = sx, scissorY = sy,
+                            scissorWidth = sw, scissorHeight = sh,
+                        ),
                     ),
-                ),
-                blendMode = blendMode,
-            )
+                    blendMode = blendMode,
+                )
+            } else {
+                val bb = java.nio.ByteBuffer.allocate(48).order(java.nio.ByteOrder.nativeOrder())
+                bb.putFloat(material.centerX); bb.putFloat(material.centerY)
+                bb.putFloat(material.radius)
+                bb.putFloat(0f) // padding — vec4f alignment at offset 16
+                bb.putFloat(srgbToLinear(material.startR) * material.startA)
+                bb.putFloat(srgbToLinear(material.startG) * material.startA)
+                bb.putFloat(srgbToLinear(material.startB) * material.startA)
+                bb.putFloat(material.startA)
+                bb.putFloat(srgbToLinear(material.endR) * material.endA)
+                bb.putFloat(srgbToLinear(material.endG) * material.endA)
+                bb.putFloat(srgbToLinear(material.endB) * material.endA)
+                bb.putFloat(material.endA)
+                drawFullscreenRawUniformPass(
+                    wgsl = RADIAL_GRADIENT_WGSL,
+                    colorFormat = config.gpuColorFormat.wgpuLabel,
+                    draws = listOf(
+                        GPUBackendRawUniformDraw(
+                            uniformBytes = bb.array(),
+                            scissorX = sx, scissorY = sy,
+                            scissorWidth = sw, scissorHeight = sh,
+                        ),
+                    ),
+                    blendMode = blendMode,
+                )
+            }
         }
         is GPUMaterialDescriptor.SweepGradient -> {
-            val bb = java.nio.ByteBuffer.allocate(48).order(java.nio.ByteOrder.nativeOrder())
-            bb.putFloat(material.centerX); bb.putFloat(material.centerY)
-            bb.putFloat(material.startAngle); bb.putFloat(material.endAngle)
-            bb.putFloat(srgbToLinear(material.startR) * material.startA)
-            bb.putFloat(srgbToLinear(material.startG) * material.startA)
-            bb.putFloat(srgbToLinear(material.startB) * material.startA)
-            bb.putFloat(material.startA)
-            bb.putFloat(srgbToLinear(material.endR) * material.endA)
-            bb.putFloat(srgbToLinear(material.endG) * material.endA)
-            bb.putFloat(srgbToLinear(material.endB) * material.endA)
-            bb.putFloat(material.endA)
-            drawFullscreenRawUniformPass(
-                wgsl = SWEEP_GRADIENT_WGSL,
-                colorFormat = config.gpuColorFormat.wgpuLabel,
-                draws = listOf(
-                    GPUBackendRawUniformDraw(
-                        uniformBytes = bb.array(),
-                        scissorX = sx, scissorY = sy,
-                        scissorWidth = sw, scissorHeight = sh,
+            val multiStop = material.allStopPositions != null && material.allStopPositions!!.size > 2
+            if (multiStop) {
+                val n = material.allStopPositions!!.size.coerceAtMost(8)
+                val bb = java.nio.ByteBuffer.allocate(32 + n * 32).order(java.nio.ByteOrder.nativeOrder())
+                bb.putFloat(material.centerX); bb.putFloat(material.centerY)
+                bb.putFloat(material.startAngle); bb.putFloat(material.endAngle)
+                bb.putInt(n); bb.putInt(0) // stopCount + padding
+                for (i in 0 until n) {
+                    val pos = material.allStopPositions!!.getOrElse(i) { i.toFloat() / (n - 1).coerceAtLeast(1) }
+                    bb.putFloat(pos); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f)
+                    if (material.allStopColors != null && i * 4 + 3 < material.allStopColors!!.size) {
+                        bb.putFloat(srgbToLinear(material.allStopColors!![i * 4]) * material.allStopColors!![i * 4 + 3])
+                        bb.putFloat(srgbToLinear(material.allStopColors!![i * 4 + 1]) * material.allStopColors!![i * 4 + 3])
+                        bb.putFloat(srgbToLinear(material.allStopColors!![i * 4 + 2]) * material.allStopColors!![i * 4 + 3])
+                        bb.putFloat(material.allStopColors!![i * 4 + 3])
+                    } else {
+                        bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f)
+                    }
+                }
+                drawFullscreenRawUniformPass(
+                    wgsl = SWEEP_GRADIENT_MULTI_WGSL,
+                    colorFormat = config.gpuColorFormat.wgpuLabel,
+                    draws = listOf(
+                        GPUBackendRawUniformDraw(
+                            uniformBytes = bb.array(),
+                            scissorX = sx, scissorY = sy,
+                            scissorWidth = sw, scissorHeight = sh,
+                        ),
                     ),
-                ),
-                blendMode = blendMode,
-            )
+                    blendMode = blendMode,
+                )
+            } else {
+                val bb = java.nio.ByteBuffer.allocate(48).order(java.nio.ByteOrder.nativeOrder())
+                bb.putFloat(material.centerX); bb.putFloat(material.centerY)
+                bb.putFloat(material.startAngle); bb.putFloat(material.endAngle)
+                bb.putFloat(srgbToLinear(material.startR) * material.startA)
+                bb.putFloat(srgbToLinear(material.startG) * material.startA)
+                bb.putFloat(srgbToLinear(material.startB) * material.startA)
+                bb.putFloat(material.startA)
+                bb.putFloat(srgbToLinear(material.endR) * material.endA)
+                bb.putFloat(srgbToLinear(material.endG) * material.endA)
+                bb.putFloat(srgbToLinear(material.endB) * material.endA)
+                bb.putFloat(material.endA)
+                drawFullscreenRawUniformPass(
+                    wgsl = SWEEP_GRADIENT_WGSL,
+                    colorFormat = config.gpuColorFormat.wgpuLabel,
+                    draws = listOf(
+                        GPUBackendRawUniformDraw(
+                            uniformBytes = bb.array(),
+                            scissorX = sx, scissorY = sy,
+                            scissorWidth = sw, scissorHeight = sh,
+                        ),
+                    ),
+                    blendMode = blendMode,
+                )
+            }
         }
         else -> {
             refuse("unsupported_material:${material.kind.name}")

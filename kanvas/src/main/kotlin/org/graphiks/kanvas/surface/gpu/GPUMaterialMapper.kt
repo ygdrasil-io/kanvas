@@ -34,6 +34,11 @@ internal fun Shader.toMaterial(): GPUMaterialDescriptor = when (this) {
     is Shader.LinearGradient -> {
         val first = this.stops.first()
         val last = this.stops.last()
+        val allPos = FloatArray(this.stops.size) { this.stops[it].position }
+        val allCol = FloatArray(this.stops.size * 4) { i ->
+            val stop = this.stops[i / 4]
+            when (i % 4) { 0 -> stop.color.r; 1 -> stop.color.g; 2 -> stop.color.b; else -> stop.color.a }
+        }
         GPUMaterialDescriptor.LinearGradient(
             startX = this.start.x,
             startY = this.start.y,
@@ -47,17 +52,26 @@ internal fun Shader.toMaterial(): GPUMaterialDescriptor = when (this) {
             endG = last.color.g,
             endB = last.color.b,
             endA = last.color.a,
+            allStopPositions = allPos,
+            allStopColors = allCol,
         )
     }
     is Shader.RadialGradient -> {
         val first = this.stops.first()
         val last = this.stops.last()
+        val allPos = FloatArray(this.stops.size) { this.stops[it].position }
+        val allCol = FloatArray(this.stops.size * 4) { i ->
+            val stop = this.stops[i / 4]
+            when (i % 4) { 0 -> stop.color.r; 1 -> stop.color.g; 2 -> stop.color.b; else -> stop.color.a }
+        }
         GPUMaterialDescriptor.RadialGradient(
             centerX = this.center.x,
             centerY = this.center.y,
             radius = this.radius,
             startR = first.color.r, startG = first.color.g, startB = first.color.b, startA = first.color.a,
             endR = last.color.r, endG = last.color.g, endB = last.color.b, endA = last.color.a,
+            allStopPositions = allPos,
+            allStopColors = allCol,
         )
     }
     is Shader.Image -> GPUMaterialDescriptor.ImageDraw()
@@ -68,11 +82,18 @@ internal fun Shader.toMaterial(): GPUMaterialDescriptor = when (this) {
     is Shader.SweepGradient -> {
         val first = this.stops.first()
         val last = this.stops.last()
+        val allPos = FloatArray(this.stops.size) { this.stops[it].position }
+        val allCol = FloatArray(this.stops.size * 4) { i ->
+            val stop = this.stops[i / 4]
+            when (i % 4) { 0 -> stop.color.r; 1 -> stop.color.g; 2 -> stop.color.b; else -> stop.color.a }
+        }
         GPUMaterialDescriptor.SweepGradient(
             centerX = this.center.x, centerY = this.center.y,
             startAngle = this.startAngle, endAngle = this.endAngle,
             startR = first.color.r, startG = first.color.g, startB = first.color.b, startA = first.color.a,
             endR = last.color.r, endG = last.color.g, endB = last.color.b, endA = last.color.a,
+            allStopPositions = allPos,
+            allStopColors = allCol,
         )
     }
     is Shader.ConicalGradient -> GPUMaterialDescriptor.LinearGradient(

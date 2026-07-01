@@ -160,6 +160,93 @@ internal val RADIAL_GRADIENT_WGSL: String = """
     }
 """.trimIndent()
 
+internal val LINEAR_GRADIENT_MULTI_WGSL: String = """
+    struct Uniforms {
+        start: vec2f,
+        end: vec2f,
+        stopCount: u32,
+        _pad0: u32,
+        stopPositions: array<vec4f, 8>,
+        stopColors: array<vec4f, 8>,
+    };
+
+    @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+
+    @vertex
+    fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
+        let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
+        let y = f32(idx & 2u) * 2.0 - 1.0;
+        return vec4f(x, y, 0.0, 1.0);
+    }
+
+    @fragment
+    fn fs_main(@builtin(position) coord: vec4f) -> @location(0) vec4f {
+        let dir = uniforms.end - uniforms.start;
+        let lenSq = dot(dir, dir);
+        var t = -1.0e30;
+        if (lenSq >= 1.0e-12) {
+            t = dot(coord.xy - uniforms.start, dir) / lenSq;
+        }
+        let tClamped = clamp(t, 0.0, 1.0);
+        var result = uniforms.stopColors[uniforms.stopCount - 1u];
+        for (var i = 0u; i < uniforms.stopCount - 1u; i++) {
+            let p0 = uniforms.stopPositions[i].x;
+            let p1 = uniforms.stopPositions[i + 1u].x;
+            if (tClamped >= p0 && tClamped <= p1) {
+                let localT = (tClamped - p0) / max(p1 - p0, 1.0e-10);
+                let startSRGB = vec4f(pow(uniforms.stopColors[i].rgb, vec3f(1.0 / 2.2)), uniforms.stopColors[i].a);
+                let endSRGB = vec4f(pow(uniforms.stopColors[i + 1u].rgb, vec3f(1.0 / 2.2)), uniforms.stopColors[i + 1u].a);
+                let mixedSRGB = mix(startSRGB, endSRGB, localT);
+                result = vec4f(pow(mixedSRGB.rgb, vec3f(2.2)), mixedSRGB.a);
+                break;
+            }
+        }
+        return result;
+    }
+""".trimIndent()
+
+internal val RADIAL_GRADIENT_MULTI_WGSL: String = """
+    struct Uniforms {
+        center: vec2f,
+        radius: f32,
+        stopCount: u32,
+        _pad0: u32,
+        stopPositions: array<vec4f, 8>,
+        stopColors: array<vec4f, 8>,
+    };
+
+    @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+
+    @vertex
+    fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
+        let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
+        let y = f32(idx & 2u) * 2.0 - 1.0;
+        return vec4f(x, y, 0.0, 1.0);
+    }
+
+    @fragment
+    fn fs_main(@builtin(position) coord: vec4f) -> @location(0) vec4f {
+        let dir = coord.xy - uniforms.center;
+        let dist = length(dir);
+        let t = dist / uniforms.radius;
+        let tClamped = clamp(t, 0.0, 1.0);
+        var result = uniforms.stopColors[uniforms.stopCount - 1u];
+        for (var i = 0u; i < uniforms.stopCount - 1u; i++) {
+            let p0 = uniforms.stopPositions[i].x;
+            let p1 = uniforms.stopPositions[i + 1u].x;
+            if (tClamped >= p0 && tClamped <= p1) {
+                let localT = (tClamped - p0) / max(p1 - p0, 1.0e-10);
+                let startSRGB = vec4f(pow(uniforms.stopColors[i].rgb, vec3f(1.0 / 2.2)), uniforms.stopColors[i].a);
+                let endSRGB = vec4f(pow(uniforms.stopColors[i + 1u].rgb, vec3f(1.0 / 2.2)), uniforms.stopColors[i + 1u].a);
+                let mixedSRGB = mix(startSRGB, endSRGB, localT);
+                result = vec4f(pow(mixedSRGB.rgb, vec3f(2.2)), mixedSRGB.a);
+                break;
+            }
+        }
+        return result;
+    }
+""".trimIndent()
+
 internal val SWEEP_GRADIENT_WGSL: String = """
     struct Uniforms {
         center: vec2f,
@@ -188,6 +275,49 @@ internal val SWEEP_GRADIENT_WGSL: String = """
         let endSRGB = vec4f(pow(uniforms.endColor.rgb, vec3f(1.0 / 2.2)), uniforms.endColor.a);
         let mixedSRGB = mix(startSRGB, endSRGB, tClamped);
         return vec4f(pow(mixedSRGB.rgb, vec3f(2.2)), mixedSRGB.a);
+    }
+""".trimIndent()
+
+internal val SWEEP_GRADIENT_MULTI_WGSL: String = """
+    struct Uniforms {
+        center: vec2f,
+        angles: vec2f,
+        stopCount: u32,
+        _pad0: u32,
+        stopPositions: array<vec4f, 8>,
+        stopColors: array<vec4f, 8>,
+    };
+
+    @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+
+    @vertex
+    fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
+        let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
+        let y = f32(idx & 2u) * 2.0 - 1.0;
+        return vec4f(x, y, 0.0, 1.0);
+    }
+
+    @fragment
+    fn fs_main(@builtin(position) coord: vec4f) -> @location(0) vec4f {
+        let dir = coord.xy - uniforms.center;
+        let angle = atan2(dir.y, dir.x);
+        let range = uniforms.angles.y - uniforms.angles.x;
+        let t = select((angle - uniforms.angles.x) / range, 0.0, range < 1.0e-10);
+        let tClamped = clamp(t, 0.0, 1.0);
+        var result = uniforms.stopColors[uniforms.stopCount - 1u];
+        for (var i = 0u; i < uniforms.stopCount - 1u; i++) {
+            let p0 = uniforms.stopPositions[i].x;
+            let p1 = uniforms.stopPositions[i + 1u].x;
+            if (tClamped >= p0 && tClamped <= p1) {
+                let localT = (tClamped - p0) / max(p1 - p0, 1.0e-10);
+                let startSRGB = vec4f(pow(uniforms.stopColors[i].rgb, vec3f(1.0 / 2.2)), uniforms.stopColors[i].a);
+                let endSRGB = vec4f(pow(uniforms.stopColors[i + 1u].rgb, vec3f(1.0 / 2.2)), uniforms.stopColors[i + 1u].a);
+                let mixedSRGB = mix(startSRGB, endSRGB, localT);
+                result = vec4f(pow(mixedSRGB.rgb, vec3f(2.2)), mixedSRGB.a);
+                break;
+            }
+        }
+        return result;
     }
 """.trimIndent()
 
