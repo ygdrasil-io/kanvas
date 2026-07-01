@@ -141,11 +141,11 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
             val multiStop = false
             if (multiStop) {
                 val n = material.allStopPositions!!.size.coerceAtMost(8)
-                val bb = java.nio.ByteBuffer.allocate(288).order(java.nio.ByteOrder.nativeOrder())
+                val bb = java.nio.ByteBuffer.allocate(8224).order(java.nio.ByteOrder.nativeOrder())
                 bb.putFloat(material.startX); bb.putFloat(material.startY)
                 bb.putFloat(material.endX); bb.putFloat(material.endY)
                 bb.putInt(n)
-                for (i in 0 until 8) {
+                for (i in 0 until 256) {
                     if (i < n) {
                         val pos = material.allStopPositions!!.getOrElse(i) { i.toFloat() / (n - 1).coerceAtLeast(1) }
                         bb.putFloat(pos); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f)
@@ -208,12 +208,11 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
             val multiStop = false
             if (multiStop) {
                 val n = material.allStopPositions!!.size.coerceAtMost(8)
-                val bb = java.nio.ByteBuffer.allocate(288).order(java.nio.ByteOrder.nativeOrder())
+                val bb = java.nio.ByteBuffer.allocate(8224).order(java.nio.ByteOrder.nativeOrder())
                 bb.putFloat(material.centerX); bb.putFloat(material.centerY)
                 bb.putFloat(material.radius)
-                bb.putInt(n); bb.putInt(0)
-                // _pad0 + implicit padding 16-31 (zero-initialized)
-                for (i in 0 until 8) {
+                bb.putInt(n)
+                for (i in 0 until 256) {
                     if (i >= n) { bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f); continue }
                     val pos = material.allStopPositions!!.getOrElse(i) { i.toFloat() / (n - 1).coerceAtLeast(1) }
                     bb.putFloat(pos); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f)
@@ -273,11 +272,11 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
             val multiStop = false
             if (multiStop) {
                 val n = material.allStopPositions!!.size.coerceAtMost(8)
-                val bb = java.nio.ByteBuffer.allocate(288).order(java.nio.ByteOrder.nativeOrder())
+                val bb = java.nio.ByteBuffer.allocate(8224).order(java.nio.ByteOrder.nativeOrder())
                 bb.putFloat(material.centerX); bb.putFloat(material.centerY)
                 bb.putFloat(material.startAngle); bb.putFloat(material.endAngle)
                 bb.putInt(n)
-                for (i in 0 until 8) {
+                for (i in 0 until 256) {
                     if (i < n) {
                         val pos = material.allStopPositions!!.getOrElse(i) { i.toFloat() / (n - 1).coerceAtLeast(1) }
                         bb.putFloat(pos); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f)

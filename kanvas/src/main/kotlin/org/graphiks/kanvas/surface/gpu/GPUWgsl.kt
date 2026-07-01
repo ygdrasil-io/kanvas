@@ -165,9 +165,8 @@ internal val LINEAR_GRADIENT_MULTI_WGSL: String = """
         start: vec2f,
         end: vec2f,
         stopCount: u32,
-        _pad0: u32,
-        stopPositions: array<vec4f, 8>,
-        stopColors: array<vec4f, 8>,
+        stopPositions: array<vec4f, 256>,
+        stopColors: array<vec4f, 256>,
     };
 
     @group(0) @binding(0) var<uniform> uniforms: Uniforms;
@@ -210,9 +209,8 @@ internal val RADIAL_GRADIENT_MULTI_WGSL: String = """
         center: vec2f,
         radius: f32,
         stopCount: u32,
-        _pad0: u32,
-        stopPositions: array<vec4f, 8>,
-        stopColors: array<vec4f, 8>,
+        stopPositions: array<vec4f, 256>,
+        stopColors: array<vec4f, 256>,
     };
 
     @group(0) @binding(0) var<uniform> uniforms: Uniforms;
@@ -283,9 +281,8 @@ internal val SWEEP_GRADIENT_MULTI_WGSL: String = """
         center: vec2f,
         angles: vec2f,
         stopCount: u32,
-        _pad0: u32,
-        stopPositions: array<vec4f, 8>,
-        stopColors: array<vec4f, 8>,
+        stopPositions: array<vec4f, 256>,
+        stopColors: array<vec4f, 256>,
     };
 
     @group(0) @binding(0) var<uniform> uniforms: Uniforms;
