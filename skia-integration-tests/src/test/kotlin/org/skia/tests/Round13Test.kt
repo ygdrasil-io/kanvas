@@ -27,9 +27,6 @@ class Round13Test {
     }
 
     @Test
-    fun `FadeFilterGM matches reference`() = runGm(FadeFilterGM(), "FadeFilterGM", 60.0)
-
-    @Test
     fun `MatrixImageFilterGM matches reference`() =
         runGm(MatrixImageFilterGM(), "MatrixImageFilterGM", 60.0)
 

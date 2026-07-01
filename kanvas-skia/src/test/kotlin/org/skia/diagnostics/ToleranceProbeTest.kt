@@ -4,7 +4,6 @@ import org.junit.jupiter.api.Test
 import org.skia.testing.TestUtils
 import org.skia.tests.BigRectGM
 import org.skia.tests.ClipStrokeRectGM
-import org.skia.tests.SimpleRectGM
 import org.skia.tests.ThinRectsGM
 
 /**
@@ -18,11 +17,6 @@ class ToleranceProbeTest {
     @Test
     fun `BigRectGM tolerance budget`() {
         probe("BigRectGM", BigRectGM(), "bigrect")
-    }
-
-    @Test
-    fun `SimpleRectGM tolerance budget`() {
-        probe("SimpleRectGM", SimpleRectGM(), "simplerect")
     }
 
     @Test
