@@ -144,6 +144,14 @@ data class GradientStop(val position: Float, val color: Color)
 ## Non-Goals
 
 - `PerlinNoise` / `FractalNoise` shader subtypes (deferred)
+- `CoordClamp` shader (deferred)
 - `Sk1DPathEffect`, `Sk2DPathEffect`, `TrimPathEffect` (deferred)
-- Full `SkImageFilters` factory surface (Lighting, Magnifier, MatrixConvolution, Displacement) — extensible later
+- Full `SkImageFilters` factory surface — deferred:
+  - **Lighting**: DistantLit/PointLit/SpotLit Diffuse + Specular (6 variants)
+  - **Morphology**: Dilate, Erode
+  - **Transform**: MatrixTransform, Offset, Tile, Merge
+  - **Advanced**: Magnifier, MatrixConvolution, DisplacementMap
+  - **Compositing**: Crop, RuntimeShader image filter
+- `ColorFilter.HSLAMatrix`, `Lerp`, `HighContrast`, `LumaColorFilter`, `OverdrawColorFilter` (deferred)
+- `MaskFilter.Shader`, `MaskFilter.Table` (deferred)
 - Shader color space interpolation (`SkGradient::Interpolation`) — hardcoded sRGB for now

@@ -23,6 +23,7 @@ The `:kanvas` module lives at `kanvas/` and uses the base package `org.graphiks.
 | `image/` | Image, ColorType |
 | `dsl/` | @KanvasDsl annotation, DSL scopes (PathScope, PaintScope, CanvasScope) |
 | `operators/` | Operator extensions for Point, Matrix33, Rect, Path |
+| `picture/` | Picture, PictureRecorder — recording and playback of DisplayOp snapshots |
 
 ## Naming Conventions
 
@@ -40,13 +41,16 @@ The `:kanvas` module lives at `kanvas/` and uses the base package `org.graphiks.
 ```
 User Code
     │
-    ├── Canvas API ──→ DisplayOp[] (command buffer)
+    ├── PictureRecorder ──→ Picture (frozen DisplayOp[] snapshot)
+    │
+    ├── Canvas API ──→ DisplayOp[] (command buffer, may include DrawPicture)
     │
     ▼
 Surface.render()
     │
     ├── PipelineCompiler.compile(DisplayOp[]) → CompiledFrame
     │       │
+    │       ├── Expand DrawPicture → nested DisplayOp[]
     │       ├── Map Paint.shader → RenderPipeline (built-in or RuntimeEffect)
     │       ├── Map DisplayOp → RenderPass + GPU bindings
     │       └── Collect Diagnostics on refusal

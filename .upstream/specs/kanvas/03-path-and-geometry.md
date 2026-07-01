@@ -60,7 +60,9 @@ sealed interface ClipStackOp {
 ## Non-Goals
 
 - Path measurement (`SkPathMeasure`) — deferred
-- Path boolean operations (union, intersect, difference) — deferred
+- Path boolean operations (union, intersect, difference, xor, simplify) — deferred
+- Path queries: `isConvex`, `isOval`, `isRRect`, `isRect`, `isLine`, `isInterpolatable` — deferred
 - `conicTo` — arcTo handles conic-like curves; conics can be approximated by quads
 - `Direction` enum (CW/CCW) — circle/oval always use clockwise
 - `SkRegion` — not included; clip uses `ClipStack`
+- Path serialization (`serialize` / `ReadFromMemory`) — deferred

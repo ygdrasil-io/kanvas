@@ -15,7 +15,7 @@ Defines the `Canvas` class — the central recording API for all drawing operati
 class Canvas internal constructor(private val buffer: DisplayListBuffer)
 ```
 
-#### Drawing Methods (core, 6 methods)
+#### Drawing Methods (core, 7 methods)
 
 | Method | Signature |
 |--------|-----------|
@@ -25,9 +25,11 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer)
 | `drawImage` | `(image: Image, dst: Rect, paint: Paint? = null)` |
 | `drawImageRect` | `(image: Image, src: Rect, dst: Rect, paint: Paint? = null)` |
 | `drawText` | `(blob: TextBlob, x: Float, y: Float, paint: Paint)` |
+| `drawPicture` | `(picture: Picture, paint: Paint? = null)` |
 
 - Each draw creates a `DisplayOp` with baked-in `currentTransform` and `currentClip`
 - Appended to the command buffer via `DisplayListBuffer.append()`
+- `drawPicture` emits `DisplayOp.DrawPicture` — a single op referencing the pre-recorded `Picture`. The GPU pipeline expands nested picture ops during rendering.
 
 #### Convenience Drawing Extensions
 
@@ -39,6 +41,7 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer)
 | `drawLine(x0,y0,x1,y1,paint)` | `drawPath(Path { moveTo; lineTo })` |
 | `drawRoundRect(rect,rx,ry,paint)` | `drawRRect(RRect(rect,rx))` |
 | `drawImage(image,x,y,paint?)` | `drawImage(image, Rect.fromXYWH(...), paint)` |
+| `withPicture(bounds, paint?, block)` | Creates a `PictureRecorder`, records [block], calls `drawPicture` |
 
 #### State Management
 
@@ -94,6 +97,7 @@ sealed interface DisplayOp {
     data class DrawPath(val path: Path, val paint: Paint, val transform: Matrix33, val clip: ClipStack) : DisplayOp
     data class DrawImage(val image: Image, val src: Rect, val dst: Rect, val paint: Paint?, val transform: Matrix33, val clip: ClipStack) : DisplayOp
     data class DrawText(val blob: TextBlob, val x: Float, val y: Float, val paint: Paint, val transform: Matrix33, val clip: ClipStack) : DisplayOp
+    data class DrawPicture(val picture: Picture, val paint: Paint?, val transform: Matrix33, val clip: ClipStack) : DisplayOp
     // State ops
     data class SetTransform(val matrix: Matrix33) : DisplayOp
     data class SetClip(val clip: ClipStack) : DisplayOp
@@ -102,6 +106,8 @@ sealed interface DisplayOp {
 }
 ```
 
+- 6 draw DisplayOps + new `DrawPicture` in Wave 1
+- `DrawPicture` wraps a pre-recorded `Picture` — the GPU pipeline expands nested ops during rendering
 - Transform and clip are **baked in** at draw time — each draw carries the full CTM and clip state
 - State ops are emitted alongside draw ops in the display list
 - The `PipelineCompiler` in `05-gpu-pipeline.md` interprets this stream
@@ -116,10 +122,12 @@ interface DisplayListBuffer {
 ```
 
 - Internal abstraction — `Surface` provides the concrete implementation
-- `Canvas` never references `Surface` directly (decoupled)
+- `PictureRecorder` also provides a concrete implementation for recording pictures
+- `Canvas` never references `Surface` or `PictureRecorder` directly (decoupled)
 
 ## Non-Goals
 
-- `drawVertices`, `drawPicture`, `drawAtlas`, `drawDrawable`, `drawPatch`, `drawAnnotation`, `drawShadow` — deferred
-- `SkPicture` / `PictureRecorder` — deferred
+- `drawVertices`, `drawAtlas`, `drawDrawable`, `drawPatch`, `drawAnnotation`, `drawDRRect`, `drawImageNine`, `drawImageLattice`, `drawColor`/`clear`, `quickReject`, `readPixels`/`writePixels` — deferred
+- `SkDrawable` — deferred
 - LCD text rendering flags — deferred
+- `drawPicture` serialization — deferred (blocked by image encode/decode SPI)

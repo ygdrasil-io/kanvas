@@ -75,7 +75,10 @@ data class TextBlob(
 ## Non-Goals
 
 - `Image.decode` real implementation — requires codec SPI integration (deferred)
+- Image encode beyond PNG — JPEG, WebP, etc. require codec SPI (deferred)
 - `SkFont` / `SkFontMgr` — font management is not in the Kanvas facade
 - Text shaping (Bidi, Kerning, GPOS/GSUB) — delegated to `:font`
 - `TextBlob.bounds()`, `TextBlob.serialize()` — deferred
 - `makeFromString`, `makeFromRSXform` — text shaping not yet in facade
+- `TextBlob.getIntercepts()` — deferred
+- `Image.makeShader()` convenience — deferred (use `Shader.Image` directly)
