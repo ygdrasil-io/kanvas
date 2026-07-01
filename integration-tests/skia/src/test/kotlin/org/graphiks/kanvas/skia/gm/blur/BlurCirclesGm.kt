@@ -8,6 +8,11 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 
+/**
+ * Port of Skia's `gm/blurcircles.cpp`.
+ * 4×4 grid of blurred circles with varying blur radii and circle radii.
+ * @see https://github.com/google/skia/blob/main/gm/blurcircles.cpp
+ */
 class BlurCirclesGm : SkiaGm {
     override val name = "blurcircles"
     override val renderFamily = RenderFamily.BLUR

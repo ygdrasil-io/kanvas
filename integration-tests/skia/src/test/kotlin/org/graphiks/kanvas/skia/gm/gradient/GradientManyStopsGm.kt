@@ -11,6 +11,11 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.SkiaGm
 
+/**
+ * Port of Skia's `gm/gradients.cpp` (gradient_many_stops).
+ * 200-stop gradient stressing texture-based and analytic evaluators.
+ * @see https://github.com/google/skia/blob/main/gm/gradients.cpp
+ */
 class GradientManyStopsGm : SkiaGm {
     override val name = "gradient_many_stops"
     override val renderFamily = RenderFamily.GRADIENT

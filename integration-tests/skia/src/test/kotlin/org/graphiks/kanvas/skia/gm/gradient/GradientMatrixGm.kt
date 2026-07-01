@@ -12,6 +12,11 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.SkiaGm
 import kotlin.math.sqrt
 
+/**
+ * Port of Skia's `gm/gradient_matrix.cpp`.
+ * Exercises gradient-shader local-matrix path with non-square transforms.
+ * @see https://github.com/google/skia/blob/main/gm/gradient_matrix.cpp
+ */
 class GradientMatrixGm : SkiaGm {
     override val name = "gradient_matrix"
     override val renderFamily = RenderFamily.GRADIENT

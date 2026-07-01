@@ -11,6 +11,11 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.SkiaGm
 
+/**
+ * Port of Skia's `gm/shallowgradient.cpp` (linear dither).
+ * 800×800 linear gradient 0xFF555555 → 0xFF444444 with dither enabled.
+ * @see https://github.com/google/skia/blob/main/gm/shallowgradient.cpp
+ */
 class ShallowGradientLinearGm : SkiaGm {
     override val name = "shallow_gradient_linear"
     override val renderFamily = RenderFamily.GRADIENT

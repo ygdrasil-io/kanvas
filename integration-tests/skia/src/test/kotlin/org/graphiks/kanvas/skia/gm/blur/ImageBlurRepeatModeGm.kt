@@ -9,6 +9,11 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
 
+/**
+ * Port of Skia's `gm/imageblurrepeatmode.cpp`.
+ * Tests repeat tile mode on Gaussian blur at varying sigmas.
+ * @see https://github.com/google/skia/blob/main/gm/imageblurrepeatmode.cpp
+ */
 class ImageBlurRepeatModeGm : SkiaGm {
     override val name = "imageblurrepeatmode"
     override val renderFamily = RenderFamily.BLUR

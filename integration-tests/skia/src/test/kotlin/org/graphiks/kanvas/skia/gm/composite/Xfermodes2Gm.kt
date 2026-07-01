@@ -9,6 +9,11 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
 
+/**
+ * Port of Skia's `gm/xfermodes2.cpp`.
+ * Grid of blend mode cells with three shader layers.
+ * @see https://github.com/google/skia/blob/main/gm/xfermodes2.cpp
+ */
 class Xfermodes2Gm : SkiaGm {
     override val name = "xfermodes2"
     override val renderFamily = RenderFamily.COMPOSITE

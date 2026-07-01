@@ -11,6 +11,11 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.SkiaGm
 
+/**
+ * Port of Skia's `gm/hardstop_gradients.cpp`.
+ * 8×3 grid of linear gradients across clamp/repeat/mirror tile modes.
+ * @see https://github.com/google/skia/blob/main/gm/hardstop_gradients.cpp
+ */
 class HardstopGradientShaderGm : SkiaGm {
     override val name = "hardstop_gradients"
     override val renderFamily = RenderFamily.GRADIENT

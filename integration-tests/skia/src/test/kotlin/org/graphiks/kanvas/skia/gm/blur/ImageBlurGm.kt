@@ -31,6 +31,11 @@ internal fun imageBlurDraw(sigmaX: Float, sigmaY: Float, canvas: GmCanvas) {
     canvas.restore()
 }
 
+/**
+ * Port of Skia's `gm/imageblur.cpp`.
+ * 25 strings rendered with image-filter Gaussian blur.
+ * @see https://github.com/google/skia/blob/main/gm/imageblur.cpp
+ */
 class ImageBlurGm : SkiaGm {
     override val name = "imageblur"
     override val renderFamily = RenderFamily.BLUR

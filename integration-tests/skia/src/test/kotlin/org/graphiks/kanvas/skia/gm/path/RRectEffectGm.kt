@@ -13,6 +13,11 @@ import org.graphiks.kanvas.skia.SkiaGm
  * exist in our WebGPU / CPU-raster pipeline. The body throws [TODO] tagged
  * **STUB.GPU_RRECT_EFFECT** so the compile contract holds.
  */
+/**
+ * Port of Skia's `gm/rrects.cpp` (RRectGM with effect type).
+ * Stub for Ganesh-internal GrRRectEffect fragment processor.
+ * @see https://github.com/google/skia/blob/main/gm/rrects.cpp
+ */
 class RRectEffectGm : SkiaGm {
     override val name = "rrect_effect"
     override val renderFamily = RenderFamily.PATH

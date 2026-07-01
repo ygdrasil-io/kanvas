@@ -13,6 +13,11 @@ import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 
+/**
+ * Port of Skia's `gm/modecolorfilters.cpp`.
+ * Stress test for SkColorFilters::Blend across blend modes, colours and shaders.
+ * @see https://github.com/google/skia/blob/main/gm/modecolorfilters.cpp
+ */
 class ModeColorFilterGm : SkiaGm {
     override val name = "modecolorfilters"
     override val renderFamily = RenderFamily.COMPOSITE

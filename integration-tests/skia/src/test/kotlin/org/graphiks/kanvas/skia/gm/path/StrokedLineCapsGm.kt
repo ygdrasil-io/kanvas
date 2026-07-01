@@ -13,6 +13,11 @@ import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Point
 import kotlin.math.max
 
+/**
+ * Port of Skia's `gm/strokedlines.cpp` (strokedline_caps).
+ * Stroke caps (square, butt, round) across various line lengths.
+ * @see https://github.com/google/skia/blob/main/gm/strokedlines.cpp
+ */
 class StrokedLineCapsGm : SkiaGm {
     override val name = "strokedline_caps"
     override val renderFamily = RenderFamily.PATH

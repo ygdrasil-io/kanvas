@@ -19,6 +19,11 @@ import kotlin.math.sqrt
  * The 45° rotated block at the center is skipped because GmCanvas does
  * not support canvas rotation.
  */
+/**
+ * Port of Skia's `gm/dashing.cpp` (Dashing3GM).
+ * 9 blocks of dashed line strips under various dash/phase/width combinations.
+ * @see https://github.com/google/skia/blob/main/gm/dashing.cpp
+ */
 class Dashing3Gm : SkiaGm {
     override val name = "dashing3"
     override val renderFamily = RenderFamily.PATH

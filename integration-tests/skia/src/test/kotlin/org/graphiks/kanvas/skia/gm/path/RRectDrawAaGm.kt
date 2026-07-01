@@ -14,6 +14,11 @@ import org.graphiks.kanvas.types.Rect
  * tiled in 80 x 40 px cells on a 640 x 480 image. Each rrect is drawn
  * via [Path.addRRect].
  */
+/**
+ * Port of Skia's `gm/rrects.cpp` (RRectGM with AA draw).
+ * 43 anti-aliased rrects across a tiled grid.
+ * @see https://github.com/google/skia/blob/main/gm/rrects.cpp
+ */
 class RRectDrawAaGm : SkiaGm {
     override val name = "rrect_draw_aa"
     override val renderFamily = RenderFamily.PATH

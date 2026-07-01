@@ -13,6 +13,11 @@ import kotlin.math.cos
 import kotlin.math.min
 import kotlin.math.sin
 
+/**
+ * Port of Skia's `gm/dashing.cpp` (Dashing2GM).
+ * 3 dash patterns × 4 shapes (line, rect, oval, star).
+ * @see https://github.com/google/skia/blob/main/gm/dashing.cpp
+ */
 class Dashing2Gm : SkiaGm {
     override val name = "dashing2"
     override val renderFamily = RenderFamily.PATH

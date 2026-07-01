@@ -25,6 +25,11 @@ import kotlin.random.Random
  * transforms are replaced with identity so the layout differs from the
  * Skia reference. Colors are generated deterministically from [Random].
  */
+/**
+ * Port of Skia's `gm/ovals.cpp`.
+ * 5×8 grid of stroked/filled ovals under various matrices and paint styles.
+ * @see https://github.com/google/skia/blob/main/gm/ovals.cpp
+ */
 class OvalGm : SkiaGm {
     override val name = "ovals"
     override val renderFamily = RenderFamily.PATH

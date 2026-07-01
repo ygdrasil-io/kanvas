@@ -9,6 +9,11 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.SkiaGm
 
+/**
+ * Port of Skia's `gm/dashing.cpp` (Dashing4GM).
+ * Cartesian product of stroke widths, intervals, AA and caps.
+ * @see https://github.com/google/skia/blob/main/gm/dashing.cpp
+ */
 class Dashing4Gm : SkiaGm {
     override val name = "dashing4"
     override val renderFamily = RenderFamily.PATH

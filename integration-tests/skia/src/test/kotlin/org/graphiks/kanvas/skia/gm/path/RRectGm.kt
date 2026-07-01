@@ -17,6 +17,11 @@ import org.graphiks.kanvas.types.Rect
  * starting RRect type (rect / oval / simple / complex per-corner radii).
  * Within each cell the inset is applied for d in [-30, 30] step 5.
  */
+/**
+ * Port of Skia's `gm/rrect.cpp`.
+ * 4×4 grid of stroked rrects with different inset strategies.
+ * @see https://github.com/google/skia/blob/main/gm/rrect.cpp
+ */
 class RRectGm : SkiaGm {
     override val name = "rrect"
     override val renderFamily = RenderFamily.PATH

@@ -15,6 +15,11 @@ import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.types.Rect
 
+/**
+ * Port of Skia's `gm/blurrect.cpp`.
+ * Matrix of blurred rects across blur styles, shaders and clipping.
+ * @see https://github.com/google/skia/blob/main/gm/blurrect.cpp
+ */
 class BlurRectGm : SkiaGm {
     override val name = "blurrects"
     override val renderFamily = RenderFamily.BLUR

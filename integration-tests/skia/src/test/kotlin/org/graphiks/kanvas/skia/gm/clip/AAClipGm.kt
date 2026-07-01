@@ -7,6 +7,11 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
 
+/**
+ * Port of Skia's `gm/aaclip.cpp` (DEF_SIMPLE_GM aaclip).
+ * Tests sub-pixel AA clip rect rendering at various fractional offsets.
+ * @see https://github.com/google/skia/blob/main/gm/aaclip.cpp
+ */
 class AAClipGm : SkiaGm {
     override val name = "aaclip"
     override val renderFamily = RenderFamily.CLIP

@@ -9,6 +9,11 @@ import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
 import kotlin.random.Random
 
+/**
+ * Port of Skia's `gm/imageblur2.cpp`.
+ * 6×6 grid of saveLayer'd text blocks with varying blur sigmas.
+ * @see https://github.com/google/skia/blob/main/gm/imageblur2.cpp
+ */
 class ImageBlur2Gm : SkiaGm {
     override val name = "imageblur2"
     override val renderFamily = RenderFamily.BLUR

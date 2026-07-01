@@ -10,6 +10,11 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.SkiaGm
 
+/**
+ * Port of Skia's `gm/gradients.cpp` (RadialGradient2GM).
+ * Reproduces b/7671058: sweep and radial gradients with InPremul flag.
+ * @see https://github.com/google/skia/blob/main/gm/gradients.cpp
+ */
 class RadialGradient2Gm : SkiaGm {
     override val name = "radial_gradient2"
     override val renderFamily = RenderFamily.GRADIENT

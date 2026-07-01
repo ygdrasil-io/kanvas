@@ -11,6 +11,11 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.SkiaGm
 
+/**
+ * Port of Skia's `gm/gradients.cpp` (RadialGradientGM).
+ * 3-stop radial gradient over opaque black background with dither.
+ * @see https://github.com/google/skia/blob/main/gm/gradients.cpp
+ */
 class RadialGradientGm : SkiaGm {
     override val name = "radial_gradient"
     override val renderFamily = RenderFamily.GRADIENT

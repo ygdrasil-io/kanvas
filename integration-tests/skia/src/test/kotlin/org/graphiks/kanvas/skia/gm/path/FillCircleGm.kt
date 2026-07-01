@@ -17,6 +17,11 @@ import kotlin.random.Random
  * directly so new references must be generated.
  * The original `rotate` call (no-op at `fRotate = 0`) is omitted.
  */
+/**
+ * Port of Skia's `gm/fillcircle.cpp`.
+ * Spiralling stack of concentric AA ovals with 565-quantised random colours.
+ * @see https://github.com/google/skia/blob/main/gm/fillcircle.cpp
+ */
 class FillCircleGm : SkiaGm {
     override val name = "fillcircle"
     override val renderFamily = RenderFamily.PATH

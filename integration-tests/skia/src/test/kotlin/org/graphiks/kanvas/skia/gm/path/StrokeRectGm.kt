@@ -21,6 +21,11 @@ import org.graphiks.kanvas.types.Rect
  * overlay and control-point dots from the upstream are omitted because
  * Kanvas does not expose [SkStroker].
  */
+/**
+ * Port of Skia's `gm/strokerect.cpp`.
+ * Stroke and stroke-and-fill rects across joins and geometry variants.
+ * @see https://github.com/google/skia/blob/main/gm/strokerect.cpp
+ */
 class StrokeRectGm : SkiaGm {
     override val name = "strokerect"
     override val renderFamily = RenderFamily.PATH

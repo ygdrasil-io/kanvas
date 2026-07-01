@@ -7,6 +7,11 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Rect
 
+/**
+ * Port of Skia's `gm/fadefilter.cpp`.
+ * Single-rect draw with a layer-style color-filter image filter.
+ * @see https://github.com/google/skia/blob/main/gm/fadefilter.cpp
+ */
 class FadeFilterGm : SkiaGm {
     override val name = "fadefilter"
     override val renderFamily = RenderFamily.COMPOSITE

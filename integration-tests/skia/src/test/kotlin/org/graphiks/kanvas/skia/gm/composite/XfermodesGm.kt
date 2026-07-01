@@ -9,6 +9,11 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
 
+/**
+ * Port of Skia's `gm/xfermodes.cpp`.
+ * Canonical visual regression for 29 SkBlendMode values.
+ * @see https://github.com/google/skia/blob/main/gm/xfermodes.cpp
+ */
 class XfermodesGm : SkiaGm {
     override val name = "xfermodes"
     override val renderFamily = RenderFamily.COMPOSITE

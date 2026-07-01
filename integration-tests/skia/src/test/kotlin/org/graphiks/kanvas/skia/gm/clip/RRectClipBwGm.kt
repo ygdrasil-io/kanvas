@@ -11,11 +11,9 @@ import org.graphiks.kanvas.types.RRect
 import org.graphiks.kanvas.types.Rect
 
 /**
- * Port of Skia's `gm/rrects.cpp` — `RRectGM(kBW_Clip_Type)`.
- * GM name: `rrect_clip_bw`. Each of the 43 rrects is drawn as a filled
- * path in a tiled 80 x 40 px grid. The original used non-AA clipRRect
- * with a gradient shader; this simplified port draws each rrect directly
- * via [Path.addRRect].
+ * Port of Skia's `gm/rrects.cpp` (RRectGM with BW clip).
+ * 43 rrects drawn with non-anti-aliased clipRRect.
+ * @see https://github.com/google/skia/blob/main/gm/rrects.cpp
  */
 class RRectClipBwGm : SkiaGm {
     override val name = "rrect_clip_bw"

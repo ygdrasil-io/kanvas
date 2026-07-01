@@ -15,6 +15,11 @@ import org.graphiks.kanvas.types.Rect
  * in 80 x 40 px cells on a 640 x 480 image. Each rrect is drawn via
  * [Path.addRRect].
  */
+/**
+ * Port of Skia's `gm/rrects.cpp` (RRectGM with BW draw).
+ * 43 non-anti-aliased rrects across a tiled grid.
+ * @see https://github.com/google/skia/blob/main/gm/rrects.cpp
+ */
 class RRectDrawBwGm : SkiaGm {
     override val name = "rrect_draw_bw"
     override val renderFamily = RenderFamily.PATH

@@ -7,6 +7,11 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.SkiaGm
 
+/**
+ * Port of Skia's `gm/dashing.cpp` (DashingGM).
+ * Grid of dashed drawLine calls with varying stroke widths, intervals and AA.
+ * @see https://github.com/google/skia/blob/main/gm/dashing.cpp
+ */
 class DashingGm : SkiaGm {
     override val name = "dashing"
     override val renderFamily = RenderFamily.PATH

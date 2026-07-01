@@ -9,6 +9,11 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
 
+/**
+ * Port of Skia's `gm/modecolorfilters.cpp` (registered "modecolorfilters").
+ * Grid of small test rects exercising SkColorFilters::Blend.
+ * @see https://github.com/google/skia/blob/main/gm/modecolorfilters.cpp
+ */
 class ModeColorFiltersGm : SkiaGm {
     override val name = "modecolorfilters"
     override val renderFamily = RenderFamily.COMPOSITE

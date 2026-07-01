@@ -10,6 +10,11 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
 
+/**
+ * Port of Skia's `gm/imageblurclampmode.cpp`.
+ * Tests clamp tile mode on blur image filter at various sigmas.
+ * @see https://github.com/google/skia/blob/main/gm/imageblurclampmode.cpp
+ */
 class ImageBlurClampModeGm : SkiaGm {
     override val name = "imageblurclampmode"
     override val renderFamily = RenderFamily.BLUR

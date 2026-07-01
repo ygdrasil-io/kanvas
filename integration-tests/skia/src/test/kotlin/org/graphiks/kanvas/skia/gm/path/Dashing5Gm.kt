@@ -16,6 +16,11 @@ import org.graphiks.kanvas.skia.SkiaGm
  * support `rotate` or `concat`, we manually swap coordinates to
  * approximate the 90° rotation.
  */
+/**
+ * Port of Skia's `gm/dashing.cpp` (Dashing5GM).
+ * Long dashed lines with rotation, cycling stroke widths and rainbow colors.
+ * @see https://github.com/google/skia/blob/main/gm/dashing.cpp
+ */
 class Dashing5Gm(private val doAA: Boolean) : SkiaGm {
     constructor() : this(true)
 

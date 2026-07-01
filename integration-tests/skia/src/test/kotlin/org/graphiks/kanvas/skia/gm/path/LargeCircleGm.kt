@@ -6,6 +6,11 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.SkiaGm
 
+/**
+ * Port of Skia's `gm/conicpaths.cpp` (DEF_SIMPLE_GM largecircle).
+ * AA regression test with large stroked circle.
+ * @see https://github.com/google/skia/blob/main/gm/conicpaths.cpp
+ */
 class LargeCircleGm : SkiaGm {
     override val name = "largecircle"
     override val renderFamily = RenderFamily.PATH

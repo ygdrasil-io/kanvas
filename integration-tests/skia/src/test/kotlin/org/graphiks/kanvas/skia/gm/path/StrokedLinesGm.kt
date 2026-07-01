@@ -12,6 +12,11 @@ import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
 
+/**
+ * Port of Skia's `gm/strokedlines.cpp` (StrokedLinesGM).
+ * Snowflake spokes across caps and AA modes.
+ * @see https://github.com/google/skia/blob/main/gm/strokedlines.cpp
+ */
 class StrokedLinesGm : SkiaGm {
     override val name = "strokedlines"
     override val renderFamily = RenderFamily.PATH

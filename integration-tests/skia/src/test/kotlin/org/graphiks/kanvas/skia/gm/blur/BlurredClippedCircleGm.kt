@@ -12,6 +12,11 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
 
+/**
+ * Port of Skia's `gm/blurredclippedcircle.cpp`.
+ * Precision artifacts in nested clips culminating in clipRRect difference.
+ * @see https://github.com/google/skia/blob/main/gm/blurredclippedcircle.cpp
+ */
 class BlurredClippedCircleGm : SkiaGm {
     override val name = "blurredclippedcircle"
     override val renderFamily = RenderFamily.BLUR

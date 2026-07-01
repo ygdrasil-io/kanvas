@@ -12,6 +12,11 @@ import org.graphiks.kanvas.types.CornerRadii
 import org.graphiks.kanvas.types.RRect
 import org.graphiks.kanvas.types.Rect
 
+/**
+ * Port of Skia's `gm/rrect.cpp` (RRectBlurGM).
+ * Draws rounded rects through mask-filter blur.
+ * @see https://github.com/google/skia/blob/main/gm/rrect.cpp
+ */
 class RRectBlurGm : SkiaGm {
     override val name = "rrect_blurs"
     override val renderFamily = RenderFamily.BLUR

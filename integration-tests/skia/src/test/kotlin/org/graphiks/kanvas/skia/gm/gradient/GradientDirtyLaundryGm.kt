@@ -11,6 +11,11 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.SkiaGm
 
+/**
+ * Port of Skia's `gm/gradient_dirty_laundry.cpp`.
+ * 40-stop RGBWB gradient sequence through linear, radial and sweep gradients.
+ * @see https://github.com/google/skia/blob/main/gm/gradient_dirty_laundry.cpp
+ */
 class GradientDirtyLaundryGm : SkiaGm {
     override val name = "gradient_dirty_laundry"
     override val renderFamily = RenderFamily.GRADIENT

@@ -14,6 +14,11 @@ import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.abs
 
+/**
+ * Port of Skia's `gm/dashcircle.cpp`.
+ * Reference outline vs dashed circle comparison across dash patterns.
+ * @see https://github.com/google/skia/blob/main/gm/dashcircle.cpp
+ */
 class DashCircleGm : SkiaGm {
     override val name = "dashcircle"
     override val renderFamily = RenderFamily.PATH

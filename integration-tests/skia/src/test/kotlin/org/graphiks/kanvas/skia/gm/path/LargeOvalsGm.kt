@@ -8,6 +8,11 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
 
+/**
+ * Port of Skia's `gm/conicpaths.cpp` (DEF_SIMPLE_GM largeovals).
+ * Stroked and filled large ovals testing axis-aligned and rotated paths.
+ * @see https://github.com/google/skia/blob/main/gm/conicpaths.cpp
+ */
 class LargeOvalsGm : SkiaGm {
     override val name = "largeovals"
     override val renderFamily = RenderFamily.PATH

@@ -16,6 +16,11 @@ import kotlin.random.Random
  * `colorToRGB565` for pixel-exact reference matching; we use
  * `kotlin.random.Random` directly so new references must be generated.
  */
+/**
+ * Port of Skia's `gm/simplerect.cpp`.
+ * 10000 random rects with 565-quantised colours.
+ * @see https://github.com/google/skia/blob/main/gm/simplerect.cpp
+ */
 class SimpleRectGm : SkiaGm {
     override val name = "simplerect"
     override val renderFamily = RenderFamily.PATH

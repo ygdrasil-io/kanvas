@@ -11,6 +11,11 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.SkiaGm
 
+/**
+ * Port of Skia's `gm/gradients_no_texture.cpp` (LinearGradientTinyGM).
+ * Stress-tests degenerate stop positions and near-collinear endpoints.
+ * @see https://github.com/google/skia/blob/main/gm/gradients_no_texture.cpp
+ */
 class LinearGradientTinyGm : SkiaGm {
     override val name = "linear_gradient_tiny"
     override val renderFamily = RenderFamily.GRADIENT

@@ -14,6 +14,11 @@ import kotlin.random.Random
  * of N = 100 random stroked rects each. Each pane uses a fresh default-seeded
  * [Random] so the same rects are drawn across all 4 panes.
  */
+/**
+ * Port of Skia's `gm/strokerects.cpp`.
+ * 400 random stroked rects with AA on/off and varying stroke widths.
+ * @see https://github.com/google/skia/blob/main/gm/strokerects.cpp
+ */
 class StrokeRectsGm : SkiaGm {
     override val name = "strokerects"
     override val renderFamily = RenderFamily.PATH

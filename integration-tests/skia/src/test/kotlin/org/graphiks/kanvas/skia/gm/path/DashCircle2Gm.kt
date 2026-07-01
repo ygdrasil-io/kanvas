@@ -17,6 +17,11 @@ import kotlin.math.PI
  * and 7 (flipX + rotate × 2) apply only the scale/flip components.
  * Stroke width is not transformed (GmCanvas transforms path geometry only).
  */
+/**
+ * Port of Skia's `gm/dashcircle.cpp`.
+ * 10 dash patterns over 7 matrices, concentric ovals with varying stroke widths.
+ * @see https://github.com/google/skia/blob/main/gm/dashcircle.cpp
+ */
 class DashCircle2Gm : SkiaGm {
     override val name = "dashcircle2"
     override val renderFamily = RenderFamily.PATH

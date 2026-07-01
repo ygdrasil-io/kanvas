@@ -7,6 +7,11 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.SkiaGm
 
+/**
+ * Port of Skia's `gm/strokes.cpp` (DEF_SIMPLE_GM CubicStroke).
+ * Three near-identical stroked cubics with sub-1% stroke width differences.
+ * @see https://github.com/google/skia/blob/main/gm/strokes.cpp
+ */
 class CubicStrokeGm : SkiaGm {
     override val name = "CubicStroke"
     override val renderFamily = RenderFamily.PATH

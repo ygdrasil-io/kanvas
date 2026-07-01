@@ -12,6 +12,11 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
 
+/**
+ * Port of Skia's `gm/emboss.cpp`.
+ * Walks a small image-and-shape sequence to exercise the emboss mask filter pipeline.
+ * @see https://github.com/google/skia/blob/main/gm/emboss.cpp
+ */
 class EmbossGm : SkiaGm {
     override val name = "emboss"
     override val renderFamily = RenderFamily.BLUR

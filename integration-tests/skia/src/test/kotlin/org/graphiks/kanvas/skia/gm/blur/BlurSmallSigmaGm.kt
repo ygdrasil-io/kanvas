@@ -8,6 +8,11 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
 
+/**
+ * Port of Skia's `gm/blurs.cpp` (DEF_SIMPLE_GM BlurSmallSigma).
+ * Tests image-filter blur identity guards at very small sigmas.
+ * @see https://github.com/google/skia/blob/main/gm/blurs.cpp
+ */
 class BlurSmallSigmaGm : SkiaGm {
     override val name = "BlurSmallSigma"
     override val renderFamily = RenderFamily.BLUR
