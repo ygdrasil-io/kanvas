@@ -77,7 +77,10 @@ internal val LINEAR_GRADIENT_WGSL: String = """
             t = dot(coord.xy - uniforms.start, dir) / lenSq;
         }
         let tClamped = clamp(t, 0.0, 1.0);
-        return mix(uniforms.startColor, uniforms.endColor, tClamped);
+        let startSRGB = vec4f(pow(uniforms.startColor.rgb, vec3f(1.0 / 2.2)), uniforms.startColor.a);
+        let endSRGB = vec4f(pow(uniforms.endColor.rgb, vec3f(1.0 / 2.2)), uniforms.endColor.a);
+        let mixedSRGB = mix(startSRGB, endSRGB, tClamped);
+        return vec4f(pow(mixedSRGB.rgb, vec3f(2.2)), mixedSRGB.a);
     }
 """.trimIndent()
 
@@ -150,7 +153,10 @@ internal val RADIAL_GRADIENT_WGSL: String = """
         let dist = length(dir);
         let t = dist / uniforms.radius;
         let tClamped = clamp(t, 0.0, 1.0);
-        return mix(uniforms.startColor, uniforms.endColor, tClamped);
+        let startSRGB = vec4f(pow(uniforms.startColor.rgb, vec3f(1.0 / 2.2)), uniforms.startColor.a);
+        let endSRGB = vec4f(pow(uniforms.endColor.rgb, vec3f(1.0 / 2.2)), uniforms.endColor.a);
+        let mixedSRGB = mix(startSRGB, endSRGB, tClamped);
+        return vec4f(pow(mixedSRGB.rgb, vec3f(2.2)), mixedSRGB.a);
     }
 """.trimIndent()
 
@@ -178,7 +184,10 @@ internal val SWEEP_GRADIENT_WGSL: String = """
         let range = uniforms.angles.y - uniforms.angles.x;
         let t = select((angle - uniforms.angles.x) / range, 0.0, range < 1.0e-10);
         let tClamped = clamp(t, 0.0, 1.0);
-        return mix(uniforms.startColor, uniforms.endColor, tClamped);
+        let startSRGB = vec4f(pow(uniforms.startColor.rgb, vec3f(1.0 / 2.2)), uniforms.startColor.a);
+        let endSRGB = vec4f(pow(uniforms.endColor.rgb, vec3f(1.0 / 2.2)), uniforms.endColor.a);
+        let mixedSRGB = mix(startSRGB, endSRGB, tClamped);
+        return vec4f(pow(mixedSRGB.rgb, vec3f(2.2)), mixedSRGB.a);
     }
 """.trimIndent()
 
