@@ -49,7 +49,7 @@ class Surface(
 
     /**
      * Copy rendered pixels from a rectangular region into [dstBuffer].
-     * Calls [render] if needed, then copies the pixel region.
+     * Calls [render] on every invocation (no implicit caching).
      *
      * @param src the source rectangle in surface coordinates
      * @param dstBuffer pre-allocated buffer of size (src.width * src.height * 4)

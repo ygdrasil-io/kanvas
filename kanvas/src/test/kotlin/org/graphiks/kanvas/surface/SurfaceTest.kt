@@ -14,10 +14,15 @@ class SurfaceTest {
     @Test
     fun `readPixels copies correct region`() {
         val surface = Surface(100, 100)
-        surface.canvas { drawRect(Rect.fromLTRB(0f, 0f, 100f, 100f), Paint.fill(Color.RED)) }
+        surface.canvas { drawColor(Color.RED) }
         val buffer = UByteArray(10 * 10 * 4)
         val ok = surface.readPixels(Rect.fromLTRB(0f, 0f, 10f, 10f), buffer)
         assertTrue(ok)
+        // Verify first pixel is red (RGBA = 255,0,0,255)
+        assertEquals(255.toByte(), buffer[0].toByte()) // R
+        assertEquals(0.toByte(), buffer[1].toByte())   // G
+        assertEquals(0.toByte(), buffer[2].toByte())   // B
+        assertEquals(255.toByte(), buffer[3].toByte()) // A
     }
     @Test
     fun `Image decode detects PNG magic bytes`() {
@@ -30,5 +35,17 @@ class SurfaceTest {
         val jpegHeader = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0xE0.toByte())
         val img = Image.decode(jpegHeader)
         assertTrue(img.sourceId.contains("jpeg"))
+    }
+    @Test
+    fun `Image decode detects WebP magic bytes with WEBP fourCC`() {
+        val webpHeader = byteArrayOf(0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x45, 0x42, 0x50)
+        val img = Image.decode(webpHeader)
+        assertTrue(img.sourceId.contains("webp"))
+    }
+    @Test
+    fun `Image decode rejects RIFF without WEBP fourCC`() {
+        val riffHeader = byteArrayOf(0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x41, 0x56, 0x49, 0x20) // AVI
+        val img = Image.decode(riffHeader)
+        assertTrue(img.sourceId.contains("unknown"), "RIFF without WEBP should not be detected as webp")
     }
 }

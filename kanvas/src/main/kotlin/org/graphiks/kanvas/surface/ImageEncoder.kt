@@ -68,7 +68,7 @@ fun RenderResult.toPng(): ByteArray {
         PixelFormat.RGBA8 -> ImageEncoder.PixelLayout.RGBA8
         PixelFormat.BGRA8 -> ImageEncoder.PixelLayout.BGRA8
     }
-    return encoder.encode(pixels.toByteArray(), width, height, ImageEncoder.Metadata(layout))
+    return encoder.encode(pixels.toByteArray(), width, height, ImageEncoder.Metadata(layout, colorSpace))
 }
 
 /**
