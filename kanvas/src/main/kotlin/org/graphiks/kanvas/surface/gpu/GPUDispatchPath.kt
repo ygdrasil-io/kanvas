@@ -140,7 +140,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
         is GPUMaterialDescriptor.LinearGradient -> {
             val multiStop = material.allStopPositions != null && material.allStopPositions!!.size > 2
             if (multiStop) {
-                val n = material.allStopPositions!!.size.coerceAtMost(8)
+                val n = material.allStopPositions!!.size.coerceAtMost(256)
                 val bb = java.nio.ByteBuffer.allocate(8224).order(java.nio.ByteOrder.nativeOrder())
                 bb.putFloat(material.startX); bb.putFloat(material.startY)
                 bb.putFloat(material.endX); bb.putFloat(material.endY)
@@ -207,7 +207,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
         is GPUMaterialDescriptor.RadialGradient -> {
             val multiStop = material.allStopPositions != null && material.allStopPositions!!.size > 2
             if (multiStop) {
-                val n = material.allStopPositions!!.size.coerceAtMost(8)
+                val n = material.allStopPositions!!.size.coerceAtMost(256)
                 val bb = java.nio.ByteBuffer.allocate(8224).order(java.nio.ByteOrder.nativeOrder())
                 bb.putFloat(material.centerX); bb.putFloat(material.centerY)
                 bb.putFloat(material.radius)
@@ -271,7 +271,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
         is GPUMaterialDescriptor.SweepGradient -> {
             val multiStop = material.allStopPositions != null && material.allStopPositions!!.size > 2
             if (multiStop) {
-                val n = material.allStopPositions!!.size.coerceAtMost(8)
+                val n = material.allStopPositions!!.size.coerceAtMost(256)
                 val bb = java.nio.ByteBuffer.allocate(8224).order(java.nio.ByteOrder.nativeOrder())
                 bb.putFloat(material.centerX); bb.putFloat(material.centerY)
                 bb.putFloat(material.startAngle); bb.putFloat(material.endAngle)

@@ -141,12 +141,11 @@ internal fun GPUBackendRenderRecorder.dispatchFillRect(
         is GPUMaterialDescriptor.RadialGradient -> {
             val multiStop = material.allStopPositions != null && material.allStopPositions!!.size > 2
             if (multiStop) {
-                val n = material.allStopPositions!!.size.coerceAtMost(8)
+                val n = material.allStopPositions!!.size.coerceAtMost(256)
                 val bb = java.nio.ByteBuffer.allocate(8224).order(java.nio.ByteOrder.nativeOrder())
                 bb.putFloat(material.centerX); bb.putFloat(material.centerY)
                 bb.putFloat(material.radius)
                 bb.putInt(n)        // stopCount at offset 12
-                
                 for (i in 0 until 512) {
                     if (i < n * 2) {
                         if (i % 2 == 0) {
