@@ -8,26 +8,11 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
-import kotlin.math.PI
-import kotlin.math.cos
-import kotlin.math.sin
 import kotlin.random.Random
 
 /**
- * Simplified port of Skia's `gm/ovals.cpp`.
- *
- * A 5 x 8 grid of stroked / filled ovals under combinations of 5 paints
- * and 8 transforms (scale/rotate/skew), plus four special-case rows
- * (tall / wide / super-skinny / super-short ovals) and a reflected-oval
- * row. Each cell draws a bounding rect in gray then the oval itself.
- *
- * Transform support is limited to [GmCanvas.scale]; rotate and skew
- * transforms are replaced with identity so the layout differs from the
- * Skia reference. Colors are generated deterministically from [Random].
- */
-/**
  * Port of Skia's `gm/ovals.cpp`.
- * 5×8 grid of stroked/filled ovals under various matrices and paint styles.
+ * 5x8 grid of stroked/filled ovals under various matrices and paint styles.
  * @see https://github.com/google/skia/blob/main/gm/ovals.cpp
  */
 class OvalGm : SkiaGm {
@@ -82,7 +67,6 @@ class OvalGm : SkiaGm {
             }
         }
 
-        // Tall and skinny oval
         for (i in paints.indices) {
             val oval = Rect.fromLTRB(-20f, -60f, 20f, 60f)
             canvas.save()
@@ -93,7 +77,6 @@ class OvalGm : SkiaGm {
             canvas.restore()
         }
 
-        // Wide and short oval
         for (i in paints.indices) {
             val oval = Rect.fromLTRB(-80f, -30f, 80f, 30f)
             canvas.save()
@@ -104,7 +87,6 @@ class OvalGm : SkiaGm {
             canvas.restore()
         }
 
-        // Super-skinny oval (no rect outline)
         for (i in paints.indices) {
             val oval = Rect.fromLTRB(0f, -60f, 1f, 60f)
             canvas.save()
@@ -114,7 +96,6 @@ class OvalGm : SkiaGm {
             canvas.restore()
         }
 
-        // Super-short oval (no rect outline)
         for (i in paints.indices) {
             val oval = Rect.fromLTRB(-80f, -1f, 80f, 0f)
             canvas.save()
@@ -124,7 +105,6 @@ class OvalGm : SkiaGm {
             canvas.restore()
         }
 
-        // Reflected oval
         for (i in paints.indices) {
             val oval = Rect.fromLTRB(-30f, -30f, 30f, 30f)
             canvas.save()
@@ -142,6 +122,9 @@ class OvalGm : SkiaGm {
             2 -> canvas.scale(2f, 2f)
             3 -> canvas.scale(1f, 2f)
             4 -> canvas.scale(4f, 1f)
+            5 -> canvas.rotate(30f)
+            6 -> canvas.skew(0.5f, 0f)
+            7 -> canvas.scale(1f, -1f)
         }
     }
 

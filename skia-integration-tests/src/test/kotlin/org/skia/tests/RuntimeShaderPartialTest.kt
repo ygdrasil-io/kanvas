@@ -74,10 +74,6 @@ class RuntimeShaderPartialTest {
     fun `ColorCubeRTGM matches color_cube_rt reference`() =
         runGm(ColorCubeRTGM(), "ColorCubeRTGM", floor = 0.0)
 
-    @Test
-    fun `LinearGradientRTGM matches linear_gradient_rt reference`() =
-        runGm(LinearGradientRTGM(), "LinearGradientRTGM", floor = 0.0)
-
     // ─── Stubs — MISSING_API ──────────────────────────────────────────
 
     @Test

@@ -34,11 +34,22 @@ class BasicPathFillPreparedRouteTest {
     }
 
     @Test
+    fun `inverse fill path is accepted`() {
+        val plan = GPUBasicPathFillPreparedPlanner().plan(
+            descriptor = triangleShape,
+            path = trianglePath.copy(inverseFill = true),
+        )
+
+        val route = assertIs<GPUGeometryRoute.Prepared>(plan.route)
+        assertEquals("coverage-mask.sample.path-fill", route.plan.consumerKind)
+        assertContains(plan.dumpLines().joinToString("\n"), "inverse=true")
+    }
+
+    @Test
     fun `unsupported path fill variants refuse with stable diagnostics`() {
         val cases = listOf(
             RefusalCase("unsupported.path.noncanonical_key", path = trianglePath.copy(pathKey = "handle:0xdeadbeef")),
             RefusalCase("unsupported.path.fill_rule", path = trianglePath.copy(fillRule = "WindingMaybe")),
-            RefusalCase("unsupported.path.inverse_fill", path = trianglePath.copy(inverseFill = true)),
             RefusalCase("unsupported.transform.path_perspective", path = trianglePath.copy(transformClass = "perspective")),
             RefusalCase("unsupported.path.edge_budget", path = trianglePath.copy(edgeCount = 257)),
             RefusalCase("unsupported.bounds.path", path = trianglePath.copy(finiteProof = "non-finite")),

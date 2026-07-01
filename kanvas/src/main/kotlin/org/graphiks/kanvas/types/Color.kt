@@ -4,8 +4,8 @@ package org.graphiks.kanvas.types
 value class Color(val packed: UInt) {
     companion object {
         fun fromRGBA(r: Float, g: Float, b: Float, a: Float = 1f): Color {
-            fun clamp(v: Float): UInt = (v.coerceIn(0f, 1f) * 255f).toInt().toUInt()
-            val packed = (clamp(a) shl 24) or (clamp(r) shl 16) or (clamp(g) shl 8) or clamp(b)
+            fun quantize(v: Float): UInt = (v.coerceIn(0f, 1f) * 255f + 0.5f).toInt().toUInt()
+            val packed = (quantize(a) shl 24) or (quantize(r) shl 16) or (quantize(g) shl 8) or quantize(b)
             return Color(packed)
         }
 

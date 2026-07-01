@@ -46,6 +46,18 @@ class StencilCoverGatePlannerTest {
     }
 
     @Test
+    fun `inverse fill path is accepted by stencil cover gate`() {
+        val plan = GPUStencilCoverGatePlanner().plan(
+            descriptor = stencilShape,
+            path = stencilPath.copy(inverseFill = true),
+            evidence = completeStencilCoverEvidence,
+        )
+
+        val route = assertIs<GPUGeometryRoute.StencilCover>(plan.route)
+        assertContains(plan.dumpLines().joinToString("\n"), "inverse=true")
+    }
+
+    @Test
     fun `missing native stencil cover evidence refuses with stable skipped diagnostics`() {
         val cases = listOf(
             StencilCoverRefusalCase(

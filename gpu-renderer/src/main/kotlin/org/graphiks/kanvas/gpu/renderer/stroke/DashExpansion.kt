@@ -1,6 +1,109 @@
 package org.graphiks.kanvas.gpu.renderer.stroke
 
+import kotlin.math.sqrt
+
 data class DashInterval(val length: Float, val isOn: Boolean)
+
+/**
+ * Result of CPU pre-expansion of a tessellated path into dashed vertex segments.
+ *
+ * @property vertices Flat interleaved (x, y) vertex pairs for all dash-on segments.
+ * @property contourStarts Vertex indices (in vertex count, not float count) for each contour.
+ * @property edgeCount Total edges across all dash-on contours.
+ */
+data class DashVertexExpansion(
+    val vertices: List<Float>,
+    val contourStarts: List<Int>,
+    val edgeCount: Int,
+) {
+    companion object {
+        /**
+         * Pre-expands a tessellated path into visible dash-on vertex segments.
+         *
+         * Walks the tessellated vertices as a chain of line segments, computes cumulative
+         * arc length, and extracts the sub-chain of vertices for each dash-on interval.
+         * Each "on" segment becomes a separate contour.
+         *
+         * @param tessellatedVertices Flat interleaved (x, y) vertex pairs.
+         * @param dashIntervals Dash on/off lengths.
+         * @param dashPhase Offset into dash pattern.
+         * @param strokeWidth Stroke width (used only for estimate, not for geometry offset).
+         * @return [DashVertexExpansion] with concatenated on-segment vertices.
+         */
+        fun expandVertices(
+            tessellatedVertices: List<Float>,
+            dashIntervals: FloatArray,
+            dashPhase: Float,
+            strokeWidth: Float,
+        ): DashVertexExpansion {
+            if (tessellatedVertices.size < 4 || dashIntervals.isEmpty()) {
+                return DashVertexExpansion(tessellatedVertices, listOf(0), 0)
+            }
+
+            val cumulative = cumulativeArcLengths(tessellatedVertices)
+            val pathLength = cumulative.last()
+            if (pathLength <= 0f) return DashVertexExpansion(emptyList(), emptyList(), 0)
+
+            val resultVerts = mutableListOf<Float>()
+            val resultContours = mutableListOf<Int>()
+            var currentPos = -dashPhase
+            var dashIdx = 0
+            var isOn = true
+
+            while (currentPos < pathLength) {
+                val dashLen = dashIntervals[dashIdx % dashIntervals.size]
+                val segStart = maxOf(currentPos, 0f)
+                val segEnd = minOf(currentPos + dashLen, pathLength)
+
+                if (isOn && segStart < segEnd) {
+                    val startVertexIdx = findVertexAtLength(cumulative, segStart)
+                    val endVertexIdx = findVertexAtLength(cumulative, segEnd)
+
+                    resultContours.add(resultVerts.size / 2)
+
+                    for (vi in startVertexIdx..endVertexIdx) {
+                        resultVerts.add(tessellatedVertices[vi * 2])
+                        resultVerts.add(tessellatedVertices[vi * 2 + 1])
+                    }
+                }
+
+                currentPos += dashLen
+                isOn = !isOn
+                dashIdx++
+            }
+
+            val edgeCount = maxOf(0, (resultVerts.size / 2) - 1)
+            return DashVertexExpansion(
+                vertices = resultVerts,
+                contourStarts = resultContours,
+                edgeCount = edgeCount,
+            )
+        }
+
+        private fun cumulativeArcLengths(vertices: List<Float>): List<Float> {
+            val cumulative = mutableListOf(0f)
+            var i = 2
+            while (i < vertices.size) {
+                val dx = vertices[i] - vertices[i - 2]
+                val dy = vertices[i + 1] - vertices[i - 1]
+                cumulative.add(cumulative.last() + sqrt(dx * dx + dy * dy))
+                i += 2
+            }
+            return cumulative
+        }
+
+        private fun findVertexAtLength(cumulative: List<Float>, target: Float): Int {
+            var lo = 0
+            var hi = cumulative.size - 1
+            while (lo < hi) {
+                val mid = (lo + hi) / 2
+                if (cumulative[mid] < target) lo = mid + 1
+                else hi = mid
+            }
+            return lo
+        }
+    }
+}
 
 data class DashExpansion(val intervals: List<DashInterval>) {
     companion object {

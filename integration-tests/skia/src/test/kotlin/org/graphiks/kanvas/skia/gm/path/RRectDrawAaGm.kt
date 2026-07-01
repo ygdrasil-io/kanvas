@@ -22,7 +22,7 @@ import org.graphiks.kanvas.types.Rect
 class RRectDrawAaGm : SkiaGm {
     override val name = "rrect_draw_aa"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 0.0
+    override val minSimilarity = 29.0
     override val width = kImageWidth
     override val height = kImageHeight
 

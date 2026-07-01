@@ -178,7 +178,7 @@ class StencilCoverLiveMaterializationTest {
     }
 
     @Test
-    fun `stencil cover live materialization preserves gate refusals`() {
+    fun `inverse fill path materializes through stencil cover gate`() {
         val gate = GPUStencilCoverGatePlanner().plan(
             descriptor = stencilMaterializationShape,
             path = stencilMaterializationPath.copy(inverseFill = true),
@@ -190,14 +190,14 @@ class StencilCoverLiveMaterializationTest {
             context = targetPreparationContext(),
         )
 
-        val refused = assertIs<GPUResourceMaterializationDecision.Refused>(result.resourceDecision)
-        assertEquals("unsupported.geometry.path_empty_inverse_unbounded", refused.diagnostic.code)
+        val materialized = assertIs<GPUResourceMaterializationDecision.Materialized>(result.resourceDecision)
         assertContains(
             result.dumpLines(),
-            "stencil-cover:materialization.refused row=gpu-renderer.path.stencil-cover.live " +
+            "stencil-cover:materialization row=gpu-renderer.path.stencil-cover.live " +
                 "path=path:triangle:v1 attachment=stencil-attachment:triangle " +
-                "code=unsupported.geometry.path_empty_inverse_unbounded " +
-                "adapterBacked=false productActivation=true",
+                "producer=path-fill.stencil-producer cover=path-fill.cover-consumer " +
+                "ordering=producer-before-cover clear=clear-stencil-store-color-discard-stencil " +
+                "compare=equal writeMask=0xff sampleCount=4 adapterBacked=false productActivation=true",
         )
     }
 }
