@@ -4,6 +4,7 @@ import org.graphiks.kanvas.canvas.Canvas
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
+import org.graphiks.kanvas.pipeline.ClipOp
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.types.Point
@@ -75,6 +76,14 @@ class GmCanvas(
         } else {
             rect
         }
+    }
+
+    fun clipPath(path: Path, op: ClipOp = ClipOp.INTERSECT, antiAlias: Boolean = true) {
+        inner.clipPath(path, op, antiAlias)
+    }
+
+    fun clipRRect(rrect: RRect, op: ClipOp = ClipOp.INTERSECT, antiAlias: Boolean = true) {
+        inner.clipRRect(rrect, op, antiAlias)
     }
 
     private fun Matrix33.isIdentity(): Boolean =
