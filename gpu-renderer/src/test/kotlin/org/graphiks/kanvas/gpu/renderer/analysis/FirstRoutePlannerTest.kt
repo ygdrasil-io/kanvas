@@ -577,9 +577,9 @@ class FirstRoutePlannerTest {
         assertEquals("native.path_fill.stencil_cover", plan.analysisRecord.routeDecisionLabel)
     }
 
-    /** FillPath refuses when tessellated vertices are empty. */
+    /** FillPath with empty vertices is now accepted (empty non-inverse paths draw nothing). */
     @Test
-    fun `fill path with empty vertices refuses diagnostically`() {
+    fun `fill path with empty vertices accepted as empty draw`() {
         val command = GPUFillPathCommandBuilder.build(
             commandId = GPUDrawCommandID(23),
             pathKey = "path:triangle:v1",
@@ -602,8 +602,8 @@ class FirstRoutePlannerTest {
         )
 
         val plan = GPUFirstRoutePlanner(capabilities = firstSlicePathFillCapabilities()).plan(command)
-        assertIs<GPURouteDecision.Refused>(plan.routeDecision)
-        assertEquals("unsupported.geometry.path_empty", plan.pass.diagnostics.single().code)
+        assertIs<GPURouteDecision.Prepared>(plan.routeDecision)
+        assertEquals("prepared.path_fill.tessellated", plan.analysisRecord.routeDecisionLabel)
     }
 
     /** FillPath refuses for unsupported material kinds. */

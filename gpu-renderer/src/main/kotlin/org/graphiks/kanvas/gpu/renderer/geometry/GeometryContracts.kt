@@ -1518,8 +1518,7 @@ private fun GPUPathDescriptor.refusalCode(maxEdges: Int): String? =
     when {
         !pathKey.isCanonicalPathKey() -> "unsupported.path.noncanonical_key"
         verbCount <= 0 || pointCount <= 0 -> "unsupported.path.empty"
-        fillRule !in setOf("NonZero", "EvenOdd") -> "unsupported.path.fill_rule"
-        inverseFill -> "unsupported.path.inverse_fill"
+        fillRule !in setOf("NonZero", "EvenOdd", "InverseWinding", "InverseEvenOdd") -> "unsupported.path.fill_rule"
         transformClass == "perspective" -> "unsupported.transform.path_perspective"
         transformClass !in setOf("identity", "translate") -> "unsupported.transform.path_class"
         edgeCount < 0 || edgeCount > maxEdges -> "unsupported.path.edge_budget"
@@ -1613,8 +1612,7 @@ private fun GPUPathDescriptor.stencilCoverPathRefusalCode(maxEdges: Int): String
     when {
         !pathKey.isCanonicalPathKey() -> "unsupported.geometry.path_key_nondeterministic"
         verbCount <= 0 || pointCount <= 0 -> "unsupported.geometry.descriptor_invalid"
-        fillRule !in setOf("NonZero", "EvenOdd") -> "unsupported.geometry.path_fill_rule"
-        inverseFill -> "unsupported.geometry.path_empty_inverse_unbounded"
+        fillRule !in setOf("NonZero", "EvenOdd", "InverseWinding", "InverseEvenOdd") -> "unsupported.geometry.path_fill_rule"
         transformClass == "perspective" -> "unsupported.geometry.perspective_path"
         transformClass !in setOf("identity", "translate") -> "unsupported.transform.path_class"
         edgeCount < 0 || edgeCount > maxEdges -> "unsupported.geometry.path_edge_budget_exceeded"

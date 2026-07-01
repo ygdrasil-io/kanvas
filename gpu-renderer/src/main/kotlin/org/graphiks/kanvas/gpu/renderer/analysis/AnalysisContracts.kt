@@ -1025,8 +1025,6 @@ class GPUFirstRoutePlanner(
     private fun NormalizedDrawCommand.FillPath.refusalCode(): String? =
         coordinateRefusalCode() ?: when {
             stroke -> "unsupported.stroke.unimplemented"
-            pathDataEmpty() -> "unsupported.geometry.path_empty"
-            pathDescriptor.verbCount <= 0 || pathDescriptor.pointCount <= 0 -> "unsupported.geometry.path_empty"
             pathDescriptor.edgeCount < 0 -> "unsupported.geometry.path_invalid_edges"
             transform.type == GPUTransformType.Perspective -> "unsupported.transform.perspective"
             transform.type == GPUTransformType.Singular -> "unsupported.transform.singular"
@@ -1050,10 +1048,6 @@ class GPUFirstRoutePlanner(
             !capabilities.hasFact(firstPathFillCapabilityName) -> "unsupported.pipeline.capability_missing"
             else -> null
         }
-
-    /** Returns true when FillPath has no tessellated vertex data. */
-    private fun NormalizedDrawCommand.FillPath.pathDataEmpty(): Boolean =
-        tessellatedVertices.isEmpty() || contourStarts.isEmpty() || totalVertexCount <= 0
 
     /** Returns true only for explicit validity-affecting capability facts in the immutable snapshot. */
     private fun GPUCapabilities.hasFact(name: String): Boolean =
