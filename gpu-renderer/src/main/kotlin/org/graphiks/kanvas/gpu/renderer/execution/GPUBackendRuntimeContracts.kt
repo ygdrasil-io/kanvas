@@ -254,6 +254,15 @@ interface GPUBackendRenderRecorder {
         blendMode: GPUBlendMode? = null,
     )
 
+    /** Dual-texture blend pass: composites source over destination using a shader-based blend formula. */
+    fun drawBlendPass(
+        wgsl: String,
+        colorFormat: String,
+        srcTextureLabel: String,
+        dstTextureLabel: String,
+        draws: List<GPUBackendRawUniformDraw>,
+    )
+
     /** Draws indexed glyph quads from an A8 atlas texture with per-draw uniform payloads. */
     fun drawTextAtlasPass(
         atlasRgba: ByteArray,
