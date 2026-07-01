@@ -50,7 +50,6 @@ org.graphiks.kanvas.skia.gm.path.PathHugeCrbug800804Gm
 org.graphiks.kanvas.skia.gm.path.PolygonsGm
 org.graphiks.kanvas.skia.gm.path.RRectDrawAaGm
 org.graphiks.kanvas.skia.gm.path.RRectDrawBwGm
-org.graphiks.kanvas.skia.gm.path.RRectEffectGm
 org.graphiks.kanvas.skia.gm.path.RRectGm
 org.graphiks.kanvas.skia.gm.path.SimpleRectGm
 org.graphiks.kanvas.skia.gm.path.SmallPathsGm
