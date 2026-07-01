@@ -74,9 +74,9 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
     when (val material = cmd.material) {
         is GPUMaterialDescriptor.SolidColor -> {
             val colorBb = java.nio.ByteBuffer.allocate(16).order(java.nio.ByteOrder.nativeOrder())
-            colorBb.putFloat(material.r * material.a)
-            colorBb.putFloat(material.g * material.a)
-            colorBb.putFloat(material.b * material.a)
+            colorBb.putFloat(srgbToLinear(material.r) * material.a)
+            colorBb.putFloat(srgbToLinear(material.g) * material.a)
+            colorBb.putFloat(srgbToLinear(material.b) * material.a)
             colorBb.putFloat(material.a)
             drawFullscreenStencilPass(
                 wgsl = SOLID_RECT_WGSL,
@@ -96,13 +96,13 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
             val bb = java.nio.ByteBuffer.allocate(48).order(java.nio.ByteOrder.nativeOrder())
             bb.putFloat(material.startX); bb.putFloat(material.startY)
             bb.putFloat(material.endX); bb.putFloat(material.endY)
-            bb.putFloat(material.startR * material.startA)
-            bb.putFloat(material.startG * material.startA)
-            bb.putFloat(material.startB * material.startA)
+            bb.putFloat(srgbToLinear(material.startR) * material.startA)
+            bb.putFloat(srgbToLinear(material.startG) * material.startA)
+            bb.putFloat(srgbToLinear(material.startB) * material.startA)
             bb.putFloat(material.startA)
-            bb.putFloat(material.endR * material.endA)
-            bb.putFloat(material.endG * material.endA)
-            bb.putFloat(material.endB * material.endA)
+            bb.putFloat(srgbToLinear(material.endR) * material.endA)
+            bb.putFloat(srgbToLinear(material.endG) * material.endA)
+            bb.putFloat(srgbToLinear(material.endB) * material.endA)
             bb.putFloat(material.endA)
             drawFullscreenStencilPass(
                 wgsl = LINEAR_GRADIENT_WGSL,
