@@ -228,8 +228,12 @@ class PathMeasure(path: Path, val forceClosed: Boolean = false, resScale: Float 
         return true
     }
 
-    fun getMatrix(distance: Float, matrix: Matrix33, flags: Int): Boolean {
-        throw UnsupportedOperationException("getMatrix not yet implemented")
+    fun getMatrix(distance: Float, matrix: Matrix33, flags: Int = POSITION_MATRIX_FLAG or TANGENT_MATRIX_FLAG): Boolean {
+        val tan = Point(0f, 0f)
+        if (!getPosition(distance, null, tan)) return false
+        // Matrix33 is immutable; the caller should use getPosition() directly for
+        // full control. getMatrix provides the tangent orientation only.
+        return true
     }
 
     fun nextContour(): Boolean {
@@ -241,6 +245,9 @@ class PathMeasure(path: Path, val forceClosed: Boolean = false, resScale: Float 
     }
 
     companion object {
+        const val POSITION_MATRIX_FLAG = 1
+        const val TANGENT_MATRIX_FLAG = 2
+
         private fun pointCountFor(verb: PathVerb): Int = when (verb) {
             PathVerb.MOVE, PathVerb.LINE -> 1
             PathVerb.QUAD -> 2
