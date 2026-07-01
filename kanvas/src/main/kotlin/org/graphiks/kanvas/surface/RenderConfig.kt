@@ -1,7 +1,7 @@
 package org.graphiks.kanvas.surface
 
 data class RenderConfig(
-    val gpuColorFormat: GPUColorFormat = GPUColorFormat.RGBA8_UNORM,
+    val gpuColorFormat: GPUColorFormat = GPUColorFormat.RGBA8_UNORM_SRGB,
     val maxPathVertices: UInt = 131072u,
     val curveTolerance: Float = 0.25f,
     val maxImagePixels: UInt = 67_108_864u,

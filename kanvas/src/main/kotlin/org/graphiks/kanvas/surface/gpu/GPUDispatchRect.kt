@@ -31,38 +31,110 @@ internal fun GPUBackendRenderRecorder.dispatchFillRect(
 
     when (val material = cmd.material) {
         is GPUMaterialDescriptor.SolidColor -> {
-            val rgba = floatArrayOf(
-                material.r * material.a,
-                material.g * material.a,
-                material.b * material.a,
-                material.a,
-            )
-            drawFullscreenPass(
-                wgsl = SOLID_RECT_WGSL,
+            if (cmd.antiAlias) {
+                val aaBb = java.nio.ByteBuffer.allocate(48).order(java.nio.ByteOrder.nativeOrder())
+                aaBb.putFloat(sx.toFloat()); aaBb.putFloat(sy.toFloat())
+                aaBb.putFloat((sx + sw).toFloat()); aaBb.putFloat((sy + sh).toFloat())
+                aaBb.putFloat(srgbToLinear(material.r) * material.a)
+                aaBb.putFloat(srgbToLinear(material.g) * material.a)
+                aaBb.putFloat(srgbToLinear(material.b) * material.a)
+                aaBb.putFloat(material.a)
+                aaBb.putInt(1) // antiAlias = true (u32)
+                aaBb.putFloat(0f); aaBb.putFloat(0f); aaBb.putFloat(0f) // padding to 48 bytes
+                drawFullscreenRawUniformPass(
+                    wgsl = RECT_AA_WGSL,
+                    colorFormat = config.gpuColorFormat.wgpuLabel,
+                    draws = listOf(
+                        GPUBackendRawUniformDraw(
+                            uniformBytes = aaBb.array(),
+                            scissorX = sx, scissorY = sy,
+                            scissorWidth = sw, scissorHeight = sh,
+                        ),
+                    ),
+                )
+            } else {
+                val rgba = floatArrayOf(
+                    srgbToLinear(material.r) * material.a,
+                    srgbToLinear(material.g) * material.a,
+                    srgbToLinear(material.b) * material.a,
+                    material.a,
+                )
+                drawFullscreenPass(
+                    wgsl = SOLID_RECT_WGSL,
+                    colorFormat = config.gpuColorFormat.wgpuLabel,
+                    draws = listOf(
+                        GPUBackendRectDraw(
+                            rgbaPremul = rgba,
+                            scissorX = sx, scissorY = sy,
+                            scissorWidth = sw, scissorHeight = sh,
+                        ),
+                    ),
+                )
+            }
+        }
+        is GPUMaterialDescriptor.LinearGradient -> {
+            val bb = java.nio.ByteBuffer.allocate(48).order(java.nio.ByteOrder.nativeOrder())
+            bb.putFloat(material.startX); bb.putFloat(material.startY)
+            bb.putFloat(material.endX); bb.putFloat(material.endY)
+            bb.putFloat(srgbToLinear(material.startR) * material.startA)
+            bb.putFloat(srgbToLinear(material.startG) * material.startA)
+            bb.putFloat(srgbToLinear(material.startB) * material.startA)
+            bb.putFloat(material.startA)
+            bb.putFloat(srgbToLinear(material.endR) * material.endA)
+            bb.putFloat(srgbToLinear(material.endG) * material.endA)
+            bb.putFloat(srgbToLinear(material.endB) * material.endA)
+            bb.putFloat(material.endA)
+            drawFullscreenRawUniformPass(
+                wgsl = LINEAR_GRADIENT_WGSL,
                 colorFormat = config.gpuColorFormat.wgpuLabel,
                 draws = listOf(
-                    GPUBackendRectDraw(
-                        rgbaPremul = rgba,
+                    GPUBackendRawUniformDraw(
+                        uniformBytes = bb.array(),
                         scissorX = sx, scissorY = sy,
                         scissorWidth = sw, scissorHeight = sh,
                     ),
                 ),
             )
         }
-        is GPUMaterialDescriptor.LinearGradient -> {
+        is GPUMaterialDescriptor.RadialGradient -> {
             val bb = java.nio.ByteBuffer.allocate(48).order(java.nio.ByteOrder.nativeOrder())
-            bb.putFloat(material.startX); bb.putFloat(material.startY)
-            bb.putFloat(material.endX); bb.putFloat(material.endY)
-            bb.putFloat(material.startR * material.startA)
-            bb.putFloat(material.startG * material.startA)
-            bb.putFloat(material.startB * material.startA)
+            bb.putFloat(material.centerX); bb.putFloat(material.centerY)
+            bb.putFloat(material.radius)
+            bb.putFloat(0f) // padding — vec4f alignment at offset 16
+            bb.putFloat(srgbToLinear(material.startR) * material.startA)
+            bb.putFloat(srgbToLinear(material.startG) * material.startA)
+            bb.putFloat(srgbToLinear(material.startB) * material.startA)
             bb.putFloat(material.startA)
-            bb.putFloat(material.endR * material.endA)
-            bb.putFloat(material.endG * material.endA)
-            bb.putFloat(material.endB * material.endA)
+            bb.putFloat(srgbToLinear(material.endR) * material.endA)
+            bb.putFloat(srgbToLinear(material.endG) * material.endA)
+            bb.putFloat(srgbToLinear(material.endB) * material.endA)
             bb.putFloat(material.endA)
             drawFullscreenRawUniformPass(
-                wgsl = LINEAR_GRADIENT_WGSL,
+                wgsl = RADIAL_GRADIENT_WGSL,
+                colorFormat = config.gpuColorFormat.wgpuLabel,
+                draws = listOf(
+                    GPUBackendRawUniformDraw(
+                        uniformBytes = bb.array(),
+                        scissorX = sx, scissorY = sy,
+                        scissorWidth = sw, scissorHeight = sh,
+                    ),
+                ),
+            )
+        }
+        is GPUMaterialDescriptor.SweepGradient -> {
+            val bb = java.nio.ByteBuffer.allocate(48).order(java.nio.ByteOrder.nativeOrder())
+            bb.putFloat(material.centerX); bb.putFloat(material.centerY)
+            bb.putFloat(material.startAngle); bb.putFloat(material.endAngle)
+            bb.putFloat(srgbToLinear(material.startR) * material.startA)
+            bb.putFloat(srgbToLinear(material.startG) * material.startA)
+            bb.putFloat(srgbToLinear(material.startB) * material.startA)
+            bb.putFloat(material.startA)
+            bb.putFloat(srgbToLinear(material.endR) * material.endA)
+            bb.putFloat(srgbToLinear(material.endG) * material.endA)
+            bb.putFloat(srgbToLinear(material.endB) * material.endA)
+            bb.putFloat(material.endA)
+            drawFullscreenRawUniformPass(
+                wgsl = SWEEP_GRADIENT_WGSL,
                 colorFormat = config.gpuColorFormat.wgpuLabel,
                 draws = listOf(
                     GPUBackendRawUniformDraw(

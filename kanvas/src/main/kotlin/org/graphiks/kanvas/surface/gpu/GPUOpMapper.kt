@@ -41,6 +41,7 @@ internal fun DisplayOp.DrawRect.toNormalizedCommand(
         ),
         source = GPUCommandSource(adapter = "kanvas-surface", operation = "drawRect"),
         stroke = paint.isStroke(),
+        antiAlias = paint.antiAlias,
     )
 }
 
@@ -86,6 +87,7 @@ internal fun DisplayOp.DrawPath.toNormalizedCommand(
         ),
         source = GPUCommandSource(adapter = "kanvas-surface", operation = "drawPath"),
         stroke = paint.isStroke(),
+        antiAlias = paint.antiAlias,
     )
 }
 
@@ -118,6 +120,7 @@ internal fun DisplayOp.DrawRRect.toNormalizedCommand(
         ),
         source = GPUCommandSource(adapter = "kanvas-surface", operation = "drawRRect"),
         stroke = paint.isStroke(),
+        antiAlias = paint.antiAlias,
     )
 }
 

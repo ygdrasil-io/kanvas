@@ -963,6 +963,55 @@ It must not claim support for:
 
 Those routes require later evidence against this spec.
 
+### Initial SDR Implementation — sRGB Output Format
+
+The concrete implementation uses WebGPU's `RGBA8UnormSrgb` attachment format so
+the GPU applies the sRGB OETF automatically on fragment output write.
+
+**Format change:**
+
+- `GPUColorFormat.RGBA8_UNORM_SRGB("rgba8unorm-srgb")` — new variant in
+  `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/GPUColorFormat.kt`
+- `RenderConfig.gpuColorFormat` default changes to `RGBA8_UNORM_SRGB` in
+  `RenderConfig.kt`
+
+**Uniform linearization:**
+
+Current color uniforms carry sRGB-encoded floats (e.g. `0.333` for byte
+`0x55`). With `RGBA8UnormSrgb` the GPU would re-encode the output → double
+encoding. Each dispatch site must linearize the R, G, B components *before*
+premultiplication with alpha:
+
+```kotlin
+private fun srgbToLinear(c: Float): Float =
+    if (c <= 0.04045f) c / 12.92f
+    else ((c + 0.055f) / 1.055f).pow(2.4f)
+```
+
+Affected sites (5 locations across 3 files):
+
+| File | Lines | Material |
+|------|-------|----------|
+| `GPUDispatchRect.kt` | 34-38 | SolidColor |
+| `GPUDispatchRect.kt` | 56-62 | LinearGradient |
+| `GPUDispatchPath.kt` | 77-80 | SolidColor (stencil) |
+| `GPUDispatchPath.kt` | 99-105 | LinearGradient (stencil) |
+| `GPUDispatchRRect.kt` | 45-48 | SolidColor (rrect) |
+
+Alpha is never linearized — the GPU's sRGB OETF does not affect the alpha
+channel.
+
+**Blending:** sRGB framebuffer format causes WebGPU to decode stored sRGB
+values to linear before blending and re-encode on write. This changes blend
+results from the current "linear math on sRGB values" to true linear blending.
+This is physically correct and aligns with the `TargetRequired` sRGB lane
+declared in §Supported Color Space Surface.
+
+**Verification:** After implementation, re-run the Skia GM integration tests.
+`shallow_gradient_linear` should show >99% pixel similarity with tolerance=2.
+The current ~15-17 per-channel offset is eliminated because both the Kanvas
+output and the Skia reference are now sRGB-encoded.
+
 ## Non-Goals
 
 - Do not port Skia's color-management implementation.

@@ -37,15 +37,17 @@ internal fun GPUBackendRenderRecorder.dispatchFillRRect(
     val sw = (minOf(rect.right, clipBounds.right).toInt() - sx).coerceIn(1, surfaceWidth - sx)
     val sh = (minOf(rect.bottom, clipBounds.bottom).toInt() - sy).coerceIn(1, surfaceHeight - sy)
 
-    val bb = java.nio.ByteBuffer.allocate(48).order(java.nio.ByteOrder.nativeOrder())
+    val bb = java.nio.ByteBuffer.allocate(64).order(java.nio.ByteOrder.nativeOrder())
     bb.putFloat(rect.left); bb.putFloat(rect.top)
     bb.putFloat(rect.right); bb.putFloat(rect.bottom)
     bb.putFloat(rx); bb.putFloat(ry)
     bb.putFloat(0f); bb.putFloat(0f)
-    bb.putFloat(material.r * material.a)
-    bb.putFloat(material.g * material.a)
-    bb.putFloat(material.b * material.a)
+    bb.putFloat(srgbToLinear(material.r) * material.a)
+    bb.putFloat(srgbToLinear(material.g) * material.a)
+    bb.putFloat(srgbToLinear(material.b) * material.a)
     bb.putFloat(material.a)
+    bb.putInt(if (cmd.antiAlias) 1 else 0)
+    bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f)
 
     drawFullscreenRawUniformPass(
         wgsl = RRECT_WGSL,

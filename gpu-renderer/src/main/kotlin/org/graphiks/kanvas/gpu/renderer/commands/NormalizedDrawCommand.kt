@@ -909,6 +909,7 @@ sealed interface NormalizedDrawCommand {
          * `false` so all existing fill callers keep fill behavior.
          */
         val stroke: Boolean = false,
+        val antiAlias: Boolean = true,
     ) : NormalizedDrawCommand {
         override val drawKind: GPUDrawKind = GPUDrawKind.FillRect
     }
@@ -927,6 +928,7 @@ sealed interface NormalizedDrawCommand {
         override val source: GPUCommandSource,
         /** See [FillRect.stroke]. Stroke rrect draws refuse instead of filling. */
         val stroke: Boolean = false,
+        val antiAlias: Boolean = true,
     ) : NormalizedDrawCommand {
         override val drawKind: GPUDrawKind = GPUDrawKind.FillRRect
     }
@@ -950,6 +952,7 @@ sealed interface NormalizedDrawCommand {
         override val source: GPUCommandSource,
         /** See [FillRect.stroke]. Stroke path draws refuse instead of filling. */
         val stroke: Boolean = false,
+        val antiAlias: Boolean = true,
     ) : NormalizedDrawCommand {
         override val drawKind: GPUDrawKind = GPUDrawKind.FillPath
     }

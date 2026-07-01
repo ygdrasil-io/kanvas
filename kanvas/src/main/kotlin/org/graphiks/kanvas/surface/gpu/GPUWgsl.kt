@@ -20,6 +20,37 @@ internal val SOLID_RECT_WGSL: String = """
     }
 """.trimIndent()
 
+internal val RECT_AA_WGSL: String = """
+    struct Uniforms {
+        bounds: vec4f,
+        color: vec4f,
+        antiAlias: u32,
+    };
+
+    @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+
+    fn rect_cov(coord: vec2f, bounds: vec4f) -> f32 {
+        let half = vec2f(0.5 * (bounds.z - bounds.x), 0.5 * (bounds.w - bounds.y));
+        let centre = vec2f(0.5 * (bounds.x + bounds.z), 0.5 * (bounds.y + bounds.w));
+        let d = abs(coord - centre) - half;
+        let sdf = max(d.x, d.y);
+        return clamp(0.5 - sdf, 0.0, 1.0);
+    }
+
+    @vertex
+    fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
+        let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
+        let y = f32(idx & 2u) * 2.0 - 1.0;
+        return vec4f(x, y, 0.0, 1.0);
+    }
+
+    @fragment
+    fn fs_main(@builtin(position) coord: vec4f) -> @location(0) vec4f {
+        let cov = select(rect_cov(coord.xy, uniforms.bounds), 1.0, uniforms.antiAlias == 0u);
+        return vec4f(uniforms.color.rgb * cov, uniforms.color.a * cov);
+    }
+""".trimIndent()
+
 internal val LINEAR_GRADIENT_WGSL: String = """
     struct Uniforms {
         start: vec2f,
@@ -55,6 +86,7 @@ internal val RRECT_WGSL: String = """
         bounds: vec4f,
         radii: vec4f,
         color: vec4f,
+        antiAlias: u32,
     };
 
     @group(0) @binding(0) var<uniform> uniforms: Uniforms;
@@ -90,8 +122,63 @@ internal val RRECT_WGSL: String = """
 
     @fragment
     fn fs_main(@builtin(position) coord: vec4f) -> @location(0) vec4f {
-        let cov = rrect_cov(coord.xy, uniforms.bounds, uniforms.radii.x, uniforms.radii.y);
+        let cov = select(rrect_cov(coord.xy, uniforms.bounds, uniforms.radii.x, uniforms.radii.y), 1.0, uniforms.antiAlias == 0u);
         return vec4f(uniforms.color.rgb * cov, uniforms.color.a * cov);
+    }
+""".trimIndent()
+
+internal val RADIAL_GRADIENT_WGSL: String = """
+    struct Uniforms {
+        center: vec2f,
+        radius: f32,
+        startColor: vec4f,
+        endColor: vec4f,
+    };
+
+    @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+
+    @vertex
+    fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
+        let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
+        let y = f32(idx & 2u) * 2.0 - 1.0;
+        return vec4f(x, y, 0.0, 1.0);
+    }
+
+    @fragment
+    fn fs_main(@builtin(position) coord: vec4f) -> @location(0) vec4f {
+        let dir = coord.xy - uniforms.center;
+        let dist = length(dir);
+        let t = dist / uniforms.radius;
+        let tClamped = clamp(t, 0.0, 1.0);
+        return mix(uniforms.startColor, uniforms.endColor, tClamped);
+    }
+""".trimIndent()
+
+internal val SWEEP_GRADIENT_WGSL: String = """
+    struct Uniforms {
+        center: vec2f,
+        angles: vec2f,
+        startColor: vec4f,
+        endColor: vec4f,
+    };
+
+    @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+
+    @vertex
+    fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
+        let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
+        let y = f32(idx & 2u) * 2.0 - 1.0;
+        return vec4f(x, y, 0.0, 1.0);
+    }
+
+    @fragment
+    fn fs_main(@builtin(position) coord: vec4f) -> @location(0) vec4f {
+        let dir = coord.xy - uniforms.center;
+        let angle = atan2(dir.y, dir.x);
+        let range = uniforms.angles.y - uniforms.angles.x;
+        let t = select((angle - uniforms.angles.x) / range, 0.0, range < 1.0e-10);
+        let tClamped = clamp(t, 0.0, 1.0);
+        return mix(uniforms.startColor, uniforms.endColor, tClamped);
     }
 """.trimIndent()
 

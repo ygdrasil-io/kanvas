@@ -17,7 +17,9 @@ internal fun NormalizedDrawCommand.strokeRefusalReasonOrNull(): String? {
         is NormalizedDrawCommand.DrawLayer -> false
         is NormalizedDrawCommand.ApplyFilter -> false
     }
-    return if (stroke) "unsupported_stroke" else null
+    return if (stroke) {
+        if (this is NormalizedDrawCommand.FillPath) "unsupported_stroke" else null
+    } else null
 }
 
 internal fun NormalizedDrawCommand.fillGuardRefusalReasonOrNull(): String? {
@@ -27,7 +29,10 @@ internal fun NormalizedDrawCommand.fillGuardRefusalReasonOrNull(): String? {
     val acceptedByDispatch = this is NormalizedDrawCommand.FillRect ||
         this is NormalizedDrawCommand.FillPath
     if (material !is GPUMaterialDescriptor.SolidColor &&
-        (!acceptedByDispatch || material !is GPUMaterialDescriptor.LinearGradient)
+        (!acceptedByDispatch || 
+         (material !is GPUMaterialDescriptor.LinearGradient &&
+          material !is GPUMaterialDescriptor.RadialGradient &&
+          material !is GPUMaterialDescriptor.SweepGradient))
     ) {
         return "unsupported_material:${material.kind.name}"
     }
