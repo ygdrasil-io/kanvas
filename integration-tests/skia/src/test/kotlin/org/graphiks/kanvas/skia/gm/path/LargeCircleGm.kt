@@ -14,7 +14,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 class LargeCircleGm : SkiaGm {
     override val name = "largecircle"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 94.2
+    override val minSimilarity = 97.0
     override val width = 250
     override val height = 250
 

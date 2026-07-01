@@ -18,7 +18,7 @@ import org.graphiks.kanvas.types.Color
 class ConcavePathsGm : SkiaGm {
     override val name = "concavepaths"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 80.7
+    override val minSimilarity = 93.0
     override val width = 500
     override val height = 600
 

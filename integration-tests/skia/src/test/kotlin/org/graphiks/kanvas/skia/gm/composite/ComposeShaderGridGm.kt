@@ -103,7 +103,7 @@ class ComposeShaderGridGm : SkiaGm {
         alpha: Float,
     ) {
         val r = Rect(0f, 0f, CELL_SIZE, CELL_SIZE)
-        // Simulate saveLayer with a simple draw
+        canvas.saveLayer()
         val dstPaint = Paint(
             color = Color.fromRGBA(1f, 0f, 0f, alpha),
             shader = dst,
@@ -116,6 +116,7 @@ class ComposeShaderGridGm : SkiaGm {
             blendMode = mode,
         )
         canvas.drawRect(r, srcPaint)
+        canvas.restore()
     }
 
     private fun drawComposed(

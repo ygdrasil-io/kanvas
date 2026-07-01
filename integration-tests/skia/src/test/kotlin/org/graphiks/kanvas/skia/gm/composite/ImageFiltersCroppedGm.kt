@@ -23,24 +23,13 @@ class ImageFiltersCroppedGm : SkiaGm {
     override val width = 400
     override val height = 960
 
-    private fun intToColor(value: Int): Color {
-        val a = (value ushr 24) and 0xFF
-        val r = (value ushr 16) and 0xFF
-        val g = (value ushr 8) and 0xFF
-        val b = value and 0xFF
-        return Color.fromRGBA(r / 255f, g / 255f, b / 255f, a / 255f)
-    }
-
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        val checkerboard = makeCheckerboard()
-
         val drawProc: List<(GmCanvas, Rect, ImageFilter?) -> Unit> = listOf(
-            ::drawBitmap, ::drawPath, ::drawPaint, ::drawText,
+            ::drawRectProc, ::drawCircleProc, ::drawColorProc, ::drawRectProc,
         )
 
         val cf = ColorFilter.Blend(Color.BLUE, BlendMode.SRC_IN)
 
-        // Simplified filters - using only available ImageFilter types
         val filters: List<ImageFilter?> = listOf(
             null,
             ImageFilter.ColorFilter(cf, null),
@@ -68,7 +57,7 @@ class ImageFiltersCroppedGm : SkiaGm {
         for (j in drawProc.indices) {
             canvas.save()
             for (i in filters.indices) {
-                canvas.drawImage(checkerboard, Rect(0f, 0f, 80f, 80f))
+                drawCheckerboard(canvas, 80f, 80f)
                 drawProc[j](canvas, r, filters[i])
                 canvas.translate(0f, dy)
             }
@@ -77,7 +66,7 @@ class ImageFiltersCroppedGm : SkiaGm {
         }
     }
 
-    private fun drawPaint(canvas: GmCanvas, r: Rect, imf: ImageFilter?) {
+    private fun drawColorProc(canvas: GmCanvas, r: Rect, imf: ImageFilter?) {
         val paint = Paint(
             imageFilter = imf,
             color = Color.BLACK,
@@ -88,7 +77,7 @@ class ImageFiltersCroppedGm : SkiaGm {
         canvas.restore()
     }
 
-    private fun drawPath(canvas: GmCanvas, r: Rect, imf: ImageFilter?) {
+    private fun drawCircleProc(canvas: GmCanvas, r: Rect, imf: ImageFilter?) {
         val magenta = Color.fromRGBA(1f, 0f, 1f, 1f)
         val paint = Paint(
             color = magenta,
@@ -98,22 +87,28 @@ class ImageFiltersCroppedGm : SkiaGm {
         canvas.drawCircle(r.center.x, r.center.y, r.width * 2f / 5f, paint)
     }
 
-    private fun drawText(canvas: GmCanvas, r: Rect, imf: ImageFilter?) {
+    private fun drawRectProc(canvas: GmCanvas, r: Rect, imf: ImageFilter?) {
         val paint = Paint(
             imageFilter = imf,
             color = Color.GREEN,
         )
-        // Simplified - just draw a rect instead of text
         canvas.drawRect(r, paint)
     }
 
-    private fun drawBitmap(canvas: GmCanvas, r: Rect, imf: ImageFilter?) {
-        // Simplified - just draw a path
-        drawPath(canvas, r, imf)
+    private fun drawCheckerboard(canvas: GmCanvas, w: Float, h: Float) {
+        val cell = w / CHECKER_COLS.toFloat()
+        for (row in 0 until CHECKER_COLS) {
+            for (col in 0 until CHECKER_COLS) {
+                val color = if ((row + col) % 2 == 0) Color.WHITE else Color.BLACK
+                val paint = Paint(color = color, antiAlias = false)
+                val cx = col * cell
+                val cy = row * cell
+                canvas.drawRect(Rect(cx, cy, cx + cell, cy + cell), paint)
+            }
+        }
     }
 
-    private fun makeCheckerboard(): org.graphiks.kanvas.image.Image {
-        // Return a simple placeholder image
-        return org.graphiks.kanvas.image.Image(80, 80, sourceId = "checkerboard")
+    private companion object {
+        private const val CHECKER_COLS = 8
     }
 }

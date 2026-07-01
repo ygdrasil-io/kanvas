@@ -21,7 +21,7 @@ import kotlin.math.max
 class StrokedLineCapsGm : SkiaGm {
     override val name = "strokedline_caps"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 89.8
+    override val minSimilarity = 92.0
     override val width = 1400
     override val height = 740
 

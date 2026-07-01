@@ -81,6 +81,87 @@ class Path internal constructor() {
         return this
     }
 
+    fun reverseAddPath(src: Path): Path {
+        val sVerbs = src.verbs
+        val sPoints = src.points
+
+        var vi = 0
+        var pi = 0
+
+        val ptCounts = mapOf(
+            PathVerb.MOVE to 1, PathVerb.LINE to 1,
+            PathVerb.QUAD to 2, PathVerb.CUBIC to 3,
+            PathVerb.ARC_TO to 4, PathVerb.CLOSE to 0,
+        )
+
+        while (vi < sVerbs.size) {
+            if (sVerbs[vi] != PathVerb.MOVE) { vi++; pi++; continue }
+
+            // Collect contour into segments
+            val segVerbs = mutableListOf<PathVerb>()
+            val segPtStart = mutableListOf<Int>()
+            val segPtCount = mutableListOf<Int>()
+
+            var v = vi
+            var p = pi
+            while (v < sVerbs.size && (v == vi || sVerbs[v] != PathVerb.MOVE)) {
+                val c = ptCounts[sVerbs[v]]!!
+                segVerbs.add(sVerbs[v])
+                segPtStart.add(p)
+                segPtCount.add(c)
+                p += c
+                v++
+            }
+
+            val hasClose = segVerbs.last() == PathVerb.CLOSE
+            val lastReal = if (hasClose) segVerbs.size - 2 else segVerbs.size - 1
+
+            // Reversed start = original last segment's endpoint
+            val (lastEndX, lastEndY) = segmentEndPoint(segVerbs[lastReal], sPoints, segPtStart[lastReal])
+            moveTo(lastEndX, lastEndY)
+
+            // Walk backwards, skipping MOVE at index 0
+            for (si in lastReal downTo 1) {
+                val startX: Float
+                val startY: Float
+                if (si > 1) {
+                    val p = segmentEndPoint(segVerbs[si - 1], sPoints, segPtStart[si - 1])
+                    startX = p.first; startY = p.second
+                } else {
+                    startX = sPoints[segPtStart[0]].x
+                    startY = sPoints[segPtStart[0]].y
+                }
+
+                val verb = segVerbs[si]
+                val base = segPtStart[si]
+                when (verb) {
+                    PathVerb.LINE -> lineTo(startX, startY)
+                    PathVerb.QUAD -> quadTo(sPoints[base].x, sPoints[base].y, startX, startY)
+                    PathVerb.CUBIC -> cubicTo(
+                        sPoints[base + 1].x, sPoints[base + 1].y,
+                        sPoints[base].x, sPoints[base].y,
+                        startX, startY,
+                    )
+                    PathVerb.ARC_TO -> {
+                        val rx = sPoints[base].x; val ry = sPoints[base].y
+                        val axisRot = sPoints[base + 1].x
+                        val largeArc = sPoints[base + 1].y > 0f
+                        val sweep = !(sPoints[base + 2].x > 0f)
+                        arcTo(rx, ry, axisRot, largeArc, sweep, startX, startY)
+                    }
+                    else -> {}
+                }
+            }
+
+            if (hasClose) close()
+
+            vi = v
+            pi = p
+        }
+
+        return this
+    }
+
     fun transform(tx: Float, ty: Float, sx: Float, sy: Float): Path {
         val m = Matrix33.translate(tx, ty) * Matrix33.scale(sx, sy)
         return transform(m)
@@ -102,6 +183,19 @@ class Path internal constructor() {
             val scope = PathScope()
             scope.block()
             return scope.build()
+        }
+
+        private fun segmentEndPoint(
+            verb: PathVerb, points: List<Point>, ptBase: Int,
+        ): Pair<Float, Float> {
+            val idx = when (verb) {
+                PathVerb.MOVE, PathVerb.LINE -> ptBase
+                PathVerb.QUAD -> ptBase + 1
+                PathVerb.CUBIC -> ptBase + 2
+                PathVerb.ARC_TO -> ptBase + 3
+                else -> ptBase
+            }
+            return points[idx].x to points[idx].y
         }
     }
 }

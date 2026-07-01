@@ -8,74 +8,135 @@ import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.paint.StrokeCap
 import org.graphiks.kanvas.paint.StrokeJoin
 import org.graphiks.kanvas.types.Color
+import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.PI
+import kotlin.math.max
+import kotlin.math.min
 
 class GmCanvas(
     private val inner: Canvas,
     val width: Int,
     val height: Int,
 ) {
-    private val transformStack = mutableListOf<Transform>()
-    private var currentTransform = Transform()
-
-    private data class Transform(
-        val tx: Float = 0f,
-        val ty: Float = 0f,
-        val sx: Float = 1f,
-        val sy: Float = 1f,
-    )
+    private val transformStack = mutableListOf<Matrix33>()
+    private val clipStack = mutableListOf<Rect?>()
+    private val layerStack = mutableListOf<Boolean>()
+    private var currentTransform = Matrix33.identity()
+    private var currentClip: Rect? = null
 
     fun save() {
         transformStack.add(currentTransform)
+        clipStack.add(currentClip)
+        layerStack.add(false)
+    }
+
+    fun saveLayer(bounds: Rect? = null, paint: Paint? = null) {
+        transformStack.add(currentTransform)
+        clipStack.add(currentClip)
+        layerStack.add(true)
+        inner.saveLayer(bounds, paint)
     }
 
     fun restore() {
         currentTransform = transformStack.removeLast()
+        currentClip = clipStack.removeLast()
+        if (layerStack.removeLast()) {
+            inner.restore()
+        }
     }
 
     fun translate(dx: Float, dy: Float) {
-        currentTransform = currentTransform.copy(
-            tx = currentTransform.tx + dx * currentTransform.sx,
-            ty = currentTransform.ty + dy * currentTransform.sy,
-        )
+        currentTransform = currentTransform * Matrix33.translate(dx, dy)
     }
 
     fun scale(sx: Float, sy: Float) {
-        currentTransform = currentTransform.copy(
-            sx = currentTransform.sx * sx,
-            sy = currentTransform.sy * sy,
-        )
+        currentTransform = currentTransform * Matrix33.scale(sx, sy)
+    }
+
+    fun rotate(degrees: Float) {
+        currentTransform = currentTransform * Matrix33.rotate(degrees)
+    }
+
+    fun skew(sx: Float, sy: Float) {
+        currentTransform = currentTransform * Matrix33.skew(sx, sy)
+    }
+
+    fun concat(matrix: Matrix33) {
+        currentTransform = currentTransform * matrix
     }
 
     fun clipRect(rect: Rect) {
-        // no-op stub
+        currentClip = if (currentClip != null) {
+            intersectRects(currentClip!!, rect)
+        } else {
+            rect
+        }
+    }
+
+    private fun Matrix33.isIdentity(): Boolean =
+        scaleX == 1f && skewX == 0f && transX == 0f &&
+        skewY == 0f && scaleY == 1f && transY == 0f &&
+        persp0 == 0f && persp1 == 0f && persp2 == 1f
+
+    private fun transformRect(clip: Rect): Rect? {
+        val t = currentTransform
+        val p0 = t * Point(clip.left, clip.top)
+        val p1 = t * Point(clip.right, clip.top)
+        val p2 = t * Point(clip.right, clip.bottom)
+        val p3 = t * Point(clip.left, clip.bottom)
+        val l = min(min(p0.x, p1.x), min(p2.x, p3.x))
+        val tp = min(min(p0.y, p1.y), min(p2.y, p3.y))
+        val r = max(max(p0.x, p1.x), max(p2.x, p3.x))
+        val b = max(max(p0.y, p1.y), max(p2.y, p3.y))
+        return if (l < r && tp < b) Rect(l, tp, r, b) else null
+    }
+
+    private inline fun withClip(block: () -> Unit) {
+        val clip = currentClip
+        if (clip == null) {
+            block()
+            return
+        }
+        val innerRect = transformRect(clip) ?: return
+        inner.save()
+        inner.clipRect(innerRect)
+        block()
+        inner.restore()
     }
 
     fun drawRect(rect: Rect, paint: Paint) {
-        if (currentTransform == Transform()) {
-            inner.drawRect(rect, paint)
-        } else {
-            val t = currentTransform
-            val path = Path {
-                moveTo(rect.left * t.sx + t.tx, rect.top * t.sy + t.ty)
-                lineTo(rect.right * t.sx + t.tx, rect.top * t.sy + t.ty)
-                lineTo(rect.right * t.sx + t.tx, rect.bottom * t.sy + t.ty)
-                lineTo(rect.left * t.sx + t.tx, rect.bottom * t.sy + t.ty)
-                close()
+        withClip {
+            if (currentTransform.isIdentity()) {
+                inner.drawRect(rect, paint)
+            } else {
+                val t = currentTransform
+                val p0 = t * Point(rect.left, rect.top)
+                val p1 = t * Point(rect.right, rect.top)
+                val p2 = t * Point(rect.right, rect.bottom)
+                val p3 = t * Point(rect.left, rect.bottom)
+                val path = Path {
+                    moveTo(p0.x, p0.y)
+                    lineTo(p1.x, p1.y)
+                    lineTo(p2.x, p2.y)
+                    lineTo(p3.x, p3.y)
+                    close()
+                }
+                inner.drawPath(path, paint)
             }
-            inner.drawPath(path, paint)
         }
     }
 
     fun drawPath(path: Path, paint: Paint) {
-        if (currentTransform == Transform()) {
-            inner.drawPath(path, paint)
-        } else {
-            val t = currentTransform
-            inner.drawPath(path.transform(t.tx, t.ty, t.sx, t.sy), paint)
+        withClip {
+            if (currentTransform.isIdentity()) {
+                inner.drawPath(path, paint)
+            } else {
+                inner.drawPath(path.transform(currentTransform), paint)
+            }
         }
     }
 
@@ -125,17 +186,29 @@ class GmCanvas(
     }
 
     fun drawImage(image: org.graphiks.kanvas.image.Image, rect: Rect, paint: Paint? = null) {
-        if (currentTransform == Transform()) {
-            inner.drawImage(image, rect, paint)
-        } else {
-            val t = currentTransform
-            val transformed = Rect(
-                rect.left * t.sx + t.tx,
-                rect.top * t.sy + t.ty,
-                rect.right * t.sx + t.tx,
-                rect.bottom * t.sy + t.ty,
-            )
-            inner.drawImage(image, transformed, paint)
+        withClip {
+            if (currentTransform.isIdentity()) {
+                inner.drawImage(image, rect, paint)
+            } else {
+                val t = currentTransform
+                val p0 = t * Point(rect.left, rect.top)
+                val p1 = t * Point(rect.right, rect.bottom)
+                val left = min(p0.x, p1.x)
+                val top = min(p0.y, p1.y)
+                val right = max(p0.x, p1.x)
+                val bottom = max(p0.y, p1.y)
+                inner.drawImage(image, Rect(left, top, right, bottom), paint)
+            }
+        }
+    }
+
+    private companion object {
+        private fun intersectRects(a: Rect, b: Rect): Rect? {
+            val l = max(a.left, b.left)
+            val t = max(a.top, b.top)
+            val r = min(a.right, b.right)
+            val bt = min(a.bottom, b.bottom)
+            return if (l < r && t < bt) Rect(l, t, r, bt) else null
         }
     }
 }
