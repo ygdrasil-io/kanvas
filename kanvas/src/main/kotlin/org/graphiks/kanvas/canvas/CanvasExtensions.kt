@@ -6,6 +6,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.types.CornerRadii
 import org.graphiks.kanvas.types.RRect
 import org.graphiks.kanvas.types.Rect
+import org.graphiks.kanvas.picture.PictureRecorder
 import kotlin.math.PI
 
 /** Draw an oval inscribed in [rect] filled/stroked with [paint]. */
@@ -97,4 +98,15 @@ inline fun Canvas.withClipPath(path: Path, block: Canvas.() -> Unit) {
  */
 inline fun Canvas.withTransform(block: Canvas.() -> Unit) {
     this.save(); try { block() } finally { this.restore() }
+}
+
+/**
+ * Execute [block] on a temporary picture recorded within [bounds],
+ * then draw the resulting picture onto this canvas.
+ */
+fun Canvas.withPicture(bounds: Rect, paint: Paint? = null, block: Canvas.() -> Unit) {
+    val recorder = PictureRecorder()
+    val pictureCanvas = recorder.beginRecording(bounds)
+    pictureCanvas.block()
+    drawPicture(recorder.finishRecordingAsPicture(), paint)
 }

@@ -6,6 +6,11 @@ import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.pipeline.ClipOp
 import org.graphiks.kanvas.types.*
+import org.graphiks.kanvas.types.PointMode
+import org.graphiks.kanvas.types.Lattice
+import org.graphiks.kanvas.types.Vertices
+import org.graphiks.kanvas.picture.Picture
+import org.graphiks.kanvas.paint.BlendMode
 
 /**
  * A immediate-mode style 2D drawing surface that records drawing operations into
@@ -39,6 +44,39 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
             is ClipStack.DeviceRect -> clip.rect
             is ClipStack.Complex -> Rect.EMPTY
         }
+
+    /**
+     * Return true if [rect] is fully outside the current clip.
+     * Returns false for complex clips (conservative: may draw).
+     */
+    fun quickReject(rect: Rect): Boolean {
+        if (currentClip is ClipStack.WideOpen) return false
+        if (currentClip is ClipStack.DeviceRect) {
+            val c = (currentClip as ClipStack.DeviceRect).rect
+            return rect.right <= c.left || rect.left >= c.right ||
+                   rect.bottom <= c.top || rect.top >= c.bottom
+        }
+        return false
+    }
+
+    /** Return true if [path]'s bounds are fully outside the current clip. */
+    fun quickReject(path: Path): Boolean {
+        // Compute conservative bounds from path points
+        var minX = Float.MAX_VALUE; var minY = Float.MAX_VALUE
+        var maxX = Float.MIN_VALUE; var maxY = Float.MIN_VALUE
+        for (pt in path.points()) {
+            if (pt.x < minX) minX = pt.x; if (pt.y < minY) minY = pt.y
+            if (pt.x > maxX) maxX = pt.x; if (pt.y > maxY) maxY = pt.y
+        }
+        if (minX == Float.MAX_VALUE) return false
+        return quickReject(Rect.fromLTRB(minX, minY, maxX, maxY))
+    }
+
+    /** True if the current clip region is empty (nothing visible). */
+    val isClipEmpty: Boolean get() = currentClip.isEmpty
+
+    /** True if the current clip is a single axis-aligned rectangle. */
+    val isClipRect: Boolean get() = currentClip.isRect
 
     /** Draw an axis-aligned rectangle filled/stroked with [paint]. */
     fun drawRect(rect: Rect, paint: Paint) {
@@ -77,6 +115,61 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
     /** Draw a [TextBlob] at the given position with [paint]. */
     fun drawText(blob: TextBlob, x: Float, y: Float, paint: Paint) {
         buffer.append(DisplayOp.DrawText(blob, x, y, paint, currentTransform, currentClip))
+    }
+
+    /** Fill the entire canvas with [color] using optional [mode] (default: SRC_OVER). */
+    fun drawColor(color: Color, mode: BlendMode = BlendMode.SRC_OVER) {
+        buffer.append(DisplayOp.DrawColor(color, mode, currentTransform, currentClip))
+    }
+
+    /** Overwrite the entire canvas with [color]. */
+    fun clear(color: Color) {
+        buffer.append(DisplayOp.Clear(color))
+    }
+
+    /** Draw a single point at (x, y). */
+    fun drawPoint(x: Float, y: Float, paint: Paint) {
+        buffer.append(DisplayOp.DrawPoint(x, y, paint, currentTransform, currentClip))
+    }
+
+    /** Draw a list of [points] with the given point [mode]. */
+    fun drawPoints(mode: PointMode, points: List<Point>, paint: Paint) {
+        buffer.append(DisplayOp.DrawPoints(mode, points, paint, currentTransform, currentClip))
+    }
+
+    /** Draw a double rounded rectangle (outer fill, inner hole). */
+    fun drawDRRect(outer: RRect, inner: RRect, paint: Paint) {
+        buffer.append(DisplayOp.DrawDRRect(outer, inner, paint, currentTransform, currentClip))
+    }
+
+    /** Draw a 9-patch [image] with [center] defining corner sizes, scaled to [dst]. */
+    fun drawImageNine(image: Image, center: Rect, dst: Rect, paint: Paint? = null) {
+        buffer.append(DisplayOp.DrawImageNine(image, center, dst, paint, currentTransform, currentClip))
+    }
+
+    /** Draw a lattice [image] over a grid defined by [lattice], scaled to [dst]. */
+    fun drawImageLattice(image: Image, lattice: Lattice, dst: Rect, paint: Paint? = null) {
+        buffer.append(DisplayOp.DrawImageLattice(image, lattice, dst, paint, currentTransform, currentClip))
+    }
+
+    /** Draw a pre-recorded [picture] with optional [paint] modulation. */
+    fun drawPicture(picture: Picture, paint: Paint? = null) {
+        buffer.append(DisplayOp.DrawPicture(picture, paint, currentTransform, currentClip))
+    }
+
+    /** Draw a triangle mesh from [vertices]. */
+    fun drawVertices(vertices: Vertices, paint: Paint) {
+        buffer.append(DisplayOp.DrawVertices(vertices, paint, currentTransform, currentClip))
+    }
+
+    /** Batch-draw sprites from [atlas] texture. */
+    fun drawAtlas(atlas: Image, transforms: List<Matrix33>, texRects: List<Rect>, colors: List<Color>? = null, blendMode: BlendMode = BlendMode.SRC_OVER, paint: Paint? = null) {
+        buffer.append(DisplayOp.DrawAtlas(atlas, transforms, texRects, colors, blendMode, paint, currentTransform, currentClip))
+    }
+
+    /** Add a metadata annotation (no visual output). */
+    fun drawAnnotation(rect: Rect, key: String, value: String) {
+        buffer.append(DisplayOp.Annotation(rect, key, value))
     }
 
     /**

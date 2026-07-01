@@ -186,6 +186,37 @@ internal fun renderViaGpu(
                     is DisplayOp.SetClip,
                     is DisplayOp.BeginLayer,
                     is DisplayOp.EndLayer -> { /* state ops */ }
+                    is DisplayOp.DrawColor -> {
+                        diagnostics.fatal("refuse:drawColor:${cmdId.value}", "drawColor", "unsupported_operation")
+                    }
+                    is DisplayOp.Clear -> {
+                        diagnostics.fatal("refuse:clear:${cmdId.value}", "clear", "unsupported_operation")
+                    }
+                    is DisplayOp.DrawPoint -> {
+                        diagnostics.fatal("refuse:drawPoint:${cmdId.value}", "drawPoint", "unsupported_operation")
+                    }
+                    is DisplayOp.DrawPoints -> {
+                        diagnostics.fatal("refuse:drawPoints:${cmdId.value}", "drawPoints", "unsupported_operation")
+                    }
+                    is DisplayOp.DrawDRRect -> {
+                        diagnostics.fatal("refuse:drawDRRect:${cmdId.value}", "drawDRRect", "unsupported_operation")
+                    }
+                    is DisplayOp.DrawImageNine -> {
+                        diagnostics.fatal("refuse:drawImageNine:${cmdId.value}", "drawImageNine", "unsupported_operation")
+                    }
+                    is DisplayOp.DrawImageLattice -> {
+                        diagnostics.fatal("refuse:drawImageLattice:${cmdId.value}", "drawImageLattice", "unsupported_operation")
+                    }
+                    is DisplayOp.DrawPicture -> {
+                        diagnostics.fatal("refuse:drawPicture:${cmdId.value}", "drawPicture", "unsupported_operation")
+                    }
+                    is DisplayOp.DrawVertices -> {
+                        diagnostics.fatal("refuse:drawVertices:${cmdId.value}", "drawVertices", "unsupported_operation")
+                    }
+                    is DisplayOp.DrawAtlas -> {
+                        diagnostics.fatal("refuse:drawAtlas:${cmdId.value}", "drawAtlas", "unsupported_operation")
+                    }
+                    is DisplayOp.Annotation -> { /* no visual output */ }
                 }
             }
 

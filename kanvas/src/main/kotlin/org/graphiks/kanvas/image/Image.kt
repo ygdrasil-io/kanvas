@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.image
 
+import org.graphiks.kanvas.types.ColorSpace
+
 enum class ColorType { RGBA_8888, BGRA_8888, ALPHA_8, GRAY_8 }
 
 data class Image(
@@ -8,6 +10,7 @@ data class Image(
     val colorType: ColorType = ColorType.RGBA_8888,
     val sourceId: String,
     val pixels: ByteArray? = null,
+    val colorSpace: ColorSpace = ColorSpace.SRGB,
 ) {
     companion object {
         fun decode(bytes: ByteArray, mimeType: String? = null): Image =
