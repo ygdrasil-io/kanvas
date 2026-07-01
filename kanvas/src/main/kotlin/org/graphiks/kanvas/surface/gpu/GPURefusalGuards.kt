@@ -7,18 +7,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 
 internal fun NormalizedDrawCommand.strokeRefusalReasonOrNull(): String? {
-    val stroke = when (this) {
-        is NormalizedDrawCommand.FillRect -> stroke
-        is NormalizedDrawCommand.FillRRect -> stroke
-        is NormalizedDrawCommand.FillPath -> stroke
-        is NormalizedDrawCommand.DrawTextRun -> false
-        is NormalizedDrawCommand.DrawImageRect -> false
-        is NormalizedDrawCommand.DrawLayer -> false
-        is NormalizedDrawCommand.ApplyFilter -> false
-    }
-    return if (stroke) {
-        if (this is NormalizedDrawCommand.FillPath) "unsupported_stroke" else null
-    } else null
+    return null // stroke is now handled via geometry conversion
 }
 
 internal fun NormalizedDrawCommand.fillGuardRefusalReasonOrNull(): String? {

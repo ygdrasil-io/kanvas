@@ -92,6 +92,7 @@ internal fun DisplayOp.DrawPath.toNormalizedCommand(
         ),
         source = GPUCommandSource(adapter = "kanvas-surface", operation = "drawPath"),
         stroke = paint.isStroke(),
+        strokeWidth = paint.strokeWidth,
         antiAlias = paint.antiAlias,
         blend = paint.blendMode.toGpuBlendFacts(),
     )

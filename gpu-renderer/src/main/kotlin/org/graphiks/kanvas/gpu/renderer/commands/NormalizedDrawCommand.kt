@@ -956,6 +956,8 @@ sealed interface NormalizedDrawCommand {
         override val source: GPUCommandSource,
         /** See [FillRect.stroke]. Stroke path draws refuse instead of filling. */
         val stroke: Boolean = false,
+        /** Stroke width used when [stroke] is true. Default 1f. */
+        val strokeWidth: Float = 1f,
         val antiAlias: Boolean = true,
     ) : NormalizedDrawCommand {
         override val drawKind: GPUDrawKind = GPUDrawKind.FillPath
