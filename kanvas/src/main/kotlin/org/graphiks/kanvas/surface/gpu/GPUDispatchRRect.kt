@@ -22,6 +22,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillRRect(
     cmd.fillGuardRefusalReasonOrNull()?.let { refuse(it); return }
     cmd.nonUniformRadiiRefusalReasonOrNull()?.let { refuse(it); return }
 
+    val blendMode = cmd.blend.blendMode
     val material = cmd.material as? GPUMaterialDescriptor.SolidColor ?: run {
         refuse("unsupported_material:${cmd.material.kind.name}")
         return
@@ -59,6 +60,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillRRect(
                 scissorWidth = sw, scissorHeight = sh,
             ),
         ),
+        blendMode = blendMode,
     )
     dispatched.add(cmd.commandId.toString())
     diagnostics.degrade("dispatch:${cmd.diagnosticName}", cmd.diagnosticName, "dispatched")

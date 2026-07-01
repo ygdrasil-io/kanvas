@@ -52,6 +52,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
 
     cmd.fillGuardRefusalReasonOrNull()?.let { refuse(it); return }
 
+    val blendMode = cmd.blend.blendMode
     val tessVertices = cmd.tessellatedVertices
     val vertexCount = cmd.totalVertexCount
     if (vertexCount < 3 || tessVertices.size < 6) {
@@ -129,6 +130,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
                         scissorWidth = sw, scissorHeight = sh,
                     ),
                 ),
+                blendMode = blendMode,
             )
         }
         is GPUMaterialDescriptor.LinearGradient -> {
@@ -155,6 +157,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
                         scissorWidth = sw, scissorHeight = sh,
                     ),
                 ),
+                blendMode = blendMode,
             )
         }
         is GPUMaterialDescriptor.RadialGradient -> {
@@ -182,6 +185,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
                         scissorWidth = sw, scissorHeight = sh,
                     ),
                 ),
+                blendMode = blendMode,
             )
         }
         is GPUMaterialDescriptor.SweepGradient -> {
@@ -208,6 +212,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
                         scissorWidth = sw, scissorHeight = sh,
                     ),
                 ),
+                blendMode = blendMode,
             )
         }
         else -> {
