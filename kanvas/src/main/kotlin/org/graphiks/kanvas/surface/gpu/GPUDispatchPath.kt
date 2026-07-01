@@ -9,6 +9,35 @@ import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendTriangleData
 import org.graphiks.kanvas.surface.Diagnostics
 import org.graphiks.kanvas.surface.RenderConfig
 
+internal fun offsetForAA(vertices: List<Float>, pixelStep: Float = 0.5f): List<Float> {
+    if (vertices.size < 6) return vertices
+    val n = vertices.size / 2
+    val dx = FloatArray(n)
+    val dy = FloatArray(n)
+    for (i in 0 until n - 2) {
+        val ax = vertices[i * 2]; val ay = vertices[i * 2 + 1]
+        val bx = vertices[(i + 1) * 2]; val by = vertices[(i + 1) * 2 + 1]
+        val cx = vertices[(i + 2) * 2]; val cy = vertices[(i + 2) * 2 + 1]
+        val ex1 = bx - ax; val ey1 = by - ay
+        val ex2 = cx - ax; val ey2 = cy - ay
+        var nx = ey1 - ey2
+        var ny = ex2 - ex1
+        val len = kotlin.math.sqrt(nx * nx + ny * ny)
+        if (len < 1e-6f) continue
+        nx = nx / len * pixelStep
+        ny = ny / len * pixelStep
+        dx[i] += nx; dy[i] += ny
+        dx[i + 1] += nx; dy[i + 1] += ny
+        dx[i + 2] += nx; dy[i + 2] += ny
+    }
+    val result = vertices.toMutableList()
+    for (i in 0 until n) {
+        result[i * 2] = vertices[i * 2] + dx[i]
+        result[i * 2 + 1] = vertices[i * 2 + 1] + dy[i]
+    }
+    return result
+}
+
 internal fun GPUBackendRenderRecorder.dispatchFillPath(
     cmd: NormalizedDrawCommand.FillPath,
     dispatched: MutableList<String>,
@@ -49,8 +78,9 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
         return
     }
 
+    val finalVertices = if (cmd.antiAlias) offsetForAA(tessVertices) else tessVertices
     val triangleData = GPUBackendTriangleData(
-        vertices = tessVertices.toFloatArray(),
+        vertices = finalVertices.toFloatArray(),
         indices = indices.toIntArray(),
     )
 
