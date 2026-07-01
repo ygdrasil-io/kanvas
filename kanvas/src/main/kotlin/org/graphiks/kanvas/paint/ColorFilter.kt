@@ -24,4 +24,16 @@ sealed interface ColorFilter {
     data class Lighting(val mul: Color, val add: Color) : ColorFilter
     data object SRGBToLinear : ColorFilter
     data object LinearToSRGB : ColorFilter
+    data class HSLAMatrix(val values: FloatArray) : ColorFilter {
+        override fun equals(other: Any?): Boolean {
+            if (this === other) return true
+            if (other !is HSLAMatrix) return false
+            return values.contentEquals(other.values)
+        }
+        override fun hashCode(): Int = values.contentHashCode()
+    }
+    data class Lerp(val t: Float, val dst: ColorFilter, val src: ColorFilter) : ColorFilter
+    data object HighContrast : ColorFilter
+    data object Luma : ColorFilter
+    data object Overdraw : ColorFilter
 }

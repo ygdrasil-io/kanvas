@@ -15,7 +15,7 @@ The `:kanvas` module lives at `kanvas/` and uses the base package `org.graphiks.
 |-------------|----------------|
 | `types/` | Core value types: Color, Point, Size, Rect, RRect, Matrix33, ColorSpace |
 | `paint/` | Paint data class and all effect sealed hierarchies |
-| `geometry/` | Path, FillType, PathVerb, ClipStack |
+| `geometry/` | Path, FillType, PathVerb, PathMeasure, PathOps, Region, ClipStack |
 | `canvas/` | Canvas, DisplayOp sealed hierarchy, extensions |
 | `pipeline/` | GPU pipeline interfaces and supporting types |
 | `surface/` | Surface, RenderResult, Diagnostics, ImageEncoder bridge |
@@ -23,6 +23,7 @@ The `:kanvas` module lives at `kanvas/` and uses the base package `org.graphiks.
 | `image/` | Image, ColorType |
 | `dsl/` | @KanvasDsl annotation, DSL scopes (PathScope, PaintScope, CanvasScope) |
 | `operators/` | Operator extensions for Point, Matrix33, Rect, Path |
+| `picture/` | Picture, PictureRecorder — recording, playback, and serialization |
 
 ## Naming Conventions
 
@@ -40,13 +41,16 @@ The `:kanvas` module lives at `kanvas/` and uses the base package `org.graphiks.
 ```
 User Code
     │
-    ├── Canvas API ──→ DisplayOp[] (command buffer)
+    ├── PictureRecorder ──→ Picture (frozen DisplayOp[] snapshot)
+    │
+    ├── Canvas API ──→ DisplayOp[] (command buffer, may include DrawPicture)
     │
     ▼
 Surface.render()
     │
     ├── PipelineCompiler.compile(DisplayOp[]) → CompiledFrame
     │       │
+    │       ├── Expand DrawPicture → nested DisplayOp[]
     │       ├── Map Paint.shader → RenderPipeline (built-in or RuntimeEffect)
     │       ├── Map DisplayOp → RenderPass + GPU bindings
     │       └── Collect Diagnostics on refusal
@@ -68,4 +72,4 @@ RenderResult(pixels, diagnostics, stats)
 
 - This spec does not define the GPU backend execution model — see `../gpu-renderer/`
 - File-level grouping within sub-packages is not prescribed (decided during implementation)
-- `:kanvas` does not depend on `:kanvas-skia` or any Skia native bindings
+- `:kanvas` does not depend on `:kanvas-skia` or any native C++ rendering bindings

@@ -206,10 +206,12 @@ data class CompiledFrame(val passes: List<RenderPass>, val diagnostics: Diagnost
 - Internal to `Surface.render()` — not instantiated by users
 - Exhaustive `when` on `DisplayOp` → maps each op to a `RenderPipeline` + bindings
 - Produces `RenderPass[]` for execution + `Diagnostics` for refusals
+- **Picture expansion**: When encountering `DisplayOp.DrawPicture`, the compiler recursively expands the nested `Picture.ops` into the display list. Each nested draw op inherits the outer `DrawPicture`'s transform and clip (concatenated), and carries the `DrawPicture`'s optional `Paint` for alpha modulation.
 
 ## Non-Goals
 
-- Compute pipeline interface — deferred
-- Multi-pass render graph DAG — current model is linear pass list
-- GPU buffer/texture lifecycle management (create/destroy) — delegated to `:gpu-renderer`
-- WGSL parser/reflection implementation — delegated to `wgsl4k` library
+- Compute shader pipelines
+- Multi-pass render graph with dependencies — the compiler produces a linear pass list
+- GPU buffer and texture lifecycle management — delegated to `:gpu-renderer`
+- WGSL parsing, reflection, and code generation — delegated to the `wgsl4k` library
+- Runtime shader effects beyond the `RuntimeEffect` descriptor registration — `makeColorFilter`, `makeBlender`, and `compile` require `wgsl4k` integration

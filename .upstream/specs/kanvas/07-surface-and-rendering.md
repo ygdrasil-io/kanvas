@@ -23,6 +23,8 @@ class Surface(
 - **Canvas access:**
   - `canvas(): Canvas` — returns (or creates) the Canvas for this surface
   - `canvas { ... }` — DSL convenience: creates canvas, runs block
+- **Pixel access:**
+  - `readPixels(src: Rect, dstBuffer: UByteArray): Boolean` — copies rendered pixels from a rectangular region into the destination buffer. Returns true on success.
 - **Rendering:**
   - `render(): RenderResult` — compiles DisplayList → executes on GPU → returns pixels + diagnostics
 - **GPU access:**
@@ -71,10 +73,12 @@ data class RenderStats(
 
 - `coverage`: ratio of non-transparent pixels (0.0–1.0)
 
-### toPng() Image Export
+### toPng() / toJpeg() / toWebP() Image Export
 
 ```kotlin
 fun RenderResult.toPng(): ByteArray
+fun RenderResult.toJpeg(quality: Int = 92): ByteArray
+fun RenderResult.toWebP(quality: Int = 80): ByteArray
 ```
 
 - Extension on `RenderResult`
@@ -106,7 +110,5 @@ object ImageEncoderRegistry {
 
 ## Non-Goals
 
-- GPU pipeline wiring — `render()` returns placeholder pixels in this phase; real GPU dispatch is integrated later
-- `makeSurface()` / `makeImageSnapshot()` — deferred
-- Pixel readback beyond full RGBA frame — deferred
-- `toJpeg()`, `toWebP()` — follow same SPI pattern, deferred
+- `makeSurface()` / `makeImageSnapshot()` — multi-surface composition is not a Kanvas concern
+- Specific codec implementations (PNG, JPEG, WebP) — encoders live in `:codec:*` modules and are resolved via SPI

@@ -5,7 +5,7 @@ Date: 2026-07-01
 
 ## Purpose
 
-Defines `Image`, `ColorType`, `TextBlob`, `KanvasTypeface`, and `KanvasGlyphRun` — the data types for image content and pre-shaped text glyph runs used by `Canvas.drawImage()` and `Canvas.drawText()`.
+Defines `Image`, `ColorType`, `ColorSpace`, `TextBlob`, `KanvasTypeface`, and `KanvasGlyphRun` — the data types for image content and pre-shaped text glyph runs used by `Canvas.drawImage()` and `Canvas.drawText()`.
 
 ## Contracts
 
@@ -18,22 +18,40 @@ data class Image(
     val colorType: ColorType = ColorType.RGBA_8888,
     val colorSpace: ColorSpace = ColorSpace.SRGB,
     val sourceId: String,
+    val pixels: UByteArray? = null,
 ) {
     companion object {
         fun decode(bytes: ByteArray, mimeType: String? = null): Image
+        fun fromPixels(width: Int, height: Int, pixels: UByteArray, colorType: ColorType = ColorType.RGBA_8888, colorSpace: ColorSpace = ColorSpace.SRGB, sourceId: String = ""): Image
     }
 }
 ```
 
 - Metadata carrier — the actual pixel data is managed by the GPU backend
 - `sourceId`: unique identifier for texture lookup in GPU resource cache
+- `pixels`: optional in-memory pixel buffer for CPU-side access or small images
 - `colorSpace`: forwarded to `GPUColorSpaceDescriptor` in `:gpu-renderer` for color conversion; defaults to sRGB
-- `decode()`: placeholder in this phase (returns width=0, height=0); real implementation via codec SPI deferred (codec will extract color space from image metadata — e.g., ICC profile from JPEG, gAMA/cHRM from PNG, NCLC/colr from HEIF)
+- `decode()`: decodes image bytes via codec SPI. Extracts color space from image metadata (ICC profile from JPEG, gAMA/cHRM from PNG, NCLC/colr from HEIF). Supported formats: PNG, JPEG, WebP, GIF, BMP. Returns zero-size placeholder when no codec SPI is registered.
 
 ### ColorType
 
 ```kotlin
 enum class ColorType { RGBA_8888, BGRA_8888, ALPHA_8, GRAY_8 }
+```
+
+### ColorSpace
+
+```kotlin
+data class ColorSpace(val name: String, val transferFunction: TransferFunction, val gamut: Gamut) {
+    companion object {
+        val SRGB = ColorSpace("sRGB", TransferFunction.SRGB, Gamut.SRGB)
+        val DISPLAY_P3 = ColorSpace("Display P3", TransferFunction.SRGB, Gamut.DISPLAY_P3)
+        val LINEAR_SRGB = ColorSpace("Linear sRGB", TransferFunction.LINEAR, Gamut.SRGB)
+    }
+}
+
+enum class TransferFunction { SRGB, LINEAR, PQ, HLG }
+enum class Gamut { SRGB, DISPLAY_P3, REC2020 }
 ```
 
 ### KanvasTypeface
@@ -68,14 +86,14 @@ data class TextBlob(
 )
 ```
 
-- Multi-run text container (mutable-free, like Skia's `SkTextBlob`)
+- Multi-run text container (mutable-free, pre-shaped glyph runs only)
 - When `typeface` is non-null, the font pipeline can produce an A8 glyph atlas
 - Without `typeface`: placeholder rendering with empty atlas (diagnostic: `DEGRADE`)
 
 ## Non-Goals
 
-- `Image.decode` real implementation — requires codec SPI integration (deferred)
-- `SkFont` / `SkFontMgr` — font management is not in the Kanvas facade
-- Text shaping (Bidi, Kerning, GPOS/GSUB) — delegated to `:font`
-- `TextBlob.bounds()`, `TextBlob.serialize()` — deferred
-- `makeFromString`, `makeFromRSXform` — text shaping not yet in facade
+- Font and font management — not part of the Kanvas facade; delegated to `:font`
+- Text shaping (bidi, kerning, glyph substitution and positioning) — delegated to `:font`
+- `TextBlob.bounds()`, `TextBlob.serialize()`, `TextBlob.getIntercepts()`
+- String-to-glyph conversion (`makeFromString`, `makeFromRSXform`)
+- `Image.makeShader()` convenience — use `Shader.Image` directly

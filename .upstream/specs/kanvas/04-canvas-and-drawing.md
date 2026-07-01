@@ -15,19 +15,46 @@ Defines the `Canvas` class — the central recording API for all drawing operati
 class Canvas internal constructor(private val buffer: DisplayListBuffer)
 ```
 
-#### Drawing Methods (core, 6 methods)
+#### Drawing Methods (core, 14 methods)
 
 | Method | Signature |
 |--------|-----------|
 | `drawRect` | `(rect: Rect, paint: Paint)` |
 | `drawRRect` | `(rrect: RRect, paint: Paint)` |
+| `drawDRRect` | `(outer: RRect, inner: RRect, paint: Paint)` |
 | `drawPath` | `(path: Path, paint: Paint)` |
+| `drawPoint` | `(x: Float, y: Float, paint: Paint)` |
+| `drawPoints` | `(mode: PointMode, points: List<Point>, paint: Paint)` |
 | `drawImage` | `(image: Image, dst: Rect, paint: Paint? = null)` |
 | `drawImageRect` | `(image: Image, src: Rect, dst: Rect, paint: Paint? = null)` |
+| `drawImageNine` | `(image: Image, center: Rect, dst: Rect, paint: Paint? = null)` |
+| `drawImageLattice` | `(image: Image, lattice: Lattice, dst: Rect, paint: Paint? = null)` |
 | `drawText` | `(blob: TextBlob, x: Float, y: Float, paint: Paint)` |
+| `drawPicture` | `(picture: Picture, paint: Paint? = null)` |
+| `drawVertices` | `(vertices: Vertices, paint: Paint)` |
+| `drawAtlas` | `(atlas: Image, transforms: List<Matrix33>, texRects: List<Rect>, colors: List<Color>?, blendMode: BlendMode, paint: Paint? = null)` |
 
 - Each draw creates a `DisplayOp` with baked-in `currentTransform` and `currentClip`
-- Appended to the command buffer via `DisplayListBuffer.append()`
+- `drawPicture` emits `DisplayOp.DrawPicture` — the GPU pipeline expands nested picture ops during rendering
+
+#### Fill and Clear
+
+| Method | Signature |
+|--------|-----------|
+| `drawColor` | `(color: Color, mode: BlendMode = BlendMode.SRC_OVER)` |
+| `clear` | `(color: Color)` |
+
+- `drawColor` fills the entire canvas with a color using the given blend mode
+- `clear` fills with the color, ignoring blend mode
+
+#### Visibility Culling
+
+| Method | Description |
+|--------|-------------|
+| `quickReject(rect: Rect): Boolean` | True if `rect` is fully outside the clip |
+| `quickReject(path: Path): Boolean` | True if `path` is fully outside the clip |
+| `isClipEmpty: Boolean` | True if the clip region is empty |
+| `isClipRect: Boolean` | True if the clip is a single axis-aligned rectangle |
 
 #### Convenience Drawing Extensions
 
@@ -39,6 +66,9 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer)
 | `drawLine(x0,y0,x1,y1,paint)` | `drawPath(Path { moveTo; lineTo })` |
 | `drawRoundRect(rect,rx,ry,paint)` | `drawRRect(RRect(rect,rx))` |
 | `drawImage(image,x,y,paint?)` | `drawImage(image, Rect.fromXYWH(...), paint)` |
+| `withPicture(bounds, paint?, block)` | Creates a `PictureRecorder`, records `block`, calls `drawPicture` |
+| `drawPatch(cubics, colors?, texCoords?, paint)` | `drawVertices(...)` — Coons patch via mesh |
+| `drawAnnotation(rect, key, value)` | Emits `DisplayOp.Annotation` — metadata marker, no visual output |
 
 #### State Management
 
@@ -73,8 +103,6 @@ fun Canvas.withTransform(block)                // save(); block(); restore()
 | `resetMatrix()` | Reset to identity |
 | `matrix: Matrix33` | Current transform |
 
-Each transform method calls `concat()` which updates `currentTransform` and appends `DisplayOp.SetTransform`.
-
 #### Clips
 
 | Method | Description |
@@ -91,20 +119,48 @@ sealed interface DisplayOp {
     // Draw ops
     data class DrawRect(val rect: Rect, val paint: Paint, val transform: Matrix33, val clip: ClipStack) : DisplayOp
     data class DrawRRect(val rrect: RRect, val paint: Paint, val transform: Matrix33, val clip: ClipStack) : DisplayOp
+    data class DrawDRRect(val outer: RRect, val inner: RRect, val paint: Paint, val transform: Matrix33, val clip: ClipStack) : DisplayOp
     data class DrawPath(val path: Path, val paint: Paint, val transform: Matrix33, val clip: ClipStack) : DisplayOp
+    data class DrawPoint(val x: Float, val y: Float, val paint: Paint, val transform: Matrix33, val clip: ClipStack) : DisplayOp
+    data class DrawPoints(val mode: PointMode, val points: List<Point>, val paint: Paint, val transform: Matrix33, val clip: ClipStack) : DisplayOp
     data class DrawImage(val image: Image, val src: Rect, val dst: Rect, val paint: Paint?, val transform: Matrix33, val clip: ClipStack) : DisplayOp
+    data class DrawImageNine(val image: Image, val center: Rect, val dst: Rect, val paint: Paint?, val transform: Matrix33, val clip: ClipStack) : DisplayOp
+    data class DrawImageLattice(val image: Image, val lattice: Lattice, val dst: Rect, val paint: Paint?, val transform: Matrix33, val clip: ClipStack) : DisplayOp
     data class DrawText(val blob: TextBlob, val x: Float, val y: Float, val paint: Paint, val transform: Matrix33, val clip: ClipStack) : DisplayOp
+    data class DrawPicture(val picture: Picture, val paint: Paint?, val transform: Matrix33, val clip: ClipStack) : DisplayOp
+    data class DrawVertices(val vertices: Vertices, val paint: Paint, val transform: Matrix33, val clip: ClipStack) : DisplayOp
+    data class DrawAtlas(val atlas: Image, val transforms: List<Matrix33>, val texRects: List<Rect>, val colors: List<Color>?, val blendMode: BlendMode, val paint: Paint?, val transform: Matrix33, val clip: ClipStack) : DisplayOp
+    data class DrawColor(val color: Color, val mode: BlendMode) : DisplayOp
+    data class Clear(val color: Color) : DisplayOp
     // State ops
     data class SetTransform(val matrix: Matrix33) : DisplayOp
     data class SetClip(val clip: ClipStack) : DisplayOp
     data class BeginLayer(val bounds: Rect?, val paint: Paint?) : DisplayOp
     data object EndLayer : DisplayOp
+    // Metadata
+    data class Annotation(val rect: Rect, val key: String, val value: String) : DisplayOp
 }
-```
 
-- Transform and clip are **baked in** at draw time — each draw carries the full CTM and clip state
-- State ops are emitted alongside draw ops in the display list
-- The `PipelineCompiler` in `05-gpu-pipeline.md` interprets this stream
+enum class PointMode { POINTS, LINES, POLYGON }
+
+data class Lattice(
+    val xDivs: List<Int>,
+    val yDivs: List<Int>,
+    val rects: List<Rect>?,    // optional per-cell texture rects
+    val colors: List<Color>?,  // optional per-cell colors
+    val flags: List<LatticeFlags>?,
+)
+
+data class Vertices(
+    val mode: VertexMode,
+    val positions: List<Point>,
+    val texCoords: List<Point>?,
+    val colors: List<Color>?,
+    val indices: List<Int>?,
+)
+
+enum class VertexMode { TRIANGLES, TRIANGLE_STRIP, TRIANGLE_FAN }
+```
 
 ### DisplayListBuffer
 
@@ -116,10 +172,11 @@ interface DisplayListBuffer {
 ```
 
 - Internal abstraction — `Surface` provides the concrete implementation
-- `Canvas` never references `Surface` directly (decoupled)
+- `PictureRecorder` also provides a concrete implementation for recording pictures
+- `Canvas` never references `Surface` or `PictureRecorder` directly (decoupled)
 
 ## Non-Goals
 
-- `drawVertices`, `drawPicture`, `drawAtlas`, `drawDrawable`, `drawPatch`, `drawAnnotation`, `drawShadow` — deferred
-- `SkPicture` / `PictureRecorder` — deferred
-- LCD text rendering flags — deferred
+- Custom drawable abstractions — Kanvas uses `Canvas.drawPicture` for composition
+- LCD sub-pixel text rendering — the pipeline uses grayscale anti-aliasing
+- Picture binary serialization — handled in `10-picture-and-recording.md`

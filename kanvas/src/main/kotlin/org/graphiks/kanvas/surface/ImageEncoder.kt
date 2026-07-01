@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.surface
 
 import org.graphiks.kanvas.image.Image
+import org.graphiks.kanvas.types.ColorSpace
 
 /**
  * Encodes raw pixel data into a compressed image format such as PNG.
@@ -15,15 +16,17 @@ interface ImageEncoder {
      * @param width   image width in pixels
      * @param height  image height in pixels
      * @param metadata decoder hints such as pixel layout
+     * @param options encoder-specific options (e.g. "quality" for JPEG/WebP)
      * @return the encoded image as a byte array
      */
-    fun encode(pixels: ByteArray, width: Int, height: Int, metadata: Metadata): ByteArray
+    fun encode(pixels: ByteArray, width: Int, height: Int, metadata: Metadata, options: Map<String, String> = emptyMap()): ByteArray
 
     /**
      * Metadata passed to [encode] describing the pixel layout.
      * @property format the channel order of the supplied pixel data
+     * @property colorSpace the color space of the pixel data
      */
-    data class Metadata(val format: PixelLayout)
+    data class Metadata(val format: PixelLayout, val colorSpace: ColorSpace = ColorSpace.SRGB)
 
     /**
      * Channel order of the raw pixel buffer.
@@ -65,7 +68,25 @@ fun RenderResult.toPng(): ByteArray {
         PixelFormat.RGBA8 -> ImageEncoder.PixelLayout.RGBA8
         PixelFormat.BGRA8 -> ImageEncoder.PixelLayout.BGRA8
     }
-    return encoder.encode(pixels.toByteArray(), width, height, ImageEncoder.Metadata(layout))
+    return encoder.encode(pixels.toByteArray(), width, height, ImageEncoder.Metadata(layout, colorSpace))
+}
+
+/**
+ * Encode this render result as JPEG with the given quality (0-100).
+ */
+fun RenderResult.toJpeg(quality: Int = 92): ByteArray {
+    val encoder = ImageEncoderRegistry.find("jpeg")
+        ?: throw IllegalStateException("Add :codec:jpeg to your dependencies to enable JPEG export")
+    return encoder.encode(pixels.toByteArray(), width, height, ImageEncoder.Metadata(ImageEncoder.PixelLayout.RGBA8, colorSpace), mapOf("quality" to quality.toString()))
+}
+
+/**
+ * Encode this render result as WebP with the given quality (0-100).
+ */
+fun RenderResult.toWebP(quality: Int = 80): ByteArray {
+    val encoder = ImageEncoderRegistry.find("webp")
+        ?: throw IllegalStateException("Add :codec:webp to your dependencies to enable WebP export")
+    return encoder.encode(pixels.toByteArray(), width, height, ImageEncoder.Metadata(ImageEncoder.PixelLayout.RGBA8, colorSpace), mapOf("quality" to quality.toString()))
 }
 
 /**

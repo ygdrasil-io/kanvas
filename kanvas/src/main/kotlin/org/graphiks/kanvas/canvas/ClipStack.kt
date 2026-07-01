@@ -17,6 +17,14 @@ sealed interface ClipStack {
 
     /** Clipping to a list of clip operations (paths, round-rects, etc.). */
     data class Complex(val ops: List<ClipStackOp>) : ClipStack
+
+    val isEmpty: Boolean get() = when (this) {
+        WideOpen -> false
+        is DeviceRect -> rect.isEmpty
+        is Complex -> false
+    }
+
+    val isRect: Boolean get() = this is DeviceRect
 }
 
 /**

@@ -9,7 +9,11 @@ dependencies {
     implementation(kotlin("stdlib"))
     implementation(project(":codec:api"))
     implementation(project(":font"))
+    compileOnly("org.graphiks:wgsl-core-jvm:1.0.0-SNAPSHOT")
+    compileOnly("org.graphiks:wgsl-parser-jvm:1.0.0-SNAPSHOT")
     testImplementation(kotlin("test"))
+    testImplementation("org.graphiks:wgsl-core-jvm:1.0.0-SNAPSHOT")
+    testImplementation("org.graphiks:wgsl-parser-jvm:1.0.0-SNAPSHOT")
 }
 
 tasks.withType<Test> {
