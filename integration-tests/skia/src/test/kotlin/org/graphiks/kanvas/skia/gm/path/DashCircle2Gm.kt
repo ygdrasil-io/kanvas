@@ -10,16 +10,13 @@ import org.graphiks.kanvas.skia.SkiaGm
 import kotlin.math.PI
 
 /**
- * Port of Dashing2GM — 10 dash patterns × 7 matrices on concentric circles.
+ * Port of Skia's `gm/dashcircle.cpp`.
+ * 10 dash patterns over 7 matrices, concentric ovals with varying stroke widths.
  *
  * Matrices that only affect rotation/flip are no-ops for circles.
  * GmCanvas does not support `concat` or `rotate`, so matrices 6 (rotate 25°)
  * and 7 (flipX + rotate × 2) apply only the scale/flip components.
  * Stroke width is not transformed (GmCanvas transforms path geometry only).
- */
-/**
- * Port of Skia's `gm/dashcircle.cpp`.
- * 10 dash patterns over 7 matrices, concentric ovals with varying stroke widths.
  * @see https://github.com/google/skia/blob/main/gm/dashcircle.cpp
  */
 class DashCircle2Gm : SkiaGm {
@@ -67,7 +64,7 @@ class DashCircle2Gm : SkiaGm {
             Mat(-1f, 1f),
         )
 
-        val deffects = intervals.map { interval ->
+        val dEffects = intervals.map { interval ->
             val scaled = floatArrayOf(
                 kCircumference * interval[0],
                 kCircumference * interval[1],
@@ -94,7 +91,7 @@ class DashCircle2Gm : SkiaGm {
         val kCircle = Rect.fromLTRB(-kRadius, -kRadius, kRadius, kRadius)
         val kThinCircle = Rect.fromLTRB(-kThinRadius, -kThinRadius, kThinRadius, kThinRadius)
 
-        for (i in deffects.indices) {
+        for (i in dEffects.indices) {
             canvas.save()
             for (m in matrices) {
                 canvas.save()
@@ -103,7 +100,7 @@ class DashCircle2Gm : SkiaGm {
                 val outerPaint = Paint(
                     style = PaintStyle.STROKE,
                     strokeWidth = kStrokeWidth,
-                    pathEffect = deffects[i],
+                    pathEffect = dEffects[i],
                     antiAlias = true,
                 )
                 canvas.drawOval(kCircle, outerPaint)

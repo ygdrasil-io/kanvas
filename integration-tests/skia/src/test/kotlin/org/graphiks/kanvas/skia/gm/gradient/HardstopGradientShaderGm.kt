@@ -99,12 +99,10 @@ class HardstopGradientShaderGm : SkiaGm {
     }
 
     private companion object {
-        const val WIDTH: Int = 500
-        const val HEIGHT: Int = 500
         const val NUM_ROWS: Int = 8
         const val NUM_COLS: Int = 3
-        const val CELL_WIDTH: Int = WIDTH / NUM_COLS
-        const val CELL_HEIGHT: Int = HEIGHT / NUM_ROWS
+        const val CELL_WIDTH: Int = 512 / NUM_COLS
+        const val CELL_HEIGHT: Int = 512 / NUM_ROWS
         const val PAD_WIDTH: Int = 3
         const val PAD_HEIGHT: Int = 3
         const val RECT_WIDTH: Int = CELL_WIDTH - 2 * PAD_WIDTH

@@ -11,17 +11,13 @@ import org.graphiks.kanvas.skia.SkiaGm
 import kotlin.math.sqrt
 
 /**
- * Port of Dashing3GM.
+ * Port of Skia's `gm/dashing.cpp` (Dashing3GM).
+ * 9 blocks of dashed line strips under various dash/phase/width combinations.
  *
- * Renders horizontal dashed lines via `drawLine` at various intervals.
  * The original `drawPoints(PointMode.kLines)` has been replaced with
  * equivalent `drawLine` calls.
  * The 45° rotated block at the center is skipped because GmCanvas does
  * not support canvas rotation.
- */
-/**
- * Port of Skia's `gm/dashing.cpp` (Dashing3GM).
- * 9 blocks of dashed line strips under various dash/phase/width combinations.
  * @see https://github.com/google/skia/blob/main/gm/dashing.cpp
  */
 class Dashing3Gm : SkiaGm {

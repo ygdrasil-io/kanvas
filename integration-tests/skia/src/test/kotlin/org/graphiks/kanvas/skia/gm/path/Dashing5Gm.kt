@@ -9,16 +9,13 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.SkiaGm
 
 /**
- * Port of Dashing5GM.
+ * Port of Skia's `gm/dashing.cpp` (Dashing5GM).
+ * Long dashed lines with rotation, cycling stroke widths and rainbow colors.
  *
  * The original rotates the canvas 90° and draws long vertical/horizontal
  * dashed lines to stress dash decomposition. Since GmCanvas does not
  * support `rotate` or `concat`, we manually swap coordinates to
  * approximate the 90° rotation.
- */
-/**
- * Port of Skia's `gm/dashing.cpp` (Dashing5GM).
- * Long dashed lines with rotation, cycling stroke widths and rainbow colors.
  * @see https://github.com/google/skia/blob/main/gm/dashing.cpp
  */
 class Dashing5Gm(private val doAA: Boolean) : SkiaGm {
