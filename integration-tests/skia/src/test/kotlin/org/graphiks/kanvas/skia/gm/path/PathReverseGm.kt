@@ -70,9 +70,7 @@ class PathReverseGm : SkiaGm {
     private fun testRev(canvas: GmCanvas, path: Path) {
         testPath(canvas, path)
 
-        // TODO: Replace with actual reverseAddPath when available
-        // For now, just draw the path again (not reversed)
-        val rev = Path { }.apply { addPath(path) }
+        val rev = Path { }.apply { reverseAddPath(path) }
         canvas.save()
         canvas.translate(150f, 0f)
         testPath(canvas, rev)
