@@ -17,7 +17,9 @@ internal fun NormalizedDrawCommand.strokeRefusalReasonOrNull(): String? {
         is NormalizedDrawCommand.DrawLayer -> false
         is NormalizedDrawCommand.ApplyFilter -> false
     }
-    return if (stroke) "unsupported_stroke" else null
+    return if (stroke) {
+        if (this is NormalizedDrawCommand.FillPath) "unsupported_stroke" else null
+    } else null
 }
 
 internal fun NormalizedDrawCommand.fillGuardRefusalReasonOrNull(): String? {
