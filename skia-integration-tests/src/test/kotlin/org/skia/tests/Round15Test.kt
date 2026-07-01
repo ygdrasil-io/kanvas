@@ -26,14 +26,6 @@ class Round15Test {
         )
     }
 
-    // BlurLargeRRectsGM at ~36 % — visual layout matches (4 rotated
-    // colored RRects with σ=20 halos) but the giant -20000 ymin
-    // coord makes the mask-buffer's bbox computation drift on the
-    // AA edges of every cell. Floor 30 — tracker-only.
-    @Test
-    fun `BlurLargeRRectsGM matches reference`() =
-        runGm(BlurLargeRRectsGM(), "BlurLargeRRectsGM", 30.0)
-
     @Test
     fun `SimpleBlurRoundRectGM matches reference`() =
         runGm(SimpleBlurRoundRectGM(), "SimpleBlurRoundRectGM", 50.0)

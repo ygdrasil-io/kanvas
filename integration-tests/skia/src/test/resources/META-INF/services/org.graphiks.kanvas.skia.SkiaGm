@@ -240,4 +240,11 @@ org.graphiks.kanvas.skia.gm.path.TrickyCubicStrokesLargeRadiusGm
 org.graphiks.kanvas.skia.gm.path.TrimGm
 org.graphiks.kanvas.skia.gm.path.WideButtCapsGm
 org.graphiks.kanvas.skia.gm.path.ZeroLenStrokesGm
+org.graphiks.kanvas.skia.gm.blur.BlurLargeRRectsGm
+org.graphiks.kanvas.skia.gm.path.Crbug1139750Gm
+org.graphiks.kanvas.skia.gm.path.Crbug946965Gm
+org.graphiks.kanvas.skia.gm.path.DrawLinesWithLocalMatrixGm
+org.graphiks.kanvas.skia.gm.path.HitTestPathGm
+org.graphiks.kanvas.skia.gm.path.PointsGm
+org.graphiks.kanvas.skia.gm.path.PointsMaskFilterGm
 org.graphiks.kanvas.skia.gm.path.ZeroLineStrokeGm
