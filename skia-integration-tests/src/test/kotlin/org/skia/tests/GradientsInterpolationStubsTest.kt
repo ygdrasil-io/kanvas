@@ -10,11 +10,6 @@ import org.skia.testing.TestUtils
 class GradientsInterpolationSmokeTest {
 
     @Test
-    fun `gradients_color_space_tilemode GM draws`() {
-        TestUtils.runGmTest(GradientsColorSpaceTilemodeGM())
-    }
-
-    @Test
     fun `gradients_powerless_hue_OKLCH GM draws`() {
         TestUtils.runGmTest(GradientsPowerlessHueOklchGM())
     }

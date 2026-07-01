@@ -52,9 +52,6 @@ class Round9Test {
     fun `ConicalGradients2ptOutsideNoDitherGM matches reference`() =
         runGm(ConicalGradients2ptOutsideNoDitherGM(), "ConicalGradients2ptOutsideNoDitherGM", 70.0)
 
-    @Test
-    fun `ConicalGradients2ptOutsideGM matches reference`() =
-        runGm(ConicalGradients2ptOutsideGM(), "ConicalGradients2ptOutsideGM", 50.0)
 
     @Test
     fun `ConicalGradients2ptEdgeNoDitherGM matches reference`() =

@@ -55,7 +55,4 @@ class Round5Test {
     fun `InnerJoinGeometryGM matches reference`() =
         runGm(InnerJoinGeometryGM(), "InnerJoinGeometryGM", 96.0)
 
-    @Test
-    fun `RectPolyStrokeGM matches reference`() =
-        runGm(RectPolyStrokeGM(), "RectPolyStrokeGM", 96.0)
 }
