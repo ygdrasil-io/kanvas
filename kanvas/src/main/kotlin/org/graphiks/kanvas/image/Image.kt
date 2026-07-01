@@ -1,8 +1,9 @@
 package org.graphiks.kanvas.image
 
-import org.graphiks.kanvas.surface.ImageEncoder
-import org.graphiks.kanvas.surface.ImageEncoderRegistry
+import org.graphiks.kanvas.codec.Codec
 import org.graphiks.kanvas.types.ColorSpace
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
 enum class ColorType { RGBA_8888, BGRA_8888, ALPHA_8, GRAY_8 }
 
@@ -16,19 +17,23 @@ data class Image(
 ) {
     companion object {
         fun decode(bytes: ByteArray, mimeType: String? = null): Image {
-            val format = mimeType?.substringAfter("image/")?.lowercase()
-                ?: detectFormatFromMagicBytes(bytes)
-            if (format != null) {
-                val encoder = ImageEncoderRegistry.find("decode-$format")
-                if (encoder != null) {
-                    val metadata = ImageEncoder.Metadata(ImageEncoder.PixelLayout.RGBA8, ColorSpace.SRGB)
-                    if (format == "png") {
-                        return decodePng(bytes)
-                    }
+            val codec = Codec.MakeFromData(bytes)
+            if (codec != null) {
+                val info = codec.getInfo()
+                val (bitmap, result) = codec.getImage()
+                if (bitmap != null && result == Codec.Result.kSuccess) {
+                    val w = bitmap.width; val h = bitmap.height
+                    val rgba = IntArrayToRGBA(bitmap.pixels8888, w, h)
+                    val format = detectFormatFromMagicBytes(bytes) ?: "image"
+                    return Image(w, h, ColorType.RGBA_8888, "decode-${format}:${bytes.size}", rgba)
                 }
+                // Decode failed — return placeholder with format info
+                val format = detectFormatFromMagicBytes(bytes) ?: "unknown"
                 return Image(0, 0, ColorType.RGBA_8888, "decode-${format}:${bytes.size}")
             }
-            return Image(0, 0, ColorType.RGBA_8888, "decode-unknown:${bytes.size}")
+            // No codec matched
+            val format = detectFormatFromMagicBytes(bytes) ?: "unknown"
+            return Image(0, 0, ColorType.RGBA_8888, "decode-${format}:${bytes.size}")
         }
 
         fun fromPixels(
@@ -58,18 +63,27 @@ data class Image(
     }
 }
 
+/** Convert packed ARGB IntArray to RGBA ByteArray. */
+private fun IntArrayToRGBA(argb: IntArray, width: Int, height: Int): ByteArray {
+    val rgba = ByteArray(width * height * 4)
+    val buf = ByteBuffer.wrap(rgba).order(ByteOrder.LITTLE_ENDIAN)
+    for (pixel in argb) {
+        val a = (pixel ushr 24) and 0xFF
+        val r = (pixel ushr 16) and 0xFF
+        val g = (pixel ushr 8) and 0xFF
+        val b = pixel and 0xFF
+        buf.putInt((a shl 24) or (b shl 16) or (g shl 8) or r) // ARGB → ABGR
+    }
+    return rgba
+}
+
 private fun detectFormatFromMagicBytes(bytes: ByteArray): String? {
     if (bytes.size < 4) return null
     if (bytes[0] == 0x89.toByte() && bytes[1] == 0x50.toByte() && bytes[2] == 0x4E.toByte() && bytes[3] == 0x47.toByte()) return "png"
     if (bytes[0] == 0xFF.toByte() && bytes[1] == 0xD8.toByte() && bytes[2] == 0xFF.toByte()) return "jpeg"
-    // RIFF container with "WEBP" at offset 8-11
     if (bytes.size >= 12 && bytes[0] == 0x52.toByte() && bytes[1] == 0x49.toByte() && bytes[2] == 0x46.toByte() && bytes[3] == 0x46.toByte()
         && bytes[8] == 0x57.toByte() && bytes[9] == 0x45.toByte() && bytes[10] == 0x42.toByte() && bytes[11] == 0x50.toByte()) return "webp"
     if (bytes[0] == 0x47.toByte() && bytes[1] == 0x49.toByte() && bytes[2] == 0x46.toByte() && bytes[3] == 0x38.toByte()) return "gif"
     if (bytes[0] == 0x42.toByte() && bytes[1] == 0x4D.toByte()) return "bmp"
     return null
-}
-
-private fun decodePng(bytes: ByteArray): Image {
-    return Image(0, 0, ColorType.RGBA_8888, "decode-png:${bytes.size}")
 }
