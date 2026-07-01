@@ -19,7 +19,7 @@ import org.graphiks.kanvas.types.Rect
 class RgbwSweepGradientGm : SkiaGm {
     override val name = "rgbw_sweep_gradient"
     override val renderFamily = RenderFamily.GRADIENT
-    override val minSimilarity = 0.0
+    override val minSimilarity = 20.0
     override val width = 100
     override val height = 100
 

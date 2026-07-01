@@ -25,7 +25,7 @@ import org.graphiks.kanvas.types.Rect
 class ClippedCubic2Gm : SkiaGm {
     override val name = "clippedcubic2"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 0.0
+    override val minSimilarity = 94.2
     override val width = 1240
     override val height = 390
 

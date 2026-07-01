@@ -16,7 +16,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 class ThinAaDashLinesGm : SkiaGm {
     override val name = "thin_aa_dash_lines"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 0.0
+    override val minSimilarity = 75.6
     override val width = 330
     override val height = 110
 

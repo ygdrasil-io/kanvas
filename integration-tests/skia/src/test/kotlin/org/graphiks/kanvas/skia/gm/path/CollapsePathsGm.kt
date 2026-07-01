@@ -22,7 +22,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 class CollapsePathsGm : SkiaGm {
     override val name = "collapsepaths"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 0.0
+    override val minSimilarity = 83.4
     override val width = 500
     override val height = 600
 

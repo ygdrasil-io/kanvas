@@ -16,7 +16,7 @@ import org.graphiks.kanvas.types.Rect
 class PathInvFillGm : SkiaGm {
     override val name = "pathinvfill"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 0.0
+    override val minSimilarity = 15.8
     override val width = 450
     override val height = 220
 

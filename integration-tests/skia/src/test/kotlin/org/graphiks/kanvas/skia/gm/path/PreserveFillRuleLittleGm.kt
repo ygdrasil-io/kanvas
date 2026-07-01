@@ -20,7 +20,7 @@ import kotlin.math.sin
 class PreserveFillRuleLittleGm : SkiaGm {
     override val name = "preservefillrule_little"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 0.0
+    override val minSimilarity = 40.4
     override val width = 40
     override val height = 40
 

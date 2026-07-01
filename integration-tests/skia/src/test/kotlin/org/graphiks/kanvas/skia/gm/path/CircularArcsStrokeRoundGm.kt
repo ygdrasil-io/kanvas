@@ -17,7 +17,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 class CircularArcsStrokeRoundGm : SkiaGm {
     override val name = "circular_arcs_stroke_round"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 0.0
+    override val minSimilarity = 40.7
     override val width = 1000
     override val height = 1000
 

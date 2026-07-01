@@ -16,7 +16,7 @@ import org.graphiks.kanvas.types.Color
 class HairlineSubdivGm : SkiaGm {
     override val name = "hairline_subdiv"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 0.0
+    override val minSimilarity = 43.6
     override val width = 512
     override val height = 256
 

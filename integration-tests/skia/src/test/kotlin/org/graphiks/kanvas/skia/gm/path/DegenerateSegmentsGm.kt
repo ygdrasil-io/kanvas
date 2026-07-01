@@ -22,7 +22,7 @@ import kotlin.random.Random
 class DegenerateSegmentsGm : SkiaGm {
     override val name = "degeneratesegments"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 0.0
+    override val minSimilarity = 71.9
     override val width = 896
     override val height = 930
 

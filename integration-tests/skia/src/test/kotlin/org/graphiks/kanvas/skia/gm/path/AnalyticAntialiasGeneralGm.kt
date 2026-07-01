@@ -20,7 +20,7 @@ import kotlin.math.sin
 class AnalyticAntialiasGeneralGm : SkiaGm {
     override val name = "analytic_antialias_general"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 0.0
+    override val minSimilarity = 85.3
     override val width = 800
     override val height = 800
 

@@ -17,7 +17,7 @@ import org.graphiks.kanvas.types.Color
 class RotatedCubicPathGm : SkiaGm {
     override val name = "rotatedcubicpath"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 0.0
+    override val minSimilarity = 90.6
     override val width = 200
     override val height = 200
 

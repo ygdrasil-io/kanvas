@@ -17,7 +17,7 @@ import org.graphiks.kanvas.types.Rect
 class BigRectGm : SkiaGm {
     override val name = "bigrect"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 0.0
+    override val minSimilarity = 41.9
     override val width = 325
     override val height = 125
 

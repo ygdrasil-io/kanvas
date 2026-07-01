@@ -20,7 +20,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 class GradientsInterestingGm : SkiaGm {
     override val name = "gradients_interesting"
     override val renderFamily = RenderFamily.GRADIENT
-    override val minSimilarity = 0.0
+    override val minSimilarity = 10.8
     override val width = 640
     override val height = 1300
 

@@ -16,7 +16,7 @@ import org.graphiks.kanvas.types.Rect
 class DaaGm : SkiaGm {
     override val name = "daa"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 0.0
+    override val minSimilarity = 76.8
     override val width = 399
     override val height = 245
 

@@ -16,7 +16,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 class LongWavyLineGm : SkiaGm {
     override val name = "longwavyline"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 0.0
+    override val minSimilarity = 94.4
     override val width = 512
     override val height = 512
 

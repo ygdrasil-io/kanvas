@@ -13,7 +13,7 @@ import kotlin.math.sin
 class BatchedConvexPathsGm : SkiaGm {
     override val name = "batchedconvexpaths"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 0.0
+    override val minSimilarity = 30.0
     override val width = 512
     override val height = 512
 

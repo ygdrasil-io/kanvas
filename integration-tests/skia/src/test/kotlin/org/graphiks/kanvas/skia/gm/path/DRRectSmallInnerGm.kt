@@ -17,7 +17,7 @@ import org.graphiks.kanvas.types.Rect
 class DRRectSmallInnerGm : SkiaGm {
     override val name = "drrect_small_inner"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 0.0
+    override val minSimilarity = 71.4
     override val width = 170
     override val height = 610
 

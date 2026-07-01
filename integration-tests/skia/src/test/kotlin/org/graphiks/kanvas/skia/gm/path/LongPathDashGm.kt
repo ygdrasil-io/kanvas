@@ -20,7 +20,7 @@ import kotlin.math.sin
 class LongPathDashGm : SkiaGm {
     override val name = "longpathdash"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 0.0
+    override val minSimilarity = 34.2
     override val width = 612
     override val height = 612
 

@@ -22,7 +22,7 @@ import kotlin.math.min
 class StrokeRectRRectsGm : SkiaGm {
     override val name = "stroke_rect_rrects"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 0.0
+    override val minSimilarity = 71.2
     override val width = 1350
     override val height = 700
 
