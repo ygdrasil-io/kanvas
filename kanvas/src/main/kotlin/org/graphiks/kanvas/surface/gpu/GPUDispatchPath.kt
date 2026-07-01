@@ -118,6 +118,59 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
                 ),
             )
         }
+        is GPUMaterialDescriptor.RadialGradient -> {
+            val bb = java.nio.ByteBuffer.allocate(48).order(java.nio.ByteOrder.nativeOrder())
+            bb.putFloat(material.centerX); bb.putFloat(material.centerY)
+            bb.putFloat(material.radius)
+            bb.putFloat(0f) // padding — vec4f alignment at offset 16
+            bb.putFloat(srgbToLinear(material.startR) * material.startA)
+            bb.putFloat(srgbToLinear(material.startG) * material.startA)
+            bb.putFloat(srgbToLinear(material.startB) * material.startA)
+            bb.putFloat(material.startA)
+            bb.putFloat(srgbToLinear(material.endR) * material.endA)
+            bb.putFloat(srgbToLinear(material.endG) * material.endA)
+            bb.putFloat(srgbToLinear(material.endB) * material.endA)
+            bb.putFloat(material.endA)
+            drawFullscreenStencilPass(
+                wgsl = RADIAL_GRADIENT_WGSL,
+                colorFormat = config.gpuColorFormat.wgpuLabel,
+                stencilMode = GPUBackendStencilMode.Test,
+                triangleData = null,
+                draws = listOf(
+                    GPUBackendRawUniformDraw(
+                        uniformBytes = bb.array(),
+                        scissorX = sx, scissorY = sy,
+                        scissorWidth = sw, scissorHeight = sh,
+                    ),
+                ),
+            )
+        }
+        is GPUMaterialDescriptor.SweepGradient -> {
+            val bb = java.nio.ByteBuffer.allocate(48).order(java.nio.ByteOrder.nativeOrder())
+            bb.putFloat(material.centerX); bb.putFloat(material.centerY)
+            bb.putFloat(material.startAngle); bb.putFloat(material.endAngle)
+            bb.putFloat(srgbToLinear(material.startR) * material.startA)
+            bb.putFloat(srgbToLinear(material.startG) * material.startA)
+            bb.putFloat(srgbToLinear(material.startB) * material.startA)
+            bb.putFloat(material.startA)
+            bb.putFloat(srgbToLinear(material.endR) * material.endA)
+            bb.putFloat(srgbToLinear(material.endG) * material.endA)
+            bb.putFloat(srgbToLinear(material.endB) * material.endA)
+            bb.putFloat(material.endA)
+            drawFullscreenStencilPass(
+                wgsl = SWEEP_GRADIENT_WGSL,
+                colorFormat = config.gpuColorFormat.wgpuLabel,
+                stencilMode = GPUBackendStencilMode.Test,
+                triangleData = null,
+                draws = listOf(
+                    GPUBackendRawUniformDraw(
+                        uniformBytes = bb.array(),
+                        scissorX = sx, scissorY = sy,
+                        scissorWidth = sw, scissorHeight = sh,
+                    ),
+                ),
+            )
+        }
         else -> {
             refuse("unsupported_material:${material.kind.name}")
             return
