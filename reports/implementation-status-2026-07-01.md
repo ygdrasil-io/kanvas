@@ -141,8 +141,9 @@ Total: 28 new subtypes + 4 enums. 29 existing + 28 new = 57 subtypes.
 | `PathMeasure.getMatrix` | Dead stub | Implement or remove from API |
 | `PathOps.op` for general bezier paths | Only rect-rect handled | Path boolean algorithm |
 | Image codec (real decode) | `Image.decode` returns 0x0 placeholder | `:codec:api` SPI providers |
-| RuntimeEffect (compile) | `compile()` returns `Result.failure` (not yet wired) | Bridge to existing wgsl4k integration in `:gpu-renderer` (KanvasWGSLValidator, KanvasWGSLReflectionProvider) |
-| RuntimeEffect (makeColorFilter/makeBlender) | throw UnsupportedOperationException | Shader lowering semantics for color filter/blender effects |
+| PathMeasure.getMatrix | ✅ Implemented (delegates to getPosition) | — |
+| RuntimeEffect (compile) | ✅ Hooks wired; `compile()` uses `compileWgsl` hook | wgsl4k JARs must be published to Maven local, then `RuntimeEffectWgsl4kWiring.install()` in :kanvas |
+| RuntimeEffect (colorFilter/blender) | ✅ Hooks ready (`makeColorFilterHook`, `makeBlenderHook`) | wgsl4k integration for shader lowering semantics |
 
 ### Fully complete
 
