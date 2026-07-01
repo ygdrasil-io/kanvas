@@ -315,6 +315,74 @@ internal val SWEEP_GRADIENT_MULTI_WGSL: String = """
     }
 """.trimIndent()
 
+internal val BLEND_FORMULA_WGSL: String = """
+    struct Uniforms {
+        blendMode: u32,
+    };
+
+    @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+    @group(1) @binding(1) var srcTexture: texture_2d<f32>;
+    @group(1) @binding(2) var srcSampler: sampler;
+    @group(1) @binding(3) var dstTexture: texture_2d<f32>;
+    @group(1) @binding(4) var dstSampler: sampler;
+
+    @vertex
+    fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
+        let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
+        let y = f32(idx & 2u) * 2.0 - 1.0;
+        return vec4f(x, y, 0.0, 1.0);
+    }
+
+    fn blendMultiply(src: vec4f, dst: vec4f) -> vec4f {
+        return vec4f(src.rgb * dst.rgb + dst.rgb * (1.0 - src.a) + src.rgb * (1.0 - dst.a), src.a + dst.a * (1.0 - src.a));
+    }
+
+    fn blendScreen(src: vec4f, dst: vec4f) -> vec4f {
+        return vec4f(src.rgb + dst.rgb - src.rgb * dst.rgb, src.a + dst.a * (1.0 - src.a));
+    }
+
+    fn blendOverlay(src: vec4f, dst: vec4f) -> vec4f {
+        let mul = 2.0 * src.rgb * dst.rgb;
+        let scrn = 1.0 - 2.0 * (1.0 - src.rgb) * (1.0 - dst.rgb);
+        let cond = step(dst.rgb, vec3f(0.5));
+        return vec4f(mix(scrn, mul, cond), src.a + dst.a * (1.0 - src.a));
+    }
+
+    fn blendDarken(src: vec4f, dst: vec4f) -> vec4f {
+        return vec4f(min(src.rgb, dst.rgb), src.a + dst.a * (1.0 - src.a));
+    }
+
+    fn blendLighten(src: vec4f, dst: vec4f) -> vec4f {
+        return vec4f(max(src.rgb, dst.rgb), src.a + dst.a * (1.0 - src.a));
+    }
+
+    fn blendDifference(src: vec4f, dst: vec4f) -> vec4f {
+        return vec4f(abs(dst.rgb - src.rgb), src.a + dst.a * (1.0 - src.a));
+    }
+
+    fn blendExclusion(src: vec4f, dst: vec4f) -> vec4f {
+        return vec4f(src.rgb + dst.rgb - 2.0 * src.rgb * dst.rgb, src.a + dst.a * (1.0 - src.a));
+    }
+
+    @fragment
+    fn fs_main(@builtin(position) coord: vec4f) -> @location(0) vec4f {
+        let srcDims = textureDimensions(srcTexture);
+        let uv = vec2f(coord.x / f32(srcDims.x), coord.y / f32(srcDims.y));
+        let src = textureSample(srcTexture, srcSampler, uv);
+        let dst = textureSample(dstTexture, dstSampler, uv);
+        switch uniforms.blendMode {
+            case 0u: { return blendMultiply(src, dst); }
+            case 1u: { return blendScreen(src, dst); }
+            case 2u: { return blendOverlay(src, dst); }
+            case 3u: { return blendDarken(src, dst); }
+            case 4u: { return blendLighten(src, dst); }
+            case 5u: { return blendDifference(src, dst); }
+            case 6u: { return blendExclusion(src, dst); }
+            default: { return src; }
+        }
+    }
+""".trimIndent()
+
 internal fun stencilWriteWgsl(width: Int, height: Int): String = """
 struct VertexInput {
     @location(0) position: vec2f,
