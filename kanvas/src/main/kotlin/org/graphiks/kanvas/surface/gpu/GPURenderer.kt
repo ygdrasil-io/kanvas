@@ -13,21 +13,21 @@ import org.graphiks.kanvas.gpu.renderer.geometry.PathTessellator
 import org.graphiks.kanvas.gpu.renderer.geometry.Point
 import org.graphiks.kanvas.surface.Diagnostics
 import org.graphiks.kanvas.surface.PixelFormat
+import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.surface.RenderResult
 import org.graphiks.kanvas.surface.RenderStats
-
-private const val GPU_COLOR_FORMAT: String = "rgba8unorm"
 
 internal fun renderViaGpu(
     buffer: DisplayListBuffer,
     width: Int,
     height: Int,
     format: PixelFormat,
+    config: RenderConfig,
 ): RenderResult {
     val ops = buffer.ops()
     val diagnostics = Diagnostics()
     val dispatched = mutableListOf<String>()
-    val targets = GPUTargetFacts(width = width, height = height, colorFormat = format.toGpuColorFormat())
+    val targets = GPUTargetFacts(width = width, height = height, colorFormat = config.gpuColorFormat.wgpuLabel)
 
     val session = GPUBackendRuntimeFactory.createOrNull()
         ?: error("webgpu-context-unavailable")
@@ -37,7 +37,7 @@ internal fun renderViaGpu(
             GPUOffscreenTargetRequest(
                 width = width,
                 height = height,
-                colorFormat = GPU_COLOR_FORMAT,
+                colorFormat = config.gpuColorFormat.wgpuLabel,
             ),
         )
         target.use { t ->
@@ -48,11 +48,14 @@ internal fun renderViaGpu(
                     when (op) {
                         is DisplayOp.DrawRect -> {
                             val cmd = op.toNormalizedCommand(cmdId, targets)
-                            dispatchFillRect(cmd, dispatched, diagnostics, width, height)
+                            dispatchFillRect(cmd, dispatched, diagnostics, width, height, config)
                         }
                         is DisplayOp.DrawPath -> {
                             val pathData = op.path.toPathTessellatorData()
-                            val tessellator = PathTessellator(tolerance = 0.25f, maxVertices = 16384)
+                            val tessellator = PathTessellator(
+                                tolerance = config.curveTolerance,
+                                maxVertices = config.maxPathVertices.toInt(),
+                            )
                             val flat = tessellator.flatten(pathData)
                             if (flat.size < 3) {
                                 diagnostics.fatal(
@@ -64,11 +67,11 @@ internal fun renderViaGpu(
                             val vertices = tri.vertices.flatMap { listOf(it.x, it.y) }
                             val contourStarts = listOf(0)
                             val cmd = op.toNormalizedCommand(cmdId, targets, vertices, contourStarts, flat.size)
-                            dispatchFillPath(cmd, dispatched, diagnostics, width, height)
+                            dispatchFillPath(cmd, dispatched, diagnostics, width, height, config)
                         }
                         is DisplayOp.DrawRRect -> {
                             val cmd = op.toNormalizedCommand(cmdId, targets)
-                            dispatchFillRRect(cmd, dispatched, diagnostics, width, height)
+                            dispatchFillRRect(cmd, dispatched, diagnostics, width, height, config)
                         }
                         is DisplayOp.DrawImage -> {
                             diagnostics.fatal(
@@ -146,7 +149,3 @@ internal fun org.graphiks.kanvas.geometry.Path.toPathTessellatorData(): PathData
     return PathData(verbs = verbs, points = points)
 }
 
-internal fun PixelFormat.toGpuColorFormat(): String = when (this) {
-    PixelFormat.RGBA8 -> "rgba8unorm"
-    PixelFormat.BGRA8 -> "bgra8unorm"
-}

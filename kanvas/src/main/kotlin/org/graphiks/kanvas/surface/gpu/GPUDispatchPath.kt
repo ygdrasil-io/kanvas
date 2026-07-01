@@ -7,8 +7,7 @@ import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRenderRecorder
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendStencilMode
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendTriangleData
 import org.graphiks.kanvas.surface.Diagnostics
-
-private const val GPU_COLOR_FORMAT: String = "rgba8unorm"
+import org.graphiks.kanvas.surface.RenderConfig
 
 internal fun GPUBackendRenderRecorder.dispatchFillPath(
     cmd: NormalizedDrawCommand.FillPath,
@@ -16,6 +15,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
     diagnostics: Diagnostics,
     surfaceWidth: Int,
     surfaceHeight: Int,
+    config: RenderConfig,
 ) {
     fun refuse(reason: String) {
         diagnostics.fatal("refuse:${cmd.diagnosticName}", cmd.diagnosticName, reason)
@@ -65,7 +65,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
 
     drawFullscreenStencilPass(
         wgsl = writeWgsl,
-        colorFormat = GPU_COLOR_FORMAT,
+        colorFormat = config.gpuColorFormat.wgpuLabel,
         stencilMode = GPUBackendStencilMode.Write,
         triangleData = triangleData,
         draws = emptyList(),
@@ -80,7 +80,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
             colorBb.putFloat(material.a)
             drawFullscreenStencilPass(
                 wgsl = SOLID_RECT_WGSL,
-                colorFormat = GPU_COLOR_FORMAT,
+                colorFormat = config.gpuColorFormat.wgpuLabel,
                 stencilMode = GPUBackendStencilMode.Test,
                 triangleData = null,
                 draws = listOf(

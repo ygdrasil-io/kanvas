@@ -20,6 +20,7 @@ class Surface(
     val width: Int,
     val height: Int,
     val format: PixelFormat = PixelFormat.RGBA8,
+    val config: RenderConfig = RenderConfig.DEFAULT,
 ) {
     private val buffer = SurfaceDisplayListBuffer()
     private var canvasInstance: Canvas? = null
@@ -43,7 +44,7 @@ class Surface(
      * accumulated during processing, and rendering statistics. The pixel buffer
      * is allocated fresh each call.
      */
-    fun render(): RenderResult = renderViaGpu(buffer, width, height, format)
+    fun render(): RenderResult = renderViaGpu(buffer, width, height, format, config)
 }
 
 private class SurfaceDisplayListBuffer : DisplayListBuffer {

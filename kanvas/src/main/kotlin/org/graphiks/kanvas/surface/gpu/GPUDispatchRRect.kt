@@ -5,8 +5,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRawUniformDraw
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRenderRecorder
 import org.graphiks.kanvas.surface.Diagnostics
-
-private const val GPU_COLOR_FORMAT: String = "rgba8unorm"
+import org.graphiks.kanvas.surface.RenderConfig
 
 internal fun GPUBackendRenderRecorder.dispatchFillRRect(
     cmd: NormalizedDrawCommand.FillRRect,
@@ -14,6 +13,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillRRect(
     diagnostics: Diagnostics,
     surfaceWidth: Int,
     surfaceHeight: Int,
+    config: RenderConfig,
 ) {
     fun refuse(reason: String) {
         diagnostics.fatal("refuse:${cmd.diagnosticName}", cmd.diagnosticName, reason)
@@ -49,7 +49,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillRRect(
 
     drawFullscreenRawUniformPass(
         wgsl = RRECT_WGSL,
-        colorFormat = GPU_COLOR_FORMAT,
+        colorFormat = config.gpuColorFormat.wgpuLabel,
         draws = listOf(
             GPUBackendRawUniformDraw(
                 uniformBytes = bb.array(),
