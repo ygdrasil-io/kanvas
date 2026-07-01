@@ -42,9 +42,9 @@ internal fun GPUBackendRenderRecorder.dispatchFillRRect(
     bb.putFloat(rect.right); bb.putFloat(rect.bottom)
     bb.putFloat(rx); bb.putFloat(ry)
     bb.putFloat(0f); bb.putFloat(0f)
-    bb.putFloat(material.r * material.a)
-    bb.putFloat(material.g * material.a)
-    bb.putFloat(material.b * material.a)
+    bb.putFloat(srgbToLinear(material.r) * material.a)
+    bb.putFloat(srgbToLinear(material.g) * material.a)
+    bb.putFloat(srgbToLinear(material.b) * material.a)
     bb.putFloat(material.a)
 
     drawFullscreenRawUniformPass(
