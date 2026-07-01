@@ -20,7 +20,6 @@ import io.ygdrasil.webgpu.Extent3D
 import io.ygdrasil.webgpu.FragmentState
 import io.ygdrasil.webgpu.GLFWContext
 import io.ygdrasil.webgpu.GPUAddressMode
-import io.ygdrasil.webgpu.GPUBlendFactor
 import io.ygdrasil.webgpu.GPUBlendOperation
 import io.ygdrasil.webgpu.GPUColorWrite
 import io.ygdrasil.webgpu.GPUCompareFunction
@@ -87,6 +86,7 @@ import org.graphiks.kanvas.gpu.renderer.telemetry.GPUCacheTelemetry
 import org.graphiks.kanvas.gpu.renderer.telemetry.GPUTelemetryLedger
 
 import org.graphiks.kanvas.gpu.renderer.text.colorGlyphCompositeWgsl
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendFactor
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 
 private const val COPY_BYTES_PER_ROW_ALIGNMENT: Int = 256
@@ -2034,13 +2034,13 @@ private class WgpuExecutionCaches(
                                     blend = BlendState(
                                         color = BlendComponent(
                                             operation = GPUBlendOperation.Add,
-                                            srcFactor = GPUBlendFactor.One,
-                                            dstFactor = GPUBlendFactor.Zero,
-                                        ),
-                                        alpha = BlendComponent(
-                                            operation = GPUBlendOperation.Add,
-                                            srcFactor = GPUBlendFactor.One,
-                                            dstFactor = GPUBlendFactor.Zero,
+                                    srcFactor = io.ygdrasil.webgpu.GPUBlendFactor.One,
+                                    dstFactor = io.ygdrasil.webgpu.GPUBlendFactor.Zero,
+                                ),
+                                alpha = BlendComponent(
+                                    operation = GPUBlendOperation.Add,
+                                    srcFactor = io.ygdrasil.webgpu.GPUBlendFactor.One,
+                                    dstFactor = io.ygdrasil.webgpu.GPUBlendFactor.Zero,
                                         ),
                                     ),
                                     writeMask = GPUColorWrite.None,
@@ -2910,51 +2910,42 @@ private fun Map<String, Long>.firstNonZeroPointer(vararg keys: String): Long? =
 private fun GPUClearColor.toWgpuColor(): Color =
     Color(r = red, g = green, b = blue, a = alpha)
 
-private fun blendFactor(label: String): GPUBlendFactor = when (label) {
-    "Zero" -> GPUBlendFactor.Zero
-    "One" -> GPUBlendFactor.One
-    "SrcColor", "Src" -> GPUBlendFactor.Src
-    "OneMinusSrcColor", "OneMinusSrc" -> GPUBlendFactor.OneMinusSrc
-    "DstColor", "Dst" -> GPUBlendFactor.Dst
-    "OneMinusDstColor", "OneMinusDst" -> GPUBlendFactor.OneMinusDst
-    "SrcAlpha" -> GPUBlendFactor.SrcAlpha
-    "OneMinusSrcAlpha" -> GPUBlendFactor.OneMinusSrcAlpha
-    "DstAlpha" -> GPUBlendFactor.DstAlpha
-    "OneMinusDstAlpha" -> GPUBlendFactor.OneMinusDstAlpha
-    "SrcAlphaSaturated" -> GPUBlendFactor.SrcAlphaSaturated
-    "Constant" -> GPUBlendFactor.Constant
-    "OneMinusConstant" -> GPUBlendFactor.OneMinusConstant
-    else -> GPUBlendFactor.One
+private fun toWgpuFactor(f: GPUBlendFactor): io.ygdrasil.webgpu.GPUBlendFactor = when (f) {
+    GPUBlendFactor.Zero -> io.ygdrasil.webgpu.GPUBlendFactor.Zero
+    GPUBlendFactor.One -> io.ygdrasil.webgpu.GPUBlendFactor.One
+    GPUBlendFactor.Src -> io.ygdrasil.webgpu.GPUBlendFactor.Src
+    GPUBlendFactor.OneMinusSrc -> io.ygdrasil.webgpu.GPUBlendFactor.OneMinusSrc
+    GPUBlendFactor.Dst -> io.ygdrasil.webgpu.GPUBlendFactor.Dst
+    GPUBlendFactor.OneMinusDst -> io.ygdrasil.webgpu.GPUBlendFactor.OneMinusDst
+    GPUBlendFactor.SrcAlpha -> io.ygdrasil.webgpu.GPUBlendFactor.SrcAlpha
+    GPUBlendFactor.OneMinusSrcAlpha -> io.ygdrasil.webgpu.GPUBlendFactor.OneMinusSrcAlpha
+    GPUBlendFactor.DstAlpha -> io.ygdrasil.webgpu.GPUBlendFactor.DstAlpha
+    GPUBlendFactor.OneMinusDstAlpha -> io.ygdrasil.webgpu.GPUBlendFactor.OneMinusDstAlpha
+    GPUBlendFactor.SrcAlphaSaturated -> io.ygdrasil.webgpu.GPUBlendFactor.SrcAlphaSaturated
+    GPUBlendFactor.Constant -> io.ygdrasil.webgpu.GPUBlendFactor.Constant
+    GPUBlendFactor.OneMinusConstant -> io.ygdrasil.webgpu.GPUBlendFactor.OneMinusConstant
 }
 
 private fun blendStateFor(blendMode: GPUBlendMode?): BlendState {
-    return if (blendMode == null || blendMode == GPUBlendMode.SRC_OVER) {
-        BlendState(
-            color = BlendComponent(GPUBlendOperation.Add, GPUBlendFactor.One, GPUBlendFactor.OneMinusSrcAlpha),
-            alpha = BlendComponent(GPUBlendOperation.Add, GPUBlendFactor.One, GPUBlendFactor.OneMinusSrcAlpha),
+    val mode = blendMode
+    if (mode == null || mode == GPUBlendMode.SRC_OVER || mode.requiresDestinationRead) {
+        return BlendState(
+            color = BlendComponent(GPUBlendOperation.Add, io.ygdrasil.webgpu.GPUBlendFactor.One, io.ygdrasil.webgpu.GPUBlendFactor.OneMinusSrcAlpha),
+            alpha = BlendComponent(GPUBlendOperation.Add, io.ygdrasil.webgpu.GPUBlendFactor.One, io.ygdrasil.webgpu.GPUBlendFactor.OneMinusSrcAlpha),
         )
-    } else {
-        try {
-            BlendState(
-                color = BlendComponent(
-                    operation = GPUBlendOperation.Add,
-                    srcFactor = blendFactor(blendMode.colorSrcFactor),
-                    dstFactor = blendFactor(blendMode.colorDstFactor),
-                ),
-                alpha = BlendComponent(
-                    operation = GPUBlendOperation.Add,
-                    srcFactor = blendFactor(blendMode.alphaSrcFactor),
-                    dstFactor = blendFactor(blendMode.alphaDstFactor),
-                ),
-            )
-        } catch (_: Throwable) {
-            // Fall back to SrcOver if blend state creation fails
-            BlendState(
-                color = BlendComponent(GPUBlendOperation.Add, GPUBlendFactor.One, GPUBlendFactor.OneMinusSrcAlpha),
-                alpha = BlendComponent(GPUBlendOperation.Add, GPUBlendFactor.One, GPUBlendFactor.OneMinusSrcAlpha),
-            )
-        }
     }
+    return BlendState(
+        color = BlendComponent(
+            operation = GPUBlendOperation.Add,
+            srcFactor = toWgpuFactor(mode.colorSrcFactor),
+            dstFactor = toWgpuFactor(mode.colorDstFactor),
+        ),
+        alpha = BlendComponent(
+            operation = GPUBlendOperation.Add,
+            srcFactor = toWgpuFactor(mode.alphaSrcFactor),
+            dstFactor = toWgpuFactor(mode.alphaDstFactor),
+        ),
+    )
 }
 
 private fun GPUTextureFormat.bytesPerPixel(): Int =

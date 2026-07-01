@@ -1,7 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.passes
 
 /**
- * WebGPU blend mode mapping.
+ * Blend mode mapping to WebGPU fixed-function blend factors.
  *
  * Porter-Duff (fixed-function) modes use [colorSrcFactor]/[colorDstFactor]
  * directly. Shader-based modes ([requiresDestinationRead] = true) need dual
@@ -10,31 +10,31 @@ package org.graphiks.kanvas.gpu.renderer.passes
  */
 enum class GPUBlendMode(
     val wgpuLabel: String,
-    val colorSrcFactor: String,
-    val colorDstFactor: String,
-    val alphaSrcFactor: String,
-    val alphaDstFactor: String,
+    val colorSrcFactor: GPUBlendFactor,
+    val colorDstFactor: GPUBlendFactor,
+    val alphaSrcFactor: GPUBlendFactor,
+    val alphaDstFactor: GPUBlendFactor,
     val requiresDestinationRead: Boolean = false,
 ) {
     // Porter-Duff modes — exact WebGPU fixed-function blend
-    SRC_OVER("src_over", "One", "OneMinusSrcAlpha", "One", "OneMinusSrcAlpha"),
-    SRC("src", "One", "Zero", "One", "Zero"),
-    DST("dst", "Zero", "One", "Zero", "One"),
-    SRC_IN("src_in", "DstAlpha", "Zero", "DstAlpha", "Zero"),
-    DST_IN("dst_in", "Zero", "SrcAlpha", "Zero", "SrcAlpha"),
-    SRC_OUT("src_out", "OneMinusDstAlpha", "Zero", "OneMinusDstAlpha", "Zero"),
-    DST_OUT("dst_out", "Zero", "OneMinusSrcAlpha", "Zero", "OneMinusSrcAlpha"),
-    SRC_ATOP("src_atop", "DstAlpha", "OneMinusSrcAlpha", "DstAlpha", "OneMinusSrcAlpha"),
-    DST_ATOP("dst_atop", "OneMinusDstAlpha", "SrcAlpha", "OneMinusDstAlpha", "SrcAlpha"),
-    XOR("xor", "OneMinusDstAlpha", "OneMinusSrcAlpha", "OneMinusDstAlpha", "OneMinusSrcAlpha"),
-    PLUS("plus", "One", "One", "One", "One"),
-    MODULATE("modulate", "Zero", "SrcColor", "Zero", "SrcAlpha"),
+    SRC_OVER("src_over", GPUBlendFactor.One, GPUBlendFactor.OneMinusSrcAlpha, GPUBlendFactor.One, GPUBlendFactor.OneMinusSrcAlpha),
+    SRC("src", GPUBlendFactor.One, GPUBlendFactor.Zero, GPUBlendFactor.One, GPUBlendFactor.Zero),
+    DST("dst", GPUBlendFactor.Zero, GPUBlendFactor.One, GPUBlendFactor.Zero, GPUBlendFactor.One),
+    SRC_IN("src_in", GPUBlendFactor.DstAlpha, GPUBlendFactor.Zero, GPUBlendFactor.DstAlpha, GPUBlendFactor.Zero),
+    DST_IN("dst_in", GPUBlendFactor.Zero, GPUBlendFactor.SrcAlpha, GPUBlendFactor.Zero, GPUBlendFactor.SrcAlpha),
+    SRC_OUT("src_out", GPUBlendFactor.OneMinusDstAlpha, GPUBlendFactor.Zero, GPUBlendFactor.OneMinusDstAlpha, GPUBlendFactor.Zero),
+    DST_OUT("dst_out", GPUBlendFactor.Zero, GPUBlendFactor.OneMinusSrcAlpha, GPUBlendFactor.Zero, GPUBlendFactor.OneMinusSrcAlpha),
+    SRC_ATOP("src_atop", GPUBlendFactor.DstAlpha, GPUBlendFactor.OneMinusSrcAlpha, GPUBlendFactor.DstAlpha, GPUBlendFactor.OneMinusSrcAlpha),
+    DST_ATOP("dst_atop", GPUBlendFactor.OneMinusDstAlpha, GPUBlendFactor.SrcAlpha, GPUBlendFactor.OneMinusDstAlpha, GPUBlendFactor.SrcAlpha),
+    XOR("xor", GPUBlendFactor.OneMinusDstAlpha, GPUBlendFactor.OneMinusSrcAlpha, GPUBlendFactor.OneMinusDstAlpha, GPUBlendFactor.OneMinusSrcAlpha),
+    PLUS("plus", GPUBlendFactor.One, GPUBlendFactor.One, GPUBlendFactor.One, GPUBlendFactor.One),
+    MODULATE("modulate", GPUBlendFactor.Zero, GPUBlendFactor.Src, GPUBlendFactor.Zero, GPUBlendFactor.SrcAlpha),
     // Advanced modes — need destination read + shader-based blending
-    MULTIPLY("multiply", "DstColor", "OneMinusSrcAlpha", "One", "OneMinusSrcAlpha", requiresDestinationRead = true),
-    SCREEN("screen", "One", "OneMinusSrcColor", "One", "OneMinusSrcAlpha", requiresDestinationRead = true),
-    OVERLAY("overlay", "DstColor", "OneMinusSrcAlpha", "One", "OneMinusSrcAlpha", requiresDestinationRead = true),
-    DARKEN("darken", "OneMinusDstColor", "OneMinusSrcAlpha", "One", "OneMinusSrcAlpha", requiresDestinationRead = true),
-    LIGHTEN("lighten", "One", "OneMinusSrcAlpha", "One", "OneMinusSrcAlpha", requiresDestinationRead = true),
-    DIFFERENCE("difference", "One", "OneMinusSrcAlpha", "One", "OneMinusSrcAlpha", requiresDestinationRead = true),
-    EXCLUSION("exclusion", "One", "OneMinusSrcAlpha", "One", "OneMinusSrcAlpha", requiresDestinationRead = true),
+    MULTIPLY("multiply", GPUBlendFactor.Dst, GPUBlendFactor.OneMinusSrcAlpha, GPUBlendFactor.One, GPUBlendFactor.OneMinusSrcAlpha, requiresDestinationRead = true),
+    SCREEN("screen", GPUBlendFactor.One, GPUBlendFactor.OneMinusSrc, GPUBlendFactor.One, GPUBlendFactor.OneMinusSrcAlpha, requiresDestinationRead = true),
+    OVERLAY("overlay", GPUBlendFactor.Dst, GPUBlendFactor.OneMinusSrcAlpha, GPUBlendFactor.One, GPUBlendFactor.OneMinusSrcAlpha, requiresDestinationRead = true),
+    DARKEN("darken", GPUBlendFactor.OneMinusDst, GPUBlendFactor.OneMinusSrcAlpha, GPUBlendFactor.One, GPUBlendFactor.OneMinusSrcAlpha, requiresDestinationRead = true),
+    LIGHTEN("lighten", GPUBlendFactor.One, GPUBlendFactor.OneMinusSrcAlpha, GPUBlendFactor.One, GPUBlendFactor.OneMinusSrcAlpha, requiresDestinationRead = true),
+    DIFFERENCE("difference", GPUBlendFactor.One, GPUBlendFactor.OneMinusSrcAlpha, GPUBlendFactor.One, GPUBlendFactor.OneMinusSrcAlpha, requiresDestinationRead = true),
+    EXCLUSION("exclusion", GPUBlendFactor.One, GPUBlendFactor.OneMinusSrcAlpha, GPUBlendFactor.One, GPUBlendFactor.OneMinusSrcAlpha, requiresDestinationRead = true),
 }
