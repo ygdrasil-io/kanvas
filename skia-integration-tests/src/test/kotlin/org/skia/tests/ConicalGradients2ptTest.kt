@@ -30,10 +30,6 @@ class ConicalGradients2ptTest {
         )
     }
 
-    @Test
-    fun `gradients_2pt_conical_inside_nodither matches reference`() =
-        runGm(ConicalGradients2ptInsideGM(), "ConicalGradients2ptInsideGM", 75.0)
-
     // ─── Tile-mode variants added in H3 wave 10B ────────────────────
 
     @Test

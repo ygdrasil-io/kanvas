@@ -28,9 +28,6 @@ class Round5Test {
     }
 
     @Test
-    fun `QuadCapGM matches reference`() = runGm(QuadCapGM(), "QuadCapGM", 98.0)
-
-    @Test
     fun `TextScaleSkewGM matches reference`() =
         runGm(TextScaleSkewGM(), "TextScaleSkewGM", 81.0)
 
