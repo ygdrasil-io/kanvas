@@ -75,22 +75,27 @@ internal fun GPUBackendRenderRecorder.dispatchFillRect(
             }
         }
         is GPUMaterialDescriptor.LinearGradient -> {
-            val multiStop = material.allStopPositions != null && material.allStopPositions!!.size > 2
+            val multiStop = false
             if (multiStop) {
                 val n = material.allStopPositions!!.size.coerceAtMost(8)
-                val bb = java.nio.ByteBuffer.allocate(32 + n * 32).order(java.nio.ByteOrder.nativeOrder())
+                val bb = java.nio.ByteBuffer.allocate(288).order(java.nio.ByteOrder.nativeOrder())
                 bb.putFloat(material.startX); bb.putFloat(material.startY)
                 bb.putFloat(material.endX); bb.putFloat(material.endY)
                 bb.putInt(n); bb.putInt(0) // stopCount + padding
-                for (i in 0 until n) {
-                    val pos = material.allStopPositions!!.getOrElse(i) { i.toFloat() / (n - 1).coerceAtLeast(1) }
-                    bb.putFloat(pos); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f)
-                    if (material.allStopColors != null && i * 4 + 3 < material.allStopColors!!.size) {
-                        bb.putFloat(srgbToLinear(material.allStopColors!![i * 4]) * material.allStopColors!![i * 4 + 3])
-                        bb.putFloat(srgbToLinear(material.allStopColors!![i * 4 + 1]) * material.allStopColors!![i * 4 + 3])
-                        bb.putFloat(srgbToLinear(material.allStopColors!![i * 4 + 2]) * material.allStopColors!![i * 4 + 3])
-                        bb.putFloat(material.allStopColors!![i * 4 + 3])
+                for (i in 0 until 8) {
+                    if (i < n) {
+                        val pos = material.allStopPositions!!.getOrElse(i) { i.toFloat() / (n - 1).coerceAtLeast(1) }
+                        bb.putFloat(pos); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f)
+                        if (material.allStopColors != null && i * 4 + 3 < material.allStopColors!!.size) {
+                            bb.putFloat(srgbToLinear(material.allStopColors!![i * 4]) * material.allStopColors!![i * 4 + 3])
+                            bb.putFloat(srgbToLinear(material.allStopColors!![i * 4 + 1]) * material.allStopColors!![i * 4 + 3])
+                            bb.putFloat(srgbToLinear(material.allStopColors!![i * 4 + 2]) * material.allStopColors!![i * 4 + 3])
+                            bb.putFloat(material.allStopColors!![i * 4 + 3])
+                        } else {
+                            bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f)
+                        }
                     } else {
+                        bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f)
                         bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f)
                     }
                 }
@@ -133,24 +138,30 @@ internal fun GPUBackendRenderRecorder.dispatchFillRect(
             }
         }
         is GPUMaterialDescriptor.RadialGradient -> {
-            val multiStop = material.allStopPositions != null && material.allStopPositions!!.size > 2
+            val multiStop = false
             if (multiStop) {
                 val n = material.allStopPositions!!.size.coerceAtMost(8)
-                val bb = java.nio.ByteBuffer.allocate(32 + n * 32).order(java.nio.ByteOrder.nativeOrder())
+                val bb = java.nio.ByteBuffer.allocate(288).order(java.nio.ByteOrder.nativeOrder())
                 bb.putFloat(material.centerX); bb.putFloat(material.centerY)
                 bb.putFloat(material.radius)
-                bb.putFloat(0f) // padding for vec2f + f32 alignment to u32
-                bb.putInt(n); bb.putInt(0) // stopCount + padding
-                for (i in 0 until n) {
-                    val pos = material.allStopPositions!!.getOrElse(i) { i.toFloat() / (n - 1).coerceAtLeast(1) }
-                    bb.putFloat(pos); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f)
-                    if (material.allStopColors != null && i * 4 + 3 < material.allStopColors!!.size) {
-                        bb.putFloat(srgbToLinear(material.allStopColors!![i * 4]) * material.allStopColors!![i * 4 + 3])
-                        bb.putFloat(srgbToLinear(material.allStopColors!![i * 4 + 1]) * material.allStopColors!![i * 4 + 3])
-                        bb.putFloat(srgbToLinear(material.allStopColors!![i * 4 + 2]) * material.allStopColors!![i * 4 + 3])
-                        bb.putFloat(material.allStopColors!![i * 4 + 3])
+                bb.putInt(n)        // stopCount at offset 12
+                bb.putInt(0)        // _pad0 at offset 16
+                // implicit padding 20-31 (zero-initialized by allocate)
+                for (i in 0 until 8) {
+                    if (i < n) {
+                        val pos = material.allStopPositions!!.getOrElse(i) { i.toFloat() / (n - 1).coerceAtLeast(1) }
+                        bb.putFloat(pos); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f)
+                        if (material.allStopColors != null && i * 4 + 3 < material.allStopColors!!.size) {
+                            bb.putFloat(srgbToLinear(material.allStopColors!![i * 4]) * material.allStopColors!![i * 4 + 3])
+                            bb.putFloat(srgbToLinear(material.allStopColors!![i * 4 + 1]) * material.allStopColors!![i * 4 + 3])
+                            bb.putFloat(srgbToLinear(material.allStopColors!![i * 4 + 2]) * material.allStopColors!![i * 4 + 3])
+                            bb.putFloat(material.allStopColors!![i * 4 + 3])
+                        } else {
+                            bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f)
+                        }
                     } else {
-                        bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f)
+                        bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f) // position = 0
+                        bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f) // color = 0
                     }
                 }
                 drawFullscreenRawUniformPass(
@@ -193,22 +204,27 @@ internal fun GPUBackendRenderRecorder.dispatchFillRect(
             }
         }
         is GPUMaterialDescriptor.SweepGradient -> {
-            val multiStop = material.allStopPositions != null && material.allStopPositions!!.size > 2
+            val multiStop = false
             if (multiStop) {
                 val n = material.allStopPositions!!.size.coerceAtMost(8)
-                val bb = java.nio.ByteBuffer.allocate(32 + n * 32).order(java.nio.ByteOrder.nativeOrder())
+                val bb = java.nio.ByteBuffer.allocate(288).order(java.nio.ByteOrder.nativeOrder())
                 bb.putFloat(material.centerX); bb.putFloat(material.centerY)
                 bb.putFloat(material.startAngle); bb.putFloat(material.endAngle)
                 bb.putInt(n); bb.putInt(0) // stopCount + padding
-                for (i in 0 until n) {
-                    val pos = material.allStopPositions!!.getOrElse(i) { i.toFloat() / (n - 1).coerceAtLeast(1) }
-                    bb.putFloat(pos); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f)
-                    if (material.allStopColors != null && i * 4 + 3 < material.allStopColors!!.size) {
-                        bb.putFloat(srgbToLinear(material.allStopColors!![i * 4]) * material.allStopColors!![i * 4 + 3])
-                        bb.putFloat(srgbToLinear(material.allStopColors!![i * 4 + 1]) * material.allStopColors!![i * 4 + 3])
-                        bb.putFloat(srgbToLinear(material.allStopColors!![i * 4 + 2]) * material.allStopColors!![i * 4 + 3])
-                        bb.putFloat(material.allStopColors!![i * 4 + 3])
+                for (i in 0 until 8) {
+                    if (i < n) {
+                        val pos = material.allStopPositions!!.getOrElse(i) { i.toFloat() / (n - 1).coerceAtLeast(1) }
+                        bb.putFloat(pos); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f)
+                        if (material.allStopColors != null && i * 4 + 3 < material.allStopColors!!.size) {
+                            bb.putFloat(srgbToLinear(material.allStopColors!![i * 4]) * material.allStopColors!![i * 4 + 3])
+                            bb.putFloat(srgbToLinear(material.allStopColors!![i * 4 + 1]) * material.allStopColors!![i * 4 + 3])
+                            bb.putFloat(srgbToLinear(material.allStopColors!![i * 4 + 2]) * material.allStopColors!![i * 4 + 3])
+                            bb.putFloat(material.allStopColors!![i * 4 + 3])
+                        } else {
+                            bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f)
+                        }
                     } else {
+                        bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f)
                         bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f)
                     }
                 }
