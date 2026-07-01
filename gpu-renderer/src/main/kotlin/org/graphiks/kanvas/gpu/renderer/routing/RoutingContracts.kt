@@ -233,6 +233,24 @@ object GPUFirstRouteDecisionBuilder {
             ),
         )
 
+    /** Builds a prepared FillStroke CPUPreparedGPU route decision for stroked paths. */
+    fun preparedFillStroke(
+        commandIdValue: Int,
+        artifactKey: String,
+        consumerKind: String,
+        invalidationFacts: List<String>,
+    ): GPURouteDecision.Prepared =
+        GPURouteDecision.Prepared(
+            route = CPUPreparedGPURoute(
+                artifactKey = CPUPreparedGPUArtifactKey(artifactKey),
+                artifactType = "stroke-tessellation",
+                lifetimeClass = "recording-local",
+                budgetClass = "stroke-simple",
+                consumerKind = consumerKind,
+                invalidationFacts = invalidationFacts,
+            ),
+        )
+
     /**
      * Builds a prepared DrawImageRect CPUPreparedGPU route decision for decoded
      * image upload before sampler consumption.

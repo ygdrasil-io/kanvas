@@ -87,7 +87,7 @@ class SDFGenerator {
                     }
                 }
 
-                val normalized = ((minDist / radius + 1f) * 0.5f * 255f).toInt().coerceIn(0, 255)
+                val normalized = ((minDist / radius + 1f) * 0.5f * 255f + 0.5f).toInt().coerceIn(0, 255)
                 sdfBytes[y * width + x] = normalized.toByte()
             }
         }

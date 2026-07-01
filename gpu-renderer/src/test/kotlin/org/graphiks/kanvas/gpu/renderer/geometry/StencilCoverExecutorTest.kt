@@ -9,6 +9,26 @@ import kotlin.test.assertTrue
 class StencilCoverExecutorTest {
 
     @Test
+    fun `inverse fill via stencil cover uses inverted stencil comparison`() {
+        val executor = StencilCoverExecutor(clearStencilValue = 0)
+        val diagnostics = executor.stencilStateDiagnostics(inverseFill = true)
+
+        assertContains(diagnostics.joinToString(" "), "cover compare=equal")
+        assertContains(diagnostics.joinToString(" "), "stencil-write")
+        assertContains(diagnostics.joinToString(" "), "twoPass=true")
+    }
+
+    @Test
+    fun `normal fill via stencil cover uses not-equal stencil comparison`() {
+        val executor = StencilCoverExecutor(clearStencilValue = 0)
+        val diagnostics = executor.stencilStateDiagnostics(inverseFill = false)
+
+        assertContains(diagnostics.joinToString(" "), "cover compare=not-equal")
+        assertContains(diagnostics.joinToString(" "), "stencil-write")
+        assertContains(diagnostics.joinToString(" "), "twoPass=true")
+    }
+
+    @Test
     fun `star fill via stencil cover reports correct stats`() {
         val tessellator = PathTessellator()
         val path = makeStar(

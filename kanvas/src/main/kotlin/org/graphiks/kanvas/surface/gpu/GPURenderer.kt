@@ -49,6 +49,7 @@ internal fun renderViaGpu(
             val sceneLabel = t.createOffscreenTexture(GPUBackendOffscreenTexture(width, height, texFormat))
             val srcLabel = t.createOffscreenTexture(GPUBackendOffscreenTexture(width, height, texFormat))
             val snapLabel = t.createOffscreenTexture(GPUBackendOffscreenTexture(width, height, texFormat))
+
             var sceneHasContent = false
             val clearTransparent = GPUClearColor(0.0, 0.0, 0.0, 0.0)
             fun sceneClear() = if (sceneHasContent) null else clearTransparent
@@ -111,16 +112,30 @@ internal fun renderViaGpu(
                 }
             }
 
+
+
             for (op in ops) {
                 val cmdId = GPUDrawCommandID(dispatched.size)
                 when (op) {
                     is DisplayOp.DrawRect -> {
-                        val cmd = op.toNormalizedCommand(cmdId, targets)
-                        if (cmd.blend.requiresDestinationRead) {
-                            renderAdvancedBlend(cmd)
+                        if (op.paint.isStroke()) {
+                            val cmd = op.toStrokePathCommand(cmdId, targets)
+                            if (cmd.blend.requiresDestinationRead) {
+                                diagnostics.fatal("refuse:drawRect:${cmdId.value}", "drawRect", "unsupported_blend:advanced")
+                                continue
+                            } else {
+                                t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
+                                    dispatchFillPath(cmd, dispatched, diagnostics, width, height, config)
+                                }
+                            }
                         } else {
-                            t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
-                                dispatchFillRect(cmd, dispatched, diagnostics, width, height, config)
+                            val cmd = op.toNormalizedCommand(cmdId, targets)
+                            if (cmd.blend.requiresDestinationRead) {
+                                renderAdvancedBlend(cmd)
+                            } else {
+                                t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
+                                    dispatchFillRect(cmd, dispatched, diagnostics, width, height, config)
+                                }
                             }
                         }
                         sceneHasContent = true
@@ -143,13 +158,18 @@ internal fun renderViaGpu(
                         if (cmd.blend.requiresDestinationRead) {
                             diagnostics.fatal("refuse:drawPath:${cmdId.value}", "drawPath", "unsupported_blend:advanced")
                             continue
-                        }
-                        t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
-                            dispatchFillPath(cmd, dispatched, diagnostics, width, height, config)
+                        } else {
+                            t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
+                                dispatchFillPath(cmd, dispatched, diagnostics, width, height, config)
+                            }
                         }
                         sceneHasContent = true
                     }
                     is DisplayOp.DrawRRect -> {
+                        if (op.paint.isStroke()) {
+                            diagnostics.fatal("refuse:drawRRect:${cmdId.value}", "drawRRect", "stroke_rrect_unimplemented")
+                            continue
+                        }
                         val cmd = op.toNormalizedCommand(cmdId, targets)
                         t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
                             dispatchFillRRect(cmd, dispatched, diagnostics, width, height, config)

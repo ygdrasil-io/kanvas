@@ -5,7 +5,11 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.commands.GPUClipFacts
+import org.graphiks.kanvas.gpu.renderer.commands.NormalizedMaskFilter
+import org.graphiks.kanvas.gpu.renderer.commands.NormalizedBlurStyle
+import org.graphiks.kanvas.paint.MaskFilter
 import org.graphiks.kanvas.paint.PathEffect
+import org.graphiks.kanvas.pipeline.BlurStyle
 import org.graphiks.kanvas.gpu.renderer.commands.GPUCommandSource
 import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBlendFacts
@@ -63,6 +67,7 @@ internal fun DisplayOp.DrawPath.toNormalizedCommand(
     val bounds = computeBounds(tessellatedVertices)
     val clip = this.clip.toGPUClipFacts(bounds)
     val transform = this.transform.toGPUTransformFacts()
+    val maskFilter = paint.maskFilter.toNormalizedMaskFilter()
     return NormalizedDrawCommand.FillPath(
         commandId = cmdId,
         pathKey = "path-${cmdId.value}",
@@ -100,6 +105,66 @@ internal fun DisplayOp.DrawPath.toNormalizedCommand(
         strokeJoin = paint.strokeJoin.name.lowercase(),
         antiAlias = paint.antiAlias,
         blend = paint.blendMode.toGpuBlendFacts(),
+        maskFilter = maskFilter,
+    )
+}
+
+/**
+ * Converts a stroke-style [DisplayOp.DrawRect] into a [NormalizedDrawCommand.FillPath]
+ * so the stroke can be dispatched through the tessellated-path pipeline.
+ *
+ * Generates a closed contour from the 4 rect corners and copies the paint's
+ * stroke parameters (width, cap, join, dash) directly onto the path command.
+ * Returns a fill-path command with [FillPath.stroke] set to `true`.
+ */
+internal fun DisplayOp.DrawRect.toStrokePathCommand(
+    cmdId: GPUDrawCommandID,
+    target: GPUTargetFacts,
+): NormalizedDrawCommand.FillPath {
+    val r = this.rect
+    val vertices = listOf(r.left, r.top, r.right, r.top, r.right, r.bottom, r.left, r.bottom)
+    val edges = 4
+    val bounds = computeBounds(vertices)
+    val clip = this.clip.toGPUClipFacts(bounds)
+    val transform = this.transform.toGPUTransformFacts()
+    val paint = this.paint
+    return NormalizedDrawCommand.FillPath(
+        commandId = cmdId,
+        pathKey = "rect-stroke-${cmdId.value}",
+        pathDescriptor = GPUPathFacts(
+            pathKey = "rect-stroke-${cmdId.value}",
+            verbCount = edges,
+            pointCount = edges,
+            fillRule = "winding",
+            inverseFill = false,
+            finiteProof = "all_finite",
+            volatility = "static",
+            transformClass = transform.type.name.lowercase(),
+            edgeCount = edges,
+        ),
+        tessellatedVertices = vertices,
+        contourStarts = listOf(0),
+        totalVertexCount = edges,
+        edgeCount = edges,
+        transform = transform,
+        clip = clip,
+        layer = GPULayerFacts.root(target),
+        material = paint.toMaterial(),
+        bounds = bounds,
+        ordering = GPUOrderingFacts(
+            paintOrder = 0,
+            dependsOnDestination = false,
+            requiresBarrier = false,
+        ),
+        source = GPUCommandSource(adapter = "kanvas-surface", operation = "drawRect.stroke"),
+        stroke = true,
+        strokeWidth = paint.strokeWidth,
+        dashIntervals = (paint.pathEffect as? PathEffect.Dash)?.intervals,
+        dashPhase = (paint.pathEffect as? PathEffect.Dash)?.phase ?: 0f,
+        strokeCap = paint.strokeCap.name.lowercase(),
+        strokeJoin = paint.strokeJoin.name.lowercase(),
+        antiAlias = paint.antiAlias,
+        maskFilter = paint.maskFilter.toNormalizedMaskFilter(),
     )
 }
 
@@ -184,6 +249,21 @@ internal fun Matrix33.toGPUTransformFacts(): GPUTransformFacts {
         translateX = this.transX,
         translateY = this.transY,
     )
+}
+
+internal fun MaskFilter?.toNormalizedMaskFilter(): NormalizedMaskFilter? = when (this) {
+    is MaskFilter.Blur -> NormalizedMaskFilter.Blur(
+        style = style.toNormalizedBlurStyle(),
+        sigma = sigma,
+    )
+    null -> null
+}
+
+internal fun BlurStyle.toNormalizedBlurStyle(): NormalizedBlurStyle = when (this) {
+    BlurStyle.NORMAL -> NormalizedBlurStyle.NORMAL
+    BlurStyle.SOLID -> NormalizedBlurStyle.SOLID
+    BlurStyle.OUTER -> NormalizedBlurStyle.OUTER
+    BlurStyle.INNER -> NormalizedBlurStyle.INNER
 }
 
 internal fun computeBounds(flatVertices: List<Float>): GPUBounds {
