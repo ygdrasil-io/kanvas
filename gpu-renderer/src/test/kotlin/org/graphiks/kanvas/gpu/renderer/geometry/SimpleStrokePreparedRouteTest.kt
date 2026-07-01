@@ -69,7 +69,7 @@ class SimpleStrokePreparedRouteTest {
             StrokeRefusalCase("unsupported.stroke.cap", stroke = simpleStroke.copy(cap = "Round")),
             StrokeRefusalCase("unsupported.stroke.join", stroke = simpleStroke.copy(join = "Round")),
             StrokeRefusalCase("unsupported.stroke.miter_limit", stroke = simpleStroke.copy(miter = 0.5f)),
-            StrokeRefusalCase("unsupported.stroke.dash_complex", stroke = simpleStroke.copy(dashOrPathEffectRef = "dash:v1")),
+            StrokeRefusalCase("unsupported.stroke.dash_complex", stroke = simpleStroke.copy(dashOrPathEffectRef = "dash:1,2,3,4,5")),
             StrokeRefusalCase(
                 "unsupported.stroke.path_effect_unregistered",
                 stroke = simpleStroke.copy(dashOrPathEffectRef = "path-effect:corner"),

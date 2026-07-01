@@ -634,6 +634,12 @@ object GPUFillPathCommandBuilder {
         paintOrder: Int = 0,
         source: GPUCommandSource = GPUCommandSource(adapter = "gpu-renderer", operation = "fillPath.shadow"),
         stroke: Boolean = false,
+        strokeWidth: Float = 1f,
+        dashIntervals: FloatArray? = null,
+        dashPhase: Float = 0f,
+        strokeCap: String = "butt",
+        strokeJoin: String = "miter",
+        antiAlias: Boolean = true,
         maskFilter: NormalizedMaskFilter? = null,
     ): NormalizedDrawCommand.FillPath {
         val vertexCount = tessellatedVertices.size / 2
@@ -673,6 +679,12 @@ object GPUFillPathCommandBuilder {
             ),
             source = source,
             stroke = stroke,
+            strokeWidth = strokeWidth,
+            dashIntervals = dashIntervals,
+            dashPhase = dashPhase,
+            strokeCap = strokeCap,
+            strokeJoin = strokeJoin,
+            antiAlias = antiAlias,
             maskFilter = maskFilter,
         )
     }

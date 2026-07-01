@@ -1577,8 +1577,14 @@ internal fun GPUStrokeDescriptor.refusalCode(maxEdges: Int): String? =
         cap != "Butt" -> "unsupported.stroke.cap"
         join != "Miter" -> "unsupported.stroke.join"
         miter < 1f -> "unsupported.stroke.miter_limit"
-        dashOrPathEffectRef?.startsWith("dash:") == true -> "unsupported.stroke.dash_complex"
-        dashOrPathEffectRef != null -> "unsupported.stroke.path_effect_unregistered"
+        dashOrPathEffectRef != null -> {
+            val ref = dashOrPathEffectRef
+            if (ref.startsWith("dash:")) {
+                val elementCount = ref.removePrefix("dash:").count { it == ',' } + 1
+                if (elementCount > 4) "unsupported.stroke.dash_complex"
+                else null
+            } else "unsupported.stroke.path_effect_unregistered"
+        }
         transformClass == "nonuniform" -> "unsupported.stroke.nonuniform_transform"
         transformClass !in setOf("identity", "translate") -> "unsupported.geometry.perspective_path"
         edgeCount < 0 || edgeCount > maxEdges -> "unsupported.stroke.expansion_budget_exceeded"

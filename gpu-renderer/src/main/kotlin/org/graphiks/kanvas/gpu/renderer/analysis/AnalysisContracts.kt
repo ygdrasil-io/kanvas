@@ -34,6 +34,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPass
 import org.graphiks.kanvas.gpu.renderer.passes.GPUFirstRoutePassBuilder
 import org.graphiks.kanvas.gpu.renderer.routing.GPUFirstRouteDecisionBuilder
 import org.graphiks.kanvas.gpu.renderer.routing.GPURouteDecision
+import org.graphiks.kanvas.gpu.renderer.stroke.DashVertexExpansion
 
 /** Compact stable sort-key value. */
 @JvmInline
@@ -462,8 +463,19 @@ class GPUFirstRoutePlanner(
         val pipelineKey = "pending.pipeline.fill_stroke.tessellated.rgba8unorm.src_over"
         val renderStep = "path.stroke.tessellated"
         val consumerKind = "stroke-strip.render-step"
-        val artifactKey = "prepared.stroke.${command.pathKey.sanitizeForAnalysisKey()}.w${command.strokeWidth}.${command.strokeCap.lowercase()}.${command.strokeJoin.lowercase()}.e${command.edgeCount}"
-        val invalidationFacts = listOf("path-content-hash", "stroke-width", "cap", "join", "miter", "transform-class", "bounds-proof")
+
+        val dashResult = command.dashIntervals?.let { intervals ->
+            DashVertexExpansion.expandVertices(
+                tessellatedVertices = command.tessellatedVertices,
+                dashIntervals = intervals,
+                dashPhase = command.dashPhase,
+                strokeWidth = command.strokeWidth,
+            )
+        }
+        val expandedEdgeCount = dashResult?.edgeCount ?: command.edgeCount
+        val dashSuffix = command.dashIntervals?.let { "d${it.joinToString("_")}." } ?: ""
+        val artifactKey = "prepared.stroke.${command.pathKey.sanitizeForAnalysisKey()}.w${command.strokeWidth}.${command.strokeCap.lowercase()}.${command.strokeJoin.lowercase()}.${dashSuffix}e$expandedEdgeCount"
+        val invalidationFacts = listOf("path-content-hash", "stroke-width", "cap", "join", "miter", "transform-class", "bounds-proof", "dash-intervals")
         val analysisRecord = GPUDrawAnalysisRecord(
             recordId = recordId,
             commandIdValue = command.commandId.value,
