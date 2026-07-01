@@ -55,6 +55,7 @@ internal val RRECT_WGSL: String = """
         bounds: vec4f,
         radii: vec4f,
         color: vec4f,
+        antiAlias: u32,
     };
 
     @group(0) @binding(0) var<uniform> uniforms: Uniforms;
@@ -90,7 +91,7 @@ internal val RRECT_WGSL: String = """
 
     @fragment
     fn fs_main(@builtin(position) coord: vec4f) -> @location(0) vec4f {
-        let cov = rrect_cov(coord.xy, uniforms.bounds, uniforms.radii.x, uniforms.radii.y);
+        let cov = select(rrect_cov(coord.xy, uniforms.bounds, uniforms.radii.x, uniforms.radii.y), 1.0, uniforms.antiAlias == 0u);
         return vec4f(uniforms.color.rgb * cov, uniforms.color.a * cov);
     }
 """.trimIndent()
