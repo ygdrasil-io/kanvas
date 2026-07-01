@@ -1,43 +1,44 @@
 package org.graphiks.kanvas.svg
 
-import org.graphiks.kanvas.Paint
-import org.graphiks.kanvas.PaintStyle
+import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.paint.PaintStyle
+import org.graphiks.kanvas.types.Color
 
 class SvgPaintParser {
-    private var gradientMap: Map<String, org.graphiks.kanvas.Shader> = emptyMap()
+    private var gradientMap: Map<String, org.graphiks.kanvas.paint.Shader> = emptyMap()
 
-    fun setGradientMap(map: Map<String, org.graphiks.kanvas.Shader>) {
+    fun setGradientMap(map: Map<String, org.graphiks.kanvas.paint.Shader>) {
         this.gradientMap = map
     }
 
     fun parseFill(fill: String?, opacity: Float = 1f): Paint {
         if (fill == null) {
-            val paint = Paint()
-            paint.a = opacity
-            paint.style = PaintStyle.FILL
-            return paint
+            return Paint(
+                color = Color.fromRGBA(0f, 0f, 0f, opacity),
+                style = PaintStyle.FILL,
+            )
         }
-        
+
         if (fill.startsWith("url(") && fill.endsWith(")")) {
             val id = fill.substring(4, fill.length - 1).trim().removePrefix("#")
             val shader = gradientMap[id]
             if (shader != null) {
-                val paint = Paint()
-                paint.shader = shader
-                paint.a = opacity
-                paint.style = PaintStyle.FILL
-                return paint
+                return Paint(
+                    shader = shader,
+                    color = Color.fromRGBA(0f, 0f, 0f, opacity),
+                    style = PaintStyle.FILL,
+                )
             }
         }
-        
-        val paint = Paint()
-        val color = parseColor(fill)
-        paint.r = (color shr 16 and 0xFF) / 255f
-        paint.g = (color shr 8 and 0xFF) / 255f
-        paint.b = (color and 0xFF) / 255f
-        paint.a = opacity
-        paint.style = PaintStyle.FILL
-        return paint
+
+        val colorInt = parseColor(fill)
+        val r = (colorInt shr 16 and 0xFF) / 255f
+        val g = (colorInt shr 8 and 0xFF) / 255f
+        val b = (colorInt and 0xFF) / 255f
+        return Paint(
+            color = Color.fromRGBA(r, g, b, opacity),
+            style = PaintStyle.FILL,
+        )
     }
 
     fun parseStroke(
@@ -45,36 +46,37 @@ class SvgPaintParser {
         strokeWidth: Float? = null,
         strokeOpacity: Float = 1f,
     ): Paint {
+        val width = strokeWidth ?: 1f
         if (stroke == null) {
-            val paint = Paint()
-            paint.strokeWidth = strokeWidth ?: 1f
-            paint.a = strokeOpacity
-            paint.style = PaintStyle.STROKE
-            return paint
+            return Paint(
+                color = Color.fromRGBA(0f, 0f, 0f, strokeOpacity),
+                style = PaintStyle.STROKE,
+                strokeWidth = width,
+            )
         }
-        
+
         if (stroke.startsWith("url(") && stroke.endsWith(")")) {
             val id = stroke.substring(4, stroke.length - 1).trim().removePrefix("#")
             val shader = gradientMap[id]
             if (shader != null) {
-                val paint = Paint()
-                paint.shader = shader
-                paint.strokeWidth = strokeWidth ?: 1f
-                paint.a = strokeOpacity
-                paint.style = PaintStyle.STROKE
-                return paint
+                return Paint(
+                    shader = shader,
+                    color = Color.fromRGBA(0f, 0f, 0f, strokeOpacity),
+                    style = PaintStyle.STROKE,
+                    strokeWidth = width,
+                )
             }
         }
-        
-        val paint = Paint()
-        val color = parseColor(stroke)
-        paint.r = (color shr 16 and 0xFF) / 255f
-        paint.g = (color shr 8 and 0xFF) / 255f
-        paint.b = (color and 0xFF) / 255f
-        paint.strokeWidth = strokeWidth ?: 1f
-        paint.a = strokeOpacity
-        paint.style = PaintStyle.STROKE
-        return paint
+
+        val colorInt = parseColor(stroke)
+        val r = (colorInt shr 16 and 0xFF) / 255f
+        val g = (colorInt shr 8 and 0xFF) / 255f
+        val b = (colorInt and 0xFF) / 255f
+        return Paint(
+            color = Color.fromRGBA(r, g, b, strokeOpacity),
+            style = PaintStyle.STROKE,
+            strokeWidth = width,
+        )
     }
 
     fun parseColor(color: String): Int {

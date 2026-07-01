@@ -1,11 +1,11 @@
 package org.graphiks.kanvas.skia.gm.path
 
-import org.graphiks.kanvas.KanvasFillType
-import org.graphiks.kanvas.Paint
-import org.graphiks.kanvas.PaintStyle
-import org.graphiks.kanvas.Path
-import org.graphiks.kanvas.Rect
-import org.graphiks.kanvas.StrokeCap
+import org.graphiks.kanvas.geometry.FillType
+import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.paint.PaintStyle
+import org.graphiks.kanvas.geometry.Path
+import org.graphiks.kanvas.types.Rect
+import org.graphiks.kanvas.paint.StrokeCap
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.SkiaGm
@@ -37,7 +37,7 @@ class SmallPathsGm : SkiaGm {
     }
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        val paint = Paint()
+        var paint = Paint()
 
         canvas.save()
         for (i in paths.indices) {
@@ -48,10 +48,9 @@ class SmallPathsGm : SkiaGm {
         canvas.translate(120f, 0f)
 
         canvas.save()
-        paint.style = PaintStyle.STROKE
-        paint.strokeCap = StrokeCap.BUTT
+        paint = paint.copy(style = PaintStyle.STROKE, strokeCap = StrokeCap.BUTT)
         for (i in paths.indices) {
-            paint.strokeWidth = widths[i]
+            paint = paint.copy(strokeWidth = widths[i])
             canvas.drawPath(paths[i], paint)
             canvas.translate(xTranslate[i], dy[i])
         }
@@ -59,20 +58,18 @@ class SmallPathsGm : SkiaGm {
         canvas.translate(120f, 0f)
 
         canvas.save()
-        paint.style = PaintStyle.STROKE
-        paint.strokeCap = StrokeCap.BUTT
+        paint = paint.copy(style = PaintStyle.STROKE, strokeCap = StrokeCap.BUTT)
         for (i in paths.indices) {
-            paint.strokeWidth = widths[i] + 2f
+            paint = paint.copy(strokeWidth = widths[i] + 2f)
             canvas.drawPath(paths[i], paint)
             canvas.translate(xTranslate[i], dy[i])
         }
         canvas.restore()
         canvas.translate(120f, 0f)
 
-        paint.style = PaintStyle.STROKE
-        paint.strokeCap = StrokeCap.BUTT
+        paint = paint.copy(style = PaintStyle.STROKE, strokeCap = StrokeCap.BUTT)
         for (i in paths.indices) {
-            paint.strokeWidth = widths[i]
+            paint = paint.copy(strokeWidth = widths[i])
             canvas.drawPath(paths[i], paint)
             canvas.translate(xTranslate[i], dy[i])
         }
@@ -80,7 +77,7 @@ class SmallPathsGm : SkiaGm {
 
     private fun makeTriangle(): Pair<Path, Float> {
         val pts = intArrayOf(10, 20, 15, 5, 30, 30)
-        val p = Path().apply {
+        val p = Path {
             moveTo(pts[0].toFloat(), pts[1].toFloat())
             lineTo(pts[2].toFloat(), pts[3].toFloat())
             lineTo(pts[4].toFloat(), pts[5].toFloat())
@@ -91,7 +88,7 @@ class SmallPathsGm : SkiaGm {
 
     private fun makeRect(): Pair<Path, Float> {
         val r = Rect(20f, 10f, 40f, 30f)
-        return Path().apply {
+        return Path {
             moveTo(r.left, r.top)
             lineTo(r.right, r.top)
             lineTo(r.right, r.bottom)
@@ -102,7 +99,7 @@ class SmallPathsGm : SkiaGm {
 
     private fun makeOval(): Pair<Path, Float> {
         val r = Rect(20f, 10f, 40f, 30f)
-        return Path().apply { addOval(r) } to 30f
+        return Path { }.also { it.addOval(r) } to 30f
     }
 
     private fun makeStar(n: Int): Pair<Path, Float> {
@@ -110,7 +107,7 @@ class SmallPathsGm : SkiaGm {
         val r = 20f
         var rad = -PI.toFloat() / 2f
         val drad = (n shr 1) * PI.toFloat() * 2f / n
-        val p = Path().apply {
+        val p = Path {
             moveTo(cx, cx - r)
             for (i in 1 until n) {
                 rad += drad
@@ -124,7 +121,7 @@ class SmallPathsGm : SkiaGm {
     private fun makeThreeLine(): Pair<Path, Float> {
         val xOffset = 34f
         val yOffset = 50f
-        return Path().apply {
+        return Path {
             moveTo(-32.5f + xOffset, 0f + yOffset)
             lineTo(32.5f + xOffset, 0f + yOffset)
 
@@ -142,7 +139,7 @@ class SmallPathsGm : SkiaGm {
     private fun makeArrow(): Pair<Path, Float> {
         val xOffset = 34f
         val yOffset = 40f
-        return Path().apply {
+        return Path {
             moveTo(-26f + xOffset, 0f + yOffset)
             lineTo(26f + xOffset, 0f + yOffset)
 
@@ -160,7 +157,7 @@ class SmallPathsGm : SkiaGm {
     private fun makeCurve(): Pair<Path, Float> {
         val xOffset = -382f
         val yOffset = -50f
-        return Path().apply {
+        return Path {
             moveTo(491f + xOffset, 56f + yOffset)
             quadTo(
                 435.93292f + xOffset, 56.000031f + yOffset,
@@ -171,7 +168,7 @@ class SmallPathsGm : SkiaGm {
 
     private fun makeBattery(): Pair<Path, Float> {
         val xOffset = 5f
-        return Path().apply {
+        return Path {
             moveTo(24.67f + xOffset, 0.33000004f)
             lineTo(8.3299999f + xOffset, 0.33000004f)
             lineTo(8.3299999f + xOffset, 5.3299999f)
@@ -197,7 +194,7 @@ class SmallPathsGm : SkiaGm {
 
     private fun makeBattery2(): Pair<Path, Float> {
         val xOffset = 225.625f
-        return Path().apply {
+        return Path {
             moveTo(32.669998f + xOffset, 9.8640003f)
             lineTo(0.33000004f + xOffset, 9.8640003f)
             lineTo(0.33000004f + xOffset, 50.669998f)
@@ -220,7 +217,7 @@ class SmallPathsGm : SkiaGm {
     private fun makeRing(): Pair<Path, Float> {
         val xOffset = 120f
         val yOffset = -270f
-        return Path(fillType = KanvasFillType.WINDING).apply {
+        return Path {
             moveTo(xOffset + 144.859f, yOffset + 285.172f)
             lineTo(xOffset + 144.859f, yOffset + 285.172f)
             lineTo(xOffset + 144.859f, yOffset + 285.172f)
@@ -327,6 +324,6 @@ class SmallPathsGm : SkiaGm {
             )
             lineTo(xOffset + 141.406f, yOffset + 284.055f)
             close()
-        } to 15f
+        }.also { it.fillType = FillType.WINDING } to 15f
     }
 }

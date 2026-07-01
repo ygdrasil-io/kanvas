@@ -62,6 +62,10 @@ tasks.register<JavaExec>("generateSvgRenders") {
         if (org.gradle.internal.os.OperatingSystem.current().isMacOsX) {
             add("-XstartOnFirstThread")
         }
+        val maxPathVertices = project.findProperty("kanvas.render.maxPathVertices")?.toString()
+        if (maxPathVertices != null) {
+            add("-Dkanvas.render.maxPathVertices=$maxPathVertices")
+        }
     })
 
     outputs.dir(renderOutputDir)

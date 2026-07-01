@@ -225,23 +225,16 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
 
       - name: Run required GPU bridge smoke gate
-        # The legacy `:gpu-raster:gpuSmokeTest` was deleted with the device
-        # (KGPU-M32-005). Real GPU rendering now runs through the Kanvas
-        # bridge (`:kanvas-skia-bridge` + `:kanvas`), which exercises the
+        # GPU rendering smoke gate using `:kanvas` which exercises the
         # actual GPU bridge path on the macOS Metal runner.
-        # The bridge tests use `assumeTrue` gating; fail-closed-on-GPU-skip
-        # semantics are a follow-up.
-        run: ./gradlew --no-daemon :kanvas-skia-bridge:test :kanvas:test
+        run: ./gradlew --no-daemon :kanvas:test
 
       - name: Upload GPU bridge smoke debug images
-        # Bridge tests dump debug images under `kanvas-skia-bridge/build/`
-        # and `kanvas/build/` when GPU rendering lands inside warning bands.
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: gpu-bridge-smoke-debug-images
           path: |
-            kanvas-skia-bridge/build/debug-images/
             kanvas/build/debug-images/
           if-no-files-found: ignore
 
@@ -251,9 +244,7 @@ jobs:
         with:
           name: gpu-bridge-smoke-test-reports
           path: |
-            kanvas-skia-bridge/build/reports/tests/test/
             kanvas/build/reports/tests/test/
-            kanvas-skia-bridge/build/test-results/test/
             kanvas/build/test-results/test/
           if-no-files-found: ignore
 

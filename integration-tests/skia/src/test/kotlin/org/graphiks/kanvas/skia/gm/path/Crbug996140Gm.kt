@@ -1,12 +1,13 @@
 package org.graphiks.kanvas.skia.gm.path
 
-import org.graphiks.kanvas.Paint
-import org.graphiks.kanvas.PaintStyle
-import org.graphiks.kanvas.Path
-import org.graphiks.kanvas.Rect
+import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.paint.PaintStyle
+import org.graphiks.kanvas.geometry.Path
+import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.SkiaGm
+import org.graphiks.kanvas.types.Color
 
 class Crbug996140Gm : SkiaGm {
     override val name = "crbug_996140"
@@ -18,7 +19,7 @@ class Crbug996140Gm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         canvas.drawRect(
             Rect(0f, 0f, width.toFloat(), height.toFloat()),
-            Paint().apply { r = 1f; g = 1f; b = 1f; a = 1f },
+            Paint(color = Color.fromRGBA(1f, 1f, 1f, 1f)),
         )
 
         val cx = 19.221f
@@ -39,23 +40,23 @@ class Crbug996140Gm : SkiaGm {
         val x2 = cx - rx
         val y2 = cy
 
-        val path = Path().apply {
+        val path = Path {
             moveTo(x1, y1)
             arcTo(rx, ry, 0f, false, true, x2, y2)
             arcTo(rx, ry, 0f, false, true, x1, y1)
         }
 
-        val stroke = Paint().apply {
-            r = 0f; g = 0f; b = 1f; a = 1f
-            strokeWidth = 1f
-            style = PaintStyle.STROKE
-            antiAlias = true
-        }
-        val fill = Paint().apply {
-            r = 1f; g = 0f; b = 0f; a = 1f
-            style = PaintStyle.FILL
-            antiAlias = true
-        }
+        val stroke = Paint(
+            color = Color.fromRGBA(0f, 0f, 1f, 1f),
+            strokeWidth = 1f,
+            style = PaintStyle.STROKE,
+            antiAlias = true,
+        )
+        val fill = Paint(
+            color = Color.fromRGBA(1f, 0f, 0f, 1f),
+            style = PaintStyle.FILL,
+            antiAlias = true,
+        )
 
         canvas.drawPath(path, stroke)
         canvas.drawPath(path, fill)

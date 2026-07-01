@@ -1,13 +1,14 @@
 package org.graphiks.kanvas.skia.gm.path
 
-import org.graphiks.kanvas.KanvasFillType
-import org.graphiks.kanvas.Paint
-import org.graphiks.kanvas.PaintStyle
-import org.graphiks.kanvas.Path
-import org.graphiks.kanvas.Rect
+import org.graphiks.kanvas.geometry.FillType
+import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.paint.PaintStyle
+import org.graphiks.kanvas.geometry.Path
+import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.SkiaGm
+import org.graphiks.kanvas.types.Color
 import kotlin.random.Random
 
 /**
@@ -26,10 +27,11 @@ class EmptyPathGm : SkiaGm {
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val rand = Random(0)
         val rect = Rect(0f, 0f, 100f, 30f)
-        val borderPaint = Paint(0f, 0f, 0f, 1f).apply {
-            style = PaintStyle.STROKE
-            strokeWidth = 1f
-        }
+        val borderPaint = Paint(
+            color = Color.fromRGBA(0f, 0f, 0f, 1f),
+            style = PaintStyle.STROKE,
+            strokeWidth = 1f,
+        )
         var index = 0
 
         for (style in styles) {
@@ -46,10 +48,8 @@ class EmptyPathGm : SkiaGm {
                 val g = ((colorInt ushr 8) and 0xFF) / 255f
                 val b = (colorInt and 0xFF) / 255f
 
-                val path = Path(fillType = fill)
-                val paint = Paint(r, g, b, a).apply {
-                    this.style = style
-                }
+                val path = Path { }.also { it.fillType = fill }
+                val paint = Paint(color = Color.fromRGBA(r, g, b, a), style = style)
 
                 canvas.save()
                 canvas.translate(x, y)
@@ -67,10 +67,10 @@ class EmptyPathGm : SkiaGm {
 
     private companion object {
         val fills = listOf(
-            KanvasFillType.WINDING,
-            KanvasFillType.EVEN_ODD,
-            KanvasFillType.INVERSE_WINDING,
-            KanvasFillType.INVERSE_EVEN_ODD,
+            FillType.WINDING,
+            FillType.EVEN_ODD,
+            FillType.INVERSE_WINDING,
+            FillType.INVERSE_EVEN_ODD,
         )
         val styles = listOf(
             PaintStyle.FILL,

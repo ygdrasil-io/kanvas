@@ -1,12 +1,12 @@
 package org.graphiks.kanvas.svg
 
-import org.graphiks.kanvas.Canvas
-import org.graphiks.kanvas.KanvasPoint
-import org.graphiks.kanvas.Paint
-import org.graphiks.kanvas.PaintStyle
-import org.graphiks.kanvas.Path
-import org.graphiks.kanvas.Rect
-import org.graphiks.kanvas.Shader
+import org.graphiks.kanvas.canvas.Canvas
+import org.graphiks.kanvas.types.Point
+import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.paint.PaintStyle
+import org.graphiks.kanvas.geometry.Path
+import org.graphiks.kanvas.types.Rect
+import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
 
 class SvgRenderer(
@@ -253,7 +253,7 @@ class SvgRenderer(
         val cy = circle.cy * sy + ty
         val r = circle.r * maxOf(sx, sy)
 
-        val path = Path()
+        val path = Path { }
         path.addCircle(cx, cy, r)
 
         val effectiveFill = circle.fill ?: style.fill
@@ -284,7 +284,7 @@ class SvgRenderer(
         val rx = ellipse.rx * sx
         val ry = ellipse.ry * sy
 
-        val path = Path()
+        val path = Path { }
         path.addOval(Rect.fromXYWH(cx - rx, cy - ry, rx * 2, ry * 2))
 
         val effectiveFill = ellipse.fill ?: style.fill
@@ -318,7 +318,7 @@ class SvgRenderer(
         val effectiveStrokeWidth = line.strokeWidth ?: style.strokeWidth
         if (effectiveStroke != null && effectiveStrokeWidth != null && effectiveStrokeWidth > 0) {
             val strokePaint = paintParser.parseStroke(effectiveStroke, effectiveStrokeWidth, strokeOpacity * opacity)
-            val path = Path()
+            val path = Path { }
             path.moveTo(x1, y1)
             path.lineTo(x2, y2)
             canvas.drawPath(path, strokePaint)
@@ -368,7 +368,7 @@ class SvgRenderer(
     }
 
     private fun parsePoints(points: String, transform: GPUTransformFacts = GPUTransformFacts.identity()): Path {
-        val path = Path()
+        val path = Path { }
         val coords = points.split(Regex("[\\s,]+"))
             .filter { it.isNotEmpty() }
             .map { it.toFloatOrNull() ?: 0f }
@@ -390,3 +390,10 @@ class SvgRenderer(
         return path
     }
 }
+
+private data class Quadruple<out A, out B, out C, out D>(
+    val first: A,
+    val second: B,
+    val third: C,
+    val fourth: D,
+)

@@ -54,7 +54,7 @@ class SkiaGmRunner {
             "(threshold: ${comparison.minSimilarity}%) " +
             "dispatch=${result.dispatchedCount} refuse=${result.refusedCount}",
         )
-        result.diagnostics.forEach { d -> println("  $d") }
+        result.diagnostics.forEach { d -> println("  ${d}") }
 
         assertTrue(comparison.isPassing) {
             "${gm.name}: similarity=${"%.2f".format(comparison.similarity)}% " +

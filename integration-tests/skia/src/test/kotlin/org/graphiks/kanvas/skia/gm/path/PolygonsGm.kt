@@ -1,12 +1,13 @@
 package org.graphiks.kanvas.skia.gm.path
 
-import org.graphiks.kanvas.Paint
-import org.graphiks.kanvas.PaintStyle
-import org.graphiks.kanvas.Path
-import org.graphiks.kanvas.StrokeJoin
+import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.paint.PaintStyle
+import org.graphiks.kanvas.geometry.Path
+import org.graphiks.kanvas.paint.StrokeJoin
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.SkiaGm
+import org.graphiks.kanvas.types.Color
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
@@ -76,16 +77,18 @@ class PolygonsGm : SkiaGm {
         val raw = rand.nextInt() or 0xFF000000.toInt()
         val alpha = if (width == 40f) 0xA0 else 0xFF
         val adjusted = (raw and 0x00FFFFFF) or (alpha shl 24)
-        return Paint().apply {
-            r = ((adjusted shr 16) and 0xFF) / 255f
-            g = ((adjusted shr 8) and 0xFF) / 255f
-            b = (adjusted and 0xFF) / 255f
-            a = alpha / 255f
-            strokeJoin = join
-            strokeWidth = width
-            this.style = style
-            antiAlias = true
-        }
+        return Paint(
+            color = Color.fromRGBA(
+                ((adjusted shr 16) and 0xFF) / 255f,
+                ((adjusted shr 8) and 0xFF) / 255f,
+                (adjusted and 0xFF) / 255f,
+                alpha / 255f,
+            ),
+            strokeJoin = join,
+            strokeWidth = width,
+            style = style,
+            antiAlias = true,
+        )
     }
 
     private fun buildPolygons(): List<Path> {
@@ -112,7 +115,7 @@ class PolygonsGm : SkiaGm {
 
         val all = listOf(p0, p1, p2, p3, p4, p5, p6, p7)
         return all.map { pts ->
-            Path().apply {
+            Path {
                 moveTo(pts[0].first, pts[0].second)
                 for (j in 1 until pts.size) lineTo(pts[j].first, pts[j].second)
                 close()

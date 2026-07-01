@@ -3,6 +3,7 @@ package org.graphiks.kanvas.surface
 import org.graphiks.kanvas.canvas.Canvas
 import org.graphiks.kanvas.canvas.DisplayListBuffer
 import org.graphiks.kanvas.canvas.DisplayOp
+import org.graphiks.kanvas.surface.gpu.renderViaGpu
 
 /**
  * A raster surface that produces a [RenderResult] from [Canvas] drawing commands.
@@ -19,6 +20,7 @@ class Surface(
     val width: Int,
     val height: Int,
     val format: PixelFormat = PixelFormat.RGBA8,
+    val config: RenderConfig = RenderConfig.DEFAULT,
 ) {
     private val buffer = SurfaceDisplayListBuffer()
     private var canvasInstance: Canvas? = null
@@ -42,17 +44,7 @@ class Surface(
      * accumulated during processing, and rendering statistics. The pixel buffer
      * is allocated fresh each call.
      */
-    fun render(): RenderResult {
-        val ops = buffer.ops()
-        val dispatched = ops.size
-        return RenderResult(
-            pixels = UByteArray(width * height * 4) { 0u },
-            width = width, height = height,
-            format = format,
-            diagnostics = Diagnostics(),
-            stats = RenderStats(dispatched, 0, 1, dispatched, if (dispatched > 0) 1.0f else 0f),
-        )
-    }
+    fun render(): RenderResult = renderViaGpu(buffer, width, height, format, config)
 }
 
 private class SurfaceDisplayListBuffer : DisplayListBuffer {
