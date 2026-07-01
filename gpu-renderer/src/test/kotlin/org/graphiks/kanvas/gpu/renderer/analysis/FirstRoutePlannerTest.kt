@@ -3,6 +3,7 @@ package org.graphiks.kanvas.gpu.renderer.analysis
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
@@ -28,6 +29,8 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUPathFacts
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
+import org.graphiks.kanvas.gpu.renderer.commands.NormalizedMaskFilter
+import org.graphiks.kanvas.gpu.renderer.commands.NormalizedBlurStyle
 import org.graphiks.kanvas.gpu.renderer.filters.GPUFilterGraphDescriptor
 import org.graphiks.kanvas.gpu.renderer.filters.GPUFilterNodeDescriptor
 import org.graphiks.kanvas.gpu.renderer.filters.GPUFilterNodeID
@@ -713,6 +716,95 @@ class FirstRoutePlannerTest {
             "prepared.stroke.path_triangle_v1.w1.0.butt.miter.e3",
             routeDecision.route.artifactKey.value,
         )
+    }
+
+    /** Accepted FillPath with blur MaskFilter builds blur-aware prepared CPU route. */
+    @Test
+    fun `fill path with blur mask filter builds blur mask prepared route`() {
+        val command = GPUFillPathCommandBuilder.build(
+            commandId = GPUDrawCommandID(27),
+            pathKey = "path:triangle:v1",
+            pathDescriptor = GPUPathFacts(
+                pathKey = "path:triangle:v1",
+                verbCount = 4,
+                pointCount = 3,
+                fillRule = "NonZero",
+                inverseFill = false,
+                finiteProof = "finite",
+                volatility = "immutable",
+                transformClass = "identity",
+                edgeCount = 3,
+            ),
+            tessellatedVertices = listOf(0f, 0f, 16f, 0f, 8f, 16f),
+            contourStarts = listOf(0),
+            edgeCount = 3,
+            target = GPUTargetFacts(width = 64, height = 64, colorFormat = "rgba8unorm"),
+            material = GPUMaterialDescriptor.SolidColor(r = 1f, g = 0.25f, b = 0.5f, a = 1f),
+            maskFilter = NormalizedMaskFilter.Blur(
+                style = NormalizedBlurStyle.NORMAL,
+                sigma = 6.2735f,
+            ),
+        )
+
+        val plan = GPUFirstRoutePlanner(capabilities = firstSlicePathFillCapabilities()).plan(command)
+        val routeDecision = assertIs<GPURouteDecision.Prepared>(plan.routeDecision)
+        val analysisDecision = assertIs<GPUDrawAnalysisDecision.Candidate>(plan.analysisDecision)
+
+        assertEquals("analysis.fill_path.27", plan.analysisRecord.recordId)
+        assertEquals("FillPath", plan.analysisRecord.commandFamily)
+        assertEquals("prepared.path_fill.blur_mask", analysisDecision.routeDecisionLabel)
+        assertEquals("blur-mask.sample.path-fill", routeDecision.route.consumerKind)
+        assertEquals("path.fill.blur_mask", plan.pass.invocations.single().renderStepId.value)
+        assertEquals(listOf("pending.pipeline.fill_path.blur_mask.rgba8unorm.src_over"), plan.pass.pipelineKeys)
+        assertEquals("pending.pipeline.fill_path.blur_mask.rgba8unorm.src_over", plan.pass.invocations.single().pipelineKeyHash)
+        assertEquals("analysis.fill_path.27", plan.pass.invocations.single().analysisRecordId)
+        assertEquals(27, plan.pass.invocations.single().commandIdValue)
+        assertEquals("path_fill", plan.pass.invocations.single().role)
+        assertEquals("pass.path_fill.27", plan.pass.passId)
+        assertEquals(
+            "blur-mask.path-fill.path_triangle_v1.blur:normal_sigma=6.2735",
+            routeDecision.route.artifactKey.value,
+        )
+    }
+
+    /** Accepted FillPath with all blur style variants produces expected blur mask routes. */
+    @Test
+    fun `fill path with all blur style variants produces blur mask routes`() {
+        val styles = listOf(
+            NormalizedBlurStyle.NORMAL,
+            NormalizedBlurStyle.SOLID,
+            NormalizedBlurStyle.OUTER,
+            NormalizedBlurStyle.INNER,
+        )
+        for (style in styles) {
+            val command = GPUFillPathCommandBuilder.build(
+                commandId = GPUDrawCommandID(31),
+                pathKey = "path:rect:v1",
+                pathDescriptor = GPUPathFacts(
+                    pathKey = "path:rect:v1",
+                    verbCount = 5,
+                    pointCount = 4,
+                    fillRule = "NonZero",
+                    inverseFill = false,
+                    finiteProof = "finite",
+                    volatility = "immutable",
+                    transformClass = "identity",
+                    edgeCount = 4,
+                ),
+                tessellatedVertices = listOf(0f, 0f, 32f, 0f, 32f, 32f, 0f, 32f),
+                contourStarts = listOf(0),
+                edgeCount = 4,
+                target = GPUTargetFacts(width = 64, height = 64, colorFormat = "rgba8unorm"),
+                material = GPUMaterialDescriptor.SolidColor(r = 0f, g = 0.5f, b = 1f, a = 1f),
+                maskFilter = NormalizedMaskFilter.Blur(style = style, sigma = 3f),
+            )
+
+            val plan = GPUFirstRoutePlanner(capabilities = firstSlicePathFillCapabilities()).plan(command)
+            val analysisDecision = assertIs<GPUDrawAnalysisDecision.Candidate>(plan.analysisDecision)
+
+            assertEquals("prepared.path_fill.blur_mask", analysisDecision.routeDecisionLabel)
+            assertContains(plan.pass.invocations.single().renderStepId.value, "blur_mask")
+        }
     }
 
     /** Accepted DrawImageRect with decoded pixels builds CPU-prepared GPU route. */

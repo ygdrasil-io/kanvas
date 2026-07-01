@@ -316,6 +316,22 @@ enum class GPUBlendKind {
     Unsupported,
 }
 
+/**
+ * Blur style for normalized mask filters, mirrored from Kanvas BlurStyle to avoid
+ * cross-module dependency. Matches Skia's SkBlurStyle: NORMAL, SOLID, OUTER, INNER.
+ */
+enum class NormalizedBlurStyle { NORMAL, SOLID, OUTER, INNER }
+
+/** Normalized mask filter descriptor captured by the command adapter before route analysis. */
+sealed interface NormalizedMaskFilter {
+    /** Gaussian blur mask filter with style and sigma parameters. */
+    data class Blur(val style: NormalizedBlurStyle, val sigma: Float) : NormalizedMaskFilter {
+        init {
+            require(sigma >= 0f && sigma.isFinite()) { "Blur sigma must be non-negative and finite" }
+        }
+    }
+}
+
 /** Captured blend facts; unsupported or destination-reading blends are refused before pass construction. */
 data class GPUBlendFacts(
     val kind: GPUBlendKind,
@@ -618,6 +634,7 @@ object GPUFillPathCommandBuilder {
         paintOrder: Int = 0,
         source: GPUCommandSource = GPUCommandSource(adapter = "gpu-renderer", operation = "fillPath.shadow"),
         stroke: Boolean = false,
+        maskFilter: NormalizedMaskFilter? = null,
     ): NormalizedDrawCommand.FillPath {
         val vertexCount = tessellatedVertices.size / 2
         val minBounds = if (vertexCount > 0) {
@@ -656,6 +673,7 @@ object GPUFillPathCommandBuilder {
             ),
             source = source,
             stroke = stroke,
+            maskFilter = maskFilter,
         )
     }
 }
@@ -920,6 +938,8 @@ sealed interface NormalizedDrawCommand {
          */
         val stroke: Boolean = false,
         val antiAlias: Boolean = true,
+        /** Mask filter descriptor for post-processing the fill output. Null when no mask filter is active. */
+        val maskFilter: NormalizedMaskFilter? = null,
     ) : NormalizedDrawCommand {
         override val drawKind: GPUDrawKind = GPUDrawKind.FillRect
     }
@@ -939,6 +959,8 @@ sealed interface NormalizedDrawCommand {
         /** See [FillRect.stroke]. Stroke rrect draws refuse instead of filling. */
         val stroke: Boolean = false,
         val antiAlias: Boolean = true,
+        /** Mask filter descriptor for post-processing the fill output. Null when no mask filter is active. */
+        val maskFilter: NormalizedMaskFilter? = null,
     ) : NormalizedDrawCommand {
         override val drawKind: GPUDrawKind = GPUDrawKind.FillRRect
     }
@@ -973,6 +995,8 @@ sealed interface NormalizedDrawCommand {
         /** Stroke join style: "miter", "round", "bevel". */
         val strokeJoin: String = "miter",
         val antiAlias: Boolean = true,
+        /** Mask filter descriptor for post-processing the fill output. Null when no mask filter is active. */
+        val maskFilter: NormalizedMaskFilter? = null,
     ) : NormalizedDrawCommand {
         override val drawKind: GPUDrawKind = GPUDrawKind.FillPath
     }

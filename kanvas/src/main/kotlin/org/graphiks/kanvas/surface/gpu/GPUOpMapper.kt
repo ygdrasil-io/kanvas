@@ -5,7 +5,11 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.commands.GPUClipFacts
+import org.graphiks.kanvas.gpu.renderer.commands.NormalizedMaskFilter
+import org.graphiks.kanvas.gpu.renderer.commands.NormalizedBlurStyle
+import org.graphiks.kanvas.paint.MaskFilter
 import org.graphiks.kanvas.paint.PathEffect
+import org.graphiks.kanvas.pipeline.BlurStyle
 import org.graphiks.kanvas.gpu.renderer.commands.GPUCommandSource
 import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBlendFacts
@@ -63,6 +67,7 @@ internal fun DisplayOp.DrawPath.toNormalizedCommand(
     val bounds = computeBounds(tessellatedVertices)
     val clip = this.clip.toGPUClipFacts(bounds)
     val transform = this.transform.toGPUTransformFacts()
+    val maskFilter = paint.maskFilter.toNormalizedMaskFilter()
     return NormalizedDrawCommand.FillPath(
         commandId = cmdId,
         pathKey = "path-${cmdId.value}",
@@ -100,6 +105,7 @@ internal fun DisplayOp.DrawPath.toNormalizedCommand(
         strokeJoin = paint.strokeJoin.name.lowercase(),
         antiAlias = paint.antiAlias,
         blend = paint.blendMode.toGpuBlendFacts(),
+        maskFilter = maskFilter,
     )
 }
 
@@ -184,6 +190,21 @@ internal fun Matrix33.toGPUTransformFacts(): GPUTransformFacts {
         translateX = this.transX,
         translateY = this.transY,
     )
+}
+
+internal fun MaskFilter?.toNormalizedMaskFilter(): NormalizedMaskFilter? = when (this) {
+    is MaskFilter.Blur -> NormalizedMaskFilter.Blur(
+        style = style.toNormalizedBlurStyle(),
+        sigma = sigma,
+    )
+    null -> null
+}
+
+internal fun BlurStyle.toNormalizedBlurStyle(): NormalizedBlurStyle = when (this) {
+    BlurStyle.NORMAL -> NormalizedBlurStyle.NORMAL
+    BlurStyle.SOLID -> NormalizedBlurStyle.SOLID
+    BlurStyle.OUTER -> NormalizedBlurStyle.OUTER
+    BlurStyle.INNER -> NormalizedBlurStyle.INNER
 }
 
 internal fun computeBounds(flatVertices: List<Float>): GPUBounds {
