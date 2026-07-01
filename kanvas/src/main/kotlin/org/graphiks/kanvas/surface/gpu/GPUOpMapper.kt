@@ -109,6 +109,65 @@ internal fun DisplayOp.DrawPath.toNormalizedCommand(
     )
 }
 
+/**
+ * Converts a stroke-style [DisplayOp.DrawRect] into a [NormalizedDrawCommand.FillPath]
+ * so the stroke can be dispatched through the tessellated-path pipeline.
+ *
+ * Generates a closed contour from the 4 rect corners and copies the paint's
+ * stroke parameters (width, cap, join, dash) directly onto the path command.
+ * Returns a fill-path command with [FillPath.stroke] set to `true`.
+ */
+internal fun DisplayOp.DrawRect.toStrokePathCommand(
+    cmdId: GPUDrawCommandID,
+    target: GPUTargetFacts,
+): NormalizedDrawCommand.FillPath {
+    val r = this.rect
+    val vertices = listOf(r.left, r.top, r.right, r.top, r.right, r.bottom, r.left, r.bottom)
+    val edges = 4
+    val bounds = computeBounds(vertices)
+    val clip = this.clip.toGPUClipFacts(bounds)
+    val transform = this.transform.toGPUTransformFacts()
+    val paint = this.paint
+    return NormalizedDrawCommand.FillPath(
+        commandId = cmdId,
+        pathKey = "rect-stroke-${cmdId.value}",
+        pathDescriptor = GPUPathFacts(
+            pathKey = "rect-stroke-${cmdId.value}",
+            verbCount = edges,
+            pointCount = edges,
+            fillRule = "winding",
+            inverseFill = false,
+            finiteProof = "all_finite",
+            volatility = "static",
+            transformClass = transform.type.name.lowercase(),
+            edgeCount = edges,
+        ),
+        tessellatedVertices = vertices,
+        contourStarts = listOf(0),
+        totalVertexCount = edges,
+        edgeCount = edges,
+        transform = transform,
+        clip = clip,
+        layer = GPULayerFacts.root(target),
+        material = paint.toMaterial(),
+        bounds = bounds,
+        ordering = GPUOrderingFacts(
+            paintOrder = 0,
+            dependsOnDestination = false,
+            requiresBarrier = false,
+        ),
+        source = GPUCommandSource(adapter = "kanvas-surface", operation = "drawRect.stroke"),
+        stroke = true,
+        strokeWidth = paint.strokeWidth,
+        dashIntervals = (paint.pathEffect as? PathEffect.Dash)?.intervals,
+        dashPhase = (paint.pathEffect as? PathEffect.Dash)?.phase ?: 0f,
+        strokeCap = paint.strokeCap.name.lowercase(),
+        strokeJoin = paint.strokeJoin.name.lowercase(),
+        antiAlias = paint.antiAlias,
+        maskFilter = paint.maskFilter.toNormalizedMaskFilter(),
+    )
+}
+
 internal fun DisplayOp.DrawRRect.toNormalizedCommand(
     cmdId: GPUDrawCommandID,
     target: GPUTargetFacts,
