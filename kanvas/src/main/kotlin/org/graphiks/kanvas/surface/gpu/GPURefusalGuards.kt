@@ -27,7 +27,10 @@ internal fun NormalizedDrawCommand.fillGuardRefusalReasonOrNull(): String? {
     val acceptedByDispatch = this is NormalizedDrawCommand.FillRect ||
         this is NormalizedDrawCommand.FillPath
     if (material !is GPUMaterialDescriptor.SolidColor &&
-        (!acceptedByDispatch || material !is GPUMaterialDescriptor.LinearGradient)
+        (!acceptedByDispatch || 
+         (material !is GPUMaterialDescriptor.LinearGradient &&
+          material !is GPUMaterialDescriptor.RadialGradient &&
+          material !is GPUMaterialDescriptor.SweepGradient))
     ) {
         return "unsupported_material:${material.kind.name}"
     }
