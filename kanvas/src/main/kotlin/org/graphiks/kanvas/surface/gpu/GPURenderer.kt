@@ -213,7 +213,13 @@ internal fun renderViaGpu(
                         sceneHasContent = true
                     }
                     is DisplayOp.DrawText -> {
-                        diagnostics.fatal("refuse:drawText:${cmdId.value}", "drawText", "unsupported_operation")
+                        val cmd = op.toNormalizedCommand(cmdId, targets)
+                        // Text route requires glyphRunDescriptor populated by the font module.
+                        // planDrawTextRun() in RecordingContracts will refuse gracefully
+                        // until the ShapingResult→TextBlob bridge provides real glyph data.
+                        t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
+                            drawTextAtlasPassOrDegrade(cmd, dispatched, diagnostics)
+                        }
                     }
                     is DisplayOp.SetTransform,
                     is DisplayOp.SetClip,
@@ -564,7 +570,10 @@ internal fun renderViaGpu(
                                     diagnostics.degrade("unimplemented:drawPicture:nested:${nestedCmdId.value}", "drawPicture", "gpu_nested_vertices_unimplemented")
                                 }
                                 is DisplayOp.DrawText -> {
-                                    diagnostics.fatal("refuse:drawPicture:nested:${nestedCmdId.value}", "drawPicture", "nested_text_unimplemented")
+                                    val cmd = nestedOp.toNormalizedCommand(nestedCmdId, targets)
+                                    t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
+                                        drawTextAtlasPassOrDegrade(cmd, dispatched, diagnostics)
+                                    }
                                 }
                                 is DisplayOp.SetTransform,
                                 is DisplayOp.SetClip,
@@ -753,4 +762,22 @@ private fun computeAtlasDst(texRect: Rect, xform: Matrix33): Rect {
     val r = maxOf(x0, x1, x2, x3)
     val b = maxOf(y0, y1, y2, y3)
     return Rect.fromLTRB(l, t, r, b)
+}
+
+/** Bridge: DrawText → GPU text atlas pass. Degrades gracefully until font module provides real glyph data and atlas. */
+private fun drawTextAtlasPassOrDegrade(
+    cmd: NormalizedDrawCommand.DrawTextRun,
+    dispatched: MutableList<String>,
+    diagnostics: Diagnostics,
+) {
+    // Text GPU dispatch requires a populated GlyphRunDescriptor with atlas plan,
+    // vertex data (glyph quad positions), and a built A8 glyph atlas texture.
+    // Until the font module provides these via the ShapingResult→TextBlob bridge,
+    // we degrade gracefully instead of hard-fataling.
+    if (cmd.glyphRunDescriptor == null) {
+        diagnostics.degrade("degrade:drawText:${cmd.commandId.value}", "drawText", "no_glyph_descriptor")
+        return
+    }
+    // Full GPU text dispatch would call: t.drawTextAtlasPass(atlasRgba, ...)
+    diagnostics.degrade("degrade:drawText:${cmd.commandId.value}", "drawText", "text_atlas_not_implemented")
 }
