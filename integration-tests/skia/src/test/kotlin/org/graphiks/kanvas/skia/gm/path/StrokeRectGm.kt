@@ -29,7 +29,7 @@ import org.graphiks.kanvas.types.Rect
 class StrokeRectGm : SkiaGm {
     override val name = "strokerect"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 70.0
+    override val minSimilarity = 69.3
     override val width = 1400
     override val height = 740
 

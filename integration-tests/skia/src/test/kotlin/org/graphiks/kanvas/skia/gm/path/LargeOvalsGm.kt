@@ -16,7 +16,7 @@ import org.graphiks.kanvas.types.Rect
 class LargeOvalsGm : SkiaGm {
     override val name = "largeovals"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 0.0
+    override val minSimilarity = 25.7
     override val width = 250
     override val height = 250
 

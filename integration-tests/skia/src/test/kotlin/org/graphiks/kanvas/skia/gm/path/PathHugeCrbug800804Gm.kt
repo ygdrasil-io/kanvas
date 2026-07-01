@@ -16,7 +16,7 @@ import org.graphiks.kanvas.types.Color
 class PathHugeCrbug800804Gm : SkiaGm {
     override val name = "path_huge_crbug_800804"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 0.0
+    override val minSimilarity = 81.7
     override val width = 50
     override val height = 600
 

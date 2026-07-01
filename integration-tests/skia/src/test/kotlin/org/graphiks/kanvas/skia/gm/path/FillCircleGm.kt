@@ -25,7 +25,7 @@ import kotlin.random.Random
 class FillCircleGm : SkiaGm {
     override val name = "fillcircle"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 0.0
+    override val minSimilarity = 27.3
     override val width = 520
     override val height = 520
 
