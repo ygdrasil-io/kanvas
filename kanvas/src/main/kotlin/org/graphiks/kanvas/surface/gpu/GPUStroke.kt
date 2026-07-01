@@ -27,8 +27,6 @@ internal fun applyDash(
         remaining -= dashArray[dashIdx]
         dashIdx++
     }
-    val isDashOn = dashIdx % 2 == 0
-
     for (i in 0 until points.size - 1) {
         val p0 = points[i]; val p1 = points[i + 1]
         val dx = p1.first - p0.first; val dy = p1.second - p0.second
@@ -38,13 +36,14 @@ internal fun applyDash(
         val nx = dx / segLen; val ny = dy / segLen
 
         while (pos < segLen) {
-            val dashLen = dashArray[dashIdx % dashArray.size].coerceAtLeast(0.1f)
+            val idx = dashIdx % dashArray.size
+            val dashLen = dashArray[idx].coerceAtLeast(0.1f)
             val startOff = remaining
             val effectiveLen = minOf(dashLen - startOff, segLen - pos)
             val endPos = pos + effectiveLen
             remaining = 0f
 
-            if (isDashOn) {
+            if (dashIdx % 2 == 0) {
                 result.add(Pair(p0.first + pos * nx, p0.second + pos * ny))
                 result.add(Pair(p0.first + endPos * nx, p0.second + endPos * ny))
             }
@@ -53,7 +52,6 @@ internal fun applyDash(
             if (pos >= segLen - 1e-6f) break
 
             dashIdx++
-            remaining = 0f
         }
     }
     return result
