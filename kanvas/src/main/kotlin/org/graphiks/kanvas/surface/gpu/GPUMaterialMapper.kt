@@ -102,4 +102,8 @@ internal fun Shader.toMaterial(): GPUMaterialDescriptor = when (this) {
         startR = 0f, startG = 0f, startB = 0f, startA = 0f,
         endR = 0f, endG = 0f, endB = 0f, endA = 0f,
     )
+    is Shader.PerlinNoise -> GPUMaterialDescriptor.SolidColor(r = 0f, g = 0f, b = 0f, a = 0f)
+    is Shader.FractalNoise -> GPUMaterialDescriptor.SolidColor(r = 0f, g = 0f, b = 0f, a = 0f)
+    is Shader.WithWorkingColorSpace -> this.shader.toMaterial()
+    is Shader.CoordClamp -> this.shader.toMaterial()
 }

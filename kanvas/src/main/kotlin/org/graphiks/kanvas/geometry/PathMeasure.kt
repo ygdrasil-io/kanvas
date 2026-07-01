@@ -81,7 +81,11 @@ class PathMeasure(path: Path, val forceClosed: Boolean = false, resScale: Float 
 
         var i = 0
         while (i < pathVerbs.size) {
-            if (pathVerbs[i] != PathVerb.MOVE) { i++; continue }
+            if (pathVerbs[i] != PathVerb.MOVE) {
+                // Defensive: advance pi by the point count for this non-MOVE verb
+                pi += pointCountFor(pathVerbs[i])
+                i++; continue
+            }
             val segs = mutableListOf<ContourSegment>()
             var prevX = pathPoints[pi].x; var prevY = pathPoints[pi].y
             val firstX = prevX; val firstY = prevY
@@ -225,8 +229,7 @@ class PathMeasure(path: Path, val forceClosed: Boolean = false, resScale: Float 
     }
 
     fun getMatrix(distance: Float, matrix: Matrix33, flags: Int): Boolean {
-        // Matrix33 constructor is private; cannot write into the parameter
-        return false
+        throw UnsupportedOperationException("getMatrix not yet implemented")
     }
 
     fun nextContour(): Boolean {
@@ -235,5 +238,15 @@ class PathMeasure(path: Path, val forceClosed: Boolean = false, resScale: Float 
             return true
         }
         return false
+    }
+
+    companion object {
+        private fun pointCountFor(verb: PathVerb): Int = when (verb) {
+            PathVerb.MOVE, PathVerb.LINE -> 1
+            PathVerb.QUAD -> 2
+            PathVerb.CUBIC -> 3
+            PathVerb.ARC_TO -> 4
+            PathVerb.CLOSE -> 0
+        }
     }
 }

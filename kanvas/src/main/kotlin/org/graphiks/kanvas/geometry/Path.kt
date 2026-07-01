@@ -6,7 +6,6 @@ import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.RRect
 import org.graphiks.kanvas.types.Rect
-import kotlin.math.abs
 import kotlin.math.sqrt
 
 class Path internal constructor() {
@@ -178,6 +177,8 @@ class Path internal constructor() {
         val p = points
         val corners = listOf(p[0], p[1], p[2], p[3])
         val closePt = if (lineCount == 4) p[4] else p[0]
+        // Verify the path is closed: last point must match first point
+        if (lineCount == 4 && (closePt.x != p[0].x || closePt.y != p[0].y)) return false
         for (i in 0..3) {
             val next = if (i == 3) closePt else corners[i + 1]
             val dx = next.x - corners[i].x
@@ -270,12 +271,14 @@ class Path internal constructor() {
     fun isConvex(): Boolean {
         val poly = mutableListOf<Point>()
         var firstPt: Point? = null
+        var contourCount = 0
         var pi = 0
         for (verb in verbs) {
             when (verb) {
                 PathVerb.MOVE -> {
+                    if (contourCount > 0 && poly.size >= 3) return false // multi-contour: cannot determine convexity
                     poly.clear(); firstPt = points[pi]
-                    poly.add(points[pi]); pi++
+                    poly.add(points[pi]); pi++; contourCount++
                 }
                 PathVerb.LINE -> { poly.add(points[pi]); pi++ }
                 PathVerb.CLOSE -> firstPt?.let { poly.add(it) }

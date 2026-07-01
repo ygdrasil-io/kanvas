@@ -256,6 +256,8 @@ internal fun MaskFilter?.toNormalizedMaskFilter(): NormalizedMaskFilter? = when 
         style = style.toNormalizedBlurStyle(),
         sigma = sigma,
     )
+    is MaskFilter.Shader -> null
+    is MaskFilter.Table -> null
     null -> null
 }
 
