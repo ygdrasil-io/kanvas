@@ -1,5 +1,11 @@
 package org.graphiks.kanvas.skia.gm.path
 
+/**
+ * Port of Skia's `gm/strokerectanisotropic5408.cpp`.
+ * Tests stroked rect with 10x anisotropic scale (regression for Skia bug 5408).
+ * @see https://github.com/google/skia/blob/main/gm/strokerectanisotropic5408.cpp
+ */
+
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.skia.GmCanvas

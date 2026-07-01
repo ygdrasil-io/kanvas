@@ -1,5 +1,11 @@
 package org.graphiks.kanvas.skia.gm.path
 
+/**
+ * Port of Skia's `gm/strokes4.cpp`.
+ * Tests very thin strokes rendered under 1000x scale.
+ * @see https://github.com/google/skia/blob/main/gm/strokes4.cpp
+ */
+
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.skia.GmCanvas

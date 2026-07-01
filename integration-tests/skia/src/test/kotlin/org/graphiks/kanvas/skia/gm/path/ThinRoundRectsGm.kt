@@ -1,5 +1,11 @@
 package org.graphiks.kanvas.skia.gm.path
 
+/**
+ * Port of Skia's `gm/thinroundrects.cpp`.
+ * Tests sub-pixel-width filled round-rects with varying corner radii.
+ * @see https://github.com/google/skia/blob/main/gm/thinroundrects.cpp
+ */
+
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.skia.GmCanvas

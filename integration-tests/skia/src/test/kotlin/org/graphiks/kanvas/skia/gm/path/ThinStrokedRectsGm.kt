@@ -1,5 +1,11 @@
 package org.graphiks.kanvas.skia.gm.path
 
+/**
+ * Port of Skia's `gm/thinstrokedrects.cpp`.
+ * Tests thin stroked rects across various stroke widths, with sub-pixel offsets.
+ * @see https://github.com/google/skia/blob/main/gm/thinstrokedrects.cpp
+ */
+
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.skia.GmCanvas

@@ -1,5 +1,11 @@
 package org.graphiks.kanvas.skia.gm.composite
 
+/**
+ * Port of Skia's `gm/hairmodes.cpp`.
+ * Tests all blend modes on hairline strokes drawn from center of cell with oval background.
+ * @see https://github.com/google/skia/blob/main/gm/hairmodes.cpp
+ */
+
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle

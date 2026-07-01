@@ -1,5 +1,11 @@
 package org.graphiks.kanvas.skia.gm.path
 
+/**
+ * Port of Skia's `gm/zerolenstrokes.cpp`.
+ * Tests rendering of zero-length paths (move+line, move+close, cubic, quad to same point).
+ * @see https://github.com/google/skia/blob/main/gm/zerolenstrokes.cpp
+ */
+
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle

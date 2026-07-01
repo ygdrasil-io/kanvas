@@ -1,5 +1,11 @@
 package org.graphiks.kanvas.skia.gm.clip
 
+/**
+ * Port of Skia's `gm/inverseclip.cpp`.
+ * Tests inverse-winding fill path clip.
+ * @see https://github.com/google/skia/blob/main/gm/inverseclip.cpp
+ */
+
 import org.graphiks.kanvas.geometry.FillType
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.paint.Paint

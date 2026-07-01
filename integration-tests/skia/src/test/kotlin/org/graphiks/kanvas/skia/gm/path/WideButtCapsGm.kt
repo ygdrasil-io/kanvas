@@ -1,5 +1,11 @@
 package org.graphiks.kanvas.skia.gm.path
 
+/**
+ * Port of Skia's `gm/widebuttcaps.cpp`.
+ * Tests wide stroke butt caps with bevel, round, and miter joins on line and cubic paths.
+ * @see https://github.com/google/skia/blob/main/gm/widebuttcaps.cpp
+ */
+
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle

@@ -55,11 +55,11 @@ class BeziersGm : SkiaGm {
             b = (c32 and 0xFF) / 255f,
             a = 1f,
         )
-        var width = rand.nextFloat() * 4f + 1f
-        width *= width
+        var strokeW = rand.nextFloat() * 4f + 1f
+        strokeW *= strokeW
         val paint = Paint(
             style = PaintStyle.STROKE,
-            strokeWidth = width,
+            strokeWidth = strokeW,
             antiAlias = true,
             color = color,
         )
@@ -88,11 +88,11 @@ class BeziersGm : SkiaGm {
             b = (c32 and 0xFF) / 255f,
             a = 1f,
         )
-        var width = rand.nextFloat() * 4f + 1f
-        width *= width
+        var strokeW = rand.nextFloat() * 4f + 1f
+        strokeW *= strokeW
         val paint = Paint(
             style = PaintStyle.STROKE,
-            strokeWidth = width,
+            strokeWidth = strokeW,
             antiAlias = true,
             color = color,
         )

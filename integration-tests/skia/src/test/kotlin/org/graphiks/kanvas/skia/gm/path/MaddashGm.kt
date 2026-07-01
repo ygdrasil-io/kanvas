@@ -1,5 +1,11 @@
 package org.graphiks.kanvas.skia.gm.path
 
+/**
+ * Port of Skia's `gm/maddash.cpp`.
+ * Tests dashed strokes on large circles, quad, and cubic paths.
+ * @see https://github.com/google/skia/blob/main/gm/maddash.cpp
+ */
+
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle

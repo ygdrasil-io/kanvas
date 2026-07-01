@@ -1,5 +1,11 @@
 package org.graphiks.kanvas.skia.gm.path
 
+/**
+ * Port of Skia's `gm/thinrects.cpp`.
+ * Tests sub-pixel-width filled vertical, horizontal, and square rects.
+ * @see https://github.com/google/skia/blob/main/gm/thinrects.cpp
+ */
+
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily

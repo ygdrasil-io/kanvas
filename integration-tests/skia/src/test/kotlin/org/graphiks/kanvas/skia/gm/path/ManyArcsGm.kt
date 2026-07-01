@@ -1,5 +1,11 @@
 package org.graphiks.kanvas.skia.gm.path
 
+/**
+ * Port of Skia's `gm/manyarcs.cpp`.
+ * Tests arcTo with many combinations of sweep/start angles and direction flags.
+ * @see https://github.com/google/skia/blob/main/gm/manyarcs.cpp
+ */
+
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle

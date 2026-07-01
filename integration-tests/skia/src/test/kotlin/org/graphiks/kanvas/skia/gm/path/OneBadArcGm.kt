@@ -1,5 +1,11 @@
 package org.graphiks.kanvas.skia.gm.path
 
+/**
+ * Port of Skia's `gm/onebadarc.cpp`.
+ * Tests a known problematic arc path with stroke and drawArc.
+ * @see https://github.com/google/skia/blob/main/gm/onebadarc.cpp
+ */
+
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle

@@ -1,5 +1,11 @@
 package org.graphiks.kanvas.skia.gm.path
 
+/**
+ * Port of Skia's `gm/strokerectanisotropic.cpp`.
+ * Tests stroked rect rendering under anisotropic scale with AA and non-AA.
+ * @see https://github.com/google/skia/blob/main/gm/strokerectanisotropic.cpp
+ */
+
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle

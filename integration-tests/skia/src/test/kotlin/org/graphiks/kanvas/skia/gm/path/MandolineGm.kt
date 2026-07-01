@@ -1,5 +1,11 @@
 package org.graphiks.kanvas.skia.gm.path
 
+/**
+ * Port of Skia's `gm/mandoline.cpp`.
+ * Tests path slice operations (line, quad, cubic, conic) with randomized near-zero chop ts.
+ * @see https://github.com/google/skia/blob/main/gm/mandoline.cpp
+ */
+
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.skia.GmCanvas

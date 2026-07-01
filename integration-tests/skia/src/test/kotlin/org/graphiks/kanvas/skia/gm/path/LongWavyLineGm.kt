@@ -1,5 +1,11 @@
 package org.graphiks.kanvas.skia.gm.path
 
+/**
+ * Port of Skia's `gm/longwavyline.cpp`.
+ * Tests stroked wavy quad path spanning a wide coordinate range.
+ * @see https://github.com/google/skia/blob/main/gm/longwavyline.cpp
+ */
+
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle

@@ -1,5 +1,11 @@
 package org.graphiks.kanvas.skia.gm.path
 
+/**
+ * Port of Skia's `gm/manyrrects.cpp`.
+ * Renders 7,000 small round-rect paths across the canvas.
+ * @see https://github.com/google/skia/blob/main/gm/manyrrects.cpp
+ */
+
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.skia.GmCanvas

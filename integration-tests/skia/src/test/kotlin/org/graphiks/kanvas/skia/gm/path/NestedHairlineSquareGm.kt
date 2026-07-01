@@ -1,5 +1,11 @@
 package org.graphiks.kanvas.skia.gm.path
 
+/**
+ * Port of Skia's `gm/nestedhairlinesquare.cpp`.
+ * Tests nested hairline-width square rendering with non-integer scaling.
+ * @see https://github.com/google/skia/blob/main/gm/nestedhairlinesquare.cpp
+ */
+
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.skia.GmCanvas

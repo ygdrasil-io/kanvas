@@ -1,5 +1,11 @@
 package org.graphiks.kanvas.skia.gm.path
 
+/**
+ * Port of Skia's `gm/tinyanglearcs.cpp`.
+ * Tests arcTo with tiny sweep angles on very large radii.
+ * @see https://github.com/google/skia/blob/main/gm/tinyanglearcs.cpp
+ */
+
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle

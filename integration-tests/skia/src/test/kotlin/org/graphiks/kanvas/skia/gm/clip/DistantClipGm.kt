@@ -1,13 +1,15 @@
 package org.graphiks.kanvas.skia.gm.clip
 
-import org.graphiks.kanvas.geometry.Path
+/**
+ * Port of Skia's `gm/distantclip.cpp`.
+ * Tests clipRect with a rect far outside canvas extents.
+ * @see https://github.com/google/skia/blob/main/gm/distantclip.cpp
+ */
+
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.SkiaGm
-import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.CornerRadii
-import org.graphiks.kanvas.types.RRect
 import org.graphiks.kanvas.types.Rect
 
 class DistantClipGm : SkiaGm {

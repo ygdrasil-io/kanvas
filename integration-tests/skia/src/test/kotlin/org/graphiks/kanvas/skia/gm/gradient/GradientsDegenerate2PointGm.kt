@@ -6,6 +6,7 @@ import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Point
+import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.SkiaGm
@@ -15,7 +16,7 @@ import org.graphiks.kanvas.skia.SkiaGm
  * Tests degenerate 2-point conical gradient (X^2 coefficient=0).
  * @see https://github.com/google/skia/blob/main/gm/gradients.cpp
  */
-class GradientsDegenrate2PointGm : SkiaGm {
+class GradientsDegenerate2PointGm : SkiaGm {
     override val name = "gradients_degenerate_2pt"
     override val renderFamily = RenderFamily.GRADIENT
     override val minSimilarity = 0.0
@@ -42,9 +43,6 @@ class GradientsDegenrate2PointGm : SkiaGm {
             tileMode = TileMode.CLAMP,
         )
         val paint = Paint(shader = shader)
-        canvas.drawRect(
-            org.graphiks.kanvas.types.Rect(0f, 0f, width.toFloat(), height.toFloat()),
-            paint,
-        )
+        canvas.drawRect(Rect(0f, 0f, width.toFloat(), height.toFloat()), paint)
     }
 }

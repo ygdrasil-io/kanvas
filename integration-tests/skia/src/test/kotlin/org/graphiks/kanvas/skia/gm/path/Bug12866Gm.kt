@@ -1,5 +1,11 @@
 package org.graphiks.kanvas.skia.gm.path
 
+/**
+ * Port of Skia's `gm/bug12866.cpp`.
+ * Regression test for Skia bug 12866 — quad path rendered as stroke and fill.
+ * @see https://github.com/google/skia/blob/main/gm/bug12866.cpp
+ */
+
 import org.graphiks.kanvas.geometry.FillType
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.paint.Paint

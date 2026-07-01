@@ -1,5 +1,11 @@
 package org.graphiks.kanvas.skia.gm.path
 
+/**
+ * Port of Skia's `gm/teenystrokes.cpp`.
+ * Tests extremely thin stroke rendering with varying sub-pixel widths.
+ * @see https://github.com/google/skia/blob/main/gm/teenystrokes.cpp
+ */
+
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.skia.GmCanvas

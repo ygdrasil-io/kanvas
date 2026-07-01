@@ -1,5 +1,11 @@
 package org.graphiks.kanvas.skia.gm.path
 
+/**
+ * Port of Skia's `gm/zerolinestroke.cpp`.
+ * Tests rendering of zero-length line strokes with round caps.
+ * @see https://github.com/google/skia/blob/main/gm/zerolinestroke.cpp
+ */
+
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle

@@ -1,5 +1,11 @@
 package org.graphiks.kanvas.skia.gm.path
 
+/**
+ * Port of Skia's `gm/trim.cpp`.
+ * Tests path trim (offset) rendering on cubic, line, and polyline paths.
+ * @see https://github.com/google/skia/blob/main/gm/trim.cpp
+ */
+
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle

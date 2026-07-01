@@ -1,5 +1,11 @@
 package org.graphiks.kanvas.skia.gm.path
 
+/**
+ * Port of Skia's `gm/longlinedash.cpp`.
+ * Tests dashed stroke on a very long wide rect.
+ * @see https://github.com/google/skia/blob/main/gm/longlinedash.cpp
+ */
+
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.paint.PathEffect

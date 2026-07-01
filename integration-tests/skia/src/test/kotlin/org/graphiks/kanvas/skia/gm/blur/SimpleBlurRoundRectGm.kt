@@ -1,5 +1,11 @@
 package org.graphiks.kanvas.skia.gm.blur
 
+/**
+ * Port of Skia's `gm/simpleblurroundrect.cpp`.
+ * Renders round-rects with varying blur radii and corner radii, with solid and gradient fills.
+ * @see https://github.com/google/skia/blob/main/gm/simpleblurroundrect.cpp
+ */
+
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.MaskFilter

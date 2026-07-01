@@ -1,5 +1,11 @@
 package org.graphiks.kanvas.skia.gm.path
 
+/**
+ * Port of Skia's `gm/longpathdash.cpp`.
+ * Tests dashed strokes on long paths with many radial line segments.
+ * @see https://github.com/google/skia/blob/main/gm/longpathdash.cpp
+ */
+
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle

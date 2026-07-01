@@ -1,5 +1,11 @@
 package org.graphiks.kanvas.skia.gm.path
 
+/**
+ * Port of Skia's `gm/strokes.cpp`.
+ * Tests round-stroked ovals and round-rects with 50 random shapes, with and without AA.
+ * @see https://github.com/google/skia/blob/main/gm/strokes.cpp
+ */
+
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle

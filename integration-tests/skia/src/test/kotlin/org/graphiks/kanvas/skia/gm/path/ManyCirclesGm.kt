@@ -1,5 +1,11 @@
 package org.graphiks.kanvas.skia.gm.path
 
+/**
+ * Port of Skia's `gm/manycircles.cpp`.
+ * Fills canvas with 10,000 randomly positioned and colored circles.
+ * @see https://github.com/google/skia/blob/main/gm/manycircles.cpp
+ */
+
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
