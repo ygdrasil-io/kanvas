@@ -84,51 +84,38 @@ Kanvas is a recording 2D drawing API backed by a programmable GPU pipeline. It c
 
 | Domain | Coverage |
 |--------|----------|
-| Canvas core draws | drawRect, drawRRect, drawPath, drawImage, drawImageRect, drawText, drawPicture |
-| Canvas extensions | drawOval, drawCircle, drawArc, drawLine, drawRoundRect, withPicture |
-| Canvas state | save/saveLayer/restore/restoreToCount, transmit, scale, rotate, skew, concat, setMatrix, resetMatrix, clipRect/clipRRect/clipPath |
+| Canvas core draws | drawRect, drawRRect, drawDRRect, drawPath, drawPoint, drawPoints, drawImage, drawImageRect, drawImageNine, drawImageLattice, drawText, drawPicture, drawVertices, drawAtlas |
+| Canvas fill/clear | drawColor(mode), clear(color) |
+| Canvas culling | quickReject(rect/path), isClipEmpty, isClipRect |
+| Canvas extensions | drawOval, drawCircle, drawArc, drawLine, drawRoundRect, drawPatch, drawAnnotation, withPicture |
+| Canvas state | save/saveLayer/restore/restoreToCount, translate, scale, rotate, skew, concat, setMatrix, resetMatrix, clipRect/clipRRect/clipPath |
 | Paint | 14 fields: color, shader, blendMode, colorFilter, maskFilter, pathEffect, imageFilter, blender, style, strokeWidth/Cap/Join/Miter, antiAlias |
-| Shader | 10 subtypes: solid color, linear/radial/sweep/conical gradients, image, blend, runtime effect, local matrix wrapper, color filter wrapper |
-| ColorFilter | 7 subtypes: matrix, blend, compose, table, lighting, linear-to-sRGB, sRGB-to-linear |
-| MaskFilter | Gaussian blur |
-| PathEffect | Dash pattern, rounded corners, discrete scattering |
-| ImageFilter | Gaussian blur, drop shadow, color filter, compose, blend |
-| Blender | Porter-Duff mode, arithmetic |
-| BlendMode | 29 values: all Porter-Duff compositing + separable + non-separable blend modes |
-| Geometry | Path (move, line, quad, cubic, arc, close) + fill type + convenience shapes; ClipStack (wide-open, device rect, complex stack) |
+| Shader | 15 subtypes: solid color, 4 gradients (linear/radial/sweep/conical), image, perlin noise, fractal noise, blend, runtime effect, local matrix wrapper, color filter wrapper, working color space wrapper, coordinate clamp wrapper |
+| ColorFilter | 12 subtypes: matrix, blend, compose, table, lighting, linear-to-sRGB, sRGB-to-linear, HSLA matrix, lerp, high-contrast, luma, overdraw |
+| MaskFilter | 3 subtypes: gaussian blur, shader-based mask, lookup-table mask |
+| PathEffect | 6 subtypes: dash, corner, discrete, 1D path repeat, 2D path deform, trim |
+| ImageFilter | 20 subtypes: blur, drop shadow, color filter, compose, blend, dilate, erode, distant/point/spot diffuse lighting, distant/point/spot specular lighting, offset, tile, merge, displacement map, magnifier, matrix convolution |
+| Blender | 2 subtypes: Porter-Duff mode, arithmetic |
+| BlendMode | 29 values: all Porter-Duff + separable + non-separable blend modes |
+| Color space | sRGB, Display P3, Linear sRGB, PQ/HLG transfer functions, SRGB/DisplayP3/Rec2020 gamuts; gradient color space interpolation |
+| Geometry | Path (6 verbs + rect/oval/circle/rrect/path shapes), PathMeasure, PathOps (union/intersect/difference/xor/simplify), Path queries (isConvex, isRect, isOval, isRRect, isLine, isInterpolatable, contains), FillType, Region (rectangle boolean ops) |
+| Clip | ClipStack (wide-open, device rect, complex stack with rect/rrect/path ops) |
 | Core types | Color, Point, Size, Rect, RRect, CornerRadii, Matrix33 |
-| Surface | Width/height/pixel format, Canvas provider, render to pixel buffer with diagnostics |
+| Surface | Width/height/pixel format/color space, Canvas provider, readPixels (region readback), render to pixels + diagnostics |
+| Image codec | decode (PNG, JPEG, WebP, GIF, BMP) via SPI; encode (PNG, JPEG, WebP) |
 | Pipeline | GPU context, render passes, render pipelines, shader modules, uniform blocks, runtime effect descriptors |
-| Picture | Immutable command snapshot (Picture), recording session (PictureRecorder), Canvas.drawPicture, withPicture extension |
+| Picture | Immutable command snapshot, recording session, Canvas.drawPicture, withPicture, binary serialization |
 | DSL | Path builders, gradient builders, @KanvasDsl scope marker |
 
 ### Out of Scope
 
 | # | Domain | Description |
 |---|--------|-------------|
-| C1 | Canvas | Point primitives (drawPoint, drawPoints) |
-| C2 | Canvas | Double rounded rectangle (drawDRRect) |
-| C3 | Canvas | Nine-patch and lattice image drawing |
-| C4 | Canvas | Full-canvas fill or clear |
-| C5 | Canvas | Visibility culling queries |
-| C6 | Canvas | Direct pixel readback or injection |
-| C7 | Canvas | Triangle mesh, sprite atlas, patch, annotation rendering |
-| D1 | Geometry | Path measurement (arc length, tangent, segment) |
-| D2 | Geometry | Path boolean operations |
-| D3 | Geometry | Path introspection (convexity, shape detection, interpolatability) |
-| D4 | Geometry | Region-based clipping geometry |
-| E1 | Effects | Path-based shape effects (pattern repeat, deformation, trimming) |
-| E2 | Shader | Procedural noise (Perlin, turbulence) |
-| E3 | Shader | Coordinate clamping |
-| E4 | ColorFilter | HSLA matrix, filter interpolation, high-contrast, luma extraction, overdraw |
-| E5 | MaskFilter | Shader-based masks, lookup-table masks |
-| E6 | ImageFilter | Morphological filters, lighting effects, displacement mapping, magnifier, matrix convolution, offset, tile, merge, crop |
-| I1 | Image | Codec integration (decode + encode beyond PNG) |
-| S1 | Serialize | Picture binary serialization |
-| T1 | Text | Font management (delegated to `:font`) |
-| T2 | Text | Text shaping — Unicode to glyph, bidi, kerning, glyph substitution/positioning (delegated to `:font`) |
-| T3 | Text | Text blob bounds, serialization, intercepts, string-to-glyph conversion |
-| D5 | Document | PDF, XPS backends |
+| T1 | Text | Font management — delegated to `:font` |
+| T2 | Text | Text shaping (Unicode→glyph, bidi, kerning, glyph substitution/positioning) — delegated to `:font` |
+| T3 | Text | TextBlob bounds, serialization, intercepts, string-to-glyph conversion |
+| D1 | Document | PDF, XPS backends |
+| S1 | Surface | makeSurface / makeImageSnapshot — multi-surface composition |
 | G1 | GPU | Externally-managed buffer/texture lifecycle, compute pipelines, multi-pass render graphs |
 
 ## Status Policy

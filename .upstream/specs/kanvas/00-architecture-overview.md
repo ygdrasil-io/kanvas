@@ -15,7 +15,7 @@ The `:kanvas` module lives at `kanvas/` and uses the base package `org.graphiks.
 |-------------|----------------|
 | `types/` | Core value types: Color, Point, Size, Rect, RRect, Matrix33, ColorSpace |
 | `paint/` | Paint data class and all effect sealed hierarchies |
-| `geometry/` | Path, FillType, PathVerb, ClipStack |
+| `geometry/` | Path, FillType, PathVerb, PathMeasure, PathOps, Region, ClipStack |
 | `canvas/` | Canvas, DisplayOp sealed hierarchy, extensions |
 | `pipeline/` | GPU pipeline interfaces and supporting types |
 | `surface/` | Surface, RenderResult, Diagnostics, ImageEncoder bridge |
@@ -23,7 +23,7 @@ The `:kanvas` module lives at `kanvas/` and uses the base package `org.graphiks.
 | `image/` | Image, ColorType |
 | `dsl/` | @KanvasDsl annotation, DSL scopes (PathScope, PaintScope, CanvasScope) |
 | `operators/` | Operator extensions for Point, Matrix33, Rect, Path |
-| `picture/` | Picture, PictureRecorder — recording and playback of DisplayOp snapshots |
+| `picture/` | Picture, PictureRecorder — recording, playback, and serialization |
 
 ## Naming Conventions
 

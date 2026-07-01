@@ -16,8 +16,16 @@ Kanvas already has a display list mechanism (`DisplayOp`, `DisplayListBuffer`). 
 - **Caching**: Record once, replay many times — avoids re-executing expensive scene construction.
 - **Composability**: Pictures can contain other pictures via `DisplayOp.DrawPicture`.
 - **Inspection**: Access to cull rect, approximate op count, and byte usage.
+- **Persistence**: Serialize to and deserialize from bytes for asset pipelines and caching across sessions.
 
-Unlike the upstream C++ API, Kanvas does **not** implement custom binary serialization. The display list is always held in memory. Serialization (`toByteArray()` / `fromByteArray()`) is excluded from the Kanvas Picture target.
+## Contracts
+
+Kanvas already has a display list mechanism (`DisplayOp`, `DisplayListBuffer`). `Picture` is a higher-level wrapper around a frozen `List<DisplayOp>`, providing:
+
+- **Caching**: Record once, replay many times — avoids re-executing expensive scene construction.
+- **Composability**: Pictures can contain other pictures via `DisplayOp.DrawPicture`.
+- **Inspection**: Access to cull rect, approximate op count, and byte usage.
+- **Persistence**: Serialize to and deserialize from bytes for asset pipelines and caching across sessions.
 
 ## Contracts
 
@@ -70,9 +78,25 @@ class Picture internal constructor(
      */
     fun approximateBytesUsed(): Int
 
+    /**
+     * Serialize this picture to a compact binary representation.
+     *
+     * The serialized form includes all DisplayOps and embedded resources
+     * (images encoded as PNG). Compatible with [fromByteArray] for
+     * deserialization.
+     */
+    fun toByteArray(): ByteArray
+
     // uniqueID generation: process-wide, monotonically increasing, thread-safe.
-    // Implementation detail — not AtomicInteger-specific in case of KMP.
     companion object {
+        /**
+         * Deserialize a [Picture] from its binary representation.
+         *
+         * @param data the bytes previously produced by [toByteArray]
+         * @return the reconstructed Picture, or null if the data is invalid
+         */
+        fun fromByteArray(data: ByteArray): Picture?
+
         private var globalId = 0
         private fun nextId(): Int = synchronized(this) { ++globalId }
     }
@@ -248,7 +272,6 @@ fun finishRecordingAsPicture(): Picture {
 
 ## Non-Goals
 
-- Picture binary serialization
 - Picture-to-shader conversion (`makeShader`)
 - Placeholder pictures
 - Interruptible playback
