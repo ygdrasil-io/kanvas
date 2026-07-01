@@ -8,6 +8,12 @@ enum class RenderFamily {
     IMAGE,
     TEXT,
     COMPOSITE,
+    IMAGE_FILTERS,
+    RUNTIME_EFFECT,
+    SHADER,
+    MESH,
+    SURFACE,
+    COLOR,
 }
 
 interface SkiaGm {

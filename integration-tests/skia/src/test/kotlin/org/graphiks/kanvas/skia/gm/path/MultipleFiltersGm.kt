@@ -1,4 +1,4 @@
-package org.graphiks.kanvas.skia.gm.composite
+package org.graphiks.kanvas.skia.gm.path
 
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
@@ -15,7 +15,7 @@ import org.graphiks.kanvas.types.Rect
  */
 class MultipleFiltersGm : SkiaGm {
     override val name = "multiple_filters"
-    override val renderFamily = RenderFamily.COMPOSITE
+    override val renderFamily = RenderFamily.PATH
     override val minSimilarity = 0.0
     override val width = 415
     override val height = 210
