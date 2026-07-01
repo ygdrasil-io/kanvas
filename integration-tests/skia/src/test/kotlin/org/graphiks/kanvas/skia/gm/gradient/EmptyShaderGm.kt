@@ -1,4 +1,4 @@
-package org.graphiks.kanvas.skia.gm.composite
+package org.graphiks.kanvas.skia.gm.gradient
 
 import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.Paint
@@ -21,7 +21,7 @@ import org.graphiks.kanvas.types.Rect
  */
 class EmptyShaderGm : SkiaGm {
     override val name = "emptyshader"
-    override val renderFamily = RenderFamily.COMPOSITE
+    override val renderFamily = RenderFamily.GRADIENT
     override val minSimilarity = 0.0
     override val width = 128
     override val height = 88

@@ -1,4 +1,4 @@
-package org.graphiks.kanvas.skia.gm.blur
+package org.graphiks.kanvas.skia.gm.path
 
 import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.Image
@@ -26,7 +26,7 @@ open class ClippedBitmapShadersBase(
             return if (hq) "clipped-bitmap-shaders-$descriptor-hq" else "clipped-bitmap-shaders-$descriptor"
         }
 
-    override val renderFamily = RenderFamily.BLUR
+    override val renderFamily = RenderFamily.PATH
     override val minSimilarity = 0.0
     override val width = 300
     override val height = 300

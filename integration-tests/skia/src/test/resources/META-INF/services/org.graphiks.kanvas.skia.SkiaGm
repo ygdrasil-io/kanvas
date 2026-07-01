@@ -14,12 +14,6 @@ org.graphiks.kanvas.skia.gm.blur.BlurRectGalleryGm
 org.graphiks.kanvas.skia.gm.blur.BlurRectGm
 org.graphiks.kanvas.skia.gm.blur.BlurSmallSigmaGm
 org.graphiks.kanvas.skia.gm.blur.BlurredClippedCircleGm
-org.graphiks.kanvas.skia.gm.blur.ClippedBitmapShadersClampGm
-org.graphiks.kanvas.skia.gm.blur.ClippedBitmapShadersClampHqGm
-org.graphiks.kanvas.skia.gm.blur.ClippedBitmapShadersMirrorGm
-org.graphiks.kanvas.skia.gm.blur.ClippedBitmapShadersMirrorHqGm
-org.graphiks.kanvas.skia.gm.blur.ClippedBitmapShadersTileGm
-org.graphiks.kanvas.skia.gm.blur.ClippedBitmapShadersTileHqGm
 org.graphiks.kanvas.skia.gm.blur.Crbug899512Gm
 org.graphiks.kanvas.skia.gm.blur.EmbossGm
 org.graphiks.kanvas.skia.gm.blur.HdrPipBlurGm
@@ -53,7 +47,6 @@ org.graphiks.kanvas.skia.gm.composite.ComposeShaderBitmap2Gm
 org.graphiks.kanvas.skia.gm.composite.ComposeShaderBitmapGm
 org.graphiks.kanvas.skia.gm.composite.ComposeShaderGm
 org.graphiks.kanvas.skia.gm.composite.ComposeShaderGridGm
-org.graphiks.kanvas.skia.gm.composite.EmptyShaderGm
 org.graphiks.kanvas.skia.gm.composite.FadeFilterGm
 org.graphiks.kanvas.skia.gm.composite.HairModesGm
 org.graphiks.kanvas.skia.gm.composite.ModeColorFilterGm
@@ -63,6 +56,7 @@ org.graphiks.kanvas.skia.gm.composite.XfermodesGm
 org.graphiks.kanvas.skia.gm.gradient.ClampedGradientsGm
 org.graphiks.kanvas.skia.gm.gradient.ConicalGradients2ptInsideGm
 org.graphiks.kanvas.skia.gm.gradient.Crbug938592Gm
+org.graphiks.kanvas.skia.gm.gradient.EmptyShaderGm
 org.graphiks.kanvas.skia.gm.gradient.FillrectGradientGm
 org.graphiks.kanvas.skia.gm.gradient.GradientDirtyLaundryGm
 org.graphiks.kanvas.skia.gm.gradient.GradientManyHardStopsGm
@@ -124,6 +118,12 @@ org.graphiks.kanvas.skia.gm.path.CircularArcsStrokeButtGm
 org.graphiks.kanvas.skia.gm.path.CircularArcsStrokeRoundGm
 org.graphiks.kanvas.skia.gm.path.CircularArcsStrokeSquareGm
 org.graphiks.kanvas.skia.gm.path.CircularArcsWeirdGm
+org.graphiks.kanvas.skia.gm.path.ClippedBitmapShadersClampGm
+org.graphiks.kanvas.skia.gm.path.ClippedBitmapShadersClampHqGm
+org.graphiks.kanvas.skia.gm.path.ClippedBitmapShadersMirrorGm
+org.graphiks.kanvas.skia.gm.path.ClippedBitmapShadersMirrorHqGm
+org.graphiks.kanvas.skia.gm.path.ClippedBitmapShadersTileGm
+org.graphiks.kanvas.skia.gm.path.ClippedBitmapShadersTileHqGm
 org.graphiks.kanvas.skia.gm.path.ClippedCubic2Gm
 org.graphiks.kanvas.skia.gm.path.ClippedCubicGm
 org.graphiks.kanvas.skia.gm.path.CollapsePathsGm

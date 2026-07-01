@@ -1,4 +1,4 @@
-package org.graphiks.kanvas.skia.gm.composite
+package org.graphiks.kanvas.skia.gm.path
 
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.paint.Paint
@@ -19,7 +19,7 @@ import kotlin.math.max
  */
 class ShadowUtilsGm : SkiaGm {
     override val name = "shadow_utils"
-    override val renderFamily = RenderFamily.COMPOSITE
+    override val renderFamily = RenderFamily.PATH
     override val minSimilarity = 0.0
     override val width = 800
     override val height = 960
