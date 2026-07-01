@@ -29,7 +29,7 @@ import kotlin.random.Random
 class PolygonsGm : SkiaGm {
     override val name = "polygons"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 0.0
+    override val minSimilarity = 69.0
 
     override val width = kNumPolygons * kCellSize + 40
     override val height = (kNumJoins * kNumStrokeWidths + kNumExtraStyles) * kCellSize + 40

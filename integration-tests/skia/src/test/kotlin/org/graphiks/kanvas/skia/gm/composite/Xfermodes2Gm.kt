@@ -17,7 +17,7 @@ import org.graphiks.kanvas.types.Rect
 class Xfermodes2Gm : SkiaGm {
     override val name = "xfermodes2"
     override val renderFamily = RenderFamily.COMPOSITE
-    override val minSimilarity = 0.0
+    override val minSimilarity = 33.8
     override val width = 455
     override val height = 475
 

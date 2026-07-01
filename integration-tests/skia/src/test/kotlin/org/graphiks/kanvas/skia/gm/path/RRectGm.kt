@@ -25,7 +25,7 @@ import org.graphiks.kanvas.types.Rect
 class RRectGm : SkiaGm {
     override val name = "rrect"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 0.0
+    override val minSimilarity = 76.4
     override val width = 820
     override val height = 710
 

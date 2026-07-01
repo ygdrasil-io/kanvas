@@ -21,7 +21,7 @@ import kotlin.math.sin
 class Dashing2Gm : SkiaGm {
     override val name = "dashing2"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 0.0
+    override val minSimilarity = 83.9
     override val width = 640
     override val height = 480
 
