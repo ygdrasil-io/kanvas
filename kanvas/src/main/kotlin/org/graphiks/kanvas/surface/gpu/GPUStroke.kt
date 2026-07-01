@@ -12,9 +12,10 @@ data class StrokeGeometry(
  * segment. Adjacent quads share vertices at join points.
  *
  * Currently supports:
- * - Butt caps (flat end at each contour endpoint)
+ * - Closed polygon contours only (all tessellated Skia contours are closed)
  * - Miter joins (extend offset edges until they intersect)
  * - No dashing support (dash patterns are refused)
+ * - Open polyline stroke support requires an explicit isOpen flag in the path data
  */
 internal fun strokeToFillGeometry(
     contourVertices: List<Float>,
@@ -48,14 +49,14 @@ internal fun strokeToFillGeometry(
         if (n < 2) continue
 
         // Extract contour points
-        val points = Array(n) { idx ->
+        val points = List(n) { idx ->
             val i = (start + idx) * 2
             Pair(contourVertices[i], contourVertices[i + 1])
         }
 
         // Compute normals for each edge (the normal for each vertex is the
         // average of the normals of the two edges meeting at that vertex)
-        val normals = Array(n) { i ->
+        val normals = List(n) { i ->
             val prev = edgeNormal(
                 points[(i + n - 1) % n].first, points[(i + n - 1) % n].second,
                 points[i].first, points[i].second,
@@ -71,10 +72,13 @@ internal fun strokeToFillGeometry(
             else Pair(nx / len * halfWidth, ny / len * halfWidth)
         }
 
-        // Generate stroke quad: for each edge, add a quad (left side, right side)
-        for (i in 0 until n - 1) {
-            val p0 = points[i]; val p1 = points[i + 1]
-            val n0 = normals[i]; val n1 = normals[i + 1]
+        // Generate stroke quad: for each edge, add a quad (left side, right side).
+        // All tessellated contours from Skia are closed polygon boundaries, so we
+        // always draw n edges with wrap-around via (i+1)%n. Open polyline stroke
+        // support would require an explicit isOpen flag in the path data.
+        for (i in 0 until n) {
+            val p0 = points[i]; val p1 = points[(i + 1) % n]
+            val n0 = normals[i]; val n1 = normals[(i + 1) % n]
 
             // Left offset edge
             val l0x = p0.first - n0.first; val l0y = p0.second - n0.second
@@ -86,40 +90,6 @@ internal fun strokeToFillGeometry(
             // Quad as two triangles (CW winding)
             result.addAll(listOf(l0x, l0y, r0x, r0y, r1x, r1y))
             result.addAll(listOf(l0x, l0y, r1x, r1y, l1x, l1y))
-        }
-
-        // Butt caps at endpoints (for open contours only)
-        // When n < contourStarts size, we cap at start and end
-        // [Simplified: just use the first and last edge normals for caps]
-        if (n < contourVertices.size / 2) { // open contour
-            // Start cap
-            val sn = edgeNormal(points[1].first, points[1].second, points[0].first, points[0].second)
-            val capNx = sn.first * halfWidth; val capNy = sn.second * halfWidth
-            val pS = points[0]
-            result.addAll(listOf(
-                pS.first - capNx, pS.second - capNy,
-                pS.first + capNx, pS.second + capNy,
-                pS.first + capNx + normals[0].first, pS.second + capNy + normals[0].second,
-            ))
-            result.addAll(listOf(
-                pS.first - capNx, pS.second - capNy,
-                pS.first + capNx + normals[0].first, pS.second + capNy + normals[0].second,
-                pS.first - capNx + normals[0].first, pS.second - capNy + normals[0].second,
-            ))
-            // End cap (backwards normal)
-            val en = edgeNormal(points[n-2].first, points[n-2].second, points[n-1].first, points[n-1].second)
-            val capEx = en.first * halfWidth; val capEy = en.second * halfWidth
-            val pE = points[n-1]
-            result.addAll(listOf(
-                pE.first - capEx, pE.second - capEy,
-                pE.first + capEx, pE.second + capEy,
-                pE.first + capEx - normals[n-1].first, pE.second + capEy - normals[n-1].second,
-            ))
-            result.addAll(listOf(
-                pE.first - capEx, pE.second - capEy,
-                pE.first + capEx - normals[n-1].first, pE.second + capEy - normals[n-1].second,
-                pE.first - capEx - normals[n-1].first, pE.second - capEy - normals[n-1].second,
-            ))
         }
 
         contourResult.add(result.size / 2)

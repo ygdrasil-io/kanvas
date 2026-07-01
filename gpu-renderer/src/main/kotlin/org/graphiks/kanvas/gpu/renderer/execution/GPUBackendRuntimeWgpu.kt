@@ -2034,13 +2034,13 @@ private class WgpuExecutionCaches(
                                     blend = BlendState(
                                         color = BlendComponent(
                                             operation = GPUBlendOperation.Add,
-                                    srcFactor = io.ygdrasil.webgpu.GPUBlendFactor.One,
-                                    dstFactor = io.ygdrasil.webgpu.GPUBlendFactor.Zero,
-                                ),
-                                alpha = BlendComponent(
-                                    operation = GPUBlendOperation.Add,
-                                    srcFactor = io.ygdrasil.webgpu.GPUBlendFactor.One,
-                                    dstFactor = io.ygdrasil.webgpu.GPUBlendFactor.Zero,
+                                            srcFactor = io.ygdrasil.webgpu.GPUBlendFactor.One,
+                                            dstFactor = io.ygdrasil.webgpu.GPUBlendFactor.Zero,
+                                        ),
+                                        alpha = BlendComponent(
+                                            operation = GPUBlendOperation.Add,
+                                            srcFactor = io.ygdrasil.webgpu.GPUBlendFactor.One,
+                                            dstFactor = io.ygdrasil.webgpu.GPUBlendFactor.Zero,
                                         ),
                                     ),
                                     writeMask = GPUColorWrite.None,
