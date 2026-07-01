@@ -141,7 +141,8 @@ Total: 28 new subtypes + 4 enums. 29 existing + 28 new = 57 subtypes.
 | `PathMeasure.getMatrix` | Dead stub | Implement or remove from API |
 | `PathOps.op` for general bezier paths | Only rect-rect handled | Path boolean algorithm |
 | Image codec (real decode) | `Image.decode` returns 0x0 placeholder | `:codec:api` SPI providers |
-| RuntimeEffect (wgsl4k) | `makeShader`/`makeColorFilter`/`makeBlender` throw | `wgsl4k` integration |
+| RuntimeEffect (compile) | `compile()` returns `Result.failure` (not yet wired) | Bridge to existing wgsl4k integration in `:gpu-renderer` (KanvasWGSLValidator, KanvasWGSLReflectionProvider) |
+| RuntimeEffect (makeColorFilter/makeBlender) | throw UnsupportedOperationException | Shader lowering semantics for color filter/blender effects |
 
 ### Fully complete
 
@@ -154,3 +155,4 @@ Total: 28 new subtypes + 4 enums. 29 existing + 28 new = 57 subtypes.
 | Effect subtypes | ✅ Complete |
 | GPU dispatch (all DisplayOp types handled) | ✅ Complete |
 | Culling (quickReject, isClipEmpty, isClipRect) | ✅ Complete |
+| wgsl4k submodule | ✅ Initialized (commit 6f6521c), integrated in :gpu-renderer |

@@ -228,19 +228,8 @@ class PathMeasure(path: Path, val forceClosed: Boolean = false, resScale: Float 
         return true
     }
 
-    fun getMatrix(distance: Float, flags: Int = GET_POSITION or GET_TANGENT): Matrix33? {
-        val pos = Point(0f, 0f)
-        val tan = Point(0f, 0f)
-        if (!getPosition(distance, pos, tan)) return null
-        var matrix = Matrix33.identity()
-        if (flags and GET_POSITION != 0) {
-            matrix = matrix * Matrix33.translate(pos.x, pos.y)
-        }
-        if (flags and GET_TANGENT != 0) {
-            val angle = Math.toDegrees(atan2(tan.y.toDouble(), tan.x.toDouble())).toFloat()
-            matrix = matrix * Matrix33.rotate(angle)
-        }
-        return matrix
+    fun getMatrix(distance: Float, matrix: Matrix33, flags: Int): Boolean {
+        throw UnsupportedOperationException("getMatrix not yet implemented")
     }
 
     fun nextContour(): Boolean {
@@ -252,9 +241,6 @@ class PathMeasure(path: Path, val forceClosed: Boolean = false, resScale: Float 
     }
 
     companion object {
-        const val GET_POSITION = 1
-        const val GET_TANGENT = 2
-
         private fun pointCountFor(verb: PathVerb): Int = when (verb) {
             PathVerb.MOVE, PathVerb.LINE -> 1
             PathVerb.QUAD -> 2
