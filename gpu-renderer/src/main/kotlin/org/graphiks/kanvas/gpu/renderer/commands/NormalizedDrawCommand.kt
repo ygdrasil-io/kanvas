@@ -309,6 +309,8 @@ data class GPULayerFacts(
 enum class GPUBlendKind {
     /** Source-over fixed-function blend accepted by the first route. */
     SrcOver,
+    /** Custom blend mode mapped from BlendMode. */
+    Custom,
     /** Unsupported blend mode that must refuse deterministically. */
     Unsupported,
 }
@@ -318,6 +320,7 @@ data class GPUBlendFacts(
     val kind: GPUBlendKind,
     val modeLabel: String,
     val requiresDestinationRead: Boolean,
+    val blendMode: GPUBlendMode? = null,
 ) {
     /** Constructors for first-route blend fact records. */
     companion object {
