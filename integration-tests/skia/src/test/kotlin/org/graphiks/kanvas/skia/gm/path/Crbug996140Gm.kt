@@ -12,7 +12,7 @@ import org.graphiks.kanvas.types.Color
 class Crbug996140Gm : SkiaGm {
     override val name = "crbug_996140"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 0.0
+    override val minSimilarity = 90.0
     override val width = 300
     override val height = 300
 
