@@ -22,7 +22,7 @@ import kotlin.math.sin
 class BlurCircles2Gm : SkiaGm {
     override val name = "blurcircles2"
     override val renderFamily = RenderFamily.BLUR
-    override val minSimilarity = 0.0
+    override val minSimilarity = 49.2
     override val width = 730
     override val height = 1350
 

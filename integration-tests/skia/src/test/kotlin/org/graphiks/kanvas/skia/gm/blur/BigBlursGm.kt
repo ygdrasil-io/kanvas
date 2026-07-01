@@ -20,7 +20,7 @@ import org.graphiks.kanvas.types.Rect
 class BigBlursGm : SkiaGm {
     override val name = "bigblurs"
     override val renderFamily = RenderFamily.BLUR
-    override val minSimilarity = 0.0
+    override val minSimilarity = 31.0
     override val width = kWidth
     override val height = kHeight
 

@@ -16,7 +16,7 @@ import org.graphiks.kanvas.types.Rect
 class ScaledStrokesGm : SkiaGm {
     override val name = "scaledstrokes"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 0.0
+    override val minSimilarity = 56.9
     override val width = 640
     override val height = 320
 

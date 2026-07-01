@@ -19,7 +19,7 @@ import org.graphiks.kanvas.types.Rect
 class StrokerectAnisotropicGm : SkiaGm {
     override val name = "strokerect_anisotropic"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 0.0
+    override val minSimilarity = 49.9
     override val width = 160
     override val height = 160
 

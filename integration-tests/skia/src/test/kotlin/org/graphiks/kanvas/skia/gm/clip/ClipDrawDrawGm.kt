@@ -23,7 +23,7 @@ import org.graphiks.kanvas.types.Rect
 class ClipDrawDrawGm : SkiaGm {
     override val name = "clipdrawdraw"
     override val renderFamily = RenderFamily.CLIP
-    override val minSimilarity = 0.0
+    override val minSimilarity = 24.0
     override val width = 512
     override val height = 512
 

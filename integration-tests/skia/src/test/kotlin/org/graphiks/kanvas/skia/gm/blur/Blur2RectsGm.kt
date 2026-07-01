@@ -18,7 +18,7 @@ import org.graphiks.kanvas.types.Rect
 class Blur2RectsGm : SkiaGm {
     override val name = "blur2rects"
     override val renderFamily = RenderFamily.BLUR
-    override val minSimilarity = 0.0
+    override val minSimilarity = 91.4
     override val width = 700
     override val height = 500
 

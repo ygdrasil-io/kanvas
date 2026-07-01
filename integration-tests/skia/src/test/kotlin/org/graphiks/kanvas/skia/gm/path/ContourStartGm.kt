@@ -21,7 +21,7 @@ import org.graphiks.kanvas.types.Rect
 class ContourStartGm : SkiaGm {
     override val name = "contour_start"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 0.0
+    override val minSimilarity = 36.5
     override val width = 1200
     override val height = 600
 

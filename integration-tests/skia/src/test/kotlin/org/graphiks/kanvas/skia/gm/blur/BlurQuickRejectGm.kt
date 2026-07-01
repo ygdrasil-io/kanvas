@@ -19,7 +19,7 @@ import org.graphiks.kanvas.types.Rect
 class BlurQuickRejectGm : SkiaGm {
     override val name = "blurquickreject"
     override val renderFamily = RenderFamily.BLUR
-    override val minSimilarity = 0.0
+    override val minSimilarity = 76.8
     override val width = 300
     override val height = 300
 

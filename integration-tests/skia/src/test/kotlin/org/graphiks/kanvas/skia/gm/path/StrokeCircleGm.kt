@@ -19,7 +19,7 @@ import kotlin.random.Random
 class StrokeCircleGm : SkiaGm {
     override val name = "strokecircle"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 0.0
+    override val minSimilarity = 25.0
     override val width = 520
     override val height = 520
 

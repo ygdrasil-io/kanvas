@@ -18,7 +18,7 @@ import org.graphiks.kanvas.types.Point
 class EmptyStrokeGm : SkiaGm {
     override val name = "emptystroke"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 0.0
+    override val minSimilarity = 87.1
     override val width = 200
     override val height = 240
 

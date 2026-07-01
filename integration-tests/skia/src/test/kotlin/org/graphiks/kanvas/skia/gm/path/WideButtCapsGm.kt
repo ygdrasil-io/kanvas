@@ -19,7 +19,7 @@ import kotlin.random.Random
 class WideButtCapsGm : SkiaGm {
     override val name = "widebuttcaps"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 0.0
+    override val minSimilarity = 26.3
     override val width = 120 * 4
     override val height = 120 * 3 + 140
 

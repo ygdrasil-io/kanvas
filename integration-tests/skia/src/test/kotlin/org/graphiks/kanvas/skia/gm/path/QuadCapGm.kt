@@ -18,7 +18,7 @@ import kotlin.math.sqrt
 class QuadCapGm : SkiaGm {
     override val name = "quadcap"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 0.0
+    override val minSimilarity = 94.8
     override val width = 200
     override val height = 200
 

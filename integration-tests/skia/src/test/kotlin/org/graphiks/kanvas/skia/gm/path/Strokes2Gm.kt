@@ -18,7 +18,7 @@ import kotlin.random.Random
 class Strokes2Gm : SkiaGm {
     override val name = "strokes_poly"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 0.0
+    override val minSimilarity = 14.5
     override val width = W
     override val height = H * 2
 

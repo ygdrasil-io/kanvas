@@ -20,7 +20,7 @@ import org.graphiks.kanvas.types.Rect
 class InversePathsGm : SkiaGm {
     override val name = "inverse_paths"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 0.0
+    override val minSimilarity = 12.4
     override val width = 800
     override val height = 1200
 

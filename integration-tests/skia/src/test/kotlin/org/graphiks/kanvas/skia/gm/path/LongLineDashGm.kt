@@ -17,7 +17,7 @@ import org.graphiks.kanvas.types.Rect
 class LongLineDashGm : SkiaGm {
     override val name = "longlinedash"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 0.0
+    override val minSimilarity = 79.4
     override val width = 512
     override val height = 512
 

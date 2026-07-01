@@ -20,7 +20,7 @@ import kotlin.math.abs
 class ManyArcsGm : SkiaGm {
     override val name = "manyarcs"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 0.0
+    override val minSimilarity = 86.1
     override val width = 620
     override val height = 330
 

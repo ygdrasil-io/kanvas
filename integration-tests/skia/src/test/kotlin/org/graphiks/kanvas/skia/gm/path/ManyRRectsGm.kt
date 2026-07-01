@@ -18,7 +18,7 @@ import org.graphiks.kanvas.types.Rect
 class ManyRRectsGm : SkiaGm {
     override val name = "manyrrects"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 0.0
+    override val minSimilarity = 48.3
     override val width = 800
     override val height = 300
 

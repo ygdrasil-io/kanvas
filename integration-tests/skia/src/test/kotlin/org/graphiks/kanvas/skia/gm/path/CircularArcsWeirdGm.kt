@@ -25,7 +25,7 @@ import org.graphiks.kanvas.types.Rect
 class CircularArcsWeirdGm : SkiaGm {
     override val name = "circular_arcs_weird"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 0.0
+    override val minSimilarity = 73.4
     override val width = 1000
     override val height = 400
 

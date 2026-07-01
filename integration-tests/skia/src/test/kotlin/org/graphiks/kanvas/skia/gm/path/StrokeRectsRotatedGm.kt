@@ -16,7 +16,7 @@ import kotlin.random.Random
 class StrokeRectsRotatedGm : SkiaGm {
     override val name = "strokerects_rotated"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 0.0
+    override val minSimilarity = 61.9
     override val width = W * 2
     override val height = H * 2
 

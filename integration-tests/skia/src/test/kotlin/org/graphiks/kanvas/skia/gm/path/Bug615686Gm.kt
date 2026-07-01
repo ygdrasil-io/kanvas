@@ -20,7 +20,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 class Bug615686Gm : SkiaGm {
     override val name = "bug615686"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 0.0
+    override val minSimilarity = 79.8
     override val width = 250
     override val height = 250
 

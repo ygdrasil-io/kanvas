@@ -16,7 +16,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 class PathEffectEmptyResultGm : SkiaGm {
     override val name = "path_effect_empty_result"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 0.0
+    override val minSimilarity = 95.0
     override val width = 100
     override val height = 100
 

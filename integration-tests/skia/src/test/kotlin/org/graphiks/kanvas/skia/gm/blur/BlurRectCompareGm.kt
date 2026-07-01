@@ -26,7 +26,7 @@ import kotlin.math.sqrt
 class BlurRectCompareGm : SkiaGm {
     override val name = "blurrect_compare"
     override val renderFamily = RenderFamily.BLUR
-    override val minSimilarity = 0.0
+    override val minSimilarity = 79.7
     override val width = 900
     override val height = 1220
 

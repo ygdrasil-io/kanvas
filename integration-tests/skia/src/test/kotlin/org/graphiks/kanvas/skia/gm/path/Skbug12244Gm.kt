@@ -15,7 +15,7 @@ import org.graphiks.kanvas.types.Color
 class Skbug12244Gm : SkiaGm {
     override val name = "skbug12244"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 0.0
+    override val minSimilarity = 75.0
     override val width = 150
     override val height = 150
 

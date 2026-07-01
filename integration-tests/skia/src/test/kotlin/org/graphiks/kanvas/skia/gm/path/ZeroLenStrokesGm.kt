@@ -20,7 +20,7 @@ import org.graphiks.kanvas.types.Rect
 class ZeroLenStrokesGm : SkiaGm {
     override val name = "zeroPath"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 0.0
+    override val minSimilarity = 92.4
     override val width = 400
     override val height = 800
 

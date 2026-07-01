@@ -15,7 +15,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 class Crbug908646Gm : SkiaGm {
     override val name = "crbug_908646"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 0.0
+    override val minSimilarity = 79.1
     override val width = 300
     override val height = 300
 
