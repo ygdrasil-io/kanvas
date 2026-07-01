@@ -4,9 +4,12 @@ import org.graphiks.kanvas.canvas.Canvas
 import org.graphiks.kanvas.canvas.DisplayListBuffer
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class PictureTest {
@@ -51,6 +54,33 @@ class PictureTest {
         val outer = r2.finishRecordingAsPicture()
 
         assertTrue(outer.approximateOpCount(true) > outer.approximateOpCount(false))
+    }
+
+    @Test
+    fun `serialize and deserialize roundtrip`() {
+        val recorder = PictureRecorder()
+        val canvas = recorder.beginRecording(Rect.fromLTRB(0f, 0f, 100f, 100f))
+        canvas.drawRect(Rect.fromLTRB(10f, 10f, 50f, 50f), Paint.fill(Color.RED))
+        canvas.drawRect(Rect.fromLTRB(60f, 60f, 80f, 80f), Paint.fill(Color.BLUE))
+        val original = recorder.finishRecordingAsPicture()
+
+        val bytes = original.toByteArray()
+        assertTrue(bytes.isNotEmpty())
+
+        val restored = Picture.fromByteArray(bytes)
+        assertNotNull(restored)
+        assertEquals(original.cullRect, restored.cullRect)
+        assertEquals(original.approximateOpCount(), restored.approximateOpCount())
+    }
+
+    @Test
+    fun `fromByteArray returns null for invalid data`() {
+        assertNull(Picture.fromByteArray(byteArrayOf(0, 1, 2, 3)))
+    }
+
+    @Test
+    fun `fromByteArray returns null for empty data`() {
+        assertNull(Picture.fromByteArray(ByteArray(0)))
     }
 }
 
