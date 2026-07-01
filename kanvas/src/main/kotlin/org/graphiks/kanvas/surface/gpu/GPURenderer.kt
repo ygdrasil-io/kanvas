@@ -50,6 +50,8 @@ internal fun renderViaGpu(
             val srcLabel = t.createOffscreenTexture(GPUBackendOffscreenTexture(width, height, texFormat))
             val snapLabel = t.createOffscreenTexture(GPUBackendOffscreenTexture(width, height, texFormat))
             var sceneHasContent = false
+            val clearTransparent = GPUClearColor(0.0, 0.0, 0.0, 0.0)
+            fun sceneClear() = if (sceneHasContent) null else clearTransparent
 
             fun blendModeIndex(mode: GPUBlendMode): Int = when (mode) {
                 GPUBlendMode.MULTIPLY -> 0
@@ -92,7 +94,7 @@ internal fun renderViaGpu(
                 val blendIdx = if (blendMode != null) blendModeIndex(blendMode) else 0
                 val bb = java.nio.ByteBuffer.allocate(16).order(java.nio.ByteOrder.nativeOrder())
                 bb.putInt(blendIdx)
-                t.encodeOffscreenTexture(sceneLabel, if (sceneHasContent) null else GPUClearColor(0.0, 0.0, 0.0, 0.0)) {
+                t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
                     drawBlendPass(
                         wgsl = BLEND_FORMULA_WGSL,
                         colorFormat = texFormat,
@@ -117,7 +119,7 @@ internal fun renderViaGpu(
                         if (cmd.blend.requiresDestinationRead) {
                             renderAdvancedBlend(cmd)
                         } else {
-                            t.encodeOffscreenTexture(sceneLabel, if (sceneHasContent) null else GPUClearColor(0.0, 0.0, 0.0, 0.0)) {
+                            t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
                                 dispatchFillRect(cmd, dispatched, diagnostics, width, height, config)
                             }
                         }
@@ -142,14 +144,14 @@ internal fun renderViaGpu(
                             diagnostics.fatal("refuse:drawPath:${cmdId.value}", "drawPath", "unsupported_blend:advanced")
                             continue
                         }
-                        t.encodeOffscreenTexture(sceneLabel, if (sceneHasContent) null else GPUClearColor(0.0, 0.0, 0.0, 0.0)) {
+                        t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
                             dispatchFillPath(cmd, dispatched, diagnostics, width, height, config)
                         }
                         sceneHasContent = true
                     }
                     is DisplayOp.DrawRRect -> {
                         val cmd = op.toNormalizedCommand(cmdId, targets)
-                        t.encodeOffscreenTexture(sceneLabel, if (sceneHasContent) null else GPUClearColor(0.0, 0.0, 0.0, 0.0)) {
+                        t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
                             dispatchFillRRect(cmd, dispatched, diagnostics, width, height, config)
                         }
                         sceneHasContent = true
