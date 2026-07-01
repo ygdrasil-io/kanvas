@@ -12,6 +12,16 @@ dependencies {
     testImplementation(kotlin("test"))
 }
 
+tasks.withType<Test> {
+    jvmArgs(
+        "--add-opens=java.base/java.lang=ALL-UNNAMED",
+        "--enable-native-access=ALL-UNNAMED",
+    )
+    if (System.getProperty("os.name").lowercase().contains("mac")) {
+        jvmArgs("-XstartOnFirstThread")
+    }
+}
+
 tasks.register<JavaExec>("kanvasTextGpuEvidence") {
     group = "verification"
     description = "Native WebGPU evidence: renders A8 text via Surface and checks GPU/CPU coverage parity (opt-in)."
