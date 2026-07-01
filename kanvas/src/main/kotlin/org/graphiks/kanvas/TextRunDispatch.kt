@@ -191,5 +191,5 @@ internal object TextRunCpuOracle {
         return count
     }
 
-    private fun channel(value: Float): Byte = (value * 255f).toInt().coerceIn(0, 255).toByte()
+    private fun channel(value: Float): Byte = (value * 255f + 0.5f).toInt().coerceIn(0, 255).toByte()
 }

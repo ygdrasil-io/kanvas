@@ -2,8 +2,25 @@ package org.graphiks.kanvas.types
 
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
 
 class ColorTest {
+
+    @Test
+    fun `fromRGBA uses round-half-up quantization`() {
+        val c = Color.fromRGBA(0.5f, 0.5f, 0.5f, 1f)
+        assertEquals(128, ((c.packed shr 16) and 0xFFu).toInt(), "R channel must be 128 (round-half-up)")
+        assertEquals(128, ((c.packed shr 8) and 0xFFu).toInt(), "G channel must be 128 (round-half-up)")
+        assertEquals(128, (c.packed and 0xFFu).toInt(), "B channel must be 128 (round-half-up)")
+    }
+
+    @Test
+    fun `fromRGBA half value maps to middle-gray`() {
+        val c = Color.fromRGBA(0.5f, 0.5f, 0.5f, 1f)
+        assertTrue(0.501f <= c.r && c.r <= 0.503f, "r=$c.r should be ~0.502")
+        assertTrue(0.501f <= c.g && c.g <= 0.503f, "g=$c.g should be ~0.502")
+        assertTrue(0.501f <= c.b && c.b <= 0.503f, "b=$c.b should be ~0.502")
+    }
     @Test
     fun `Color packed stores ARGB as UInt`() {
         val c = Color(0xFFFF0000u)
