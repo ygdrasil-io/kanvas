@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.surface
 
+import org.graphiks.kanvas.types.ColorSpace
+
 /**
  * The outcome of a single [Surface.render] invocation.
  *
@@ -12,6 +14,7 @@ package org.graphiks.kanvas.surface
  * @property width       image width in pixels
  * @property height      image height in pixels
  * @property format      pixel memory layout (RGBA8 or BGRA8)
+ * @property colorSpace  the color space of the pixel data
  * @property diagnostics issues recorded during this render pass
  * @property stats       performance and dispatch counters
  */
@@ -20,6 +23,7 @@ data class RenderResult(
     val width: Int,
     val height: Int,
     val format: PixelFormat = PixelFormat.RGBA8,
+    val colorSpace: ColorSpace = ColorSpace.SRGB,
     val diagnostics: Diagnostics,
     val stats: RenderStats,
 ) {
@@ -39,7 +43,7 @@ data class RenderResult(
         if (this === other) return true
         if (other !is RenderResult) return false
         return pixels.contentEquals(other.pixels) && width == other.width && height == other.height
-            && format == other.format && diagnostics == other.diagnostics && stats == other.stats
+            && format == other.format && colorSpace == other.colorSpace && diagnostics == other.diagnostics && stats == other.stats
     }
-    override fun hashCode(): Int = pixels.contentHashCode() * 31 + width + height + format.hashCode() + diagnostics.hashCode() + stats.hashCode()
+    override fun hashCode(): Int = pixels.contentHashCode() * 31 + width + height + format.hashCode() + colorSpace.hashCode() + diagnostics.hashCode() + stats.hashCode()
 }
