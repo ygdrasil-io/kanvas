@@ -19,6 +19,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUOrderingFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUPathFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPURect
 import org.graphiks.kanvas.gpu.renderer.commands.GPURRect
+import org.graphiks.kanvas.gpu.renderer.commands.GPURRectCornerRadii
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
@@ -188,7 +189,13 @@ internal fun DisplayOp.DrawRRect.toNormalizedCommand(
         this.rrect.rect.left, this.rrect.rect.top,
         this.rrect.rect.right, this.rrect.rect.bottom,
     )
-    val gpRRect = GPURRect(gpRect, this.rrect.topLeft.x, this.rrect.topLeft.y)
+    val gpRRect = GPURRect(
+        gpRect,
+        topLeft = GPURRectCornerRadii(this.rrect.topLeft.x, this.rrect.topLeft.y),
+        topRight = GPURRectCornerRadii(this.rrect.topRight.x, this.rrect.topRight.y),
+        bottomRight = GPURRectCornerRadii(this.rrect.bottomRight.x, this.rrect.bottomRight.y),
+        bottomLeft = GPURRectCornerRadii(this.rrect.bottomLeft.x, this.rrect.bottomLeft.y),
+    )
     val bounds = GPUBounds(gpRect.left, gpRect.top, gpRect.right, gpRect.bottom)
     val clip = this.clip.toGPUClipFacts(bounds)
     val transform = this.transform.toGPUTransformFacts()
@@ -413,13 +420,10 @@ internal fun DisplayOp.DrawPoints.toPath(): Path = when (this.mode) {
 internal fun DisplayOp.DrawDRRect.toPath(): Path {
     val path = Path()
     path.addRRect(this.outer)
-    // Inner contour in opposite winding so the fill rule punches a hole
-    val ir = this.inner.rect
-    path.moveTo(ir.left, ir.top)
-    path.lineTo(ir.left, ir.bottom)
-    path.lineTo(ir.right, ir.bottom)
-    path.lineTo(ir.right, ir.top)
-    path.close()
+    // Inner contour: reverse the inner RRect path to produce CCW winding,
+    // which punches a hole under non-zero winding fill.
+    val innerPath = Path().addRRect(this.inner)
+    path.reverseAddPath(innerPath)
     return path
 }
 

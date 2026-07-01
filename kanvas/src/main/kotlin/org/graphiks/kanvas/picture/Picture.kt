@@ -566,7 +566,7 @@ private class Reader(private val data: ByteArray) {
 
     fun matrix33(): Matrix33 {
         val floats = FloatArray(9) { float() }
-        return createMatrix33(floats)
+        return createMatrix33(floats) ?: run { valid = false; Matrix33.identity() }
     }
 
     fun rrect(): RRect {
@@ -582,8 +582,8 @@ private class Reader(private val data: ByteArray) {
         val p = Path()
         p.fillType = fillType
         // Add verbs and points via internal methods
-        for (v in verbs) p.addVerb(v)
-        for (pt in pts) p.addPoint(pt)
+        for (v in verbs) if (!p.addVerb(v)) { valid = false; return p }
+        for (pt in pts) if (!p.addPoint(pt)) { valid = false; return p }
         return p
     }
 
@@ -633,7 +633,8 @@ private class Reader(private val data: ByteArray) {
             4 -> Shader.ConicalGradient(point(), float(), point(), float(), gradientStops(), tileMode(), colorSpaceInterpolation())
             5 -> Shader.Image(image(), tileMode(), tileMode())
             6 -> Shader.Blend(blendMode(), shader()!!, shader()!!)
-            7 -> Shader.RuntimeEffect(readRuntimeEffect(), readUniformBlock())
+            7 -> readRuntimeEffect()?.let { re -> readUniformBlock()?.let { ub -> Shader.RuntimeEffect(re, ub) } }
+                ?: run { valid = false; null }
             8 -> Shader.WithLocalMatrix(shader()!!, matrix33())
             9 -> Shader.WithColorFilter(shader()!!, colorFilter()!!)
             10 -> Shader.PerlinNoise(float(), float(), int(), int(), readSizeOrNull())
@@ -650,20 +651,33 @@ private class Reader(private val data: ByteArray) {
 
     private fun readSizeOrNull(): Size? = if (bool()) size() else null
 
-    fun readRuntimeEffect(): RuntimeEffect {
+    fun readRuntimeEffect(): RuntimeEffect? {
         val id = string()
         val module = readShaderModule()
         val layout = readUniformLayout()
         val children = readChildSlots()
-        return createRuntimeEffect(id, module, layout, children)
+        val result = createRuntimeEffect(id, module, layout, children)
+        if (result == null) valid = false
+        return result
     }
 
     private fun readShaderModule(): ShaderModule {
-        return ShaderModule.fromSource(string(), string()).also { m ->
-            // ShaderModule.fromSource creates with empty uniforms/textures/vertexLayout
-            // We need to fill those. Since ShaderModule has immutable fields,
-            // we work with what fromSource gives us for now.
+        val source = string()
+        val entry = string()
+        val uniformCount = int()
+        val uniforms = List(uniformCount) { UniformSlot(string(), int(), UniformType.entries[byte().toInt()], int()) }
+        val textureCount = int()
+        val textures = List(textureCount) { TextureSlot(string(), int()) }
+        val attrCount = int()
+        val attrs = List(attrCount) { VertexAttribute(VertexFormat.entries[byte().toInt()], int(), int()) }
+        val stride = int()
+        val stepMode = VertexStepMode.entries[byte().toInt()]
+        // ShaderModule constructor is private; uniforms/textures/vertexLayout cannot be
+        // injected into the reconstructed module. If the source had bindings, mark invalid.
+        if (uniforms.isNotEmpty() || textures.isNotEmpty() || attrs.isNotEmpty()) {
+            valid = false
         }
+        return ShaderModule.fromSource(source, entry)
     }
 
     private fun readUniformLayout(): UniformLayout {
@@ -679,7 +693,7 @@ private class Reader(private val data: ByteArray) {
         return List(n) { ChildSlot(string(), ChildType.entries[byte().toInt()]) }
     }
 
-    fun readUniformBlock(): UniformBlock {
+    fun readUniformBlock(): UniformBlock? {
         // UniformBlock has no public constructor that accepts entries map
         // We'll create it via the DSL
         val n = int()
@@ -698,7 +712,9 @@ private class Reader(private val data: ByteArray) {
             }
             entries[name] = value
         }
-        return createUniformBlock(entries)
+        val result = createUniformBlock(entries)
+        if (result == null) valid = false
+        return result
     }
 
     fun colorFilter(): ColorFilter? {
@@ -935,41 +951,43 @@ private fun decodePicture(data: ByteArray): Picture? {
 }
 
 // ---- Workarounds for types with private constructors -----------------------
+// These reflection accesses are guarded: if any fail (e.g., due to JDK module
+// restrictions or constructor changes), deserialization returns null rather
+// than throwing at runtime.
 
-private fun createMatrix33(values: FloatArray): Matrix33 {
+private fun createMatrix33(values: FloatArray): Matrix33? = try {
     val constructor = Matrix33::class.java.getDeclaredConstructor(FloatArray::class.java)
     constructor.isAccessible = true
-    @Suppress("UNCHECKED_CAST")
-    return constructor.newInstance(values) as Matrix33
-}
+    constructor.newInstance(values)
+} catch (_: Exception) { null }
 
-private fun createUniformBlock(entries: Map<String, UniformValue>): UniformBlock {
+private fun createUniformBlock(entries: Map<String, UniformValue>): UniformBlock? = try {
     val constructor = UniformBlock::class.java.getDeclaredConstructor(Map::class.java)
     constructor.isAccessible = true
-    @Suppress("UNCHECKED_CAST")
-    return constructor.newInstance(entries) as UniformBlock
-}
+    constructor.newInstance(entries)
+} catch (_: Exception) { null }
 
-private fun createRuntimeEffect(id: String, module: ShaderModule, uniformLayout: UniformLayout, children: List<ChildSlot>): RuntimeEffect {
+private fun createRuntimeEffect(id: String, module: ShaderModule, uniformLayout: UniformLayout, children: List<ChildSlot>): RuntimeEffect? = try {
     val constructor = RuntimeEffect::class.java.getDeclaredConstructor(
         String::class.java, ShaderModule::class.java, UniformLayout::class.java, List::class.java
     )
     constructor.isAccessible = true
-    @Suppress("UNCHECKED_CAST")
-    return constructor.newInstance(id, module, uniformLayout, children) as RuntimeEffect
-}
+    constructor.newInstance(id, module, uniformLayout, children)
+} catch (_: Exception) { null }
 
 // Add missing methods to Path for serialization construction
-internal fun Path.addVerb(verb: PathVerb) {
+internal fun Path.addVerb(verb: PathVerb): Boolean = try {
     val field = Path::class.java.getDeclaredField("verbs")
     field.isAccessible = true
     @Suppress("UNCHECKED_CAST")
     (field.get(this) as MutableList<PathVerb>).add(verb)
-}
+    true
+} catch (_: Exception) { false }
 
-internal fun Path.addPoint(pt: Point) {
+internal fun Path.addPoint(pt: Point): Boolean = try {
     val field = Path::class.java.getDeclaredField("points")
     field.isAccessible = true
     @Suppress("UNCHECKED_CAST")
     (field.get(this) as MutableList<Point>).add(pt)
-}
+    true
+} catch (_: Exception) { false }
