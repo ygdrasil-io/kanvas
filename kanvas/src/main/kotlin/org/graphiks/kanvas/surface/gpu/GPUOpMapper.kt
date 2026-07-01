@@ -22,8 +22,18 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPURRect
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
+import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.kanvas.types.Rect
+import org.graphiks.kanvas.types.PointMode
+import org.graphiks.kanvas.types.Point
+import org.graphiks.kanvas.types.Color
+import org.graphiks.kanvas.geometry.Path
+import org.graphiks.kanvas.types.a
+import org.graphiks.kanvas.types.b
+import org.graphiks.kanvas.types.g
+import org.graphiks.kanvas.types.r
 
 internal fun DisplayOp.DrawRect.toNormalizedCommand(
     cmdId: GPUDrawCommandID,
@@ -278,4 +288,307 @@ internal fun computeBounds(flatVertices: List<Float>): GPUBounds {
         if (x > maxX) maxX = x; if (y > maxY) maxY = y
     }
     return GPUBounds(minX, minY, maxX, maxY)
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// DrawColor / Clear — full‑surface rect fills
+// ────────────────────────────────────────────────────────────────────────────
+
+internal fun DisplayOp.DrawColor.toNormalizedCommand(
+    cmdId: GPUDrawCommandID,
+    target: GPUTargetFacts,
+): NormalizedDrawCommand.FillRect {
+    val w = target.width.toFloat()
+    val h = target.height.toFloat()
+    val gpRect = GPURect(0f, 0f, w, h)
+    val bounds = GPUBounds(0f, 0f, w, h)
+    val clip = this.clip.toGPUClipFacts(bounds)
+    val transform = this.transform.toGPUTransformFacts()
+    return NormalizedDrawCommand.FillRect(
+        commandId = cmdId,
+        rect = gpRect,
+        transform = transform,
+        clip = clip,
+        layer = GPULayerFacts.root(target),
+        material = GPUMaterialDescriptor.SolidColor(
+            r = this.color.r, g = this.color.g, b = this.color.b, a = this.color.a,
+        ),
+        bounds = bounds,
+        ordering = GPUOrderingFacts(paintOrder = 0, dependsOnDestination = false, requiresBarrier = false),
+        source = GPUCommandSource(adapter = "kanvas-surface", operation = "drawColor"),
+        stroke = false,
+        antiAlias = false,
+        blend = this.mode.toGpuBlendFacts(),
+    )
+}
+
+internal fun DisplayOp.Clear.toNormalizedCommand(
+    cmdId: GPUDrawCommandID,
+    target: GPUTargetFacts,
+): NormalizedDrawCommand.FillRect {
+    val w = target.width.toFloat()
+    val h = target.height.toFloat()
+    return NormalizedDrawCommand.FillRect(
+        commandId = cmdId,
+        rect = GPURect(0f, 0f, w, h),
+        transform = GPUTransformFacts.identity(),
+        clip = GPUClipFacts.wideOpen(bounds = GPUBounds(0f, 0f, w, h)),
+        layer = GPULayerFacts.root(target),
+        material = GPUMaterialDescriptor.SolidColor(
+            r = this.color.r, g = this.color.g, b = this.color.b, a = this.color.a,
+        ),
+        bounds = GPUBounds(0f, 0f, w, h),
+        ordering = GPUOrderingFacts(paintOrder = 0, dependsOnDestination = false, requiresBarrier = false),
+        source = GPUCommandSource(adapter = "kanvas-surface", operation = "clear"),
+        stroke = false,
+        antiAlias = false,
+        blend = BlendMode.SRC.toGpuBlendFacts(),
+    )
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// DrawPoint — single pixel as 1×1 rect fill
+// ────────────────────────────────────────────────────────────────────────────
+
+internal fun DisplayOp.DrawPoint.toNormalizedCommand(
+    cmdId: GPUDrawCommandID,
+    target: GPUTargetFacts,
+): NormalizedDrawCommand.FillRect {
+    val paint = this.paint
+    val gpRect = GPURect(this.x, this.y, this.x + 1f, this.y + 1f)
+    val bounds = GPUBounds(this.x, this.y, this.x + 1f, this.y + 1f)
+    val clip = this.clip.toGPUClipFacts(bounds)
+    val transform = this.transform.toGPUTransformFacts()
+    return NormalizedDrawCommand.FillRect(
+        commandId = cmdId,
+        rect = gpRect,
+        transform = transform,
+        clip = clip,
+        layer = GPULayerFacts.root(target),
+        material = paint.toMaterial(),
+        bounds = bounds,
+        ordering = GPUOrderingFacts(paintOrder = 0, dependsOnDestination = false, requiresBarrier = false),
+        source = GPUCommandSource(adapter = "kanvas-surface", operation = "drawPoint"),
+        stroke = false,
+        antiAlias = paint.antiAlias,
+        blend = paint.blendMode.toGpuBlendFacts(),
+    )
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// DrawPoints — build a Path from the point list and the point mode.
+// POINTS  → tiny rects for each point
+// LINES   → moveTo/lineTo pairs
+// POLYGON → closed polygon
+// ────────────────────────────────────────────────────────────────────────────
+
+internal fun DisplayOp.DrawPoints.toPath(): Path = when (this.mode) {
+    PointMode.POINTS -> Path().also { path ->
+        for (pt in this.points) {
+            path.addRect(Rect.fromLTRB(pt.x, pt.y, pt.x + 1f, pt.y + 1f))
+        }
+    }
+    PointMode.LINES -> Path().also { path ->
+        var i = 0
+        while (i + 1 < this.points.size) {
+            path.moveTo(this.points[i].x, this.points[i].y)
+            path.lineTo(this.points[i + 1].x, this.points[i + 1].y)
+            i += 2
+        }
+    }
+    PointMode.POLYGON -> Path().also { path ->
+        if (this.points.isEmpty()) return@also
+        path.moveTo(this.points[0].x, this.points[0].y)
+        for (i in 1 until this.points.size) {
+            path.lineTo(this.points[i].x, this.points[i].y)
+        }
+        path.close()
+    }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// DrawDRRect — outer RRect contour (CW) + inner RRect contour (CCW) for hole
+// ────────────────────────────────────────────────────────────────────────────
+
+internal fun DisplayOp.DrawDRRect.toPath(): Path {
+    val path = Path()
+    path.addRRect(this.outer)
+    // Inner contour in opposite winding so the fill rule punches a hole
+    val ir = this.inner.rect
+    path.moveTo(ir.left, ir.top)
+    path.lineTo(ir.left, ir.bottom)
+    path.lineTo(ir.right, ir.bottom)
+    path.lineTo(ir.right, ir.top)
+    path.close()
+    return path
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// DrawImage → NormalizedDrawCommand.DrawImageRect
+// ────────────────────────────────────────────────────────────────────────────
+
+internal fun DisplayOp.DrawImage.toImageRectCommand(
+    cmdId: GPUDrawCommandID,
+    target: GPUTargetFacts,
+): NormalizedDrawCommand.DrawImageRect {
+    val image = this.image
+    val material = GPUMaterialDescriptor.ImageDraw(
+        imageSourceId = image.sourceId,
+        imageWidth = image.width,
+        imageHeight = image.height,
+    )
+    val src = GPURect(this.src.left, this.src.top, this.src.right, this.src.bottom)
+    val dst = GPURect(this.dst.left, this.dst.top, this.dst.right, this.dst.bottom)
+    val bounds = GPUBounds(dst.left, dst.top, dst.right, dst.bottom)
+    val clip = this.clip.toGPUClipFacts(bounds)
+    val transform = this.transform.toGPUTransformFacts()
+    return NormalizedDrawCommand.DrawImageRect(
+        commandId = cmdId,
+        imageSourceId = image.sourceId,
+        src = src,
+        dst = dst,
+        transform = transform,
+        clip = clip,
+        layer = GPULayerFacts.root(target),
+        material = material,
+        bounds = bounds,
+        ordering = GPUOrderingFacts(paintOrder = 0, dependsOnDestination = false, requiresBarrier = false),
+        source = GPUCommandSource(adapter = "kanvas-surface", operation = "drawImage"),
+        blend = (this.paint?.blendMode ?: BlendMode.SRC_OVER).toGpuBlendFacts(),
+        pixelsWidth = image.width,
+        pixelsHeight = image.height,
+        pixelsFormat = "RGBA8Unorm",
+        pixelsAlphaType = "Premul",
+    )
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// DrawImageNine — decompose into 9 cells (src / dst pairs)
+// ────────────────────────────────────────────────────────────────────────────
+
+internal data class ImageCell(
+    val src: Rect,
+    val dst: Rect,
+    val color: Color? = null,
+)
+
+internal fun DisplayOp.DrawImageNine.decompose(): List<ImageCell> {
+    val iw = this.image.width.toFloat()
+    val ih = this.image.height.toFloat()
+    val c = this.center
+    val d = this.dst
+    val cells = mutableListOf<ImageCell>()
+
+    // Column boundaries (source)
+    val srcL = listOf(0f, c.left, c.right, iw)
+    // Row boundaries (source)
+    val srcT = listOf(0f, c.top, c.bottom, ih)
+    // Column boundaries (destination)
+    val dstL = listOf(
+        d.left,
+        d.left + c.left,
+        d.right - (iw - c.right),
+        d.right,
+    )
+    // Row boundaries (destination)
+    val dstT = listOf(
+        d.top,
+        d.top + c.top,
+        d.bottom - (ih - c.bottom),
+        d.bottom,
+    )
+
+    for (row in 0 until 3) {
+        for (col in 0 until 3) {
+            val src = Rect.fromLTRB(srcL[col], srcT[row], srcL[col + 1], srcT[row + 1])
+            val dst = Rect.fromLTRB(dstL[col], dstT[row], dstL[col + 1], dstT[row + 1])
+            if (!src.isEmpty && !dst.isEmpty) {
+                cells.add(ImageCell(src = src, dst = dst))
+            }
+        }
+    }
+    return cells
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// DrawImageLattice — decompose into (xDivs+1)×(yDivs+1) cells
+// ────────────────────────────────────────────────────────────────────────────
+
+internal fun DisplayOp.DrawImageLattice.decompose(): List<ImageCell> {
+    val iw = this.image.width.toFloat()
+    val ih = this.image.height.toFloat()
+    val lat = this.lattice
+    val d = this.dst
+
+    // Column boundaries from xDivs
+    val cols = mutableListOf(0f)
+    for (xv in lat.xDivs) cols.add(xv.toFloat())
+    cols.add(iw)
+    // Row boundaries from yDivs
+    val rows = mutableListOf(0f)
+    for (yv in lat.yDivs) rows.add(yv.toFloat())
+    rows.add(ih)
+
+    val numCols = cols.size - 1
+    val numRows = rows.size - 1
+    val cells = mutableListOf<ImageCell>()
+    var cellIndex = 0
+
+    for (r in 0 until numRows) {
+        for (c in 0 until numCols) {
+            val srcLeft = cols[c]
+            val srcTop = rows[r]
+            val srcRight = cols[c + 1]
+            val srcBottom = rows[r + 1]
+
+            val dstRect = if (lat.rects != null && cellIndex < lat.rects.size) {
+                lat.rects[cellIndex]
+            } else {
+                // Proportional stretch to fill dst
+                Rect.fromLTRB(
+                    d.left + (srcLeft / iw) * d.width,
+                    d.top + (srcTop / ih) * d.height,
+                    d.left + (srcRight / iw) * d.width,
+                    d.top + (srcBottom / ih) * d.height,
+                )
+            }
+
+            val color = lat.colors?.getOrNull(cellIndex)
+            cells.add(ImageCell(
+                src = Rect.fromLTRB(srcLeft, srcTop, srcRight, srcBottom),
+                dst = dstRect,
+                color = color,
+            ))
+            cellIndex++
+        }
+    }
+    return cells
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// DisplayOp.withCombinedTransform — concatenate an outer transform into every
+// drawing op that carries a transform field. Used for DrawPicture expansion.
+// ────────────────────────────────────────────────────────────────────────────
+
+internal fun DisplayOp.withCombinedTransform(outer: Matrix33): DisplayOp = when (this) {
+    is DisplayOp.DrawRect -> copy(transform = outer * transform)
+    is DisplayOp.DrawRRect -> copy(transform = outer * transform)
+    is DisplayOp.DrawPath -> copy(transform = outer * transform)
+    is DisplayOp.DrawImage -> copy(transform = outer * transform)
+    is DisplayOp.DrawText -> copy(transform = outer * transform)
+    is DisplayOp.DrawColor -> copy(transform = outer * transform)
+    is DisplayOp.DrawPoint -> copy(transform = outer * transform)
+    is DisplayOp.DrawPoints -> copy(transform = outer * transform)
+    is DisplayOp.DrawDRRect -> copy(transform = outer * transform)
+    is DisplayOp.DrawImageNine -> copy(transform = outer * transform)
+    is DisplayOp.DrawImageLattice -> copy(transform = outer * transform)
+    is DisplayOp.DrawPicture -> copy(transform = outer * transform)
+    is DisplayOp.DrawVertices -> copy(transform = outer * transform)
+    is DisplayOp.DrawAtlas -> copy(transform = outer * transform)
+    is DisplayOp.Clear,
+    is DisplayOp.SetTransform,
+    is DisplayOp.SetClip,
+    is DisplayOp.BeginLayer,
+    is DisplayOp.EndLayer,
+    is DisplayOp.Annotation -> this
 }
