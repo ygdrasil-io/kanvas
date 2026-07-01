@@ -407,6 +407,37 @@ internal val BLEND_FORMULA_WGSL: String = """
     }
 """.trimIndent()
 
+internal val IMAGE_TEXTURE_WGSL: String = """
+    struct Uniforms {
+        dstRect: vec4f,
+        uvScale: vec2f,
+        uvOffset: vec2f,
+        alpha: f32,
+    };
+
+    @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+    @group(1) @binding(1) var imageTex: texture_2d<f32>;
+    @group(1) @binding(2) var imageSam: sampler;
+
+    @vertex
+    fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
+        let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
+        let y = f32(idx & 2u) * 2.0 - 1.0;
+        return vec4f(x, y, 0.0, 1.0);
+    }
+
+    @fragment
+    fn fs_main(@builtin(position) coord: vec4f) -> @location(0) vec4f {
+        let dstSize = max(uniforms.dstRect.zw - uniforms.dstRect.xy, vec2f(1.0, 1.0));
+        let uv = vec2f(
+            uniforms.uvOffset.x + (coord.x - uniforms.dstRect.x) / dstSize.x * uniforms.uvScale.x,
+            uniforms.uvOffset.y + (coord.y - uniforms.dstRect.y) / dstSize.y * uniforms.uvScale.y,
+        );
+        let color = textureSample(imageTex, imageSam, uv);
+        return vec4f(color.rgb * uniforms.alpha, color.a * uniforms.alpha);
+    }
+""".trimIndent()
+
 internal fun stencilWriteWgsl(width: Int, height: Int): String = """
 struct VertexInput {
     @location(0) position: vec2f,

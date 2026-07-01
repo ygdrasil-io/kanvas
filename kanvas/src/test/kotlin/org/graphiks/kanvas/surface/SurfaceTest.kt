@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.surface
 
+import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.types.Color
@@ -47,5 +48,19 @@ class SurfaceTest {
         val riffHeader = byteArrayOf(0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x41, 0x56, 0x49, 0x20) // AVI
         val img = Image.decode(riffHeader)
         assertTrue(img.sourceId.contains("unknown"), "RIFF without WEBP should not be detected as webp")
+    }
+    @Test
+    fun `drawImage produces non-blank pixels`() {
+        val pixels = ByteArray(10 * 10 * 4) { 255.toByte() }
+        val img = Image.fromPixels(10, 10, pixels, ColorType.RGBA_8888, "test-white")
+        val surface = Surface(100, 100)
+        surface.canvas {
+            drawImage(img, Rect.fromLTRB(0f, 0f, 10f, 10f))
+        }
+        val result = surface.render()
+        val nonZero = (0 until result.pixels.size step 4).any { idx ->
+            result.pixels[idx].toInt() and 0xFF > 0
+        }
+        assertTrue(nonZero, "drawImage should produce visible pixels")
     }
 }

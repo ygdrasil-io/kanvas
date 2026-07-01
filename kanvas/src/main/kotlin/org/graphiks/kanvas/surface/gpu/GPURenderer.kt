@@ -23,6 +23,7 @@ import org.graphiks.kanvas.surface.RenderResult
 import org.graphiks.kanvas.surface.RenderStats
 import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.types.PointMode
+import org.graphiks.kanvas.types.Rect
 
 internal fun renderViaGpu(
     buffer: DisplayListBuffer,
@@ -117,6 +118,31 @@ internal fun renderViaGpu(
 
 
 
+            val textureCache = mutableMapOf<String, ByteArray>()
+            fun cachePixels(image: org.graphiks.kanvas.image.Image) {
+                if (image.sourceId !in textureCache) {
+                    val px = image.pixels
+                    if (px != null) {
+                        textureCache[image.sourceId] = px
+                    } else {
+                        diagnostics.warn("no_pixels:${image.sourceId}", "cachePixels", "cpu_pixels_unavailable")
+                    }
+                }
+            }
+            fun scanImages(scanOps: List<DisplayOp>) {
+                for (op in scanOps) {
+                    when (op) {
+                        is DisplayOp.DrawImage -> cachePixels(op.image)
+                        is DisplayOp.DrawImageNine -> cachePixels(op.image)
+                        is DisplayOp.DrawImageLattice -> cachePixels(op.image)
+                        is DisplayOp.DrawAtlas -> cachePixels(op.atlas)
+                        is DisplayOp.DrawPicture -> scanImages(op.picture.ops)
+                        else -> {}
+                    }
+                }
+            }
+            scanImages(ops)
+
             for (op in ops) {
                 val cmdId = GPUDrawCommandID(dispatched.size)
                 when (op) {
@@ -181,7 +207,10 @@ internal fun renderViaGpu(
                     }
                     is DisplayOp.DrawImage -> {
                         val cmd = op.toImageRectCommand(cmdId, targets)
-                        diagnostics.degrade("unimplemented:drawImage:${cmdId.value}", "drawImage", "gpu_image_dispatch_unimplemented")
+                        t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
+                            dispatchImageRect(cmd, textureCache, dispatched, diagnostics, width, height, config)
+                        }
+                        sceneHasContent = true
                     }
                     is DisplayOp.DrawText -> {
                         diagnostics.fatal("refuse:drawText:${cmdId.value}", "drawText", "unsupported_operation")
@@ -310,7 +339,10 @@ internal fun renderViaGpu(
                                 clip = op.clip,
                             )
                             val cmd = subOp.toImageRectCommand(subCmdId, targets)
-                            diagnostics.degrade("unimplemented:drawImageNine:${subCmdId.value}", "drawImageNine", "gpu_image_dispatch_unimplemented")
+                            t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
+                                dispatchImageRect(cmd, textureCache, dispatched, diagnostics, width, height, config)
+                            }
+                            sceneHasContent = true
                         }
                     }
                     is DisplayOp.DrawImageLattice -> {
@@ -333,7 +365,10 @@ internal fun renderViaGpu(
                                 clip = op.clip,
                             )
                             val cmd = subOp.toImageRectCommand(subCmdId, targets)
-                            diagnostics.degrade("unimplemented:drawImageLattice:${subCmdId.value}", "drawImageLattice", "gpu_image_dispatch_unimplemented")
+                            t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
+                                dispatchImageRect(cmd, textureCache, dispatched, diagnostics, width, height, config)
+                            }
+                            sceneHasContent = true
                         }
                     }
                     is DisplayOp.DrawPicture -> {
@@ -445,11 +480,85 @@ internal fun renderViaGpu(
                                         sceneHasContent = true
                                     }
                                 }
-                                is DisplayOp.DrawImage,
-                                is DisplayOp.DrawImageNine,
-                                is DisplayOp.DrawImageLattice,
+                                is DisplayOp.DrawImage -> {
+                                    val imgCmd = nestedOp.toImageRectCommand(nestedCmdId, targets)
+                                    t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
+                                        dispatchImageRect(imgCmd, textureCache, dispatched, diagnostics, width, height, config)
+                                    }
+                                    sceneHasContent = true
+                                }
+                                is DisplayOp.DrawImageNine -> {
+                                    val cells = nestedOp.decompose()
+                                    for (cell in cells) {
+                                        val subCmdId = GPUDrawCommandID(dispatched.size)
+                                        val subOp = DisplayOp.DrawImage(
+                                            image = nestedOp.image,
+                                            src = cell.src,
+                                            dst = cell.dst,
+                                            paint = nestedOp.paint,
+                                            transform = nestedOp.transform,
+                                            clip = nestedOp.clip,
+                                        )
+                                        val imgCmd = subOp.toImageRectCommand(subCmdId, targets)
+                                        t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
+                                            dispatchImageRect(imgCmd, textureCache, dispatched, diagnostics, width, height, config)
+                                        }
+                                        sceneHasContent = true
+                                    }
+                                }
+                                is DisplayOp.DrawImageLattice -> {
+                                    val cells = nestedOp.decompose()
+                                    for (cell in cells) {
+                                        val subCmdId = GPUDrawCommandID(dispatched.size)
+                                        val subPaint = if (cell.color != null) {
+                                            val c = cell.color
+                                            (nestedOp.paint ?: org.graphiks.kanvas.paint.Paint()).copy(
+                                                color = c,
+                                                blendMode = nestedOp.paint?.blendMode ?: org.graphiks.kanvas.paint.BlendMode.SRC_OVER,
+                                            )
+                                        } else nestedOp.paint
+                                        val subOp = DisplayOp.DrawImage(
+                                            image = nestedOp.image,
+                                            src = cell.src,
+                                            dst = cell.dst,
+                                            paint = subPaint,
+                                            transform = nestedOp.transform,
+                                            clip = nestedOp.clip,
+                                        )
+                                        val imgCmd = subOp.toImageRectCommand(subCmdId, targets)
+                                        t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
+                                            dispatchImageRect(imgCmd, textureCache, dispatched, diagnostics, width, height, config)
+                                        }
+                                        sceneHasContent = true
+                                    }
+                                }
                                 is DisplayOp.DrawAtlas -> {
-                                    diagnostics.degrade("unimplemented:drawPicture:nested:${nestedCmdId.value}", "drawPicture", "gpu_nested_image_unimplemented")
+                                    val numSprites = minOf(nestedOp.transforms.size, nestedOp.texRects.size)
+                                    for (i in 0 until numSprites) {
+                                        val subCmdId = GPUDrawCommandID(dispatched.size)
+                                        val spriteXform = nestedOp.transform * nestedOp.transforms[i]
+                                        val texRect = nestedOp.texRects[i]
+                                        val tint = nestedOp.colors?.getOrNull(i)
+                                        val subPaint = when {
+                                            tint != null && nestedOp.paint != null -> nestedOp.paint.copy(color = tint)
+                                            tint != null -> org.graphiks.kanvas.paint.Paint.fill(tint)
+                                            else -> nestedOp.paint
+                                        }
+                                        val screenDst = computeAtlasDst(texRect, spriteXform)
+                                        val subOp = DisplayOp.DrawImage(
+                                            image = nestedOp.atlas,
+                                            src = texRect,
+                                            dst = screenDst,
+                                            paint = subPaint,
+                                            transform = Matrix33.identity(),
+                                            clip = nestedOp.clip,
+                                        )
+                                        val imgCmd = subOp.toImageRectCommand(subCmdId, targets)
+                                        t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
+                                            dispatchImageRect(imgCmd, textureCache, dispatched, diagnostics, width, height, config)
+                                        }
+                                        sceneHasContent = true
+                                    }
                                 }
                                 is DisplayOp.DrawVertices -> {
                                     diagnostics.degrade("unimplemented:drawPicture:nested:${nestedCmdId.value}", "drawPicture", "gpu_nested_vertices_unimplemented")
@@ -535,16 +644,20 @@ internal fun renderViaGpu(
                                 tint != null -> org.graphiks.kanvas.paint.Paint.fill(tint)
                                 else -> op.paint
                             }
+                            val screenDst = computeAtlasDst(texRect, spriteXform)
                             val subOp = DisplayOp.DrawImage(
                                 image = op.atlas,
                                 src = texRect,
-                                dst = texRect,
+                                dst = screenDst,
                                 paint = subPaint,
-                                transform = spriteXform,
+                                transform = Matrix33.identity(),
                                 clip = op.clip,
                             )
                             val cmd = subOp.toImageRectCommand(subCmdId, targets)
-                            diagnostics.degrade("unimplemented:drawAtlas:${subCmdId.value}", "drawAtlas", "gpu_image_dispatch_unimplemented")
+                            t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
+                                dispatchImageRect(cmd, textureCache, dispatched, diagnostics, width, height, config)
+                            }
+                            sceneHasContent = true
                         }
                     }
                     is DisplayOp.Annotation -> { /* no visual output */ }
@@ -623,4 +736,21 @@ internal fun org.graphiks.kanvas.geometry.Path.toPathTessellatorData(): PathData
         }
     }
     return PathData(verbs = verbs, points = points)
+}
+
+/** Transform a source rectangle through an affine matrix to obtain screen-space destination bounds. */
+private fun computeAtlasDst(texRect: Rect, xform: Matrix33): Rect {
+    val x0 = xform.scaleX * texRect.left + xform.skewX * texRect.top + xform.transX
+    val y0 = xform.skewY * texRect.left + xform.scaleY * texRect.top + xform.transY
+    val x1 = xform.scaleX * texRect.right + xform.skewX * texRect.top + xform.transX
+    val y1 = xform.skewY * texRect.right + xform.scaleY * texRect.top + xform.transY
+    val x2 = xform.scaleX * texRect.right + xform.skewX * texRect.bottom + xform.transX
+    val y2 = xform.skewY * texRect.right + xform.scaleY * texRect.bottom + xform.transY
+    val x3 = xform.scaleX * texRect.left + xform.skewX * texRect.bottom + xform.transX
+    val y3 = xform.skewY * texRect.left + xform.scaleY * texRect.bottom + xform.transY
+    val l = minOf(x0, x1, x2, x3)
+    val t = minOf(y0, y1, y2, y3)
+    val r = maxOf(x0, x1, x2, x3)
+    val b = maxOf(y0, y1, y2, y3)
+    return Rect.fromLTRB(l, t, r, b)
 }
