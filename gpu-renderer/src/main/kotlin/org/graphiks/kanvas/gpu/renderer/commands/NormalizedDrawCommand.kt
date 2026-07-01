@@ -9,6 +9,7 @@ import org.graphiks.kanvas.gpu.renderer.filters.GPUFilterCropPlan
 import org.graphiks.kanvas.gpu.renderer.filters.GPUFilterSamplingPlan
 import org.graphiks.kanvas.gpu.renderer.text.GPUTextDiagnostic
 import org.graphiks.kanvas.gpu.renderer.text.GPUTextArtifactRef
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 
 /** Canonical command identifier name used by the package layout target. */
 @JvmInline
@@ -309,6 +310,8 @@ data class GPULayerFacts(
 enum class GPUBlendKind {
     /** Source-over fixed-function blend accepted by the first route. */
     SrcOver,
+    /** Custom blend mode mapped from BlendMode. */
+    Custom,
     /** Unsupported blend mode that must refuse deterministically. */
     Unsupported,
 }
@@ -318,6 +321,7 @@ data class GPUBlendFacts(
     val kind: GPUBlendKind,
     val modeLabel: String,
     val requiresDestinationRead: Boolean,
+    val blendMode: GPUBlendMode? = null,
 ) {
     /** Constructors for first-route blend fact records. */
     companion object {
@@ -952,6 +956,8 @@ sealed interface NormalizedDrawCommand {
         override val source: GPUCommandSource,
         /** See [FillRect.stroke]. Stroke path draws refuse instead of filling. */
         val stroke: Boolean = false,
+        /** Stroke width used when [stroke] is true. Default 1f. */
+        val strokeWidth: Float = 1f,
         val antiAlias: Boolean = true,
     ) : NormalizedDrawCommand {
         override val drawKind: GPUDrawKind = GPUDrawKind.FillPath

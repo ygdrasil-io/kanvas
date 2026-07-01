@@ -1,8 +1,11 @@
 package org.graphiks.kanvas.skia
 
 import org.graphiks.kanvas.canvas.Canvas
+import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.surface.Surface
+import org.graphiks.kanvas.types.Color
+import org.graphiks.kanvas.types.Rect
 
 object SkiaGmRenderer {
     private const val DEFAULT_WIDTH = 800
@@ -11,6 +14,9 @@ object SkiaGmRenderer {
     fun render(gm: SkiaGm, width: Int = gm.width, height: Int = gm.height, config: RenderConfig = RenderConfig.DEFAULT): SkiaRenderResult {
         val surface = Surface(width = width, height = height, config = config)
         val canvas = surface.canvas()
+        // Match Skia GM infrastructure: fill background before drawing the GM.
+        // Skia's GM::drawBackground() fills with fBGColor (default SK_ColorWHITE).
+        canvas.drawRect(Rect(0f, 0f, width.toFloat(), height.toFloat()), Paint(color = Color.fromRGBA(1f, 1f, 1f, 1f), antiAlias = false))
         val gmCanvas = GmCanvas(canvas, width, height)
         gm.draw(gmCanvas, width, height)
         val result = surface.render()

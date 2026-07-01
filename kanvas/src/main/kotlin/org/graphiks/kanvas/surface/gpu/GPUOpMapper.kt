@@ -1,11 +1,14 @@
 package org.graphiks.kanvas.surface.gpu
 
 import org.graphiks.kanvas.canvas.ClipStack
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.commands.GPUClipFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUCommandSource
 import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
+import org.graphiks.kanvas.gpu.renderer.commands.GPUBlendFacts
+import org.graphiks.kanvas.gpu.renderer.commands.GPUBlendKind
 import org.graphiks.kanvas.gpu.renderer.commands.GPULayerFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUOrderingFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUPathFacts
@@ -14,6 +17,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPURRect
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
+import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.types.Matrix33
 
 internal fun DisplayOp.DrawRect.toNormalizedCommand(
@@ -42,6 +46,7 @@ internal fun DisplayOp.DrawRect.toNormalizedCommand(
         source = GPUCommandSource(adapter = "kanvas-surface", operation = "drawRect"),
         stroke = paint.isStroke(),
         antiAlias = paint.antiAlias,
+        blend = paint.blendMode.toGpuBlendFacts(),
     )
 }
 
@@ -87,7 +92,9 @@ internal fun DisplayOp.DrawPath.toNormalizedCommand(
         ),
         source = GPUCommandSource(adapter = "kanvas-surface", operation = "drawPath"),
         stroke = paint.isStroke(),
+        strokeWidth = paint.strokeWidth,
         antiAlias = paint.antiAlias,
+        blend = paint.blendMode.toGpuBlendFacts(),
     )
 }
 
@@ -121,6 +128,38 @@ internal fun DisplayOp.DrawRRect.toNormalizedCommand(
         source = GPUCommandSource(adapter = "kanvas-surface", operation = "drawRRect"),
         stroke = paint.isStroke(),
         antiAlias = paint.antiAlias,
+        blend = paint.blendMode.toGpuBlendFacts(),
+    )
+}
+
+internal fun BlendMode.toGpuBlendFacts(): GPUBlendFacts {
+    val mode = when (this) {
+        BlendMode.SRC_OVER -> GPUBlendMode.SRC_OVER
+        BlendMode.SRC -> GPUBlendMode.SRC
+        BlendMode.DST -> GPUBlendMode.DST
+        BlendMode.SRC_IN -> GPUBlendMode.SRC_IN
+        BlendMode.DST_IN -> GPUBlendMode.DST_IN
+        BlendMode.SRC_OUT -> GPUBlendMode.SRC_OUT
+        BlendMode.DST_OUT -> GPUBlendMode.DST_OUT
+        BlendMode.SRC_ATOP -> GPUBlendMode.SRC_ATOP
+        BlendMode.DST_ATOP -> GPUBlendMode.DST_ATOP
+        BlendMode.XOR -> GPUBlendMode.XOR
+        BlendMode.PLUS -> GPUBlendMode.PLUS
+        BlendMode.MODULATE -> GPUBlendMode.MODULATE
+        BlendMode.MULTIPLY -> GPUBlendMode.MULTIPLY
+        BlendMode.SCREEN -> GPUBlendMode.SCREEN
+        BlendMode.OVERLAY -> GPUBlendMode.OVERLAY
+        BlendMode.DARKEN -> GPUBlendMode.DARKEN
+        BlendMode.LIGHTEN -> GPUBlendMode.LIGHTEN
+        BlendMode.DIFFERENCE -> GPUBlendMode.DIFFERENCE
+        BlendMode.EXCLUSION -> GPUBlendMode.EXCLUSION
+        else -> return GPUBlendFacts.unsupported(this.name)
+    }
+    return GPUBlendFacts(
+        kind = if (mode.requiresDestinationRead) GPUBlendKind.Unsupported else GPUBlendKind.Custom,
+        modeLabel = mode.wgpuLabel,
+        requiresDestinationRead = mode.requiresDestinationRead,
+        blendMode = if (mode.requiresDestinationRead) null else mode,
     )
 }
 

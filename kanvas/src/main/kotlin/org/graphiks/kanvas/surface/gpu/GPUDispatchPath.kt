@@ -52,6 +52,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
 
     cmd.fillGuardRefusalReasonOrNull()?.let { refuse(it); return }
 
+    val blendMode = cmd.blend.blendMode
     val tessVertices = cmd.tessellatedVertices
     val vertexCount = cmd.totalVertexCount
     if (vertexCount < 3 || tessVertices.size < 6) {
@@ -60,10 +61,19 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
     }
 
     val contourStarts = cmd.contourStarts
+
+    // If stroke, convert to filled geometry
+    val (strokeVertices, strokeContours) = if (cmd.stroke) {
+        val sg = strokeToFillGeometry(tessVertices, contourStarts, cmd.strokeWidth)
+        Pair(sg.vertices, sg.contourStarts)
+    } else {
+        Pair(tessVertices, contourStarts)
+    }
+
     val indices = mutableListOf<Int>()
-    for (ci in contourStarts.indices) {
-        val start = contourStarts[ci]
-        val end = if (ci + 1 < contourStarts.size) contourStarts[ci + 1] else vertexCount
+    for (ci in strokeContours.indices) {
+        val start = strokeContours[ci]
+        val end = if (ci + 1 < strokeContours.size) strokeContours[ci + 1] else strokeVertices.size / 2
         val cvCount = end - start
         if (cvCount < 3) continue
         for (i in 1 until cvCount - 1) {
@@ -78,7 +88,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
         return
     }
 
-    val finalVertices = if (cmd.antiAlias) offsetForAA(tessVertices) else tessVertices
+    val finalVertices = if (cmd.antiAlias) offsetForAA(strokeVertices) else strokeVertices
     val triangleData = GPUBackendTriangleData(
         vertices = finalVertices.toFloatArray(),
         indices = indices.toIntArray(),
@@ -120,6 +130,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
                         scissorWidth = sw, scissorHeight = sh,
                     ),
                 ),
+                blendMode = blendMode,
             )
         }
         is GPUMaterialDescriptor.LinearGradient -> {
@@ -146,6 +157,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
                         scissorWidth = sw, scissorHeight = sh,
                     ),
                 ),
+                blendMode = blendMode,
             )
         }
         is GPUMaterialDescriptor.RadialGradient -> {
@@ -173,6 +185,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
                         scissorWidth = sw, scissorHeight = sh,
                     ),
                 ),
+                blendMode = blendMode,
             )
         }
         is GPUMaterialDescriptor.SweepGradient -> {
@@ -199,6 +212,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
                         scissorWidth = sw, scissorHeight = sh,
                     ),
                 ),
+                blendMode = blendMode,
             )
         }
         else -> {

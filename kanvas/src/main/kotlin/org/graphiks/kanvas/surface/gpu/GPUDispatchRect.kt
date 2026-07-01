@@ -22,6 +22,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillRect(
 
     cmd.fillGuardRefusalReasonOrNull()?.let { refuse(it); return }
 
+    val blendMode = cmd.blend.blendMode
     val rect = cmd.rect
     val clipBounds = cmd.clip.bounds
     val sx = maxOf(rect.left, clipBounds.left).toInt().coerceIn(0, surfaceWidth - 1)
@@ -69,6 +70,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillRect(
                             scissorWidth = sw, scissorHeight = sh,
                         ),
                     ),
+                    blendMode = blendMode,
                 )
             }
         }
@@ -94,6 +96,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillRect(
                         scissorWidth = sw, scissorHeight = sh,
                     ),
                 ),
+                blendMode = blendMode,
             )
         }
         is GPUMaterialDescriptor.RadialGradient -> {
@@ -119,6 +122,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillRect(
                         scissorWidth = sw, scissorHeight = sh,
                     ),
                 ),
+                blendMode = blendMode,
             )
         }
         is GPUMaterialDescriptor.SweepGradient -> {
@@ -143,6 +147,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillRect(
                         scissorWidth = sw, scissorHeight = sh,
                     ),
                 ),
+                blendMode = blendMode,
             )
         }
         else -> {
