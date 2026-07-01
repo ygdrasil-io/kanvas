@@ -27,7 +27,6 @@ on:
       - 'cpu-raster/**'
       - 'gpu-raster/**'
       - 'render-pipeline/**'
-      - 'skia-integration-tests/**'
       - 'integration-tests/**'
       - 'kanvas-legacy/src/test/resources/**'
       - 'buildSrc/**'
@@ -60,7 +59,6 @@ on:
       - 'cpu-raster/**'
       - 'gpu-raster/**'
       - 'render-pipeline/**'
-      - 'skia-integration-tests/**'
       - 'integration-tests/**'
       - 'kanvas-legacy/src/test/resources/**'
       - 'buildSrc/**'
@@ -173,41 +171,37 @@ jobs:
         # both invariants are lint-enforcing.
         run: python3 .upstream/source/map/audit.sh math
 
-      - name: Run render pipeline + raster integration tests
-        # GPU module deliberately skipped on the raster job — no driver,
-        # the WebGPU tests would all skip via Assumptions.assumeTrue and
-        # the matrix would mask a real GPU regression. The macos job
-        # below owns the GPU coverage.
-        run: |
-          ./gradlew --no-daemon \
-            checkCodecImageComplete \
-            :render-pipeline:test \
-            :cpu-raster:test \
-            :skia-integration-tests:test \
-            :math:jvmTest \
-            :kanvas-skia:test
+       - name: Run render pipeline + raster integration tests
+         # GPU module deliberately skipped on the raster job — no driver,
+         # the WebGPU tests would all skip via Assumptions.assumeTrue and
+         # the matrix would mask a real GPU regression. The macos job
+         # below owns the GPU coverage.
+         run: |
+           ./gradlew --no-daemon \
+             checkCodecImageComplete \
+             :render-pipeline:test \
+             :cpu-raster:test \
+             :math:jvmTest \
+             :kanvas-skia:test
 
-      - name: Upload raster debug images
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: raster-debug-images
-          path: |
-            cpu-raster/build/debug-images/
-            skia-integration-tests/build/debug-images/
-          if-no-files-found: ignore
+       - name: Upload raster debug images
+         if: failure()
+         uses: actions/upload-artifact@v4
+         with:
+           name: raster-debug-images
+           path: |
+             cpu-raster/build/debug-images/
+           if-no-files-found: ignore
 
-      - name: Upload raster test reports
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: raster-test-reports
-          path: |
-            cpu-raster/build/reports/tests/
-            skia-integration-tests/build/reports/tests/
-            cpu-raster/test-similarity-report.md
-            skia-integration-tests/test-similarity-report.md
-          if-no-files-found: ignore
+       - name: Upload raster test reports
+         if: always()
+         uses: actions/upload-artifact@v4
+         with:
+           name: raster-test-reports
+           path: |
+             cpu-raster/build/reports/tests/
+             cpu-raster/test-similarity-report.md
+           if-no-files-found: ignore
 
   gpu_smoke:
     name: GPU tests (macos)

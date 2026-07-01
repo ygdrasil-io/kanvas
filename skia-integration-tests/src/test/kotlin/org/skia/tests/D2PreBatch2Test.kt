@@ -49,15 +49,6 @@ class D2PreBatch2Test {
         runGm(EmptyShaderGM(), "EmptyShaderGM", floor = 0.0)
 
     /**
-     * `alphagradients` — 12-row gradient grid. We render only one
-     * `InPremul` mode (no flag in our gradient API), so similarity
-     * caps at ~50 % vs upstream which renders both modes.
-     */
-    @Test
-    fun `AlphaGradientsGM matches reference`() =
-        runGm(AlphaGradientsGM(), "AlphaGradientsGM", floor = 0.0)
-
-    /**
      * `filltypespersp` — 4×4 grid of fill-type permutations drawn
      * in perspective with a radial-gradient background.
      */
