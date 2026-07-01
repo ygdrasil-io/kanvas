@@ -9,6 +9,7 @@ import org.graphiks.kanvas.gpu.renderer.filters.GPUFilterCropPlan
 import org.graphiks.kanvas.gpu.renderer.filters.GPUFilterSamplingPlan
 import org.graphiks.kanvas.gpu.renderer.text.GPUTextDiagnostic
 import org.graphiks.kanvas.gpu.renderer.text.GPUTextArtifactRef
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 
 /** Canonical command identifier name used by the package layout target. */
 @JvmInline

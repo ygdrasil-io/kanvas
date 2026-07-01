@@ -1,4 +1,4 @@
-package org.graphiks.kanvas.surface.gpu
+package org.graphiks.kanvas.gpu.renderer.passes
 
 enum class GPUBlendMode(
     val wgpuLabel: String,
