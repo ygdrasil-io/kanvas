@@ -9,6 +9,35 @@ import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendTriangleData
 import org.graphiks.kanvas.surface.Diagnostics
 import org.graphiks.kanvas.surface.RenderConfig
 
+internal fun offsetForAA(vertices: List<Float>, pixelStep: Float = 0.5f): List<Float> {
+    if (vertices.size < 6) return vertices
+    val n = vertices.size / 2
+    val dx = FloatArray(n)
+    val dy = FloatArray(n)
+    for (i in 0 until n - 2) {
+        val ax = vertices[i * 2]; val ay = vertices[i * 2 + 1]
+        val bx = vertices[(i + 1) * 2]; val by = vertices[(i + 1) * 2 + 1]
+        val cx = vertices[(i + 2) * 2]; val cy = vertices[(i + 2) * 2 + 1]
+        val ex1 = bx - ax; val ey1 = by - ay
+        val ex2 = cx - ax; val ey2 = cy - ay
+        var nx = ey1 - ey2
+        var ny = ex2 - ex1
+        val len = kotlin.math.sqrt(nx * nx + ny * ny)
+        if (len < 1e-6f) continue
+        nx = nx / len * pixelStep
+        ny = ny / len * pixelStep
+        dx[i] += nx; dy[i] += ny
+        dx[i + 1] += nx; dy[i + 1] += ny
+        dx[i + 2] += nx; dy[i + 2] += ny
+    }
+    val result = vertices.toMutableList()
+    for (i in 0 until n) {
+        result[i * 2] = vertices[i * 2] + dx[i]
+        result[i * 2 + 1] = vertices[i * 2 + 1] + dy[i]
+    }
+    return result
+}
+
 internal fun GPUBackendRenderRecorder.dispatchFillPath(
     cmd: NormalizedDrawCommand.FillPath,
     dispatched: MutableList<String>,
@@ -23,6 +52,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
 
     cmd.fillGuardRefusalReasonOrNull()?.let { refuse(it); return }
 
+    val blendMode = cmd.blend.blendMode
     val tessVertices = cmd.tessellatedVertices
     val vertexCount = cmd.totalVertexCount
     if (vertexCount < 3 || tessVertices.size < 6) {
@@ -31,10 +61,19 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
     }
 
     val contourStarts = cmd.contourStarts
+
+    // If stroke, convert to filled geometry
+    val (strokeVertices, strokeContours) = if (cmd.stroke) {
+        val sg = strokeToFillGeometry(tessVertices, contourStarts, cmd.strokeWidth)
+        Pair(sg.vertices, sg.contourStarts)
+    } else {
+        Pair(tessVertices, contourStarts)
+    }
+
     val indices = mutableListOf<Int>()
-    for (ci in contourStarts.indices) {
-        val start = contourStarts[ci]
-        val end = if (ci + 1 < contourStarts.size) contourStarts[ci + 1] else vertexCount
+    for (ci in strokeContours.indices) {
+        val start = strokeContours[ci]
+        val end = if (ci + 1 < strokeContours.size) strokeContours[ci + 1] else strokeVertices.size / 2
         val cvCount = end - start
         if (cvCount < 3) continue
         for (i in 1 until cvCount - 1) {
@@ -49,8 +88,9 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
         return
     }
 
+    val finalVertices = if (cmd.antiAlias) offsetForAA(strokeVertices) else strokeVertices
     val triangleData = GPUBackendTriangleData(
-        vertices = tessVertices.toFloatArray(),
+        vertices = finalVertices.toFloatArray(),
         indices = indices.toIntArray(),
     )
 
@@ -74,9 +114,9 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
     when (val material = cmd.material) {
         is GPUMaterialDescriptor.SolidColor -> {
             val colorBb = java.nio.ByteBuffer.allocate(16).order(java.nio.ByteOrder.nativeOrder())
-            colorBb.putFloat(material.r * material.a)
-            colorBb.putFloat(material.g * material.a)
-            colorBb.putFloat(material.b * material.a)
+            colorBb.putFloat(srgbToLinear(material.r) * material.a)
+            colorBb.putFloat(srgbToLinear(material.g) * material.a)
+            colorBb.putFloat(srgbToLinear(material.b) * material.a)
             colorBb.putFloat(material.a)
             drawFullscreenStencilPass(
                 wgsl = SOLID_RECT_WGSL,
@@ -90,19 +130,20 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
                         scissorWidth = sw, scissorHeight = sh,
                     ),
                 ),
+                blendMode = blendMode,
             )
         }
         is GPUMaterialDescriptor.LinearGradient -> {
             val bb = java.nio.ByteBuffer.allocate(48).order(java.nio.ByteOrder.nativeOrder())
             bb.putFloat(material.startX); bb.putFloat(material.startY)
             bb.putFloat(material.endX); bb.putFloat(material.endY)
-            bb.putFloat(material.startR * material.startA)
-            bb.putFloat(material.startG * material.startA)
-            bb.putFloat(material.startB * material.startA)
+            bb.putFloat(srgbToLinear(material.startR) * material.startA)
+            bb.putFloat(srgbToLinear(material.startG) * material.startA)
+            bb.putFloat(srgbToLinear(material.startB) * material.startA)
             bb.putFloat(material.startA)
-            bb.putFloat(material.endR * material.endA)
-            bb.putFloat(material.endG * material.endA)
-            bb.putFloat(material.endB * material.endA)
+            bb.putFloat(srgbToLinear(material.endR) * material.endA)
+            bb.putFloat(srgbToLinear(material.endG) * material.endA)
+            bb.putFloat(srgbToLinear(material.endB) * material.endA)
             bb.putFloat(material.endA)
             drawFullscreenStencilPass(
                 wgsl = LINEAR_GRADIENT_WGSL,
@@ -116,6 +157,62 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
                         scissorWidth = sw, scissorHeight = sh,
                     ),
                 ),
+                blendMode = blendMode,
+            )
+        }
+        is GPUMaterialDescriptor.RadialGradient -> {
+            val bb = java.nio.ByteBuffer.allocate(48).order(java.nio.ByteOrder.nativeOrder())
+            bb.putFloat(material.centerX); bb.putFloat(material.centerY)
+            bb.putFloat(material.radius)
+            bb.putFloat(0f) // padding — vec4f alignment at offset 16
+            bb.putFloat(srgbToLinear(material.startR) * material.startA)
+            bb.putFloat(srgbToLinear(material.startG) * material.startA)
+            bb.putFloat(srgbToLinear(material.startB) * material.startA)
+            bb.putFloat(material.startA)
+            bb.putFloat(srgbToLinear(material.endR) * material.endA)
+            bb.putFloat(srgbToLinear(material.endG) * material.endA)
+            bb.putFloat(srgbToLinear(material.endB) * material.endA)
+            bb.putFloat(material.endA)
+            drawFullscreenStencilPass(
+                wgsl = RADIAL_GRADIENT_WGSL,
+                colorFormat = config.gpuColorFormat.wgpuLabel,
+                stencilMode = GPUBackendStencilMode.Test,
+                triangleData = null,
+                draws = listOf(
+                    GPUBackendRawUniformDraw(
+                        uniformBytes = bb.array(),
+                        scissorX = sx, scissorY = sy,
+                        scissorWidth = sw, scissorHeight = sh,
+                    ),
+                ),
+                blendMode = blendMode,
+            )
+        }
+        is GPUMaterialDescriptor.SweepGradient -> {
+            val bb = java.nio.ByteBuffer.allocate(48).order(java.nio.ByteOrder.nativeOrder())
+            bb.putFloat(material.centerX); bb.putFloat(material.centerY)
+            bb.putFloat(material.startAngle); bb.putFloat(material.endAngle)
+            bb.putFloat(srgbToLinear(material.startR) * material.startA)
+            bb.putFloat(srgbToLinear(material.startG) * material.startA)
+            bb.putFloat(srgbToLinear(material.startB) * material.startA)
+            bb.putFloat(material.startA)
+            bb.putFloat(srgbToLinear(material.endR) * material.endA)
+            bb.putFloat(srgbToLinear(material.endG) * material.endA)
+            bb.putFloat(srgbToLinear(material.endB) * material.endA)
+            bb.putFloat(material.endA)
+            drawFullscreenStencilPass(
+                wgsl = SWEEP_GRADIENT_WGSL,
+                colorFormat = config.gpuColorFormat.wgpuLabel,
+                stencilMode = GPUBackendStencilMode.Test,
+                triangleData = null,
+                draws = listOf(
+                    GPUBackendRawUniformDraw(
+                        uniformBytes = bb.array(),
+                        scissorX = sx, scissorY = sy,
+                        scissorWidth = sw, scissorHeight = sh,
+                    ),
+                ),
+                blendMode = blendMode,
             )
         }
         else -> {

@@ -3,6 +3,7 @@ package org.graphiks.kanvas.gpu.renderer.execution
 import org.graphiks.kanvas.gpu.renderer.telemetry.GPUCacheTelemetry
 import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandKind
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceMaterializationDecision
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 
 /** Describes an offscreen surface allocation request for the low-level GPU backend runtime. */
 data class GPUOffscreenTargetRequest(
@@ -182,6 +183,7 @@ interface GPUBackendRenderRecorder {
         wgsl: String,
         colorFormat: String,
         draws: List<GPUBackendRectDraw>,
+        blendMode: GPUBlendMode? = null,
     )
 
     /** Draws a fullscreen pass by uploading prepacked uniform payload bytes for each draw. */
@@ -189,6 +191,7 @@ interface GPUBackendRenderRecorder {
         wgsl: String,
         colorFormat: String,
         draws: List<GPUBackendUniformPayloadDraw>,
+        blendMode: GPUBlendMode? = null,
     )
 
     /** Draws a fullscreen pass with raw uniform bytes per draw, bypassing provider materialization. */
@@ -196,6 +199,7 @@ interface GPUBackendRenderRecorder {
         wgsl: String,
         colorFormat: String,
         draws: List<GPUBackendRawUniformDraw>,
+        blendMode: GPUBlendMode? = null,
     )
 
     /** Draws a fullscreen pass with a generated texture+sampler binding alongside packed uniforms. */
@@ -207,6 +211,7 @@ interface GPUBackendRenderRecorder {
         textureHeight: Int,
         textureFormat: String,
         draws: List<GPUBackendRawUniformDraw>,
+        blendMode: GPUBlendMode? = null,
     )
 
     /** Draws a two-pass stencil-cover fill with triangle geometry (write) and fullscreen cover (test). */
@@ -216,6 +221,7 @@ interface GPUBackendRenderRecorder {
         stencilMode: GPUBackendStencilMode,
         triangleData: GPUBackendTriangleData?,
         draws: List<GPUBackendRawUniformDraw>,
+        blendMode: GPUBlendMode? = null,
     )
 
     /** Creates a GPU vertex buffer from interleaved position + color float data. Returns a stable label. */
@@ -226,6 +232,7 @@ interface GPUBackendRenderRecorder {
         vertexBufferLabel: String,
         indexCount: Int,
         uniformDraw: GPUBackendRawUniformDraw,
+        blendMode: GPUBlendMode? = null,
     )
 
     /** Creates a secondary offscreen texture that can be bound as a texture source. */
@@ -244,6 +251,7 @@ interface GPUBackendRenderRecorder {
         colorFormat: String,
         textureLabel: String,
         draws: List<GPUBackendRawUniformDraw>,
+        blendMode: GPUBlendMode? = null,
     )
 
     /** Draws indexed glyph quads from an A8 atlas texture with per-draw uniform payloads. */
@@ -255,6 +263,7 @@ interface GPUBackendRenderRecorder {
         vertexData: FloatArray,
         indexData: IntArray,
         draws: List<GPUBackendRawUniformDraw>,
+        blendMode: GPUBlendMode? = null,
     )
 
     /** Draws indexed glyph quads for COLRv0 composite color glyphs. Same vertex/index/atlas structure as drawTextAtlasPass with a per-layer composite WGSL shader. */
@@ -266,6 +275,7 @@ interface GPUBackendRenderRecorder {
         vertexData: FloatArray,
         indexData: IntArray,
         draws: List<GPUBackendRawUniformDraw>,
+        blendMode: GPUBlendMode? = null,
     )
 }
 

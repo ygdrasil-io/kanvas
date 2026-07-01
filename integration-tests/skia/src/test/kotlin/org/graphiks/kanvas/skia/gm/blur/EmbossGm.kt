@@ -20,7 +20,7 @@ import org.graphiks.kanvas.types.Rect
 class EmbossGm : SkiaGm {
     override val name = "emboss"
     override val renderFamily = RenderFamily.BLUR
-    override val minSimilarity = 0.0
+    override val minSimilarity = 61.0
     override val width = 600
     override val height = 120
 

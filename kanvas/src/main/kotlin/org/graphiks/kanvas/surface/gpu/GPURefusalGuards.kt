@@ -8,16 +8,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 
 internal fun NormalizedDrawCommand.strokeRefusalReasonOrNull(): String? {
-    val stroke = when (this) {
-        is NormalizedDrawCommand.FillRect -> stroke
-        is NormalizedDrawCommand.FillRRect -> stroke
-        is NormalizedDrawCommand.FillPath -> stroke
-        is NormalizedDrawCommand.DrawTextRun -> false
-        is NormalizedDrawCommand.DrawImageRect -> false
-        is NormalizedDrawCommand.DrawLayer -> false
-        is NormalizedDrawCommand.ApplyFilter -> false
-    }
-    return if (stroke) "unsupported_stroke" else null
+    return null // stroke is now handled via geometry conversion
 }
 
 internal fun NormalizedDrawCommand.fillGuardRefusalReasonOrNull(): String? {
@@ -27,20 +18,23 @@ internal fun NormalizedDrawCommand.fillGuardRefusalReasonOrNull(): String? {
     val acceptedByDispatch = this is NormalizedDrawCommand.FillRect ||
         this is NormalizedDrawCommand.FillPath
     if (material !is GPUMaterialDescriptor.SolidColor &&
-        (!acceptedByDispatch || material !is GPUMaterialDescriptor.LinearGradient)
+        (!acceptedByDispatch || 
+         (material !is GPUMaterialDescriptor.LinearGradient &&
+          material !is GPUMaterialDescriptor.RadialGradient &&
+          material !is GPUMaterialDescriptor.SweepGradient))
     ) {
         return "unsupported_material:${material.kind.name}"
     }
     if (transform.type != GPUTransformType.Identity) {
         return "unsupported_transform:${transform.type.name}"
     }
-    if (clip.kind !in listOf(GPUClipKind.WideOpen, GPUClipKind.DeviceRect)) {
+    if (clip.kind !in listOf(GPUClipKind.WideOpen, GPUClipKind.DeviceRect, GPUClipKind.ComplexStack)) {
         return "unsupported_clip:${clip.kind.name}"
     }
     if (layer.scopeKind != GPULayerScopeKind.Root) {
         return "unsupported_layer:${layer.scopeKind.name}"
     }
-    if (blend.kind != GPUBlendKind.SrcOver) {
+    if (blend.kind == GPUBlendKind.Unsupported) {
         return "unsupported_blend:${blend.modeLabel}"
     }
     return null

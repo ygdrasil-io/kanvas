@@ -23,7 +23,7 @@ import kotlin.math.sqrt
 class Dashing3Gm : SkiaGm {
     override val name = "dashing3"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 0.0
+    override val minSimilarity = 87.7
     override val width = 640
     override val height = 480
 

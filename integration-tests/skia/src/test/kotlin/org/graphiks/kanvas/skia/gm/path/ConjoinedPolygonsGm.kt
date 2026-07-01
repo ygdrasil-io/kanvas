@@ -15,7 +15,7 @@ import org.graphiks.kanvas.types.Color
 class ConjoinedPolygonsGm : SkiaGm {
     override val name = "conjoined_polygons"
     override val renderFamily = RenderFamily.PATH
-    override val minSimilarity = 0.0
+    override val minSimilarity = 94.2
     override val width = 400
     override val height = 400
 

@@ -18,7 +18,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 class RadialGradient2Gm : SkiaGm {
     override val name = "radial_gradient2"
     override val renderFamily = RenderFamily.GRADIENT
-    override val minSimilarity = 0.0
+    override val minSimilarity = 50.4
     override val width = 800
     override val height = 400
 

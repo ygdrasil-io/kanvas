@@ -20,7 +20,6 @@ import io.ygdrasil.webgpu.Extent3D
 import io.ygdrasil.webgpu.FragmentState
 import io.ygdrasil.webgpu.GLFWContext
 import io.ygdrasil.webgpu.GPUAddressMode
-import io.ygdrasil.webgpu.GPUBlendFactor
 import io.ygdrasil.webgpu.GPUBlendOperation
 import io.ygdrasil.webgpu.GPUColorWrite
 import io.ygdrasil.webgpu.GPUCompareFunction
@@ -87,6 +86,8 @@ import org.graphiks.kanvas.gpu.renderer.telemetry.GPUCacheTelemetry
 import org.graphiks.kanvas.gpu.renderer.telemetry.GPUTelemetryLedger
 
 import org.graphiks.kanvas.gpu.renderer.text.colorGlyphCompositeWgsl
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendFactor
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 
 private const val COPY_BYTES_PER_ROW_ALIGNMENT: Int = 256
 private const val FULL_SCREEN_TRIANGLE_VERTEX_COUNT: UInt = 3u
@@ -666,6 +667,7 @@ private class WgpuRenderRecorder(
         wgsl: String,
         colorFormat: String,
         draws: List<GPUBackendRectDraw>,
+        blendMode: GPUBlendMode?,
     ) {
         recordFullscreenUniformPass(
             wgsl = wgsl,
@@ -680,6 +682,7 @@ private class WgpuRenderRecorder(
                     scissorHeight = draw.scissorHeight,
                 )
             },
+            blendMode = blendMode,
         )
     }
 
@@ -687,6 +690,7 @@ private class WgpuRenderRecorder(
         wgsl: String,
         colorFormat: String,
         draws: List<GPUBackendUniformPayloadDraw>,
+        blendMode: GPUBlendMode?,
     ) {
         recordFullscreenUniformPass(
             wgsl = wgsl,
@@ -702,6 +706,7 @@ private class WgpuRenderRecorder(
                     scissorHeight = draw.scissorHeight,
                 )
             },
+            blendMode = blendMode,
         )
     }
 
@@ -709,6 +714,7 @@ private class WgpuRenderRecorder(
         wgsl: String,
         colorFormat: String,
         draws: List<GPUBackendRawUniformDraw>,
+        blendMode: GPUBlendMode?,
     ) {
         recordFullscreenUniformPass(
             wgsl = wgsl,
@@ -723,6 +729,7 @@ private class WgpuRenderRecorder(
                     scissorHeight = draw.scissorHeight,
                 )
             },
+            blendMode = blendMode,
         )
     }
 
@@ -734,6 +741,7 @@ private class WgpuRenderRecorder(
         textureHeight: Int,
         textureFormat: String,
         draws: List<GPUBackendRawUniformDraw>,
+        blendMode: GPUBlendMode?,
     ) {
         recordFullscreenTextureUniformPass(
             wgsl = wgsl,
@@ -752,6 +760,7 @@ private class WgpuRenderRecorder(
                     scissorHeight = draw.scissorHeight,
                 )
             },
+            blendMode = blendMode,
         )
     }
 
@@ -761,6 +770,7 @@ private class WgpuRenderRecorder(
         stencilMode: GPUBackendStencilMode,
         triangleData: GPUBackendTriangleData?,
         draws: List<GPUBackendRawUniformDraw>,
+        blendMode: GPUBlendMode?,
     ) {
         require(wgsl.isNotBlank()) { "wgsl must not be blank" }
         require(colorFormat.normalizedColorFormat() == targetFormat.toBackendColorFormat()) {
@@ -783,7 +793,7 @@ private class WgpuRenderRecorder(
                         scissorWidth = draw.scissorWidth,
                         scissorHeight = draw.scissorHeight,
                     )
-                })
+                }, blendMode = blendMode)
             }
         }
     }
@@ -811,6 +821,7 @@ private class WgpuRenderRecorder(
         vertexBufferLabel: String,
         indexCount: Int,
         uniformDraw: GPUBackendRawUniformDraw,
+        blendMode: GPUBlendMode?,
     ) {
         val (vertexBuffer, vertexCount) = vertexBufferStore[vertexBufferLabel]
             ?: error("Vertex buffer not found: $vertexBufferLabel")
@@ -837,7 +848,7 @@ private class WgpuRenderRecorder(
         queue.writeBuffer(indexBuffer, 0uL, ArrayBuffer.of(indices))
 
         val vertexWgsl = VERTEX_COLOR_WGSL
-        val keys = stencilExecutionCacheKeys(wgsl = vertexWgsl, targetFormat = targetFormat, vertexStage = true)
+        val keys = stencilExecutionCacheKeys(wgsl = vertexWgsl, targetFormat = targetFormat, vertexStage = true, blendMode = blendMode)
         executionCaches.recordPreimages(keys)
         val bindGroupLayout = executionCaches.bindGroupLayout(device = device, keys = keys)
         val shader = executionCaches.shaderModule(device = device, wgsl = vertexWgsl, keys = keys)
@@ -848,6 +859,7 @@ private class WgpuRenderRecorder(
             pipelineLayout = pipelineLayout,
             targetFormat = targetFormat,
             keys = keys,
+            blendMode = blendMode,
         )
 
         val uniform = resourceScope.track(
@@ -917,6 +929,7 @@ private class WgpuRenderRecorder(
         vertexData: FloatArray,
         indexData: IntArray,
         draws: List<GPUBackendRawUniformDraw>,
+        blendMode: GPUBlendMode?,
     ) {
         require(atlasRgba.isNotEmpty()) { "atlasRgba must not be empty" }
         require(atlasWidth > 0) { "atlasWidth must be positive" }
@@ -927,7 +940,7 @@ private class WgpuRenderRecorder(
 
         val wgsl = TEXT_ATLAS_A8_WGSL
         val textureFormat = atlasFormat.toWgpuTextureFormat()
-        val keys = textAtlasExecutionCacheKeys(wgsl = wgsl, targetFormat = targetFormat, textureFormat = textureFormat)
+        val keys = textAtlasExecutionCacheKeys(wgsl = wgsl, targetFormat = targetFormat, textureFormat = textureFormat, blendMode = blendMode)
         executionCaches.recordPreimages(keys)
 
         val bindGroupLayout = executionCaches.bindGroupLayout(device = device, keys = keys)
@@ -944,6 +957,7 @@ private class WgpuRenderRecorder(
             pipelineLayout = pipelineLayout,
             targetFormat = targetFormat,
             keys = keys,
+            blendMode = blendMode,
         )
 
         val atlasTexture = resourceScope.track(
@@ -1066,6 +1080,7 @@ private class WgpuRenderRecorder(
         vertexData: FloatArray,
         indexData: IntArray,
         draws: List<GPUBackendRawUniformDraw>,
+        blendMode: GPUBlendMode?,
     ) {
         require(atlasRgba.isNotEmpty()) { "atlasRgba must not be empty" }
         require(atlasWidth > 0) { "atlasWidth must be positive" }
@@ -1076,7 +1091,7 @@ private class WgpuRenderRecorder(
 
         val wgsl = colorGlyphCompositeWgsl()
         val textureFormat = atlasFormat.toWgpuTextureFormat()
-        val keys = colorGlyphExecutionCacheKeys(wgsl = wgsl, targetFormat = targetFormat, textureFormat = textureFormat)
+        val keys = colorGlyphExecutionCacheKeys(wgsl = wgsl, targetFormat = targetFormat, textureFormat = textureFormat, blendMode = blendMode)
         executionCaches.recordPreimages(keys)
 
         val bindGroupLayout = executionCaches.bindGroupLayout(device = device, keys = keys)
@@ -1093,6 +1108,7 @@ private class WgpuRenderRecorder(
             pipelineLayout = pipelineLayout,
             targetFormat = targetFormat,
             keys = keys,
+            blendMode = blendMode,
         )
 
         val atlasTexture = resourceScope.track(
@@ -1212,6 +1228,7 @@ private class WgpuRenderRecorder(
         colorFormat: String,
         textureLabel: String,
         draws: List<GPUBackendRawUniformDraw>,
+        blendMode: GPUBlendMode?,
     ) {
         require(wgsl.isNotBlank()) { "wgsl must not be blank" }
         require(colorFormat.normalizedColorFormat() == targetFormat.toBackendColorFormat()) {
@@ -1223,26 +1240,30 @@ private class WgpuRenderRecorder(
             ?: error("Offscreen texture not found: $textureLabel")
         val textureFormat = GPUTextureFormat.RGBA8Unorm
 
+        val textureKeys = fullscreenTextureExecutionCacheKeys(wgsl = wgsl, targetFormat = targetFormat, textureFormat = textureFormat, blendMode = blendMode)
+        val fullKeys = fullscreenExecutionCacheKeys(wgsl = wgsl, targetFormat = targetFormat, blendMode = blendMode)
+
         val textureBindGroupLayout = executionCaches.textureBindGroupLayout(
             device = device,
-            keys = fullscreenTextureExecutionCacheKeys(wgsl = wgsl, targetFormat = targetFormat, textureFormat = textureFormat),
+            keys = textureKeys,
         )
         val bindGroupLayout = executionCaches.bindGroupLayout(
             device = device,
-            keys = fullscreenExecutionCacheKeys(wgsl = wgsl, targetFormat = targetFormat),
+            keys = fullKeys,
         )
-        val shader = executionCaches.shaderModule(device = device, wgsl = wgsl, keys = fullscreenExecutionCacheKeys(wgsl = wgsl, targetFormat = targetFormat))
+        val shader = executionCaches.shaderModule(device = device, wgsl = wgsl, keys = fullKeys)
         val pipelineLayout = executionCaches.texturePipelineLayout(
             device = device,
             bindGroupLayouts = listOf(bindGroupLayout, textureBindGroupLayout),
-            keys = fullscreenTextureExecutionCacheKeys(wgsl = wgsl, targetFormat = targetFormat, textureFormat = textureFormat),
+            keys = textureKeys,
         )
         val pipeline = executionCaches.renderPipeline(
             device = device,
             shader = shader,
             pipelineLayout = pipelineLayout,
             targetFormat = targetFormat,
-            keys = fullscreenTextureExecutionCacheKeys(wgsl = wgsl, targetFormat = targetFormat, textureFormat = textureFormat),
+            keys = textureKeys,
+            blendMode = blendMode,
         )
 
         val textureView = resourceScope.track(tex.createView()) { it.close() }
@@ -1350,8 +1371,9 @@ private class WgpuRenderRecorder(
         wgsl: String,
         colorFormat: String,
         draws: List<WgpuFullscreenUniformDraw>,
+        blendMode: GPUBlendMode? = null,
     ) {
-        val keys = stencilExecutionCacheKeys(wgsl = wgsl, targetFormat = targetFormat, vertexStage = false)
+        val keys = stencilExecutionCacheKeys(wgsl = wgsl, targetFormat = targetFormat, vertexStage = false, blendMode = blendMode)
         executionCaches.recordPreimages(keys)
         val bindGroupLayout = executionCaches.bindGroupLayout(device = device, keys = keys)
         val shader = executionCaches.shaderModule(device = device, wgsl = wgsl, keys = keys)
@@ -1362,6 +1384,7 @@ private class WgpuRenderRecorder(
             pipelineLayout = pipelineLayout,
             targetFormat = targetFormat,
             keys = keys,
+            blendMode = blendMode,
         )
 
         setPipelineAction(pipeline)
@@ -1406,6 +1429,7 @@ private class WgpuRenderRecorder(
         textureHeight: Int,
         textureFormat: String,
         draws: List<WgpuFullscreenUniformDraw>,
+        blendMode: GPUBlendMode? = null,
     ) {
         require(wgsl.isNotBlank()) { "wgsl must not be blank" }
         require(colorFormat.normalizedColorFormat() == targetFormat.toBackendColorFormat()) {
@@ -1438,6 +1462,7 @@ private class WgpuRenderRecorder(
             wgsl = wgsl,
             targetFormat = targetFormat,
             textureFormat = gpuTextureFormat,
+            blendMode = blendMode,
         )
         executionCaches.recordPreimages(keys)
         val bindGroupLayout = executionCaches.bindGroupLayout(device = device, keys = keys)
@@ -1454,6 +1479,7 @@ private class WgpuRenderRecorder(
             pipelineLayout = pipelineLayout,
             targetFormat = targetFormat,
             keys = keys,
+            blendMode = blendMode,
         )
 
         val texture = resourceScope.track(
@@ -1538,6 +1564,7 @@ private class WgpuRenderRecorder(
         wgsl: String,
         colorFormat: String,
         draws: List<WgpuFullscreenUniformDraw>,
+        blendMode: GPUBlendMode? = null,
     ) {
         require(wgsl.isNotBlank()) { "wgsl must not be blank" }
         require(colorFormat.normalizedColorFormat() == targetFormat.toBackendColorFormat()) {
@@ -1545,7 +1572,7 @@ private class WgpuRenderRecorder(
         }
         if (draws.isEmpty()) return
 
-        val keys = fullscreenExecutionCacheKeys(wgsl = wgsl, targetFormat = targetFormat)
+        val keys = fullscreenExecutionCacheKeys(wgsl = wgsl, targetFormat = targetFormat, blendMode = blendMode)
         executionCaches.recordPreimages(keys)
         val bindGroupLayout = executionCaches.bindGroupLayout(device = device, keys = keys)
         val shader = executionCaches.shaderModule(device = device, wgsl = wgsl, keys = keys)
@@ -1560,6 +1587,7 @@ private class WgpuRenderRecorder(
             pipelineLayout = pipelineLayout,
             targetFormat = targetFormat,
             keys = keys,
+            blendMode = blendMode,
         )
 
         setPipelineAction(pipeline)
@@ -1889,6 +1917,7 @@ private class WgpuExecutionCaches(
         pipelineLayout: GPUPipelineLayout,
         targetFormat: GPUTextureFormat,
         keys: FullscreenExecutionCacheKeys,
+        blendMode: GPUBlendMode? = null,
     ): GPURenderPipeline {
         val decision = renderPipelineCache.getOrCreate(
             request = request(
@@ -1927,7 +1956,7 @@ private class WgpuExecutionCaches(
                         targets = listOf(
                             ColorTargetState(
                                 format = targetFormat,
-                                blend = srcOverBlendState(),
+                                blend = blendStateFor(blendMode),
                             ),
                         ),
                     ),
@@ -2005,13 +2034,13 @@ private class WgpuExecutionCaches(
                                     blend = BlendState(
                                         color = BlendComponent(
                                             operation = GPUBlendOperation.Add,
-                                            srcFactor = GPUBlendFactor.One,
-                                            dstFactor = GPUBlendFactor.Zero,
+                                            srcFactor = io.ygdrasil.webgpu.GPUBlendFactor.One,
+                                            dstFactor = io.ygdrasil.webgpu.GPUBlendFactor.Zero,
                                         ),
                                         alpha = BlendComponent(
                                             operation = GPUBlendOperation.Add,
-                                            srcFactor = GPUBlendFactor.One,
-                                            dstFactor = GPUBlendFactor.Zero,
+                                            srcFactor = io.ygdrasil.webgpu.GPUBlendFactor.One,
+                                            dstFactor = io.ygdrasil.webgpu.GPUBlendFactor.Zero,
                                         ),
                                     ),
                                     writeMask = GPUColorWrite.None,
@@ -2035,6 +2064,7 @@ private class WgpuExecutionCaches(
         pipelineLayout: GPUPipelineLayout,
         targetFormat: GPUTextureFormat,
         keys: FullscreenExecutionCacheKeys,
+        blendMode: GPUBlendMode? = null,
     ): GPURenderPipeline {
         val decision = renderPipelineCache.getOrCreate(
             request = request(
@@ -2073,7 +2103,7 @@ private class WgpuExecutionCaches(
                         targets = listOf(
                             ColorTargetState(
                                 format = targetFormat,
-                                blend = srcOverBlendState(),
+                                blend = blendStateFor(blendMode),
                             ),
                         ),
                     ),
@@ -2091,6 +2121,7 @@ private class WgpuExecutionCaches(
         pipelineLayout: GPUPipelineLayout,
         targetFormat: GPUTextureFormat,
         keys: FullscreenExecutionCacheKeys,
+        blendMode: GPUBlendMode? = null,
     ): GPURenderPipeline {
         val decision = renderPipelineCache.getOrCreate(
             request = request(
@@ -2149,7 +2180,7 @@ private class WgpuExecutionCaches(
                         targets = listOf(
                             ColorTargetState(
                                 format = targetFormat,
-                                blend = srcOverBlendState(),
+                                blend = blendStateFor(blendMode),
                             ),
                         ),
                     ),
@@ -2167,6 +2198,7 @@ private class WgpuExecutionCaches(
         pipelineLayout: GPUPipelineLayout,
         targetFormat: GPUTextureFormat,
         keys: FullscreenExecutionCacheKeys,
+        blendMode: GPUBlendMode? = null,
     ): GPURenderPipeline {
         val decision = renderPipelineCache.getOrCreate(
             request = request(
@@ -2225,7 +2257,7 @@ private class WgpuExecutionCaches(
                         targets = listOf(
                             ColorTargetState(
                                 format = targetFormat,
-                                blend = srcOverBlendState(),
+                                blend = blendStateFor(blendMode),
                             ),
                         ),
                     ),
@@ -2351,7 +2383,9 @@ private fun fullscreenTextureExecutionCacheKeys(
     wgsl: String,
     targetFormat: GPUTextureFormat,
     textureFormat: GPUTextureFormat,
+    blendMode: GPUBlendMode? = null,
 ): FullscreenExecutionCacheKeys {
+    val blendLabel = blendMode?.wgpuLabel ?: "src_over"
     val targetFormatClass = targetFormat.toBackendColorFormat()
     val wgslHash = stableSha256(wgsl)
     val bindGroupLayoutPreimage = listOf(
@@ -2399,7 +2433,7 @@ private fun fullscreenTextureExecutionCacheKeys(
         moduleHash = moduleHash,
         vertexLayoutHash = stableSha256("vertex-layout:fullscreen-triangle:vertex-index-only"),
         targetFormatClass = targetFormatClass,
-        blendStateHash = stableSha256("blend:src-over-premul:v1"),
+        blendStateHash = stableSha256("blend:$blendLabel-premul:v1"),
         sampleStateHash = stableSha256("sample-state:count=1:mask=all"),
         bindGroupLayoutHash = "$bindGroupLayoutHash,$textureBindGroupLayoutHash",
         capabilityClass = "webgpu-wgsl-fullscreen-texture-pass",
@@ -2431,7 +2465,9 @@ private fun fullscreenTextureExecutionCacheKeys(
 private fun fullscreenExecutionCacheKeys(
     wgsl: String,
     targetFormat: GPUTextureFormat,
+    blendMode: GPUBlendMode? = null,
 ): FullscreenExecutionCacheKeys {
+    val blendLabel = blendMode?.wgpuLabel ?: "src_over"
     val targetFormatClass = targetFormat.toBackendColorFormat()
     val wgslHash = stableSha256(wgsl)
     val bindGroupLayoutPreimage = listOf(
@@ -2470,7 +2506,7 @@ private fun fullscreenExecutionCacheKeys(
         moduleHash = moduleHash,
         vertexLayoutHash = stableSha256("vertex-layout:fullscreen-triangle:vertex-index-only"),
         targetFormatClass = targetFormatClass,
-        blendStateHash = stableSha256("blend:src-over-premul:v1"),
+        blendStateHash = stableSha256("blend:$blendLabel-premul:v1"),
         sampleStateHash = stableSha256("sample-state:count=1:mask=all"),
         bindGroupLayoutHash = bindGroupLayoutHash,
         capabilityClass = "webgpu-wgsl-fullscreen-pass",
@@ -2500,7 +2536,9 @@ private fun textAtlasExecutionCacheKeys(
     wgsl: String,
     targetFormat: GPUTextureFormat,
     textureFormat: GPUTextureFormat,
+    blendMode: GPUBlendMode? = null,
 ): FullscreenExecutionCacheKeys {
+    val blendLabel = blendMode?.wgpuLabel ?: "src_over"
     val targetFormatClass = targetFormat.toBackendColorFormat()
     val wgslHash = stableSha256(wgsl)
     val bindGroupLayoutPreimage = listOf(
@@ -2548,7 +2586,7 @@ private fun textAtlasExecutionCacheKeys(
         moduleHash = moduleHash,
         vertexLayoutHash = stableSha256("vertex-layout:text-atlas:float32x2+float32x2"),
         targetFormatClass = targetFormatClass,
-        blendStateHash = stableSha256("blend:src-over-premul:v1"),
+        blendStateHash = stableSha256("blend:$blendLabel-premul:v1"),
         sampleStateHash = stableSha256("sample-state:count=1:mask=all"),
         bindGroupLayoutHash = "$bindGroupLayoutHash,$textureBindGroupLayoutHash",
         capabilityClass = "webgpu-wgsl-text-atlas-pass",
@@ -2581,7 +2619,9 @@ private fun colorGlyphExecutionCacheKeys(
     wgsl: String,
     targetFormat: GPUTextureFormat,
     textureFormat: GPUTextureFormat,
+    blendMode: GPUBlendMode? = null,
 ): FullscreenExecutionCacheKeys {
+    val blendLabel = blendMode?.wgpuLabel ?: "src_over"
     val targetFormatClass = targetFormat.toBackendColorFormat()
     val wgslHash = stableSha256(wgsl)
     val bindGroupLayoutPreimage = listOf(
@@ -2629,7 +2669,7 @@ private fun colorGlyphExecutionCacheKeys(
         moduleHash = moduleHash,
         vertexLayoutHash = stableSha256("vertex-layout:color-glyph:float32x2+float32x2"),
         targetFormatClass = targetFormatClass,
-        blendStateHash = stableSha256("blend:src-over-premul:v1"),
+        blendStateHash = stableSha256("blend:$blendLabel-premul:v1"),
         sampleStateHash = stableSha256("sample-state:count=1:mask=all"),
         bindGroupLayoutHash = "$bindGroupLayoutHash,$textureBindGroupLayoutHash",
         capabilityClass = "webgpu-wgsl-color-glyph-pass",
@@ -2662,7 +2702,9 @@ private fun stencilExecutionCacheKeys(
     wgsl: String,
     targetFormat: GPUTextureFormat,
     vertexStage: Boolean,
+    blendMode: GPUBlendMode? = null,
 ): FullscreenExecutionCacheKeys {
+    val blendLabel = blendMode?.wgpuLabel ?: "src_over"
     val targetFormatClass = targetFormat.toBackendColorFormat()
     val wgslHash = stableSha256(wgsl)
         val role = if (vertexStage) "stencil-write-vertex" else "stencil-test-fullscreen"
@@ -2702,7 +2744,7 @@ private fun stencilExecutionCacheKeys(
         moduleHash = moduleHash,
         vertexLayoutHash = if (vertexStage) stableSha256("vertex-layout:float32x2:stencil") else stableSha256("vertex-layout:fullscreen-triangle:vertex-index-only"),
         targetFormatClass = targetFormatClass,
-        blendStateHash = stableSha256("blend:src-over-premul:v1"),
+        blendStateHash = stableSha256("blend:$blendLabel-premul:v1"),
         sampleStateHash = stableSha256("sample-state:count=1:mask=all"),
         bindGroupLayoutHash = bindGroupLayoutHash,
         capabilityClass = "webgpu-wgsl-$role",
@@ -2868,19 +2910,43 @@ private fun Map<String, Long>.firstNonZeroPointer(vararg keys: String): Long? =
 private fun GPUClearColor.toWgpuColor(): Color =
     Color(r = red, g = green, b = blue, a = alpha)
 
-private fun srcOverBlendState(): BlendState =
-    BlendState(
+private fun toWgpuFactor(f: GPUBlendFactor): io.ygdrasil.webgpu.GPUBlendFactor = when (f) {
+    GPUBlendFactor.Zero -> io.ygdrasil.webgpu.GPUBlendFactor.Zero
+    GPUBlendFactor.One -> io.ygdrasil.webgpu.GPUBlendFactor.One
+    GPUBlendFactor.Src -> io.ygdrasil.webgpu.GPUBlendFactor.Src
+    GPUBlendFactor.OneMinusSrc -> io.ygdrasil.webgpu.GPUBlendFactor.OneMinusSrc
+    GPUBlendFactor.Dst -> io.ygdrasil.webgpu.GPUBlendFactor.Dst
+    GPUBlendFactor.OneMinusDst -> io.ygdrasil.webgpu.GPUBlendFactor.OneMinusDst
+    GPUBlendFactor.SrcAlpha -> io.ygdrasil.webgpu.GPUBlendFactor.SrcAlpha
+    GPUBlendFactor.OneMinusSrcAlpha -> io.ygdrasil.webgpu.GPUBlendFactor.OneMinusSrcAlpha
+    GPUBlendFactor.DstAlpha -> io.ygdrasil.webgpu.GPUBlendFactor.DstAlpha
+    GPUBlendFactor.OneMinusDstAlpha -> io.ygdrasil.webgpu.GPUBlendFactor.OneMinusDstAlpha
+    GPUBlendFactor.SrcAlphaSaturated -> io.ygdrasil.webgpu.GPUBlendFactor.SrcAlphaSaturated
+    GPUBlendFactor.Constant -> io.ygdrasil.webgpu.GPUBlendFactor.Constant
+    GPUBlendFactor.OneMinusConstant -> io.ygdrasil.webgpu.GPUBlendFactor.OneMinusConstant
+}
+
+private fun blendStateFor(blendMode: GPUBlendMode?): BlendState {
+    val mode = blendMode
+    if (mode == null || mode == GPUBlendMode.SRC_OVER || mode.requiresDestinationRead) {
+        return BlendState(
+            color = BlendComponent(GPUBlendOperation.Add, io.ygdrasil.webgpu.GPUBlendFactor.One, io.ygdrasil.webgpu.GPUBlendFactor.OneMinusSrcAlpha),
+            alpha = BlendComponent(GPUBlendOperation.Add, io.ygdrasil.webgpu.GPUBlendFactor.One, io.ygdrasil.webgpu.GPUBlendFactor.OneMinusSrcAlpha),
+        )
+    }
+    return BlendState(
         color = BlendComponent(
             operation = GPUBlendOperation.Add,
-            srcFactor = GPUBlendFactor.One,
-            dstFactor = GPUBlendFactor.OneMinusSrcAlpha,
+            srcFactor = toWgpuFactor(mode.colorSrcFactor),
+            dstFactor = toWgpuFactor(mode.colorDstFactor),
         ),
         alpha = BlendComponent(
             operation = GPUBlendOperation.Add,
-            srcFactor = GPUBlendFactor.One,
-            dstFactor = GPUBlendFactor.OneMinusSrcAlpha,
+            srcFactor = toWgpuFactor(mode.alphaSrcFactor),
+            dstFactor = toWgpuFactor(mode.alphaDstFactor),
         ),
     )
+}
 
 private fun GPUTextureFormat.bytesPerPixel(): Int =
     when (this) {
