@@ -1,13 +1,11 @@
 package org.graphiks.kanvas.svg
 
-import org.graphiks.kanvas.RenderOptions
-import org.graphiks.kanvas.Canvas
-import org.graphiks.kanvas.Surface
+import org.graphiks.kanvas.canvas.Canvas
+import org.graphiks.kanvas.surface.Surface
 
 object SvgGpuRenderer {
     private const val DEFAULT_WIDTH = 800
     private const val DEFAULT_HEIGHT = 600
-    private const val PATH_VERTEX_BUDGET = 16384
 
     fun renderToRgba(
         svg: Svg,
@@ -15,11 +13,11 @@ object SvgGpuRenderer {
         height: Int = DEFAULT_HEIGHT
     ): Triple<ByteArray, Int, Int> {
         val surface = Surface(width = width, height = height)
-        val canvas = Canvas(surface, RenderOptions(maxPathVertices = PATH_VERTEX_BUDGET))
+        val canvas = surface.canvas()
         val renderer = SvgRenderer(canvas, targetWidth = width.toFloat(), targetHeight = height.toFloat())
         renderer.render(svg)
-        val result = surface.renderToRgba()
-        return Triple(result.rgba, width, height)
+        val result = surface.render()
+        return Triple(result.pixels.map { it.toByte() }.toByteArray(), width, height)
     }
 
     fun renderSvgContentToRgba(

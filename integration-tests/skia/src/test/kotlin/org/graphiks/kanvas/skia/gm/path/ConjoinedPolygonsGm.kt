@@ -1,10 +1,11 @@
 package org.graphiks.kanvas.skia.gm.path
 
-import org.graphiks.kanvas.Paint
-import org.graphiks.kanvas.Path
+import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.SkiaGm
+import org.graphiks.kanvas.types.Color
 
 /**
  * Port of Skia's `gm/convexpoly.cpp` (conjoined_polygons).
@@ -19,7 +20,7 @@ class ConjoinedPolygonsGm : SkiaGm {
     override val height = 400
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        val path = Path().apply {
+        val path = Path {
             moveTo(0f, 120f)
             lineTo(0f, 0f)
             lineTo(50f, 330f)
@@ -29,10 +30,10 @@ class ConjoinedPolygonsGm : SkiaGm {
             lineTo(50f, 330f)
             close()
         }
-        val paint = Paint().apply {
-            r = 0f; g = 0f; b = 0f; a = 1f
-            antiAlias = true
-        }
+        val paint = Paint(
+            color = Color.fromRGBA(0f, 0f, 0f, 1f),
+            antiAlias = true,
+        )
         canvas.drawPath(path, paint)
     }
 }

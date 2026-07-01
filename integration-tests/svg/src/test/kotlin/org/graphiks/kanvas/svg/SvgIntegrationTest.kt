@@ -107,59 +107,59 @@ class SvgIntegrationTest {
 
     @Test
     fun `test geometric-3`() {
-        requireWebGpu()
+        GpuAvailability.requireWebGpu()
         // Missing: rotate(cx,cy) transform, precise anti-aliasing
         testSvg("/by-render-family/geometric/geometric-3.svg", minSimilarity = 30.0, tolerance = 2)
     }
 
     @Test
     fun `test laptop-computer`() {
-        requireWebGpu()
+        GpuAvailability.requireWebGpu()
         // Missing: rotate(angle,cx,cy) transform support
         testSvg("/by-render-family/geometric/laptop-computer.svg", minSimilarity = 10.0, tolerance = 2)
     }
 
     @Test
     fun `test icon-computer`() {
-        requireWebGpu()
+        GpuAvailability.requireWebGpu()
         // Missing: rotate(angle,cx,cy) transform support
         testSvg("/by-render-family/geometric/icon-computer.svg", minSimilarity = 10.0, tolerance = 2)
     }
 
     @Test
     fun `test gradient-1`() {
-        requireWebGpu()
+        GpuAvailability.requireWebGpu()
         // Missing: rotate(angle,cx,cy) transform support (12 groups with rotate)
         testSvg("/by-render-family/gradients/gradient-1.svg", minSimilarity = 60.0, tolerance = 5)
     }
 
     @Test
     fun `test gradient-2`() {
-        requireWebGpu()
+        GpuAvailability.requireWebGpu()
         testSvg("/by-render-family/gradients/gradient-2.svg", minSimilarity = 60.0, tolerance = 5)
     }
 
     @Test
     fun `test gradient-3`() {
-        requireWebGpu()
+        GpuAvailability.requireWebGpu()
         testSvg("/by-render-family/gradients/gradient-3.svg", minSimilarity = 75.0, tolerance = 5)
     }
 
     @Test
     fun `test shadow-2`() {
-        requireWebGpu()
+        GpuAvailability.requireWebGpu()
         testSvg("/by-render-family/shadows/shadow-2.svg", minSimilarity = 30.0, tolerance = 2)
     }
 
     @Test
     fun `test shadow-3`() {
-        requireWebGpu()
+        GpuAvailability.requireWebGpu()
         testSvg("/by-render-family/shadows/shadow-3.svg", minSimilarity = 80.0, tolerance = 2)
     }
 
     @Test
     fun `test layer-1`() {
-        requireWebGpu()
+        GpuAvailability.requireWebGpu()
         // Missing: rotate(angle,cx,cy) transform support
         testSvg("/by-render-family/layers/layer-1.svg", minSimilarity = 10.0, tolerance = 2)
     }

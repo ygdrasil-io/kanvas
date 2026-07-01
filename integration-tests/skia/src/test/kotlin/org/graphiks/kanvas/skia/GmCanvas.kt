@@ -1,13 +1,14 @@
 package org.graphiks.kanvas.skia
 
-import org.graphiks.kanvas.Canvas
-import org.graphiks.kanvas.KanvasFillType
-import org.graphiks.kanvas.Paint
-import org.graphiks.kanvas.PaintStyle
-import org.graphiks.kanvas.Path
-import org.graphiks.kanvas.Rect
-import org.graphiks.kanvas.StrokeCap
-import org.graphiks.kanvas.StrokeJoin
+import org.graphiks.kanvas.canvas.Canvas
+import org.graphiks.kanvas.geometry.FillType
+import org.graphiks.kanvas.geometry.Path
+import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.paint.PaintStyle
+import org.graphiks.kanvas.paint.StrokeCap
+import org.graphiks.kanvas.paint.StrokeJoin
+import org.graphiks.kanvas.types.Color
+import org.graphiks.kanvas.types.Rect
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.PI
@@ -50,7 +51,7 @@ class GmCanvas(
     }
 
     fun clipRect(rect: Rect) {
-        // no-op stub — Kanvas Canvas does not expose GPU-side clip.
+        // no-op stub
     }
 
     fun drawRect(rect: Rect, paint: Paint) {
@@ -58,7 +59,7 @@ class GmCanvas(
             inner.drawRect(rect, paint)
         } else {
             val t = currentTransform
-            val path = Path().apply {
+            val path = Path {
                 moveTo(rect.left * t.sx + t.tx, rect.top * t.sy + t.ty)
                 lineTo(rect.right * t.sx + t.tx, rect.top * t.sy + t.ty)
                 lineTo(rect.right * t.sx + t.tx, rect.bottom * t.sy + t.ty)
@@ -79,21 +80,26 @@ class GmCanvas(
     }
 
     fun drawColor(r: Float, g: Float, b: Float, a: Float = 1f) {
-        drawRect(Rect(0f, 0f, width.toFloat(), height.toFloat()), Paint().apply {
-            this.r = r; this.g = g; this.b = b; this.a = a
-        })
+        drawRect(
+            Rect(0f, 0f, width.toFloat(), height.toFloat()),
+            Paint(color = Color.fromRGBA(r, g, b, a)),
+        )
     }
 
     fun drawCircle(cx: Float, cy: Float, radius: Float, paint: Paint) {
-        drawPath(Path().addCircle(cx, cy, radius), paint)
+        val path = Path { }
+        path.addCircle(cx, cy, radius)
+        drawPath(path, paint)
     }
 
     fun drawOval(rect: Rect, paint: Paint) {
-        drawPath(Path().addOval(rect), paint)
+        val path = Path { }
+        path.addOval(rect)
+        drawPath(path, paint)
     }
 
     fun drawLine(x1: Float, y1: Float, x2: Float, y2: Float, paint: Paint) {
-        drawPath(Path().apply { moveTo(x1, y1); lineTo(x2, y2) }, paint)
+        drawPath(Path { moveTo(x1, y1); lineTo(x2, y2) }, paint)
     }
 
     fun drawArc(rect: Rect, startAngle: Float, sweepAngle: Float, useCenter: Boolean, paint: Paint) {
@@ -110,14 +116,15 @@ class GmCanvas(
         val largeArc = kotlin.math.abs(sweepAngle) > 180f
         val sweep = sweepAngle > 0f
 
-        val path = Path()
-        if (useCenter) path.moveTo(cx, cy) else path.moveTo(x1, y1)
-        path.arcTo(rx, ry, 0f, largeArc, sweep, x2, y2)
-        if (useCenter) path.close()
+        val path = Path {
+            if (useCenter) moveTo(cx, cy) else moveTo(x1, y1)
+            arcTo(rx, ry, 0f, largeArc, sweep, x2, y2)
+            if (useCenter) close()
+        }
         drawPath(path, paint)
     }
 
-    fun drawImage(image: org.graphiks.kanvas.Image, rect: Rect, paint: Paint? = null) {
+    fun drawImage(image: org.graphiks.kanvas.image.Image, rect: Rect, paint: Paint? = null) {
         if (currentTransform == Transform()) {
             inner.drawImage(image, rect, paint)
         } else {

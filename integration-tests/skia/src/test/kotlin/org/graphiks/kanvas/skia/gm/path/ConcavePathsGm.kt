@@ -1,11 +1,12 @@
 package org.graphiks.kanvas.skia.gm.path
 
-import org.graphiks.kanvas.Paint
-import org.graphiks.kanvas.PaintStyle
-import org.graphiks.kanvas.Path
+import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.paint.PaintStyle
+import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.SkiaGm
+import org.graphiks.kanvas.types.Color
 
 /**
  * Port of Skia's `gm/concavepaths.cpp` (`DEF_SIMPLE_GM(concavepaths, ...)`).
@@ -22,10 +23,7 @@ class ConcavePathsGm : SkiaGm {
     override val height = 600
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        val paint = Paint(0f, 0f, 0f, 1f).apply {
-            antiAlias = true
-            style = PaintStyle.FILL
-        }
+        val paint = Paint(color = Color.fromRGBA(0f, 0f, 0f, 1f), antiAlias = true, style = PaintStyle.FILL)
         testConcave(canvas, paint)
         testReverseConcave(canvas, paint)
         testBowtie(canvas, paint)
@@ -60,14 +58,14 @@ class ConcavePathsGm : SkiaGm {
     private fun drawPath(canvas: GmCanvas, paint: Paint, x: Float, y: Float, block: Path.() -> Unit) {
         canvas.save()
         canvas.translate(x, y)
-        canvas.drawPath(Path().apply(block), paint)
+        canvas.drawPath(Path { }.apply(block), paint)
         canvas.restore()
     }
 
     private fun testConcave(canvas: GmCanvas, paint: Paint) {
         canvas.save()
         canvas.drawPath(
-            Path().apply {
+            Path {
                 moveTo(20f, 20f); lineTo(80f, 20f); lineTo(30f, 30f); lineTo(20f, 80f)
             },
             paint,
@@ -92,7 +90,7 @@ class ConcavePathsGm : SkiaGm {
         canvas.save()
         canvas.translate(400f, 0f)
         canvas.drawPath(
-            Path().apply {
+            Path {
                 moveTo(20f, 20f); lineTo(50f, 50f); lineTo(68f, 20f); lineTo(68f, 80f)
                 lineTo(50f, 50f); lineTo(20f, 80f)
             },
@@ -105,7 +103,7 @@ class ConcavePathsGm : SkiaGm {
         canvas.save()
         canvas.translate(400f, 100f)
         canvas.drawPath(
-            Path().apply {
+            Path {
                 moveTo(80f, 50f); lineTo(40f, 80f); lineTo(60f, 20f); lineTo(20f, 20f)
                 lineTo(39.99f, 80f); lineTo(80f, 50f)
             },
@@ -118,7 +116,7 @@ class ConcavePathsGm : SkiaGm {
         canvas.save()
         canvas.translate(0f, 100f)
         canvas.drawPath(
-            Path().apply {
+            Path {
                 moveTo(20f, 20f); lineTo(80f, 80f); lineTo(70f, 50f); lineTo(80f, 20f)
                 lineTo(20f, 80f); lineTo(0f, 50f)
             },
@@ -131,7 +129,7 @@ class ConcavePathsGm : SkiaGm {
         canvas.save()
         canvas.translate(100f, 100f)
         canvas.drawPath(
-            Path().apply {
+            Path {
                 moveTo(20f, 20f); lineTo(60f, 50f); lineTo(20f, 80f)
                 moveTo(40f, 20f); lineTo(40f, 80f); lineTo(80f, 50f)
             },
@@ -144,7 +142,7 @@ class ConcavePathsGm : SkiaGm {
         canvas.save()
         canvas.translate(200f, 100f)
         canvas.drawPath(
-            Path().apply {
+            Path {
                 moveTo(20f, 20f); lineTo(80f, 20f); lineTo(80f, 80f); lineTo(20f, 80f)
                 moveTo(30f, 30f); lineTo(30f, 70f); lineTo(70f, 70f); lineTo(70f, 30f)
             },
@@ -157,7 +155,7 @@ class ConcavePathsGm : SkiaGm {
         canvas.save()
         canvas.translate(300f, 100f)
         canvas.drawPath(
-            Path().apply {
+            Path {
                 moveTo(30f, 20f); lineTo(50f, 80f); lineTo(70f, 20f); lineTo(20f, 57f); lineTo(80f, 57f)
             },
             paint,
@@ -170,7 +168,7 @@ class ConcavePathsGm : SkiaGm {
         canvas.translate(420f, 220f)
         canvas.scale(10f, 10f)
         canvas.drawPath(
-            Path().apply {
+            Path {
                 moveTo(0.5f, 6f)
                 lineTo(5.8070392608642578125f, 6.4612660408020019531f)
                 lineTo(-2.9186885356903076172f, 2.811046600341796875f)
@@ -185,7 +183,7 @@ class ConcavePathsGm : SkiaGm {
         canvas.save()
         canvas.translate(0f, 200f)
         canvas.drawPath(
-            Path().apply {
+            Path {
                 moveTo(50f, 50f); lineTo(50f, 20f); lineTo(80f, 20f); lineTo(50f, 50f)
                 lineTo(20f, 50f); lineTo(20f, 80f)
             },
@@ -198,7 +196,7 @@ class ConcavePathsGm : SkiaGm {
         canvas.save()
         canvas.translate(100f, 200f)
         canvas.drawPath(
-            Path().apply {
+            Path {
                 moveTo(20f, 60f); lineTo(35f, 80f); lineTo(50f, 60f); lineTo(65f, 80f); lineTo(80f, 60f)
             },
             paint,
@@ -210,7 +208,7 @@ class ConcavePathsGm : SkiaGm {
         canvas.save()
         canvas.translate(200f, 200f)
         canvas.drawPath(
-            Path().apply {
+            Path {
                 moveTo(20f, 80f); lineTo(80f, 80f); lineTo(80f, 20f); lineTo(80f, 30f)
             },
             paint,
@@ -222,7 +220,7 @@ class ConcavePathsGm : SkiaGm {
         canvas.save()
         canvas.translate(300f, 200f)
         canvas.drawPath(
-            Path().apply {
+            Path {
                 moveTo(20f, 80f); lineTo(80f, 80f); lineTo(80f, 20f); lineTo(20f, 20f)
                 moveTo(30f, 30f); lineTo(45f, 50f); lineTo(30f, 70f)
                 moveTo(70f, 30f); lineTo(70f, 70f); lineTo(55f, 50f)

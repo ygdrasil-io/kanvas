@@ -1,6 +1,6 @@
 package org.graphiks.kanvas.svg
 
-import org.graphiks.kanvas.Canvas
+import org.graphiks.kanvas.canvas.Canvas
 import java.io.File
 import java.io.InputStream
 

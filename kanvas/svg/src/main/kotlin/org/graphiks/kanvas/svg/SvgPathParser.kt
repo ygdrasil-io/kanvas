@@ -1,13 +1,13 @@
 package org.graphiks.kanvas.svg
 
-import org.graphiks.kanvas.Path
+import org.graphiks.kanvas.geometry.Path
 
 class SvgPathParser {
     fun parse(d: String): Path {
-        if (d.isBlank()) return Path()
+        if (d.isBlank()) return Path { }
         
         try {
-            val path = Path()
+            val path = Path { }
             val commands = d.split(Regex("\\s*(?=[A-Za-z])"))
             var currentX = 0f
             var currentY = 0f
@@ -158,7 +158,7 @@ class SvgPathParser {
             return path
         } catch (e: Exception) {
             System.err.println("Failed to parse SVG path: ${e.message}")
-            return Path()
+            return Path { }
         }
     }
 }

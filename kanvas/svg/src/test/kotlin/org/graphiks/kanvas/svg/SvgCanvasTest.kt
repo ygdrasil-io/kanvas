@@ -1,6 +1,6 @@
 package org.graphiks.kanvas.svg
 
-import org.graphiks.kanvas.Path
+import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
 import kotlin.test.Test
 import java.io.File
@@ -190,7 +190,7 @@ class SvgCanvasTest {
             SvgStop(offset = 1f, stopColor = "#0000FF")
         )
         val gradient = parser.parseLinearGradient(0f, 0f, 1f, 0f, stops)
-        assert(gradient is org.graphiks.kanvas.Shader.LinearGradient)
+        assert(gradient is org.graphiks.kanvas.paint.Shader.LinearGradient)
     }
 
     @Test
@@ -201,6 +201,6 @@ class SvgCanvasTest {
             SvgStop(offset = 1f, stopColor = "#0000FF")
         )
         val gradient = parser.parseRadialGradient(0.5f, 0.5f, 0.5f, stops)
-        assert(gradient is org.graphiks.kanvas.Shader.RadialGradient)
+        assert(gradient is org.graphiks.kanvas.paint.Shader.RadialGradient)
     }
 }

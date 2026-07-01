@@ -1,10 +1,10 @@
 package org.graphiks.kanvas.skia.gm.path
 
-import org.graphiks.kanvas.Paint
-import org.graphiks.kanvas.PaintStyle
-import org.graphiks.kanvas.Path
-import org.graphiks.kanvas.StrokeCap
-import org.graphiks.kanvas.StrokeJoin
+import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.paint.PaintStyle
+import org.graphiks.kanvas.geometry.Path
+import org.graphiks.kanvas.paint.StrokeCap
+import org.graphiks.kanvas.paint.StrokeJoin
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.SkiaGm
@@ -27,7 +27,7 @@ class NonClosedPathsGm : SkiaGm {
         val types = ClosureType.values()
         val lineNum = joins.size * numWidths
         var counter = 0
-        val paint = Paint()
+        var paint = Paint()
 
         for (type in types) {
             for (style in styles) {
@@ -37,10 +37,12 @@ class NonClosedPathsGm : SkiaGm {
                             canvas.save()
                             setLocation(canvas, counter, lineNum)
                             val path = makePath(type)
-                            paint.style = style
-                            paint.strokeCap = cap
-                            paint.strokeJoin = join
-                            paint.strokeWidth = width.toFloat()
+                            paint = paint.copy(
+                                style = style,
+                                strokeCap = cap,
+                                strokeJoin = join,
+                                strokeWidth = width.toFloat(),
+                            )
                             canvas.drawPath(path, paint)
                             canvas.restore()
                             counter++
@@ -50,7 +52,7 @@ class NonClosedPathsGm : SkiaGm {
             }
         }
 
-        paint.style = PaintStyle.FILL
+        paint = paint.copy(style = PaintStyle.FILL)
         for (type in types) {
             canvas.save()
             setLocation(canvas, counter, lineNum)
@@ -61,7 +63,7 @@ class NonClosedPathsGm : SkiaGm {
     }
 
     private fun makePath(type: ClosureType): Path {
-        val p = Path()
+        val p = Path { }
         if (type == ClosureType.FakeCloseMiddle) {
             p.moveTo(30f, 50f)
             p.lineTo(30f, 30f)
