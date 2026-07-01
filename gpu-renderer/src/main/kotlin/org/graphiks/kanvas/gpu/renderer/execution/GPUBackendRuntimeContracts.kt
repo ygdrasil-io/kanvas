@@ -96,12 +96,13 @@ interface GPUBackendOffscreenTarget : AutoCloseable {
     /** Creates a secondary offscreen texture that can be bound as a texture source during a subsequent [encode]. */
     fun createOffscreenTexture(texture: GPUBackendOffscreenTexture): String
 
-    /** Renders into a previously-created offscreen texture via a separate render pass with the given clear color. */
+    /** Renders into a previously-created offscreen texture via a separate render pass. When clearColor is null, the existing texture content is loaded. */
     fun encodeOffscreenTexture(
         textureLabel: String,
-        clearColor: GPUClearColor,
+        clearColor: GPUClearColor?,
         block: GPUBackendRenderRecorder.() -> Unit,
     )
+
 }
 
 /** Represents a native surface that can be resized and presented to screen. */
@@ -238,10 +239,10 @@ interface GPUBackendRenderRecorder {
     /** Creates a secondary offscreen texture that can be bound as a texture source. */
     fun createOffscreenTexture(texture: GPUBackendOffscreenTexture): String
 
-    /** Renders into a previously-created offscreen texture via a separate render pass with the given clear color. */
+    /** Renders into a previously-created offscreen texture via a separate render pass. When clearColor is null, the existing texture content is loaded. */
     fun encodeOffscreenTexture(
         textureLabel: String,
-        clearColor: GPUClearColor,
+        clearColor: GPUClearColor?,
         block: GPUBackendRenderRecorder.() -> Unit,
     )
 

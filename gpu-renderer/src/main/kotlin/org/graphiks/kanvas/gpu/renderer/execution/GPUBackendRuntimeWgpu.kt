@@ -429,15 +429,28 @@ private class WgpuOffscreenTarget(
 
     override fun encodeOffscreenTexture(
         textureLabel: String,
-        clearColor: GPUClearColor,
+        clearColor: GPUClearColor?,
         block: GPUBackendRenderRecorder.() -> Unit,
     ) {
         GPUResourceScope().use { resources ->
+            // Build a composite store: recorder owns entries it creates (local HashMap),
+            // but falls back to target-level textures for lookups.
+            val localStore = HashMap<String, GPUTexture>()
+            val compositeStore = object : MutableMap<String, GPUTexture> by localStore {
+                override fun get(key: String): GPUTexture? {
+                    val local = localStore[key]
+                    if (local != null) return local
+                    return offscreenTextures[key]
+                }
+                override fun containsKey(key: String): Boolean =
+                    localStore.containsKey(key) || offscreenTextures.containsKey(key)
+            }
             encodeOffscreenTextureInternal(
                 textureLabel = textureLabel,
                 clearColor = clearColor,
                 textureFormat = format,
                 resources = resources,
+                offscreenTextureStore = compositeStore,
                 block = { recorder -> recorder.block() },
             )
         }
@@ -450,9 +463,10 @@ private class WgpuOffscreenTarget(
 
     internal fun encodeOffscreenTextureInternal(
         textureLabel: String,
-        clearColor: GPUClearColor,
+        clearColor: GPUClearColor?,
         textureFormat: GPUTextureFormat,
         resources: GPUResourceScope,
+        offscreenTextureStore: MutableMap<String, GPUTexture> = mutableMapOf(),
         block: (WgpuRenderRecorder) -> Unit,
     ) {
         val tex = offscreenTexture(textureLabel)
@@ -471,13 +485,22 @@ private class WgpuOffscreenTarget(
         ) { it.close() }
         val dsView = resources.track(dsTex.createView()) { it.close() }
         val encoder = resources.trackIfAutoCloseable(device.createCommandEncoder())
+        val loadOp: GPULoadOp
+        val clearValue: Color
+        if (clearColor != null) {
+            loadOp = GPULoadOp.Clear
+            clearValue = clearColor.toWgpuColor()
+        } else {
+            loadOp = GPULoadOp.Load
+            clearValue = Color(r = 0.0, g = 0.0, b = 0.0, a = 0.0)
+        }
         encoder.beginRenderPass(
             RenderPassDescriptor(
                 colorAttachments = listOf(
                     RenderPassColorAttachment(
                         view = texView,
-                        loadOp = GPULoadOp.Clear,
-                        clearValue = clearColor.toWgpuColor(),
+                        loadOp = loadOp,
+                        clearValue = clearValue,
                         storeOp = GPUStoreOp.Store,
                     ),
                 ),
@@ -505,7 +528,7 @@ private class WgpuOffscreenTarget(
                 setVertexBufferAction = { slot, buffer -> setVertexBuffer(slot, buffer) },
                 setIndexBufferAction = { buffer, format -> setIndexBuffer(buffer, format) },
                 drawIndexedAction = { indexCount -> drawIndexed(indexCount) },
-                offscreenTextureStore = mutableMapOf(),
+                offscreenTextureStore = offscreenTextureStore,
             )
             block(recorder)
             end()
@@ -513,6 +536,7 @@ private class WgpuOffscreenTarget(
         val commandBuffer = resources.trackIfAutoCloseable(encoder.finish())
         queue.submit(listOf(commandBuffer))
     }
+
 
     override fun close() {
         var firstFailure: Throwable? = null
@@ -915,7 +939,7 @@ private class WgpuRenderRecorder(
 
     override fun encodeOffscreenTexture(
         textureLabel: String,
-        clearColor: GPUClearColor,
+        clearColor: GPUClearColor?,
         block: GPUBackendRenderRecorder.() -> Unit,
     ) {
         error("encodeOffscreenTexture must be handled by WgpuOffscreenTarget via internal encodeOffscreenTexture")
