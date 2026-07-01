@@ -383,30 +383,6 @@ internal val BLEND_FORMULA_WGSL: String = """
     }
 """.trimIndent()
 
-internal val COPY_WGSL: String = """
-    struct Uniforms {
-        _pad: vec4f,
-    };
-
-    @group(0) @binding(0) var<uniform> uniforms: Uniforms;
-    @group(1) @binding(1) var inputTex: texture_2d<f32>;
-    @group(1) @binding(2) var inputSam: sampler;
-
-    @vertex
-    fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
-        let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
-        let y = f32(idx & 2u) * 2.0 - 1.0;
-        return vec4f(x, y, 0.0, 1.0);
-    }
-
-    @fragment
-    fn fs_main(@builtin(position) coord: vec4f) -> @location(0) vec4f {
-        let dims = textureDimensions(inputTex);
-        let uv = vec2f(coord.x / f32(dims.x), coord.y / f32(dims.y));
-        return textureSample(inputTex, inputSam, uv);
-    }
-""".trimIndent()
-
 internal fun stencilWriteWgsl(width: Int, height: Int): String = """
 struct VertexInput {
     @location(0) position: vec2f,
