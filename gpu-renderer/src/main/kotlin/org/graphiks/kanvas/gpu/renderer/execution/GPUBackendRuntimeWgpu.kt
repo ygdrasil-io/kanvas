@@ -429,7 +429,7 @@ private class WgpuOffscreenTarget(
 
     override fun encodeOffscreenTexture(
         textureLabel: String,
-        clearColor: GPUClearColor,
+        clearColor: GPUClearColor?,
         block: GPUBackendRenderRecorder.() -> Unit,
     ) {
         GPUResourceScope().use { resources ->
@@ -450,7 +450,7 @@ private class WgpuOffscreenTarget(
 
     internal fun encodeOffscreenTextureInternal(
         textureLabel: String,
-        clearColor: GPUClearColor,
+        clearColor: GPUClearColor?,
         textureFormat: GPUTextureFormat,
         resources: GPUResourceScope,
         block: (WgpuRenderRecorder) -> Unit,
@@ -476,8 +476,8 @@ private class WgpuOffscreenTarget(
                 colorAttachments = listOf(
                     RenderPassColorAttachment(
                         view = texView,
-                        loadOp = GPULoadOp.Clear,
-                        clearValue = clearColor.toWgpuColor(),
+                        loadOp = if (clearColor != null) GPULoadOp.Clear else GPULoadOp.Load,
+                        clearValue = clearColor?.toWgpuColor() ?: Color(r = 0.0, g = 0.0, b = 0.0, a = 0.0),
                         storeOp = GPUStoreOp.Store,
                     ),
                 ),
@@ -915,7 +915,7 @@ private class WgpuRenderRecorder(
 
     override fun encodeOffscreenTexture(
         textureLabel: String,
-        clearColor: GPUClearColor,
+        clearColor: GPUClearColor?,
         block: GPUBackendRenderRecorder.() -> Unit,
     ) {
         error("encodeOffscreenTexture must be handled by WgpuOffscreenTarget via internal encodeOffscreenTexture")
