@@ -165,8 +165,7 @@ internal val LINEAR_GRADIENT_MULTI_WGSL: String = """
         start: vec2f,
         end: vec2f,
         stopCount: u32,
-        stopPositions: array<vec4f, 256>,
-        stopColors: array<vec4f, 256>,
+        stopData: array<vec4f, 512>,
     };
 
     @group(0) @binding(0) var<uniform> uniforms: Uniforms;
@@ -187,14 +186,14 @@ internal val LINEAR_GRADIENT_MULTI_WGSL: String = """
             t = dot(coord.xy - uniforms.start, dir) / lenSq;
         }
         let tClamped = clamp(t, 0.0, 1.0);
-        var result = uniforms.stopColors[uniforms.stopCount - 1u];
+        var result = uniforms.stopData[2u * uniforms.stopCount - 1u];
         for (var i = 0u; i < uniforms.stopCount - 1u; i++) {
-            let p0 = uniforms.stopPositions[i].x;
-            let p1 = uniforms.stopPositions[i + 1u].x;
+            let p0 = uniforms.stopData[2u * i].x;
+            let p1 = uniforms.stopData[2u * (i + 1u)].x;
             if (tClamped >= p0 && tClamped <= p1) {
                 let localT = (tClamped - p0) / max(p1 - p0, 1.0e-10);
-                let startSRGB = vec4f(pow(uniforms.stopColors[i].rgb, vec3f(1.0 / 2.2)), uniforms.stopColors[i].a);
-                let endSRGB = vec4f(pow(uniforms.stopColors[i + 1u].rgb, vec3f(1.0 / 2.2)), uniforms.stopColors[i + 1u].a);
+                let startSRGB = vec4f(pow(uniforms.stopData[2u * i + 1u].rgb, vec3f(1.0 / 2.2)), uniforms.stopData[2u * i + 1u].a);
+                let endSRGB = vec4f(pow(uniforms.stopData[2u * (i + 1u) + 1u].rgb, vec3f(1.0 / 2.2)), uniforms.stopData[2u * (i + 1u) + 1u].a);
                 let mixedSRGB = mix(startSRGB, endSRGB, localT);
                 result = vec4f(pow(mixedSRGB.rgb, vec3f(2.2)), mixedSRGB.a);
                 break;
@@ -209,8 +208,7 @@ internal val RADIAL_GRADIENT_MULTI_WGSL: String = """
         center: vec2f,
         radius: f32,
         stopCount: u32,
-        stopPositions: array<vec4f, 256>,
-        stopColors: array<vec4f, 256>,
+        stopData: array<vec4f, 512>,
     };
 
     @group(0) @binding(0) var<uniform> uniforms: Uniforms;
@@ -228,14 +226,14 @@ internal val RADIAL_GRADIENT_MULTI_WGSL: String = """
         let dist = length(dir);
         let t = dist / uniforms.radius;
         let tClamped = clamp(t, 0.0, 1.0);
-        var result = uniforms.stopColors[uniforms.stopCount - 1u];
+        var result = uniforms.stopData[2u * uniforms.stopCount - 1u];
         for (var i = 0u; i < uniforms.stopCount - 1u; i++) {
-            let p0 = uniforms.stopPositions[i].x;
-            let p1 = uniforms.stopPositions[i + 1u].x;
+            let p0 = uniforms.stopData[2u * i].x;
+            let p1 = uniforms.stopData[2u * (i + 1u)].x;
             if (tClamped >= p0 && tClamped <= p1) {
                 let localT = (tClamped - p0) / max(p1 - p0, 1.0e-10);
-                let startSRGB = vec4f(pow(uniforms.stopColors[i].rgb, vec3f(1.0 / 2.2)), uniforms.stopColors[i].a);
-                let endSRGB = vec4f(pow(uniforms.stopColors[i + 1u].rgb, vec3f(1.0 / 2.2)), uniforms.stopColors[i + 1u].a);
+                let startSRGB = vec4f(pow(uniforms.stopData[2u * i + 1u].rgb, vec3f(1.0 / 2.2)), uniforms.stopData[2u * i + 1u].a);
+                let endSRGB = vec4f(pow(uniforms.stopData[2u * (i + 1u) + 1u].rgb, vec3f(1.0 / 2.2)), uniforms.stopData[2u * (i + 1u) + 1u].a);
                 let mixedSRGB = mix(startSRGB, endSRGB, localT);
                 result = vec4f(pow(mixedSRGB.rgb, vec3f(2.2)), mixedSRGB.a);
                 break;
@@ -281,8 +279,7 @@ internal val SWEEP_GRADIENT_MULTI_WGSL: String = """
         center: vec2f,
         angles: vec2f,
         stopCount: u32,
-        stopPositions: array<vec4f, 256>,
-        stopColors: array<vec4f, 256>,
+        stopData: array<vec4f, 512>,
     };
 
     @group(0) @binding(0) var<uniform> uniforms: Uniforms;
@@ -301,14 +298,14 @@ internal val SWEEP_GRADIENT_MULTI_WGSL: String = """
         let range = uniforms.angles.y - uniforms.angles.x;
         let t = select((angle - uniforms.angles.x) / range, 0.0, range < 1.0e-10);
         let tClamped = clamp(t, 0.0, 1.0);
-        var result = uniforms.stopColors[uniforms.stopCount - 1u];
+        var result = uniforms.stopData[2u * uniforms.stopCount - 1u];
         for (var i = 0u; i < uniforms.stopCount - 1u; i++) {
-            let p0 = uniforms.stopPositions[i].x;
-            let p1 = uniforms.stopPositions[i + 1u].x;
+            let p0 = uniforms.stopData[2u * i].x;
+            let p1 = uniforms.stopData[2u * (i + 1u)].x;
             if (tClamped >= p0 && tClamped <= p1) {
                 let localT = (tClamped - p0) / max(p1 - p0, 1.0e-10);
-                let startSRGB = vec4f(pow(uniforms.stopColors[i].rgb, vec3f(1.0 / 2.2)), uniforms.stopColors[i].a);
-                let endSRGB = vec4f(pow(uniforms.stopColors[i + 1u].rgb, vec3f(1.0 / 2.2)), uniforms.stopColors[i + 1u].a);
+                let startSRGB = vec4f(pow(uniforms.stopData[2u * i + 1u].rgb, vec3f(1.0 / 2.2)), uniforms.stopData[2u * i + 1u].a);
+                let endSRGB = vec4f(pow(uniforms.stopData[2u * (i + 1u) + 1u].rgb, vec3f(1.0 / 2.2)), uniforms.stopData[2u * (i + 1u) + 1u].a);
                 let mixedSRGB = mix(startSRGB, endSRGB, localT);
                 result = vec4f(pow(mixedSRGB.rgb, vec3f(2.2)), mixedSRGB.a);
                 break;
