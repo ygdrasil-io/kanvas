@@ -16,7 +16,7 @@ import org.graphiks.kanvas.types.Rect
 class AndroidBlendModesGm : SkiaGm {
     override val name = "androidblendmodes"
     override val renderFamily = RenderFamily.COMPOSITE
-    override val minSimilarity = 0.0
+    override val minSimilarity = 85.0
     override val width = 1024
     override val height = 1280
 

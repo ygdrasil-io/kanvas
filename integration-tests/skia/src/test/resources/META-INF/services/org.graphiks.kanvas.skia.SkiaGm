@@ -14,6 +14,9 @@ org.graphiks.kanvas.skia.gm.clip.RRectClipBwGm
 org.graphiks.kanvas.skia.gm.composite.FadeFilterGm
 org.graphiks.kanvas.skia.gm.composite.ModeColorFilterGm
 org.graphiks.kanvas.skia.gm.composite.ModeColorFiltersGm
+org.graphiks.kanvas.skia.gm.composite.AAXfermodesGm
+org.graphiks.kanvas.skia.gm.composite.AndroidBlendModesGm
+org.graphiks.kanvas.skia.gm.composite.ComposeShaderGridGm
 org.graphiks.kanvas.skia.gm.composite.Xfermodes2Gm
 org.graphiks.kanvas.skia.gm.composite.XfermodesGm
 org.graphiks.kanvas.skia.gm.gradient.GradientDirtyLaundryGm
