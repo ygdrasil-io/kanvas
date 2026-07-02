@@ -783,28 +783,47 @@ private fun GPUBackendRenderRecorder.drawTextAtlasPass(
     dispatched: MutableList<String>,
     diagnostics: Diagnostics,
 ) {
-    // Build fullscreen quad vertex data (2 triangles for each glyph)
-    // and per-glyph uniform draws with UV offsets.
-    // For MVP: draw the full atlas as a single textured quad.
-    val vertexData = floatArrayOf(
-        -1f, -1f, 0f, 0f,
-         1f, -1f, 1f, 0f,
-         1f,  1f, 1f, 1f,
-        -1f, -1f, 0f, 0f,
-         1f,  1f, 1f, 1f,
-        -1f,  1f, 0f, 1f,
-    )
-    val indexData = intArrayOf(0, 1, 2, 3, 4, 5)
+    val blob = gpuBlob.textBlob
+    val uvs = gpuBlob.glyphUvs
+    val vertexData = mutableListOf<Float>()
+    val indexData = mutableListOf<Int>()
+    var quadIndex = 0
+
+    // Build one quad (4 vertices, 6 indices) per glyph
+    for (run in blob.glyphRuns) {
+        for ((glyphIdx, pos) in run.positions.withIndex()) {
+            val uv = uvs.getOrNull(quadIndex) ?: Rect.fromLTRB(0f, 0f, 1f, 1f)
+            val w = 10f  // glyph width placeholder; real size comes from atlas placement
+            val h = 10f  // glyph height placeholder
+            // Quad vertices: position (x,y) + texCoord (u,v)
+            vertexData.addAll(listOf(pos.x,     pos.y,      uv.left,  uv.top))
+            vertexData.addAll(listOf(pos.x + w, pos.y,      uv.right, uv.top))
+            vertexData.addAll(listOf(pos.x + w, pos.y + h,  uv.right, uv.bottom))
+            vertexData.addAll(listOf(pos.x,     pos.y + h,  uv.left,  uv.bottom))
+            val base = quadIndex * 4
+            indexData.addAll(listOf(base, base + 1, base + 2, base, base + 2, base + 3))
+            quadIndex++
+        }
+    }
+
+    if (vertexData.isEmpty() || indexData.isEmpty()) return
+
+    // Populate textParams: atlasScale (1/w, 1/h), maskGamma (1.0 for linear)
+    val uniformBytes = java.nio.ByteBuffer.allocate(12).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+    uniformBytes.putFloat(1f / gpuBlob.atlasWidth.coerceAtLeast(1))
+    uniformBytes.putFloat(1f / gpuBlob.atlasHeight.coerceAtLeast(1))
+    uniformBytes.putFloat(1.0f)
+
     drawTextAtlasPass(
         atlasRgba = gpuBlob.atlasRgba,
         atlasWidth = gpuBlob.atlasWidth,
         atlasHeight = gpuBlob.atlasHeight,
         atlasFormat = "a8unorm",
-        vertexData = vertexData,
-        indexData = indexData,
+        vertexData = vertexData.toFloatArray(),
+        indexData = indexData.toIntArray(),
         draws = listOf(
             GPUBackendRawUniformDraw(
-                uniformBytes = ByteArray(16),
+                uniformBytes = uniformBytes.array(),
                 scissorX = 0,
                 scissorY = 0,
                 scissorWidth = gpuBlob.atlasWidth,
@@ -813,5 +832,5 @@ private fun GPUBackendRenderRecorder.drawTextAtlasPass(
         ),
         blendMode = blendMode,
     )
-    dispatched.add("text:${gpuBlob.textBlob.hashCode()}")
+    dispatched.add("text:${blob.hashCode()}")
 }
