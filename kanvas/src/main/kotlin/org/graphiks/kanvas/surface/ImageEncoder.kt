@@ -91,5 +91,9 @@ fun RenderResult.toWebP(quality: Int = 80): ByteArray {
 
 /**
  * Convert this [RenderResult] into an [Image] with RGBA_8888 color type.
+ *
+ * The returned [Image] carries the pixel data from this render result,
+ * making it suitable for subsequent [Canvas.drawImage] calls.
  */
-fun RenderResult.toImage(): Image = Image(width, height, org.graphiks.kanvas.image.ColorType.RGBA_8888, "render-result")
+fun RenderResult.toImage(sourceId: String = "render-result"): Image =
+    Image(width, height, org.graphiks.kanvas.image.ColorType.RGBA_8888, sourceId, pixels = pixels.toByteArray())

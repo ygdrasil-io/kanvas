@@ -3,6 +3,8 @@ package org.graphiks.kanvas.surface
 import org.graphiks.kanvas.canvas.Canvas
 import org.graphiks.kanvas.canvas.DisplayListBuffer
 import org.graphiks.kanvas.canvas.DisplayOp
+import org.graphiks.kanvas.image.Image
+import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.surface.gpu.renderViaGpu
 import org.graphiks.kanvas.types.Rect
 
@@ -46,6 +48,37 @@ class Surface(
      * is allocated fresh each call.
      */
     fun render(): RenderResult = renderViaGpu(buffer, width, height, format, config)
+
+    /**
+     * Render all recorded commands and capture the result as an [Image].
+     *
+     * Equivalent to Skia's `surface.makeImageSnapshot()`.
+     * The returned [Image] carries pixel data and can be passed to
+     * [Canvas.drawImage] on another surface.
+     */
+    fun makeImageSnapshot(): Image = render().toImage("surface-snapshot")
+
+    /**
+     * Render and capture a sub-rectangle as an [Image].
+     *
+     * Equivalent to Skia's `surface.makeImageSnapshot(subset)`.
+     * Returns null if [subset] is empty or lies outside the surface bounds.
+     */
+    fun makeImageSnapshot(subset: Rect): Image? {
+        val result = render()
+        val sx = subset.left.toInt().coerceIn(0, result.width)
+        val sy = subset.top.toInt().coerceIn(0, result.height)
+        val sw = subset.width.toInt().coerceAtMost(result.width - sx)
+        val sh = subset.height.toInt().coerceAtMost(result.height - sy)
+        if (sw <= 0 || sh <= 0) return null
+        val pixels = ByteArray(sw * sh * 4)
+        for (row in 0 until sh) {
+            val srcOff = ((sy + row) * result.width + sx) * 4
+            val dstOff = row * sw * 4
+            result.pixels.toByteArray().copyInto(pixels, dstOff, srcOff, srcOff + sw * 4)
+        }
+        return Image(sw, sh, ColorType.RGBA_8888, "surface-snapshot-subset", pixels)
+    }
 
     /**
      * Copy rendered pixels from a rectangular region into [dstBuffer].
