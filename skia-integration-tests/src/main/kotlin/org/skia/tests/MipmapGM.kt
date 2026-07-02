@@ -1,75 +1,19 @@
 package org.skia.tests
 
 import org.skia.core.SkCanvas
-import org.skia.core.SkSurface
-import org.graphiks.math.SK_ColorBLACK
-import org.graphiks.math.SK_ColorWHITE
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkColorType
-import org.skia.foundation.SkCubicResampler
 import org.skia.foundation.SkFilterMode
 import org.skia.foundation.SkImage
 import org.skia.foundation.SkImageInfo
 import org.skia.foundation.SkMipmapMode
-import org.skia.foundation.SkPaint
 import org.skia.foundation.SkSamplingOptions
+import org.graphiks.math.SK_ColorBLACK
+import org.graphiks.math.SK_ColorWHITE
 import org.graphiks.math.SkIRect
 import org.graphiks.math.SkISize
 import org.graphiks.math.SkRect
-
-/**
- * Port of Skia's [`gm/mipmap.cpp`](https://github.com/google/skia/blob/main/gm/mipmap.cpp)
- * `mipmap` GM (400 × 200).
- *
- * Renders a 319×52 source image of overlapping circle outlines four
- * times into a thin 177×15 destination, exercising the four common
- * sampling configurations: nearest, linear, linear+mip-linear,
- * Mitchell cubic.
- */
-public class MipmapGM : GM() {
-
-    override fun getName(): String = "mipmap"
-    override fun getISize(): SkISize = SkISize.Make(400, 200)
-
-    override fun onDraw(canvas: SkCanvas?) {
-        val c = canvas ?: return
-        val img = makeImage()
-
-        val dst = SkRect.MakeWH(177f, 15f)
-
-        val samplings = arrayOf(
-            SkSamplingOptions(SkFilterMode.kNearest),
-            SkSamplingOptions(SkFilterMode.kLinear),
-            SkSamplingOptions(SkFilterMode.kLinear, SkMipmapMode.kLinear),
-            SkSamplingOptions(SkCubicResampler.Mitchell),
-        )
-
-        c.translate(20f, 20f)
-        for (s in samplings) {
-            c.drawImageRect(img, SkRect.MakeWH(img.width.toFloat(), img.height.toFloat()), dst, s, null)
-            c.translate(0f, 20f)
-        }
-        c.drawImage(img, 20f, 20f)
-    }
-
-    private fun makeImage(): SkImage {
-        val info = SkImageInfo.MakeN32Premul(319, 52)
-        val surface = SkSurface.MakeRaster(info)
-        val sc = surface.canvas
-        sc.drawColor(0xFFF8F8F8.toInt())
-
-        val paint = SkPaint().apply {
-            isAntiAlias = true
-            style = SkPaint.Style.kStroke_Style
-        }
-        for (i in 0 until 20) {
-            sc.drawCircle(-4f, 25f, 20f, paint)
-            sc.translate(25f, 0f)
-        }
-        return surface.makeImageSnapshot()
-    }
-}
 
 /**
  * Port of Skia's `mipmap_srgb` GM (260 × 230).

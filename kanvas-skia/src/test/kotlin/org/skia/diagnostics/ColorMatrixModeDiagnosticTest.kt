@@ -10,7 +10,7 @@ import org.skia.foundation.skcms.SkNamedTransferFn
 import org.graphiks.math.SkcmsTransferFunction
 import org.skia.foundation.skcms.skcmsTransferFunctionEval
 import org.skia.foundation.skcms.skcmsTransferFunctionInvert
-import org.skia.tests.ColorMatrixGM
+import org.graphiks.kanvas.skia.gm.composite.ColorMatrixGm
 import org.skia.testing.TestUtils
 import java.io.File
 import kotlin.math.abs
@@ -27,7 +27,7 @@ import kotlin.math.abs
  * decode(encoded)))?**
  *
  * The Phase 7e' attempt (decode → matrix → encode wrapper) regressed
- * `ColorMatrixGM` from **69 % → 49 %** vs upstream, suggesting the
+ * `ColorMatrixGm` from **69 % → 49 %** vs upstream, suggesting the
  * Linear hypothesis was wrong. The current code path applies the
  * matrix in encoded sRGB and floors at **65 %** with an actual score
  * of **69.28 %**. The residual ~30 % gap was attributed in the
@@ -57,12 +57,12 @@ import kotlin.math.abs
 class ColorMatrixModeDiagnosticTest {
 
     @Test
-    fun `Q5 — diagnose linear vs encoded sRGB on ColorMatrixGM`() {
-        val gm = ColorMatrixGM()
-        val reference = TestUtils.loadReferenceBitmap(gm.name())
+    fun `Q5 — diagnose linear vs encoded sRGB on ColorMatrixGm`() {
+        val gm = ColorMatrixGm()
+        val reference = TestUtils.loadReferenceBitmap(gm.name)
             ?: error("missing original-888/colormatrix.png reference")
         // Recreate the source bitmaps via the *same* code path the GM
-        // uses. We can't reach into the private ColorMatrixGM helpers,
+        // uses. We can't reach into the private ColorMatrixGm helpers,
         // so we replicate the recipe here — reference-quality match
         // because the GM's bitmaps are pure data (no sub-pixel
         // rasterisation, no shaders other than the gradient).
@@ -71,19 +71,19 @@ class ColorMatrixModeDiagnosticTest {
 
         val cells = buildList {
             // First row : solid (64×64 RG-gradient, opaque).
-            add(Cell(0, 0, ColorMatrixGM.identityMatrix(), solidImg, "solid / identity"))
-            add(Cell(80, 0, ColorMatrixGM.saturationMatrix(0.0f), solidImg, "solid / sat=0.0"))
-            add(Cell(160, 0, ColorMatrixGM.saturationMatrix(0.5f), solidImg, "solid / sat=0.5"))
-            add(Cell(240, 0, ColorMatrixGM.saturationMatrix(1.0f), solidImg, "solid / sat=1.0"))
-            add(Cell(320, 0, ColorMatrixGM.saturationMatrix(2.0f), solidImg, "solid / sat=2.0"))
-            add(Cell(400, 0, ColorMatrixGM.redToAlphaWhiteMatrix(), solidImg, "solid / red→α"))
+            add(Cell(0, 0, ColorMatrixGm.identityMatrix(), solidImg, "solid / identity"))
+            add(Cell(80, 0, ColorMatrixGm.saturationMatrix(0.0f), solidImg, "solid / sat=0.0"))
+            add(Cell(160, 0, ColorMatrixGm.saturationMatrix(0.5f), solidImg, "solid / sat=0.5"))
+            add(Cell(240, 0, ColorMatrixGm.saturationMatrix(1.0f), solidImg, "solid / sat=1.0"))
+            add(Cell(320, 0, ColorMatrixGm.saturationMatrix(2.0f), solidImg, "solid / sat=2.0"))
+            add(Cell(400, 0, ColorMatrixGm.redToAlphaWhiteMatrix(), solidImg, "solid / red→α"))
             // Second row : transparent (alpha-gradient).
-            add(Cell(0, 80, ColorMatrixGM.identityMatrix(), transparentImg, "α-grad / identity"))
-            add(Cell(80, 80, ColorMatrixGM.saturationMatrix(0.0f), transparentImg, "α-grad / sat=0.0"))
-            add(Cell(160, 80, ColorMatrixGM.saturationMatrix(0.5f), transparentImg, "α-grad / sat=0.5"))
-            add(Cell(240, 80, ColorMatrixGM.saturationMatrix(1.0f), transparentImg, "α-grad / sat=1.0"))
-            add(Cell(320, 80, ColorMatrixGM.saturationMatrix(2.0f), transparentImg, "α-grad / sat=2.0"))
-            add(Cell(400, 80, ColorMatrixGM.redToAlphaWhiteMatrix(), transparentImg, "α-grad / red→α"))
+            add(Cell(0, 80, ColorMatrixGm.identityMatrix(), transparentImg, "α-grad / identity"))
+            add(Cell(80, 80, ColorMatrixGm.saturationMatrix(0.0f), transparentImg, "α-grad / sat=0.0"))
+            add(Cell(160, 80, ColorMatrixGm.saturationMatrix(0.5f), transparentImg, "α-grad / sat=0.5"))
+            add(Cell(240, 80, ColorMatrixGm.saturationMatrix(1.0f), transparentImg, "α-grad / sat=1.0"))
+            add(Cell(320, 80, ColorMatrixGm.saturationMatrix(2.0f), transparentImg, "α-grad / sat=2.0"))
+            add(Cell(400, 80, ColorMatrixGm.redToAlphaWhiteMatrix(), transparentImg, "α-grad / red→α"))
         }
 
         // Sample positions inside each 64×64 cell — corners + centre.
@@ -120,7 +120,7 @@ class ColorMatrixModeDiagnosticTest {
         }
 
         val summary = buildString {
-            append("# Q5 — ColorMatrixGM linear-vs-encoded sRGB diagnostic\n\n")
+            append("# Q5 — ColorMatrixGm linear-vs-encoded sRGB diagnostic\n\n")
             append("**Method** : per-cell sample 9 pixels (3×3 grid at offsets 8/32/56) ; ")
             append("for each, compute the encoded-mode expected ")
             append("(`out = matrix × encoded_input`) and the linear-mode expected ")
@@ -164,7 +164,7 @@ class ColorMatrixModeDiagnosticTest {
         println(summary)
     }
 
-    // ─── Source bitmap recreation (kept in sync with ColorMatrixGM) ──
+    // ─── Source bitmap recreation (kept in sync with ColorMatrixGm) ──
 
     /**
      * 64×64 RGBA pixels with R = x*255/64, G = y*255/64, B = 0,

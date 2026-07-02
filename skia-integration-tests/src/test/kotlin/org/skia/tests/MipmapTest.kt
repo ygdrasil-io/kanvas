@@ -27,9 +27,6 @@ class MipmapTest {
     }
 
     @Test
-    fun `MipmapGM matches mipmap_png`() = runGm(MipmapGM(), "MipmapGM")
-
-    @Test
     fun `MipmapSrgbGM matches mipmap_srgb_png`() = runGm(MipmapSrgbGM(), "MipmapSrgbGM")
 
     @Test
