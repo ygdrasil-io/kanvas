@@ -110,7 +110,10 @@ internal fun Shader.toMaterial(): GPUMaterialDescriptor = when (this) {
             srcDesc
         }
     }
-    is Shader.RuntimeEffect -> GPUMaterialDescriptor.RuntimeEffect()
+    is Shader.RuntimeEffect -> {
+        val id = this.effect.id
+        GPUMaterialDescriptor.RuntimeEffect(effectId = id, descriptorVersion = 1)
+    }
     is Shader.WithLocalMatrix -> this.shader.toMaterial()
     is Shader.WithColorFilter -> this.shader.toMaterial()
     is Shader.SweepGradient -> {
