@@ -1,7 +1,10 @@
 package org.graphiks.kanvas.gpu.renderer.materials
 
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
+import org.graphiks.kanvas.gpu.renderer.wgsl.RadialGradientDecalEntryPoint
 import org.graphiks.kanvas.gpu.renderer.wgsl.RadialGradientEntryPoint
+import org.graphiks.kanvas.gpu.renderer.wgsl.RadialGradientMirrorEntryPoint
+import org.graphiks.kanvas.gpu.renderer.wgsl.RadialGradientRepeatEntryPoint
 import org.graphiks.kanvas.gpu.renderer.wgsl.RadialGradientSnippetSourceHash
 
 object GPURadialGradientMaterialDictionary {
@@ -173,15 +176,11 @@ object GPURadialGradientMaterialLowering {
             )
         }
 
-        if (plan.tileMode != GPUMaterialTileMode.Clamp) {
-            return GPUMaterialSourcePlan.Refused(
-                GPUMaterialSourceDiagnostic(
-                    code = "unsupported.material.gradient_tile_mode_unimplemented",
-                    sourceKind = GPUMaterialSourceKind.Gradient,
-                    message = "M14 radial gradient only supports Clamp tile mode (got ${plan.tileMode})",
-                    terminal = true,
-                ),
-            )
+        val entryPoint = when (plan.tileMode) {
+            GPUMaterialTileMode.Clamp -> RadialGradientEntryPoint
+            GPUMaterialTileMode.Repeat -> RadialGradientRepeatEntryPoint
+            GPUMaterialTileMode.Mirror -> RadialGradientMirrorEntryPoint
+            GPUMaterialTileMode.Decal -> RadialGradientDecalEntryPoint
         }
 
         if (plan.stops.size > 16) {
@@ -199,6 +198,7 @@ object GPURadialGradientMaterialLowering {
             source = this,
             snippetId = GPURadialGradientMaterialDictionary.RadialGradientSnippetID,
             payloadPlanHash = "payload:RadialGradientMaterialBlock.centerRadius.vec4f32@group1.binding0",
+            entryPoint = entryPoint,
             diagnostics = listOf(
                 GPUMaterialSourceDiagnostic(
                     code = "accepted.material_source.radial_gradient",

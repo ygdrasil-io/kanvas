@@ -1,7 +1,10 @@
 package org.graphiks.kanvas.gpu.renderer.materials
 
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
+import org.graphiks.kanvas.gpu.renderer.wgsl.LinearGradientDecalEntryPoint
 import org.graphiks.kanvas.gpu.renderer.wgsl.LinearGradientEntryPoint
+import org.graphiks.kanvas.gpu.renderer.wgsl.LinearGradientMirrorEntryPoint
+import org.graphiks.kanvas.gpu.renderer.wgsl.LinearGradientRepeatEntryPoint
 import org.graphiks.kanvas.gpu.renderer.wgsl.LinearGradientSnippetSourceHash
 
 object GPULinearGradientMaterialDictionary {
@@ -162,15 +165,11 @@ object GPULinearGradientMaterialLowering {
             )
         }
 
-        if (plan.tileMode != GPUMaterialTileMode.Clamp) {
-            return GPUMaterialSourcePlan.Refused(
-                GPUMaterialSourceDiagnostic(
-                    code = "unsupported.material.gradient_tile_mode_unimplemented",
-                    sourceKind = GPUMaterialSourceKind.Gradient,
-                    message = "M13 linear gradient only supports Clamp tile mode (got ${plan.tileMode})",
-                    terminal = true,
-                ),
-            )
+        val entryPoint = when (plan.tileMode) {
+            GPUMaterialTileMode.Clamp -> LinearGradientEntryPoint
+            GPUMaterialTileMode.Repeat -> LinearGradientRepeatEntryPoint
+            GPUMaterialTileMode.Mirror -> LinearGradientMirrorEntryPoint
+            GPUMaterialTileMode.Decal -> LinearGradientDecalEntryPoint
         }
 
         if (plan.stops.size > 16) {
@@ -188,6 +187,7 @@ object GPULinearGradientMaterialLowering {
             source = this,
             snippetId = GPULinearGradientMaterialDictionary.LinearGradientSnippetID,
             payloadPlanHash = "payload:LinearGradientMaterialBlock.startEnd.vec4f32@group1.binding0",
+            entryPoint = entryPoint,
             diagnostics = listOf(
                 GPUMaterialSourceDiagnostic(
                     code = "accepted.material_source.linear_gradient",
