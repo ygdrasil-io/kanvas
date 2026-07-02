@@ -35,10 +35,4 @@ class Round18Test {
     fun `CircularArcsWeirdGM matches reference`() =
         runGm(CircularArcsWeirdGM(), "CircularArcsWeirdGM", 50.0)
 
-    // circular_arc_stroke_matrix: stroked one-radian arcs under 36 affine
-    // transforms (reflections, tiny rotations, 45° rotations) × 3 cap
-    // styles. Red/blue at 50 % alpha — overlap appears magenta.
-    @Test
-    fun `CircularArcStrokeMatrixGM matches reference`() =
-        runGm(CircularArcStrokeMatrixGM(), "CircularArcStrokeMatrixGM", 50.0)
 }

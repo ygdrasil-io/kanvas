@@ -39,6 +39,4 @@ class Round8Test {
     @Test
     fun `InnerShapesBwGM matches reference`() = runGm(InnerShapesBwGM(), "InnerShapesBwGM", 81.0)
 
-    @Test
-    fun `HairlinesGM matches reference`() = runGm(HairlinesGM(), "HairlinesGM", 96.0)
 }

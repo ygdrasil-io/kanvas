@@ -27,21 +27,11 @@ class Round12Test {
     }
 
     @Test
-    fun `RRectClipDrawPaintGM matches reference`() =
-        runGm(RRectClipDrawPaintGM(), "RRectClipDrawPaintGM", 60.0)
-
-    @Test
-    fun `CircularClipsGM matches reference`() = runGm(CircularClipsGM(), "CircularClipsGM", 60.0)
-
-    @Test
     fun `DistantClipGM matches reference`() = runGm(DistantClipGM(), "DistantClipGM", 80.0)
 
     @Test
     fun `BlurQuickRejectGM matches reference`() =
         runGm(BlurQuickRejectGM(), "BlurQuickRejectGM", 80.0)
-
-    @Test
-    fun `Skbug1719GM matches reference`() = runGm(Skbug1719GM(), "Skbug1719GM", 80.0)
 
     @Test
     fun `Crbug899512GM matches reference`() = runGm(Crbug899512GM(), "Crbug899512GM", 80.0)

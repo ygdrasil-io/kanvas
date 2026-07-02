@@ -1,16 +1,17 @@
 package org.graphiks.kanvas.skia
 
 import org.graphiks.kanvas.canvas.Canvas
-import org.graphiks.kanvas.geometry.FillType
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
-import org.graphiks.kanvas.paint.StrokeCap
-import org.graphiks.kanvas.paint.StrokeJoin
+import org.graphiks.kanvas.pipeline.ClipOp
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.types.Point
+import org.graphiks.kanvas.types.PointMode
+import org.graphiks.kanvas.types.RRect
 import org.graphiks.kanvas.types.Rect
+import org.graphiks.kanvas.types.Vertices
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.PI
@@ -75,6 +76,14 @@ class GmCanvas(
         } else {
             rect
         }
+    }
+
+    fun clipPath(path: Path, op: ClipOp = ClipOp.INTERSECT, antiAlias: Boolean = true) {
+        inner.clipPath(path, op, antiAlias)
+    }
+
+    fun clipRRect(rrect: RRect, op: ClipOp = ClipOp.INTERSECT, antiAlias: Boolean = true) {
+        inner.clipRRect(rrect, op, antiAlias)
     }
 
     private fun Matrix33.isIdentity(): Boolean =
@@ -183,6 +192,62 @@ class GmCanvas(
             if (useCenter) close()
         }
         drawPath(path, paint)
+    }
+
+    fun drawRRect(rrect: RRect, paint: Paint) {
+        withClip {
+            if (currentTransform.isIdentity()) {
+                inner.drawRRect(rrect, paint)
+            } else {
+                val path = Path { }
+                path.addRRect(rrect)
+                inner.drawPath(path.transform(currentTransform), paint)
+            }
+        }
+    }
+
+    fun drawDRRect(outer: RRect, innerRect: RRect, paint: Paint) {
+        withClip {
+            if (currentTransform.isIdentity()) {
+                this.inner.drawDRRect(outer, innerRect, paint)
+            } else {
+                val outerPath = Path { }.apply { addRRect(outer) }
+                val innerPath = Path { }.apply { addRRect(innerRect) }
+                val p = Path { }
+                p.addPath(outerPath)
+                p.addPath(innerPath)
+                this.inner.drawPath(p.transform(currentTransform), paint)
+            }
+        }
+    }
+
+    fun drawPoints(mode: PointMode, points: List<Point>, paint: Paint) {
+        withClip {
+            if (currentTransform.isIdentity()) {
+                inner.drawPoints(mode, points, paint)
+            } else {
+                val transformed = points.map { currentTransform * it }
+                inner.drawPoints(mode, transformed, paint)
+            }
+        }
+    }
+
+    fun drawPoint(x: Float, y: Float, paint: Paint) {
+        withClip {
+            val pt = currentTransform * Point(x, y)
+            inner.drawPoint(pt.x, pt.y, paint)
+        }
+    }
+
+    fun drawVertices(vertices: Vertices, paint: Paint) {
+        withClip {
+            if (currentTransform.isIdentity()) {
+                inner.drawVertices(vertices, paint)
+            } else {
+                val transformed = vertices.positions.map { currentTransform * it }
+                inner.drawVertices(vertices.copy(positions = transformed), paint)
+            }
+        }
     }
 
     fun drawImage(image: org.graphiks.kanvas.image.Image, rect: Rect, paint: Paint? = null) {

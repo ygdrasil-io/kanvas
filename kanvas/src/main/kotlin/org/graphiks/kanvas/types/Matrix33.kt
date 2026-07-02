@@ -30,6 +30,17 @@ class Matrix33 private constructor(private val values: FloatArray) {
         }
 
         fun skew(kx: Float, ky: Float) = Matrix33(floatArrayOf(1f, kx, 0f, ky, 1f, 0f, 0f, 0f, 1f))
+
+        fun makeAll(
+            sx: Float, kx: Float, tx: Float,
+            ky: Float, sy: Float, ty: Float,
+        ): Matrix33 = Matrix33(floatArrayOf(sx, kx, tx, ky, sy, ty, 0f, 0f, 1f))
+
+        fun makeAll(
+            sx: Float, kx: Float, tx: Float,
+            ky: Float, sy: Float, ty: Float,
+            p0: Float, p1: Float, p2: Float,
+        ): Matrix33 = Matrix33(floatArrayOf(sx, kx, tx, ky, sy, ty, p0, p1, p2))
     }
 
     operator fun times(other: Matrix33): Matrix33 {
