@@ -314,3 +314,6 @@ org.graphiks.kanvas.skia.gm.image.SnapWithMipsGm
 org.graphiks.kanvas.skia.gm.image.SurfaceUnderdrawGm
 org.graphiks.kanvas.skia.gm.image.TallStretchedBitmapsGm
 org.graphiks.kanvas.skia.gm.image.VeryLargeBitmapGm
+org.graphiks.kanvas.skia.gm.runtime_effect.RuntimeShaderGm
+org.graphiks.kanvas.skia.gm.runtime_effect.SpiralRTGm
+org.graphiks.kanvas.skia.gm.runtime_effect.RuntimeColorFilterGm
