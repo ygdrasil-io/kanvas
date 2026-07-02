@@ -10,6 +10,27 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.types.Color
 
+/**
+ * Port of Skia's `gm/lumafilter.cpp`.
+ *
+ * **Note** : the upstream `lumafilter.cpp` ships a second
+ * `DEF_SIMPLE_GM(AlternateLuma)` that wraps a luma color filter
+ * inside a runtime-effect shim — that GM depends on a runtime
+ * effect and is therefore deferred. This port only covers the first
+ * GM, which uses only primitives already shipped.
+ *
+ * **What's drawn** : a 6-column × 4-row grid where each column
+ * exercises a different blend mode and each row pairs
+ * two shader configurations (none/none, none/g2, g1/none, g1/g2).
+ * Inside each cell, two ovals are drawn through a `saveLayer` /
+ * blend / `saveLayer` chain modulated by the luma color filter on
+ * the second oval.
+ *
+ * **Iso-fidelity caveat** : labels (column / row text) are skipped
+ * to avoid font-rendering drift dominating the similarity. The
+ * pixel content of the cells themselves should match upstream.
+ * @see https://github.com/google/skia/blob/main/gm/lumafilter.cpp
+ */
 class LumaFilterGm : SkiaGm {
     override val name = "lumafilter"
     override val renderFamily = RenderFamily.RUNTIME_EFFECT

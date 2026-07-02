@@ -9,6 +9,19 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Rect
 
+/**
+ * Port of Skia's `gm/runtimeintrinsics.cpp`.
+ *
+ * 3-column × 2-row grid. Row 1 : `matrixCompMult` for 2×2 / 3×3 /
+ * 4×4. Row 2 : `inverse` for 2×2 / 3×3 / 4×4. Each cell renders
+ * a 2D colour map where `(p.x, p.y)` selects a single matrix cell
+ * via the upstream `selN` partitioning.
+ *
+ * Resolves through the
+ * [SkBuiltinShaderEffectsIntrinsicsMatrix]
+ * cluster (Phase D2.4.c.5).
+ * @see https://github.com/google/skia/blob/main/gm/runtimeintrinsics.cpp
+ */
 class IntrinsicsMatrixGm : SkiaGm {
     override val name = "runtime_intrinsics_matrix"
     override val renderFamily = RenderFamily.RUNTIME_EFFECT

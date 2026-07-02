@@ -9,6 +9,22 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Rect
 
+/**
+ * Port of Skia's `gm/rippleshader.cpp`.
+ *
+ * Iso-aligned port of upstream's `gm/rippleshader.cpp` (which compiles
+ * a custom SkSL runtime-effect shader that animates a wave-front pattern
+ * across the canvas).
+ *
+ * `:kanvas-skia` does not parse arbitrary SkSL — it dispatches through
+ * a hand-port-per-shader-hash table. The custom RippleShader SkSL is
+ * therefore not registered ; the runtime effect returns
+ * an error and the GM cannot draw anything meaningful.
+ *
+ * The body calls the compile so the compile contract holds.
+ * See [`API_FINALIZATION_PLAN.md`] § STUB.SKSL.
+ * @see https://github.com/google/skia/blob/main/gm/rippleshader.cpp
+ */
 class RippleShaderGm : SkiaGm {
     override val name = "rippleshader"
     override val renderFamily = RenderFamily.RUNTIME_EFFECT

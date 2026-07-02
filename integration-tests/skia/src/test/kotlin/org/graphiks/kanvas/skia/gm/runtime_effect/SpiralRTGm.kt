@@ -10,6 +10,20 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Rect
 import kotlin.math.sin
 
+/**
+ * Port of Skia's `gm/runtimeshader.cpp`.
+ *
+ * Renders a polar-coordinate conic spiral between two `layout(color)`
+ * uniforms (`in_colors0` = red, `in_colors1` = green). Upstream animates
+ * `rad_scale` via `sin(secs * 0.5 + 2.0) / 5`; here it is frozen at
+ * `sin(2.0f) / 5 ≈ 0.0727` (the static frame with time = 0 seconds).
+ *
+ * **SkSL source** : [SkBuiltinShaderEffectsSimple.SPIRAL_RT_SKSL] (already
+ * registered in the dispatch table — impl is [SkBuiltinShaderEffectsSimple.SpiralRTImpl]).
+ *
+ * C++ original: `gm/runtimeshader.cpp:192-225`.
+ * @see https://github.com/google/skia/blob/main/gm/runtimeshader.cpp
+ */
 class SpiralRTGm : SkiaGm {
     override val name = "spiral_rt"
     override val renderFamily = RenderFamily.RUNTIME_EFFECT

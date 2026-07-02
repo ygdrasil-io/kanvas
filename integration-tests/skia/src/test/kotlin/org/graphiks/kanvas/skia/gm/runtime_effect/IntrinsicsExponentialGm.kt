@@ -9,6 +9,20 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Rect
 
+/**
+ * Port of Skia's `gm/runtimeintrinsics.cpp`.
+ *
+ * 2-column × 5-row grid of exponential intrinsics. Each cell
+ * resolves through the
+ * [org.skia.effects.runtime.effects.SkBuiltinShaderEffectsIntrinsicsExponential]
+ * cluster (Phase D2.4.c.2) — registered against the same
+ * [org.skia.effects.runtime.effects.SkBuiltinShaderEffectsIntrinsicsTrig.UnaryIntrinsicImpl]
+ * skeleton as the trig cluster, just with different math lambdas.
+ *
+ * Same drift sources as `RuntimeIntrinsicsTrigGM` (text labels,
+ * sub-surface sRGB→Rec.2020 composite, polyline AA).
+ * @see https://github.com/google/skia/blob/main/gm/runtimeintrinsics.cpp
+ */
 class IntrinsicsExponentialGm : SkiaGm {
     override val name = "runtime_intrinsics_exponential"
     override val renderFamily = RenderFamily.RUNTIME_EFFECT

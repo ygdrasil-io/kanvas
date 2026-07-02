@@ -9,6 +9,18 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Rect
 
+/**
+ * Port of Skia's `gm/runtimeintrinsics.cpp`.
+ *
+ * 4-column × 5-row grid covering GLSL geometric functions :
+ * `length` / `distance` / `dot` / `cross` / `normalize` /
+ * `faceforward` / `reflect` / `refract`.
+ *
+ * Resolves through the
+ * [org.skia.effects.runtime.effects.SkBuiltinShaderEffectsIntrinsicsGeometric]
+ * cluster (Phase D2.4.c.4).
+ * @see https://github.com/google/skia/blob/main/gm/runtimeintrinsics.cpp
+ */
 class IntrinsicsGeometricGm : SkiaGm {
     override val name = "runtime_intrinsics_geometric"
     override val renderFamily = RenderFamily.RUNTIME_EFFECT

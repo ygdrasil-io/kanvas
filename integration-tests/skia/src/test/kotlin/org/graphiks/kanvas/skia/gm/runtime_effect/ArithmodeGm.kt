@@ -9,6 +9,32 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Rect
 
+/**
+ * Port of Skia's `gm/arithmode.cpp`.
+ *
+ * **Important** : the upstream `arithmode.cpp` includes
+ * `<SkRuntimeEffect.h>` but the **first** GM (this one)
+ * never actually uses a runtime effect — it's a falsely-blocked
+ * port. The runtime-effect-dependent companion is
+ * `ArithmodeBlenderGM` (handled separately).
+ *
+ * **What's drawn** : a 13-row grid where each row applies a
+ * different parameter tuple `(k1, k2, k3, k4)` to
+ * `Arithmetic` between a horizontally-laid-out
+ * `src` and `dst` image. The first 11 rows iterate over the
+ * canonical K-table from upstream ; the last 2 rows are special
+ * cases for `enforcePMColor=true` vs `false`.
+ *
+ * **Iso-fidelity caveats** :
+ *  - The text labels are intentionally skipped.
+ *    Font rendering drift would dominate the similarity metric.
+ *  - The no-crop-rect factory plus the
+ *    fact that we use the existing constructor produce output that's
+ *    typically below 50 % similar to upstream because of accumulated
+ *    filter-bleed errors. We keep the floor low (10 %) to capture
+ *    observable progress without blocking the build on iterative refinement.
+ * @see https://github.com/google/skia/blob/main/gm/arithmode.cpp
+ */
 class ArithmodeGm : SkiaGm {
     override val name = "arithmode"
     override val renderFamily = RenderFamily.RUNTIME_EFFECT

@@ -9,6 +9,37 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Rect
 
+/**
+ * Port of Skia's `gm/runtimeintrinsics.cpp`.
+ *
+ * Lays out a 3-column × 5-row grid of unary trig intrinsics. Each
+ * cell : (1) draws a centred label (`fn` text), (2) renders the
+ * SkSL `make_unary_sksl_1d(fn, false)` runtime shader into a
+ * 100×100 off-screen surface scaled so the shader's `p` parameter
+ * sweeps `[0, 1)²`, (3) plots a green polyline through the top
+ * row of pixels — visualising `y(x)` for x linearly mapped to
+ * `[xMin, xMax]` and y mapped from `[yMin, yMax]` to
+ * `[0, kBoxSize]` (1 = bottom, 0 = top).
+ *
+ * Built on the [SkBuiltinShaderEffectsIntrinsicsTrig] cluster
+ * (Phase D2.4.c.1) — the registry has 12 SkSL hash entries
+ * (radians / degrees / sin / cos / tan / asin / acos / atan(x) /
+ * atan(0.1, x) / atan(-0.1, x) / atan(x, 0.1) / atan(x, -0.1))
+ * each pointing to a [SkBuiltinShaderEffectsIntrinsicsTrig.UnaryIntrinsicImpl]
+ * carrying the matching `kotlin.math` impl.
+ *
+ * **Known drift sources** (vs `runtime_intrinsics_trig.png`) :
+ *  - Text labels — OpenType-vs-FreeType glyph drift (~3-5 % canvas).
+ *  - Working colour space — our render goes through a sRGB
+ *    100×100 sub-surface then composites onto a Rec.2020 parent.
+ *  - Polyline AA — our scanline 4×4 supersampling vs Skia's
+ *    analytical AA.
+ *
+ * The floor is set low (~5 %) since the drift sources accumulate
+ * across 12 cells ; the ratchet still catches regressions of any
+ * single intrinsic's math.
+ * @see https://github.com/google/skia/blob/main/gm/runtimeintrinsics.cpp
+ */
 class IntrinsicsTrigGm : SkiaGm {
     override val name = "runtime_intrinsics_trig"
     override val renderFamily = RenderFamily.RUNTIME_EFFECT

@@ -14,6 +14,36 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
 
+/**
+ * Port of Skia's `gm/runtimecolorfilter.cpp`.
+ *
+ * Draws the same source image five times under five SkSL color
+ * filters that all express the same idea (or, for `gNoop` /
+ * `gLumaSrc`, two distinct ideas) :
+ *
+ *  | Cell | SkSL source | Effect                          |
+ *  |:----:|:------------|:--------------------------------|
+ *  | 0,0  | gNoop       | identity (passthrough)          |
+ *  | 0,1  | gLumaSrc    | luma → alpha (RGB cleared)      |
+ *  | 1,0  | gTernary    | tone-map via ternary            |
+ *  | 1,1  | gIfs        | tone-map via if / else if       |
+ *  | 1,2  | gEarlyReturn| tone-map via early `return`     |
+ *
+ * The three tone-map variants (`gTernary` / `gIfs` /
+ * `gEarlyReturn`) express the same semantic in three different
+ * SkSL syntaxes — they hash to three distinct keys in
+ * [org.skia.effects.runtime.SkRuntimeEffectDispatch] but all map
+ * to the same [SkBuiltinColorFilterEffects.ToneMapImpl] (per-
+ * variant register entries set up at class load).
+ *
+ * **Adaptation** : upstream loads `images/mandrill_256.png` via
+ * `ToolUtils::GetResourceAsImage`. We synthesise a 256×256
+ * gradient stand-in (matches [Skbug13047GM]'s pattern). Iso-
+ * fidelity vs upstream's mandrill is therefore impossible —
+ * similarity reflects the cell-by-cell colour-filter math, not
+ * the underlying pixels.
+ * @see https://github.com/google/skia/blob/main/gm/runtimecolorfilter.cpp
+ */
 class RuntimeColorFilterGm : SkiaGm {
     override val name = "runtimecolorfilter"
     override val renderFamily = RenderFamily.RUNTIME_EFFECT

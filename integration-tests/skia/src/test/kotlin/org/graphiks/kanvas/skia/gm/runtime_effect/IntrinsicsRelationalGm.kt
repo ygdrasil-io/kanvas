@@ -9,6 +9,21 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Rect
 
+/**
+ * Port of Skia's `gm/runtimeintrinsics.cpp`.
+ *
+ * 4-column × 6-row grid (some rows have only 2 cells). Each cell
+ * exercises one bvec relational expression — `lessThan` /
+ * `lessThanEqual` / `greaterThan` / `greaterThanEqual` / `equal` /
+ * `notEqual`, in float and int variants, plus bvec compositions
+ * (`equal(le, ge)`), `not()` inverses, and `any` / `all` reductions
+ * broadcast back to bool2.
+ *
+ * Resolves through
+ * [SkBuiltinShaderEffectsIntrinsicsRelational]
+ * cluster (Phase D2.4.c.6).
+ * @see https://github.com/google/skia/blob/main/gm/runtimeintrinsics.cpp
+ */
 class IntrinsicsRelationalGm : SkiaGm {
     override val name = "runtime_intrinsics_relational"
     override val renderFamily = RenderFamily.RUNTIME_EFFECT

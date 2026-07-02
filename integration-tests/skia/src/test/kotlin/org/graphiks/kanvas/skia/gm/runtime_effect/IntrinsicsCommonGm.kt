@@ -9,6 +9,22 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Rect
 
+/**
+ * Port of Skia's `gm/runtimeintrinsics.cpp`.
+ *
+ * 6-column × 7-row grid covering the GLSL "common" function
+ * family : abs / sign / floor / ceil / fract / mod / min / max /
+ * clamp / saturate / mix / step / smoothstep + the row-7
+ * componentwise `floor(p)` / `ceil(p)` plots.
+ *
+ * Resolves through the
+ * [org.skia.effects.runtime.effects.SkBuiltinShaderEffectsIntrinsicsCommon]
+ * cluster (Phase D2.4.c.3) which registers 31 SkSL hashes against
+ * the
+ * [org.skia.effects.runtime.effects.SkBuiltinShaderEffectsIntrinsicsTrig.UnaryIntrinsicImpl]
+ * skeleton.
+ * @see https://github.com/google/skia/blob/main/gm/runtimeintrinsics.cpp
+ */
 class IntrinsicsCommonGm : SkiaGm {
     override val name = "runtime_intrinsics_common"
     override val renderFamily = RenderFamily.RUNTIME_EFFECT
