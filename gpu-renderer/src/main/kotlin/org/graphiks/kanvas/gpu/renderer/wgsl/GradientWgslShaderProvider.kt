@@ -227,7 +227,10 @@ fn sample_stops_at(t: f32, count: u32, positions: ptr<function, array<vec4<f32>,
     let t1 = (*positions)[hi].x;
     let span = t1 - t0;
     let u = select((t - t0) / span, 0.0, span <= 0.0);
-    return (1.0 - u) * (*colors)[lo] + u * (*colors)[hi];
+    let c_lo_srgb = vec4f(pow((*colors)[lo].rgb, vec3f(1.0 / 2.2)), (*colors)[lo].a);
+    let c_hi_srgb = vec4f(pow((*colors)[hi].rgb, vec3f(1.0 / 2.2)), (*colors)[hi].a);
+    let mixed_srgb = (1.0 - u) * c_lo_srgb + u * c_hi_srgb;
+    return vec4f(pow(mixed_srgb.rgb, vec3f(2.2)), mixed_srgb.a);
 }
 """.trimIndent()
 
@@ -320,7 +323,10 @@ fn sample_stops_at(t: f32, count: u32, positions: ptr<function, array<vec4<f32>,
     let t1 = (*positions)[hi].x;
     let span = t1 - t0;
     let u = select((t - t0) / span, 0.0, span <= 0.0);
-    return (1.0 - u) * (*colors)[lo] + u * (*colors)[hi];
+    let c_lo_srgb = vec4f(pow((*colors)[lo].rgb, vec3f(1.0 / 2.2)), (*colors)[lo].a);
+    let c_hi_srgb = vec4f(pow((*colors)[hi].rgb, vec3f(1.0 / 2.2)), (*colors)[hi].a);
+    let mixed_srgb = (1.0 - u) * c_lo_srgb + u * c_hi_srgb;
+    return vec4f(pow(mixed_srgb.rgb, vec3f(2.2)), mixed_srgb.a);
 }
 """.trimIndent()
 
