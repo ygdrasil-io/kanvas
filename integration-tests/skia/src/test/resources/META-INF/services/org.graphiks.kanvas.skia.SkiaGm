@@ -62,6 +62,7 @@ org.graphiks.kanvas.skia.gm.composite.ComposeShaderBitmap2Gm
 org.graphiks.kanvas.skia.gm.composite.ComposeShaderBitmapGm
 org.graphiks.kanvas.skia.gm.composite.ComposeShaderGm
 org.graphiks.kanvas.skia.gm.composite.ComposeShaderGridGm
+org.graphiks.kanvas.skia.gm.composite.DrawAtlasGm
 org.graphiks.kanvas.skia.gm.composite.FadeFilterGm
 org.graphiks.kanvas.skia.gm.composite.HairModesGm
 org.graphiks.kanvas.skia.gm.composite.LuminosityOverflowGm
@@ -193,6 +194,7 @@ org.graphiks.kanvas.skia.gm.path.InversePathsGm
 org.graphiks.kanvas.skia.gm.path.LabyrinthButtGm
 org.graphiks.kanvas.skia.gm.path.LabyrinthRoundGm
 org.graphiks.kanvas.skia.gm.path.LabyrinthSquareGm
+org.graphiks.kanvas.skia.gm.path.LatticeAlphaGm
 org.graphiks.kanvas.skia.gm.path.LargeCircleGm
 org.graphiks.kanvas.skia.gm.path.LargeOvalsGm
 org.graphiks.kanvas.skia.gm.path.LongLineDashGm
@@ -204,6 +206,7 @@ org.graphiks.kanvas.skia.gm.path.ManyArcsGm
 org.graphiks.kanvas.skia.gm.path.ManyCirclesGm
 org.graphiks.kanvas.skia.gm.path.ManyRRectsGm
 org.graphiks.kanvas.skia.gm.path.NestedHairlineSquareGm
+org.graphiks.kanvas.skia.gm.path.NinepatchEdgeCase349428795Gm
 org.graphiks.kanvas.skia.gm.path.NonClosedPathsGm
 org.graphiks.kanvas.skia.gm.path.OneBadArcGm
 org.graphiks.kanvas.skia.gm.path.OvalGm
@@ -212,6 +215,8 @@ org.graphiks.kanvas.skia.gm.path.PathHugeCrbug800804Gm
 org.graphiks.kanvas.skia.gm.path.PathInvFillGm
 org.graphiks.kanvas.skia.gm.path.PathSkbug11859Gm
 org.graphiks.kanvas.skia.gm.path.PathSkbug11886Gm
+org.graphiks.kanvas.skia.gm.path.PictureCullRectGm
+org.graphiks.kanvas.skia.gm.path.PictureGm
 org.graphiks.kanvas.skia.gm.path.PolygonsGm
 org.graphiks.kanvas.skia.gm.path.PreserveFillRuleBigGm
 org.graphiks.kanvas.skia.gm.path.PreserveFillRuleLittleGm

@@ -61,18 +61,6 @@ class Round9Test {
     fun `ConicalGradients2ptEdgeGM matches reference`() =
         runGm(ConicalGradients2ptEdgeGM(), "ConicalGradients2ptEdgeGM", 50.0)
 
-    // Tier 2 — SkPicture / SkSurface.
-
-    @Test
-    fun `PictureCullRectGM matches reference`() = runGm(PictureCullRectGM(), "PictureCullRectGM", 80.0)
-
-    // PictureGM at ~28 % — visual layout matches the reference, but
-    // 4 pictures × 4 translucent overlapping shapes per picture
-    // accumulate sub-tolerance byte-level drift on every pixel.
-    // Score is dominated by the alpha=0.5 saveLayer in the 4th cell.
-    @Test
-    fun `PictureGM matches reference`() = runGm(PictureGM(), "PictureGM", 25.0)
-
     @Test
     fun `Bug6783GM matches reference`() = runGm(Bug6783GM(), "Bug6783GM", 50.0)
 }
