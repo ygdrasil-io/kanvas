@@ -337,6 +337,23 @@ internal fun GPUBackendRenderRecorder.dispatchFillRect(
                 refuse("unsupported_material:conical_gradient_fallback")
             }
         }
+        is GPUMaterialDescriptor.BlendShader -> {
+            if (material.wgslCombined.isNotBlank()) {
+                drawFullscreenRawUniformPass(
+                    wgsl = material.wgslCombined,
+                    colorFormat = config.gpuColorFormat.wgpuLabel,
+                    draws = listOf(
+                        GPUBackendRawUniformDraw(
+                            uniformBytes = material.uniformBytes,
+                            scissorX = sx, scissorY = sy,
+                            scissorWidth = sw, scissorHeight = sh,
+                        ),
+                    ),
+                )
+            } else {
+                refuse("unsupported_material:blend_shader")
+            }
+        }
         else -> {
             refuse("unsupported_material:${material.kind.name}")
             return

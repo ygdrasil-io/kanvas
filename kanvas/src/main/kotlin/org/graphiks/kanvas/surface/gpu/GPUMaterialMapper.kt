@@ -91,7 +91,25 @@ internal fun Shader.toMaterial(): GPUMaterialDescriptor = when (this) {
         }
     }
     is Shader.Image -> GPUMaterialDescriptor.ImageDraw()
-    is Shader.Blend -> GPUMaterialDescriptor.SolidColor(r = 0f, g = 0f, b = 0f, a = 0f)
+    is Shader.Blend -> {
+        val dstDesc = this.dst.toMaterial()
+        val srcDesc = this.src.toMaterial()
+        val modeStr = this.mode.name
+        val desc = GPUMaterialDescriptor.BlendShader(
+            mode = modeStr,
+            dst = dstDesc,
+            src = srcDesc,
+        )
+        if (org.graphiks.kanvas.gpu.renderer.materials.GPUBlendShaderLowering.canHandle(desc)) {
+            desc.copy(
+                wgslCombined = org.graphiks.kanvas.gpu.renderer.materials.BlendWgslBuilder.buildWgsl(dstDesc, srcDesc, modeStr),
+                uniformBytes = org.graphiks.kanvas.gpu.renderer.materials.BlendWgslBuilder.packUniforms(dstDesc, srcDesc, modeStr),
+            )
+        } else {
+            // fallback: use src shader only (drop the blend)
+            srcDesc
+        }
+    }
     is Shader.RuntimeEffect -> GPUMaterialDescriptor.RuntimeEffect()
     is Shader.WithLocalMatrix -> this.shader.toMaterial()
     is Shader.WithColorFilter -> this.shader.toMaterial()
