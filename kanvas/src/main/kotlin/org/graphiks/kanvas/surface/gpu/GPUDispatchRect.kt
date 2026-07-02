@@ -318,6 +318,25 @@ internal fun GPUBackendRenderRecorder.dispatchFillRect(
                 }
             }
         }
+        is GPUMaterialDescriptor.ConicalGradient -> {
+            if (material.snippetSourceHash != null) {
+                val shader = GradientWgslShaderProvider.shaderFor(material)!!
+                val uniformBytes = GradientWgslShaderProvider.uniformBytesFor(material)!!
+                drawFullscreenRawUniformPass(
+                    wgsl = shader.wgslSource,
+                    colorFormat = config.gpuColorFormat.wgpuLabel,
+                    draws = listOf(
+                        GPUBackendRawUniformDraw(
+                            uniformBytes = uniformBytes,
+                            scissorX = sx, scissorY = sy,
+                            scissorWidth = sw, scissorHeight = sh,
+                        ),
+                    ),
+                )
+            } else {
+                refuse("unsupported_material:conical_gradient_fallback")
+            }
+        }
         else -> {
             refuse("unsupported_material:${material.kind.name}")
             return

@@ -124,12 +124,36 @@ internal fun Shader.toMaterial(): GPUMaterialDescriptor = when (this) {
             desc
         }
     }
-    is Shader.ConicalGradient -> GPUMaterialDescriptor.LinearGradient(
-        startX = this.start.x, startY = this.start.y,
-        endX = this.start.x, endY = this.start.y,
-        startR = 0f, startG = 0f, startB = 0f, startA = 0f,
-        endR = 0f, endG = 0f, endB = 0f, endA = 0f,
-    )
+    is Shader.ConicalGradient -> {
+        val first = this.stops.first()
+        val last = this.stops.last()
+        val allPos = FloatArray(this.stops.size) { this.stops[it].position }
+        val allCol = FloatArray(this.stops.size * 4) { i ->
+            val stop = this.stops[i / 4]
+            when (i % 4) { 0 -> stop.color.r; 1 -> stop.color.g; 2 -> stop.color.b; else -> stop.color.a }
+        }
+        val tileMode = when (this.tileMode) {
+            org.graphiks.kanvas.paint.TileMode.CLAMP -> "clamp"
+            org.graphiks.kanvas.paint.TileMode.REPEAT -> "repeat"
+            org.graphiks.kanvas.paint.TileMode.MIRROR -> "mirror"
+            org.graphiks.kanvas.paint.TileMode.DECAL -> "decal"
+        }
+        val desc = GPUMaterialDescriptor.ConicalGradient(
+            startX = this.start.x, startY = this.start.y,
+            endX = this.end.x, endY = this.end.y,
+            startRadius = this.startRadius, endRadius = this.endRadius,
+            startR = first.color.r, startG = first.color.g, startB = first.color.b, startA = first.color.a,
+            endR = last.color.r, endG = last.color.g, endB = last.color.b, endA = last.color.a,
+            tileMode = tileMode,
+            allStopPositions = allPos, allStopColors = allCol,
+        )
+        if (GradientWgslShaderProvider.canHandle(desc)) {
+            val hash = GradientWgslShaderProvider.uniformLayoutHashFor(desc)
+            desc.copy(snippetSourceHash = hash)
+        } else {
+            desc
+        }
+    }
     is Shader.PerlinNoise -> GPUMaterialDescriptor.SolidColor(r = 0f, g = 0f, b = 0f, a = 0f)
     is Shader.FractalNoise -> GPUMaterialDescriptor.SolidColor(r = 0f, g = 0f, b = 0f, a = 0f)
     is Shader.WithWorkingColorSpace -> this.shader.toMaterial()

@@ -17,6 +17,7 @@ object GradientWgslShaderProvider {
             is GPUMaterialDescriptor.LinearGradient -> linearShader(descriptor)
             is GPUMaterialDescriptor.RadialGradient -> radialShader(descriptor)
             is GPUMaterialDescriptor.SweepGradient -> sweepShader(descriptor)
+            is GPUMaterialDescriptor.ConicalGradient -> conicalShader(descriptor)
             else -> null
         }
     }
@@ -26,6 +27,7 @@ object GradientWgslShaderProvider {
             is GPUMaterialDescriptor.LinearGradient -> linearUniformBytes(descriptor)
             is GPUMaterialDescriptor.RadialGradient -> radialUniformBytes(descriptor)
             is GPUMaterialDescriptor.SweepGradient -> sweepUniformBytes(descriptor)
+            is GPUMaterialDescriptor.ConicalGradient -> conicalUniformBytes(descriptor)
             else -> null
         }
     }
@@ -35,6 +37,7 @@ object GradientWgslShaderProvider {
             is GPUMaterialDescriptor.LinearGradient -> "layout:linear-gradient-material-block:v1"
             is GPUMaterialDescriptor.RadialGradient -> "layout:radial-gradient-material-block:v1"
             is GPUMaterialDescriptor.SweepGradient -> "layout:sweep-gradient-material-block:v1"
+            is GPUMaterialDescriptor.ConicalGradient -> "layout:conical-gradient-material-block:v1"
             else -> null
         }
     }
@@ -44,6 +47,7 @@ object GradientWgslShaderProvider {
             is GPUMaterialDescriptor.LinearGradient -> descriptor.allStopPositions?.size ?: 2
             is GPUMaterialDescriptor.RadialGradient -> descriptor.allStopPositions?.size ?: 2
             is GPUMaterialDescriptor.SweepGradient -> descriptor.allStopPositions?.size ?: 2
+            is GPUMaterialDescriptor.ConicalGradient -> descriptor.allStopPositions?.size ?: 2
             else -> return false
         }
         return stopCount <= MAX_STOPS
@@ -140,6 +144,107 @@ object GradientWgslShaderProvider {
         """.trimIndent(),
         tileFn = tileFnForMode(tileMode),
     )
+
+    private fun conicalShader(desc: GPUMaterialDescriptor.ConicalGradient): GradientWgslShader {
+        val n = desc.allStopPositions?.size ?: 2
+        return GradientWgslShader(
+            wgslSource = buildConicalWgsl(
+                stopCount = n,
+                tileFn = tileFnForMode(desc.tileMode),
+            ),
+            uniformLayoutHash = "layout:conical-gradient-material-block:v1",
+        )
+    }
+
+    private fun buildConicalWgsl(stopCount: Int, tileFn: String): String = """
+struct GradientBlock {
+    start: vec2<f32>,
+    end: vec2<f32>,
+    r1: f32,
+    r2: f32,
+    count: u32,
+    _pad0: u32,
+    _pad1: u32,
+    _pad2: u32,
+    stopData: array<vec4<f32>, 32>,
+}
+@group(0) @binding(0) var<uniform> gradient: GradientBlock;
+
+struct VertexOutput {
+    @builtin(position) pos: vec4<f32>,
+}
+
+@vertex fn vs_main(@builtin(vertex_index) vi: u32) -> VertexOutput {
+    let verts = array<vec2<f32>, 3>(
+        vec2<f32>(-1.0, -1.0),
+        vec2<f32>(3.0, -1.0),
+        vec2<f32>(-1.0, 3.0),
+    );
+    return VertexOutput(vec4<f32>(verts[vi], 0.0, 1.0));
+}
+
+@fragment fn fs_main(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
+    let dx = gradient.end.x - gradient.start.x;
+    let dy = gradient.end.y - gradient.start.y;
+    let fx = pos.x - gradient.start.x;
+    let fy = pos.y - gradient.start.y;
+    let A = dx*dx + dy*dy - (gradient.r2 - gradient.r1)*(gradient.r2 - gradient.r1);
+    let B = 2.0 * (dx*fx + dy*fy + gradient.r1*(gradient.r2 - gradient.r1));
+    let C = fx*fx + fy*fy - gradient.r1*gradient.r1;
+    var t_raw: f32 = 0.0;
+    if (abs(A) < 1.0e-12) {
+        if (abs(B) >= 1.0e-12) {
+            t_raw = -C / B;
+        }
+    } else {
+        let disc = B*B - 4.0*A*C;
+        if (disc >= 0.0) {
+            t_raw = (-B + sqrt(disc)) / (2.0 * A);
+        }
+    }
+    let t = $tileFn;
+    var positions: array<vec4<f32>, 16>;
+    var colors: array<vec4<f32>, 16>;
+    for (var i: u32 = 0u; i < ${stopCount}u; i = i + 1u) {
+        positions[i] = gradient.stopData[i * 2u];
+        colors[i] = gradient.stopData[i * 2u + 1u];
+    }
+    let result = sample_stops_at(t, ${stopCount}u, &positions, &colors);
+    return result;
+}
+
+fn sample_stops_at(t: f32, count: u32, positions: ptr<function, array<vec4<f32>, 16>>, colors: ptr<function, array<vec4<f32>, 16>>) -> vec4<f32> {
+    if (count <= 1u) { return (*colors)[0]; }
+    if (t <= (*positions)[0].x) { return (*colors)[0]; }
+    let lastIdx = count - 1u;
+    if (t >= (*positions)[lastIdx].x) { return (*colors)[lastIdx]; }
+    var lo: u32 = 0u;
+    for (var i: u32 = 1u; i < count; i = i + 1u) {
+        if ((*positions)[i].x >= t) { lo = i - 1u; break; }
+    }
+    let hi = lo + 1u;
+    let t0 = (*positions)[lo].x;
+    let t1 = (*positions)[hi].x;
+    let span = t1 - t0;
+    let u = select((t - t0) / span, 0.0, span <= 0.0);
+    return (1.0 - u) * (*colors)[lo] + u * (*colors)[hi];
+}
+""".trimIndent()
+
+    private fun conicalUniformBytes(desc: GPUMaterialDescriptor.ConicalGradient): ByteArray {
+        return packGradientUniforms(
+            geometryPacker = { bb ->
+                bb.putFloat(desc.startX); bb.putFloat(desc.startY)
+                bb.putFloat(desc.endX); bb.putFloat(desc.endY)
+                bb.putFloat(desc.startRadius); bb.putFloat(desc.endRadius)
+                val n = desc.allStopPositions?.size ?: 2
+                bb.putInt(n)
+                bb.putInt(0); bb.putInt(0); bb.putInt(0) // pad to 32
+            },
+            allStopPositions = desc.allStopPositions,
+            allStopColors = desc.allStopColors,
+        )
+    }
 
     private data class StructLayout(
         val geometrySize: Int,
