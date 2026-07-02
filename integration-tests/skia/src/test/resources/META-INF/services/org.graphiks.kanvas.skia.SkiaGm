@@ -314,6 +314,16 @@ org.graphiks.kanvas.skia.gm.image.SnapWithMipsGm
 org.graphiks.kanvas.skia.gm.image.SurfaceUnderdrawGm
 org.graphiks.kanvas.skia.gm.image.TallStretchedBitmapsGm
 org.graphiks.kanvas.skia.gm.image.VeryLargeBitmapGm
+org.graphiks.kanvas.skia.gm.runtime_effect.ArithmodeGm
+org.graphiks.kanvas.skia.gm.runtime_effect.IntrinsicsCommonGm
+org.graphiks.kanvas.skia.gm.runtime_effect.IntrinsicsExponentialGm
+org.graphiks.kanvas.skia.gm.runtime_effect.IntrinsicsGeometricGm
+org.graphiks.kanvas.skia.gm.runtime_effect.IntrinsicsMatrixGm
+org.graphiks.kanvas.skia.gm.runtime_effect.IntrinsicsRelationalGm
+org.graphiks.kanvas.skia.gm.runtime_effect.IntrinsicsTrigGm
+org.graphiks.kanvas.skia.gm.runtime_effect.LumaFilterGm
+org.graphiks.kanvas.skia.gm.runtime_effect.RippleShaderGm
+org.graphiks.kanvas.skia.gm.runtime_effect.RuntimeColorFilterGm
+org.graphiks.kanvas.skia.gm.runtime_effect.RuntimeFunctionsGm
 org.graphiks.kanvas.skia.gm.runtime_effect.RuntimeShaderGm
 org.graphiks.kanvas.skia.gm.runtime_effect.SpiralRTGm
-org.graphiks.kanvas.skia.gm.runtime_effect.RuntimeColorFilterGm
