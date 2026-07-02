@@ -313,6 +313,7 @@ private class Writer {
                 is UniformValue.F2 -> { byte(1); float(value.x); float(value.y) }
                 is UniformValue.F3 -> { byte(2); float(value.x); float(value.y); float(value.z) }
                 is UniformValue.F4 -> { byte(3); float(value.x); float(value.y); float(value.z); float(value.w) }
+                is UniformValue.I1 -> { byte(6); int(value.v) }
                 is UniformValue.M3 -> { byte(4); matrix33(value.m) }
                 is UniformValue.M4 -> { byte(5); int(value.values.size); for (f in value.values) float(f) }
             }
@@ -708,6 +709,7 @@ private class Reader(private val data: ByteArray) {
                 3 -> UniformValue.F4(float(), float(), float(), float())
                 4 -> UniformValue.M3(matrix33())
                 5 -> { val len = int(); UniformValue.M4(FloatArray(len) { float() }) }
+                6 -> UniformValue.I1(int())
                 else -> { valid = false; UniformValue.F1(0f) }
             }
             entries[name] = value
