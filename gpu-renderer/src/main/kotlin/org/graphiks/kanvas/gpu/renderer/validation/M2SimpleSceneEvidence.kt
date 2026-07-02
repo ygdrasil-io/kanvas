@@ -195,6 +195,7 @@ private fun buildGradientPaintPlan(): GPUPaintPipelinePlan {
         source = source,
         snippetId = WGSLSnippetID("snippet:linear-gradient.clamp.inline2"),
         payloadPlanHash = "gradient.inline2",
+        entryPoint = "linear_gradient_clamp",
     )
 
     return GPUPaintPipelinePlan(

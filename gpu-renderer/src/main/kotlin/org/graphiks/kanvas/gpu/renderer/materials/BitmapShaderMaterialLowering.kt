@@ -190,6 +190,7 @@ object GPUBitmapShaderMaterialLowering {
             source = this,
             snippetId = GPUBitmapShaderMaterialDictionary.BitmapShaderSnippetID,
             payloadPlanHash = "payload:BitmapShaderMaterialBlock.textureSampled@group1.binding1+sampler@group1.binding2",
+            entryPoint = BitmapShaderClampEntryPoint,
             diagnostics = listOf(
                 GPUMaterialSourceDiagnostic(
                     code = "accepted.material_source.bitmap_shader",

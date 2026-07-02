@@ -129,6 +129,10 @@ enum class GPUMaterialKind {
     ImageDraw,
     /** Runtime-effect (SkRuntimeEffect compatibility) source material — no dispatch support (dependency-gated). */
     RuntimeEffect,
+    /** Two-point conical gradient source material. */
+    TwoPointConical,
+    /** Blend shader combining two child shaders (dst, src) via a blend mode. */
+    ShaderBlend,
 }
 
 /** Rectangle geometry in local command coordinates. */
@@ -387,6 +391,8 @@ sealed interface GPUMaterialDescriptor {
         val tileMode: String = "clamp",
         val allStopPositions: FloatArray? = null,
         val allStopColors: FloatArray? = null,
+        val snippetSourceHash: String? = null,
+        val fragmentEntryPoint: String? = null,
     ) : GPUMaterialDescriptor {
         override val kind: GPUMaterialKind = GPUMaterialKind.LinearGradient
     }
@@ -407,6 +413,8 @@ sealed interface GPUMaterialDescriptor {
         val tileMode: String = "clamp",
         val allStopPositions: FloatArray? = null,
         val allStopColors: FloatArray? = null,
+        val snippetSourceHash: String? = null,
+        val fragmentEntryPoint: String? = null,
     ) : GPUMaterialDescriptor {
         override val kind: GPUMaterialKind = GPUMaterialKind.RadialGradient
     }
@@ -428,8 +436,26 @@ sealed interface GPUMaterialDescriptor {
         val tileMode: String = "clamp",
         val allStopPositions: FloatArray? = null,
         val allStopColors: FloatArray? = null,
+        val snippetSourceHash: String? = null,
+        val fragmentEntryPoint: String? = null,
     ) : GPUMaterialDescriptor {
         override val kind: GPUMaterialKind = GPUMaterialKind.SweepGradient
+    }
+
+    /** Two-point conical gradient descriptor with start/end centers, radii, and tile mode. */
+    data class ConicalGradient(
+        val startX: Float, val startY: Float,
+        val endX: Float, val endY: Float,
+        val startRadius: Float, val endRadius: Float,
+        val startR: Float, val startG: Float, val startB: Float, val startA: Float,
+        val endR: Float, val endG: Float, val endB: Float, val endA: Float,
+        val tileMode: String = "clamp",
+        val allStopPositions: FloatArray? = null,
+        val allStopColors: FloatArray? = null,
+        val snippetSourceHash: String? = null,
+        val fragmentEntryPoint: String? = null,
+    ) : GPUMaterialDescriptor {
+        override val kind: GPUMaterialKind = GPUMaterialKind.TwoPointConical
     }
 
     /** Placeholder image-draw descriptor — deferred; dispatch refuses via non-SolidColor material. */
@@ -453,6 +479,17 @@ sealed interface GPUMaterialDescriptor {
         val descriptorVersion: Int = 1,
     ) : GPUMaterialDescriptor {
         override val kind: GPUMaterialKind = GPUMaterialKind.RuntimeEffect
+    }
+
+    /** Blend shader descriptor combining two child shaders via a blend mode. */
+    data class BlendShader(
+        val mode: String,
+        val dst: GPUMaterialDescriptor,
+        val src: GPUMaterialDescriptor,
+        val wgslCombined: String = "",
+        val uniformBytes: ByteArray = byteArrayOf(),
+    ) : GPUMaterialDescriptor {
+        override val kind: GPUMaterialKind = GPUMaterialKind.ShaderBlend
     }
 }
 

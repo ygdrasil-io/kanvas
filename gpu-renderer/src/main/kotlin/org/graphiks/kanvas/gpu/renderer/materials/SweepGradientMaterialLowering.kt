@@ -1,7 +1,10 @@
 package org.graphiks.kanvas.gpu.renderer.materials
 
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
+import org.graphiks.kanvas.gpu.renderer.wgsl.SweepGradientDecalEntryPoint
 import org.graphiks.kanvas.gpu.renderer.wgsl.SweepGradientEntryPoint
+import org.graphiks.kanvas.gpu.renderer.wgsl.SweepGradientMirrorEntryPoint
+import org.graphiks.kanvas.gpu.renderer.wgsl.SweepGradientRepeatEntryPoint
 import org.graphiks.kanvas.gpu.renderer.wgsl.SweepGradientSnippetSourceHash
 
 object GPUSweepGradientMaterialDictionary {
@@ -173,15 +176,11 @@ object GPUSweepGradientMaterialLowering {
             )
         }
 
-        if (plan.tileMode != GPUMaterialTileMode.Clamp) {
-            return GPUMaterialSourcePlan.Refused(
-                GPUMaterialSourceDiagnostic(
-                    code = "unsupported.material.gradient_tile_mode_unimplemented",
-                    sourceKind = GPUMaterialSourceKind.Gradient,
-                    message = "M14 sweep gradient only supports Clamp tile mode (got ${plan.tileMode})",
-                    terminal = true,
-                ),
-            )
+        val entryPoint = when (plan.tileMode) {
+            GPUMaterialTileMode.Clamp -> SweepGradientEntryPoint
+            GPUMaterialTileMode.Repeat -> SweepGradientRepeatEntryPoint
+            GPUMaterialTileMode.Mirror -> SweepGradientMirrorEntryPoint
+            GPUMaterialTileMode.Decal -> SweepGradientDecalEntryPoint
         }
 
         if (plan.stops.size > 16) {
@@ -199,6 +198,7 @@ object GPUSweepGradientMaterialLowering {
             source = this,
             snippetId = GPUSweepGradientMaterialDictionary.SweepGradientSnippetID,
             payloadPlanHash = "payload:SweepGradientMaterialBlock.centerAngles.vec4f32@group1.binding0",
+            entryPoint = entryPoint,
             diagnostics = listOf(
                 GPUMaterialSourceDiagnostic(
                     code = "accepted.material_source.sweep_gradient",
