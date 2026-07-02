@@ -1619,6 +1619,7 @@ class GPUFirstRoutePlanner(
             GPUMaterialKind.LinearGradient,
             GPUMaterialKind.RadialGradient,
             GPUMaterialKind.SweepGradient,
+            GPUMaterialKind.RuntimeEffect,
         )
 
         /** Transform classes accepted by the FillPath route. */
@@ -1628,6 +1629,7 @@ class GPUFirstRoutePlanner(
         val acceptedFillPathMaterialKinds = setOf(
             GPUMaterialKind.SolidColor,
             GPUMaterialKind.LinearGradient,
+            GPUMaterialKind.RuntimeEffect,
         )
 
         /** Gradient tile modes accepted by the first expansion route. */

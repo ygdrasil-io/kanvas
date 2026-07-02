@@ -4,6 +4,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUBlendKind
 import org.graphiks.kanvas.gpu.renderer.commands.GPUClipKind
 import org.graphiks.kanvas.gpu.renderer.commands.GPULayerScopeKind
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
+import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialKind
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 
@@ -18,6 +19,7 @@ internal fun NormalizedDrawCommand.fillGuardRefusalReasonOrNull(): String? {
     val acceptedByDispatch = this is NormalizedDrawCommand.FillRect ||
         this is NormalizedDrawCommand.FillPath
     if (material !is GPUMaterialDescriptor.SolidColor &&
+        material.kind != GPUMaterialKind.RuntimeEffect &&
         (!acceptedByDispatch || 
          (material !is GPUMaterialDescriptor.LinearGradient &&
           material !is GPUMaterialDescriptor.RadialGradient &&
