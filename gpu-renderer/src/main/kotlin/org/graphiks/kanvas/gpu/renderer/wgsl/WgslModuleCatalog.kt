@@ -98,3 +98,31 @@ val sweepGradientDecalModule: WgslRenderStepModule = WgslRenderStepModule(
     vertexEntryPoint = "vs_main",
     fragmentEntryPoint = SweepGradientDecalEntryPoint,
 )
+
+val conicalGradientModule: WgslRenderStepModule = WgslRenderStepModule(
+    renderStepIdentity = "conical.gradient.fill",
+    sourceHash = ConicalGradientSnippetSourceHash,
+    vertexEntryPoint = "vs_main",
+    fragmentEntryPoint = ConicalGradientEntryPoint,
+)
+
+val conicalGradientRepeatModule: WgslRenderStepModule = WgslRenderStepModule(
+    renderStepIdentity = "conical.gradient.repeat.fill",
+    sourceHash = ConicalGradientSnippetSourceHash,
+    vertexEntryPoint = "vs_main",
+    fragmentEntryPoint = ConicalGradientRepeatEntryPoint,
+)
+
+val conicalGradientMirrorModule: WgslRenderStepModule = WgslRenderStepModule(
+    renderStepIdentity = "conical.gradient.mirror.fill",
+    sourceHash = ConicalGradientSnippetSourceHash,
+    vertexEntryPoint = "vs_main",
+    fragmentEntryPoint = ConicalGradientMirrorEntryPoint,
+)
+
+val conicalGradientDecalModule: WgslRenderStepModule = WgslRenderStepModule(
+    renderStepIdentity = "conical.gradient.decal.fill",
+    sourceHash = ConicalGradientSnippetSourceHash,
+    vertexEntryPoint = "vs_main",
+    fragmentEntryPoint = ConicalGradientDecalEntryPoint,
+)
