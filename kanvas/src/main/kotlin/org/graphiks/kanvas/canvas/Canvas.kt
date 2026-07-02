@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.canvas
 
+import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.image.Image
@@ -112,6 +113,17 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
     /** Draw a [TextBlob] at the given position with [paint]. */
     fun drawText(blob: TextBlob, x: Float, y: Float, paint: Paint) {
         buffer.append(DisplayOp.DrawText(blob, x, y, paint, currentTransform, currentClip))
+    }
+
+    /** Draw a string at (x, y) using [font], rendered with [paint]. */
+    fun drawString(str: String, x: Float, y: Float, font: Font, paint: Paint) {
+        val blob = font.toTextBlob(str, x, y)
+        drawText(blob, x, y, paint)
+    }
+
+    /** Measure the advance width of [str] when set in [font]. */
+    fun measureText(str: String, font: Font): Float {
+        return font.measureText(str)
     }
 
     /** Fill the entire canvas with [color] using optional [mode] (default: SRC_OVER). */
