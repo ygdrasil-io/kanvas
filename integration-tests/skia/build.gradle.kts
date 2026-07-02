@@ -6,6 +6,9 @@ plugins {
 dependencies {
     implementation(kotlin("stdlib"))
     implementation(project(":kanvas"))
+    implementation(project(":codec:api"))
+    implementation(project(":codec:android"))
+    implementation(project(":codec:animated"))
     implementation(project(":integration-tests:test-utils"))
     implementation("io.ygdrasil:wgpu4k-toolkit:0.2.0-SNAPSHOT")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
