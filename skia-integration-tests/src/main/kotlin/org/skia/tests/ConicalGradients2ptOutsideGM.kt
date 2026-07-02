@@ -10,6 +10,27 @@ import org.graphiks.math.SkMatrix
 import org.graphiks.math.SkPoint
 import org.graphiks.math.SkRect
 
+/**
+ * Port of Skia's `gm/gradients_2pt_conical.cpp::ConicalGradientsGM`
+ * — the `outside` and `edge` variants (840 × 815). Sister to the
+ * existing [ConicalGradients2ptInsideGM] which covers the `inside`
+ * case.
+ *
+ * 4 × N grid of `100 × 100` rects ; each cell paints a 2-point
+ * conical gradient via a different maker function (different center
+ * / radius / direction permutations). Columns are gradient stop
+ * configurations matching upstream `gConicalGrad2ptData` ; rows are the maker
+ * variations.
+ *
+ * - **Outside** : 5 makers (Outside / OutsideFlip / ZeroRadOutside /
+ *   ZeroRadFlipOutside / OutsideStrip).
+ * - **Edge** : 7 makers (EdgeX / EdgeY / ZeroRadEdgeX / ZeroRadEdgeY /
+ *   TouchX / TouchY / InsideSmallRad).
+ *
+ * @param dither when `true`, sets `paint.isDither = true`. Our
+ *   rasterizer doesn't apply dither, so dither variants will match
+ *   only modulo the reference's added noise pattern.
+ */
 public data class ConicalGrad2ptData(val colors: IntArray, val positions: FloatArray)
 
 public sealed class ConicalGradients2ptVariantGM(
@@ -55,7 +76,11 @@ public sealed class ConicalGradients2ptVariantGM(
         }
     }
 
+    // ─── Maker functions — port of the C++ statics ──────────────────
+
     protected companion object {
+        // ─── Outside-case makers ────────────────────────────────────
+
         @JvmStatic
         protected fun make2ConicalOutside(pts: Array<SkPoint>, data: ConicalGrad2ptData, tm: SkTileMode, lm: SkMatrix): SkShader? {
             val r0 = (pts[1].fX - pts[0].fX) / 10f
@@ -99,6 +124,8 @@ public sealed class ConicalGradients2ptVariantGM(
             val c1 = SkPoint(pts[1].fX, pts[1].fY)
             return SkConicalGradient.Make(c0, r, c1, r, data.colors, data.positions, tm, lm)
         }
+
+        // ─── Edge-case makers ───────────────────────────────────────
 
         @JvmStatic
         protected fun make2ConicalEdgeX(pts: Array<SkPoint>, data: ConicalGrad2ptData, tm: SkTileMode, lm: SkMatrix): SkShader? {
@@ -184,6 +211,8 @@ public sealed class ConicalGradients2ptVariantGM(
             ::make2ConicalInsideSmallRad,
         )
 
+        // ─── Shared data ────────────────────────────────────────────
+
         private fun midpoint(a: Float, b: Float): Float = (a + b) * 0.5f
 
         @JvmStatic
@@ -207,3 +236,31 @@ public sealed class ConicalGradients2ptVariantGM(
         )
     }
 }
+
+/** `gradients_2pt_conical_outside` — dither on. */
+public class ConicalGradients2ptOutsideGM : ConicalGradients2ptVariantGM(
+    gmName = "gradients_2pt_conical_outside",
+    makers = OUTSIDE_MAKERS,
+    dither = true,
+)
+
+/** `gradients_2pt_conical_outside_nodither`. */
+public class ConicalGradients2ptOutsideNoDitherGM : ConicalGradients2ptVariantGM(
+    gmName = "gradients_2pt_conical_outside_nodither",
+    makers = OUTSIDE_MAKERS,
+    dither = false,
+)
+
+/** `gradients_2pt_conical_edge` — dither on. */
+public class ConicalGradients2ptEdgeGM : ConicalGradients2ptVariantGM(
+    gmName = "gradients_2pt_conical_edge",
+    makers = EDGE_MAKERS,
+    dither = true,
+)
+
+/** `gradients_2pt_conical_edge_nodither`. */
+public class ConicalGradients2ptEdgeNoDitherGM : ConicalGradients2ptVariantGM(
+    gmName = "gradients_2pt_conical_edge_nodither",
+    makers = EDGE_MAKERS,
+    dither = false,
+)
