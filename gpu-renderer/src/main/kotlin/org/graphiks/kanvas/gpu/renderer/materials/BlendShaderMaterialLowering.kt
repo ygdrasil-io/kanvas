@@ -3,11 +3,14 @@ package org.graphiks.kanvas.gpu.renderer.materials
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 
 object GPUBlendShaderLowering {
-    fun canHandle(descriptor: GPUMaterialDescriptor.BlendShader): Boolean {
-        val dstOk = descriptor.dst is GPUMaterialDescriptor.LinearGradient ||
-                    descriptor.dst is GPUMaterialDescriptor.SolidColor
-        val srcOk = descriptor.src is GPUMaterialDescriptor.LinearGradient ||
-                    descriptor.src is GPUMaterialDescriptor.SolidColor
-        return dstOk && srcOk
+    private fun isSupported(child: GPUMaterialDescriptor): Boolean = when (child) {
+        is GPUMaterialDescriptor.LinearGradient -> true
+        is GPUMaterialDescriptor.RadialGradient -> true
+        is GPUMaterialDescriptor.SweepGradient -> true
+        is GPUMaterialDescriptor.SolidColor -> true
+        else -> false
     }
+
+    fun canHandle(descriptor: GPUMaterialDescriptor.BlendShader): Boolean =
+        isSupported(descriptor.dst) && isSupported(descriptor.src)
 }

@@ -47,12 +47,26 @@ struct BlendBlock {
             ${prefix}_color: vec4f,
             ${prefix}_pad: vec4f,
         """.trimIndent()
+        is GPUMaterialDescriptor.RadialGradient -> """
+            ${prefix}_center: vec2f,
+            ${prefix}_radius: f32,
+            ${prefix}_pad0: f32,
+            ${prefix}_color: vec4f,
+            ${prefix}_pad: vec4f,
+        """.trimIndent()
+        is GPUMaterialDescriptor.SweepGradient -> """
+            ${prefix}_center: vec2f,
+            ${prefix}_startAngle: f32,
+            ${prefix}_endAngle: f32,
+            ${prefix}_color: vec4f,
+            ${prefix}_pad: vec4f,
+        """.trimIndent()
         is GPUMaterialDescriptor.SolidColor -> """
             ${prefix}_color: vec4f,
             ${prefix}_pad: vec4f,
             ${prefix}_pad2: vec4f,
         """.trimIndent()
-        else -> """${prefix}_color: vec4f,${prefix}_pad: vec4f,${prefix}_pad2: vec4f,"""
+        else -> error("Unsupported blend child: ${child.kind}")
     }
 
     private fun childEval(prefix: String, child: GPUMaterialDescriptor): String = when (child) {
@@ -61,9 +75,23 @@ struct BlendBlock {
     let ${prefix}_t = dot(pos.xy - blend.${prefix}_start, ${prefix}_dir) / dot(${prefix}_dir, ${prefix}_dir);
     let ${prefix}_tc = clamp(${prefix}_t, 0.0, 1.0);
     let ${prefix}_result = mix(blend.${prefix}_color, blend.${prefix}_pad, ${prefix}_tc);""".trimIndent()
+        is GPUMaterialDescriptor.RadialGradient -> """
+    let ${prefix}_d = pos.xy - blend.${prefix}_center;
+    let ${prefix}_t = length(${prefix}_d) / blend.${prefix}_radius;
+    let ${prefix}_tc = clamp(${prefix}_t, 0.0, 1.0);
+    let ${prefix}_result = mix(blend.${prefix}_color, blend.${prefix}_pad, ${prefix}_tc);""".trimIndent()
+        is GPUMaterialDescriptor.SweepGradient -> """
+    let ${prefix}_d = pos.xy - blend.${prefix}_center;
+    let ${prefix}_a = atan2(${prefix}_d.y, ${prefix}_d.x);
+    var ${prefix}_u = ${prefix}_a / 6.2831853071795864;
+    if (${prefix}_u < 0.0) { ${prefix}_u = ${prefix}_u + 1.0; }
+    let ${prefix}_sweep = blend.${prefix}_endAngle - blend.${prefix}_startAngle;
+    let ${prefix}_t = (${prefix}_u - blend.${prefix}_startAngle / 360.0) * (360.0 / max(${prefix}_sweep, 1.0e-12));
+    let ${prefix}_tc = clamp(${prefix}_t, 0.0, 1.0);
+    let ${prefix}_result = mix(blend.${prefix}_color, blend.${prefix}_pad, ${prefix}_tc);""".trimIndent()
         is GPUMaterialDescriptor.SolidColor -> """
     let ${prefix}_result = blend.${prefix}_color;""".trimIndent()
-        else -> """let ${prefix}_result = vec4f(0.0, 0.0, 0.0, 0.0);"""
+        else -> error("Unsupported blend child: ${child.kind}")
     }
 
     private fun blendFormula(mode: String): String = when (mode.uppercase()) {
@@ -95,6 +123,30 @@ struct BlendBlock {
                 bb.putFloat(child.endB * child.endA)
                 bb.putFloat(child.endA)
             }
+            is GPUMaterialDescriptor.RadialGradient -> {
+                bb.putFloat(child.centerX); bb.putFloat(child.centerY)
+                bb.putFloat(child.radius); bb.putFloat(0f) // pad
+                bb.putFloat(child.startR * child.startA)
+                bb.putFloat(child.startG * child.startA)
+                bb.putFloat(child.startB * child.startA)
+                bb.putFloat(child.startA)
+                bb.putFloat(child.endR * child.endA)
+                bb.putFloat(child.endG * child.endA)
+                bb.putFloat(child.endB * child.endA)
+                bb.putFloat(child.endA)
+            }
+            is GPUMaterialDescriptor.SweepGradient -> {
+                bb.putFloat(child.centerX); bb.putFloat(child.centerY)
+                bb.putFloat(child.startAngle); bb.putFloat(child.endAngle)
+                bb.putFloat(child.startR * child.startA)
+                bb.putFloat(child.startG * child.startA)
+                bb.putFloat(child.startB * child.startA)
+                bb.putFloat(child.startA)
+                bb.putFloat(child.endR * child.endA)
+                bb.putFloat(child.endG * child.endA)
+                bb.putFloat(child.endB * child.endA)
+                bb.putFloat(child.endA)
+            }
             is GPUMaterialDescriptor.SolidColor -> {
                 val r = child.r * child.a
                 val g = child.g * child.a
@@ -103,11 +155,7 @@ struct BlendBlock {
                 bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f)
                 bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f)
             }
-            else -> {
-                bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f)
-                bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f)
-                bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f)
-            }
+            else -> error("Unsupported blend child: ${child.kind}")
         }
     }
 }
