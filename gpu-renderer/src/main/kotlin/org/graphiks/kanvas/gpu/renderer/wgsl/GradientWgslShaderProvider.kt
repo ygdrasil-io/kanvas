@@ -158,9 +158,6 @@ object GradientWgslShaderProvider {
 struct GradientBlock {
     $structFields
     count: u32,
-    _pad0: u32,
-    _pad1: u32,
-    _pad2: u32,
     stopData: array<vec4<f32>, 32>,
 }
 @group(0) @binding(0) var<uniform> gradient: GradientBlock;
@@ -231,7 +228,6 @@ fn sample_stops_at(t: f32, count: u32, positions: ptr<function, array<vec4<f32>,
                 bb.putFloat(desc.radius)
                 val n = desc.allStopPositions?.size ?: 2
                 bb.putInt(n)
-                bb.putInt(0); bb.putInt(0) // pad to 32
             },
             allStopPositions = desc.allStopPositions,
             allStopColors = desc.allStopColors,
@@ -252,27 +248,37 @@ fn sample_stops_at(t: f32, count: u32, positions: ptr<function, array<vec4<f32>,
         )
     }
 
+    private const val STRUCT_HEADER_SIZE = 32
+    private const val MAX_STOPS_WGSL = 16
+    private const val BYTES_PER_STOP = 32  // vec4f position + vec4f color
+    private const val FULL_STRUCT_SIZE = STRUCT_HEADER_SIZE + MAX_STOPS_WGSL * BYTES_PER_STOP // 544
+
     private fun packGradientUniforms(
         geometryPacker: (java.nio.ByteBuffer) -> Unit,
         allStopPositions: FloatArray?,
         allStopColors: FloatArray?,
     ): ByteArray {
         val n = allStopPositions?.size ?: 2
-        val bb = java.nio.ByteBuffer.allocate(32 + n * 32)
+        val bb = java.nio.ByteBuffer.allocate(FULL_STRUCT_SIZE)
             .order(java.nio.ByteOrder.nativeOrder())
         geometryPacker(bb)
-        for (i in 0 until n) {
-            val pos = allStopPositions?.getOrElse(i) {
-                i.toFloat() / (n - 1).coerceAtLeast(1)
-            } ?: (i.toFloat() / (n - 1).coerceAtLeast(1))
-            bb.putFloat(pos); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f)
-            if (allStopColors != null && i * 4 + 3 < allStopColors.size) {
-                val r = srgbToLinear(allStopColors[i * 4]) * allStopColors[i * 4 + 3]
-                val g = srgbToLinear(allStopColors[i * 4 + 1]) * allStopColors[i * 4 + 3]
-                val b = srgbToLinear(allStopColors[i * 4 + 2]) * allStopColors[i * 4 + 3]
-                val a = allStopColors[i * 4 + 3]
-                bb.putFloat(r); bb.putFloat(g); bb.putFloat(b); bb.putFloat(a)
+        for (i in 0 until MAX_STOPS_WGSL) {
+            if (i < n) {
+                val pos = allStopPositions?.getOrElse(i) {
+                    i.toFloat() / (n - 1).coerceAtLeast(1)
+                } ?: (i.toFloat() / (n - 1).coerceAtLeast(1))
+                bb.putFloat(pos); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f)
+                if (allStopColors != null && i * 4 + 3 < allStopColors.size) {
+                    val r = srgbToLinear(allStopColors[i * 4]) * allStopColors[i * 4 + 3]
+                    val g = srgbToLinear(allStopColors[i * 4 + 1]) * allStopColors[i * 4 + 3]
+                    val b = srgbToLinear(allStopColors[i * 4 + 2]) * allStopColors[i * 4 + 3]
+                    val a = allStopColors[i * 4 + 3]
+                    bb.putFloat(r); bb.putFloat(g); bb.putFloat(b); bb.putFloat(a)
+                } else {
+                    bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f)
+                }
             } else {
+                bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f)
                 bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f)
             }
         }

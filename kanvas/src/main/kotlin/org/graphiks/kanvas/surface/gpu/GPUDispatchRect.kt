@@ -89,7 +89,6 @@ internal fun GPUBackendRenderRecorder.dispatchFillRect(
                             scissorWidth = sw, scissorHeight = sh,
                         ),
                     ),
-                    blendMode = blendMode,
                 )
             } else {
                 val multiStop = material.allStopPositions != null && material.allStopPositions!!.size > 2
@@ -170,7 +169,6 @@ internal fun GPUBackendRenderRecorder.dispatchFillRect(
                             scissorWidth = sw, scissorHeight = sh,
                         ),
                     ),
-                    blendMode = blendMode,
                 )
             } else {
                 val multiStop = material.allStopPositions != null && material.allStopPositions!!.size > 2
@@ -254,7 +252,6 @@ internal fun GPUBackendRenderRecorder.dispatchFillRect(
                             scissorWidth = sw, scissorHeight = sh,
                         ),
                     ),
-                    blendMode = blendMode,
                 )
             } else {
                 val multiStop = material.allStopPositions != null && material.allStopPositions!!.size > 2
