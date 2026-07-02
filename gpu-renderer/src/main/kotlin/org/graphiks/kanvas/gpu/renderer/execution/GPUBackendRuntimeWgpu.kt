@@ -30,7 +30,12 @@ import io.ygdrasil.webgpu.GPUBuffer
 import io.ygdrasil.webgpu.GPUBufferBindingType
 import io.ygdrasil.webgpu.GPUBufferUsage
 import io.ygdrasil.webgpu.GPUDevice
+import io.ygdrasil.webgpu.GPUDeviceDescriptor
 import io.ygdrasil.webgpu.GPUErrorFilter
+import io.ygdrasil.webgpu.GPUFeatureName
+import io.ygdrasil.webgpu.GPUQueueDescriptor
+import io.ygdrasil.webgpu.GPUSupportedLimits
+import io.ygdrasil.webgpu.GPUUncapturedErrorCallback
 import io.ygdrasil.webgpu.GPUFilterMode
 import io.ygdrasil.webgpu.GPUIndexFormat
 import io.ygdrasil.webgpu.GPULoadOp
@@ -3091,7 +3096,17 @@ private fun createNativeWindowRuntime(binding: GPUNativeSurfaceBinding): NativeW
             try {
                 surface.computeSurfaceCapabilities(adapter)
                 val adapterInfo = GPUBackendAdapterSummary(adapterSummary(adapter.info))
-                val device = runBlocking { adapter.requestDevice() }
+                val device = runBlocking {
+                        adapter.requestDevice(object : GPUDeviceDescriptor {
+                            override val requiredLimits: GPUSupportedLimits? = adapter.limits
+                            override val requiredFeatures: List<GPUFeatureName> = emptyList()
+                            override val label: String = ""
+                            override val defaultQueue: GPUQueueDescriptor = object : GPUQueueDescriptor {
+                                override val label: String = ""
+                            }
+                            override val onUncapturedError: GPUUncapturedErrorCallback? = null
+                        })
+                    }
                     .getOrElse { error -> error(error.message ?: error.toString()) }
                 try {
                     val format = surface.supportedFormats.firstOrNull { it == GPUTextureFormat.BGRA8Unorm }
