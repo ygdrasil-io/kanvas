@@ -46,19 +46,13 @@ object GradientWgslShaderProvider {
             is GPUMaterialDescriptor.SweepGradient -> descriptor.allStopPositions?.size ?: 2
             else -> return false
         }
-        val tileMode = when (descriptor) {
-            is GPUMaterialDescriptor.LinearGradient -> descriptor.tileMode
-            is GPUMaterialDescriptor.RadialGradient -> descriptor.tileMode
-            is GPUMaterialDescriptor.SweepGradient -> descriptor.tileMode
-            else -> return false
-        }
-        return tileMode == "clamp" && stopCount <= MAX_STOPS
+        return stopCount <= MAX_STOPS
     }
 
     private fun linearShader(desc: GPUMaterialDescriptor.LinearGradient): GradientWgslShader {
         val n = desc.allStopPositions?.size ?: 2
         return GradientWgslShader(
-            wgslSource = buildLinearWgsl(n),
+            wgslSource = buildLinearWgsl(n, desc.tileMode),
             uniformLayoutHash = "layout:linear-gradient-material-block:v1",
         )
     }
@@ -66,7 +60,7 @@ object GradientWgslShaderProvider {
     private fun radialShader(desc: GPUMaterialDescriptor.RadialGradient): GradientWgslShader {
         val n = desc.allStopPositions?.size ?: 2
         return GradientWgslShader(
-            wgslSource = buildRadialWgsl(n),
+            wgslSource = buildRadialWgsl(n, desc.tileMode),
             uniformLayoutHash = "layout:radial-gradient-material-block:v1",
         )
     }
@@ -74,12 +68,12 @@ object GradientWgslShaderProvider {
     private fun sweepShader(desc: GPUMaterialDescriptor.SweepGradient): GradientWgslShader {
         val n = desc.allStopPositions?.size ?: 2
         return GradientWgslShader(
-            wgslSource = buildSweepWgsl(n),
+            wgslSource = buildSweepWgsl(n, desc.tileMode),
             uniformLayoutHash = "layout:sweep-gradient-material-block:v1",
         )
     }
 
-    private fun buildLinearWgsl(stopCount: Int): String = buildGradientWgsl(
+    private fun buildLinearWgsl(stopCount: Int, tileMode: String): String = buildGradientWgsl(
         preamble = """
             let dir = gradient.end - gradient.start;
             let lenSq = dot(dir, dir);
@@ -96,9 +90,10 @@ object GradientWgslShaderProvider {
                 start: vec2<f32>,
                 end: vec2<f32>,
         """.trimIndent(),
+        tileFn = tileFnForMode(tileMode),
     )
 
-    private fun buildRadialWgsl(stopCount: Int): String = buildGradientWgsl(
+    private fun buildRadialWgsl(stopCount: Int, tileMode: String): String = buildGradientWgsl(
         preamble = """
             let d = pos.xy - gradient.center;
             var t_raw: f32;
@@ -114,9 +109,10 @@ object GradientWgslShaderProvider {
                 center: vec2<f32>,
                 radius: f32,
         """.trimIndent(),
+        tileFn = tileFnForMode(tileMode),
     )
 
-    private fun buildSweepWgsl(stopCount: Int): String = buildGradientWgsl(
+    private fun buildSweepWgsl(stopCount: Int, tileMode: String): String = buildGradientWgsl(
         preamble = """
             const TWO_PI: f32 = 6.2831853071795864;
             let d = pos.xy - gradient.center;
@@ -142,6 +138,7 @@ object GradientWgslShaderProvider {
                 startAngle: f32,
                 endAngle: f32,
         """.trimIndent(),
+        tileFn = tileFnForMode(tileMode),
     )
 
     private data class StructLayout(
@@ -149,11 +146,28 @@ object GradientWgslShaderProvider {
         val geometryFields: String,
     )
 
+    private fun tileFnForMode(tileMode: String): String {
+        return when (tileMode) {
+            "clamp" -> "let t = clamp(t_raw, 0.0, 1.0);"
+            "repeat" -> "let t = t_raw - floor(t_raw);"
+            "mirror" -> """
+                let even = (floor(t_raw) % 2.0) == 0.0;
+                let t = select(1.0 - (t_raw - floor(t_raw)), t_raw - floor(t_raw), even);
+            """.trimIndent()
+            "decal" -> """
+                let t = clamp(t_raw, 0.0, 1.0);
+                let decalA = select(0.0, 1.0, t_raw >= 0.0 && t_raw <= 1.0);
+            """.trimIndent()
+            else -> "let t = clamp(t_raw, 0.0, 1.0);"
+        }
+    }
+
     private fun buildGradientWgsl(
         preamble: String,
         stopCount: Int,
         headerExtra: String,
         structFields: String,
+        tileFn: String,
     ): String = """
 struct GradientBlock {
     $structFields
@@ -177,7 +191,7 @@ struct VertexOutput {
 
 @fragment fn fs_main(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
     $preamble
-    let t = clamp(t_raw, 0.0, 1.0);
+    $tileFn
     var positions: array<vec4<f32>, 16>;
     var colors: array<vec4<f32>, 16>;
     for (var i: u32 = 0u; i < ${stopCount}u; i = i + 1u) {
