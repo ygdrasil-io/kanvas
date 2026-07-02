@@ -207,6 +207,7 @@ data class CompiledFrame(val passes: List<RenderPass>, val diagnostics: Diagnost
 - Exhaustive `when` on `DisplayOp` → maps each op to a `RenderPipeline` + bindings
 - Produces `RenderPass[]` for execution + `Diagnostics` for refusals
 - **Picture expansion**: When encountering `DisplayOp.DrawPicture`, the compiler recursively expands the nested `Picture.ops` into the display list. Each nested draw op inherits the outer `DrawPicture`'s transform and clip (concatenated), and carries the `DrawPicture`'s optional `Paint` for alpha modulation.
+- **Text rendering**: DisplayOp.DrawText is converted to NormalizedDrawCommand.DrawTextRun via GPUOpMapper. The GPURenderer calls TextBridge.rasterize(textBlob) to produce a GpuTextBlob (atlas + UVs). The atlas is uploaded as a GPU texture and dispatched via drawTextAtlasPass() with the WGSL shader `text/a8_text_mask.wgsl`. When the font module is unavailable, rasterize() returns null and the renderer degrades gracefully.
 
 ## Non-Goals
 

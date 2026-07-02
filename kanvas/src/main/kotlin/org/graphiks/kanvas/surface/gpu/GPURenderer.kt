@@ -9,6 +9,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendOffscreenTexture
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRawUniformDraw
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRenderRecorder
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
 import org.graphiks.kanvas.gpu.renderer.execution.GPUClearColor
 import org.graphiks.kanvas.gpu.renderer.execution.GPUOffscreenTargetRequest
@@ -24,6 +25,8 @@ import org.graphiks.kanvas.surface.RenderStats
 import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.types.PointMode
 import org.graphiks.kanvas.types.Rect
+import org.graphiks.kanvas.text.GpuTextBlob
+import org.graphiks.kanvas.text.TextBridge
 
 internal fun renderViaGpu(
     buffer: DisplayListBuffer,
@@ -213,7 +216,16 @@ internal fun renderViaGpu(
                         sceneHasContent = true
                     }
                     is DisplayOp.DrawText -> {
-                        diagnostics.fatal("refuse:drawText:${cmdId.value}", "drawText", "unsupported_operation")
+                        val gpuBlob = TextBridge.rasterize(op.blob)
+                        if (gpuBlob != null) {
+                            val cmd = op.toNormalizedCommand(cmdId, targets)
+                            t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
+                                drawTextAtlasPass(gpuBlob, cmd.blend.blendMode, dispatched, diagnostics)
+                            }
+                            sceneHasContent = true
+                        } else {
+                            diagnostics.degrade("degrade:drawText:${cmdId.value}", "drawText", "rasterize_failed")
+                        }
                     }
                     is DisplayOp.SetTransform,
                     is DisplayOp.SetClip,
@@ -564,7 +576,16 @@ internal fun renderViaGpu(
                                     diagnostics.degrade("unimplemented:drawPicture:nested:${nestedCmdId.value}", "drawPicture", "gpu_nested_vertices_unimplemented")
                                 }
                                 is DisplayOp.DrawText -> {
-                                    diagnostics.fatal("refuse:drawPicture:nested:${nestedCmdId.value}", "drawPicture", "nested_text_unimplemented")
+                                    val gpuBlob = TextBridge.rasterize(nestedOp.blob)
+                                    if (gpuBlob != null) {
+                                        val cmd = nestedOp.toNormalizedCommand(nestedCmdId, targets)
+                                        t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
+                                            drawTextAtlasPass(gpuBlob, cmd.blend.blendMode, dispatched, diagnostics)
+                                        }
+                                        sceneHasContent = true
+                                    } else {
+                                        diagnostics.degrade("degrade:drawPicture:nested:${nestedCmdId.value}", "drawPicture", "nested_text_rasterize_failed")
+                                    }
                                 }
                                 is DisplayOp.SetTransform,
                                 is DisplayOp.SetClip,
@@ -753,4 +774,63 @@ private fun computeAtlasDst(texRect: Rect, xform: Matrix33): Rect {
     val r = maxOf(x0, x1, x2, x3)
     val b = maxOf(y0, y1, y2, y3)
     return Rect.fromLTRB(l, t, r, b)
+}
+
+/** Dispatch text atlas pass from a rasterized [GpuTextBlob]. */
+private fun GPUBackendRenderRecorder.drawTextAtlasPass(
+    gpuBlob: GpuTextBlob,
+    blendMode: GPUBlendMode?,
+    dispatched: MutableList<String>,
+    diagnostics: Diagnostics,
+) {
+    val blob = gpuBlob.textBlob
+    val uvs = gpuBlob.glyphUvs
+    val vertexData = mutableListOf<Float>()
+    val indexData = mutableListOf<Int>()
+    var quadIndex = 0
+
+    // Build one quad (4 vertices, 6 indices) per glyph
+    for (run in blob.glyphRuns) {
+        for ((glyphIdx, pos) in run.positions.withIndex()) {
+            val uv = uvs.getOrNull(quadIndex) ?: Rect.fromLTRB(0f, 0f, 1f, 1f)
+            val w = 10f  // glyph width placeholder; real size comes from atlas placement
+            val h = 10f  // glyph height placeholder
+            // Quad vertices: position (x,y) + texCoord (u,v)
+            vertexData.addAll(listOf(pos.x,     pos.y,      uv.left,  uv.top))
+            vertexData.addAll(listOf(pos.x + w, pos.y,      uv.right, uv.top))
+            vertexData.addAll(listOf(pos.x + w, pos.y + h,  uv.right, uv.bottom))
+            vertexData.addAll(listOf(pos.x,     pos.y + h,  uv.left,  uv.bottom))
+            val base = quadIndex * 4
+            indexData.addAll(listOf(base, base + 1, base + 2, base, base + 2, base + 3))
+            quadIndex++
+        }
+    }
+
+    if (vertexData.isEmpty() || indexData.isEmpty()) return
+
+    // Populate textParams: atlasScale (1/w, 1/h), maskGamma (1.0 for linear)
+    val uniformBytes = java.nio.ByteBuffer.allocate(12).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+    uniformBytes.putFloat(1f / gpuBlob.atlasWidth.coerceAtLeast(1))
+    uniformBytes.putFloat(1f / gpuBlob.atlasHeight.coerceAtLeast(1))
+    uniformBytes.putFloat(1.0f)
+
+    drawTextAtlasPass(
+        atlasRgba = gpuBlob.atlasRgba,
+        atlasWidth = gpuBlob.atlasWidth,
+        atlasHeight = gpuBlob.atlasHeight,
+        atlasFormat = "a8unorm",
+        vertexData = vertexData.toFloatArray(),
+        indexData = indexData.toIntArray(),
+        draws = listOf(
+            GPUBackendRawUniformDraw(
+                uniformBytes = uniformBytes.array(),
+                scissorX = 0,
+                scissorY = 0,
+                scissorWidth = gpuBlob.atlasWidth,
+                scissorHeight = gpuBlob.atlasHeight,
+            ),
+        ),
+        blendMode = blendMode,
+    )
+    dispatched.add("text:${blob.hashCode()}")
 }

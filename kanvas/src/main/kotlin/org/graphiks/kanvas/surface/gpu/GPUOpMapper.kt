@@ -596,3 +596,39 @@ internal fun DisplayOp.withCombinedTransform(outer: Matrix33): DisplayOp = when 
     is DisplayOp.EndLayer,
     is DisplayOp.Annotation -> this
 }
+
+// ────────────────────────────────────────────────────────────────────────────
+// DrawText → NormalizedDrawCommand.DrawTextRun
+// ────────────────────────────────────────────────────────────────────────────
+
+internal fun DisplayOp.DrawText.toNormalizedCommand(
+    cmdId: GPUDrawCommandID,
+    target: GPUTargetFacts,
+): NormalizedDrawCommand.DrawTextRun {
+    val material = this.paint.toMaterial()
+    val bounds = GPUBounds(this.x, this.y, this.x + this.blob.fontSize * 10f, this.y + this.blob.fontSize)
+    val clip = this.clip.toGPUClipFacts(bounds)
+    val transform = this.transform.toGPUTransformFacts()
+    val blobId = "textblob-${this.blob.hashCode()}"
+    return NormalizedDrawCommand.DrawTextRun(
+        commandId = cmdId,
+        textLayoutResultId = blobId,
+        glyphRunId = blobId,
+        glyphRunDescriptorRefs = emptyList(),
+        glyphRunDescriptor = null,
+        colorGlyphPlans = emptyList(),
+        artifactRefs = emptyList(),
+        artifactKeyHashes = emptyList(),
+        atlasGenerationTokens = emptyList(),
+        uploadDependencyFacts = emptyList(),
+        routeDiagnostics = emptyList(),
+        transform = transform,
+        clip = clip,
+        layer = GPULayerFacts.root(target),
+        material = material,
+        blend = this.paint.blendMode.toGpuBlendFacts(),
+        bounds = bounds,
+        ordering = GPUOrderingFacts(paintOrder = 0, dependsOnDestination = false, requiresBarrier = false),
+        source = GPUCommandSource(adapter = "kanvas-surface", operation = "drawText"),
+    )
+}
