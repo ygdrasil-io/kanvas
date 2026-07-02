@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.surface.gpu
 
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
+import org.graphiks.kanvas.gpu.renderer.wgsl.GradientWgslShaderProvider
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.paint.Shader
@@ -39,22 +40,26 @@ internal fun Shader.toMaterial(): GPUMaterialDescriptor = when (this) {
             val stop = this.stops[i / 4]
             when (i % 4) { 0 -> stop.color.r; 1 -> stop.color.g; 2 -> stop.color.b; else -> stop.color.a }
         }
-        GPUMaterialDescriptor.LinearGradient(
-            startX = this.start.x,
-            startY = this.start.y,
-            endX = this.end.x,
-            endY = this.end.y,
-            startR = first.color.r,
-            startG = first.color.g,
-            startB = first.color.b,
-            startA = first.color.a,
-            endR = last.color.r,
-            endG = last.color.g,
-            endB = last.color.b,
-            endA = last.color.a,
-            allStopPositions = allPos,
-            allStopColors = allCol,
+        val tileMode = when (this.tileMode) {
+            org.graphiks.kanvas.paint.TileMode.CLAMP -> "clamp"
+            org.graphiks.kanvas.paint.TileMode.REPEAT -> "repeat"
+            org.graphiks.kanvas.paint.TileMode.MIRROR -> "mirror"
+            org.graphiks.kanvas.paint.TileMode.DECAL -> "decal"
+        }
+        val desc = GPUMaterialDescriptor.LinearGradient(
+            startX = this.start.x, startY = this.start.y,
+            endX = this.end.x, endY = this.end.y,
+            startR = first.color.r, startG = first.color.g, startB = first.color.b, startA = first.color.a,
+            endR = last.color.r, endG = last.color.g, endB = last.color.b, endA = last.color.a,
+            tileMode = tileMode,
+            allStopPositions = allPos, allStopColors = allCol,
         )
+        if (GradientWgslShaderProvider.canHandle(desc)) {
+            val hash = GradientWgslShaderProvider.uniformLayoutHashFor(desc)
+            desc.copy(snippetSourceHash = hash)
+        } else {
+            desc
+        }
     }
     is Shader.RadialGradient -> {
         val first = this.stops.first()
@@ -64,15 +69,26 @@ internal fun Shader.toMaterial(): GPUMaterialDescriptor = when (this) {
             val stop = this.stops[i / 4]
             when (i % 4) { 0 -> stop.color.r; 1 -> stop.color.g; 2 -> stop.color.b; else -> stop.color.a }
         }
-        GPUMaterialDescriptor.RadialGradient(
-            centerX = this.center.x,
-            centerY = this.center.y,
+        val tileMode = when (this.tileMode) {
+            org.graphiks.kanvas.paint.TileMode.CLAMP -> "clamp"
+            org.graphiks.kanvas.paint.TileMode.REPEAT -> "repeat"
+            org.graphiks.kanvas.paint.TileMode.MIRROR -> "mirror"
+            org.graphiks.kanvas.paint.TileMode.DECAL -> "decal"
+        }
+        val desc = GPUMaterialDescriptor.RadialGradient(
+            centerX = this.center.x, centerY = this.center.y,
             radius = this.radius,
             startR = first.color.r, startG = first.color.g, startB = first.color.b, startA = first.color.a,
             endR = last.color.r, endG = last.color.g, endB = last.color.b, endA = last.color.a,
-            allStopPositions = allPos,
-            allStopColors = allCol,
+            tileMode = tileMode,
+            allStopPositions = allPos, allStopColors = allCol,
         )
+        if (GradientWgslShaderProvider.canHandle(desc)) {
+            val hash = GradientWgslShaderProvider.uniformLayoutHashFor(desc)
+            desc.copy(snippetSourceHash = hash)
+        } else {
+            desc
+        }
     }
     is Shader.Image -> GPUMaterialDescriptor.ImageDraw()
     is Shader.Blend -> GPUMaterialDescriptor.SolidColor(r = 0f, g = 0f, b = 0f, a = 0f)
@@ -87,14 +103,26 @@ internal fun Shader.toMaterial(): GPUMaterialDescriptor = when (this) {
             val stop = this.stops[i / 4]
             when (i % 4) { 0 -> stop.color.r; 1 -> stop.color.g; 2 -> stop.color.b; else -> stop.color.a }
         }
-        GPUMaterialDescriptor.SweepGradient(
+        val tileMode = when (this.tileMode) {
+            org.graphiks.kanvas.paint.TileMode.CLAMP -> "clamp"
+            org.graphiks.kanvas.paint.TileMode.REPEAT -> "repeat"
+            org.graphiks.kanvas.paint.TileMode.MIRROR -> "mirror"
+            org.graphiks.kanvas.paint.TileMode.DECAL -> "decal"
+        }
+        val desc = GPUMaterialDescriptor.SweepGradient(
             centerX = this.center.x, centerY = this.center.y,
             startAngle = this.startAngle, endAngle = this.endAngle,
             startR = first.color.r, startG = first.color.g, startB = first.color.b, startA = first.color.a,
             endR = last.color.r, endG = last.color.g, endB = last.color.b, endA = last.color.a,
-            allStopPositions = allPos,
-            allStopColors = allCol,
+            tileMode = tileMode,
+            allStopPositions = allPos, allStopColors = allCol,
         )
+        if (GradientWgslShaderProvider.canHandle(desc)) {
+            val hash = GradientWgslShaderProvider.uniformLayoutHashFor(desc)
+            desc.copy(snippetSourceHash = hash)
+        } else {
+            desc
+        }
     }
     is Shader.ConicalGradient -> GPUMaterialDescriptor.LinearGradient(
         startX = this.start.x, startY = this.start.y,
