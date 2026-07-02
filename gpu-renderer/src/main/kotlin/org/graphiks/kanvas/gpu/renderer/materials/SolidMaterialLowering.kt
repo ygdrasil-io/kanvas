@@ -273,6 +273,7 @@ object GPUSolidMaterialLowering {
             source = this,
             snippetId = GPUSolidMaterialDictionary.SolidColorSnippetID,
             payloadPlanHash = "payload:SolidMaterialBlock.color.vec4f32@group1.binding0",
+            entryPoint = "solid_source",
             diagnostics = listOf(
                 GPUMaterialSourceDiagnostic(
                     code = "accepted.material_source.solid_color",

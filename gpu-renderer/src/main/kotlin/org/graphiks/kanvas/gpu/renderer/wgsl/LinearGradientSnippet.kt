@@ -42,7 +42,45 @@ fn linear_gradient_clamp(pos: vec4f, start: vec2f, end: vec2f, count: u32, posit
     let t = clamp(t_raw, 0.0, 1.0);
     return sample_stops_at(t, count, positions, colors);
 }
+
+fn tile_repeat(t: f32) -> f32 {
+    return t - floor(t);
+}
+
+fn tile_mirror(t: f32) -> f32 {
+    let i = floor(t);
+    let f = t - i;
+    let even = (i % 2.0) == 0.0;
+    return select(1.0 - f, f, even);
+}
+
+fn tile_decal_alpha(t: f32) -> f32 {
+    return select(0.0, 1.0, t >= 0.0 && t <= 1.0);
+}
+
+fn linear_gradient_repeat(pos: vec4f, start: vec2f, end: vec2f, count: u32, positions: ptr<function, array<vec4f, 16>>, colors: ptr<function, array<vec4f, 16>>) -> vec4f {
+    let t_raw = compute_t_raw(pos, start, end);
+    let t = tile_repeat(t_raw);
+    return sample_stops_at(t, count, positions, colors);
+}
+
+fn linear_gradient_mirror(pos: vec4f, start: vec2f, end: vec2f, count: u32, positions: ptr<function, array<vec4f, 16>>, colors: ptr<function, array<vec4f, 16>>) -> vec4f {
+    let t_raw = compute_t_raw(pos, start, end);
+    let t = tile_mirror(t_raw);
+    return sample_stops_at(t, count, positions, colors);
+}
+
+fn linear_gradient_decal(pos: vec4f, start: vec2f, end: vec2f, count: u32, positions: ptr<function, array<vec4f, 16>>, colors: ptr<function, array<vec4f, 16>>) -> vec4f {
+    let t_raw = compute_t_raw(pos, start, end);
+    let t = clamp(t_raw, 0.0, 1.0);
+    let alpha = tile_decal_alpha(t_raw);
+    let color = sample_stops_at(t, count, positions, colors);
+    return vec4f(color.rgb, color.a * alpha);
+}
 """
 
 const val LinearGradientSnippetSourceHash: String = "fragment:linear_gradient:v1"
 const val LinearGradientEntryPoint: String = "linear_gradient_clamp"
+const val LinearGradientRepeatEntryPoint: String = "linear_gradient_repeat"
+const val LinearGradientMirrorEntryPoint: String = "linear_gradient_mirror"
+const val LinearGradientDecalEntryPoint: String = "linear_gradient_decal"

@@ -194,6 +194,7 @@ sealed interface GPUMaterialSourcePlan {
         val source: GPUMaterialSourceDescriptor,
         val snippetId: WGSLSnippetID,
         val payloadPlanHash: String,
+        val entryPoint: String,
         val diagnostics: List<GPUMaterialSourceDiagnostic> = emptyList(),
     ) : GPUMaterialSourcePlan
 

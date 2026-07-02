@@ -40,6 +40,8 @@ class SkiaGmRunner {
             minSimilarity = gm.minSimilarity,
         )
 
+        SimilarityTracker.updateScore(gm.name, comparison.similarity)
+
         val outputDir = File(tempDir, gm.name)
         outputDir.mkdirs()
         ComparisonUtils.saveRgbaAsPng(result.rgba, result.width, result.height, File(outputDir, "kanvas.png"))

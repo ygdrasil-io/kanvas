@@ -35,3 +35,94 @@ val sweepGradientModule: WgslRenderStepModule = WgslRenderStepModule(
     vertexEntryPoint = "vs_main",
     fragmentEntryPoint = SweepGradientEntryPoint,
 )
+
+val linearGradientRepeatModule: WgslRenderStepModule = WgslRenderStepModule(
+    renderStepIdentity = "linear.gradient.repeat.fill",
+    sourceHash = LinearGradientSnippetSourceHash,
+    vertexEntryPoint = "vs_main",
+    fragmentEntryPoint = LinearGradientRepeatEntryPoint,
+)
+
+val linearGradientMirrorModule: WgslRenderStepModule = WgslRenderStepModule(
+    renderStepIdentity = "linear.gradient.mirror.fill",
+    sourceHash = LinearGradientSnippetSourceHash,
+    vertexEntryPoint = "vs_main",
+    fragmentEntryPoint = LinearGradientMirrorEntryPoint,
+)
+
+val linearGradientDecalModule: WgslRenderStepModule = WgslRenderStepModule(
+    renderStepIdentity = "linear.gradient.decal.fill",
+    sourceHash = LinearGradientSnippetSourceHash,
+    vertexEntryPoint = "vs_main",
+    fragmentEntryPoint = LinearGradientDecalEntryPoint,
+)
+
+val radialGradientRepeatModule: WgslRenderStepModule = WgslRenderStepModule(
+    renderStepIdentity = "radial.gradient.repeat.fill",
+    sourceHash = RadialGradientSnippetSourceHash,
+    vertexEntryPoint = "vs_main",
+    fragmentEntryPoint = RadialGradientRepeatEntryPoint,
+)
+
+val radialGradientMirrorModule: WgslRenderStepModule = WgslRenderStepModule(
+    renderStepIdentity = "radial.gradient.mirror.fill",
+    sourceHash = RadialGradientSnippetSourceHash,
+    vertexEntryPoint = "vs_main",
+    fragmentEntryPoint = RadialGradientMirrorEntryPoint,
+)
+
+val radialGradientDecalModule: WgslRenderStepModule = WgslRenderStepModule(
+    renderStepIdentity = "radial.gradient.decal.fill",
+    sourceHash = RadialGradientSnippetSourceHash,
+    vertexEntryPoint = "vs_main",
+    fragmentEntryPoint = RadialGradientDecalEntryPoint,
+)
+
+val sweepGradientRepeatModule: WgslRenderStepModule = WgslRenderStepModule(
+    renderStepIdentity = "sweep.gradient.repeat.fill",
+    sourceHash = SweepGradientSnippetSourceHash,
+    vertexEntryPoint = "vs_main",
+    fragmentEntryPoint = SweepGradientRepeatEntryPoint,
+)
+
+val sweepGradientMirrorModule: WgslRenderStepModule = WgslRenderStepModule(
+    renderStepIdentity = "sweep.gradient.mirror.fill",
+    sourceHash = SweepGradientSnippetSourceHash,
+    vertexEntryPoint = "vs_main",
+    fragmentEntryPoint = SweepGradientMirrorEntryPoint,
+)
+
+val sweepGradientDecalModule: WgslRenderStepModule = WgslRenderStepModule(
+    renderStepIdentity = "sweep.gradient.decal.fill",
+    sourceHash = SweepGradientSnippetSourceHash,
+    vertexEntryPoint = "vs_main",
+    fragmentEntryPoint = SweepGradientDecalEntryPoint,
+)
+
+val conicalGradientModule: WgslRenderStepModule = WgslRenderStepModule(
+    renderStepIdentity = "conical.gradient.fill",
+    sourceHash = ConicalGradientSnippetSourceHash,
+    vertexEntryPoint = "vs_main",
+    fragmentEntryPoint = ConicalGradientEntryPoint,
+)
+
+val conicalGradientRepeatModule: WgslRenderStepModule = WgslRenderStepModule(
+    renderStepIdentity = "conical.gradient.repeat.fill",
+    sourceHash = ConicalGradientSnippetSourceHash,
+    vertexEntryPoint = "vs_main",
+    fragmentEntryPoint = ConicalGradientRepeatEntryPoint,
+)
+
+val conicalGradientMirrorModule: WgslRenderStepModule = WgslRenderStepModule(
+    renderStepIdentity = "conical.gradient.mirror.fill",
+    sourceHash = ConicalGradientSnippetSourceHash,
+    vertexEntryPoint = "vs_main",
+    fragmentEntryPoint = ConicalGradientMirrorEntryPoint,
+)
+
+val conicalGradientDecalModule: WgslRenderStepModule = WgslRenderStepModule(
+    renderStepIdentity = "conical.gradient.decal.fill",
+    sourceHash = ConicalGradientSnippetSourceHash,
+    vertexEntryPoint = "vs_main",
+    fragmentEntryPoint = ConicalGradientDecalEntryPoint,
+)
