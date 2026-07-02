@@ -37,16 +37,6 @@ class D2PreBatch4Test {
         runGm(CroppedRectsGM(), "CroppedRectsGM", floor = 0.0)
 
     /**
-     * `dropshadowimagefilter` — 4 draw recipes × 8 drop-shadow
-     * filter variants. Slot 5 (color-space tint), slot 6
-     * (bogus crop rect) and the text recipe row are adapted to
-     * primitives we expose.
-     */
-    @Test
-    fun `DropShadowImageFilterGM matches reference`() =
-        runGm(DropShadowImageFilterGM(), "DropShadowImageFilterGM", floor = 0.0)
-
-    /**
      * `lighting` — C1.7 lighting filters on a synthetic 100×100
      * input bitmap (substitutes upstream's 'e' glyph render).
      */

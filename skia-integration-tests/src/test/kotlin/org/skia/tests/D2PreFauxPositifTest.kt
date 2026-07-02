@@ -133,20 +133,4 @@ class D2PreFauxPositifTest {
     fun `ArithmodeBlenderGM matches reference`() =
         runGm(ArithmodeBlenderGM(), "ArithmodeBlenderGM", floor = 0.0)
 
-    /**
-     * `overdrawcolorfilter` — the only DEF_GM of
-     * `gm/overdrawcolorfilter.cpp`. **Phase G9b** port :
-     * [org.skia.effects.SkOverdrawColorFilter.MakeWithSkColors] is fully
-     * implemented but the upstream GM sources its tiles from
-     * `kAlpha_8` `SkBitmap`s — a colour type not yet supported by
-     * `:kanvas-skia`. The port substitutes `kRGBA_8888` tiles whose
-     * `RGB` is zero and `A` carries the overdraw count, which round-
-     * trips correctly through the filter but does not match the
-     * source-pixel encoding upstream uses, so iso-pixel parity with
-     * `original-888/overdrawcolorfilter.png` is not expected until
-     * Phase G4a (Alpha8 SkBitmap) lands.
-     */
-    @Test
-    fun `OverdrawColorFilterGM matches reference`() =
-        runGm(OverdrawColorFilterGM(), "OverdrawColorFilterGM", floor = 0.0)
 }

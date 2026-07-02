@@ -1,6 +1,8 @@
 package org.graphiks.kanvas.image
 
 import org.graphiks.kanvas.codec.Codec
+import org.graphiks.kanvas.paint.Shader
+import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.types.ColorSpace
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -44,6 +46,11 @@ data class Image(
             sourceId: String = "pixels",
         ): Image = Image(width, height, colorType, sourceId, pixels)
     }
+
+    fun makeShader(
+        tileModeX: TileMode = TileMode.CLAMP,
+        tileModeY: TileMode = TileMode.CLAMP,
+    ): Shader.Image = Shader.Image(this, tileModeX, tileModeY)
 
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
