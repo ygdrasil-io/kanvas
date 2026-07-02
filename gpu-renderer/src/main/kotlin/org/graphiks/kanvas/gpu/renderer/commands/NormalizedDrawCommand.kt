@@ -387,6 +387,8 @@ sealed interface GPUMaterialDescriptor {
         val tileMode: String = "clamp",
         val allStopPositions: FloatArray? = null,
         val allStopColors: FloatArray? = null,
+        val snippetSourceHash: String? = null,
+        val fragmentEntryPoint: String? = null,
     ) : GPUMaterialDescriptor {
         override val kind: GPUMaterialKind = GPUMaterialKind.LinearGradient
     }
@@ -407,6 +409,8 @@ sealed interface GPUMaterialDescriptor {
         val tileMode: String = "clamp",
         val allStopPositions: FloatArray? = null,
         val allStopColors: FloatArray? = null,
+        val snippetSourceHash: String? = null,
+        val fragmentEntryPoint: String? = null,
     ) : GPUMaterialDescriptor {
         override val kind: GPUMaterialKind = GPUMaterialKind.RadialGradient
     }
@@ -428,6 +432,8 @@ sealed interface GPUMaterialDescriptor {
         val tileMode: String = "clamp",
         val allStopPositions: FloatArray? = null,
         val allStopColors: FloatArray? = null,
+        val snippetSourceHash: String? = null,
+        val fragmentEntryPoint: String? = null,
     ) : GPUMaterialDescriptor {
         override val kind: GPUMaterialKind = GPUMaterialKind.SweepGradient
     }
