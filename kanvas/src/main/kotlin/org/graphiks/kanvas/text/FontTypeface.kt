@@ -6,7 +6,7 @@ import org.graphiks.kanvas.font.scaler.OutlineCommand
 import org.graphiks.kanvas.geometry.Path
 
 class FontTypeface(
-    private val fontBytes: ByteArray,
+    val fontBytes: ByteArray,
     override val fontName: String = "unknown",
 ) : Typeface {
     private val scaler: GlyphScaler? = try {

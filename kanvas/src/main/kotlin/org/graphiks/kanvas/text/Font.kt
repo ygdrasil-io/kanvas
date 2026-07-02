@@ -20,10 +20,7 @@ data class Font(
         }
         return TextBlob(
             glyphRuns = listOf(KanvasGlyphRun(glyphIds, positions)),
-            typeface = when (typeface) {
-                is KanvasTypeface -> typeface
-                else -> null
-            },
+            typeface = typeface,
             fontSize = size,
         )
     }

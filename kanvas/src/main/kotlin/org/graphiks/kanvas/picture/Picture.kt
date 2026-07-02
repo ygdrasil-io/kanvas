@@ -416,7 +416,8 @@ private class Writer {
             int(run.positions.size)
             for (p in run.positions) point(p)
         }
-        if (blob.typeface != null) { bool(true); string(blob.typeface.resourcePath) } else bool(false)
+        val tf = blob.typeface
+        if (tf != null) { bool(true); string((tf as? KanvasTypeface)?.resourcePath ?: tf.fontName) } else bool(false)
         float(blob.fontSize)
     }
 
