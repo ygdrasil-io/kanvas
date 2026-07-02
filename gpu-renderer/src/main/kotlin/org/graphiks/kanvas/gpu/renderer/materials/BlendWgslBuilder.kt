@@ -9,6 +9,12 @@ object BlendWgslBuilder {
         val dstEval = childEval("dst", dst)
         val srcEval = childEval("src", src)
         val blendFn = blendFormula(mode)
+        val hasImageDraw = (dst is GPUMaterialDescriptor.ImageDraw && dst.rgbaPixels.isNotEmpty()) ||
+            (src is GPUMaterialDescriptor.ImageDraw && src.rgbaPixels.isNotEmpty())
+        val texDecl = if (hasImageDraw) """
+@group(1) @binding(1) var blend_image_texture: texture_2d<f32>;
+@group(1) @binding(2) var blend_image_sampler: sampler;
+""".trimIndent() else ""
         return """
 struct BlendBlock {
     ${dstFields}
@@ -16,6 +22,7 @@ struct BlendBlock {
     _pad0: u32, _pad1: u32, _pad2: u32,
 }
 @group(0) @binding(0) var<uniform> blend: BlendBlock;
+${texDecl}
 
 @vertex fn vs_main(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f {
     let x = f32((vi << 1u) & 2u) * 2.0 - 1.0;
@@ -66,6 +73,11 @@ struct BlendBlock {
             ${prefix}_pad: vec4f,
             ${prefix}_pad2: vec4f,
         """.trimIndent()
+        is GPUMaterialDescriptor.ImageDraw -> """
+            ${prefix}_color: vec4f,
+            ${prefix}_pad: vec4f,
+            ${prefix}_pad2: vec4f,
+        """.trimIndent()
         else -> error("Unsupported blend child: ${child.kind}")
     }
 
@@ -91,6 +103,10 @@ struct BlendBlock {
     let ${prefix}_result = mix(blend.${prefix}_color, blend.${prefix}_pad, ${prefix}_tc);""".trimIndent()
         is GPUMaterialDescriptor.SolidColor -> """
     let ${prefix}_result = blend.${prefix}_color;""".trimIndent()
+        is GPUMaterialDescriptor.ImageDraw -> """
+    let ${prefix}_uv = vec2f(pos.x * 0.5 + 0.5, pos.y * -0.5 + 0.5);
+    let ${prefix}_sampled = textureSample(blend_image_texture, blend_image_sampler, ${prefix}_uv);
+    let ${prefix}_result = ${prefix}_sampled * blend.${prefix}_color;""".trimIndent()
         else -> error("Unsupported blend child: ${child.kind}")
     }
 
@@ -152,6 +168,11 @@ struct BlendBlock {
                 val g = child.g * child.a
                 val b = child.b * child.a
                 bb.putFloat(r); bb.putFloat(g); bb.putFloat(b); bb.putFloat(child.a)
+                bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f)
+                bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f)
+            }
+            is GPUMaterialDescriptor.ImageDraw -> {
+                bb.putFloat(1f); bb.putFloat(1f); bb.putFloat(1f); bb.putFloat(1f)
                 bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f)
                 bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f)
             }

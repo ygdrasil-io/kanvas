@@ -90,7 +90,15 @@ internal fun Shader.toMaterial(): GPUMaterialDescriptor = when (this) {
             desc
         }
     }
-    is Shader.Image -> GPUMaterialDescriptor.ImageDraw()
+    is Shader.Image -> {
+        val image = this.image
+        GPUMaterialDescriptor.ImageDraw(
+            imageSourceId = image.sourceId,
+            imageWidth = image.width,
+            imageHeight = image.height,
+            rgbaPixels = image.pixels ?: byteArrayOf(),
+        )
+    }
     is Shader.Blend -> {
         val dstDesc = this.dst.toMaterial()
         val srcDesc = this.src.toMaterial()

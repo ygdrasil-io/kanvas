@@ -339,17 +339,40 @@ internal fun GPUBackendRenderRecorder.dispatchFillRect(
         }
         is GPUMaterialDescriptor.BlendShader -> {
             if (material.wgslCombined.isNotBlank()) {
-                drawFullscreenRawUniformPass(
-                    wgsl = material.wgslCombined,
-                    colorFormat = config.gpuColorFormat.wgpuLabel,
-                    draws = listOf(
-                        GPUBackendRawUniformDraw(
-                            uniformBytes = material.uniformBytes,
-                            scissorX = sx, scissorY = sy,
-                            scissorWidth = sw, scissorHeight = sh,
+                val imageChild = when {
+                    material.dst is GPUMaterialDescriptor.ImageDraw -> material.dst as GPUMaterialDescriptor.ImageDraw
+                    material.src is GPUMaterialDescriptor.ImageDraw -> material.src as GPUMaterialDescriptor.ImageDraw
+                    else -> null
+                }
+                if (imageChild != null && imageChild.rgbaPixels.isNotEmpty()) {
+                    drawFullscreenTextureUniformPass(
+                        wgsl = material.wgslCombined,
+                        colorFormat = config.gpuColorFormat.wgpuLabel,
+                        textureRgba = imageChild.rgbaPixels,
+                        textureWidth = imageChild.imageWidth,
+                        textureHeight = imageChild.imageHeight,
+                        textureFormat = "RGBA8Unorm",
+                        draws = listOf(
+                            GPUBackendRawUniformDraw(
+                                uniformBytes = material.uniformBytes,
+                                scissorX = sx, scissorY = sy,
+                                scissorWidth = sw, scissorHeight = sh,
+                            ),
                         ),
-                    ),
-                )
+                    )
+                } else {
+                    drawFullscreenRawUniformPass(
+                        wgsl = material.wgslCombined,
+                        colorFormat = config.gpuColorFormat.wgpuLabel,
+                        draws = listOf(
+                            GPUBackendRawUniformDraw(
+                                uniformBytes = material.uniformBytes,
+                                scissorX = sx, scissorY = sy,
+                                scissorWidth = sw, scissorHeight = sh,
+                            ),
+                        ),
+                    )
+                }
             } else {
                 refuse("unsupported_material:blend_shader")
             }

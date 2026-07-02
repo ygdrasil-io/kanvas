@@ -8,6 +8,7 @@ object GPUBlendShaderLowering {
         is GPUMaterialDescriptor.RadialGradient -> true
         is GPUMaterialDescriptor.SweepGradient -> true
         is GPUMaterialDescriptor.SolidColor -> true
+        is GPUMaterialDescriptor.ImageDraw -> child.rgbaPixels.isNotEmpty()
         else -> false
     }
 
