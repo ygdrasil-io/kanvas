@@ -263,6 +263,7 @@ fn sample_stops_at(t: f32, count: u32, positions: ptr<function, array<vec4<f32>,
             },
             allStopPositions = desc.allStopPositions,
             allStopColors = desc.allStopColors,
+            headerSize = 48,
         )
     }
 
@@ -389,15 +390,15 @@ fn sample_stops_at(t: f32, count: u32, positions: ptr<function, array<vec4<f32>,
     private const val STRUCT_HEADER_SIZE = 32
     private const val MAX_STOPS_WGSL = 16
     private const val BYTES_PER_STOP = 32  // vec4f position + vec4f color
-    private const val FULL_STRUCT_SIZE = STRUCT_HEADER_SIZE + MAX_STOPS_WGSL * BYTES_PER_STOP // 544
-
     private fun packGradientUniforms(
         geometryPacker: (java.nio.ByteBuffer) -> Unit,
         allStopPositions: FloatArray?,
         allStopColors: FloatArray?,
+        headerSize: Int = STRUCT_HEADER_SIZE,
     ): ByteArray {
         val n = allStopPositions?.size ?: 2
-        val bb = java.nio.ByteBuffer.allocate(FULL_STRUCT_SIZE)
+        val bufferSize = headerSize + MAX_STOPS_WGSL * BYTES_PER_STOP
+        val bb = java.nio.ByteBuffer.allocate(bufferSize)
             .order(java.nio.ByteOrder.nativeOrder())
         geometryPacker(bb)
         for (i in 0 until MAX_STOPS_WGSL) {

@@ -463,6 +463,7 @@ sealed interface GPUMaterialDescriptor {
         val imageSourceId: String = "",
         val imageWidth: Int = 0,
         val imageHeight: Int = 0,
+        val rgbaPixels: ByteArray = byteArrayOf(),
     ) : GPUMaterialDescriptor {
         override val kind: GPUMaterialKind = GPUMaterialKind.ImageDraw
     }
