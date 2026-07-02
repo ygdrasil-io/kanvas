@@ -2,10 +2,14 @@ package org.graphiks.kanvas.skia
 
 import org.graphiks.kanvas.canvas.Canvas
 import org.graphiks.kanvas.geometry.Path
+import org.graphiks.kanvas.image.Image
+import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
+import org.graphiks.kanvas.picture.Picture
 import org.graphiks.kanvas.pipeline.ClipOp
 import org.graphiks.kanvas.types.Color
+import org.graphiks.kanvas.types.Lattice
 import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.PointMode
@@ -70,6 +74,14 @@ class GmCanvas(
         currentTransform = currentTransform * matrix
     }
 
+    fun setMatrix(matrix: Matrix33) {
+        inner.setMatrix(matrix)
+    }
+
+    fun resetMatrix() {
+        inner.resetMatrix()
+    }
+
     fun clipRect(rect: Rect) {
         currentClip = if (currentClip != null) {
             intersectRects(currentClip!!, rect)
@@ -85,6 +97,10 @@ class GmCanvas(
     fun clipRRect(rrect: RRect, op: ClipOp = ClipOp.INTERSECT, antiAlias: Boolean = true) {
         inner.clipRRect(rrect, op, antiAlias)
     }
+
+    fun quickReject(rect: Rect): Boolean = inner.quickReject(rect)
+
+    fun quickReject(path: Path): Boolean = inner.quickReject(path)
 
     private fun Matrix33.isIdentity(): Boolean =
         scaleX == 1f && skewX == 0f && transX == 0f &&
@@ -212,10 +228,10 @@ class GmCanvas(
                 this.inner.drawDRRect(outer, innerRect, paint)
             } else {
                 val outerPath = Path { }.apply { addRRect(outer) }
-                val innerPath = Path { }.apply { addRRect(innerRect) }
+                val ip = Path { }.apply { addRRect(innerRect) }
                 val p = Path { }
                 p.addPath(outerPath)
-                p.addPath(innerPath)
+                p.addPath(ip)
                 this.inner.drawPath(p.transform(currentTransform), paint)
             }
         }
@@ -250,7 +266,7 @@ class GmCanvas(
         }
     }
 
-    fun drawImage(image: org.graphiks.kanvas.image.Image, rect: Rect, paint: Paint? = null) {
+    fun drawImage(image: Image, rect: Rect, paint: Paint? = null) {
         withClip {
             if (currentTransform.isIdentity()) {
                 inner.drawImage(image, rect, paint)
@@ -264,6 +280,68 @@ class GmCanvas(
                 val bottom = max(p0.y, p1.y)
                 inner.drawImage(image, Rect(left, top, right, bottom), paint)
             }
+        }
+    }
+
+    fun drawImageRect(image: Image, src: Rect, dst: Rect, paint: Paint? = null) {
+        withClip {
+            if (currentTransform.isIdentity()) {
+                inner.drawImageRect(image, src, dst, paint)
+            } else {
+                val t = currentTransform
+                val p0 = t * Point(dst.left, dst.top)
+                val p1 = t * Point(dst.right, dst.bottom)
+                val left = min(p0.x, p1.x)
+                val top = min(p0.y, p1.y)
+                val right = max(p0.x, p1.x)
+                val bottom = max(p0.y, p1.y)
+                inner.drawImageRect(image, src, Rect(left, top, right, bottom), paint)
+            }
+        }
+    }
+
+    fun drawImageNine(image: Image, center: Rect, dst: Rect, paint: Paint? = null) {
+        withClip {
+            if (currentTransform.isIdentity()) {
+                inner.drawImageNine(image, center, dst, paint)
+            } else {
+                val p0 = currentTransform * Point(dst.left, dst.top)
+                val p1 = currentTransform * Point(dst.right, dst.bottom)
+                val tdst = Rect(min(p0.x, p1.x), min(p0.y, p1.y), max(p0.x, p1.x), max(p0.y, p1.y))
+                inner.drawImageNine(image, center, tdst, paint)
+            }
+        }
+    }
+
+    fun drawImageLattice(image: Image, lattice: Lattice, dst: Rect, paint: Paint? = null) {
+        withClip {
+            if (currentTransform.isIdentity()) {
+                inner.drawImageLattice(image, lattice, dst, paint)
+            } else {
+                val p0 = currentTransform * Point(dst.left, dst.top)
+                val p1 = currentTransform * Point(dst.right, dst.bottom)
+                val tdst = Rect(min(p0.x, p1.x), min(p0.y, p1.y), max(p0.x, p1.x), max(p0.y, p1.y))
+                inner.drawImageLattice(image, lattice, tdst, paint)
+            }
+        }
+    }
+
+    fun drawAtlas(
+        atlas: Image,
+        transforms: List<Matrix33>,
+        texRects: List<Rect>,
+        colors: List<Color>? = null,
+        blendMode: BlendMode = BlendMode.SRC_OVER,
+        paint: Paint? = null,
+    ) {
+        withClip {
+            inner.drawAtlas(atlas, transforms, texRects, colors, blendMode, paint)
+        }
+    }
+
+    fun drawPicture(picture: Picture, paint: Paint? = null) {
+        withClip {
+            inner.drawPicture(picture, paint)
         }
     }
 
