@@ -8,7 +8,7 @@ fn compute_t_sweep(pos: vec4f, center: vec2f, startAngle: f32, endAngle: f32) ->
     if (d.x == 0.0 && d.y == 0.0) {
         return 0.0;
     }
-    let a = atan2(d.y, d.x);
+    let a = atan2(-d.y, d.x);
     var u = a / TWO_PI;
     if (u < 0.0) {
         u = u + 1.0;
