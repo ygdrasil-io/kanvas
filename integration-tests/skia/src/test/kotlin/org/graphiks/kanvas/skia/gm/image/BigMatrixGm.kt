@@ -13,6 +13,13 @@ import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 
+/**
+ * Port of Skia's `gm/bigmatrix.cpp`.
+ * Stresses the rasteriser with an extreme CTM:
+ * scale(3000) * rotate(33) * translate(6000, -5000).
+ * Draws three sub-pixel-sized primitives in device space.
+ * @see https://github.com/google/skia/blob/main/gm/bigmatrix.cpp
+ */
 class BigMatrixGm : SkiaGm {
     override val name = "bigmatrix"
     override val renderFamily = RenderFamily.IMAGE
@@ -21,50 +28,47 @@ class BigMatrixGm : SkiaGm {
     override val height = 50
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        canvas.drawColor(0x66 / 255f, 0xAA / 255f, 0x99 / 255f)
+        canvas.drawColor(0.388f, 0.667f, 0.580f)
 
         val m = Matrix33.rotate(33f) * Matrix33.scale(3000f, 3000f) * Matrix33.translate(6000f, -5000f)
         canvas.concat(m)
 
-        val inv = invertAffine(m) ?: error("BigMatrixGm: m.invert() failed")
-        val paint = Paint(color = Color.RED, antiAlias = true)
-
+        val inv = invert33(m)
         val small = 1f / 500f
-        fun mapPoint(x: Float, y: Float): Point = inv * Point(x, y)
 
-        var pt = mapPoint(10f, 10f)
-        canvas.drawCircle(pt.x, pt.y, small, paint)
+        var pt = inv * Point(10f, 10f)
+        canvas.drawCircle(pt.x, pt.y, small, Paint(color = Color.RED, antiAlias = true))
 
-        pt = mapPoint(30f, 10f)
-        canvas.drawRect(Rect(pt.x - small, pt.y - small, pt.x + small, pt.y + small), paint)
+        pt = inv * Point(30f, 10f)
+        canvas.drawRect(
+            Rect.fromLTRB(pt.x - small, pt.y - small, pt.x + small, pt.y + small),
+            Paint(color = Color.RED, antiAlias = true),
+        )
 
         val bmpPixels = byteArrayOf(
-            (-1).toByte(), 0, 0, (-1).toByte(),
-            0, (-1).toByte(), 0, (-1).toByte(),
-            0, 0, 0, 0x80.toByte(),
-            0, 0, (-1).toByte(), (-1).toByte(),
+            0xFF.toByte(), 0x00.toByte(), 0x00.toByte(), 0xFF.toByte(),
+            0x00.toByte(), 0xFF.toByte(), 0x00.toByte(), 0xFF.toByte(),
+            0x00.toByte(), 0x00.toByte(), 0x00.toByte(), 0x80.toByte(),
+            0x00.toByte(), 0x00.toByte(), 0xFF.toByte(), 0xFF.toByte(),
         )
-        val bmp = Image.fromPixels(2, 2, bmpPixels)
+        val bmp = Image.fromPixels(2, 2, bmpPixels, ColorType.RGBA_8888, "bigmatrix-bmp")
 
-        pt = mapPoint(30f, 30f)
+        pt = inv * Point(30f, 30f)
         val s = Matrix33.scale(1f / 1000f, 1f / 1000f)
+        val shader = Shader.WithLocalMatrix(bmp.makeShader(TileMode.REPEAT, TileMode.REPEAT), s)
         canvas.drawRect(
-            Rect(pt.x - small, pt.y - small, pt.x + small, pt.y + small),
-            Paint(
-                shader = Shader.WithLocalMatrix(
-                    Shader.Image(bmp, TileMode.REPEAT, TileMode.REPEAT), s,
-                ),
-            ),
+            Rect.fromLTRB(pt.x - small, pt.y - small, pt.x + small, pt.y + small),
+            Paint(shader = shader, antiAlias = false),
         )
     }
+}
 
-    private fun invertAffine(m: Matrix33): Matrix33? {
-        val det = m.scaleX * m.scaleY - m.skewX * m.skewY
-        if (det == 0f) return null
-        val invDet = 1f / det
-        return Matrix33.makeAll(
-            m.scaleY * invDet, -m.skewX * invDet, (m.skewX * m.transY - m.scaleY * m.transX) * invDet,
-            -m.skewY * invDet, m.scaleX * invDet, (m.skewY * m.transX - m.scaleX * m.transY) * invDet,
-        )
-    }
+internal fun invert33(m: Matrix33): Matrix33 {
+    val a = m.scaleX; val b = m.skewX; val c = m.transX
+    val d = m.skewY; val e = m.scaleY; val f = m.transY
+    val det = a * e - b * d
+    return Matrix33.makeAll(
+        sx = e / det, kx = -b / det, tx = (b * f - c * e) / det,
+        ky = -d / det, sy = a / det, ty = (c * d - a * f) / det,
+    )
 }

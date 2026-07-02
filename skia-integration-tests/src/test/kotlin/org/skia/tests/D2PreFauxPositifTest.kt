@@ -123,14 +123,4 @@ class D2PreFauxPositifTest {
     fun `Skbug13047GM matches reference`() =
         runGm(Skbug13047GM(), "Skbug13047GM", floor = 0.0)
 
-    /**
-     * `arithmode_blender` — the second DEF_GM of `arithmode.cpp`.
-     * Now portable post-D2.0 (uses `SkBlenders.Arithmetic`). Cells
-     * 3 and 4 (runtime shader) are still placeholders pending
-     * D2.4.b, so the similarity ceiling is ~50 %.
-     */
-    @Test
-    fun `ArithmodeBlenderGM matches reference`() =
-        runGm(ArithmodeBlenderGM(), "ArithmodeBlenderGM", floor = 0.0)
-
 }

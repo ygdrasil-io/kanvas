@@ -38,10 +38,6 @@ class Round10Test {
     fun `TinyBitmapGM matches reference`() = runGm(TinyBitmapGM(), "TinyBitmapGM", 0.0)
 
     @Test
-    fun `BigMatrixGM matches reference`() = runGm(BigMatrixGM(), "BigMatrixGM", 80.0)
-
-
-    @Test
     fun `BitmapRectTestGM matches reference`() = runGm(BitmapRectTestGM(), "BitmapRectTestGM", 80.0)
 
     @Test
