@@ -77,86 +77,100 @@ object GradientWgslShaderProvider {
         )
     }
 
-    private fun buildLinearWgsl(stopCount: Int, tileMode: String): String = buildGradientWgsl(
-        preamble = """
-            let dir = gradient.end - gradient.start;
-            let lenSq = dot(dir, dir);
-            var t_raw: f32;
-            if (lenSq < 1.0e-12) {
-                t_raw = -1.0e30;
-            } else {
-                t_raw = dot(pos.xy - gradient.start, dir) / lenSq;
-            }
-        """.trimIndent(),
-        stopCount = stopCount,
-        headerExtra = "",
-        structFields = """
-                start: vec2<f32>,
-                end: vec2<f32>,
-        """.trimIndent(),
-        tileFn = tileFnForMode(tileMode),
-    )
+    private fun buildLinearWgsl(stopCount: Int, tileMode: String): String {
+        val (tileFn, decalSuffix) = tileFnForMode(tileMode)
+        return buildGradientWgsl(
+            preamble = """
+                let dir = gradient.end - gradient.start;
+                let lenSq = dot(dir, dir);
+                var t_raw: f32;
+                if (lenSq < 1.0e-12) {
+                    t_raw = -1.0e30;
+                } else {
+                    t_raw = dot(pos.xy - gradient.start, dir) / lenSq;
+                }
+            """.trimIndent(),
+            stopCount = stopCount,
+            headerExtra = "",
+            structFields = """
+                    start: vec2<f32>,
+                    end: vec2<f32>,
+            """.trimIndent(),
+            tileFn = tileFn,
+            decalSuffix = decalSuffix,
+        )
+    }
 
-    private fun buildRadialWgsl(stopCount: Int, tileMode: String): String = buildGradientWgsl(
-        preamble = """
-            let d = pos.xy - gradient.center;
-            var t_raw: f32;
-            if (gradient.radius <= 0.0) {
-                t_raw = -1.0e30;
-            } else {
-                t_raw = length(d) / gradient.radius;
-            }
-        """.trimIndent(),
-        stopCount = stopCount,
-        headerExtra = "radius: f32,",
-        structFields = """
-                center: vec2<f32>,
-                radius: f32,
-        """.trimIndent(),
-        tileFn = tileFnForMode(tileMode),
-    )
+    private fun buildRadialWgsl(stopCount: Int, tileMode: String): String {
+        val (tileFn, decalSuffix) = tileFnForMode(tileMode)
+        return buildGradientWgsl(
+            preamble = """
+                let d = pos.xy - gradient.center;
+                var t_raw: f32;
+                if (gradient.radius <= 0.0) {
+                    t_raw = -1.0e30;
+                } else {
+                    t_raw = length(d) / gradient.radius;
+                }
+            """.trimIndent(),
+            stopCount = stopCount,
+            headerExtra = "radius: f32,",
+            structFields = """
+                    center: vec2<f32>,
+                    radius: f32,
+            """.trimIndent(),
+            tileFn = tileFn,
+            decalSuffix = decalSuffix,
+        )
+    }
 
-    private fun buildSweepWgsl(stopCount: Int, tileMode: String): String = buildGradientWgsl(
-        preamble = """
-            const TWO_PI: f32 = 6.2831853071795864;
-            let d = pos.xy - gradient.center;
-            var t_raw: f32;
-            if (d.x == 0.0 && d.y == 0.0) {
-                t_raw = 0.0;
-            } else {
-                let a = atan2(d.y, d.x);
-                var u = a / TWO_PI;
-                if (u < 0.0) { u = u + 1.0; }
-                let sweep = gradient.endAngle - gradient.startAngle;
-                if (sweep <= 0.0) {
+    private fun buildSweepWgsl(stopCount: Int, tileMode: String): String {
+        val (tileFn, decalSuffix) = tileFnForMode(tileMode)
+        return buildGradientWgsl(
+            preamble = """
+                const TWO_PI: f32 = 6.2831853071795864;
+                let d = pos.xy - gradient.center;
+                var t_raw: f32;
+                if (d.x == 0.0 && d.y == 0.0) {
                     t_raw = 0.0;
                 } else {
-                    t_raw = (u - gradient.startAngle / 360.0) * (360.0 / sweep);
+                    let a = atan2(d.y, d.x);
+                    var u = a / TWO_PI;
+                    if (u < 0.0) { u = u + 1.0; }
+                    let sweep = gradient.endAngle - gradient.startAngle;
+                    if (sweep <= 0.0) {
+                        t_raw = 0.0;
+                    } else {
+                        t_raw = (u - gradient.startAngle / 360.0) * (360.0 / sweep);
+                    }
                 }
-            }
-        """.trimIndent(),
-        stopCount = stopCount,
-        headerExtra = "startAngle: f32, endAngle: f32,",
-        structFields = """
-                center: vec2<f32>,
-                startAngle: f32,
-                endAngle: f32,
-        """.trimIndent(),
-        tileFn = tileFnForMode(tileMode),
-    )
+            """.trimIndent(),
+            stopCount = stopCount,
+            headerExtra = "startAngle: f32, endAngle: f32,",
+            structFields = """
+                    center: vec2<f32>,
+                    startAngle: f32,
+                    endAngle: f32,
+            """.trimIndent(),
+            tileFn = tileFn,
+            decalSuffix = decalSuffix,
+        )
+    }
 
     private fun conicalShader(desc: GPUMaterialDescriptor.ConicalGradient): GradientWgslShader {
         val n = desc.allStopPositions?.size ?: 2
+        val (tileFn, decalSuffix) = tileFnForMode(desc.tileMode)
         return GradientWgslShader(
             wgslSource = buildConicalWgsl(
                 stopCount = n,
-                tileFn = tileFnForMode(desc.tileMode),
+                tileFn = tileFn,
+                decalSuffix = decalSuffix,
             ),
             uniformLayoutHash = "layout:conical-gradient-material-block:v1",
         )
     }
 
-    private fun buildConicalWgsl(stopCount: Int, tileFn: String): String = """
+    private fun buildConicalWgsl(stopCount: Int, tileFn: String, decalSuffix: String): String = """
 struct GradientBlock {
     start: vec2<f32>,
     end: vec2<f32>,
@@ -166,6 +180,8 @@ struct GradientBlock {
     _pad0: u32,
     _pad1: u32,
     _pad2: u32,
+    _pad3: u32,
+    _pad4: u32,
     stopData: array<vec4<f32>, 32>,
 }
 @group(0) @binding(0) var<uniform> gradient: GradientBlock;
@@ -209,7 +225,7 @@ struct VertexOutput {
         positions[i] = gradient.stopData[i * 2u];
         colors[i] = gradient.stopData[i * 2u + 1u];
     }
-    let result = sample_stops_at(t, ${stopCount}u, &positions, &colors);
+    let result = sample_stops_at(t, ${stopCount}u, &positions, &colors)${decalSuffix};
     return result;
 }
 
@@ -242,31 +258,27 @@ fn sample_stops_at(t: f32, count: u32, positions: ptr<function, array<vec4<f32>,
                 bb.putFloat(desc.startRadius); bb.putFloat(desc.endRadius)
                 val n = desc.allStopPositions?.size ?: 2
                 bb.putInt(n)
-                bb.putInt(0); bb.putInt(0); bb.putInt(0) // pad to 32
+                bb.putInt(0); bb.putInt(0); bb.putInt(0)
+                bb.putInt(0); bb.putInt(0) // pad to 48
             },
             allStopPositions = desc.allStopPositions,
             allStopColors = desc.allStopColors,
         )
     }
 
-    private data class StructLayout(
-        val geometrySize: Int,
-        val geometryFields: String,
-    )
-
-    private fun tileFnForMode(tileMode: String): String {
+    private fun tileFnForMode(tileMode: String): Pair<String, String> {
         return when (tileMode) {
-            "clamp" -> "let t = clamp(t_raw, 0.0, 1.0);"
-            "repeat" -> "let t = t_raw - floor(t_raw);"
-            "mirror" -> """
+            "clamp" -> Pair("let t = clamp(t_raw, 0.0, 1.0);", "")
+            "repeat" -> Pair("let t = t_raw - floor(t_raw);", "")
+            "mirror" -> Pair("""
                 let even = (floor(t_raw) % 2.0) == 0.0;
                 let t = select(1.0 - (t_raw - floor(t_raw)), t_raw - floor(t_raw), even);
-            """.trimIndent()
-            "decal" -> """
+            """.trimIndent(), "")
+            "decal" -> Pair("""
                 let t = clamp(t_raw, 0.0, 1.0);
                 let decalA = select(0.0, 1.0, t_raw >= 0.0 && t_raw <= 1.0);
-            """.trimIndent()
-            else -> "let t = clamp(t_raw, 0.0, 1.0);"
+            """.trimIndent(), " * decalA")
+            else -> Pair("let t = clamp(t_raw, 0.0, 1.0);", "")
         }
     }
 
@@ -276,6 +288,7 @@ fn sample_stops_at(t: f32, count: u32, positions: ptr<function, array<vec4<f32>,
         headerExtra: String,
         structFields: String,
         tileFn: String,
+        decalSuffix: String = "",
     ): String = """
 struct GradientBlock {
     $structFields
@@ -306,7 +319,7 @@ struct VertexOutput {
         positions[i] = gradient.stopData[i * 2u];
         colors[i] = gradient.stopData[i * 2u + 1u];
     }
-    return sample_stops_at(t, ${stopCount}u, &positions, &colors);
+    return sample_stops_at(t, ${stopCount}u, &positions, &colors)${decalSuffix};
 }
 
 fn sample_stops_at(t: f32, count: u32, positions: ptr<function, array<vec4<f32>, 16>>, colors: ptr<function, array<vec4<f32>, 16>>) -> vec4<f32> {
