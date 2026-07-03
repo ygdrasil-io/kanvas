@@ -239,6 +239,7 @@ private class Writer {
                 byte(7)
                 runtimeEffect(s.effect)
                 uniformBlock(s.uniforms)
+                shaderMap(s.children)
             }
             is Shader.WithLocalMatrix -> { byte(8); shader(s.shader); matrix33(s.matrix) }
             is Shader.WithColorFilter -> { byte(9); shader(s.shader); colorFilter(s.filter) }
@@ -303,6 +304,28 @@ private class Writer {
         for (s in slots) { string(s.name); byte(s.type.ordinal.toByte()) }
     }
 
+    private fun <T> namedMap(
+        map: Map<String, T>,
+        serialize: (Pair<String, T>) -> Unit,
+    ) {
+        int(map.size)
+        for ((key, value) in map) {
+            string(key)
+            serialize(key to value)
+        }
+    }
+
+    private fun shaderMap(map: Map<String, Shader>) = namedMap(map) { shader(it.second) }
+
+    private fun colorFilterMap(map: Map<String, ColorFilter>) = namedMap(map) { colorFilter(it.second) }
+
+    private fun imageFilterMap(map: Map<String, ImageFilter?>) = namedMap(map) { imageFilter(it.second) }
+
+    private fun stringOrNull(s: String?) {
+        if (s == null) { bool(false); return }
+        bool(true); string(s)
+    }
+
     fun uniformBlock(ub: UniformBlock) {
         val entries = ub.entries
         int(entries.size)
@@ -335,6 +358,12 @@ private class Writer {
             ColorFilter.HighContrast -> byte(9)
             ColorFilter.Luma -> byte(10)
             ColorFilter.Overdraw -> byte(11)
+            is ColorFilter.RuntimeEffect -> {
+                byte(12)
+                runtimeEffect(cf.effect)
+                uniformBlock(cf.uniforms)
+                colorFilterMap(cf.children)
+            }
         }
     }
 
@@ -386,6 +415,13 @@ private class Writer {
                 float(imageFilter.gain); float(imageFilter.bias)
                 point(imageFilter.kernelOffset); tileMode(imageFilter.tileMode)
                 bool(imageFilter.convolveAlpha); imageFilter(imageFilter.input)
+            }
+            is ImageFilter.RuntimeEffect -> {
+                byte(19)
+                runtimeEffect(imageFilter.effect)
+                uniformBlock(imageFilter.uniforms)
+                stringOrNull(imageFilter.childShaderName)
+                imageFilterMap(imageFilter.childImageFilters)
             }
         }
     }

@@ -85,4 +85,10 @@ sealed interface ImageFilter {
             return result
         }
     }
+    data class RuntimeEffect(
+        val effect: org.graphiks.kanvas.pipeline.RuntimeEffect,
+        val uniforms: org.graphiks.kanvas.pipeline.UniformBlock,
+        val childShaderName: String? = null,
+        val childImageFilters: Map<String, ImageFilter?> = emptyMap(),
+    ) : ImageFilter
 }
