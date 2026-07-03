@@ -28,7 +28,10 @@ import org.graphiks.kanvas.surface.RenderStats
 import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.types.PointMode
 import org.graphiks.kanvas.types.Rect
+import org.graphiks.kanvas.font.scaler.GlyphRepresentation
+import org.graphiks.kanvas.text.FontTypeface
 import org.graphiks.kanvas.text.GpuTextBlob
+import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.text.TextBridge
 
 internal fun renderViaGpu(
@@ -219,6 +222,10 @@ internal fun renderViaGpu(
                         sceneHasContent = true
                     }
                     is DisplayOp.DrawText -> {
+                        if (hasColorGlyphs(op.blob)) {
+                            diagnostics.degrade("degrade:drawText:${cmdId.value}", "drawText", "color_glyphs_not_yet_routed")
+                            continue
+                        }
                         val gpuBlob = TextBridge.rasterize(op.blob)
                         if (gpuBlob != null) {
                             val cmd = op.toNormalizedCommand(cmdId, targets)
@@ -579,6 +586,10 @@ internal fun renderViaGpu(
                                     diagnostics.degrade("unimplemented:drawPicture:nested:${nestedCmdId.value}", "drawPicture", "gpu_nested_vertices_unimplemented")
                                 }
                                 is DisplayOp.DrawText -> {
+                                    if (hasColorGlyphs(nestedOp.blob)) {
+                                        diagnostics.degrade("degrade:drawPicture:nested:${nestedCmdId.value}", "drawPicture", "nested_color_glyphs_not_yet_routed")
+                                        continue
+                                    }
                                     val gpuBlob = TextBridge.rasterize(nestedOp.blob)
                                     if (gpuBlob != null) {
                                         val cmd = nestedOp.toNormalizedCommand(nestedCmdId, targets)
@@ -777,6 +788,18 @@ private fun computeAtlasDst(texRect: Rect, xform: Matrix33): Rect {
     val r = maxOf(x0, x1, x2, x3)
     val b = maxOf(y0, y1, y2, y3)
     return Rect.fromLTRB(l, t, r, b)
+}
+
+private fun hasColorGlyphs(blob: TextBlob): Boolean {
+    val tf = blob.typeface as? FontTypeface ?: return false
+    val scaler = tf.scaler ?: return false
+    for (run in blob.glyphRuns) {
+        for (gid in run.glyphs) {
+            val rep = scaler.getGlyphRepresentation(gid.toInt(), blob.fontSize)
+            if (rep is GlyphRepresentation.ColorLayers || rep is GlyphRepresentation.Bitmap) return true
+        }
+    }
+    return false
 }
 
 /** Dispatch text atlas pass from a rasterized [GpuTextBlob]. */

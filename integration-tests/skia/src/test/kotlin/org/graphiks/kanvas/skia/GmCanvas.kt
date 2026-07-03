@@ -358,6 +358,17 @@ class GmCanvas(
         drawString(text, x, y, font, paint)
     }
 
+    fun drawGlyphs(glyphIds: List<Int>, positions: List<Point>, font: Font, paint: Paint) {
+        require(glyphIds.size == positions.size)
+        for (i in glyphIds.indices) {
+            val gid = glyphIds[i]
+            val pos = positions[i]
+            val glyphPath = font.typeface.getGlyphPath(gid, font.size) ?: continue
+            val offsetPath = glyphPath.transform(pos.x, pos.y, 1f, 1f)
+            drawPath(offsetPath, paint)
+        }
+    }
+
     fun drawTextBlob(blob: TextBlob, x: Float, y: Float, paint: Paint) {
         withClip {
             if (currentTransform.isIdentity()) {
