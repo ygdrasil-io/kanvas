@@ -30,12 +30,7 @@ import io.ygdrasil.webgpu.GPUBuffer
 import io.ygdrasil.webgpu.GPUBufferBindingType
 import io.ygdrasil.webgpu.GPUBufferUsage
 import io.ygdrasil.webgpu.GPUDevice
-import io.ygdrasil.webgpu.GPUDeviceDescriptor
 import io.ygdrasil.webgpu.GPUErrorFilter
-import io.ygdrasil.webgpu.GPUFeatureName
-import io.ygdrasil.webgpu.GPUQueueDescriptor
-import io.ygdrasil.webgpu.GPUSupportedLimits
-import io.ygdrasil.webgpu.GPUUncapturedErrorCallback
 import io.ygdrasil.webgpu.GPUFilterMode
 import io.ygdrasil.webgpu.GPUIndexFormat
 import io.ygdrasil.webgpu.GPULoadOp
@@ -254,6 +249,8 @@ private class WgpuBackendSession(
     }
 }
 
+private const val MAX_TEXTURE_DIMENSION: Int = 8192
+
 private class WgpuOffscreenTarget(
     private val sessionOrdinal: Long,
     private val offscreenTargetOrdinal: Long,
@@ -263,14 +260,16 @@ private class WgpuOffscreenTarget(
     private val request: GPUOffscreenTargetRequest,
     private val executionCaches: WgpuExecutionCaches,
 ) : GPUBackendOffscreenTarget {
+    private val safeWidth = request.width.coerceAtMost(MAX_TEXTURE_DIMENSION)
+    private val safeHeight = request.height.coerceAtMost(MAX_TEXTURE_DIMENSION)
     private val format = request.colorFormat.toWgpuTextureFormat()
     private val bytesPerPixel = format.bytesPerPixel()
-    private val tightBytesPerRow = request.width * bytesPerPixel
+    private val tightBytesPerRow = safeWidth * bytesPerPixel
     private val paddedBytesPerRow = alignCopyBytesPerRow(tightBytesPerRow)
-    private val stagingSize = (paddedBytesPerRow.toLong() * request.height.toLong()).toULong()
+    private val stagingSize = (paddedBytesPerRow.toLong() * safeHeight.toLong()).toULong()
     private val texture = device.createTexture(
         TextureDescriptor(
-            size = Extent3D(width = request.width.toUInt(), height = request.height.toUInt()),
+            size = Extent3D(width = safeWidth.toUInt(), height = safeHeight.toUInt()),
             format = format,
             usage = GPUTextureUsage.RenderAttachment or GPUTextureUsage.CopySrc,
             label = "GPUBackend.offscreen.color",
@@ -278,7 +277,7 @@ private class WgpuOffscreenTarget(
     )
     private val depthStencilTexture = device.createTexture(
         TextureDescriptor(
-            size = Extent3D(width = request.width.toUInt(), height = request.height.toUInt()),
+            size = Extent3D(width = safeWidth.toUInt(), height = safeHeight.toUInt()),
             format = GPUTextureFormat.Depth24PlusStencil8,
             usage = GPUTextureUsage.RenderAttachment,
             label = "GPUBackend.offscreen.depthStencil",
@@ -350,7 +349,13 @@ private class WgpuOffscreenTarget(
                     executionCaches = executionCaches,
                     setPipelineAction = { pipeline -> setPipeline(pipeline) },
                     setBindGroupAction = { index, bindGroup -> setBindGroup(index, bindGroup) },
-                    setScissorAction = { x, y, width, height -> setScissorRect(x, y, width, height) },
+                    setScissorAction = { x: UInt, y: UInt, width: UInt, height: UInt ->
+                            val cx = x.coerceAtMost(safeWidth.toUInt())
+                            val cy = y.coerceAtMost(safeHeight.toUInt())
+                            val cw = width.coerceAtMost((safeWidth.toUInt() - cx))
+                            val ch = height.coerceAtMost((safeHeight.toUInt() - cy))
+                            setScissorRect(cx, cy, cw, ch)
+                        },
                     drawAction = { vertexCount -> draw(vertexCount) },
                     setStencilReferenceAction = { ref -> setStencilReference(ref) },
                     setVertexBufferAction = { slot, buffer -> setVertexBuffer(slot, buffer) },
@@ -367,9 +372,9 @@ private class WgpuOffscreenTarget(
                     buffer = stagingBuffer,
                     offset = 0uL,
                     bytesPerRow = paddedBytesPerRow.toUInt(),
-                    rowsPerImage = request.height.toUInt(),
+                    rowsPerImage = safeHeight.toUInt(),
                 ),
-                copySize = Extent3D(width = request.width.toUInt(), height = request.height.toUInt()),
+                copySize = Extent3D(width = safeWidth.toUInt(), height = safeHeight.toUInt()),
             )
             val commandBuffer = resources.trackIfAutoCloseable(encoder.finish())
             queue.submit(listOf(commandBuffer))
@@ -418,11 +423,13 @@ private class WgpuOffscreenTarget(
     }
 
     override fun createOffscreenTexture(textureDesc: GPUBackendOffscreenTexture): String {
+        val safeW = textureDesc.width.coerceAtMost(MAX_TEXTURE_DIMENSION)
+        val safeH = textureDesc.height.coerceAtMost(MAX_TEXTURE_DIMENSION)
         val label = "offscreenTex:${textureDesc.width}x${textureDesc.height}:${textureDesc.format}"
         if (label in offscreenTextures) return label
         val tex = device.createTexture(
             TextureDescriptor(
-                size = Extent3D(width = textureDesc.width.toUInt(), height = textureDesc.height.toUInt()),
+                size = Extent3D(width = safeW.toUInt(), height = safeH.toUInt()),
                 format = textureDesc.format.toWgpuTextureFormat(),
                 usage = GPUTextureUsage.RenderAttachment or GPUTextureUsage.TextureBinding or GPUTextureUsage.CopySrc,
                 label = label,
@@ -504,7 +511,15 @@ private class WgpuOffscreenTarget(
                 executionCaches = executionCaches,
                 setPipelineAction = { pipeline -> setPipeline(pipeline) },
                 setBindGroupAction = { index, bindGroup -> setBindGroup(index, bindGroup) },
-                setScissorAction = { x, y, width, height -> setScissorRect(x, y, width, height) },
+                setScissorAction = { x: UInt, y: UInt, width: UInt, height: UInt ->
+                        val texW = tex.width
+                        val texH = tex.height
+                        val cx = x.coerceAtMost(texW)
+                        val cy = y.coerceAtMost(texH)
+                        val cw = width.coerceAtMost(texW - cx)
+                        val ch = height.coerceAtMost(texH - cy)
+                        setScissorRect(cx, cy, cw, ch)
+                    },
                 drawAction = { vertexCount -> draw(vertexCount) },
                 setStencilReferenceAction = { ref -> setStencilReference(ref) },
                 setVertexBufferAction = { slot, buffer -> setVertexBuffer(slot, buffer) },
@@ -902,12 +917,14 @@ private class WgpuRenderRecorder(
     }
 
     override fun createOffscreenTexture(texture: GPUBackendOffscreenTexture): String {
+        val safeW = texture.width.coerceAtMost(MAX_TEXTURE_DIMENSION)
+        val safeH = texture.height.coerceAtMost(MAX_TEXTURE_DIMENSION)
         val label = "offscreenTex:${texture.width}x${texture.height}:${texture.format}"
         if (label in offscreenTextureStore) return label
         val tex = resourceScope.track(
             device.createTexture(
                 TextureDescriptor(
-                    size = Extent3D(width = texture.width.toUInt(), height = texture.height.toUInt()),
+                    size = Extent3D(width = safeW.toUInt(), height = safeH.toUInt()),
                     format = texture.format.toWgpuTextureFormat(),
                     usage = GPUTextureUsage.RenderAttachment or GPUTextureUsage.TextureBinding or GPUTextureUsage.CopySrc,
                     label = label,
@@ -3096,17 +3113,7 @@ private fun createNativeWindowRuntime(binding: GPUNativeSurfaceBinding): NativeW
             try {
                 surface.computeSurfaceCapabilities(adapter)
                 val adapterInfo = GPUBackendAdapterSummary(adapterSummary(adapter.info))
-                val device = runBlocking {
-                        adapter.requestDevice(object : GPUDeviceDescriptor {
-                            override val requiredLimits: GPUSupportedLimits? = adapter.limits
-                            override val requiredFeatures: List<GPUFeatureName> = emptyList()
-                            override val label: String = ""
-                            override val defaultQueue: GPUQueueDescriptor = object : GPUQueueDescriptor {
-                                override val label: String = ""
-                            }
-                            override val onUncapturedError: GPUUncapturedErrorCallback? = null
-                        })
-                    }
+                val device = runBlocking { adapter.requestDevice() }
                     .getOrElse { error -> error(error.message ?: error.toString()) }
                 try {
                     val format = surface.supportedFormats.firstOrNull { it == GPUTextureFormat.BGRA8Unorm }
