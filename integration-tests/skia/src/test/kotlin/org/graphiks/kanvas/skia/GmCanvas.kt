@@ -48,6 +48,10 @@ class GmCanvas(
         inner.saveLayer(bounds, paint)
     }
 
+    fun makeImageSnapshot(): Image {
+        return inner.flushAndSnapshot(Rect(0f, 0f, width.toFloat(), height.toFloat()))
+    }
+
     fun restore() {
         currentTransform = transformStack.removeLast()
         currentClip = clipStack.removeLast()

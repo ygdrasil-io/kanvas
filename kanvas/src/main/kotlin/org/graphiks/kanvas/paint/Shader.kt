@@ -49,6 +49,7 @@ sealed interface Shader {
     data class RuntimeEffect(
         val effect: org.graphiks.kanvas.pipeline.RuntimeEffect,
         val uniforms: org.graphiks.kanvas.pipeline.UniformBlock,
+        val children: Map<String, Shader> = emptyMap(),
     ) : Shader
     data class WithLocalMatrix(val shader: Shader, val matrix: Matrix33) : Shader
     data class WithColorFilter(val shader: Shader, val filter: ColorFilter) : Shader

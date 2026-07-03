@@ -24,6 +24,8 @@ class KanvasRuntimeEffectRegistry : GPURuntimeEffectRegistry {
         RippleDescriptor.effectId to RippleDescriptor.createDescriptor(),
         ArithmodeDescriptor.effectId to ArithmodeDescriptor.createDescriptor(),
         LumaFilterDescriptor.effectId to LumaFilterDescriptor.createDescriptor(),
+        GChannelSplatDescriptor.effectId to GChannelSplatDescriptor.createDescriptor(),
+        ComposeColorFilterDescriptor.effectId to ComposeColorFilterDescriptor.createDescriptor(),
     )
 
     override fun lookup(id: GPURuntimeEffectID): GPURuntimeEffectDescriptor? = descriptors[id]

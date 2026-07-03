@@ -191,6 +191,7 @@ class Picture internal constructor(
                     is DisplayOp.BeginLayer -> canvas.saveLayer(op.bounds, op.paint)
                     is DisplayOp.EndLayer -> canvas.restore()
                     is DisplayOp.Annotation -> { /* no visual output */ }
+                    is DisplayOp.FlushAndSnapshot -> { /* no visual output; readback is render-backend-specific */ }
                 }
             }
         } finally {
@@ -258,6 +259,7 @@ private const val OP_SET_CLIP: Byte = 16
 private const val OP_BEGIN_LAYER: Byte = 17
 private const val OP_END_LAYER: Byte = 18
 private const val OP_ANNOTATION: Byte = 19
+private const val OP_FLUSH_AND_SNAPSHOT: Byte = 20
 
 private class Writer {
     private val baos = ByteArrayOutputStream()
@@ -361,6 +363,7 @@ private class Writer {
                 byte(7)
                 runtimeEffect(s.effect)
                 uniformBlock(s.uniforms)
+                shaderMap(s.children)
             }
             is Shader.WithLocalMatrix -> { byte(8); shader(s.shader); matrix33(s.matrix) }
             is Shader.WithColorFilter -> { byte(9); shader(s.shader); colorFilter(s.filter) }
@@ -425,6 +428,28 @@ private class Writer {
         for (s in slots) { string(s.name); byte(s.type.ordinal.toByte()) }
     }
 
+    private fun <T> namedMap(
+        map: Map<String, T>,
+        serialize: (Pair<String, T>) -> Unit,
+    ) {
+        int(map.size)
+        for ((key, value) in map) {
+            string(key)
+            serialize(key to value)
+        }
+    }
+
+    private fun shaderMap(map: Map<String, Shader>) = namedMap(map) { shader(it.second) }
+
+    private fun colorFilterMap(map: Map<String, ColorFilter>) = namedMap(map) { colorFilter(it.second) }
+
+    private fun imageFilterMap(map: Map<String, ImageFilter?>) = namedMap(map) { imageFilter(it.second) }
+
+    private fun stringOrNull(s: String?) {
+        if (s == null) { bool(false); return }
+        bool(true); string(s)
+    }
+
     fun uniformBlock(ub: UniformBlock) {
         val entries = ub.entries
         int(entries.size)
@@ -457,6 +482,12 @@ private class Writer {
             ColorFilter.HighContrast -> byte(9)
             ColorFilter.Luma -> byte(10)
             ColorFilter.Overdraw -> byte(11)
+            is ColorFilter.RuntimeEffect -> {
+                byte(12)
+                runtimeEffect(cf.effect)
+                uniformBlock(cf.uniforms)
+                colorFilterMap(cf.children)
+            }
         }
     }
 
@@ -514,6 +545,13 @@ private class Writer {
                 val nestedBytes = encodePicture(imageFilter.picture)
                 int(nestedBytes.size); bytes(nestedBytes)
                 if (imageFilter.src != null) { bool(true); rect(imageFilter.src) } else bool(false)
+            }
+            is ImageFilter.RuntimeEffect -> {
+                byte(20)
+                runtimeEffect(imageFilter.effect)
+                uniformBlock(imageFilter.uniforms)
+                stringOrNull(imageFilter.childShaderName)
+                imageFilterMap(imageFilter.childImageFilters)
             }
         }
     }
@@ -660,6 +698,7 @@ private class Writer {
             }
             DisplayOp.EndLayer -> byte(OP_END_LAYER)
             is DisplayOp.Annotation -> { byte(OP_ANNOTATION); rect(op.rect); string(op.key); string(op.value) }
+            is DisplayOp.FlushAndSnapshot -> { byte(OP_FLUSH_AND_SNAPSHOT); rect(op.bounds) }
         }
     }
 
@@ -763,7 +802,7 @@ private class Reader(private val data: ByteArray) {
             4 -> Shader.ConicalGradient(point(), float(), point(), float(), gradientStops(), tileMode(), colorSpaceInterpolation())
             5 -> Shader.Image(image(), tileMode(), tileMode())
             6 -> Shader.Blend(blendMode(), shader()!!, shader()!!)
-            7 -> readRuntimeEffect()?.let { re -> readUniformBlock()?.let { ub -> Shader.RuntimeEffect(re, ub) } }
+            7 -> readRuntimeEffect()?.let { re -> readUniformBlock()?.let { ub -> Shader.RuntimeEffect(re, ub, readShaderMap()) } }
                 ?: run { valid = false; null }
             8 -> Shader.WithLocalMatrix(shader()!!, matrix33())
             9 -> Shader.WithColorFilter(shader()!!, colorFilter()!!)
@@ -780,6 +819,23 @@ private class Reader(private val data: ByteArray) {
     }
 
     private fun readSizeOrNull(): Size? = if (bool()) size() else null
+
+    private fun readShaderMap(): Map<String, Shader> {
+        val n = int()
+        return buildMap { for (i in 0 until n) { val key = string(); put(key, shader()!!) } }
+    }
+
+    private fun readColorFilterMap(): Map<String, ColorFilter> {
+        val n = int()
+        return buildMap { for (i in 0 until n) { val key = string(); put(key, colorFilter()!!) } }
+    }
+
+    private fun readImageFilterMap(): Map<String, ImageFilter?> {
+        val n = int()
+        return buildMap { for (i in 0 until n) { val key = string(); put(key, imageFilter()) } }
+    }
+
+    private fun readStringOrNull(): String? = if (bool()) string() else null
 
     fun readRuntimeEffect(): RuntimeEffect? {
         val id = string()
@@ -864,6 +920,8 @@ private class Reader(private val data: ByteArray) {
             9 -> ColorFilter.HighContrast
             10 -> ColorFilter.Luma
             11 -> ColorFilter.Overdraw
+            12 -> readRuntimeEffect()?.let { re -> readUniformBlock()?.let { ub -> ColorFilter.RuntimeEffect(re, ub, readColorFilterMap()) } }
+                ?: run { valid = false; null }
             else -> { valid = false; null }
         }
     }
@@ -923,6 +981,8 @@ private class Reader(private val data: ByteArray) {
                 val src = if (bool()) rect() else null
                 if (pic != null) ImageFilter.Picture(pic, src) else { valid = false; null }
             }
+            20 -> readRuntimeEffect()?.let { re -> readUniformBlock()?.let { ub -> ImageFilter.RuntimeEffect(re, ub, readStringOrNull(), readImageFilterMap()) } }
+                ?: run { valid = false; null }
             else -> { valid = false; null }
         }
     }
@@ -1053,6 +1113,7 @@ private class Reader(private val data: ByteArray) {
             }
             OP_END_LAYER.toInt() -> DisplayOp.EndLayer
             OP_ANNOTATION.toInt() -> DisplayOp.Annotation(rect(), string(), string())
+            OP_FLUSH_AND_SNAPSHOT.toInt() -> DisplayOp.FlushAndSnapshot(rect())
             else -> { valid = false; null }
         }
     }

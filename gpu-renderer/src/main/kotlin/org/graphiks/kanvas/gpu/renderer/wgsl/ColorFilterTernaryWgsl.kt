@@ -8,7 +8,7 @@ struct ColorFilterTernaryUniform {
 }
 @group(1) @binding(0) var<uniform> uColorFilterTernary: ColorFilterTernaryUniform;
 
-fn color_filter_ternary(uv: vec2<f32>) -> vec4<f32> {
+fn color_filter_ternary(inColor: vec4<f32>) -> vec4<f32> {
     return select(uColorFilterTernary.colorFalse, uColorFilterTernary.colorTrue, uColorFilterTernary.condition > 0.5);
 }
 """

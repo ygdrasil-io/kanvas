@@ -2,6 +2,7 @@ package org.graphiks.kanvas.surface.gpu
 
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.wgsl.GradientWgslShaderProvider
+import org.graphiks.kanvas.paint.ColorFilter
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.image.ColorType
@@ -14,15 +15,25 @@ import org.graphiks.kanvas.types.r
 
 internal fun Paint.toMaterial(): GPUMaterialDescriptor {
     val shader = this.shader
-    if (shader != null) {
-        return shader.toMaterial()
+    val base = if (shader != null) {
+        shader.toMaterial()
+    } else {
+        GPUMaterialDescriptor.SolidColor(
+            r = this.color.r,
+            g = this.color.g,
+            b = this.color.b,
+            a = this.color.a,
+        )
     }
-    return GPUMaterialDescriptor.SolidColor(
-        r = this.color.r,
-        g = this.color.g,
-        b = this.color.b,
-        a = this.color.a,
-    )
+
+    val cf = this.colorFilter
+    if (cf is ColorFilter.RuntimeEffect) {
+        return GPUMaterialDescriptor.RuntimeEffect(
+            effectId = cf.effect.id,
+            descriptorVersion = 1,
+        )
+    }
+    return base
 }
 
 internal fun Paint.isStroke(): Boolean = style == PaintStyle.STROKE

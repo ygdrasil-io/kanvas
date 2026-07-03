@@ -97,4 +97,7 @@ sealed interface DisplayOp {
 
     /** Metadata annotation (no visual output). */
     data class Annotation(val rect: Rect, val key: String, val value: String) : DisplayOp
+
+    /** Request a framebuffer capture — the render backend reads back and produces an Image. */
+    data class FlushAndSnapshot(val bounds: Rect) : DisplayOp
 }
