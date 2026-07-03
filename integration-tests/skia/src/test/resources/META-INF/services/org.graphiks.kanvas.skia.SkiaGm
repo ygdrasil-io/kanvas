@@ -161,9 +161,15 @@ org.graphiks.kanvas.skia.gm.image.ImageOutOfGamutGm
 org.graphiks.kanvas.skia.gm.image.MirrorTileGm
 org.graphiks.kanvas.skia.gm.image.NearestHalfPixelImageGm
 org.graphiks.kanvas.skia.gm.image.P3Gm
+org.graphiks.kanvas.skia.gm.image.PictureShaderAlphaGm
+org.graphiks.kanvas.skia.gm.image.PictureShaderCacheGm
+org.graphiks.kanvas.skia.gm.image.PictureShaderGm
+org.graphiks.kanvas.skia.gm.image.PictureShaderLocalWrapperGm
+org.graphiks.kanvas.skia.gm.image.PictureShaderTileGm
 org.graphiks.kanvas.skia.gm.image.ShaderPathGm
 org.graphiks.kanvas.skia.gm.image.Skbug9819Gm
 org.graphiks.kanvas.skia.gm.image.SurfaceUnderdrawGm
+org.graphiks.kanvas.skia.gm.image.TiledPictureShaderGm
 org.graphiks.kanvas.skia.gm.image.TiledScaledBitmapGm
 org.graphiks.kanvas.skia.gm.image.Tiling2BitmapGm
 org.graphiks.kanvas.skia.gm.image.Tiling2GradientGm
