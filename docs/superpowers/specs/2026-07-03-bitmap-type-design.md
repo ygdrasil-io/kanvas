@@ -97,7 +97,7 @@ fun makeShader(
     tileY: TileMode = TileMode.CLAMP,
     sampling: SamplingOptions = SamplingOptions.NEAREST,
     localMatrix: Matrix33 = Matrix33.identity(),
-): Shader.Image
+): Shader
 ```
 
 ### fromImage (companion)
