@@ -14,9 +14,6 @@ import org.junit.jupiter.api.Test
  */
 class PlaceholderGMsTest {
 
-    @Test @Disabled("GPU-only : distance-field text path not yet ported.")
-    fun `DFTextGM placeholder`() { DFTextGM() }
-
     // DFTextBlobPerspGM — real body port landed in its own DFTextBlobPerspTest
     //                     (STUB.DF_TEXT_RASTER until raster grows an SDF path).
 
