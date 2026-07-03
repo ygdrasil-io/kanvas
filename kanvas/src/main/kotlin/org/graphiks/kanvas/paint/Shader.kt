@@ -41,6 +41,7 @@ sealed interface Shader {
         val image: org.graphiks.kanvas.image.Image,
         val tileModeX: TileMode = TileMode.CLAMP,
         val tileModeY: TileMode = TileMode.CLAMP,
+        val sampling: SamplingOptions = SamplingOptions.NEAREST,
     ) : Shader
     data class Blend(
         val mode: BlendMode, val dst: Shader, val src: Shader,

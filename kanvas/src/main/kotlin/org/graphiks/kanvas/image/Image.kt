@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.image
 
 import org.graphiks.kanvas.codec.Codec
+import org.graphiks.kanvas.paint.SamplingOptions
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.types.ColorSpace
@@ -58,7 +59,8 @@ data class Image(
     fun makeShader(
         tileModeX: TileMode = TileMode.CLAMP,
         tileModeY: TileMode = TileMode.CLAMP,
-    ): Shader.Image = Shader.Image(this, tileModeX, tileModeY)
+        sampling: SamplingOptions = SamplingOptions.NEAREST,
+    ): Shader.Image = Shader.Image(this, tileModeX, tileModeY, sampling)
 
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
