@@ -298,6 +298,7 @@ org.graphiks.kanvas.skia.gm.text.GradTextGm
 org.graphiks.kanvas.skia.gm.text.MixedTextBlobsGm
 org.graphiks.kanvas.skia.gm.text.OverdrawTextXformGm
 org.graphiks.kanvas.skia.gm.text.PerspTextGm
+org.graphiks.kanvas.skia.gm.text.ScaledEmojiPosGm
 org.graphiks.kanvas.skia.gm.text.ScaledemojiGm
 org.graphiks.kanvas.skia.gm.text.ScaledemojiRenderingGm
 org.graphiks.kanvas.skia.gm.text.ShaderText3Gm
