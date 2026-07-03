@@ -15,6 +15,8 @@ import org.graphiks.kanvas.paint.*
 import org.graphiks.kanvas.pipeline.*
 import org.graphiks.kanvas.surface.ImageEncoder
 import org.graphiks.kanvas.surface.ImageEncoderRegistry
+import org.graphiks.kanvas.surface.Surface
+import kotlin.math.ceil
 import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.KanvasTypeface
 import org.graphiks.kanvas.text.TextBlob
@@ -99,6 +101,42 @@ class Picture internal constructor(
                 op.picture.forEachOp(nested = true, action = action)
             }
         }
+    }
+
+    /**
+     * Renders this picture into a transient surface and wraps the result
+     * as a tiled [Shader.Image], equivalent to Skia's `SkPicture.makeShader`.
+     *
+     * The picture is rasterised once into a snapshot sized to [tile]
+     * (defaults to [cullRect]), then promoted to an image shader for
+     * unlimited reuse on any canvas.
+     *
+     * @param tileX    tile mode along the local-x axis
+     * @param tileY    tile mode along the local-y axis
+     * @param sampling sampling filter; defaults to [SamplingOptions.NEAREST]
+     * @param tile     sub-rectangle of the picture to use as the tile source
+     * @param matrix   optional shader-local transform applied before sampling;
+     *                 when non-null, wraps with [Shader.WithLocalMatrix]
+     */
+    fun asShader(
+        tileX: TileMode = TileMode.CLAMP,
+        tileY: TileMode = TileMode.CLAMP,
+        sampling: SamplingOptions = SamplingOptions.NEAREST,
+        tile: Rect = cullRect,
+        matrix: Matrix33? = null,
+    ): Shader {
+        val w = maxOf(1, ceil(tile.width.toDouble()).toInt())
+        val h = maxOf(1, ceil(tile.height.toDouble()).toInt())
+        val surface = Surface(w, h)
+        val c = surface.canvas()
+        c.clear(Color.TRANSPARENT)
+        if (tile.left != 0f || tile.top != 0f) {
+            c.translate(-tile.left, -tile.top)
+        }
+        playback(c)
+        val image = surface.makeImageSnapshot()
+        val base = Shader.Image(image, tileX, tileY, sampling)
+        return if (matrix != null) Shader.WithLocalMatrix(base, matrix) else base
     }
 
     /**
