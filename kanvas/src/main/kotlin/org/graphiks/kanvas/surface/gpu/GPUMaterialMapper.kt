@@ -2,8 +2,10 @@ package org.graphiks.kanvas.surface.gpu
 
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.wgsl.GradientWgslShaderProvider
+import org.graphiks.kanvas.paint.ColorFilter
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
+import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.paint.SamplingOptions
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.types.a
@@ -13,15 +15,25 @@ import org.graphiks.kanvas.types.r
 
 internal fun Paint.toMaterial(): GPUMaterialDescriptor {
     val shader = this.shader
-    if (shader != null) {
-        return shader.toMaterial()
+    val base = if (shader != null) {
+        shader.toMaterial()
+    } else {
+        GPUMaterialDescriptor.SolidColor(
+            r = this.color.r,
+            g = this.color.g,
+            b = this.color.b,
+            a = this.color.a,
+        )
     }
-    return GPUMaterialDescriptor.SolidColor(
-        r = this.color.r,
-        g = this.color.g,
-        b = this.color.b,
-        a = this.color.a,
-    )
+
+    val cf = this.colorFilter
+    if (cf is ColorFilter.RuntimeEffect) {
+        return GPUMaterialDescriptor.RuntimeEffect(
+            effectId = cf.effect.id,
+            descriptorVersion = 1,
+        )
+    }
+    return base
 }
 
 internal fun Paint.isStroke(): Boolean = style == PaintStyle.STROKE
@@ -102,7 +114,7 @@ internal fun Shader.toMaterial(): GPUMaterialDescriptor = when (this) {
             imageSourceId = image.sourceId,
             imageWidth = image.width,
             imageHeight = image.height,
-            rgbaPixels = image.pixels ?: byteArrayOf(),
+            rgbaPixels = image.expandToRgba(),
             samplingFilterMode = filterMode,
         )
     }
@@ -194,4 +206,27 @@ internal fun Shader.toMaterial(): GPUMaterialDescriptor = when (this) {
     is Shader.FractalNoise -> GPUMaterialDescriptor.SolidColor(r = 0f, g = 0f, b = 0f, a = 0f)
     is Shader.WithWorkingColorSpace -> this.shader.toMaterial()
     is Shader.CoordClamp -> this.shader.toMaterial()
+}
+
+/**
+ * Expands non-RGBA image pixels to RGBA for GPU upload.
+ * ALPHA_8 (1 byte/pixel) → RGBA (4 bytes/pixel, R=G=B=0, A=alpha).
+ * RGBA formats pass through unchanged.
+ */
+private fun org.graphiks.kanvas.image.Image.expandToRgba(): ByteArray {
+    val pixels = this.pixels ?: return byteArrayOf()
+    if (colorType == ColorType.RGBA_8888 || colorType == ColorType.BGRA_8888) return pixels
+    if (colorType == ColorType.ALPHA_8) {
+        val rgba = ByteArray(width * height * 4)
+        for (i in 0 until width * height) {
+            val a = pixels[i]
+            val off = i * 4
+            rgba[off] = 0
+            rgba[off + 1] = 0
+            rgba[off + 2] = 0
+            rgba[off + 3] = a
+        }
+        return rgba
+    }
+    return pixels
 }

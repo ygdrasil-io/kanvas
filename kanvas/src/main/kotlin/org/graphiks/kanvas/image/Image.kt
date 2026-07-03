@@ -54,6 +54,9 @@ data class Image(
             colorType: ColorType = ColorType.RGBA_8888,
             sourceId: String = "pixels",
         ): Image = Image(width, height, colorType, sourceId, pixels)
+
+        fun placeholder(width: Int, height: Int): Image =
+            Image(width, height, ColorType.RGBA_8888, "placeholder:${width}x${height}")
     }
 
     fun makeShader(

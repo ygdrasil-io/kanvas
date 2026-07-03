@@ -10,13 +10,17 @@ class RuntimeEffect internal constructor(
     val uniformLayout: UniformLayout,
     val children: List<ChildSlot>,
 ) {
-    fun makeShader(uniforms: UniformBlock): Shader.RuntimeEffect = Shader.RuntimeEffect(this, uniforms)
-    fun makeColorFilter(uniforms: UniformBlock): ColorFilter {
+    fun makeShader(
+        uniforms: UniformBlock,
+        children: Map<String, Shader> = emptyMap(),
+    ): Shader.RuntimeEffect = Shader.RuntimeEffect(this, uniforms, children)
+    fun makeColorFilter(
+        uniforms: UniformBlock,
+        children: Map<String, ColorFilter> = emptyMap(),
+    ): ColorFilter {
         val result = makeColorFilterHook?.invoke(this, uniforms)
         if (result != null) return result
-        throw UnsupportedOperationException(
-            "RuntimeEffect.makeColorFilter: wgsl4k is available but color filter lowering is not yet implemented."
-        )
+        return ColorFilter.RuntimeEffect(this, uniforms, children)
     }
     fun makeBlender(uniforms: UniformBlock): Blender {
         val result = makeBlenderHook?.invoke(this, uniforms)
