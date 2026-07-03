@@ -51,6 +51,7 @@ class GlyphScaler private constructor(
     private val unitsPerEm: Int
     private val indexToLocFormat: Int
     private val numHMetrics: Int
+    private val hheaMetricsRaw: HheaMetrics
     private val cmap: CmapSubtable
     private val advanceWidths: IntArray
     private val glyphOffsets: IntArray
@@ -67,6 +68,7 @@ class GlyphScaler private constructor(
         unitsPerEm = parseHeadUnitsPerEm()
         indexToLocFormat = parseHeadLocFormat()
         numHMetrics = parseHheaNumHMetrics()
+        hheaMetricsRaw = parseHheaMetrics()
         cmap = parseCmap()
         advanceWidths = parseHmtx()
         glyphOffsets = parseLoca()
@@ -118,6 +120,11 @@ class GlyphScaler private constructor(
             representation = GlyphRepresentation.Outline(scaledCommands),
         )
     }
+
+    val hheaAscent: Int get() = hheaMetricsRaw.ascent
+    val hheaDescent: Int get() = hheaMetricsRaw.descent
+    val hheaLineGap: Int get() = hheaMetricsRaw.lineGap
+    val unitsPerEmInt: Int get() = unitsPerEm
 
     fun scaleGlyphOrDiagnostic(glyphId: Int, size: Float): GlyphScaleResult {
         if (glyphId < 0 || glyphId >= numGlyphs) {
@@ -605,6 +612,22 @@ class GlyphScaler private constructor(
     private data class CmapFormat12Group(val startChar: Long, val endChar: Long, val startGlyph: Long)
 
     private data class GlyphPoint(val x: Float, val y: Float, val onCurve: Boolean)
+
+    private class HheaMetrics(
+        val ascent: Int,
+        val descent: Int,
+        val lineGap: Int,
+    )
+
+    private fun parseHheaMetrics(): HheaMetrics {
+        val hhea = tables["hhea"] ?: error("Missing hhea table")
+        val bytes = fontBytes
+        return HheaMetrics(
+            ascent = i16(bytes, hhea.offset + 4).toInt(),
+            descent = i16(bytes, hhea.offset + 6).toInt(),
+            lineGap = i16(bytes, hhea.offset + 8).toInt(),
+        )
+    }
 
     private sealed class GlyphData {
         data object Empty : GlyphData()

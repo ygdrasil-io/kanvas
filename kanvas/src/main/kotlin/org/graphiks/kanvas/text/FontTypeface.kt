@@ -9,7 +9,7 @@ class FontTypeface(
     val fontBytes: ByteArray,
     override val fontName: String = "unknown",
 ) : Typeface {
-    private val scaler: GlyphScaler? = try {
+    internal val scaler: GlyphScaler? = try {
         GlyphScaler.fromBytes(fontBytes)
     } catch (_: NoClassDefFoundError) {
         null
