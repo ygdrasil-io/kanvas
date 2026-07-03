@@ -1,8 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.wgsl
 
 const val GChannelSplatWgsl: String = """
-fn g_channel_splat(uv: vec2<f32>) -> vec4<f32> {
-    var inColor = vec4<f32>(0.0, 0.0, 0.0, 0.0);
+fn g_channel_splat(inColor: vec4<f32>) -> vec4<f32> {
     return inColor.ggga;
 }
 """

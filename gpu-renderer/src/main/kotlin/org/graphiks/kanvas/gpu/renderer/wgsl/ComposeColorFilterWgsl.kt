@@ -6,9 +6,8 @@ const val ComposeColorFilterWgsl: String = """
 @group(0) @binding(2) var outer: texture_2d<f32>;
 @group(0) @binding(3) var outer_sampler: sampler;
 
-fn compose_cf_source(uv: vec2<f32>) -> vec4<f32> {
-    let innerColor = textureSampleLevel(inner, inner_sampler, uv, 0.0);
-    return textureSampleLevel(outer, outer_sampler, uv, 0.0);
+fn compose_cf_source(inColor: vec4<f32>) -> vec4<f32> {
+    return inColor;
 }
 """
 
