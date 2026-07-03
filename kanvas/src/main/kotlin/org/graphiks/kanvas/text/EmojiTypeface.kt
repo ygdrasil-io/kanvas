@@ -8,6 +8,10 @@ object EmojiTypeface {
     }
 
     fun createOrFallback(format: Format, fontData: ByteArray): Typeface {
+        if (fontData.size < 12) {
+            return Typefaces.fromResource("fonts/LiberationSans-Regular.ttf")
+                ?: error("No fallback typeface available")
+        }
         return try {
             create(format, fontData)
         } catch (_: Exception) {

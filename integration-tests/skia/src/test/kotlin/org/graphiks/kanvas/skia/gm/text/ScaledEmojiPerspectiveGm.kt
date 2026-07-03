@@ -18,8 +18,8 @@ class ScaledEmojiPerspectiveGm : SkiaGm {
     override val name = "scaledemojiperspective_colrv0"
     override val renderFamily = RenderFamily.TEXT
     override val minSimilarity = 0.0
-    override val width = 950
-    override val height = 950
+    override val width = 1200
+    override val height = 1200
 
     private val emojiTypeface = EmojiTypeface.createOrFallback(
         EmojiTypeface.Format.COLRv0, ByteArray(0),
