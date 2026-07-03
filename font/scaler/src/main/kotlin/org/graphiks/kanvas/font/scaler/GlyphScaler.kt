@@ -1,5 +1,9 @@
 package org.graphiks.kanvas.font.scaler
 
+import org.graphiks.kanvas.font.colr.COLRV1Parser
+import org.graphiks.kanvas.font.colr.COLRV1Table
+import org.graphiks.kanvas.font.colr.CPALV0Parser
+import org.graphiks.kanvas.font.colr.CPALTable
 import java.security.MessageDigest
 import kotlin.math.abs
 import kotlin.math.max
@@ -59,6 +63,8 @@ class GlyphScaler private constructor(
     private val colrV0BaseGlyphs: Map<Int, List<ColorLayerEntry>>?
     private val sbixGlyphs: Map<Int, GlyphRepresentation.Bitmap>?
     private val cblcStrikes: List<CblcStrike>?
+    internal val colrV1Table: COLRV1Table?
+    internal val cpalMultiTable: CPALTable?
 
     init {
         tables = parseTableDirectory()
@@ -66,6 +72,8 @@ class GlyphScaler private constructor(
         colrV0BaseGlyphs = parseColrV0()
         sbixGlyphs = parseSbix()
         cblcStrikes = parseCblc()
+        colrV1Table = parseColrV1()
+        cpalMultiTable = parseCpalMulti()
         val sfntTag = String(fontBytes, 0, 4, Charsets.ISO_8859_1)
         isCFF = sfntTag == "OTTO" || sfntTag == "typ1"
         numGlyphs = parseMaxp()
@@ -116,6 +124,25 @@ class GlyphScaler private constructor(
                 commands = emptyList(),
                 representation = GlyphRepresentation.ColorLayers(colorLayers),
             )
+        }
+
+        val colrV1 = colrV1Table
+        if (colrV1 != null) {
+            val paint = colrV1.paintForGlyph(glyphId)
+            if (paint != null) {
+                val paintGraph = colrV1.paintGraphForGlyph(glyphId)
+                if (paintGraph != null) {
+                    return ScaledGlyph(
+                        sourceCodepoint = sourceCodepoint,
+                        glyphId = glyphId,
+                        size = size,
+                        advanceWidth = advance,
+                        bounds = GlyphBounds(0.0, 0.0, size.toDouble(), size.toDouble()),
+                        commands = emptyList(),
+                        representation = GlyphRepresentation.ColorLayersV1(paintGraph),
+                    )
+                }
+            }
         }
 
         val cblcBitmap = resolveCbdtBitmap(glyphId, size)
@@ -322,6 +349,29 @@ class GlyphScaler private constructor(
             result[glyphId] = layers
         }
         return if (result.isEmpty()) null else result
+    }
+
+    private fun parseColrV1(): COLRV1Table? {
+        val colrTable = tables["COLR"] ?: return null
+        val bytes = fontBytes
+        val off = colrTable.offset
+        if (off + 4 > bytes.size) return null
+        val version = u16(bytes, off)
+        if (version < 1) return null
+        return try {
+            COLRV1Parser.parse(bytes.copyOfRange(colrTable.offset, colrTable.offset + colrTable.length))
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun parseCpalMulti(): CPALTable? {
+        val cpalTable = tables["CPAL"] ?: return null
+        return try {
+            CPALV0Parser.parse(fontBytes.copyOfRange(cpalTable.offset, cpalTable.offset + cpalTable.length))
+        } catch (_: Exception) {
+            null
+        }
     }
 
     private fun parseSbix(): Map<Int, GlyphRepresentation.Bitmap>? {

@@ -26,6 +26,9 @@ sealed interface GlyphRepresentation {
         }
     }
     data class ColorLayers(val layers: List<ColorLayerEntry>) : GlyphRepresentation
+    data class ColorLayersV1(
+        val paintGraph: org.graphiks.kanvas.font.colr.COLRPaintGraph,
+    ) : GlyphRepresentation
     data class SvgDocument(
         val svgData: ByteArray,
         val docWidth: Float,
