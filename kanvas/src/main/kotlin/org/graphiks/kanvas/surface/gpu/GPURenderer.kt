@@ -4,6 +4,7 @@ import org.graphiks.kanvas.canvas.DisplayListBuffer
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.geometry.PathVerb
+import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
@@ -21,6 +22,7 @@ import org.graphiks.kanvas.gpu.renderer.geometry.PathTessellator
 import org.graphiks.kanvas.gpu.renderer.geometry.PathVerb as GpuPathVerb
 import org.graphiks.kanvas.gpu.renderer.geometry.Point
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
+import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.surface.Diagnostics
 import org.graphiks.kanvas.surface.PixelFormat
 import org.graphiks.kanvas.surface.RenderConfig
@@ -272,7 +274,7 @@ internal fun renderViaGpu(
                 if (image.sourceId !in textureCache) {
                     val px = image.pixels
                     if (px != null) {
-                        textureCache[image.sourceId] = px
+                        textureCache[image.sourceId] = expandToRgba(image, px)
                     } else {
                         diagnostics.warn("no_pixels:${image.sourceId}", "cachePixels", "cpu_pixels_unavailable")
                     }
@@ -726,6 +728,9 @@ internal fun renderViaGpu(
                                 is DisplayOp.DrawVertices -> {
                                     diagnostics.degrade("unimplemented:drawPicture:nested:${nestedCmdId.value}", "drawPicture", "gpu_nested_vertices_unimplemented")
                                 }
+                                is DisplayOp.DrawMesh -> {
+                                    diagnostics.degrade("unimplemented:drawPicture:nested:${nestedCmdId.value}", "drawPicture", "gpu_nested_mesh_unimplemented")
+                                }
                                 is DisplayOp.DrawText -> {
                                     if (hasColorGlyphs(nestedOp.blob)) {
                                         renderColorText(nestedOp, nestedCmdId)
@@ -747,7 +752,8 @@ internal fun renderViaGpu(
                                 is DisplayOp.SetClip,
                                 is DisplayOp.BeginLayer,
                                 is DisplayOp.EndLayer,
-                                is DisplayOp.Annotation -> { /* state / metadata ops */ }
+                                is DisplayOp.Annotation,
+                                is DisplayOp.FlushAndSnapshot -> { /* state / metadata ops */ }
                                 is DisplayOp.DrawPicture -> {
                                     /* already flattened; should not occur */
                                 }
@@ -757,7 +763,44 @@ internal fun renderViaGpu(
                     is DisplayOp.DrawVertices -> {
                         val verts = op.vertices
                         if (verts.texCoords != null) {
-                            diagnostics.degrade("unimplemented:drawVertices:textured:${cmdId.value}", "drawVertices", "gpu_textured_vertices_unimplemented")
+                            val tex = verts.texCoords
+                            val idx = verts.indices?.toIntArray()
+                                ?: IntArray(verts.positions.size) { it }
+                            val posFlat = FloatArray(verts.positions.size * 2) {
+                                if (it % 2 == 0) verts.positions[it / 2].x else verts.positions[it / 2].y
+                            }
+                            val uvFlat = FloatArray(tex.size * 2) {
+                                if (it % 2 == 0) tex[it / 2].x else tex[it / 2].y
+                            }
+                            val paint = op.paint
+
+                            if (paint.shader is Shader.Image) {
+                                val img = paint.shader.image
+                                val texBytes = img.pixels
+                                val texW = img.width
+                                val texH = img.height
+                                if (texBytes != null) {
+                                    t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
+                                        dispatchTexturedVertices(
+                                            positions = posFlat, uvs = uvFlat, uvs2 = null,
+                                            indices = idx, paint = paint,
+                                            textureBytes = texBytes,
+                                            textureWidth = texW, textureHeight = texH,
+                                            textureSourceId = img.sourceId,
+                                            diagnostics = diagnostics,
+                                            surfaceWidth = width, surfaceHeight = height,
+                                            config = config, diagnosticName = op.paint.toString(),
+                                        )
+                                    }
+                                    sceneHasContent = true
+                                    continue
+                                } else {
+                                    diagnostics.degrade("unimplemented:drawVertices:textured:${cmdId.value}", "drawVertices", "gpu_textured_vertices_no_pixels")
+                                }
+                            } else {
+                                diagnostics.degrade("unimplemented:drawVertices:textured:${cmdId.value}", "drawVertices", "gpu_textured_vertices_no_image_shader")
+                            }
+                            continue
                         }
                         if (verts.positions.size >= 3) {
                             val path = Path().also { p ->
@@ -809,6 +852,98 @@ internal fun renderViaGpu(
                             }
                         }
                     }
+                    is DisplayOp.DrawMesh -> {
+                        val verts = op.mesh.vertices
+                        if (verts.texCoords != null) {
+                            val tex = verts.texCoords
+                            val idx = verts.indices?.toIntArray()
+                                ?: IntArray(verts.positions.size) { it }
+                            val posFlat = FloatArray(verts.positions.size * 2) {
+                                if (it % 2 == 0) verts.positions[it / 2].x else verts.positions[it / 2].y
+                            }
+                            val uvFlat = FloatArray(tex.size * 2) {
+                                if (it % 2 == 0) tex[it / 2].x else tex[it / 2].y
+                            }
+                            val paint = op.paint
+
+                            if (paint.shader is Shader.Image) {
+                                val img = paint.shader.image
+                                val texBytes = img.pixels
+                                val texW = img.width
+                                val texH = img.height
+                                if (texBytes != null) {
+                                    t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
+                                        dispatchTexturedVertices(
+                                            positions = posFlat, uvs = uvFlat, uvs2 = null,
+                                            indices = idx, paint = paint,
+                                            textureBytes = texBytes,
+                                            textureWidth = texW, textureHeight = texH,
+                                            textureSourceId = img.sourceId,
+                                            diagnostics = diagnostics,
+                                            surfaceWidth = width, surfaceHeight = height,
+                                            config = config, diagnosticName = op.paint.toString(),
+                                        )
+                                    }
+                                    sceneHasContent = true
+                                    continue
+                                } else {
+                                    diagnostics.degrade("unimplemented:drawVertices:textured:${cmdId.value}", "drawVertices", "gpu_textured_vertices_no_pixels")
+                                }
+                            } else {
+                                diagnostics.degrade("unimplemented:drawVertices:textured:${cmdId.value}", "drawVertices", "gpu_textured_vertices_no_image_shader")
+                            }
+                            continue
+                        }
+                        if (verts.positions.size >= 3) {
+                            val path = Path().also { p ->
+                                when (verts.mode) {
+                                    org.graphiks.kanvas.types.VertexMode.TRIANGLES -> {
+                                        var i = 0
+                                        while (i + 2 < verts.positions.size) {
+                                            p.moveTo(verts.positions[i].x, verts.positions[i].y)
+                                            p.lineTo(verts.positions[i + 1].x, verts.positions[i + 1].y)
+                                            p.lineTo(verts.positions[i + 2].x, verts.positions[i + 2].y)
+                                            p.close()
+                                            i += 3
+                                        }
+                                    }
+                                    org.graphiks.kanvas.types.VertexMode.TRIANGLE_STRIP -> {
+                                        for (j in 2 until verts.positions.size) {
+                                            p.moveTo(verts.positions[j - 2].x, verts.positions[j - 2].y)
+                                            p.lineTo(verts.positions[j - 1].x, verts.positions[j - 1].y)
+                                            p.lineTo(verts.positions[j].x, verts.positions[j].y)
+                                            p.close()
+                                        }
+                                    }
+                                    org.graphiks.kanvas.types.VertexMode.TRIANGLE_FAN -> {
+                                        val first = verts.positions.first()
+                                        for (j in 2 until verts.positions.size) {
+                                            p.moveTo(first.x, first.y)
+                                            p.lineTo(verts.positions[j - 1].x, verts.positions[j - 1].y)
+                                            p.lineTo(verts.positions[j].x, verts.positions[j].y)
+                                            p.close()
+                                        }
+                                    }
+                                }
+                            }
+                            val pathData = path.toPathTessellatorData()
+                            val tessellator = PathTessellator(config.curveTolerance, config.maxPathVertices.toInt())
+                            val flat = tessellator.flatten(pathData)
+                            if (flat.size >= 3) {
+                                val tri = tessellator.triangulate(flat)
+                                val vertices = tri.vertices.flatMap { listOf(it.x, it.y) }
+                                val contourStarts = listOf(0)
+                                val drawPathOp = DisplayOp.DrawPath(path, op.paint, op.transform, op.clip)
+                                val cmd = drawPathOp.toNormalizedCommand(cmdId, targets, vertices, contourStarts, flat.size)
+                                t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
+                                    dispatchFillPath(cmd, dispatched, diagnostics, width, height, config)
+                                }
+                                sceneHasContent = true
+                            } else {
+                                diagnostics.degrade("unimplemented:drawMesh:insufficient:${cmdId.value}", "drawMesh", "insufficient_vertices:${flat.size}")
+                            }
+                        }
+                    }
                     is DisplayOp.DrawAtlas -> {
                         val numSprites = minOf(op.transforms.size, op.texRects.size)
                         for (i in 0 until numSprites) {
@@ -838,6 +973,7 @@ internal fun renderViaGpu(
                         }
                     }
                     is DisplayOp.Annotation -> { /* no visual output */ }
+                    is DisplayOp.FlushAndSnapshot -> { /* deferred to render-backend; no-op in CPU path */ }
                 }
             }
 
@@ -1025,4 +1161,20 @@ private fun GPUBackendRenderRecorder.drawTextAtlasPass(
         blendMode = blendMode,
     )
     dispatched.add("text:${blob.hashCode()}")
+}
+
+private fun expandToRgba(image: org.graphiks.kanvas.image.Image, pixels: ByteArray): ByteArray {
+    if (image.colorType == ColorType.RGBA_8888 || image.colorType == ColorType.BGRA_8888) return pixels
+    if (image.colorType == ColorType.ALPHA_8) {
+        val rgba = ByteArray(image.width * image.height * 4)
+        for (i in pixels.indices) {
+            val off = i * 4
+            rgba[off] = 0
+            rgba[off + 1] = 0
+            rgba[off + 2] = 0
+            rgba[off + 3] = pixels[i]
+        }
+        return rgba
+    }
+    return pixels
 }

@@ -11,6 +11,7 @@ import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.PointMode
 import org.graphiks.kanvas.types.Lattice
+import org.graphiks.kanvas.types.Mesh
 import org.graphiks.kanvas.types.Vertices
 import org.graphiks.kanvas.picture.Picture
 import org.graphiks.kanvas.paint.BlendMode
@@ -92,9 +93,18 @@ sealed interface DisplayOp {
     /** Draw a triangle mesh. */
     data class DrawVertices(val vertices: Vertices, val paint: Paint, val transform: Matrix33, val clip: ClipStack) : DisplayOp
 
+    /** Draw a mesh with optional fragment program and children. */
+    data class DrawMesh(
+        val mesh: Mesh, val paint: Paint,
+        val blendMode: BlendMode?, val transform: Matrix33, val clip: ClipStack,
+    ) : DisplayOp
+
     /** Batch-draw sprites from an atlas texture. */
     data class DrawAtlas(val atlas: Image, val transforms: List<Matrix33>, val texRects: List<Rect>, val colors: List<Color>?, val blendMode: BlendMode, val paint: Paint?, val transform: Matrix33, val clip: ClipStack) : DisplayOp
 
     /** Metadata annotation (no visual output). */
     data class Annotation(val rect: Rect, val key: String, val value: String) : DisplayOp
+
+    /** Request a framebuffer capture — the render backend reads back and produces an Image. */
+    data class FlushAndSnapshot(val bounds: Rect) : DisplayOp
 }

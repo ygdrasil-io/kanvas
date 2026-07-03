@@ -45,7 +45,7 @@ import org.graphiks.kanvas.types.Rect
 class RuntimeFunctionsGm : SkiaGm {
     override val name = "runtimefunctions"
     override val renderFamily = RenderFamily.RUNTIME_EFFECT
-    override val minSimilarity = 0.0
+    override val minSimilarity = 10.25848388671875
     override val width = 256
     override val height = 256
 

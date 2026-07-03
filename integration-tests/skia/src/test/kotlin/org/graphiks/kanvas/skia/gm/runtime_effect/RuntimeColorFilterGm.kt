@@ -76,9 +76,12 @@ class RuntimeColorFilterGm : SkiaGm {
 
     private fun drawCell(canvas: GmCanvas, col: Int, row: Int, wgsl: String, uniforms: UniformBlock) {
         val effect = RuntimeEffect.compile(wgsl).getOrThrow()
-        val shader = effect.makeShader(uniforms)
+        val colorFilter = effect.makeColorFilter(uniforms)
         val x = col * 256f
         val y = row * 256f
-        canvas.drawRect(Rect(x, y, x + 256f, y + 256f), Paint(shader = shader))
+        canvas.drawRect(Rect(x, y, x + 256f, y + 256f), Paint(
+            color = Color.fromRGBA(1f, 1f, 1f, 1f),
+            colorFilter = colorFilter,
+        ))
     }
 }

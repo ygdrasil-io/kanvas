@@ -11,9 +11,7 @@ import org.skia.testing.TestUtils
  * GM ports that the `MIGRATION_PLAN_D2_RUNTIME_EFFECT` originally
  * listed as "needs D2" but that turn out to be **faux-positifs** :
  * the upstream `gm/<name>.cpp` includes `<SkRuntimeEffect.h>` while
- * the actual GM body either never uses `SkRuntimeEffect` at all, or
- * uses it only for a half of the cells (the runtime-effect branch
- * is replaced by a placeholder in the port).
+ * the actual GM body never uses `SkRuntimeEffect` at all.
  *
  * **Floor strategy** : these ports run with **very low floors**
  * (5 % – 50 %) because :
@@ -28,9 +26,6 @@ import org.skia.testing.TestUtils
  *    D2 slices land.
  *  - A low floor still catches regressions (the ratchet detects a
  *    drop > 1 % even at low absolute values).
- *
- * Each test ports the **first DEF_GM** of its `gm/<name>.cpp` file
- * unless otherwise noted.
  */
 class D2PreFauxPositifTest {
 
@@ -50,60 +45,6 @@ class D2PreFauxPositifTest {
             "$trackerName similarity ${"%.2f".format(comparison.similarity)}% < $floor% floor",
         )
     }
-
-    /**
-     * `lumafilter` — the first DEF_GM of `lumafilter.cpp`. Doesn't
-     * use `SkRuntimeEffect` at all (only the second `AlternateLuma`
-     * GM does). Skips text labels.
-     */
-    @Test
-    fun `LumaFilterGM matches reference`() =
-        runGm(LumaFilterGM(), "LumaFilterGM", floor = 0.0)
-
-    /**
-     * `arithmode` — the first DEF_GM of `arithmode.cpp`. Uses only
-     * `SkImageFilters.Arithmetic` (shipped in C1.3) ; the second
-     * GM `ArithmodeBlenderGM` is the runtime-effect-dependent one.
-     * Skips text labels.
-     */
-    @Test
-    fun `ArithmodeGM matches reference`() =
-        runGm(ArithmodeGM(), "ArithmodeGM", floor = 0.0)
-
-    /**
-     * `composeCF` — the first DEF_SIMPLE_GM of
-     * `composecolorfilter.cpp`. Half-port : the `useSkSL=true`
-     * column is replaced by a gray placeholder.
-     */
-    @Test
-    fun `ComposeColorFilterGM matches reference`() =
-        runGm(ComposeColorFilterGM(), "ComposeColorFilterGM", floor = 0.0)
-
-    /**
-     * `composeCFIF` — the second DEF_SIMPLE_GM of
-     * `composecolorfilter.cpp`. No `SkRuntimeEffect` involvement —
-     * fully portable today.
-     */
-    @Test
-    fun `ComposeCFIFGM matches reference`() =
-        runGm(ComposeCFIFGM(), "ComposeCFIFGM", floor = 0.0)
-
-    /**
-     * `runtimecolorfilter` — the first DEF_GM of
-     * `runtimecolorfilter.cpp`. **D2.4.a** port : the 5 SkSL color
-     * filters (Noop / LumaSrc / Ternary / Ifs / EarlyReturn) are
-     * hand-ported via [org.skia.effects.runtime.effects.SkBuiltinColorFilterEffects]
-     * and dispatched through the SkRuntimeEffect façade. The GM
-     * uses a synthetic 256×256 RGB-gradient stand-in for upstream's
-     * `mandrill_256.png` ; iso-pixel parity is therefore impossible
-     * (the per-cell colour-filter math is correct, but the
-     * underlying source pixels differ from upstream's mandrill).
-     * Floor stays at 0 % until either the image asset lands or a
-     * mandrill-substitute ratchet baseline is captured.
-     */
-    @Test
-    fun `RuntimeColorFilterGM matches reference`() =
-        runGm(RuntimeColorFilterGM(), "RuntimeColorFilterGM", floor = 0.0)
 
     /**
      * `vertices_perspective` — `gm/vertices.cpp`. Pure faux-positif :

@@ -18,6 +18,7 @@ object SkiaGmRenderer {
         // Skia's GM::drawBackground() fills with fBGColor (default SK_ColorWHITE).
         canvas.drawRect(Rect(0f, 0f, width.toFloat(), height.toFloat()), Paint(color = Color.fromRGBA(1f, 1f, 1f, 1f), antiAlias = false))
         val gmCanvas = GmCanvas(canvas, width, height)
+        gm.onOnceBeforeDraw(gmCanvas)
         gm.draw(gmCanvas, width, height)
         val result = surface.render()
         return SkiaRenderResult(

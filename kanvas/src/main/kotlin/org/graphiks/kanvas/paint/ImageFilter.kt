@@ -60,6 +60,7 @@ sealed interface ImageFilter {
         val xChannelSelector: ColorChannel, val yChannelSelector: ColorChannel,
         val scale: Float, val displacement: ImageFilter, val input: ImageFilter? = null,
     ) : ImageFilter
+    data class Picture(val picture: org.graphiks.kanvas.picture.Picture, val src: Rect? = null) : ImageFilter
     data class Magnifier(val src: Rect, val zoom: Float, val inset: Float, val input: ImageFilter? = null) : ImageFilter
     data class MatrixConvolution(
         val kernelSize: Size, val kernel: FloatArray, val gain: Float, val bias: Float,
@@ -85,4 +86,10 @@ sealed interface ImageFilter {
             return result
         }
     }
+    data class RuntimeEffect(
+        val effect: org.graphiks.kanvas.pipeline.RuntimeEffect,
+        val uniforms: org.graphiks.kanvas.pipeline.UniformBlock,
+        val childShaderName: String? = null,
+        val childImageFilters: Map<String, ImageFilter?> = emptyMap(),
+    ) : ImageFilter
 }

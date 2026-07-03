@@ -171,6 +171,14 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
         buffer.append(DisplayOp.DrawVertices(vertices, paint, currentTransform, currentClip))
     }
 
+    fun drawMesh(mesh: Mesh, paint: Paint, blendMode: BlendMode? = null) {
+        if (mesh.program != null) {
+            buffer.append(DisplayOp.DrawMesh(mesh, paint, blendMode, currentTransform, currentClip))
+        } else {
+            drawVertices(mesh.vertices, paint)
+        }
+    }
+
     /** Batch-draw sprites from [atlas] texture. */
     fun drawAtlas(atlas: Image, transforms: List<Matrix33>, texRects: List<Rect>, colors: List<Color>? = null, blendMode: BlendMode = BlendMode.SRC_OVER, paint: Paint? = null) {
         buffer.append(DisplayOp.DrawAtlas(atlas, transforms, texRects, colors, blendMode, paint, currentTransform, currentClip))
@@ -221,6 +229,11 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
      */
     fun restoreToCount(count: Int) {
         while (saveStack.size > count) restore()
+    }
+
+    fun flushAndSnapshot(bounds: Rect): Image {
+        buffer.append(DisplayOp.FlushAndSnapshot(bounds))
+        return Image.placeholder(bounds.width.toInt(), bounds.height.toInt())
     }
 
     /** Pre-concatenate a translation by (x, y) into the current transform. */

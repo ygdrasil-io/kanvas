@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.paint
 
+import org.graphiks.kanvas.pipeline.UniformBlock
 import org.graphiks.kanvas.types.Color
 
 sealed interface ColorFilter {
@@ -36,4 +37,9 @@ sealed interface ColorFilter {
     data object HighContrast : ColorFilter
     data object Luma : ColorFilter
     data object Overdraw : ColorFilter
+    data class RuntimeEffect(
+        val effect: org.graphiks.kanvas.pipeline.RuntimeEffect,
+        val uniforms: UniformBlock,
+        val children: Map<String, ColorFilter> = emptyMap(),
+    ) : ColorFilter
 }
