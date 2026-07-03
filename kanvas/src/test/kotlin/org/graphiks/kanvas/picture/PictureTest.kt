@@ -3,11 +3,14 @@ package org.graphiks.kanvas.picture
 import org.graphiks.kanvas.canvas.Canvas
 import org.graphiks.kanvas.canvas.DisplayListBuffer
 import org.graphiks.kanvas.canvas.DisplayOp
+import org.graphiks.kanvas.image.ColorType
+import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -107,6 +110,53 @@ class PictureTest {
         val outer = outerRec.finishRecordingAsPicture()
 
         assertTrue(outer.totalOpCount > outer.opCount)
+    }
+
+    @Test
+    fun `walkImages invokes action for each embedded image`() {
+        val img = Image(4, 4, ColorType.RGBA_8888, "test", ByteArray(64) { 0 })
+        val recorder = PictureRecorder()
+        val canvas = recorder.beginRecording(Rect.fromLTRB(0f, 0f, 100f, 100f))
+        canvas.drawImage(img, Rect.fromLTRB(10f, 10f, 50f, 50f))
+        canvas.drawImage(img, Rect.fromLTRB(60f, 60f, 80f, 80f))
+        val picture = recorder.finishRecordingAsPicture()
+
+        val collected = mutableListOf<Image>()
+        picture.walkImages { collected.add(it) }
+        assertEquals(2, collected.size)
+        assertEquals(img, collected[0])
+        assertEquals(img, collected[1])
+    }
+
+    @Test
+    fun `walkImages does not invoke action when no images present`() {
+        val recorder = PictureRecorder()
+        val canvas = recorder.beginRecording(Rect.fromLTRB(0f, 0f, 100f, 100f))
+        canvas.drawRect(Rect.fromLTRB(10f, 10f, 50f, 50f), Paint.fill(Color.RED))
+        val picture = recorder.finishRecordingAsPicture()
+
+        var called = false
+        picture.walkImages { called = true }
+        assertFalse(called)
+    }
+
+    @Test
+    fun `walkNestedPictures invokes action for each nested picture`() {
+        val inner = PictureRecorder().apply {
+            beginRecording(Rect.fromLTRB(0f, 0f, 10f, 10f)).drawRect(Rect.fromLTRB(0f, 0f, 5f, 5f), Paint.fill(Color.RED))
+        }.finishRecordingAsPicture()
+
+        val outerRec = PictureRecorder()
+        val outerCanvas = outerRec.beginRecording(Rect.fromLTRB(0f, 0f, 100f, 100f))
+        outerCanvas.drawPicture(inner)
+        outerCanvas.drawPicture(inner)
+        val outer = outerRec.finishRecordingAsPicture()
+
+        val collected = mutableListOf<Picture>()
+        outer.walkNestedPictures { collected.add(it) }
+        assertEquals(2, collected.size)
+        assertEquals(inner, collected[0])
+        assertEquals(inner, collected[1])
     }
 }
 

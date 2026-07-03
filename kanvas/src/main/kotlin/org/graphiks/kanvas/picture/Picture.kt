@@ -45,6 +45,34 @@ class Picture internal constructor(
     val totalOpCount: Int get() = approximateOpCount(nested = true)
 
     /**
+     * Walks every top-level [DisplayOp.DrawImage], [DisplayOp.DrawImageNine],
+     * [DisplayOp.DrawImageLattice], and [DisplayOp.DrawAtlas] in this picture,
+     * invoking [action] for each embedded [Image]. Does not recurse into
+     * nested pictures.
+     */
+    fun walkImages(action: (Image) -> Unit) {
+        for (op in ops) {
+            when (op) {
+                is DisplayOp.DrawImage -> action(op.image)
+                is DisplayOp.DrawImageNine -> action(op.image)
+                is DisplayOp.DrawImageLattice -> action(op.image)
+                is DisplayOp.DrawAtlas -> action(op.atlas)
+                else -> {}
+            }
+        }
+    }
+
+    /**
+     * Walks every top-level [DisplayOp.DrawPicture] in this picture, invoking
+     * [action] for each nested [Picture]. Does not recurse.
+     */
+    fun walkNestedPictures(action: (Picture) -> Unit) {
+        for (op in ops) {
+            if (op is DisplayOp.DrawPicture) action(op.picture)
+        }
+    }
+
+    /**
      * Replay this picture's drawing commands onto [canvas].
      *
      * The canvas's save/restore balance is preserved — each call
