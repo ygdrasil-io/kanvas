@@ -173,12 +173,13 @@ class PictureTest {
         val recorder = PictureRecorder()
         val canvas = recorder.beginRecording(Rect.fromLTRB(0f, 0f, 200f, 200f))
         canvas.drawText(blob1, 0f, 50f, Paint.fill(Color.BLACK))
-        canvas.drawText(blob2, 0f, 100f, Paint.fill(Color.BLACK))
+        canvas.drawText(blob1, 0f, 100f, Paint.fill(Color.BLACK)) // same reference -> dedup
+        canvas.drawText(blob2, 0f, 150f, Paint.fill(Color.BLACK)) // different reference
         val picture = recorder.finishRecordingAsPicture()
 
         val collected = mutableListOf<TextBlob>()
         picture.walkTextBlobs { collected.add(it) }
-        assertEquals(2, collected.size) // reference-identity: two distinct blobs
+        assertEquals(2, collected.size) // blob1 deduped to 1, blob2 = 1 more
         assertEquals(blob1, collected[0])
         assertEquals(blob2, collected[1])
     }

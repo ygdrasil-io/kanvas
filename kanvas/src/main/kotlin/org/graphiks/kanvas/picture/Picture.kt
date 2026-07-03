@@ -9,6 +9,7 @@ import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.geometry.FillType
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.geometry.PathVerb
+import kotlin.math.ceil
 import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.*
@@ -16,7 +17,6 @@ import org.graphiks.kanvas.pipeline.*
 import org.graphiks.kanvas.surface.ImageEncoder
 import org.graphiks.kanvas.surface.ImageEncoderRegistry
 import org.graphiks.kanvas.surface.Surface
-import kotlin.math.ceil
 import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.KanvasTypeface
 import org.graphiks.kanvas.text.TextBlob
@@ -125,8 +125,8 @@ class Picture internal constructor(
         tile: Rect = cullRect,
         matrix: Matrix33? = null,
     ): Shader {
-        val w = maxOf(1, ceil(tile.width.toDouble()).toInt())
-        val h = maxOf(1, ceil(tile.height.toDouble()).toInt())
+        val w = maxOf(1, ceil(tile.width).toInt())
+        val h = maxOf(1, ceil(tile.height).toInt())
         val surface = Surface(w, h)
         val c = surface.canvas()
         c.clear(Color.TRANSPARENT)
@@ -148,12 +148,10 @@ class Picture internal constructor(
      *
      * @param width     output image width in pixels
      * @param height    output image height in pixels
-     * @param colorType pixel format; defaults to [ColorType.RGBA_8888]
      */
     fun rasterize(
         width: Int,
         height: Int,
-        colorType: ColorType = ColorType.RGBA_8888,
     ): Image {
         val surface = Surface(width, height)
         val c = surface.canvas()
