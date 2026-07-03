@@ -7,7 +7,15 @@ import org.graphiks.kanvas.types.ColorSpace
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
-enum class ColorType { RGBA_8888, BGRA_8888, ALPHA_8, GRAY_8 }
+enum class ColorType(val bytesPerPixel: Int) {
+    RGBA_8888(4),
+    BGRA_8888(4),
+    ALPHA_8(1),
+    GRAY_8(1),
+    RGBA_F16(8),
+    RGB_565(2),
+    ARGB_4444(2),
+}
 
 data class Image(
     val width: Int,
