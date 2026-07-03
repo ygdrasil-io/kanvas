@@ -176,6 +176,24 @@ data class GPUBackendVertexColorData(
     }
 }
 
+/** Holds interleaved vertex data (position + uv) for textured vertex buffer passes. */
+data class GPUBackendVertexPositionUVData(
+    val vertexData: FloatArray,
+    val indices: IntArray,
+) {
+    val vertexCount: Int get() = vertexData.size / 4
+    val strideFloats: Int = 4
+
+    init {
+        require(vertexData.size >= 4) { "GPUBackendVertexPositionUVData.vertexData must have at least 4 floats" }
+        require(vertexData.size % strideFloats == 0) {
+            "GPUBackendVertexPositionUVData.vertexData must be a multiple of $strideFloats"
+        }
+        require(indices.isNotEmpty()) { "GPUBackendVertexPositionUVData.indices must not be empty" }
+        require(indices.all { it in 0 until vertexCount }) { "GPUBackendVertexPositionUVData.indices out of range" }
+    }
+}
+
 /** Records draw inputs for the backend runtime's fullscreen pass helper. */
 interface GPUBackendRenderRecorder {
     /** Draws a fullscreen pass parameterized by WGSL source and per-draw rect payloads. */
@@ -232,6 +250,34 @@ interface GPUBackendRenderRecorder {
         vertexBufferLabel: String,
         indexCount: Int,
         uniformDraw: GPUBackendRawUniformDraw,
+        blendMode: GPUBlendMode? = null,
+    )
+
+    /** Creates a GPU vertex buffer from interleaved position + uv float data. Returns a stable label. */
+    fun createVertexPositionUVBuffer(data: GPUBackendVertexPositionUVData): String
+
+    /** Draws an indexed mesh using a previously-created position+uv vertex buffer with a bound texture. */
+    fun drawVertexPositionUVIndexed(
+        vertexBufferLabel: String,
+        indexCount: Int,
+        uniformDraw: GPUBackendRawUniformDraw,
+        textureRgba: ByteArray,
+        textureWidth: Int,
+        textureHeight: Int,
+        textureFormat: String,
+        blendMode: GPUBlendMode? = null,
+    )
+
+    /** Draws an indexed mesh with dual UV channels and two bound textures. */
+    fun drawVertexPositionDualUVIndexed(
+        vertexBufferLabel: String,
+        indexCount: Int,
+        uniformDraw: GPUBackendRawUniformDraw,
+        texture1Rgba: ByteArray,
+        texture1Width: Int, texture1Height: Int,
+        texture2Rgba: ByteArray,
+        texture2Width: Int, texture2Height: Int,
+        textureFormat: String,
         blendMode: GPUBlendMode? = null,
     )
 

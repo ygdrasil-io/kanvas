@@ -12,6 +12,12 @@ import org.graphiks.kanvas.geometry.PathVerb
 import kotlin.math.ceil
 import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.Image
+import org.graphiks.kanvas.paint.MeshChild
+import org.graphiks.kanvas.paint.ShaderChild
+import org.graphiks.kanvas.paint.ColorFilterChild
+import org.graphiks.kanvas.paint.BlenderChild
+import org.graphiks.kanvas.paint.MeshChildren
+import org.graphiks.kanvas.paint.MeshProgram
 import org.graphiks.kanvas.paint.*
 import org.graphiks.kanvas.pipeline.*
 import org.graphiks.kanvas.surface.ImageEncoder
@@ -183,6 +189,7 @@ class Picture internal constructor(
                     is DisplayOp.DrawText -> canvas.drawText(op.blob, op.x, op.y, op.paint)
                     is DisplayOp.DrawPicture -> canvas.drawPicture(op.picture, op.paint)
                     is DisplayOp.DrawVertices -> canvas.drawVertices(op.vertices, op.paint)
+                    is DisplayOp.DrawMesh -> canvas.drawMesh(op.mesh, op.paint, op.blendMode)
                     is DisplayOp.DrawAtlas -> canvas.drawAtlas(op.atlas, op.transforms, op.texRects, op.colors, op.blendMode, op.paint)
                     is DisplayOp.DrawColor -> canvas.drawColor(op.color, op.mode)
                     is DisplayOp.Clear -> canvas.clear(op.color)
@@ -260,6 +267,7 @@ private const val OP_BEGIN_LAYER: Byte = 17
 private const val OP_END_LAYER: Byte = 18
 private const val OP_ANNOTATION: Byte = 19
 private const val OP_FLUSH_AND_SNAPSHOT: Byte = 20
+private const val OP_DRAW_MESH: Byte = 21
 
 private class Writer {
     private val baos = ByteArrayOutputStream()
@@ -620,6 +628,27 @@ private class Writer {
         }
     }
 
+    fun meshProgram(mp: MeshProgram?) {
+        if (mp == null) { bool(false); return }
+        bool(true)
+        runtimeEffect(mp.effect)
+        uniformBlock(mp.uniforms)
+        val entries = mp.children.entries
+        int(entries.size)
+        for (entry in entries) {
+            string(entry.name)
+            meshChild(entry.child)
+        }
+    }
+
+    fun meshChild(child: MeshChild) {
+        when (child) {
+            is ShaderChild -> { byte(0); shader(child.shader) }
+            is ColorFilterChild -> { byte(1); colorFilter(child.filter) }
+            is BlenderChild -> { byte(2); blender(child.blender) }
+        }
+    }
+
     fun displayOp(op: DisplayOp) {
         when (op) {
             is DisplayOp.DrawRect -> {
@@ -673,6 +702,15 @@ private class Writer {
             }
             is DisplayOp.DrawVertices -> {
                 byte(OP_DRAW_VERTICES); vertices(op.vertices); paint(op.paint)
+                matrix33(op.transform); clipStack(op.clip)
+            }
+            is DisplayOp.DrawMesh -> {
+                byte(OP_DRAW_MESH)
+                vertices(op.mesh.vertices)
+                paint(op.paint)
+                if (op.blendMode != null) { bool(true); blendMode(op.blendMode) } else bool(false)
+                meshProgram(op.mesh.program)
+                rect(op.mesh.bounds)
                 matrix33(op.transform); clipStack(op.clip)
             }
             is DisplayOp.DrawAtlas -> {
@@ -1055,6 +1093,29 @@ private class Reader(private val data: ByteArray) {
         }
     }
 
+    fun readMeshProgram(): MeshProgram? {
+        if (!bool()) return null
+        val effect = readRuntimeEffect() ?: return null.also { valid = false }
+        val uniforms = readUniformBlock() ?: return null.also { valid = false }
+        val entryCount = int()
+        val entries = mutableListOf<MeshChildren.Entry>()
+        for (i in 0 until entryCount) {
+            val name = string()
+            val child = readMeshChild() ?: return null.also { valid = false }
+            entries.add(MeshChildren.Entry(name, child))
+        }
+        return MeshProgram(effect, uniforms, MeshChildren(entries))
+    }
+
+    fun readMeshChild(): MeshChild? {
+        return when (byte().toInt()) {
+            0 -> ShaderChild(shader()!!)
+            1 -> ColorFilterChild(colorFilter()!!)
+            2 -> BlenderChild(blender()!!)
+            else -> { valid = false; null }
+        }
+    }
+
     fun displayOp(): DisplayOp? {
         val disc = byte()
         return when (disc.toInt()) {
@@ -1092,6 +1153,14 @@ private class Reader(private val data: ByteArray) {
                 DisplayOp.DrawPicture(nestedPic, p, matrix33(), clipStack())
             }
             OP_DRAW_VERTICES.toInt() -> DisplayOp.DrawVertices(vertices(), paint(), matrix33(), clipStack())
+            OP_DRAW_MESH.toInt() -> {
+                val v = vertices()
+                val p = paint()
+                val bm = if (bool()) blendMode() else null
+                val mp = readMeshProgram()
+                val bounds = rect()
+                DisplayOp.DrawMesh(Mesh(v, mp, bounds), p, bm, matrix33(), clipStack())
+            }
             OP_DRAW_ATLAS.toInt() -> {
                 val atlas = image()
                 val txCount = int()

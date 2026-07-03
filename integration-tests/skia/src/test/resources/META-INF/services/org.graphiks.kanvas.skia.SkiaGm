@@ -177,6 +177,17 @@ org.graphiks.kanvas.skia.gm.image.Tiling2GradientGm
 org.graphiks.kanvas.skia.gm.image.TinyBitmapGm
 org.graphiks.kanvas.skia.gm.image.UnpremulGm
 org.graphiks.kanvas.skia.gm.image.VeryLargeBitmapGm
+org.graphiks.kanvas.skia.gm.mesh.CustomMeshCsGm
+org.graphiks.kanvas.skia.gm.mesh.CustomMeshCsUniformsGm
+org.graphiks.kanvas.skia.gm.mesh.CustomMeshGm
+org.graphiks.kanvas.skia.gm.mesh.CustomMeshUniformsGm
+org.graphiks.kanvas.skia.gm.mesh.MeshUpdateGm
+org.graphiks.kanvas.skia.gm.mesh.MeshWithEffectsGm
+org.graphiks.kanvas.skia.gm.mesh.MeshWithImageGm
+org.graphiks.kanvas.skia.gm.mesh.MeshWithPaintColorGm
+org.graphiks.kanvas.skia.gm.mesh.MeshWithPaintImageGm
+org.graphiks.kanvas.skia.gm.mesh.MeshZeroInitGm
+org.graphiks.kanvas.skia.gm.mesh.PictureMeshGm
 org.graphiks.kanvas.skia.gm.mesh.VerticesCollapsedGm
 org.graphiks.kanvas.skia.gm.path.Bug41422450Gm
 org.graphiks.kanvas.skia.gm.path.CTMPathEffectGm

@@ -23,5 +23,10 @@ interface SkiaGm {
     val tolerance: Int get() = 2
     val width: Int get() = 800
     val height: Int get() = 600
+
+    fun onOnceBeforeDraw(canvas: GmCanvas) {}
+
+    fun onAnimate(deltaMs: Long): Boolean = false
+
     fun draw(canvas: GmCanvas, width: Int, height: Int)
 }

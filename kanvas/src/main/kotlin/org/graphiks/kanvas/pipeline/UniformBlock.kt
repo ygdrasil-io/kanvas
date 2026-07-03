@@ -6,6 +6,7 @@ class UniformBlock private constructor(
     val entries: Map<String, UniformValue>,
 ) {
     companion object {
+        val EMPTY = UniformBlock(emptyMap())
         operator fun invoke(block: UniformBlockScope.() -> Unit): UniformBlock {
             val scope = UniformBlockScope()
             scope.block()
