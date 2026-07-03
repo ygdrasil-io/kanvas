@@ -158,6 +158,14 @@ data class COLRV1Table(
                 }
                 is COLRV1Paint.Translate -> return visitPaint(paint.paint)
                 is COLRV1Paint.Transform -> return visitPaint(paint.paint)
+                is COLRV1Paint.Scale -> return visitPaint(paint.paint)
+                is COLRV1Paint.ScaleAroundCenter -> return visitPaint(paint.paint)
+                is COLRV1Paint.ScaleUniform -> return visitPaint(paint.paint)
+                is COLRV1Paint.ScaleUniformAroundCenter -> return visitPaint(paint.paint)
+                is COLRV1Paint.Rotate -> return visitPaint(paint.paint)
+                is COLRV1Paint.RotateAroundCenter -> return visitPaint(paint.paint)
+                is COLRV1Paint.Skew -> return visitPaint(paint.paint)
+                is COLRV1Paint.SkewAroundCenter -> return visitPaint(paint.paint)
             }
         }
 
@@ -215,6 +223,38 @@ internal fun appendCOLRV1PaintNode(paint: COLRV1Paint, nodes: MutableList<COLRPa
             id = id,
             kind = "colr-v1-paint-transform",
         )
+        is COLRV1Paint.Scale -> COLRPaintNode(
+            id = id,
+            kind = "colr-v1-paint-scale",
+        )
+        is COLRV1Paint.ScaleAroundCenter -> COLRPaintNode(
+            id = id,
+            kind = "colr-v1-paint-scale-around-center",
+        )
+        is COLRV1Paint.ScaleUniform -> COLRPaintNode(
+            id = id,
+            kind = "colr-v1-paint-scale-uniform",
+        )
+        is COLRV1Paint.ScaleUniformAroundCenter -> COLRPaintNode(
+            id = id,
+            kind = "colr-v1-paint-scale-uniform-around-center",
+        )
+        is COLRV1Paint.Rotate -> COLRPaintNode(
+            id = id,
+            kind = "colr-v1-paint-rotate",
+        )
+        is COLRV1Paint.RotateAroundCenter -> COLRPaintNode(
+            id = id,
+            kind = "colr-v1-paint-rotate-around-center",
+        )
+        is COLRV1Paint.Skew -> COLRPaintNode(
+            id = id,
+            kind = "colr-v1-paint-skew",
+        )
+        is COLRV1Paint.SkewAroundCenter -> COLRPaintNode(
+            id = id,
+            kind = "colr-v1-paint-skew-around-center",
+        )
     }
     nodes += baseNode
 
@@ -232,6 +272,14 @@ internal fun appendCOLRV1PaintNode(paint: COLRV1Paint, nodes: MutableList<COLRPa
         is COLRV1Paint.ColrGlyph -> emptyList()
         is COLRV1Paint.Translate -> listOf(appendCOLRV1PaintNode(paint = paint.paint, nodes = nodes))
         is COLRV1Paint.Transform -> listOf(appendCOLRV1PaintNode(paint = paint.paint, nodes = nodes))
+        is COLRV1Paint.Scale -> listOf(appendCOLRV1PaintNode(paint = paint.paint, nodes = nodes))
+        is COLRV1Paint.ScaleAroundCenter -> listOf(appendCOLRV1PaintNode(paint = paint.paint, nodes = nodes))
+        is COLRV1Paint.ScaleUniform -> listOf(appendCOLRV1PaintNode(paint = paint.paint, nodes = nodes))
+        is COLRV1Paint.ScaleUniformAroundCenter -> listOf(appendCOLRV1PaintNode(paint = paint.paint, nodes = nodes))
+        is COLRV1Paint.Rotate -> listOf(appendCOLRV1PaintNode(paint = paint.paint, nodes = nodes))
+        is COLRV1Paint.RotateAroundCenter -> listOf(appendCOLRV1PaintNode(paint = paint.paint, nodes = nodes))
+        is COLRV1Paint.Skew -> listOf(appendCOLRV1PaintNode(paint = paint.paint, nodes = nodes))
+        is COLRV1Paint.SkewAroundCenter -> listOf(appendCOLRV1PaintNode(paint = paint.paint, nodes = nodes))
     }
     nodes[id] = baseNode.copy(children = childIds)
     return id

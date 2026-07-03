@@ -29,6 +29,14 @@ internal const val COLR_V1_VAR_TRANSFORM_SIZE = 28
 internal const val COLR_V1_PAINT_TRANSLATE_SIZE = 8
 internal const val COLR_V1_PAINT_VAR_TRANSLATE_SIZE = 12
 internal const val COLR_V1_PAINT_COMPOSITE_SIZE = 8
+internal const val COLR_V1_PAINT_SCALE_SIZE = 8
+internal const val COLR_V1_PAINT_SCALE_AROUND_CENTER_SIZE = 12
+internal const val COLR_V1_PAINT_SCALE_UNIFORM_SIZE = 6
+internal const val COLR_V1_PAINT_SCALE_UNIFORM_AROUND_CENTER_SIZE = 10
+internal const val COLR_V1_PAINT_ROTATE_SIZE = 6
+internal const val COLR_V1_PAINT_ROTATE_AROUND_CENTER_SIZE = 10
+internal const val COLR_V1_PAINT_SKEW_SIZE = 8
+internal const val COLR_V1_PAINT_SKEW_AROUND_CENTER_SIZE = 12
 
 /**
  * Tracks total COLRv1 paint expansion during one parse call.
@@ -283,6 +291,54 @@ object COLRV1Parser {
                 state = state,
                 variable = format == 15,
             )
+            16 -> parsePaintScale(
+                reader = reader,
+                layerPaintOffsets = layerPaintOffsets,
+                paintOffset = paintOffset,
+                depth = depth,
+                state = state,
+            )
+            17 -> null
+            20 -> parsePaintScaleAroundCenter(
+                reader = reader,
+                layerPaintOffsets = layerPaintOffsets,
+                paintOffset = paintOffset,
+                depth = depth,
+                state = state,
+            )
+            21 -> null
+            22 -> parsePaintScaleUniform(
+                reader = reader,
+                layerPaintOffsets = layerPaintOffsets,
+                paintOffset = paintOffset,
+                depth = depth,
+                state = state,
+            )
+            23 -> null
+            24 -> parsePaintScaleUniformAroundCenter(
+                reader = reader,
+                layerPaintOffsets = layerPaintOffsets,
+                paintOffset = paintOffset,
+                depth = depth,
+                state = state,
+            )
+            25 -> null
+            28 -> parsePaintRotate(
+                reader = reader,
+                layerPaintOffsets = layerPaintOffsets,
+                paintOffset = paintOffset,
+                depth = depth,
+                state = state,
+            )
+            29 -> null
+            30 -> parsePaintRotateAroundCenter(
+                reader = reader,
+                layerPaintOffsets = layerPaintOffsets,
+                paintOffset = paintOffset,
+                depth = depth,
+                state = state,
+            )
+            31 -> null
             32 -> parseCompositePaint(
                 reader = reader,
                 layerPaintOffsets = layerPaintOffsets,
@@ -290,6 +346,15 @@ object COLRV1Parser {
                 depth = depth,
                 state = state,
             )
+            33 -> null
+            34 -> parsePaintSkew(
+                reader = reader,
+                layerPaintOffsets = layerPaintOffsets,
+                paintOffset = paintOffset,
+                depth = depth,
+                state = state,
+            )
+            35 -> null
             else -> null
         }
     }
@@ -560,6 +625,194 @@ object COLRV1Parser {
                 depth = depth + 1,
                 state = state,
             ) ?: return null,
+        )
+    }
+
+    private fun parsePaintScale(
+        reader: ColorTableReader,
+        layerPaintOffsets: List<Int>,
+        paintOffset: Int,
+        depth: Int,
+        state: COLRV1PaintParseState,
+    ): COLRV1Paint.Scale? {
+        if (!reader.fits(paintOffset, COLR_V1_PAINT_SCALE_SIZE.toLong())) return null
+        val childOffset = childPaintOffset(reader = reader, parentOffset = paintOffset, fieldOffset = 1)
+            ?: return null
+        return COLRV1Paint.Scale(
+            paint = parsePaint(
+                reader = reader,
+                layerPaintOffsets = layerPaintOffsets,
+                paintOffset = childOffset,
+                depth = depth + 1,
+                state = state,
+            ) ?: return null,
+            scaleX = reader.f2Dot14(paintOffset + 4) ?: return null,
+            scaleY = reader.f2Dot14(paintOffset + 6) ?: return null,
+        )
+    }
+
+    private fun parsePaintScaleAroundCenter(
+        reader: ColorTableReader,
+        layerPaintOffsets: List<Int>,
+        paintOffset: Int,
+        depth: Int,
+        state: COLRV1PaintParseState,
+    ): COLRV1Paint.ScaleAroundCenter? {
+        if (!reader.fits(paintOffset, COLR_V1_PAINT_SCALE_AROUND_CENTER_SIZE.toLong())) return null
+        val childOffset = childPaintOffset(reader = reader, parentOffset = paintOffset, fieldOffset = 1)
+            ?: return null
+        return COLRV1Paint.ScaleAroundCenter(
+            paint = parsePaint(
+                reader = reader,
+                layerPaintOffsets = layerPaintOffsets,
+                paintOffset = childOffset,
+                depth = depth + 1,
+                state = state,
+            ) ?: return null,
+            scaleX = reader.f2Dot14(paintOffset + 4) ?: return null,
+            scaleY = reader.f2Dot14(paintOffset + 6) ?: return null,
+            centerX = reader.i16(paintOffset + 8) ?: return null,
+            centerY = reader.i16(paintOffset + 10) ?: return null,
+        )
+    }
+
+    private fun parsePaintScaleUniform(
+        reader: ColorTableReader,
+        layerPaintOffsets: List<Int>,
+        paintOffset: Int,
+        depth: Int,
+        state: COLRV1PaintParseState,
+    ): COLRV1Paint.ScaleUniform? {
+        if (!reader.fits(paintOffset, COLR_V1_PAINT_SCALE_UNIFORM_SIZE.toLong())) return null
+        val childOffset = childPaintOffset(reader = reader, parentOffset = paintOffset, fieldOffset = 1)
+            ?: return null
+        return COLRV1Paint.ScaleUniform(
+            paint = parsePaint(
+                reader = reader,
+                layerPaintOffsets = layerPaintOffsets,
+                paintOffset = childOffset,
+                depth = depth + 1,
+                state = state,
+            ) ?: return null,
+            scale = reader.f2Dot14(paintOffset + 4) ?: return null,
+        )
+    }
+
+    private fun parsePaintScaleUniformAroundCenter(
+        reader: ColorTableReader,
+        layerPaintOffsets: List<Int>,
+        paintOffset: Int,
+        depth: Int,
+        state: COLRV1PaintParseState,
+    ): COLRV1Paint.ScaleUniformAroundCenter? {
+        if (!reader.fits(paintOffset, COLR_V1_PAINT_SCALE_UNIFORM_AROUND_CENTER_SIZE.toLong())) return null
+        val childOffset = childPaintOffset(reader = reader, parentOffset = paintOffset, fieldOffset = 1)
+            ?: return null
+        return COLRV1Paint.ScaleUniformAroundCenter(
+            paint = parsePaint(
+                reader = reader,
+                layerPaintOffsets = layerPaintOffsets,
+                paintOffset = childOffset,
+                depth = depth + 1,
+                state = state,
+            ) ?: return null,
+            scale = reader.f2Dot14(paintOffset + 4) ?: return null,
+            centerX = reader.i16(paintOffset + 6) ?: return null,
+            centerY = reader.i16(paintOffset + 8) ?: return null,
+        )
+    }
+
+    private fun parsePaintRotate(
+        reader: ColorTableReader,
+        layerPaintOffsets: List<Int>,
+        paintOffset: Int,
+        depth: Int,
+        state: COLRV1PaintParseState,
+    ): COLRV1Paint.Rotate? {
+        if (!reader.fits(paintOffset, COLR_V1_PAINT_ROTATE_SIZE.toLong())) return null
+        val childOffset = childPaintOffset(reader = reader, parentOffset = paintOffset, fieldOffset = 1)
+            ?: return null
+        return COLRV1Paint.Rotate(
+            paint = parsePaint(
+                reader = reader,
+                layerPaintOffsets = layerPaintOffsets,
+                paintOffset = childOffset,
+                depth = depth + 1,
+                state = state,
+            ) ?: return null,
+            angle = reader.f2Dot14(paintOffset + 4) ?: return null,
+        )
+    }
+
+    private fun parsePaintRotateAroundCenter(
+        reader: ColorTableReader,
+        layerPaintOffsets: List<Int>,
+        paintOffset: Int,
+        depth: Int,
+        state: COLRV1PaintParseState,
+    ): COLRV1Paint.RotateAroundCenter? {
+        if (!reader.fits(paintOffset, COLR_V1_PAINT_ROTATE_AROUND_CENTER_SIZE.toLong())) return null
+        val childOffset = childPaintOffset(reader = reader, parentOffset = paintOffset, fieldOffset = 1)
+            ?: return null
+        return COLRV1Paint.RotateAroundCenter(
+            paint = parsePaint(
+                reader = reader,
+                layerPaintOffsets = layerPaintOffsets,
+                paintOffset = childOffset,
+                depth = depth + 1,
+                state = state,
+            ) ?: return null,
+            angle = reader.f2Dot14(paintOffset + 4) ?: return null,
+            centerX = reader.i16(paintOffset + 6) ?: return null,
+            centerY = reader.i16(paintOffset + 8) ?: return null,
+        )
+    }
+
+    private fun parsePaintSkew(
+        reader: ColorTableReader,
+        layerPaintOffsets: List<Int>,
+        paintOffset: Int,
+        depth: Int,
+        state: COLRV1PaintParseState,
+    ): COLRV1Paint.Skew? {
+        if (!reader.fits(paintOffset, COLR_V1_PAINT_SKEW_SIZE.toLong())) return null
+        val childOffset = childPaintOffset(reader = reader, parentOffset = paintOffset, fieldOffset = 1)
+            ?: return null
+        return COLRV1Paint.Skew(
+            paint = parsePaint(
+                reader = reader,
+                layerPaintOffsets = layerPaintOffsets,
+                paintOffset = childOffset,
+                depth = depth + 1,
+                state = state,
+            ) ?: return null,
+            xSkew = reader.f2Dot14(paintOffset + 4) ?: return null,
+            ySkew = reader.f2Dot14(paintOffset + 6) ?: return null,
+        )
+    }
+
+    private fun parsePaintSkewAroundCenter(
+        reader: ColorTableReader,
+        layerPaintOffsets: List<Int>,
+        paintOffset: Int,
+        depth: Int,
+        state: COLRV1PaintParseState,
+    ): COLRV1Paint.SkewAroundCenter? {
+        if (!reader.fits(paintOffset, COLR_V1_PAINT_SKEW_AROUND_CENTER_SIZE.toLong())) return null
+        val childOffset = childPaintOffset(reader = reader, parentOffset = paintOffset, fieldOffset = 1)
+            ?: return null
+        return COLRV1Paint.SkewAroundCenter(
+            paint = parsePaint(
+                reader = reader,
+                layerPaintOffsets = layerPaintOffsets,
+                paintOffset = childOffset,
+                depth = depth + 1,
+                state = state,
+            ) ?: return null,
+            xSkew = reader.f2Dot14(paintOffset + 4) ?: return null,
+            ySkew = reader.f2Dot14(paintOffset + 6) ?: return null,
+            centerX = reader.i16(paintOffset + 8) ?: return null,
+            centerY = reader.i16(paintOffset + 10) ?: return null,
         )
     }
 

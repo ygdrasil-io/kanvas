@@ -41,7 +41,7 @@ object CPALV0Parser {
             return null
         }
 
-        val palettes = ArrayList<CPALPalette>(numPalettes)
+        val palettes = ArrayList<List<Int>>(numPalettes)
         repeat(numPalettes) { paletteIndex ->
             val firstColorRecordIndex = reader.u16(CPAL_V0_HEADER_SIZE + paletteIndex * U16_SIZE_BYTES)
                 ?: return null
@@ -58,16 +58,44 @@ object CPALV0Parser {
                 colors += packArgb(alpha = alpha, red = red, green = green, blue = blue)
             }
 
-            palettes += CPALPalette(
-                index = paletteIndex,
-                colors = colors.toList(),
-            )
+            palettes += colors.toList()
+        }
+
+        val paletteTypesOffset = CPAL_V0_HEADER_SIZE + numPalettes * U16_SIZE_BYTES
+        val paletteTypes = if (reader.fits(paletteTypesOffset, numPalettes.toLong() * U16_SIZE_BYTES.toLong())) {
+            List(numPalettes) { index ->
+                reader.u16(paletteTypesOffset + index * U16_SIZE_BYTES) ?: 0
+            }
+        } else {
+            emptyList()
+        }
+
+        val paletteLabelsOffset = paletteTypesOffset + numPalettes * U16_SIZE_BYTES
+        val paletteLabels = if (reader.fits(paletteLabelsOffset, numPalettes.toLong() * U16_SIZE_BYTES.toLong())) {
+            List(numPalettes) { index ->
+                reader.u16(paletteLabelsOffset + index * U16_SIZE_BYTES) ?: 0
+            }
+        } else {
+            emptyList()
+        }
+
+        val paletteEntryLabelsOffset = paletteLabelsOffset + numPalettes * U16_SIZE_BYTES
+        val paletteEntryLabels = if (numPaletteEntries > 0 &&
+            reader.fits(paletteEntryLabelsOffset, numPaletteEntries.toLong() * U16_SIZE_BYTES.toLong())
+        ) {
+            List(numPaletteEntries) { index ->
+                reader.u16(paletteEntryLabelsOffset + index * U16_SIZE_BYTES) ?: 0
+            }
+        } else {
+            null
         }
 
         return CPALTable(
-            numPaletteEntries = numPaletteEntries,
-            numColorRecords = numColorRecords,
+            version = version,
             palettes = palettes.toList(),
+            paletteTypes = paletteTypes,
+            paletteLabels = paletteLabels,
+            paletteEntryLabels = paletteEntryLabels,
         )
     }
 }

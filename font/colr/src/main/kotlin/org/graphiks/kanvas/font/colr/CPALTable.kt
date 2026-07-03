@@ -54,16 +54,16 @@ data class CPALPaletteSelection(
      * name a palette in [table].
      */
     fun select(table: CPALTable): CPALPalette? {
-        val palette = table.palettes.getOrNull(index) ?: return null
-        if (overrides.isEmpty()) return palette
+        val colors = table.palettes.getOrNull(index) ?: return null
+        if (overrides.isEmpty()) return CPALPalette(index = index, colors = colors)
 
-        val colors = palette.colors.toMutableList()
+        val result = colors.toMutableList()
         overrides.forEach { override ->
-            if (override.index in colors.indices) {
-                colors[override.index] = override.color
+            if (override.index in result.indices) {
+                result[override.index] = override.color
             }
         }
-        return palette.copy(colors = colors.toList())
+        return CPALPalette(index = index, colors = result.toList())
     }
 
     companion object {
@@ -81,12 +81,16 @@ data class CPALPaletteSelection(
  * stores CPAL v0 color records as BGRA bytes; [CPALV0Parser] converts that byte order once during
  * parsing so downstream color glyph planning does not need to know the table encoding.
  *
- * @property numPaletteEntries number of color entries expected in every parsed palette.
- * @property numColorRecords number of raw color records advertised by the CPAL table.
- * @property palettes parsed palettes in table order.
+ * @property version CPAL table version.
+ * @property palettes parsed ARGB color entries, one list per palette in table order.
+ * @property paletteTypes USHORT palette type flags, one per palette.
+ * @property paletteLabels USHORT nameID labels, one per palette.
+ * @property paletteEntryLabels optional USHORT nameID labels, one per palette entry.
  */
 data class CPALTable(
-    val numPaletteEntries: Int,
-    val numColorRecords: Int,
-    val palettes: List<CPALPalette>,
+    val version: Int,
+    val palettes: List<List<Int>>,
+    val paletteTypes: List<Int> = emptyList(),
+    val paletteLabels: List<Int> = emptyList(),
+    val paletteEntryLabels: List<Int>? = null,
 )

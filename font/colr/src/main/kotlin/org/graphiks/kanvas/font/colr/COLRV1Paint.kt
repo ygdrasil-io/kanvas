@@ -264,4 +264,116 @@ sealed interface COLRV1Paint {
         val dy: Float,
         val varIndexBase: Long? = null,
     ) : COLRV1Paint
+
+    /**
+     * PaintScale.
+     *
+     * @property paint scaled child paint.
+     * @property scaleX scale factor in x direction as F2DOT14.
+     * @property scaleY scale factor in y direction as F2DOT14.
+     */
+    data class Scale(
+        val paint: COLRV1Paint,
+        val scaleX: Float,
+        val scaleY: Float,
+    ) : COLRV1Paint
+
+    /**
+     * PaintScaleAroundCenter.
+     *
+     * @property paint scaled child paint.
+     * @property scaleX scale factor in x direction as F2DOT14.
+     * @property scaleY scale factor in y direction as F2DOT14.
+     * @property centerX x coordinate of the scale center in font design units.
+     * @property centerY y coordinate of the scale center in font design units.
+     */
+    data class ScaleAroundCenter(
+        val paint: COLRV1Paint,
+        val scaleX: Float,
+        val scaleY: Float,
+        val centerX: Int,
+        val centerY: Int,
+    ) : COLRV1Paint
+
+    /**
+     * PaintScaleUniform.
+     *
+     * @property paint scaled child paint.
+     * @property scale uniform scale factor as F2DOT14.
+     */
+    data class ScaleUniform(
+        val paint: COLRV1Paint,
+        val scale: Float,
+    ) : COLRV1Paint
+
+    /**
+     * PaintScaleUniformAroundCenter.
+     *
+     * @property paint scaled child paint.
+     * @property scale uniform scale factor as F2DOT14.
+     * @property centerX x coordinate of the scale center in font design units.
+     * @property centerY y coordinate of the scale center in font design units.
+     */
+    data class ScaleUniformAroundCenter(
+        val paint: COLRV1Paint,
+        val scale: Float,
+        val centerX: Int,
+        val centerY: Int,
+    ) : COLRV1Paint
+
+    /**
+     * PaintRotate.
+     *
+     * @property paint rotated child paint.
+     * @property angle rotation angle as F2DOT14.
+     */
+    data class Rotate(
+        val paint: COLRV1Paint,
+        val angle: Float,
+    ) : COLRV1Paint
+
+    /**
+     * PaintRotateAroundCenter.
+     *
+     * @property paint rotated child paint.
+     * @property angle rotation angle as F2DOT14.
+     * @property centerX x coordinate of the rotation center in font design units.
+     * @property centerY y coordinate of the rotation center in font design units.
+     */
+    data class RotateAroundCenter(
+        val paint: COLRV1Paint,
+        val angle: Float,
+        val centerX: Int,
+        val centerY: Int,
+    ) : COLRV1Paint
+
+    /**
+     * PaintSkew.
+     *
+     * @property paint skewed child paint.
+     * @property xSkew skew angle in x direction as F2DOT14.
+     * @property ySkew skew angle in y direction as F2DOT14.
+     */
+    data class Skew(
+        val paint: COLRV1Paint,
+        val xSkew: Float,
+        val ySkew: Float,
+    ) : COLRV1Paint
+
+    /**
+     * PaintSkewAroundCenter.
+     *
+     * @property paint skewed child paint.
+     * @property xSkew skew angle in x direction as F2DOT14.
+     * @property ySkew skew angle in y direction as F2DOT14.
+     * @property centerX x coordinate of the skew center in font design units.
+     * @property centerY y coordinate of the skew center in font design units.
+     */
+    data class SkewAroundCenter(
+        val paint: COLRV1Paint,
+        val xSkew: Float,
+        val ySkew: Float,
+        val centerX: Int,
+        val centerY: Int,
+    ) : COLRV1Paint
 }
