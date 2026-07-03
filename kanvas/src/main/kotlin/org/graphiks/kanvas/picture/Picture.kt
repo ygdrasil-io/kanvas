@@ -140,6 +140,29 @@ class Picture internal constructor(
     }
 
     /**
+     * Renders this picture into an [Image] of the given dimensions.
+     *
+     * This is an explicit snapshot alternative to [asShader] — useful for
+     * generating textures, thumbnails, or GPU uploads without wrapping in
+     * a shader.
+     *
+     * @param width     output image width in pixels
+     * @param height    output image height in pixels
+     * @param colorType pixel format; defaults to [ColorType.RGBA_8888]
+     */
+    fun rasterize(
+        width: Int,
+        height: Int,
+        colorType: ColorType = ColorType.RGBA_8888,
+    ): Image {
+        val surface = Surface(width, height)
+        val c = surface.canvas()
+        c.clear(Color.TRANSPARENT)
+        playback(c)
+        return surface.makeImageSnapshot()
+    }
+
+    /**
      * Replay this picture's drawing commands onto [canvas].
      *
      * The canvas's save/restore balance is preserved — each call
