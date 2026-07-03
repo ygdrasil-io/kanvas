@@ -7,6 +7,7 @@ dependencies {
     api(project(":font:core"))
     api(project(":math"))
 
+    implementation(project(":font:colr"))
     implementation(project(":font:sfnt"))
     implementation(kotlin("stdlib"))
     testImplementation(kotlin("test"))
