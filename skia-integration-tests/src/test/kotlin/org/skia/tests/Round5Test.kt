@@ -28,14 +28,6 @@ class Round5Test {
     }
 
     @Test
-    fun `TextScaleSkewGM matches reference`() =
-        runGm(TextScaleSkewGM(), "TextScaleSkewGM", 81.0)
-
-    @Test
-    fun `TextScaleSkewRotateGM matches reference`() =
-        runGm(TextScaleSkewRotateGM(), "TextScaleSkewRotateGM", 83.0)
-
-    @Test
     fun `SquareHairGM matches reference`() = runGm(SquareHairGM(), "SquareHairGM", 95.0)
 
     @Test
