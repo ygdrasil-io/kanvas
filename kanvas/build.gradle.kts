@@ -7,6 +7,7 @@ dependencies {
     api(project(":gpu-renderer"))
     api(project(":font:gpu-api"))
     implementation(kotlin("stdlib"))
+    implementation(project(":math"))
     implementation(project(":codec:api"))
     implementation(project(":font"))
     api("org.graphiks:wgsl-core-jvm:1.0.0-SNAPSHOT")

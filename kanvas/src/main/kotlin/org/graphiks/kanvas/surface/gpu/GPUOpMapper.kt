@@ -436,10 +436,21 @@ internal fun DisplayOp.DrawImage.toImageRectCommand(
     target: GPUTargetFacts,
 ): NormalizedDrawCommand.DrawImageRect {
     val image = this.image
+    val samplingFilterMode = this.paint?.let { p ->
+        val sh = p.shader
+        if (sh is org.graphiks.kanvas.paint.Shader.Image) {
+            when (sh.sampling) {
+                org.graphiks.kanvas.paint.SamplingOptions.NEAREST -> "nearest"
+                org.graphiks.kanvas.paint.SamplingOptions.LINEAR -> "linear"
+                is org.graphiks.kanvas.paint.SamplingOptions.Cubic -> "linear"
+            }
+        } else null
+    } ?: "linear"
     val material = GPUMaterialDescriptor.ImageDraw(
         imageSourceId = image.sourceId,
         imageWidth = image.width,
         imageHeight = image.height,
+        samplingFilterMode = samplingFilterMode,
     )
     val src = GPURect(this.src.left, this.src.top, this.src.right, this.src.bottom)
     val dst = GPURect(this.dst.left, this.dst.top, this.dst.right, this.dst.bottom)
@@ -459,6 +470,9 @@ internal fun DisplayOp.DrawImage.toImageRectCommand(
         ordering = GPUOrderingFacts(paintOrder = 0, dependsOnDestination = false, requiresBarrier = false),
         source = GPUCommandSource(adapter = "kanvas-surface", operation = "drawImage"),
         blend = (this.paint?.blendMode ?: BlendMode.SRC_OVER).toGpuBlendFacts(),
+        samplingFilterMode = when (val mat = material) {
+            is GPUMaterialDescriptor.ImageDraw -> mat.samplingFilterMode
+        },
         pixelsWidth = image.width,
         pixelsHeight = image.height,
         pixelsFormat = "RGBA8Unorm",

@@ -1,13 +1,22 @@
 package org.graphiks.kanvas.image
 
 import org.graphiks.kanvas.codec.Codec
+import org.graphiks.kanvas.paint.SamplingOptions
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.types.ColorSpace
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
-enum class ColorType { RGBA_8888, BGRA_8888, ALPHA_8, GRAY_8 }
+enum class ColorType(val bytesPerPixel: Int) {
+    RGBA_8888(4),
+    BGRA_8888(4),
+    ALPHA_8(1),
+    GRAY_8(1),
+    RGBA_F16(8),
+    RGB_565(2),
+    ARGB_4444(2),
+}
 
 data class Image(
     val width: Int,
@@ -50,7 +59,8 @@ data class Image(
     fun makeShader(
         tileModeX: TileMode = TileMode.CLAMP,
         tileModeY: TileMode = TileMode.CLAMP,
-    ): Shader.Image = Shader.Image(this, tileModeX, tileModeY)
+        sampling: SamplingOptions = SamplingOptions.NEAREST,
+    ): Shader.Image = Shader.Image(this, tileModeX, tileModeY, sampling)
 
     override fun equals(other: Any?): Boolean {
         if (this === other) return true

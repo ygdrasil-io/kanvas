@@ -57,6 +57,8 @@ internal fun GPUBackendRenderRecorder.dispatchImageRect(
     bb.putFloat(uvOffsetX).putFloat(uvOffsetY)
     bb.putFloat(1.0f) // alpha
 
+    // TODO: read cmd.samplingFilterMode and create appropriate WebGPU sampler
+    // Currently hardcoded to Nearest/ClampToEdge in GPUBackendRuntimeWgpu.kt
     drawFullscreenTextureUniformPass(
         wgsl = IMAGE_TEXTURE_WGSL,
         colorFormat = config.gpuColorFormat.wgpuLabel,

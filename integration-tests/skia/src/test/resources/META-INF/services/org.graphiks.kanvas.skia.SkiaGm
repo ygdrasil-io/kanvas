@@ -123,6 +123,7 @@ org.graphiks.kanvas.skia.gm.gradient.ShallowGradientSweepNoditherGm
 org.graphiks.kanvas.skia.gm.gradient.SmallColorStopGm
 org.graphiks.kanvas.skia.gm.gradient.SweepTilingGm
 org.graphiks.kanvas.skia.gm.image.AnimCodecPlayerExifGm
+org.graphiks.kanvas.skia.gm.image.AnisoMipsGm
 org.graphiks.kanvas.skia.gm.image.AnisotropicGm
 org.graphiks.kanvas.skia.gm.image.AnisotropicImageScaleAnisoGm
 org.graphiks.kanvas.skia.gm.image.AnisotropicImageScaleLinearGm
@@ -135,6 +136,9 @@ org.graphiks.kanvas.skia.gm.image.AyncYUVNoScaleGm
 org.graphiks.kanvas.skia.gm.image.BigMatrixGm
 org.graphiks.kanvas.skia.gm.image.BitmapPremulGm
 org.graphiks.kanvas.skia.gm.image.BitmapShaderGm
+org.graphiks.kanvas.skia.gm.image.BitmapSubsetShaderGm
+org.graphiks.kanvas.skia.gm.image.BitmapTiledFractionalHorizontalManualGm
+org.graphiks.kanvas.skia.gm.image.BitmapTiledFractionalVerticalManualGm
 org.graphiks.kanvas.skia.gm.image.BitmapTiledGm
 org.graphiks.kanvas.skia.gm.image.BleedDownscaleGm
 org.graphiks.kanvas.skia.gm.image.ColorCubeGm
