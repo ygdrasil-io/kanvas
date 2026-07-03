@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.skia
 
+import org.graphiks.kanvas.pipeline.RuntimeEffectWgsl4kWiring
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.test.ComparisonUtils
 import java.io.File
@@ -12,6 +13,7 @@ fun main(args: Array<String>) {
 
     val outputDir = File(args[0])
     val config = RenderConfig.fromEnvironment()
+    RuntimeEffectWgsl4kWiring.install()
     val gms = SkiaGmRegistry.all()
 
     if (gms.isEmpty()) {
