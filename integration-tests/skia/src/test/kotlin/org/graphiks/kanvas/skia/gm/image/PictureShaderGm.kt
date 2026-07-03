@@ -1,3 +1,10 @@
+/**
+ * Port of Skia's `gm/pictureshader.cpp`.
+ * Exercises [Picture.asShader] with tile modes, local matrices, and alpha.
+ * Three variants: pictureshader (default), pictureshader_localwrapper
+ * (via [Shader.WithLocalMatrix]), pictureshader_alpha (alpha=0.25).
+ * @see https://github.com/google/skia/blob/main/gm/pictureshader.cpp
+ */
 package org.graphiks.kanvas.skia.gm.image
 
 import org.graphiks.kanvas.canvas.Canvas

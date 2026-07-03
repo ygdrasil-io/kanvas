@@ -1,3 +1,10 @@
+/**
+ * Port of Skia's `gm/image_pict.cpp`.
+ * Records a picture (red-stroked rect + blue oval), materialises two
+ * images from it with different matrices, then draws them at 1x/0.25x/2x.
+ * [SkImages.DeferredFromPicture] replaced with eager [Surface] materialization.
+ * @see https://github.com/google/skia/blob/main/gm/image_pict.cpp
+ */
 package org.graphiks.kanvas.skia.gm.image
 
 import org.graphiks.kanvas.canvas.Canvas

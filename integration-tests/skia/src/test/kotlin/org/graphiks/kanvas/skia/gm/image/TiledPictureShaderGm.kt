@@ -1,3 +1,10 @@
+/**
+ * Port of Skia's `gm/pictureshader.cpp::tiled_picture_shader`.
+ * Regression test for https://code.google.com/p/skia/issues/detail?id=3398.
+ * Builds a 100x100 tile picture with dark-blue rect + light-blue diagonal,
+ * then tiles it as a repeat shader over a clipped green/gray background.
+ * @see https://github.com/google/skia/blob/main/gm/pictureshader.cpp
+ */
 package org.graphiks.kanvas.skia.gm.image
 
 import org.graphiks.kanvas.geometry.Path

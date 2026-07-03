@@ -1,3 +1,9 @@
+/**
+ * Port of Skia's `gm/pictureshadertile.cpp`.
+ * Exercises [Picture.asShader] with a non-default `tile` sub-rectangle
+ * and `localMatrix` — 27 tile/offset variants in a 6-wide grid.
+ * @see https://github.com/google/skia/blob/main/gm/pictureshadertile.cpp
+ */
 package org.graphiks.kanvas.skia.gm.image
 
 import org.graphiks.kanvas.canvas.Canvas

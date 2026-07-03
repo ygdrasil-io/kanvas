@@ -1,3 +1,10 @@
+/**
+ * Port of Skia's `gm/pictureimagegenerator.cpp`.
+ * Records a 200x100 picture, then draws 16 variants with varying
+ * scale, opacity, and flip matrices in a 4-column grid.
+ * [SkImages.DeferredFromPicture] replaced with eager [Surface] materialization.
+ * @see https://github.com/google/skia/blob/main/gm/pictureimagegenerator.cpp
+ */
 package org.graphiks.kanvas.skia.gm.image
 
 import org.graphiks.kanvas.canvas.Canvas

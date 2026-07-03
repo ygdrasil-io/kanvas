@@ -1,3 +1,10 @@
+/**
+ * Port of Skia's `gm/pictureshadercache.cpp`.
+ * Tests [Picture.asShader] cache behaviour — the picture shader is
+ * drawn once and reused. Surface colour-space cache-discrimination
+ * test omitted (Kanvas has no non-sRGB raster surface).
+ * @see https://github.com/google/skia/blob/main/gm/pictureshadercache.cpp
+ */
 package org.graphiks.kanvas.skia.gm.image
 
 import org.graphiks.kanvas.canvas.Canvas

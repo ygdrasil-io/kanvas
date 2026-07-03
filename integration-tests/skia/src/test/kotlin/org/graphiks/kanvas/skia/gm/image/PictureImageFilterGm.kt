@@ -1,3 +1,10 @@
+/**
+ * Port of Skia's `gm/pictureimagefilter.cpp`.
+ * Exercises [ImageFilter.Picture] — the picture-backed image filter.
+ * Two pre-recorded pictures (filled circle + stroked circle) are drawn
+ * through the image filter with src rect clipping, empty rect, and zoom.
+ * @see https://github.com/google/skia/blob/main/gm/pictureimagefilter.cpp
+ */
 package org.graphiks.kanvas.skia.gm.image
 
 import org.graphiks.kanvas.canvas.Canvas

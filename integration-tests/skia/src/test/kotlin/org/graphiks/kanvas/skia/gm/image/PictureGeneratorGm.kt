@@ -1,3 +1,10 @@
+/**
+ * Port of Skia's `gm/pictureimagegenerator.cpp`.
+ * Records a picture with concentric alternating-color rects, then draws
+ * 16 variants with varying scale, opacity, and flip matrices.
+ * [SkImages.DeferredFromPicture] replaced with eager [Surface] materialization.
+ * @see https://github.com/google/skia/blob/main/gm/pictureimagegenerator.cpp
+ */
 package org.graphiks.kanvas.skia.gm.image
 
 import org.graphiks.kanvas.canvas.Canvas
