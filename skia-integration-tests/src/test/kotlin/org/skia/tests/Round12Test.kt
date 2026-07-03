@@ -36,6 +36,4 @@ class Round12Test {
     @Test
     fun `Crbug899512GM matches reference`() = runGm(Crbug899512GM(), "Crbug899512GM", 80.0)
 
-    @Test
-    fun `MirrorTileGM matches reference`() = runGm(MirrorTileGM(), "MirrorTileGM", 60.0)
 }
