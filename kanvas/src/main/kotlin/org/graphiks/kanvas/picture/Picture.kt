@@ -671,7 +671,7 @@ private class Reader(private val data: ByteArray) {
             4 -> Shader.ConicalGradient(point(), float(), point(), float(), gradientStops(), tileMode(), colorSpaceInterpolation())
             5 -> Shader.Image(image(), tileMode(), tileMode())
             6 -> Shader.Blend(blendMode(), shader()!!, shader()!!)
-            7 -> readRuntimeEffect()?.let { re -> readUniformBlock()?.let { ub -> Shader.RuntimeEffect(re, ub) } }
+            7 -> readRuntimeEffect()?.let { re -> readUniformBlock()?.let { ub -> Shader.RuntimeEffect(re, ub, readShaderMap()) } }
                 ?: run { valid = false; null }
             8 -> Shader.WithLocalMatrix(shader()!!, matrix33())
             9 -> Shader.WithColorFilter(shader()!!, colorFilter()!!)
@@ -688,6 +688,23 @@ private class Reader(private val data: ByteArray) {
     }
 
     private fun readSizeOrNull(): Size? = if (bool()) size() else null
+
+    private fun readShaderMap(): Map<String, Shader> {
+        val n = int()
+        return buildMap { for (i in 0 until n) { val key = string(); put(key, shader()!!) } }
+    }
+
+    private fun readColorFilterMap(): Map<String, ColorFilter> {
+        val n = int()
+        return buildMap { for (i in 0 until n) { val key = string(); put(key, colorFilter()!!) } }
+    }
+
+    private fun readImageFilterMap(): Map<String, ImageFilter?> {
+        val n = int()
+        return buildMap { for (i in 0 until n) { val key = string(); put(key, imageFilter()) } }
+    }
+
+    private fun readStringOrNull(): String? = if (bool()) string() else null
 
     fun readRuntimeEffect(): RuntimeEffect? {
         val id = string()
@@ -772,6 +789,8 @@ private class Reader(private val data: ByteArray) {
             9 -> ColorFilter.HighContrast
             10 -> ColorFilter.Luma
             11 -> ColorFilter.Overdraw
+            12 -> readRuntimeEffect()?.let { re -> readUniformBlock()?.let { ub -> ColorFilter.RuntimeEffect(re, ub, readColorFilterMap()) } }
+                ?: run { valid = false; null }
             else -> { valid = false; null }
         }
     }
@@ -824,6 +843,8 @@ private class Reader(private val data: ByteArray) {
             16 -> ImageFilter.DisplacementMap(colorChannel(), colorChannel(), float(), imageFilter()!!, imageFilter())
             17 -> ImageFilter.Magnifier(rect(), float(), float(), imageFilter())
             18 -> ImageFilter.MatrixConvolution(size(), FloatArray(int()) { float() }, float(), float(), point(), tileMode(), bool(), imageFilter())
+            19 -> readRuntimeEffect()?.let { re -> readUniformBlock()?.let { ub -> ImageFilter.RuntimeEffect(re, ub, readStringOrNull(), readImageFilterMap()) } }
+                ?: run { valid = false; null }
             else -> { valid = false; null }
         }
     }
