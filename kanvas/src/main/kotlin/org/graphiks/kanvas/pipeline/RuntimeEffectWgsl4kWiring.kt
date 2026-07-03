@@ -31,10 +31,12 @@ object RuntimeEffectWgsl4kWiring {
         val parsed = parseWgslResult(wgsl)
         if (!parsed.isSuccess) return null
         val module = Lowerer().lower(parsed.translationUnit)
-        val eps = module.entryPoints
-        if (eps.isEmpty()) return null
-        val ep = eps.first()
-        val shaderModule = ShaderModule.fromSource(wgsl, ep.name)
+        val entryName = if (module.entryPoints.isNotEmpty()) {
+            module.entryPoints.first().name
+        } else if (module.functions.isNotEmpty()) {
+            module.functions.first().name
+        } else return null
+        val shaderModule = ShaderModule.fromSource(wgsl, entryName)
 
         val uniformSlots = module.globalVariables.mapNotNull { gv ->
             val b = gv.binding ?: return@mapNotNull null
