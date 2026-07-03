@@ -53,9 +53,11 @@ class GlyphScaler private constructor(
     private val cmap: CmapSubtable
     private val advanceWidths: IntArray
     private val glyphOffsets: IntArray
+    private val cpalPalette: IntArray?
 
     init {
         tables = parseTableDirectory()
+        cpalPalette = parseCpal()
         val sfntTag = String(fontBytes, 0, 4, Charsets.ISO_8859_1)
         isCFF = sfntTag == "OTTO" || sfntTag == "typ1"
         numGlyphs = parseMaxp()
@@ -206,6 +208,27 @@ class GlyphScaler private constructor(
             if (offsets[i] > offsets[i + 1]) error("loca offsets not monotonic")
         }
         return offsets
+    }
+
+    private fun parseCpal(): IntArray? {
+        val cpalTable = tables["CPAL"] ?: return null
+        val bytes = fontBytes
+        val off = cpalTable.offset
+        val numPaletteEntries = u16(bytes, off + 4)
+        val numPalettes = u16(bytes, off + 6)
+        if (numPalettes == 0 || numPaletteEntries == 0) return null
+        val colorRecordsOffset = u32(bytes, off + 12).toInt()
+        val colors = IntArray(numPaletteEntries)
+        for (i in 0 until numPaletteEntries) {
+            val entryOff = cpalTable.offset + colorRecordsOffset + i * 4
+            if (entryOff + 4 > bytes.size) return null
+            val b = u8(bytes, entryOff)
+            val g = u8(bytes, entryOff + 1)
+            val r = u8(bytes, entryOff + 2)
+            val a = u8(bytes, entryOff + 3)
+            colors[i] = (a shl 24) or (r shl 16) or (g shl 8) or b
+        }
+        return colors
     }
 
     private fun parseCmap(): CmapSubtable {
