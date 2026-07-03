@@ -82,6 +82,32 @@ class PictureTest {
     fun `fromByteArray returns null for empty data`() {
         assertNull(Picture.fromByteArray(ByteArray(0)))
     }
+
+    @Test
+    fun `opCount returns top-level operation count`() {
+        val recorder = PictureRecorder()
+        val canvas = recorder.beginRecording(Rect.fromLTRB(0f, 0f, 100f, 100f))
+        canvas.drawRect(Rect.fromLTRB(0f, 0f, 10f, 10f), Paint.fill(Color.RED))
+        canvas.drawRect(Rect.fromLTRB(20f, 20f, 30f, 30f), Paint.fill(Color.BLUE))
+        val picture = recorder.finishRecordingAsPicture()
+
+        assertEquals(3, picture.opCount) // clipRect + 2x drawRect
+    }
+
+    @Test
+    fun `totalOpCount includes nested pictures`() {
+        val innerRec = PictureRecorder()
+        val innerCanvas = innerRec.beginRecording(Rect.fromLTRB(0f, 0f, 10f, 10f))
+        innerCanvas.drawRect(Rect.fromLTRB(0f, 0f, 5f, 5f), Paint.fill(Color.RED))
+        val inner = innerRec.finishRecordingAsPicture()
+
+        val outerRec = PictureRecorder()
+        val outerCanvas = outerRec.beginRecording(Rect.fromLTRB(0f, 0f, 100f, 100f))
+        outerCanvas.drawPicture(inner)
+        val outer = outerRec.finishRecordingAsPicture()
+
+        assertTrue(outer.totalOpCount > outer.opCount)
+    }
 }
 
 private class TestBuffer : DisplayListBuffer {

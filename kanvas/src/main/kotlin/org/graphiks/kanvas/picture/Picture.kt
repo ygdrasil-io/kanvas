@@ -38,6 +38,12 @@ class Picture internal constructor(
     /** Unique identifier for this picture instance. */
     val uniqueID: Int = nextId()
 
+    /** Number of top-level display operations in this picture. */
+    val opCount: Int get() = ops.size
+
+    /** Total operation count including nested pictures. */
+    val totalOpCount: Int get() = approximateOpCount(nested = true)
+
     /**
      * Replay this picture's drawing commands onto [canvas].
      *
