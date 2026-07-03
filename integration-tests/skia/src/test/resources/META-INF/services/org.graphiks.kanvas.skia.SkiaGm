@@ -126,6 +126,9 @@ org.graphiks.kanvas.skia.gm.gradient.ShallowGradientSweepGm
 org.graphiks.kanvas.skia.gm.gradient.ShallowGradientSweepNoditherGm
 org.graphiks.kanvas.skia.gm.gradient.SmallColorStopGm
 org.graphiks.kanvas.skia.gm.gradient.SweepTilingGm
+org.graphiks.kanvas.skia.gm.image.AnimCodecPlayerExifRequiredGifGm
+org.graphiks.kanvas.skia.gm.image.AnimCodecPlayerExifRequiredWebpGm
+org.graphiks.kanvas.skia.gm.image.AnimCodecPlayerExifStoplightHWebpGm
 org.graphiks.kanvas.skia.gm.image.AnisoMipsGm
 org.graphiks.kanvas.skia.gm.image.AnisotropicImageScaleAnisoGm
 org.graphiks.kanvas.skia.gm.image.AnisotropicImageScaleLinearGm
