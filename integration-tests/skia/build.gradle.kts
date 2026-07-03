@@ -8,8 +8,6 @@ dependencies {
     implementation(project(":kanvas"))
     implementation(project(":integration-tests:test-utils"))
     implementation("io.ygdrasil:wgpu4k-toolkit:0.2.0-SNAPSHOT")
-    implementation("org.graphiks:wgsl-core-jvm:1.0.0-SNAPSHOT")
-    implementation("org.graphiks:wgsl-parser-jvm:1.0.0-SNAPSHOT")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
 
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")

@@ -13,7 +13,7 @@ fun main(args: Array<String>) {
 
     val outputDir = File(args[0])
     val config = RenderConfig.fromEnvironment()
-    try { RuntimeEffectWgsl4kWiring.install() } catch (e: Throwable) { System.err.println("[WARN] wgsl4k install failed: ${e.message}") }
+    RuntimeEffectWgsl4kWiring.install()
     val gms = SkiaGmRegistry.all()
 
     if (gms.isEmpty()) {
