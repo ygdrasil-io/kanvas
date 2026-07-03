@@ -509,6 +509,12 @@ private class Writer {
                 point(imageFilter.kernelOffset); tileMode(imageFilter.tileMode)
                 bool(imageFilter.convolveAlpha); imageFilter(imageFilter.input)
             }
+            is ImageFilter.Picture -> {
+                byte(19)
+                val nestedBytes = encodePicture(imageFilter.picture)
+                int(nestedBytes.size); bytes(nestedBytes)
+                if (imageFilter.src != null) { bool(true); rect(imageFilter.src) } else bool(false)
+            }
         }
     }
 
@@ -910,6 +916,13 @@ private class Reader(private val data: ByteArray) {
             16 -> ImageFilter.DisplacementMap(colorChannel(), colorChannel(), float(), imageFilter()!!, imageFilter())
             17 -> ImageFilter.Magnifier(rect(), float(), float(), imageFilter())
             18 -> ImageFilter.MatrixConvolution(size(), FloatArray(int()) { float() }, float(), float(), point(), tileMode(), bool(), imageFilter())
+            19 -> {
+                val nestedLen = int()
+                val nestedData = bytes(nestedLen)
+                val pic = decodePicture(nestedData)
+                val src = if (bool()) rect() else null
+                if (pic != null) ImageFilter.Picture(pic, src) else { valid = false; null }
+            }
             else -> { valid = false; null }
         }
     }
