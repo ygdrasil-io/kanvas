@@ -25,8 +25,8 @@ class ThresholdRTGm : SkiaGm {
     override val name = "threshold_rt"
     override val renderFamily = RenderFamily.RUNTIME_EFFECT
     override val minSimilarity = 0.0
-    override val width = 512
-    override val height = 512
+    override val width = 256
+    override val height = 256
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val effect = RuntimeEffect.compile(ThresholdRTWgsl).getOrThrow()

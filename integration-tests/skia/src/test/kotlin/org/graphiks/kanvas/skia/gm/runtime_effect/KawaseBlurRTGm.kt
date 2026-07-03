@@ -27,8 +27,8 @@ class KawaseBlurRTGm : SkiaGm {
     override val name = "kawase_blur_rt"
     override val renderFamily = RenderFamily.RUNTIME_EFFECT
     override val minSimilarity = 0.0
-    override val width = 512
-    override val height = 512
+    override val width = 1280
+    override val height = 768
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val original = syntheticCheckerboard(256, 256)

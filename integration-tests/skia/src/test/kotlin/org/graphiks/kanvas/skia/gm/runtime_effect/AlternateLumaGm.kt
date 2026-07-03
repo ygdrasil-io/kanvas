@@ -27,8 +27,8 @@ class AlternateLumaGm : SkiaGm {
     override val name = "AlternateLuma"
     override val renderFamily = RenderFamily.RUNTIME_EFFECT
     override val minSimilarity = 0.0
-    override val width = 200
-    override val height = 200
+    override val width = 384
+    override val height = 128
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val effect = RuntimeEffect.compile(GChannelSplatWgsl).getOrThrow()
