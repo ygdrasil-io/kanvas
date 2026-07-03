@@ -629,7 +629,8 @@ private fun drawTextColorPass(
                             }
                         }
                         val layerPaint = op.paint.copy(color = layer.paletteColor)
-                        dispatchPath(path, layerPaint, op.clip, op.transform, t, dispatched, diagnostics, cmdId, sceneLabel, targets)
+                        val layerCmd = op.toNormalizedCommand(cmdId, targets)
+                        dispatchFillPath(layerCmd.copy(blend = layerCmd.blend), dispatched, diagnostics, width, height, config)
                     }
                 }
                 is GlyphRepresentation.Outline -> {
@@ -728,12 +729,55 @@ private data class BitmapRecord(
 private fun parseCblc(): List<CblcStrike>? {
     val cblcTable = tables["CBLC"] ?: return null
     val cbdtTable = tables["CBDT"] ?: return null
-    // Parse CBLC header → numSizes, sizeRecords
-    // For each sizeRecord: parse subtable offsets → indexSubTables
-    // For each indexSubTable: parse glyph IDs + CBDT offsets
-    // Extract PNG data from CBDT offset
-    // Return list of CblcStrike
-    // ...
+    val bytes = fontBytes
+    val offset = cblcTable.offset
+    val numSizes = u32(bytes, offset + 4).toInt()
+    val strikes = mutableListOf<CblcStrike>()
+    var sizeOff = offset + 8
+    for (si in 0 until numSizes) {
+        val indexSubTableArrayOffset = u32(bytes, sizeOff).toInt()
+        val numTables = u32(bytes, sizeOff + 8).toInt()
+        val ppemX = u8(bytes, sizeOff + 12).toInt()
+        val ppemY = u8(bytes, sizeOff + 13).toInt()
+        val glyphBitmaps = mutableMapOf<Int, BitmapRecord>()
+        for (ti in 0 until numTables) {
+            val subTableOff = cblcTable.offset + indexSubTableArrayOffset + ti * 8
+            val firstGlyph = u16(bytes, subTableOff)
+            val lastGlyph = u16(bytes, subTableOff + 2)
+            val additionalOffset = u32(bytes, subTableOff + 4).toInt()
+            val imageSize = if (si + 1 < numSizes) {
+                val nextSizeOff = offset + 8 + (si + 1) * 48
+                u32(bytes, nextSizeOff + 32).toInt()
+            } else cbdtTable.length
+            for (gid in firstGlyph..lastGlyph) {
+                val entryOff = cblcTable.offset + additionalOffset + (gid - firstGlyph) * 4
+                val glyphOffset = u32(bytes, entryOff).toInt()
+                if (glyphOffset == 0) continue
+                val glyphSize = computeCbdtGlyphSize(gid, firstGlyph, lastGlyph, additionalOffset, glyphOffset, imageSize, bytes, cblcTable.offset)
+                if (glyphOffset + 4 > cbdtTable.length) continue
+                val cbdtOff = cbdtTable.offset + glyphOffset
+                val format = u16(bytes, cbdtOff)
+                if (format != 17 && format != 18 && format != 19) continue // PNG only
+                val pngLen = glyphSize - 4
+                if (cbdtOff + 4 + pngLen > bytes.size) continue
+                val pngData = bytes.copyOfRange(cbdtOff + 4, cbdtOff + 4 + pngLen)
+                glyphBitmaps[gid] = BitmapRecord(
+                    originX = 0f,
+                    originY = 0f,
+                    pngData = pngData,
+                    pixelWidth = ppemX,
+                    pixelHeight = ppemY,
+                )
+            }
+        }
+        strikes.add(CblcStrike(ppemX, ppemY, glyphBitmaps))
+        sizeOff += 48
+    }
+    return strikes.ifEmpty { null }
+}
+
+private fun computeCbdtGlyphSize(gid: Int, firstGlyph: Int, lastGlyph: Int, additionalOffset: Int, glyphOffset: Int, imageSize: Int, bytes: ByteArray, cblcOff: Int): Int {
+    return imageSize - glyphOffset // simplified: subtract current offset from total image size
 }
 ```
 
@@ -747,11 +791,39 @@ private val sbixGlyphs: Map<Int, BitmapRecord>? = parseSbix()
 
 private fun parseSbix(): Map<Int, BitmapRecord>? {
     val sbixTable = tables["sbix"] ?: return null
-    // Parse: version, flags, numStrikes
-    // For first strike: numGlyphs, then per-glyph: originOffsetX, originOffsetY, graphicType, pngData
-    // Filter graphicType == "png "
-    // Return Map<glyphId, BitmapRecord>
-    // ...
+    val bytes = fontBytes
+    val off = sbixTable.offset
+    val numStrikes = u16(bytes, off + 4).toInt()
+    if (numStrikes == 0) return null
+    // Use first strike only (most common case for test fonts)
+    val strikeOffset = u32(bytes, off + 8).toInt()
+    val strikeOff = sbixTable.offset + strikeOffset
+    val ppem = u16(bytes, strikeOff)
+    val ppi = u16(bytes, strikeOff + 2)
+    val numGlyphs = u32(bytes, strikeOff + 4).toInt()
+    val result = mutableMapOf<Int, BitmapRecord>()
+    var glyphOff = strikeOff + 8
+    for (i in 0 until numGlyphs) {
+        val originOffsetX = i16(bytes, glyphOff).toInt()
+        val originOffsetY = i16(bytes, glyphOff + 2).toInt()
+        val graphicType = String(bytes, glyphOff + 4, 4, Charsets.ISO_8859_1)
+        val dataLen = u32(bytes, glyphOff + 8).toInt()
+        if (graphicType == "png " && dataLen > 0) {
+            val pngStart = glyphOff + 12
+            if (pngStart + dataLen <= bytes.size) {
+                val pngData = bytes.copyOfRange(pngStart, pngStart + dataLen)
+                result[i] = BitmapRecord(
+                    originX = originOffsetX.toFloat(),
+                    originY = originOffsetY.toFloat(),
+                    pngData = pngData,
+                    pixelWidth = ppem,
+                    pixelHeight = ppem,
+                )
+            }
+        }
+        glyphOff += 12 + dataLen
+    }
+    return result.ifEmpty { null }
 }
 ```
 
