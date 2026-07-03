@@ -134,6 +134,7 @@ org.graphiks.kanvas.skia.gm.image.AsyncRescaleAndReadNoBleedGm
 org.graphiks.kanvas.skia.gm.image.AttributesGm
 org.graphiks.kanvas.skia.gm.image.AyncYUVNoScaleGm
 org.graphiks.kanvas.skia.gm.image.BigMatrixGm
+org.graphiks.kanvas.skia.gm.image.BitmapImageGm
 org.graphiks.kanvas.skia.gm.image.BitmapPremulGm
 org.graphiks.kanvas.skia.gm.image.BitmapShaderGm
 org.graphiks.kanvas.skia.gm.image.BitmapSubsetShaderGm
@@ -142,6 +143,7 @@ org.graphiks.kanvas.skia.gm.image.BitmapTiledFractionalVerticalManualGm
 org.graphiks.kanvas.skia.gm.image.BitmapTiledGm
 org.graphiks.kanvas.skia.gm.image.BleedDownscaleGm
 org.graphiks.kanvas.skia.gm.image.ColorCubeGm
+org.graphiks.kanvas.skia.gm.image.CopyTo4444Gm
 org.graphiks.kanvas.skia.gm.image.Bug6783Gm
 org.graphiks.kanvas.skia.gm.image.BicubicGm
 org.graphiks.kanvas.skia.gm.image.Crbug404394639Gm
