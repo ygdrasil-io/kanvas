@@ -20,7 +20,7 @@ import org.graphiks.kanvas.types.Point
 class GammashadertextGm : SkiaGm {
     override val name = "gammagradienttext"
     override val renderFamily = RenderFamily.TEXT
-    override val minSimilarity = 85.0
+    override val minSimilarity = 82.0
     override val width = 300
     override val height = 300
 

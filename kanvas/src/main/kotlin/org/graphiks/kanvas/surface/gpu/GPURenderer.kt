@@ -813,6 +813,11 @@ private fun GPUBackendRenderRecorder.drawTextAtlasPass(
     }
 
     if (vertexData.isEmpty() || indexData.isEmpty()) return
+    if (gpuBlob.atlasRgba.isEmpty() || gpuBlob.atlasWidth == 0 || gpuBlob.atlasHeight == 0) {
+        diagnostics.degrade("degrade:drawText:empty_atlas", "drawText", "empty_atlas")
+        return
+    }
+
 
     // Populate uniforms matching TEXT_ATLAS_A8_WGSL struct:
     //   struct Uniforms {
@@ -848,8 +853,8 @@ private fun GPUBackendRenderRecorder.drawTextAtlasPass(
                 uniformBytes = uniformBytes.array(),
                 scissorX = 0,
                 scissorY = 0,
-                scissorWidth = gpuBlob.atlasWidth,
-                scissorHeight = gpuBlob.atlasHeight,
+                scissorWidth = tw.toInt(),
+                scissorHeight = th.toInt(),
             ),
         ),
         blendMode = blendMode,
