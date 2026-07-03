@@ -22,7 +22,7 @@ import org.graphiks.kanvas.types.Rect
 class RtifUnsharpGm : SkiaGm {
     override val name = "rtif_unsharp"
     override val renderFamily = RenderFamily.RUNTIME_EFFECT
-    override val minSimilarity = 0.0
+    override val minSimilarity = 0.00152587890625
     override val width = 512
     override val height = 256
 
