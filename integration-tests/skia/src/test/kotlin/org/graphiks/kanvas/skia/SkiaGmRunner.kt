@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.skia
 
+import org.graphiks.kanvas.pipeline.RuntimeEffectWgsl4kWiring
 import org.graphiks.kanvas.test.GpuAvailability
 import org.graphiks.kanvas.test.ComparisonUtils
 import org.graphiks.kanvas.test.ReferenceManager
@@ -14,6 +15,10 @@ class SkiaGmRunner {
     lateinit var tempDir: File
 
     companion object {
+        init {
+            RuntimeEffectWgsl4kWiring.install()
+        }
+
         @JvmStatic
         fun allGms() = SkiaGmRegistry.all()
     }
