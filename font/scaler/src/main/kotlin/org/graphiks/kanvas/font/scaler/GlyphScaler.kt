@@ -16,6 +16,7 @@ data class ScaledGlyph(
     val advanceWidth: Float,
     val bounds: GlyphBounds,
     val commands: List<OutlineCommand> = emptyList(),
+    val representation: GlyphRepresentation? = null,
 ) {
     fun checksum(): String {
         val md = MessageDigest.getInstance("SHA-256")
@@ -54,10 +55,12 @@ class GlyphScaler private constructor(
     private val advanceWidths: IntArray
     private val glyphOffsets: IntArray
     private val cpalPalette: IntArray?
+    private val colrV0BaseGlyphs: Map<Int, List<ColorLayerEntry>>?
 
     init {
         tables = parseTableDirectory()
         cpalPalette = parseCpal()
+        colrV0BaseGlyphs = parseColrV0()
         val sfntTag = String(fontBytes, 0, 4, Charsets.ISO_8859_1)
         isCFF = sfntTag == "OTTO" || sfntTag == "typ1"
         numGlyphs = parseMaxp()
@@ -87,6 +90,20 @@ class GlyphScaler private constructor(
         }
         val scale = size / unitsPerEm.toFloat()
         val advance = advanceWidths[min(glyphId, advanceWidths.lastIndex)] * scale
+
+        val colorLayers = colrV0BaseGlyphs?.get(glyphId)
+        if (colorLayers != null) {
+            return ScaledGlyph(
+                sourceCodepoint = sourceCodepoint,
+                glyphId = glyphId,
+                size = size,
+                advanceWidth = advance,
+                bounds = computeBounds(emptyList()),
+                commands = emptyList(),
+                representation = GlyphRepresentation.ColorLayers(colorLayers),
+            )
+        }
+
         val outline = parseGlyphOutline(glyphId)
         val commands = outlineToCommands(outline)
         val scaledCommands = commands.map { scaleCommand(it, scale) }
@@ -98,6 +115,7 @@ class GlyphScaler private constructor(
             advanceWidth = advance,
             bounds = bounds,
             commands = scaledCommands,
+            representation = GlyphRepresentation.Outline(scaledCommands),
         )
     }
 
@@ -229,6 +247,36 @@ class GlyphScaler private constructor(
             colors[i] = (a shl 24) or (r shl 16) or (g shl 8) or b
         }
         return colors
+    }
+
+    private fun parseColrV0(): Map<Int, List<ColorLayerEntry>>? {
+        val colrTable = tables["COLR"] ?: return null
+        val palette = cpalPalette ?: return null
+        val bytes = fontBytes
+        val off = colrTable.offset
+        val version = u16(bytes, off)
+        if (version != 0) return null
+        val numBaseGlyphRecords = u16(bytes, off + 2)
+        val baseGlyphRecordsOffset = u32(bytes, off + 4).toInt()
+        val layerRecordsOffset = u32(bytes, off + 8).toInt()
+        val numLayerRecords = u16(bytes, off + 12)
+        val result = mutableMapOf<Int, List<ColorLayerEntry>>()
+        for (i in 0 until numBaseGlyphRecords) {
+            val baseOff = colrTable.offset + baseGlyphRecordsOffset + i * 6
+            val glyphId = u16(bytes, baseOff)
+            val firstLayerIndex = u16(bytes, baseOff + 2)
+            val numLayers = u16(bytes, baseOff + 4)
+            val layers = mutableListOf<ColorLayerEntry>()
+            for (j in 0 until numLayers) {
+                val layerOff = colrTable.offset + layerRecordsOffset + (firstLayerIndex + j) * 4
+                val layerGlyphId = u16(bytes, layerOff)
+                val paletteIndex = u16(bytes, layerOff + 2)
+                val argb = if (paletteIndex < palette.size) palette[paletteIndex] else 0xFF000000.toInt()
+                layers.add(ColorLayerEntry(layerGlyphId, argb))
+            }
+            result[glyphId] = layers
+        }
+        return if (result.isEmpty()) null else result
     }
 
     private fun parseCmap(): CmapSubtable {
