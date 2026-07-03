@@ -1,7 +1,6 @@
 package org.graphiks.kanvas.skia.gm.runtime_effect
 
 import org.graphiks.kanvas.gpu.renderer.wgsl.GChannelSplatWgsl
-import org.graphiks.kanvas.paint.ColorFilter
 import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.Shader
@@ -34,11 +33,6 @@ class AlternateLumaGm : SkiaGm {
         val effect = RuntimeEffect.compile(GChannelSplatWgsl).getOrThrow()
         val gChannelSplat = effect.makeColorFilter(UniformBlock {})
 
-        val workingFilter = ColorFilter.Compose(
-            ColorFilter.LinearToSRGB,
-            ColorFilter.Compose(gChannelSplat, ColorFilter.SRGBToLinear),
-        )
-
         val gradient = Shader.LinearGradient(
             Point(0f, 0f), Point(width.toFloat(), height.toFloat()),
             listOf(
@@ -52,7 +46,7 @@ class AlternateLumaGm : SkiaGm {
 
         canvas.drawRect(
             Rect(0f, 0f, width.toFloat(), height.toFloat()),
-            Paint(shader = gradient, colorFilter = workingFilter),
+            Paint(shader = gradient, colorFilter = gChannelSplat),
         )
     }
 }
