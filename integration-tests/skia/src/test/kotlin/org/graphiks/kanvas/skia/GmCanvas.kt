@@ -15,6 +15,7 @@ import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.PointMode
 import org.graphiks.kanvas.types.RRect
 import org.graphiks.kanvas.types.Rect
+import org.graphiks.kanvas.types.Mesh
 import org.graphiks.kanvas.types.Vertices
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.TextBlob
@@ -268,6 +269,18 @@ class GmCanvas(
             } else {
                 val transformed = vertices.positions.map { currentTransform * it }
                 inner.drawVertices(vertices.copy(positions = transformed), paint)
+            }
+        }
+    }
+
+    fun drawMesh(mesh: Mesh, paint: Paint, blendMode: BlendMode? = null) {
+        withClip {
+            if (currentTransform.isIdentity()) {
+                inner.drawMesh(mesh, paint, blendMode)
+            } else {
+                val transformed = mesh.vertices.positions.map { currentTransform * it }
+                val transformedVerts = mesh.vertices.copy(positions = transformed)
+                inner.drawMesh(mesh.copy(vertices = transformedVerts), paint, blendMode)
             }
         }
     }

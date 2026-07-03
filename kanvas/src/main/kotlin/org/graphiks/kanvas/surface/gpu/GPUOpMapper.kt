@@ -602,6 +602,7 @@ internal fun DisplayOp.withCombinedTransform(outer: Matrix33): DisplayOp = when 
     is DisplayOp.DrawImageLattice -> copy(transform = outer * transform)
     is DisplayOp.DrawPicture -> copy(transform = outer * transform)
     is DisplayOp.DrawVertices -> copy(transform = outer * transform)
+    is DisplayOp.DrawMesh -> copy(transform = outer * transform)
     is DisplayOp.DrawAtlas -> copy(transform = outer * transform)
     is DisplayOp.Clear,
     is DisplayOp.SetTransform,

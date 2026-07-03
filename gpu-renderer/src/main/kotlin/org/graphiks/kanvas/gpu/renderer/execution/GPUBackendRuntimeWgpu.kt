@@ -86,6 +86,9 @@ import org.graphiks.kanvas.gpu.renderer.telemetry.GPUCacheTelemetry
 import org.graphiks.kanvas.gpu.renderer.telemetry.GPUTelemetryLedger
 
 import org.graphiks.kanvas.gpu.renderer.text.colorGlyphCompositeWgsl
+import org.graphiks.kanvas.gpu.renderer.wgsl.TexturedVerticesWgsl
+import org.graphiks.kanvas.gpu.renderer.wgsl.TexturedVerticesDualBlendWgsl
+import org.graphiks.kanvas.gpu.renderer.wgsl.TexturedVerticesColorFilterWgsl
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendFactor
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 
@@ -682,6 +685,10 @@ private class WgpuRenderRecorder(
 ) : GPUBackendRenderRecorder {
     private val vertexBufferStore = mutableMapOf<String, Pair<GPUBuffer, Int>>()
     private val vertexColorIndexStore = mutableMapOf<String, IntArray>()
+    private var texturedVertexPipelineCache = mutableMapOf<String, GPURenderPipeline>()
+    private var texturedVertexBindGroupLayout: GPUBindGroupLayout? = null
+    private var dualUVVertexPipelineCache = mutableMapOf<String, GPURenderPipeline>()
+    private var dualUVVertexBindGroupLayout: GPUBindGroupLayout? = null
 
     override fun drawFullscreenPass(
         wgsl: String,
@@ -913,6 +920,178 @@ private class WgpuRenderRecorder(
         )
         setVertexBufferAction(0u, vertexBuffer)
         setIndexBufferAction(indexBuffer, GPUIndexFormat.Uint32)
+        drawIndexedAction(indexCount.toUInt())
+    }
+
+    override fun createVertexPositionUVBuffer(data: GPUBackendVertexPositionUVData): String {
+        val label = "vertexUV:${data.vertexData.contentHashCode()}:${vertexBufferStore.size}"
+        if (label in vertexBufferStore) return label
+        val byteSize = (data.vertexData.size * 4).toULong()
+        val buffer = resourceScope.track(
+            device.createBuffer(
+                BufferDescriptor(
+                    size = byteSize,
+                    usage = GPUBufferUsage.Vertex or GPUBufferUsage.CopyDst,
+                    label = label,
+                ),
+            ),
+        ) { it.close() }
+        queue.writeBuffer(buffer, 0uL, ArrayBuffer.of(data.vertexData))
+        vertexBufferStore[label] = buffer to data.vertexCount
+        vertexColorIndexStore[label] = data.indices
+        return label
+    }
+
+    override fun drawVertexPositionUVIndexed(
+        vertexBufferLabel: String,
+        indexCount: Int,
+        uniformDraw: GPUBackendRawUniformDraw,
+        textureRgba: ByteArray,
+        textureWidth: Int,
+        textureHeight: Int,
+        textureFormat: String,
+        blendMode: GPUBlendMode?,
+    ) {
+        val (vertexBuffer, vertexCount) = vertexBufferStore[vertexBufferLabel]
+            ?: error("Vertex buffer not found: $vertexBufferLabel")
+        val indices = vertexColorIndexStore[vertexBufferLabel]
+            ?: error("Vertex UV index data not found: $vertexBufferLabel")
+        require(indices.size == indexCount) {
+            "indexCount=$indexCount does not match stored index data ${indices.size} for $vertexBufferLabel"
+        }
+        val indexByteSize = (indices.size * 4).toULong()
+        val indexBuffer = resourceScope.track(
+            device.createBuffer(
+                BufferDescriptor(
+                    size = indexByteSize,
+                    usage = GPUBufferUsage.Index or GPUBufferUsage.CopyDst,
+                    label = "GPUBackend.uvIndex.$vertexBufferLabel",
+                ),
+            ),
+        ) { it.close() }
+        queue.writeBuffer(indexBuffer, 0uL, ArrayBuffer.of(indices))
+
+        val texture = createTexture(textureRgba, textureWidth, textureHeight, textureFormat)
+        val sampler = resourceScope.track(
+            device.createSampler(
+                SamplerDescriptor(
+                    addressModeU = GPUAddressMode.ClampToEdge,
+                    addressModeV = GPUAddressMode.ClampToEdge,
+                    magFilter = GPUFilterMode.Linear,
+                    minFilter = GPUFilterMode.Linear,
+                ),
+            ),
+        ) { it.close() }
+        val textureView = resourceScope.track(texture.createView()) { it.close() }
+
+        val uniformBuffer = createUniformBuffer(uniformDraw.uniformBytes)
+
+        val bindGroupLayout = getOrCreateTexturedVertexBindGroupLayout()
+        val bindGroup = resourceScope.track(
+            device.createBindGroup(
+                BindGroupDescriptor(
+                    label = "texturedVertex:$vertexBufferLabel",
+                    layout = bindGroupLayout,
+                    entries = listOf(
+                        BindGroupEntry(binding = 0u, resource = BufferBinding(buffer = uniformBuffer)),
+                        BindGroupEntry(binding = 1u, resource = textureView),
+                        BindGroupEntry(binding = 2u, resource = sampler),
+                    ),
+                ),
+            ),
+        ) { it.close() }
+
+        val pipeline = getOrCreateTexturedVertexPipeline(textureFormat, blendMode)
+
+        setPipelineAction(pipeline)
+        setBindGroupAction(0u, bindGroup)
+        setVertexBufferAction(0u, vertexBuffer)
+        setIndexBufferAction(indexBuffer, GPUIndexFormat.Uint32)
+        setScissorAction(
+            uniformDraw.scissorX.toUInt(),
+            uniformDraw.scissorY.toUInt(),
+            uniformDraw.scissorWidth.toUInt(),
+            uniformDraw.scissorHeight.toUInt(),
+        )
+        drawIndexedAction(indexCount.toUInt())
+    }
+
+    override fun drawVertexPositionDualUVIndexed(
+        vertexBufferLabel: String,
+        indexCount: Int,
+        uniformDraw: GPUBackendRawUniformDraw,
+        texture1Rgba: ByteArray,
+        texture1Width: Int, texture1Height: Int,
+        texture2Rgba: ByteArray,
+        texture2Width: Int, texture2Height: Int,
+        textureFormat: String,
+        blendMode: GPUBlendMode?,
+    ) {
+        val (vertexBuffer, vertexCount) = vertexBufferStore[vertexBufferLabel]
+            ?: error("Vertex buffer not found: $vertexBufferLabel")
+        val indices = vertexColorIndexStore[vertexBufferLabel]
+            ?: error("Dual UV index data not found: $vertexBufferLabel")
+        require(indices.size == indexCount) {
+            "indexCount=$indexCount does not match stored index data ${indices.size} for $vertexBufferLabel"
+        }
+        val indexByteSize = (indices.size * 4).toULong()
+        val indexBuffer = resourceScope.track(
+            device.createBuffer(
+                BufferDescriptor(
+                    size = indexByteSize,
+                    usage = GPUBufferUsage.Index or GPUBufferUsage.CopyDst,
+                    label = "GPUBackend.dualUVIndex.$vertexBufferLabel",
+                ),
+            ),
+        ) { it.close() }
+        queue.writeBuffer(indexBuffer, 0uL, ArrayBuffer.of(indices))
+
+        val tex1 = createTexture(texture1Rgba, texture1Width, texture1Height, textureFormat)
+        val tex2 = createTexture(texture2Rgba, texture2Width, texture2Height, textureFormat)
+        val sampler = resourceScope.track(
+            device.createSampler(
+                SamplerDescriptor(
+                    addressModeU = GPUAddressMode.ClampToEdge,
+                    addressModeV = GPUAddressMode.ClampToEdge,
+                    magFilter = GPUFilterMode.Linear,
+                    minFilter = GPUFilterMode.Linear,
+                ),
+            ),
+        ) { it.close() }
+        val tex1View = resourceScope.track(tex1.createView()) { it.close() }
+        val tex2View = resourceScope.track(tex2.createView()) { it.close() }
+
+        val uniformBuffer = createUniformBuffer(uniformDraw.uniformBytes)
+
+        val bindGroupLayout = getOrCreateDualUVVertexBindGroupLayout()
+        val bindGroup = resourceScope.track(
+            device.createBindGroup(
+                BindGroupDescriptor(
+                    label = "dualVertex:$vertexBufferLabel",
+                    layout = bindGroupLayout,
+                    entries = listOf(
+                        BindGroupEntry(binding = 0u, resource = BufferBinding(buffer = uniformBuffer)),
+                        BindGroupEntry(binding = 1u, resource = tex1View),
+                        BindGroupEntry(binding = 2u, resource = sampler),
+                        BindGroupEntry(binding = 3u, resource = tex2View),
+                        BindGroupEntry(binding = 4u, resource = sampler),
+                    ),
+                ),
+            ),
+        ) { it.close() }
+
+        val pipeline = getOrCreateDualUVVertexPipeline(textureFormat, blendMode)
+
+        setPipelineAction(pipeline)
+        setBindGroupAction(0u, bindGroup)
+        setVertexBufferAction(0u, vertexBuffer)
+        setIndexBufferAction(indexBuffer, GPUIndexFormat.Uint32)
+        setScissorAction(
+            uniformDraw.scissorX.toUInt(),
+            uniformDraw.scissorY.toUInt(),
+            uniformDraw.scissorWidth.toUInt(),
+            uniformDraw.scissorHeight.toUInt(),
+        )
         drawIndexedAction(indexCount.toUInt())
     }
 
@@ -1759,6 +1938,304 @@ private class WgpuRenderRecorder(
         val scissorWidth: Int,
         val scissorHeight: Int,
     )
+
+    private fun createTexture(rgba: ByteArray, width: Int, height: Int, format: String): GPUTexture {
+        val gpuFormat = format.toWgpuTextureFormat()
+        val texture = resourceScope.track(
+            device.createTexture(
+                TextureDescriptor(
+                    size = Extent3D(width = width.toUInt(), height = height.toUInt()),
+                    format = gpuFormat,
+                    usage = GPUTextureUsage.TextureBinding or GPUTextureUsage.CopyDst,
+                    label = "GPUBackend.texturedVertex.tex",
+                ),
+            ),
+        ) { it.close() }
+        val textureBytesPerPixel = gpuFormat.bytesPerPixel()
+        val tightBytesPerRow = width * textureBytesPerPixel
+        val paddedBytesPerRow = alignCopyBytesPerRow(tightBytesPerRow)
+        val paddedData = if (paddedBytesPerRow == tightBytesPerRow) {
+            rgba
+        } else {
+            val padded = ByteArray(paddedBytesPerRow * height)
+            for (row in 0 until height) {
+                System.arraycopy(rgba, row * tightBytesPerRow, padded, row * paddedBytesPerRow, tightBytesPerRow)
+            }
+            padded
+        }
+        queue.writeTexture(
+            destination = TexelCopyTextureInfo(texture = texture),
+            data = ArrayBuffer.of(paddedData),
+            dataLayout = TexelCopyBufferLayout(
+                offset = 0uL,
+                bytesPerRow = paddedBytesPerRow.toUInt(),
+                rowsPerImage = height.toUInt(),
+            ),
+            size = Extent3D(width = width.toUInt(), height = height.toUInt()),
+        )
+        return texture
+    }
+
+    private fun createUniformBuffer(uniformBytes: ByteArray): GPUBuffer {
+        val buffer = resourceScope.track(
+            device.createBuffer(
+                BufferDescriptor(
+                    size = uniformBytes.size.toULong(),
+                    usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
+                    label = "GPUBackend.texturedVertex.uniform",
+                ),
+            ),
+        ) { it.close() }
+        queue.writeBuffer(buffer, 0uL, ArrayBuffer.of(uniformBytes))
+        return buffer
+    }
+
+    private fun getOrCreateTexturedVertexBindGroupLayout(): GPUBindGroupLayout {
+        if (texturedVertexBindGroupLayout == null) {
+            texturedVertexBindGroupLayout = device.createBindGroupLayout(
+                BindGroupLayoutDescriptor(
+                    label = "texturedVertexLayout",
+                    entries = listOf(
+                        BindGroupLayoutEntry(
+                            binding = 0u,
+                            visibility = GPUShaderStage.Vertex or GPUShaderStage.Fragment,
+                            buffer = BufferBindingLayout(type = GPUBufferBindingType.Uniform),
+                        ),
+                        BindGroupLayoutEntry(
+                            binding = 1u,
+                            visibility = GPUShaderStage.Fragment,
+                            texture = TextureBindingLayout(
+                                sampleType = GPUTextureSampleType.Float,
+                                viewDimension = GPUTextureViewDimension.TwoD,
+                                multisampled = false,
+                            ),
+                        ),
+                        BindGroupLayoutEntry(
+                            binding = 2u,
+                            visibility = GPUShaderStage.Fragment,
+                            sampler = SamplerBindingLayout(type = GPUSamplerBindingType.Filtering),
+                        ),
+                    ),
+                ),
+            )
+        }
+        return texturedVertexBindGroupLayout!!
+    }
+
+    private fun getOrCreateTexturedVertexPipeline(colorFormat: String, blendMode: GPUBlendMode?): GPURenderPipeline {
+        val key = "$colorFormat:${blendMode?.name ?: "none"}"
+        return texturedVertexPipelineCache.getOrPut(key) {
+            createTexturedVertexPipeline(colorFormat, blendMode)
+        }
+    }
+
+    private fun createTexturedVertexPipeline(colorFormat: String, blendMode: GPUBlendMode?): GPURenderPipeline {
+        val shaderModule = device.createShaderModule(
+            ShaderModuleDescriptor(label = "texturedVertex:$colorFormat", code = TexturedVerticesWgsl),
+        )
+        val bindGroupLayout = getOrCreateTexturedVertexBindGroupLayout()
+        val pipelineLayout = device.createPipelineLayout(
+            PipelineLayoutDescriptor(
+                label = "texturedVertexLayout",
+                bindGroupLayouts = listOf(bindGroupLayout),
+            ),
+        )
+        try {
+            return device.createRenderPipelineWithValidationScope(
+                RenderPipelineDescriptor(
+                    label = "texturedVertex:$colorFormat:${blendMode?.name ?: "none"}",
+                    layout = pipelineLayout,
+                    vertex = VertexState(
+                        module = shaderModule,
+                        entryPoint = "vs_main",
+                        buffers = listOf(
+                            VertexBufferLayout(
+                                arrayStride = 16uL,
+                                attributes = listOf(
+                                    VertexAttribute(
+                                        shaderLocation = 0u,
+                                        offset = 0uL,
+                                        format = GPUVertexFormat.Float32x2,
+                                    ),
+                                    VertexAttribute(
+                                        shaderLocation = 1u,
+                                        offset = 8uL,
+                                        format = GPUVertexFormat.Float32x2,
+                                    ),
+                                ),
+                            ),
+                        ),
+                    ),
+                    primitive = PrimitiveState(),
+                    depthStencil = DepthStencilState(
+                        format = GPUTextureFormat.Depth24PlusStencil8,
+                        depthWriteEnabled = false,
+                        depthCompare = GPUCompareFunction.Always,
+                        stencilFront = StencilFaceState(
+                            compare = GPUCompareFunction.Always,
+                            failOp = GPUStencilOperation.Keep,
+                            depthFailOp = GPUStencilOperation.Keep,
+                            passOp = GPUStencilOperation.Keep,
+                        ),
+                        stencilBack = StencilFaceState(
+                            compare = GPUCompareFunction.Always,
+                            failOp = GPUStencilOperation.Keep,
+                            depthFailOp = GPUStencilOperation.Keep,
+                            passOp = GPUStencilOperation.Keep,
+                        ),
+                        stencilReadMask = 0u,
+                        stencilWriteMask = 0u,
+                    ),
+                    fragment = FragmentState(
+                        module = shaderModule,
+                        entryPoint = "fs_main",
+                        targets = listOf(
+                            ColorTargetState(
+                                format = targetFormat,
+                                blend = blendStateFor(blendMode),
+                            ),
+                        ),
+                    ),
+                ),
+            )
+        } finally {
+            shaderModule.close()
+            pipelineLayout.close()
+        }
+    }
+
+    private fun getOrCreateDualUVVertexBindGroupLayout(): GPUBindGroupLayout {
+        if (dualUVVertexBindGroupLayout == null) {
+            dualUVVertexBindGroupLayout = device.createBindGroupLayout(
+                BindGroupLayoutDescriptor(
+                    label = "dualUVVertexLayout",
+                    entries = listOf(
+                        BindGroupLayoutEntry(
+                            binding = 0u,
+                            visibility = GPUShaderStage.Vertex or GPUShaderStage.Fragment,
+                            buffer = BufferBindingLayout(type = GPUBufferBindingType.Uniform),
+                        ),
+                        BindGroupLayoutEntry(
+                            binding = 1u,
+                            visibility = GPUShaderStage.Fragment,
+                            texture = TextureBindingLayout(
+                                sampleType = GPUTextureSampleType.Float,
+                                viewDimension = GPUTextureViewDimension.TwoD,
+                                multisampled = false,
+                            ),
+                        ),
+                        BindGroupLayoutEntry(
+                            binding = 2u,
+                            visibility = GPUShaderStage.Fragment,
+                            sampler = SamplerBindingLayout(type = GPUSamplerBindingType.Filtering),
+                        ),
+                        BindGroupLayoutEntry(
+                            binding = 3u,
+                            visibility = GPUShaderStage.Fragment,
+                            texture = TextureBindingLayout(
+                                sampleType = GPUTextureSampleType.Float,
+                                viewDimension = GPUTextureViewDimension.TwoD,
+                                multisampled = false,
+                            ),
+                        ),
+                        BindGroupLayoutEntry(
+                            binding = 4u,
+                            visibility = GPUShaderStage.Fragment,
+                            sampler = SamplerBindingLayout(type = GPUSamplerBindingType.Filtering),
+                        ),
+                    ),
+                ),
+            )
+        }
+        return dualUVVertexBindGroupLayout!!
+    }
+
+    private fun getOrCreateDualUVVertexPipeline(colorFormat: String, blendMode: GPUBlendMode?): GPURenderPipeline {
+        val key = "$colorFormat:${blendMode?.name ?: "none"}"
+        return dualUVVertexPipelineCache.getOrPut(key) {
+            createDualUVVertexPipeline(colorFormat, blendMode)
+        }
+    }
+
+    private fun createDualUVVertexPipeline(colorFormat: String, blendMode: GPUBlendMode?): GPURenderPipeline {
+        val shaderModule = device.createShaderModule(
+            ShaderModuleDescriptor(label = "dualUVVertex:$colorFormat", code = TexturedVerticesDualBlendWgsl),
+        )
+        val bindGroupLayout = getOrCreateDualUVVertexBindGroupLayout()
+        val pipelineLayout = device.createPipelineLayout(
+            PipelineLayoutDescriptor(
+                label = "dualUVVertexLayout",
+                bindGroupLayouts = listOf(bindGroupLayout),
+            ),
+        )
+        try {
+            return device.createRenderPipelineWithValidationScope(
+                RenderPipelineDescriptor(
+                    label = "dualUVVertex:$colorFormat:${blendMode?.name ?: "none"}",
+                    layout = pipelineLayout,
+                    vertex = VertexState(
+                        module = shaderModule,
+                        entryPoint = "vs_main",
+                        buffers = listOf(
+                            VertexBufferLayout(
+                                arrayStride = 24uL,
+                                attributes = listOf(
+                                    VertexAttribute(
+                                        shaderLocation = 0u,
+                                        offset = 0uL,
+                                        format = GPUVertexFormat.Float32x2,
+                                    ),
+                                    VertexAttribute(
+                                        shaderLocation = 1u,
+                                        offset = 8uL,
+                                        format = GPUVertexFormat.Float32x2,
+                                    ),
+                                    VertexAttribute(
+                                        shaderLocation = 2u,
+                                        offset = 16uL,
+                                        format = GPUVertexFormat.Float32x2,
+                                    ),
+                                ),
+                            ),
+                        ),
+                    ),
+                    primitive = PrimitiveState(),
+                    depthStencil = DepthStencilState(
+                        format = GPUTextureFormat.Depth24PlusStencil8,
+                        depthWriteEnabled = false,
+                        depthCompare = GPUCompareFunction.Always,
+                        stencilFront = StencilFaceState(
+                            compare = GPUCompareFunction.Always,
+                            failOp = GPUStencilOperation.Keep,
+                            depthFailOp = GPUStencilOperation.Keep,
+                            passOp = GPUStencilOperation.Keep,
+                        ),
+                        stencilBack = StencilFaceState(
+                            compare = GPUCompareFunction.Always,
+                            failOp = GPUStencilOperation.Keep,
+                            depthFailOp = GPUStencilOperation.Keep,
+                            passOp = GPUStencilOperation.Keep,
+                        ),
+                        stencilReadMask = 0u,
+                        stencilWriteMask = 0u,
+                    ),
+                    fragment = FragmentState(
+                        module = shaderModule,
+                        entryPoint = "fs_main",
+                        targets = listOf(
+                            ColorTargetState(
+                                format = targetFormat,
+                                blend = blendStateFor(blendMode),
+                            ),
+                        ),
+                    ),
+                ),
+            )
+        } finally {
+            shaderModule.close()
+            pipelineLayout.close()
+        }
+    }
 
     companion object {
         val VERTEX_COLOR_WGSL: String = """

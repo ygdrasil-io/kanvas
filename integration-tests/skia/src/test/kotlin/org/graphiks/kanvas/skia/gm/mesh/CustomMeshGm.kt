@@ -22,7 +22,7 @@ import org.graphiks.kanvas.types.VertexMode
 class CustomMeshGm : SkiaGm {
     override val name = "custommesh"
     override val renderFamily = RenderFamily.MESH
-    override val minSimilarity = 0.0
+    override val minSimilarity = 84.0
     override val width = 435
     override val height = 1180
 

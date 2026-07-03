@@ -18,7 +18,7 @@ import org.graphiks.kanvas.types.VertexMode
 class CustomMeshUniformsGm : SkiaGm {
     override val name = "custommesh_uniforms"
     override val renderFamily = RenderFamily.MESH
-    override val minSimilarity = 0.0
+    override val minSimilarity = 99.0
     override val width = 140
     override val height = 250
 
