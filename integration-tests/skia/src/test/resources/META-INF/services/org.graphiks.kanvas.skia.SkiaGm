@@ -164,6 +164,7 @@ org.graphiks.kanvas.skia.gm.image.MirrorTileGm
 org.graphiks.kanvas.skia.gm.image.NearestHalfPixelImageGm
 org.graphiks.kanvas.skia.gm.image.P3Gm
 org.graphiks.kanvas.skia.gm.image.PictureGeneratorGm
+org.graphiks.kanvas.skia.gm.image.PictureImageFilterGm
 org.graphiks.kanvas.skia.gm.image.PictureImageGeneratorGm
 org.graphiks.kanvas.skia.gm.image.PictureShaderAlphaGm
 org.graphiks.kanvas.skia.gm.image.PictureShaderCacheGm
