@@ -4,6 +4,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.wgsl.GradientWgslShaderProvider
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
+import org.graphiks.kanvas.paint.SamplingOptions
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.types.a
 import org.graphiks.kanvas.types.b
@@ -92,11 +93,17 @@ internal fun Shader.toMaterial(): GPUMaterialDescriptor = when (this) {
     }
     is Shader.Image -> {
         val image = this.image
+        val filterMode = when (this.sampling) {
+            is SamplingOptions.NEAREST -> "nearest"
+            is SamplingOptions.LINEAR -> "linear"
+            is SamplingOptions.Cubic -> "linear"
+        }
         GPUMaterialDescriptor.ImageDraw(
             imageSourceId = image.sourceId,
             imageWidth = image.width,
             imageHeight = image.height,
             rgbaPixels = image.pixels ?: byteArrayOf(),
+            samplingFilterMode = filterMode,
         )
     }
     is Shader.Blend -> {
