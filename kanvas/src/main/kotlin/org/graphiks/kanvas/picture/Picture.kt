@@ -9,12 +9,14 @@ import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.geometry.FillType
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.geometry.PathVerb
+import kotlin.math.ceil
 import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.*
 import org.graphiks.kanvas.pipeline.*
 import org.graphiks.kanvas.surface.ImageEncoder
 import org.graphiks.kanvas.surface.ImageEncoderRegistry
+import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.KanvasTypeface
 import org.graphiks.kanvas.text.TextBlob
@@ -37,6 +39,126 @@ class Picture internal constructor(
 ) {
     /** Unique identifier for this picture instance. */
     val uniqueID: Int = nextId()
+
+    /** Number of top-level display operations in this picture. */
+    val opCount: Int get() = ops.size
+
+    /** Total operation count including nested pictures. */
+    val totalOpCount: Int get() = approximateOpCount(nested = true)
+
+    /**
+     * Walks every top-level [DisplayOp.DrawImage], [DisplayOp.DrawImageNine],
+     * [DisplayOp.DrawImageLattice], and [DisplayOp.DrawAtlas] in this picture,
+     * invoking [action] for each embedded [Image]. Does not recurse into
+     * nested pictures.
+     */
+    fun walkImages(action: (Image) -> Unit) {
+        for (op in ops) {
+            when (op) {
+                is DisplayOp.DrawImage -> action(op.image)
+                is DisplayOp.DrawImageNine -> action(op.image)
+                is DisplayOp.DrawImageLattice -> action(op.image)
+                is DisplayOp.DrawAtlas -> action(op.atlas)
+                else -> {}
+            }
+        }
+    }
+
+    /**
+     * Walks every top-level [DisplayOp.DrawPicture] in this picture, invoking
+     * [action] for each nested [Picture]. Does not recurse.
+     */
+    fun walkNestedPictures(action: (Picture) -> Unit) {
+        for (op in ops) {
+            if (op is DisplayOp.DrawPicture) action(op.picture)
+        }
+    }
+
+    /**
+     * Walks every top-level [DisplayOp.DrawText] in this picture, invoking
+     * [action] once per distinct [TextBlob] (deduplicated by reference
+     * identity). Does not recurse into nested pictures.
+     */
+    fun walkTextBlobs(action: (TextBlob) -> Unit) {
+        val seen = java.util.IdentityHashMap<TextBlob, Boolean>()
+        for (op in ops) {
+            if (op is DisplayOp.DrawText && seen.put(op.blob, true) == null) {
+                action(op.blob)
+            }
+        }
+    }
+
+    /**
+     * Iterates every display operation in insertion order.
+     *
+     * @param nested if `true`, recurses into [DisplayOp.DrawPicture]
+     * @param action invoked for each [DisplayOp] encountered
+     */
+    fun forEachOp(nested: Boolean = false, action: (DisplayOp) -> Unit) {
+        for (op in ops) {
+            action(op)
+            if (nested && op is DisplayOp.DrawPicture) {
+                op.picture.forEachOp(nested = true, action = action)
+            }
+        }
+    }
+
+    /**
+     * Renders this picture into a transient surface and wraps the result
+     * as a tiled [Shader.Image], equivalent to Skia's `SkPicture.makeShader`.
+     *
+     * The picture is rasterised once into a snapshot sized to [tile]
+     * (defaults to [cullRect]), then promoted to an image shader for
+     * unlimited reuse on any canvas.
+     *
+     * @param tileX    tile mode along the local-x axis
+     * @param tileY    tile mode along the local-y axis
+     * @param sampling sampling filter; defaults to [SamplingOptions.NEAREST]
+     * @param tile     sub-rectangle of the picture to use as the tile source
+     * @param matrix   optional shader-local transform applied before sampling;
+     *                 when non-null, wraps with [Shader.WithLocalMatrix]
+     */
+    fun asShader(
+        tileX: TileMode = TileMode.CLAMP,
+        tileY: TileMode = TileMode.CLAMP,
+        sampling: SamplingOptions = SamplingOptions.NEAREST,
+        tile: Rect = cullRect,
+        matrix: Matrix33? = null,
+    ): Shader {
+        val w = maxOf(1, ceil(tile.width).toInt())
+        val h = maxOf(1, ceil(tile.height).toInt())
+        val surface = Surface(w, h)
+        val c = surface.canvas()
+        c.clear(Color.TRANSPARENT)
+        if (tile.left != 0f || tile.top != 0f) {
+            c.translate(-tile.left, -tile.top)
+        }
+        playback(c)
+        val image = surface.makeImageSnapshot()
+        val base = Shader.Image(image, tileX, tileY, sampling)
+        return if (matrix != null) Shader.WithLocalMatrix(base, matrix) else base
+    }
+
+    /**
+     * Renders this picture into an [Image] of the given dimensions.
+     *
+     * This is an explicit snapshot alternative to [asShader] — useful for
+     * generating textures, thumbnails, or GPU uploads without wrapping in
+     * a shader.
+     *
+     * @param width     output image width in pixels
+     * @param height    output image height in pixels
+     */
+    fun rasterize(
+        width: Int,
+        height: Int,
+    ): Image {
+        val surface = Surface(width, height)
+        val c = surface.canvas()
+        c.clear(Color.TRANSPARENT)
+        playback(c)
+        return surface.makeImageSnapshot()
+    }
 
     /**
      * Replay this picture's drawing commands onto [canvas].
@@ -418,8 +540,14 @@ private class Writer {
                 point(imageFilter.kernelOffset); tileMode(imageFilter.tileMode)
                 bool(imageFilter.convolveAlpha); imageFilter(imageFilter.input)
             }
-            is ImageFilter.RuntimeEffect -> {
+            is ImageFilter.Picture -> {
                 byte(19)
+                val nestedBytes = encodePicture(imageFilter.picture)
+                int(nestedBytes.size); bytes(nestedBytes)
+                if (imageFilter.src != null) { bool(true); rect(imageFilter.src) } else bool(false)
+            }
+            is ImageFilter.RuntimeEffect -> {
+                byte(20)
                 runtimeEffect(imageFilter.effect)
                 uniformBlock(imageFilter.uniforms)
                 stringOrNull(imageFilter.childShaderName)
@@ -846,7 +974,14 @@ private class Reader(private val data: ByteArray) {
             16 -> ImageFilter.DisplacementMap(colorChannel(), colorChannel(), float(), imageFilter()!!, imageFilter())
             17 -> ImageFilter.Magnifier(rect(), float(), float(), imageFilter())
             18 -> ImageFilter.MatrixConvolution(size(), FloatArray(int()) { float() }, float(), float(), point(), tileMode(), bool(), imageFilter())
-            19 -> readRuntimeEffect()?.let { re -> readUniformBlock()?.let { ub -> ImageFilter.RuntimeEffect(re, ub, readStringOrNull(), readImageFilterMap()) } }
+            19 -> {
+                val nestedLen = int()
+                val nestedData = bytes(nestedLen)
+                val pic = decodePicture(nestedData)
+                val src = if (bool()) rect() else null
+                if (pic != null) ImageFilter.Picture(pic, src) else { valid = false; null }
+            }
+            20 -> readRuntimeEffect()?.let { re -> readUniformBlock()?.let { ub -> ImageFilter.RuntimeEffect(re, ub, readStringOrNull(), readImageFilterMap()) } }
                 ?: run { valid = false; null }
             else -> { valid = false; null }
         }

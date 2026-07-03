@@ -20,6 +20,7 @@ import org.graphiks.kanvas.gpu.renderer.geometry.PathData
 import org.graphiks.kanvas.gpu.renderer.geometry.PathTessellator
 import org.graphiks.kanvas.gpu.renderer.geometry.Point
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
+import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.surface.Diagnostics
 import org.graphiks.kanvas.surface.PixelFormat
 import org.graphiks.kanvas.surface.RenderConfig
@@ -129,7 +130,7 @@ internal fun renderViaGpu(
                 if (image.sourceId !in textureCache) {
                     val px = image.pixels
                     if (px != null) {
-                        textureCache[image.sourceId] = px
+                        textureCache[image.sourceId] = expandToRgba(image, px)
                     } else {
                         diagnostics.warn("no_pixels:${image.sourceId}", "cachePixels", "cpu_pixels_unavailable")
                     }
@@ -862,4 +863,20 @@ private fun GPUBackendRenderRecorder.drawTextAtlasPass(
         blendMode = blendMode,
     )
     dispatched.add("text:${blob.hashCode()}")
+}
+
+private fun expandToRgba(image: org.graphiks.kanvas.image.Image, pixels: ByteArray): ByteArray {
+    if (image.colorType == ColorType.RGBA_8888 || image.colorType == ColorType.BGRA_8888) return pixels
+    if (image.colorType == ColorType.ALPHA_8) {
+        val rgba = ByteArray(image.width * image.height * 4)
+        for (i in pixels.indices) {
+            val off = i * 4
+            rgba[off] = 0
+            rgba[off + 1] = 0
+            rgba[off + 2] = 0
+            rgba[off + 3] = pixels[i]
+        }
+        return rgba
+    }
+    return pixels
 }
