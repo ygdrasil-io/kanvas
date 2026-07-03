@@ -170,6 +170,12 @@ org.graphiks.kanvas.skia.gm.image.Tiling2GradientGm
 org.graphiks.kanvas.skia.gm.image.TinyBitmapGm
 org.graphiks.kanvas.skia.gm.image.UnpremulGm
 org.graphiks.kanvas.skia.gm.image.VeryLargeBitmapGm
+org.graphiks.kanvas.skia.gm.mesh.CustomMeshCsGm
+org.graphiks.kanvas.skia.gm.mesh.CustomMeshCsUniformsGm
+org.graphiks.kanvas.skia.gm.mesh.CustomMeshGm
+org.graphiks.kanvas.skia.gm.mesh.CustomMeshUniformsGm
+org.graphiks.kanvas.skia.gm.mesh.MeshUpdateGm
+org.graphiks.kanvas.skia.gm.mesh.PictureMeshGm
 org.graphiks.kanvas.skia.gm.mesh.VerticesCollapsedGm
 org.graphiks.kanvas.skia.gm.path.ArcsGm
 org.graphiks.kanvas.skia.gm.path.BigRectsGm
