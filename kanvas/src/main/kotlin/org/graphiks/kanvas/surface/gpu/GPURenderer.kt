@@ -13,6 +13,8 @@ import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRenderRecorder
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
 
 import org.graphiks.kanvas.gpu.renderer.execution.GPUClearColor
+import org.graphiks.kanvas.types.Color
+
 import org.graphiks.kanvas.gpu.renderer.execution.GPUOffscreenTargetRequest
 import org.graphiks.kanvas.gpu.renderer.geometry.PathData
 import org.graphiks.kanvas.gpu.renderer.geometry.PathTessellator
@@ -221,7 +223,7 @@ internal fun renderViaGpu(
                         if (gpuBlob != null) {
                             val cmd = op.toNormalizedCommand(cmdId, targets)
                             t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
-                                drawTextAtlasPass(gpuBlob, cmd.blend.blendMode, dispatched, diagnostics)
+                                drawTextAtlasPass(gpuBlob, cmd.blend.blendMode, dispatched, diagnostics, textColor = op.paint.color, targetWidth = width, targetHeight = height)
                             }
                             sceneHasContent = true
                         } else {
@@ -581,7 +583,7 @@ internal fun renderViaGpu(
                                     if (gpuBlob != null) {
                                         val cmd = nestedOp.toNormalizedCommand(nestedCmdId, targets)
                                         t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
-                                            drawTextAtlasPass(gpuBlob, cmd.blend.blendMode, dispatched, diagnostics)
+                                            drawTextAtlasPass(gpuBlob, cmd.blend.blendMode, dispatched, diagnostics, textColor = nestedOp.paint.color, targetWidth = width, targetHeight = height)
                                         }
                                         sceneHasContent = true
                                     } else {
@@ -783,6 +785,9 @@ private fun GPUBackendRenderRecorder.drawTextAtlasPass(
     blendMode: GPUBlendMode?,
     dispatched: MutableList<String>,
     diagnostics: Diagnostics,
+    textColor: Color = Color.BLACK,
+    targetWidth: Int = 0,
+    targetHeight: Int = 0,
 ) {
     val blob = gpuBlob.textBlob
     val uvs = gpuBlob.glyphUvs
@@ -809,11 +814,27 @@ private fun GPUBackendRenderRecorder.drawTextAtlasPass(
 
     if (vertexData.isEmpty() || indexData.isEmpty()) return
 
-    // Populate textParams: atlasScale (1/w, 1/h), maskGamma (1.0 for linear)
-    val uniformBytes = java.nio.ByteBuffer.allocate(12).order(java.nio.ByteOrder.LITTLE_ENDIAN)
-    uniformBytes.putFloat(1f / gpuBlob.atlasWidth.coerceAtLeast(1))
-    uniformBytes.putFloat(1f / gpuBlob.atlasHeight.coerceAtLeast(1))
-    uniformBytes.putFloat(1.0f)
+    // Populate uniforms matching TEXT_ATLAS_A8_WGSL struct:
+    //   struct Uniforms {
+    //       targetWidth: f32,     // offset 0,  size 4
+    //       targetHeight: f32,    // offset 4,  size 4
+    //       color: vec4<f32>,     // offset 16, size 16 (vec4 requires 16-byte alignment)
+    //   };  // total size: 32 bytes
+    val tw = if (targetWidth > 0) targetWidth.toFloat() else gpuBlob.atlasWidth.toFloat()
+    val th = if (targetHeight > 0) targetHeight.toFloat() else gpuBlob.atlasHeight.toFloat()
+    val uniformBytes = java.nio.ByteBuffer.allocate(32).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+    uniformBytes.putFloat(tw)           // targetWidth
+    uniformBytes.putFloat(th)           // targetHeight
+    uniformBytes.putFloat(0f)           // padding (vec4 alignment)
+    uniformBytes.putFloat(0f)           // padding
+    val cr = ((textColor.packed shr 16) and 0xFFu).toFloat() / 255f
+    val cg = ((textColor.packed shr 8) and 0xFFu).toFloat() / 255f
+    val cb = ((textColor.packed shr 0) and 0xFFu).toFloat() / 255f
+    val ca = ((textColor.packed shr 24) and 0xFFu).toFloat() / 255f
+    uniformBytes.putFloat(cr)           // color.r
+    uniformBytes.putFloat(cg)           // color.g
+    uniformBytes.putFloat(cb)           // color.b
+    uniformBytes.putFloat(ca)           // color.a
 
     drawTextAtlasPass(
         atlasRgba = gpuBlob.atlasRgba,
