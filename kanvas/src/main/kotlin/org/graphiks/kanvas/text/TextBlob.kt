@@ -24,6 +24,6 @@ data class KanvasGlyphRun(
  */
 data class TextBlob(
     val glyphRuns: List<KanvasGlyphRun>,
-    val typeface: KanvasTypeface? = null,
+    val typeface: Typeface? = null,
     val fontSize: Float = 12f,
 )

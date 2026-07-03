@@ -94,12 +94,16 @@ object TextBridge {
     /** Font module-backed rasterization. Delegates to GlyphScaler + A8Rasterizer + GlyphAtlasUploadPlanner. */
     private fun rasterizeViaFont(blob: TextBlob): GpuTextBlob? {
         val typeface = blob.typeface ?: return null
-        val fontStream = javaClass.classLoader.getResourceAsStream(typeface.resourcePath)
-            ?: ClassLoader.getSystemResourceAsStream(typeface.resourcePath)
-            ?: return null
-
-        val fontBytes = fontStream.readBytes()
-        fontStream.close()
+        val fontBytes: ByteArray = when (typeface) {
+            is FontTypeface -> typeface.fontBytes
+            is KanvasTypeface -> {
+                val stream = javaClass.classLoader.getResourceAsStream(typeface.resourcePath)
+                    ?: ClassLoader.getSystemResourceAsStream(typeface.resourcePath)
+                    ?: return null
+                stream.use { it.readBytes() }
+            }
+            else -> return null
+        }
 
         val scaler = GlyphScaler.fromBytes(fontBytes)
         val rasterizer = A8Rasterizer()

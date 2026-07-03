@@ -3226,6 +3226,7 @@ private fun String.toWgpuTextureFormat(): GPUTextureFormat =
         "bgra8unorm" -> GPUTextureFormat.BGRA8Unorm
         "bgra8unorm-srgb" -> GPUTextureFormat.BGRA8UnormSrgb
         "r8unorm" -> GPUTextureFormat.R8Unorm
+        "a8unorm" -> GPUTextureFormat.R8Unorm
         else -> error("Unsupported GPU color format $this")
     }
 

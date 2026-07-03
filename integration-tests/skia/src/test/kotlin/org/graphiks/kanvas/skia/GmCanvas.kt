@@ -16,6 +16,8 @@ import org.graphiks.kanvas.types.PointMode
 import org.graphiks.kanvas.types.RRect
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.types.Vertices
+import org.graphiks.kanvas.text.Font
+import org.graphiks.kanvas.text.TextBlob
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.PI
@@ -336,6 +338,36 @@ class GmCanvas(
     ) {
         withClip {
             inner.drawAtlas(atlas, transforms, texRects, colors, blendMode, paint)
+        }
+    }
+
+    fun drawString(str: String, x: Float, y: Float, font: Font, paint: Paint) {
+        withClip {
+            if (currentTransform.isIdentity()) {
+                inner.drawString(str, x, y, font, paint)
+            } else {
+                inner.save()
+                inner.concat(currentTransform)
+                inner.drawString(str, x, y, font, paint)
+                inner.restore()
+            }
+        }
+    }
+
+    fun drawSimpleText(text: String, x: Float, y: Float, font: Font, paint: Paint) {
+        drawString(text, x, y, font, paint)
+    }
+
+    fun drawTextBlob(blob: TextBlob, x: Float, y: Float, paint: Paint) {
+        withClip {
+            if (currentTransform.isIdentity()) {
+                inner.drawText(blob, x, y, paint)
+            } else {
+                inner.save()
+                inner.concat(currentTransform)
+                inner.drawText(blob, x, y, paint)
+                inner.restore()
+            }
         }
     }
 
