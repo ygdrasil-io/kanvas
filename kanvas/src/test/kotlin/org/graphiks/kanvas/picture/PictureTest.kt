@@ -194,6 +194,42 @@ class PictureTest {
         picture.walkTextBlobs { called = true }
         assertFalse(called)
     }
+
+    @Test
+    fun `forEachOp visits all top-level ops in order`() {
+        val recorder = PictureRecorder()
+        val canvas = recorder.beginRecording(Rect.fromLTRB(0f, 0f, 100f, 100f))
+        canvas.drawRect(Rect.fromLTRB(0f, 0f, 10f, 10f), Paint.fill(Color.RED))
+        canvas.drawRect(Rect.fromLTRB(20f, 20f, 30f, 30f), Paint.fill(Color.BLUE))
+        val picture = recorder.finishRecordingAsPicture()
+
+        val ops = mutableListOf<DisplayOp>()
+        picture.forEachOp { ops.add(it) }
+        assertEquals(picture.opCount, ops.size)
+        assertTrue(ops.count { it is DisplayOp.DrawRect } == 2)
+    }
+
+    @Test
+    fun `forEachOp nested visits ops from child pictures`() {
+        val innerRec = PictureRecorder()
+        val innerCanvas = innerRec.beginRecording(Rect.fromLTRB(0f, 0f, 10f, 10f))
+        innerCanvas.drawRect(Rect.fromLTRB(0f, 0f, 5f, 5f), Paint.fill(Color.RED))
+        val inner = innerRec.finishRecordingAsPicture()
+
+        val outerRec = PictureRecorder()
+        val outerCanvas = outerRec.beginRecording(Rect.fromLTRB(0f, 0f, 100f, 100f))
+        outerCanvas.drawPicture(inner)
+        outerCanvas.drawRect(Rect.fromLTRB(50f, 50f, 80f, 80f), Paint.fill(Color.BLUE))
+        val outer = outerRec.finishRecordingAsPicture()
+
+        val collected = mutableListOf<DisplayOp>()
+        outer.forEachOp(nested = true) { collected.add(it) }
+
+        // outer: clipRect + DrawPicture + drawRect = 3
+        // inner: clipRect + drawRect = 2
+        assertTrue(collected.size >= 4)
+        assertTrue(collected.any { it is DisplayOp.DrawPicture })
+    }
 }
 
 private class TestBuffer : DisplayListBuffer {

@@ -87,6 +87,21 @@ class Picture internal constructor(
     }
 
     /**
+     * Iterates every display operation in insertion order.
+     *
+     * @param nested if `true`, recurses into [DisplayOp.DrawPicture]
+     * @param action invoked for each [DisplayOp] encountered
+     */
+    fun forEachOp(nested: Boolean = false, action: (DisplayOp) -> Unit) {
+        for (op in ops) {
+            action(op)
+            if (nested && op is DisplayOp.DrawPicture) {
+                op.picture.forEachOp(nested = true, action = action)
+            }
+        }
+    }
+
+    /**
      * Replay this picture's drawing commands onto [canvas].
      *
      * The canvas's save/restore balance is preserved — each call
