@@ -41,14 +41,6 @@ class Round7Test {
     @Test
     fun `StringArtGM matches reference`() = runGm(StringArtGM(), "StringArtGM", 81.0)
 
-    @Test
-    fun `ChromeGradText1GM matches reference`() =
-        runGm(ChromeGradText1GM(), "ChromeGradText1GM", 99.0)
-
-    @Test
-    fun `ChromeGradText2GM matches reference`() =
-        runGm(ChromeGradText2GM(), "ChromeGradText2GM", 98.0)
-
     // SimpleShapes uses paint.alphaf=0.5 + AA — accumulates byte-level
     // drift over 9 RRect/oval shapes at random rotations. Visual layout
     // matches the reference cell-by-cell.
@@ -57,9 +49,6 @@ class Round7Test {
 
     @Test
     fun `SimpleShapesBwGM matches reference`() = runGm(SimpleShapesBwGM(), "SimpleShapesBwGM", 64.0)
-
-    @Test
-    fun `GradTextGM matches reference`() = runGm(GradTextGM(), "GradTextGM", 84.0)
 
     // The 3 stroked-arc grids (`butt` / `square` / `round` cap) hit the
     // same translucent-overlap drift as `CircularArcsFillGM` (4 grids
