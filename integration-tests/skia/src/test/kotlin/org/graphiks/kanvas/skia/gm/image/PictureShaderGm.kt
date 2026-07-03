@@ -90,7 +90,7 @@ abstract class PictureShaderBaseGm(
 
     private fun drawTile(canvas: Canvas) {
         var paint = Paint(color = Color.GREEN, antiAlias = true)
-        val circle = Path { addCircle(tileSize / 4f, tileSize / 4f, tileSize / 4f) }
+        val circle = Path { }.apply { addCircle(tileSize / 4f, tileSize / 4f, tileSize / 4f) }
         canvas.drawPath(circle, paint)
         canvas.drawRect(
             Rect.fromXYWH(tileSize / 2f, tileSize / 2f, tileSize / 2f, tileSize / 2f),
@@ -143,7 +143,7 @@ abstract class PictureShaderBaseGm(
     private data class TileConfig(val tmx: TileMode, val tmy: TileMode)
 
     companion object {
-        val kTileConfigs: Array<TileConfig> = arrayOf(
+        private val kTileConfigs: Array<TileConfig> = arrayOf(
             TileConfig(TileMode.REPEAT, TileMode.REPEAT),
             TileConfig(TileMode.REPEAT, TileMode.MIRROR),
             TileConfig(TileMode.MIRROR, TileMode.REPEAT),

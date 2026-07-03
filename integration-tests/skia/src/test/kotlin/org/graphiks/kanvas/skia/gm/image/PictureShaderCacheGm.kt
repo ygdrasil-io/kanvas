@@ -45,7 +45,7 @@ class PictureShaderCacheGm : SkiaGm {
     private fun drawTile(canvas: Canvas) {
         var paint = Paint(color = Color.GREEN, antiAlias = true)
 
-        val circle = Path { addCircle(tileSize / 4f, tileSize / 4f, tileSize / 4f) }
+        val circle = Path { }.apply { addCircle(tileSize / 4f, tileSize / 4f, tileSize / 4f) }
         canvas.drawPath(circle, paint)
         canvas.drawRect(
             Rect.fromXYWH(tileSize / 2f, tileSize / 2f, tileSize / 2f, tileSize / 2f),

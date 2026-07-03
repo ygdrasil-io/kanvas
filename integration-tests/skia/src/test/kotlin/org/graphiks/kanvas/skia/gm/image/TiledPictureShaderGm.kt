@@ -51,9 +51,7 @@ class TiledPictureShaderGm : SkiaGm {
             style = PaintStyle.STROKE,
             strokeWidth = 10f,
         )
-        val linePath = Path()
-        linePath.moveTo(20f, 20f)
-        linePath.lineTo(80f, 80f)
+        val linePath = Path { moveTo(20f, 20f); lineTo(80f, 80f) }
         c.drawPath(linePath, p)
 
         val picture = recorder.finishRecordingAsPicture()

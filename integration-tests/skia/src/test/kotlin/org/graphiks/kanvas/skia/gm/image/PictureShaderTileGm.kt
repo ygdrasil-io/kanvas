@@ -128,7 +128,7 @@ class PictureShaderTileGm : SkiaGm {
         var paint = Paint(antiAlias = true)
 
         paint = paint.copy(color = Color.GREEN)
-        canvas.drawPath(Path { addCircle(pictureSize / 4f, pictureSize / 4f, pictureSize / 4f) }, paint)
+        canvas.drawPath(Path { }.apply { addCircle(pictureSize / 4f, pictureSize / 4f, pictureSize / 4f) }, paint)
 
         paint = paint.copy(color = Color.BLUE)
         canvas.drawRect(
