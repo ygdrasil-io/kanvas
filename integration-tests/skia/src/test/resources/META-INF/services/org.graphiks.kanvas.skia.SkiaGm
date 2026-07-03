@@ -287,6 +287,7 @@ org.graphiks.kanvas.skia.gm.text.BigTextGm
 org.graphiks.kanvas.skia.gm.text.BlobRSXformDistortableGm
 org.graphiks.kanvas.skia.gm.text.BlobRSXformGm
 org.graphiks.kanvas.skia.gm.text.ChromeGradText2Gm
+org.graphiks.kanvas.skia.gm.text.ColorEmojiGm
 org.graphiks.kanvas.skia.gm.text.DfTextGm
 org.graphiks.kanvas.skia.gm.text.GammashadertextGm
 org.graphiks.kanvas.skia.gm.text.GammatextColorShaderGm
