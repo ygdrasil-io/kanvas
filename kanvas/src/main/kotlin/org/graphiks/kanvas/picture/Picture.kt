@@ -73,6 +73,20 @@ class Picture internal constructor(
     }
 
     /**
+     * Walks every top-level [DisplayOp.DrawText] in this picture, invoking
+     * [action] once per distinct [TextBlob] (deduplicated by reference
+     * identity). Does not recurse into nested pictures.
+     */
+    fun walkTextBlobs(action: (TextBlob) -> Unit) {
+        val seen = java.util.IdentityHashMap<TextBlob, Boolean>()
+        for (op in ops) {
+            if (op is DisplayOp.DrawText && seen.put(op.blob, true) == null) {
+                action(op.blob)
+            }
+        }
+    }
+
+    /**
      * Replay this picture's drawing commands onto [canvas].
      *
      * The canvas's save/restore balance is preserved — each call

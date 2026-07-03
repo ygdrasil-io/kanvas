@@ -6,7 +6,11 @@ import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.text.KanvasGlyphRun
+import org.graphiks.kanvas.text.KanvasTypeface
+import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.types.Color
+import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -157,6 +161,38 @@ class PictureTest {
         assertEquals(2, collected.size)
         assertEquals(inner, collected[0])
         assertEquals(inner, collected[1])
+    }
+
+    @Test
+    fun `walkTextBlobs deduplicates by reference and invokes action once per distinct blob`() {
+        val glyphRuns = listOf(KanvasGlyphRun(listOf(65u, 66u), listOf(Point(10f, 10f), Point(30f, 10f))))
+        val tf = KanvasTypeface("test-font")
+        val blob1 = TextBlob(glyphRuns, tf, 16f)
+        val blob2 = TextBlob(glyphRuns, tf, 16f) // structurally equal but different reference
+
+        val recorder = PictureRecorder()
+        val canvas = recorder.beginRecording(Rect.fromLTRB(0f, 0f, 200f, 200f))
+        canvas.drawText(blob1, 0f, 50f, Paint.fill(Color.BLACK))
+        canvas.drawText(blob2, 0f, 100f, Paint.fill(Color.BLACK))
+        val picture = recorder.finishRecordingAsPicture()
+
+        val collected = mutableListOf<TextBlob>()
+        picture.walkTextBlobs { collected.add(it) }
+        assertEquals(2, collected.size) // reference-identity: two distinct blobs
+        assertEquals(blob1, collected[0])
+        assertEquals(blob2, collected[1])
+    }
+
+    @Test
+    fun `walkTextBlobs does not invoke action when no text present`() {
+        val recorder = PictureRecorder()
+        val canvas = recorder.beginRecording(Rect.fromLTRB(0f, 0f, 100f, 100f))
+        canvas.drawRect(Rect.fromLTRB(10f, 10f, 50f, 50f), Paint.fill(Color.RED))
+        val picture = recorder.finishRecordingAsPicture()
+
+        var called = false
+        picture.walkTextBlobs { called = true }
+        assertFalse(called)
     }
 }
 
