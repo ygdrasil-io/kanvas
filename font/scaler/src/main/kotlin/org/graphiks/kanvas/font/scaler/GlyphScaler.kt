@@ -57,11 +57,15 @@ class GlyphScaler private constructor(
     private val glyphOffsets: IntArray
     private val cpalPalette: IntArray?
     private val colrV0BaseGlyphs: Map<Int, List<ColorLayerEntry>>?
+    private val sbixGlyphs: Map<Int, GlyphRepresentation.Bitmap>?
+    private val cblcStrikes: List<CblcStrike>?
 
     init {
         tables = parseTableDirectory()
         cpalPalette = parseCpal()
         colrV0BaseGlyphs = parseColrV0()
+        sbixGlyphs = parseSbix()
+        cblcStrikes = parseCblc()
         val sfntTag = String(fontBytes, 0, 4, Charsets.ISO_8859_1)
         isCFF = sfntTag == "OTTO" || sfntTag == "typ1"
         numGlyphs = parseMaxp()
@@ -72,6 +76,14 @@ class GlyphScaler private constructor(
         cmap = parseCmap()
         advanceWidths = parseHmtx()
         glyphOffsets = parseLoca()
+    }
+
+    fun getGlyphRepresentation(glyphId: Int, fontSize: Float): GlyphRepresentation? {
+        return try {
+            scaleGlyph(glyphId, fontSize).representation
+        } catch (_: Exception) {
+            null
+        }
     }
 
     fun glyphIdForCodepoint(codepoint: Int): Int? {
@@ -103,6 +115,32 @@ class GlyphScaler private constructor(
                 bounds = computeBounds(emptyList()),
                 commands = emptyList(),
                 representation = GlyphRepresentation.ColorLayers(colorLayers),
+            )
+        }
+
+        val cblcBitmap = resolveCbdtBitmap(glyphId, size)
+        if (cblcBitmap != null) {
+            return ScaledGlyph(
+                sourceCodepoint = sourceCodepoint,
+                glyphId = glyphId,
+                size = size,
+                advanceWidth = advance,
+                bounds = GlyphBounds(0.0, 0.0, cblcBitmap.pixelWidth.toDouble(), cblcBitmap.pixelHeight.toDouble()),
+                commands = emptyList(),
+                representation = cblcBitmap,
+            )
+        }
+
+        val sbixBmp = sbixGlyphs?.get(glyphId)
+        if (sbixBmp != null) {
+            return ScaledGlyph(
+                sourceCodepoint = sourceCodepoint,
+                glyphId = glyphId,
+                size = size,
+                advanceWidth = advance,
+                bounds = GlyphBounds(0.0, 0.0, sbixBmp.pixelWidth.toDouble(), sbixBmp.pixelHeight.toDouble()),
+                commands = emptyList(),
+                representation = sbixBmp,
             )
         }
 
@@ -284,6 +322,94 @@ class GlyphScaler private constructor(
             result[glyphId] = layers
         }
         return if (result.isEmpty()) null else result
+    }
+
+    private fun parseSbix(): Map<Int, GlyphRepresentation.Bitmap>? {
+        val sbixTable = tables["sbix"] ?: return null
+        val bytes = fontBytes
+        val off = sbixTable.offset
+        val numStrikes = u32(bytes, off + 4).toInt()
+        if (numStrikes == 0) return null
+        val strikeOffset = u32(bytes, off + 8).toInt()
+        val strikeOff = sbixTable.offset + strikeOffset
+        if (strikeOff + 8 > bytes.size) return null
+        val ppem = u16(bytes, strikeOff)
+        val numGlyphs = u32(bytes, strikeOff + 4).toInt()
+        val result = mutableMapOf<Int, GlyphRepresentation.Bitmap>()
+        var glyphOff = strikeOff + 8
+        for (i in 0 until numGlyphs) {
+            if (glyphOff + 12 > bytes.size) break
+            val originOffsetX = i16(bytes, glyphOff).toInt()
+            val originOffsetY = i16(bytes, glyphOff + 2).toInt()
+            val graphicType = String(bytes, glyphOff + 4, 4, Charsets.ISO_8859_1)
+            val dataLen = u32(bytes, glyphOff + 8).toInt()
+            if (graphicType == "png " && dataLen > 0) {
+                val pngStart = glyphOff + 12
+                if (pngStart + dataLen <= bytes.size) {
+                    val pngData = bytes.copyOfRange(pngStart, pngStart + dataLen)
+                    result[i] = GlyphRepresentation.Bitmap(
+                        pngData = pngData,
+                        originX = originOffsetX.toFloat(),
+                        originY = originOffsetY.toFloat(),
+                        pixelWidth = ppem,
+                        pixelHeight = ppem,
+                    )
+                }
+            }
+            glyphOff += 12 + dataLen
+        }
+        return result.ifEmpty { null }
+    }
+
+    private fun parseCblc(): List<CblcStrike>? {
+        val cblcTable = tables["CBLC"] ?: return null
+        val cbdtTable = tables["CBDT"] ?: return null
+        val bytes = fontBytes
+        val offset = cblcTable.offset
+        if (offset + 8 > bytes.size) return null
+        val numSizes = u32(bytes, offset + 4).toInt()
+        if (numSizes == 0) return null
+        val strikes = mutableListOf<CblcStrike>()
+        var sizeOff = offset + 8
+        for (si in 0 until numSizes) {
+            if (sizeOff + 48 > bytes.size) break
+            val indexSubTableArrayOffset = u32(bytes, sizeOff).toInt()
+            val numTables = u32(bytes, sizeOff + 8).toInt()
+            val ppemX = u8(bytes, sizeOff + 12).toInt()
+            val ppemY = u8(bytes, sizeOff + 13).toInt()
+            val glyphBitmaps = mutableMapOf<Int, GlyphRepresentation.Bitmap>()
+            for (ti in 0 until numTables) {
+                val subOff = cblcTable.offset + indexSubTableArrayOffset + ti * 8
+                if (subOff + 8 > bytes.size) break
+                val firstGlyph = u16(bytes, subOff).toInt()
+                val lastGlyph = u16(bytes, subOff + 2).toInt()
+                val additionalOffset = u32(bytes, subOff + 4).toInt()
+                for (gid in firstGlyph..lastGlyph) {
+                    if (gid > 0xFFFF) break
+                    val entryOff = cblcTable.offset + additionalOffset + (gid - firstGlyph) * 4
+                    if (entryOff + 4 > bytes.size) continue
+                    val glyphOffset = u32(bytes, entryOff).toInt()
+                    if (glyphOffset == 0) continue
+                    val cbdtOff = cbdtTable.offset + glyphOffset
+                    if (cbdtOff + 6 > bytes.size) continue
+                    val format = u16(bytes, cbdtOff + 4)
+                    if (format != 17 && format != 18 && format != 19) continue
+                    val pngLen = u32(bytes, cbdtOff).toInt() - 8
+                    if (cbdtOff + 8 + pngLen > bytes.size || pngLen <= 0) continue
+                    val pngData = bytes.copyOfRange(cbdtOff + 8, cbdtOff + 8 + pngLen)
+                    glyphBitmaps[gid] = GlyphRepresentation.Bitmap(
+                        pngData = pngData,
+                        originX = 0f,
+                        originY = 0f,
+                        pixelWidth = ppemX,
+                        pixelHeight = ppemY,
+                    )
+                }
+            }
+            strikes.add(CblcStrike(ppemX, ppemY, glyphBitmaps))
+            sizeOff += 48
+        }
+        return strikes.ifEmpty { null }
     }
 
     private fun parseCmap(): CmapSubtable {
@@ -619,6 +745,12 @@ class GlyphScaler private constructor(
         val lineGap: Int,
     )
 
+    private data class CblcStrike(
+        val ppemX: Int,
+        val ppemY: Int,
+        val glyphBitmaps: Map<Int, GlyphRepresentation.Bitmap>,
+    )
+
     private fun parseHheaMetrics(): HheaMetrics {
         val hhea = tables["hhea"] ?: error("Missing hhea table")
         val bytes = fontBytes
@@ -627,6 +759,21 @@ class GlyphScaler private constructor(
             descent = i16(bytes, hhea.offset + 6).toInt(),
             lineGap = i16(bytes, hhea.offset + 8).toInt(),
         )
+    }
+
+    private fun resolveCbdtBitmap(glyphId: Int, fontSize: Float): GlyphRepresentation.Bitmap? {
+        val strikes = cblcStrikes ?: return null
+        if (strikes.isEmpty()) return null
+        var bestStrike = strikes.first()
+        var bestDiff = kotlin.math.abs(bestStrike.ppemX - fontSize.toInt())
+        for (strike in strikes) {
+            val diff = kotlin.math.abs(strike.ppemX - fontSize.toInt())
+            if (diff < bestDiff) {
+                bestDiff = diff
+                bestStrike = strike
+            }
+        }
+        return bestStrike.glyphBitmaps[glyphId]
     }
 
     private sealed class GlyphData {
