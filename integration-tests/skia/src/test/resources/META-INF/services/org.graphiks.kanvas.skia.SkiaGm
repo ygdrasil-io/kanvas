@@ -352,4 +352,9 @@ org.graphiks.kanvas.skia.gm.runtime_effect.RuntimeColorFilterGm
 org.graphiks.kanvas.skia.gm.runtime_effect.RuntimeFunctionsGm
 org.graphiks.kanvas.skia.gm.runtime_effect.RuntimeShaderGm
 org.graphiks.kanvas.skia.gm.runtime_effect.SpiralRTGm
+org.graphiks.kanvas.skia.gm.text.ChromeGradText1Gm
+org.graphiks.kanvas.skia.gm.text.ChromeGradText2Gm
+org.graphiks.kanvas.skia.gm.text.GammashadertextGm
+org.graphiks.kanvas.skia.gm.text.GammatextGm
+org.graphiks.kanvas.skia.gm.text.GradTextGm
 org.graphiks.kanvas.skia.gm.text.SmokeTextGm
