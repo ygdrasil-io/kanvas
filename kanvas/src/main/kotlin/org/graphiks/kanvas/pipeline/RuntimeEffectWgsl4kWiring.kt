@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.pipeline
 
+import org.graphiks.kanvas.paint.ColorFilter
 import org.graphiks.wgsl.ir.TypeInner
 import org.graphiks.wgsl.ir.VectorSize
 import org.graphiks.wgsl.parser.Lowerer
@@ -24,6 +25,10 @@ object RuntimeEffectWgsl4kWiring {
             try { wgsl4kCompile(wgsl) }
             catch (_: NoClassDefFoundError) { null }
             catch (_: ClassNotFoundException) { null }
+        }
+
+        RuntimeEffect.makeColorFilterHook = { effect, uniforms ->
+            ColorFilter.RuntimeEffect(effect, uniforms)
         }
     }
 

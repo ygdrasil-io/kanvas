@@ -69,6 +69,7 @@ class Picture internal constructor(
                     is DisplayOp.BeginLayer -> canvas.saveLayer(op.bounds, op.paint)
                     is DisplayOp.EndLayer -> canvas.restore()
                     is DisplayOp.Annotation -> { /* no visual output */ }
+                    is DisplayOp.FlushAndSnapshot -> { /* no visual output; readback is render-backend-specific */ }
                 }
             }
         } finally {
@@ -136,6 +137,7 @@ private const val OP_SET_CLIP: Byte = 16
 private const val OP_BEGIN_LAYER: Byte = 17
 private const val OP_END_LAYER: Byte = 18
 private const val OP_ANNOTATION: Byte = 19
+private const val OP_FLUSH_AND_SNAPSHOT: Byte = 20
 
 private class Writer {
     private val baos = ByteArrayOutputStream()
@@ -568,6 +570,7 @@ private class Writer {
             }
             DisplayOp.EndLayer -> byte(OP_END_LAYER)
             is DisplayOp.Annotation -> { byte(OP_ANNOTATION); rect(op.rect); string(op.key); string(op.value) }
+            is DisplayOp.FlushAndSnapshot -> { byte(OP_FLUSH_AND_SNAPSHOT); rect(op.bounds) }
         }
     }
 
@@ -975,6 +978,7 @@ private class Reader(private val data: ByteArray) {
             }
             OP_END_LAYER.toInt() -> DisplayOp.EndLayer
             OP_ANNOTATION.toInt() -> DisplayOp.Annotation(rect(), string(), string())
+            OP_FLUSH_AND_SNAPSHOT.toInt() -> DisplayOp.FlushAndSnapshot(rect())
             else -> { valid = false; null }
         }
     }

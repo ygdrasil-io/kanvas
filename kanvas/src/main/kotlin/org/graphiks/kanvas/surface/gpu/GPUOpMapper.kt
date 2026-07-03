@@ -608,7 +608,8 @@ internal fun DisplayOp.withCombinedTransform(outer: Matrix33): DisplayOp = when 
     is DisplayOp.SetClip,
     is DisplayOp.BeginLayer,
     is DisplayOp.EndLayer,
-    is DisplayOp.Annotation -> this
+    is DisplayOp.Annotation,
+    is DisplayOp.FlushAndSnapshot -> this
 }
 
 // ────────────────────────────────────────────────────────────────────────────

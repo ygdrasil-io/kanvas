@@ -594,7 +594,8 @@ internal fun renderViaGpu(
                                 is DisplayOp.SetClip,
                                 is DisplayOp.BeginLayer,
                                 is DisplayOp.EndLayer,
-                                is DisplayOp.Annotation -> { /* state / metadata ops */ }
+                                is DisplayOp.Annotation,
+                                is DisplayOp.FlushAndSnapshot -> { /* state / metadata ops */ }
                                 is DisplayOp.DrawPicture -> {
                                     /* already flattened; should not occur */
                                 }
@@ -685,6 +686,7 @@ internal fun renderViaGpu(
                         }
                     }
                     is DisplayOp.Annotation -> { /* no visual output */ }
+                    is DisplayOp.FlushAndSnapshot -> { /* deferred to render-backend; no-op in CPU path */ }
                 }
             }
 

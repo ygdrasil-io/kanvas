@@ -223,6 +223,11 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
         while (saveStack.size > count) restore()
     }
 
+    fun flushAndSnapshot(bounds: Rect): Image {
+        buffer.append(DisplayOp.FlushAndSnapshot(bounds))
+        return Image.placeholder(bounds.width.toInt(), bounds.height.toInt())
+    }
+
     /** Pre-concatenate a translation by (x, y) into the current transform. */
     fun translate(x: Float, y: Float) { concat(Matrix33.translate(x, y)) }
 
