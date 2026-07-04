@@ -143,18 +143,45 @@ internal fun renderViaGpu(
                 op: DisplayOp.DrawText,
                 cmdId: GPUDrawCommandID,
             ) {
+                val tx = op.transform
+                val sx = tx.scaleX; val kx = tx.skewX; val txx = tx.transX
+                val ky = tx.skewY; val sy = tx.scaleY; val ty = tx.transY
                 val verbs = mutableListOf<GpuPathVerb>()
                 for (cmd in commands) {
                     when (cmd) {
-                        is OutlineCommand.MoveTo -> verbs.add(GpuPathVerb.MoveTo(Point(cmd.x.toFloat() + offsetX, cmd.y.toFloat() + offsetY)))
-                        is OutlineCommand.LineTo -> verbs.add(GpuPathVerb.LineTo(Point(cmd.x.toFloat() + offsetX, cmd.y.toFloat() + offsetY)))
-                        is OutlineCommand.QuadraticTo -> verbs.add(GpuPathVerb.QuadTo(
-                            Point(cmd.controlX.toFloat() + offsetX, cmd.controlY.toFloat() + offsetY),
-                            Point(cmd.x.toFloat() + offsetX, cmd.y.toFloat() + offsetY)))
-                        is OutlineCommand.CubicTo -> verbs.add(GpuPathVerb.CubicTo(
-                            Point(cmd.controlX1.toFloat() + offsetX, cmd.controlY1.toFloat() + offsetY),
-                            Point(cmd.controlX2.toFloat() + offsetX, cmd.controlY2.toFloat() + offsetY),
-                            Point(cmd.x.toFloat() + offsetX, cmd.y.toFloat() + offsetY)))
+                        is OutlineCommand.MoveTo -> {
+                            val x = cmd.x.toFloat() + offsetX
+                            val y = cmd.y.toFloat() + offsetY
+                            verbs.add(GpuPathVerb.MoveTo(Point(sx * x + kx * y + txx, ky * x + sy * y + ty)))
+                        }
+                        is OutlineCommand.LineTo -> {
+                            val x = cmd.x.toFloat() + offsetX
+                            val y = cmd.y.toFloat() + offsetY
+                            verbs.add(GpuPathVerb.LineTo(Point(sx * x + kx * y + txx, ky * x + sy * y + ty)))
+                        }
+                        is OutlineCommand.QuadraticTo -> {
+                            val cx = cmd.controlX.toFloat() + offsetX
+                            val cy = cmd.controlY.toFloat() + offsetY
+                            val x = cmd.x.toFloat() + offsetX
+                            val y = cmd.y.toFloat() + offsetY
+                            verbs.add(GpuPathVerb.QuadTo(
+                                Point(sx * cx + kx * cy + txx, ky * cx + sy * cy + ty),
+                                Point(sx * x + kx * y + txx, ky * x + sy * y + ty),
+                            ))
+                        }
+                        is OutlineCommand.CubicTo -> {
+                            val c1x = cmd.controlX1.toFloat() + offsetX
+                            val c1y = cmd.controlY1.toFloat() + offsetY
+                            val c2x = cmd.controlX2.toFloat() + offsetX
+                            val c2y = cmd.controlY2.toFloat() + offsetY
+                            val x = cmd.x.toFloat() + offsetX
+                            val y = cmd.y.toFloat() + offsetY
+                            verbs.add(GpuPathVerb.CubicTo(
+                                Point(sx * c1x + kx * c1y + txx, ky * c1x + sy * c1y + ty),
+                                Point(sx * c2x + kx * c2y + txx, ky * c2x + sy * c2y + ty),
+                                Point(sx * x + kx * y + txx, ky * x + sy * y + ty),
+                            ))
+                        }
                         is OutlineCommand.Close -> verbs.add(GpuPathVerb.Close)
                     }
                 }
@@ -170,7 +197,7 @@ internal fun renderViaGpu(
                 val syntheticOp = DisplayOp.DrawPath(
                     path = Path { },
                     paint = org.graphiks.kanvas.paint.Paint(color = color),
-                    transform = op.transform,
+                    transform = Matrix33.identity(),
                     clip = op.clip,
                 )
                 val cmd = syntheticOp.toNormalizedCommand(cmdId, targets, vertices, listOf(0), flat.size)
@@ -185,6 +212,9 @@ internal fun renderViaGpu(
             ) {
                 val tf = op.blob.typeface as? FontTypeface ?: return
                 val scaler = tf.scaler ?: return
+                val tx = op.transform
+                val sx = tx.scaleX; val kx = tx.skewX; val txx = tx.transX
+                val ky = tx.skewY; val sy = tx.scaleY; val ty = tx.transY
 
                 for (run in op.blob.glyphRuns) {
                     for ((idx, gid) in run.glyphs.withIndex()) {
@@ -195,15 +225,39 @@ internal fun renderViaGpu(
                         val verbs = mutableListOf<GpuPathVerb>()
                         for (cmd in scaled.commands) {
                             when (cmd) {
-                                is OutlineCommand.MoveTo -> verbs.add(GpuPathVerb.MoveTo(Point(cmd.x.toFloat() + pos.x + op.x, cmd.y.toFloat() + pos.y + op.y)))
-                                is OutlineCommand.LineTo -> verbs.add(GpuPathVerb.LineTo(Point(cmd.x.toFloat() + pos.x + op.x, cmd.y.toFloat() + pos.y + op.y)))
-                                is OutlineCommand.QuadraticTo -> verbs.add(GpuPathVerb.QuadTo(
-                                    Point(cmd.controlX.toFloat() + pos.x + op.x, cmd.controlY.toFloat() + pos.y + op.y),
-                                    Point(cmd.x.toFloat() + pos.x + op.x, cmd.y.toFloat() + pos.y + op.y)))
-                                is OutlineCommand.CubicTo -> verbs.add(GpuPathVerb.CubicTo(
-                                    Point(cmd.controlX1.toFloat() + pos.x + op.x, cmd.controlY1.toFloat() + pos.y + op.y),
-                                    Point(cmd.controlX2.toFloat() + pos.x + op.x, cmd.controlY2.toFloat() + pos.y + op.y),
-                                    Point(cmd.x.toFloat() + pos.x + op.x, cmd.y.toFloat() + pos.y + op.y)))
+                                is OutlineCommand.MoveTo -> {
+                                    val x = cmd.x.toFloat() + pos.x + op.x
+                                    val y = cmd.y.toFloat() + pos.y + op.y
+                                    verbs.add(GpuPathVerb.MoveTo(Point(sx * x + kx * y + txx, ky * x + sy * y + ty)))
+                                }
+                                is OutlineCommand.LineTo -> {
+                                    val x = cmd.x.toFloat() + pos.x + op.x
+                                    val y = cmd.y.toFloat() + pos.y + op.y
+                                    verbs.add(GpuPathVerb.LineTo(Point(sx * x + kx * y + txx, ky * x + sy * y + ty)))
+                                }
+                                is OutlineCommand.QuadraticTo -> {
+                                    val cx = cmd.controlX.toFloat() + pos.x + op.x
+                                    val cy = cmd.controlY.toFloat() + pos.y + op.y
+                                    val x = cmd.x.toFloat() + pos.x + op.x
+                                    val y = cmd.y.toFloat() + pos.y + op.y
+                                    verbs.add(GpuPathVerb.QuadTo(
+                                        Point(sx * cx + kx * cy + txx, ky * cx + sy * cy + ty),
+                                        Point(sx * x + kx * y + txx, ky * x + sy * y + ty),
+                                    ))
+                                }
+                                is OutlineCommand.CubicTo -> {
+                                    val c1x = cmd.controlX1.toFloat() + pos.x + op.x
+                                    val c1y = cmd.controlY1.toFloat() + pos.y + op.y
+                                    val c2x = cmd.controlX2.toFloat() + pos.x + op.x
+                                    val c2y = cmd.controlY2.toFloat() + pos.y + op.y
+                                    val x = cmd.x.toFloat() + pos.x + op.x
+                                    val y = cmd.y.toFloat() + pos.y + op.y
+                                    verbs.add(GpuPathVerb.CubicTo(
+                                        Point(sx * c1x + kx * c1y + txx, ky * c1x + sy * c1y + ty),
+                                        Point(sx * c2x + kx * c2y + txx, ky * c2x + sy * c2y + ty),
+                                        Point(sx * x + kx * y + txx, ky * x + sy * y + ty),
+                                    ))
+                                }
                                 is OutlineCommand.Close -> verbs.add(GpuPathVerb.Close)
                             }
                         }
@@ -219,7 +273,7 @@ internal fun renderViaGpu(
                         val syntheticOp = DisplayOp.DrawPath(
                             path = Path { },
                             paint = op.paint,
-                            transform = op.transform,
+                            transform = Matrix33.identity(),
                             clip = op.clip,
                         )
                         val glyphCmdId = GPUDrawCommandID(dispatched.size)
@@ -469,6 +523,11 @@ internal fun renderViaGpu(
                         }
                         if (hasColorGlyphs(op.blob)) {
                             renderColorText(op, cmdId)
+                            sceneHasContent = true
+                            continue
+                        }
+                        if (op.paint.isStroke()) {
+                            renderShaderText(op, cmdId)
                             sceneHasContent = true
                             continue
                         }
@@ -849,6 +908,11 @@ internal fun renderViaGpu(
                                     }
                                     if (hasColorGlyphs(nestedOp.blob)) {
                                         renderColorText(nestedOp, nestedCmdId)
+                                        sceneHasContent = true
+                                        continue
+                                    }
+                                    if (nestedOp.paint.isStroke()) {
+                                        renderShaderText(nestedOp, nestedCmdId)
                                         sceneHasContent = true
                                         continue
                                     }

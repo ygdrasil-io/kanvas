@@ -107,11 +107,12 @@ internal fun strokeToFillGeometry(
     capStyle: StrokeCap = StrokeCap.BUTT,
     joinStyle: StrokeJoin = StrokeJoin.MITER,
 ): StrokeGeometry {
-    if (contourVertices.size < 4 || strokeWidth <= 0f) {
+    if (contourVertices.size < 4 || strokeWidth < 0f) {
         return StrokeGeometry(emptyList(), listOf(0))
     }
 
-    val halfWidth = strokeWidth / 2f
+    val effectiveWidth = if (strokeWidth == 0f) 1f else strokeWidth
+    val halfWidth = effectiveWidth / 2f
     val segments = 6
     val result = mutableListOf<Float>()
     val contourResult = mutableListOf(0)
