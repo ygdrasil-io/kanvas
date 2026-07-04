@@ -41,6 +41,7 @@ class MixedTextBlobsGm : SkiaGm {
             KanvasGlyphRun(
                 glyphs = run.glyphs,
                 positions = run.positions.map { Point(it.x, it.y + yOffset) },
+                fontSize = 385f,
             )
         }
         allRuns.addAll(offsetO)

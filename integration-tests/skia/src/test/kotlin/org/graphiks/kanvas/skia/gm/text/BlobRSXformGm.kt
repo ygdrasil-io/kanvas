@@ -50,7 +50,7 @@ class BlobRSXformGm : SkiaGm {
         }
 
         val blob = TextBlob(
-            glyphRuns = listOf(KanvasGlyphRun(glyphIds, positions)),
+            glyphRuns = listOf(KanvasGlyphRun(glyphIds, positions, fontSize = 50f)),
             typeface = typeface,
             fontSize = font.size,
         )
