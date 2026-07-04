@@ -24,6 +24,7 @@ data class GmEntry(
     val hasDiff: Boolean,
     val renderFailed: Boolean,
     val noReference: Boolean,
+    val sizeMismatch: Boolean,
 )
 
 fun main(args: Array<String>) {
@@ -50,13 +51,13 @@ fun main(args: Array<String>) {
         val fam = gm.renderFamily.name
 
         if (!refFile.exists()) {
-            entries.add(GmEntry(gm.name, fam, null, gm.minSimilarity, null, gm.width, gm.height, 0,0,0,0, 0.0,0.0,0.0,0.0, null, null, false, false, true))
+            entries.add(GmEntry(gm.name, fam, null, gm.minSimilarity, null, gm.width, gm.height, 0,0,0,0, 0.0,0.0,0.0,0.0, null, null, false, false, true, false))
             noScore++
             continue
         }
 
         if (!genFile.exists()) {
-            entries.add(GmEntry(gm.name, fam, null, gm.minSimilarity, null, gm.width, gm.height, 0,0,0,0, 0.0,0.0,0.0,0.0, null, null, false, true, false))
+            entries.add(GmEntry(gm.name, fam, null, gm.minSimilarity, null, gm.width, gm.height, 0,0,0,0, 0.0,0.0,0.0,0.0, null, null, false, true, false, false))
             noScore++
             continue
         }
@@ -68,7 +69,7 @@ fun main(args: Array<String>) {
             println("[SKIP] ${gm.name}: size mismatch (ref=${refImg.width}x${refImg.height}, gen=${genImg.width}x${genImg.height})")
             refFile.copyTo(outputDir.resolve("images/reference/${gm.name}.png"), overwrite = true)
             genFile.copyTo(outputDir.resolve("images/generated/${gm.name}.png"), overwrite = true)
-            entries.add(GmEntry(gm.name, fam, null, gm.minSimilarity, null, refImg.width, refImg.height, 0,0,0,0, 0.0,0.0,0.0,0.0, null, null, false, false, false))
+            entries.add(GmEntry(gm.name, fam, null, gm.minSimilarity, null, refImg.width, refImg.height, 0,0,0,0, 0.0,0.0,0.0,0.0, null, null, false, false, false, true))
             noScore++
             continue
         }
@@ -89,7 +90,7 @@ fun main(args: Array<String>) {
             println("[SKIP] ${gm.name}: comparison failed (${e.message})")
             refFile.copyTo(outputDir.resolve("images/reference/${gm.name}.png"), overwrite = true)
             genFile.copyTo(outputDir.resolve("images/generated/${gm.name}.png"), overwrite = true)
-            entries.add(GmEntry(gm.name, fam, null, gm.minSimilarity, null, refImg.width, refImg.height, 0,0,0,0, 0.0,0.0,0.0,0.0, null, null, false, false, false))
+            entries.add(GmEntry(gm.name, fam, null, gm.minSimilarity, null, refImg.width, refImg.height, 0,0,0,0, 0.0,0.0,0.0,0.0, null, null, false, false, false, false))
             noScore++
             continue
         }
@@ -122,6 +123,7 @@ fun main(args: Array<String>) {
             hasDiff = diffRgba != null,
             renderFailed = false,
             noReference = false,
+            sizeMismatch = false,
         ))
 
         if (result.isPassing) passed++ else failed++
@@ -191,7 +193,8 @@ private fun writeJson(
         sb.appendLine("      \"totalPixels\": ${e.totalPixels ?: "null"},")
         sb.appendLine("      \"hasDiff\": ${e.hasDiff},")
         sb.appendLine("      \"renderFailed\": ${e.renderFailed},")
-        sb.appendLine("      \"noReference\": ${e.noReference}")
+        sb.appendLine("      \"noReference\": ${e.noReference},")
+        sb.appendLine("      \"sizeMismatch\": ${e.sizeMismatch}")
         sb.append("    }$comma\n")
     }
     sb.appendLine("  ]")
@@ -271,7 +274,7 @@ h1{font-size:1.5rem;margin-bottom:0.25rem}
 <div class="summary" id="summary"></div>
 <div class="toolbar" id="toolbar">
 <select id="filterFamily"><option value="">Family: All</option></select>
-<select id="filterScore"><option value="">Score: All</option><option value="0-25">0-25%</option><option value="25-50">25-50%</option><option value="50-75">50-75%</option><option value="75-90">75-90%</option><option value="90-100">90-100%</option></select>
+<select id="filterScore"><option value="">Score: All</option><option value="0-25">0-25%</option><option value="25-50">25-50%</option><option value="50-75">50-75%</option><option value="75-90">75-90%</option><option value="90-101">90-100%</option></select>
 <select id="filterStatus"><option value="">Status: All</option><option value="pass">Pass</option><option value="fail">Fail</option><option value="none">No Score</option></select>
 <input type="text" id="filterSearch" placeholder="Search GM name...">
 </div>
@@ -289,7 +292,7 @@ const fStat=document.getElementById('filterStatus').value;
 const fSearch=document.getElementById('filterSearch').value.toLowerCase();
 let filtered=data.gms.filter(g=>{
 if(fFam&&g.family!==fFam)return false;
-if(fScore){const[lo,hi]=fScore.split('-').map(Number);if(g.similarity===null||g.similarity<lo||g.similarity>=hi)return false}
+if(fScore){const[lo,hi]=fScore.split('-').map(Number);if(g.similarity===null||g.similarity<lo||g.similarity>hi)return false}
 if(fStat==='pass'&&g.isPassing!==true)return false;
 if(fStat==='fail'&&g.isPassing!==false)return false;
 if(fStat==='none'&&g.isPassing!==null)return false;
@@ -308,9 +311,9 @@ document.getElementById('count').textContent='Showing '+filtered.length+' of '+d
 document.getElementById('grid').innerHTML=filtered.map(g=>{
 const sc=g.similarity;const pass=g.isPassing;
 const scCls=sc===null?'none':sc>=95?'pass':pass?'warn':'fail';
-const badgeCls=pass===true?'pass':pass===false?'fail':'none';
-const badgeTxt=pass===true?'Pass':pass===false?'Fail':'No Score';
-const borderCls=pass===true?'pass':pass===false?'fail':'';
+const badgeCls=pass===true?'pass':pass===false?'fail':g.sizeMismatch?'none':'none';
+const badgeTxt=pass===true?'Pass':pass===false?'Fail':g.sizeMismatch?'Size mismatch':'No Score';
+const borderCls=pass===true?'pass':pass===false?'fail':g.sizeMismatch?'fail':'';
 const diffPct=sc!==null?(100-sc).toFixed(1):'?';
 return '<div class="card '+borderCls+'">'+
 '<div class="card-header"><div><span class="name">'+g.name+'</span> <span class="badge '+badgeCls+'">'+badgeTxt+'</span></div>'+
@@ -318,7 +321,7 @@ return '<div class="card '+borderCls+'">'+
 '<div class="images">'+
 '<div class="col"><div class="label"><span>Reference</span><span>'+g.width+'×'+g.height+'</span></div>'+(g.noReference?'<div class="img-wrap"><div class="placeholder">No reference</div></div>':'<div class="img-wrap" onclick="openModal(\'images/reference/'+g.name+'.png\')"><img src="images/reference/'+g.name+'.png" loading="lazy"></div>')+'</div>'+
 '<div class="col"><div class="label"><span>Generated</span><span>'+g.width+'×'+g.height+'</span></div>'+(g.renderFailed?'<div class="img-wrap"><div class="placeholder">Render failed</div></div>':'<div class="img-wrap" onclick="openModal(\'images/generated/'+g.name+'.png\')"><img src="images/generated/'+g.name+'.png" loading="lazy"></div>')+'</div>'+
-'<div class="col"><div class="label"><span>Diff</span>'+(g.hasDiff?'<span>'+diffPct+'% diff</span>':'')+'</div>'+(g.hasDiff?'<div class="img-wrap" onclick="openModal(\'images/diff/'+g.name+'.png\')"><img src="images/diff/'+g.name+'.png" loading="lazy"></div>':'<div class="img-wrap"><div class="placeholder">'+(g.noReference||g.renderFailed?'N/A':'Identical')+'</div></div>')+'</div>'+
+'<div class="col"><div class="label"><span>Diff</span>'+(g.hasDiff?'<span>'+diffPct+'% diff</span>':'')+'</div>'+(g.hasDiff?'<div class="img-wrap" onclick="openModal(\'images/diff/'+g.name+'.png\')"><img src="images/diff/'+g.name+'.png" loading="lazy"></div>':'<div class="img-wrap"><div class="placeholder">'+(g.noReference||g.renderFailed||g.sizeMismatch?'N/A':'Identical')+'</div></div>')+'</div>'+
 '</div>'+
 '<div class="card-footer"><span>Family: '+g.family+'</span><span>Max diff: R='+g.maxDiff.r+' G='+g.maxDiff.g+' B='+g.maxDiff.b+' A='+g.maxDiff.a+'</span><span>Mean miss: R='+g.meanDiff.r.toFixed(1)+' G='+g.meanDiff.g.toFixed(1)+' B='+g.meanDiff.b.toFixed(1)+' A='+g.meanDiff.a.toFixed(1)+'</span></div>'+
 '</div>';
