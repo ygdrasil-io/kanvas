@@ -27,10 +27,10 @@ data class GmEntry(
 )
 
 fun main(args: Array<String>) {
-    val refDir = File(args.getOrNull(indexOf(args, "--ref-dir") + 1) ?: error("--ref-dir required"))
-    val genDir = File(args.getOrNull(indexOf(args, "--gen-dir") + 1) ?: error("--gen-dir required"))
-    val scoresFile = File(args.getOrNull(indexOf(args, "--scores") + 1) ?: error("--scores required"))
-    val outputDir = File(args.getOrNull(indexOf(args, "--output-dir") + 1) ?: error("--output-dir required"))
+    val refDir = File(argAt(args, "--ref-dir"))
+    val genDir = File(argAt(args, "--gen-dir"))
+    val scoresFile = File(argAt(args, "--scores"))
+    val outputDir = File(argAt(args, "--output-dir"))
 
     val scores = Properties().apply {
         if (scoresFile.exists()) FileInputStream(scoresFile).use { load(it) }
@@ -61,8 +61,8 @@ fun main(args: Array<String>) {
             continue
         }
 
-        val refImg = ImageIO.read(refFile)
-        val genImg = ImageIO.read(genFile)
+        val refImg = ImageIO.read(refFile) ?: error("Failed to decode reference PNG: ${refFile.name}")
+        val genImg = ImageIO.read(genFile) ?: error("Failed to decode generated PNG: ${genFile.name}")
         val refRgba = ComparisonUtils.bufferedImageToRgba(refImg)
         val genRgba = ComparisonUtils.bufferedImageToRgba(genImg)
 
@@ -109,7 +109,7 @@ fun main(args: Array<String>) {
         sumSim += result.similarity; simCount++
 
         val status = if (result.isPassing) "PASS" else "FAIL"
-        println("[$status] ${gm.name}: similarity=${"%.2f".format(result.similarity)}% (threshold: ${gm.minSimilarity}%)")
+        println("[$status] ${gm.name}: similarity=${String.format(Locale.US, "%.2f", result.similarity)}% (threshold: ${gm.minSimilarity}%)")
     }
 
     val avgSim = if (simCount > 0) sumSim / simCount else 0.0
@@ -121,12 +121,14 @@ fun main(args: Array<String>) {
 
     println()
     println("Dashboard generated: ${outputDir.absolutePath}")
-    println("Total: ${gms.size}, Pass: $passed, Fail: $failed, No score: $noScore, Avg sim: ${"%.1f".format(avgSim)}%")
+    println("Total: ${gms.size}, Pass: $passed, Fail: $failed, No score: $noScore, Avg sim: ${String.format(Locale.US, "%.1f", avgSim)}%")
 }
 
-private fun indexOf(args: Array<String>, flag: String): Int {
-    for (i in args.indices) if (args[i] == flag) return i
-    return -1
+private fun argAt(args: Array<String>, flag: String): String {
+    val idx = args.indexOf(flag)
+    require(idx >= 0) { "$flag required" }
+    require(idx + 1 < args.size) { "$flag requires a value" }
+    return args[idx + 1]
 }
 
 private fun writeJson(
@@ -165,7 +167,7 @@ private fun writeJson(
         sb.appendLine("      \"width\": ${e.width},")
         sb.appendLine("      \"height\": ${e.height},")
         sb.appendLine("      \"maxDiff\": { \"r\": ${e.maxDiffR}, \"g\": ${e.maxDiffG}, \"b\": ${e.maxDiffB}, \"a\": ${e.maxDiffA} },")
-        sb.appendLine("      \"meanDiff\": { \"r\": ${"%.2f".format(e.meanDiffR)}, \"g\": ${"%.2f".format(e.meanDiffG)}, \"b\": ${"%.2f".format(e.meanDiffB)}, \"a\": ${"%.2f".format(e.meanDiffA)} },")
+        sb.appendLine("      \"meanDiff\": { \"r\": ${fmt2(e.meanDiffR)}, \"g\": ${fmt2(e.meanDiffG)}, \"b\": ${fmt2(e.meanDiffB)}, \"a\": ${fmt2(e.meanDiffA)} },")
         sb.appendLine("      \"matchingPixels\": ${e.matchingPixels ?: "null"},")
         sb.appendLine("      \"totalPixels\": ${e.totalPixels ?: "null"},")
         sb.appendLine("      \"hasDiff\": ${e.hasDiff},")
@@ -179,12 +181,23 @@ private fun writeJson(
     file.writeText(sb.toString())
 }
 
-private fun jsonEsc(s: String): String = s
-    .replace("\\", "\\\\")
-    .replace("\"", "\\\"")
-    .replace("\n", "\\n")
-    .replace("\r", "\\r")
-    .replace("\t", "\\t")
+private fun fmt2(v: Double): String = String.format(Locale.US, "%.2f", v)
+
+private fun jsonEsc(s: String): String = buildString {
+    for (c in s) {
+        when (c) {
+            '\\' -> append("\\\\")
+            '"' -> append("\\\"")
+            '\n' -> append("\\n")
+            '\r' -> append("\\r")
+            '\t' -> append("\\t")
+            '\b' -> append("\\b")
+            '\u000C' -> append("\\f")
+            in '\u0000'..'\u001F' -> append("\\u%04x".format(c.code))
+            else -> append(c)
+        }
+    }
+}
 
 private fun copyHtml(outputDir: File) {
     val html = """<!doctype html>
