@@ -5,6 +5,7 @@ import java.io.File
 import java.io.FileInputStream
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
+import java.util.Locale
 import java.util.Properties
 import javax.imageio.ImageIO
 
@@ -145,11 +146,11 @@ private fun writeJson(
     sb.appendLine("    \"passing\": $passing,")
     sb.appendLine("    \"failing\": $failing,")
     sb.appendLine("    \"noScore\": $noScore,")
-    sb.appendLine("    \"avgSimilarity\": ${"%.1f".format(avgSimilarity)}")
+    sb.appendLine("    \"avgSimilarity\": ${String.format(Locale.US, "%.1f", avgSimilarity)}")
     sb.appendLine("  },")
 
     sb.appendLine("  \"families\": [")
-    sb.appendLine(families.joinToString(",\n") { "    \"$it\"" })
+    sb.appendLine(families.joinToString(",\n") { "    \"${jsonEsc(it)}\"" })
     sb.appendLine("  ],")
 
     sb.appendLine("  \"gms\": [")
@@ -157,7 +158,7 @@ private fun writeJson(
         val comma = if (i < entries.size - 1) "," else ""
         sb.appendLine("    {")
         sb.appendLine("      \"name\": \"${jsonEsc(e.name)}\",")
-        sb.appendLine("      \"family\": \"${e.family}\",")
+        sb.appendLine("      \"family\": \"${jsonEsc(e.family)}\",")
         sb.appendLine("      \"similarity\": ${e.similarity ?: "null"},")
         sb.appendLine("      \"minSimilarity\": ${e.minSimilarity},")
         sb.appendLine("      \"isPassing\": ${e.isPassing ?: "null"},")
@@ -256,7 +257,7 @@ const fStat=document.getElementById('filterStatus').value;
 const fSearch=document.getElementById('filterSearch').value.toLowerCase();
 let filtered=data.gms.filter(g=>{
 if(fFam&&g.family!==fFam)return false;
-if(fScore){const[mx]=fScore.split('-').map(Number);if(g.similarity===null||g.similarity<mx)return false}
+if(fScore){const[lo,hi]=fScore.split('-').map(Number);if(g.similarity===null||g.similarity<lo||g.similarity>=hi)return false}
 if(fStat==='pass'&&g.isPassing!==true)return false;
 if(fStat==='fail'&&g.isPassing!==false)return false;
 if(fStat==='none'&&g.isPassing!==null)return false;
