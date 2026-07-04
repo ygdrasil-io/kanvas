@@ -51,3 +51,30 @@ tasks.register<JavaExec>("generateSkiaRenders") {
     outputs.dir(outputDir)
     outputs.upToDateWhen { false }
 }
+
+tasks.register<JavaExec>("generateSkiaDashboard") {
+    group = "verification"
+    description = "Generates Skia GM visual comparison dashboard."
+    dependsOn(tasks.named("generateSkiaRenders"))
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass.set("org.graphiks.kanvas.skia.SkiaDashboardGeneratorKt")
+    val refDir = layout.projectDirectory.dir("src/test/resources/reference")
+    val genDir = layout.projectDirectory.dir("src/test/resources/generated-renders")
+    val scoresFile = layout.projectDirectory.file("test-similarity-scores.properties")
+    val outputDir = layout.buildDirectory.dir("reports/skia-gm-dashboard")
+    args(
+        "--ref-dir", refDir.asFile.absolutePath,
+        "--gen-dir", genDir.asFile.absolutePath,
+        "--scores", scoresFile.asFile.absolutePath,
+        "--output-dir", outputDir.get().asFile.absolutePath,
+    )
+    jvmArgs(buildList {
+        add("--add-opens=java.base/java.lang=ALL-UNNAMED")
+        add("--enable-native-access=ALL-UNNAMED")
+        if (org.gradle.internal.os.OperatingSystem.current().isMacOsX) {
+            add("-XstartOnFirstThread")
+        }
+    })
+    outputs.dir(outputDir)
+    outputs.upToDateWhen { false }
+}
