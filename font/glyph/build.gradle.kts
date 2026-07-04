@@ -9,6 +9,7 @@ dependencies {
     api(project(":font:gpu-api"))
     api(project(":math"))
 
+    implementation(project(":font:colr"))
     implementation(project(":font:scaler"))
     implementation(project(":codec:png"))
     implementation(kotlin("stdlib"))

@@ -7,7 +7,19 @@ data class Font(
     val size: Float = 12f,
     val antiAlias: Boolean = true,
     val subpixel: Boolean = true,
+    val isEmbolden: Boolean = false,  // applied per-codepoint; ZWJ clusters get multiple increments
 ) {
+    fun getMetrics(): FontMetrics? {
+        if (typeface !is FontTypeface) return null
+        val scaler = typeface.scaler ?: return null
+        val scale = size / scaler.unitsPerEmInt.toFloat()
+        return FontMetrics(
+            ascent = scaler.hheaAscent * scale,
+            descent = scaler.hheaDescent * scale,
+            leading = scaler.hheaLineGap * scale,
+        )
+    }
+
     fun toTextBlob(str: String, originX: Float, originY: Float): TextBlob {
         val glyphIds = mutableListOf<UShort>()
         val positions = mutableListOf<Point>()
@@ -31,6 +43,7 @@ data class Font(
             val gid = typeface.glyphIdForCodepoint(cp)
             width += typeface.getAdvance(gid, size)
         }
+        if (isEmbolden) width += str.codePoints().count().toFloat() * size * 0.02f
         return width
     }
 

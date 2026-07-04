@@ -105,7 +105,11 @@ object TextBridge {
             else -> return null
         }
 
-        val scaler = GlyphScaler.fromBytes(fontBytes)
+        val scaler = try {
+            GlyphScaler.fromBytes(fontBytes)
+        } catch (_: Exception) {
+            return null
+        }
         val rasterizer = A8Rasterizer()
         val planner = GlyphAtlasUploadPlanner()
 

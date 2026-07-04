@@ -19,6 +19,7 @@ import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.gpu.renderer.execution.GPUOffscreenTargetRequest
 import org.graphiks.kanvas.gpu.renderer.geometry.PathData
 import org.graphiks.kanvas.gpu.renderer.geometry.PathTessellator
+import org.graphiks.kanvas.gpu.renderer.geometry.PathVerb as GpuPathVerb
 import org.graphiks.kanvas.gpu.renderer.geometry.Point
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.image.ColorType
@@ -30,7 +31,15 @@ import org.graphiks.kanvas.surface.RenderStats
 import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.types.PointMode
 import org.graphiks.kanvas.types.Rect
+import org.graphiks.kanvas.font.colr.COLRPaintNode
+import org.graphiks.kanvas.font.colr.COLRV1ColorLineExtend
+import org.graphiks.kanvas.font.scaler.GlyphRepresentation
+import org.graphiks.kanvas.font.scaler.GlyphScaler
+import org.graphiks.kanvas.font.scaler.OutlineCommand
+import org.graphiks.kanvas.paint.TileMode
+import org.graphiks.kanvas.text.FontTypeface
 import org.graphiks.kanvas.text.GpuTextBlob
+import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.text.TextBridge
 
 internal fun renderViaGpu(
@@ -124,7 +133,145 @@ internal fun renderViaGpu(
                 }
             }
 
+            fun drawGlyphPath(
+                commands: List<OutlineCommand>,
+                offsetX: Float,
+                offsetY: Float,
+                color: Color,
+                op: DisplayOp.DrawText,
+                cmdId: GPUDrawCommandID,
+            ) {
+                val verbs = mutableListOf<GpuPathVerb>()
+                for (cmd in commands) {
+                    when (cmd) {
+                        is OutlineCommand.MoveTo -> verbs.add(GpuPathVerb.MoveTo(Point(cmd.x.toFloat() + offsetX, cmd.y.toFloat() + offsetY)))
+                        is OutlineCommand.LineTo -> verbs.add(GpuPathVerb.LineTo(Point(cmd.x.toFloat() + offsetX, cmd.y.toFloat() + offsetY)))
+                        is OutlineCommand.QuadraticTo -> verbs.add(GpuPathVerb.QuadTo(
+                            Point(cmd.controlX.toFloat() + offsetX, cmd.controlY.toFloat() + offsetY),
+                            Point(cmd.x.toFloat() + offsetX, cmd.y.toFloat() + offsetY)))
+                        is OutlineCommand.CubicTo -> verbs.add(GpuPathVerb.CubicTo(
+                            Point(cmd.controlX1.toFloat() + offsetX, cmd.controlY1.toFloat() + offsetY),
+                            Point(cmd.controlX2.toFloat() + offsetX, cmd.controlY2.toFloat() + offsetY),
+                            Point(cmd.x.toFloat() + offsetX, cmd.y.toFloat() + offsetY)))
+                        is OutlineCommand.Close -> verbs.add(GpuPathVerb.Close)
+                    }
+                }
+                val pathData = PathData(verbs, emptyList())
+                val tessellator = PathTessellator(
+                    tolerance = config.curveTolerance,
+                    maxVertices = config.maxPathVertices.toInt(),
+                )
+                val flat = tessellator.flatten(pathData)
+                if (flat.size < 3) return
+                val tri = tessellator.triangulate(flat)
+                val vertices = tri.vertices.flatMap { listOf(it.x, it.y) }
+                val syntheticOp = DisplayOp.DrawPath(
+                    path = Path { },
+                    paint = org.graphiks.kanvas.paint.Paint(color = color),
+                    transform = op.transform,
+                    clip = op.clip,
+                )
+                val cmd = syntheticOp.toNormalizedCommand(cmdId, targets, vertices, listOf(0), flat.size)
+                t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
+                    dispatchFillPath(cmd, dispatched, diagnostics, width, height, config)
+                }
+            }
 
+            fun dispatchColrV1Node(
+                node: COLRPaintNode,
+                scaler: GlyphScaler,
+                fontSize: Float,
+                posX: Float,
+                posY: Float,
+                op: DisplayOp.DrawText,
+                cmdId: GPUDrawCommandID,
+            ) {
+                val kind = node.kind
+                when {
+                    // Leaf: render the glyph outline at its raw position.
+                    // The paint graph from paintGraphForGlyph is pre-flattened;
+                    // parent containers (layers, transforms, composites) appear
+                    // as structural passthrough nodes without accumulated matrices.
+                    kind == "colr-v1-paint-glyph" -> {
+                        val refGlyphId = node.glyphId
+                        if (refGlyphId == null) {
+                            diagnostics.degrade("degrade:drawText:${cmdId.value}", "drawText", "colrv1_glyph_no_ref")
+                            return
+                        }
+                        val scaled = scaler.scaleGlyph(refGlyphId, fontSize)
+                        if (scaled.commands.isEmpty()) return
+                        drawGlyphPath(scaled.commands, posX + op.x, posY + op.y, op.paint.color, op, cmdId)
+                    }
+                    kind == "colr-v1-paint-solid" -> {
+                        diagnostics.degrade("degrade:drawText:${cmdId.value}", "drawText", "colrv1_solid_palette_not_resolved")
+                    }
+                    kind == "colr-v1-paint-linear-gradient" ||
+                    kind == "colr-v1-paint-radial-gradient" -> {
+                        diagnostics.degrade("degrade:drawText:${cmdId.value}", "drawText", "colrv1_gradient_needs_paint_tree")
+                    }
+                    kind == "colr-v1-paint-sweep-gradient" -> {
+                        diagnostics.degrade("degrade:drawText:${cmdId.value}", "drawText", "colrv1_sweep_not_routed")
+                    }
+                    kind.startsWith("colr-v1-paint-translate") ||
+                    kind.startsWith("colr-v1-paint-scale") ||
+                    kind.startsWith("colr-v1-paint-rotate") ||
+                    kind.startsWith("colr-v1-paint-skew") ||
+                    kind == "colr-v1-paint-transform" ||
+                    kind.startsWith("colr-v1-paint-composite") ||
+                    kind == "colr-v1-paint-layers" ||
+                    kind == "colr-v1-paint-colr-glyph" ||
+                    kind == "colr-v1-glyph" -> { /* passthrough */ }
+                }
+            }
+
+            fun renderColorText(
+                op: DisplayOp.DrawText,
+                cmdId: GPUDrawCommandID,
+            ) {
+                val tf = op.blob.typeface as? FontTypeface ?: return
+                val scaler = tf.scaler ?: return
+
+                for (run in op.blob.glyphRuns) {
+                    for ((idx, gid) in run.glyphs.withIndex()) {
+                        val pos = run.positions[idx]
+                        val rep = scaler.getGlyphRepresentation(gid.toInt(), op.blob.fontSize) ?: continue
+
+                        when (rep) {
+                            is GlyphRepresentation.ColorLayersV1 -> {
+                                for (node in rep.paintGraph.nodes) {
+                                    dispatchColrV1Node(
+                                        node, scaler, op.blob.fontSize, pos.x, pos.y, op, cmdId,
+                                    )
+                                }
+                            }
+                            is GlyphRepresentation.ColorLayers -> {
+                                for (layer in rep.layers) {
+                                    val scaled = scaler.scaleGlyph(layer.glyphId, op.blob.fontSize)
+                                    if (scaled.commands.isEmpty()) continue
+                                    val color = Color.fromRGBA(
+                                        ((layer.paletteColorArgb shr 16) and 0xFF) / 255f,
+                                        ((layer.paletteColorArgb shr 8) and 0xFF) / 255f,
+                                        (layer.paletteColorArgb and 0xFF) / 255f,
+                                        ((layer.paletteColorArgb shr 24) and 0xFF) / 255f,
+                                    )
+                                    drawGlyphPath(scaled.commands, pos.x + op.x, pos.y + op.y, color, op, cmdId)
+                                }
+                            }
+                            is GlyphRepresentation.Bitmap -> {
+                                diagnostics.degrade("degrade:drawText:${cmdId.value}", "drawText", "bitmap_not_routed")
+                            }
+                            else -> {}
+                        }
+                    }
+                }
+            }
+
+            fun extendToTileMode(extend: COLRV1ColorLineExtend?): TileMode = when (extend) {
+                COLRV1ColorLineExtend.PAD -> TileMode.CLAMP
+                COLRV1ColorLineExtend.REPEAT -> TileMode.REPEAT
+                COLRV1ColorLineExtend.REFLECT -> TileMode.MIRROR
+                null -> TileMode.CLAMP
+            }
 
             val textureCache = mutableMapOf<String, ByteArray>()
             fun cachePixels(image: org.graphiks.kanvas.image.Image) {
@@ -221,6 +368,11 @@ internal fun renderViaGpu(
                         sceneHasContent = true
                     }
                     is DisplayOp.DrawText -> {
+                        if (hasColorGlyphs(op.blob)) {
+                            renderColorText(op, cmdId)
+                            sceneHasContent = true
+                            continue
+                        }
                         val gpuBlob = TextBridge.rasterize(op.blob)
                         if (gpuBlob != null) {
                             val cmd = op.toNormalizedCommand(cmdId, targets)
@@ -584,6 +736,11 @@ internal fun renderViaGpu(
                                     diagnostics.degrade("unimplemented:drawPicture:nested:${nestedCmdId.value}", "drawPicture", "gpu_nested_mesh_unimplemented")
                                 }
                                 is DisplayOp.DrawText -> {
+                                    if (hasColorGlyphs(nestedOp.blob)) {
+                                        renderColorText(nestedOp, nestedCmdId)
+                                        sceneHasContent = true
+                                        continue
+                                    }
                                     val gpuBlob = TextBridge.rasterize(nestedOp.blob)
                                     if (gpuBlob != null) {
                                         val cmd = nestedOp.toNormalizedCommand(nestedCmdId, targets)
@@ -913,6 +1070,20 @@ private fun computeAtlasDst(texRect: Rect, xform: Matrix33): Rect {
     val r = maxOf(x0, x1, x2, x3)
     val b = maxOf(y0, y1, y2, y3)
     return Rect.fromLTRB(l, t, r, b)
+}
+
+private fun hasColorGlyphs(blob: TextBlob): Boolean {
+    val tf = blob.typeface as? FontTypeface ?: return false
+    val scaler = tf.scaler ?: return false
+    // Shortcut: check table presence instead of scaling every glyph
+    if (!scaler.hasAnyColorTable) return false
+    for (run in blob.glyphRuns) {
+        for (gid in run.glyphs) {
+            val rep = scaler.getGlyphRepresentation(gid.toInt(), blob.fontSize)
+            if (rep is GlyphRepresentation.ColorLayers || rep is GlyphRepresentation.Bitmap || rep is GlyphRepresentation.ColorLayersV1) return true
+        }
+    }
+    return false
 }
 
 /** Dispatch text atlas pass from a rasterized [GpuTextBlob]. */

@@ -10,6 +10,7 @@ dependencies {
     implementation(project(":math"))
     implementation(project(":codec:api"))
     implementation(project(":font"))
+    implementation(project(":font:colr"))
     api("org.graphiks:wgsl-core-jvm:1.0.0-SNAPSHOT")
     api("org.graphiks:wgsl-parser-jvm:1.0.0-SNAPSHOT")
     testImplementation(kotlin("test"))

@@ -249,6 +249,9 @@ org.graphiks.kanvas.skia.gm.text.BigTextGm
 org.graphiks.kanvas.skia.gm.text.BlobRSXformDistortableGm
 org.graphiks.kanvas.skia.gm.text.BlobRSXformGm
 org.graphiks.kanvas.skia.gm.text.ChromeGradText2Gm
+org.graphiks.kanvas.skia.gm.text.ColrV1Gm
+org.graphiks.kanvas.skia.gm.text.ColoremojiBlendmodesGm
+org.graphiks.kanvas.skia.gm.text.ColorEmojiGm
 org.graphiks.kanvas.skia.gm.text.DfTextGm
 org.graphiks.kanvas.skia.gm.text.GammashadertextGm
 org.graphiks.kanvas.skia.gm.text.GammatextColorShaderGm
@@ -258,6 +261,10 @@ org.graphiks.kanvas.skia.gm.text.GradTextGm
 org.graphiks.kanvas.skia.gm.text.MixedTextBlobsGm
 org.graphiks.kanvas.skia.gm.text.OverdrawTextXformGm
 org.graphiks.kanvas.skia.gm.text.PerspTextGm
+org.graphiks.kanvas.skia.gm.text.ScaledEmojiPerspectiveGm
+org.graphiks.kanvas.skia.gm.text.ScaledEmojiPosGm
+org.graphiks.kanvas.skia.gm.text.ScaledemojiGm
+org.graphiks.kanvas.skia.gm.text.ScaledemojiRenderingGm
 org.graphiks.kanvas.skia.gm.text.ShaderText3Gm
 org.graphiks.kanvas.skia.gm.text.StrokeTextGm
 org.graphiks.kanvas.skia.gm.text.TextBlobBlockReorderingGm
