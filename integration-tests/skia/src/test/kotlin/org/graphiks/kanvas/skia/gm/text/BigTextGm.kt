@@ -26,7 +26,13 @@ class BigTextGm : SkiaGm {
         val font = Font(typeface, size = 1500f)
         val textWidth = font.measureText("/")
         val posX = width / 2f - textWidth / 2f
-        val posY = height / 2f + 1500f / 3f
+
+        // Match Skia's font.measureText(text, &bounds)→pos = height/2 - bounds.centerY()
+        // In Kanvas: ascent > 0 (above baseline), descent < 0 (below baseline)
+        // Equivalent centerY = -(ascent + descent) / 2 → posY = height/2 - centerY
+        val metrics = font.getMetrics()
+        val centerY = -((metrics?.ascent ?: 1200f) + (metrics?.descent ?: -300f)) / 2f
+        val posY = height / 2f - centerY
 
         canvas.drawString("/", posX, posY, font, Paint(color = Color.RED))
         canvas.drawString("\\", posX, posY, font, Paint(color = Color.BLUE))

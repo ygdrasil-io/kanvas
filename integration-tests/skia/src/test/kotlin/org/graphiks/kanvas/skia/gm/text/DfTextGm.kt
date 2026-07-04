@@ -30,6 +30,11 @@ class DfTextGm : SkiaGm {
 
     private val typeface = Typefaces.fromResource("fonts/LiberationSans-Regular.ttf")!!
 
+    private fun fontHeight(font: Font): Float {
+        val m = font.getMetrics()
+        return if (m != null) m.ascent - m.descent else font.size * 1.2f
+    }
+
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         canvas.drawColor(r = 1f, g = 1f, b = 1f)
 
@@ -49,7 +54,7 @@ class DfTextGm : SkiaGm {
             font = font.copy(size = textSizes[i])
             canvas.drawSimpleText(text, 0f, 0f, font, Paint(antiAlias = true))
             canvas.restore()
-            y += font.size * 1.2f * scales[i]
+            y += fontHeight(font) * scales[i]
         }
 
         // ─── 2. Rotation ──────────────────────────────────────────────
@@ -67,7 +72,7 @@ class DfTextGm : SkiaGm {
                 canvas.translate(-rotX, -rotY)
                 canvas.drawSimpleText(text, rotX, rotY, font, Paint(antiAlias = true))
                 canvas.restore()
-                rotY += font.size * 1.2f
+                rotY += fontHeight(font)
                 ps += 3
             }
             canvas.restore()
@@ -86,8 +91,7 @@ class DfTextGm : SkiaGm {
             font = font.copy(size = textSizes[i])
             canvas.drawSimpleText(text, 0f, 0f, font, Paint(antiAlias = true))
             canvas.restore()
-            val scaleFactor2 = 1f / scales[arraySize - i - 1]
-            y += font.size * 1.2f * scaleFactor2
+            y += fontHeight(font) * scaleFactor
         }
 
         // ─── 4. Positioned glyph blob ─────────────────────────────────
@@ -131,7 +135,7 @@ class DfTextGm : SkiaGm {
         font = font.copy(size = 19f)
         for (color in fgColors) {
             canvas.drawSimpleText(text, x, y, font, Paint(color = color))
-            y += font.size * 1.2f
+            y += fontHeight(font)
         }
 
         rect = Rect.fromLTRB(820f, 215f, 970f, 397f)
@@ -142,7 +146,7 @@ class DfTextGm : SkiaGm {
         font = font.copy(size = 19f)
         for (color in fgColors) {
             canvas.drawSimpleText(text, x, y, font, Paint(color = color))
-            y += font.size * 1.2f
+            y += fontHeight(font)
         }
 
         // ─── 6. Skew ──────────────────────────────────────────────────
