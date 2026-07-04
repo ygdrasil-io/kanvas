@@ -121,10 +121,10 @@ object TextBridge {
         for (run in blob.glyphRuns) {
             for (glyphId in run.glyphs) {
                 try {
-                    val scaled = scaler.scaleGlyph(glyphId.toInt(), blob.fontSize)
+                    val scaled = scaler.scaleGlyph(glyphId.toInt(), run.fontSize)
                     val bitmap = rasterizer.rasterize(scaled)
                     if (bitmap != null) {
-                        val key = GlyphStrikeKey(glyphId.toInt(), blob.fontSize, 0, 0)
+                        val key = GlyphStrikeKey(glyphId.toInt(), run.fontSize, 0, 0)
                         glyphIndexToEntry[globalIdx] = entries.size
                         entries.add(key to bitmap)
                     }
