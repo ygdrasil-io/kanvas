@@ -34,16 +34,16 @@ class TextBlobTransformsGm : SkiaGm {
         val textB = "B"
         val textC = "C"
 
-        val blobA = fontA.toTextBlob(textA, 0f, 0f)
+        // Match C++: measure "A" at 162pt for xOffset, "B" at 72pt for yOffset
         val widthA = fontA.measureText(textA)
-        val heightA = fontA.size * 1.2f
+        val metricsB = fontB.getMetrics()
+        val heightB = if (metricsB != null) metricsB.ascent - metricsB.descent else fontB.size * 1.2f
 
+        val blobA = fontA.toTextBlob(textA, 0f, 0f)
         val blobB = fontB.toTextBlob(textB, widthA + 5f, 0f)
-        val heightB = fontB.size * 1.2f
-
         val blobC = fontC.toTextBlob(textC, widthA + 5f, -heightB - 10f)
 
-        // Merge into one blob
+        // Merge into one blob (matching C++ single-blob construction)
         val allRuns = mutableListOf<org.graphiks.kanvas.text.KanvasGlyphRun>()
         allRuns.addAll(blobA.glyphRuns)
         allRuns.addAll(blobB.glyphRuns)
@@ -57,11 +57,13 @@ class TextBlobTransformsGm : SkiaGm {
 
         val paint = Paint()
 
-        // Compute approx blob bounds
-        val blobW = widthA + 5f + fontB.measureText(textB)
-        val blobH = maxOf(heightA, heightB) + 10f
-        val xOffset = ceil(blobW)
-        val yOffset = ceil(blobH)
+        // Use blob bounds for layout xOffset/yOffset, matching C++:
+        //   SkRect bounds = fBlob->bounds();
+        //   xOffset = SkScalarCeilToScalar(bounds.width());
+        //   yOffset = SkScalarCeilToScalar(bounds.height());
+        val bounds = blob.computeBounds(typeface)
+        val xOffset = ceil(bounds.width)
+        val yOffset = ceil(bounds.height)
 
         canvas.translate(20f, 20f)
 
