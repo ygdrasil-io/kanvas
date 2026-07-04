@@ -96,10 +96,10 @@ enum class COLRV1CompositeMode(val fontValue: Int, val graphSuffix: String) {
 /**
  * Renderer-neutral subset of COLR version 1 paint operations parsed by the pure Kotlin font stack.
  *
- * The supported subset is intentionally bounded: solid paints, glyph paints, layer groups,
- * gradients, PaintColrGlyph references, composites, translations, and affine transforms. Scale,
- * rotate, skew, and other COLRv1 paint formats currently make [COLRV1Parser.parse] return `null`
- * instead of producing a partial or misleading graph.
+ * The supported subset includes: solid paints, glyph paints, layer groups,
+ * gradients, PaintColrGlyph references, composites, translations, affine
+ * transforms, scale, rotate, and skew. Var* variants for variable fonts are
+ * parsed but rejected at the planner level with a diagnostic.
  */
 sealed interface COLRV1Paint {
     /**

@@ -151,7 +151,7 @@ class ColorEmojiGm : SkiaGm {
             val dimTextPaint = Paint(color = Color.fromRGBA(0f, 0f, 0f, 0.125f))
             canvas.drawSimpleText(text, 0f, 0f, clipFont, dimTextPaint)
             canvas.clipRect(clipRect)
-            canvas.drawSimpleText(text, 0f, 0f, clipFont, Paint())
+            canvas.drawSimpleText(text, 0f, 0f, clipFont, Paint(color = Color.BLACK))
             canvas.restore()
             canvas.translate(0f, 25f)
         }
@@ -170,7 +170,7 @@ class ColorEmojiGm : SkiaGm {
         tileMode = TileMode.CLAMP,
     )
 
-    private fun makeGrayscale(input: ImageFilter?): ImageFilter? {
+    private fun makeGrayscale(input: ImageFilter?): ImageFilter {
         val matrix = floatArrayOf(
             0.2126f, 0.7152f, 0.0722f, 0f, 0f,
             0.2126f, 0.7152f, 0.0722f, 0f, 0f,

@@ -7,7 +7,7 @@ data class Font(
     val size: Float = 12f,
     val antiAlias: Boolean = true,
     val subpixel: Boolean = true,
-    val isEmbolden: Boolean = false,
+    val isEmbolden: Boolean = false,  // applied per-codepoint; ZWJ clusters get multiple increments
 ) {
     fun getMetrics(): FontMetrics? {
         if (typeface !is FontTypeface) return null

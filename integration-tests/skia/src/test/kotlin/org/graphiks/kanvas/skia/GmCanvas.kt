@@ -375,6 +375,8 @@ class GmCanvas(
         drawString(text, x, y, font, paint)
     }
 
+    /** Draw individual glyphs at explicit positions. Renders monochrome outlines
+     * via the path pipeline; color glyph layers require the GPU text pipeline. */
     fun drawGlyphs(glyphIds: List<Int>, positions: List<Point>, font: Font, paint: Paint) {
         require(glyphIds.size == positions.size)
         for (i in glyphIds.indices) {

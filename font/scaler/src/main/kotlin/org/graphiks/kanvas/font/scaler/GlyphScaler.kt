@@ -59,12 +59,18 @@ class GlyphScaler private constructor(
     private val cmap: CmapSubtable
     private val advanceWidths: IntArray
     private val glyphOffsets: IntArray
+    /** Legacy CPAL parse — palette 0 only, used by [parseColrV0]. */
     private val cpalPalette: IntArray?
     private val colrV0BaseGlyphs: Map<Int, List<ColorLayerEntry>>?
     private val sbixGlyphs: Map<Int, GlyphRepresentation.Bitmap>?
     private val cblcStrikes: List<CblcStrike>?
     internal val colrV1Table: COLRV1Table?
     internal val cpalMultiTable: CPALTable?
+
+    /** True when any color glyph table is present — avoids O(n) glyph scan in [hasColorGlyphs]. */
+    val hasAnyColorTable: Boolean by lazy {
+        colrV0BaseGlyphs != null || colrV1Table != null || cblcStrikes != null || sbixGlyphs != null
+    }
 
     init {
         tables = parseTableDirectory()
@@ -326,21 +332,28 @@ class GlyphScaler private constructor(
         val palette = cpalPalette ?: return null
         val bytes = fontBytes
         val off = colrTable.offset
+        val tableEnd = off + colrTable.length
         val version = u16(bytes, off)
         if (version != 0) return null
         val numBaseGlyphRecords = u16(bytes, off + 2)
         val baseGlyphRecordsOffset = u32(bytes, off + 4).toInt()
         val layerRecordsOffset = u32(bytes, off + 8).toInt()
         val numLayerRecords = u16(bytes, off + 12)
+        // Bounds: record offsets must lie within the COLR table
+        if (baseGlyphRecordsOffset < 0 || baseGlyphRecordsOffset + numBaseGlyphRecords * 6 > colrTable.length) return null
+        if (layerRecordsOffset < 0 || layerRecordsOffset + numLayerRecords * 4 > colrTable.length) return null
         val result = mutableMapOf<Int, List<ColorLayerEntry>>()
         for (i in 0 until numBaseGlyphRecords) {
-            val baseOff = colrTable.offset + baseGlyphRecordsOffset + i * 6
+            val baseOff = off + baseGlyphRecordsOffset + i * 6
+            if (baseOff + 6 > tableEnd) break
             val glyphId = u16(bytes, baseOff)
             val firstLayerIndex = u16(bytes, baseOff + 2)
             val numLayers = u16(bytes, baseOff + 4)
             val layers = mutableListOf<ColorLayerEntry>()
             for (j in 0 until numLayers) {
-                val layerOff = colrTable.offset + layerRecordsOffset + (firstLayerIndex + j) * 4
+                if (firstLayerIndex + j >= numLayerRecords) break
+                val layerOff = off + layerRecordsOffset + (firstLayerIndex + j) * 4
+                if (layerOff + 4 > tableEnd) break
                 val layerGlyphId = u16(bytes, layerOff)
                 val paletteIndex = u16(bytes, layerOff + 2)
                 val argb = if (paletteIndex < palette.size) palette[paletteIndex] else 0xFF000000.toInt()
@@ -444,7 +457,9 @@ class GlyphScaler private constructor(
                     if (cbdtOff + 6 > bytes.size) continue
                     val format = u16(bytes, cbdtOff + 4)
                     if (format != 17 && format != 18 && format != 19) continue
-                    val pngLen = u32(bytes, cbdtOff).toInt() - 8
+                    val totalLen = u32(bytes, cbdtOff)
+                    if (totalLen < 8L) continue // avoid underflow
+                    val pngLen = totalLen.toInt() - 8
                     if (cbdtOff + 8 + pngLen > bytes.size || pngLen <= 0) continue
                     val pngData = bytes.copyOfRange(cbdtOff + 8, cbdtOff + 8 + pngLen)
                     glyphBitmaps[gid] = GlyphRepresentation.Bitmap(

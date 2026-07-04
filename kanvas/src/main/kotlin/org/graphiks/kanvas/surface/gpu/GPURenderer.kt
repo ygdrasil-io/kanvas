@@ -188,6 +188,10 @@ internal fun renderViaGpu(
             ) {
                 val kind = node.kind
                 when {
+                    // Leaf: render the glyph outline at its raw position.
+                    // The paint graph from paintGraphForGlyph is pre-flattened;
+                    // parent containers (layers, transforms, composites) appear
+                    // as structural passthrough nodes without accumulated matrices.
                     kind == "colr-v1-paint-glyph" -> {
                         val refGlyphId = node.glyphId
                         if (refGlyphId == null) {
@@ -1071,6 +1075,8 @@ private fun computeAtlasDst(texRect: Rect, xform: Matrix33): Rect {
 private fun hasColorGlyphs(blob: TextBlob): Boolean {
     val tf = blob.typeface as? FontTypeface ?: return false
     val scaler = tf.scaler ?: return false
+    // Shortcut: check table presence instead of scaling every glyph
+    if (!scaler.hasAnyColorTable) return false
     for (run in blob.glyphRuns) {
         for (gid in run.glyphs) {
             val rep = scaler.getGlyphRepresentation(gid.toInt(), blob.fontSize)
