@@ -41,6 +41,7 @@ import org.graphiks.kanvas.text.FontTypeface
 import org.graphiks.kanvas.text.GpuTextBlob
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.text.TextBridge
+import kotlin.math.abs
 
 internal fun renderViaGpu(
     buffer: DisplayListBuffer,
@@ -373,11 +374,18 @@ internal fun renderViaGpu(
                             sceneHasContent = true
                             continue
                         }
-                        val gpuBlob = TextBridge.rasterize(op.blob)
+                        val cmd = op.toNormalizedCommand(cmdId, targets)
+                        if (cmd.blend.requiresDestinationRead) {
+                            diagnostics.fatal("refuse:drawText:${cmdId.value}", "drawText", "unsupported_blend:advanced")
+                            continue
+                        }
+                        val ctmScale = ctmEffectiveScale(op.transform)
+                        val rasterBlob = op.blob.scaledForRasterization(ctmScale)
+                        var gpuBlob = TextBridge.rasterize(rasterBlob)
                         if (gpuBlob != null) {
-                            val cmd = op.toNormalizedCommand(cmdId, targets)
+                            gpuBlob = gpuBlob.normalizeGlyphRects(ctmScale)
                             t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
-                                drawTextAtlasPass(gpuBlob, cmd.blend.blendMode, dispatched, diagnostics, textColor = op.paint.color, targetWidth = width, targetHeight = height)
+                                drawTextAtlasPass(gpuBlob, cmd.blend.blendMode, dispatched, diagnostics, textColor = resolveTextColor(op.paint), targetWidth = width, targetHeight = height, transform = op.transform)
                             }
                             sceneHasContent = true
                         } else {
@@ -741,11 +749,18 @@ internal fun renderViaGpu(
                                         sceneHasContent = true
                                         continue
                                     }
-                                    val gpuBlob = TextBridge.rasterize(nestedOp.blob)
+                                    val cmd = nestedOp.toNormalizedCommand(nestedCmdId, targets)
+                                    if (cmd.blend.requiresDestinationRead) {
+                                        diagnostics.fatal("refuse:drawPicture:nested:${nestedCmdId.value}", "drawPicture", "unsupported_blend:advanced")
+                                        continue
+                                    }
+                                    val ctmScale = ctmEffectiveScale(nestedOp.transform)
+                                    val rasterBlob = nestedOp.blob.scaledForRasterization(ctmScale)
+                                    var gpuBlob = TextBridge.rasterize(rasterBlob)
                                     if (gpuBlob != null) {
-                                        val cmd = nestedOp.toNormalizedCommand(nestedCmdId, targets)
+                                        gpuBlob = gpuBlob.normalizeGlyphRects(ctmScale)
                                         t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
-                                            drawTextAtlasPass(gpuBlob, cmd.blend.blendMode, dispatched, diagnostics, textColor = nestedOp.paint.color, targetWidth = width, targetHeight = height)
+                                            drawTextAtlasPass(gpuBlob, cmd.blend.blendMode, dispatched, diagnostics, textColor = resolveTextColor(nestedOp.paint), targetWidth = width, targetHeight = height, transform = nestedOp.transform)
                                         }
                                         sceneHasContent = true
                                     } else {
@@ -1095,12 +1110,20 @@ private fun GPUBackendRenderRecorder.drawTextAtlasPass(
     textColor: Color = Color.BLACK,
     targetWidth: Int = 0,
     targetHeight: Int = 0,
+    transform: Matrix33? = null,
 ) {
     val blob = gpuBlob.textBlob
     val uvs = gpuBlob.glyphUvs
     val vertexData = mutableListOf<Float>()
     val indexData = mutableListOf<Int>()
     var quadIndex = 0
+    val hasXform = transform != null
+    val sx = transform?.scaleX ?: 1f
+    val kx = transform?.skewX ?: 0f
+    val tx = transform?.transX ?: 0f
+    val ky = transform?.skewY ?: 0f
+    val sy = transform?.scaleY ?: 1f
+    val ty = transform?.transY ?: 0f
 
     // Build one quad (4 vertices, 6 indices) per glyph
     for (run in blob.glyphRuns) {
@@ -1110,10 +1133,25 @@ private fun GPUBackendRenderRecorder.drawTextAtlasPass(
             val w = glyphRect.width
             val h = glyphRect.height
             // Quad vertices: position (x,y) + texCoord (u,v)
-            vertexData.addAll(listOf(pos.x,     pos.y,      uv.left,  uv.top))
-            vertexData.addAll(listOf(pos.x + w, pos.y,      uv.right, uv.top))
-            vertexData.addAll(listOf(pos.x + w, pos.y + h,  uv.right, uv.bottom))
-            vertexData.addAll(listOf(pos.x,     pos.y + h,  uv.left,  uv.bottom))
+            if (hasXform) {
+                val x0 = sx * pos.x + kx * pos.y + tx
+                val y0 = ky * pos.x + sy * pos.y + ty
+                val x1 = sx * (pos.x + w) + kx * pos.y + tx
+                val y1 = ky * (pos.x + w) + sy * pos.y + ty
+                val x2 = sx * (pos.x + w) + kx * (pos.y + h) + tx
+                val y2 = ky * (pos.x + w) + sy * (pos.y + h) + ty
+                val x3 = sx * pos.x + kx * (pos.y + h) + tx
+                val y3 = ky * pos.x + sy * (pos.y + h) + ty
+                vertexData.addAll(listOf(x0, y0, uv.left,  uv.top))
+                vertexData.addAll(listOf(x1, y1, uv.right, uv.top))
+                vertexData.addAll(listOf(x2, y2, uv.right, uv.bottom))
+                vertexData.addAll(listOf(x3, y3, uv.left,  uv.bottom))
+            } else {
+                vertexData.addAll(listOf(pos.x,     pos.y,      uv.left,  uv.top))
+                vertexData.addAll(listOf(pos.x + w, pos.y,      uv.right, uv.top))
+                vertexData.addAll(listOf(pos.x + w, pos.y + h,  uv.right, uv.bottom))
+                vertexData.addAll(listOf(pos.x,     pos.y + h,  uv.left,  uv.bottom))
+            }
             val base = quadIndex * 4
             indexData.addAll(listOf(base, base + 1, base + 2, base, base + 2, base + 3))
             quadIndex++
@@ -1170,6 +1208,20 @@ private fun GPUBackendRenderRecorder.drawTextAtlasPass(
     dispatched.add("text:${blob.hashCode()}")
 }
 
+private fun resolveTextColor(paint: org.graphiks.kanvas.paint.Paint): Color {
+    val shader = paint.shader ?: return paint.color
+    return extractSolidShaderColor(shader) ?: paint.color
+}
+
+private fun extractSolidShaderColor(shader: Shader): Color? = when (shader) {
+    is Shader.SolidColor -> shader.color
+    is Shader.WithLocalMatrix -> extractSolidShaderColor(shader.shader)
+    is Shader.WithColorFilter -> extractSolidShaderColor(shader.shader)
+    is Shader.WithWorkingColorSpace -> extractSolidShaderColor(shader.shader)
+    is Shader.CoordClamp -> extractSolidShaderColor(shader.shader)
+    else -> null
+}
+
 private fun expandToRgba(image: org.graphiks.kanvas.image.Image, pixels: ByteArray): ByteArray {
     if (image.colorType == ColorType.RGBA_8888 || image.colorType == ColorType.BGRA_8888) return pixels
     if (image.colorType == ColorType.ALPHA_8) {
@@ -1184,4 +1236,33 @@ private fun expandToRgba(image: org.graphiks.kanvas.image.Image, pixels: ByteArr
         return rgba
     }
     return pixels
+}
+
+/** Extract the effective scale for text rasterization from a CTM. */
+private fun ctmEffectiveScale(transform: Matrix33): Float {
+    return maxOf(abs(transform.scaleX), abs(transform.scaleY), 1f)
+}
+
+/** Create a [TextBlob] with fontSize scaled by [scale] for higher-resolution rasterization. */
+private fun TextBlob.scaledForRasterization(scale: Float): TextBlob {
+    if (scale <= 1f || fontSize <= 0f) return this
+    val efSize = maxOf(fontSize * scale, 1f)
+    return copy(
+        fontSize = efSize,
+        glyphRuns = glyphRuns.map { it.copy(fontSize = efSize) },
+    )
+}
+
+/**
+ * Rescale glyphRects back to design-space dimensions.
+ *
+ * When glyphs are rasterized at a CTM-scaled font size, the resulting bitmap rects
+ * are proportionally larger. This function reverses that so [drawTextAtlasPass]
+ * produces correct screen-space quads when it applies the CTM to the vertices.
+ */
+private fun GpuTextBlob.normalizeGlyphRects(scale: Float): GpuTextBlob {
+    if (scale <= 1f) return this
+    return copy(
+        glyphRects = glyphRects.map { Rect(0f, 0f, it.width / scale, it.height / scale) },
+    )
 }
