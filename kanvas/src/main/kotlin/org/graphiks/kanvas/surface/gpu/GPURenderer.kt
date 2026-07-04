@@ -1106,8 +1106,9 @@ private fun GPUBackendRenderRecorder.drawTextAtlasPass(
     for (run in blob.glyphRuns) {
         for ((glyphIdx, pos) in run.positions.withIndex()) {
             val uv = uvs.getOrNull(quadIndex) ?: Rect.fromLTRB(0f, 0f, 1f, 1f)
-            val w = 10f  // glyph width placeholder; real size comes from atlas placement
-            val h = 10f  // glyph height placeholder
+            val glyphRect = gpuBlob.glyphRects.getOrNull(quadIndex) ?: Rect(0f, 0f, 10f, 10f)
+            val w = glyphRect.width
+            val h = glyphRect.height
             // Quad vertices: position (x,y) + texCoord (u,v)
             vertexData.addAll(listOf(pos.x,     pos.y,      uv.left,  uv.top))
             vertexData.addAll(listOf(pos.x + w, pos.y,      uv.right, uv.top))
