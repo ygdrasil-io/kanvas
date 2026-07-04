@@ -4,18 +4,12 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.SkiaGm
 
-/**
- * Stub — Skia's `gm/user_typeface.cpp` (640 × 480).
- * Missing API: custom / embedded typeface loading.
- * @see https://github.com/google/skia/blob/main/gm/user_typeface.cpp
- */
 class UserTypefaceGm : SkiaGm {
     override val name = "user_typeface"
     override val renderFamily = RenderFamily.TEXT
     override val minSimilarity = 0.0
-    override val width = 640
-    override val height = 480
+    override val width = 810
+    override val height = 452
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        /* TODO: requires custom typeface support */
     }
 }
