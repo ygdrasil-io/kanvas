@@ -244,6 +244,7 @@ org.graphiks.kanvas.skia.gm.runtime_effect.SpiralRTGm
 org.graphiks.kanvas.skia.gm.runtime_effect.ThresholdRTGm
 org.graphiks.kanvas.skia.gm.runtime_effect.UnsharpRTGm
 org.graphiks.kanvas.skia.gm.runtime_effect.WorkingspaceGm
+org.graphiks.kanvas.skia.gm.text.AnnotatedTextGm
 org.graphiks.kanvas.skia.gm.text.BigTextCrbug1370488Gm
 org.graphiks.kanvas.skia.gm.text.BigTextGm
 org.graphiks.kanvas.skia.gm.text.BlobRSXformDistortableGm
@@ -266,6 +267,7 @@ org.graphiks.kanvas.skia.gm.text.ScaledEmojiPosGm
 org.graphiks.kanvas.skia.gm.text.ScaledemojiGm
 org.graphiks.kanvas.skia.gm.text.ScaledemojiRenderingGm
 org.graphiks.kanvas.skia.gm.text.ShaderText3Gm
+org.graphiks.kanvas.skia.gm.text.Skbug8955Gm
 org.graphiks.kanvas.skia.gm.text.StrokeTextGm
 org.graphiks.kanvas.skia.gm.text.TextBlobBlockReorderingGm
 org.graphiks.kanvas.skia.gm.text.TextBlobColorTransGm
@@ -280,3 +282,4 @@ org.graphiks.kanvas.skia.gm.text.TextEffectsGm
 org.graphiks.kanvas.skia.gm.text.TextFilterColorGm
 org.graphiks.kanvas.skia.gm.text.TextFilterImageGm
 org.graphiks.kanvas.skia.gm.text.TextScaleSkewGm
+org.graphiks.kanvas.skia.gm.text.TypefaceStylingGm
