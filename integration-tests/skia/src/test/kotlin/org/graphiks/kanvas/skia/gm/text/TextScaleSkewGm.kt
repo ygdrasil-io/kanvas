@@ -18,7 +18,7 @@ import org.graphiks.kanvas.types.Color
 open class TextScaleSkewGm : SkiaGm {
     override val name = "text_scale_skew"
     override val renderFamily = RenderFamily.TEXT
-    override val minSimilarity = 0.0
+    override val minSimilarity = 80.0
     override val width = 256
     override val height = 128
 

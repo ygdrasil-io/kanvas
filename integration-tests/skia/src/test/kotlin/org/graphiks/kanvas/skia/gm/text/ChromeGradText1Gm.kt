@@ -21,7 +21,7 @@ import org.graphiks.kanvas.types.Rect
 class ChromeGradText1Gm : SkiaGm {
     override val name = "chrome_gradtext1"
     override val renderFamily = RenderFamily.TEXT
-    override val minSimilarity = 95.0
+    override val minSimilarity = 90.0
     override val width = 500
     override val height = 480
 

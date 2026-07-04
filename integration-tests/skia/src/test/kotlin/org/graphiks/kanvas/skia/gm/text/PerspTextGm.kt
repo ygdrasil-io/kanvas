@@ -18,7 +18,7 @@ import org.graphiks.kanvas.types.Matrix33
 class PerspTextGm : SkiaGm {
     override val name = "persptext"
     override val renderFamily = RenderFamily.TEXT
-    override val minSimilarity = 0.0
+    override val minSimilarity = 90.0
     override val width = 1024
     override val height = 768
 

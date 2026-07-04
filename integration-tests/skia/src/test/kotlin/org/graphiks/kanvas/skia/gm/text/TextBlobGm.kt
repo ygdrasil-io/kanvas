@@ -22,7 +22,7 @@ import org.graphiks.kanvas.types.Rect
 class TextBlobGm : SkiaGm {
     override val name = "textblob"
     override val renderFamily = RenderFamily.TEXT
-    override val minSimilarity = 0.0
+    override val minSimilarity = 90.0
     override val width = 640
     override val height = 480
 

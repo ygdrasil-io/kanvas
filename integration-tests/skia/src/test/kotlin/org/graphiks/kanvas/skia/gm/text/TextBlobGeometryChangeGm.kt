@@ -18,7 +18,7 @@ import org.graphiks.kanvas.types.Rect
 class TextBlobGeometryChangeGm : SkiaGm {
     override val name = "textblobgeometrychange"
     override val renderFamily = RenderFamily.TEXT
-    override val minSimilarity = 0.0
+    override val minSimilarity = 90.0
     override val width = 200
     override val height = 200
 

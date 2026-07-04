@@ -10,8 +10,8 @@ import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.SkiaGm
+import org.graphiks.kanvas.text.EmojiTypeface
 import org.graphiks.kanvas.text.Font
-import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
@@ -57,13 +57,15 @@ class ColorEmojiGm : SkiaGm {
     override val width = 650
     override val height = 1200
 
-    private val fallbackTypeface = Typefaces.fromResource("fonts/LiberationSans-Regular.ttf")!!
+    private val emojiTypeface = EmojiTypeface.createOrFallback(
+        EmojiTypeface.Format.COLRv0, ByteArray(0),
+    )
     private val sampleText = "\uD83D\uDE00 \u2662"
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         canvas.drawColor(0.5f, 0.5f, 0.5f)
 
-        val font = Font(fallbackTypeface, antiAlias = false, subpixel = true)
+        val font = Font(emojiTypeface, antiAlias = false, subpixel = true)
         val text = sampleText
 
         // ── (1) size grid ──────────────────────────────────────

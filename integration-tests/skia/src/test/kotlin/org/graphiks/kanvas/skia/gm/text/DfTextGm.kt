@@ -24,7 +24,7 @@ import org.graphiks.kanvas.types.Rect
 class DfTextGm : SkiaGm {
     override val name = "dftext"
     override val renderFamily = RenderFamily.TEXT
-    override val minSimilarity = 0.0
+    override val minSimilarity = 75.0
     override val width = 1024
     override val height = 768
 
