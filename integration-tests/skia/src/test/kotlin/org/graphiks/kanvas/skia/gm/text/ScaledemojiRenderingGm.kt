@@ -4,8 +4,8 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.SkiaGm
+import org.graphiks.kanvas.text.EmojiTypeface
 import org.graphiks.kanvas.text.Font
-import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
 
 /**
@@ -42,33 +42,35 @@ class ScaledemojiRenderingGm : SkiaGm {
         val font: Font,
     )
 
-    private val fallbackTypeface = Typefaces.fromResource("fonts/LiberationSans-Regular.ttf")!!
+    private val emojiTypeface = EmojiTypeface.createOrFallback(
+        EmojiTypeface.Format.COLRv0, ByteArray(0),
+    )
 
     private val samples: Array<EmojiSample> = arrayOf(
         // Slot 0 — COLRv0
         EmojiSample(
             sampleText = "\uD83D\uDE00 \u2662",
-            font = Font(fallbackTypeface, antiAlias = false, subpixel = true),
+            font = Font(emojiTypeface, antiAlias = false, subpixel = true),
         ),
         // Slot 1 — Sbix
         EmojiSample(
             sampleText = "\uD83D\uDE00 \u2662",
-            font = Font(fallbackTypeface, antiAlias = false, subpixel = true),
+            font = Font(emojiTypeface, antiAlias = false, subpixel = true),
         ),
         // Slot 2 — CBDT
         EmojiSample(
             sampleText = "\uD83D\uDE00 \u2662",
-            font = Font(fallbackTypeface, antiAlias = false, subpixel = true),
+            font = Font(emojiTypeface, antiAlias = false, subpixel = true),
         ),
         // Slot 3 — Test
         EmojiSample(
             sampleText = "\uD83D\uDE00 \u2662",
-            font = Font(fallbackTypeface, antiAlias = false, subpixel = true),
+            font = Font(emojiTypeface, antiAlias = false, subpixel = true),
         ),
         // Slot 4 — SVG ("abcdefghij")
         EmojiSample(
             sampleText = "abcdefghij",
-            font = Font(fallbackTypeface, antiAlias = false, subpixel = true),
+            font = Font(emojiTypeface, antiAlias = false, subpixel = true),
         ),
     )
 

@@ -23,7 +23,7 @@ import kotlin.math.sin
 class BlobRSXformGm : SkiaGm {
     override val name = "blob_rsxform"
     override val renderFamily = RenderFamily.TEXT
-    override val minSimilarity = 0.0
+    override val minSimilarity = 20.0
     override val width = 500
     override val height = 100
 
@@ -50,7 +50,7 @@ class BlobRSXformGm : SkiaGm {
         }
 
         val blob = TextBlob(
-            glyphRuns = listOf(KanvasGlyphRun(glyphIds, positions)),
+            glyphRuns = listOf(KanvasGlyphRun(glyphIds, positions, fontSize = 50f)),
             typeface = typeface,
             fontSize = font.size,
         )

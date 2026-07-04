@@ -17,7 +17,7 @@ import org.graphiks.kanvas.types.Rect
 class OverdrawColorFilterGm : SkiaGm {
     override val name = "overdrawcolorfilter"
     override val renderFamily = RenderFamily.COMPOSITE
-    override val minSimilarity = 0.0
+    override val minSimilarity = 10.0
     override val width = 200
     override val height = 400
 

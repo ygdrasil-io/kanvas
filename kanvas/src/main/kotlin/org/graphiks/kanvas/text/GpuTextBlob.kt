@@ -19,6 +19,7 @@ data class GpuTextBlob(
     val atlasWidth: Int,
     val atlasHeight: Int,
     private val glyphUvData: List<Rect>? = null,
+    val glyphRects: List<Rect> = emptyList(),
 ) {
     /** Per-glyph UV coordinates into the atlas texture, computed by TextBridge. */
     val glyphUvs: List<Rect> by lazy {

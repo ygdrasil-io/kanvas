@@ -23,7 +23,7 @@ import kotlin.math.sin
 class TextBlobShaderGm : SkiaGm {
     override val name = "textblobshader"
     override val renderFamily = RenderFamily.TEXT
-    override val minSimilarity = 0.0
+    override val minSimilarity = 85.0
     override val width = 640
     override val height = 480
 

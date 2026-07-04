@@ -17,7 +17,7 @@ import org.graphiks.kanvas.types.Rect
 class TextBlobUseAfterGpuFreeGm : SkiaGm {
     override val name = "textblobuseaftergpufree"
     override val renderFamily = RenderFamily.TEXT
-    override val minSimilarity = 0.0
+    override val minSimilarity = 90.0
     override val width = 200
     override val height = 200
 

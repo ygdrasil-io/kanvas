@@ -31,7 +31,7 @@ data class Font(
             cursorX += typeface.getAdvance(gid, size)
         }
         return TextBlob(
-            glyphRuns = listOf(KanvasGlyphRun(glyphIds, positions)),
+            glyphRuns = listOf(KanvasGlyphRun(glyphIds, positions, fontSize = size)),
             typeface = typeface,
             fontSize = size,
         )

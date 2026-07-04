@@ -47,6 +47,7 @@ class TextBlobColorTransGm : SkiaGm {
             KanvasGlyphRun(
                 glyphs = run.glyphs,
                 positions = run.positions.map { Point(it.x, it.y + yOffset256 - 30f) },
+                fontSize = 28f,
             )
         }
         allRuns.addAll(offsetRuns)

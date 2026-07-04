@@ -13,6 +13,7 @@ import org.graphiks.kanvas.types.Rect
 data class KanvasGlyphRun(
     val glyphs: List<UShort>,
     val positions: List<Point>,
+    val fontSize: Float = 12f,
 )
 
 /**
