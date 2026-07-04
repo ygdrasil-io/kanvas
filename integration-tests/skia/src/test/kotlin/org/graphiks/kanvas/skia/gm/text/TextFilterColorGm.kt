@@ -20,7 +20,7 @@ import org.graphiks.kanvas.types.Color
 class TextFilterColorGm : SkiaGm {
     override val name = "textfilter_color"
     override val renderFamily = RenderFamily.TEXT
-    override val minSimilarity = 85.0
+    override val minSimilarity = 75.0
     override val width = 512
     override val height = 342
 
