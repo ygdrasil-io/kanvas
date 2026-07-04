@@ -179,6 +179,62 @@ internal fun renderViaGpu(
                 }
             }
 
+            fun renderShaderText(
+                op: DisplayOp.DrawText,
+                cmdId: GPUDrawCommandID,
+            ) {
+                val tf = op.blob.typeface as? FontTypeface ?: return
+                val scaler = tf.scaler ?: return
+
+                for (run in op.blob.glyphRuns) {
+                    for ((idx, gid) in run.glyphs.withIndex()) {
+                        val pos = run.positions[idx]
+                        val scaled = scaler.scaleGlyph(gid.toInt(), run.fontSize)
+                        if (scaled.commands.isEmpty()) continue
+
+                        val verbs = mutableListOf<GpuPathVerb>()
+                        for (cmd in scaled.commands) {
+                            when (cmd) {
+                                is OutlineCommand.MoveTo -> verbs.add(GpuPathVerb.MoveTo(Point(cmd.x.toFloat() + pos.x + op.x, cmd.y.toFloat() + pos.y + op.y)))
+                                is OutlineCommand.LineTo -> verbs.add(GpuPathVerb.LineTo(Point(cmd.x.toFloat() + pos.x + op.x, cmd.y.toFloat() + pos.y + op.y)))
+                                is OutlineCommand.QuadraticTo -> verbs.add(GpuPathVerb.QuadTo(
+                                    Point(cmd.controlX.toFloat() + pos.x + op.x, cmd.controlY.toFloat() + pos.y + op.y),
+                                    Point(cmd.x.toFloat() + pos.x + op.x, cmd.y.toFloat() + pos.y + op.y)))
+                                is OutlineCommand.CubicTo -> verbs.add(GpuPathVerb.CubicTo(
+                                    Point(cmd.controlX1.toFloat() + pos.x + op.x, cmd.controlY1.toFloat() + pos.y + op.y),
+                                    Point(cmd.controlX2.toFloat() + pos.x + op.x, cmd.controlY2.toFloat() + pos.y + op.y),
+                                    Point(cmd.x.toFloat() + pos.x + op.x, cmd.y.toFloat() + pos.y + op.y)))
+                                is OutlineCommand.Close -> verbs.add(GpuPathVerb.Close)
+                            }
+                        }
+                        val pathData = PathData(verbs, emptyList())
+                        val tessellator = PathTessellator(
+                            tolerance = config.curveTolerance,
+                            maxVertices = config.maxPathVertices.toInt(),
+                        )
+                        val flat = tessellator.flatten(pathData)
+                        if (flat.size < 3) continue
+                        val tri = tessellator.triangulate(flat)
+                        val vertices = tri.vertices.flatMap { listOf(it.x, it.y) }
+                        val syntheticOp = DisplayOp.DrawPath(
+                            path = Path { },
+                            paint = op.paint,
+                            transform = op.transform,
+                            clip = op.clip,
+                        )
+                        val glyphCmdId = GPUDrawCommandID(dispatched.size)
+                        val cmd = syntheticOp.toNormalizedCommand(glyphCmdId, targets, vertices, listOf(0), flat.size)
+                        if (cmd.blend.requiresDestinationRead) {
+                            diagnostics.fatal("refuse:drawText:shader:${glyphCmdId.value}", "drawText", "unsupported_blend:advanced")
+                            continue
+                        }
+                        t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
+                            dispatchFillPath(cmd, dispatched, diagnostics, width, height, config)
+                        }
+                    }
+                }
+            }
+
             fun dispatchColrV1Node(
                 node: COLRPaintNode,
                 scaler: GlyphScaler,
@@ -406,6 +462,11 @@ internal fun renderViaGpu(
                         sceneHasContent = true
                     }
                     is DisplayOp.DrawText -> {
+                        if (op.paint.shader != null && extractSolidShaderColor(op.paint.shader) == null) {
+                            renderShaderText(op, cmdId)
+                            sceneHasContent = true
+                            continue
+                        }
                         if (hasColorGlyphs(op.blob)) {
                             renderColorText(op, cmdId)
                             sceneHasContent = true
@@ -781,6 +842,11 @@ internal fun renderViaGpu(
                                     diagnostics.degrade("unimplemented:drawPicture:nested:${nestedCmdId.value}", "drawPicture", "gpu_nested_mesh_unimplemented")
                                 }
                                 is DisplayOp.DrawText -> {
+                                    if (nestedOp.paint.shader != null && extractSolidShaderColor(nestedOp.paint.shader) == null) {
+                                        renderShaderText(nestedOp, nestedCmdId)
+                                        sceneHasContent = true
+                                        continue
+                                    }
                                     if (hasColorGlyphs(nestedOp.blob)) {
                                         renderColorText(nestedOp, nestedCmdId)
                                         sceneHasContent = true
