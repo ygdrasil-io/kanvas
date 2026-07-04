@@ -8,15 +8,19 @@ object EmojiTypeface {
     }
 
     fun createOrFallback(format: Format, fontData: ByteArray): Typeface {
-        if (fontData.size < 12) {
-            return Typefaces.fromResource("fonts/LiberationSans-Regular.ttf")
-                ?: error("No fallback typeface available")
+        if (fontData.size >= 12) {
+            return try {
+                create(format, fontData)
+            } catch (_: Exception) {
+                loadFallback()
+            }
         }
-        return try {
-            create(format, fontData)
-        } catch (_: Exception) {
-            Typefaces.fromResource("fonts/LiberationSans-Regular.ttf")
-                ?: error("No fallback typeface available")
-        }
+        Typefaces.fromResource("fonts/Noto-COLRv1-noflags.ttf")?.let { return it }
+        return loadFallback()
+    }
+
+    private fun loadFallback(): Typeface {
+        return Typefaces.fromResource("fonts/LiberationSans-Regular.ttf")
+            ?: error("No fallback typeface available")
     }
 }

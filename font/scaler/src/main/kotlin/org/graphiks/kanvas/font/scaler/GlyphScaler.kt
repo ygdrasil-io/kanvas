@@ -61,6 +61,26 @@ class GlyphScaler private constructor(
     private val glyphOffsets: IntArray
     /** Legacy CPAL parse — palette 0 only, used by [parseColrV0]. */
     private val cpalPalette: IntArray?
+
+    /**
+     * Resolves a CPAL palette entry to a packed ARGB color.
+     *
+     * Checks the multi-palette [cpalMultiTable] (palette 0) first, then falls
+     * back to the legacy single-palette [cpalPalette]. Returns null when the
+     * index is out of range or no palette is available.
+     */
+    fun resolveCpalColor(paletteIndex: Int): Int? {
+        val multi = cpalMultiTable
+        if (multi != null) {
+            val colors = multi.palettes.getOrNull(0) ?: return null
+            return colors.getOrNull(paletteIndex)
+        }
+        val legacy = cpalPalette
+        if (legacy != null && paletteIndex in legacy.indices) {
+            return legacy[paletteIndex]
+        }
+        return null
+    }
     private val colrV0BaseGlyphs: Map<Int, List<ColorLayerEntry>>?
     private val sbixGlyphs: Map<Int, GlyphRepresentation.Bitmap>?
     private val cblcStrikes: List<CblcStrike>?

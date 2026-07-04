@@ -33,6 +33,7 @@ import org.graphiks.kanvas.types.PointMode
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.font.colr.COLRPaintNode
 import org.graphiks.kanvas.font.colr.COLRV1ColorLineExtend
+import org.graphiks.kanvas.font.colr.COLR_FOREGROUND_PALETTE_INDEX
 import org.graphiks.kanvas.font.scaler.GlyphRepresentation
 import org.graphiks.kanvas.font.scaler.GlyphScaler
 import org.graphiks.kanvas.font.scaler.OutlineCommand
@@ -186,13 +187,10 @@ internal fun renderViaGpu(
                 posY: Float,
                 op: DisplayOp.DrawText,
                 cmdId: GPUDrawCommandID,
+                solidColors: Map<Int, Color>,
             ) {
                 val kind = node.kind
                 when {
-                    // Leaf: render the glyph outline at its raw position.
-                    // The paint graph from paintGraphForGlyph is pre-flattened;
-                    // parent containers (layers, transforms, composites) appear
-                    // as structural passthrough nodes without accumulated matrices.
                     kind == "colr-v1-paint-glyph" -> {
                         val refGlyphId = node.glyphId
                         if (refGlyphId == null) {
@@ -201,11 +199,11 @@ internal fun renderViaGpu(
                         }
                         val scaled = scaler.scaleGlyph(refGlyphId, fontSize)
                         if (scaled.commands.isEmpty()) return
-                        drawGlyphPath(scaled.commands, posX + op.x, posY + op.y, op.paint.color, op, cmdId)
+                        val glyphColor = node.children.firstNotNullOfOrNull { solidColors[it] }
+                            ?: op.paint.color
+                        drawGlyphPath(scaled.commands, posX + op.x, posY + op.y, glyphColor, op, cmdId)
                     }
-                    kind == "colr-v1-paint-solid" -> {
-                        diagnostics.degrade("degrade:drawText:${cmdId.value}", "drawText", "colrv1_solid_palette_not_resolved")
-                    }
+                    kind == "colr-v1-paint-solid" -> { /* color resolved by parent glyph via solidColors */ }
                     kind == "colr-v1-paint-linear-gradient" ||
                     kind == "colr-v1-paint-radial-gradient" -> {
                         diagnostics.degrade("degrade:drawText:${cmdId.value}", "drawText", "colrv1_gradient_needs_paint_tree")
@@ -231,6 +229,27 @@ internal fun renderViaGpu(
             ) {
                 val tf = op.blob.typeface as? FontTypeface ?: return
                 val scaler = tf.scaler ?: return
+                val foregroundColor = op.paint.color
+
+                fun resolveSolidColors(nodes: List<COLRPaintNode>): Map<Int, Color> {
+                    val result = mutableMapOf<Int, Color>()
+                    for (n in nodes) {
+                        if (n.kind != "colr-v1-paint-solid") continue
+                        val pi = n.paletteIndex ?: continue
+                        if (pi == COLR_FOREGROUND_PALETTE_INDEX) {
+                            result[n.id] = foregroundColor
+                            continue
+                        }
+                        val argb = scaler.resolveCpalColor(pi) ?: continue
+                        result[n.id] = Color.fromRGBA(
+                            ((argb shr 16) and 0xFF) / 255f,
+                            ((argb shr 8) and 0xFF) / 255f,
+                            (argb and 0xFF) / 255f,
+                            ((argb shr 24) and 0xFF) / 255f,
+                        )
+                    }
+                    return result
+                }
 
                 for (run in op.blob.glyphRuns) {
                     for ((idx, gid) in run.glyphs.withIndex()) {
@@ -239,9 +258,10 @@ internal fun renderViaGpu(
 
                         when (rep) {
                             is GlyphRepresentation.ColorLayersV1 -> {
+                                val solidColors = resolveSolidColors(rep.paintGraph.nodes)
                                 for (node in rep.paintGraph.nodes) {
                                     dispatchColrV1Node(
-                                        node, scaler, op.blob.fontSize, pos.x, pos.y, op, cmdId,
+                                        node, scaler, op.blob.fontSize, pos.x, pos.y, op, cmdId, solidColors,
                                     )
                                 }
                             }
@@ -259,7 +279,24 @@ internal fun renderViaGpu(
                                 }
                             }
                             is GlyphRepresentation.Bitmap -> {
-                                diagnostics.degrade("degrade:drawText:${cmdId.value}", "drawText", "bitmap_not_routed")
+                                val x = pos.x + op.x + rep.originX
+                                val y = pos.y + op.y + rep.originY
+                                val w = rep.pixelWidth.toFloat().coerceAtLeast(1f)
+                                val h = rep.pixelHeight.toFloat().coerceAtLeast(1f)
+                                val syntheticOp = DisplayOp.DrawRect(
+                                    rect = Rect.fromLTRB(x, y, x + w, y + h),
+                                    paint = org.graphiks.kanvas.paint.Paint(
+                                        color = Color.fromRGBA(1f, 0.078f, 0.576f, 0.5f),
+                                    ),
+                                    transform = op.transform,
+                                    clip = op.clip,
+                                )
+                                val cmd = syntheticOp.toNormalizedCommand(
+                                    GPUDrawCommandID(dispatched.size), targets,
+                                )
+                                t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
+                                    dispatchFillRect(cmd, dispatched, diagnostics, width, height, config)
+                                }
                             }
                             else -> {}
                         }
