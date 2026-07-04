@@ -137,8 +137,9 @@ fun main(args: Array<String>) {
     val families = gms.map { it.renderFamily.name }.distinct().sorted()
     val now = LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME)
 
-    writeJson(outputDir.resolve("data/gms.json"), entries, passed, failed, noScore, gms.size, avgSim, now, families)
-    copyHtml(outputDir)
+    val json = buildJson(entries, passed, failed, noScore, gms.size, avgSim, now, families)
+    outputDir.resolve("data/gms.json").writeText(json)
+    copyHtml(outputDir, json)
 
     println()
     println("Dashboard generated: ${outputDir.absolutePath}")
@@ -152,14 +153,12 @@ private fun argAt(args: Array<String>, flag: String): String {
     return args[idx + 1]
 }
 
-private fun writeJson(
-    file: File,
+private fun buildJson(
     entries: List<GmEntry>,
     passing: Int, failing: Int, noScore: Int, total: Int,
     avgSimilarity: Double, generatedAt: String,
     families: List<String>,
-) {
-    file.parentFile.mkdirs()
+): String {
     val sb = StringBuilder()
     sb.appendLine("{")
     sb.appendLine("  \"generatedAt\": \"$generatedAt\",")
@@ -199,8 +198,7 @@ private fun writeJson(
     }
     sb.appendLine("  ]")
     sb.append("}")
-
-    file.writeText(sb.toString())
+    return sb.toString()
 }
 
 private fun fmt2(v: Double): String = String.format(Locale.US, "%.2f", v)
@@ -221,7 +219,7 @@ private fun jsonEsc(s: String): String = buildString {
     }
 }
 
-private fun copyHtml(outputDir: File) {
+private fun copyHtml(outputDir: File, json: String) {
     val html = """<!doctype html>
 <html lang="en">
 <head>
@@ -283,14 +281,14 @@ h1{font-size:1.5rem;margin-bottom:0.25rem}
 </main>
 <div class="modal" id="modal" onclick="this.classList.remove('open')"><img id="modalImg"></div>
 <script>
-let data=null;
-async function load(){const r=await fetch('data/gms.json');data=await r.json();render();}
+const DATA = $json;
+
 function render(){
 const fFam=document.getElementById('filterFamily').value;
 const fScore=document.getElementById('filterScore').value;
 const fStat=document.getElementById('filterStatus').value;
 const fSearch=document.getElementById('filterSearch').value.toLowerCase();
-let filtered=data.gms.filter(g=>{
+let filtered=DATA.gms.filter(g=>{
 if(fFam&&g.family!==fFam)return false;
 if(fScore){const[lo,hi]=fScore.split('-').map(Number);if(g.similarity===null||g.similarity<lo||g.similarity>hi)return false}
 if(fStat==='pass'&&g.isPassing!==true)return false;
@@ -299,15 +297,15 @@ if(fStat==='none'&&g.isPassing!==null)return false;
 if(fSearch&&!g.name.toLowerCase().includes(fSearch))return false;
 return true;
 });
-const s=data.summary;
-document.getElementById('genInfo').textContent='Generated: '+data.generatedAt;
+const s=DATA.summary;
+document.getElementById('genInfo').textContent='Generated: '+DATA.generatedAt;
 document.getElementById('summary').innerHTML=
 '<div class="stat"><div class="num" style="color:var(--text)">'+s.total+'</div><div class="lbl">Total GMs</div></div>'+
 '<div class="stat"><div class="num" style="color:var(--green)">'+s.passing+'</div><div class="lbl">Pass</div></div>'+
 '<div class="stat"><div class="num" style="color:var(--red)">'+s.failing+'</div><div class="lbl">Fail</div></div>'+
 '<div class="stat"><div class="num" style="color:var(--muted)">'+s.noScore+'</div><div class="lbl">No Score</div></div>'+
 '<div class="stat"><div class="num" style="color:'+(s.avgSimilarity>=90?'var(--green)':s.avgSimilarity>=75?'var(--orange)':'var(--red)')+'">'+s.avgSimilarity+'%</div><div class="lbl">Avg Similarity</div></div>';
-document.getElementById('count').textContent='Showing '+filtered.length+' of '+data.gms.length+' GMs';
+document.getElementById('count').textContent='Showing '+filtered.length+' of '+DATA.gms.length+' GMs';
 document.getElementById('grid').innerHTML=filtered.map(g=>{
 const sc=g.similarity;const pass=g.isPassing;
 const scCls=sc===null?'none':sc>=95?'pass':pass?'warn':'fail';
@@ -332,10 +330,9 @@ document.getElementById('filterFamily').addEventListener('change',render);
 document.getElementById('filterScore').addEventListener('change',render);
 document.getElementById('filterStatus').addEventListener('change',render);
 document.getElementById('filterSearch').addEventListener('input',render);
-load().then(()=>{
-const fams=[...new Set(data.gms.map(g=>g.family))].sort();
+const fams=[...new Set(DATA.gms.map(g=>g.family))].sort();
 document.getElementById('filterFamily').innerHTML='<option value="">Family: All</option>'+fams.map(f=>'<option value="'+f+'">'+f+'</option>').join('');
-});
+render();
 </script>
 </body>
 </html>"""
