@@ -63,17 +63,36 @@ fun main(args: Array<String>) {
 
         val refImg = ImageIO.read(refFile) ?: error("Failed to decode reference PNG: ${refFile.name}")
         val genImg = ImageIO.read(genFile) ?: error("Failed to decode generated PNG: ${genFile.name}")
+
+        if (refImg.width != genImg.width || refImg.height != genImg.height) {
+            println("[SKIP] ${gm.name}: size mismatch (ref=${refImg.width}x${refImg.height}, gen=${genImg.width}x${genImg.height})")
+            refFile.copyTo(outputDir.resolve("images/reference/${gm.name}.png"), overwrite = true)
+            genFile.copyTo(outputDir.resolve("images/generated/${gm.name}.png"), overwrite = true)
+            entries.add(GmEntry(gm.name, fam, null, gm.minSimilarity, null, refImg.width, refImg.height, 0,0,0,0, 0.0,0.0,0.0,0.0, null, null, false, false, false))
+            noScore++
+            continue
+        }
+
         val refRgba = ComparisonUtils.bufferedImageToRgba(refImg)
         val genRgba = ComparisonUtils.bufferedImageToRgba(genImg)
 
-        val result = ComparisonUtils.compareRgba(
-            actual = genRgba,
-            reference = refRgba,
-            width = refImg.width,
-            height = refImg.height,
-            tolerance = gm.tolerance,
-            minSimilarity = gm.minSimilarity,
-        )
+        val result = try {
+            ComparisonUtils.compareRgba(
+                actual = genRgba,
+                reference = refRgba,
+                width = refImg.width,
+                height = refImg.height,
+                tolerance = gm.tolerance,
+                minSimilarity = gm.minSimilarity,
+            )
+        } catch (e: Exception) {
+            println("[SKIP] ${gm.name}: comparison failed (${e.message})")
+            refFile.copyTo(outputDir.resolve("images/reference/${gm.name}.png"), overwrite = true)
+            genFile.copyTo(outputDir.resolve("images/generated/${gm.name}.png"), overwrite = true)
+            entries.add(GmEntry(gm.name, fam, null, gm.minSimilarity, null, refImg.width, refImg.height, 0,0,0,0, 0.0,0.0,0.0,0.0, null, null, false, false, false))
+            noScore++
+            continue
+        }
 
         val diffRgba = result.diffRgba
         if (diffRgba != null) {
