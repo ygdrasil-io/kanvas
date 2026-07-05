@@ -28,6 +28,9 @@ class Surface(
     private val buffer = SurfaceDisplayListBuffer()
     private var canvasInstance: Canvas? = null
 
+    /** Return a snapshot of recorded display operations (for diagnostic replay). */
+    fun snapshotOps(): List<DisplayOp> = buffer.ops()
+
     /** Optional listener for per-operation pipeline events (DebugLevel.TRACE). */
     var renderOpListener: RenderOpListener? = null
 
