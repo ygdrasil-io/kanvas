@@ -49,12 +49,12 @@ absolus permettent de retrouver rapidement le code local.
 - [/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/dawn/DawnQueueManager.cpp:125](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/dawn/DawnQueueManager.cpp:125)
   `Queue.Submit`.
 
-## Kanvas runtime WGPU
+## Kanvas runtime GPU
 
 ### Session, target, submit
 
 - [/Users/chaos/.codex/worktrees/416c/kanvas/gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeWgpu.kt:242](/Users/chaos/.codex/worktrees/416c/kanvas/gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeWgpu.kt:242)
-  Session WGPU.
+  Session GPU.
 - [/Users/chaos/.codex/worktrees/416c/kanvas/gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeWgpu.kt:289](/Users/chaos/.codex/worktrees/416c/kanvas/gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeWgpu.kt:289)
   Target offscreen.
 - [/Users/chaos/.codex/worktrees/416c/kanvas/gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeWgpu.kt:419](/Users/chaos/.codex/worktrees/416c/kanvas/gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeWgpu.kt:419)
@@ -65,7 +65,7 @@ absolus permettent de retrouver rapidement le code local.
 ### Recorder et ressources locales
 
 - [/Users/chaos/.codex/worktrees/416c/kanvas/gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeWgpu.kt:714](/Users/chaos/.codex/worktrees/416c/kanvas/gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeWgpu.kt:714)
-  `WgpuRenderRecorder`.
+  GPU render recorder.
 - [/Users/chaos/.codex/worktrees/416c/kanvas/gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeWgpu.kt:1928](/Users/chaos/.codex/worktrees/416c/kanvas/gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeWgpu.kt:1928)
   Fullscreen uniform pass.
 - [/Users/chaos/.codex/worktrees/416c/kanvas/gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeWgpu.kt:2001](/Users/chaos/.codex/worktrees/416c/kanvas/gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeWgpu.kt:2001)
@@ -73,7 +73,7 @@ absolus permettent de retrouver rapidement le code local.
 - [/Users/chaos/.codex/worktrees/416c/kanvas/gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeWgpu.kt:2038](/Users/chaos/.codex/worktrees/416c/kanvas/gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeWgpu.kt:2038)
   Creation uniform buffer locale.
 - [/Users/chaos/.codex/worktrees/416c/kanvas/gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeWgpu.kt:2409](/Users/chaos/.codex/worktrees/416c/kanvas/gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeWgpu.kt:2409)
-  Caches WGPU d'execution.
+  Caches GPU d'execution.
 
 ## Kanvas contrats
 

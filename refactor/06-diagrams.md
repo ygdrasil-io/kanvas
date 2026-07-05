@@ -10,7 +10,7 @@ flowchart TD
     A["DisplayList Kanvas"] --> B["GPURenderer"]
     B --> C["Dispatch par type d'operation"]
     C --> D["encodeOffscreenTexture"]
-    D --> E["WgpuRenderRecorder"]
+    D --> E["GPU render recorder"]
     E --> F["Creation locale: buffers, textures, samplers, bind groups"]
     F --> G["Render pass courte"]
     G --> H["queue.submit"]
@@ -28,22 +28,22 @@ flowchart TD
     B --> C["Material lowering"]
     C --> D["GPUDrawPacket"]
     D --> E["Resource planning"]
-    E --> F["GpuPassBatcher"]
+    E --> F["GPUPassBatcher"]
     F --> G["GPUPassCommandStream"]
-    G --> H["WgpuCommandEncoder"]
-    H --> I["WgpuQueueManager"]
+    G --> H["GPUCommandEncoder"]
+    H --> I["GPUQueueManager"]
     I --> J["Completion GPU"]
     J --> K["Resource recycling"]
 
-    L["WgpuCaps"] --> C
+    L["GPUCaps"] --> C
     L --> E
     L --> H
-    M["WgpuResourceProvider"] --> E
+    M["GPUResourceProvider"] --> E
     M --> H
     I --> M
 ```
 
-Lecture : les decisions deviennent explicites avant l'encodage WGPU.
+Lecture : les decisions deviennent explicites avant l'encodage GPU.
 
 ## Ce que Dawn apporte comme reference
 
@@ -116,9 +116,9 @@ par draw.
 
 ```mermaid
 sequenceDiagram
-    participant Encoder as WgpuCommandEncoder
-    participant Provider as WgpuResourceProvider
-    participant Queue as WgpuQueueManager
+    participant Encoder as GPUCommandEncoder
+    participant Provider as GPUResourceProvider
+    participant Queue as GPUQueueManager
     participant GPU as GPU
 
     Encoder->>Provider: materialiser buffers/textures/bind groups
@@ -152,8 +152,8 @@ Lecture : `scene`, `src` et `snap` deviennent un plan explicite.
 
 ```mermaid
 flowchart LR
-    A["0 Baseline"] --> B["1 WgpuCaps"]
-    B --> C["2 WgpuResourceProvider"]
+    A["0 Baseline"] --> B["1 GPUCaps"]
+    B --> C["2 GPUResourceProvider"]
     C --> D["3 Queue/lifetime"]
     D --> E["4 Pass batching simple"]
     E --> F["5 Intermediate planner"]
@@ -185,7 +185,7 @@ flowchart TD
     D --> E["GPUDrawPacket"]
     D --> F["GPUPassCommandStream"]
     D --> G["GPUResourceProvider"]
-    D --> H["Wgpu backend"]
+    D --> H["GPU backend"]
 ```
 
 Lecture : Graphite reste une reference algorithmique. Kanvas reste proprietaire

@@ -28,7 +28,7 @@ Mesurer l'etat actuel avant de changer les chemins runtime.
 Instrumentation trop verbeuse. Garder des compteurs agreges par famille et par
 frame, pas des logs par pixel/draw sauf mode debug.
 
-## Phase 1 : `WgpuCaps`
+## Phase 1 : `GPUCaps`
 
 ### Objectif
 
@@ -36,9 +36,9 @@ Centraliser les faits backend.
 
 ### Travail
 
-- Creer `WgpuCaps`.
+- Creer `GPUCaps`.
 - Lire limits/features disponibles depuis le device/adapter expose par la
-  couche WGPU.
+  couche GPU.
 - Remplacer les constantes dispersees quand possible.
 - Exposer les facts utiles aux pipeline keys.
 - Ajouter diagnostics de refus pour format/usage/size/alignment.
@@ -47,7 +47,7 @@ Centraliser les faits backend.
 ### Validation
 
 - Tests unitaires sur caps simules.
-- Smoke WGPU offscreen toujours vert.
+- Smoke GPU offscreen toujours vert.
 - Les cles de pipeline incluent les facts utiles mais pas les valeurs uniforms.
 - Les refus mentionnent la capacite manquante.
 - Les tests couvrent au moins un alignement 256 octets et un alignement plus
@@ -58,7 +58,7 @@ Centraliser les faits backend.
 Changer trop tot les cles de pipeline peut invalider beaucoup de snapshots.
 Utiliser un renderer salt/version explicite.
 
-## Phase 2 : `WgpuResourceProvider` minimal
+## Phase 2 : `GPUResourceProvider` minimal
 
 ### Objectif
 
@@ -67,7 +67,7 @@ Faire passer les ressources les plus frequentes par un provider concret.
 ### Travail
 
 - Uniform slab/ring pour petits payloads.
-- Padding base sur `WgpuCaps.minUniformBufferOffsetAlignment`, pas sur une
+- Padding base sur `GPUCaps.minUniformBufferOffsetAlignment`, pas sur une
   constante globale.
 - Null buffer.
 - Cache bind group single-uniform.
@@ -95,7 +95,7 @@ Retenir les ressources jusqu'a completion GPU avant de generaliser le batching.
 
 ### Travail
 
-- Ajouter `WgpuQueueManager` minimal.
+- Ajouter `GPUQueueManager` minimal.
 - Associer `submissionId` aux ressources.
 - Suivre completion.
 - Retenir readback/staging buffers.
@@ -121,14 +121,14 @@ Regrouper les draws compatibles sans toucher aux cas complexes.
 
 ### Travail
 
-- Creer ou activer un `GpuPassBatcher`.
+- Creer ou activer un `GPUPassBatcher`.
 - Supporter fills solides et gradients simples.
 - Garder destination-read, saveLayer, filters et text complex hors batch au
   debut.
 - Produire dumps de decisions de batch.
 - Encoder depuis `GPUPassCommandStream`.
 - Guard explicite : si une ressource materialisee n'est pas retenue par le
-  `WgpuQueueManager`, le batcher coupe ou refuse au lieu de recycler tot.
+  `GPUQueueManager`, le batcher coupe ou refuse au lieu de recycler tot.
 
 ### Validation
 
@@ -154,7 +154,7 @@ Sortir la logique `scene/src/snap` du renderer procedural.
 - Documenter au moins un plan `srcOver` simple et un plan `saveLayer` avec
   snapshot destination.
 - Reutiliser textures intermediaires via provider.
-- Ajouter decisions copy/render/compute selon `WgpuCaps`.
+- Ajouter decisions copy/render/compute selon `GPUCaps`.
 - Integrer saveLayer et blends avances progressivement.
 - Produire diagnostics de fallback.
 
@@ -200,7 +200,7 @@ difficiles a comprendre. Faire une famille a la fois.
 
 ```text
 0. Baseline
-1. WgpuCaps
+1. GPUCaps
 2. ResourceProvider minimal
 3. Queue/lifetime
 4. Pass batching simple

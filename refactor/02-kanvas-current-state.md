@@ -1,7 +1,7 @@
 # Etat actuel de Kanvas
 
 Ce fichier resume l'etat observe cote Kanvas. Il distingue les fondations deja
-solides des zones ou le runtime WGPU concret contourne encore les contrats plus
+solides des zones ou le runtime GPU concret contourne encore les contrats plus
 ambitieux des specs.
 
 ## Contraintes d'architecture deja posees
@@ -18,7 +18,7 @@ Les documents cible du repo sont clairs :
 - separer la semantique CPU/WebGPU des details backend.
 
 Cela donne une bonne direction. Le refactor propose ne change pas ces choix.
-Il les rend plus concrets dans le runtime WGPU.
+Il les rend plus concrets dans le runtime GPU.
 
 ## Pipeline keys et caches : base solide
 
@@ -33,7 +33,7 @@ Kanvas possede deja une base importante :
 - les generations stale sont refusees.
 
 Ce point est deja tres proche de ce qu'il faut. Il ne faut pas le remplacer par
-les cles Graphite/Dawn. Il faut plutot connecter les futures capacites WGPU et
+les cles Graphite/Dawn. Il faut plutot connecter les futures capacites GPU et
 les vrais objets backend a ces contrats.
 
 ## Ressources : contrats forts, runtime encore direct
@@ -47,7 +47,7 @@ Les contrats de ressources sont prudents :
 - validation des operands ;
 - distinction entre plan, decision et ressource materialisee.
 
-Mais le runtime WGPU concret cree encore beaucoup d'objets localement dans le
+Mais le runtime GPU concret cree encore beaucoup d'objets localement dans le
 recorder :
 
 - buffers uniformes ;
@@ -59,11 +59,11 @@ recorder :
 Cela cree un ecart entre la bonne architecture de contrats et le chemin
 runtime effectivement utilise.
 
-## Runtime WGPU : ce qui fonctionne
+## Runtime GPU : ce qui fonctionne
 
-Le runtime WGPU concret fournit deja :
+Le runtime GPU concret fournit deja :
 
-- une session WGPU partagee ;
+- une session GPU partagee ;
 - des targets offscreen et window ;
 - des caches de shader modules, bind group layouts, pipeline layouts et render
   pipelines ;
@@ -73,7 +73,7 @@ Le runtime WGPU concret fournit deja :
 
 Ces points sont a conserver.
 
-## Runtime WGPU : limites actuelles
+## Runtime GPU : limites actuelles
 
 Les limites principales sont structurelles :
 
@@ -88,7 +88,7 @@ Les limites principales sont structurelles :
 
 3. **Capacites implicites**
    Certaines limites sont codees en dur, par exemple l'alignement de copie ou
-   une taille texture maximale. Une couche `WgpuCaps` rendrait ces decisions
+   une taille texture maximale. Une couche `GPUCaps` rendrait ces decisions
    explicites.
 
 4. **Duree de vie GPU trop locale**
@@ -166,14 +166,14 @@ Ces chiffres doivent etre lus prudemment :
 | Execution cache | Hit/miss/create/failure/stale visibles |
 | Diagnostics | Refus explicites dans les contrats |
 | Specs | Direction coherente et anti-port Graphite claire |
-| Runtime WGPU | Session partagee, caches backend, smoke paths |
+| Runtime GPU | Session partagee, caches backend, smoke paths |
 | Dashboard | Mesure GM deja disponible pour suivre les regressions |
 
 ## Faiblesses a traiter
 
 | Zone | Probleme | Effet |
 | --- | --- | --- |
-| Caps | Pas de `WgpuCaps` central | Hypotheses dispersees |
+| Caps | Pas de `GPUCaps` central | Hypotheses dispersees |
 | Passes | Trop d'encodage par operation | Overhead CPU/GPU |
 | Ressources | Creation directe dans recorder | Cache et lifetime faibles |
 | Queue | Pas de manager de completion explicite | Recyclage plus risque |
@@ -183,12 +183,12 @@ Ces chiffres doivent etre lus prudemment :
 ## Lecture globale
 
 Kanvas n'a pas besoin d'un changement de cap. La direction est bonne. Le besoin
-est maintenant de faire converger les contrats existants et le runtime WGPU
+est maintenant de faire converger les contrats existants et le runtime GPU
 concret :
 
 ```text
 Contrats GPU deja bons
-  + runtime WGPU plus discipline
+  + runtime GPU plus discipline
   + diagnostics relies au backend
   = pipeline plus rapide, plus stable, plus explicable
 ```
