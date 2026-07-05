@@ -21,10 +21,8 @@ produces coverage, the paint pipeline consumes coverage.
   `.upstream/target/linear-agent-methodology.md`
 - Active post-MEP target:
   `.upstream/target/skia-like-realtime-renderer-target.md`
-- Historical MEP conformance target:
-  `archives/target-closeout-2026-05-31/rendering-conformance-performance-target.md`
-- Historical MEP conformance backlog:
-  `archives/target-closeout-2026-05-31/post-mvp-conformance-backlog.md`
+- Historical MEP target/backlog:
+  removed from the working tree; recover from Git history only if needed.
 - Linear project:
   `Kanvas - WGSL Pipeline Target`, milestones M0-M11
 - Geometry handoff:

@@ -4,6 +4,8 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Test
+import org.graphiks.kanvas.image.ColorType
+import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.codec.test.CodecTestFixtures
 import org.graphiks.kanvas.codec.test.CodecTestFixtures.decodePixels
 import java.util.ServiceLoader
@@ -62,5 +64,22 @@ class CodecAllKotlinAssemblyTest {
         for (y in CodecTestFixtures.SIMPLE_RGBA_PIXELS.indices) {
             assertArrayEquals(CodecTestFixtures.SIMPLE_RGBA_PIXELS[y], actual[y], "row=$y")
         }
+    }
+
+    @Test
+    fun `decodes shared rgba png fixture through Kanvas bitmap facade`() {
+        val codec = Codec.MakeFromData(CodecTestFixtures.simpleRgbaPng())
+
+        assertNotNull(codec)
+        val info = codec!!.getKanvasInfo()
+        val (bitmap, result) = codec.getKanvasImage()
+
+        assertEquals(ColorType.RGBA_8888, info.colorType)
+        assertEquals(Codec.Result.kSuccess, result)
+        assertNotNull(bitmap)
+        assertEquals(Color.fromArgbInt(CodecTestFixtures.RED), bitmap!!.getPixel(0, 0))
+        assertEquals(Color.fromArgbInt(CodecTestFixtures.GREEN), bitmap.getPixel(1, 0))
+        assertEquals(Color.fromArgbInt(CodecTestFixtures.BLUE), bitmap.getPixel(0, 1))
+        assertEquals(Color.fromArgbInt(CodecTestFixtures.WHITE), bitmap.getPixel(1, 1))
     }
 }

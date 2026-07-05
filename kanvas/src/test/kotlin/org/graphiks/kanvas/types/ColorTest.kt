@@ -28,6 +28,35 @@ class ColorTest {
     }
 
     @Test
+    fun `Color converts to and from ARGB Int without changing bits`() {
+        val argb = 0x8044AA11.toInt()
+        val color = Color.fromArgbInt(argb)
+
+        assertEquals(argb, color.toArgbInt())
+        assertEquals(0x8044AA11u, color.packed)
+    }
+
+    @Test
+    fun `Color constructs from byte channels and exposes byte channels`() {
+        val color = Color.fromArgb(0x80, 0x11, 0x22, 0x33)
+
+        assertEquals(0x80, color.alphaByte)
+        assertEquals(0x11, color.redByte)
+        assertEquals(0x22, color.greenByte)
+        assertEquals(0x33, color.blueByte)
+        assertEquals(0x80112233.toInt(), color.toArgbInt())
+    }
+
+    @Test
+    fun `Color can replace alpha byte without changing rgb`() {
+        val color = Color.fromArgb(0x80, 0x11, 0x22, 0x33)
+
+        assertEquals(Color.fromArgb(0xFE, 0x11, 0x22, 0x33), color.withAlphaByte(0xFE))
+        assertTrue(Color.WHITE.isOpaque)
+        assertTrue(!Color.TRANSPARENT.isOpaque)
+    }
+
+    @Test
     fun `Color r g b a extract components`() {
         val c = Color(0xFF112233u)
         assertEquals(0x11.toFloat() / 255f, c.r, 0.01f)

@@ -1,5 +1,5 @@
 /*
- * Copyright 2026 The kanvas-skia authors.
+ * Copyright 2026 The Kanvas authors.
  *
  * Mirrors Skia's `src/pathops/SkPathOpsLine.{h,cpp}` — `SkDLine`, the
  * double-precision line segment used by the pathops machinery.

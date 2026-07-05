@@ -47,7 +47,6 @@ Active planning entry points:
 - target: [.upstream/target/skia-like-realtime-renderer-target.md](.upstream/target/skia-like-realtime-renderer-target.md)
 - specs: [.upstream/specs/skia-like-realtime/README.md](.upstream/specs/skia-like-realtime/README.md)
 - parent architecture: [.upstream/target/high-performance-wgsl-pipeline-target.md](.upstream/target/high-performance-wgsl-pipeline-target.md)
-- completed MEP archive: [archives/target-closeout-2026-05-31/README.md](archives/target-closeout-2026-05-31/README.md)
 
 | Milestone | Focus | PM-visible outcome |
 |---|---|---|
@@ -258,9 +257,7 @@ M50 moved the PM score to 80% because these requirements landed together:
 
 Historical MEP evidence:
 
-- target archive: [archives/target-closeout-2026-05-31/rendering-conformance-performance-target.md](archives/target-closeout-2026-05-31/rendering-conformance-performance-target.md)
-- conformance backlog archive: [archives/target-closeout-2026-05-31/post-mvp-conformance-backlog.md](archives/target-closeout-2026-05-31/post-mvp-conformance-backlog.md)
-- pipeline backlog archive: [archives/target-closeout-2026-05-31/post-mvp-pipeline-backlog.md](archives/target-closeout-2026-05-31/post-mvp-pipeline-backlog.md)
+- removed target/backlog archives: recover from Git history only if needed.
 - front specs: [.upstream/specs/front/README.md](.upstream/specs/front/README.md)
 - font specs: [.upstream/specs/font/README.md](.upstream/specs/font/README.md)
 - dashboard source: [reports/wgsl-pipeline/scenes/](reports/wgsl-pipeline/scenes/)
@@ -330,8 +327,8 @@ Active execution source:
 - Sprint closeout: [reports/wgsl-pipeline/2026-05-28-m33-m35-sprint-report.md](reports/wgsl-pipeline/2026-05-28-m33-m35-sprint-report.md)
 - Architecture target: [.upstream/target/high-performance-wgsl-pipeline-target.md](.upstream/target/high-performance-wgsl-pipeline-target.md)
 - Active post-MEP target: [.upstream/target/skia-like-realtime-renderer-target.md](.upstream/target/skia-like-realtime-renderer-target.md)
-- Completed MEP target archive: [archives/target-closeout-2026-05-31/rendering-conformance-performance-target.md](archives/target-closeout-2026-05-31/rendering-conformance-performance-target.md)
-- Completed MEP backlog archive: [archives/target-closeout-2026-05-31/post-mvp-conformance-backlog.md](archives/target-closeout-2026-05-31/post-mvp-conformance-backlog.md)
+- Completed MEP archives: removed from the working tree; recover from Git
+  history only if needed.
 - Front evidence specs: [.upstream/specs/front/README.md](.upstream/specs/front/README.md)
 - Font and text specs: [.upstream/specs/font/README.md](.upstream/specs/font/README.md)
 - Linear/agent methodology: [.upstream/target/linear-agent-methodology.md](.upstream/target/linear-agent-methodology.md)
@@ -393,7 +390,6 @@ Current scene dashboard:
 - source: [reports/wgsl-pipeline/scenes/](reports/wgsl-pipeline/scenes/)
 - export task: `rtk ./gradlew --no-daemon pipelineSceneDashboard`
 - generated output: `build/reports/wgsl-pipeline-scenes/index.html`
-- target archive: [archives/target-closeout-2026-05-31/rendering-conformance-performance-target.md](archives/target-closeout-2026-05-31/rendering-conformance-performance-target.md)
 
 Current dashboard evidence after M50 readiness acceleration:
 
@@ -506,20 +502,6 @@ M46 closeout:
 Support claims after the MVP require visible evidence: reference, CPU/GPU
 render or explicit refusal, diffs, stats, route diagnostics, and stable fallback
 policy. Static or estimated evidence must be labelled as such.
-
-## M30 — Skia Kanvas Bridge
-
-| Ticket | Scope | Status |
-| --- | --- | --- |
-| M30-001 | KanvasSkiaBridge — type conversion functions (SkRect→Rect, SkPaint→Paint, SkPath→Path, SkShader→Shader, SkImage→Image, SkBlendMode→BlendMode) | Done |
-| M30-002 | SkiaKanvasSurface — wrap SkSurface → Kanvas Surface, bridge draw calls through Kanvas Canvas, flush via Surface.flush() | Done |
-| M30-003 | Regression tests — 14 unit tests covering bridge conversion and SkiaKanvasSurface integration | Done |
-| M30-004 | gpu-raster deprecation — @Deprecated on SkWebGpuDevice, log warning, frozen at M30 (device removed in M32-005) | Done |
-
-Module: `:kanvas-skia-bridge` depends on `:kanvas-skia` and `:kanvas` without circular dependency.
-The `:gpu-raster` module is kept for shared WGSL-validation / pipeline-conformance / gate / generated-WGSL / inventory infra (no render device).
-
-Activation: Kanvas-native is the sole renderer (no legacy fallback). No activation flag needed.
 
 ## Development Commands
 

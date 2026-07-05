@@ -3,7 +3,8 @@
 Status: Draft
 Target: `.upstream/target/skia-like-realtime-renderer-target.md`
 Parent target: `.upstream/target/high-performance-wgsl-pipeline-target.md`
-Historical MEP target: `archives/target-closeout-2026-05-31/rendering-conformance-performance-target.md`
+Historical MEP target: removed from the working tree; recover from Git history
+only if needed.
 
 This spec pack owns the Kanvas font, text, glyph, and font-rendering target.
 It covers portable font loading, typeface selection, shaping boundaries, glyph
@@ -22,7 +23,7 @@ rendering truth by itself.
 - Active rendering target:
   `.upstream/target/skia-like-realtime-renderer-target.md`
 - Historical MEP conformance target:
-  `archives/target-closeout-2026-05-31/rendering-conformance-performance-target.md`
+  removed from the working tree; recover from Git history only if needed.
 - WGSL pipeline target:
   `.upstream/target/high-performance-wgsl-pipeline-target.md`
 - Current portable OpenType scope:

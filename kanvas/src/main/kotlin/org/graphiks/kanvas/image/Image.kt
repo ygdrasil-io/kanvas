@@ -1,12 +1,9 @@
 package org.graphiks.kanvas.image
 
-import org.graphiks.kanvas.codec.Codec
 import org.graphiks.kanvas.paint.SamplingOptions
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.types.ColorSpace
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
 
 enum class ColorType(val bytesPerPixel: Int) {
     RGBA_8888(4),
@@ -28,23 +25,13 @@ data class Image(
 ) {
     companion object {
         fun decode(bytes: ByteArray, mimeType: String? = null): Image {
-            val codec = Codec.MakeFromData(bytes)
-            if (codec != null) {
-                val info = codec.getInfo()
-                val (bitmap, result) = codec.getImage()
-                if (bitmap != null && result == Codec.Result.kSuccess) {
-                    val w = bitmap.width; val h = bitmap.height
-                    val rgba = IntArrayToRGBA(bitmap.pixels8888, w, h)
-                    val format = detectFormatFromMagicBytes(bytes) ?: "image"
-                    return Image(w, h, ColorType.RGBA_8888, "decode-${format}:${bytes.size}", rgba)
+            when (val result = ImageDecoderRegistry.decode(bytes, mimeType)) {
+                is ImageDecodeResult.Success -> return result.image
+                is ImageDecodeResult.Failure -> {
+                    val format = detectFormatFromMagicBytes(bytes) ?: "unknown"
+                    return Image(0, 0, ColorType.RGBA_8888, "decode-${format}:${bytes.size}")
                 }
-                // Decode failed — return placeholder with format info
-                val format = detectFormatFromMagicBytes(bytes) ?: "unknown"
-                return Image(0, 0, ColorType.RGBA_8888, "decode-${format}:${bytes.size}")
             }
-            // No codec matched
-            val format = detectFormatFromMagicBytes(bytes) ?: "unknown"
-            return Image(0, 0, ColorType.RGBA_8888, "decode-${format}:${bytes.size}")
         }
 
         fun fromPixels(
@@ -90,20 +77,6 @@ data class Image(
         result = 31 * result + sourceId.hashCode()
         return result
     }
-}
-
-/** Convert packed ARGB IntArray to RGBA ByteArray. */
-private fun IntArrayToRGBA(argb: IntArray, width: Int, height: Int): ByteArray {
-    val rgba = ByteArray(width * height * 4)
-    val buf = ByteBuffer.wrap(rgba).order(ByteOrder.LITTLE_ENDIAN)
-    for (pixel in argb) {
-        val a = (pixel ushr 24) and 0xFF
-        val r = (pixel ushr 16) and 0xFF
-        val g = (pixel ushr 8) and 0xFF
-        val b = pixel and 0xFF
-        buf.putInt((a shl 24) or (b shl 16) or (g shl 8) or r) // ARGB → ABGR
-    }
-    return rgba
 }
 
 private fun detectFormatFromMagicBytes(bytes: ByteArray): String? {

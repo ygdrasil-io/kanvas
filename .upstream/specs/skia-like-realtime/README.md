@@ -2,7 +2,8 @@
 
 Status: Draft
 Target: `.upstream/target/skia-like-realtime-renderer-target.md`
-Previous evidence target: `archives/target-closeout-2026-05-31/rendering-conformance-performance-target.md`
+Previous evidence target: removed from the working tree; recover from Git
+history only if needed.
 
 This spec pack defines the next Kanvas ambition after the MEP evidence target:
 add missing rendering features, move closer to Skia CPU output, and build a

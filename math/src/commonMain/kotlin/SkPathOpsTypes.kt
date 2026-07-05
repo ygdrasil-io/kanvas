@@ -1,5 +1,5 @@
 /*
- * Copyright 2026 The kanvas-skia authors.
+ * Copyright 2026 The Kanvas authors.
  *
  * Mirrors Skia's `src/pathops/SkPathOpsTypes.{h,cpp}` — ULPs-tolerant
  * floating-point comparisons + approximate predicates used pervasively

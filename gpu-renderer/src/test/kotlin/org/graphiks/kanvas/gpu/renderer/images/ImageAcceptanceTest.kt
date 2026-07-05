@@ -12,9 +12,13 @@ import kotlin.test.assertTrue
 class ImageAcceptanceTest {
 
     @Test
-    fun `decode plan accepts valid PNG bytes`() {
+    fun `decode plan accepts valid PNG bytes from injected decoder`() {
         val pngBytes = redPixelPng()
-        val planner = GPUImageDecodePlanner()
+        val planner = GPUImageDecodePlanner(
+            decoderRegistry = GPUEncodedImageDecoderRegistry {
+                listOf(FixedRedPixelDecoder(pngBytes))
+            },
+        )
 
         val plan = planner.plan(pngBytes, "image/png")
 
@@ -27,6 +31,18 @@ class ImageAcceptanceTest {
         assertEquals(0.toByte(), accepted.pixelBytes[1])
         assertEquals(0.toByte(), accepted.pixelBytes[2])
         assertEquals(255.toByte(), accepted.pixelBytes[3])
+    }
+
+    @Test
+    fun `decode plan refuses PNG when no decoder is registered`() {
+        val planner = GPUImageDecodePlanner(
+            decoderRegistry = GPUEncodedImageDecoderRegistry { emptyList() },
+        )
+
+        val plan = planner.plan(redPixelPng(), "image/png")
+
+        val refused = assertIs<GPUImageDecodePlan.Refused>(plan)
+        assertEquals("dependency.image.decode.codec_not_found", refused.code)
     }
 
     @Test
@@ -229,5 +245,23 @@ class ImageAcceptanceTest {
         private val PNG_SIGNATURE = byteArrayOf(
             0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
         )
+    }
+
+    private class FixedRedPixelDecoder(
+        private val expectedBytes: ByteArray,
+    ) : GPUEncodedImageDecoder {
+        override val name: String = "test-red-pixel"
+        override val supportedMimeTypes: Set<String> = setOf("image/png")
+
+        override fun matches(bytes: ByteArray, mimeType: String): Boolean =
+            mimeType.lowercase() == "image/png" && bytes.contentEquals(expectedBytes)
+
+        override fun decode(bytes: ByteArray, mimeType: String): GPUImageDecodePlan =
+            GPUImageDecodePlan.Accepted(
+                width = 1,
+                height = 1,
+                pixelBytes = byteArrayOf(255.toByte(), 0, 0, 255.toByte()),
+                colorType = "rgba8unorm",
+            )
     }
 }

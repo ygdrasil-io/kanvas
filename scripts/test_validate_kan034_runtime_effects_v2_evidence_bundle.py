@@ -69,9 +69,9 @@ class RuntimeEffectsV2EvidenceBundleTest(unittest.TestCase):
 
         self.assertFalse(by_id["runtime.unsharp_rt"]["supportClaim"])
         self.assertEqual("cpu-only", by_id["runtime.unsharp_rt"]["supportState"])
-        self.assertIn(
-            "runtime-effect.child-binding-unsupported",
-            by_id["runtime.unsharp_rt"]["specializedEvidence"]["stableRefusals"],
+        self.assertEqual(
+            "runtime-effect.wgsl-descriptor-missing",
+            by_id["runtime.unsharp_rt"]["fallbackReason"],
         )
         self.assertEqual(
             "runtime-effect.blender-dst-read-unsupported",

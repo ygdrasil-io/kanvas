@@ -63,14 +63,9 @@ The new target starts at approximately 25%.
 
 ## Historical Evidence
 
-The previous active MEP targets are archived:
-
-- `archives/target-closeout-2026-05-31/rendering-conformance-performance-target.md`
-- `archives/target-closeout-2026-05-31/post-mvp-conformance-backlog.md`
-- `archives/target-closeout-2026-05-31/post-mvp-pipeline-backlog.md`
-- `archives/target-closeout-2026-05-31/task-prompt-m0-m11.md`
-
-They are evidence, not active backlog.
+The previous active MEP target/backlog archive was removed from the working
+tree. Recover it from Git history only if needed as evidence, not active
+backlog.
 
 ## Planning Principles
 

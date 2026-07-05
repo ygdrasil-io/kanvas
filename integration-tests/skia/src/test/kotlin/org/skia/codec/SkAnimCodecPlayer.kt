@@ -1,43 +1,39 @@
 package org.skia.codec
 
-import org.graphiks.kanvas.codec.AnimatedImage
-import org.graphiks.kanvas.codec.AndroidCodec
 import org.graphiks.kanvas.codec.Codec
 import org.graphiks.kanvas.image.Image
+import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorType
-import org.skia.foundation.SkImage
-import org.skia.foundation.SkImageInfo
-import java.nio.ByteBuffer
 
-class SkAnimCodecPlayer(codec: Codec) {
-    private var animImage: AnimatedImage? = null
+class SkAnimCodecPlayer(
+    private val codec: Codec,
+) {
     private val frameDurations: List<Int>
     val totalDuration: Int
-    private var repCount: Int = Codec.kRepetitionCountInfinite
-    private var pxWidth: Int = 0
-    private var pxHeight: Int = 0
+    private var repCount: Int = codec.getRepetitionCount()
+    private var currentFrameIndex: Int = 0
 
     init {
-        val androidCodec = AndroidCodec.MakeFromCodec(codec)
-        animImage = AnimatedImage.Make(androidCodec)
         frameDurations = codec.getFrameInfo().map { it.durationMs }
         totalDuration = frameDurations.sum()
-        pxWidth = codec.dimensions().width
-        pxHeight = codec.dimensions().height
     }
 
-    fun getFrame(): SkImage? = animImage?.getCurrentFrame()
-
     fun getFrameAsImage(): Image? {
-        val skImg = getFrame() ?: return null
-        val w = skImg.width
-        val h = skImg.height
-        val info = SkImageInfo.MakeN32Premul(w, h)
-        val rowBytes = info.minRowBytes()
-        val dst = ByteBuffer.allocate(h * rowBytes)
-        skImg.readPixels(info, dst, rowBytes, 0, 0)
-        val bytes = ByteArray(dst.remaining()).also { dst.get(it) }
-        return Image.fromPixels(w, h, bytes)
+        if (frameDurations.isEmpty()) return null
+        val info = codec.getInfo().makeColorType(SkColorType.kRGBA_8888)
+        val bitmap = SkBitmap(
+            width = info.width,
+            height = info.height,
+            colorSpace = info.colorSpace,
+            colorType = info.colorType,
+        )
+        val result = codec.getPixels(
+            info = info,
+            dst = bitmap,
+            opts = Codec.Options(frameIndex = currentFrameIndex),
+        )
+        if (result != Codec.Result.kSuccess) return null
+        return bitmap.toImage()
     }
 
     fun seek(ms: Int): Boolean {
@@ -66,12 +62,27 @@ class SkAnimCodecPlayer(codec: Codec) {
     }
 
     private fun seekToFrame(frame: Int) {
-        animImage?.let { anim ->
-            anim.reset()
-            for (i in 0 until frame) {
-                val duration = anim.decodeNextFrame()
-                if (duration == AnimatedImage.kFinished) break
-            }
+        currentFrameIndex = if (frameDurations.isEmpty()) {
+            0
+        } else {
+            frame.coerceIn(0, frameDurations.lastIndex)
         }
+    }
+
+    private fun SkBitmap.toImage(): Image {
+        val rgba = ByteArray(width * height * 4)
+        var di = 0
+        for (pixel in pixels8888) {
+            val a = (pixel ushr 24) and 0xFF
+            val r = (pixel ushr 16) and 0xFF
+            val g = (pixel ushr 8) and 0xFF
+            val b = pixel and 0xFF
+            rgba[di] = b.toByte()
+            rgba[di + 1] = g.toByte()
+            rgba[di + 2] = r.toByte()
+            rgba[di + 3] = a.toByte()
+            di += 4
+        }
+        return Image.fromPixels(width, height, rgba)
     }
 }

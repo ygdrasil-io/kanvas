@@ -1,11 +1,5 @@
 package org.graphiks.kanvas.gpu.renderer.images
 
-import org.graphiks.kanvas.codec.Codec
-import org.graphiks.math.SkColorGetA
-import org.graphiks.math.SkColorGetB
-import org.graphiks.math.SkColorGetG
-import org.graphiks.math.SkColorGetR
-
 /** Real decoded image texture ready for GPU upload with RGBA8 pixel data and evidence. */
 data class DecodedImageTexture(
     val rgba: ByteArray,
@@ -30,32 +24,24 @@ data class DecodedImageTexture(
     }
 }
 
-/** Decodes PNG bytes via [Codec] (M17/M12 codec pipeline) into tightly packed RGBA8 pixel data. */
-fun decodePngToRgba(pngBytes: ByteArray, sourceId: String): DecodedImageTexture? {
-    val codec = Codec.MakeFromData(pngBytes) ?: return null
-    val (bitmap, result) = codec.getImage()
-    if (result != Codec.Result.kSuccess || bitmap == null) return null
+/** Decodes PNG bytes through the injected GPU image decoder registry. */
+fun decodePngToRgba(
+    pngBytes: ByteArray,
+    sourceId: String,
+    decoderRegistry: GPUEncodedImageDecoderRegistry = GPUEncodedImageDecoders,
+): DecodedImageTexture? {
+    val plan = GPUImageDecodePlanner(decoderRegistry).plan(pngBytes, "image/png")
+    val accepted = plan as? GPUImageDecodePlan.Accepted ?: return null
+    val w = accepted.width
+    val h = accepted.height
+    if (w <= 0 || h <= 0 || accepted.colorType.lowercase() != "rgba8unorm") return null
 
-    val w = bitmap.width
-    val h = bitmap.height
-    if (w <= 0 || h <= 0) return null
-
-    val rgba = ByteArray(w * h * 4)
-    for (y in 0 until h) {
-        for (x in 0 until w) {
-            val c = bitmap.getPixel(x, y)
-            val base = (y * w + x) * 4
-            rgba[base] = SkColorGetR(c).toByte()
-            rgba[base + 1] = SkColorGetG(c).toByte()
-            rgba[base + 2] = SkColorGetB(c).toByte()
-            rgba[base + 3] = SkColorGetA(c).toByte()
-        }
-    }
+    val rgba = accepted.pixelBytes.copyOf()
 
     val uploadBytes = rgba.size.toLong()
     val evidence = listOf(
         "imageUpload:sourceId=$sourceId",
-        "imageUpload:codec=png-kotlin",
+        "imageUpload:decoder=registered",
         "imageUpload:dimensions=${w}x${h}",
         "imageUpload:format=RGBA8Unorm",
         "imageUpload:byteCount=$uploadBytes",

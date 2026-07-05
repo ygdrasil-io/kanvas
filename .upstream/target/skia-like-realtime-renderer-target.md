@@ -2,7 +2,8 @@
 
 Date: 2026-05-31
 Status: Proposed
-Previous target: `archives/target-closeout-2026-05-31/rendering-conformance-performance-target.md`
+Previous target: removed from the working tree; recover from Git history only
+if needed as historical evidence.
 Parent architecture: `.upstream/target/high-performance-wgsl-pipeline-target.md`
 Spec entry point: `.upstream/specs/skia-like-realtime/README.md`
 

@@ -839,7 +839,7 @@ class GPURendererSceneRegistryTest {
         assertTrue(command.hasFixturePayload)
         assertEquals("TOTAL 42.00", command.text)
         assertEquals("Liberation Sans", command.fontFamily)
-        assertEquals("kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Regular.ttf", command.fontSourceId)
+        assertEquals("reports/font/fixtures/fonts/liberation/LiberationSans-Regular.ttf", command.fontSourceId)
         assertEquals("simple-latin", command.shapingMode)
         assertEquals("font.glyph.outline-path", command.glyphRoute)
         assertEquals("webgpu.text.glyph-atlas.simple-latin", command.webGpuCandidateRoute)

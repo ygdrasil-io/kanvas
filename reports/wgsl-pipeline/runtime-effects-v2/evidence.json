@@ -27,20 +27,11 @@
     "No arbitrary user WGSL input.",
     "No runtime color-filter, blender, image-filter helper, child shader, or live editor broad claim.",
     "No global similarity threshold change.",
-    "No GPU child shader support claim.",
-    "No arbitrary runtime-effect DAG support.",
-    "No child shader texture/resource binding allocation claim.",
-    "No uniform values in PipelineKey.",
     "No broad ColorFilter support.",
     "No arbitrary runtime ColorFilter WGSL support.",
     "No runtime ColorFilter uniforms, child ColorFilters, LUTs, or color-space wrappers.",
     "No shader-input runtime ColorFilter route beyond solid-color direct rect.",
     "No global threshold or color policy change.",
-    "No support for all blend modes.",
-    "No GPU runtime blender support.",
-    "No implicit destination read.",
-    "No CPU readback fallback.",
-    "No hidden layer compatibility path.",
     "No live SkSL editor.",
     "No live controls for unregistered effects.",
     "No new WGSL generated per uniform value.",
@@ -165,14 +156,7 @@
       "wgslImplementationId": "wgsl/runtime_color_filter_luma_to_alpha"
     },
     {
-      "artifactGroups": {
-        "runtimeBlenderBoundary": {
-          "blendPlanJson": "reports/wgsl-pipeline/runtime-blender-boundary/runtime-blender-boundary-blend-plan.json",
-          "reportJson": "reports/wgsl-pipeline/runtime-blender-boundary/runtime-blender-boundary.json",
-          "reportMarkdown": "reports/wgsl-pipeline/runtime-blender-boundary/runtime-blender-boundary.md",
-          "routeJson": "reports/wgsl-pipeline/runtime-blender-boundary/runtime-blender-boundary-route.json"
-        }
-      },
+      "artifactGroups": {},
       "cpuImplementationId": "kotlin/invert_blender",
       "descriptorStatus": "descriptor-backed",
       "exactState": "cpu-only",
@@ -182,98 +166,9 @@
       "pipelineCacheKeyPolicy": null,
       "pmNote": "This registered runtime blender has Kotlin/CPU behavior, but its result depends on destination color. WebGPU remains refused until an explicit shader/layer composite BlendPlan exists; this does not support all blend modes.",
       "sourceReports": [
-        "supportMatrix",
-        "runtimeBlenderBoundary"
+        "supportMatrix"
       ],
-      "specializedEvidence": {
-        "blenderBoundary": {
-          "blendPlan": {
-            "candidate": "InvertBlender",
-            "cpuReadbackAllowed": false,
-            "fallbackReasons": [
-              "runtime-effect.blender-dst-read-unsupported",
-              "blend.shader-layer-required"
-            ],
-            "fixedFunctionAllowed": false,
-            "implicitDestinationReadAllowed": false,
-            "kind": "ShaderLayerComposite",
-            "operation": "runtime blender main(src, dst) reads destination color",
-            "reason": "The candidate computes its output from dstColor, so WebGPU cannot use a fixed-function blend state or silently read destination pixels. A future GPU pass must prove an explicit shader/layer composite BlendPlan with no CPU readback.",
-            "requiresDestinationColor": true,
-            "requiresLayerComposite": true,
-            "schemaVersion": "kanvas.runtime-blender-boundary.blend-plan",
-            "stableId": "runtime.invert_blender",
-            "status": "required-not-implemented",
-            "ticket": "KAN-032"
-          },
-          "route": {
-            "cpuFixture": {
-              "dst": [
-                0.25,
-                0.5,
-                0.75,
-                0.4
-              ],
-              "expected": [
-                0.75,
-                0.5,
-                0.25,
-                1.0
-              ],
-              "formula": "(half4(1) - dst).rgb1",
-              "source": "gm/destcolor.cpp invert blender",
-              "src": [
-                1.0,
-                0.0,
-                0.0,
-                0.5
-              ],
-              "status": "pass",
-              "testClass": "SkRuntimeBlenderTest",
-              "testFile": "cpu-raster/src/test/kotlin/org/skia/effects/runtime/SkRuntimeBlenderTest.kt"
-            },
-            "cpuImplementationId": "kotlin/invert_blender",
-            "fallbackReason": "runtime-effect.blender-dst-read-unsupported",
-            "gpuGate": {
-              "futurePassCondition": "BlendPlan proves an explicit shader/layer composite route for destination color without implicit readback.",
-              "gpuPassAllowedNow": false
-            },
-            "nonClaims": [
-              "No support for all blend modes.",
-              "No GPU runtime blender support.",
-              "No implicit destination read.",
-              "No CPU readback fallback.",
-              "No hidden layer compatibility path.",
-              "No dynamic SkSL compilation.",
-              "No SkSL IR or VM."
-            ],
-            "routeDiagnostics": {
-              "blendPlanArtifact": "reports/wgsl-pipeline/runtime-blender-boundary/runtime-blender-boundary-blend-plan.json",
-              "cpuReadbackAllowed": false,
-              "fixedFunctionBlendAllowed": false,
-              "hiddenLayerCompatAllowed": false,
-              "implicitDestinationReadAllowed": false,
-              "requiresDestinationColor": true,
-              "requiresLayerComposite": true
-            },
-            "sceneId": "runtime.invert_blender.boundary.v1",
-            "schemaVersion": "kanvas.runtime-blender-boundary.route",
-            "secondaryFallbackReason": "blend.shader-layer-required",
-            "selectedRoute": "webgpu.runtime-blender.expected-unsupported",
-            "stableId": "runtime.invert_blender",
-            "status": "expected-unsupported",
-            "supportState": "cpu-only",
-            "ticket": "KAN-032",
-            "wgslImplementationId": null
-          },
-          "status": "expected-unsupported"
-        },
-        "stableRefusals": [
-          "runtime-effect.blender-dst-read-unsupported",
-          "blend.shader-layer-required",
-          "runtime-effect.blender-wgsl-descriptor-missing"
-        ]
-      },
+      "specializedEvidence": {},
       "stableId": "runtime.invert_blender",
       "supportClaim": false,
       "supportState": "cpu-only",
@@ -497,13 +392,7 @@
       "wgslImplementationId": "wgsl/runtime_spiral_rt"
     },
     {
-      "artifactGroups": {
-        "cpuOnlyChildLane": {
-          "reportJson": "reports/wgsl-pipeline/runtime-child-shader-effect-lane/runtime-child-shader-effect-lane.json",
-          "reportMarkdown": "reports/wgsl-pipeline/runtime-child-shader-effect-lane/runtime-child-shader-effect-lane.md",
-          "routeJson": "reports/wgsl-pipeline/runtime-child-shader-effect-lane/runtime-child-shader-effect-lane-route.json"
-        }
-      },
+      "artifactGroups": {},
       "cpuImplementationId": "kotlin/unsharp_rt",
       "descriptorStatus": "descriptor-backed",
       "exactState": "cpu-only",
@@ -513,48 +402,9 @@
       "pipelineCacheKeyPolicy": null,
       "pmNote": "This row has registered Kotlin/CPU behavior but no parser-validated WGSL implementation; GPU remains refused with a stable missing-descriptor reason.",
       "sourceReports": [
-        "supportMatrix",
-        "runtimeChildShaderEffectLane"
+        "supportMatrix"
       ],
-      "specializedEvidence": {
-        "childLane": {
-          "children": [
-            {
-              "binding": "child[0]",
-              "bindingState": "cpu-supported-gpu-unsupported",
-              "fallbackReason": "runtime-effect.child-binding-unsupported",
-              "index": 0,
-              "name": "child",
-              "resourceAxis": "childShader",
-              "resourceAxisState": "classified-not-in-pipeline-key",
-              "type": "kShader"
-            }
-          ],
-          "gpuFallbackReason": "runtime-effect.child-binding-unsupported",
-          "gpuSupportState": "expected-unsupported",
-          "pipelineKeyPolicy": {
-            "acceptedAxes": [
-              "wgslImplementationId",
-              "blendMode",
-              "layoutReflection",
-              "childShaderResourceShape"
-            ],
-            "policy": "resource-axes-classified-uniform-values-excluded",
-            "rejectedAxes": [
-              "uniformBytes",
-              "uniformValues",
-              "childShaderPixels"
-            ],
-            "uniformValuesIncluded": false
-          },
-          "status": "expected-unsupported"
-        },
-        "stableRefusals": [
-          "runtime-effect.child-binding-unsupported",
-          "runtime-effect.child-wgsl-layout-missing",
-          "runtime-effect.child-resource-axis-unsupported"
-        ]
-      },
+      "specializedEvidence": {},
       "stableId": "runtime.unsharp_rt",
       "supportClaim": false,
       "supportState": "cpu-only",
@@ -564,10 +414,6 @@
   ],
   "schemaVersion": "kanvas.runtime-effects-v2.evidence-bundle",
   "sourceOfTruth": {
-    "blenderJson": "reports/wgsl-pipeline/runtime-blender-boundary/runtime-blender-boundary.json",
-    "blenderMarkdown": "reports/wgsl-pipeline/runtime-blender-boundary/runtime-blender-boundary.md",
-    "childLaneJson": "reports/wgsl-pipeline/runtime-child-shader-effect-lane/runtime-child-shader-effect-lane.json",
-    "childLaneMarkdown": "reports/wgsl-pipeline/runtime-child-shader-effect-lane/runtime-child-shader-effect-lane.md",
     "colorFilterJson": "reports/wgsl-pipeline/runtime-color-filter-wgsl/runtime-color-filter-wgsl.json",
     "colorFilterMarkdown": "reports/wgsl-pipeline/runtime-color-filter-wgsl/runtime-color-filter-wgsl.md",
     "layoutJson": "reports/wgsl-pipeline/runtime-effects-layout-v2/runtime-effects-layout-v2.json",
@@ -583,14 +429,9 @@
     "runtime-effect.arbitrary-sksl-unsupported",
     "runtime-effect.wgsl-descriptor-missing",
     "runtime-effect.blender-dst-read-unsupported",
-    "runtime-effect.child-binding-unsupported",
-    "runtime-effect.child-wgsl-layout-missing",
-    "runtime-effect.child-resource-axis-unsupported",
     "runtime-effect.color-filter-wgsl-missing",
     "runtime-effect.color-filter-cpu-only",
     "color-filter.color-space-unsupported",
-    "blend.shader-layer-required",
-    "runtime-effect.blender-wgsl-descriptor-missing",
     "runtime-effect.preview-uniform-out-of-range",
     "runtime-effect.preview-effect-not-registered"
   ],

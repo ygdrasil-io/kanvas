@@ -1322,6 +1322,15 @@ class JpegCodecTest {
     }
 
     private fun readSkiaJpeg(name: String): ByteArray {
+        val resourceName = when (name) {
+            "color_wheel.jpg" -> "codec-real-images/jpeg/color_wheel_420.jpg"
+            "mandrill_h1v1.jpg" -> "codec-real-images/jpeg/mandrill_h1v1_444.jpg"
+            "grayscale.jpg" -> "codec-real-images/jpeg/grayscale_progressive.jpg"
+            else -> null
+        }
+        if (resourceName != null) {
+            javaClass.classLoader.getResourceAsStream(resourceName)?.use { return it.readBytes() }
+        }
         val relative = "skia-integration-tests/src/test/resources/images/$name"
         var dir: Path? = Path.of("").toAbsolutePath()
         while (dir != null) {

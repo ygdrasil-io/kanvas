@@ -6,5 +6,5 @@ plugins {
 dependencies {
     implementation(kotlin("stdlib"))
     implementation(project(":math"))
-    api(project(":kanvas-skia"))
+    api(project(":kanvas"))
 }
