@@ -20,7 +20,7 @@ import org.graphiks.kanvas.types.Rect
 class ClipShaderLayerGm : SkiaGm {
     override val name = "clip_shader_layer"
     override val renderFamily = RenderFamily.COMPOSITE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.TRIVIAL
     override val minSimilarity = 0.0
     override val width = 430
     override val height = 320

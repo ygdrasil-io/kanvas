@@ -16,7 +16,7 @@ import org.graphiks.kanvas.types.Rect
 class ClipSierpinskiRegionGm : SkiaGm {
     override val name = "clip_sierpinski_region"
     override val renderFamily = RenderFamily.CLIP
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 2 * kTrans + kSize
     override val height = 2 * kTrans + kSize

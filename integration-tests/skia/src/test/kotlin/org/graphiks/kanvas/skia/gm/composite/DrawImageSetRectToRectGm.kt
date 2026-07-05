@@ -21,7 +21,7 @@ import kotlin.math.min
 class DrawImageSetRectToRectGm : SkiaGm {
     override val name = "draw_image_set_rect_to_rect"
     override val renderFamily = RenderFamily.COMPOSITE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.MEDIUM
     override val minSimilarity = 0.0
     override val width = 1250
     override val height = 850

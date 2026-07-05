@@ -18,7 +18,7 @@ import org.graphiks.kanvas.types.Rect
 class DrawImageSetAlphaOnlyGm : SkiaGm {
     override val name = "draw_image_set_alpha_only"
     override val renderFamily = RenderFamily.COMPOSITE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = kM * kTileW
     override val height = 2 * kN * kTileH

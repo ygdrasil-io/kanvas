@@ -17,7 +17,7 @@ import org.graphiks.kanvas.types.Matrix33
 class Crbug1174186Gm : SkiaGm {
     override val name = "crbug_1174186"
     override val renderFamily = RenderFamily.COMPOSITE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.MEDIUM
     override val minSimilarity = 0.0
     override val width = 1200
     override val height = 1200
