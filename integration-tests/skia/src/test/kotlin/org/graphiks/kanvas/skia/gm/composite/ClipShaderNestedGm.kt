@@ -23,7 +23,7 @@ import org.graphiks.kanvas.types.Rect
 class ClipShaderNestedGm : SkiaGm {
     override val name = "clip_shader_nested"
     override val renderFamily = RenderFamily.COMPOSITE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.TRIVIAL
     override val minSimilarity = 0.0
     override val width = 256
     override val height = 256

@@ -21,7 +21,7 @@ import kotlin.random.Random
 class DiscardGm : SkiaGm {
     override val name = "discard"
     override val renderFamily = RenderFamily.COMPOSITE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.SLOW
     override val minSimilarity = 0.0
     override val width = 100
     override val height = 100
