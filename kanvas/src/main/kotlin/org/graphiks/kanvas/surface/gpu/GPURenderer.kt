@@ -206,7 +206,7 @@ internal fun renderViaGpu(
                 )
                 val cmd = syntheticOp.toNormalizedCommand(cmdId, targets, vertices, listOf(0), flat.size)
                 t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
-                    dispatchFillPath(cmd, dispatched, diagnostics, width, height, config)
+                    dispatchFillPath(cmd, dispatched, diagnostics, width, height, config, t)
                 }
             }
 
@@ -287,7 +287,7 @@ internal fun renderViaGpu(
                             continue
                         }
                         t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
-                            dispatchFillPath(cmd, dispatched, diagnostics, width, height, config)
+                            dispatchFillPath(cmd, dispatched, diagnostics, width, height, config, t)
                         }
                     }
                 }
@@ -461,7 +461,7 @@ internal fun renderViaGpu(
                                 continue
                             } else {
                                 t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
-                                    dispatchFillPath(cmd, dispatched, diagnostics, width, height, config)
+                                    dispatchFillPath(cmd, dispatched, diagnostics, width, height, config, t)
                                 }
                             }
                         } else {
@@ -503,7 +503,7 @@ internal fun renderViaGpu(
                             continue
                         } else {
                             t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
-                                dispatchFillPath(cmd, dispatched, diagnostics, width, height, config)
+                                dispatchFillPath(cmd, dispatched, diagnostics, width, height, config, t)
                             }
                         }
                         sceneHasContent = true
@@ -635,7 +635,7 @@ internal fun renderViaGpu(
                                     continue
                                 }
                                 t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
-                                    dispatchFillPath(cmd, dispatched, diagnostics, width, height, config)
+                                    dispatchFillPath(cmd, dispatched, diagnostics, width, height, config, t)
                                 }
                                 sceneHasContent = true
                             }
@@ -667,7 +667,7 @@ internal fun renderViaGpu(
                             continue
                         }
                         t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
-                            dispatchFillPath(cmd, dispatched, diagnostics, width, height, config)
+                            dispatchFillPath(cmd, dispatched, diagnostics, width, height, config, t)
                         }
                         sceneHasContent = true
                     }
@@ -738,7 +738,7 @@ internal fun renderViaGpu(
                                     if (nestedOp.paint.isStroke()) {
                                         val cmd = nestedOp.toStrokePathCommand(nestedCmdId, targets)
                                         t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
-                                            dispatchFillPath(cmd, dispatched, diagnostics, width, height, config)
+                                            dispatchFillPath(cmd, dispatched, diagnostics, width, height, config, t)
                                         }
                                     } else {
                                         val cmd = nestedOp.toNormalizedCommand(nestedCmdId, targets)
@@ -766,7 +766,7 @@ internal fun renderViaGpu(
                                         val verts = tri.vertices.flatMap { listOf(it.x, it.y) }
                                         val cmd = nestedOp.toNormalizedCommand(nestedCmdId, targets, verts, listOf(0), fl.size)
                                         t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
-                                            dispatchFillPath(cmd, dispatched, diagnostics, width, height, config)
+                                            dispatchFillPath(cmd, dispatched, diagnostics, width, height, config, t)
                                         }
                                         sceneHasContent = true
                                     }
@@ -804,7 +804,7 @@ internal fun renderViaGpu(
                                         val dpOp = DisplayOp.DrawPath(p, nestedOp.paint, nestedOp.transform, nestedOp.clip)
                                         val cmd = dpOp.toNormalizedCommand(nestedCmdId, targets, verts, listOf(0), fl.size).copy(stroke = isStroke)
                                         t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
-                                            dispatchFillPath(cmd, dispatched, diagnostics, width, height, config)
+                                            dispatchFillPath(cmd, dispatched, diagnostics, width, height, config, t)
                                         }
                                         sceneHasContent = true
                                     }
@@ -820,7 +820,7 @@ internal fun renderViaGpu(
                                         val dpOp = DisplayOp.DrawPath(p, nestedOp.paint, nestedOp.transform, nestedOp.clip)
                                         val cmd = dpOp.toNormalizedCommand(nestedCmdId, targets, verts, listOf(0), fl.size)
                                         t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
-                                            dispatchFillPath(cmd, dispatched, diagnostics, width, height, config)
+                                            dispatchFillPath(cmd, dispatched, diagnostics, width, height, config, t)
                                         }
                                         sceneHasContent = true
                                     }
@@ -1041,7 +1041,7 @@ internal fun renderViaGpu(
                                 val drawPathOp = DisplayOp.DrawPath(path, op.paint, op.transform, op.clip)
                                 val cmd = drawPathOp.toNormalizedCommand(cmdId, targets, vertices, contourStarts, flat.size)
                                 t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
-                                    dispatchFillPath(cmd, dispatched, diagnostics, width, height, config)
+                                    dispatchFillPath(cmd, dispatched, diagnostics, width, height, config, t)
                                 }
                                 sceneHasContent = true
                             } else {
@@ -1133,7 +1133,7 @@ internal fun renderViaGpu(
                                 val drawPathOp = DisplayOp.DrawPath(path, op.paint, op.transform, op.clip)
                                 val cmd = drawPathOp.toNormalizedCommand(cmdId, targets, vertices, contourStarts, flat.size)
                                 t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
-                                    dispatchFillPath(cmd, dispatched, diagnostics, width, height, config)
+                                    dispatchFillPath(cmd, dispatched, diagnostics, width, height, config, t)
                                 }
                                 sceneHasContent = true
                             } else {

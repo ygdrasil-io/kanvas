@@ -3,6 +3,7 @@ package org.graphiks.kanvas.surface.gpu
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRawUniformDraw
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendOffscreenTarget
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRenderRecorder
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendStencilMode
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendTriangleData
@@ -47,6 +48,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
     surfaceWidth: Int,
     surfaceHeight: Int,
     config: RenderConfig,
+    target: GPUBackendOffscreenTarget,
 ) {
     fun refuse(reason: String) {
         diagnostics.fatal("refuse:${cmd.diagnosticName}", cmd.diagnosticName, reason)
@@ -122,37 +124,51 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
     when (val material = cmd.material) {
         is GPUMaterialDescriptor.SolidColor -> {
             if (cmd.stroke && cmd.tessellatedVertices.size >= 4) {
-                // Distance-field AA: stencil body is inflated by aaW, shader uses original halfWidth
+                // Coverage compute shader AA for strokes
                 val p0x = cmd.tessellatedVertices[0]
                 val p0y = cmd.tessellatedVertices[1]
                 val p1x = cmd.tessellatedVertices[2]
                 val p1y = cmd.tessellatedVertices[3]
-                val halfW = cmd.strokeWidth / 2f  // original stroke edge (inside smoothstep)
+                val halfW = cmd.strokeWidth / 2f
+                val aaW = 2.0f
 
-                val colorBb = java.nio.ByteBuffer.allocate(48).order(java.nio.ByteOrder.nativeOrder())
+                // Compute coverage texture bounds (inflated by halfW + aaW for AA zone)
+                val ox = halfW + aaW + 4f  // extra padding
+                val minX = (minOf(p0x, p1x) - ox).toInt().coerceAtLeast(0)
+                val minY = (minOf(p0y, p1y) - ox).toInt().coerceAtLeast(0)
+                val maxX = (maxOf(p0x, p1x) + ox).toInt().coerceAtMost(surfaceWidth)
+                val maxY = (maxOf(p0y, p1y) + ox).toInt().coerceAtMost(surfaceHeight)
+                val covW = maxX - minX
+                val covH = maxY - minY
+                if (covW <= 0 || covH <= 0) {
+                    diagnostics.fatal("refuse:coverage", "coverage", "zero_sized_coverage_texture")
+                    return
+                }
+
+                // Create coverage texture (R8)
+                val covLabel = target.createCoverageTexture(covW, covH)
+
+                // Pack compute uniforms: p0, p1 (in coverage-local coords), halfW, aaW
+                val compUniforms = java.nio.ByteBuffer.allocate(32).order(java.nio.ByteOrder.nativeOrder())
+                compUniforms.putFloat(p0x - minX); compUniforms.putFloat(p0y - minY)
+                compUniforms.putFloat(p1x - minX); compUniforms.putFloat(p1y - minY)
+                compUniforms.putFloat(halfW)
+                compUniforms.putFloat(aaW)
+
+                // Dispatch compute shader → writes coverage to texture
+                val wgX = (covW + 7) / 8
+                val wgY = (covH + 7) / 8
+                target.recordCoverageStroke(COVERAGE_STROKE_WGSL, compUniforms.array(), covLabel, wgX, wgY)
+
+                // Pack color uniforms (premultiplied linear)
+                val colorBb = java.nio.ByteBuffer.allocate(16).order(java.nio.ByteOrder.nativeOrder())
                 colorBb.putFloat(srgbToLinear(material.r) * material.a)
                 colorBb.putFloat(srgbToLinear(material.g) * material.a)
                 colorBb.putFloat(srgbToLinear(material.b) * material.a)
                 colorBb.putFloat(material.a)
-                colorBb.putFloat(p0x); colorBb.putFloat(p0y)
-                colorBb.putFloat(p1x); colorBb.putFloat(p1y)
-                colorBb.putFloat(halfW)
-                colorBb.putFloat(aaWidth)
 
-                drawFullscreenStencilPass(
-                    wgsl = STROKE_AA_WGSL,
-                    colorFormat = config.gpuColorFormat.wgpuLabel,
-                    stencilMode = GPUBackendStencilMode.Test,
-                    triangleData = null,
-                    draws = listOf(
-                        GPUBackendRawUniformDraw(
-                            uniformBytes = colorBb.array(),
-                            scissorX = sx, scissorY = sy,
-                            scissorWidth = sw, scissorHeight = sh,
-                        ),
-                    ),
-                    blendMode = blendMode,
-                )
+                // Render coverage fill (fullscreen quad sampling coverage texture)
+                recordCoverageFill(COVERAGE_FILL_WGSL, colorBb.array(), covLabel)
             } else {
                 val colorBb = java.nio.ByteBuffer.allocate(16).order(java.nio.ByteOrder.nativeOrder())
                 colorBb.putFloat(srgbToLinear(material.r) * material.a)
