@@ -410,9 +410,7 @@ public object SkImages {
         return when (compression) {
             SkTextureCompressionType.kBC1_RGB8_UNORM -> decodeBC1(data, width, height, honorAlpha = false)
             SkTextureCompressionType.kBC1_RGBA8_UNORM -> decodeBC1(data, width, height, honorAlpha = true)
-            SkTextureCompressionType.kETC2_RGB8_UNORM -> throw NotImplementedError(
-                "STUB.COMPRESSED_TEXTURES.ETC: ETC2/ETC1 decode not implemented."
-            )
+            SkTextureCompressionType.kETC2_RGB8_UNORM -> decodeETC2(data, width, height)
             SkTextureCompressionType.kNone -> null
         }
     }
@@ -481,6 +479,108 @@ public object SkImages {
         val b = (b5 shl 3) or (b5 ushr 2)
         return SkColorSetARGB(255, r, g, b)
     }
+
+    private fun decodeETC2(data: SkData, width: Int, height: Int): SkImage? {
+        val blockW = (width + 3) / 4
+        val blockH = (height + 3) / 4
+        val needed = blockW * blockH * 8
+        if (data.size < needed) return null
+        val src = data.bytesUnsafe()
+        val out = IntArray(width * height)
+        var off = 0
+        for (by in 0 until blockH) {
+            for (bx in 0 until blockW) {
+                etc2DecodeBlock(src, off, width, height, bx, by, out)
+                off += 8
+            }
+        }
+        return SkImage(width, height, out, SkColorType.kRGBA_8888)
+    }
+
+    private fun etc2DecodeBlock(src: ByteArray, off: Int, w: Int, h: Int, bx: Int, by: Int, out: IntArray) {
+        val hi = ((src[off].toInt() and 0xFF) shl 24) or
+                ((src[off + 1].toInt() and 0xFF) shl 16) or
+                ((src[off + 2].toInt() and 0xFF) shl 8) or
+                (src[off + 3].toInt() and 0xFF)
+        val lo = ((src[off + 4].toInt() and 0xFF) shl 24) or
+                ((src[off + 5].toInt() and 0xFF) shl 16) or
+                ((src[off + 6].toInt() and 0xFF) shl 8) or
+                (src[off + 7].toInt() and 0xFF)
+
+        val flipped = (hi shr 31) and 1
+        val diff = (hi shr 30) and 1
+
+        val baseR1: Int; val baseG1: Int; val baseB1: Int
+        val baseR2: Int; val baseG2: Int; val baseB2: Int
+        val table1: Int; val table2: Int
+
+        if (diff == 0) {
+            val r1_4 = (hi shr 15) and 0xF
+            val g1_4 = (hi shr 10) and 0xF
+            val b1_4 = (hi shr 5) and 0xF
+            val r2_4 = (hi shr 0) and 0xF
+            baseR1 = r1_4 * 17; baseG1 = g1_4 * 17; baseB1 = b1_4 * 17
+            baseR2 = r2_4 * 17; baseG2 = baseG1; baseB2 = baseB1
+            table1 = (hi shr 1) and 0x7
+            table2 = (hi shr 4) and 0x7
+        } else {
+            val r1_5 = (hi shr 25) and 0x1F
+            val g1_5 = (hi shr 20) and 0x1F
+            val b1_5 = (hi shr 15) and 0x1F
+            val dr = ((hi shr 12) and 0x7).let { if (it >= 4) it - 8 else it }
+            val dg = ((hi shr 9) and 0x7).let { if (it >= 4) it - 8 else it }
+            val db = ((hi shr 6) and 0x7).let { if (it >= 4) it - 8 else it }
+            baseR1 = (r1_5 shl 3) or (r1_5 ushr 2)
+            baseG1 = (g1_5 shl 3) or (g1_5 ushr 2)
+            baseB1 = (b1_5 shl 3) or (b1_5 ushr 2)
+            val r2_5 = (r1_5 + dr).coerceIn(0, 31)
+            val g2_5 = (g1_5 + dg).coerceIn(0, 31)
+            val b2_5 = (b1_5 + db).coerceIn(0, 31)
+            baseR2 = (r2_5 shl 3) or (r2_5 ushr 2)
+            baseG2 = (g2_5 shl 3) or (g2_5 ushr 2)
+            baseB2 = (b2_5 shl 3) or (b2_5 ushr 2)
+            table1 = (hi shr 3) and 0x7
+            table2 = (hi shr 0) and 0x7
+        }
+
+        var indexBits = lo
+        val pixelIndices = IntArray(16) { (indexBits ushr (it * 2)) and 3 }
+
+        for (i in 0 until 16) {
+            val lx: Int; val ly: Int
+            if (flipped == 0) {
+                lx = i % 4; ly = i / 4
+            } else {
+                lx = (i % 8) % 2 + (i / 8) * 2
+                ly = (i % 8) / 2
+            }
+            val px = bx * 4 + lx
+            val py = by * 4 + ly
+            if (px >= w || py >= h) continue
+            val sb = if (flipped == 0) { if (ly < 2) 0 else 1 } else { if (lx < 2) 0 else 1 }
+            val table = if (sb == 0) table1 else table2
+            val baseR = if (sb == 0) baseR1 else baseR2
+            val baseG = if (sb == 0) baseG1 else baseG2
+            val baseB = if (sb == 0) baseB1 else baseB2
+            val idx = pixelIndices[i]
+            val mod = ETC2_MODIFIER_TABLES[table][idx]
+            val r = (baseR + mod).coerceIn(0, 255)
+            val g = (baseG + mod).coerceIn(0, 255)
+            val b = (baseB + mod).coerceIn(0, 255)
+            out[py * w + px] = (0xFF shl 24) or (r shl 16) or (g shl 8) or b
+        }
+    }
+
+    private val ETC2_MODIFIER_TABLES = arrayOf(
+        intArrayOf(2, 8, -8, -2),
+        intArrayOf(5, 17, -17, -5),
+        intArrayOf(9, 29, -29, -9),
+        intArrayOf(13, 42, -42, -13),
+        intArrayOf(18, 60, -60, -18),
+        intArrayOf(24, 80, -80, -24),
+        intArrayOf(33, 106, -106, -33),
+        intArrayOf(47, 183, -183, -47),
+    )
 
     private fun u16(src: ByteArray, off: Int): Int =
         (src[off].toInt() and 0xFF) or ((src[off + 1].toInt() and 0xFF) shl 8)

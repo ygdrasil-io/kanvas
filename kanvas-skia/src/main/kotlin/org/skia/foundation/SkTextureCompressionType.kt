@@ -156,11 +156,79 @@ public object SkCompressedDataUtils {
         dst: ByteArray,
         dstOffset: Int,
     ) {
-        throw NotImplementedError(
-            "STUB.COMPRESSED_TEXTURES.ETC: SkCompressedDataUtils.Etc1EncodeImage(" +
-                "${srcBitmap.width}x${srcBitmap.height} ${srcBitmap.colorType}, " +
-                "dst[${dst.size} bytes], offset=$dstOffset) not implemented."
-        )
+        require(dstOffset >= 0 && dstOffset < dst.size) { "dstOffset out of range: $dstOffset" }
+        val blockWidth = (srcBitmap.width + 3) / 4
+        val blockHeight = (srcBitmap.height + 3) / 4
+        val needed = blockWidth * blockHeight * 8
+        require(dstOffset + needed <= dst.size) {
+            "destination too small for ETC1 payload: need=${dstOffset + needed}, have=${dst.size}"
+        }
+        var write = dstOffset
+        for (by in 0 until blockHeight) {
+            for (bx in 0 until blockWidth) {
+                encodeEtc1Block(srcBitmap, bx, by, dst, write)
+                write += 8
+            }
+        }
+    }
+
+    private fun encodeEtc1Block(src: SkBitmap, bx: Int, by: Int, dst: ByteArray, off: Int) {
+        var srSum = 0L; var sgSum = 0L; var sbSum = 0L
+        var srSum2 = 0L; var sgSum2 = 0L; var sbSum2 = 0L
+        var count1 = 0; var count2 = 0
+        for (ly in 0 until 4) {
+            for (lx in 0 until 4) {
+                val x = bx * 4 + lx; val y = by * 4 + ly
+                val c = if (x < src.width && y < src.height) src.getPixel(x, y) else 0
+                val r = (c ushr 16) and 0xFF; val g = (c ushr 8) and 0xFF; val b = c and 0xFF
+                if (ly < 2) {
+                    srSum += r; sgSum += g; sbSum += b; count1++
+                } else {
+                    srSum2 += r; sgSum2 += g; sbSum2 += b; count2++
+                }
+            }
+        }
+        if (count1 == 0) count1 = 1; if (count2 == 0) count2 = 1
+        val avgR1 = (srSum / count1).toInt(); val avgG1 = (sgSum / count1).toInt()
+        val avgB1 = (sbSum / count1).toInt()
+        val avgR2 = (srSum2 / count2).toInt(); val avgG2 = (sgSum2 / count2).toInt()
+        val avgB2 = (sbSum2 / count2).toInt()
+
+        val r1_5 = (avgR1 * 31 + 127) / 255
+        val g1_5 = (avgG1 * 31 + 127) / 255
+        val b1_5 = (avgB1 * 31 + 127) / 255
+        val r2_5 = (avgR2 * 31 + 127) / 255
+        val g2_5 = (avgG2 * 31 + 127) / 255
+        val b2_5 = (avgB2 * 31 + 127) / 255
+        val dr = (r2_5 - r1_5).coerceIn(-4, 3)
+        val dg = (g2_5 - g1_5).coerceIn(-4, 3)
+        val db = (b2_5 - b1_5).coerceIn(-4, 3)
+
+        val hi = (0 shl 31) or  // flip=0 (horizontal split)
+                (1 shl 30) or  // diff=1 (differential mode)
+                (r1_5 shl 25) or
+                (g1_5 shl 20) or
+                (b1_5 shl 15) or
+                ((dr and 0x7) shl 12) or
+                ((dg and 0x7) shl 9) or
+                ((db and 0x7) shl 6) or
+                (0 shl 3) or  // table1 = 0
+                (0 shl 0)     // table2 = 0
+
+        var pixelIdx = 0
+        for (i in 0 until 16) {
+            pixelIdx = pixelIdx or (0 shl (i * 2))
+        }
+
+        put32BE(dst, off, hi)
+        put32BE(dst, off + 4, pixelIdx)
+    }
+
+    private fun put32BE(dst: ByteArray, off: Int, v: Int) {
+        dst[off] = ((v ushr 24) and 0xFF).toByte()
+        dst[off + 1] = ((v ushr 16) and 0xFF).toByte()
+        dst[off + 2] = ((v ushr 8) and 0xFF).toByte()
+        dst[off + 3] = (v and 0xFF).toByte()
     }
 
     /**
