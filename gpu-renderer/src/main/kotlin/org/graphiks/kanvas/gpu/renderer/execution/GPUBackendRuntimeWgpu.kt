@@ -297,6 +297,7 @@ private class WgpuOffscreenTarget(
 ) : GPUBackendOffscreenTarget {
     private val safeWidth = request.width.coerceAtMost(MAX_TEXTURE_DIMENSION)
     private val safeHeight = request.height.coerceAtMost(MAX_TEXTURE_DIMENSION)
+    private val sampleCount = request.sampleCount
     private val format = request.colorFormat.toWgpuTextureFormat()
     private val bytesPerPixel = format.bytesPerPixel()
     private val tightBytesPerRow = safeWidth * bytesPerPixel
@@ -307,6 +308,7 @@ private class WgpuOffscreenTarget(
             size = Extent3D(width = safeWidth.toUInt(), height = safeHeight.toUInt()),
             format = format,
             usage = GPUTextureUsage.RenderAttachment or GPUTextureUsage.CopySrc,
+            sampleCount = sampleCount.toUInt(),
             label = "GPUBackend.offscreen.color",
         ),
     )
@@ -315,10 +317,23 @@ private class WgpuOffscreenTarget(
             size = Extent3D(width = safeWidth.toUInt(), height = safeHeight.toUInt()),
             format = GPUTextureFormat.Depth24PlusStencil8,
             usage = GPUTextureUsage.RenderAttachment,
+            sampleCount = sampleCount.toUInt(),
             label = "GPUBackend.offscreen.depthStencil",
         ),
     )
     private val depthStencilView = depthStencilTexture.createView()
+    private val resolveTexture = if (sampleCount > 1) {
+        device.createTexture(
+            TextureDescriptor(
+                size = Extent3D(width = safeWidth.toUInt(), height = safeHeight.toUInt()),
+                format = format,
+                usage = GPUTextureUsage.RenderAttachment or GPUTextureUsage.CopySrc,
+                sampleCount = 1u,
+                label = "GPUBackend.offscreen.color.resolve",
+            ),
+        )
+    } else null
+    private val resolveView = resolveTexture?.createView()
     private val stagingBuffer = device.createBuffer(
         BufferDescriptor(
             size = stagingSize,
@@ -405,8 +420,32 @@ private class WgpuOffscreenTarget(
                 }
                 end()
             }
+            // Resolve MSAA before copy to staging buffer
+            if (resolveTexture != null) {
+                val resolveResources = GPUResourceScope()
+                val rView = resolveResources.track(resolveTexture.createView()) { it.close() }
+                val msaaView = resolveResources.track(texture.createView()) { it.close() }
+                val resolveEncoder = resolveResources.trackIfAutoCloseable(device.createCommandEncoder())
+                resolveEncoder.beginRenderPass(
+                    RenderPassDescriptor(
+                        colorAttachments = listOf(
+                            RenderPassColorAttachment(
+                                view = msaaView,
+                                resolveTarget = rView,
+                                loadOp = GPULoadOp.Load,
+                                storeOp = GPUStoreOp.Store,
+                            ),
+                        ),
+                    ),
+                ) {
+                    end()
+                }
+                val resolveCommandBuffer = resolveResources.trackIfAutoCloseable(resolveEncoder.finish())
+                queue.submit(listOf(resolveCommandBuffer))
+                resolveResources.close()
+            }
             encoder.copyTextureToBuffer(
-                source = TexelCopyTextureInfo(texture = texture),
+                source = TexelCopyTextureInfo(texture = resolveTexture ?: texture),
                 destination = TexelCopyBufferInfo(
                     buffer = stagingBuffer,
                     offset = 0uL,
@@ -588,6 +627,8 @@ private class WgpuOffscreenTarget(
         closeQuietly { stagingBuffer.close() }
         closeQuietly { depthStencilView.close() }
         closeQuietly { depthStencilTexture.close() }
+        resolveView?.let { closeQuietly { it.close() } }
+        resolveTexture?.let { closeQuietly { it.close() } }
         closeQuietly { texture.close() }
         vertexBuffers.values.forEach { (buffer, _) -> closeQuietly { buffer.close() } }
         vertexBuffers.clear()
