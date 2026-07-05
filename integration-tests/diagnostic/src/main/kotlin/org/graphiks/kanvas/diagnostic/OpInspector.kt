@@ -61,7 +61,7 @@ object OpInspector {
             var prevSimilarity = 100.0
             for (i in 1..n) {
                 val partialRgba = renderPartial(ops, i, gmWidth, gmHeight)
-                val similarity = comparePartial(partialRgba, referenceRgba, tolerance)
+                val similarity = comparePartial(partialRgba, referenceRgba, gmWidth, gmHeight, tolerance)
                 val contribution = max(0.0, prevSimilarity - similarity)
                 prevSimilarity = similarity
 
@@ -97,17 +97,44 @@ object OpInspector {
                 ))
             }
         } else {
-            val checkpoints = listOf(n / 4, n / 2, 3 * n / 4, n).filter { it > 0 }
+            val checkpoints = listOf(n / 2, n).filter { it > 0 }
+            var prevSimilarity = 100.0
+            var prevCount = 0
             for (cp in checkpoints) {
+                val partialRgba = renderPartial(ops, cp, gmWidth, gmHeight)
+                val similarity = comparePartial(partialRgba, referenceRgba, gmWidth, gmHeight, tolerance)
+                val contribution = max(0.0, prevSimilarity - similarity)
+                prevSimilarity = similarity
+
+                val suspect = contribution > 5.0
+                var beforeUrl: String? = null
+                var afterUrl: String? = null
+                var deltaUrl: String? = null
+
+                if (suspect && prevCount > 0) {
+                    val beforeRgba = renderPartial(ops, prevCount, gmWidth, gmHeight)
+                    ComparisonUtils.saveRgbaAsPng(beforeRgba, gmWidth, gmHeight,
+                        outputDir.resolve("op_${prevCount}_before.png"))
+                    ComparisonUtils.saveRgbaAsPng(partialRgba, gmWidth, gmHeight,
+                        outputDir.resolve("op_${cp}_after.png"))
+                    val delta = buildDelta(beforeRgba, partialRgba, gmWidth, gmHeight)
+                    ComparisonUtils.saveRgbaAsPng(delta, gmWidth, gmHeight,
+                        outputDir.resolve("op_${cp}_diff.png"))
+                    beforeUrl = "op_${prevCount}_before.png"
+                    afterUrl = "op_${cp}_after.png"
+                    deltaUrl = "op_${cp}_diff.png"
+                }
+
                 entries.add(OpTraceEntry(
                     index = cp - 1,
-                    type = "batch_0_to_$cp",
-                    pixelContribution = 0.0,
-                    isSuspect = false,
-                    beforeUrl = null,
-                    afterUrl = null,
-                    deltaUrl = null,
+                    type = "batch_${prevCount}_to_${cp}",
+                    pixelContribution = contribution,
+                    isSuspect = suspect,
+                    beforeUrl = beforeUrl,
+                    afterUrl = afterUrl,
+                    deltaUrl = deltaUrl,
                 ))
+                prevCount = cp
             }
         }
 
@@ -179,12 +206,14 @@ object OpInspector {
         }
     }
 
-    private fun comparePartial(partialRgba: ByteArray, referenceRgba: ByteArray, tolerance: Int): Double {
-        val size = partialRgba.size / 4
-        val w = kotlin.math.sqrt(size.toDouble()).toInt()
-        val h = size / w
-        if (w <= 0 || h <= 0) return 0.0
-        return ComparisonUtils.compareRgba(partialRgba, referenceRgba, w, h, tolerance, 0.0).similarity
+    private fun comparePartial(
+        partialRgba: ByteArray,
+        referenceRgba: ByteArray,
+        width: Int,
+        height: Int,
+        tolerance: Int,
+    ): Double {
+        return ComparisonUtils.compareRgba(partialRgba, referenceRgba, width, height, tolerance, 0.0).similarity
     }
 
     private fun buildDelta(before: ByteArray, after: ByteArray, width: Int, height: Int): ByteArray {
