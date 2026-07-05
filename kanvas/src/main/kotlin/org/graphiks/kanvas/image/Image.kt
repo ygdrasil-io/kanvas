@@ -65,6 +65,15 @@ data class Image(
         sampling: SamplingOptions = SamplingOptions.NEAREST,
     ): Shader.Image = Shader.Image(this, tileModeX, tileModeY, sampling)
 
+    /**
+     * Return a new [Image] with the same pixel data but a different
+     * [ColorSpace] tag. No pixel conversion is performed — this is a
+     * metadata-only operation (equivalent to Skia's
+     * `SkImage::reinterpretColorSpace`).
+     */
+    fun reinterpretColorSpace(newColorSpace: ColorSpace): Image =
+        Image(width, height, colorType, sourceId, pixels, newColorSpace)
+
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other !is Image) return false
