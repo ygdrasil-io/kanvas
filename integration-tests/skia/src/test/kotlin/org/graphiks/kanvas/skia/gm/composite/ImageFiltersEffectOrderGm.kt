@@ -25,7 +25,7 @@ import org.graphiks.kanvas.types.Size
 class ImageFiltersEffectOrderGm : SkiaGm {
     override val name = "imagefilters_effect_order"
     override val renderFamily = RenderFamily.COMPOSITE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.TRIVIAL
     override val minSimilarity = 0.0
     override val width = 512
     override val height = 512

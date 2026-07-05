@@ -15,7 +15,7 @@ import org.graphiks.kanvas.types.Size
 class ImageFilterConvolveSubsetGm : SkiaGm {
     override val name = "imagefilter_convolve_subset"
     override val renderFamily = RenderFamily.COMPOSITE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.TRIVIAL
     override val minSimilarity = 0.0
     override val width = 160
     override val height = 180

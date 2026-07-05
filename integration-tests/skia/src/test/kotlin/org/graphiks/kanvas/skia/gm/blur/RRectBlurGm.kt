@@ -21,7 +21,7 @@ import org.graphiks.kanvas.types.Rect
 class RRectBlurGm : SkiaGm {
     override val name = "rrect_blurs"
     override val renderFamily = RenderFamily.BLUR
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.TRIVIAL
     override val minSimilarity = 0.0
     override val width = kWidth
     override val height = kHeight

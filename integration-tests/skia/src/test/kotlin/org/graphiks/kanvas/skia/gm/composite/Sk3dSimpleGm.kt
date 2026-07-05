@@ -19,7 +19,7 @@ import org.graphiks.kanvas.types.Rect
 class Sk3dSimpleGm : SkiaGm {
     override val name = "sk3d_simple"
     override val renderFamily = RenderFamily.COMPOSITE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.TRIVIAL
     override val minSimilarity = 0.0
     override val width = 300
     override val height = 300

@@ -16,7 +16,7 @@ import org.graphiks.kanvas.types.Rect
 class AAClipGm : SkiaGm {
     override val name = "aaclip"
     override val renderFamily = RenderFamily.CLIP
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 88.2
     override val width = 240
     override val height = 120

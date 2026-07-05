@@ -29,7 +29,7 @@ import org.graphiks.kanvas.types.Rect
 class PlusMergesAaGm : SkiaGm {
     override val name = "PlusMergesAA"
     override val renderFamily = RenderFamily.COMPOSITE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.TRIVIAL
     override val minSimilarity = 0.0
     override val width = 256
     override val height = 256

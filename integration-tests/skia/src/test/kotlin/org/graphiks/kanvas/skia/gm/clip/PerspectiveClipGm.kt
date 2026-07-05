@@ -23,7 +23,7 @@ import kotlin.random.Random
 class PerspectiveClipGm : SkiaGm {
     override val name = "perspective_clip"
     override val renderFamily = RenderFamily.CLIP
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 800
     override val height = 800

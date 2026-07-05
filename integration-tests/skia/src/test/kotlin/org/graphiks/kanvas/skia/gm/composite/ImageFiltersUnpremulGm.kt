@@ -18,7 +18,7 @@ import org.graphiks.kanvas.types.Rect
 class ImageFiltersUnpremulGm : SkiaGm {
     override val name = "imagefiltersunpremul"
     override val renderFamily = RenderFamily.COMPOSITE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.TRIVIAL
     override val minSimilarity = 0.0
     override val width = 64
     override val height = 64

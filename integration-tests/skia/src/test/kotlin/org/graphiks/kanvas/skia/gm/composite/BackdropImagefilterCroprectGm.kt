@@ -75,7 +75,7 @@ fun drawBackdropFilterGm(
 class BackdropImagefilterCroprectGm : SkiaGm {
     override val name = "backdrop_imagefilter_croprect"
     override val renderFamily = RenderFamily.COMPOSITE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 600
     override val height = 500

@@ -17,7 +17,7 @@ import org.graphiks.kanvas.types.Rect
 class DrawAtlasColorGm : SkiaGm {
     override val name = "draw-atlas-colors"
     override val renderFamily = RenderFamily.COMPOSITE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.MEDIUM
     override val minSimilarity = 0.0
     override val width = kNumXferModes * (kAtlasSize + kPad) + kPad
     override val height = 2 * kNumColors * (kAtlasSize + kPad) + kTextPad + kPad
