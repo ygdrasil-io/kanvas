@@ -4,7 +4,7 @@
     "packId": "mep-next-runtime-interactive-kadre-v1",
     "status": "pass",
     "claimLevel": "bounded-kadre-runtime-interactive-evidence",
-    "linearIssues": [
+    "scopeIds": [
         "FOR-193",
         "FOR-194",
         "FOR-195",

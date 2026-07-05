@@ -21,7 +21,7 @@
   ],
   "generatedAt": "2026-06-14T11:12:12Z",
   "generatedBy": "scripts/m68_kadre_demo_evidence.py",
-  "linearIssues": [
+  "scopeIds": [
     "FOR-50",
     "FOR-51",
     "FOR-52",

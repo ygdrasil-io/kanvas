@@ -4,7 +4,7 @@
   "status": "pass",
   "claimLevel": "release-candidate-evidence-selection",
   "date": "2026-06-02",
-  "linearIssues": [
+  "scopeIds": [
     "FOR-215",
     "FOR-216",
     "FOR-218"

@@ -53,7 +53,7 @@ def main() -> int:
     require(manifest.get("schemaVersion") == 1, "schemaVersion must be 1")
     require(manifest.get("packId") == "m91-mep-rc-scene-pack-v1", "unexpected packId")
     require(manifest.get("status") == "pass", "manifest status must be pass")
-    require(set(manifest.get("linearIssues", [])) == {"FOR-215", "FOR-216", "FOR-218"}, "linear issue scope changed")
+    require(set(manifest.get("scopeIds", [])) == {"FOR-215", "FOR-216", "FOR-218"}, "scope ids changed")
 
     scope = manifest.get("scope") or {}
     require(scope.get("shaderTarget") == "WGSL", "shader target must stay WGSL")

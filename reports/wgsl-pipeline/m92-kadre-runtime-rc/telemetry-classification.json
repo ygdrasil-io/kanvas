@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "packId": "m92-kadre-runtime-telemetry-classification-v1",
   "status": "pass",
-  "linearIssues": [
+  "scopeIds": [
     "FOR-209",
     "FOR-210",
     "FOR-211",

@@ -23,10 +23,8 @@ reason-code taxonomy used by that implementation.
 - `.upstream/target/skia-like-realtime-renderer-target.md`
 - `.upstream/specs/skia-like-realtime/README.md`
 - `.upstream/specs/skia-like-realtime/01-rendering-feature-expansion.md`
-- `.upstream/specs/skia-like-realtime/06-agent-execution-and-linear-planning.md`
 - `.upstream/target/high-performance-wgsl-pipeline-target.md`
-- `.upstream/target/linear-agent-methodology.md`
-- Linear FOR-6
+- FOR-6 scope notes
 
 ## Current Owner Map
 

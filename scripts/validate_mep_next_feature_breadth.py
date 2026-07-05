@@ -60,7 +60,7 @@ def main() -> int:
     require(evidence.get("packId") == "m89-mep-next-feature-breadth-v1", "unexpected packId")
     require(evidence.get("status") == "pass", "evidence status must be pass")
     require(evidence.get("claimLevel") == "post-rc-mep-bounded-feature-breadth-evidence", "unexpected claimLevel")
-    require(set(evidence.get("linearIssues", [])) == {"FOR-189", "FOR-190", "FOR-191", "FOR-192"}, "linear issue scope changed")
+    require(set(evidence.get("scopeIds", [])) == {"FOR-189", "FOR-190", "FOR-191", "FOR-192"}, "scope ids changed")
     require(evidence.get("sourceCommit") == "fbadbd3d4bd7ab8b86ffc2eabf01a02707b9068e", "RC-MEP source commit changed")
 
     dashboard = evidence.get("dashboardExpectation", {})

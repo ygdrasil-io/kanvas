@@ -24,7 +24,6 @@ sprints:
 | `03-skia-fidelity-and-gm-promotion.md` | GM selection, reference policy, diff burn-down, support/refusal semantics, and promotion waves. |
 | `04-performance-tiering-and-release-gates.md` | Family budgets, frame budgets, measured lanes, cache pressure, quarantine, and rebaseline rules. |
 | `05-pm-demo-and-release-candidate.md` | PM demos, native/live demo packaging, release-candidate criteria, and non-claims. |
-| `06-agent-execution-and-linear-planning.md` | Linear ticket shape, milestone decomposition, agent handoff contract, review gates, and progress update rules. |
 
 ## Hard Constraints
 
@@ -77,7 +76,8 @@ sprints:
 - Performance-sensitive work has measured payloads or an explicit non-gating
   rationale.
 - PM demo output is reproducible from commands or checked-in artifacts.
-- Linear tickets cite the target and exact spec sections they implement.
+- Planned implementation work cites the target and exact spec sections it
+  implements.
 
 ## Open Decisions
 

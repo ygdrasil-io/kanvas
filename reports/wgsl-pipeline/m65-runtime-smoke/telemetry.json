@@ -16,8 +16,8 @@
     "status": "blocked-not-wired"
   },
   "lane": "m65-runtime-smoke",
-  "linearEpic": "FOR-31",
-  "linearIssues": [
+  "scopeGroup": "FOR-31",
+  "scopeIds": [
     "FOR-33",
     "FOR-34",
     "FOR-35",

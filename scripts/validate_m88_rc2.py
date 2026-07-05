@@ -48,8 +48,8 @@ def main() -> int:
     require_value(evidence, "readinessAfter", 67.75)
     require_value(evidence, "readinessDelta", 0.0)
 
-    required_issues = {"FOR-104", "FOR-174", "FOR-175", "FOR-176", "FOR-177", "FOR-178"}
-    require(set(evidence.get("linearIssues", [])) == required_issues, "linearIssues do not match M88 scope")
+    required_scope_ids = {"FOR-104", "FOR-174", "FOR-175", "FOR-176", "FOR-177", "FOR-178"}
+    require(set(evidence.get("scopeIds", [])) == required_scope_ids, "scopeIds do not match M88 scope")
 
     artifacts = evidence.get("artifactPaths")
     require(isinstance(artifacts, list) and artifacts, "artifactPaths must be a non-empty list")

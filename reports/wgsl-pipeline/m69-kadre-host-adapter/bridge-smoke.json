@@ -7,7 +7,7 @@
   "failures": [],
   "generatedAt": "2026-06-14T11:12:12Z",
   "generatedBy": "scripts/m69_kadre_host_adapter_smoke.py",
-  "linearIssues": [
+  "scopeIds": [
     "FOR-56",
     "FOR-57",
     "FOR-58",

@@ -26,7 +26,7 @@
   "frameClockSource": "kadre.appkit.control-flow-poll",
   "generatedAt": "2026-06-14T11:12:13Z",
   "generatedBy": "scripts/m70_kadre_live_runtime_evidence.py",
-  "linearIssues": [
+  "scopeIds": [
     "FOR-60",
     "FOR-61",
     "FOR-62",

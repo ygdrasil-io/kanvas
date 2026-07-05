@@ -1,7 +1,7 @@
 {
     "schemaVersion": 1,
     "generatedBy": "kadre-runtime:M88ReleaseCandidate2",
-    "linearIssues": [
+    "scopeIds": [
         "FOR-104",
         "FOR-174",
         "FOR-175",

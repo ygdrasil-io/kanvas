@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "generatedBy": "kadre-runtime:M76GeneratedMetadataReplay",
-  "linearIssues": ["FOR-92", "FOR-114", "FOR-115", "FOR-116", "FOR-117", "FOR-118"],
+  "scopeIds": ["FOR-92", "FOR-114", "FOR-115", "FOR-116", "FOR-117", "FOR-118"],
   "packId": "m76-generated-metadata-replay-v1",
   "sourceManifest": "reports/wgsl-pipeline/scenes/generated/results.json",
   "claimLevel": "selected-generated-metadata-to-replay-contract",

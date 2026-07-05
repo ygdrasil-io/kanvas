@@ -228,7 +228,7 @@
     "normalizedTimeoutAsSuccess": true,
     "reason": "wgpu-native v27 reports SuccessOptimal as raw status 1; wgpu4k maps raw 1 to SurfaceTextureStatus.timeout"
   },
-  "linearIssues": ["FOR-99", "FOR-149", "FOR-150", "FOR-151", "FOR-152", "FOR-153"],
+  "scopeIds": ["FOR-99", "FOR-149", "FOR-150", "FOR-151", "FOR-152", "FOR-153"],
   "nonClaims": [
     "This run proves one bounded Kanvas display-list scene contract selected through the Kadre native window present-call loop.",
     "M83 does not prove arbitrary SkCanvas op streams, text, image-filter DAGs, arbitrary runtime effects, or full display-list replay.",

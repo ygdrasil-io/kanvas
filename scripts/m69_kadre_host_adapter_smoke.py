@@ -19,7 +19,7 @@ from typing import Any
 
 
 SCHEMA_VERSION = 1
-LINEAR_ISSUES = ["FOR-56", "FOR-57", "FOR-58", "FOR-59"]
+SCOPE_IDS = ["FOR-56", "FOR-57", "FOR-58", "FOR-59"]
 
 REQUIRED_SPECS = [
     ".upstream/specs/skia-like-realtime/02-realtime-runtime-architecture.md",
@@ -257,7 +257,7 @@ def build_contract(project_root: Path) -> tuple[dict[str, Any], list[str]]:
         "schemaVersion": SCHEMA_VERSION,
         "generatedAt": now_iso(),
         "generatedBy": "scripts/m69_kadre_host_adapter_smoke.py",
-        "linearIssues": LINEAR_ISSUES,
+        "scopeIds": SCOPE_IDS,
         "repository": {
             "rootCommit": run_git(project_root, ["rev-parse", "HEAD"]),
             "kadreSubmoduleCommit": run_git(project_root, ["-C", "external/poc-koreos", "rev-parse", "HEAD"]),
@@ -323,7 +323,7 @@ def build_scene_route(project_root: Path, m65: dict[str, Any], native_smoke: dic
         "schemaVersion": SCHEMA_VERSION,
         "generatedAt": now_iso(),
         "generatedBy": "scripts/m69_kadre_host_adapter_smoke.py",
-        "linearIssues": LINEAR_ISSUES,
+        "scopeIds": SCOPE_IDS,
         "sceneId": "m69-first-kanvas-kadre-host-adapter-scene",
         "claimLevel": "native-runnable" if native_presented else "headless-bridge",
         "nativePresented": native_presented,
@@ -396,7 +396,7 @@ def decide_route(
         "schemaVersion": SCHEMA_VERSION,
         "generatedAt": now_iso(),
         "generatedBy": "scripts/m69_kadre_host_adapter_smoke.py",
-        "linearIssues": LINEAR_ISSUES,
+        "scopeIds": SCOPE_IDS,
         "status": route_status,
         "reason": reason,
         "nativePresented": native_presented,
@@ -442,7 +442,7 @@ def build_telemetry(route: dict[str, Any], scene: dict[str, Any], m65: dict[str,
         "schemaVersion": SCHEMA_VERSION,
         "generatedAt": now_iso(),
         "generatedBy": "scripts/m69_kadre_host_adapter_smoke.py",
-        "linearIssues": LINEAR_ISSUES,
+        "scopeIds": SCOPE_IDS,
         "claimLevel": route["status"],
         "nativePresented": bool(route["nativePresented"]),
         "nativeFrameTimingClaim": "present-call-duration-only" if route["nativePresented"] else "none",
@@ -618,7 +618,7 @@ def main() -> int:
         "schemaVersion": SCHEMA_VERSION,
         "generatedAt": now_iso(),
         "generatedBy": "scripts/m69_kadre_host_adapter_smoke.py",
-        "linearIssues": LINEAR_ISSUES,
+        "scopeIds": SCOPE_IDS,
         "environment": {
             "platform": platform.platform(),
             "python": platform.python_version(),

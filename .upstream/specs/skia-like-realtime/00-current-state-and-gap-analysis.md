@@ -20,7 +20,7 @@ interactive renderer.
 | Expected unsupported policy | Unsupported rows carry stable fallback reasons. | Required for broad Skia-like scope control. |
 | Performance release gate | M59 gates seven selected rows and 14 lanes. | Expand to family and frame budgets. |
 | WGSL/WebGPU architecture | Parser/generator direction, PipelineIR target, WebGPU backend. | Foundation for feature expansion and real-time runtime. |
-| Linear/agent workflow | Tickets, reviews, PM reports, subagent execution pattern. | Continue for M60-M70. |
+| Agent workflow | Reviews, PM reports, and subagent execution pattern. | Continue for M60-M70 without a Linear dependency. |
 
 ## What Is Not Done
 

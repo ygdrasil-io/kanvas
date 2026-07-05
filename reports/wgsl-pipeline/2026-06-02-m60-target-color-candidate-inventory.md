@@ -81,7 +81,6 @@ promoted by this inventory, and no global rendering path is changed.
 ## Validation
 
 ```text
-rtk python3 scripts/m60_target_color_candidate_inventory.py
 rtk python3 -m json.tool reports/wgsl-pipeline/scenes/artifacts/m60-target-color-candidate-inventory.json
 rtk ./gradlew --no-daemon pipelineSceneDashboardGate
 rtk git diff --check

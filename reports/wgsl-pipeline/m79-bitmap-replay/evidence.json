@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "generatedBy": "kadre-runtime:M79BitmapReplay",
-  "linearIssues": ["FOR-95", "FOR-129", "FOR-130", "FOR-131", "FOR-132", "FOR-133"],
+  "scopeIds": ["FOR-95", "FOR-129", "FOR-130", "FOR-131", "FOR-132", "FOR-133"],
   "packId": "m79-bitmap-replay-v1",
   "claimLevel": "bounded-fixture-backed-bitmap-replay-evidence",
   "readinessDelta": 0,

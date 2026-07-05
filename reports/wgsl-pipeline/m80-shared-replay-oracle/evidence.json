@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "generatedBy": "kadre-runtime:M80SharedReplayOracle",
-  "linearIssues": ["FOR-96", "FOR-134", "FOR-135", "FOR-136", "FOR-137", "FOR-138"],
+  "scopeIds": ["FOR-96", "FOR-134", "FOR-135", "FOR-136", "FOR-137", "FOR-138"],
   "packId": "m80-shared-replay-oracle-v1",
   "claimLevel": "shared-replay-cpu-oracle-hardening",
   "readinessDelta": 0,

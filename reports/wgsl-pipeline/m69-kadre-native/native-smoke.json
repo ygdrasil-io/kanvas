@@ -25,7 +25,7 @@
     "nativeTimingClaim": "present-call-duration-only"
   },
   "surfaceStatuses": ["timeout", "timeout", "timeout"],
-  "linearIssues": ["FOR-56", "FOR-57", "FOR-58", "FOR-59"],
+  "scopeIds": ["FOR-56", "FOR-57", "FOR-58", "FOR-59"],
   "nonClaims": [
     "This smoke proves Kadre native window presentation for a bounded WGSL scene only.",
     "It does not prove broad Kanvas display-list replay or input-driven interaction yet."

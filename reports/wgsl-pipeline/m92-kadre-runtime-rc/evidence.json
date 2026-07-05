@@ -4,7 +4,7 @@
   "status": "pass",
   "generatedBy": "reports-only-closeout",
   "claimLevel": "rc-kadre-runtime-product-like-evidence-with-observed-derived-not-observable-telemetry",
-  "linearIssues": [
+  "scopeIds": [
     "FOR-204",
     "FOR-205",
     "FOR-206",

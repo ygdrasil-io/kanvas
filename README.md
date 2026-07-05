@@ -280,7 +280,7 @@ Historical MEP evidence:
 - M49 sprint review: [reports/wgsl-pipeline/2026-05-31-m49-sprint-review.md](reports/wgsl-pipeline/2026-05-31-m49-sprint-review.md)
 - M50 sprint plan: [reports/wgsl-pipeline/2026-05-31-m50-80-readiness-sprint-plan.md](reports/wgsl-pipeline/2026-05-31-m50-80-readiness-sprint-plan.md)
 - M50 sprint review: [reports/wgsl-pipeline/2026-05-31-m50-sprint-review.md](reports/wgsl-pipeline/2026-05-31-m50-sprint-review.md)
-- M50 verification and Linear sync: [reports/wgsl-pipeline/2026-05-31-m50-verification-and-linear-sync.md](reports/wgsl-pipeline/2026-05-31-m50-verification-and-linear-sync.md)
+- M50 verification report: [reports/wgsl-pipeline/2026-05-31-m50-verification-and-linear-sync.md](reports/wgsl-pipeline/2026-05-31-m50-verification-and-linear-sync.md)
 - M51 proposed sprint: [reports/wgsl-pipeline/2026-05-31-m51-skia-gm-inventory-sprint-plan.md](reports/wgsl-pipeline/2026-05-31-m51-skia-gm-inventory-sprint-plan.md)
 - M51 sprint review: [reports/wgsl-pipeline/2026-05-31-m51-sprint-review.md](reports/wgsl-pipeline/2026-05-31-m51-sprint-review.md)
 - M51 PM report: [reports/wgsl-pipeline/2026-05-31-m51-pm-report.md](reports/wgsl-pipeline/2026-05-31-m51-pm-report.md)
@@ -317,13 +317,12 @@ Last updated: 2026-05-28
 MVP readiness: 100%.
 
 The percentage is a readiness score, not an effort estimate. A block only moves
-when its milestone Definition of Done has CI, Linear, report, or artifact
-evidence. Archived migration plans are historical evidence only and must not be
-used as active backlog.
+when its milestone Definition of Done has CI, report, or artifact evidence.
+Archived migration plans are historical evidence only and must not be used as
+active backlog.
 
 Active execution source:
 
-- Linear project: [Kanvas - WGSL Pipeline Target](https://linear.app/forge-yg/project/kanvas-wgsl-pipeline-target-ef9e97757caa)
 - Sprint closeout: [reports/wgsl-pipeline/2026-05-28-m33-m35-sprint-report.md](reports/wgsl-pipeline/2026-05-28-m33-m35-sprint-report.md)
 - Architecture target: [.upstream/target/high-performance-wgsl-pipeline-target.md](.upstream/target/high-performance-wgsl-pipeline-target.md)
 - Active post-MEP target: [.upstream/target/skia-like-realtime-renderer-target.md](.upstream/target/skia-like-realtime-renderer-target.md)
@@ -331,7 +330,6 @@ Active execution source:
   history only if needed.
 - Front evidence specs: [.upstream/specs/front/README.md](.upstream/specs/front/README.md)
 - Font and text specs: [.upstream/specs/font/README.md](.upstream/specs/font/README.md)
-- Linear/agent methodology: [.upstream/target/linear-agent-methodology.md](.upstream/target/linear-agent-methodology.md)
 
 | Block | Scope | Status | Weight | Progress | MVP evidence gate |
 | --- | --- | --- | ---: | ---: | --- |
@@ -344,9 +342,8 @@ Active execution source:
 | Image-filter MVP lane | M34/M38: gate unsupported `Crop(input = nonNull)` graphs and promote the selected SimpleOffset child pre-pass | Done | 5% | 100% | `GRA-109` through `GRA-113` and `GRA-174` through `GRA-184`; selected `SimpleOffsetImageFilterWebGpuTest` is required smoke with dashboard evidence, while `image-filter.crop-input-nonnull-prepass-required` is retained only for out-of-scope Crop(input nonNull) graph shapes |
 | MVP release candidate | M35: final smoke, inventory, PM demo, limitations, and release notes | Done | 5% | 100% | Required CI, conformance, smoke, full inventory, PM evidence package, and closeout evidence are complete |
 
-Sprint verification on 2026-05-28 confirmed that Linear epics `GRA-101`,
-`GRA-102`, and `GRA-103`, their M33-M35 child tasks, and the M33-M35
-milestones are all `Done` / 100%.
+Sprint verification on 2026-05-28 confirmed that the M33-M35 scope and
+milestones are complete in repository evidence.
 
 ```mermaid
 flowchart LR
@@ -369,8 +366,7 @@ The MVP is reached when:
 - generated/validated WGSL is the accepted path for promoted pipeline slices;
 - CPU reference behavior and GPU similarity policy are visible in tests or
   reports;
-- PM-facing evidence links Linear milestones, PRs, CI runs, and known
-  limitations.
+- PM-facing evidence links milestones, PRs, CI runs, and known limitations.
 
 Non-goals for the MVP:
 

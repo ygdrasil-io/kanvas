@@ -4,7 +4,7 @@
   "status": "pass",
   "claimLevel": "post-rc-mep-bounded-feature-breadth-evidence",
   "date": "2026-06-02",
-  "linearIssues": [
+  "scopeIds": [
     "FOR-189",
     "FOR-190",
     "FOR-191",
