@@ -28,6 +28,9 @@ class Surface(
     private val buffer = SurfaceDisplayListBuffer()
     private var canvasInstance: Canvas? = null
 
+    /** Optional listener for per-operation pipeline events (DebugLevel.TRACE). */
+    var renderOpListener: RenderOpListener? = null
+
     /**
      * Run a block of drawing commands on this surface's [Canvas].
      * The canvas is created lazily on first access and reused for subsequent calls.
