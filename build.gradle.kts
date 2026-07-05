@@ -277,12 +277,6 @@ fun renderPipelineConformanceReport(
         |KAN-039 nested clip-stack V1 evidence with stable expected-unsupported classification,
         |KAN-040 coverage/stroke/clip closeout matrix with support/refusal proof guards,
         |KAN-041 image-filter DAG bounded V3 evidence with two support rows and stable residual refusals,
-        |KAN-042 image-filter residual refusal matrix with PM support/gap/dependency categories,
-        |KAN-043 text shaping/fallback scope with explicit font identity, glyph clusters, glyph ids, and stable fallback refusals,
-        |KAN-044 glyph mask/atlas ownership boundary with text-owned atlas route, CPU mask oracle, coverage handoff, and stable WebGPU alpha-mask refusal,
-        |KAN-045 color pipeline bounded policy with selected sRGB/premul support rows, wide-gamut/F16 refusals, semantic CPU/GPU op parity, and threshold guards,
-        |KAN-046 tile modes/mipmap boundary with two bounded tile-mode support rows, structured sampling/local-matrix/tile-mode/mipmap diagnostics, and stable mipmap refusals.
-        |
         |## Status Matrix
         |
         || Area | Status | Evidence |
@@ -314,25 +308,6 @@ fun renderPipelineConformanceReport(
         |${row("Runtime ColorFilter WGSL", "passed", "`pipelineRuntimeColorFilterWgslReport` validates selected `runtime.color_filter_luma_to_alpha` descriptor/WGSL layout, reference/CPU/WebGPU/diff/stat route artifacts, and stable non-selected ColorFilter reason codes; counts $runtimeColorFilterWgslCounts")}
         |${row("Runtime Effect uniform preview", "passed", "`pipelineRuntimeEffectUniformPreviewReport` validates two registered runtime effects, four edited uniform states, stable PipelineKey telemetry, invalid-value refusal policy, and headless/Kadre lane separation; counts $runtimeEffectUniformPreviewCounts")}
         |${row("Runtime Effects V2 evidence bundle", "passed", "`pipelineRuntimeEffectsV2EvidenceBundleReport` aggregates all Runtime Effects V2 support/refusal rows, linked artifacts, stable diagnostics, and PM non-claims; counts $runtimeEffectsV2EvidenceBundleCounts")}
-        |${row("KAN-035 HairlinesGM root cause", "expected-unsupported", "`validateKan035HairlinesRootCause` classifies the current HairlinesGM residual as `cap-join-parity`, keeps `skia-gm-hairlines` expected-unsupported, records `expected-unsupported-diagnostic=1` and `unexpected-exception=0`, and makes no renderer, shader, threshold, or edge-budget change.")}
-        |${row("KAN-036 butt stroke non-hairline", "expected-unsupported", "`validateKan036ButtStrokeNonHairline` selects one non-hairline no-dash butt-cap stroke row, records WebGPU stable refusal `coverage.stroke-cap-join-visual-parity-below-threshold` with `coverageEdgeCount=66/256`, blocks support until WebGPU image/diff and CPU-vs-Skia support-ready evidence exist, and makes no renderer, shader, threshold, or edge-budget change.")}
-        |${row("KAN-037 caps/joins micro-matrix", "expected-unsupported", "`validateKan037CapsJoinsMicroMatrix` selects `round-round`, preserves `butt-bevel` and `square-bevel` sentinels, records WebGPU stable refusal `coverage.stroke-cap-join-visual-parity-below-threshold` with `coverageEdgeCount=18/256`, keeps closed-contour join CPU evidence as a visible support blocker, and makes no renderer, shader, threshold, or edge-budget change.")}
-        |${row("KAN-038 dashes bounded V1", "expected-unsupported", "`validateKan038DashesBoundedV1` identifies `skia-gm-dashing-width1-pattern1-1-aa` with 2/8 dash intervals, phase 0, stroke width 1, path effect before stroke, keeps it refused via `coverage.dashing.row-specific-artifacts-required`, preserves the `path-aa-dashing-edge-budget` sentinel via `coverage.edge-count-exceeded`, and makes no renderer, shader, threshold, edge-budget, or dash-budget change.")}
-        |${row("KAN-039 nested clip-stack V1", "expected-unsupported", "`validateKan039NestedClipStackV1` selects `m60-bounded-nested-rrect-clip`, records clip sequence `rect/intersect + rect/intersect + rrect-oval/difference`, clipDepth `3/4`, edgeCount `72/256`, keeps it refused via `coverage.nested-clip-visual-parity-below-threshold`, preserves `m57-aaclip-bounded-grid` support, and makes no renderer, shader, threshold, edge-budget, clip-depth budget, or integer-scissor substitution change.")}
-        |${row("KAN-040 coverage/stroke/clip closeout matrix", "passed", "`validateKan040CoverageCloseoutMatrix` aggregates HairlinesGM, butt stroke, caps/joins, dashes, AA clip, and nested clip rows into supportable-bounded, visible-non-supportable, expected-unsupported, and dependency-gated categories; it fails support claims without reference/CPU/GPU/diff/stat/route plus `fallbackReason=none` and refuses unsupported rows without stable fallbacks.")}
-        |${row("KAN-041 image-filter DAG bounded V3", "passed", "`validateKan041ImageFilterDagBoundedV3` records two bounded support scenes (`crop-image-filter-nonnull-prepass`, `m61-compose-cf-matrix-transform-dag-v2`) with reference/CPU/GPU/diff/stat/route and `fallbackReason=none`, keeps BigTile/ImageFiltersGraph/out-of-scope Crop rows refused with stable reasons, and makes no renderer, shader, threshold, readback, picture-prepass, or broad DAG claim.")}
-        |${row("KAN-042 image-filter residual refusal matrix", "passed", "`validateKan042ImageFilterResidualRefusalMatrix` aggregates 15 image-filter rows into `supportable-bounded`, `implementation-gap`, and `dependency-gated` PM categories, keeps every unsupported row on a stable reason code, verifies dashboard `fail=0` and `tracked-gap=0`, and makes no renderer, shader, threshold, budget, or new support claim.")}
-        |${row("KAN-043 text shaping/fallback scope", "passed", "`validateKan043TextShapingFallbackScope` records simple Latin support, bounded kerning-style shaping support, complex shaping refusal, and missing glyph/fallback refusal with font face/source/hash, shaping route, clusters, glyph ids, CPU/GPU route or refusal, and guards against implicit system font fallback or broad shaping claims.")}
-        |${row("KAN-044 glyph mask/atlas ownership", "passed", "`validateKan044GlyphMaskAtlasOwnership` records the text-owned simple Latin glyph atlas upload plan, CPU glyph-mask oracle, geometry `CoveragePlan.AlphaMask` handoff, and WebGPU standalone alpha-mask refusal `coverage.alpha-mask-unsupported`, with guards against missing glyph keys/generation/upload bytes/cache ids, coverage ownership drift, LCD/SDF, dynamic eviction, and Ganesh/Graphite claims.")}
-        |${row("KAN-045 color pipeline bounded policy", "passed", "`validateKan045ColorPipelineBoundedPolicy` records bounded sRGB/premul SrcOver and Blend(kPlus) ColorFilter support rows, visible wide-gamut and F16 policy refusals, matching CPU/GPU semantic ops, generated/handwritten WGSL validation facts, and guards against threshold weakening, silent approximation, broad color management, HDR/gainmap, all-blend-mode, Ganesh/Graphite, or SkSL compiler claims.")}
-        |${row("KAN-046 tile modes/mipmap boundary", "passed", "`validateKan046TileModesMipmapBoundary` records two bounded tile-mode support rows (`bitmap-shader-repeat-tile`, `bitmap-subset-local-matrix-repeat`) with reference/CPU/GPU/diff/stat/routes plus structured sampling/localMatrix/tileMode/mipmapMode diagnostics, keeps mipmap requests expected-unsupported via `image-sampling.mipmap-unsupported`, and guards against arbitrary texture, codec decode, perspective sampling, color-managed decode, broad tile-mode, mipmap, renderer, shader, threshold, or budget claims.")}
-        |${row("KAN-047 codec provenance matrix", "passed", "`validateKan047CodecProvenanceMatrix` records 6 image-scene provenance rows with format, decoder, color info, origin, and decode result; separates fixture/surface rows from the real PNG codec decode source in `bitmap-subset-local-matrix-repeat`; keeps animated WebP/GIF scene rows dependency-gated via `codec.animated-frame-unsupported`; and keeps AVIF, JPEG XL, RAW, and video stubs dependency-gated via `codec.decoder-unavailable`.")}
-        |${row("KAN-048 performance family budgets", "passed", "`validateKan048PerformanceFamilyBudgets` records filters, text, and bitmap/color family performance payloads: bitmap/color aggregates checked-in measured CPU/WebGPU raw metrics, filters and text remain `unavailable` with stable root-cause reasons, and all family gates stay `reporting-only` with no release-blocking or slow-CI benchmark claim.")}
-        |${row("KAN-049 cache telemetry release-gate criteria", "passed", "`validateKan049CacheTelemetryReleaseGateCriteria` classifies observed/partial/derived/unavailable counters, names promotion criteria, and keeps M85 ledgers non-observed/non-gating.")}
-        |${row("KAN-050 PM breadth support/refusal pack", "passed", "`validateKan050PmBreadthSupportRefusalPack` aggregates runtime effects V2, coverage/strokes/clips, filters, text/glyphs, color/bitmap/codec, performance/cache, categories, support proofs, non-claims, and the PM bundle manifest entry without adding renderer code, thresholds, readiness movement, native Kadre CI requirements, or release-blocking performance/cache gates.")}
-        |${row("KAN-051 renderer visual delta", "passed", "`validateKan051RendererVisualDelta` records a real WebGPU renderer change for `clip-rect-difference` / `Skbug9319GM`, keeps threshold/tolerance constant, packages before/after reference/CPU/GPU/diff/stat/route evidence, improves GPU matching pixels `130672 -> 131064`, and guards against rendererChanged=false, missing before/after, evidence-only closure, or hidden refusal loss.")}
-        |${row("KAN-052 image-filter visual delta", "blocked", "`validateKan052ImageFilterVisualDelta` selects `crop-image-filter-nonnull-prepass`, preserves reference/CPU/GPU/diff/stat/route evidence, and records a machine-checked root-cause blocker: the remaining residual is an RGBA16Float intermediate store-to-present byte-quantization policy issue that reproduces outside image-filter routing, so no crop-only renderer fix is claimed.")}
-        |${row("KAN-053 text glyph visual delta", "blocked", "`validateKan053TextGlyphVisualDelta` selects `text.simple-latin.line.v1`, preserves KAN-012 reference/CPU/WebGPU/diff/stat/route evidence plus KAN-043 font/glyph facts and KAN-044 atlas ownership, and records a machine-checked root-cause blocker: the glyph atlas route is an upload-plan/CPU-mask oracle, while production text drawing still uses outline-path routes, so no atlas sampling renderer fix is claimed.")}
         |${row("Vector decision", vectorStatus, vectorDecision)}
         |${row("Skipped checks", if (totalSkipped == 0) "passed" else "skipped", "$totalSkipped JUnit skipped checks in local report; GPU CI skip remains residual adapter risk")}
         |
@@ -4608,73 +4583,6 @@ tasks.register("pipelineSceneDashboardGateNegativeFixture") {
     }
 }
 
-tasks.register("pipelineSkiaGmInventory") {
-    group = "verification"
-    description = "Generates the M51 Skia GM/sample inventory JSON and Markdown without changing dashboard support claims."
-
-    val scriptFile = layout.projectDirectory.file("scripts/skia_gm_inventory.py")
-    val outputDir = layout.buildDirectory.dir("reports/wgsl-pipeline-skia-gm-inventory")
-    val upstreamGmDir = file("/Users/chaos/workspace/kanvas-forge/skia-main/gm")
-    val generatedSceneDir = layout.buildDirectory.dir("reports/wgsl-pipeline-generated-scenes")
-    dependsOn("pipelineGeneratedSceneExport")
-    inputs.file(scriptFile)
-    inputs.dir(layout.projectDirectory.dir("skia-integration-tests/src/main/kotlin/org/skia/tests"))
-    if (upstreamGmDir.isDirectory) {
-        inputs.dir(upstreamGmDir)
-    }
-    inputs.property("upstreamGmDirPresent", upstreamGmDir.isDirectory)
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/data/scenes.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/results.json"))
-    inputs.file(generatedSceneDir.map { it.file("data/generated-scenes.json") })
-    outputs.dir(outputDir)
-    outputs.upToDateWhen { false }
-
-    doLast {
-        providers.exec {
-            commandLine(
-                "python3",
-                scriptFile.asFile.absolutePath,
-                "generate",
-                "--project-root",
-                rootDir.absolutePath,
-                "--output-dir",
-                outputDir.get().asFile.relativeTo(rootDir).path,
-                "--dashboard-json",
-                generatedSceneDir.get().file("data/generated-scenes.json").asFile.relativeTo(rootDir).path,
-            )
-        }.result.get().assertNormalExitValue()
-    }
-}
-
-tasks.register("pipelineSkiaGmInventoryGate") {
-    group = "verification"
-    description = "Validates the M51 Skia GM inventory and writes PM-readable gate reports."
-
-    dependsOn("pipelineSkiaGmInventory")
-
-    val inventoryDir = layout.buildDirectory.dir("reports/wgsl-pipeline-skia-gm-inventory")
-    val reportDir = layout.buildDirectory.dir("reports/wgsl-pipeline-skia-gm-inventory-gate")
-    inputs.file(inventoryDir.map { it.file("inventory.json") })
-    outputs.dir(reportDir)
-    outputs.upToDateWhen { false }
-
-    doLast {
-        providers.exec {
-            commandLine(
-                "python3",
-                layout.projectDirectory.file("scripts/skia_gm_inventory.py").asFile.absolutePath,
-                "validate",
-                "--project-root",
-                rootDir.absolutePath,
-                "--inventory-json",
-                inventoryDir.get().file("inventory.json").asFile.relativeTo(rootDir).path,
-                "--report-dir",
-                reportDir.get().asFile.relativeTo(rootDir).path,
-            )
-        }.result.get().assertNormalExitValue()
-    }
-}
-
 tasks.register<Exec>("validateM88ReleaseCandidate2") {
     group = "verification"
     description = "Validates checked-in M88 RC2 evidence without resolving Kadre runtime dependencies."
@@ -4761,7 +4669,6 @@ tasks.register("pipelinePmBundle") {
         "pipelineM68KadreDemoEvidence",
         "pipelineM69KadreHostAdapterSmoke",
         "pipelineM70KadreLiveRuntimeEvidence",
-        "pipelineSkiaGmInventoryGate",
         "validateMepNextRuntimeInteractive",
         "validateMepRcScenePack",
         "validateMepRcRuntime",

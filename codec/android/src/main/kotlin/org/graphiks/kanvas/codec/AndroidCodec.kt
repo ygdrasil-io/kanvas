@@ -81,7 +81,7 @@ public class AndroidCodec internal constructor(private val codec: Codec) {
      * Mirrors `AndroidCodec::getICCProfile()`. The upstream returns a
      * raw `skcms_ICCProfile*` ; the Kotlin port surfaces the parsed
      * [SkColorSpace] from [getInfo] for ergonomic parity with the rest
-     * of `:kanvas-skia` (callers that need the raw profile can reach
+     * of Kanvas (callers that need the raw profile can reach
      * through `codec().getICCProfile()`).
      */
     public fun getICCProfile(): SkColorSpace? = codec.getInfo().colorSpace
@@ -214,7 +214,7 @@ public class AndroidCodec internal constructor(private val codec: Codec) {
      *     output dimensions match [getSampledSubsetDimensions] (or
      *     [getSampledDimensions] when no subset is set).
      *  3. **Write** to the caller's [pixels] [ByteBuffer], honouring
-     *     [rowBytes] and the colour types kanvas-skia's [SkBitmap] knows
+     *     [rowBytes] and the colour types Kanvas' [SkBitmap] knows
      *     how to read (8888 / BGRA / 565 / 4444 / Alpha-8 / Gray-8).
      *
      * The caller's [info] must match the **post-sampling** size : its

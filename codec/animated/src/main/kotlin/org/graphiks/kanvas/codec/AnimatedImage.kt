@@ -20,7 +20,7 @@ import org.skia.utils.PixmapUtils
  * advances through the animation under client control via
  * [decodeNextFrame].
  *
- * **R-final.8 scope.** The kanvas-skia port surfaces the API the
+ * **R-final.8 scope.** The Kanvas compatibility surface exposes the API the
  * `gm/animated_image_orientation.cpp` GM exercises :
  *  - [Make] — construct from an [AndroidCodec] (with optional
  *    `requestedInfo` / `cropRect` / `postProcess` for the GM's

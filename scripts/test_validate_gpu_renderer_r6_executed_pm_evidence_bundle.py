@@ -864,7 +864,7 @@ class GpuRendererR6ExecutedPmEvidenceValidatorTest(unittest.TestCase):
             (root / "build.gradle.kts").write_text(
                 "\n".join(
                     [
-                        'val harmlessDependency = "validateKan056GlyphAtlasRouteHardening" // :gpu-raster:validateGpuRendererR6ExecutedFirstRoutePmEvidenceBundle',
+                        'val harmlessDependency = "validateMepRcRuntime" // :gpu-renderer:gpuRendererR6FirstRoutePmEvidenceBundle',
                         'tasks.register("pipelinePmBundle") {',
                         "}",
                         'tasks.named("pipelinePmBundle") {',
