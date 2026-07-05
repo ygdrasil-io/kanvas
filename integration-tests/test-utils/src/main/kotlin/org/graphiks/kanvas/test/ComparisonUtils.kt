@@ -137,4 +137,111 @@ object ComparisonUtils {
         }
         return rgba
     }
+
+    fun computeSSIM(
+        actual: ByteArray,
+        reference: ByteArray,
+        width: Int,
+        height: Int,
+    ): Double {
+        val blockSize = 16
+        val C1 = (0.01 * 255.0).let { it * it }
+        val C2 = (0.03 * 255.0).let { it * it }
+
+        fun luminance(r: Int, g: Int, b: Int): Double =
+            0.299 * r + 0.587 * g + 0.114 * b
+
+        val blocksX = width / blockSize
+        val blocksY = height / blockSize
+        if (blocksX == 0 || blocksY == 0) return 1.0
+
+        var totalSSIM = 0.0
+        var blockCount = 0
+
+        for (by in 0 until blocksY) {
+            for (bx in 0 until blocksX) {
+                val n = blockSize * blockSize
+                var sumX = 0.0
+                var sumY = 0.0
+                var sumXX = 0.0
+                var sumYY = 0.0
+                var sumXY = 0.0
+
+                for (dy in 0 until blockSize) {
+                    for (dx in 0 until blockSize) {
+                        val px = (by * blockSize + dy) * width + (bx * blockSize + dx)
+                        val i = px * 4
+                        val ar = actual[i].toInt() and 0xFF
+                        val ag = actual[i + 1].toInt() and 0xFF
+                        val ab = actual[i + 2].toInt() and 0xFF
+                        val rr = reference[i].toInt() and 0xFF
+                        val rg = reference[i + 1].toInt() and 0xFF
+                        val rb = reference[i + 2].toInt() and 0xFF
+
+                        val lx = luminance(ar, ag, ab)
+                        val ly = luminance(rr, rg, rb)
+                        sumX += lx; sumY += ly
+                        sumXX += lx * lx; sumYY += ly * ly
+                        sumXY += lx * ly
+                    }
+                }
+
+                val meanX = sumX / n
+                val meanY = sumY / n
+                val varX = sumXX / n - meanX * meanX
+                val varY = sumYY / n - meanY * meanY
+                val covXY = sumXY / n - meanX * meanY
+
+                val numerator = (2.0 * meanX * meanY + C1) * (2.0 * covXY + C2)
+                val denominator = (meanX * meanX + meanY * meanY + C1) * (varX + varY + C2)
+                val ssim = if (denominator > 0.0) numerator / denominator else 1.0
+                totalSSIM += ssim
+                blockCount++
+            }
+        }
+
+        return if (blockCount > 0) totalSSIM / blockCount else 1.0
+    }
+
+    fun computeSSIMBlocks(
+        actual: ByteArray,
+        reference: ByteArray,
+        width: Int,
+        height: Int,
+        blockSize: Int = 16,
+    ): List<SsimBlock> {
+        val C1 = (0.01 * 255.0).let { it * it }
+        val C2 = (0.03 * 255.0).let { it * it }
+        fun lum(r: Int, g: Int, b: Int): Double = 0.299 * r + 0.587 * g + 0.114 * b
+
+        val blocksX = width / blockSize
+        val blocksY = height / blockSize
+        if (blocksX == 0 || blocksY == 0) return emptyList()
+
+        val results = mutableListOf<SsimBlock>()
+        for (by in 0 until blocksY) {
+            for (bx in 0 until blocksX) {
+                val n = blockSize * blockSize
+                var sumX = 0.0; var sumY = 0.0; var sumXX = 0.0; var sumYY = 0.0; var sumXY = 0.0
+                for (dy in 0 until blockSize) {
+                    for (dx in 0 until blockSize) {
+                        val px = (by * blockSize + dy) * width + (bx * blockSize + dx)
+                        val i = px * 4
+                        val lx = lum(actual[i].toInt() and 0xFF, actual[i + 1].toInt() and 0xFF, actual[i + 2].toInt() and 0xFF)
+                        val ly = lum(reference[i].toInt() and 0xFF, reference[i + 1].toInt() and 0xFF, reference[i + 2].toInt() and 0xFF)
+                        sumX += lx; sumY += ly; sumXX += lx * lx; sumYY += ly * ly; sumXY += lx * ly
+                    }
+                }
+                val mx = sumX / n; val my = sumY / n
+                val vx = sumXX / n - mx * mx; val vy = sumYY / n - my * my; val cv = sumXY / n - mx * my
+                val num = (2.0 * mx * my + C1) * (2.0 * cv + C2)
+                val den = (mx * mx + my * my + C1) * (vx + vy + C2)
+                val s = if (den > 0.0) num / den else 1.0
+                results.add(SsimBlock(x = bx * blockSize, y = by * blockSize, score = s))
+            }
+        }
+        return results
+    }
 }
+
+data class SsimBlock(val x: Int, val y: Int, val score: Double)

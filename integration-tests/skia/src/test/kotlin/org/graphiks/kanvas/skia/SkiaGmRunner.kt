@@ -1,6 +1,11 @@
 package org.graphiks.kanvas.skia
 
+import org.graphiks.kanvas.diagnostic.DiagnosticRunner
+import org.graphiks.kanvas.diagnostic.PipelineTrace
+import org.graphiks.kanvas.diagnostic.RunnerInput
 import org.graphiks.kanvas.pipeline.RuntimeEffectWgsl4kWiring
+import org.graphiks.kanvas.surface.DebugLevel
+import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.test.GpuAvailability
 import org.graphiks.kanvas.test.ComparisonUtils
 import org.graphiks.kanvas.test.ReferenceManager
@@ -27,7 +32,13 @@ class SkiaGmRunner {
     @MethodSource("allGms")
     fun `render GM`(gm: SkiaGm) {
         GpuAvailability.requireWebGpu()
-        val result = SkiaGmRenderer.render(gm)
+
+        val debugLevel = DebugLevel.valueOf(
+            System.getProperty("kanvas.render.debugLevel") ?: "OFF"
+        )
+        val config = RenderConfig.DEFAULT.copy(debugLevel = debugLevel)
+
+        val result = SkiaGmRenderer.render(gm, config = config)
         val refPath = "/reference/${gm.name}.png"
 
         if (!ReferenceManager.hasReference(refPath)) {
@@ -53,6 +64,39 @@ class SkiaGmRunner {
         ComparisonUtils.saveRgbaAsPng(reference, result.width, result.height, File(outputDir, "reference.png"))
         comparison.diffRgba?.let { diff ->
             ComparisonUtils.saveRgbaAsPng(diff, result.width, result.height, File(outputDir, "diff.png"))
+        }
+
+        if (debugLevel >= DebugLevel.PIXEL) {
+            val diagnosticDir = File(outputDir, "diagnostics")
+            diagnosticDir.mkdirs()
+
+            var pipelineTrace: PipelineTrace? = null
+            if (debugLevel >= DebugLevel.TRACE && result.pipelineTracer != null) {
+                pipelineTrace = result.pipelineTracer.buildTrace()
+            }
+
+            val manifest = DiagnosticRunner.run(RunnerInput(
+                gmName = gm.name,
+                minSimilarity = gm.minSimilarity,
+                actualRgba = result.rgba,
+                referenceRgba = reference,
+                width = result.width,
+                height = result.height,
+                tolerance = gm.tolerance,
+                ops = result.ops,
+                dispatchedCount = result.dispatchedCount,
+                refusedCount = result.refusedCount,
+                diagnostics = result.diagnostics,
+                debugLevel = debugLevel,
+                outputDir = diagnosticDir,
+            ))
+
+            val finalManifest = if (pipelineTrace != null) {
+                manifest.copy(pipelineTrace = pipelineTrace)
+            } else manifest
+
+            val manifestFile = File(outputDir, "manifest.json")
+            manifestFile.writeText(finalManifest.toJson())
         }
 
         println(
