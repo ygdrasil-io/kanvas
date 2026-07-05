@@ -154,8 +154,8 @@ Lecture : `scene`, `src` et `snap` deviennent un plan explicite.
 flowchart LR
     A["0 Baseline"] --> B["1 WgpuCaps"]
     B --> C["2 WgpuResourceProvider"]
-    C --> D["3 Pass batching simple"]
-    D --> E["4 Queue/lifetime"]
+    C --> D["3 Queue/lifetime"]
+    D --> E["4 Pass batching simple"]
     E --> F["5 Intermediate planner"]
     F --> G["6 Migration familles GM"]
 ```

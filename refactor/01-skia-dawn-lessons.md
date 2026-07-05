@@ -128,10 +128,16 @@ Dawn utilise notamment :
 Pour Kanvas, cela suggere un `WgpuResourceProvider` avec :
 
 - une uniform slab ou ring buffer ;
+- un alignement lu depuis `WgpuCaps.minUniformBufferOffsetAlignment` ;
 - une cle de cache par layout + buffer + plage ;
 - une cle de cache par texture view + sampler descriptor ;
 - une strategie claire pour les ressources nulles ;
 - des compteurs de hit/miss/creation.
+
+Le padding de la slab doit etre une decision backend. D3D12 impose
+typiquement 256 octets pour les offsets dynamiques uniformes ; si Metal ou
+Vulkan exposent un alignement plus fin via WebGPU, Kanvas doit pouvoir en
+profiter sans changer les shaders.
 
 Le benefice attendu est important parce que le runtime actuel cree souvent
 des uniform buffers, bind groups, textures et samplers directement dans le

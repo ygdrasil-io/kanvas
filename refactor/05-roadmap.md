@@ -42,6 +42,7 @@ Centraliser les faits backend.
 - Remplacer les constantes dispersees quand possible.
 - Exposer les facts utiles aux pipeline keys.
 - Ajouter diagnostics de refus pour format/usage/size/alignment.
+- Exposer `minUniformBufferOffsetAlignment` pour la strategie de slab.
 
 ### Validation
 
@@ -49,6 +50,8 @@ Centraliser les faits backend.
 - Smoke WGPU offscreen toujours vert.
 - Les cles de pipeline incluent les facts utiles mais pas les valeurs uniforms.
 - Les refus mentionnent la capacite manquante.
+- Les tests couvrent au moins un alignement 256 octets et un alignement plus
+  fin.
 
 ### Risque
 
@@ -64,6 +67,8 @@ Faire passer les ressources les plus frequentes par un provider concret.
 ### Travail
 
 - Uniform slab/ring pour petits payloads.
+- Padding base sur `WgpuCaps.minUniformBufferOffsetAlignment`, pas sur une
+  constante globale.
 - Null buffer.
 - Cache bind group single-uniform.
 - Cache texture+sampler simple.
@@ -82,38 +87,11 @@ Faire passer les ressources les plus frequentes par un provider concret.
 Un provider trop general au debut ralentirait le chantier. Commencer par les
 cas les plus frequents : uniform + texture/sampler.
 
-## Phase 3 : batching des passes simples
+## Phase 3 : queue manager et resource lifetime
 
 ### Objectif
 
-Regrouper les draws compatibles sans toucher aux cas complexes.
-
-### Travail
-
-- Creer ou activer un `GpuPassBatcher`.
-- Supporter fills solides et gradients simples.
-- Garder destination-read, saveLayer, filters et text complex hors batch au
-  debut.
-- Produire dumps de decisions de batch.
-- Encoder depuis `GPUPassCommandStream`.
-
-### Validation
-
-- Tests ordre de rendu.
-- Tests batch cut sur target/blend/destination-read.
-- Scene de rectangles : moins de passes/submissions.
-- GM impact nul ou explique.
-
-### Risque
-
-Le batching peut casser l'ordre visuel. Regle stricte : si doute, couper le
-batch et garder le chemin existant.
-
-## Phase 4 : queue manager et resource lifetime
-
-### Objectif
-
-Retenir les ressources jusqu'a completion GPU.
+Retenir les ressources jusqu'a completion GPU avant de generaliser le batching.
 
 ### Travail
 
@@ -135,6 +113,35 @@ Retenir les ressources jusqu'a completion GPU.
 Les APIs de completion peuvent varier selon backend natif/web. Encapsuler la
 difference dans le queue manager.
 
+## Phase 4 : batching des passes simples
+
+### Objectif
+
+Regrouper les draws compatibles sans toucher aux cas complexes.
+
+### Travail
+
+- Creer ou activer un `GpuPassBatcher`.
+- Supporter fills solides et gradients simples.
+- Garder destination-read, saveLayer, filters et text complex hors batch au
+  debut.
+- Produire dumps de decisions de batch.
+- Encoder depuis `GPUPassCommandStream`.
+- Guard explicite : si une ressource materialisee n'est pas retenue par le
+  `WgpuQueueManager`, le batcher coupe ou refuse au lieu de recycler tot.
+
+### Validation
+
+- Tests ordre de rendu.
+- Tests batch cut sur target/blend/destination-read.
+- Scene de rectangles : moins de passes/submissions.
+- GM impact nul ou explique.
+
+### Risque
+
+Le batching peut casser l'ordre visuel ou exposer des bugs de lifetime. Regle
+stricte : si doute, couper le batch et garder le chemin existant.
+
 ## Phase 5 : planner destination-read / intermediates / MSAA
 
 ### Objectif
@@ -144,6 +151,8 @@ Sortir la logique `scene/src/snap` du renderer procedural.
 ### Travail
 
 - Definir un plan explicite pour destination-read.
+- Documenter au moins un plan `srcOver` simple et un plan `saveLayer` avec
+  snapshot destination.
 - Reutiliser textures intermediaires via provider.
 - Ajouter decisions copy/render/compute selon `WgpuCaps`.
 - Integrer saveLayer et blends avances progressivement.
@@ -193,8 +202,8 @@ difficiles a comprendre. Faire une famille a la fois.
 0. Baseline
 1. WgpuCaps
 2. ResourceProvider minimal
-3. Pass batching simple
-4. Queue/lifetime
+3. Queue/lifetime
+4. Pass batching simple
 5. Intermediate planner
 6. Familles GM
 ```

@@ -112,6 +112,30 @@ Responsabilite :
 Au debut, ce planner peut couvrir seulement les cas deja presents dans
 `GPURenderer`, puis s'etendre.
 
+Exemple de decision simple :
+
+```text
+drawRect srcOver opaque
+  -> pas de destination-read explicite
+  -> fixed-function blend possible
+  -> batch compatible si target/clip/pipeline le permettent
+```
+
+Exemple de `saveLayer` ou blend qui lit la destination :
+
+```text
+saveLayer(bounds, paint)
+  -> allouer ou reutiliser layerTexture(bounds)
+  -> rendre les draws enfants dans layerTexture
+  -> si le paint final demande la destination:
+       snapshot scene -> snapTexture
+       composer layerTexture + snapTexture -> scene
+     sinon:
+       composer layerTexture -> scene
+  -> liberer/recycler layerTexture apres completion GPU
+  -> produire diagnostics: textures, copies, fallback, submissionId
+```
+
 ## Flux cible detaille
 
 ```text
@@ -177,6 +201,11 @@ Bind group
   -> meme buffer
   -> offset dynamique
 ```
+
+Chaque offset doit etre aligne sur `WgpuCaps.minUniformBufferOffsetAlignment`.
+La valeur peut etre 256 octets sur D3D12, mais le provider ne doit pas la coder
+en dur : elle vient des limits du backend. Si l'alignement expose est plus fin,
+la slab peut reduire le padding et augmenter sa densite.
 
 Si les offsets dynamiques ne sont pas disponibles ou pas adaptes, le provider
 peut choisir une variante :
@@ -253,10 +282,11 @@ Le refus doit contenir :
 1. instrumenter le nombre de passes/submissions ;
 2. brancher `WgpuCaps` sans changer le rendu ;
 3. brancher `WgpuResourceProvider` pour uniforms/bind groups simples ;
-4. batcher les rectangles/gradients simples ;
-5. batcher les images simples ;
-6. deplacer destination-read vers `IntermediatePlanner` ;
-7. migrer texte/path/blur quand les primitives sont stables.
+4. brancher `WgpuQueueManager` pour retenir les ressources jusqu'a completion ;
+5. batcher les rectangles/gradients simples ;
+6. batcher les images simples ;
+7. deplacer destination-read vers `IntermediatePlanner` ;
+8. migrer texte/path/blur quand les primitives sont stables.
 
 ## Definition d'un refactor reussi
 
