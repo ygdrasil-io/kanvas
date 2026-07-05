@@ -62,6 +62,7 @@ org.graphiks.kanvas.skia.gm.clip.WindowRectanglesGm
 org.graphiks.kanvas.skia.gm.composite.AAXfermodesGm
 org.graphiks.kanvas.skia.gm.composite.AaRectModesGm
 org.graphiks.kanvas.skia.gm.composite.ArithmodeBlenderGm
+org.graphiks.kanvas.skia.gm.composite.BackdropHintrectClippingGm
 org.graphiks.kanvas.skia.gm.composite.BackdropImagefilterCroprectGm
 org.graphiks.kanvas.skia.gm.composite.BackdropImagefilterCroprectVariantsGm
 org.graphiks.kanvas.skia.gm.composite.BadPaintGm
@@ -87,6 +88,7 @@ org.graphiks.kanvas.skia.gm.composite.DstReadShuffleGm
 org.graphiks.kanvas.skia.gm.composite.DuckyYuvBlendGm
 org.graphiks.kanvas.skia.gm.composite.EncodeGm
 org.graphiks.kanvas.skia.gm.composite.FadeFilterGm
+org.graphiks.kanvas.skia.gm.composite.FilterFastBoundsGm
 org.graphiks.kanvas.skia.gm.composite.GraphiteReplayGm
 org.graphiks.kanvas.skia.gm.composite.HSLColorFilterGm
 org.graphiks.kanvas.skia.gm.composite.HairModesGm
@@ -131,6 +133,7 @@ org.graphiks.kanvas.skia.gm.composite.PerlinNoiseLocalMatrixGm
 org.graphiks.kanvas.skia.gm.composite.PerlinNoiseRotatedGm
 org.graphiks.kanvas.skia.gm.composite.PlusMergesAaGm
 org.graphiks.kanvas.skia.gm.composite.RasterAllocatorGm
+org.graphiks.kanvas.skia.gm.composite.RecordOptsGm
 org.graphiks.kanvas.skia.gm.composite.RotateImageFilterGm
 org.graphiks.kanvas.skia.gm.composite.SamplerStressGm
 org.graphiks.kanvas.skia.gm.composite.SaveBehindGm
@@ -138,6 +141,7 @@ org.graphiks.kanvas.skia.gm.composite.SaveLayerF16Gm
 org.graphiks.kanvas.skia.gm.composite.SaveLayerGm
 org.graphiks.kanvas.skia.gm.composite.ShaderMaskFilterGm
 org.graphiks.kanvas.skia.gm.composite.SimpleOffsetImageFilterGm
+org.graphiks.kanvas.skia.gm.composite.Sk3dSimpleGm
 org.graphiks.kanvas.skia.gm.composite.Skbug14554Gm
 org.graphiks.kanvas.skia.gm.composite.SrcModeGm
 org.graphiks.kanvas.skia.gm.composite.SrgbGm
@@ -243,11 +247,13 @@ org.graphiks.kanvas.skia.gm.image.EncodePlatformGm
 org.graphiks.kanvas.skia.gm.image.EncodeSrgbGm
 org.graphiks.kanvas.skia.gm.image.FilterBugGm
 org.graphiks.kanvas.skia.gm.image.FilterIndiaBoxGm
+org.graphiks.kanvas.skia.gm.image.FlightAnimatedImageGm
 org.graphiks.kanvas.skia.gm.image.FlippityGm
 org.graphiks.kanvas.skia.gm.image.Format4444Gm
 org.graphiks.kanvas.skia.gm.image.GiantBitmapGm
 org.graphiks.kanvas.skia.gm.image.GrayscaleJpgGm
 org.graphiks.kanvas.skia.gm.image.HugeBitmapShaderGm
+org.graphiks.kanvas.skia.gm.image.ImageCacheratorFromPictureGm
 org.graphiks.kanvas.skia.gm.image.ImageFilterTransformedImageGm
 org.graphiks.kanvas.skia.gm.image.ImageFiltersCropExpandGm
 org.graphiks.kanvas.skia.gm.image.ImageFiltersGraphGm
@@ -258,6 +264,7 @@ org.graphiks.kanvas.skia.gm.image.ImageMagnifierGm
 org.graphiks.kanvas.skia.gm.image.ImageOutOfGamutGm
 org.graphiks.kanvas.skia.gm.image.ImagePictGm
 org.graphiks.kanvas.skia.gm.image.ImageResizeTiledGm
+org.graphiks.kanvas.skia.gm.image.ImageShaderGm
 org.graphiks.kanvas.skia.gm.image.ImageSourceGm
 org.graphiks.kanvas.skia.gm.image.ImageSubsetGm
 org.graphiks.kanvas.skia.gm.image.ImageshaderTinyscaleGm
@@ -279,9 +286,11 @@ org.graphiks.kanvas.skia.gm.image.PictureShaderAlphaGm
 org.graphiks.kanvas.skia.gm.image.PictureShaderCacheGm
 org.graphiks.kanvas.skia.gm.image.PictureShaderGm
 org.graphiks.kanvas.skia.gm.image.PictureShaderLocalWrapperGm
+org.graphiks.kanvas.skia.gm.image.PictureShaderPerspGm
 org.graphiks.kanvas.skia.gm.image.PictureShaderTileGm
 org.graphiks.kanvas.skia.gm.image.PosterCircleGm
 org.graphiks.kanvas.skia.gm.image.ReadPixelsCodecGm
+org.graphiks.kanvas.skia.gm.image.ReadPixelsPictureGm
 org.graphiks.kanvas.skia.gm.image.ScaledTilemodesGm
 org.graphiks.kanvas.skia.gm.image.ScaledTilemodesNpotGm
 org.graphiks.kanvas.skia.gm.image.ScalepixelsUnpremulGm
@@ -290,6 +299,7 @@ org.graphiks.kanvas.skia.gm.image.ShowMipLevelsGm
 org.graphiks.kanvas.skia.gm.image.Skbug8664Gm
 org.graphiks.kanvas.skia.gm.image.Skbug9819Gm
 org.graphiks.kanvas.skia.gm.image.SrcRectConstraintGm
+org.graphiks.kanvas.skia.gm.image.StoplightAnimatedImageGm
 org.graphiks.kanvas.skia.gm.image.SurfaceUnderdrawGm
 org.graphiks.kanvas.skia.gm.image.TextureimageAndShaderGm
 org.graphiks.kanvas.skia.gm.image.TiledPictureShaderGm
