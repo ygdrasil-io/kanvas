@@ -53,6 +53,63 @@ internal val STROKE_AA_WGSL: String = """
     }
 """.trimIndent()
 
+internal val COVERAGE_STROKE_WGSL: String = """
+    struct StrokeParams {
+        p0: vec2f,
+        p1: vec2f,
+        halfWidth: f32,
+        aaWidth: f32,
+    };
+
+    @group(0) @binding(0) var<uniform> params: StrokeParams;
+    @group(0) @binding(1) var coverage: texture_storage_2d<r8unorm, write>;
+
+    @compute @workgroup_size(8, 8)
+    fn main(@builtin(global_invocation_id) gid: vec3u) {
+        let p = vec2f(gid.xy);
+        let v = params.p1 - params.p0;
+        let w = p - params.p0;
+        let t = clamp(dot(w, v) / max(dot(v, v), 0.001), 0.0, 1.0);
+        let closest = params.p0 + t * v;
+        let dist = length(p - closest);
+        let inner = params.halfWidth;
+        let outer = inner + params.aaWidth;
+        let alpha = saturate(1.0 - (dist - inner) / (outer - inner));
+        textureStore(coverage, vec2u(gid.xy), vec4f(alpha, 0.0, 0.0, 0.0));
+    }
+""".trimIndent()
+
+internal val COVERAGE_FILL_WGSL: String = """
+    struct FillUniforms {
+        color: vec4f,
+    };
+
+    @group(0) @binding(0) var<uniform> fill: FillUniforms;
+    @group(0) @binding(1) var covTex: texture_2d<f32>;
+    @group(0) @binding(2) var covSampler: sampler;
+
+    struct VertexOut {
+        @builtin(position) pos: vec4f,
+        @location(0) uv: vec2f,
+    };
+
+    @vertex
+    fn vs_main(@builtin(vertex_index) idx: u32) -> VertexOut {
+        var out: VertexOut;
+        let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
+        let y = f32(idx & 2u) * 2.0 - 1.0;
+        out.pos = vec4f(x, y, 0.0, 1.0);
+        out.uv = vec2f(x * 0.5 + 0.5, 0.5 - y * 0.5);
+        return out;
+    }
+
+    @fragment
+    fn fs_main(in: VertexOut) -> @location(0) vec4f {
+        let coverage = textureSample(covTex, covSampler, in.uv).r;
+        return vec4f(fill.color.rgb * coverage, coverage);
+    }
+""".trimIndent()
+
 internal val RECT_AA_WGSL: String = """
     struct Uniforms {
         bounds: vec4f,
