@@ -276,6 +276,7 @@ org.graphiks.kanvas.skia.gm.image.ImageshaderTinyscaleGm
 org.graphiks.kanvas.skia.gm.image.JpgColorCubeGm
 org.graphiks.kanvas.skia.gm.image.LocalMatrixImageShaderFilteringGm
 org.graphiks.kanvas.skia.gm.image.LocalMatrixImageShaderGm
+org.graphiks.kanvas.skia.gm.image.MakeColorSpaceGm
 org.graphiks.kanvas.skia.gm.image.MakeColorTypeAndSpaceGm
 org.graphiks.kanvas.skia.gm.image.MakeRasterImageGm
 org.graphiks.kanvas.skia.gm.image.MirrorTileGm
@@ -296,6 +297,7 @@ org.graphiks.kanvas.skia.gm.image.PictureShaderTileGm
 org.graphiks.kanvas.skia.gm.image.PosterCircleGm
 org.graphiks.kanvas.skia.gm.image.ReadPixelsCodecGm
 org.graphiks.kanvas.skia.gm.image.ReadPixelsPictureGm
+org.graphiks.kanvas.skia.gm.image.ReinterpretColorSpaceGm
 org.graphiks.kanvas.skia.gm.image.ScaledTilemodesGm
 org.graphiks.kanvas.skia.gm.image.ScaledTilemodesNpotGm
 org.graphiks.kanvas.skia.gm.image.ScalepixelsUnpremulGm
