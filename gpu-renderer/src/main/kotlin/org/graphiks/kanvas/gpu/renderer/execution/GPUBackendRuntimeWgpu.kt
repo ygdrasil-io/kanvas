@@ -524,7 +524,7 @@ private class WgpuOffscreenTarget(
         val tex = device.createTexture(
             TextureDescriptor(
                 size = Extent3D(width = width.toUInt(), height = height.toUInt()),
-                format = GPUTextureFormat.R32Float,
+                                format = GPUTextureFormat.RGBA8Unorm,
             usage = GPUTextureUsage.StorageBinding or GPUTextureUsage.TextureBinding,
             label = label,
             ),
@@ -662,7 +662,7 @@ private class WgpuOffscreenTarget(
                             binding = 1u,
                             visibility = GPUShaderStage.Compute,
                             storageTexture = StorageTextureBindingLayout(
-                                format = GPUTextureFormat.R32Float,
+                format = GPUTextureFormat.RGBA8Unorm,
                                 access = GPUStorageTextureAccess.WriteOnly,
                             ),
                         ),
@@ -829,7 +829,7 @@ private class WgpuWindowSurface(
                     setIndexBufferAction = { buffer, format -> setIndexBuffer(buffer, format) },
                     drawIndexedAction = { indexCount -> drawIndexed(indexCount) },
                     sampleCount = 1,
-                offscreenTextureStore = offscreenTextures,
+                offscreenTextureStore = mutableMapOf(),
                 )
                 try {
                     recorder.block()
