@@ -502,6 +502,32 @@ private class WgpuOffscreenTarget(
         return buffer
     }
 
+    override fun resolveOffscreenTexture(msaaLabel: String, resolvedLabel: String) {
+        val msaaTex = offscreenTexture(msaaLabel)
+        val resolvedTex = offscreenTexture(resolvedLabel)
+        GPUResourceScope().use { resources ->
+            val msaaView = resources.track(msaaTex.createView()) { it.close() }
+            val resolvedView = resources.track(resolvedTex.createView()) { it.close() }
+            val encoder = resources.trackIfAutoCloseable(device.createCommandEncoder())
+            encoder.beginRenderPass(
+                RenderPassDescriptor(
+                    colorAttachments = listOf(
+                        RenderPassColorAttachment(
+                            view = msaaView,
+                            resolveTarget = resolvedView,
+                            loadOp = GPULoadOp.Load,
+                            storeOp = GPUStoreOp.Store,
+                        ),
+                    ),
+                ),
+            ) {
+                end()
+            }
+            val commandBuffer = resources.trackIfAutoCloseable(encoder.finish())
+            queue.submit(listOf(commandBuffer))
+        }
+    }
+
     override fun createOffscreenTexture(textureDesc: GPUBackendOffscreenTexture): String {
         val safeW = textureDesc.width.coerceAtMost(MAX_TEXTURE_DIMENSION)
         val safeH = textureDesc.height.coerceAtMost(MAX_TEXTURE_DIMENSION)

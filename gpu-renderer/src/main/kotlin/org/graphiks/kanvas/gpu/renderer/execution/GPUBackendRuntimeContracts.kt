@@ -104,6 +104,9 @@ interface GPUBackendOffscreenTarget : AutoCloseable {
         clearColor: GPUClearColor?,
         block: GPUBackendRenderRecorder.() -> Unit,
     )
+
+    /** Resolves a multisampled offscreen texture into a 1x companion texture via a hardware MSAA resolve pass. */
+    fun resolveOffscreenTexture(msaaLabel: String, resolvedLabel: String)
 }
 
 /** Represents a native surface that can be resized and presented to screen. */

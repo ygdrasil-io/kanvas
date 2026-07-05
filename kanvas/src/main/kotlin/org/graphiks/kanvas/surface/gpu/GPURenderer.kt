@@ -71,6 +71,9 @@ internal fun renderViaGpu(
         target.use { t ->
             val texFormat = config.gpuColorFormat.wgpuLabel
             val sceneLabel = t.createOffscreenTexture(GPUBackendOffscreenTexture(width, height, texFormat))
+            val sceneResolvedLabel = if (config.sampleCount > 1) {
+                t.createOffscreenTexture(GPUBackendOffscreenTexture(width, height, texFormat))
+            } else sceneLabel
             val srcLabel = t.createOffscreenTexture(GPUBackendOffscreenTexture(width, height, texFormat))
             val snapLabel = t.createOffscreenTexture(GPUBackendOffscreenTexture(width, height, texFormat))
 
@@ -1171,12 +1174,19 @@ internal fun renderViaGpu(
                 }
             }
 
+            // Resolve MSAA scene before compositing
+            if (config.sampleCount > 1 && sceneHasContent) {
+                t.resolveOffscreenTexture(sceneLabel, sceneResolvedLabel)
+            }
+
+            val compositeSourceLabel = if (config.sampleCount > 1) sceneResolvedLabel else sceneLabel
+
             // Composite final: scene -> main target for readback
             t.encode(clearColor = GPUClearColor(0.0, 0.0, 0.0, 0.0)) {
                 drawCompositePass(
                     wgsl = COPY_WGSL,
                     colorFormat = texFormat,
-                    textureLabel = sceneLabel,
+                    textureLabel = compositeSourceLabel,
                     draws = listOf(
                         GPUBackendRawUniformDraw(
                             uniformBytes = ByteArray(16),
