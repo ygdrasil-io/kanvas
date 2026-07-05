@@ -138,6 +138,7 @@ data class GPUBackendOffscreenTexture(
     val width: Int,
     val height: Int,
     val format: String,
+    val sampleCount: Int = 1,
 ) {
     init {
         require(width > 0) { "GPUBackendOffscreenTexture.width must be positive" }

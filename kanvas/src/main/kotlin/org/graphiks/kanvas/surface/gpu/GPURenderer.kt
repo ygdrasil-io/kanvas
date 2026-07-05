@@ -70,7 +70,7 @@ internal fun renderViaGpu(
         )
         target.use { t ->
             val texFormat = config.gpuColorFormat.wgpuLabel
-            val sceneLabel = t.createOffscreenTexture(GPUBackendOffscreenTexture(width, height, texFormat))
+            val sceneLabel = t.createOffscreenTexture(GPUBackendOffscreenTexture(width, height, texFormat, sampleCount = config.sampleCount))
             val sceneResolvedLabel = if (config.sampleCount > 1) {
                 t.createOffscreenTexture(GPUBackendOffscreenTexture(width, height, texFormat))
             } else sceneLabel

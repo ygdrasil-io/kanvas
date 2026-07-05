@@ -308,8 +308,7 @@ private class WgpuOffscreenTarget(
         TextureDescriptor(
             size = Extent3D(width = safeWidth.toUInt(), height = safeHeight.toUInt()),
             format = format,
-            usage = if (sampleCount > 1) GPUTextureUsage.RenderAttachment else GPUTextureUsage.RenderAttachment or GPUTextureUsage.CopySrc,
-            sampleCount = sampleCount.toUInt(),
+            usage = GPUTextureUsage.RenderAttachment or GPUTextureUsage.CopySrc,
             label = "GPUBackend.offscreen.color",
         ),
     )
@@ -318,23 +317,10 @@ private class WgpuOffscreenTarget(
             size = Extent3D(width = safeWidth.toUInt(), height = safeHeight.toUInt()),
             format = GPUTextureFormat.Depth24PlusStencil8,
             usage = GPUTextureUsage.RenderAttachment,
-            sampleCount = sampleCount.toUInt(),
             label = "GPUBackend.offscreen.depthStencil",
         ),
     )
     private val depthStencilView = depthStencilTexture.createView()
-    private val resolveTexture = if (sampleCount > 1) {
-        device.createTexture(
-            TextureDescriptor(
-                size = Extent3D(width = safeWidth.toUInt(), height = safeHeight.toUInt()),
-                format = format,
-                usage = GPUTextureUsage.RenderAttachment or GPUTextureUsage.CopySrc,
-                sampleCount = 1u,
-                label = "GPUBackend.offscreen.color.resolve",
-            ),
-        )
-    } else null
-    private val resolveView = resolveTexture?.createView()
     private val stagingBuffer = device.createBuffer(
         BufferDescriptor(
             size = stagingSize,
@@ -412,7 +398,7 @@ private class WgpuOffscreenTarget(
                     setVertexBufferAction = { slot, buffer -> setVertexBuffer(slot, buffer) },
                     setIndexBufferAction = { buffer, format -> setIndexBuffer(buffer, format) },
                     drawIndexedAction = { indexCount -> drawIndexed(indexCount) },
-                    sampleCount = sampleCount,
+                    sampleCount = 1, // main target is always single-sample
                     offscreenTextureStore = offscreenTextures,
                 )
                 try {
@@ -422,33 +408,8 @@ private class WgpuOffscreenTarget(
                 }
                 end()
             }
-            // Resolve MSAA before copy to staging buffer
-            // Resolve MSAA before copy to staging buffer
-            if (resolveTexture != null) {
-                val resolveResources = GPUResourceScope()
-                val rView = resolveResources.track(resolveTexture.createView()) { it.close() }
-                val msaaView = resolveResources.track(texture.createView()) { it.close() }
-                val resolveEncoder = resolveResources.trackIfAutoCloseable(device.createCommandEncoder())
-                resolveEncoder.beginRenderPass(
-                    RenderPassDescriptor(
-                        colorAttachments = listOf(
-                            RenderPassColorAttachment(
-                                view = msaaView,
-                                resolveTarget = rView,
-                                loadOp = GPULoadOp.Load,
-                                storeOp = GPUStoreOp.Store,
-                            ),
-                        ),
-                    ),
-                ) {
-                    end()
-                }
-                val resolveCommandBuffer = resolveResources.trackIfAutoCloseable(resolveEncoder.finish())
-                queue.submit(listOf(resolveCommandBuffer))
-                resolveResources.close()
-            }
             encoder.copyTextureToBuffer(
-                source = TexelCopyTextureInfo(texture = resolveTexture ?: texture),
+                source = TexelCopyTextureInfo(texture = texture),
                 destination = TexelCopyBufferInfo(
                     buffer = stagingBuffer,
                     offset = 0uL,
@@ -532,9 +493,10 @@ private class WgpuOffscreenTarget(
     override fun createOffscreenTexture(textureDesc: GPUBackendOffscreenTexture): String {
         val safeW = textureDesc.width.coerceAtMost(MAX_TEXTURE_DIMENSION)
         val safeH = textureDesc.height.coerceAtMost(MAX_TEXTURE_DIMENSION)
-        val label = "offscreenTex:${textureDesc.width}x${textureDesc.height}:${textureDesc.format}"
+        val label = "offscreenTex:${textureDesc.width}x${textureDesc.height}:${textureDesc.format}:msaa${textureDesc.sampleCount}"
         if (label in offscreenTextures) return label
-        val texUsage = if (sampleCount > 1) {
+        val sc = textureDesc.sampleCount
+        val texUsage = if (sc > 1) {
             GPUTextureUsage.RenderAttachment
         } else {
             GPUTextureUsage.RenderAttachment or GPUTextureUsage.TextureBinding or GPUTextureUsage.CopySrc
@@ -544,7 +506,7 @@ private class WgpuOffscreenTarget(
                 size = Extent3D(width = safeW.toUInt(), height = safeH.toUInt()),
                 format = textureDesc.format.toWgpuTextureFormat(),
                 usage = texUsage,
-                sampleCount = sampleCount.toUInt(),
+                sampleCount = sc.toUInt(),
                 label = label,
             ),
         )
@@ -584,13 +546,14 @@ private class WgpuOffscreenTarget(
         val texView = resources.track(tex.createView()) { it.close() }
         val texWidth = tex.width
         val texHeight = tex.height
+        val texSampleCount = tex.sampleCount
         val dsTex = resources.track(
             device.createTexture(
                 TextureDescriptor(
                     size = Extent3D(width = texWidth, height = texHeight),
                     format = GPUTextureFormat.Depth24PlusStencil8,
                     usage = GPUTextureUsage.RenderAttachment,
-                    sampleCount = sampleCount.toUInt(),
+                    sampleCount = texSampleCount,
                     label = "GPUBackend.offscreenLayer.depthStencil",
                 ),
             ),
@@ -639,7 +602,7 @@ private class WgpuOffscreenTarget(
                 setVertexBufferAction = { slot, buffer -> setVertexBuffer(slot, buffer) },
                 setIndexBufferAction = { buffer, format -> setIndexBuffer(buffer, format) },
                 drawIndexedAction = { indexCount -> drawIndexed(indexCount) },
-                sampleCount = sampleCount,
+                sampleCount = texSampleCount.toInt(),
                 offscreenTextureStore = mutableMapOf(),
             )
             try {
@@ -664,8 +627,6 @@ private class WgpuOffscreenTarget(
         closeQuietly { stagingBuffer.close() }
         closeQuietly { depthStencilView.close() }
         closeQuietly { depthStencilTexture.close() }
-        resolveView?.let { closeQuietly { it.close() } }
-        resolveTexture?.let { closeQuietly { it.close() } }
         closeQuietly { texture.close() }
         vertexBuffers.values.forEach { (buffer, _) -> closeQuietly { buffer.close() } }
         vertexBuffers.clear()
