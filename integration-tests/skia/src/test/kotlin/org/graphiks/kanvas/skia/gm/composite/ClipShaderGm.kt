@@ -13,6 +13,11 @@ import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 
+/**
+ * Port of Skia's `gm/clipshader.cpp::ClipShaderGM`.
+ * Tests clipShader with a matrix transformation applied to a radial gradient shader via SRC_IN blend mode.
+ * @see https://github.com/google/skia/blob/main/gm/clipshader.cpp
+ */
 class ClipShaderGm : SkiaGm {
     override val name = "clipshadermatrix"
     override val renderFamily = RenderFamily.COMPOSITE

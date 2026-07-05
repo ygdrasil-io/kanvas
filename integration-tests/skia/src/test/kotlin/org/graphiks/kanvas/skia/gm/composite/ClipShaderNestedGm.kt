@@ -14,6 +14,11 @@ import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.RRect
 import org.graphiks.kanvas.types.Rect
 
+/**
+ * Port of Skia's `DEF_SIMPLE_GM(clip_shader_nested, canvas, 256, 256)` in `gm/complexclip.cpp`.
+ * Tests nested clip-shaders: two stacked gradient shader masks, plus clipShader combined with RRect and star-path clipping.
+ * @see https://github.com/google/skia/blob/main/gm/complexclip.cpp
+ */
 class ClipShaderNestedGm : SkiaGm {
     override val name = "clip_shader_nested"
     override val renderFamily = RenderFamily.COMPOSITE
