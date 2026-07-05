@@ -6,6 +6,7 @@ data class RenderConfig(
     val curveTolerance: Float = 0.25f,
     val maxImagePixels: UInt = 67_108_864u,
     val diagnosticLevel: DiagnosticLevel = DiagnosticLevel.WARN,
+    val debugLevel: DebugLevel = DebugLevel.OFF,
 ) {
     companion object {
         val DEFAULT = RenderConfig()
@@ -25,6 +26,9 @@ data class RenderConfig(
                 diagnosticLevel = p.getProperty("kanvas.render.diagnosticLevel")
                     ?.let { runCatching { DiagnosticLevel.valueOf(it) }.getOrNull() }
                     ?: DEFAULT.diagnosticLevel,
+                debugLevel = p.getProperty("kanvas.debug")
+                    ?.let { runCatching { DebugLevel.valueOf(it) }.getOrNull() }
+                    ?: DEFAULT.debugLevel,
             )
         }
     }
