@@ -473,18 +473,25 @@ internal fun renderViaGpu(
                         sceneHasContent = true
                     }
                     is DisplayOp.DrawPath -> {
+                        val paint = op.paint
+                        val isStroke = paint.isStroke()
                         val pathData = op.path.toPathTessellatorData()
                         val tessellator = PathTessellator(
                             tolerance = config.curveTolerance,
                             maxVertices = config.maxPathVertices.toInt(),
                         )
                         val flat = tessellator.flatten(pathData)
-                        if (flat.size < 3) {
+                        val minVertices = if (isStroke) 2 else 3
+                        if (flat.size < minVertices) {
                             diagnostics.fatal("refuse:${op.hashCode()}", "drawPath", "insufficient_vertices:${flat.size}")
                             continue
                         }
                         val tri = tessellator.triangulate(flat)
-                        val vertices = tri.vertices.flatMap { listOf(it.x, it.y) }
+                        val vertices = if (isStroke && tri.vertices.isEmpty() && flat.size >= 2) {
+                            flat.flatMap { listOf(it.x, it.y) }
+                        } else {
+                            tri.vertices.flatMap { listOf(it.x, it.y) }
+                        }
                         val contourStarts = listOf(0)
                         val cmd = op.toNormalizedCommand(cmdId, targets, vertices, contourStarts, flat.size)
                         if (cmd.blend.requiresDestinationRead) {
