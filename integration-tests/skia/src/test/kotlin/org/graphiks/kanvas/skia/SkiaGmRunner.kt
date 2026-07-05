@@ -16,6 +16,7 @@ import org.junit.jupiter.api.Timeout
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.MethodSource
 import org.junit.jupiter.api.io.TempDir
+import org.opentest4j.TestAbortedException
 import java.io.File
 import java.util.concurrent.TimeUnit
 
@@ -43,6 +44,13 @@ class SkiaGmRunner {
     @Timeout(value = 120, unit = TimeUnit.SECONDS)
     fun `render GM`(gm: SkiaGm) {
         GpuAvailability.requireWebGpu()
+
+        val includeBlocking = System.getProperty("kanvas.gm.includeBlocking")?.toBoolean() ?: false
+        if (!includeBlocking && gm.renderCost == RenderCost.BLOCKING) {
+            throw TestAbortedException(
+                "GM '${gm.name}' is BLOCKING — use -Dkanvas.gm.includeBlocking=true"
+            )
+        }
 
         val t0 = System.nanoTime()
 
