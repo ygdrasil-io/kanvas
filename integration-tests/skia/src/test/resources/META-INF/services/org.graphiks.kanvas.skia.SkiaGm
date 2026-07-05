@@ -39,6 +39,7 @@ org.graphiks.kanvas.skia.gm.clip.ClipCubicGm
 org.graphiks.kanvas.skia.gm.clip.ClipDrawDrawGm
 org.graphiks.kanvas.skia.gm.clip.ClipLargeRectGm
 org.graphiks.kanvas.skia.gm.clip.ClipRegionGm
+org.graphiks.kanvas.skia.gm.clip.ClipSierpinskiRegionGm
 org.graphiks.kanvas.skia.gm.clip.ClipStrokeRectGm
 org.graphiks.kanvas.skia.gm.clip.ComplexClip2Gm
 org.graphiks.kanvas.skia.gm.clip.ComplexClip3Gm
@@ -75,6 +76,12 @@ org.graphiks.kanvas.skia.gm.composite.BackdropHintrectClippingGm
 org.graphiks.kanvas.skia.gm.composite.BackdropImagefilterCroprectGm
 org.graphiks.kanvas.skia.gm.composite.BackdropImagefilterCroprectVariantsGm
 org.graphiks.kanvas.skia.gm.composite.BadPaintGm
+org.graphiks.kanvas.skia.gm.composite.ClipShaderDifferenceGm
+org.graphiks.kanvas.skia.gm.composite.ClipShaderGm
+org.graphiks.kanvas.skia.gm.composite.ClipShaderLayerGm
+org.graphiks.kanvas.skia.gm.composite.ClipShaderNestedGm
+org.graphiks.kanvas.skia.gm.composite.ClipShaderPerspGm
+org.graphiks.kanvas.skia.gm.composite.ClipShaderSimpleGm
 org.graphiks.kanvas.skia.gm.composite.Color4blendcfGm
 org.graphiks.kanvas.skia.gm.composite.Color4shaderGm
 org.graphiks.kanvas.skia.gm.composite.ColorFilterImageFilterGm

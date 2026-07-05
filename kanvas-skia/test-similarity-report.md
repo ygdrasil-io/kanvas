@@ -99,8 +99,6 @@ Snapshot of the latest `:kanvas-skia:test` run. Best-ever scores tracked in `tes
 | ClipErrorGM | 81.26% | = | 8 | 520,083 / 640,000 | 0, 100, 101, 101 | 0, 18, 18, 18 |
 | ClipLargeRectGM | 99.61% | = | 1 | 65,280 / 65,536 | 0, 145, 245, 68 | 0, 145, 245, 68 |
 | ClipRegionGM | 100.00% | = | 1 | 65,536 / 65,536 | 0, 0, 0, 0 | 0, 0, 0, 0 |
-| ClipShaderGM | 51.37% | = | 1 | 9,534 / 18,560 | 0, 209, 241, 186 | 0, 50, 61, 45 |
-| ClipSierpinskiRegionGM | 100.00% | = | 1 | 69,169 / 69,169 | 0, 0, 0, 0 | 0, 0, 0, 0 |
 | ClipStrokeRectGM | 100.00% | = | 1 | 80,000 / 80,000 | 0, 0, 0, 0 | 0, 0, 0, 0 |
 | ClippedBitmapShadersClampGM | 100.00% | = | 1 | 90,000 / 90,000 | 0, 0, 0, 0 | 0, 0, 0, 0 |
 | ClippedBitmapShadersClampHqGM | 94.74% | = | 1 | 85,264 / 90,000 | 0, 62, 42, 45 | 0, 9, 7, 7 |
