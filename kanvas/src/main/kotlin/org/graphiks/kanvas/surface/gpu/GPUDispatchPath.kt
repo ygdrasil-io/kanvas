@@ -67,10 +67,12 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
     val contourStarts = cmd.contourStarts
 
     // If stroke, convert to filled geometry
+    val aaWidth = if (cmd.stroke) 2.0f else 0f  // 2px AA zone for stroke distance-field shader
     val (strokeVertices, strokeContours) = if (cmd.stroke) {
         val cap = when (cmd.strokeCap) { "round" -> StrokeCap.ROUND; "square" -> StrokeCap.SQUARE; else -> StrokeCap.BUTT }
         val join = when (cmd.strokeJoin) { "round" -> StrokeJoin.ROUND; "bevel" -> StrokeJoin.BEVEL; else -> StrokeJoin.MITER }
-        val sg = strokeToFillGeometry(tessVertices, contourStarts, cmd.strokeWidth, dashArray = cmd.dashIntervals, dashPhase = cmd.dashPhase, capStyle = cap, joinStyle = join)
+        val inflatedWidth = cmd.strokeWidth + 2f * aaWidth  // inflate body to cover AA zone
+        val sg = strokeToFillGeometry(tessVertices, contourStarts, inflatedWidth, dashArray = cmd.dashIntervals, dashPhase = cmd.dashPhase, capStyle = cap, joinStyle = join)
         Pair(sg.vertices, sg.contourStarts)
     } else {
         Pair(tessVertices, contourStarts)
@@ -119,25 +121,59 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
 
     when (val material = cmd.material) {
         is GPUMaterialDescriptor.SolidColor -> {
-            val colorBb = java.nio.ByteBuffer.allocate(16).order(java.nio.ByteOrder.nativeOrder())
-            colorBb.putFloat(srgbToLinear(material.r) * material.a)
-            colorBb.putFloat(srgbToLinear(material.g) * material.a)
-            colorBb.putFloat(srgbToLinear(material.b) * material.a)
-            colorBb.putFloat(material.a)
-            drawFullscreenStencilPass(
-                wgsl = SOLID_RECT_WGSL,
-                colorFormat = config.gpuColorFormat.wgpuLabel,
-                stencilMode = GPUBackendStencilMode.Test,
-                triangleData = null,
-                draws = listOf(
-                    GPUBackendRawUniformDraw(
-                        uniformBytes = colorBb.array(),
-                        scissorX = sx, scissorY = sy,
-                        scissorWidth = sw, scissorHeight = sh,
+            if (cmd.stroke && cmd.tessellatedVertices.size >= 4) {
+                // Distance-field AA: stencil body is inflated by aaW, shader uses original halfWidth
+                val p0x = cmd.tessellatedVertices[0]
+                val p0y = cmd.tessellatedVertices[1]
+                val p1x = cmd.tessellatedVertices[2]
+                val p1y = cmd.tessellatedVertices[3]
+                val halfW = cmd.strokeWidth / 2f  // original stroke edge (inside smoothstep)
+
+                val colorBb = java.nio.ByteBuffer.allocate(48).order(java.nio.ByteOrder.nativeOrder())
+                colorBb.putFloat(srgbToLinear(material.r) * material.a)
+                colorBb.putFloat(srgbToLinear(material.g) * material.a)
+                colorBb.putFloat(srgbToLinear(material.b) * material.a)
+                colorBb.putFloat(material.a)
+                colorBb.putFloat(p0x); colorBb.putFloat(p0y)
+                colorBb.putFloat(p1x); colorBb.putFloat(p1y)
+                colorBb.putFloat(halfW)
+                colorBb.putFloat(aaWidth)
+
+                drawFullscreenStencilPass(
+                    wgsl = STROKE_AA_WGSL,
+                    colorFormat = config.gpuColorFormat.wgpuLabel,
+                    stencilMode = GPUBackendStencilMode.Test,
+                    triangleData = null,
+                    draws = listOf(
+                        GPUBackendRawUniformDraw(
+                            uniformBytes = colorBb.array(),
+                            scissorX = sx, scissorY = sy,
+                            scissorWidth = sw, scissorHeight = sh,
+                        ),
                     ),
-                ),
-                blendMode = blendMode,
-            )
+                    blendMode = blendMode,
+                )
+            } else {
+                val colorBb = java.nio.ByteBuffer.allocate(16).order(java.nio.ByteOrder.nativeOrder())
+                colorBb.putFloat(srgbToLinear(material.r) * material.a)
+                colorBb.putFloat(srgbToLinear(material.g) * material.a)
+                colorBb.putFloat(srgbToLinear(material.b) * material.a)
+                colorBb.putFloat(material.a)
+                drawFullscreenStencilPass(
+                    wgsl = SOLID_RECT_WGSL,
+                    colorFormat = config.gpuColorFormat.wgpuLabel,
+                    stencilMode = GPUBackendStencilMode.Test,
+                    triangleData = null,
+                    draws = listOf(
+                        GPUBackendRawUniformDraw(
+                            uniformBytes = colorBb.array(),
+                            scissorX = sx, scissorY = sy,
+                            scissorWidth = sw, scissorHeight = sh,
+                        ),
+                    ),
+                    blendMode = blendMode,
+                )
+            }
         }
         is GPUMaterialDescriptor.LinearGradient -> {
             val multiStop = material.allStopPositions != null && material.allStopPositions!!.size > 2

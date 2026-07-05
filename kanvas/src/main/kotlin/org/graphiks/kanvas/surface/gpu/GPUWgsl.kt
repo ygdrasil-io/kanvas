@@ -20,6 +20,39 @@ internal val SOLID_RECT_WGSL: String = """
     }
 """.trimIndent()
 
+internal val STROKE_AA_WGSL: String = """
+    struct Uniforms {
+        color: vec4f,
+        p0: vec2f,
+        p1: vec2f,
+        halfWidth: f32,
+        aaWidth: f32,
+    };
+
+    @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+
+    @vertex
+    fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
+        let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
+        let y = f32(idx & 2u) * 2.0 - 1.0;
+        return vec4f(x, y, 0.0, 1.0);
+    }
+
+    @fragment
+    fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
+        let p = pos.xy;
+        let v = uniforms.p1 - uniforms.p0;
+        let w = p - uniforms.p0;
+        let t = clamp(dot(w, v) / max(dot(v, v), 0.001), 0.0, 1.0);
+        let closest = uniforms.p0 + t * v;
+        let dist = length(p - closest);
+        let inner = uniforms.halfWidth;
+        let outer = inner + uniforms.aaWidth;
+        let alpha = 1.0 - smoothstep(inner, outer, dist);
+        return vec4f(uniforms.color.rgb * alpha, alpha);
+    }
+""".trimIndent()
+
 internal val RECT_AA_WGSL: String = """
     struct Uniforms {
         bounds: vec4f,
