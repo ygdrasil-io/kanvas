@@ -25,7 +25,6 @@ on:
       - 'kanvas-skia/**'
       - 'font/**'
       - 'gpu-raster/**'
-      - 'render-pipeline/**'
       - 'integration-tests/**'
       - 'kanvas-legacy/src/test/resources/**'
       - 'buildSrc/**'
@@ -56,7 +55,6 @@ on:
       - 'kanvas-skia/**'
       - 'font/**'
       - 'gpu-raster/**'
-      - 'render-pipeline/**'
       - 'integration-tests/**'
       - 'kanvas-legacy/src/test/resources/**'
       - 'buildSrc/**'
@@ -177,8 +175,7 @@ jobs:
          run: |
            ./gradlew --no-daemon \
              checkCodecImageComplete \
-             :render-pipeline:test \
-             :math:jvmTest \
+              :math:jvmTest \
              :kanvas-skia:test
 
   gpu_smoke:

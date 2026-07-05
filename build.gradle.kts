@@ -113,22 +113,6 @@ data class RequiredPipelineConformanceSuite(
 
 val requiredPipelineConformanceSuites = listOf(
     RequiredPipelineConformanceSuite(
-        className = "org.skia.pipeline.CpuScalarPipelineExecutorTest",
-        resultRoot = "render-pipeline/build/test-results/pipelineConformanceTest",
-    ),
-    RequiredPipelineConformanceSuite(
-        className = "org.skia.pipeline.GeometryCoverageContractsTest",
-        resultRoot = "render-pipeline/build/test-results/pipelineConformanceTest",
-    ),
-    RequiredPipelineConformanceSuite(
-        className = "org.skia.pipeline.GeometryCoverageMigrationHarnessTest",
-        resultRoot = "render-pipeline/build/test-results/pipelineConformanceTest",
-    ),
-    RequiredPipelineConformanceSuite(
-        className = "org.skia.pipeline.KanvasPipelineIRTest",
-        resultRoot = "render-pipeline/build/test-results/pipelineConformanceTest",
-    ),
-    RequiredPipelineConformanceSuite(
         className = "org.skia.core.SkBitmapDescriptorCoverageOracleTest",
         resultRoot = "kanvas-skia/build/test-results/pipelineConformanceTest",
     ),
@@ -494,16 +478,6 @@ fun renderPipelineConformanceReport(
     """.trimMargin().replace("TABLE_PIPE", "|")
 }
 
-project(":render-pipeline").registerPipelineConformanceTest(
-    descriptionText = "Runs PipelineIR, CPU executor, and geometry coverage oracle conformance tests.",
-    testPatterns = listOf(
-        "org.skia.pipeline.KanvasPipelineIRTest",
-        "org.skia.pipeline.CpuScalarPipelineExecutorTest",
-        "org.skia.pipeline.GeometryCoverageContractsTest",
-        "org.skia.pipeline.GeometryCoverageMigrationHarnessTest",
-    ),
-)
-
 project(":kanvas-skia").registerPipelineConformanceTest(
     descriptionText = "Runs kanvas-skia production descriptor-route coverage conformance tests.",
     testPatterns = listOf(
@@ -667,7 +641,6 @@ tasks.register("pipelineConformance") {
         "pipelineRuntimeColorFilterWgslReport",
         "pipelineRuntimeBlenderBoundaryReport",
         "pipelineRuntimeEffectUniformPreviewReport",
-        ":render-pipeline:pipelineConformanceTest",
         ":kanvas-skia:pipelineConformanceTest",
     )
 
@@ -681,10 +654,8 @@ tasks.register("pipelineConformance") {
             |- REQUIRED Runtime Blender boundary report: pipelineRuntimeBlenderBoundaryReport
             |- REQUIRED Runtime Effect uniform preview report: pipelineRuntimeEffectUniformPreviewReport
             |- REQUIRED Runtime Effects V2 evidence bundle: pipelineRuntimeEffectsV2EvidenceBundleReport
-            |- REQUIRED PipelineIR, CPU executor, and geometry oracle tests: :render-pipeline:pipelineConformanceTest
             |- REQUIRED kanvas-skia production descriptor-route tests: :kanvas-skia:pipelineConformanceTest
             |- GPU adapter residual risk: local adapter-dependent WebGPU tests may report JUnit SKIPPED when no adapter is available; required CI smoke lane (`GPU tests (macos)`) fails closed on adapter skips.
-            |- Slow benchmark gates remain opt-in: :render-pipeline:cpuVectorPilotBenchmark and :render-pipeline:cpuVectorAllocationBenchmark.
             """.trimMargin()
         )
     }

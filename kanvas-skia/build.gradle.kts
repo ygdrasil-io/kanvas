@@ -13,7 +13,6 @@ plugins {
 dependencies {
     implementation(kotlin("stdlib"))
     implementation(project(":math"))
-    implementation(project(":render-pipeline"))
     implementation(project(":font:core"))
     implementation(project(":font:sfnt"))
     implementation(project(":font:text"))
