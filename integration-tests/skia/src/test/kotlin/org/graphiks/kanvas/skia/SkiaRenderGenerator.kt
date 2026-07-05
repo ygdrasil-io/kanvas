@@ -1,11 +1,20 @@
 package org.graphiks.kanvas.skia
 
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
 import org.graphiks.kanvas.pipeline.RuntimeEffectWgsl4kWiring
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.test.ComparisonUtils
 import java.io.File
 
 fun main(args: Array<String>) {
+    try {
+        generateSkiaRenders(args)
+    } finally {
+        GPUBackendRuntimeFactory.dispose()
+    }
+}
+
+internal fun generateSkiaRenders(args: Array<String>) {
     if (args.isEmpty()) {
         System.err.println("Usage: SkiaRenderGenerator <outputDir>")
         kotlin.system.exitProcess(1)
