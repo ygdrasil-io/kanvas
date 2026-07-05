@@ -7,6 +7,7 @@ import org.graphiks.kanvas.paint.ColorFilter
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Matrix33
@@ -23,6 +24,7 @@ import org.graphiks.kanvas.types.VertexMode
 class CompareAtlasVerticesGm : SkiaGm {
     override val name = "compare_atlas_vertices"
     override val renderFamily = RenderFamily.COMPOSITE
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 560
     override val height = 585

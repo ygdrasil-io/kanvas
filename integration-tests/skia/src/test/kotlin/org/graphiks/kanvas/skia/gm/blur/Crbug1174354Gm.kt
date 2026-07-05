@@ -2,6 +2,7 @@ package org.graphiks.kanvas.skia.gm.blur
 
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 
 /**
@@ -14,6 +15,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 class Crbug1174354Gm : SkiaGm {
     override val name = "crbug_1174354"
     override val renderFamily = RenderFamily.BLUR
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 70
     override val height = 250

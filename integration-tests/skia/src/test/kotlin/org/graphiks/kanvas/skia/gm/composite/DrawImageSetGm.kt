@@ -8,6 +8,7 @@ import org.graphiks.kanvas.paint.ColorFilter
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Matrix33
@@ -23,6 +24,7 @@ import kotlin.math.sqrt
 class DrawImageSetGm : SkiaGm {
     override val name = "draw_image_set"
     override val renderFamily = RenderFamily.COMPOSITE
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 1000
     override val height = 725

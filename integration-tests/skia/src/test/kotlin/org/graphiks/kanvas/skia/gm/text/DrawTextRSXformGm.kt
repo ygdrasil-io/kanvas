@@ -8,6 +8,7 @@ import org.graphiks.kanvas.paint.StrokeJoin
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
@@ -29,6 +30,7 @@ import kotlin.math.PI
 class DrawTextRSXformGm : SkiaGm {
     override val name = "drawTextRSXform"
     override val renderFamily = RenderFamily.TEXT
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 430
     override val height = 860

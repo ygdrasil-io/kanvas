@@ -2,6 +2,7 @@ package org.graphiks.kanvas.skia.gm.image
 
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 
 /**
@@ -13,6 +14,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 class YUVMakeColorSpaceGm : SkiaGm {
     override val name = "yuv_make_color_space"
     override val renderFamily = RenderFamily.IMAGE
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 1100
     override val height = 750

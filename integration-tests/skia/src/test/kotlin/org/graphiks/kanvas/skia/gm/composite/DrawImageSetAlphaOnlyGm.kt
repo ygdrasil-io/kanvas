@@ -5,6 +5,7 @@ import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
@@ -17,6 +18,7 @@ import org.graphiks.kanvas.types.Rect
 class DrawImageSetAlphaOnlyGm : SkiaGm {
     override val name = "draw_image_set_alpha_only"
     override val renderFamily = RenderFamily.COMPOSITE
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = kM * kTileW
     override val height = 2 * kN * kTileH
