@@ -7,6 +7,11 @@ import java.io.File
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
+/**
+ * All inputs needed to produce a `DiagnosticManifest` for a single GM: pixel
+ * buffers, dimensions, tolerance, recorded display operations, pipeline stats,
+ * diagnostic messages, debug level, and output directory.
+ */
 data class RunnerInput(
     val gmName: String,
     val minSimilarity: Double,
@@ -23,6 +28,12 @@ data class RunnerInput(
     val outputDir: File,
 )
 
+/**
+ * Orchestrator that runs all activated diagnostic layers and produces a
+ * `DiagnosticManifest`. Layers are selected by `DebugLevel`: PIXEL enables
+ * `DiffAnalyzer`, OP adds `OpInspector`, TRACE adds `PipelineTracer` (if a
+ * tracer was attached to the Surface).
+ */
 object DiagnosticRunner {
     fun run(input: RunnerInput): DiagnosticManifest {
         val now = LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME)

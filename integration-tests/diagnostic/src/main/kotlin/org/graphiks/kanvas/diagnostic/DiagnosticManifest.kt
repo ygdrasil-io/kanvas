@@ -2,6 +2,13 @@ package org.graphiks.kanvas.diagnostic
 
 import java.util.Locale
 
+/**
+ * Root diagnostic output for a single GM test. Contains the pixel comparison
+ * result, optional spatial report (Layer 1), op trace (Layer 2), pipeline trace
+ * (Layer 3), and an `agentSummary` section with natural-language hypotheses and
+ * actionable fix suggestions. Use `toJson()` to serialize to agent-consumable
+ * JSON.
+ */
 data class DiagnosticManifest(
     val gm: String,
     val debugLevel: String,
@@ -109,6 +116,11 @@ data class DiagnosticManifest(
     }
 }
 
+/**
+ * Pixel comparison result: pass/fail status, similarity percentage, threshold,
+ * pixel counts, per-channel max and mean delta, and per-channel mismatch
+ * percentages.
+ */
 data class ResultSection(
     val status: String,
     val similarity: Double,
@@ -120,12 +132,21 @@ data class ResultSection(
     val mismatchPct: DoubleArray,
 )
 
+/**
+ * Human-readable diagnostic synthesis for AI agent consumption. Contains the
+ * primary rendering issue description, alpha channel analysis, and a list of
+ * suspect operations with hypotheses and suggested fix actions.
+ */
 data class AgentSummary(
     val primaryIssue: String,
     val alphaChannel: String,
     val suspectOps: List<SuspectOpSummary>,
 )
 
+/**
+ * A suspect drawing operation: its index in the op list, a hypothesis about what
+ * went wrong, and a concrete action for the agent to take.
+ */
 data class SuspectOpSummary(
     val index: Int,
     val hypothesis: String,

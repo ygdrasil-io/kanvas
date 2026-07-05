@@ -2,8 +2,16 @@ package org.graphiks.kanvas.diagnostic
 
 import kotlin.math.abs
 
+/**
+ * Classifies pixel regions by visual characteristic: EDGE (high local gradient),
+ * SOLID (uniform color), GRADIENT (progressive color change), TEXT (dense edges).
+ */
 enum class ZoneType { EDGE, SOLID, GRADIENT, TEXT }
 
+/**
+ * A labeled spatial region with aggregated diff statistics, used by the agent
+ * to localize rendering discrepancies.
+ */
 data class ZoneRegion(
     val label: String,
     val bounds: ZoneBounds,
@@ -13,8 +21,16 @@ data class ZoneRegion(
     val avgDelta: Double,
 )
 
+/**
+ * Pixel coordinates of a rectangular region: x, y, width, height.
+ */
 data class ZoneBounds(val x: Int, val y: Int, val w: Int, val h: Int)
 
+/**
+ * Classifies pixels in a reference image into spatial zones using Sobel edge
+ * detection on the luminance channel. TEXT zones are identified by edge density
+ * in 64x64 blocks.
+ */
 object SpatialZoneClassifier {
     fun classify(
         rgba: ByteArray,

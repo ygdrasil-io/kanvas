@@ -5,6 +5,10 @@ import org.graphiks.kanvas.test.SsimBlock
 import java.io.File
 import kotlin.math.abs
 
+/**
+ * Enriched pixel diff report containing SSIM scores, per-zone channel deltas,
+ * and heatmap image URLs.
+ */
 data class SpatialReport(
     val ssim: Double,
     val ssimBlocks: List<SsimBlock>,
@@ -13,6 +17,11 @@ data class SpatialReport(
     val perChannelHeatmapUrls: Map<String, String>,
 )
 
+/**
+ * Layer 1 diagnostic: produces structured pixel-level diff including graduated
+ * heatmaps (green→yellow→red), per-channel heatmaps, SSIM similarity scores per
+ * 16x16 block, and spatial zone (edge/solid/gradient/text) delta aggregation.
+ */
 object DiffAnalyzer {
     fun analyze(
         actualRgba: ByteArray,

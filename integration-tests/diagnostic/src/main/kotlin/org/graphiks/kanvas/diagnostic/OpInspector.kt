@@ -11,12 +11,21 @@ import org.graphiks.kanvas.types.Rect
 import java.io.File
 import kotlin.math.max
 
+/**
+ * Per-operation replay trace: total number of display operations, individual op
+ * entries with contribution scores, and indices of suspect operations.
+ */
 data class OpTrace(
     val totalOps: Int,
     val ops: List<OpTraceEntry>,
     val suspectOps: List<Int>,
 )
 
+/**
+ * A single operation's diagnostic record: operation type, how much pixel
+ * divergence it caused (`pixelContribution` percentage), whether it is
+ * suspicious (>5% contribution), and URLs to before/after/delta PNG images.
+ */
 data class OpTraceEntry(
     val index: Int,
     val type: String,
@@ -27,6 +36,13 @@ data class OpTraceEntry(
     val deltaUrl: String?,
 )
 
+/**
+ * Layer 2 diagnostic: replays drawing operations incrementally onto fresh
+ * surfaces, comparing each partial result against the reference image. Identifies
+ * which specific draw calls caused the most pixel divergence. Uses sequential
+ * replay for pictures with <=50 ops; falls back to checkpoint-based binary search
+ * for larger pictures.
+ */
 object OpInspector {
     fun inspect(
         ops: List<DisplayOp>,
