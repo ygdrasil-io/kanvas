@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.skia
 
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
 import org.graphiks.kanvas.test.ComparisonUtils
 import java.io.File
 import java.io.FileInputStream
@@ -28,6 +29,14 @@ data class GmEntry(
 )
 
 fun main(args: Array<String>) {
+    try {
+        generateSkiaDashboard(args)
+    } finally {
+        GPUBackendRuntimeFactory.dispose()
+    }
+}
+
+internal fun generateSkiaDashboard(args: Array<String>, gms: List<SkiaGm> = SkiaGmRegistry.all()) {
     val refDir = File(argAt(args, "--ref-dir"))
     val genDir = File(argAt(args, "--gen-dir"))
     val scoresFile = File(argAt(args, "--scores"))
@@ -37,13 +46,13 @@ fun main(args: Array<String>) {
         if (scoresFile.exists()) FileInputStream(scoresFile).use { load(it) }
     }
 
-    val gms = SkiaGmRegistry.all()
     val entries = mutableListOf<GmEntry>()
     var passed = 0; var failed = 0; var noScore = 0; var sumSim = 0.0; var simCount = 0
 
     outputDir.resolve("images/reference").mkdirs()
     outputDir.resolve("images/generated").mkdirs()
     outputDir.resolve("images/diff").mkdirs()
+    outputDir.resolve("data").mkdirs()
 
     for (gm in gms) {
         val refFile = refDir.resolve("${gm.name}.png")
