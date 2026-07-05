@@ -6,7 +6,7 @@ Status: FOR-33 concrete audit, no live-host support claim.
 
 - Target/specs: `.upstream/target/skia-like-realtime-renderer-target.md`,
   `.upstream/specs/skia-like-realtime/02-realtime-runtime-architecture.md`,
-  `.upstream/specs/skia-like-realtime/06-agent-execution-and-linear-planning.md`.
+  `.upstream/specs/skia-like-realtime/05-pm-demo-and-release-candidate.md`.
 - Audited upstream: `https://github.com/ygdrasil-io/poc-koreos.git`
   at `9dae217144fde70bdafddcf60855e2329921b1e5`.
 - Local audit command: `rtk git ls-remote https://github.com/ygdrasil-io/poc-koreos.git HEAD 'refs/heads/*'`

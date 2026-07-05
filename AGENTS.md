@@ -30,14 +30,6 @@ For Geometry/Coverage implementation specs, read
 clip lowering, coverage plans, CPU spans, WebGPU stencil-cover, or fallback
 diagnostics work.
 
-For Linear milestone execution, skill usage, subagent handoffs, and PM demo
-evidence, read `.upstream/target/linear-agent-methodology.md`.
-
-For completed Linear backlog archival, use `reports/linear-archive/README.md`
-and `scripts/linear_archive.py`. Committed Linear archive snapshots are
-historical evidence only; active backlog remains in Linear and the current
-target/spec documents.
-
 For RC/MEP wording, PM demos, and runtime-effect explanations, use WGSL as the
 implementation target. Mentions of SkSL must be framed only as Skia API
 compatibility surface that Kanvas does not dynamically compile. Supported

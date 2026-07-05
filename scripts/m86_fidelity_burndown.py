@@ -290,7 +290,7 @@ def write_markdown(path: Path, evidence: dict[str, Any]) -> None:
     lines = [
         "# M86 Fidelity Burn-Down Wave 2",
         "",
-        "Linear: FOR-102, FOR-164, FOR-165, FOR-166, FOR-167, FOR-168",
+        "Scope: FOR-102, FOR-164, FOR-165, FOR-166, FOR-167, FOR-168",
         "",
         "## Summary",
         "",

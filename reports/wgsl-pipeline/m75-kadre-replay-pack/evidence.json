@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "generatedBy": "kadre-runtime:M75ReplayPackEvidence",
-  "linearIssues": ["FOR-91", "FOR-110", "FOR-111", "FOR-112", "FOR-113"],
+  "scopeIds": ["FOR-91", "FOR-110", "FOR-111", "FOR-112", "FOR-113"],
   "packId": "m75-kadre-replay-pack-evidence-v1",
   "sourcePackId": "m73-kadre-replay-pack-v1",
   "claimLevel": "multi-scene-replay-evidence",

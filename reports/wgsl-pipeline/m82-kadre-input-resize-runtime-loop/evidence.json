@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "generatedBy": "kadre-runtime:M82KadreInputResizeRuntimeLoop",
-  "linearIssues": ["FOR-98", "FOR-144", "FOR-145", "FOR-146", "FOR-147", "FOR-148"],
+  "scopeIds": ["FOR-98", "FOR-144", "FOR-145", "FOR-146", "FOR-147", "FOR-148"],
   "packId": "m82-kadre-input-resize-runtime-loop-v1",
   "status": "pass",
   "claimLevel": "deterministic-kadre-runtime-event-model-and-telemetry",

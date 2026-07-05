@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "generatedBy": "kadre-runtime:M78ClipReplay",
-  "linearIssues": ["FOR-94", "FOR-124", "FOR-125", "FOR-126", "FOR-127", "FOR-128"],
+  "scopeIds": ["FOR-94", "FOR-124", "FOR-125", "FOR-126", "FOR-127", "FOR-128"],
   "packId": "m78-clip-replay-v1",
   "claimLevel": "bounded-cliprect-intersect-replay-evidence",
   "readinessDelta": 0,

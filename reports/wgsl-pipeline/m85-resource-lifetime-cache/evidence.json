@@ -1,7 +1,7 @@
 {
     "schemaVersion": 1,
     "generatedBy": "kadre-runtime:M85ResourceLifetimeCacheHardening",
-    "linearIssues": [
+    "scopeIds": [
         "FOR-101",
         "FOR-159",
         "FOR-160",

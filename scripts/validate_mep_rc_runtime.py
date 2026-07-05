@@ -66,7 +66,7 @@ def main() -> int:
 
     require(evidence.get("packId") == "m92-kadre-runtime-rc-closeout-v1", "unexpected evidence packId")
     require(evidence.get("status") == "pass", "evidence status must be pass")
-    require(set(evidence.get("linearIssues", [])) == EXPECTED_ISSUES, "Linear issue scope changed")
+    require(set(evidence.get("scopeIds", [])) == EXPECTED_ISSUES, "scope ids changed")
     require(
         evidence.get("claimLevel")
         == "rc-kadre-runtime-product-like-evidence-with-observed-derived-not-observable-telemetry",

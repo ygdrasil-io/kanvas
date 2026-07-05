@@ -22,12 +22,11 @@ from typing import Any
 
 
 SCHEMA_VERSION = 1
-LINEAR_ISSUES = ["FOR-50", "FOR-51", "FOR-52", "FOR-53"]
+SCOPE_IDS = ["FOR-50", "FOR-51", "FOR-52", "FOR-53"]
 
 CONTRACT_SPECS = [
     ".upstream/specs/skia-like-realtime/02-realtime-runtime-architecture.md",
     ".upstream/specs/skia-like-realtime/05-pm-demo-and-release-candidate.md",
-    ".upstream/specs/skia-like-realtime/06-agent-execution-and-linear-planning.md",
 ]
 
 KADRE_FILES = {
@@ -249,7 +248,7 @@ def audit_kadre(project_root: Path) -> tuple[dict[str, Any], list[str]]:
         "schemaVersion": SCHEMA_VERSION,
         "generatedAt": now_iso(),
         "generatedBy": "scripts/m68_kadre_demo_evidence.py",
-        "linearIssues": LINEAR_ISSUES,
+        "scopeIds": SCOPE_IDS,
         "repository": {
             "rootCommit": root_head,
             "kadreSubmoduleCommit": submodule_head,
@@ -483,7 +482,7 @@ def main() -> int:
         "schemaVersion": SCHEMA_VERSION,
         "generatedAt": now_iso(),
         "generatedBy": "scripts/m68_kadre_demo_evidence.py",
-        "linearIssues": LINEAR_ISSUES,
+        "scopeIds": SCOPE_IDS,
         "environment": {
             "platform": platform.platform(),
             "python": platform.python_version(),
@@ -502,7 +501,7 @@ def main() -> int:
         "schemaVersion": SCHEMA_VERSION,
         "generatedAt": now_iso(),
         "generatedBy": "scripts/m68_kadre_demo_evidence.py",
-        "linearIssues": LINEAR_ISSUES,
+        "scopeIds": SCOPE_IDS,
         "scene": "m68-flagship-kadre-native-demo",
         "nativePresented": False,
         "nativePresentationReason": "m68.kadre-host-adapter-not-implemented",

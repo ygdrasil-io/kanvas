@@ -19,7 +19,7 @@
     "slotCount": 3,
     "source": "reports/wgsl-pipeline/m65-runtime-smoke/telemetry.json"
   },
-  "linearIssues": [
+  "scopeIds": [
     "FOR-56",
     "FOR-57",
     "FOR-58",

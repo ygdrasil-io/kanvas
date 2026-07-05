@@ -177,7 +177,7 @@
       "path": "external/poc-koreos/samples/hello-window/src/commonMain/kotlin/org/graphiks/kadre/samples/hellowindow/HelloApp.kt"
     }
   },
-  "linearIssues": [
+  "scopeIds": [
     "FOR-56",
     "FOR-57",
     "FOR-58",

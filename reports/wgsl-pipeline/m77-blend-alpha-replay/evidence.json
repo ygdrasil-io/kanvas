@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "generatedBy": "kadre-runtime:M77BlendAlphaReplay",
-  "linearIssues": ["FOR-93", "FOR-119", "FOR-120", "FOR-121", "FOR-122", "FOR-123"],
+  "scopeIds": ["FOR-93", "FOR-119", "FOR-120", "FOR-121", "FOR-122", "FOR-123"],
   "packId": "m77-blend-alpha-replay-v1",
   "claimLevel": "bounded-src-over-alpha-replay-evidence",
   "readinessDelta": 0,

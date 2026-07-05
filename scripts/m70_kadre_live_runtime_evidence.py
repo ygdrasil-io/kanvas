@@ -11,7 +11,7 @@ from typing import Any
 
 
 SCHEMA_VERSION = 1
-LINEAR_ISSUES = [
+SCOPE_IDS = [
     "FOR-60",
     "FOR-61",
     "FOR-62",
@@ -140,7 +140,7 @@ def build_route(project_root: Path) -> dict[str, Any]:
         "schemaVersion": SCHEMA_VERSION,
         "generatedAt": now_iso(),
         "generatedBy": "scripts/m70_kadre_live_runtime_evidence.py",
-        "linearIssues": LINEAR_ISSUES,
+        "scopeIds": SCOPE_IDS,
         "status": status,
         "reason": reason,
         "sceneId": scene_contract.get("id") or "m72-solid-rect-replay-v1",
@@ -225,7 +225,7 @@ def write_markdown(path: Path, route: dict[str, Any]) -> None:
         f"- Native readback checksum/nontransparent: `{capture.get('checksum')}` / `{capture.get('nonTransparentPixels')}`",
         f"- Surface status summary: success `{surface_status.get('success')}`, timeout `{surface_status.get('timeout')}`",
         "",
-        "## Linear Scope",
+        "## Scope",
         "",
         "- Epic: `FOR-60` M70-A Kadre Live Runtime V1.",
         "- Runtime demo task: `FOR-61`.",

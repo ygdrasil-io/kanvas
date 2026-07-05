@@ -35,7 +35,7 @@ def main() -> int:
     require(evidence.get("packId") == "mep-next-runtime-interactive-kadre-v1", "unexpected evidence packId")
     require(evidence.get("status") == "pass", "evidence status must be pass")
     require(evidence.get("claimLevel") == "bounded-kadre-runtime-interactive-evidence", "unexpected claimLevel")
-    require(set(evidence.get("linearIssues", [])) == {"FOR-193", "FOR-194", "FOR-195", "FOR-196"}, "linear issue scope changed")
+    require(set(evidence.get("scopeIds", [])) == {"FOR-193", "FOR-194", "FOR-195", "FOR-196"}, "scope ids changed")
 
     modes = evidence.get("modes", {})
     require(modes.get("demo", {}).get("optIn") is True, "native demo must remain opt-in")

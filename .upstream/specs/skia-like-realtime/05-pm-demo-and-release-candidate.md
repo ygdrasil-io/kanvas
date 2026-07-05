@@ -261,7 +261,7 @@ The evidence JSON must report:
 
 - pack id `m89-mep-next-feature-breadth-v1`;
 - status `pass`;
-- Linear scope `FOR-189`, `FOR-190`, `FOR-191`, and `FOR-192`;
+- scope ids `FOR-189`, `FOR-190`, `FOR-191`, and `FOR-192`;
 - RC-MEP source commit `fbadbd3d4bd7ab8b86ffc2eabf01a02707b9068e`;
 - dashboard expectation `failRows=0` and `trackedGapRows=0`;
 - at least two bounded evidence rows for image filters, clips/Path AA, and

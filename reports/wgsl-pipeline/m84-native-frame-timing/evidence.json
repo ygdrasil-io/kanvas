@@ -1,7 +1,7 @@
 {
     "schemaVersion": 1,
     "generatedBy": "kadre-runtime:M84NativeFrameTimingCandidate",
-    "linearIssues": [
+    "scopeIds": [
         "FOR-100",
         "FOR-154",
         "FOR-155",

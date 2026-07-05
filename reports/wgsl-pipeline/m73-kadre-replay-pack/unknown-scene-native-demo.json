@@ -303,7 +303,7 @@
     "deviceLost": 0
   },
   "surfaceStatuses": [],
-  "linearIssues": ["FOR-61", "FOR-62", "FOR-64", "FOR-66", "FOR-67", "FOR-68", "FOR-69", "FOR-70", "FOR-71", "FOR-72", "FOR-73", "FOR-74", "FOR-75", "FOR-76", "FOR-77", "FOR-78", "FOR-79", "FOR-80", "FOR-81", "FOR-82", "FOR-83", "FOR-84", "FOR-85", "FOR-86", "FOR-87", "FOR-88", "FOR-89", "FOR-90", "FOR-105", "FOR-106", "FOR-107", "FOR-108", "FOR-109"],
+  "scopeIds": ["FOR-61", "FOR-62", "FOR-64", "FOR-66", "FOR-67", "FOR-68", "FOR-69", "FOR-70", "FOR-71", "FOR-72", "FOR-73", "FOR-74", "FOR-75", "FOR-76", "FOR-77", "FOR-78", "FOR-79", "FOR-80", "FOR-81", "FOR-82", "FOR-83", "FOR-84", "FOR-85", "FOR-86", "FOR-87", "FOR-88", "FOR-89", "FOR-90", "FOR-105", "FOR-106", "FOR-107", "FOR-108", "FOR-109"],
   "nonClaims": [
     "This run proves bounded Kadre native window present-call execution for one selected M73 replay-pack scene contract.",
     "M71 proves the demo route requests frames from Kadre/AppKit ControlFlow.Poll instead of relying on pointer/input events to wake the run loop.",

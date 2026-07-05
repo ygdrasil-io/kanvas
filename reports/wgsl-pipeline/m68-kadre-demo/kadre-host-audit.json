@@ -135,7 +135,7 @@
       "path": "external/poc-koreos/kadre-core/src/commonMain/kotlin/org/graphiks/kadre/core/Window.kt"
     }
   },
-  "linearIssues": [
+  "scopeIds": [
     "FOR-50",
     "FOR-51",
     "FOR-52",
