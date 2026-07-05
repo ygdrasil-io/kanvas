@@ -24,7 +24,7 @@ import org.graphiks.kanvas.types.Rect
 class HslGm : SkiaGm {
     override val name = "HSL_duck"
     override val renderFamily = RenderFamily.COMPOSITE
-    override val renderCost = RenderCost.FAST
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 1110
     override val height = 620

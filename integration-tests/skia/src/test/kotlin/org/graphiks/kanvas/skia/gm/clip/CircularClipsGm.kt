@@ -22,7 +22,7 @@ import org.graphiks.kanvas.types.Rect
 class CircularClipsGm : SkiaGm {
     override val name = "circular-clips"
     override val renderFamily = RenderFamily.CLIP
-    override val renderCost = RenderCost.FAST
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 800
     override val height = 200

@@ -20,7 +20,7 @@ import org.graphiks.kanvas.types.Rect
 class WindowRectanglesGm : SkiaGm {
     override val name = "windowrectangles"
     override val renderFamily = RenderFamily.CLIP
-    override val renderCost = RenderCost.MEDIUM
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 600
     override val height = 600

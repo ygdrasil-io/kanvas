@@ -20,7 +20,7 @@ import org.graphiks.kanvas.types.Rect
 class ImageFiltersCroppedGm : SkiaGm {
     override val name = "imagefilterscropped"
     override val renderFamily = RenderFamily.COMPOSITE
-    override val renderCost = RenderCost.SLOW
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 400
     override val height = 960

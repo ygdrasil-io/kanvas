@@ -26,7 +26,7 @@ import kotlin.random.Random
 class DstReadShuffleGm : SkiaGm {
     override val name = "dstreadshuffle"
     override val renderFamily = RenderFamily.COMPOSITE
-    override val renderCost = RenderCost.FAST
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 530
     override val height = 680

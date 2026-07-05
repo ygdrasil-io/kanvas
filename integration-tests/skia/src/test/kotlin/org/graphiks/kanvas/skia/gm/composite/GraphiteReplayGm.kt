@@ -22,7 +22,7 @@ import kotlin.math.sin
 class GraphiteReplayGm : SkiaGm {
     override val name = "graphite-replay"
     override val renderFamily = RenderFamily.COMPOSITE
-    override val renderCost = RenderCost.FAST
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = K_TILE_WIDTH * 3
     override val height = K_TILE_HEIGHT * 2

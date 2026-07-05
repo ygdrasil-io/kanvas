@@ -18,7 +18,7 @@ import org.graphiks.kanvas.types.Rect
 class SrgbGm : SkiaGm {
     override val name = "srgb_colorfilter"
     override val renderFamily = RenderFamily.COMPOSITE
-    override val renderCost = RenderCost.FAST
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 512
     override val height = 256 * 3

@@ -19,7 +19,7 @@ import org.graphiks.kanvas.types.Rect
 class ImageBlurClampModeGm : SkiaGm {
     override val name = "imageblurclampmode"
     override val renderFamily = RenderFamily.BLUR
-    override val renderCost = RenderCost.MEDIUM
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 850
     override val height = 920

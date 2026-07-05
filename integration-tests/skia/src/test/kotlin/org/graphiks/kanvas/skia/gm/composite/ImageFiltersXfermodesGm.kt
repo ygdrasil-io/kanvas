@@ -13,7 +13,7 @@ import org.graphiks.kanvas.types.Rect
 class ImageFiltersXfermodesGm : SkiaGm {
     override val name = "imagefilters_xfermodes"
     override val renderFamily = RenderFamily.COMPOSITE
-    override val renderCost = RenderCost.FAST
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 480
     override val height = 480

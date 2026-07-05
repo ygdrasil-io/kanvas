@@ -20,7 +20,7 @@ import org.graphiks.kanvas.types.Rect
 class ImageFilterOffsetGm : SkiaGm {
     override val name = "image_filter_offset"
     override val renderFamily = RenderFamily.COMPOSITE
-    override val renderCost = RenderCost.TRIVIAL
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 280
     override val height = 100

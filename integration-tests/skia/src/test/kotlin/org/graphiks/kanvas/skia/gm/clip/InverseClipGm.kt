@@ -19,7 +19,7 @@ import org.graphiks.kanvas.types.Rect
 class InverseClipGm : SkiaGm {
     override val name = "inverseclip"
     override val renderFamily = RenderFamily.CLIP
-    override val renderCost = RenderCost.FAST
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 52.1
     override val width = 400
     override val height = 400

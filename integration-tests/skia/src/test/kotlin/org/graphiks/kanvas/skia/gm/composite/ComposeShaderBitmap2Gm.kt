@@ -21,7 +21,7 @@ import org.graphiks.kanvas.types.Rect
 class ComposeShaderBitmap2Gm : SkiaGm {
     override val name = "composeshader_bitmap2"
     override val renderFamily = RenderFamily.COMPOSITE
-    override val renderCost = RenderCost.TRIVIAL
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 200
     override val height = 200

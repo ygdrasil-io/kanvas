@@ -21,7 +21,7 @@ import org.graphiks.kanvas.types.Rect
 class RecordOptsGm : SkiaGm {
     override val name = "recordopts"
     override val renderFamily = RenderFamily.COMPOSITE
-    override val renderCost = RenderCost.FAST
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = (kSize + 1) * 2
     override val height = (kSize + 1) * 15

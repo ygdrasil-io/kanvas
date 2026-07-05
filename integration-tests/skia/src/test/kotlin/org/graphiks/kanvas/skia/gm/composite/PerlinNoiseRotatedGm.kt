@@ -20,7 +20,7 @@ import org.graphiks.kanvas.types.Rect
 class PerlinNoiseRotatedGm : SkiaGm {
     override val name = "perlinnoise_rotated"
     override val renderFamily = RenderFamily.COMPOSITE
-    override val renderCost = RenderCost.FAST
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 320
     override val height = 220

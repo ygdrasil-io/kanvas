@@ -23,7 +23,7 @@ import org.graphiks.kanvas.types.Rect
 class ClipLargeRectGm : SkiaGm {
     override val name = "cliplargerect"
     override val renderFamily = RenderFamily.CLIP
-    override val renderCost = RenderCost.TRIVIAL
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 47.7
     override val width = 256
     override val height = 256

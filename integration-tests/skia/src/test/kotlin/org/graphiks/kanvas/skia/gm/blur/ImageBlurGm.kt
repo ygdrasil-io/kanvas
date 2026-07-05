@@ -40,7 +40,7 @@ internal fun imageBlurDraw(sigmaX: Float, sigmaY: Float, canvas: GmCanvas) {
 class ImageBlurGm : SkiaGm {
     override val name = "imageblur"
     override val renderFamily = RenderFamily.BLUR
-    override val renderCost = RenderCost.FAST
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 27.9
     override val width = 500
     override val height = 500
@@ -54,7 +54,7 @@ class ImageBlurGm : SkiaGm {
 class ImageBlurLargeGm : SkiaGm {
     override val name = "imageblur_large"
     override val renderFamily = RenderFamily.BLUR
-    override val renderCost = RenderCost.FAST
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 27.9
     override val width = 500
     override val height = 500

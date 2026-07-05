@@ -19,7 +19,7 @@ import org.graphiks.kanvas.types.Rect
 class ImageFilterComposedTransformGm : SkiaGm {
     override val name = "imagefilter_composed_transform"
     override val renderFamily = RenderFamily.COMPOSITE
-    override val renderCost = RenderCost.TRIVIAL
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 512
     override val height = 512

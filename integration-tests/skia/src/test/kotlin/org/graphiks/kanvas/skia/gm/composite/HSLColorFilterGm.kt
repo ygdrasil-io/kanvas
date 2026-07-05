@@ -19,7 +19,7 @@ import kotlin.math.max
 class HSLColorFilterGm : SkiaGm {
     override val name = "hslcolorfilter"
     override val renderFamily = RenderFamily.COMPOSITE
-    override val renderCost = RenderCost.FAST
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 840
     override val height = 1100

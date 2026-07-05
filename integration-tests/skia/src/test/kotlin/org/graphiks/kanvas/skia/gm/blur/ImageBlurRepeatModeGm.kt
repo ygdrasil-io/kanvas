@@ -18,7 +18,7 @@ import org.graphiks.kanvas.types.Rect
 class ImageBlurRepeatModeGm : SkiaGm {
     override val name = "imageblurrepeatmode"
     override val renderFamily = RenderFamily.BLUR
-    override val renderCost = RenderCost.FAST
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 850
     override val height = 920

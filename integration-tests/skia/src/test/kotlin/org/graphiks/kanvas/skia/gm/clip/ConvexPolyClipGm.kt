@@ -25,7 +25,7 @@ import kotlin.math.sin
 class ConvexPolyClipGm : SkiaGm {
     override val name = "convex_poly_clip"
     override val renderFamily = RenderFamily.CLIP
-    override val renderCost = RenderCost.MEDIUM
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 870
     override val height = 540

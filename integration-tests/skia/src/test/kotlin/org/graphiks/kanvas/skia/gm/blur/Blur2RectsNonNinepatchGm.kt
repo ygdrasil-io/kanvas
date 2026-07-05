@@ -20,7 +20,7 @@ import org.graphiks.kanvas.types.Rect
 class Blur2RectsNonNinepatchGm : SkiaGm {
     override val name = "blur2rectsnonninepatch"
     override val renderFamily = RenderFamily.BLUR
-    override val renderCost = RenderCost.FAST
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 90.5
     override val width = 700
     override val height = 500

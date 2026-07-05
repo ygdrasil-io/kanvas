@@ -23,7 +23,7 @@ import org.graphiks.kanvas.types.Rect
 class DropShadowPseudoPerspGm : SkiaGm {
     override val name = "dropshadow_pseudopersp"
     override val renderFamily = RenderFamily.COMPOSITE
-    override val renderCost = RenderCost.TRIVIAL
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 155
     override val height = 155

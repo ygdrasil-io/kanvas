@@ -19,7 +19,7 @@ import org.graphiks.kanvas.types.Rect
 class RRectClipBwGm : SkiaGm {
     override val name = "rrect_clip_bw"
     override val renderFamily = RenderFamily.CLIP
-    override val renderCost = RenderCost.FAST
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = kImageWidth
     override val height = kImageHeight

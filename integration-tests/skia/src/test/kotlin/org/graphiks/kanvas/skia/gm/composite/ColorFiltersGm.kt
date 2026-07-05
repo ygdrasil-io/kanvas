@@ -20,7 +20,7 @@ import org.graphiks.kanvas.types.Rect
 class ColorFiltersGm : SkiaGm {
     override val name = "lightingcolorfilter"
     override val renderFamily = RenderFamily.COMPOSITE
-    override val renderCost = RenderCost.TRIVIAL
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 620
     override val height = 430

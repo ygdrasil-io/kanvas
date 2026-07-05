@@ -23,7 +23,7 @@ import org.graphiks.kanvas.types.Rect
 class InverseFillFiltersGm : SkiaGm {
     override val name = "inverse_fill_filters"
     override val renderFamily = RenderFamily.BLUR
-    override val renderCost = RenderCost.TRIVIAL
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 384
     override val height = 128

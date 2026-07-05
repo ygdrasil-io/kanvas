@@ -36,7 +36,7 @@ import org.graphiks.kanvas.types.Point
 class PatchAlphaGm : SkiaGm {
     override val name = "patch_alpha"
     override val renderFamily = RenderFamily.COMPOSITE
-    override val renderCost = RenderCost.FAST
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 1500
     override val height = 1100

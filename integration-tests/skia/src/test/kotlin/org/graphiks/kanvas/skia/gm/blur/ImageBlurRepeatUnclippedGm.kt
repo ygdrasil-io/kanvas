@@ -21,7 +21,7 @@ import org.graphiks.kanvas.types.Rect
 class ImageBlurRepeatUnclippedGm : SkiaGm {
     override val name = "imageblurrepeatunclipped"
     override val renderFamily = RenderFamily.BLUR
-    override val renderCost = RenderCost.FAST
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 256
     override val height = 128

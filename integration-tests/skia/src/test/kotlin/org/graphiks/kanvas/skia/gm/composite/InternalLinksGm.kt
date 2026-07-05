@@ -18,7 +18,7 @@ import org.graphiks.kanvas.types.Rect
 class InternalLinksGm : SkiaGm {
     override val name = "internal_links"
     override val renderFamily = RenderFamily.COMPOSITE
-    override val renderCost = RenderCost.TRIVIAL
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 700
     override val height = 500

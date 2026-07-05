@@ -17,7 +17,7 @@ import org.graphiks.kanvas.types.Rect
 class Color4shaderGm : SkiaGm {
     override val name = "color4shader"
     override val renderFamily = RenderFamily.COMPOSITE
-    override val renderCost = RenderCost.TRIVIAL
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 360
     override val height = 480

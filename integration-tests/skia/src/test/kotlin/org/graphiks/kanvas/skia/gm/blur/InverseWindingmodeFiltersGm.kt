@@ -23,7 +23,7 @@ import org.graphiks.kanvas.types.Rect
 class InverseWindingmodeFiltersGm : SkiaGm {
     override val name = "inverse_windingmode_filters"
     override val renderFamily = RenderFamily.BLUR
-    override val renderCost = RenderCost.TRIVIAL
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 256
     override val height = 100
