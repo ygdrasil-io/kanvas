@@ -190,20 +190,52 @@ private fun nextSessionOrdinal(): Long = sessionOrdinalCounter.incrementAndGet()
 private fun nextWindowRuntimeOrdinal(): Long = windowRuntimeOrdinalCounter.incrementAndGet()
 
 object WgpuBackendRuntimeFactory {
-    /** Creates a WebGPU-backed runtime session when the host can initialize the backend. */
-    fun createOrNull(): GPUBackendSession? = try {
-        LibraryLoader.load()
-        val glfw = runBlocking {
-            glfwContextRenderer(
-                width = 1,
-                height = 1,
-                title = "kanvas-gpu-renderer-wgpu-runtime",
-                deferredRendering = true,
-            )
+    private var sharedInner: GPUBackendSession? = null
+    private var shutdownHook: Thread? = null
+
+    /** Creates a WebGPU-backed runtime session when the host can initialize the backend.
+     *  The session is **reused** across renders — creating a new WGPU device per render
+     *  leaks native Metal/Dawn memory and causes "Context leak detected" after ~250 renders.
+     *  The returned wrapper ignores close() so that callers using .use {} do not destroy
+     *  the shared device. Call [dispose] to release native resources on shutdown. */
+    fun createOrNull(): GPUBackendSession? {
+        if (sharedInner == null) {
+            sharedInner = try {
+                LibraryLoader.load()
+                val glfw = runBlocking {
+                    glfwContextRenderer(
+                        width = 1,
+                        height = 1,
+                        title = "kanvas-gpu-renderer-wgpu-runtime",
+                        deferredRendering = true,
+                    )
+                }
+                WgpuBackendSession(glfw)
+            } catch (_: Throwable) {
+                null
+            }
+            if (sharedInner != null) {
+                val hook = Thread { sharedInner!!.close() }
+                shutdownHook = hook
+                Runtime.getRuntime().addShutdownHook(hook)
+            }
         }
-        WgpuBackendSession(glfw)
-    } catch (_: Throwable) {
-        null
+        return sharedInner?.let { NonClosingSession(it) }
+    }
+
+    /** Release the shared session and its native resources. Must be called
+     *  before JVM shutdown to avoid wgpu-native panics during cleanup. */
+    fun dispose() {
+        shutdownHook?.let { Runtime.getRuntime().removeShutdownHook(it) }
+        shutdownHook = null
+        sharedInner?.close()
+        sharedInner = null
+    }
+
+    private class NonClosingSession(
+        private val inner: GPUBackendSession,
+    ) : GPUBackendSession by inner {
+        override fun close() { /* no-op: lifetime managed by WgpuBackendRuntimeFactory */ }
     }
 }
 
@@ -366,7 +398,11 @@ private class WgpuOffscreenTarget(
                     drawIndexedAction = { indexCount -> drawIndexed(indexCount) },
                     offscreenTextureStore = offscreenTextures,
                 )
-                recorder.block()
+                try {
+                    recorder.block()
+                } finally {
+                    recorder.closeCachedResources()
+                }
                 end()
             }
             encoder.copyTextureToBuffer(
@@ -530,7 +566,11 @@ private class WgpuOffscreenTarget(
                 drawIndexedAction = { indexCount -> drawIndexed(indexCount) },
                 offscreenTextureStore = mutableMapOf(),
             )
-            block(recorder)
+            try {
+                block(recorder)
+            } finally {
+                recorder.closeCachedResources()
+            }
             end()
         }
         val commandBuffer = resources.trackIfAutoCloseable(encoder.finish())
@@ -648,7 +688,11 @@ private class WgpuWindowSurface(
                     drawIndexedAction = { indexCount -> drawIndexed(indexCount) },
                     offscreenTextureStore = mutableMapOf(),
                 )
-                recorder.block()
+                try {
+                    recorder.block()
+                } finally {
+                    recorder.closeCachedResources()
+                }
                 end()
             }
             val commandBuffer = resources.trackIfAutoCloseable(encoder.finish())
@@ -682,13 +726,28 @@ private class WgpuRenderRecorder(
     private val setIndexBufferAction: (GPUBuffer, GPUIndexFormat) -> Unit,
     private val drawIndexedAction: (UInt) -> Unit,
     private val offscreenTextureStore: MutableMap<String, GPUTexture>,
-) : GPUBackendRenderRecorder {
+    ) : GPUBackendRenderRecorder {
     private val vertexBufferStore = mutableMapOf<String, Pair<GPUBuffer, Int>>()
     private val vertexColorIndexStore = mutableMapOf<String, IntArray>()
     private var texturedVertexPipelineCache = mutableMapOf<String, GPURenderPipeline>()
     private var texturedVertexBindGroupLayout: GPUBindGroupLayout? = null
     private var dualUVVertexPipelineCache = mutableMapOf<String, GPURenderPipeline>()
     private var dualUVVertexBindGroupLayout: GPUBindGroupLayout? = null
+
+    fun closeCachedResources() {
+        texturedVertexBindGroupLayout?.let { closeQuietly { it.close() } }
+        dualUVVertexBindGroupLayout?.let { closeQuietly { it.close() } }
+        texturedVertexPipelineCache.values.forEach { closeQuietly { it.close() } }
+        dualUVVertexPipelineCache.values.forEach { closeQuietly { it.close() } }
+        texturedVertexPipelineCache.clear()
+        dualUVVertexPipelineCache.clear()
+        texturedVertexBindGroupLayout = null
+        dualUVVertexBindGroupLayout = null
+    }
+
+    private fun closeQuietly(block: () -> Unit) {
+        try { block() } catch (_: Throwable) { }
+    }
 
     override fun drawFullscreenPass(
         wgsl: String,

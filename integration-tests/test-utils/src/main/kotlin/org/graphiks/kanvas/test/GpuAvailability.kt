@@ -4,12 +4,8 @@ import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
 import org.opentest4j.TestAbortedException
 
 object GpuAvailability {
-    val gpuAvailable: Boolean by lazy {
-        GPUBackendRuntimeFactory.createOrNull() != null
-    }
-
     fun requireWebGpu() {
-        if (!gpuAvailable) {
+        if (GPUBackendRuntimeFactory.createOrNull() == null) {
             throw TestAbortedException("WebGPU not available on this machine")
         }
     }
