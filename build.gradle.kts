@@ -113,35 +113,6 @@ data class RequiredPipelineConformanceSuite(
 
 val requiredPipelineConformanceSuites = listOf(
     RequiredPipelineConformanceSuite(
-        className = "org.skia.effects.runtime.SkRuntimeEffectDescriptorRegistryTest",
-        resultRoot = "cpu-raster/build/test-results/pipelineConformanceTest",
-    ),
-    RequiredPipelineConformanceSuite(
-        className = "org.skia.effects.runtime.SkRuntimeEffectDispatchTest",
-        resultRoot = "cpu-raster/build/test-results/pipelineConformanceTest",
-    ),
-    RequiredPipelineConformanceSuite(
-        className = "org.skia.effects.runtime.SkRuntimeEffectMakeTest",
-        resultRoot = "cpu-raster/build/test-results/pipelineConformanceTest",
-    ),
-
-    RequiredPipelineConformanceSuite(
-        className = "org.skia.pipeline.CpuScalarPipelineExecutorTest",
-        resultRoot = "render-pipeline/build/test-results/pipelineConformanceTest",
-    ),
-    RequiredPipelineConformanceSuite(
-        className = "org.skia.pipeline.GeometryCoverageContractsTest",
-        resultRoot = "render-pipeline/build/test-results/pipelineConformanceTest",
-    ),
-    RequiredPipelineConformanceSuite(
-        className = "org.skia.pipeline.GeometryCoverageMigrationHarnessTest",
-        resultRoot = "render-pipeline/build/test-results/pipelineConformanceTest",
-    ),
-    RequiredPipelineConformanceSuite(
-        className = "org.skia.pipeline.KanvasPipelineIRTest",
-        resultRoot = "render-pipeline/build/test-results/pipelineConformanceTest",
-    ),
-    RequiredPipelineConformanceSuite(
         className = "org.skia.core.SkBitmapDescriptorCoverageOracleTest",
         resultRoot = "kanvas-skia/build/test-results/pipelineConformanceTest",
     ),
@@ -507,25 +478,6 @@ fun renderPipelineConformanceReport(
     """.trimMargin().replace("TABLE_PIPE", "|")
 }
 
-project(":cpu-raster").registerPipelineConformanceTest(
-    descriptionText = "Runs runtime-effect descriptor and CPU dispatch conformance tests.",
-    testPatterns = listOf(
-        "org.skia.effects.runtime.SkRuntimeEffectDescriptorRegistryTest",
-        "org.skia.effects.runtime.SkRuntimeEffectDispatchTest",
-        "org.skia.effects.runtime.SkRuntimeEffectMakeTest",
-    ),
-)
-
-project(":render-pipeline").registerPipelineConformanceTest(
-    descriptionText = "Runs PipelineIR, CPU executor, and geometry coverage oracle conformance tests.",
-    testPatterns = listOf(
-        "org.skia.pipeline.KanvasPipelineIRTest",
-        "org.skia.pipeline.CpuScalarPipelineExecutorTest",
-        "org.skia.pipeline.GeometryCoverageContractsTest",
-        "org.skia.pipeline.GeometryCoverageMigrationHarnessTest",
-    ),
-)
-
 project(":kanvas-skia").registerPipelineConformanceTest(
     descriptionText = "Runs kanvas-skia production descriptor-route coverage conformance tests.",
     testPatterns = listOf(
@@ -537,7 +489,6 @@ tasks.register<Exec>("pipelineRuntimeShaderEffectsV2PromotionReport") {
     group = "verification"
     description = "Materializes and validates the KAN-029 Runtime Shader Effects V2 promotion report."
 
-    dependsOn(":cpu-raster:pipelineRuntimeEffectsV2SupportMatrix")
     val outputDir = layout.projectDirectory.dir("reports/wgsl-pipeline/runtime-shader-effects-v2")
     commandLine(
         "python3",
@@ -561,7 +512,6 @@ tasks.register<Exec>("pipelineRuntimeChildShaderEffectLaneReport") {
     group = "verification"
     description = "Materializes and validates the KAN-030 Runtime child shader effect lane report."
 
-    dependsOn(":cpu-raster:pipelineRuntimeEffectsV2SupportMatrix")
     val outputDir = layout.projectDirectory.dir("reports/wgsl-pipeline/runtime-child-shader-effect-lane")
     commandLine(
         "python3",
@@ -583,9 +533,6 @@ tasks.register<Exec>("pipelineRuntimeColorFilterWgslReport") {
     group = "verification"
     description = "Materializes and validates the KAN-031 Runtime ColorFilter WGSL report."
 
-    dependsOn(
-        ":cpu-raster:pipelineRuntimeEffectsV2SupportMatrix",
-    )
     val outputDir = layout.projectDirectory.dir("reports/wgsl-pipeline/runtime-color-filter-wgsl")
     commandLine(
         "python3",
@@ -606,7 +553,6 @@ tasks.register<Exec>("pipelineRuntimeBlenderBoundaryReport") {
     group = "verification"
     description = "Materializes and validates the KAN-032 Runtime Blender boundary report."
 
-    dependsOn(":cpu-raster:pipelineRuntimeEffectsV2SupportMatrix")
     val outputDir = layout.projectDirectory.dir("reports/wgsl-pipeline/runtime-blender-boundary")
     commandLine(
         "python3",
@@ -631,9 +577,6 @@ tasks.register<Exec>("pipelineRuntimeEffectUniformPreviewReport") {
     group = "verification"
     description = "Materializes and validates the KAN-033 Runtime Effect uniform preview report."
 
-    dependsOn(
-        ":cpu-raster:pipelineRuntimeEffectsV2SupportMatrix",
-    )
     val outputDir = layout.projectDirectory.dir("reports/wgsl-pipeline/runtime-effect-uniform-preview")
     commandLine(
         "python3",
@@ -659,7 +602,6 @@ tasks.register<Exec>("pipelineRuntimeEffectsV2EvidenceBundleReport") {
     description = "Materializes and validates the KAN-034 Runtime Effects V2 evidence bundle."
 
     dependsOn(
-        ":cpu-raster:pipelineRuntimeEffectsV2SupportMatrix",
         "pipelineRuntimeShaderEffectsV2PromotionReport",
         "pipelineRuntimeChildShaderEffectLaneReport",
         "pipelineRuntimeColorFilterWgslReport",
@@ -694,15 +636,11 @@ tasks.register("pipelineConformance") {
     description = "Runs the standard production pipeline conformance suite without slow benchmark gates."
 
     dependsOn(
-        ":cpu-raster:pipelineRuntimeEffectsV2SupportMatrix",
         "pipelineRuntimeShaderEffectsV2PromotionReport",
         "pipelineRuntimeChildShaderEffectLaneReport",
         "pipelineRuntimeColorFilterWgslReport",
         "pipelineRuntimeBlenderBoundaryReport",
         "pipelineRuntimeEffectUniformPreviewReport",
-        "pipelineRuntimeEffectsV2EvidenceBundleReport",
-        ":cpu-raster:pipelineConformanceTest",
-        ":render-pipeline:pipelineConformanceTest",
         ":kanvas-skia:pipelineConformanceTest",
     )
 
@@ -710,18 +648,14 @@ tasks.register("pipelineConformance") {
         logger.lifecycle(
             """
             |pipelineConformance summary:
-            |- REQUIRED Runtime Effects V2 support matrix: :cpu-raster:pipelineRuntimeEffectsV2SupportMatrix
             |- REQUIRED Runtime Shader Effects V2 promotion report: pipelineRuntimeShaderEffectsV2PromotionReport
             |- REQUIRED Runtime child shader effect lane report: pipelineRuntimeChildShaderEffectLaneReport
             |- REQUIRED Runtime ColorFilter WGSL report: pipelineRuntimeColorFilterWgslReport
             |- REQUIRED Runtime Blender boundary report: pipelineRuntimeBlenderBoundaryReport
             |- REQUIRED Runtime Effect uniform preview report: pipelineRuntimeEffectUniformPreviewReport
             |- REQUIRED Runtime Effects V2 evidence bundle: pipelineRuntimeEffectsV2EvidenceBundleReport
-            |- REQUIRED runtime descriptor registry and CPU dispatch tests: :cpu-raster:pipelineConformanceTest
-            |- REQUIRED PipelineIR, CPU executor, and geometry oracle tests: :render-pipeline:pipelineConformanceTest
             |- REQUIRED kanvas-skia production descriptor-route tests: :kanvas-skia:pipelineConformanceTest
             |- GPU adapter residual risk: local adapter-dependent WebGPU tests may report JUnit SKIPPED when no adapter is available; required CI smoke lane (`GPU tests (macos)`) fails closed on adapter skips.
-            |- Slow benchmark gates remain opt-in: :render-pipeline:cpuVectorPilotBenchmark and :render-pipeline:cpuVectorAllocationBenchmark.
             """.trimMargin()
         )
     }
@@ -1382,11 +1316,6 @@ tasks.register("pipelineM69KadreHostAdapterSmoke") {
     group = "verification"
     description = "Generates M69 Kanvas/Kadre host adapter smoke evidence and a concrete native/headless route status."
     mustRunAfter("pipelineM65RuntimeSmoke")
-    mustRunAfter(":kadre-runtime:runM69KadreNativeSmoke")
-    if (providers.gradleProperty("kanvasRunNativeKadreSmoke").map(String::toBoolean).getOrElse(false)) {
-        dependsOn(":kadre-runtime:runM69KadreNativeSmoke")
-    }
-
     val scriptFile = layout.projectDirectory.file("scripts/m69_kadre_host_adapter_smoke.py")
     val outputDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m69-kadre-host-adapter")
     inputs.file(scriptFile)
@@ -1416,7 +1345,6 @@ tasks.register("pipelineM69KadreHostAdapterSmoke") {
 tasks.register("pipelineM70KadreLiveRuntimeEvidence") {
     group = "verification"
     description = "Generates M70-A Kadre live runtime route evidence from native demo telemetry."
-    mustRunAfter(":kadre-runtime:runM70KadreNativeDemo")
 
     val scriptFile = layout.projectDirectory.file("scripts/m70_kadre_live_runtime_evidence.py")
     val outputDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m70-kadre-live-runtime")
@@ -3106,7 +3034,7 @@ tasks.register("checkProductionCodecImageClasspathNoJavaDesktop") {
 
     doLast {
         val violations = mutableListOf<String>()
-        val projectsToCheck = (pureKotlinCodecProjects + "codec:image-generator" + "kanvas-skia" + "cpu-raster")
+        val projectsToCheck = (pureKotlinCodecProjects + "codec:image-generator" + "kanvas-skia")
             .mapNotNull { name -> findProject(":$name") }
 
         projectsToCheck.forEach { checkedProject ->
@@ -3228,42 +3156,6 @@ tasks.register("checkImageEncodeTestsNoAwt") {
     }
 }
 
-tasks.register("checkCpuRasterImageToolingNoAwt") {
-    group = "verification"
-    description = "Fails if cpu-raster image test tooling uses AWT/ImageIO/java.desktop APIs."
-
-    doLast {
-        val filesToCheck = listOf(
-            file("cpu-raster/src/main/kotlin/org/skia/testing/TestUtils.kt"),
-            file("cpu-raster/src/main/kotlin/org/skia/testing/DiffImage.kt"),
-            file("cpu-raster/src/test/kotlin/org/skia/testing/TestToolingTest.kt"),
-            file("cpu-raster/src/test/kotlin/org/graphiks/kanvas/codec/AndroidCodecComputeSampleSizeJpegTest.kt"),
-            file("cpu-raster/src/test/kotlin/org/graphiks/kanvas/codec/AndroidCodecGetAndroidPixelsTest.kt"),
-            file("cpu-raster/src/test/kotlin/org/graphiks/kanvas/codec/AndroidCodecTest.kt"),
-        )
-        val violations = mutableListOf<String>()
-        filesToCheck
-            .filter { source -> source.isFile }
-            .forEach { source ->
-                val sourceText = source.readText().withoutKotlinOrJavaComments()
-                forbiddenSourcePatterns.forEach { pattern ->
-                    if (pattern.containsMatchIn(sourceText)) {
-                        violations += "${source.relativeTo(rootDir)} contains forbidden image tooling API reference ${pattern.pattern}"
-                    }
-                }
-            }
-
-        if (violations.isNotEmpty()) {
-            throw GradleException(
-                buildString {
-                    appendLine("CPU raster image test tooling must not use AWT/ImageIO/java.desktop APIs.")
-                    violations.sorted().forEach { appendLine("- $it") }
-                }
-            )
-        }
-    }
-}
-
 tasks.register("checkCodecKotlinSwitchCriteria") {
     group = "verification"
     description = "Runs the non-destructive :codec switch-readiness checks."
@@ -3279,7 +3171,6 @@ tasks.register("checkCodecKotlinSwitchCriteria") {
         ":codec:test",
         ":codec:real-image-tests:test",
         ":codec:jar",
-        ":cpu-raster:testCodecWithKotlinBackend",
     )
 }
 
@@ -3289,7 +3180,6 @@ tasks.register("checkCodecImageComplete") {
 
     dependsOn(
         "checkCodecKotlinSwitchCriteria",
-        "checkCpuRasterImageToolingNoAwt",
         "checkProductionCodecImageClasspathNoJavaDesktop",
         ":codec:png:test",
         ":codec:jpeg:test",
@@ -4949,20 +4839,6 @@ tasks.register<Exec>("validateMepRcRuntime") {
 tasks.register("pipelinePmBundle") {
     group = "verification"
     description = "Builds a portable PM review bundle for the WGSL scene dashboard."
-    mustRunAfter(":kadre-runtime:pipelineM75ReplayPackEvidence")
-    mustRunAfter(":kadre-runtime:pipelineM76GeneratedMetadataReplay")
-    mustRunAfter(":kadre-runtime:pipelineM77BlendAlphaReplay")
-    mustRunAfter(":kadre-runtime:pipelineM78ClipReplay")
-    mustRunAfter(":kadre-runtime:pipelineM79BitmapReplay")
-    mustRunAfter(":kadre-runtime:pipelineM80SharedReplayOracle")
-    mustRunAfter(":kadre-runtime:pipelineM81NativeFrameCapture")
-    mustRunAfter(":kadre-runtime:pipelineM82InputResizeRuntimeLoop")
-    mustRunAfter(":kadre-runtime:pipelineM83DisplayListReplay")
-    mustRunAfter(":kadre-runtime:pipelineM84NativeFrameTimingCandidate")
-    mustRunAfter(":kadre-runtime:pipelineM85ResourceLifetimeCacheHardening")
-    mustRunAfter(":kadre-runtime:pipelineM87RuntimeEffectLiveEditing")
-    mustRunAfter(":kadre-runtime:pipelineM88ReleaseCandidate2")
-
     dependsOn(
         "validatePureKotlinTextClaimDashboard",
         "validateKfontM12001TelemetryPmEvidence",

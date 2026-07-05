@@ -13,23 +13,15 @@ plugins {
 dependencies {
     implementation(kotlin("stdlib"))
     implementation(project(":math"))
-    implementation(project(":render-pipeline"))
     implementation(project(":font:core"))
     implementation(project(":font:sfnt"))
     implementation(project(":font:text"))
     implementation("io.ygdrasil:wgpu4k-toolkit:0.2.0-SNAPSHOT")
 
-    // :kanvas-skia/src/main has NO dependency on :cpu-raster (architecture
-    // goal: core/abstractions module). But :kanvas-skia/src/test references
-    // classes that live in :cpu-raster (e.g. ToolUtils, GMs used by
-    // diagnostic tests). testImplementation only affects the test classpath ;
-    // the main JAR stays raster-free.
-    testImplementation(project(":cpu-raster"))
     testImplementation(project(":codec:core"))
     testImplementation(project(":codec:png"))
     testImplementation(project(":codec:image-generator"))
     testImplementation(project(":codec:webp"))
-    testImplementation(project(":skia-integration-tests"))
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
     testImplementation("org.junit.jupiter:junit-jupiter-params:5.10.2")
     // G0 (MIGRATION_PLAN_GPU_WEBGPU.md) — wgpu4k's mapAsync /
@@ -53,8 +45,6 @@ dependencies {
 
 sourceSets {
     test {
-        // Skia GM and image fixtures are owned by :skia-integration-tests.
-        resources.srcDir("../skia-integration-tests/src/test/resources")
         // Encoder tests reuse the small redistributable real-image corpus
         // from the codec validation module to prove encode paths against
         // decoded real fixtures rather than synthetic-only bitmaps.

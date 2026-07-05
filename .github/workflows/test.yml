@@ -1,7 +1,7 @@
 name: Test matrix (raster + GPU)
 
 # G7/M31 cross-validation matrix. Three jobs:
-#  - `raster`        : :cpu-raster + :skia-integration-tests on ubuntu-latest.
+#  - `raster`        : :kanvas-skia + :skia-integration-tests on ubuntu-latest.
 #                      No native GPU driver dependency, fast runner.
 #  - `gpu_smoke`     : required macOS GPU bridge gate using `:kanvas-skia-bridge:test :kanvas:test`.
 #                      The legacy `:gpu-raster:gpuSmokeTest` was deleted with the device
@@ -24,9 +24,7 @@ on:
       - 'codec/**'
       - 'kanvas-skia/**'
       - 'font/**'
-      - 'cpu-raster/**'
       - 'gpu-raster/**'
-      - 'render-pipeline/**'
       - 'integration-tests/**'
       - 'kanvas-legacy/src/test/resources/**'
       - 'buildSrc/**'
@@ -56,9 +54,7 @@ on:
       - 'codec/**'
       - 'kanvas-skia/**'
       - 'font/**'
-      - 'cpu-raster/**'
       - 'gpu-raster/**'
-      - 'render-pipeline/**'
       - 'integration-tests/**'
       - 'kanvas-legacy/src/test/resources/**'
       - 'buildSrc/**'
@@ -179,29 +175,8 @@ jobs:
          run: |
            ./gradlew --no-daemon \
              checkCodecImageComplete \
-             :render-pipeline:test \
-             :cpu-raster:test \
-             :math:jvmTest \
+              :math:jvmTest \
              :kanvas-skia:test
-
-       - name: Upload raster debug images
-         if: failure()
-         uses: actions/upload-artifact@v4
-         with:
-           name: raster-debug-images
-           path: |
-             cpu-raster/build/debug-images/
-           if-no-files-found: ignore
-
-       - name: Upload raster test reports
-         if: always()
-         uses: actions/upload-artifact@v4
-         with:
-           name: raster-test-reports
-           path: |
-             cpu-raster/build/reports/tests/
-             cpu-raster/test-similarity-report.md
-           if-no-files-found: ignore
 
   gpu_smoke:
     name: GPU tests (macos)

@@ -6,7 +6,6 @@ on:
     paths:
       - 'math/**'
       - 'kanvas-skia/**'
-      - 'cpu-raster/**'
       - 'gpu-raster/**'
       - 'docs/**'
       - 'mkdocs.yml'
@@ -48,18 +47,17 @@ jobs:
           pip install mkdocs-material mkdocs-awesome-pages-plugin
 
       - name: Generate per-module API docs (Dokka GFM)
-        # G7.2 — :math + :kanvas-skia + :cpu-raster + :gpu-raster.
+        # G7.2 — :math + :kanvas-skia + :gpu-raster.
         # Each module's :dokkaGfm task writes into <module>/build/dokka/gfm/.
         run: |
           ./gradlew --no-daemon \
             :math:dokkaGfm \
             :kanvas-skia:dokkaGfm \
-            :cpu-raster:dokkaGfm \
             :gpu-raster:dokkaGfm
 
       - name: Copy GFM output into docs tree
         run: |
-          for m in math kanvas-skia cpu-raster gpu-raster; do
+          for m in math kanvas-skia gpu-raster; do
             mkdir -p docs/api/$m
             cp -r $m/build/dokka/gfm/. docs/api/$m/
           done
@@ -68,7 +66,6 @@ jobs:
         run: |
           python docs/scripts/postprocess_dokka_gfm.py docs/api/math
           python docs/scripts/postprocess_dokka_gfm.py docs/api/kanvas-skia
-          python docs/scripts/postprocess_dokka_gfm.py docs/api/cpu-raster
           python docs/scripts/postprocess_dokka_gfm.py docs/api/gpu-raster
 
       - name: Build site (MkDocs)
