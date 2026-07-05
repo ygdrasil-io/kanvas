@@ -62,7 +62,7 @@ internal val COVERAGE_STROKE_WGSL: String = """
     };
 
     @group(0) @binding(0) var<uniform> params: StrokeParams;
-    @group(0) @binding(1) var coverage: texture_storage_2d<r8unorm, write>;
+    @group(0) @binding(1) var coverage: texture_storage_2d<r32float, write>;
 
     @compute @workgroup_size(8, 8)
     fn main(@builtin(global_invocation_id) gid: vec3u) {
