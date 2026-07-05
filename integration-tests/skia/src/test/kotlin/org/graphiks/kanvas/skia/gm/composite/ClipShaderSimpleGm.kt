@@ -13,11 +13,14 @@ import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.types.Rect
 
+<<<<<<< HEAD
 /**
  * Port of Skia's `DEF_SIMPLE_GM(clip_shader, canvas, 840, 650)` in `gm/clip_shader.cpp`.
  * Tests basic clipShader operations: intersect (SRC_IN), difference (SRC_OUT), and two nested intersects using an image shader.
  * @see https://github.com/google/skia/blob/main/gm/clip_shader.cpp
  */
+=======
+>>>>>>> 1f1c0a540 (gm: port 4 clipShader/clipRegion GMs (7 variants) via SRC_IN saveLayer)
 class ClipShaderSimpleGm : SkiaGm {
     override val name = "clip_shader"
     override val renderFamily = RenderFamily.COMPOSITE
