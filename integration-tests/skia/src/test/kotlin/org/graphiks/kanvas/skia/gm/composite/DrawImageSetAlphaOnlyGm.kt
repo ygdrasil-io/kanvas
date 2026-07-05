@@ -9,6 +9,11 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
 
+/**
+ * Port of Skia's `gm/draw_image_set_alpha_only.cpp::DrawImageSetAlphaOnly`.
+ * Tests drawing image rects with alpha-only (A8) vs color tiles over checkerboard.
+ * @see https://github.com/google/skia/blob/main/gm/draw_image_set_alpha_only.cpp
+ */
 class DrawImageSetAlphaOnlyGm : SkiaGm {
     override val name = "draw_image_set_alpha_only"
     override val renderFamily = RenderFamily.COMPOSITE

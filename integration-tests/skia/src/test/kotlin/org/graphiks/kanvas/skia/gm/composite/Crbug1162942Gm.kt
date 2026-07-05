@@ -9,6 +9,11 @@ import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.types.Rect
 
+/**
+ * Port of Skia's `gm/crbug_1162942.cpp::Crbug1162942`.
+ * Renders paths with a near-singular CTM matrix and rotating colors.
+ * @see https://github.com/google/skia/blob/main/gm/crbug_1162942.cpp
+ */
 class Crbug1162942Gm : SkiaGm {
     override val name = "crbug_1162942"
     override val renderFamily = RenderFamily.COMPOSITE

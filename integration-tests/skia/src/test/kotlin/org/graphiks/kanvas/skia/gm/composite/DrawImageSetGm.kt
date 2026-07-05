@@ -15,6 +15,11 @@ import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 import kotlin.math.sqrt
 
+/**
+ * Port of Skia's `gm/draw_image_set.cpp::DrawImageSet`.
+ * Tests drawing image rects with various matrix transforms, blend modes, and color filters.
+ * @see https://github.com/google/skia/blob/main/gm/draw_image_set.cpp
+ */
 class DrawImageSetGm : SkiaGm {
     override val name = "draw_image_set"
     override val renderFamily = RenderFamily.COMPOSITE

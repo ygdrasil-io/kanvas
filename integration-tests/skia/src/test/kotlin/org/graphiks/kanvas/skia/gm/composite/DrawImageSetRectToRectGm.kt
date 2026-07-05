@@ -12,6 +12,11 @@ import org.graphiks.kanvas.types.Rect
 import kotlin.math.max
 import kotlin.math.min
 
+/**
+ * Port of Skia's `gm/draw_image_set_rect_to_rect.cpp::DrawImageSetRectToRect`.
+ * Tests drawing image rects with rect-to-rect mapping under various matrix transforms.
+ * @see https://github.com/google/skia/blob/main/gm/draw_image_set_rect_to_rect.cpp
+ */
 class DrawImageSetRectToRectGm : SkiaGm {
     override val name = "draw_image_set_rect_to_rect"
     override val renderFamily = RenderFamily.COMPOSITE

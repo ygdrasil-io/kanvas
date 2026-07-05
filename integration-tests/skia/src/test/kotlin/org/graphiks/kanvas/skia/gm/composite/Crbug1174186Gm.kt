@@ -8,6 +8,11 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Matrix33
 
+/**
+ * Port of Skia's `gm/crbug_1174186.cpp::Crbug1174186`.
+ * Renders paths with a specific CTM matrix across multiple iterations.
+ * @see https://github.com/google/skia/blob/main/gm/crbug_1174186.cpp
+ */
 class Crbug1174186Gm : SkiaGm {
     override val name = "crbug_1174186"
     override val renderFamily = RenderFamily.COMPOSITE

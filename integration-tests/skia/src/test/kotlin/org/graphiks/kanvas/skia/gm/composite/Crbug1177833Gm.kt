@@ -9,6 +9,11 @@ import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.types.Rect
 
+/**
+ * Port of Skia's `gm/crbug_1177833.cpp::Crbug1177833`.
+ * Renders paths with multiple extreme CTM matrices on a black background.
+ * @see https://github.com/google/skia/blob/main/gm/crbug_1177833.cpp
+ */
 class Crbug1177833Gm : SkiaGm {
     override val name = "crbug_1177833"
     override val renderFamily = RenderFamily.COMPOSITE

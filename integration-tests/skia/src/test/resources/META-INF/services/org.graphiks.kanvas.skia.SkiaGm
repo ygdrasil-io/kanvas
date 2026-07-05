@@ -96,11 +96,11 @@ org.graphiks.kanvas.skia.gm.composite.ComposeShaderBitmapGm
 org.graphiks.kanvas.skia.gm.composite.ComposeShaderGm
 org.graphiks.kanvas.skia.gm.composite.ComposeShaderGridGm
 org.graphiks.kanvas.skia.gm.composite.CompositorGm
-org.graphiks.kanvas.skia.gm.composite.Crbug918512Gm
 org.graphiks.kanvas.skia.gm.composite.Crbug1162942Gm
 org.graphiks.kanvas.skia.gm.composite.Crbug1167277Gm
 org.graphiks.kanvas.skia.gm.composite.Crbug1174186Gm
 org.graphiks.kanvas.skia.gm.composite.Crbug1177833Gm
+org.graphiks.kanvas.skia.gm.composite.Crbug918512Gm
 org.graphiks.kanvas.skia.gm.composite.DiscardGm
 org.graphiks.kanvas.skia.gm.composite.DisplacementGm
 org.graphiks.kanvas.skia.gm.composite.DrawAtlasColorGm
