@@ -5,99 +5,60 @@ import ffi.LibraryLoader
 import io.ygdrasil.webgpu.ArrayBuffer
 import io.ygdrasil.webgpu.BindGroupDescriptor
 import io.ygdrasil.webgpu.BindGroupEntry
-import io.ygdrasil.webgpu.BindGroupLayoutDescriptor
-import io.ygdrasil.webgpu.BindGroupLayoutEntry
-import io.ygdrasil.webgpu.BlendComponent
-import io.ygdrasil.webgpu.BlendState
 import io.ygdrasil.webgpu.BufferBinding
-import io.ygdrasil.webgpu.BufferBindingLayout
 import io.ygdrasil.webgpu.BufferDescriptor
 import io.ygdrasil.webgpu.Color
-import io.ygdrasil.webgpu.ColorTargetState
 import io.ygdrasil.webgpu.CompositeAlphaMode
-import io.ygdrasil.webgpu.DepthStencilState
 import io.ygdrasil.webgpu.Extent3D
-import io.ygdrasil.webgpu.FragmentState
 import io.ygdrasil.webgpu.GLFWContext
 import io.ygdrasil.webgpu.GPUAddressMode
-import io.ygdrasil.webgpu.GPUBlendOperation
-import io.ygdrasil.webgpu.GPUColorWrite
-import io.ygdrasil.webgpu.GPUCompareFunction
 import io.ygdrasil.webgpu.GPUAdapterInfo
 import io.ygdrasil.webgpu.GPUBindGroup
-import io.ygdrasil.webgpu.GPUBindGroupLayout
 import io.ygdrasil.webgpu.GPUBuffer
-import io.ygdrasil.webgpu.GPUBufferBindingType
 import io.ygdrasil.webgpu.GPUBufferUsage
 import io.ygdrasil.webgpu.GPUDevice
-import io.ygdrasil.webgpu.GPUErrorFilter
 import io.ygdrasil.webgpu.GPUFilterMode
 import io.ygdrasil.webgpu.GPUIndexFormat
 import io.ygdrasil.webgpu.GPULoadOp
 import io.ygdrasil.webgpu.GPUMapMode
-import io.ygdrasil.webgpu.GPUPipelineLayout
 import io.ygdrasil.webgpu.GPUQueue
 import io.ygdrasil.webgpu.GPURenderPipeline
 import io.ygdrasil.webgpu.GPUSampler
-import io.ygdrasil.webgpu.GPUSamplerBindingType
-import io.ygdrasil.webgpu.GPUShaderModule
-import io.ygdrasil.webgpu.GPUShaderStage
-import io.ygdrasil.webgpu.GPUStencilOperation
 import io.ygdrasil.webgpu.GPUStoreOp
 import io.ygdrasil.webgpu.GPUTexture
 import io.ygdrasil.webgpu.GPUTextureFormat
-import io.ygdrasil.webgpu.GPUTextureSampleType
 import io.ygdrasil.webgpu.GPUTextureUsage
 import io.ygdrasil.webgpu.GPUTextureView
-import io.ygdrasil.webgpu.GPUTextureViewDimension
-import io.ygdrasil.webgpu.GPUVertexFormat
 import io.ygdrasil.webgpu.NativeSurface
-import io.ygdrasil.webgpu.PipelineLayoutDescriptor
-import io.ygdrasil.webgpu.PrimitiveState
 import io.ygdrasil.webgpu.RenderPassColorAttachment
 import io.ygdrasil.webgpu.RenderPassDepthStencilAttachment
 import io.ygdrasil.webgpu.RenderPassDescriptor
-import io.ygdrasil.webgpu.RenderPipelineDescriptor
-import io.ygdrasil.webgpu.SamplerBindingLayout
 import io.ygdrasil.webgpu.SamplerDescriptor
-import io.ygdrasil.webgpu.ShaderModuleDescriptor
-import io.ygdrasil.webgpu.StencilFaceState
 import io.ygdrasil.webgpu.SurfaceConfiguration
 import io.ygdrasil.webgpu.SurfaceTextureStatus
 import io.ygdrasil.webgpu.TexelCopyBufferInfo
 import io.ygdrasil.webgpu.TexelCopyBufferLayout
 import io.ygdrasil.webgpu.TexelCopyTextureInfo
-import io.ygdrasil.webgpu.TextureBindingLayout
 import io.ygdrasil.webgpu.TextureDescriptor
-import io.ygdrasil.webgpu.VertexAttribute
-import io.ygdrasil.webgpu.VertexBufferLayout
-import io.ygdrasil.webgpu.VertexState
 import io.ygdrasil.webgpu.WGPU
 import io.ygdrasil.webgpu.WGPUInstanceBackend
 import io.ygdrasil.webgpu.beginRenderPass
 import io.ygdrasil.webgpu.glfwContextRenderer
 import java.lang.foreign.MemorySegment
-import java.security.MessageDigest
 import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.runBlocking
-import org.graphiks.kanvas.gpu.renderer.pipelines.GPUPipelineKeyPreimage
-import org.graphiks.kanvas.gpu.renderer.pipelines.GPUPipelineKeys
 import org.graphiks.kanvas.gpu.renderer.telemetry.GPUCacheTelemetry
-import org.graphiks.kanvas.gpu.renderer.telemetry.GPUTelemetryLedger
 
 import org.graphiks.kanvas.gpu.renderer.text.colorGlyphCompositeWgsl
-import org.graphiks.kanvas.gpu.renderer.wgsl.TexturedVerticesWgsl
-import org.graphiks.kanvas.gpu.renderer.wgsl.TexturedVerticesDualBlendWgsl
 import org.graphiks.kanvas.gpu.renderer.wgsl.TexturedVerticesColorFilterWgsl
-import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendFactor
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
+import org.graphiks.kanvas.gpu.renderer.pipelines.GPUFullscreenPipelineRequest
+import org.graphiks.kanvas.gpu.renderer.state.GPUBlendMode as ContractGPUBlendMode
 
 private const val COPY_BYTES_PER_ROW_ALIGNMENT: Int = 256
 private const val FULL_SCREEN_TRIANGLE_VERTEX_COUNT: UInt = 3u
 private const val RGBA_BYTES_PER_PIXEL: Int = 4
 private const val RECT_COLOR_UNIFORM_SIZE_BYTES: ULong = 16uL
-private const val VERTEX_COLOR_STRIDE_BYTES: Int = 32
-private const val TEXT_ATLAS_VERTEX_STRIDE_BYTES: Int = 16
 private val sessionOrdinalCounter = AtomicLong(0L)
 private val windowRuntimeOrdinalCounter = AtomicLong(0L)
 
@@ -186,18 +147,25 @@ internal fun offscreenTargetId(
     return "wgpu-offscreen-$sessionOrdinal-$offscreenTargetOrdinal-${request.width}x${request.height}-${request.colorFormat.normalizedColorFormat()}"
 }
 
+internal fun GPUBlendMode.toContractBlendModeOrNull(): ContractGPUBlendMode? = when (this) {
+    GPUBlendMode.SRC -> ContractGPUBlendMode.Src
+    GPUBlendMode.SRC_OVER -> ContractGPUBlendMode.SrcOver
+    GPUBlendMode.MULTIPLY -> ContractGPUBlendMode.Multiply
+    GPUBlendMode.SCREEN -> ContractGPUBlendMode.Screen
+    else -> null
+}
+
 private fun nextSessionOrdinal(): Long = sessionOrdinalCounter.incrementAndGet()
 private fun nextWindowRuntimeOrdinal(): Long = windowRuntimeOrdinalCounter.incrementAndGet()
 
 object WgpuBackendRuntimeFactory {
     private var sharedInner: GPUBackendSession? = null
-    private var shutdownHook: Thread? = null
 
     /** Creates a WebGPU-backed runtime session when the host can initialize the backend.
      *  The session is **reused** across renders — creating a new WGPU device per render
      *  leaks native Metal/Dawn memory and causes "Context leak detected" after ~250 renders.
      *  The returned wrapper ignores close() so that callers using .use {} do not destroy
-     *  the shared device. Call [dispose] to release native resources on shutdown. */
+     *  the shared device. Call [dispose] before JVM shutdown to release native resources. */
     fun createOrNull(): GPUBackendSession? {
         if (sharedInner == null) {
             sharedInner = try {
@@ -214,11 +182,6 @@ object WgpuBackendRuntimeFactory {
             } catch (_: Throwable) {
                 null
             }
-            if (sharedInner != null) {
-                val hook = Thread { sharedInner!!.close() }
-                shutdownHook = hook
-                Runtime.getRuntime().addShutdownHook(hook)
-            }
         }
         return sharedInner?.let { NonClosingSession(it) }
     }
@@ -226,8 +189,6 @@ object WgpuBackendRuntimeFactory {
     /** Release the shared session and its native resources. Must be called
      *  before JVM shutdown to avoid wgpu-native panics during cleanup. */
     fun dispose() {
-        shutdownHook?.let { Runtime.getRuntime().removeShutdownHook(it) }
-        shutdownHook = null
         sharedInner?.close()
         sharedInner = null
     }
@@ -235,26 +196,62 @@ object WgpuBackendRuntimeFactory {
     private class NonClosingSession(
         private val inner: GPUBackendSession,
     ) : GPUBackendSession by inner {
-        override fun close() { /* no-op: lifetime managed by WgpuBackendRuntimeFactory */ }
+        private val initialCacheTelemetry = inner.executionCacheTelemetry.associateBy(GPUCacheTelemetry::cacheName)
+
+        override val executionCacheTelemetry: List<GPUCacheTelemetry>
+            get() = inner.executionCacheTelemetry
+                .map { telemetry -> telemetry.minusBaseline(initialCacheTelemetry[telemetry.cacheName]) }
+                .filter(GPUCacheTelemetry::hasObservedEvents)
+
+        override fun close() {
+            (inner as? WgpuBackendSession)?.resetLogicalSessionState()
+        }
     }
 }
+
+private fun GPUCacheTelemetry.minusBaseline(baseline: GPUCacheTelemetry?): GPUCacheTelemetry =
+    if (baseline == null) {
+        this
+    } else {
+        copy(
+            hits = (hits - baseline.hits).coerceAtLeast(0L),
+            misses = (misses - baseline.misses).coerceAtLeast(0L),
+            evictions = (evictions - baseline.evictions).coerceAtLeast(0L),
+            residentBytes = (residentBytes - baseline.residentBytes).coerceAtLeast(0L),
+            pressureBytes = (pressureBytes - baseline.pressureBytes).coerceAtLeast(0L),
+            creations = (creations - baseline.creations).coerceAtLeast(0L),
+            failures = (failures - baseline.failures).coerceAtLeast(0L),
+            staleGenerations = (staleGenerations - baseline.staleGenerations).coerceAtLeast(0L),
+        )
+    }
+
+private fun GPUCacheTelemetry.hasObservedEvents(): Boolean =
+    hits > 0L ||
+        misses > 0L ||
+        evictions > 0L ||
+        creations > 0L ||
+        failures > 0L ||
+        staleGenerations > 0L
 
 private class WgpuBackendSession(
     private val glfw: GLFWContext,
 ) : GPUBackendSession {
     private val sessionOrdinal = nextSessionOrdinal()
     private val deviceGeneration = sessionDeviceGeneration(sessionOrdinal)
-    private val executionCaches = WgpuExecutionCaches(deviceGeneration)
+    private val pipelineProvider = GPUBackendPipelineProvider(
+        device = glfw.wgpuContext.device,
+        deviceGeneration = deviceGeneration,
+    )
     private var offscreenTargetOrdinalCounter = 0L
 
     override val adapterInfo: GPUBackendAdapterSummary? =
         GPUBackendAdapterSummary(adapterSummary(glfw))
 
     override val executionCacheTelemetry: List<GPUCacheTelemetry>
-        get() = executionCaches.cacheTelemetry
+        get() = pipelineProvider.cacheTelemetry
 
     override val executionCacheDumpLines: List<String>
-        get() = executionCaches.dumpLines
+        get() = pipelineProvider.dumpLines
 
     override fun createOffscreenTarget(request: GPUOffscreenTargetRequest): GPUBackendOffscreenTarget =
         WgpuOffscreenTarget(
@@ -264,7 +261,7 @@ private class WgpuBackendSession(
             device = glfw.wgpuContext.device,
             queue = glfw.wgpuContext.device.queue,
             request = request,
-            executionCaches = executionCaches,
+            pipelineProvider = pipelineProvider,
         )
 
     override fun createWindowSurface(binding: GPUNativeSurfaceBinding): GPUBackendWindowSurface =
@@ -272,7 +269,7 @@ private class WgpuBackendSession(
 
     override fun close() {
         try {
-            executionCaches.close()
+            pipelineProvider.close()
         } finally {
             glfw.close()
         }
@@ -281,6 +278,10 @@ private class WgpuBackendSession(
     private fun nextOffscreenTargetOrdinal(): Long {
         offscreenTargetOrdinalCounter += 1L
         return offscreenTargetOrdinalCounter
+    }
+
+    fun resetLogicalSessionState() {
+        pipelineProvider.resetLogicalSessionState()
     }
 }
 
@@ -293,7 +294,7 @@ private class WgpuOffscreenTarget(
     private val device: GPUDevice,
     private val queue: GPUQueue,
     private val request: GPUOffscreenTargetRequest,
-    private val executionCaches: WgpuExecutionCaches,
+    private val pipelineProvider: GPUBackendPipelineProvider,
 ) : GPUBackendOffscreenTarget {
     private val safeWidth = request.width.coerceAtMost(MAX_TEXTURE_DIMENSION)
     private val safeHeight = request.height.coerceAtMost(MAX_TEXTURE_DIMENSION)
@@ -381,7 +382,7 @@ private class WgpuOffscreenTarget(
                     queue = queue,
                     targetFormat = format,
                     resourceScope = resources,
-                    executionCaches = executionCaches,
+                    pipelineProvider = pipelineProvider,
                     setPipelineAction = { pipeline -> setPipeline(pipeline) },
                     setBindGroupAction = { index, bindGroup -> setBindGroup(index, bindGroup) },
                     setScissorAction = { x: UInt, y: UInt, width: UInt, height: UInt ->
@@ -547,7 +548,7 @@ private class WgpuOffscreenTarget(
                 queue = queue,
                 targetFormat = textureFormat,
                 resourceScope = resources,
-                executionCaches = executionCaches,
+                pipelineProvider = pipelineProvider,
                 setPipelineAction = { pipeline -> setPipeline(pipeline) },
                 setBindGroupAction = { index, bindGroup -> setBindGroup(index, bindGroup) },
                 setScissorAction = { x: UInt, y: UInt, width: UInt, height: UInt ->
@@ -604,7 +605,10 @@ private class WgpuWindowSurface(
     private val deviceGeneration = windowSurfaceDeviceGeneration(windowRuntimeOrdinal)
     private val targetId = windowSurfaceTargetId(windowRuntimeOrdinal, binding)
     private val runtime = createNativeWindowRuntime(binding)
-    private val executionCaches = WgpuExecutionCaches(deviceGeneration)
+    private val pipelineProvider = GPUBackendPipelineProvider(
+        device = runtime.device,
+        deviceGeneration = deviceGeneration,
+    )
     private var width = binding.width
     private var height = binding.height
     private var targetGeneration = 0L
@@ -677,7 +681,7 @@ private class WgpuWindowSurface(
                     queue = runtime.device.queue,
                     targetFormat = runtime.format,
                     resourceScope = resources,
-                    executionCaches = executionCaches,
+                    pipelineProvider = pipelineProvider,
                     setPipelineAction = { pipeline -> setPipeline(pipeline) },
                     setBindGroupAction = { index, bindGroup -> setBindGroup(index, bindGroup) },
                     setScissorAction = { x, y, surfaceWidth, surfaceHeight -> setScissorRect(x, y, surfaceWidth, surfaceHeight) },
@@ -704,7 +708,7 @@ private class WgpuWindowSurface(
 
     override fun close() {
         try {
-            executionCaches.close()
+            pipelineProvider.close()
         } finally {
             runtime.close()
         }
@@ -716,7 +720,7 @@ private class WgpuRenderRecorder(
     private val queue: GPUQueue,
     private val targetFormat: GPUTextureFormat,
     private val resourceScope: GPUResourceScope,
-    private val executionCaches: WgpuExecutionCaches,
+    private val pipelineProvider: GPUBackendPipelineProvider,
     private val setPipelineAction: (GPURenderPipeline) -> Unit,
     private val setBindGroupAction: (UInt, GPUBindGroup) -> Unit,
     private val setScissorAction: (UInt, UInt, UInt, UInt) -> Unit,
@@ -729,24 +733,13 @@ private class WgpuRenderRecorder(
     ) : GPUBackendRenderRecorder {
     private val vertexBufferStore = mutableMapOf<String, Pair<GPUBuffer, Int>>()
     private val vertexColorIndexStore = mutableMapOf<String, IntArray>()
-    private var texturedVertexPipelineCache = mutableMapOf<String, GPURenderPipeline>()
-    private var texturedVertexBindGroupLayout: GPUBindGroupLayout? = null
-    private var dualUVVertexPipelineCache = mutableMapOf<String, GPURenderPipeline>()
-    private var dualUVVertexBindGroupLayout: GPUBindGroupLayout? = null
+    private val recorderPipelineProvider = GPURecorderPipelineProvider(
+        device = device,
+        targetFormat = targetFormat,
+    )
 
     fun closeCachedResources() {
-        texturedVertexBindGroupLayout?.let { closeQuietly { it.close() } }
-        dualUVVertexBindGroupLayout?.let { closeQuietly { it.close() } }
-        texturedVertexPipelineCache.values.forEach { closeQuietly { it.close() } }
-        dualUVVertexPipelineCache.values.forEach { closeQuietly { it.close() } }
-        texturedVertexPipelineCache.clear()
-        dualUVVertexPipelineCache.clear()
-        texturedVertexBindGroupLayout = null
-        dualUVVertexBindGroupLayout = null
-    }
-
-    private fun closeQuietly(block: () -> Unit) {
-        try { block() } catch (_: Throwable) { }
+        recorderPipelineProvider.close()
     }
 
     override fun drawFullscreenPass(
@@ -935,12 +928,11 @@ private class WgpuRenderRecorder(
 
         val vertexWgsl = VERTEX_COLOR_WGSL
         val keys = stencilExecutionCacheKeys(wgsl = vertexWgsl, targetFormat = targetFormat, vertexStage = true, blendMode = blendMode)
-        executionCaches.recordPreimages(keys)
-        val bindGroupLayout = executionCaches.bindGroupLayout(device = device, keys = keys)
-        val shader = executionCaches.shaderModule(device = device, wgsl = vertexWgsl, keys = keys)
-        val pipelineLayout = executionCaches.pipelineLayout(device = device, bindGroupLayout = bindGroupLayout, keys = keys)
-        val pipeline = executionCaches.vertexColorRenderPipeline(
-            device = device,
+        pipelineProvider.recordPreimages(keys)
+        val bindGroupLayout = pipelineProvider.bindGroupLayout(keys = keys)
+        val shader = pipelineProvider.shaderModule(wgsl = vertexWgsl, keys = keys)
+        val pipelineLayout = pipelineProvider.pipelineLayout(bindGroupLayout = bindGroupLayout, keys = keys)
+        val pipeline = pipelineProvider.vertexColorRenderPipeline(
             shader = shader,
             pipelineLayout = pipelineLayout,
             targetFormat = targetFormat,
@@ -1045,7 +1037,7 @@ private class WgpuRenderRecorder(
 
         val uniformBuffer = createUniformBuffer(uniformDraw.uniformBytes)
 
-        val bindGroupLayout = getOrCreateTexturedVertexBindGroupLayout()
+        val bindGroupLayout = recorderPipelineProvider.texturedVertexBindGroupLayout()
         val bindGroup = resourceScope.track(
             device.createBindGroup(
                 BindGroupDescriptor(
@@ -1060,7 +1052,11 @@ private class WgpuRenderRecorder(
             ),
         ) { it.close() }
 
-        val pipeline = getOrCreateTexturedVertexPipeline(textureFormat, blendMode)
+        val gpuTextureFormat = textureFormat.toWgpuTextureFormat()
+        val pipeline = recorderPipelineProvider.texturedVertexPipeline(
+            colorFormat = gpuTextureFormat,
+            blendMode = blendMode,
+        )
 
         setPipelineAction(pipeline)
         setBindGroupAction(0u, bindGroup)
@@ -1122,7 +1118,7 @@ private class WgpuRenderRecorder(
 
         val uniformBuffer = createUniformBuffer(uniformDraw.uniformBytes)
 
-        val bindGroupLayout = getOrCreateDualUVVertexBindGroupLayout()
+        val bindGroupLayout = recorderPipelineProvider.dualUVVertexBindGroupLayout()
         val bindGroup = resourceScope.track(
             device.createBindGroup(
                 BindGroupDescriptor(
@@ -1139,7 +1135,11 @@ private class WgpuRenderRecorder(
             ),
         ) { it.close() }
 
-        val pipeline = getOrCreateDualUVVertexPipeline(textureFormat, blendMode)
+        val gpuTextureFormat = textureFormat.toWgpuTextureFormat()
+        val pipeline = recorderPipelineProvider.dualUVVertexPipeline(
+            colorFormat = gpuTextureFormat,
+            blendMode = blendMode,
+        )
 
         setPipelineAction(pipeline)
         setBindGroupAction(0u, bindGroup)
@@ -1200,25 +1200,15 @@ private class WgpuRenderRecorder(
 
         val wgsl = TEXT_ATLAS_A8_WGSL
         val textureFormat = atlasFormat.toWgpuTextureFormat()
-        val keys = textAtlasExecutionCacheKeys(wgsl = wgsl, targetFormat = targetFormat, textureFormat = textureFormat, blendMode = blendMode)
-        executionCaches.recordPreimages(keys)
-
-        val bindGroupLayout = executionCaches.bindGroupLayout(device = device, keys = keys)
-        val textureBindGroupLayout = executionCaches.textureBindGroupLayout(device = device, keys = keys)
-        val shader = executionCaches.shaderModule(device = device, wgsl = wgsl, keys = keys)
-        val pipelineLayout = executionCaches.texturePipelineLayout(
-            device = device,
-            bindGroupLayouts = listOf(bindGroupLayout, textureBindGroupLayout),
-            keys = keys,
-        )
-        val pipeline = executionCaches.textAtlasRenderPipeline(
-            device = device,
-            shader = shader,
-            pipelineLayout = pipelineLayout,
+        val resolution = pipelineProvider.resolveTextAtlasPipeline(
+            wgsl = wgsl,
             targetFormat = targetFormat,
-            keys = keys,
+            textureFormat = textureFormat,
             blendMode = blendMode,
         )
+        val bindGroupLayout = resolution.bindGroupLayouts[0]
+        val textureBindGroupLayout = resolution.bindGroupLayouts[1]
+        val pipeline = resolution.pipeline
 
         val atlasTexture = resourceScope.track(
             device.createTexture(
@@ -1351,25 +1341,15 @@ private class WgpuRenderRecorder(
 
         val wgsl = colorGlyphCompositeWgsl()
         val textureFormat = atlasFormat.toWgpuTextureFormat()
-        val keys = colorGlyphExecutionCacheKeys(wgsl = wgsl, targetFormat = targetFormat, textureFormat = textureFormat, blendMode = blendMode)
-        executionCaches.recordPreimages(keys)
-
-        val bindGroupLayout = executionCaches.bindGroupLayout(device = device, keys = keys)
-        val textureBindGroupLayout = executionCaches.textureBindGroupLayout(device = device, keys = keys)
-        val shader = executionCaches.shaderModule(device = device, wgsl = wgsl, keys = keys)
-        val pipelineLayout = executionCaches.texturePipelineLayout(
-            device = device,
-            bindGroupLayouts = listOf(bindGroupLayout, textureBindGroupLayout),
-            keys = keys,
-        )
-        val pipeline = executionCaches.textAtlasRenderPipeline(
-            device = device,
-            shader = shader,
-            pipelineLayout = pipelineLayout,
+        val resolution = pipelineProvider.resolveColorGlyphPipeline(
+            wgsl = wgsl,
             targetFormat = targetFormat,
-            keys = keys,
+            textureFormat = textureFormat,
             blendMode = blendMode,
         )
+        val bindGroupLayout = resolution.bindGroupLayouts[0]
+        val textureBindGroupLayout = resolution.bindGroupLayouts[1]
+        val pipeline = resolution.pipeline
 
         val atlasTexture = resourceScope.track(
             device.createTexture(
@@ -1500,31 +1480,15 @@ private class WgpuRenderRecorder(
             ?: error("Offscreen texture not found: $textureLabel")
         val textureFormat = GPUTextureFormat.RGBA8Unorm
 
-        val textureKeys = fullscreenTextureExecutionCacheKeys(wgsl = wgsl, targetFormat = targetFormat, textureFormat = textureFormat, blendMode = blendMode)
-        val fullKeys = fullscreenExecutionCacheKeys(wgsl = wgsl, targetFormat = targetFormat, blendMode = blendMode)
-
-        val textureBindGroupLayout = executionCaches.textureBindGroupLayout(
-            device = device,
-            keys = textureKeys,
-        )
-        val bindGroupLayout = executionCaches.bindGroupLayout(
-            device = device,
-            keys = fullKeys,
-        )
-        val shader = executionCaches.shaderModule(device = device, wgsl = wgsl, keys = fullKeys)
-        val pipelineLayout = executionCaches.texturePipelineLayout(
-            device = device,
-            bindGroupLayouts = listOf(bindGroupLayout, textureBindGroupLayout),
-            keys = textureKeys,
-        )
-        val pipeline = executionCaches.renderPipeline(
-            device = device,
-            shader = shader,
-            pipelineLayout = pipelineLayout,
+        val resolution = pipelineProvider.resolveFullscreenTexturePipeline(
+            wgsl = wgsl,
             targetFormat = targetFormat,
-            keys = textureKeys,
+            textureFormat = textureFormat,
             blendMode = blendMode,
         )
+        val bindGroupLayout = resolution.bindGroupLayouts[0]
+        val textureBindGroupLayout = resolution.bindGroupLayouts[1]
+        val pipeline = resolution.pipeline
 
         val textureView = resourceScope.track(tex.createView()) { it.close() }
         val sampler = resourceScope.track(
@@ -1603,31 +1567,14 @@ private class WgpuRenderRecorder(
             ?: error("Destination texture not found: $dstTextureLabel")
         val textureFormat = GPUTextureFormat.RGBA8Unorm
 
-        val textureKeys = blendTextureExecutionCacheKeys(wgsl = wgsl, targetFormat = targetFormat, textureFormat = textureFormat)
-        val fullKeys = fullscreenExecutionCacheKeys(wgsl = wgsl, targetFormat = targetFormat)
-
-        executionCaches.recordPreimages(textureKeys)
-        val textureBindGroupLayout = executionCaches.blendTextureBindGroupLayout(
-            device = device,
-            keys = textureKeys,
-        )
-        val bindGroupLayout = executionCaches.bindGroupLayout(
-            device = device,
-            keys = fullKeys,
-        )
-        val shader = executionCaches.shaderModule(device = device, wgsl = wgsl, keys = fullKeys)
-        val pipelineLayout = executionCaches.texturePipelineLayout(
-            device = device,
-            bindGroupLayouts = listOf(bindGroupLayout, textureBindGroupLayout),
-            keys = textureKeys,
-        )
-        val pipeline = executionCaches.renderPipeline(
-            device = device,
-            shader = shader,
-            pipelineLayout = pipelineLayout,
+        val resolution = pipelineProvider.resolveBlendTexturePipeline(
+            wgsl = wgsl,
             targetFormat = targetFormat,
-            keys = textureKeys,
+            textureFormat = textureFormat,
         )
+        val bindGroupLayout = resolution.bindGroupLayouts[0]
+        val textureBindGroupLayout = resolution.bindGroupLayouts[1]
+        val pipeline = resolution.pipeline
 
         val srcView = resourceScope.track(srcTex.createView()) { it.close() }
         val dstView = resourceScope.track(dstTex.createView()) { it.close() }
@@ -1717,9 +1664,8 @@ private class WgpuRenderRecorder(
         queue.writeBuffer(indexBuffer, 0uL, ArrayBuffer.of(triangleData.indices))
 
         val keys = stencilExecutionCacheKeys(wgsl = wgsl, targetFormat = targetFormat, vertexStage = true)
-        executionCaches.recordPreimages(keys)
-        val pipeline = executionCaches.stencilWriteRenderPipeline(
-            device = device,
+        pipelineProvider.recordPreimages(keys)
+        val pipeline = pipelineProvider.stencilWriteRenderPipeline(
             wgsl = wgsl,
             targetFormat = targetFormat,
             keys = keys,
@@ -1739,12 +1685,11 @@ private class WgpuRenderRecorder(
         blendMode: GPUBlendMode? = null,
     ) {
         val keys = stencilExecutionCacheKeys(wgsl = wgsl, targetFormat = targetFormat, vertexStage = false, blendMode = blendMode)
-        executionCaches.recordPreimages(keys)
-        val bindGroupLayout = executionCaches.bindGroupLayout(device = device, keys = keys)
-        val shader = executionCaches.shaderModule(device = device, wgsl = wgsl, keys = keys)
-        val pipelineLayout = executionCaches.pipelineLayout(device = device, bindGroupLayout = bindGroupLayout, keys = keys)
-        val pipeline = executionCaches.stencilTestRenderPipeline(
-            device = device,
+        pipelineProvider.recordPreimages(keys)
+        val bindGroupLayout = pipelineProvider.bindGroupLayout(keys = keys)
+        val shader = pipelineProvider.shaderModule(wgsl = wgsl, keys = keys)
+        val pipelineLayout = pipelineProvider.pipelineLayout(bindGroupLayout = bindGroupLayout, keys = keys)
+        val pipeline = pipelineProvider.stencilTestRenderPipeline(
             shader = shader,
             pipelineLayout = pipelineLayout,
             targetFormat = targetFormat,
@@ -1823,29 +1768,15 @@ private class WgpuRenderRecorder(
             padded
         }
 
-        val keys = fullscreenTextureExecutionCacheKeys(
+        val resolution = pipelineProvider.resolveFullscreenTexturePipeline(
             wgsl = wgsl,
             targetFormat = targetFormat,
             textureFormat = gpuTextureFormat,
             blendMode = blendMode,
         )
-        executionCaches.recordPreimages(keys)
-        val bindGroupLayout = executionCaches.bindGroupLayout(device = device, keys = keys)
-        val textureBindGroupLayout = executionCaches.textureBindGroupLayout(device = device, keys = keys)
-        val shader = executionCaches.shaderModule(device = device, wgsl = wgsl, keys = keys)
-        val pipelineLayout = executionCaches.texturePipelineLayout(
-            device = device,
-            bindGroupLayouts = listOf(bindGroupLayout, textureBindGroupLayout),
-            keys = keys,
-        )
-        val pipeline = executionCaches.renderPipeline(
-            device = device,
-            shader = shader,
-            pipelineLayout = pipelineLayout,
-            targetFormat = targetFormat,
-            keys = keys,
-            blendMode = blendMode,
-        )
+        val bindGroupLayout = resolution.bindGroupLayouts[0]
+        val textureBindGroupLayout = resolution.bindGroupLayouts[1]
+        val pipeline = resolution.pipeline
 
         val texture = resourceScope.track(
             device.createTexture(
@@ -1937,23 +1868,32 @@ private class WgpuRenderRecorder(
         }
         if (draws.isEmpty()) return
 
-        val keys = fullscreenExecutionCacheKeys(wgsl = wgsl, targetFormat = targetFormat, blendMode = blendMode)
-        executionCaches.recordPreimages(keys)
-        val bindGroupLayout = executionCaches.bindGroupLayout(device = device, keys = keys)
-        val shader = executionCaches.shaderModule(device = device, wgsl = wgsl, keys = keys)
-        val pipelineLayout = executionCaches.pipelineLayout(
-            device = device,
-            bindGroupLayout = bindGroupLayout,
-            keys = keys,
-        )
-        val pipeline = executionCaches.renderPipeline(
-            device = device,
-            shader = shader,
-            pipelineLayout = pipelineLayout,
-            targetFormat = targetFormat,
-            keys = keys,
-            blendMode = blendMode,
-        )
+        val resolution = when (val contractBlendMode = blendMode?.toContractBlendModeOrNull()) {
+            null -> if (blendMode == null) {
+                pipelineProvider.resolveFullscreenPipeline(
+                    GPUFullscreenPipelineRequest(
+                        shaderSource = wgsl,
+                        colorFormat = targetFormat,
+                        blendMode = null,
+                    ),
+                )
+            } else {
+                pipelineProvider.resolveFullscreenPipelineForBackendBlend(
+                    wgsl = wgsl,
+                    targetFormat = targetFormat,
+                    blendMode = blendMode,
+                )
+            }
+            else -> pipelineProvider.resolveFullscreenPipeline(
+                GPUFullscreenPipelineRequest(
+                    shaderSource = wgsl,
+                    colorFormat = targetFormat,
+                    blendMode = contractBlendMode,
+                ),
+            )
+        }
+        val bindGroupLayout = resolution.bindGroupLayouts.single()
+        val pipeline = resolution.pipeline
 
         setPipelineAction(pipeline)
         draws.forEach { draw ->
@@ -2047,253 +1987,6 @@ private class WgpuRenderRecorder(
         ) { it.close() }
         queue.writeBuffer(buffer, 0uL, ArrayBuffer.of(uniformBytes))
         return buffer
-    }
-
-    private fun getOrCreateTexturedVertexBindGroupLayout(): GPUBindGroupLayout {
-        if (texturedVertexBindGroupLayout == null) {
-            texturedVertexBindGroupLayout = device.createBindGroupLayout(
-                BindGroupLayoutDescriptor(
-                    label = "texturedVertexLayout",
-                    entries = listOf(
-                        BindGroupLayoutEntry(
-                            binding = 0u,
-                            visibility = GPUShaderStage.Vertex or GPUShaderStage.Fragment,
-                            buffer = BufferBindingLayout(type = GPUBufferBindingType.Uniform),
-                        ),
-                        BindGroupLayoutEntry(
-                            binding = 1u,
-                            visibility = GPUShaderStage.Fragment,
-                            texture = TextureBindingLayout(
-                                sampleType = GPUTextureSampleType.Float,
-                                viewDimension = GPUTextureViewDimension.TwoD,
-                                multisampled = false,
-                            ),
-                        ),
-                        BindGroupLayoutEntry(
-                            binding = 2u,
-                            visibility = GPUShaderStage.Fragment,
-                            sampler = SamplerBindingLayout(type = GPUSamplerBindingType.Filtering),
-                        ),
-                    ),
-                ),
-            )
-        }
-        return texturedVertexBindGroupLayout!!
-    }
-
-    private fun getOrCreateTexturedVertexPipeline(colorFormat: String, blendMode: GPUBlendMode?): GPURenderPipeline {
-        val key = "$colorFormat:${blendMode?.name ?: "none"}"
-        return texturedVertexPipelineCache.getOrPut(key) {
-            createTexturedVertexPipeline(colorFormat, blendMode)
-        }
-    }
-
-    private fun createTexturedVertexPipeline(colorFormat: String, blendMode: GPUBlendMode?): GPURenderPipeline {
-        val shaderModule = device.createShaderModule(
-            ShaderModuleDescriptor(label = "texturedVertex:$colorFormat", code = TexturedVerticesWgsl),
-        )
-        val bindGroupLayout = getOrCreateTexturedVertexBindGroupLayout()
-        val pipelineLayout = device.createPipelineLayout(
-            PipelineLayoutDescriptor(
-                label = "texturedVertexLayout",
-                bindGroupLayouts = listOf(bindGroupLayout),
-            ),
-        )
-        try {
-            return device.createRenderPipelineWithValidationScope(
-                RenderPipelineDescriptor(
-                    label = "texturedVertex:$colorFormat:${blendMode?.name ?: "none"}",
-                    layout = pipelineLayout,
-                    vertex = VertexState(
-                        module = shaderModule,
-                        entryPoint = "vs_main",
-                        buffers = listOf(
-                            VertexBufferLayout(
-                                arrayStride = 16uL,
-                                attributes = listOf(
-                                    VertexAttribute(
-                                        shaderLocation = 0u,
-                                        offset = 0uL,
-                                        format = GPUVertexFormat.Float32x2,
-                                    ),
-                                    VertexAttribute(
-                                        shaderLocation = 1u,
-                                        offset = 8uL,
-                                        format = GPUVertexFormat.Float32x2,
-                                    ),
-                                ),
-                            ),
-                        ),
-                    ),
-                    primitive = PrimitiveState(),
-                    depthStencil = DepthStencilState(
-                        format = GPUTextureFormat.Depth24PlusStencil8,
-                        depthWriteEnabled = false,
-                        depthCompare = GPUCompareFunction.Always,
-                        stencilFront = StencilFaceState(
-                            compare = GPUCompareFunction.Always,
-                            failOp = GPUStencilOperation.Keep,
-                            depthFailOp = GPUStencilOperation.Keep,
-                            passOp = GPUStencilOperation.Keep,
-                        ),
-                        stencilBack = StencilFaceState(
-                            compare = GPUCompareFunction.Always,
-                            failOp = GPUStencilOperation.Keep,
-                            depthFailOp = GPUStencilOperation.Keep,
-                            passOp = GPUStencilOperation.Keep,
-                        ),
-                        stencilReadMask = 0u,
-                        stencilWriteMask = 0u,
-                    ),
-                    fragment = FragmentState(
-                        module = shaderModule,
-                        entryPoint = "fs_main",
-                        targets = listOf(
-                            ColorTargetState(
-                                format = targetFormat,
-                                blend = blendStateFor(blendMode),
-                            ),
-                        ),
-                    ),
-                ),
-            )
-        } finally {
-            shaderModule.close()
-            pipelineLayout.close()
-        }
-    }
-
-    private fun getOrCreateDualUVVertexBindGroupLayout(): GPUBindGroupLayout {
-        if (dualUVVertexBindGroupLayout == null) {
-            dualUVVertexBindGroupLayout = device.createBindGroupLayout(
-                BindGroupLayoutDescriptor(
-                    label = "dualUVVertexLayout",
-                    entries = listOf(
-                        BindGroupLayoutEntry(
-                            binding = 0u,
-                            visibility = GPUShaderStage.Vertex or GPUShaderStage.Fragment,
-                            buffer = BufferBindingLayout(type = GPUBufferBindingType.Uniform),
-                        ),
-                        BindGroupLayoutEntry(
-                            binding = 1u,
-                            visibility = GPUShaderStage.Fragment,
-                            texture = TextureBindingLayout(
-                                sampleType = GPUTextureSampleType.Float,
-                                viewDimension = GPUTextureViewDimension.TwoD,
-                                multisampled = false,
-                            ),
-                        ),
-                        BindGroupLayoutEntry(
-                            binding = 2u,
-                            visibility = GPUShaderStage.Fragment,
-                            sampler = SamplerBindingLayout(type = GPUSamplerBindingType.Filtering),
-                        ),
-                        BindGroupLayoutEntry(
-                            binding = 3u,
-                            visibility = GPUShaderStage.Fragment,
-                            texture = TextureBindingLayout(
-                                sampleType = GPUTextureSampleType.Float,
-                                viewDimension = GPUTextureViewDimension.TwoD,
-                                multisampled = false,
-                            ),
-                        ),
-                        BindGroupLayoutEntry(
-                            binding = 4u,
-                            visibility = GPUShaderStage.Fragment,
-                            sampler = SamplerBindingLayout(type = GPUSamplerBindingType.Filtering),
-                        ),
-                    ),
-                ),
-            )
-        }
-        return dualUVVertexBindGroupLayout!!
-    }
-
-    private fun getOrCreateDualUVVertexPipeline(colorFormat: String, blendMode: GPUBlendMode?): GPURenderPipeline {
-        val key = "$colorFormat:${blendMode?.name ?: "none"}"
-        return dualUVVertexPipelineCache.getOrPut(key) {
-            createDualUVVertexPipeline(colorFormat, blendMode)
-        }
-    }
-
-    private fun createDualUVVertexPipeline(colorFormat: String, blendMode: GPUBlendMode?): GPURenderPipeline {
-        val shaderModule = device.createShaderModule(
-            ShaderModuleDescriptor(label = "dualUVVertex:$colorFormat", code = TexturedVerticesDualBlendWgsl),
-        )
-        val bindGroupLayout = getOrCreateDualUVVertexBindGroupLayout()
-        val pipelineLayout = device.createPipelineLayout(
-            PipelineLayoutDescriptor(
-                label = "dualUVVertexLayout",
-                bindGroupLayouts = listOf(bindGroupLayout),
-            ),
-        )
-        try {
-            return device.createRenderPipelineWithValidationScope(
-                RenderPipelineDescriptor(
-                    label = "dualUVVertex:$colorFormat:${blendMode?.name ?: "none"}",
-                    layout = pipelineLayout,
-                    vertex = VertexState(
-                        module = shaderModule,
-                        entryPoint = "vs_main",
-                        buffers = listOf(
-                            VertexBufferLayout(
-                                arrayStride = 24uL,
-                                attributes = listOf(
-                                    VertexAttribute(
-                                        shaderLocation = 0u,
-                                        offset = 0uL,
-                                        format = GPUVertexFormat.Float32x2,
-                                    ),
-                                    VertexAttribute(
-                                        shaderLocation = 1u,
-                                        offset = 8uL,
-                                        format = GPUVertexFormat.Float32x2,
-                                    ),
-                                    VertexAttribute(
-                                        shaderLocation = 2u,
-                                        offset = 16uL,
-                                        format = GPUVertexFormat.Float32x2,
-                                    ),
-                                ),
-                            ),
-                        ),
-                    ),
-                    primitive = PrimitiveState(),
-                    depthStencil = DepthStencilState(
-                        format = GPUTextureFormat.Depth24PlusStencil8,
-                        depthWriteEnabled = false,
-                        depthCompare = GPUCompareFunction.Always,
-                        stencilFront = StencilFaceState(
-                            compare = GPUCompareFunction.Always,
-                            failOp = GPUStencilOperation.Keep,
-                            depthFailOp = GPUStencilOperation.Keep,
-                            passOp = GPUStencilOperation.Keep,
-                        ),
-                        stencilBack = StencilFaceState(
-                            compare = GPUCompareFunction.Always,
-                            failOp = GPUStencilOperation.Keep,
-                            depthFailOp = GPUStencilOperation.Keep,
-                            passOp = GPUStencilOperation.Keep,
-                        ),
-                        stencilReadMask = 0u,
-                        stencilWriteMask = 0u,
-                    ),
-                    fragment = FragmentState(
-                        module = shaderModule,
-                        entryPoint = "fs_main",
-                        targets = listOf(
-                            ColorTargetState(
-                                format = targetFormat,
-                                blend = blendStateFor(blendMode),
-                            ),
-                        ),
-                    ),
-                ),
-            )
-        } finally {
-            shaderModule.close()
-            pipelineLayout.close()
-        }
     }
 
     companion object {
@@ -2406,1199 +2099,6 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     }
 }
 
-private class WgpuExecutionCaches(
-    private val deviceGeneration: GPUDeviceGeneration,
-) : AutoCloseable {
-    private val moduleCache = GPUExecutionObjectCache(
-        domain = GPUExecutionCacheDomain.Module,
-        dispose = GPUShaderModule::close,
-    )
-    private val bindGroupLayoutCache =
-        GPUExecutionObjectCache(
-            domain = GPUExecutionCacheDomain.BindGroupLayout,
-            dispose = GPUBindGroupLayout::close,
-        )
-    private val pipelineLayoutCache =
-        GPUExecutionObjectCache(
-            domain = GPUExecutionCacheDomain.PipelineLayout,
-            dispose = GPUPipelineLayout::close,
-        )
-    private val renderPipelineCache =
-        GPUExecutionObjectCache(
-            domain = GPUExecutionCacheDomain.RenderPipeline,
-            dispose = GPURenderPipeline::close,
-        )
-    private var ledger = GPUTelemetryLedger.empty()
-    private val recordedDumpLines = mutableListOf<String>()
-    private val recordedPreimageKeys = linkedSetOf<String>()
-
-    val cacheTelemetry: List<GPUCacheTelemetry>
-        get() = ledger.cacheTelemetry
-
-    val dumpLines: List<String>
-        get() = recordedDumpLines.toList()
-
-    /** Records stable cache-key preimage dumps once per cache key. */
-    fun recordPreimages(keys: FullscreenExecutionCacheKeys) {
-        keys.preimageDumpLines().forEach { line ->
-            if (recordedPreimageKeys.add(line)) {
-                recordedDumpLines += line
-            }
-        }
-    }
-
-    /** Returns a cached shader module for the stable fullscreen WGSL identity. */
-    fun shaderModule(
-        device: GPUDevice,
-        wgsl: String,
-        keys: FullscreenExecutionCacheKeys,
-    ): GPUShaderModule {
-        val decision = moduleCache.getOrCreate(
-            request = request(
-                domain = GPUExecutionCacheDomain.Module,
-                keyHash = keys.moduleKeyHash,
-                subjectHash = keys.moduleSubjectHash,
-            ),
-        ) {
-            device.createShaderModule(ShaderModuleDescriptor(code = wgsl))
-        }
-        record(decision)
-        return decision.readyHandle()
-    }
-
-    /** Returns the cached bind-group layout accepted by the fullscreen uniform lane. */
-    fun bindGroupLayout(
-        device: GPUDevice,
-        keys: FullscreenExecutionCacheKeys,
-    ): GPUBindGroupLayout {
-        val decision = bindGroupLayoutCache.getOrCreate(
-            request = request(
-                domain = GPUExecutionCacheDomain.BindGroupLayout,
-                keyHash = keys.bindGroupLayoutKeyHash,
-                subjectHash = keys.bindGroupLayoutSubjectHash,
-            ),
-        ) {
-            device.createBindGroupLayout(
-                BindGroupLayoutDescriptor(
-                    entries = listOf(
-                    BindGroupLayoutEntry(
-                        binding = 0u,
-                        visibility = GPUShaderStage.Vertex or GPUShaderStage.Fragment,
-                        buffer = BufferBindingLayout(type = GPUBufferBindingType.Uniform),
-                    ),
-                    ),
-                ),
-            )
-        }
-        record(decision)
-        return decision.readyHandle()
-    }
-
-    /** Returns the cached pipeline layout derived from the stable bind-group layout key. */
-    fun pipelineLayout(
-        device: GPUDevice,
-        bindGroupLayout: GPUBindGroupLayout,
-        keys: FullscreenExecutionCacheKeys,
-    ): GPUPipelineLayout {
-        val decision = pipelineLayoutCache.getOrCreate(
-            request = request(
-                domain = GPUExecutionCacheDomain.PipelineLayout,
-                keyHash = keys.pipelineLayoutKeyHash,
-                subjectHash = keys.pipelineLayoutSubjectHash,
-            ),
-        ) {
-            device.createPipelineLayout(
-                PipelineLayoutDescriptor(bindGroupLayouts = listOf(bindGroupLayout)),
-            )
-        }
-        record(decision)
-        return decision.readyHandle()
-    }
-
-    /** Returns the cached texture bind-group layout (binding 1=texture, binding 2=sampler) at @group(1). */
-    fun textureBindGroupLayout(
-        device: GPUDevice,
-        keys: FullscreenExecutionCacheKeys,
-    ): GPUBindGroupLayout {
-        val decision = bindGroupLayoutCache.getOrCreate(
-            request = request(
-                domain = GPUExecutionCacheDomain.BindGroupLayout,
-                keyHash = keys.textureBindGroupLayoutKeyHash,
-                subjectHash = keys.textureBindGroupLayoutSubjectHash,
-            ),
-        ) {
-            device.createBindGroupLayout(
-                BindGroupLayoutDescriptor(
-                    entries = listOf(
-                        BindGroupLayoutEntry(
-                            binding = 1u,
-                            visibility = GPUShaderStage.Fragment,
-                            texture = TextureBindingLayout(
-                                sampleType = GPUTextureSampleType.Float,
-                                viewDimension = GPUTextureViewDimension.TwoD,
-                                multisampled = false,
-                            ),
-                        ),
-                        BindGroupLayoutEntry(
-                            binding = 2u,
-                            visibility = GPUShaderStage.Fragment,
-                            sampler = SamplerBindingLayout(type = GPUSamplerBindingType.Filtering),
-                        ),
-                    ),
-                ),
-            )
-        }
-        record(decision)
-        return decision.readyHandle()
-    }
-
-    /** Returns cached dual-texture bind-group layout (bindings 1-4: src tex+sampler, dst tex+sampler) at @group(1). */
-    fun blendTextureBindGroupLayout(
-        device: GPUDevice,
-        keys: FullscreenExecutionCacheKeys,
-    ): GPUBindGroupLayout {
-        val decision = bindGroupLayoutCache.getOrCreate(
-            request = request(
-                domain = GPUExecutionCacheDomain.BindGroupLayout,
-                keyHash = keys.textureBindGroupLayoutKeyHash,
-                subjectHash = keys.textureBindGroupLayoutSubjectHash,
-            ),
-        ) {
-            device.createBindGroupLayout(
-                BindGroupLayoutDescriptor(
-                    entries = listOf(
-                        BindGroupLayoutEntry(
-                            binding = 1u,
-                            visibility = GPUShaderStage.Fragment,
-                            texture = TextureBindingLayout(
-                                sampleType = GPUTextureSampleType.Float,
-                                viewDimension = GPUTextureViewDimension.TwoD,
-                                multisampled = false,
-                            ),
-                        ),
-                        BindGroupLayoutEntry(
-                            binding = 2u,
-                            visibility = GPUShaderStage.Fragment,
-                            sampler = SamplerBindingLayout(type = GPUSamplerBindingType.Filtering),
-                        ),
-                        BindGroupLayoutEntry(
-                            binding = 3u,
-                            visibility = GPUShaderStage.Fragment,
-                            texture = TextureBindingLayout(
-                                sampleType = GPUTextureSampleType.Float,
-                                viewDimension = GPUTextureViewDimension.TwoD,
-                                multisampled = false,
-                            ),
-                        ),
-                        BindGroupLayoutEntry(
-                            binding = 4u,
-                            visibility = GPUShaderStage.Fragment,
-                            sampler = SamplerBindingLayout(type = GPUSamplerBindingType.Filtering),
-                        ),
-                    ),
-                ),
-            )
-        }
-        record(decision)
-        return decision.readyHandle()
-    }
-
-    /** Returns the cached pipeline layout for texture passes with two bind-group layouts. */
-    fun texturePipelineLayout(
-        device: GPUDevice,
-        bindGroupLayouts: List<GPUBindGroupLayout>,
-        keys: FullscreenExecutionCacheKeys,
-    ): GPUPipelineLayout {
-        val decision = pipelineLayoutCache.getOrCreate(
-            request = request(
-                domain = GPUExecutionCacheDomain.PipelineLayout,
-                keyHash = keys.pipelineLayoutKeyHash,
-                subjectHash = keys.pipelineLayoutSubjectHash,
-            ),
-        ) {
-            device.createPipelineLayout(
-                PipelineLayoutDescriptor(bindGroupLayouts = bindGroupLayouts),
-            )
-        }
-        record(decision)
-        return decision.readyHandle()
-    }
-
-    /** Returns the cached render pipeline for the module, layout, target, and blend-state facts. */
-    fun renderPipeline(
-        device: GPUDevice,
-        shader: GPUShaderModule,
-        pipelineLayout: GPUPipelineLayout,
-        targetFormat: GPUTextureFormat,
-        keys: FullscreenExecutionCacheKeys,
-        blendMode: GPUBlendMode? = null,
-    ): GPURenderPipeline {
-        val decision = renderPipelineCache.getOrCreate(
-            request = request(
-                domain = GPUExecutionCacheDomain.RenderPipeline,
-                keyHash = keys.renderPipelineKeyHash,
-                subjectHash = keys.renderPipelineSubjectHash,
-            ),
-        ) {
-            device.createRenderPipelineWithValidationScope(
-                RenderPipelineDescriptor(
-                    layout = pipelineLayout,
-                    vertex = VertexState(module = shader, entryPoint = "vs_main"),
-                    primitive = PrimitiveState(),
-                    depthStencil = DepthStencilState(
-                        format = GPUTextureFormat.Depth24PlusStencil8,
-                        depthWriteEnabled = false,
-                        depthCompare = GPUCompareFunction.Always,
-                        stencilFront = StencilFaceState(
-                            compare = GPUCompareFunction.Always,
-                            failOp = GPUStencilOperation.Keep,
-                            depthFailOp = GPUStencilOperation.Keep,
-                            passOp = GPUStencilOperation.Keep,
-                        ),
-                        stencilBack = StencilFaceState(
-                            compare = GPUCompareFunction.Always,
-                            failOp = GPUStencilOperation.Keep,
-                            depthFailOp = GPUStencilOperation.Keep,
-                            passOp = GPUStencilOperation.Keep,
-                        ),
-                        stencilReadMask = 0u,
-                        stencilWriteMask = 0u,
-                    ),
-                    fragment = FragmentState(
-                        module = shader,
-                        entryPoint = "fs_main",
-                        targets = listOf(
-                            ColorTargetState(
-                                format = targetFormat,
-                                blend = blendStateFor(blendMode),
-                            ),
-                        ),
-                    ),
-                ),
-            )
-        }
-        record(decision)
-        return decision.readyHandle()
-    }
-
-    /** Returns the cached stencil-write render pipeline with vertex buffer input, no color writes, and winding stencil ops. */
-    fun stencilWriteRenderPipeline(
-        device: GPUDevice,
-        wgsl: String,
-        targetFormat: GPUTextureFormat,
-        keys: FullscreenExecutionCacheKeys,
-    ): GPURenderPipeline {
-        val decision = renderPipelineCache.getOrCreate(
-            request = request(
-                domain = GPUExecutionCacheDomain.RenderPipeline,
-                keyHash = keys.renderPipelineKeyHash,
-                subjectHash = keys.renderPipelineSubjectHash,
-            ),
-        ) {
-            val shader = device.createShaderModule(ShaderModuleDescriptor(code = wgsl))
-            try {
-                val pipelineLayout = device.createPipelineLayout(
-                    PipelineLayoutDescriptor(bindGroupLayouts = emptyList()),
-                )
-                device.createRenderPipelineWithValidationScope(
-                    RenderPipelineDescriptor(
-                        layout = pipelineLayout,
-                        vertex = VertexState(
-                            module = shader,
-                            entryPoint = "vs_main",
-                            buffers = listOf(
-                                VertexBufferLayout(
-                                    arrayStride = 8uL,
-                                    attributes = listOf(
-                                        VertexAttribute(
-                                            shaderLocation = 0u,
-                                            offset = 0uL,
-                                            format = GPUVertexFormat.Float32x2,
-                                        ),
-                                    ),
-                                ),
-                            ),
-                        ),
-                        primitive = PrimitiveState(),
-                        depthStencil = DepthStencilState(
-                            format = GPUTextureFormat.Depth24PlusStencil8,
-                            depthWriteEnabled = false,
-                            depthCompare = GPUCompareFunction.Always,
-                            stencilFront = StencilFaceState(
-                                compare = GPUCompareFunction.Always,
-                                failOp = GPUStencilOperation.Keep,
-                                depthFailOp = GPUStencilOperation.Keep,
-                                passOp = GPUStencilOperation.IncrementWrap,
-                            ),
-                            stencilBack = StencilFaceState(
-                                compare = GPUCompareFunction.Always,
-                                failOp = GPUStencilOperation.Keep,
-                                depthFailOp = GPUStencilOperation.Keep,
-                                passOp = GPUStencilOperation.DecrementWrap,
-                            ),
-                            stencilReadMask = 0xFFu,
-                            stencilWriteMask = 0xFFu,
-                        ),
-                        fragment = FragmentState(
-                            module = shader,
-                            entryPoint = "fs_main",
-                            targets = listOf(
-                                ColorTargetState(
-                                    format = targetFormat,
-                                    blend = BlendState(
-                                        color = BlendComponent(
-                                            operation = GPUBlendOperation.Add,
-                                            srcFactor = io.ygdrasil.webgpu.GPUBlendFactor.One,
-                                            dstFactor = io.ygdrasil.webgpu.GPUBlendFactor.Zero,
-                                        ),
-                                        alpha = BlendComponent(
-                                            operation = GPUBlendOperation.Add,
-                                            srcFactor = io.ygdrasil.webgpu.GPUBlendFactor.One,
-                                            dstFactor = io.ygdrasil.webgpu.GPUBlendFactor.Zero,
-                                        ),
-                                    ),
-                                    writeMask = GPUColorWrite.None,
-                                ),
-                            ),
-                        ),
-                    ),
-                )
-            } finally {
-                shader.close()
-            }
-        }
-        record(decision)
-        return decision.readyHandle()
-    }
-
-    /** Returns the cached stencil-test render pipeline that fills pixels where stencil != 0 with the fragment color. */
-    fun stencilTestRenderPipeline(
-        device: GPUDevice,
-        shader: GPUShaderModule,
-        pipelineLayout: GPUPipelineLayout,
-        targetFormat: GPUTextureFormat,
-        keys: FullscreenExecutionCacheKeys,
-        blendMode: GPUBlendMode? = null,
-    ): GPURenderPipeline {
-        val decision = renderPipelineCache.getOrCreate(
-            request = request(
-                domain = GPUExecutionCacheDomain.RenderPipeline,
-                keyHash = keys.renderPipelineKeyHash,
-                subjectHash = keys.renderPipelineSubjectHash,
-            ),
-        ) {
-            device.createRenderPipelineWithValidationScope(
-                RenderPipelineDescriptor(
-                    layout = pipelineLayout,
-                    vertex = VertexState(module = shader, entryPoint = "vs_main"),
-                    primitive = PrimitiveState(),
-                    depthStencil = DepthStencilState(
-                        format = GPUTextureFormat.Depth24PlusStencil8,
-                        depthWriteEnabled = false,
-                        depthCompare = GPUCompareFunction.Always,
-                        stencilFront = StencilFaceState(
-                            compare = GPUCompareFunction.NotEqual,
-                            failOp = GPUStencilOperation.Keep,
-                            depthFailOp = GPUStencilOperation.Keep,
-                            passOp = GPUStencilOperation.Keep,
-                        ),
-                        stencilBack = StencilFaceState(
-                            compare = GPUCompareFunction.NotEqual,
-                            failOp = GPUStencilOperation.Keep,
-                            depthFailOp = GPUStencilOperation.Keep,
-                            passOp = GPUStencilOperation.Keep,
-                        ),
-                        stencilReadMask = 0xFFu,
-                        stencilWriteMask = 0xFFu,
-                    ),
-                    fragment = FragmentState(
-                        module = shader,
-                        entryPoint = "fs_main",
-                        targets = listOf(
-                            ColorTargetState(
-                                format = targetFormat,
-                                blend = blendStateFor(blendMode),
-                            ),
-                        ),
-                    ),
-                ),
-            )
-        }
-        record(decision)
-        return decision.readyHandle()
-    }
-
-    /** Returns the cached vertex-color render pipeline with interleaved position+color vertex buffer input. */
-    fun vertexColorRenderPipeline(
-        device: GPUDevice,
-        shader: GPUShaderModule,
-        pipelineLayout: GPUPipelineLayout,
-        targetFormat: GPUTextureFormat,
-        keys: FullscreenExecutionCacheKeys,
-        blendMode: GPUBlendMode? = null,
-    ): GPURenderPipeline {
-        val decision = renderPipelineCache.getOrCreate(
-            request = request(
-                domain = GPUExecutionCacheDomain.RenderPipeline,
-                keyHash = keys.renderPipelineKeyHash,
-                subjectHash = keys.renderPipelineSubjectHash,
-            ),
-        ) {
-            device.createRenderPipelineWithValidationScope(
-                RenderPipelineDescriptor(
-                    layout = pipelineLayout,
-                    vertex = VertexState(
-                        module = shader,
-                        entryPoint = "vs_main",
-                        buffers = listOf(
-                            VertexBufferLayout(
-                                arrayStride = VERTEX_COLOR_STRIDE_BYTES.toULong(),
-                                attributes = listOf(
-                                    VertexAttribute(
-                                        shaderLocation = 0u,
-                                        offset = 0uL,
-                                        format = GPUVertexFormat.Float32x2,
-                                    ),
-                            VertexAttribute(
-                                shaderLocation = 1u,
-                                offset = 16uL,
-                                format = GPUVertexFormat.Float32x4,
-                            ),
-                                ),
-                            ),
-                        ),
-                    ),
-                    primitive = PrimitiveState(),
-                    depthStencil = DepthStencilState(
-                        format = GPUTextureFormat.Depth24PlusStencil8,
-                        depthWriteEnabled = false,
-                        depthCompare = GPUCompareFunction.Always,
-                        stencilFront = StencilFaceState(
-                            compare = GPUCompareFunction.Always,
-                            failOp = GPUStencilOperation.Keep,
-                            depthFailOp = GPUStencilOperation.Keep,
-                            passOp = GPUStencilOperation.Keep,
-                        ),
-                        stencilBack = StencilFaceState(
-                            compare = GPUCompareFunction.Always,
-                            failOp = GPUStencilOperation.Keep,
-                            depthFailOp = GPUStencilOperation.Keep,
-                            passOp = GPUStencilOperation.Keep,
-                        ),
-                        stencilReadMask = 0u,
-                        stencilWriteMask = 0u,
-                    ),
-                    fragment = FragmentState(
-                        module = shader,
-                        entryPoint = "fs_main",
-                        targets = listOf(
-                            ColorTargetState(
-                                format = targetFormat,
-                                blend = blendStateFor(blendMode),
-                            ),
-                        ),
-                    ),
-                ),
-            )
-        }
-        record(decision)
-        return decision.readyHandle()
-    }
-
-    /** Returns the cached text atlas A8 render pipeline with position+texcoord vertex buffers and indexed draw. */
-    fun textAtlasRenderPipeline(
-        device: GPUDevice,
-        shader: GPUShaderModule,
-        pipelineLayout: GPUPipelineLayout,
-        targetFormat: GPUTextureFormat,
-        keys: FullscreenExecutionCacheKeys,
-        blendMode: GPUBlendMode? = null,
-    ): GPURenderPipeline {
-        val decision = renderPipelineCache.getOrCreate(
-            request = request(
-                domain = GPUExecutionCacheDomain.RenderPipeline,
-                keyHash = keys.renderPipelineKeyHash,
-                subjectHash = keys.renderPipelineSubjectHash,
-            ),
-        ) {
-            device.createRenderPipelineWithValidationScope(
-                RenderPipelineDescriptor(
-                    layout = pipelineLayout,
-                    vertex = VertexState(
-                        module = shader,
-                        entryPoint = "vs_main",
-                        buffers = listOf(
-                            VertexBufferLayout(
-                                arrayStride = TEXT_ATLAS_VERTEX_STRIDE_BYTES.toULong(),
-                                attributes = listOf(
-                                    VertexAttribute(
-                                        shaderLocation = 0u,
-                                        offset = 0uL,
-                                        format = GPUVertexFormat.Float32x2,
-                                    ),
-                                    VertexAttribute(
-                                        shaderLocation = 1u,
-                                        offset = 8uL,
-                                        format = GPUVertexFormat.Float32x2,
-                                    ),
-                                ),
-                            ),
-                        ),
-                    ),
-                    primitive = PrimitiveState(),
-                    depthStencil = DepthStencilState(
-                        format = GPUTextureFormat.Depth24PlusStencil8,
-                        depthWriteEnabled = false,
-                        depthCompare = GPUCompareFunction.Always,
-                        stencilFront = StencilFaceState(
-                            compare = GPUCompareFunction.Always,
-                            failOp = GPUStencilOperation.Keep,
-                            depthFailOp = GPUStencilOperation.Keep,
-                            passOp = GPUStencilOperation.Keep,
-                        ),
-                        stencilBack = StencilFaceState(
-                            compare = GPUCompareFunction.Always,
-                            failOp = GPUStencilOperation.Keep,
-                            depthFailOp = GPUStencilOperation.Keep,
-                            passOp = GPUStencilOperation.Keep,
-                        ),
-                        stencilReadMask = 0u,
-                        stencilWriteMask = 0u,
-                    ),
-                    fragment = FragmentState(
-                        module = shader,
-                        entryPoint = "fs_main",
-                        targets = listOf(
-                            ColorTargetState(
-                                format = targetFormat,
-                                blend = blendStateFor(blendMode),
-                            ),
-                        ),
-                    ),
-                ),
-            )
-        }
-        record(decision)
-        return decision.readyHandle()
-    }
-
-    private fun request(
-        domain: GPUExecutionCacheDomain,
-        keyHash: String,
-        subjectHash: String,
-    ): GPUExecutionCacheRequest =
-        GPUExecutionCacheRequest(
-            domain = domain,
-            keyHash = keyHash,
-            subjectHash = subjectHash,
-            deviceGeneration = deviceGeneration,
-            expectedDeviceGeneration = deviceGeneration,
-            ownerScope = "GPUResourceProvider",
-        )
-
-    private fun record(decision: GPUExecutionCacheDecision<*>) {
-        decision.cacheEvents.forEach { event ->
-            ledger = ledger.recordCacheEvent(event)
-        }
-        recordedDumpLines += decision.dumpLines()
-    }
-
-    override fun close() {
-        var firstFailure: Throwable? = null
-        listOf(
-            renderPipelineCache,
-            pipelineLayoutCache,
-            bindGroupLayoutCache,
-            moduleCache,
-        ).forEach { cache ->
-            try {
-                cache.close()
-            } catch (failure: Throwable) {
-                if (firstFailure == null) {
-                    firstFailure = failure
-                } else {
-                    firstFailure.addSuppressed(failure)
-                }
-            }
-        }
-        firstFailure?.let { throw it }
-    }
-}
-
-private data class FullscreenExecutionCacheKeys(
-    val moduleKeyHash: String,
-    val moduleSubjectHash: String,
-    val modulePreimage: String,
-    val bindGroupLayoutKeyHash: String,
-    val bindGroupLayoutSubjectHash: String,
-    val bindGroupLayoutPreimage: String,
-    val textureBindGroupLayoutKeyHash: String = "",
-    val textureBindGroupLayoutSubjectHash: String = "",
-    val textureBindGroupLayoutPreimage: String = "",
-    val pipelineLayoutKeyHash: String,
-    val pipelineLayoutSubjectHash: String,
-    val pipelineLayoutPreimage: String,
-    val renderPipelineKeyHash: String,
-    val renderPipelineSubjectHash: String,
-    val renderPipelinePreimage: String,
-) {
-    /** Emits backend-neutral cache-key preimage dumps without WGPU handles. */
-    fun preimageDumpLines(): List<String> {
-        val lines = mutableListOf(
-            preimageDumpLine(
-                domain = GPUExecutionCacheDomain.Module.telemetryDomain,
-                keyHash = moduleKeyHash,
-                subjectHash = moduleSubjectHash,
-                preimage = modulePreimage,
-            ),
-            preimageDumpLine(
-                domain = GPUExecutionCacheDomain.BindGroupLayout.telemetryDomain,
-                keyHash = bindGroupLayoutKeyHash,
-                subjectHash = bindGroupLayoutSubjectHash,
-                preimage = bindGroupLayoutPreimage,
-            ),
-        )
-        if (textureBindGroupLayoutKeyHash.isNotEmpty()) {
-            lines += preimageDumpLine(
-                domain = GPUExecutionCacheDomain.BindGroupLayout.telemetryDomain,
-                keyHash = textureBindGroupLayoutKeyHash,
-                subjectHash = textureBindGroupLayoutSubjectHash,
-                preimage = textureBindGroupLayoutPreimage,
-            )
-        }
-        lines += listOf(
-            preimageDumpLine(
-                domain = GPUExecutionCacheDomain.PipelineLayout.telemetryDomain,
-                keyHash = pipelineLayoutKeyHash,
-                subjectHash = pipelineLayoutSubjectHash,
-                preimage = pipelineLayoutPreimage,
-            ),
-            preimageDumpLine(
-                domain = GPUExecutionCacheDomain.RenderPipeline.telemetryDomain,
-                keyHash = renderPipelineKeyHash,
-                subjectHash = renderPipelineSubjectHash,
-                preimage = renderPipelinePreimage,
-            ),
-        )
-        return lines
-    }
-
-    private fun preimageDumpLine(
-        domain: String,
-        keyHash: String,
-        subjectHash: String,
-        preimage: String,
-    ): String =
-        "execution.cache.preimage domain=$domain key=$keyHash subject=$subjectHash " +
-            "deviceScope=runtime-helper preimage=${preimage.dumpPreimage()}"
-}
-
-private fun fullscreenTextureExecutionCacheKeys(
-    wgsl: String,
-    targetFormat: GPUTextureFormat,
-    textureFormat: GPUTextureFormat,
-    blendMode: GPUBlendMode? = null,
-): FullscreenExecutionCacheKeys {
-    val blendLabel = blendMode?.wgpuLabel ?: "src_over"
-    val targetFormatClass = targetFormat.toBackendColorFormat()
-    val wgslHash = stableSha256(wgsl)
-    val bindGroupLayoutPreimage = listOf(
-        "kind=bind-group-layout",
-        "role=fullscreen-uniform",
-        "version=1",
-        "binding=0",
-        "visibility=fragment",
-        "bufferType=uniform",
-        "dynamicOffsets=false",
-    ).joinToString("\n")
-    val bindGroupLayoutHash = stableSha256(bindGroupLayoutPreimage)
-    val textureBindGroupLayoutPreimage = listOf(
-        "kind=bind-group-layout",
-        "role=fullscreen-texture-sampler",
-        "version=1",
-        "binding=1:type=texture:format=${textureFormat.name}",
-        "binding=2:type=sampler:filtering",
-        "visibility=fragment",
-    ).joinToString("\n")
-    val textureBindGroupLayoutHash = stableSha256(textureBindGroupLayoutPreimage)
-    val modulePreimage = listOf(
-        "kind=wgsl-module",
-        "role=fullscreen-texture-pass",
-        "entryPoints=vs_main,fs_main",
-        "wgsl=$wgslHash",
-    ).joinToString("\n")
-    val moduleHash = stableSha256(modulePreimage)
-    val pipelineLayoutPreimage = listOf(
-        "kind=pipeline-layout",
-        "role=fullscreen-texture-pass",
-        "version=1",
-        "bindGroupLayouts=$bindGroupLayoutHash,$textureBindGroupLayoutHash",
-    ).joinToString("\n")
-    val pipelineLayoutHash = stableSha256(pipelineLayoutPreimage)
-    val renderPreimage = GPUPipelineKeyPreimage.Render(
-        renderStepIdentity = "gpu-backend.fullscreen-texture-pass",
-        renderStepVersion = "1",
-        primitiveTopology = "triangle-list",
-        materialKeyHash = stableSha256("material:fullscreen-texture-color-uniform:v1"),
-        materialProgramId = "wgsl.fullscreen-texture-color",
-        materialDictionaryVersion = "runtime-helper-v1",
-        materialLayoutHash = "$bindGroupLayoutHash,$textureBindGroupLayoutHash",
-        snippetIdentityHash = stableSha256("snippet:fullscreen-texture:v1"),
-        moduleHash = moduleHash,
-        vertexLayoutHash = stableSha256("vertex-layout:fullscreen-triangle:vertex-index-only"),
-        targetFormatClass = targetFormatClass,
-        blendStateHash = stableSha256("blend:$blendLabel-premul:v1"),
-        sampleStateHash = stableSha256("sample-state:count=1:mask=all"),
-        bindGroupLayoutHash = "$bindGroupLayoutHash,$textureBindGroupLayoutHash",
-        capabilityClass = "webgpu-wgsl-fullscreen-texture-pass",
-        capabilityFacts = listOf("adapter-backed-helper", "targetFormat=$targetFormatClass", "textureFormat=${textureFormat.name}"),
-        rendererSalt = "kgpu-m26-001",
-    )
-    val canonicalRenderPreimage = GPUPipelineKeys.canonicalRenderPreimage(renderPreimage)
-    val renderPipelineKey = GPUPipelineKeys.renderPipelineKey(renderPreimage).value
-
-    return FullscreenExecutionCacheKeys(
-        moduleKeyHash = "module:$moduleHash",
-        moduleSubjectHash = "wgsl:$wgslHash",
-        modulePreimage = modulePreimage,
-        bindGroupLayoutKeyHash = "bind-group-layout:$bindGroupLayoutHash",
-        bindGroupLayoutSubjectHash = "layout-shape:$bindGroupLayoutHash",
-        bindGroupLayoutPreimage = bindGroupLayoutPreimage,
-        textureBindGroupLayoutKeyHash = "bind-group-layout:$textureBindGroupLayoutHash",
-        textureBindGroupLayoutSubjectHash = "layout-shape:$textureBindGroupLayoutHash",
-        textureBindGroupLayoutPreimage = textureBindGroupLayoutPreimage,
-        pipelineLayoutKeyHash = "pipeline-layout:$pipelineLayoutHash",
-        pipelineLayoutSubjectHash = "bind-groups:$bindGroupLayoutHash,$textureBindGroupLayoutHash",
-        pipelineLayoutPreimage = pipelineLayoutPreimage,
-        renderPipelineKeyHash = renderPipelineKey,
-        renderPipelineSubjectHash = stableSha256(canonicalRenderPreimage),
-        renderPipelinePreimage = canonicalRenderPreimage,
-    )
-}
-
-private fun blendTextureExecutionCacheKeys(
-    wgsl: String,
-    targetFormat: GPUTextureFormat,
-    textureFormat: GPUTextureFormat,
-): FullscreenExecutionCacheKeys {
-    val targetFormatClass = targetFormat.toBackendColorFormat()
-    val wgslHash = stableSha256(wgsl)
-    val bindGroupLayoutPreimage = listOf(
-        "kind=bind-group-layout",
-        "role=blend-uniform",
-        "version=1",
-        "binding=0",
-        "visibility=fragment",
-        "bufferType=uniform",
-        "dynamicOffsets=false",
-    ).joinToString("\n")
-    val bindGroupLayoutHash = stableSha256(bindGroupLayoutPreimage)
-    val textureBindGroupLayoutPreimage = listOf(
-        "kind=bind-group-layout",
-        "role=blend-dual-texture-sampler",
-        "version=1",
-        "binding=1:type=texture:format=${textureFormat.name}",
-        "binding=2:type=sampler:filtering",
-        "binding=3:type=texture:format=${textureFormat.name}",
-        "binding=4:type=sampler:filtering",
-        "visibility=fragment",
-    ).joinToString("\n")
-    val textureBindGroupLayoutHash = stableSha256(textureBindGroupLayoutPreimage)
-    val modulePreimage = listOf(
-        "kind=wgsl-module",
-        "role=blend-pass",
-        "entryPoints=vs_main,fs_main",
-        "wgsl=$wgslHash",
-    ).joinToString("\n")
-    val moduleHash = stableSha256(modulePreimage)
-    val pipelineLayoutPreimage = listOf(
-        "kind=pipeline-layout",
-        "role=blend-pass",
-        "version=1",
-        "bindGroupLayouts=$bindGroupLayoutHash,$textureBindGroupLayoutHash",
-    ).joinToString("\n")
-    val pipelineLayoutHash = stableSha256(pipelineLayoutPreimage)
-    val renderPreimage = GPUPipelineKeyPreimage.Render(
-        renderStepIdentity = "gpu-backend.blend-pass",
-        renderStepVersion = "1",
-        primitiveTopology = "triangle-list",
-        materialKeyHash = stableSha256("material:blend-uniform:v1"),
-        materialProgramId = "wgsl.blend-pass",
-        materialDictionaryVersion = "runtime-helper-v1",
-        materialLayoutHash = "$bindGroupLayoutHash,$textureBindGroupLayoutHash",
-        snippetIdentityHash = stableSha256("snippet:blend-pass:v1"),
-        moduleHash = moduleHash,
-        vertexLayoutHash = stableSha256("vertex-layout:fullscreen-triangle:vertex-index-only"),
-        targetFormatClass = targetFormatClass,
-        blendStateHash = stableSha256("blend:src_over-premul:v1"),
-        sampleStateHash = stableSha256("sample-state:count=1:mask=all"),
-        bindGroupLayoutHash = "$bindGroupLayoutHash,$textureBindGroupLayoutHash",
-        capabilityClass = "webgpu-wgsl-blend-pass",
-        capabilityFacts = listOf("adapter-backed-helper", "targetFormat=$targetFormatClass", "textureFormat=${textureFormat.name}"),
-        rendererSalt = "kgpu-m26-001",
-    )
-    val canonicalRenderPreimage = GPUPipelineKeys.canonicalRenderPreimage(renderPreimage)
-    val renderPipelineKey = GPUPipelineKeys.renderPipelineKey(renderPreimage).value
-
-    return FullscreenExecutionCacheKeys(
-        moduleKeyHash = "module:$moduleHash",
-        moduleSubjectHash = "wgsl:$wgslHash",
-        modulePreimage = modulePreimage,
-        bindGroupLayoutKeyHash = "bind-group-layout:$bindGroupLayoutHash",
-        bindGroupLayoutSubjectHash = "layout-shape:$bindGroupLayoutHash",
-        bindGroupLayoutPreimage = bindGroupLayoutPreimage,
-        textureBindGroupLayoutKeyHash = "bind-group-layout:$textureBindGroupLayoutHash",
-        textureBindGroupLayoutSubjectHash = "layout-shape:$textureBindGroupLayoutHash",
-        textureBindGroupLayoutPreimage = textureBindGroupLayoutPreimage,
-        pipelineLayoutKeyHash = "pipeline-layout:$pipelineLayoutHash",
-        pipelineLayoutSubjectHash = "bind-groups:$bindGroupLayoutHash,$textureBindGroupLayoutHash",
-        pipelineLayoutPreimage = pipelineLayoutPreimage,
-        renderPipelineKeyHash = renderPipelineKey,
-        renderPipelineSubjectHash = stableSha256(canonicalRenderPreimage),
-        renderPipelinePreimage = canonicalRenderPreimage,
-    )
-}
-
-private fun fullscreenExecutionCacheKeys(
-    wgsl: String,
-    targetFormat: GPUTextureFormat,
-    blendMode: GPUBlendMode? = null,
-): FullscreenExecutionCacheKeys {
-    val blendLabel = blendMode?.wgpuLabel ?: "src_over"
-    val targetFormatClass = targetFormat.toBackendColorFormat()
-    val wgslHash = stableSha256(wgsl)
-    val bindGroupLayoutPreimage = listOf(
-        "kind=bind-group-layout",
-        "role=fullscreen-uniform",
-        "version=1",
-        "binding=0",
-        "visibility=fragment",
-        "bufferType=uniform",
-        "dynamicOffsets=false",
-    ).joinToString("\n")
-    val bindGroupLayoutHash = stableSha256(bindGroupLayoutPreimage)
-    val modulePreimage = listOf(
-        "kind=wgsl-module",
-        "role=fullscreen-pass",
-        "entryPoints=vs_main,fs_main",
-        "wgsl=$wgslHash",
-    ).joinToString("\n")
-    val moduleHash = stableSha256(modulePreimage)
-    val pipelineLayoutPreimage = listOf(
-        "kind=pipeline-layout",
-        "role=fullscreen-pass",
-        "version=1",
-        "bindGroupLayouts=$bindGroupLayoutHash",
-    ).joinToString("\n")
-    val pipelineLayoutHash = stableSha256(pipelineLayoutPreimage)
-    val renderPreimage = GPUPipelineKeyPreimage.Render(
-        renderStepIdentity = "gpu-backend.fullscreen-pass",
-        renderStepVersion = "1",
-        primitiveTopology = "triangle-list",
-        materialKeyHash = stableSha256("material:fullscreen-solid-color-uniform:v1"),
-        materialProgramId = "wgsl.fullscreen-solid-color",
-        materialDictionaryVersion = "runtime-helper-v1",
-        materialLayoutHash = bindGroupLayoutHash,
-        snippetIdentityHash = stableSha256("snippet:fullscreen-solid-color:v1"),
-        moduleHash = moduleHash,
-        vertexLayoutHash = stableSha256("vertex-layout:fullscreen-triangle:vertex-index-only"),
-        targetFormatClass = targetFormatClass,
-        blendStateHash = stableSha256("blend:$blendLabel-premul:v1"),
-        sampleStateHash = stableSha256("sample-state:count=1:mask=all"),
-        bindGroupLayoutHash = bindGroupLayoutHash,
-        capabilityClass = "webgpu-wgsl-fullscreen-pass",
-        capabilityFacts = listOf("adapter-backed-helper", "targetFormat=$targetFormatClass"),
-        rendererSalt = "kgpu-m11-001",
-    )
-    val canonicalRenderPreimage = GPUPipelineKeys.canonicalRenderPreimage(renderPreimage)
-    val renderPipelineKey = GPUPipelineKeys.renderPipelineKey(renderPreimage).value
-
-    return FullscreenExecutionCacheKeys(
-        moduleKeyHash = "module:$moduleHash",
-        moduleSubjectHash = "wgsl:$wgslHash",
-        modulePreimage = modulePreimage,
-        bindGroupLayoutKeyHash = "bind-group-layout:$bindGroupLayoutHash",
-        bindGroupLayoutSubjectHash = "layout-shape:$bindGroupLayoutHash",
-        bindGroupLayoutPreimage = bindGroupLayoutPreimage,
-        pipelineLayoutKeyHash = "pipeline-layout:$pipelineLayoutHash",
-        pipelineLayoutSubjectHash = "bind-groups:$bindGroupLayoutHash",
-        pipelineLayoutPreimage = pipelineLayoutPreimage,
-        renderPipelineKeyHash = renderPipelineKey,
-        renderPipelineSubjectHash = stableSha256(canonicalRenderPreimage),
-        renderPipelinePreimage = canonicalRenderPreimage,
-    )
-}
-
-private fun textAtlasExecutionCacheKeys(
-    wgsl: String,
-    targetFormat: GPUTextureFormat,
-    textureFormat: GPUTextureFormat,
-    blendMode: GPUBlendMode? = null,
-): FullscreenExecutionCacheKeys {
-    val blendLabel = blendMode?.wgpuLabel ?: "src_over"
-    val targetFormatClass = targetFormat.toBackendColorFormat()
-    val wgslHash = stableSha256(wgsl)
-    val bindGroupLayoutPreimage = listOf(
-        "kind=bind-group-layout",
-        "role=text-atlas-uniform",
-        "version=1",
-        "binding=0",
-        "visibility=vertex|fragment",
-        "bufferType=uniform",
-        "dynamicOffsets=false",
-    ).joinToString("\n")
-    val bindGroupLayoutHash = stableSha256(bindGroupLayoutPreimage)
-    val textureBindGroupLayoutPreimage = listOf(
-        "kind=bind-group-layout",
-        "role=text-atlas-sampler",
-        "version=1",
-        "binding=1:type=texture:format=${textureFormat.name}",
-        "binding=2:type=sampler:filtering",
-        "visibility=fragment",
-    ).joinToString("\n")
-    val textureBindGroupLayoutHash = stableSha256(textureBindGroupLayoutPreimage)
-    val modulePreimage = listOf(
-        "kind=wgsl-module",
-        "role=text-atlas-pass",
-        "entryPoints=vs_main,fs_main",
-        "wgsl=$wgslHash",
-    ).joinToString("\n")
-    val moduleHash = stableSha256(modulePreimage)
-    val pipelineLayoutPreimage = listOf(
-        "kind=pipeline-layout",
-        "role=text-atlas-pass",
-        "version=1",
-        "bindGroupLayouts=$bindGroupLayoutHash,$textureBindGroupLayoutHash",
-    ).joinToString("\n")
-    val pipelineLayoutHash = stableSha256(pipelineLayoutPreimage)
-    val renderPreimage = GPUPipelineKeyPreimage.Render(
-        renderStepIdentity = "gpu-backend.text-atlas-pass",
-        renderStepVersion = "1",
-        primitiveTopology = "triangle-list",
-        materialKeyHash = stableSha256("material:text-atlas-uniform:v1"),
-        materialProgramId = "wgsl.text-atlas-a8",
-        materialDictionaryVersion = "runtime-helper-v1",
-        materialLayoutHash = "$bindGroupLayoutHash,$textureBindGroupLayoutHash",
-        snippetIdentityHash = stableSha256("snippet:text-atlas-a8:v1"),
-        moduleHash = moduleHash,
-        vertexLayoutHash = stableSha256("vertex-layout:text-atlas:float32x2+float32x2"),
-        targetFormatClass = targetFormatClass,
-        blendStateHash = stableSha256("blend:$blendLabel-premul:v1"),
-        sampleStateHash = stableSha256("sample-state:count=1:mask=all"),
-        bindGroupLayoutHash = "$bindGroupLayoutHash,$textureBindGroupLayoutHash",
-        capabilityClass = "webgpu-wgsl-text-atlas-pass",
-        capabilityFacts = listOf("adapter-backed-helper", "targetFormat=$targetFormatClass", "textureFormat=${textureFormat.name}"),
-        rendererSalt = "kgpu-m26-001",
-    )
-    val canonicalRenderPreimage = GPUPipelineKeys.canonicalRenderPreimage(renderPreimage)
-    val renderPipelineKey = GPUPipelineKeys.renderPipelineKey(renderPreimage).value
-
-    return FullscreenExecutionCacheKeys(
-        moduleKeyHash = "module:$moduleHash",
-        moduleSubjectHash = "wgsl:$wgslHash",
-        modulePreimage = modulePreimage,
-        bindGroupLayoutKeyHash = "bind-group-layout:$bindGroupLayoutHash",
-        bindGroupLayoutSubjectHash = "layout-shape:$bindGroupLayoutHash",
-        bindGroupLayoutPreimage = bindGroupLayoutPreimage,
-        textureBindGroupLayoutKeyHash = "bind-group-layout:$textureBindGroupLayoutHash",
-        textureBindGroupLayoutSubjectHash = "layout-shape:$textureBindGroupLayoutHash",
-        textureBindGroupLayoutPreimage = textureBindGroupLayoutPreimage,
-        pipelineLayoutKeyHash = "pipeline-layout:$pipelineLayoutHash",
-        pipelineLayoutSubjectHash = "bind-groups:$bindGroupLayoutHash,$textureBindGroupLayoutHash",
-        pipelineLayoutPreimage = pipelineLayoutPreimage,
-        renderPipelineKeyHash = renderPipelineKey,
-        renderPipelineSubjectHash = stableSha256(canonicalRenderPreimage),
-        renderPipelinePreimage = canonicalRenderPreimage,
-    )
-}
-
-private fun colorGlyphExecutionCacheKeys(
-    wgsl: String,
-    targetFormat: GPUTextureFormat,
-    textureFormat: GPUTextureFormat,
-    blendMode: GPUBlendMode? = null,
-): FullscreenExecutionCacheKeys {
-    val blendLabel = blendMode?.wgpuLabel ?: "src_over"
-    val targetFormatClass = targetFormat.toBackendColorFormat()
-    val wgslHash = stableSha256(wgsl)
-    val bindGroupLayoutPreimage = listOf(
-        "kind=bind-group-layout",
-        "role=color-glyph-uniform",
-        "version=1",
-        "binding=0",
-        "visibility=vertex|fragment",
-        "bufferType=uniform",
-        "dynamicOffsets=false",
-    ).joinToString("\n")
-    val bindGroupLayoutHash = stableSha256(bindGroupLayoutPreimage)
-    val textureBindGroupLayoutPreimage = listOf(
-        "kind=bind-group-layout",
-        "role=color-glyph-sampler",
-        "version=1",
-        "binding=1:type=texture:format=${textureFormat.name}",
-        "binding=2:type=sampler:filtering",
-        "visibility=fragment",
-    ).joinToString("\n")
-    val textureBindGroupLayoutHash = stableSha256(textureBindGroupLayoutPreimage)
-    val modulePreimage = listOf(
-        "kind=wgsl-module",
-        "role=color-glyph-pass",
-        "entryPoints=vs_main,fs_main",
-        "wgsl=$wgslHash",
-    ).joinToString("\n")
-    val moduleHash = stableSha256(modulePreimage)
-    val pipelineLayoutPreimage = listOf(
-        "kind=pipeline-layout",
-        "role=color-glyph-pass",
-        "version=1",
-        "bindGroupLayouts=$bindGroupLayoutHash,$textureBindGroupLayoutHash",
-    ).joinToString("\n")
-    val pipelineLayoutHash = stableSha256(pipelineLayoutPreimage)
-    val renderPreimage = GPUPipelineKeyPreimage.Render(
-        renderStepIdentity = "gpu-backend.color-glyph-pass",
-        renderStepVersion = "1",
-        primitiveTopology = "triangle-list",
-        materialKeyHash = stableSha256("material:color-glyph-uniform:v1"),
-        materialProgramId = "wgsl.color-glyph",
-        materialDictionaryVersion = "runtime-helper-v1",
-        materialLayoutHash = "$bindGroupLayoutHash,$textureBindGroupLayoutHash",
-        snippetIdentityHash = stableSha256("snippet:color-glyph:v1"),
-        moduleHash = moduleHash,
-        vertexLayoutHash = stableSha256("vertex-layout:color-glyph:float32x2+float32x2"),
-        targetFormatClass = targetFormatClass,
-        blendStateHash = stableSha256("blend:$blendLabel-premul:v1"),
-        sampleStateHash = stableSha256("sample-state:count=1:mask=all"),
-        bindGroupLayoutHash = "$bindGroupLayoutHash,$textureBindGroupLayoutHash",
-        capabilityClass = "webgpu-wgsl-color-glyph-pass",
-        capabilityFacts = listOf("adapter-backed-helper", "targetFormat=$targetFormatClass", "textureFormat=${textureFormat.name}"),
-        rendererSalt = "kgpu-m34-001",
-    )
-    val canonicalRenderPreimage = GPUPipelineKeys.canonicalRenderPreimage(renderPreimage)
-    val renderPipelineKey = GPUPipelineKeys.renderPipelineKey(renderPreimage).value
-
-    return FullscreenExecutionCacheKeys(
-        moduleKeyHash = "module:$moduleHash",
-        moduleSubjectHash = "wgsl:$wgslHash",
-        modulePreimage = modulePreimage,
-        bindGroupLayoutKeyHash = "bind-group-layout:$bindGroupLayoutHash",
-        bindGroupLayoutSubjectHash = "layout-shape:$bindGroupLayoutHash",
-        bindGroupLayoutPreimage = bindGroupLayoutPreimage,
-        textureBindGroupLayoutKeyHash = "bind-group-layout:$textureBindGroupLayoutHash",
-        textureBindGroupLayoutSubjectHash = "layout-shape:$textureBindGroupLayoutHash",
-        textureBindGroupLayoutPreimage = textureBindGroupLayoutPreimage,
-        pipelineLayoutKeyHash = "pipeline-layout:$pipelineLayoutHash",
-        pipelineLayoutSubjectHash = "bind-groups:$bindGroupLayoutHash,$textureBindGroupLayoutHash",
-        pipelineLayoutPreimage = pipelineLayoutPreimage,
-        renderPipelineKeyHash = renderPipelineKey,
-        renderPipelineSubjectHash = stableSha256(canonicalRenderPreimage),
-        renderPipelinePreimage = canonicalRenderPreimage,
-    )
-}
-
-private fun stencilExecutionCacheKeys(
-    wgsl: String,
-    targetFormat: GPUTextureFormat,
-    vertexStage: Boolean,
-    blendMode: GPUBlendMode? = null,
-): FullscreenExecutionCacheKeys {
-    val blendLabel = blendMode?.wgpuLabel ?: "src_over"
-    val targetFormatClass = targetFormat.toBackendColorFormat()
-    val wgslHash = stableSha256(wgsl)
-        val role = if (vertexStage) "stencil-write-vertex" else "stencil-test-fullscreen"
-        val bindGroupLayoutPreimage = listOf(
-            "kind=bind-group-layout",
-            "role=$role",
-            "version=1",
-            "binding=0",
-            "visibility=vertex|fragment",
-            "bufferType=uniform",
-            "dynamicOffsets=false",
-        ).joinToString("\n")
-    val bindGroupLayoutHash = stableSha256(bindGroupLayoutPreimage)
-    val modulePreimage = listOf(
-        "kind=wgsl-module",
-        "role=$role",
-        "entryPoints=vs_main,fs_main",
-        "wgsl=$wgslHash",
-    ).joinToString("\n")
-    val moduleHash = stableSha256(modulePreimage)
-    val pipelineLayoutPreimage = listOf(
-        "kind=pipeline-layout",
-        "role=$role",
-        "version=1",
-        "bindGroupLayouts=$bindGroupLayoutHash",
-    ).joinToString("\n")
-    val pipelineLayoutHash = stableSha256(pipelineLayoutPreimage)
-    val renderPreimage = GPUPipelineKeyPreimage.Render(
-        renderStepIdentity = "gpu-backend.$role",
-        renderStepVersion = "1",
-        primitiveTopology = "triangle-list",
-        materialKeyHash = stableSha256("material:$role:v1"),
-        materialProgramId = "wgsl.$role",
-        materialDictionaryVersion = "runtime-helper-v1",
-        materialLayoutHash = bindGroupLayoutHash,
-        snippetIdentityHash = stableSha256("snippet:$role:v1"),
-        moduleHash = moduleHash,
-        vertexLayoutHash = if (vertexStage) stableSha256("vertex-layout:float32x2:stencil") else stableSha256("vertex-layout:fullscreen-triangle:vertex-index-only"),
-        targetFormatClass = targetFormatClass,
-        blendStateHash = stableSha256("blend:$blendLabel-premul:v1"),
-        sampleStateHash = stableSha256("sample-state:count=1:mask=all"),
-        bindGroupLayoutHash = bindGroupLayoutHash,
-        capabilityClass = "webgpu-wgsl-$role",
-        capabilityFacts = listOf("adapter-backed-helper", "targetFormat=$targetFormatClass"),
-        rendererSalt = "kgpu-m28-001",
-    )
-    val canonicalRenderPreimage = GPUPipelineKeys.canonicalRenderPreimage(renderPreimage)
-    val renderPipelineKey = GPUPipelineKeys.renderPipelineKey(renderPreimage).value
-
-    return FullscreenExecutionCacheKeys(
-        moduleKeyHash = "module:$moduleHash",
-        moduleSubjectHash = "wgsl:$wgslHash",
-        modulePreimage = modulePreimage,
-        bindGroupLayoutKeyHash = "bind-group-layout:$bindGroupLayoutHash",
-        bindGroupLayoutSubjectHash = "layout-shape:$bindGroupLayoutHash",
-        bindGroupLayoutPreimage = bindGroupLayoutPreimage,
-        pipelineLayoutKeyHash = "pipeline-layout:$pipelineLayoutHash",
-        pipelineLayoutSubjectHash = "bind-groups:$bindGroupLayoutHash",
-        pipelineLayoutPreimage = pipelineLayoutPreimage,
-        renderPipelineKeyHash = renderPipelineKey,
-        renderPipelineSubjectHash = stableSha256(canonicalRenderPreimage),
-        renderPipelinePreimage = canonicalRenderPreimage,
-    )
-}
-
-private fun String.dumpPreimage(): String =
-    lineSequence()
-        .map { line -> line.trim() }
-        .filter { line -> line.isNotEmpty() }
-        .joinToString(";")
-
-private fun <T : Any> GPUExecutionCacheDecision<T>.readyHandle(): T =
-    when (this) {
-        is GPUExecutionCacheDecision.Ready -> handle
-        is GPUExecutionCacheDecision.Refused ->
-            error("WGPU execution cache refused materialization with $diagnosticCode")
-        is GPUExecutionCacheDecision.Evicted ->
-            error("WGPU execution cache entry was evicted before materialization")
-    }
-
-private fun GPUDevice.createRenderPipelineWithValidationScope(
-    descriptor: RenderPipelineDescriptor,
-): GPURenderPipeline {
-    pushErrorScope(GPUErrorFilter.Validation)
-    val pipeline = createRenderPipeline(descriptor)
-    val validationError = runBlocking { popErrorScope().getOrThrow() }
-    if (validationError != null) {
-        pipeline.close()
-        error("WGPU render pipeline validation failed: ${validationError.message}")
-    }
-    return pipeline
-}
-
-private fun stableSha256(input: String): String {
-    val digest = MessageDigest.getInstance("SHA-256").digest(input.toByteArray(Charsets.UTF_8))
-    return "sha256:" + digest.joinToString(separator = "") { byte -> "%02x".format(byte) }
-}
 
 private data class NativeWindowRuntime(
     val instance: WGPU,
@@ -3707,43 +2207,6 @@ private fun Map<String, Long>.firstNonZeroPointer(vararg keys: String): Long? =
 private fun GPUClearColor.toWgpuColor(): Color =
     Color(r = red, g = green, b = blue, a = alpha)
 
-private fun toWgpuFactor(f: GPUBlendFactor): io.ygdrasil.webgpu.GPUBlendFactor = when (f) {
-    GPUBlendFactor.Zero -> io.ygdrasil.webgpu.GPUBlendFactor.Zero
-    GPUBlendFactor.One -> io.ygdrasil.webgpu.GPUBlendFactor.One
-    GPUBlendFactor.Src -> io.ygdrasil.webgpu.GPUBlendFactor.Src
-    GPUBlendFactor.OneMinusSrc -> io.ygdrasil.webgpu.GPUBlendFactor.OneMinusSrc
-    GPUBlendFactor.Dst -> io.ygdrasil.webgpu.GPUBlendFactor.Dst
-    GPUBlendFactor.OneMinusDst -> io.ygdrasil.webgpu.GPUBlendFactor.OneMinusDst
-    GPUBlendFactor.SrcAlpha -> io.ygdrasil.webgpu.GPUBlendFactor.SrcAlpha
-    GPUBlendFactor.OneMinusSrcAlpha -> io.ygdrasil.webgpu.GPUBlendFactor.OneMinusSrcAlpha
-    GPUBlendFactor.DstAlpha -> io.ygdrasil.webgpu.GPUBlendFactor.DstAlpha
-    GPUBlendFactor.OneMinusDstAlpha -> io.ygdrasil.webgpu.GPUBlendFactor.OneMinusDstAlpha
-    GPUBlendFactor.SrcAlphaSaturated -> io.ygdrasil.webgpu.GPUBlendFactor.SrcAlphaSaturated
-    GPUBlendFactor.Constant -> io.ygdrasil.webgpu.GPUBlendFactor.Constant
-    GPUBlendFactor.OneMinusConstant -> io.ygdrasil.webgpu.GPUBlendFactor.OneMinusConstant
-}
-
-private fun blendStateFor(blendMode: GPUBlendMode?): BlendState {
-    val mode = blendMode
-    if (mode == null || mode == GPUBlendMode.SRC_OVER || mode.requiresDestinationRead) {
-        return BlendState(
-            color = BlendComponent(GPUBlendOperation.Add, io.ygdrasil.webgpu.GPUBlendFactor.One, io.ygdrasil.webgpu.GPUBlendFactor.OneMinusSrcAlpha),
-            alpha = BlendComponent(GPUBlendOperation.Add, io.ygdrasil.webgpu.GPUBlendFactor.One, io.ygdrasil.webgpu.GPUBlendFactor.OneMinusSrcAlpha),
-        )
-    }
-    return BlendState(
-        color = BlendComponent(
-            operation = GPUBlendOperation.Add,
-            srcFactor = toWgpuFactor(mode.colorSrcFactor),
-            dstFactor = toWgpuFactor(mode.colorDstFactor),
-        ),
-        alpha = BlendComponent(
-            operation = GPUBlendOperation.Add,
-            srcFactor = toWgpuFactor(mode.alphaSrcFactor),
-            dstFactor = toWgpuFactor(mode.alphaDstFactor),
-        ),
-    )
-}
 
 private fun GPUTextureFormat.bytesPerPixel(): Int =
     when (this) {
@@ -3766,7 +2229,7 @@ private fun String.toWgpuTextureFormat(): GPUTextureFormat =
         else -> error("Unsupported GPU color format $this")
     }
 
-private fun GPUTextureFormat.toBackendColorFormat(): String =
+internal fun GPUTextureFormat.toBackendColorFormat(): String =
     when (this) {
         GPUTextureFormat.RGBA8Unorm -> "rgba8unorm"
         GPUTextureFormat.RGBA8UnormSrgb -> "rgba8unorm-srgb"

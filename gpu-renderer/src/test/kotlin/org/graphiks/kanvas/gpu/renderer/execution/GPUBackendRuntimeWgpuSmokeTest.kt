@@ -114,7 +114,7 @@ class GPUBackendRuntimeWgpuSmokeTest {
     @Test
     fun `backend runtime offscreen encode and read rgba when backend is available`() {
         val runtime = GPUBackendRuntimeFactory.createOrNull()
-        assumeTrue(runtime != null, "WGPU backend unavailable in current environment")
+        assumeTrue(runtime != null, "GPU backend unavailable in current environment")
 
         runtime!!.use { session ->
             session.createOffscreenTarget(
@@ -170,10 +170,11 @@ class GPUBackendRuntimeWgpuSmokeTest {
     }
 
     @Test
-    fun `backend runtime records WGPU execution cache hit miss and create telemetry when backend is available`() {
+    fun `backend runtime records GPU execution cache hit miss and create telemetry when backend is available`() {
         val runtime = GPUBackendRuntimeFactory.createOrNull()
-        assumeTrue(runtime != null, "WGPU backend unavailable in current environment")
+        assumeTrue(runtime != null, "GPU backend unavailable in current environment")
 
+        val wgsl = solidColorFullscreenWgsl() + "\n// execution-cache-repeat-v2"
         runtime!!.use { session ->
             session.createOffscreenTarget(
                 GPUOffscreenTargetRequest(
@@ -187,7 +188,7 @@ class GPUBackendRuntimeWgpuSmokeTest {
                         clearColor = GPUClearColor(red = 0.0, green = 0.0, blue = 0.0, alpha = 1.0),
                     ) {
                         drawFullscreenPass(
-                            wgsl = solidColorFullscreenWgsl(),
+                            wgsl = wgsl,
                             colorFormat = "rgba8unorm",
                             draws = listOf(
                                 GPUBackendRectDraw(
@@ -206,9 +207,11 @@ class GPUBackendRuntimeWgpuSmokeTest {
 
                 listOf("module", "bind-group-layout", "pipeline-layout", "pipeline").forEach { cacheName ->
                     val cache = telemetry.getValue(cacheName)
-                    assertEquals(1L, cache.misses, "$cacheName should miss once on the first encode")
-                    assertEquals(1L, cache.creations, "$cacheName should create once on the first encode")
-                    assertEquals(1L, cache.hits, "$cacheName should hit once on the second encode")
+                    assertEquals(2L, cache.hits + cache.misses, "$cacheName should record both repeated resolves")
+                    assertTrue(cache.hits >= 1L, "$cacheName should hit on a repeated resolve")
+                    assertTrue(cache.misses <= 1L, "$cacheName should miss at most once")
+                    assertEquals(cache.misses, cache.creations, "$cacheName should create only after a miss")
+                    assertEquals(0L, cache.failures, "$cacheName should not fail during repeated resolves")
                 }
 
                 val dump = session.executionCacheDumpLines.joinToString("\n")
@@ -235,9 +238,40 @@ class GPUBackendRuntimeWgpuSmokeTest {
     }
 
     @Test
+    fun `logical session close preserves shared GPU execution caches when backend is available`() {
+        val runtime = GPUBackendRuntimeFactory.createOrNull()
+        assumeTrue(runtime != null, "GPU backend unavailable in current environment")
+
+        val wgsl = solidColorFullscreenWgsl() + "\n// logical-session-cache-persistence-v2"
+        runtime!!.use { session ->
+            session.encodeSolidColorPass(wgsl)
+            val telemetry = session.executionCacheTelemetry.associateBy(GPUCacheTelemetry::cacheName)
+            listOf("module", "bind-group-layout", "pipeline-layout", "pipeline").forEach { cacheName ->
+                val cache = telemetry.getValue(cacheName)
+                assertEquals(1L, cache.hits + cache.misses, "$cacheName should resolve once in the first logical session")
+                assertEquals(cache.misses, cache.creations, "$cacheName should create only after a miss")
+                assertEquals(0L, cache.failures, "$cacheName should not fail in the first logical session")
+            }
+        }
+
+        val secondRuntime = GPUBackendRuntimeFactory.createOrNull()
+        assumeTrue(secondRuntime != null, "GPU backend unavailable in current environment")
+        secondRuntime!!.use { session ->
+            session.encodeSolidColorPass(wgsl)
+            val telemetry = session.executionCacheTelemetry.associateBy(GPUCacheTelemetry::cacheName)
+            listOf("module", "bind-group-layout", "pipeline-layout", "pipeline").forEach { cacheName ->
+                val cache = telemetry.getValue(cacheName)
+                assertEquals(1L, cache.hits, "$cacheName should hit after logical close")
+                assertEquals(0L, cache.misses, "$cacheName should not miss after logical close")
+                assertEquals(0L, cache.creations, "$cacheName should not recreate after logical close")
+            }
+        }
+    }
+
+    @Test
     fun `backend runtime uploads uniform payload bytes and binds them when backend is available`() {
         val runtime = GPUBackendRuntimeFactory.createOrNull()
-        assumeTrue(runtime != null, "WGPU backend unavailable in current environment")
+        assumeTrue(runtime != null, "GPU backend unavailable in current environment")
 
         val uniformBlock = uniformPayloadBlock()
         val materialization = ValidatingPayloadResourceProvider().materializePayloadBindings(
@@ -297,9 +331,9 @@ class GPUBackendRuntimeWgpuSmokeTest {
     }
 
     @Test
-    fun `backend runtime records WGPU execution cache failure telemetry when backend is available`() {
+    fun `backend runtime records GPU execution cache failure telemetry when backend is available`() {
         val runtime = GPUBackendRuntimeFactory.createOrNull()
-        assumeTrue(runtime != null, "WGPU backend unavailable in current environment")
+        assumeTrue(runtime != null, "GPU backend unavailable in current environment")
 
         runtime!!.use { session ->
             session.createOffscreenTarget(
@@ -408,6 +442,34 @@ class GPUBackendRuntimeWgpuSmokeTest {
                 return uniforms.color;
             }
         """.trimIndent()
+
+    private fun GPUBackendSession.encodeSolidColorPass(wgsl: String) {
+        createOffscreenTarget(
+            GPUOffscreenTargetRequest(
+                width = 4,
+                height = 4,
+                colorFormat = "rgba8unorm",
+            ),
+        ).use { target ->
+            target.encode(
+                clearColor = GPUClearColor(red = 0.0, green = 0.0, blue = 0.0, alpha = 1.0),
+            ) {
+                drawFullscreenPass(
+                    wgsl = wgsl,
+                    colorFormat = "rgba8unorm",
+                    draws = listOf(
+                        GPUBackendRectDraw(
+                            rgbaPremul = floatArrayOf(1f, 0f, 0f, 1f),
+                            scissorX = 0,
+                            scissorY = 0,
+                            scissorWidth = 4,
+                            scissorHeight = 4,
+                        ),
+                    ),
+                )
+            }
+        }
+    }
 
     private fun uniformPayloadBlock(): GPUUniformPayloadBlock {
         val buffer = ByteBuffer.allocate(64).order(ByteOrder.LITTLE_ENDIAN)

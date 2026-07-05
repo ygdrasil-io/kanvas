@@ -1,7 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.passes
 
 /**
- * Blend mode mapping to WebGPU fixed-function blend factors.
+ * Blend mode mapping to GPU fixed-function blend factors.
  *
  * Porter-Duff (fixed-function) modes use [colorSrcFactor]/[colorDstFactor]
  * directly. Shader-based modes ([requiresDestinationRead] = true) need dual
@@ -9,14 +9,14 @@ package org.graphiks.kanvas.gpu.renderer.passes
  * the shader blending pipeline is implemented.
  */
 enum class GPUBlendMode(
-    val wgpuLabel: String,
+    val gpuLabel: String,
     val colorSrcFactor: GPUBlendFactor,
     val colorDstFactor: GPUBlendFactor,
     val alphaSrcFactor: GPUBlendFactor,
     val alphaDstFactor: GPUBlendFactor,
     val requiresDestinationRead: Boolean = false,
 ) {
-    // Porter-Duff modes — exact WebGPU fixed-function blend
+    // Porter-Duff modes — exact GPU fixed-function blend
     SRC_OVER("src_over", GPUBlendFactor.One, GPUBlendFactor.OneMinusSrcAlpha, GPUBlendFactor.One, GPUBlendFactor.OneMinusSrcAlpha),
     SRC("src", GPUBlendFactor.One, GPUBlendFactor.Zero, GPUBlendFactor.One, GPUBlendFactor.Zero),
     DST("dst", GPUBlendFactor.Zero, GPUBlendFactor.One, GPUBlendFactor.Zero, GPUBlendFactor.One),
