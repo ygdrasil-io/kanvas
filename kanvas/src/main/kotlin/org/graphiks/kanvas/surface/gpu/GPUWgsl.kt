@@ -62,7 +62,7 @@ internal val COVERAGE_STROKE_WGSL: String = """
     };
 
     @group(0) @binding(0) var<uniform> params: StrokeParams;
-    @group(0) @binding(1) var coverage: texture_storage_2d<r32float, write>;
+    @group(0) @binding(1) var coverage: texture_storage_2d<rgba8unorm, write>;
 
     @compute @workgroup_size(8, 8)
     fn main(@builtin(global_invocation_id) gid: vec3u) {
@@ -82,6 +82,8 @@ internal val COVERAGE_STROKE_WGSL: String = """
 internal val COVERAGE_FILL_WGSL: String = """
     struct FillUniforms {
         color: vec4f,
+        origin: vec2f,   // screen-space origin of coverage rect
+        size: vec2f,     // coverage texture dimensions
     };
 
     @group(0) @binding(0) var<uniform> fill: FillUniforms;
@@ -90,7 +92,6 @@ internal val COVERAGE_FILL_WGSL: String = """
 
     struct VertexOut {
         @builtin(position) pos: vec4f,
-        @location(0) uv: vec2f,
     };
 
     @vertex
@@ -99,13 +100,13 @@ internal val COVERAGE_FILL_WGSL: String = """
         let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
         let y = f32(idx & 2u) * 2.0 - 1.0;
         out.pos = vec4f(x, y, 0.0, 1.0);
-        out.uv = vec2f(x * 0.5 + 0.5, 0.5 - y * 0.5);
         return out;
     }
 
     @fragment
-    fn fs_main(in: VertexOut) -> @location(0) vec4f {
-        let coverage = textureSample(covTex, covSampler, in.uv).r;
+    fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
+        let coverageUV = (pos.xy - fill.origin) / fill.size;
+        let coverage = textureSample(covTex, covSampler, coverageUV).r;
         return vec4f(fill.color.rgb * coverage, coverage);
     }
 """.trimIndent()

@@ -160,15 +160,17 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
                 val wgY = (covH + 7) / 8
                 target.recordCoverageStroke(COVERAGE_STROKE_WGSL, compUniforms.array(), covLabel, wgX, wgY)
 
-                // Pack color uniforms (premultiplied linear)
-                val colorBb = java.nio.ByteBuffer.allocate(16).order(java.nio.ByteOrder.nativeOrder())
-                colorBb.putFloat(srgbToLinear(material.r) * material.a)
-                colorBb.putFloat(srgbToLinear(material.g) * material.a)
-                colorBb.putFloat(srgbToLinear(material.b) * material.a)
-                colorBb.putFloat(material.a)
+                // Pack fill uniforms: color(16) + origin(8) + size(8) = 32 bytes
+                val fillBb = java.nio.ByteBuffer.allocate(32).order(java.nio.ByteOrder.nativeOrder())
+                fillBb.putFloat(srgbToLinear(material.r) * material.a)
+                fillBb.putFloat(srgbToLinear(material.g) * material.a)
+                fillBb.putFloat(srgbToLinear(material.b) * material.a)
+                fillBb.putFloat(material.a)
+                fillBb.putFloat(minX.toFloat()); fillBb.putFloat(minY.toFloat())
+                fillBb.putFloat(covW.toFloat()); fillBb.putFloat(covH.toFloat())
 
                 // Render coverage fill (fullscreen quad sampling coverage texture)
-                recordCoverageFill(COVERAGE_FILL_WGSL, colorBb.array(), covLabel)
+                recordCoverageFill(COVERAGE_FILL_WGSL, fillBb.array(), covLabel)
             } else {
                 val colorBb = java.nio.ByteBuffer.allocate(16).order(java.nio.ByteOrder.nativeOrder())
                 colorBb.putFloat(srgbToLinear(material.r) * material.a)
