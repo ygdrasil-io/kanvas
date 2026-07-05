@@ -1,6 +1,5 @@
 package org.graphiks.kanvas.skia.gm.image
 
-import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.skia.GmCanvas
@@ -14,15 +13,8 @@ import org.skia.foundation.SkColorType
 import org.skia.foundation.SkCompressedDataUtils
 import org.skia.foundation.SkData
 import org.skia.foundation.SkImage
-import org.skia.foundation.SkImageInfo
 import org.skia.foundation.SkImages
-import org.skia.foundation.SkPaint
-import org.skia.foundation.SkPath
-import org.skia.foundation.SkPathBuilder
-import org.skia.foundation.SkPathDirection
-import org.skia.foundation.SkPathFillType
 import org.skia.foundation.SkTextureCompressionType
-import org.skia.core.SkCanvas
 import org.graphiks.math.SK_ColorBLACK
 import org.graphiks.math.SK_ColorBLUE
 import org.graphiks.math.SK_ColorCYAN
@@ -32,16 +24,13 @@ import org.graphiks.math.SK_ColorRED
 import org.graphiks.math.SK_ColorTRANSPARENT
 import org.graphiks.math.SK_ColorWHITE
 import org.graphiks.math.SK_ColorYELLOW
-import org.graphiks.math.SK_ScalarPI
-import org.skia.foundation.SkAlphaType
 import org.graphiks.math.SkColor
 import org.graphiks.math.SkISize
-import org.graphiks.math.SkPoint
-import org.graphiks.math.SkScalarCos
-import org.graphiks.math.SkScalarSin
-import org.graphiks.math.SkVector
+import kotlin.math.PI
+import kotlin.math.atan2
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.sqrt
 
 class CompressedTexturesGm : SkiaGm {
     override val name = "compressed_textures"
@@ -153,50 +142,33 @@ class CompressedTexturesGm : SkiaGm {
         }
 
         private fun renderLevel(dimensions: SkISize, color: SkColor, colorType: SkColorType, opaque: Boolean): SkBitmap {
-            val path = makeGear(dimensions, numTeeth = 9)
-            val ii = SkImageInfo.Make(
-                dimensions.width, dimensions.height, colorType,
-                if (opaque) SkAlphaType.kOpaque else SkAlphaType.kPremul,
+            val bm = SkBitmap(
+                width = dimensions.width,
+                height = dimensions.height,
+                colorType = colorType,
             )
-            val bm = SkBitmap.allocPixels(ii)
             bm.eraseColor(if (opaque) SK_ColorBLACK else SK_ColorTRANSPARENT)
-            val c = SkCanvas(bm)
-            val paint = SkPaint().apply {
-                this.color = color or 0xFF000000.toInt()
-                this.isAntiAlias = false
+            val fillColor = color or 0xFF000000.toInt()
+            for (y in 0 until dimensions.height) {
+                for (x in 0 until dimensions.width) {
+                    if (insideGear(x + 0.5f, y + 0.5f, dimensions, numTeeth = 9)) {
+                        bm.setPixel(x, y, fillColor)
+                    }
+                }
             }
-            c.translate(dimensions.width / 2.0f, dimensions.height / 2.0f)
-            c.drawPath(path, paint)
             return bm
         }
 
-        private fun makeGear(dimensions: SkISize, numTeeth: Int): SkPath {
-            val outerRad = SkVector(dimensions.width / 2.0f, dimensions.height / 2.0f)
-            val innerRad = SkVector(dimensions.width / 2.5f, dimensions.height / 2.5f)
-            val kAnglePerTooth: Float = 2.0f * SK_ScalarPI / (3 * numTeeth)
-            var angle = 0.0f
-            val tmp = SkPathBuilder(SkPathFillType.kWinding)
-            tmp.moveTo(genPt(angle, outerRad).fX, genPt(angle, outerRad).fY)
-            for (i in 0 until numTeeth) {
-                val p1 = genPt(angle + kAnglePerTooth, outerRad)
-                val p2 = genPt(angle + 1.5f * kAnglePerTooth, innerRad)
-                val p3 = genPt(angle + 2.5f * kAnglePerTooth, innerRad)
-                val p4 = genPt(angle + 3.0f * kAnglePerTooth, outerRad)
-                tmp.lineTo(p1.fX, p1.fY); tmp.lineTo(p2.fX, p2.fY)
-                tmp.lineTo(p3.fX, p3.fY); tmp.lineTo(p4.fX, p4.fY)
-                angle += 3 * kAnglePerTooth
-            }
-            tmp.close()
-            val fInnerRad = 0.1f * min(dimensions.width, dimensions.height)
-            if (fInnerRad > 0.5f) {
-                tmp.addCircle(0.0f, 0.0f, fInnerRad, SkPathDirection.kCCW)
-            }
-            return tmp.detach()
-        }
-
-        private fun genPt(angle: Float, scale: SkVector): SkPoint {
-            val s = SkScalarSin(angle); val c = SkScalarCos(angle)
-            return SkPoint(scale.fX * c, scale.fY * s)
+        private fun insideGear(x: Float, y: Float, dimensions: SkISize, numTeeth: Int): Boolean {
+            val cx = dimensions.width / 2f
+            val cy = dimensions.height / 2f
+            val nx = (x - cx) / cx
+            val ny = (y - cy) / cy
+            val radius = sqrt(nx * nx + ny * ny)
+            if (radius < 0.16f) return false
+            val segment = (((atan2(ny, nx) + PI) / (2.0 * PI)) * numTeeth * 2).toInt()
+            val outer = if (segment % 2 == 0) 0.95f else 0.76f
+            return radius <= outer
         }
 
         private fun computeLevelCount(dim: SkISize): Int {

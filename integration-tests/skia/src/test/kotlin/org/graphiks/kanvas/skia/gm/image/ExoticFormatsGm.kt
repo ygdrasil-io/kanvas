@@ -1,6 +1,5 @@
 package org.graphiks.kanvas.skia.gm.image
 
-import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.skia.GmCanvas
@@ -12,14 +11,10 @@ import org.graphiks.kanvas.types.Rect
 import org.skia.foundation.SkCompressedDataUtils
 import org.skia.foundation.SkData
 import org.skia.foundation.SkImage
-import org.skia.foundation.SkImageInfo
 import org.skia.foundation.SkImages
 import org.skia.foundation.SkTextureCompressionType
 import org.skia.foundation.SkColorType
-import org.skia.foundation.SkAlphaType
 import org.skia.foundation.SkBitmap
-import org.skia.foundation.SkPaint
-import org.skia.core.SkCanvas
 import org.graphiks.math.SK_ColorRED
 import org.graphiks.math.SK_ColorBLACK
 import org.graphiks.math.SK_ColorGREEN
@@ -102,18 +97,14 @@ class ExoticFormatsGm : SkiaGm {
         }
 
         private fun renderColorBars(w: Int, h: Int): SkBitmap {
-            val ii = SkImageInfo.Make(w, h, SkColorType.kRGB_565, SkAlphaType.kOpaque)
-            val bm = SkBitmap.allocPixels(ii)
-            val canvas = SkCanvas(bm)
+            val bm = SkBitmap(w, h, colorType = SkColorType.kRGB_565)
             val barWidth = w / 4
             val colors = intArrayOf(SK_ColorRED, SK_ColorGREEN, SK_ColorBLUE, SK_ColorBLACK)
-            for (i in 0 until 4) {
-                val paint = SkPaint()
-                paint.color = colors[i % colors.size]
-                canvas.drawRect(
-                    org.graphiks.math.SkRect.MakeXYWH((i * barWidth).toFloat(), 0f, barWidth.toFloat(), h.toFloat()),
-                    paint,
-                )
+            for (y in 0 until h) {
+                for (x in 0 until w) {
+                    val index = (x / barWidth).coerceIn(0, colors.lastIndex)
+                    bm.setPixel(x, y, colors[index])
+                }
             }
             return bm
         }

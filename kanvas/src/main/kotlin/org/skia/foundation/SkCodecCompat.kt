@@ -476,7 +476,7 @@ public class SkPixmap {
 public class SkImage(
     public val width: Int,
     public val height: Int,
-    private val pixels: IntArray = IntArray(width * height),
+    public val pixels: IntArray = IntArray(width * height),
     public val colorType: SkColorType = SkColorType.kRGBA_8888,
 ) {
     public fun peekPixel(x: Int, y: Int): SkColor =
