@@ -17,7 +17,7 @@ import org.graphiks.kanvas.types.Rect
  * a custom SkSL runtime-effect shader that animates a wave-front pattern
  * across the canvas).
  *
- * `:kanvas-skia` does not parse arbitrary SkSL — it dispatches through
+ * Kanvas does not parse arbitrary SkSL — it dispatches through
  * a hand-port-per-shader-hash table. The custom RippleShader SkSL is
  * therefore not registered ; the runtime effect returns
  * an error and the GM cannot draw anything meaningful.

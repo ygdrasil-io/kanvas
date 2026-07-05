@@ -14,7 +14,7 @@ import org.graphiks.kanvas.types.Rect
  *
  * Draws source images (mandrill_128.png, color_wheel.png) in a grid
  * showing unmodified, 565-in-Rec2020, and Gray-8 variants.
- * The kanvas-skia backend stores images as 8888 internally.
+ * Kanvas stores raster images as 8888 internally.
  * @see https://github.com/google/skia/blob/main/gm/makecolorspace.cpp
  */
 class MakeColorTypeAndSpaceGm : SkiaGm {

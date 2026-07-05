@@ -87,7 +87,7 @@ public object ImageGeneratorImages {
      * the generator's reported size and returns a fresh [SkImage]. The
      * upstream "deferred" semantic (the generator is held lazily and
      * decoded only when the image is first drawn) is *not* preserved by
-     * the kanvas-skia raster path — every [SkImage] consumer
+     * the Kanvas raster image path — every [SkImage] consumer
      * ([SkBitmapShader], the raster device) reads from a materialised
      * pixel buffer, so we decode eagerly. The factory name is kept for
      * source-compatibility with upstream call sites.

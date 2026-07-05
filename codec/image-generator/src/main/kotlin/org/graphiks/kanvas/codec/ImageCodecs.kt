@@ -6,8 +6,7 @@ import java.nio.ByteBuffer
 /**
  * Codec-backed factory methods for [SkImage]. Split from
  * [org.skia.foundation.SkImages] so that `foundation` no longer imports
- * from `codec` (cycle break preparing the `:cpu-raster` Gradle module
- * extraction).
+ * from `codec`; the encoded-image factories stay owned by the codec layer.
  *
  * Mirrors the subset of Skia's `SkImages::*` factories that need an
  * [Codec] decoder.

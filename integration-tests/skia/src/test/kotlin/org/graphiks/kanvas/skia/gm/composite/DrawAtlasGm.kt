@@ -50,7 +50,7 @@ class DrawAtlasGm : SkiaGm {
             Matrix33.makeAll(scos, -ssin, r.tx, ssin, scos, r.ty)
         }
         val tex = List(n) { target }
-        val colors = List(n) { Color.fromRGBA(0.5f, 1f, 0f, 0f) } // colors ignored by kanvas-skia
+        val colors = List(n) { Color.fromRGBA(0.5f, 1f, 0f, 0f) } // colors currently ignored by Kanvas drawAtlas
 
         val paint = Paint()
 
