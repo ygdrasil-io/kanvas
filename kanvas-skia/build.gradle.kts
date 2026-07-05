@@ -19,12 +19,6 @@ dependencies {
     implementation(project(":font:text"))
     implementation("io.ygdrasil:wgpu4k-toolkit:0.2.0-SNAPSHOT")
 
-    // :kanvas-skia/src/main has NO dependency on :cpu-raster (architecture
-    // goal: core/abstractions module). But :kanvas-skia/src/test references
-    // classes that live in :cpu-raster (e.g. ToolUtils, GMs used by
-    // diagnostic tests). testImplementation only affects the test classpath ;
-    // the main JAR stays raster-free.
-    testImplementation(project(":cpu-raster"))
     testImplementation(project(":codec:core"))
     testImplementation(project(":codec:png"))
     testImplementation(project(":codec:image-generator"))
