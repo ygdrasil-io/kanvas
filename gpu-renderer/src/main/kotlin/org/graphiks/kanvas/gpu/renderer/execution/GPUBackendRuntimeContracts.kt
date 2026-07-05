@@ -107,6 +107,16 @@ interface GPUBackendOffscreenTarget : AutoCloseable {
 
     /** Resolves a multisampled offscreen texture into a 1x companion texture via a hardware MSAA resolve pass. */
     fun resolveOffscreenTexture(msaaLabel: String, resolvedLabel: String)
+
+    fun createCoverageTexture(width: Int, height: Int): String
+
+    fun recordCoverageStroke(
+        wgsl: String,
+        uniforms: ByteArray,
+        coverageTextureLabel: String,
+        workgroupCountX: Int,
+        workgroupCountY: Int,
+    )
 }
 
 /** Represents a native surface that can be resized and presented to screen. */
@@ -337,6 +347,12 @@ interface GPUBackendRenderRecorder {
         indexData: IntArray,
         draws: List<GPUBackendRawUniformDraw>,
         blendMode: GPUBlendMode? = null,
+    )
+
+    fun recordCoverageFill(
+        wgsl: String,
+        colorUniforms: ByteArray,
+        coverageTextureLabel: String,
     )
 }
 
