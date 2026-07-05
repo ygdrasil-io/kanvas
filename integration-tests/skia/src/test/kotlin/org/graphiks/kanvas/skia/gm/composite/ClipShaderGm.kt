@@ -22,7 +22,7 @@ import org.graphiks.kanvas.types.Rect
 class ClipShaderGm : SkiaGm {
     override val name = "clipshadermatrix"
     override val renderFamily = RenderFamily.COMPOSITE
-    override val renderCost = RenderCost.FAST
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 145
     override val height = 128

@@ -29,7 +29,7 @@ private val typeface = Typefaces.fromResource("fonts/LiberationSans-Regular.ttf"
 class ClipShaderPerspGm : SkiaGm {
     override val name = "clip_shader_persp"
     override val renderFamily = RenderFamily.COMPOSITE
-    override val renderCost = RenderCost.FAST
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 1370
     override val height = 1030
