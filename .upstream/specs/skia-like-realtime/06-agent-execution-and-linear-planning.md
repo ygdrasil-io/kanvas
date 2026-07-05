@@ -8,7 +8,7 @@ Spec pack: `.upstream/specs/skia-like-realtime/README.md`
 
 This spec defines how Kanvas agents should turn the Skia-like real-time target
 into Linear tickets, implementation branches, review evidence, and PM-visible
-milestone outcomes. It prevents future work from drifting back into archived
+milestone outcomes. It prevents future work from drifting back into historical
 MEP checklists or from claiming support without generated evidence.
 
 ## Planning Rule
@@ -21,9 +21,9 @@ Every M60-M70 ticket must cite:
 - the support claim being added, preserved, or explicitly refused;
 - the expected PM-visible evidence.
 
-Archived MEP files under `archives/target-closeout-2026-05-31/` may be cited
-as historical context only. They must not define active backlog, acceptance
-criteria, or progress percentages.
+Removed MEP archive files may be recovered from Git history for historical
+context only. They must not define active backlog, acceptance criteria, or
+progress percentages.
 
 ## Ticket Shape
 

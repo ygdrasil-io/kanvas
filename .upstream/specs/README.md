@@ -4,7 +4,7 @@ Status: Draft
 Target: `.upstream/target/high-performance-wgsl-pipeline-target.md`
 
 This directory contains active implementation specs for the Kanvas WGSL/WebGPU
-pipeline target. Archived root plans remain historical evidence only and must
+pipeline target. Removed root plan snapshots live in Git history only and must
 not be treated as active backlog.
 
 ## Spec Packs
@@ -31,12 +31,8 @@ that area.
 
 ## Historical Target Archive
 
-| Archive | Historical scope |
-|---|---|
-| `../../archives/target-closeout-2026-05-31/rendering-conformance-performance-target.md` | Completed MEP conformance/performance target, closed at 100% after M59. |
-| `../../archives/target-closeout-2026-05-31/post-mvp-conformance-backlog.md` | Closed M41-M45 generated conformance, adapter-backed capture, benchmark, Path AA, and image-filter DAG backlog seed. |
-| `../../archives/target-closeout-2026-05-31/post-mvp-pipeline-backlog.md` | Closed M36-M40 static dashboard and post-MVP pipeline evidence backlog. |
-| `../../archives/target-closeout-2026-05-31/task-prompt-m0-m11.md` | Historical generic executor prompt for the old milestone range. |
+The former MEP target/backlog archive was removed from the working tree. Recover
+it from Git history only if needed as historical evidence.
 
 ## MVP Tail Specs
 

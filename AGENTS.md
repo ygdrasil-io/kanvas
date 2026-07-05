@@ -1,7 +1,7 @@
 @/Users/chaos/.codex/RTK.md
 
-Archived migration plans and root upstream snapshots are historical evidence
-only. Do not use archived checkboxes or phase labels as active backlog.
+Removed migration plans and root upstream snapshots live in Git history only.
+Do not use historical checkboxes or phase labels as active backlog.
 
 Current upstream/rebaseline evidence lives under `reports/upstream-rebaseline/`
 and `.upstream/source/map/`.
@@ -16,9 +16,9 @@ For the active Skia-like real-time renderer target, read
 feature expansion, Skia GM promotion, real-time runtime, performance tiering,
 PM demos, or release-candidate work.
 
-The completed MEP conformance/performance target and old post-MVP backlogs live
-under `archives/target-closeout-2026-05-31/`. Treat them as historical
-evidence only, not active backlog or acceptance criteria.
+The completed MEP conformance/performance target and old post-MVP backlogs were
+removed from the working tree. Treat any recovered Git-history copy as
+historical evidence only, not active backlog or acceptance criteria.
 
 For pre-Geometry WGSL paint-pipeline implementation specs, read
 `.upstream/specs/wgsl-pipeline/README.md` before planning PipelineIR, WGSL
@@ -66,4 +66,4 @@ Hard architecture decisions:
   evidence or explicit refusal, diff/stat artifacts, route diagnostics, and
   stable fallback policy.
 - Treat font/codec gaps as dependency-gated until the real deliveries land;
-  do not add short-lived substitutes just to clear archived backlog rows.
+  do not add short-lived substitutes just to clear historical backlog rows.

@@ -3,7 +3,8 @@
 Status: Draft
 Target: `.upstream/target/skia-like-realtime-renderer-target.md`
 Parent target: `.upstream/target/high-performance-wgsl-pipeline-target.md`
-Historical MEP target: `archives/target-closeout-2026-05-31/rendering-conformance-performance-target.md`
+Historical MEP target: removed from the working tree; recover from Git history
+only if needed.
 
 This spec pack owns the human-facing front experience for Kanvas conformance
 and PM evidence. It covers dashboards, evidence browsing, filters, visual
@@ -24,7 +25,7 @@ The front consumes rendering evidence. It does not define rendering truth.
 - Active target and readiness:
   `.upstream/target/skia-like-realtime-renderer-target.md`
 - Historical MEP target:
-  `archives/target-closeout-2026-05-31/rendering-conformance-performance-target.md`
+  removed from the working tree; recover from Git history only if needed.
 - Dashboard source committed in the repository:
   `reports/wgsl-pipeline/scenes/index.html`
 - Current scene registry:
