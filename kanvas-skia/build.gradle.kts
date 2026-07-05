@@ -22,7 +22,6 @@ dependencies {
     testImplementation(project(":codec:png"))
     testImplementation(project(":codec:image-generator"))
     testImplementation(project(":codec:webp"))
-    testImplementation(project(":skia-integration-tests"))
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
     testImplementation("org.junit.jupiter:junit-jupiter-params:5.10.2")
     // G0 (MIGRATION_PLAN_GPU_WEBGPU.md) — wgpu4k's mapAsync /
@@ -46,8 +45,6 @@ dependencies {
 
 sourceSets {
     test {
-        // Skia GM and image fixtures are owned by :skia-integration-tests.
-        resources.srcDir("../skia-integration-tests/src/test/resources")
         // Encoder tests reuse the small redistributable real-image corpus
         // from the codec validation module to prove encode paths against
         // decoded real fixtures rather than synthetic-only bitmaps.
