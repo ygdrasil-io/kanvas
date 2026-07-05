@@ -13,9 +13,9 @@ This avoids treating Linear summaries as the only technical record.
 | Module | Current ownership |
 |---|---|
 | `:render-pipeline` | `KanvasPipelineIR`, value contracts, fallback plans, CPU scalar pilot, Vector API gate, Geometry/Coverage adapter code. |
-| `:gpu-raster` | WebGPU device, handwritten WGSL resources, generated WGSL pilots, parser validation report, pipeline key diagnostics, cache telemetry, `BlendPlan`. |
-| `:cpu-raster` | Existing CPU shader families and runtime-effect registry surface. |
-| `:kanvas-skia` | CPU Skia-like behavior oracle and device/canvas surface used by tests. |
+| `:gpu-renderer` | WebGPU device, handwritten WGSL resources, generated WGSL pilots, parser validation report, pipeline key diagnostics, cache telemetry, `BlendPlan`. |
+| `:kanvas` CPU/reference route | Existing CPU shader families and runtime-effect registry surface. |
+| `:kanvas` compatibility facade | CPU Skia-like behavior oracle and device/canvas surface used by tests. |
 
 ## Current M0-M11 Evidence
 
@@ -39,7 +39,7 @@ This avoids treating Linear summaries as the only technical record.
 - This inventory remains `Draft` because it records evolving state, not a
   frozen implementation contract.
 - Existing handwritten WGSL parser diagnostics remain visible in
-  `:gpu-raster:wgslValidateAll`; generated and registered WGSL modules are the
+  `:gpu-renderer:wgslValidateAll`; generated and registered WGSL modules are the
   accepted M24 conformance scope.
 - Geometry/Coverage convergence is tracked separately under
   `.upstream/specs/geometry-coverage/` and only the conformance-covered handoff

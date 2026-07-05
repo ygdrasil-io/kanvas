@@ -33,10 +33,10 @@ Current owner:
 
 Consumers:
 
-- CPU execution in `:render-pipeline`, moving toward `:cpu-raster` ownership as
+- CPU execution in `:render-pipeline`, moving toward `:kanvas` CPU/reference route ownership as
   the backend broadens.
-- WebGPU generated pipeline selection in `:gpu-raster`.
-- Runtime-effect descriptors in `:cpu-raster` and `:gpu-raster`.
+- WebGPU generated pipeline selection in `:gpu-renderer`.
+- Runtime-effect descriptors in `:kanvas` CPU/reference route and `:gpu-renderer`.
 - Geometry/Coverage adapters from `.upstream/specs/geometry-coverage/`.
 
 ## Pipeline Boundary

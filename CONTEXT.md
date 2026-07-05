@@ -80,7 +80,7 @@ kanvas/
 │   ├── src/                # Implementation C++
 │   └── ...
 │
-└── docs/                  # Documentation et notes
+└── .upstream/             # Specs, cibles et mapping upstream actifs
 ```
 
 ### Composants Clés à Convertir

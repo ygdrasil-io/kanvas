@@ -21,7 +21,7 @@ WGSL, `WgslValidationReportTest`, and the `pipelineConformance` gate. The full
 parser/reflection/module-builder contract is not accepted yet because:
 
 - existing handwritten WGSL resources still surface parser diagnostics in
-  `:gpu-raster:wgslValidateAll`;
+  `:gpu-renderer:wgslValidateAll`;
 - broad generated uniform packers are not implemented for every layout shape;
 - remote publication policy for parser artifacts remains dependency-gated.
 
@@ -68,7 +68,7 @@ parser before it is treated as executable evidence.
 
 Validation corpus:
 
-- existing resources under `gpu-raster/src/main/resources/shaders/`;
+- existing resources under `gpu-renderer/src/main/resources/shaders/`;
 - generated WGSL modules;
 - reusable helper fragments;
 - registered runtime-effect WGSL implementations;

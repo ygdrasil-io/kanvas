@@ -164,27 +164,27 @@ fun gpuAdapterEvidenceForReport(
     val status = if (!ciLaneAvailable) ADAPTER_BLOCKED else observedStatus
     val blockerText = when (status) {
         ADAPTER_PASS ->
-            "No release blocker from required GitHub Actions `GPU tests (macos)` smoke lane."
+            "No release blocker from the GPU adapter smoke lane."
         ADAPTER_FAIL ->
-            "Release blocker: required GitHub Actions `GPU tests (macos)` smoke lane failed adapter-backed checks."
+            "Release blocker: GPU adapter smoke lane failed adapter-backed checks."
         ADAPTER_SKIPPED ->
-            "Release blocker: required GitHub Actions `GPU tests (macos)` smoke lane reported adapter-dependent skips."
+            "Release blocker: GPU adapter smoke lane reported adapter-dependent skips."
         ADAPTER_TIMEOUT ->
-            "Release blocker: required GitHub Actions `GPU tests (macos)` smoke lane did not produce a completed adapter verdict (timeout/not-run)."
+            "Release blocker: GPU adapter smoke lane did not produce a completed adapter verdict (timeout/not-run)."
         else ->
-            "Release blocker: required GitHub Actions `GPU tests (macos)` smoke lane is unavailable."
+            "Release blocker: GPU adapter smoke lane is unavailable."
     }
     val unblockCondition = when (status) {
         ADAPTER_PASS ->
             "Keep required smoke lane green and keep full GPU inventory classification as a separate signal."
         ADAPTER_FAIL ->
-            "Fix adapter-backed smoke regressions until `GPU tests (macos)` reports adapter-pass."
+            "Fix adapter-backed smoke regressions until the GPU adapter smoke lane reports adapter-pass."
         ADAPTER_SKIPPED ->
             "Ensure adapter-dependent smoke fixtures run without skips and fail closed on skip."
         ADAPTER_TIMEOUT ->
             "Stabilize CI execution so the required smoke lane completes with adapter-backed results and artifacts."
         else ->
-            "Enable a required/scheduled adapter lane (`GPU tests (macos)` or equivalent) that uploads artifacts and fails on adapter skips."
+            "Enable a required or scheduled adapter lane that uploads artifacts and fails on adapter skips."
     }
     return GpuAdapterEvidence(
         status = status,
@@ -538,7 +538,7 @@ tasks.register("pipelineConformance") {
             |- REQUIRED Runtime ColorFilter WGSL report: pipelineRuntimeColorFilterWgslReport
             |- REQUIRED Runtime Effect uniform preview report: pipelineRuntimeEffectUniformPreviewReport
             |- REQUIRED Runtime Effects V2 evidence bundle: pipelineRuntimeEffectsV2EvidenceBundleReport
-            |- GPU adapter residual risk: local adapter-dependent WebGPU tests may report JUnit SKIPPED when no adapter is available; required CI smoke lane (`GPU tests (macos)`) fails closed on adapter skips.
+            |- GPU adapter residual risk: local adapter-dependent WebGPU tests may report JUnit SKIPPED when no adapter is available; the required adapter smoke lane must fail closed on adapter skips.
             """.trimMargin()
         )
     }
@@ -7341,13 +7341,6 @@ tasks.register("pipelinePmBundle") {
         logger.lifecycle("Serve with: $serveCommand")
     }
 }
-
-// Removed injectKan050PmBreadthSupportRefusalPackIntoPmBundle — legacy-device gate deleted
-
-// Legacy-device validateKan* gates removed with device deletion.
-// pipelinePmBundle no longer depends on removed validateKan tasks.
-
-// Removed injectKan056GlyphAtlasRouteHardeningIntoPmBundle — legacy-device gate deleted
 
 tasks.register<Exec>("injectGpuRendererR6FirstRoutePmEvidenceIntoPmBundle") {
     group = "verification"

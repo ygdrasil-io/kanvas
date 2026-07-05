@@ -96,7 +96,7 @@ CPU:
 
 - Prefer correct execution where possible.
 - Emit diagnostics for non-finite, unbounded, or unsafe geometry.
-- May use `:kanvas-skia` compatibility route only when declared.
+- May use a `:kanvas` compatibility route only when declared.
 
 WebGPU:
 

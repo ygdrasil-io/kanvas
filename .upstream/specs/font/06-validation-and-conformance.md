@@ -27,34 +27,31 @@ It does not own generic dashboard UX or non-font rendering gates.
 For OpenType parser and manager changes:
 
 ```bash
-rtk ./gradlew --no-daemon :kanvas-skia:test --tests 'org.skia.foundation.opentype.*'
+rtk ./gradlew --no-daemon :font:test :kanvas:test
 ```
 
 For public font API changes:
 
 ```bash
-rtk ./gradlew --no-daemon :kanvas-skia:test --tests 'org.skia.foundation.SkFont*'
-rtk ./gradlew --no-daemon :kanvas-skia:test --tests 'org.skia.foundation.SkTypeface*'
-rtk ./gradlew --no-daemon :kanvas-skia:test --tests 'org.skia.foundation.SkTextBlob*'
+rtk ./gradlew --no-daemon :font:test :kanvas:test
 ```
 
 For shaping changes:
 
 ```bash
-rtk ./gradlew --no-daemon :kanvas-skia:test --tests 'org.skia.foundation.SkShaper*'
+rtk ./gradlew --no-daemon :font:test :kanvas:test
 ```
 
 For WebGPU text route changes:
 
 ```bash
-rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.TextSmokeWebGpuTest
-rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.TextMaskFilterWebGpuTest
+rtk ./gradlew --no-daemon :gpu-renderer:test :integration-tests:skia:test
 ```
 
 For broader font changes:
 
 ```bash
-rtk ./gradlew --no-daemon :kanvas-skia:test
+rtk ./gradlew --no-daemon :font:test :kanvas:test
 ```
 
 ## GM Classification Policy

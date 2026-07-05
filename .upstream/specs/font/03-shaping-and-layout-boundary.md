@@ -2,10 +2,11 @@
 
 Status: Draft
 Target: `.upstream/target/skia-like-realtime-renderer-target.md`
-Current implementation: `kanvas-skia/src/main/kotlin/org/skia/foundation/SkShaper.kt`
+Current implementation: `font/text/src/main/kotlin/org/graphiks/kanvas/text/shaping/`
 
-Legacy JVM-specific shaper code can exist under `cpu-raster/`, but the target
-portable shaping contract is the `foundation/SkShaper.kt` implementation above.
+The target portable shaping contract lives in the pure Kotlin `:font:text`
+implementation. Compatibility APIs in `:kanvas` must adapt to that contract
+rather than define a second shaping engine.
 
 ## Purpose
 

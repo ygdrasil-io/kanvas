@@ -34,7 +34,7 @@ Reusable prototypes and evidence:
 | `SkShaper.kt` | Existing explicit shaping boundary and diagnostics model, not complete shaping engine. |
 | `SkCpuGlyphCache.kt` | Prototype for A8 glyph inventory, mask dumps, key preimages, and CPU oracle hashes. |
 | `SkWebGpuGlyphAtlas.kt` | Prototype for atlas upload-plan evidence, not final GPU renderer artifact API. |
-| Font fixtures in `kanvas-skia` and `skia-integration-tests` | Candidate fixtures after provenance and target route review. |
+| Font fixtures in `reports/font/fixtures/` and `integration-tests/skia/` | Candidate fixtures after provenance and target route review. |
 
 ## Durable Legacy Gates
 

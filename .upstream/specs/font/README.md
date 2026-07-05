@@ -27,9 +27,9 @@ rendering truth by itself.
 - WGSL pipeline target:
   `.upstream/target/high-performance-wgsl-pipeline-target.md`
 - Current portable OpenType scope:
-  `docs/opentype-font-backend.md`
+  `.upstream/specs/pure-kotlin-text/README.md`
 - Font GM post-AWT classification:
-  `docs/font-gm-post-awt-rebaseline.md`
+  `reports/upstream-rebaseline/`
 - Current upstream rebaseline:
   `reports/upstream-rebaseline/2026-05-25-post-1087.md`
 - Current upstream rebaseline TSV:
@@ -45,13 +45,13 @@ rendering truth by itself.
 - Glyph-mask contract tests:
   `render-pipeline/src/test/kotlin/org/skia/pipeline/GeometryCoverageContractsTest.kt`
 - Portable font entry points:
-  `kanvas-skia/src/main/kotlin/org/skia/foundation/`
+  `font/src/main/kotlin/org/graphiks/kanvas/font/` and `kanvas/src/main/kotlin/org/skia/foundation/`
 - Portable OpenType backend:
-  `kanvas-skia/src/main/kotlin/org/skia/foundation/opentype/`
+  `font/sfnt/src/main/kotlin/org/graphiks/kanvas/font/sfnt/`
 - WebGPU text smoke evidence:
-  `gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/TextSmokeWebGpuTest.kt`
+  `gpu-renderer/src/test/kotlin/` and `integration-tests/skia/src/test/kotlin/`
 - WebGPU text mask-filter evidence:
-  `gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/TextMaskFilterWebGpuTest.kt`
+  `gpu-renderer/src/test/kotlin/` and `integration-tests/skia/src/test/kotlin/`
 
 ## Hard Boundaries
 
@@ -163,17 +163,14 @@ rtk git diff --check
 Font implementation changes must run the owning focused tests, starting with:
 
 ```bash
-rtk ./gradlew --no-daemon :kanvas-skia:test --tests 'org.skia.foundation.opentype.*'
-rtk ./gradlew --no-daemon :kanvas-skia:test --tests 'org.skia.foundation.SkFont*'
-rtk ./gradlew --no-daemon :kanvas-skia:test --tests 'org.skia.foundation.SkShaper*'
+rtk ./gradlew --no-daemon :font:test :kanvas:test
 ```
 
 Text/GPU changes must also run the owning WebGPU tests when an adapter lane is
 available:
 
 ```bash
-rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.TextSmokeWebGpuTest
-rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.TextMaskFilterWebGpuTest
+rtk ./gradlew --no-daemon :gpu-renderer:test :integration-tests:skia:test
 ```
 
 Any promoted font scene must also satisfy the generated evidence rules in

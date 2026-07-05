@@ -17,7 +17,6 @@ not be treated as active backlog.
 | `front/` | Front-facing evidence experience: dashboard UX, filters, artifact browsing, PM reporting workflow, accessibility, and export quality gates. Does not define rendering support. |
 | `skia-like-realtime/` | Active post-MEP target: missing rendering features, Skia-like fidelity, real-time runtime, performance tiering, PM demos, and release-candidate planning. |
 | `gpu-renderer/` | Proposed GPU-first renderer direction: Graphite-inspired inline `GPU` architecture, normalized draw commands, WGSL material keys, pipeline keys, route policy, legacy adapter cleanup, and validation gates. |
-| `release-readiness-mvp.md` | Historical MVP release candidate gate tying M32 image-rect, M33 Path AA, M34 image filters, required CI, inventory classification, and PM evidence together. |
 
 Use the pack README as the entry point before planning or reviewing work in
 that area.
@@ -41,7 +40,6 @@ it from Git history only if needed as historical evidence.
 | M32 | `wgsl-pipeline/08-bitmap-image-rect-sampling.md` | Accepted |
 | M33 | `geometry-coverage/08-path-aa-mvp-boundary.md` | Accepted |
 | M34 | `wgsl-pipeline/09-image-filter-mvp-lane.md` | Accepted |
-| M35 | `release-readiness-mvp.md` | Accepted |
 | M36 | `wgsl-pipeline/10-scene-evidence-dashboard.md` | Draft |
 | M41 | `wgsl-pipeline/11-conformance-dashboard-generation.md` | Draft |
 | M43 | `wgsl-pipeline/12-benchmark-harness-and-performance-gates.md` | Draft |

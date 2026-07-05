@@ -2,7 +2,7 @@
 
 Status: Draft
 Target: `.upstream/target/skia-like-realtime-renderer-target.md`
-Current implementation: `kanvas-skia/src/main/kotlin/org/skia/foundation/opentype/`
+Current implementation: `font/sfnt/src/main/kotlin/org/graphiks/kanvas/font/sfnt/`
 
 ## Purpose
 

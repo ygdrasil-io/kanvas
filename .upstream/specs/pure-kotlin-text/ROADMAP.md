@@ -551,7 +551,7 @@ Tickets de départ:
 
 ## M13 - Migration de la façade Skia-like
 
-Objectif: faire de `kanvas-skia` un consommateur du cœur pure Kotlin, pas un
+Objectif: faire de `:kanvas` compatibility facade un consommateur du cœur pure Kotlin, pas un
 deuxième système font divergent.
 
 Livrables:
@@ -591,7 +591,7 @@ rtk ./gradlew --no-daemon :font:core:test :font:sfnt:test :font:scaler:test :fon
 Commande d'intégration façade:
 
 ```bash
-rtk ./gradlew --no-daemon :kanvas-skia:test --tests 'org.skia.foundation.opentype.*' --tests 'org.skia.foundation.SkFont*' --tests 'org.skia.foundation.SkTypeface*' --tests 'org.skia.foundation.SkTextBlob*' --tests 'org.skia.foundation.SkShaper*'
+rtk ./gradlew --no-daemon :font:test :kanvas:test --tests 'org.skia.foundation.opentype.*' --tests 'org.skia.foundation.SkFont*' --tests 'org.skia.foundation.SkTypeface*' --tests 'org.skia.foundation.SkTextBlob*' --tests 'org.skia.foundation.SkShaper*'
 ```
 
 Commandes GPU/evidence lorsque le milestone revendique une route GPU. Chaque
@@ -599,7 +599,7 @@ route doit garder une commande focused; ne pas utiliser une passe WebGPU globale
 comme preuve d'une route A8/SDF/color/bitmap/SVG non exercée.
 
 ```bash
-rtk ./gradlew --no-daemon :gpu-raster:pipelineConformanceTest :gpu-raster:gpuSmokeTest
+rtk ./gradlew --no-daemon :gpu-renderer:pipelineConformanceTest :gpu-renderer:gpuSmokeTest
 rtk ./gradlew --no-daemon validateKan054WebGpuGlyphAtlasSamplingRoute
 rtk ./gradlew --no-daemon validateKan055TextGlyphAtlasVisualDelta
 rtk ./gradlew --no-daemon validateKan056GlyphAtlasRouteHardening
@@ -688,7 +688,7 @@ sont retirées uniquement lorsque la preuve complète existe.
 
 - Sous-estimer GSUB/GPOS: ce bloc doit rester découpé par lookup type et script.
 - Déclarer trop tôt le support emoji/color: metadata-only n'est pas un support.
-- Laisser `kanvas-skia` diverger du cœur pure Kotlin: chaque nouveau support doit
+- Laisser `:kanvas` compatibility facade diverger du cœur pure Kotlin: chaque nouveau support doit
   avoir un adapter plan.
 - Confondre preuve WebGPU simple Latin avec broad text support.
 - Utiliser des fontes système comme oracle normatif sans capturer les bytes.

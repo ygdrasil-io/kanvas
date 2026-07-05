@@ -68,7 +68,7 @@ A generated row adds this optional top-level block:
 "generation": {
   "mode": "generated",
   "producer": "pipelineSceneExport",
-  "sourceTask": ":gpu-raster:test",
+  "sourceTask": ":gpu-renderer:test",
   "sourceTest": "org.skia.gpu.webgpu.DrawBitmapRectSkbug4734WebGpuTest",
   "generatedAt": "2026-05-28T10:00:00Z",
   "commit": "<git-sha>",
@@ -127,7 +127,7 @@ so the failure is reviewable.
   "generation": {
     "mode": "generated",
     "producer": "pipelineSceneExport",
-    "sourceTask": ":gpu-raster:gpuSmokeTest",
+    "sourceTask": ":gpu-renderer:gpuSmokeTest",
     "sourceTest": "org.skia.gpu.webgpu.DrawBitmapRectSkbug4734WebGpuTest",
     "commit": "<git-sha>",
     "artifactRoot": "artifacts/bitmap-rect-nearest",
@@ -148,14 +148,14 @@ so the failure is reviewable.
     "image": "artifacts/bitmap-rect-nearest/cpu.png",
     "diff": "artifacts/bitmap-rect-nearest/cpu-diff.png",
     "route": { "selectedRoute": "cpu.image-rect.strict-nearest", "fallbackReason": "none" },
-    "stats": { "pixels": 4096, "matchingPixels": 4096, "maxChannelDelta": 0, "threshold": 99.95, "backend": "CPU", "command": ":gpu-raster:gpuSmokeTest" }
+    "stats": { "pixels": 4096, "matchingPixels": 4096, "maxChannelDelta": 0, "threshold": 99.95, "backend": "CPU", "command": ":gpu-renderer:gpuSmokeTest" }
   },
   "gpu": {
     "status": "pass",
     "image": "artifacts/bitmap-rect-nearest/gpu.png",
     "diff": "artifacts/bitmap-rect-nearest/gpu-diff.png",
     "route": { "selectedRoute": "webgpu.image-rect.strict-nearest", "pipelineKey": "imageRect.strictNearest.promotedSmoke", "fallbackReason": "none" },
-    "stats": { "pixels": 4096, "matchingPixels": 4096, "maxChannelDelta": 0, "threshold": 99.95, "backend": "WebGPU", "command": ":gpu-raster:gpuSmokeTest" }
+    "stats": { "pixels": 4096, "matchingPixels": 4096, "maxChannelDelta": 0, "threshold": 99.95, "backend": "WebGPU", "command": ":gpu-renderer:gpuSmokeTest" }
   },
   "diffs": { "cpu": "artifacts/bitmap-rect-nearest/cpu-diff.png", "gpu": "artifacts/bitmap-rect-nearest/gpu-diff.png" },
   "routeDiagnostics": { "cpu": "artifacts/bitmap-rect-nearest/route-cpu.json", "gpu": "artifacts/bitmap-rect-nearest/route-gpu.json" },

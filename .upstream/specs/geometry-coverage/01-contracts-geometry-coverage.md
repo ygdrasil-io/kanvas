@@ -41,8 +41,8 @@ Define backend-neutral contracts:
 - typed diagnostic reason records
 
 Per `adr/0004-contract-owner-package.md`, these contracts live in
-`:render-pipeline` and use dependency-free value records. `kanvas-skia`
-adapters translate public Skia-like types at the boundary.
+the Kanvas geometry/coverage layer and use dependency-free value records.
+`:kanvas` adapters translate public Skia-like types at the boundary.
 
 ## Relationship With `KanvasPipelineIR`
 
@@ -335,8 +335,8 @@ Rules:
 ## Unsupported Semantics
 
 `GeometryPlan.Unsupported` means the draw cannot produce a safe geometry
-contract. It must either choose a declared `:kanvas-skia` compatibility CPU
-route or emit a stable diagnostic.
+contract. It must either choose a declared `:kanvas` compatibility CPU route or
+emit a stable diagnostic.
 
 `CoveragePlan.Unsupported` means geometry was understood but the selected
 backend cannot execute the requested coverage strategy. It must not silently

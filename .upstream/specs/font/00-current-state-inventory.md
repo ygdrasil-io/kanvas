@@ -17,7 +17,8 @@ remain owned elsewhere.
 The portable font API surface lives mainly under:
 
 ```text
-kanvas-skia/src/main/kotlin/org/skia/foundation/
+font/src/main/kotlin/org/graphiks/kanvas/font/
+kanvas/src/main/kotlin/org/skia/foundation/
 ```
 
 Current core types include:
@@ -37,7 +38,7 @@ Current core types include:
 The pure Kotlin OpenType backend lives under:
 
 ```text
-kanvas-skia/src/main/kotlin/org/skia/foundation/opentype/
+font/sfnt/src/main/kotlin/org/graphiks/kanvas/font/sfnt/
 ```
 
 It currently provides:

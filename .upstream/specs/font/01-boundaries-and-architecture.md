@@ -52,13 +52,12 @@ The font layer does not own:
 
 | Module / path | Font responsibility |
 |---|---|
-| `kanvas-skia/src/main/kotlin/org/skia/foundation/` | Public Skia-like font/text API surface. |
-| `kanvas-skia/src/main/kotlin/org/skia/foundation/opentype/` | Internal pure Kotlin OpenType/SFNT backend. |
-| `kanvas-skia/src/main/resources/fonts/` | Bundled deterministic font fixtures. |
-| `skia-integration-tests/` | Upstream GM ports, fixtures, reference comparisons, and disabled/gated font rows. |
-| `render-pipeline/` | Backend-neutral coverage contracts for glyph masks, not font discovery or atlas lifetime. |
-| `cpu-raster/` | Legacy or JVM-specific support, including older shaper paths, that must not define portable target behavior. |
-| `gpu-raster/` | WebGPU text smoke, glyph outline rendering through paths, and future adapter-backed glyph-mask support/refusal. |
+| `kanvas/src/main/kotlin/org/skia/foundation/` | Compatibility API surface kept in `:kanvas`. |
+| `font/src/main/kotlin/org/graphiks/kanvas/font/` | Pure Kotlin font core and public Kanvas font contracts. |
+| `font/sfnt/src/main/kotlin/org/graphiks/kanvas/font/sfnt/` | Internal pure Kotlin OpenType/SFNT backend. |
+| `reports/font/fixtures/fonts/` | Bundled deterministic font fixtures. |
+| `integration-tests/skia/` | Upstream GM ports, fixtures, reference comparisons, and disabled/gated font rows. |
+| `gpu-renderer/` | WebGPU text smoke, glyph outline rendering through paths, and future adapter-backed glyph-mask support/refusal. |
 
 ## Target Data Flow
 

@@ -22,7 +22,7 @@ Hard constraints:
 - Do not port Ganesh or Graphite.
 - Do not introduce SkSL, SkSL IR, or Graphite paint-key machinery.
 - Keep WebGPU as the GPU backend.
-- Keep `:kanvas-skia` CPU coverage as the behavior oracle.
+- Keep `:kanvas` compatibility facade CPU coverage as the behavior oracle.
 - Treat legacy `:kanvas` as historical/porting evidence only.
 
 ## Status Policy
