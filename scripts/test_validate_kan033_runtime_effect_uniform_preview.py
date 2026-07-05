@@ -34,6 +34,9 @@ class RuntimeEffectUniformPreviewTest(unittest.TestCase):
             [effect["stableId"] for effect in evidence["effects"]],
         )
         for effect in evidence["effects"]:
+            self.assertTrue((PROJECT_ROOT / effect["wgslSourcePath"]).is_file())
+            self.assertIn("fragment:", effect["wgslSourceHash"])
+            self.assertTrue(effect["wgslEntryPoint"].endswith("_source"))
             telemetry = effect["telemetry"]
             self.assertFalse(telemetry["uniformValuesInPipelineKey"])
             self.assertTrue(telemetry["pipelineKeyStableAcrossUniformEdits"])

@@ -14,12 +14,8 @@ LAYOUT_REPORT_PATH = "reports/wgsl-pipeline/runtime-effects-layout-v2/runtime-ef
 LAYOUT_REPORT_MD = "reports/wgsl-pipeline/runtime-effects-layout-v2/runtime-effects-layout-v2.md"
 SHADER_EFFECTS_PATH = "reports/wgsl-pipeline/runtime-shader-effects-v2/runtime-shader-effects-v2-promotion.json"
 SHADER_EFFECTS_MD = "reports/wgsl-pipeline/runtime-shader-effects-v2/runtime-shader-effects-v2-promotion.md"
-CHILD_LANE_PATH = "reports/wgsl-pipeline/runtime-child-shader-effect-lane/runtime-child-shader-effect-lane.json"
-CHILD_LANE_MD = "reports/wgsl-pipeline/runtime-child-shader-effect-lane/runtime-child-shader-effect-lane.md"
 COLOR_FILTER_PATH = "reports/wgsl-pipeline/runtime-color-filter-wgsl/runtime-color-filter-wgsl.json"
 COLOR_FILTER_MD = "reports/wgsl-pipeline/runtime-color-filter-wgsl/runtime-color-filter-wgsl.md"
-BLENDER_PATH = "reports/wgsl-pipeline/runtime-blender-boundary/runtime-blender-boundary.json"
-BLENDER_MD = "reports/wgsl-pipeline/runtime-blender-boundary/runtime-blender-boundary.md"
 PREVIEW_PATH = "reports/wgsl-pipeline/runtime-effect-uniform-preview/runtime-effect-uniform-preview.json"
 PREVIEW_MD = "reports/wgsl-pipeline/runtime-effect-uniform-preview/runtime-effect-uniform-preview.md"
 REQUIRED_ROW_ORDER = [
@@ -40,8 +36,6 @@ REQUIRED_NON_CLAIMS = [
 REQUIRED_STABLE_REFUSALS = [
     "runtime-effect.arbitrary-sksl-unsupported",
     "runtime-effect.wgsl-descriptor-missing",
-    "runtime-effect.child-binding-unsupported",
-    "runtime-effect.blender-dst-read-unsupported",
     "runtime-effect.preview-effect-not-registered",
     "runtime-effect.arbitrary-sksl-unsupported",
 ]
@@ -148,12 +142,8 @@ def source_reports() -> dict[str, str]:
         "layoutMarkdown": LAYOUT_REPORT_MD,
         "shaderEffectsJson": SHADER_EFFECTS_PATH,
         "shaderEffectsMarkdown": SHADER_EFFECTS_MD,
-        "childLaneJson": CHILD_LANE_PATH,
-        "childLaneMarkdown": CHILD_LANE_MD,
         "colorFilterJson": COLOR_FILTER_PATH,
         "colorFilterMarkdown": COLOR_FILTER_MD,
-        "blenderJson": BLENDER_PATH,
-        "blenderMarkdown": BLENDER_MD,
         "uniformPreviewJson": PREVIEW_PATH,
         "uniformPreviewMarkdown": PREVIEW_MD,
     }
@@ -223,37 +213,6 @@ def attach_color_filter(row: dict[str, Any], report: dict[str, Any]) -> None:
     }
 
 
-def attach_child_lane(row: dict[str, Any], report: dict[str, Any]) -> None:
-    candidates = require_list(report, "candidates", CHILD_LANE_PATH)
-    require(len(candidates) == 1, "child lane report must contain one candidate")
-    candidate = candidates[0]
-    row["sourceReports"].append("runtimeChildShaderEffectLane")
-    row["artifactGroups"]["cpuOnlyChildLane"] = {
-        "routeJson": candidate["routeJson"],
-        "reportJson": CHILD_LANE_PATH,
-        "reportMarkdown": CHILD_LANE_MD,
-    }
-    row["specializedEvidence"]["stableRefusals"] = stable_refusal_values(report.get("stableRefusals", []))
-    row["specializedEvidence"]["childLane"] = {
-        "status": report.get("status"),
-        "gpuSupportState": candidate.get("gpuSupportState"),
-        "gpuFallbackReason": candidate.get("gpuFallbackReason"),
-        "pipelineKeyPolicy": candidate.get("pipelineKeyPolicy"),
-        "children": candidate.get("children", []),
-    }
-
-
-def attach_blender(row: dict[str, Any], report: dict[str, Any]) -> None:
-    row["sourceReports"].append("runtimeBlenderBoundary")
-    row["artifactGroups"]["runtimeBlenderBoundary"] = report["artifacts"]
-    row["specializedEvidence"]["stableRefusals"] = stable_refusal_values(report.get("stableRefusals", []))
-    row["specializedEvidence"]["blenderBoundary"] = {
-        "status": report.get("status"),
-        "route": report.get("route"),
-        "blendPlan": report.get("blendPlan"),
-    }
-
-
 def attach_preview(row: dict[str, Any], preview: dict[str, Any], states_by_effect: dict[str, list[dict[str, Any]]]) -> None:
     states = states_by_effect.get(row["stableId"], [])
     if not states:
@@ -276,9 +235,7 @@ def build_evidence(root: Path) -> dict[str, Any]:
     support_matrix = load_json(root, SUPPORT_MATRIX_PATH)
     layout_report = load_json(root, LAYOUT_REPORT_PATH)
     shader_report = load_json(root, SHADER_EFFECTS_PATH)
-    child_report = load_json(root, CHILD_LANE_PATH)
     color_report = load_json(root, COLOR_FILTER_PATH)
-    blender_report = load_json(root, BLENDER_PATH)
     preview_report = load_json(root, PREVIEW_PATH)
 
     support_rows = require_list(support_matrix, "rows", SUPPORT_MATRIX_PATH)
@@ -295,10 +252,6 @@ def build_evidence(root: Path) -> dict[str, Any]:
             attach_shader_effect(row, shader_by_id[stable_id])
         if stable_id == "runtime.color_filter_luma_to_alpha":
             attach_color_filter(row, color_report)
-        if stable_id == "runtime.unsharp_rt":
-            attach_child_lane(row, child_report)
-        if stable_id == "runtime.invert_blender":
-            attach_blender(row, blender_report)
         attach_preview(row, preview_report, states_by_effect)
 
     stable_refusals = dedupe(
@@ -308,18 +261,14 @@ def build_evidence(root: Path) -> dict[str, Any]:
             if row.get("fallbackReason") not in (None, "none")
         ]
         + stable_refusal_values(shader_report.get("stableRefusals", []))
-        + stable_refusal_values(child_report.get("stableRefusals", []))
         + stable_refusal_values(color_report.get("stableRefusals", []))
-        + stable_refusal_values(blender_report.get("stableRefusals", []))
         + stable_refusal_values(preview_report.get("stableRefusals", []))
     )
     non_claims = dedupe(
         REQUIRED_NON_CLAIMS
         + list(support_matrix.get("nonClaims", []))
         + list(shader_report.get("nonClaims", []))
-        + list(child_report.get("nonClaims", []))
         + list(color_report.get("nonClaims", []))
-        + list(blender_report.get("nonClaims", []))
         + list(preview_report.get("nonClaims", []))
         + [
             "No new rendering capability is introduced by this bundle.",
@@ -423,7 +372,7 @@ def validate_evidence(root: Path, evidence: dict[str, Any]) -> None:
         for path in artifact_paths(artifacts):
             require((root / path).is_file(), f"{stable_id} missing artifact {path}")
     require(
-        "runtime-effect.child-binding-unsupported" in by_id["runtime.unsharp_rt"]["specializedEvidence"]["stableRefusals"],
+        by_id["runtime.unsharp_rt"]["fallbackReason"] == "runtime-effect.wgsl-descriptor-missing",
         "runtime.unsharp_rt child shader refusal missing",
     )
     preview = by_id["runtime.simple_rt"]["specializedEvidence"]["uniformPreview"]

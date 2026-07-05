@@ -263,7 +263,10 @@
         "uniformUpdateCount": 2,
         "uniformValuesInPipelineKey": false
       },
-      "wgslImplementationId": "wgsl/runtime_simple_rt"
+      "wgslEntryPoint": "simple_rt_source",
+      "wgslImplementationId": "wgsl/runtime_simple_rt",
+      "wgslSourceHash": "fragment:simple_rt:v1",
+      "wgslSourcePath": "gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/wgsl/SimpleRTWgsl.kt"
     },
     {
       "cpuImplementationId": "kotlin/spiral_rt",
@@ -338,7 +341,10 @@
         "uniformUpdateCount": 2,
         "uniformValuesInPipelineKey": false
       },
-      "wgslImplementationId": "wgsl/runtime_spiral_rt"
+      "wgslEntryPoint": "spiral_rt_source",
+      "wgslImplementationId": "wgsl/runtime_spiral_rt",
+      "wgslSourceHash": "fragment:spiral_rt:v1",
+      "wgslSourcePath": "gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/wgsl/SpiralRTWgsl.kt"
     }
   ],
   "nonClaims": [
@@ -352,6 +358,8 @@
   "schemaVersion": "kanvas.runtime-effect-uniform-preview",
   "sourceOfTruth": {
     "layoutReport": "reports/wgsl-pipeline/runtime-effects-layout-v2/runtime-effects-layout-v2.json",
+    "simpleRtWgslSource": "gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/wgsl/SimpleRTWgsl.kt",
+    "spiralRtWgslSource": "gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/wgsl/SpiralRTWgsl.kt",
     "supportMatrix": "reports/wgsl-pipeline/runtime-effects-v2/support-matrix.json"
   },
   "stableRefusals": [

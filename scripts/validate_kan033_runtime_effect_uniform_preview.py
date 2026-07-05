@@ -175,6 +175,9 @@ def preview_definitions(layout_rows: list[Any]) -> list[dict[str, Any]]:
             "cpuImplementationId": "kotlin/simple_rt",
             "wgslImplementationId": "wgsl/runtime_simple_rt",
             "shaderPath": "gpu-raster/src/main/resources/shaders/runtime_simple_rt.wgsl",
+            "wgslSourcePath": "gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/wgsl/SimpleRTWgsl.kt",
+            "wgslSourceHash": "fragment:simple_rt:v1",
+            "wgslEntryPoint": "simple_rt_source",
             "sourceRoute": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-simple/route-gpu.json",
             "sourceStats": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-simple/stats.json",
             "parameter": {
@@ -206,6 +209,9 @@ def preview_definitions(layout_rows: list[Any]) -> list[dict[str, Any]]:
             "cpuImplementationId": "kotlin/spiral_rt",
             "wgslImplementationId": "wgsl/runtime_spiral_rt",
             "shaderPath": "gpu-raster/src/main/resources/shaders/runtime_spiral_rt.wgsl",
+            "wgslSourcePath": "gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/wgsl/SpiralRTWgsl.kt",
+            "wgslSourceHash": "fragment:spiral_rt:v1",
+            "wgslEntryPoint": "spiral_rt_source",
             "sourceRoute": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-spiral/route-gpu.json",
             "sourceStats": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-spiral/stats.json",
             "parameter": {
@@ -310,7 +316,11 @@ def build_effect(
     require(support.get("descriptorStatus") == "descriptor-backed", f"{definition['stableId']} must be descriptor-backed")
     require(support.get("supportState") == "gpu-backed", f"{definition['stableId']} must be gpu-backed")
     require(support.get("fallbackReason") == "none", f"{definition['stableId']} fallback must be none")
-    require((root / definition["shaderPath"]).is_file(), f"missing shader {definition['shaderPath']}")
+    wgsl_source = root / definition["wgslSourcePath"]
+    require(wgsl_source.is_file(), f"missing WGSL source {definition['wgslSourcePath']}")
+    wgsl_text = wgsl_source.read_text(encoding="utf-8")
+    require(definition["wgslSourceHash"] in wgsl_text, f"{definition['stableId']} WGSL source hash missing")
+    require(definition["wgslEntryPoint"] in wgsl_text, f"{definition['stableId']} WGSL entry point missing")
     route = load_json(root, definition["sourceRoute"])
     stats = load_json(root, definition["sourceStats"])
     require(route.get("fallbackReason") == "none", f"{definition['stableId']} route fallback must be none")
@@ -327,6 +337,9 @@ def build_effect(
         "cpuImplementationId": definition["cpuImplementationId"],
         "wgslImplementationId": definition["wgslImplementationId"],
         "shaderPath": definition["shaderPath"],
+        "wgslSourcePath": definition["wgslSourcePath"],
+        "wgslSourceHash": definition["wgslSourceHash"],
+        "wgslEntryPoint": definition["wgslEntryPoint"],
         "sourceRoute": definition["sourceRoute"],
         "sourceStats": definition["sourceStats"],
         "editableParameters": [parameter],
@@ -404,6 +417,8 @@ def build_evidence(root: Path) -> dict[str, Any]:
         "sourceOfTruth": {
             "supportMatrix": SUPPORT_MATRIX_PATH,
             "layoutReport": LAYOUT_REPORT_PATH,
+            "simpleRtWgslSource": "gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/wgsl/SimpleRTWgsl.kt",
+            "spiralRtWgslSource": "gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/wgsl/SpiralRTWgsl.kt",
         },
         "counts": counts,
         "effects": effects,

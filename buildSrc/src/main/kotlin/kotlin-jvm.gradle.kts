@@ -28,8 +28,7 @@ tasks.withType<Test>().configureEach {
     maxHeapSize = findProperty("kanvas.test.maxHeapSize")?.toString() ?: "8g"
 
     // Forward the ratchet-write gate from `gradle.properties` to the test
-    // worker JVMs. The `SimilarityTracker` (in :cpu-raster) reads this
-    // sysprop ; when `true`, scores validate against the existing ratchet
+    // worker JVMs. When `true`, scores validate against the existing ratchet
     // but the on-disk `test-similarity-scores.properties` is not mutated.
     // Used during the STUB/PARTIAL porting sprint so 10+ parallel agent
     // PRs don't conflict on the shared properties file. See the property

@@ -211,9 +211,7 @@ fun renderPipelineConformanceReport(
     runtimeEffectSupportMatrixCounts: String,
     runtimeEffectLayoutV2Counts: String,
     runtimeShaderEffectsV2Counts: String,
-    runtimeChildShaderEffectLaneCounts: String,
     runtimeColorFilterWgslCounts: String,
-    runtimeBlenderBoundaryCounts: String,
     runtimeEffectUniformPreviewCounts: String,
     runtimeEffectsV2EvidenceBundleCounts: String,
 ): String {
@@ -270,8 +268,6 @@ fun renderPipelineConformanceReport(
         |bounded SaveLayer ColorFilter image-filter evidence,
         |bounded registered SimpleRT runtime-effect evidence,
         |selected registered Runtime Shader Effects V2 promotion evidence,
-        |runtime child shader effect CPU-only lane and stable WebGPU refusal evidence,
-        |runtime blender CPU-only boundary and stable WebGPU destination-read refusal evidence,
         |runtime effect uniform preview evidence across registered effects with stable PipelineKey telemetry,
         |Runtime Effects V2 evidence bundle aggregation with support/refusal rows and PM non-claims,
         |KAN-035 HairlinesGM root-cause evidence with stable expected-unsupported classification,
@@ -315,9 +311,7 @@ fun renderPipelineConformanceReport(
         |${row("Image rect lowering", status("org.skia.pipeline.GeometryCoverageContractsTest", "org.skia.core.SkBitmapDescriptorCoverageOracleTest", "org.skia.gpu.webgpu.WebGpuCoveragePlanSelectorTest"), "`ImageRectLowering` captures source rect, destination rect, transform facts, opaque paint-owned sampling payload handoff, and route id; axis-aligned image rects select analytic rect coverage, transformed descriptor tests select path-like coverage without moving sampling/pixels/filtering/colorspace into geometry; CPU oracle covers one axis-aligned image rect and WebGPU selector diagnostics record the adapter-gated image-rect route")}
         |${row("Runtime-effect status", status("org.skia.effects.runtime.SkRuntimeEffectDescriptorRegistryTest", "org.skia.effects.runtime.SkRuntimeEffectDispatchTest", "org.skia.effects.runtime.SkRuntimeEffectMakeTest", "org.skia.gpu.webgpu.RuntimeEffectDescriptorWebGpuTest"), "CPU registry/dispatch/Make tests plus WebGPU descriptor test; support matrix counts $runtimeEffectSupportMatrixCounts; layout V2 counts $runtimeEffectLayoutV2Counts")}
         |${row("Runtime Shader Effects V2 promotion", "passed", "`pipelineRuntimeShaderEffectsV2PromotionReport` validates selected registered shader effects against support matrix V2, layout V2, route JSON, reference/CPU/WebGPU/diff/stat artifacts, and keeps counts $runtimeShaderEffectsV2Counts")}
-        |${row("Runtime child shader lane", "expected-unsupported", "`pipelineRuntimeChildShaderEffectLaneReport` validates `runtime.unsharp_rt` child descriptor representation, CPU oracle evidence, route JSON, resource-axis classification, and stable WebGPU refusal; counts $runtimeChildShaderEffectLaneCounts")}
         |${row("Runtime ColorFilter WGSL", "passed", "`pipelineRuntimeColorFilterWgslReport` validates selected `runtime.color_filter_luma_to_alpha` descriptor/WGSL layout, reference/CPU/WebGPU/diff/stat route artifacts, and stable non-selected ColorFilter reason codes; counts $runtimeColorFilterWgslCounts")}
-        |${row("Runtime Blender boundary", "expected-unsupported", "`pipelineRuntimeBlenderBoundaryReport` validates selected `runtime.invert_blender` descriptor, CPU fixture, route JSON, BlendPlan dump, and stable WebGPU destination-read refusal; counts $runtimeBlenderBoundaryCounts")}
         |${row("Runtime Effect uniform preview", "passed", "`pipelineRuntimeEffectUniformPreviewReport` validates two registered runtime effects, four edited uniform states, stable PipelineKey telemetry, invalid-value refusal policy, and headless/Kadre lane separation; counts $runtimeEffectUniformPreviewCounts")}
         |${row("Runtime Effects V2 evidence bundle", "passed", "`pipelineRuntimeEffectsV2EvidenceBundleReport` aggregates all Runtime Effects V2 support/refusal rows, linked artifacts, stable diagnostics, and PM non-claims; counts $runtimeEffectsV2EvidenceBundleCounts")}
         |${row("KAN-035 HairlinesGM root cause", "expected-unsupported", "`validateKan035HairlinesRootCause` classifies the current HairlinesGM residual as `cap-join-parity`, keeps `skia-gm-hairlines` expected-unsupported, records `expected-unsupported-diagnostic=1` and `unexpected-exception=0`, and makes no renderer, shader, threshold, or edge-budget change.")}
@@ -413,20 +407,11 @@ fun renderPipelineConformanceReport(
         |  validates three selected registered shader effects with descriptor-backed CPU/GPU routes, matched layout reflection, `fallbackReason=none`,
         |  reference/CPU/WebGPU/diff/stat artifacts, local threshold evidence, and explicit non-claims for broad runtime effects or dynamic SkSL;
         |  current counts are $runtimeShaderEffectsV2Counts.
-        |- Runtime child shader effect lane: `reports/wgsl-pipeline/runtime-child-shader-effect-lane/runtime-child-shader-effect-lane.md`
-        |  lists `runtime.unsharp_rt` child `child:kShader@0`, records CPU oracle coverage, emits route JSON with `runtime-effect.child-binding-unsupported`,
-        |  classifies child resource axes while excluding uniform values from PipelineKey, and keeps WebGPU support expected-unsupported;
-        |  current counts are $runtimeChildShaderEffectLaneCounts.
         |- Runtime ColorFilter WGSL: `reports/wgsl-pipeline/runtime-color-filter-wgsl/runtime-color-filter-wgsl.md`
         |  validates selected `runtime.color_filter_luma_to_alpha` direct-rect support with descriptor-backed CPU/GPU routes,
         |  matched parser/reflection layout, reference/CPU/WebGPU/diff/stat artifacts, explicit stage order, and stable reason codes
         |  for non-selected runtime ColorFilters;
         |  current counts are $runtimeColorFilterWgslCounts.
-        |- Runtime Blender boundary: `reports/wgsl-pipeline/runtime-blender-boundary/runtime-blender-boundary.md`
-        |  validates selected `runtime.invert_blender` CPU behavior, serializes the WebGPU expected-unsupported route,
-        |  records the required shader/layer `BlendPlan`, and keeps destination reads, CPU readback, hidden layer compat,
-        |  and all-blend-modes support as explicit non-claims;
-        |  current counts are $runtimeBlenderBoundaryCounts.
         |- Runtime Effect uniform preview: `reports/wgsl-pipeline/runtime-effect-uniform-preview/runtime-effect-uniform-preview.md`
         |  validates `runtime.simple_rt` and `runtime.spiral_rt` as registered effect previews with two edited states each,
         |  records telemetry showing uniform updates do not change `PipelineKey` or compile new WGSL, emits CPU/GPU/diff/stat/route artifacts,
@@ -486,27 +471,6 @@ tasks.register<Exec>("pipelineRuntimeShaderEffectsV2PromotionReport") {
     outputs.upToDateWhen { false }
 }
 
-tasks.register<Exec>("pipelineRuntimeChildShaderEffectLaneReport") {
-    group = "verification"
-    description = "Materializes and validates the KAN-030 Runtime child shader effect lane report."
-
-    val outputDir = layout.projectDirectory.dir("reports/wgsl-pipeline/runtime-child-shader-effect-lane")
-    commandLine(
-        "python3",
-        "scripts/validate_kan030_runtime_child_shader_effect_lane.py",
-        rootDir.absolutePath,
-        outputDir.asFile.absolutePath,
-    )
-    inputs.file(layout.projectDirectory.file("scripts/validate_kan030_runtime_child_shader_effect_lane.py"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/runtime-effects-v2/support-matrix.json"))
-    inputs.file(layout.projectDirectory.file("cpu-raster/src/main/kotlin/org/skia/effects/runtime/effects/SkBuiltinShaderEffectsChildren.kt"))
-    inputs.file(layout.projectDirectory.file("cpu-raster/src/test/kotlin/org/skia/effects/runtime/effects/SkBuiltinShaderEffectsChildrenTest.kt"))
-    outputs.file(outputDir.file("runtime-child-shader-effect-lane.json"))
-    outputs.file(outputDir.file("runtime-child-shader-effect-lane.md"))
-    outputs.file(outputDir.file("runtime-child-shader-effect-lane-route.json"))
-    outputs.upToDateWhen { false }
-}
-
 tasks.register<Exec>("pipelineRuntimeColorFilterWgslReport") {
     group = "verification"
     description = "Materializes and validates the KAN-031 Runtime ColorFilter WGSL report."
@@ -524,30 +488,6 @@ tasks.register<Exec>("pipelineRuntimeColorFilterWgslReport") {
     inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts/kan-031-runtime-color-filter-luma-to-alpha"))
     outputs.file(outputDir.file("runtime-color-filter-wgsl.json"))
     outputs.file(outputDir.file("runtime-color-filter-wgsl.md"))
-    outputs.upToDateWhen { false }
-}
-
-tasks.register<Exec>("pipelineRuntimeBlenderBoundaryReport") {
-    group = "verification"
-    description = "Materializes and validates the KAN-032 Runtime Blender boundary report."
-
-    val outputDir = layout.projectDirectory.dir("reports/wgsl-pipeline/runtime-blender-boundary")
-    commandLine(
-        "python3",
-        "scripts/validate_kan032_runtime_blender_boundary.py",
-        rootDir.absolutePath,
-        outputDir.asFile.absolutePath,
-    )
-    inputs.file(layout.projectDirectory.file("scripts/validate_kan032_runtime_blender_boundary.py"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/runtime-effects-v2/support-matrix.json"))
-    inputs.file(layout.projectDirectory.file("cpu-raster/src/main/kotlin/org/skia/effects/runtime/effects/SkBuiltinSpecialisedEffects.kt"))
-    inputs.file(layout.projectDirectory.file("cpu-raster/src/main/kotlin/org/skia/effects/runtime/SkRuntimeBlender.kt"))
-    inputs.file(layout.projectDirectory.file("cpu-raster/src/main/kotlin/org/skia/effects/runtime/SkRuntimeEffectDescriptor.kt"))
-    inputs.file(layout.projectDirectory.file("cpu-raster/src/test/kotlin/org/skia/effects/runtime/SkRuntimeBlenderTest.kt"))
-    outputs.file(outputDir.file("runtime-blender-boundary.json"))
-    outputs.file(outputDir.file("runtime-blender-boundary.md"))
-    outputs.file(outputDir.file("runtime-blender-boundary-route.json"))
-    outputs.file(outputDir.file("runtime-blender-boundary-blend-plan.json"))
     outputs.upToDateWhen { false }
 }
 
@@ -581,9 +521,7 @@ tasks.register<Exec>("pipelineRuntimeEffectsV2EvidenceBundleReport") {
 
     dependsOn(
         "pipelineRuntimeShaderEffectsV2PromotionReport",
-        "pipelineRuntimeChildShaderEffectLaneReport",
         "pipelineRuntimeColorFilterWgslReport",
-        "pipelineRuntimeBlenderBoundaryReport",
         "pipelineRuntimeEffectUniformPreviewReport",
     )
     val outputDir = layout.projectDirectory.dir("reports/wgsl-pipeline/runtime-effects-v2")
@@ -599,9 +537,7 @@ tasks.register<Exec>("pipelineRuntimeEffectsV2EvidenceBundleReport") {
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/runtime-effects-layout-v2/runtime-effects-layout-v2.json"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/runtime-effects-layout-v2/runtime-effects-layout-v2.md"))
     inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/runtime-shader-effects-v2"))
-    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/runtime-child-shader-effect-lane"))
     inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/runtime-color-filter-wgsl"))
-    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/runtime-blender-boundary"))
     inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/runtime-effect-uniform-preview"))
     inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts"))
     outputs.file(outputDir.file("evidence.json"))
@@ -615,9 +551,7 @@ tasks.register("pipelineConformance") {
 
     dependsOn(
         "pipelineRuntimeShaderEffectsV2PromotionReport",
-        "pipelineRuntimeChildShaderEffectLaneReport",
         "pipelineRuntimeColorFilterWgslReport",
-        "pipelineRuntimeBlenderBoundaryReport",
         "pipelineRuntimeEffectUniformPreviewReport",
     )
 
@@ -626,9 +560,7 @@ tasks.register("pipelineConformance") {
             """
             |pipelineConformance summary:
             |- REQUIRED Runtime Shader Effects V2 promotion report: pipelineRuntimeShaderEffectsV2PromotionReport
-            |- REQUIRED Runtime child shader effect lane report: pipelineRuntimeChildShaderEffectLaneReport
             |- REQUIRED Runtime ColorFilter WGSL report: pipelineRuntimeColorFilterWgslReport
-            |- REQUIRED Runtime Blender boundary report: pipelineRuntimeBlenderBoundaryReport
             |- REQUIRED Runtime Effect uniform preview report: pipelineRuntimeEffectUniformPreviewReport
             |- REQUIRED Runtime Effects V2 evidence bundle: pipelineRuntimeEffectsV2EvidenceBundleReport
             |- GPU adapter residual risk: local adapter-dependent WebGPU tests may report JUnit SKIPPED when no adapter is available; required CI smoke lane (`GPU tests (macos)`) fails closed on adapter skips.
@@ -710,14 +642,6 @@ tasks.register("pipelineConformanceReport") {
             ?: throw GradleException(
                 "Missing Runtime Shader Effects V2 status counts in `reports/wgsl-pipeline/runtime-shader-effects-v2/runtime-shader-effects-v2-promotion.md`."
             )
-        val runtimeChildShaderEffectLaneCounts = file("reports/wgsl-pipeline/runtime-child-shader-effect-lane/runtime-child-shader-effect-lane.md")
-            .readLines()
-            .firstOrNull { it.startsWith("Status counts: ") }
-            ?.removePrefix("Status counts: ")
-            ?.removeSuffix(".")
-            ?: throw GradleException(
-                "Missing Runtime child shader effect lane status counts in `reports/wgsl-pipeline/runtime-child-shader-effect-lane/runtime-child-shader-effect-lane.md`."
-            )
         val runtimeColorFilterWgslCounts = file("reports/wgsl-pipeline/runtime-color-filter-wgsl/runtime-color-filter-wgsl.md")
             .readLines()
             .firstOrNull { it.startsWith("Status counts: ") }
@@ -725,14 +649,6 @@ tasks.register("pipelineConformanceReport") {
             ?.removeSuffix(".")
             ?: throw GradleException(
                 "Missing Runtime ColorFilter WGSL status counts in `reports/wgsl-pipeline/runtime-color-filter-wgsl/runtime-color-filter-wgsl.md`."
-            )
-        val runtimeBlenderBoundaryCounts = file("reports/wgsl-pipeline/runtime-blender-boundary/runtime-blender-boundary.md")
-            .readLines()
-            .firstOrNull { it.startsWith("Status counts: ") }
-            ?.removePrefix("Status counts: ")
-            ?.removeSuffix(".")
-            ?: throw GradleException(
-                "Missing Runtime Blender boundary status counts in `reports/wgsl-pipeline/runtime-blender-boundary/runtime-blender-boundary.md`."
             )
         val runtimeEffectUniformPreviewCounts = file("reports/wgsl-pipeline/runtime-effect-uniform-preview/runtime-effect-uniform-preview.md")
             .readLines()
@@ -757,9 +673,7 @@ tasks.register("pipelineConformanceReport") {
             runtimeEffectSupportMatrixCounts = runtimeEffectSupportMatrixCounts,
             runtimeEffectLayoutV2Counts = runtimeEffectLayoutV2Counts,
             runtimeShaderEffectsV2Counts = runtimeShaderEffectsV2Counts,
-            runtimeChildShaderEffectLaneCounts = runtimeChildShaderEffectLaneCounts,
             runtimeColorFilterWgslCounts = runtimeColorFilterWgslCounts,
-            runtimeBlenderBoundaryCounts = runtimeBlenderBoundaryCounts,
             runtimeEffectUniformPreviewCounts = runtimeEffectUniformPreviewCounts,
             runtimeEffectsV2EvidenceBundleCounts = runtimeEffectsV2EvidenceBundleCounts,
         )
