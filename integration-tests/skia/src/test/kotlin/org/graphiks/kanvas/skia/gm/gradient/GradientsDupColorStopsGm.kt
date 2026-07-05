@@ -9,6 +9,7 @@ import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 
 /**
@@ -20,6 +21,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 class GradientsDupColorStopsGm : SkiaGm {
     override val name = "gradients_dup_color_stops"
     override val renderFamily = RenderFamily.GRADIENT
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 21.6
     override val width = 704
     override val height = 564

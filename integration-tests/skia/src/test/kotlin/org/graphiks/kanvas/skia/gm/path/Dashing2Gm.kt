@@ -7,6 +7,7 @@ import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import kotlin.math.PI
 import kotlin.math.cos
@@ -21,6 +22,7 @@ import kotlin.math.sin
 class Dashing2Gm : SkiaGm {
     override val name = "dashing2"
     override val renderFamily = RenderFamily.PATH
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 83.9
     override val width = 640
     override val height = 480

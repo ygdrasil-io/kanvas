@@ -9,12 +9,14 @@ package org.graphiks.kanvas.skia.gm.clip
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Rect
 
 class DistantClipGm : SkiaGm {
     override val name = "distantclip"
     override val renderFamily = RenderFamily.CLIP
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 100
     override val height = 100

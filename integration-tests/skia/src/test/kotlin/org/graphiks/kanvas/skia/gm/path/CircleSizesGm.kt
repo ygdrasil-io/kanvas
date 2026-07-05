@@ -3,6 +3,7 @@ package org.graphiks.kanvas.skia.gm.path
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 
 /**
@@ -13,6 +14,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 class CircleSizesGm : SkiaGm {
     override val name = "circle_sizes"
     override val renderFamily = RenderFamily.PATH
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 87.3
     override val width = 128
     override val height = 128

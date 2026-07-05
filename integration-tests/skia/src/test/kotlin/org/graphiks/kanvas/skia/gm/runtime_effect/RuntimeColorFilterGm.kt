@@ -10,6 +10,7 @@ import org.graphiks.kanvas.pipeline.RuntimeEffect
 import org.graphiks.kanvas.pipeline.UniformBlock
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
@@ -47,6 +48,7 @@ import org.graphiks.kanvas.types.Rect
 class RuntimeColorFilterGm : SkiaGm {
     override val name = "runtimecolorfilter"
     override val renderFamily = RenderFamily.RUNTIME_EFFECT
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 768
     override val height = 512

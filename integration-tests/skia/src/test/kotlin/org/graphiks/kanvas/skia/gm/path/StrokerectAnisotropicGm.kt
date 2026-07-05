@@ -12,6 +12,7 @@ import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.paint.StrokeJoin
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
@@ -19,6 +20,7 @@ import org.graphiks.kanvas.types.Rect
 class StrokerectAnisotropicGm : SkiaGm {
     override val name = "strokerect_anisotropic"
     override val renderFamily = RenderFamily.PATH
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 49.9
     override val width = 160
     override val height = 160

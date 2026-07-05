@@ -4,6 +4,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.KanvasGlyphRun
@@ -22,6 +23,7 @@ import org.graphiks.kanvas.types.Rect
 class TextBlobGm : SkiaGm {
     override val name = "textblob"
     override val renderFamily = RenderFamily.TEXT
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 90.0
     override val width = 640
     override val height = 480

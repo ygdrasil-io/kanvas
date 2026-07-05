@@ -5,6 +5,7 @@ import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
@@ -19,6 +20,7 @@ import org.graphiks.kanvas.types.Rect
 class BitmapCopyGm : SkiaGm {
     override val name = "bitmapcopy"
     override val renderFamily = RenderFamily.IMAGE
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 540
     override val height = 330

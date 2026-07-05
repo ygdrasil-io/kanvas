@@ -9,6 +9,7 @@ import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.EmojiTypeface
 import org.graphiks.kanvas.text.Font
@@ -53,6 +54,7 @@ import org.graphiks.kanvas.types.Rect
 class ColorEmojiGm : SkiaGm {
     override val name = "coloremoji_colrv0"
     override val renderFamily = RenderFamily.TEXT
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 650
     override val height = 1200

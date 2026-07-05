@@ -7,6 +7,7 @@ import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 
 /**
@@ -21,6 +22,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 class PathAppendExtendGm : SkiaGm {
     override val name = "path_append_extend"
     override val renderFamily = RenderFamily.PATH
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 400
     override val height = 400

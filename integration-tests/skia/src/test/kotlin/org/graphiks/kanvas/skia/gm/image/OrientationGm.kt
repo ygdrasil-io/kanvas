@@ -3,6 +3,7 @@ package org.graphiks.kanvas.skia.gm.image
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
@@ -17,6 +18,7 @@ import kotlin.random.Random
 class Orientation444Gm : SkiaGm {
     override val name = "orientation_444"
     override val renderFamily = RenderFamily.IMAGE
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 4 * IMG_W
     override val height = 2 * IMG_H
@@ -60,6 +62,7 @@ class Orientation444Gm : SkiaGm {
 class RespectOrientationJpegGm : SkiaGm {
     override val name = "respect_orientation_jpeg"
     override val renderFamily = RenderFamily.IMAGE
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 4 * IMG_W
     override val height = 2 * IMG_H

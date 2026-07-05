@@ -6,6 +6,7 @@ import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Point
@@ -22,6 +23,7 @@ import org.graphiks.kanvas.types.VertexMode
 class CustomMeshCsGm : SkiaGm {
     override val name = "custommesh_cs"
     override val renderFamily = RenderFamily.MESH
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 83.0
     override val width = 468
     override val height = 258

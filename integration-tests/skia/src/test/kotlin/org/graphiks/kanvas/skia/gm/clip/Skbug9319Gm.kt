@@ -7,6 +7,7 @@ import org.graphiks.kanvas.pipeline.BlurStyle
 import org.graphiks.kanvas.pipeline.ClipOp
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.RRect
 import org.graphiks.kanvas.types.Rect
@@ -22,6 +23,7 @@ import org.graphiks.kanvas.types.Rect
 class Skbug9319Gm : SkiaGm {
     override val name = "skbug_9319"
     override val renderFamily = RenderFamily.CLIP
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 256
     override val height = 512

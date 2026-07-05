@@ -11,6 +11,7 @@ import org.graphiks.kanvas.pipeline.RuntimeEffect
 import org.graphiks.kanvas.pipeline.UniformBlock
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
@@ -26,6 +27,7 @@ import org.graphiks.kanvas.types.Rect
 class KawaseBlurRTGm : SkiaGm {
     override val name = "kawase_blur_rt"
     override val renderFamily = RenderFamily.RUNTIME_EFFECT
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 76.66666666666667
     override val width = 1280
     override val height = 768

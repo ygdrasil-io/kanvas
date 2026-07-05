@@ -4,6 +4,7 @@ import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.CornerRadii
 import org.graphiks.kanvas.types.RRect
@@ -23,6 +24,7 @@ import org.graphiks.kanvas.types.Rect
 class RRectDrawBwGm : SkiaGm {
     override val name = "rrect_draw_bw"
     override val renderFamily = RenderFamily.PATH
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 29.0
     override val width = kImageWidth
     override val height = kImageHeight

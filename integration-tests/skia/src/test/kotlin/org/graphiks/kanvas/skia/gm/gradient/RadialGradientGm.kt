@@ -9,6 +9,7 @@ import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 
 /**
@@ -19,6 +20,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 class RadialGradientGm : SkiaGm {
     override val name = "radial_gradient"
     override val renderFamily = RenderFamily.GRADIENT
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 33.5
     override val width = 1280
     override val height = 1280

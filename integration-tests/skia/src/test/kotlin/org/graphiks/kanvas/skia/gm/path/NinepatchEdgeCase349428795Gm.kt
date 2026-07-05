@@ -5,6 +5,7 @@ import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Rect
 
@@ -17,6 +18,7 @@ import org.graphiks.kanvas.types.Rect
 class NinepatchEdgeCase349428795Gm : SkiaGm {
     override val name = "ninepatch_edge_case_349428795"
     override val renderFamily = RenderFamily.PATH
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 500
     override val height = 150

@@ -6,6 +6,7 @@ import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.paint.StrokeCap
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 
@@ -96,6 +97,7 @@ private object LabyrinthHelper {
 class LabyrinthSquareGm : SkiaGm {
     override val name = "labyrinth_square"
     override val renderFamily = RenderFamily.PATH
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 39.5
     override val width = LabyrinthHelper.WIDTH
     override val height = LabyrinthHelper.HEIGHT
@@ -108,6 +110,7 @@ class LabyrinthSquareGm : SkiaGm {
 class LabyrinthRoundGm : SkiaGm {
     override val name = "labyrinth_round"
     override val renderFamily = RenderFamily.PATH
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = LabyrinthHelper.WIDTH
     override val height = LabyrinthHelper.HEIGHT
@@ -120,6 +123,7 @@ class LabyrinthRoundGm : SkiaGm {
 class LabyrinthButtGm : SkiaGm {
     override val name = "labyrinth_butt"
     override val renderFamily = RenderFamily.PATH
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = LabyrinthHelper.WIDTH
     override val height = LabyrinthHelper.HEIGHT

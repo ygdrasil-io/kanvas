@@ -10,6 +10,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.picture.PictureRecorder
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Matrix33
@@ -18,6 +19,7 @@ import org.graphiks.kanvas.types.Rect
 class Sk3dSimpleGm : SkiaGm {
     override val name = "sk3d_simple"
     override val renderFamily = RenderFamily.COMPOSITE
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 300
     override val height = 300

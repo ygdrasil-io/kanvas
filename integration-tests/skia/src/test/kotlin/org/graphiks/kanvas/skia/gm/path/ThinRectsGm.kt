@@ -9,6 +9,7 @@ package org.graphiks.kanvas.skia.gm.path
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
@@ -16,6 +17,7 @@ import org.graphiks.kanvas.types.Rect
 class ThinRectsGm : SkiaGm {
     override val name = "thinrects"
     override val renderFamily = RenderFamily.PATH
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 85.1
     override val width = 240
     override val height = 320

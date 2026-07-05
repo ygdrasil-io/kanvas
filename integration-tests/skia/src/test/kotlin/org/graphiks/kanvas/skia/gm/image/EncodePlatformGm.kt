@@ -3,6 +3,7 @@ package org.graphiks.kanvas.skia.gm.image
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Rect
 
@@ -16,6 +17,7 @@ import org.graphiks.kanvas.types.Rect
 class EncodePlatformGm : SkiaGm {
     override val name = "encode-platform"
     override val renderFamily = RenderFamily.IMAGE
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 256 * 5
     override val height = 256 * 3

@@ -2,6 +2,7 @@ package org.graphiks.kanvas.skia.gm.composite
 
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 
 /**
@@ -13,6 +14,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 class Skbug14554Gm : SkiaGm {
     override val name = "skbug_14554"
     override val renderFamily = RenderFamily.COMPOSITE
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 310
     override val height = 630

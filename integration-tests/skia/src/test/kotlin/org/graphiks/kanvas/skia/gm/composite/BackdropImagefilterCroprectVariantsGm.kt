@@ -4,6 +4,7 @@ import org.graphiks.kanvas.paint.ImageFilter
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Matrix33
@@ -16,6 +17,7 @@ import org.graphiks.kanvas.types.Rect
 class BackdropImagefilterCroprectRotatedGm : SkiaGm {
     override val name = "backdrop_imagefilter_croprect_rotated"
     override val renderFamily = RenderFamily.COMPOSITE
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 600
     override val height = 500
@@ -34,6 +36,7 @@ class BackdropImagefilterCroprectRotatedGm : SkiaGm {
 class BackdropImagefilterCroprectPerspGm : SkiaGm {
     override val name = "backdrop_imagefilter_croprect_persp"
     override val renderFamily = RenderFamily.COMPOSITE
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 600
     override val height = 500
@@ -56,6 +59,7 @@ class BackdropImagefilterCroprectPerspGm : SkiaGm {
 class BackdropImagefilterCroprectNestedGm : SkiaGm {
     override val name = "backdrop_imagefilter_croprect_nested"
     override val renderFamily = RenderFamily.COMPOSITE
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 600
     override val height = 500
@@ -76,6 +80,7 @@ class BackdropImagefilterCroprectNestedGm : SkiaGm {
 class BackdropLayerTilemodeGm : SkiaGm {
     override val name = "backdrop_layer_tilemode"
     override val renderFamily = RenderFamily.COMPOSITE
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 512
     override val height = 128

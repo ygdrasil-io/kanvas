@@ -5,6 +5,7 @@ import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.CornerRadii
 import org.graphiks.kanvas.types.RRect
@@ -18,6 +19,7 @@ import org.graphiks.kanvas.types.Rect
 class DRRectGm : SkiaGm {
     override val name = "drrect"
     override val renderFamily = RenderFamily.PATH
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 69.4
     override val width = 640
     override val height = 480

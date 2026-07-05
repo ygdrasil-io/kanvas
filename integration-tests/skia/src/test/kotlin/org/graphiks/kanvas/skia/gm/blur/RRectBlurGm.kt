@@ -6,6 +6,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.pipeline.BlurStyle
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.CornerRadii
@@ -20,6 +21,7 @@ import org.graphiks.kanvas.types.Rect
 class RRectBlurGm : SkiaGm {
     override val name = "rrect_blurs"
     override val renderFamily = RenderFamily.BLUR
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = kWidth
     override val height = kHeight

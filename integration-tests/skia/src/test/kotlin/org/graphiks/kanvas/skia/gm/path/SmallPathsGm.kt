@@ -8,6 +8,7 @@ import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.paint.StrokeCap
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import kotlin.math.PI
 import kotlin.math.cos
@@ -16,6 +17,7 @@ import kotlin.math.sin
 class SmallPathsGm : SkiaGm {
     override val name = "smallpaths"
     override val renderFamily = RenderFamily.PATH
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 88.0
     override val width = 640
     override val height = 512

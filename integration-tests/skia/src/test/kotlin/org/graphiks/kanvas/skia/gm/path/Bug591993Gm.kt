@@ -6,6 +6,7 @@ import org.graphiks.kanvas.paint.PathEffect
 import org.graphiks.kanvas.paint.StrokeCap
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 
@@ -22,6 +23,7 @@ import org.graphiks.kanvas.types.Color
 class Bug591993Gm : SkiaGm {
     override val name = "bug591993"
     override val renderFamily = RenderFamily.PATH
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 95.0
     override val width = 40
     override val height = 140

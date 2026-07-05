@@ -9,6 +9,7 @@ import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Matrix33
@@ -25,6 +26,7 @@ class ComposeShaderBitmapGm(private val useLm: Boolean) : SkiaGm {
 
     override val name = "composeshader_bitmap${if (useLm) "_lm" else ""}"
     override val renderFamily = RenderFamily.COMPOSITE
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 7 * (SQUARE_LENGTH + 5)
     override val height = 2 * (SQUARE_LENGTH + 5)

@@ -7,6 +7,7 @@ import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.types.Rect
@@ -18,6 +19,7 @@ import org.graphiks.kanvas.types.Rect
 class CoordClampShaderGm : SkiaGm {
     override val name = "coordclampshader"
     override val renderFamily = RenderFamily.IMAGE
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 1074
     override val height = 795

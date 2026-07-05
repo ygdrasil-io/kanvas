@@ -8,6 +8,7 @@ import org.graphiks.kanvas.paint.StrokeCap
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Point
@@ -17,6 +18,7 @@ import org.graphiks.kanvas.types.Rect
 class DrawLinesWithLocalMatrixGm : SkiaGm {
     override val name = "drawlines_with_local_matrix"
     override val renderFamily = RenderFamily.PATH
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 500
     override val height = 500

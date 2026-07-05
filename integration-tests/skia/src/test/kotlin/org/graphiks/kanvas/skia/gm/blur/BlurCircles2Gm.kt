@@ -6,6 +6,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.pipeline.BlurStyle
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import kotlin.math.PI
@@ -22,6 +23,7 @@ import kotlin.math.sin
 class BlurCircles2Gm : SkiaGm {
     override val name = "blurcircles2"
     override val renderFamily = RenderFamily.BLUR
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 49.2
     override val width = 730
     override val height = 1350

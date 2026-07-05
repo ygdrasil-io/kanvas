@@ -7,6 +7,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Rect
 import kotlin.math.sin
@@ -20,6 +21,7 @@ import kotlin.math.sqrt
 class AnimatedTiledImageBlurGm : SkiaGm {
     override val name = "animated-tiled-image-blur"
     override val renderFamily = RenderFamily.BLUR
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 530
     override val height = 530

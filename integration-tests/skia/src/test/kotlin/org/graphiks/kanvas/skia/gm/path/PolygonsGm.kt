@@ -6,6 +6,7 @@ import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.paint.StrokeJoin
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import kotlin.math.PI
@@ -29,6 +30,7 @@ import kotlin.random.Random
 class PolygonsGm : SkiaGm {
     override val name = "polygons"
     override val renderFamily = RenderFamily.PATH
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 69.0
 
     override val width = kNumPolygons * kCellSize + 40

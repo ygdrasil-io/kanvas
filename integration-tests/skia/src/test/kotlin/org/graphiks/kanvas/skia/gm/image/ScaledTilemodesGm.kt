@@ -2,6 +2,7 @@ package org.graphiks.kanvas.skia.gm.image
 
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 
 /**
@@ -15,6 +16,7 @@ open class ScaledTilemodesGm(
 ) : SkiaGm {
     override val name = if (powerOfTwoSize) "scaled_tilemodes" else "scaled_tilemodes_npot"
     override val renderFamily = RenderFamily.IMAGE
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 880
     override val height = 880

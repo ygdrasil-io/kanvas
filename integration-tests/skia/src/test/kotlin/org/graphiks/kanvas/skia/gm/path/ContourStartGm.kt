@@ -6,6 +6,7 @@ import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.paint.PathEffect
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.CornerRadii
@@ -21,6 +22,7 @@ import org.graphiks.kanvas.types.Rect
 class ContourStartGm : SkiaGm {
     override val name = "contour_start"
     override val renderFamily = RenderFamily.PATH
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 36.5
     override val width = 1200
     override val height = 600

@@ -3,6 +3,7 @@ package org.graphiks.kanvas.skia.gm.path
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.CornerRadii
@@ -20,6 +21,7 @@ import kotlin.random.Random
 open class InnerShapesGm(private val antialias: Boolean) : SkiaGm {
     override val name: String get() = if (antialias) "innershapes" else "innershapes_bw"
     override val renderFamily = RenderFamily.PATH
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 500
     override val height = 500

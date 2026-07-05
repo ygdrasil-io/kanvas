@@ -6,6 +6,7 @@ import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.paint.StrokeJoin
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.CornerRadii
 import org.graphiks.kanvas.types.RRect
@@ -22,6 +23,7 @@ import kotlin.math.min
 class StrokeRectRRectsGm : SkiaGm {
     override val name = "stroke_rect_rrects"
     override val renderFamily = RenderFamily.PATH
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 71.2
     override val width = 1350
     override val height = 700

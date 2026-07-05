@@ -2,6 +2,7 @@ package org.graphiks.kanvas.skia.gm.composite
 
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 
 /**
@@ -15,6 +16,7 @@ open class MatrixConvolutionGm(
 ) : SkiaGm {
     override val name = "matrixconvolution$nameSuffix"
     override val renderFamily = RenderFamily.COMPOSITE
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 500
     override val height = 300

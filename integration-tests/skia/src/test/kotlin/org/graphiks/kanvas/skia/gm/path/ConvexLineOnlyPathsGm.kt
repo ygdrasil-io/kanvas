@@ -7,6 +7,7 @@ import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.paint.StrokeJoin
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Matrix33
@@ -234,6 +235,7 @@ private class ConvexLineOnlyPathsRenderer(private val doStrokeAndFill: Boolean) 
 class ConvexLineOnlyPathsGm : SkiaGm {
     override val name = "convex_lineonly_paths"
     override val renderFamily = RenderFamily.PATH
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 512
     override val height = 512
@@ -248,6 +250,7 @@ class ConvexLineOnlyPathsGm : SkiaGm {
 class ConvexLineOnlyPathsStrokeAndFillGm : SkiaGm {
     override val name = "convex_lineonly_paths_stroke_and_fill"
     override val renderFamily = RenderFamily.PATH
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 512
     override val height = 512

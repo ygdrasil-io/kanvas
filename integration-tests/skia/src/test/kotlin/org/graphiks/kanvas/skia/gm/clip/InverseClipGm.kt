@@ -11,6 +11,7 @@ import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
@@ -18,6 +19,7 @@ import org.graphiks.kanvas.types.Rect
 class InverseClipGm : SkiaGm {
     override val name = "inverseclip"
     override val renderFamily = RenderFamily.CLIP
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 52.1
     override val width = 400
     override val height = 400

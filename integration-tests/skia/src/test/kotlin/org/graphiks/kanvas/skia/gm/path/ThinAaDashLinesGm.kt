@@ -6,6 +6,7 @@ import org.graphiks.kanvas.paint.PathEffect
 import org.graphiks.kanvas.paint.StrokeCap
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 
 /**
@@ -16,6 +17,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 class ThinAaDashLinesGm : SkiaGm {
     override val name = "thin_aa_dash_lines"
     override val renderFamily = RenderFamily.PATH
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 75.6
     override val width = 330
     override val height = 110

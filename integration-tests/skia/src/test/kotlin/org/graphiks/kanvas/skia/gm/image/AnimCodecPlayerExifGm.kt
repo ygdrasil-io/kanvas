@@ -3,6 +3,7 @@ package org.graphiks.kanvas.skia.gm.image
 import org.graphiks.kanvas.codec.Codec
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Rect
 import org.skia.codec.SkAnimCodecPlayer
@@ -14,6 +15,7 @@ open class AnimCodecPlayerExifGm(
 ) : SkiaGm {
     final override val name = "AnimCodecPlayerExif_${path.substringAfterLast('/')}"
     final override val renderFamily = RenderFamily.IMAGE
+    override val renderCost = RenderCost.BLOCKING
     final override val minSimilarity = 0.0
     final override val width = 300
     final override val height = 300
