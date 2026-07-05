@@ -308,7 +308,7 @@ private class WgpuOffscreenTarget(
         TextureDescriptor(
             size = Extent3D(width = safeWidth.toUInt(), height = safeHeight.toUInt()),
             format = format,
-            usage = GPUTextureUsage.RenderAttachment or GPUTextureUsage.CopySrc,
+            usage = if (sampleCount > 1) GPUTextureUsage.RenderAttachment else GPUTextureUsage.RenderAttachment or GPUTextureUsage.CopySrc,
             sampleCount = sampleCount.toUInt(),
             label = "GPUBackend.offscreen.color",
         ),
@@ -423,6 +423,7 @@ private class WgpuOffscreenTarget(
                 end()
             }
             // Resolve MSAA before copy to staging buffer
+            // Resolve MSAA before copy to staging buffer
             if (resolveTexture != null) {
                 val resolveResources = GPUResourceScope()
                 val rView = resolveResources.track(resolveTexture.createView()) { it.close() }
@@ -533,11 +534,17 @@ private class WgpuOffscreenTarget(
         val safeH = textureDesc.height.coerceAtMost(MAX_TEXTURE_DIMENSION)
         val label = "offscreenTex:${textureDesc.width}x${textureDesc.height}:${textureDesc.format}"
         if (label in offscreenTextures) return label
+        val texUsage = if (sampleCount > 1) {
+            GPUTextureUsage.RenderAttachment
+        } else {
+            GPUTextureUsage.RenderAttachment or GPUTextureUsage.TextureBinding or GPUTextureUsage.CopySrc
+        }
         val tex = device.createTexture(
             TextureDescriptor(
                 size = Extent3D(width = safeW.toUInt(), height = safeH.toUInt()),
                 format = textureDesc.format.toWgpuTextureFormat(),
-                usage = GPUTextureUsage.RenderAttachment or GPUTextureUsage.TextureBinding or GPUTextureUsage.CopySrc,
+                usage = texUsage,
+                sampleCount = sampleCount.toUInt(),
                 label = label,
             ),
         )
@@ -583,6 +590,7 @@ private class WgpuOffscreenTarget(
                     size = Extent3D(width = texWidth, height = texHeight),
                     format = GPUTextureFormat.Depth24PlusStencil8,
                     usage = GPUTextureUsage.RenderAttachment,
+                    sampleCount = sampleCount.toUInt(),
                     label = "GPUBackend.offscreenLayer.depthStencil",
                 ),
             ),
