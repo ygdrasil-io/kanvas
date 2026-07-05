@@ -12,12 +12,6 @@ import org.junit.jupiter.api.Test
 @Disabled("O6 batch — GMs depending on unported APIs (image codecs / SkAAClip / YUV / etc.)")
 class O6UnportableGMsTest {
 
-    /** `gm/image.cpp::ScalePixelsGM` — needs codec / picture / gpu image makers. */
-    @Test fun `ScalePixelsGM requires make_codec make_picture make_gpu image makers`() {}
-
-    /** `gm/imagefilters.cpp::SaveLayerWithBackdropGM` — needs mandrill_512 image + 4 backdrop filters. */
-    @Test fun `SaveLayerWithBackdropGM requires mandrill image and image-filter backdrop chain`() {}
-
     /** `gm/mandoline.cpp::SimpleClipGM` — uses SkAAClip / setPath / Rgn op. */
     @Test fun `SimpleClipGM requires SkAAClip path-region API`() {}
 
