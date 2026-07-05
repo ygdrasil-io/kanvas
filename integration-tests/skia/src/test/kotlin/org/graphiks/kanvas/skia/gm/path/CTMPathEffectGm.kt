@@ -21,7 +21,7 @@ import kotlin.math.sqrt
 class CTMPathEffectGm : SkiaGm {
     override val name = "ctmpatheffect"
     override val renderFamily = RenderFamily.PATH
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 800
     override val height = 600

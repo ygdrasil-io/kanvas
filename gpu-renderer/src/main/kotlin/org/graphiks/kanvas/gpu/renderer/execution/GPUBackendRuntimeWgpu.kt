@@ -622,7 +622,7 @@ private class WgpuOffscreenTarget(
                 setIndexBufferAction = { buffer, format -> setIndexBuffer(buffer, format) },
                 drawIndexedAction = { indexCount -> drawIndexed(indexCount) },
                 sampleCount = texSampleCount.toInt(),
-                offscreenTextureStore = mutableMapOf(),
+                offscreenTextureStore = offscreenTextures,
             )
             try {
                 block(recorder)

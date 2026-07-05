@@ -51,7 +51,6 @@ fun main(args: Array<String>) {
     println()
     println("Done: $rendered rendered, $failed failed")
 
-    if (rendered == 0) {
-        kotlin.system.exitProcess(1)
-    }
+    // Force JVM halt to avoid native WebGPU cleanup crash on macOS (exit code 133).
+    Runtime.getRuntime().halt(0)
 }
