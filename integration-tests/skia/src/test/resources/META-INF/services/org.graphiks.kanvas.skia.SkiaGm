@@ -419,10 +419,12 @@ org.graphiks.kanvas.skia.gm.text.ColoremojiBlendmodesGm
 org.graphiks.kanvas.skia.gm.text.ColrV1Gm
 org.graphiks.kanvas.skia.gm.text.Crbug1073670Gm
 org.graphiks.kanvas.skia.gm.text.DfTextGm
+org.graphiks.kanvas.skia.gm.text.FontCacheGm
 org.graphiks.kanvas.skia.gm.text.FontMgrBoundsGm
 org.graphiks.kanvas.skia.gm.text.FontMgrGm
 org.graphiks.kanvas.skia.gm.text.FontMgrMatchGm
 org.graphiks.kanvas.skia.gm.text.FontPaletteGm
+org.graphiks.kanvas.skia.gm.text.FontRegenGm
 org.graphiks.kanvas.skia.gm.text.FontScalerDistortableGm
 org.graphiks.kanvas.skia.gm.text.FontScalerGm
 org.graphiks.kanvas.skia.gm.text.GammashadertextGm
