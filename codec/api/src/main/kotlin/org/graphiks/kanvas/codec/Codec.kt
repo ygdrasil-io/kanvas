@@ -172,7 +172,7 @@ public abstract class Codec protected constructor() {
      * Mirrors `Codec::FrameInfo`
      * ([include/codec/Codec.h](https://github.com/google/skia/blob/main/include/codec/Codec.h#L684)).
      *
-     * Per-frame metadata returned by [getFrameInfo]. The kanvas-skia
+     * Per-frame metadata returned by [getFrameInfo]. The codec
      * surface keeps the four fields the GM consumers (`AnimatedGifGM`,
      * `AnimCodecPlayerExifGM`) actually look at — required-frame back-
      * reference, frame duration in milliseconds, alpha type, and the

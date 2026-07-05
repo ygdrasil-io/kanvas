@@ -1145,7 +1145,7 @@ object GPURendererSceneRegistry {
                     text = "TOTAL 42.00",
                     baselineX = 42f,
                     baselineY = 118f,
-                    fontSourceId = "kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Regular.ttf",
+                    fontSourceId = "reports/font/fixtures/fonts/liberation/LiberationSans-Regular.ttf",
                     fontFamily = "Liberation Sans",
                     fontSize = 28f,
                     color = SceneColor(0.08f, 0.09f, 0.10f, 1f),

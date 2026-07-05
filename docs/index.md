@@ -1,17 +1,16 @@
-# kanvas-skia
+# Kanvas
 
-Port Kotlin de la bibliothèque graphique 2D [Skia](https://skia.org/).
+Moteur graphique Kotlin 2D avec API, codecs et pipeline de rendu propres à Kanvas.
 
 ## Modules
 
 - **[math](api/math/index.md)** — couche math pure (points, rectangles, matrices, vecteurs, couleurs, scalaires). Namespace `org.graphiks.math`, indépendant de l'écosystème Skia, réutilisable hors port.
-- `:kanvas-skia` — abstractions API (types data + interfaces). _Doc API à venir._
-- `:cpu-raster` — implémentations raster CPU. _Doc API à venir._
-- `:gpu-raster` — implémentations GPU (WebGPU). _Doc API à venir._
+- `:kanvas` — API graphique et types image/couleur centraux.
+- `:codec:*` — codecs image pure Kotlin branchés sur les types Kanvas.
+- `:gpu-renderer` — pipeline GPU/WebGPU.
 
 ## Guides
 
-- [Pure Kotlin OpenType font backend](opentype-font-backend.md) — périmètre supporté, limites sans shaping/native, et commandes de validation.
 - [Pure Kotlin font system roadmap](https://github.com/ygdrasil-io/kanvas/blob/master/.upstream/specs/pure-kotlin-text/ROADMAP.md) — roadmap complète vers un système font/text/glyph pure Kotlin avec gates de preuve.
 - [Font GM post-AWT rebaseline](font-gm-post-awt-rebaseline.md) — classification des GM fonts après retrait du backend font AWT.
 

@@ -11,7 +11,6 @@ val pureKotlinCodecProjects = setOf(
     "codec:core",
     "codec:common",
     "codec:test-fixtures",
-    "codec:real-image-tests",
     "codec:png",
     "codec:jpeg",
     "codec:gif",
@@ -19,8 +18,6 @@ val pureKotlinCodecProjects = setOf(
     "codec:wbmp",
     "codec:webp",
     "codec:ico",
-    "codec:android",
-    "codec:animated",
     "codec:extended",
 )
 
@@ -111,12 +108,7 @@ data class RequiredPipelineConformanceSuite(
     val resultRoot: String,
 )
 
-val requiredPipelineConformanceSuites = listOf(
-    RequiredPipelineConformanceSuite(
-        className = "org.skia.core.SkBitmapDescriptorCoverageOracleTest",
-        resultRoot = "kanvas-skia/build/test-results/pipelineConformanceTest",
-    ),
-)
+val requiredPipelineConformanceSuites = emptyList<RequiredPipelineConformanceSuite>()
 
 fun parsePipelineConformanceSuite(xmlFile: File): PipelineConformanceSuiteSummary {
     val document = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(xmlFile)
@@ -293,8 +285,7 @@ fun renderPipelineConformanceReport(
         |KAN-043 text shaping/fallback scope with explicit font identity, glyph clusters, glyph ids, and stable fallback refusals,
         |KAN-044 glyph mask/atlas ownership boundary with text-owned atlas route, CPU mask oracle, coverage handoff, and stable WebGPU alpha-mask refusal,
         |KAN-045 color pipeline bounded policy with selected sRGB/premul support rows, wide-gamut/F16 refusals, semantic CPU/GPU op parity, and threshold guards,
-        |KAN-046 tile modes/mipmap boundary with two bounded tile-mode support rows, structured sampling/local-matrix/tile-mode/mipmap diagnostics, and stable mipmap refusals,
-        |kanvas-skia production descriptor routing through shared analytic rect coverage execution, WebGPU selector routing, and geometry oracle checks.
+        |KAN-046 tile modes/mipmap boundary with two bounded tile-mode support rows, structured sampling/local-matrix/tile-mode/mipmap diagnostics, and stable mipmap refusals.
         |
         |## Status Matrix
         |
@@ -307,8 +298,7 @@ fun renderPipelineConformanceReport(
         |${row("PipelineKey status", status("org.skia.gpu.webgpu.PipelineKeyTelemetryTest"), "`PipelineKeyTelemetryTest`")}
         |${row("BlendPlan status", status("org.skia.gpu.webgpu.BlendPlanTest"), "`BlendPlanTest`")}
         |${row("Descriptor routing status", status("org.skia.gpu.webgpu.WebGpuCoveragePlanSelectorTest", "org.skia.pipeline.GeometryCoverageMigrationHarnessTest"), "`WebGpuCoveragePlanSelectorTest`, `GeometryCoverageMigrationHarnessTest`; CPU rect harness uses `CpuAnalyticRectCoverageExecutor`")}
-        |${row("Clip-stack breadth", status("org.skia.gpu.webgpu.WebGpuCoveragePlanSelectorTest", "org.skia.pipeline.GeometryCoverageMigrationHarnessTest", "org.skia.core.SkBitmapDescriptorCoverageOracleTest"), "`ClipStackBreadthMatrix` classifies CPU route expectations and WebGPU support/refusal: rect/rrect/rect-difference supported, arbitrary-AA and multi-shape AA refused on WebGPU, shader clip refused on WebGPU, unlowerable stacks use stable diagnostics; CPU descriptor AA-clip and clip-shader fallbacks are asserted")}
-        |${row("kanvas-skia production route", status("org.skia.core.SkBitmapDescriptorCoverageOracleTest"), "`SkBitmapDescriptorCoverageOracleTest` proves `SkBitmapDevice` descriptor routing consumes CoveragePlan lowering through the shared analytic rect executor, preserves rollback, and remains pixel-equivalent with legacy")}
+        |${row("Clip-stack breadth", status("org.skia.gpu.webgpu.WebGpuCoveragePlanSelectorTest", "org.skia.pipeline.GeometryCoverageMigrationHarnessTest"), "`ClipStackBreadthMatrix` classifies CPU route expectations and WebGPU support/refusal: rect/rrect/rect-difference supported, arbitrary-AA and multi-shape AA refused on WebGPU, shader clip refused on WebGPU, unlowerable stacks use stable diagnostics")}
         |${row("GPU adapter evidence", gpuAdapterEvidence.status, "`gpuAdapterEvidence=${gpuAdapterEvidence.status}`; local adapter JUnit status `${gpuAdapterEvidence.localJUnitStatus}`; ci adapter lane available `${gpuAdapterEvidence.ciLaneAvailable}`; ${gpuAdapterEvidence.blockerText}")}
         |${row("GPU smoke promotion policy", "enforced", "`reports/wgsl-pipeline/2026-05-27-m31-gpu-smoke-promotion-policy.md` defines promotion checklist and rollback path; current smoke includes selector/telemetry baseline plus promoted image-rect, Path AA, and selected SimpleOffset image-filter fixtures; `coverage.edge-count-exceeded`, out-of-scope `image-filter.crop-input-nonnull-prepass-required`, and unresolved similarity regressions remain inventory-only")}
         |${row("WebGPU coverage strategy inventory", webGpuCoverageInventoryStatus, "`WebGpuCoverageStrategyInventory` separates selector-only `proven` mask/atlas route selection, adapter-evidence promoted candidates (analytic rect/rrect, convex fan, stencil-cover) with explicit statuses (`adapter-pass`, `adapter-fail`, `adapter-skipped`, `adapter-timeout`; `blocked-no-adapter-lane` only when the lane is missing), `compatibility` full-scissor, and `refused` span-runs/alpha-mask/coverage-atlas/edge-overflow/arbitrary-AA-clip branches with stable diagnostics; `coverage.edge-count-exceeded` remains a known unsupported GPU breadth gap and `image-filter.crop-input-nonnull-prepass-required` is retained only for out-of-scope Crop(input nonNull) graph shapes, not the M38 SimpleOffset pre-pass target.")}
@@ -356,10 +346,6 @@ fun renderPipelineConformanceReport(
         |
         |- CPU default descriptor route dump: `render-pipeline/src/test/kotlin/org/skia/pipeline/GeometryCoverageMigrationHarnessTest.kt`
         |  (`selectedRoute=cpu.descriptor.coverage-plan.solid-rect`, `kernel=cpu.scalar.analytic_rect_coverage`, fallback route retained for rollback).
-        |- kanvas-skia production descriptor route dump: `kanvas-skia/src/test/kotlin/org/skia/core/SkBitmapDescriptorCoverageOracleTest.kt`
-        |  (`selectedRoute=cpu.descriptor.coverage-plan.solid-rect`, `fallbackRoute=kanvas-skia.current.draw-rect`,
-        |  `loweringResult=CoverageModel.AnalyticRect`, `kernel=cpu.scalar.analytic_rect_coverage`,
-        |  and `executionEvidence=lowering-consumed:CoverageModel.AnalyticRect`).
         |- GPU descriptor shadow route dump: `render-pipeline/src/test/kotlin/org/skia/pipeline/GeometryCoverageMigrationHarnessTest.kt`
         |  (`descriptorRoute=gpu.shadow.generated-rect-candidate`).
         |- CoverageAtlas policy gate: `render-pipeline/src/main/kotlin/org/skia/pipeline/GeometryCoverageContracts.kt`
@@ -416,8 +402,7 @@ fun renderPipelineConformanceReport(
         |- Clip-stack breadth matrix: `render-pipeline/src/main/kotlin/org/skia/pipeline/GeometryCoverageContracts.kt`
         |  maps rect intersect, rrect intersect, rect difference, arbitrary AA path intersect,
         |  multi-shape AA difference, shader clip, and unlowerable stacks to supported clips or stable refusal codes.
-        |  CPU descriptor fallback evidence for AA clip and clip shader is asserted by
-        |  `kanvas-skia/src/test/kotlin/org/skia/core/SkBitmapDescriptorCoverageOracleTest.kt`.
+        |  CPU descriptor fallback evidence for AA clip and clip shader is retired with the legacy Skia module.
         |- Runtime-effect V2 support matrix: `reports/wgsl-pipeline/runtime-effects-v2/support-matrix.md`
         |  lists descriptor-backed runtime effects separately from adapter-backed scene parity, keeps policy refusals explicit, and avoids broad runtime-effect claims;
         |  current counts are $runtimeEffectSupportMatrixCounts.
@@ -477,13 +462,6 @@ fun renderPipelineConformanceReport(
         |`pipelineConformanceReport` is deterministic from the current checkout's required conformance XML results and fails if required suite evidence is missing.
     """.trimMargin().replace("TABLE_PIPE", "|")
 }
-
-project(":kanvas-skia").registerPipelineConformanceTest(
-    descriptionText = "Runs kanvas-skia production descriptor-route coverage conformance tests.",
-    testPatterns = listOf(
-        "org.skia.core.SkBitmapDescriptorCoverageOracleTest",
-    ),
-)
 
 tasks.register<Exec>("pipelineRuntimeShaderEffectsV2PromotionReport") {
     group = "verification"
@@ -641,7 +619,6 @@ tasks.register("pipelineConformance") {
         "pipelineRuntimeColorFilterWgslReport",
         "pipelineRuntimeBlenderBoundaryReport",
         "pipelineRuntimeEffectUniformPreviewReport",
-        ":kanvas-skia:pipelineConformanceTest",
     )
 
     doLast {
@@ -654,7 +631,6 @@ tasks.register("pipelineConformance") {
             |- REQUIRED Runtime Blender boundary report: pipelineRuntimeBlenderBoundaryReport
             |- REQUIRED Runtime Effect uniform preview report: pipelineRuntimeEffectUniformPreviewReport
             |- REQUIRED Runtime Effects V2 evidence bundle: pipelineRuntimeEffectsV2EvidenceBundleReport
-            |- REQUIRED kanvas-skia production descriptor-route tests: :kanvas-skia:pipelineConformanceTest
             |- GPU adapter residual risk: local adapter-dependent WebGPU tests may report JUnit SKIPPED when no adapter is available; required CI smoke lane (`GPU tests (macos)`) fails closed on adapter skips.
             """.trimMargin()
         )
@@ -3034,7 +3010,7 @@ tasks.register("checkProductionCodecImageClasspathNoJavaDesktop") {
 
     doLast {
         val violations = mutableListOf<String>()
-        val projectsToCheck = (pureKotlinCodecProjects + "codec:image-generator" + "kanvas-skia")
+        val projectsToCheck = pureKotlinCodecProjects
             .mapNotNull { name -> findProject(":$name") }
 
         projectsToCheck.forEach { checkedProject ->
@@ -3101,10 +3077,20 @@ tasks.register("checkProductionImageEncodeNoAwt") {
     description = "Fails if production image encoders use AWT/ImageIO/java.desktop APIs."
 
     doLast {
-        val sourceRoot = file("kanvas-skia/src/main/kotlin/org/skia/encode")
+        val sourceRoots = listOf(
+            file("codec/png/src/main/kotlin"),
+            file("codec/jpeg/src/main/kotlin"),
+            file("codec/gif/src/main/kotlin"),
+            file("codec/bmp/src/main/kotlin"),
+            file("codec/wbmp/src/main/kotlin"),
+            file("codec/webp/src/main/kotlin"),
+            file("codec/ico/src/main/kotlin"),
+        )
         val violations = mutableListOf<String>()
-        sourceRoot
-            .walkTopDown()
+        sourceRoots
+            .asSequence()
+            .filter { it.isDirectory }
+            .flatMap { sourceRoot -> sourceRoot.walkTopDown() }
             .filter { source -> source.isFile && source.extension in setOf("kt", "kts", "java") }
             .forEach { source ->
                 val sourceText = source.readText().withoutKotlinOrJavaComments()
@@ -3131,10 +3117,20 @@ tasks.register("checkImageEncodeTestsNoAwt") {
     description = "Fails if image encode tests use AWT/ImageIO as an oracle."
 
     doLast {
-        val sourceRoot = file("kanvas-skia/src/test/kotlin/org/skia/encode")
+        val sourceRoots = listOf(
+            file("codec/png/src/test/kotlin"),
+            file("codec/jpeg/src/test/kotlin"),
+            file("codec/gif/src/test/kotlin"),
+            file("codec/bmp/src/test/kotlin"),
+            file("codec/wbmp/src/test/kotlin"),
+            file("codec/webp/src/test/kotlin"),
+            file("codec/ico/src/test/kotlin"),
+        )
         val violations = mutableListOf<String>()
-        sourceRoot
-            .walkTopDown()
+        sourceRoots
+            .asSequence()
+            .filter { it.isDirectory }
+            .flatMap { sourceRoot -> sourceRoot.walkTopDown() }
             .filter { source -> source.isFile && source.extension in setOf("kt", "kts", "java") }
             .forEach { source ->
                 val sourceText = source.readText().withoutKotlinOrJavaComments()
@@ -3169,7 +3165,6 @@ tasks.register("checkCodecKotlinSwitchCriteria") {
         "checkProductionImageEncodeNoAwt",
         "checkImageEncodeTestsNoAwt",
         ":codec:test",
-        ":codec:real-image-tests:test",
         ":codec:jar",
     )
 }
@@ -3188,10 +3183,6 @@ tasks.register("checkCodecImageComplete") {
         ":codec:wbmp:test",
         ":codec:ico:test",
         ":codec:webp:test",
-        ":codec:animated:test",
-        ":codec:android:test",
-        ":codec:image-generator:test",
-        ":kanvas-skia:test",
     )
 }
 

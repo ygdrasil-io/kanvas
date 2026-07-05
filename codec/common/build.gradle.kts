@@ -4,5 +4,5 @@ plugins {
 
 dependencies {
     implementation(kotlin("stdlib"))
-    implementation(project(":kanvas-skia"))
+    implementation(project(":kanvas"))
 }

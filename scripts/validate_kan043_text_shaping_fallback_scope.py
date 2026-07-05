@@ -21,16 +21,15 @@ LATIN_DIAGNOSTICS_PATH = "reports/wgsl-pipeline/scenes/artifacts/font-latin-outl
 M62_EVIDENCE_PATH = "reports/wgsl-pipeline/scenes/generated/m62-font-fallback-evidence.json"
 
 SPEC_REALTIME_PATH = ".upstream/specs/skia-like-realtime/01-rendering-feature-expansion.md"
-OPENTYPE_DOC_PATH = "docs/opentype-font-backend.md"
 SPEC_FONT_README_PATH = ".upstream/specs/font/README.md"
 SPEC_SHAPING_PATH = ".upstream/specs/font/03-shaping-and-layout-boundary.md"
 SPEC_VALIDATION_PATH = ".upstream/specs/font/06-validation-and-conformance.md"
 SPEC_GEOMETRY_LOWERING_PATH = ".upstream/specs/geometry-coverage/02-lowering-rules.md"
 
 FONT_FACE_BY_SOURCE = {
-    "kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Regular.ttf": "Liberation Sans",
-    "kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Bold.ttf": "Liberation Sans Bold",
-    "kanvas-skia/src/main/resources/fonts/liberation/LiberationSerif-Italic.ttf": "Liberation Serif Italic",
+    "reports/font/fixtures/fonts/liberation/LiberationSans-Regular.ttf": "Liberation Sans",
+    "reports/font/fixtures/fonts/liberation/LiberationSans-Bold.ttf": "Liberation Sans Bold",
+    "reports/font/fixtures/fonts/liberation/LiberationSerif-Italic.ttf": "Liberation Serif Italic",
 }
 
 
@@ -517,7 +516,6 @@ def committed_artifacts() -> list[str]:
         LATIN_DIAGNOSTICS_PATH,
         M62_EVIDENCE_PATH,
         SPEC_REALTIME_PATH,
-        OPENTYPE_DOC_PATH,
         SPEC_FONT_README_PATH,
         SPEC_SHAPING_PATH,
         SPEC_VALIDATION_PATH,
@@ -530,11 +528,6 @@ def build_evidence(root: Path) -> dict[str, Any]:
     require_contains(root, SPEC_REALTIME_PATH, [
         "The deterministic reference font family is the bundled Liberation",
         "one missing-glyph/fallback scene",
-    ])
-    require_contains(root, OPENTYPE_DOC_PATH, [
-        "The built-in portable shaping entry points are `SkShaper.MakePrimitive()`",
-        "Defaults remain conservative: no implicit ligature substitution",
-        "Platform font fallback through native desktop APIs remains out of scope.",
     ])
     require_contains(root, SPEC_FONT_README_PATH, [
         "which font source was used",
@@ -599,8 +592,8 @@ def build_evidence(root: Path) -> dict[str, Any]:
         "claimGuard": guard,
         "requiredValidation": [
             "validateKan043TextShapingFallbackScope",
-            ":gpu-raster:pipelineConformanceTest -- includes SimpleLatinLineSceneEvidenceTest",
-            ":kanvas-skia:pipelineConformanceTest -- includes font/shaper contract tests in the standard suite",
+            ":gpu-renderer-scenes:test -- covers scene text/font metadata",
+            ":font:core:test -- covers font fixture catalog contracts",
             "pipelinePmBundle",
         ],
         "validationRows": [

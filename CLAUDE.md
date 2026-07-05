@@ -1,4 +1,4 @@
-# Project memory — kanvas → kanvas-skia
+# Project memory — Kanvas
 
 ## Reference sources
 
@@ -9,7 +9,7 @@
 ### Other relevant trees
 - `kanvas/src/generated/tests/org/skia/tests/` — mechanically translated Kotlin stubs (TODO bodies) carrying the original C++ as Javadoc; useful for class shape and signatures.
 - `kanvas/src/test/resources/original-888/` — 989 PNG references rendered by upstream Skia (embedded `Google/Skia` ICC profile, see Phase 1 note in `archives/MIGRATION_PLAN.md`).
-- `kanvas/src/main/kotlin/` — the legacy hand-written `:kanvas` implementation (`com.kanvas.*`); useful as a porting reference but **not** to be depended upon — `:kanvas-skia` is autonomous.
+- `kanvas/src/main/kotlin/` — the active Kanvas API and renderer-facing surface.
 
 ## Upstream planning status
 The old root-level migration plans and upstream snapshots are archived because

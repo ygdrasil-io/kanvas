@@ -19,7 +19,7 @@ import org.skia.foundation.SkImageInfo
  *    `width` and `height`. Used when the [SkEncodedOrigin] of a
  *    decoded stream includes a 90° rotation.
  *
- * **R1 implementation note — pixmap type** : kanvas-skia doesn't have a
+ * **R1 implementation note — pixmap type** : the codec surface doesn't have a
  * dedicated `SkPixmap` view type yet (a non-owning pointer + info
  * descriptor in upstream). The Orient helper therefore operates on
  * [SkBitmap], which is the closest existing concept (owning pixel buffer

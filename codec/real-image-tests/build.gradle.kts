@@ -8,7 +8,7 @@ dependencies {
     implementation(kotlin("stdlib"))
     implementation(project(":codec"))
     implementation(project(":codec:core"))
-    implementation(project(":kanvas-skia"))
+    implementation(project(":kanvas"))
     implementation(project(":math"))
 
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")

@@ -1,5 +1,5 @@
 /*
- * Copyright 2026 The kanvas-skia authors.
+ * Copyright 2026 The Kanvas authors.
  *
  * Mirrors Skia's `src/pathops/SkPathOpsPoint.h` — `SkDPoint` and
  * `SkDVector` (double-precision point and direction in 2D).

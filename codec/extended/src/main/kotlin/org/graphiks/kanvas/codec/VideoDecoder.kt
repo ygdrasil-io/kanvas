@@ -17,7 +17,7 @@ import org.skia.foundation.stream.SkStream
  * test attempts to exercise it. Consumers that need a working video
  * decoder must register their own JNI binding behind this surface
  * (e.g. via JavaCV / JNAerator on top of FFmpeg) — that work is out
- * of scope for `:kanvas-skia` itself.
+ * of scope for the portable Kanvas codec surface.
  */
 @Suppress("UNUSED_PARAMETER")
 public object VideoDecoder {

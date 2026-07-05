@@ -9,10 +9,7 @@ docs/
 ├── index.md         ← landing page (committée)
 ├── README.md        ← ce fichier
 └── api/             ← API doc générée (gitignored)
-    ├── math/          ← :math via :math:dokkaGfm
-    ├── kanvas-skia/   ← :kanvas-skia (G7.2)
-    ├── cpu-raster/    ← :cpu-raster (G7.2)
-    └── gpu-raster/    ← :gpu-raster (G7.2)
+    └── math/          ← :math via :math:dokkaGfm
 mkdocs.yml           ← config MkDocs (committée)
 _site/               ← sortie HTML finale (gitignored, déployée sur Pages)
 ```
@@ -23,10 +20,10 @@ Prérequis : Python 3 + `pip install mkdocs-material mkdocs-awesome-pages-plugin
 
 ```bash
 # 1. Génère le GFM via Dokka (tous les modules documentés)
-./gradlew :math:dokkaGfm :kanvas-skia:dokkaGfm :cpu-raster:dokkaGfm :gpu-raster:dokkaGfm
+./gradlew :math:dokkaGfm
 
 # 2. Copie dans l'arbre docs/ — un sous-dossier par module
-for m in math kanvas-skia cpu-raster gpu-raster; do
+for m in math; do
   mkdir -p docs/api/$m
   cp -r $m/build/dokka/gfm/. docs/api/$m/
 done
@@ -34,9 +31,6 @@ done
 # 3. Nettoie les artefacts Dokka non-standard (breadcrumbs `//[...]/`,
 #    tags `[jvm]\`, signatures en code blocks `kotlin)
 python docs/scripts/postprocess_dokka_gfm.py docs/api/math
-python docs/scripts/postprocess_dokka_gfm.py docs/api/kanvas-skia
-python docs/scripts/postprocess_dokka_gfm.py docs/api/cpu-raster
-python docs/scripts/postprocess_dokka_gfm.py docs/api/gpu-raster
 
 # 4. Sert localement (http://localhost:8000)
 mkdocs serve
@@ -77,7 +71,7 @@ La classification est dans `docs/scripts/postprocess_dokka_gfm.py` (`FAMILIES`).
 
 ## Déploiement (GitHub Pages)
 
-[`.github/workflows/docs.yml`](../.github/workflows/docs.yml) déclenche automatiquement à chaque push sur `master` qui touche `math/**`, `kanvas-skia/**`, `cpu-raster/**`, `gpu-raster/**`, `docs/**`, `mkdocs.yml` ou le workflow lui-même.
+[`.github/workflows/docs.yml`](../.github/workflows/docs.yml) déclenche automatiquement à chaque push sur `master` qui touche `math/**`, `kanvas/**`, `docs/**`, `mkdocs.yml` ou le workflow lui-même.
 
 URL : `https://ygdrasil-io.github.io/kanvas/`.
 
@@ -85,7 +79,7 @@ URL : `https://ygdrasil-io.github.io/kanvas/`.
 
 ## Configuration Dokka
 
-Voir [`math/build.gradle.kts`](../math/build.gradle.kts) pour le pattern de référence. Les modules `:kanvas-skia`, `:cpu-raster`, `:gpu-raster` répliquent la même configuration (G7.2). Chaque module documenté a :
+Voir [`math/build.gradle.kts`](../math/build.gradle.kts) pour le pattern de référence. Chaque module documenté a :
 
 - un `id("org.jetbrains.dokka") version "2.2.0"` dans son `plugins {}`,
 - une dep `dokkaGfmPlugin("org.jetbrains.dokka:gfm-plugin:2.2.0")` scopée au format GFM,
@@ -107,8 +101,6 @@ Voir [`mkdocs.yml`](../mkdocs.yml).
 
 ## Roadmap
 
-- [x] Étendre la doc API aux modules `:kanvas-skia`, `:cpu-raster`, `:gpu-raster` — G7.2.
 - [ ] `externalDocumentationLink` Dokka pour résoudre les KDocs croisés inter-modules (ex. `[SkShader]` dans `SkMatrix.invert` — warning bénin actuel). Les warnings `Couldn't resolve link` pendant `:dokkaGfm` viennent en partie de là.
-- [ ] Familles `awesome-pages` pour `:cpu-raster` (~150 fichiers top-level, nav touffue sans regroupement). Le post-processeur de `:math` a un dict `FAMILIES` extensible.
 - [ ] Migrer en Dokka V2 quand GFM natif débarque (V1 sera removed en 2.3+).
 - [ ] Plugin `mkdocs-awesome-nav` si la nav auto-générée devient trop touffue.

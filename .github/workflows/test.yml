@@ -1,14 +1,7 @@
-name: Test matrix (raster + GPU)
+name: Test matrix (Kanvas + GPU)
 
-# G7/M31 cross-validation matrix. Three jobs:
-#  - `raster`        : :kanvas-skia + :skia-integration-tests on ubuntu-latest.
-#                      No native GPU driver dependency, fast runner.
-#  - `gpu_smoke`     : required macOS GPU bridge gate using `:kanvas-skia-bridge:test :kanvas:test`.
-#                      The legacy `:gpu-raster:gpuSmokeTest` was deleted with the device
-#                      (KGPU-M32-005). The bridge tests exercise the real GPU path on Metal.
-#                      Bridge tests use `assumeTrue` gating; fail-closed-on-skip is a follow-up.
-#  - `gpu_inventory` : non-blocking full `:gpu-raster:test` inventory lane that
-#                      stays runnable and uploads triage artifacts.
+# Kanvas cross-validation matrix. The legacy Skia raster lane has
+# been retired; codec/image checks now run against the Kanvas-owned surface.
 #
 # All jobs trigger on PRs that touch the test surface or any of the
 # modules that feed it. The matrix is intentionally split into separate
@@ -22,9 +15,10 @@ on:
     paths:
       - 'math/**'
       - 'codec/**'
-      - 'kanvas-skia/**'
+      - 'kanvas/**'
       - 'font/**'
-      - 'gpu-raster/**'
+      - 'gpu-renderer/**'
+      - 'gpu-renderer-scenes/**'
       - 'integration-tests/**'
       - 'kanvas-legacy/src/test/resources/**'
       - 'buildSrc/**'
@@ -52,9 +46,10 @@ on:
     paths:
       - 'math/**'
       - 'codec/**'
-      - 'kanvas-skia/**'
+      - 'kanvas/**'
       - 'font/**'
-      - 'gpu-raster/**'
+      - 'gpu-renderer/**'
+      - 'gpu-renderer-scenes/**'
       - 'integration-tests/**'
       - 'kanvas-legacy/src/test/resources/**'
       - 'buildSrc/**'
@@ -167,16 +162,16 @@ jobs:
         # both invariants are lint-enforcing.
         run: python3 .upstream/source/map/audit.sh math
 
-       - name: Run render pipeline + raster integration tests
-         # GPU module deliberately skipped on the raster job — no driver,
-         # the WebGPU tests would all skip via Assumptions.assumeTrue and
-         # the matrix would mask a real GPU regression. The macos job
-         # below owns the GPU coverage.
-         run: |
-           ./gradlew --no-daemon \
-             checkCodecImageComplete \
-              :math:jvmTest \
-             :kanvas-skia:test
+      - name: Run render pipeline + raster integration tests
+        # GPU module deliberately skipped on the raster job — no driver,
+        # the WebGPU tests would all skip via Assumptions.assumeTrue and
+        # the matrix would mask a real GPU regression. The macos job
+        # below owns the GPU coverage.
+        run: |
+          ./gradlew --no-daemon \
+            checkCodecImageComplete \
+            :math:jvmTest \
+            :kanvas:test
 
   gpu_smoke:
     name: GPU tests (macos)
@@ -215,52 +210,6 @@ jobs:
           path: |
             kanvas/build/reports/tests/test/
             kanvas/build/test-results/test/
-          if-no-files-found: ignore
-
-  gpu_inventory:
-    name: GPU inventory (macos, non-blocking)
-    runs-on: macos-latest
-    needs: [gpu_smoke]
-    if: always()
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up JDK 25
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '25'
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
-
-      - name: Run full GPU inventory (non-blocking)
-        # Keep the full adapter-backed inventory runnable for failure
-        # classification and PM triage while smoke remains the required
-        # merge gate. Step-level continue-on-error keeps the PR check green
-        # while preserving JUnit XML and classification artifacts.
-        continue-on-error: true
-        run: ./gradlew --no-daemon :gpu-raster:gpuInventoryTest
-
-      - name: Upload GPU inventory debug images
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: gpu-inventory-debug-images
-          path: gpu-raster/build/debug-images/
-          if-no-files-found: ignore
-
-      - name: Upload GPU inventory test reports
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: gpu-inventory-test-reports
-          path: |
-            gpu-raster/build/reports/tests/test/
-            gpu-raster/build/reports/gpu-inventory/
-            gpu-raster/build/test-results/test/
-            gpu-raster/test-similarity-scores-webgpu.properties
           if-no-files-found: ignore
 
   wgsl_scene_dashboard_release_gate:

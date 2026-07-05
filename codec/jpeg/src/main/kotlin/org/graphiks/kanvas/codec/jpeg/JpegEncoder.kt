@@ -42,12 +42,6 @@ public object JpegEncoder {
 
     private val defaultOptions = Options()
 
-    init {
-        org.skia.encode.JpegCall.setEncoder { bitmap, quality ->
-            encode(bitmap, Options(quality = quality))
-        }
-    }
-
     public fun encode(src: SkBitmap, options: Options = defaultOptions): ByteArray? {
         val baos = ByteArrayOutputStream()
         return if (encode(baos, src, options)) baos.toByteArray() else null

@@ -1,5 +1,5 @@
-site_name: kanvas-skia
-site_description: API documentation for the Kotlin port of Skia
+site_name: Kanvas
+site_description: API documentation for the Kanvas Kotlin graphics engine
 site_url: https://ygdrasil-io.github.io/kanvas/
 repo_url: https://github.com/ygdrasil-io/kanvas
 repo_name: ygdrasil-io/kanvas

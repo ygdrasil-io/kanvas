@@ -5,8 +5,7 @@ on:
     branches: [master]
     paths:
       - 'math/**'
-      - 'kanvas-skia/**'
-      - 'gpu-raster/**'
+      - 'kanvas/**'
       - 'docs/**'
       - 'mkdocs.yml'
       - '.github/workflows/docs.yml'
@@ -47,17 +46,15 @@ jobs:
           pip install mkdocs-material mkdocs-awesome-pages-plugin
 
       - name: Generate per-module API docs (Dokka GFM)
-        # G7.2 — :math + :kanvas-skia + :gpu-raster.
+        # Per-module Dokka GFM output.
         # Each module's :dokkaGfm task writes into <module>/build/dokka/gfm/.
         run: |
           ./gradlew --no-daemon \
-            :math:dokkaGfm \
-            :kanvas-skia:dokkaGfm \
-            :gpu-raster:dokkaGfm
+            :math:dokkaGfm
 
       - name: Copy GFM output into docs tree
         run: |
-          for m in math kanvas-skia gpu-raster; do
+          for m in math; do
             mkdir -p docs/api/$m
             cp -r $m/build/dokka/gfm/. docs/api/$m/
           done
@@ -65,8 +62,6 @@ jobs:
       - name: Post-process Dokka GFM (clean MkDocs-incompatible artifacts)
         run: |
           python docs/scripts/postprocess_dokka_gfm.py docs/api/math
-          python docs/scripts/postprocess_dokka_gfm.py docs/api/kanvas-skia
-          python docs/scripts/postprocess_dokka_gfm.py docs/api/gpu-raster
 
       - name: Build site (MkDocs)
         run: mkdocs build

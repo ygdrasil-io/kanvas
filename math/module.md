@@ -1,6 +1,6 @@
 # Module math
 
-Couche math pure du port `kanvas-skia` — types et primitives mathématiques (points, rectangles, matrices, vecteurs, couleurs, scalaires) extraits du mono-module historique pour être réutilisables hors de l'écosystème Skia.
+Couche math pure de Kanvas — types et primitives mathématiques (points, rectangles, matrices, vecteurs, couleurs, scalaires) réutilisables hors de l'écosystème Skia.
 
 Le namespace `org.graphiks.math` est volontairement distinct de `org.skia.*` pour refléter cette indépendance.
 
