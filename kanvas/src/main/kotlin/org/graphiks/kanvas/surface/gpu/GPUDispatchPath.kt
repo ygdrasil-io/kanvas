@@ -123,7 +123,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
 
     when (val material = cmd.material) {
         is GPUMaterialDescriptor.SolidColor -> {
-            if (cmd.stroke && cmd.tessellatedVertices.size >= 4) {
+            if (cmd.stroke && cmd.tessellatedVertices.size == 4) {
                 // Coverage compute shader AA for strokes
                 val p0x = cmd.tessellatedVertices[0]
                 val p0y = cmd.tessellatedVertices[1]
