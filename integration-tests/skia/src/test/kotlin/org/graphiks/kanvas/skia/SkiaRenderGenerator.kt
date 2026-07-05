@@ -24,7 +24,14 @@ fun main(args: Array<String>) {
     var rendered = 0
     var failed = 0
 
+    val includeBlocking = args.any { it == "--include-blocking" }
+
     for (gm in gms) {
+        if (!includeBlocking && gm.renderCost == RenderCost.BLOCKING) {
+            println("[SKIP] ${gm.name} — BLOCKING")
+            continue
+        }
+
         val familyDir = File(outputDir, gm.renderFamily.name.lowercase())
         familyDir.mkdirs()
         val outputFile = File(familyDir, "${gm.name}.png")
