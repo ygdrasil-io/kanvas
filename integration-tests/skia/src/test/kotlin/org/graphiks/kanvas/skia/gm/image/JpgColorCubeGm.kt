@@ -4,6 +4,7 @@ import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
@@ -20,6 +21,7 @@ import org.graphiks.kanvas.types.Rect
 class JpgColorCubeGm : SkiaGm {
     override val name = "jpg-color-cube"
     override val renderFamily = RenderFamily.IMAGE
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 512
     override val height = 512

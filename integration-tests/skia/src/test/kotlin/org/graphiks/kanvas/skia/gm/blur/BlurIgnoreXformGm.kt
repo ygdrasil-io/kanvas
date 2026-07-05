@@ -6,6 +6,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.pipeline.BlurStyle
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
@@ -88,6 +89,7 @@ private fun drawBlurIgnoreXform(canvas: GmCanvas, drawType: String) {
 class BlurIgnoreXformCircleGm : SkiaGm {
     override val name = "blur_ignore_xform_circle"
     override val renderFamily = RenderFamily.BLUR
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 375
     override val height = 475
@@ -105,6 +107,7 @@ class BlurIgnoreXformCircleGm : SkiaGm {
 class BlurIgnoreXformRectGm : SkiaGm {
     override val name = "blur_ignore_xform_rect"
     override val renderFamily = RenderFamily.BLUR
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 375
     override val height = 475
@@ -122,6 +125,7 @@ class BlurIgnoreXformRectGm : SkiaGm {
 class BlurIgnoreXformRRectGm : SkiaGm {
     override val name = "blur_ignore_xform_rrect"
     override val renderFamily = RenderFamily.BLUR
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 375
     override val height = 475

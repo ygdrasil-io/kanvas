@@ -5,6 +5,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
@@ -18,6 +19,7 @@ import kotlin.random.Random
 class Strokes2Gm : SkiaGm {
     override val name = "strokes_poly"
     override val renderFamily = RenderFamily.PATH
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 14.5
     override val width = W
     override val height = H * 2

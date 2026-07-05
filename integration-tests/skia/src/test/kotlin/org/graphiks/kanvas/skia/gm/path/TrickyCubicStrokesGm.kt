@@ -7,6 +7,7 @@ import org.graphiks.kanvas.paint.StrokeCap
 import org.graphiks.kanvas.paint.StrokeJoin
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Matrix33
@@ -28,6 +29,7 @@ open class TrickyCubicStrokesGm(
 ) : SkiaGm {
     override val name = gmName
     override val renderFamily = RenderFamily.PATH
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = K_TEST_WIDTH
     override val height = K_TEST_HEIGHT

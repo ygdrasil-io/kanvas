@@ -12,11 +12,13 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 
 class Bug12866Gm : SkiaGm {
     override val name = "bug12866"
     override val renderFamily = RenderFamily.PATH
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 82.0
     override val width = 128
     override val height = 64

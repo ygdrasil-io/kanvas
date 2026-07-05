@@ -9,6 +9,7 @@ package org.graphiks.kanvas.skia.gm.path
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
@@ -17,6 +18,7 @@ import kotlin.random.Random
 class ManyCirclesGm : SkiaGm {
     override val name = "manycircles"
     override val renderFamily = RenderFamily.PATH
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 800
     override val height = 600

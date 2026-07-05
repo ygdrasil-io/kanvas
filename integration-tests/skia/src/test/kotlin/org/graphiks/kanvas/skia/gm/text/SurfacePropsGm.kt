@@ -5,6 +5,7 @@ import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.text.Font
@@ -19,6 +20,7 @@ class SurfacePropsGm(
 ) : SkiaGm {
     override val name: String = if (useDistanceField) "surfaceprops_df" else "surfaceprops"
     override val renderFamily = RenderFamily.TEXT
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = W
     override val height: Int = H * recs.size

@@ -4,6 +4,7 @@ import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
@@ -16,6 +17,7 @@ import org.graphiks.kanvas.types.Rect
 class DaaGm : SkiaGm {
     override val name = "daa"
     override val renderFamily = RenderFamily.PATH
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 76.8
     override val width = 399
     override val height = 245

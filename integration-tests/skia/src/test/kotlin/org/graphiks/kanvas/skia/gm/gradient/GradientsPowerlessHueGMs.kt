@@ -6,6 +6,7 @@ import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Point
@@ -14,6 +15,7 @@ import org.graphiks.kanvas.types.Rect
 class GradientsPowerlessHueLchGm : SkiaGm {
     override val name = "gradients_powerless_hue_LCH"
     override val renderFamily = RenderFamily.GRADIENT
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 415
     override val height = 330
@@ -26,6 +28,7 @@ class GradientsPowerlessHueLchGm : SkiaGm {
 class GradientsPowerlessHueOklchGm : SkiaGm {
     override val name = "gradients_powerless_hue_OKLCH"
     override val renderFamily = RenderFamily.GRADIENT
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 415
     override val height = 330
@@ -38,6 +41,7 @@ class GradientsPowerlessHueOklchGm : SkiaGm {
 class GradientsPowerlessHueHslGm : SkiaGm {
     override val name = "gradients_powerless_hue_HSL"
     override val renderFamily = RenderFamily.GRADIENT
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 415
     override val height = 330
@@ -50,6 +54,7 @@ class GradientsPowerlessHueHslGm : SkiaGm {
 class GradientsPowerlessHueHwbGm : SkiaGm {
     override val name = "gradients_powerless_hue_HWB"
     override val renderFamily = RenderFamily.GRADIENT
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 415
     override val height = 330

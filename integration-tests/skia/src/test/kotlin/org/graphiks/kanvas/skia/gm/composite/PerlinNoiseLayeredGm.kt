@@ -5,6 +5,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Rect
 
@@ -18,6 +19,7 @@ import org.graphiks.kanvas.types.Rect
 class PerlinNoiseLayeredGm : SkiaGm {
     override val name = "perlinnoise_layered"
     override val renderFamily = RenderFamily.COMPOSITE
+    override val renderCost = RenderCost.TRIVIAL
     override val minSimilarity = 0.0
     override val width = 500
     override val height = 500

@@ -15,6 +15,7 @@ import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.picture.PictureRecorder
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
@@ -22,6 +23,7 @@ import org.graphiks.kanvas.types.Rect
 class FilterFastBoundsGm : SkiaGm {
     override val name = "filterfastbounds"
     override val renderFamily = RenderFamily.COMPOSITE
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = (gDrawMethods.size + kNumExtraCols) * kTileWidth
     override val height = kNumVerticalTiles * kTileHeight

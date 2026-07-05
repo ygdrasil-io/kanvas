@@ -6,6 +6,7 @@ import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.paint.PathEffect
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 
 /**
@@ -16,6 +17,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 class PathEffectEmptyResultGm : SkiaGm {
     override val name = "path_effect_empty_result"
     override val renderFamily = RenderFamily.PATH
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 95.0
     override val width = 100
     override val height = 100

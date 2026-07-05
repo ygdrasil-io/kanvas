@@ -8,6 +8,7 @@ import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import kotlin.math.PI
 import kotlin.math.cos
@@ -23,6 +24,7 @@ import kotlin.math.sin
 class PathFillGm : SkiaGm {
     override val name = "pathfill"
     override val renderFamily = RenderFamily.PATH
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 640
     override val height = 480

@@ -5,6 +5,7 @@ import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import kotlin.math.PI
@@ -20,6 +21,7 @@ import kotlin.math.sin
 class PreserveFillRuleLittleGm : SkiaGm {
     override val name = "preservefillrule_little"
     override val renderFamily = RenderFamily.PATH
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 40.4
     override val width = 40
     override val height = 40

@@ -7,6 +7,7 @@ import org.graphiks.kanvas.paint.PathEffect
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 
 /**
@@ -18,6 +19,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 class CornerDiscretePathEffectGm : SkiaGm {
     override val name = "corner_discrete_path_effect"
     override val renderFamily = RenderFamily.PATH
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 640
     override val height = 320

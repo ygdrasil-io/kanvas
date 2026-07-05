@@ -9,6 +9,7 @@ import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import kotlin.math.sqrt
 
@@ -20,6 +21,7 @@ import kotlin.math.sqrt
 class GradientMatrixGm : SkiaGm {
     override val name = "gradient_matrix"
     override val renderFamily = RenderFamily.GRADIENT
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 800
     override val height = 800

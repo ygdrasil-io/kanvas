@@ -13,6 +13,7 @@ import org.graphiks.kanvas.paint.PathEffect
 import org.graphiks.kanvas.paint.StrokeCap
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
@@ -20,6 +21,7 @@ import org.graphiks.kanvas.types.Rect
 class ZeroLenStrokesGm : SkiaGm {
     override val name = "zeroPath"
     override val renderFamily = RenderFamily.PATH
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 92.4
     override val width = 400
     override val height = 800

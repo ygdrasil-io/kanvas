@@ -5,6 +5,7 @@ import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Rect
 
@@ -16,6 +17,7 @@ import org.graphiks.kanvas.types.Rect
 class PathInvFillGm : SkiaGm {
     override val name = "pathinvfill"
     override val renderFamily = RenderFamily.PATH
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 15.8
     override val width = 450
     override val height = 220

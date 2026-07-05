@@ -5,6 +5,7 @@ import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
@@ -57,6 +58,7 @@ private fun drawClippedFlower(canvas: GmCanvas, fillType: FillType) {
 class LargeClippedPathWindingGm : SkiaGm {
     override val name = "largeclippedpath_winding"
     override val renderFamily = RenderFamily.CLIP
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 1000
     override val height = 1000
@@ -76,6 +78,7 @@ class LargeClippedPathWindingGm : SkiaGm {
 class LargeClippedPathEvenoddGm : SkiaGm {
     override val name = "largeclippedpath_evenodd"
     override val renderFamily = RenderFamily.CLIP
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 1000
     override val height = 1000

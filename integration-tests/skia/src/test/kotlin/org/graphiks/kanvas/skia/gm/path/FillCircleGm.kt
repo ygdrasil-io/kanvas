@@ -5,6 +5,7 @@ import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import kotlin.random.Random
 
@@ -25,6 +26,7 @@ import kotlin.random.Random
 class FillCircleGm : SkiaGm {
     override val name = "fillcircle"
     override val renderFamily = RenderFamily.PATH
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 27.3
     override val width = 520
     override val height = 520

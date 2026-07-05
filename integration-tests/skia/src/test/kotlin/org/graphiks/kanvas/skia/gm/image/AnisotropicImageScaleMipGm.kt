@@ -6,6 +6,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Rect
@@ -24,6 +25,7 @@ import kotlin.math.PI
 class AnisotropicImageScaleMipGm : SkiaGm {
     override val name = "anisotropic_image_scale_mip"
     override val renderFamily = RenderFamily.IMAGE
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 2 * kImageSize + 3 * kSpacer
     override val height = kNumVertImages * kImageSize + (kNumVertImages + 1) * kSpacer

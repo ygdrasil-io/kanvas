@@ -10,6 +10,7 @@ import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 
 /**
@@ -20,6 +21,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 class Crbug899512Gm : SkiaGm {
     override val name = "crbug_899512"
     override val renderFamily = RenderFamily.BLUR
+    override val renderCost = RenderCost.TRIVIAL
     override val minSimilarity = 87.7
     override val width = 520
     override val height = 520

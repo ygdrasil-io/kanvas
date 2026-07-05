@@ -9,6 +9,7 @@ import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
@@ -28,6 +29,7 @@ private val typeface = Typefaces.fromResource("fonts/LiberationSans-Regular.ttf"
 class ClipShaderPerspGm : SkiaGm {
     override val name = "clip_shader_persp"
     override val renderFamily = RenderFamily.COMPOSITE
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 1370
     override val height = 1030

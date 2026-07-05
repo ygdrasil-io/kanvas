@@ -6,6 +6,7 @@ import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
@@ -16,6 +17,7 @@ import org.graphiks.kanvas.types.Rect
 class DrawAtlasColorGm : SkiaGm {
     override val name = "draw-atlas-colors"
     override val renderFamily = RenderFamily.COMPOSITE
+    override val renderCost = RenderCost.MEDIUM
     override val minSimilarity = 0.0
     override val width = kNumXferModes * (kAtlasSize + kPad) + kPad
     override val height = 2 * kNumColors * (kAtlasSize + kPad) + kTextPad + kPad

@@ -9,6 +9,7 @@ import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import kotlin.math.abs
 import kotlin.math.max
@@ -27,6 +28,7 @@ import kotlin.math.max
 class DashLineZeroOffIntervalGm : SkiaGm {
     override val name = "dash_line_zero_off_interval"
     override val renderFamily = RenderFamily.PATH
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 160
     override val height = 330

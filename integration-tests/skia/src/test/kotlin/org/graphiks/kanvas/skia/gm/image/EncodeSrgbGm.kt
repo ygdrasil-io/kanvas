@@ -3,6 +3,7 @@ package org.graphiks.kanvas.skia.gm.image
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Rect
 
@@ -25,6 +26,7 @@ open class EncodeSrgbGm(
 
     override val name: String get() = "encode-srgb-$variantName"
     override val renderFamily = RenderFamily.IMAGE
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width: Int get() = imageWidth * 2
     override val height: Int get() = imageHeight * 15

@@ -8,6 +8,7 @@ import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.pipeline.BlurStyle
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
@@ -20,6 +21,7 @@ import org.graphiks.kanvas.types.Rect
 class EmbossGm : SkiaGm {
     override val name = "emboss"
     override val renderFamily = RenderFamily.BLUR
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 61.0
     override val width = 600
     override val height = 120

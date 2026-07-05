@@ -4,6 +4,7 @@ import org.graphiks.kanvas.paint.ImageFilter
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
@@ -16,6 +17,7 @@ import org.graphiks.kanvas.types.Rect
 class BlurSmallSigmaGm : SkiaGm {
     override val name = "BlurSmallSigma"
     override val renderFamily = RenderFamily.BLUR
+    override val renderCost = RenderCost.TRIVIAL
     override val minSimilarity = 82.9
     override val width = 512
     override val height = 256

@@ -5,6 +5,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
@@ -20,6 +21,7 @@ import kotlin.math.sin
 class AnalyticAntialiasGeneralGm : SkiaGm {
     override val name = "analytic_antialias_general"
     override val renderFamily = RenderFamily.PATH
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 85.3
     override val width = 800
     override val height = 800

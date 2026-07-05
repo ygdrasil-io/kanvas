@@ -419,4 +419,8 @@ private fun GPUResourceMaterializationDecision.Materialized.materializedUniformB
 object GPUBackendRuntimeFactory {
     /** Returns a WebGPU-backed session or null when backend initialization is unavailable. */
     fun createOrNull(): GPUBackendSession? = WgpuBackendRuntimeFactory.createOrNull()
+
+    /** Release the shared WGPU device and all cached resources. Must be called after
+     *  all rendering is complete, before the JVM shuts down. */
+    fun dispose() = WgpuBackendRuntimeFactory.dispose()
 }

@@ -3,6 +3,7 @@ package org.graphiks.kanvas.skia.gm.image
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Rect
@@ -19,6 +20,7 @@ private const val K_BITMAP_SHORT_EDGE: Int = 1 * K_TILE_SIZE
 class BitmapTiledFractionalHorizontalManualGm : SkiaGm {
     override val name = "bitmaptiled_fractional_horizontal_manual"
     override val renderFamily = RenderFamily.IMAGE
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 1124
     override val height = 365
@@ -36,6 +38,7 @@ class BitmapTiledFractionalHorizontalManualGm : SkiaGm {
 class BitmapTiledFractionalVerticalManualGm : SkiaGm {
     override val name = "bitmaptiled_fractional_vertical_manual"
     override val renderFamily = RenderFamily.IMAGE
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 365
     override val height = 1124

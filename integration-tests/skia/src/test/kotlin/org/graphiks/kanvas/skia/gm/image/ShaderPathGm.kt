@@ -9,6 +9,7 @@ import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
@@ -20,6 +21,7 @@ import org.graphiks.kanvas.geometry.Path
 class ShaderPathGm : SkiaGm {
     override val name = "shaderpath"
     override val renderFamily = RenderFamily.IMAGE
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 820
     override val height = 930

@@ -4,6 +4,7 @@ import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Matrix33
@@ -16,6 +17,7 @@ import org.graphiks.kanvas.types.Matrix33
 class Crbug1174186Gm : SkiaGm {
     override val name = "crbug_1174186"
     override val renderFamily = RenderFamily.COMPOSITE
+    override val renderCost = RenderCost.MEDIUM
     override val minSimilarity = 0.0
     override val width = 1200
     override val height = 1200

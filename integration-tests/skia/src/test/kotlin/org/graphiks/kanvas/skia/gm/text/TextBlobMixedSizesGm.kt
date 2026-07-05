@@ -5,6 +5,7 @@ import org.graphiks.kanvas.pipeline.BlurStyle
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.KanvasGlyphRun
@@ -25,6 +26,7 @@ import kotlin.math.sin
 class TextBlobMixedSizesGm : SkiaGm {
     override val name = "textblobmixedsizes"
     override val renderFamily = RenderFamily.TEXT
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 85.0
     override val width = 2100
     override val height = 1900

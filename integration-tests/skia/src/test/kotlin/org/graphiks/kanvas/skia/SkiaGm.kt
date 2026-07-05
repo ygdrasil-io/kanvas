@@ -19,6 +19,7 @@ enum class RenderFamily {
 interface SkiaGm {
     val name: String
     val renderFamily: RenderFamily
+    val renderCost: RenderCost
     val minSimilarity: Double
     val tolerance: Int get() = 2
     val width: Int get() = 800

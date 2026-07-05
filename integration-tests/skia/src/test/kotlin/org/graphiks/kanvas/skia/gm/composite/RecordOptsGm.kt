@@ -12,6 +12,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.picture.PictureRecorder
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
@@ -20,6 +21,7 @@ import org.graphiks.kanvas.types.Rect
 class RecordOptsGm : SkiaGm {
     override val name = "recordopts"
     override val renderFamily = RenderFamily.COMPOSITE
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = (kSize + 1) * 2
     override val height = (kSize + 1) * 15

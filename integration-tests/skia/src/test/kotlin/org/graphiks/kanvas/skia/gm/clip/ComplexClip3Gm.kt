@@ -6,6 +6,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.pipeline.ClipOp
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
@@ -20,6 +21,7 @@ import org.graphiks.kanvas.types.Rect
 class ComplexClip3SimpleGm : SkiaGm {
     override val name = "complexclip3_simple"
     override val renderFamily = RenderFamily.CLIP
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 400
     override val height = 950
@@ -102,6 +104,7 @@ class ComplexClip3SimpleGm : SkiaGm {
 class ComplexClip3ComplexGm : SkiaGm {
     override val name = "complexclip3_complex"
     override val renderFamily = RenderFamily.CLIP
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 400
     override val height = 950

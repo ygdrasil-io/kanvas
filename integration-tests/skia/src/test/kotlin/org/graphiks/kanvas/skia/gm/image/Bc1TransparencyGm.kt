@@ -5,6 +5,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
@@ -25,6 +26,7 @@ import org.graphiks.math.SK_ColorWHITE
 class Bc1TransparencyGm : SkiaGm {
     override val name = "bc1_transparency"
     override val renderFamily = RenderFamily.IMAGE
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = kImgWidth + 2 * kPad
     override val height = 2 * kImgHeight + 3 * kPad

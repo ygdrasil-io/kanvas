@@ -15,6 +15,7 @@ import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.picture.PictureRecorder
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Point
@@ -23,6 +24,7 @@ import org.graphiks.kanvas.types.Rect
 class BackdropHintrectClippingGm : SkiaGm {
     override val name = "backdrop_hintrect_clipping"
     override val renderFamily = RenderFamily.COMPOSITE
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 512
     override val height = 1024

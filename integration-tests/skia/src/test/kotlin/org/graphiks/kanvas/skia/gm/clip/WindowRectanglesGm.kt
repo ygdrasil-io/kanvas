@@ -5,6 +5,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.pipeline.ClipOp
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.CornerRadii
@@ -19,6 +20,7 @@ import org.graphiks.kanvas.types.Rect
 class WindowRectanglesGm : SkiaGm {
     override val name = "windowrectangles"
     override val renderFamily = RenderFamily.CLIP
+    override val renderCost = RenderCost.MEDIUM
     override val minSimilarity = 0.0
     override val width = 600
     override val height = 600

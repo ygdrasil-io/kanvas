@@ -9,6 +9,7 @@ import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.pipeline.ClipOp
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.text.Font
@@ -24,6 +25,7 @@ import kotlin.math.sin
 class ConvexPolyClipGm : SkiaGm {
     override val name = "convex_poly_clip"
     override val renderFamily = RenderFamily.CLIP
+    override val renderCost = RenderCost.MEDIUM
     override val minSimilarity = 0.0
     override val width = 870
     override val height = 540

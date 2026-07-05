@@ -6,6 +6,7 @@ import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
@@ -21,6 +22,7 @@ import org.graphiks.kanvas.types.Rect
 class ChromeGradText1Gm : SkiaGm {
     override val name = "chrome_gradtext1"
     override val renderFamily = RenderFamily.TEXT
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 90.0
     override val width = 500
     override val height = 480

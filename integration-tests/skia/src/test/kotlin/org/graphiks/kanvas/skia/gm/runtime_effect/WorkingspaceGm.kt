@@ -3,6 +3,7 @@ package org.graphiks.kanvas.skia.gm.runtime_effect
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
@@ -18,6 +19,7 @@ import org.graphiks.kanvas.types.Rect
 class WorkingspaceGm : SkiaGm {
     override val name = "workingspace"
     override val renderFamily = RenderFamily.RUNTIME_EFFECT
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 14.464285714285715
     override val width = 200
     override val height = 350

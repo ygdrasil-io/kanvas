@@ -8,6 +8,7 @@ import org.graphiks.kanvas.pipeline.RuntimeEffect
 import org.graphiks.kanvas.pipeline.UniformBlock
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Point
@@ -24,6 +25,7 @@ import org.graphiks.kanvas.types.Rect
 class ThresholdRTGm : SkiaGm {
     override val name = "threshold_rt"
     override val renderFamily = RenderFamily.RUNTIME_EFFECT
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.006103515625
     override val width = 256
     override val height = 256

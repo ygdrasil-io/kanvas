@@ -6,6 +6,7 @@ import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 
@@ -16,6 +17,7 @@ import org.graphiks.kanvas.types.Color
 class Crbug788500Gm : SkiaGm {
     override val name = "crbug_788500"
     override val renderFamily = RenderFamily.PATH
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 98.0
     override val width = 300
     override val height = 300

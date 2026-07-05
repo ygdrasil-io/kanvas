@@ -2,6 +2,7 @@ package org.graphiks.kanvas.skia.gm.path
 
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 
 /**
@@ -14,6 +15,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 class FiddleGm : SkiaGm {
     override val name = "fiddle"
     override val renderFamily = RenderFamily.PATH
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 256
     override val height = 256

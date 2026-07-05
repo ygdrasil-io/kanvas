@@ -3,6 +3,7 @@ package org.graphiks.kanvas.skia.gm.mesh
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Point
@@ -18,6 +19,7 @@ import org.graphiks.kanvas.types.VertexMode
 class CustomMeshUniformsGm : SkiaGm {
     override val name = "custommesh_uniforms"
     override val renderFamily = RenderFamily.MESH
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 99.0
     override val width = 140
     override val height = 250

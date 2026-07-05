@@ -7,6 +7,7 @@ import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import kotlin.random.Random
@@ -20,6 +21,7 @@ import kotlin.random.Random
 class EmptyPathGm : SkiaGm {
     override val name = "emptypath"
     override val renderFamily = RenderFamily.PATH
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 74.5
     override val width = 600
     override val height = 280

@@ -9,6 +9,7 @@ import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 
 /**
@@ -19,6 +20,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 class LinearGradientTinyGm : SkiaGm {
     override val name = "linear_gradient_tiny"
     override val renderFamily = RenderFamily.GRADIENT
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 55.0
     override val width = 600
     override val height = 500

@@ -4,6 +4,7 @@ import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Matrix33
@@ -22,6 +23,7 @@ import kotlin.random.Random
 class PerspectiveClipGm : SkiaGm {
     override val name = "perspective_clip"
     override val renderFamily = RenderFamily.CLIP
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 800
     override val height = 800

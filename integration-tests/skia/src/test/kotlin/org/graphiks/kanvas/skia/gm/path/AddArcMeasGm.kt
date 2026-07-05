@@ -6,6 +6,7 @@ import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
@@ -29,6 +30,7 @@ import kotlin.math.sin
 class AddArcMeasGm : SkiaGm {
     override val name = "addarc_meas"
     override val renderFamily = RenderFamily.PATH
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
 
     private companion object {

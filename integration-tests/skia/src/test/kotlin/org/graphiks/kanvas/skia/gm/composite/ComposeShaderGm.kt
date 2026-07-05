@@ -7,6 +7,7 @@ import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Point
@@ -20,6 +21,7 @@ import org.graphiks.kanvas.types.Rect
 class ComposeShaderGm : SkiaGm {
     override val name = "composeshader"
     override val renderFamily = RenderFamily.COMPOSITE
+    override val renderCost = RenderCost.TRIVIAL
     override val minSimilarity = 25.6
     override val width = 120
     override val height = 120

@@ -4,6 +4,7 @@ import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 
@@ -15,6 +16,7 @@ import org.graphiks.kanvas.types.Color
 class PathSkbug11859Gm : SkiaGm {
     override val name = "path_skbug_11859"
     override val renderFamily = RenderFamily.PATH
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 40.3
     override val width = 512
     override val height = 512

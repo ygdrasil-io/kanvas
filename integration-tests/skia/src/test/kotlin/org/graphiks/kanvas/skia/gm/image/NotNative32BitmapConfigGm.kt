@@ -2,6 +2,7 @@ package org.graphiks.kanvas.skia.gm.image
 
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 
 /**
@@ -13,6 +14,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 class NotNative32BitmapConfigGm : SkiaGm {
     override val name = "not_native32_bitmap_config"
     override val renderFamily = RenderFamily.IMAGE
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 128
     override val height = 128

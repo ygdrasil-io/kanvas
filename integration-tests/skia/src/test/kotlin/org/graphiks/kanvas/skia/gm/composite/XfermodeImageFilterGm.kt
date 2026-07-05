@@ -8,6 +8,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.text.Font
@@ -18,6 +19,7 @@ import org.graphiks.kanvas.types.Rect
 class XfermodeImageFilterGm : SkiaGm {
     override val name = "xfermodeimagefilter"
     override val renderFamily = RenderFamily.COMPOSITE
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = WIDTH
     override val height = HEIGHT

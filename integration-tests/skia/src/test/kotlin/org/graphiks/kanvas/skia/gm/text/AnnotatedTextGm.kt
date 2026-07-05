@@ -3,6 +3,7 @@ package org.graphiks.kanvas.skia.gm.text
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
@@ -19,6 +20,7 @@ import org.graphiks.kanvas.types.Rect
 class AnnotatedTextGm : SkiaGm {
     override val name = "annotated_text"
     override val renderFamily = RenderFamily.TEXT
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 512
     override val height = 512

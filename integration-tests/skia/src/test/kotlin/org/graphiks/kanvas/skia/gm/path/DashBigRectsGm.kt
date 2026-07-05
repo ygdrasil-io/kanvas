@@ -9,6 +9,7 @@ import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import kotlin.random.Random
 
@@ -27,6 +28,7 @@ import kotlin.random.Random
 class DashBigRectsGm : SkiaGm {
     override val name = "dashbigrects"
     override val renderFamily = RenderFamily.PATH
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 256
     override val height = 256

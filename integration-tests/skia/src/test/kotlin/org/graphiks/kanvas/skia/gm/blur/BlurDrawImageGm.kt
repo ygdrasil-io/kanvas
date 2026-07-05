@@ -7,6 +7,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.pipeline.BlurStyle
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
@@ -20,6 +21,7 @@ import org.graphiks.kanvas.types.Rect
 class BlurDrawImageGm : SkiaGm {
     override val name = "BlurDrawImage"
     override val renderFamily = RenderFamily.BLUR
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 256
     override val height = 256

@@ -7,6 +7,7 @@ import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Matrix33
@@ -22,6 +23,7 @@ import org.graphiks.kanvas.types.VertexMode
 class Skbug13047Gm : SkiaGm {
     override val name = "skbug_13047"
     override val renderFamily = RenderFamily.MESH
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 200
     override val height = 200

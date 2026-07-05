@@ -15,6 +15,7 @@ import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.pipeline.BlurStyle
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.CornerRadii
 import org.graphiks.kanvas.types.Point
@@ -25,6 +26,7 @@ import org.graphiks.kanvas.types.Color
 class SimpleBlurRoundRectGm : SkiaGm {
     override val name = "simpleblurroundrect"
     override val renderFamily = RenderFamily.BLUR
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 64.3
     override val width = 1000
     override val height = 500

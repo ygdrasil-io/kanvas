@@ -8,6 +8,7 @@ import org.graphiks.kanvas.paint.StrokeJoin
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Point
@@ -21,6 +22,7 @@ import org.graphiks.kanvas.types.Rect
 class StrokeRectShaderGm : SkiaGm {
     override val name = "stroke_rect_shader"
     override val renderFamily = RenderFamily.PATH
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 47.8
     override val width = 690
     override val height = 300

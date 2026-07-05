@@ -81,6 +81,25 @@ tasks.register<JavaExec>("generateSkiaRendersFor") {
     outputs.upToDateWhen { false }
 }
 
+tasks.register<JavaExec>("generateSkiaScan") {
+    group = "verification"
+    description = "Scans Skia GMs with per-GM timeout, saves results to a file."
+    dependsOn(tasks.named("testClasses"))
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass.set("org.graphiks.kanvas.skia.SkiaGmScannerKt")
+    jvmArgs(buildList {
+        add("--add-opens=java.base/java.lang=ALL-UNNAMED")
+        add("--enable-native-access=ALL-UNNAMED")
+        if (org.gradle.internal.os.OperatingSystem.current().isMacOsX) {
+            add("-XstartOnFirstThread")
+        }
+    })
+    project.findProperty("kanvas.scan.from")?.let { args("--from", it.toString()) }
+    project.findProperty("kanvas.scan.to")?.let { args("--to", it.toString()) }
+    project.findProperty("kanvas.scan.timeout")?.let { args("--timeout", it.toString()) }
+    project.findProperty("kanvas.scan.output")?.let { args("--output", it.toString()) }
+}
+
 tasks.register<JavaExec>("generateSkiaDashboard") {
     group = "verification"
     description = "Generates Skia GM visual comparison dashboard."

@@ -3,6 +3,7 @@ package org.graphiks.kanvas.skia.gm.text
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.EmojiTypeface
 import org.graphiks.kanvas.text.Font
@@ -17,6 +18,7 @@ import org.graphiks.kanvas.types.Color
 class ColrV1Gm : SkiaGm {
     override val name = "colrv1_gradient_stops_repeat"
     override val renderFamily = RenderFamily.TEXT
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 90.0
     override val width = 1200
     override val height = 1200

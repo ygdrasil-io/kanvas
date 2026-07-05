@@ -8,6 +8,7 @@ import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.canvas.Canvas
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.text.Font
@@ -24,6 +25,7 @@ import org.graphiks.kanvas.types.Rect
 class LcdBlendGm : SkiaGm {
     override val name = "lcdblendmodes"
     override val renderFamily = RenderFamily.COMPOSITE
+    override val renderCost = RenderCost.MEDIUM
     override val minSimilarity = 0.0
     override val width = kWidth
     override val height = kHeight

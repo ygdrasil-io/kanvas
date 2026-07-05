@@ -3,6 +3,7 @@ package org.graphiks.kanvas.skia.gm.image
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
@@ -18,6 +19,7 @@ import kotlin.random.Random
 class ReadPixelsCodecGm : SkiaGm {
     override val name = "readpixelscodec"
     override val renderFamily = RenderFamily.IMAGE
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 3 * (kEncodedWidth + 1)
     override val height = 12 * (kEncodedHeight + 1)

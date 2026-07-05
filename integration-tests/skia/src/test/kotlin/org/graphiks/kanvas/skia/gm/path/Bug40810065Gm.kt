@@ -6,6 +6,7 @@ import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.paint.StrokeCap
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 
@@ -18,6 +19,7 @@ import org.graphiks.kanvas.types.Color
 class Bug40810065Gm : SkiaGm {
     override val name = "bug40810065"
     override val renderFamily = RenderFamily.PATH
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 82.9
     override val width = 256
     override val height = 512

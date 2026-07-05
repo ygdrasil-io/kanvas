@@ -10,6 +10,7 @@ import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 
 /**
@@ -21,6 +22,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 class ConicalGradients2ptOutsideGm : SkiaGm {
     override val name = "gradients_2pt_conical_outside"
     override val renderFamily = RenderFamily.GRADIENT
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 840
     override val height = 815

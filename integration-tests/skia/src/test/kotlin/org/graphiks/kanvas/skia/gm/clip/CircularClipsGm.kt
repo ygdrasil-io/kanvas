@@ -6,6 +6,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.pipeline.ClipOp
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
@@ -21,6 +22,7 @@ import org.graphiks.kanvas.types.Rect
 class CircularClipsGm : SkiaGm {
     override val name = "circular-clips"
     override val renderFamily = RenderFamily.CLIP
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 800
     override val height = 200

@@ -9,6 +9,7 @@ import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 
 /**
@@ -19,6 +20,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 class Crbug938592Gm : SkiaGm {
     override val name = "crbug_938592"
     override val renderFamily = RenderFamily.GRADIENT
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 83.0
     override val width = 500
     override val height = 300

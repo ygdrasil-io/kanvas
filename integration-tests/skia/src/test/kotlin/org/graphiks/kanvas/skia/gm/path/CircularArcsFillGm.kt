@@ -6,6 +6,7 @@ import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 
 /**
@@ -16,6 +17,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 class CircularArcsFillGm : SkiaGm {
     override val name = "circular_arcs_fill"
     override val renderFamily = RenderFamily.PATH
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 61.8
     override val width = 1000
     override val height = 1000

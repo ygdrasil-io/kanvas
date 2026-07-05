@@ -7,6 +7,7 @@ import org.graphiks.kanvas.paint.StrokeCap
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
+import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import kotlin.math.sqrt
 
@@ -23,6 +24,7 @@ import kotlin.math.sqrt
 class Dashing3Gm : SkiaGm {
     override val name = "dashing3"
     override val renderFamily = RenderFamily.PATH
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 87.7
     override val width = 640
     override val height = 480
