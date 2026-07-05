@@ -103,7 +103,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
     )
 
     val clipBounds = cmd.clip.bounds
-    val pathBounds = cmd.bounds
+    val pathBounds = if (cmd.stroke) computeBounds(strokeVertices) else cmd.bounds
     val sx = maxOf(pathBounds.left, clipBounds.left).toInt().coerceIn(0, surfaceWidth - 1)
     val sy = maxOf(pathBounds.top, clipBounds.top).toInt().coerceIn(0, surfaceHeight - 1)
     val sw = (minOf(pathBounds.right, clipBounds.right).toInt() - sx).coerceIn(1, surfaceWidth - sx)
