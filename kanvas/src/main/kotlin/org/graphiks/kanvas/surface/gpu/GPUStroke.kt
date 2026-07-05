@@ -136,6 +136,10 @@ internal fun strokeToFillGeometry(
             Pair(contourVertices[i], contourVertices[i + 1])
         }
 
+        val isClosed = n >= 3 &&
+            kotlin.math.abs(points[0].first - points[n - 1].first) < 1e-6f &&
+            kotlin.math.abs(points[0].second - points[n - 1].second) < 1e-6f
+
         val dashSegments = if (dashArray != null && dashArray.isNotEmpty()) {
             applyDash(points, dashArray, dashPhase)
         } else null
@@ -184,17 +188,82 @@ internal fun strokeToFillGeometry(
                 }
             }
             contourResult.add(result.size / 2)
+        } else if (!isClosed || n == 2) {
+            for (ei in 0 until n - 1) {
+                val p0 = points[ei]
+                val p1 = points[ei + 1]
+                val dx = p1.first - p0.first
+                val dy = p1.second - p0.second
+                val len = sqrt(dx * dx + dy * dy)
+                if (len < 1e-6f) continue
+                val nux = -dy / len
+                val nuy = dx / len
+                val nx = nux * halfWidth
+                val ny = nuy * halfWidth
+
+                val lx0 = p0.first - nx; val ly0 = p0.second - ny
+                val rx0 = p0.first + nx; val ry0 = p0.second + ny
+                val rx1 = p1.first + nx; val ry1 = p1.second + ny
+                val lx1 = p1.first - nx; val ly1 = p1.second - ny
+
+                result.addAll(listOf(lx0, ly0, rx0, ry0, rx1, ry1, lx1, ly1))
+                contourResult.add(result.size / 2)
+
+                if (ei == 0) {
+                    when (capStyle) {
+                        StrokeCap.ROUND -> {
+                            val capStart = generateRoundCap(p0, Pair(nux, nuy), halfWidth, segments)
+                            result.addAll(listOf(p0.first, p0.second))
+                            result.addAll(capStart)
+                            contourResult.add(result.size / 2)
+                        }
+                        StrokeCap.SQUARE -> {
+                            val ex = dx / len * halfWidth; val ey = dy / len * halfWidth
+                            result.addAll(listOf(
+                                p0.first - nx - ex, p0.second - ny - ey,
+                                p0.first + nx - ex, p0.second + ny - ey,
+                                p0.first + nx, p0.second + ny,
+                                p0.first - nx, p0.second - ny,
+                            ))
+                            contourResult.add(result.size / 2)
+                        }
+                        StrokeCap.BUTT -> { /* no cap needed */ }
+                    }
+                }
+                if (ei == n - 2) {
+                    when (capStyle) {
+                        StrokeCap.ROUND -> {
+                            val capEnd = generateRoundCap(p1, Pair(-nux, -nuy), halfWidth, segments)
+                            result.addAll(listOf(p1.first, p1.second))
+                            result.addAll(capEnd)
+                            contourResult.add(result.size / 2)
+                        }
+                        StrokeCap.SQUARE -> {
+                            val ex = dx / len * halfWidth; val ey = dy / len * halfWidth
+                            result.addAll(listOf(
+                                p1.first - nx, p1.second - ny,
+                                p1.first + nx, p1.second + ny,
+                                p1.first + nx + ex, p1.second + ny + ey,
+                                p1.first - nx + ex, p1.second - ny + ey,
+                            ))
+                            contourResult.add(result.size / 2)
+                        }
+                        StrokeCap.BUTT -> { /* no cap needed */ }
+                    }
+                }
+            }
         } else {
-            val edgeNormals = List(n) { i ->
+            val effectiveN = if (isClosed) n - 1 else n
+            val edgeNormals = List(effectiveN) { i ->
                 edgeNormal(
                     points[i].first, points[i].second,
-                    points[(i + 1) % n].first, points[(i + 1) % n].second,
+                    points[(i + 1) % effectiveN].first, points[(i + 1) % effectiveN].second,
                 )
             }
 
             if (joinStyle == StrokeJoin.ROUND) {
-                for (i in 0 until n) {
-                    val p0 = points[i]; val p1 = points[(i + 1) % n]
+                for (i in 0 until effectiveN) {
+                    val p0 = points[i]; val p1 = points[(i + 1) % effectiveN]
                     val en = edgeNormals[i]
                     val nx = en.first * halfWidth; val ny = en.second * halfWidth
 
@@ -210,9 +279,9 @@ internal fun strokeToFillGeometry(
                     ))
                 }
 
-                for (i in 0 until n) {
+                for (i in 0 until effectiveN) {
                     val p = points[i]
-                    val inNorm = edgeNormals[(i + n - 1) % n]
+                    val inNorm = edgeNormals[(i + effectiveN - 1) % effectiveN]
                     val outNorm = edgeNormals[i]
 
                     val joinRight = generateRoundJoin(p, outNorm, inNorm, halfWidth, segments)
@@ -237,8 +306,8 @@ internal fun strokeToFillGeometry(
                     }
                 }
             } else {
-                val normals = List(n) { i ->
-                    val prev = edgeNormals[(i + n - 1) % n]
+                val normals = List(effectiveN) { i ->
+                    val prev = edgeNormals[(i + effectiveN - 1) % effectiveN]
                     val next = edgeNormals[i]
                     val nx = prev.first + next.first
                     val ny = prev.second + next.second
@@ -247,9 +316,9 @@ internal fun strokeToFillGeometry(
                     else Pair(nx / len * halfWidth, ny / len * halfWidth)
                 }
 
-                for (i in 0 until n) {
-                    val p0 = points[i]; val p1 = points[(i + 1) % n]
-                    val n0 = normals[i]; val n1 = normals[(i + 1) % n]
+                for (i in 0 until effectiveN) {
+                    val p0 = points[i]; val p1 = points[(i + 1) % effectiveN]
+                    val n0 = normals[i]; val n1 = normals[(i + 1) % effectiveN]
 
                     val l0x = p0.first - n0.first; val l0y = p0.second - n0.second
                     val l1x = p1.first - n1.first; val l1y = p1.second - n1.second
