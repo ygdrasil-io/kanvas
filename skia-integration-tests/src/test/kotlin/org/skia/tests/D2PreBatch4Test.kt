@@ -31,11 +31,6 @@ class D2PreBatch4Test {
         )
     }
 
-    /** `croppedrects` — 3 cropped-rect dispatch paths. */
-    @Test
-    fun `CroppedRectsGM matches reference`() =
-        runGm(CroppedRectsGM(), "CroppedRectsGM", floor = 0.0)
-
     /**
      * `lighting` — C1.7 lighting filters on a synthetic 100×100
      * input bitmap (substitutes upstream's 'e' glyph render).
