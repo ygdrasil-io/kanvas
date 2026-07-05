@@ -13,6 +13,7 @@ import org.graphiks.kanvas.types.a
 import org.graphiks.kanvas.types.b
 import org.graphiks.kanvas.types.g
 import org.graphiks.kanvas.types.r
+import org.graphiks.kanvas.types.toArgbInt
 
 class Bitmap(
     val width: Int,
@@ -142,6 +143,12 @@ class Bitmap(
                 pixels[index + 1] = ((p ushr 8) and 0xFF).toByte()
             }
         }
+    }
+
+    fun getArgb(x: Int, y: Int): Int = getPixel(x, y).toArgbInt()
+
+    fun setArgb(x: Int, y: Int, argb: Int) {
+        setPixel(x, y, Color.fromArgbInt(argb))
     }
 
     fun eraseColor(color: Color) {

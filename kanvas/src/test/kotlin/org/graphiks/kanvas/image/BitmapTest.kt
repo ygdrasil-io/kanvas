@@ -37,6 +37,17 @@ class BitmapTest {
     }
 
     @Test
+    fun `setArgb and getArgb round-trip packed Color bits`() {
+        val bmp = Bitmap(2, 2)
+        val argb = 0x8044AA11.toInt()
+
+        bmp.setArgb(1, 0, argb)
+
+        assertEquals(argb, bmp.getArgb(1, 0))
+        assertEquals(Color.fromArgbInt(argb), bmp.getPixel(1, 0))
+    }
+
+    @Test
     fun `setPixel out of bounds is no-op`() {
         val bmp = Bitmap(2, 2)
         bmp.setPixel(10, 10, Color.RED)

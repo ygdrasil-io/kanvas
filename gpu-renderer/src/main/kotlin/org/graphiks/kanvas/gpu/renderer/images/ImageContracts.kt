@@ -20,7 +20,6 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUTextureDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUTextureResourceRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUTextureViewDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUUseToken
-import org.graphiks.kanvas.codec.Codec
 import java.security.MessageDigest
 
 /** Image upload artifact key. */
@@ -228,7 +227,9 @@ sealed interface GPUImageDecodePlan {
 }
 
 /** Plans GPU image decode from encoded bytes using available codecs. */
-class GPUImageDecodePlanner {
+class GPUImageDecodePlanner(
+    private val decoderRegistry: GPUEncodedImageDecoderRegistry = GPUEncodedImageDecoders,
+) {
     private val supportedMimeTypes = setOf(
         "image/png",
         "image/jpeg",
@@ -247,42 +248,15 @@ class GPUImageDecodePlanner {
             )
         }
 
-        val codec = Codec.MakeFromData(bytes)
-        if (codec == null) {
+        val decoder = decoderRegistry.find(bytes, normalized)
+        if (decoder == null) {
             return GPUImageDecodePlan.Refused(
                 code = "dependency.image.decode.codec_not_found",
                 reason = "No codec found for $mimeType bytes.",
             )
         }
 
-        val (bitmap, result) = codec.getImage()
-        if (result != Codec.Result.kSuccess || bitmap == null) {
-            return GPUImageDecodePlan.Refused(
-                code = "dependency.image.decode.failed",
-                reason = "Decode failed for $mimeType with result $result.",
-            )
-        }
-
-        val width = bitmap.width
-        val height = bitmap.height
-        val pixelBytes = ByteArray(width * height * 4)
-        for (y in 0 until height) {
-            for (x in 0 until width) {
-                val pixel = bitmap.getPixel(x, y)
-                val offset = (y * width + x) * 4
-                pixelBytes[offset] = ((pixel ushr 16) and 0xFF).toByte()
-                pixelBytes[offset + 1] = ((pixel ushr 8) and 0xFF).toByte()
-                pixelBytes[offset + 2] = (pixel and 0xFF).toByte()
-                pixelBytes[offset + 3] = ((pixel ushr 24) and 0xFF).toByte()
-            }
-        }
-
-        return GPUImageDecodePlan.Accepted(
-            width = width,
-            height = height,
-            pixelBytes = pixelBytes,
-            colorType = "rgba8unorm",
-        )
+        return decoder.decode(bytes, normalized)
     }
 }
 
