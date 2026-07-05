@@ -15,6 +15,7 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUTargetPreparationContext
 import org.graphiks.kanvas.gpu.renderer.resources.ValidatingPayloadResourceProvider
 import org.graphiks.kanvas.gpu.renderer.resources.dumpLines
 import org.graphiks.kanvas.gpu.renderer.telemetry.GPUCacheTelemetry
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -25,6 +26,11 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class GPUBackendRuntimeWgpuSmokeTest {
+    @AfterEach
+    fun disposeRuntime() {
+        GPUBackendRuntimeFactory.dispose()
+    }
+
     @Test
     fun `align copy bytes per row rounds up to 256-byte blocks`() {
         assertEquals(256, alignCopyBytesPerRow(4))
@@ -109,6 +115,32 @@ class GPUBackendRuntimeWgpuSmokeTest {
                 request = request,
             ),
         )
+    }
+
+    @Test
+    fun `backend runtime exposes conservative GPU capabilities when backend is available`() {
+        val runtime = GPUBackendRuntimeFactory.createOrNull()
+        assumeTrue(runtime != null, "GPU backend unavailable in current environment")
+
+        runtime!!.use { session ->
+            val capabilities = session.capabilities
+                ?: error("GPU backend session should expose capabilities")
+            val limits = capabilities.limits
+                ?: error("GPU backend session should expose limits")
+            val facts = limits.capabilityFacts(evidenceLabel = "runtime")
+
+            assertEquals("GPU", capabilities.implementation.facadeName)
+            assertEquals("wgpu4k", capabilities.implementation.implementationName)
+            assertEquals(8192L, limits.maxTextureDimension2D)
+            assertEquals(256L, limits.copyBytesPerRowAlignment)
+            assertEquals(256L, limits.minUniformBufferOffsetAlignment)
+            assertEquals("runtime.conservative", limits.source)
+            assertEquals(
+                listOf("maxTextureDimension2D", "copyBytesPerRowAlignment", "minUniformBufferOffsetAlignment"),
+                facts.map { it.name },
+            )
+            assertTrue(!facts.joinToString("\n").contains("@"))
+        }
     }
 
     @Test
