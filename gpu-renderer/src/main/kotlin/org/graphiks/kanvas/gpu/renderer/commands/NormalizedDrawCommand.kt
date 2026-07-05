@@ -393,6 +393,7 @@ sealed interface GPUMaterialDescriptor {
         val allStopColors: FloatArray? = null,
         val snippetSourceHash: String? = null,
         val fragmentEntryPoint: String? = null,
+        val invLocalMatrix: FloatArray? = null,
     ) : GPUMaterialDescriptor {
         override val kind: GPUMaterialKind = GPUMaterialKind.LinearGradient
     }
@@ -415,6 +416,7 @@ sealed interface GPUMaterialDescriptor {
         val allStopColors: FloatArray? = null,
         val snippetSourceHash: String? = null,
         val fragmentEntryPoint: String? = null,
+        val invLocalMatrix: FloatArray? = null,
     ) : GPUMaterialDescriptor {
         override val kind: GPUMaterialKind = GPUMaterialKind.RadialGradient
     }
@@ -438,6 +440,7 @@ sealed interface GPUMaterialDescriptor {
         val allStopColors: FloatArray? = null,
         val snippetSourceHash: String? = null,
         val fragmentEntryPoint: String? = null,
+        val invLocalMatrix: FloatArray? = null,
     ) : GPUMaterialDescriptor {
         override val kind: GPUMaterialKind = GPUMaterialKind.SweepGradient
     }
@@ -454,6 +457,7 @@ sealed interface GPUMaterialDescriptor {
         val allStopColors: FloatArray? = null,
         val snippetSourceHash: String? = null,
         val fragmentEntryPoint: String? = null,
+        val invLocalMatrix: FloatArray? = null,
     ) : GPUMaterialDescriptor {
         override val kind: GPUMaterialKind = GPUMaterialKind.TwoPointConical
     }

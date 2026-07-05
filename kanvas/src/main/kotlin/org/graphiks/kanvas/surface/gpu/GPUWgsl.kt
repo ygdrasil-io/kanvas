@@ -57,9 +57,19 @@ internal val LINEAR_GRADIENT_WGSL: String = """
         end: vec2f,
         startColor: vec4f,
         endColor: vec4f,
+        hasMatrix: u32,
+        invMatrix: array<vec2f, 3>,
     };
 
     @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+
+    fn applyInvMatrix(coord: vec2f) -> vec2f {
+        if (uniforms.hasMatrix == 0u) { return coord; }
+        return vec2f(
+            dot(uniforms.invMatrix[0], coord) + uniforms.invMatrix[2].x,
+            dot(uniforms.invMatrix[1], coord) + uniforms.invMatrix[2].y,
+        );
+    }
 
     @vertex
     fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
@@ -70,11 +80,12 @@ internal val LINEAR_GRADIENT_WGSL: String = """
 
     @fragment
     fn fs_main(@builtin(position) coord: vec4f) -> @location(0) vec4f {
+        let p = applyInvMatrix(coord.xy);
         let dir = uniforms.end - uniforms.start;
         let lenSq = dot(dir, dir);
         var t = -1.0e30;
         if (lenSq >= 1.0e-12) {
-            t = dot(coord.xy - uniforms.start, dir) / lenSq;
+            t = dot(p - uniforms.start, dir) / lenSq;
         }
         let tClamped = clamp(t, 0.0, 1.0);
         let startSRGB = vec4f(pow(uniforms.startColor.rgb, vec3f(1.0 / 2.2)), uniforms.startColor.a);
@@ -136,9 +147,19 @@ internal val RADIAL_GRADIENT_WGSL: String = """
         radius: f32,
         startColor: vec4f,
         endColor: vec4f,
+        hasMatrix: u32,
+        invMatrix: array<vec2f, 3>,
     };
 
     @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+
+    fn applyInvMatrix(coord: vec2f) -> vec2f {
+        if (uniforms.hasMatrix == 0u) { return coord; }
+        return vec2f(
+            dot(uniforms.invMatrix[0], coord) + uniforms.invMatrix[2].x,
+            dot(uniforms.invMatrix[1], coord) + uniforms.invMatrix[2].y,
+        );
+    }
 
     @vertex
     fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
@@ -149,7 +170,8 @@ internal val RADIAL_GRADIENT_WGSL: String = """
 
     @fragment
     fn fs_main(@builtin(position) coord: vec4f) -> @location(0) vec4f {
-        let dir = coord.xy - uniforms.center;
+        let p = applyInvMatrix(coord.xy);
+        let dir = p - uniforms.center;
         let dist = length(dir);
         let t = dist / uniforms.radius;
         let tClamped = clamp(t, 0.0, 1.0);
@@ -166,9 +188,19 @@ internal val LINEAR_GRADIENT_MULTI_WGSL: String = """
         end: vec2f,
         stopCount: u32,
         stopData: array<vec4f, 512>,
+        hasMatrix: u32,
+        invMatrix: array<vec2f, 3>,
     };
 
     @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+
+    fn applyInvMatrix(coord: vec2f) -> vec2f {
+        if (uniforms.hasMatrix == 0u) { return coord; }
+        return vec2f(
+            dot(uniforms.invMatrix[0], coord) + uniforms.invMatrix[2].x,
+            dot(uniforms.invMatrix[1], coord) + uniforms.invMatrix[2].y,
+        );
+    }
 
     @vertex
     fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
@@ -179,11 +211,12 @@ internal val LINEAR_GRADIENT_MULTI_WGSL: String = """
 
     @fragment
     fn fs_main(@builtin(position) coord: vec4f) -> @location(0) vec4f {
+        let p = applyInvMatrix(coord.xy);
         let dir = uniforms.end - uniforms.start;
         let lenSq = dot(dir, dir);
         var t = -1.0e30;
         if (lenSq >= 1.0e-12) {
-            t = dot(coord.xy - uniforms.start, dir) / lenSq;
+            t = dot(p - uniforms.start, dir) / lenSq;
         }
         let tClamped = clamp(t, 0.0, 1.0);
         var result = uniforms.stopData[2u * uniforms.stopCount - 1u];
@@ -209,9 +242,19 @@ internal val RADIAL_GRADIENT_MULTI_WGSL: String = """
         radius: f32,
         stopCount: u32,
         stopData: array<vec4f, 512>,
+        hasMatrix: u32,
+        invMatrix: array<vec2f, 3>,
     };
 
     @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+
+    fn applyInvMatrix(coord: vec2f) -> vec2f {
+        if (uniforms.hasMatrix == 0u) { return coord; }
+        return vec2f(
+            dot(uniforms.invMatrix[0], coord) + uniforms.invMatrix[2].x,
+            dot(uniforms.invMatrix[1], coord) + uniforms.invMatrix[2].y,
+        );
+    }
 
     @vertex
     fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
@@ -222,7 +265,8 @@ internal val RADIAL_GRADIENT_MULTI_WGSL: String = """
 
     @fragment
     fn fs_main(@builtin(position) coord: vec4f) -> @location(0) vec4f {
-        let dir = coord.xy - uniforms.center;
+        let p = applyInvMatrix(coord.xy);
+        let dir = p - uniforms.center;
         let dist = length(dir);
         let t = dist / uniforms.radius;
         let tClamped = clamp(t, 0.0, 1.0);
@@ -249,9 +293,19 @@ internal val SWEEP_GRADIENT_WGSL: String = """
         angles: vec2f,
         startColor: vec4f,
         endColor: vec4f,
+        hasMatrix: u32,
+        invMatrix: array<vec2f, 3>,
     };
 
     @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+
+    fn applyInvMatrix(coord: vec2f) -> vec2f {
+        if (uniforms.hasMatrix == 0u) { return coord; }
+        return vec2f(
+            dot(uniforms.invMatrix[0], coord) + uniforms.invMatrix[2].x,
+            dot(uniforms.invMatrix[1], coord) + uniforms.invMatrix[2].y,
+        );
+    }
 
     @vertex
     fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
@@ -262,7 +316,8 @@ internal val SWEEP_GRADIENT_WGSL: String = """
 
     @fragment
     fn fs_main(@builtin(position) coord: vec4f) -> @location(0) vec4f {
-        let dir = coord.xy - uniforms.center;
+        let p = applyInvMatrix(coord.xy);
+        let dir = p - uniforms.center;
         let angle = atan2(dir.y, dir.x);
         let range = uniforms.angles.y - uniforms.angles.x;
         let t = select((angle - uniforms.angles.x) / range, 0.0, range < 1.0e-10);
@@ -280,9 +335,19 @@ internal val SWEEP_GRADIENT_MULTI_WGSL: String = """
         angles: vec2f,
         stopCount: u32,
         stopData: array<vec4f, 512>,
+        hasMatrix: u32,
+        invMatrix: array<vec2f, 3>,
     };
 
     @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+
+    fn applyInvMatrix(coord: vec2f) -> vec2f {
+        if (uniforms.hasMatrix == 0u) { return coord; }
+        return vec2f(
+            dot(uniforms.invMatrix[0], coord) + uniforms.invMatrix[2].x,
+            dot(uniforms.invMatrix[1], coord) + uniforms.invMatrix[2].y,
+        );
+    }
 
     @vertex
     fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
@@ -293,7 +358,8 @@ internal val SWEEP_GRADIENT_MULTI_WGSL: String = """
 
     @fragment
     fn fs_main(@builtin(position) coord: vec4f) -> @location(0) vec4f {
-        let dir = coord.xy - uniforms.center;
+        let p = applyInvMatrix(coord.xy);
+        let dir = p - uniforms.center;
         let angle = atan2(dir.y, dir.x);
         let range = uniforms.angles.y - uniforms.angles.x;
         let t = select((angle - uniforms.angles.x) / range, 0.0, range < 1.0e-10);

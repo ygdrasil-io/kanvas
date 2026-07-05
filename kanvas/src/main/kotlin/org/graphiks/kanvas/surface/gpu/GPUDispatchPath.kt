@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.surface.gpu
 
+import java.nio.ByteBuffer
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRawUniformDraw
@@ -141,10 +142,11 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
             val multiStop = material.allStopPositions != null && material.allStopPositions!!.size > 2
             if (multiStop) {
                 val n = material.allStopPositions!!.size.coerceAtMost(256)
-                val bb = java.nio.ByteBuffer.allocate(8224).order(java.nio.ByteOrder.nativeOrder())
+                val bb = java.nio.ByteBuffer.allocate(8256).order(java.nio.ByteOrder.nativeOrder())
                 bb.putFloat(material.startX); bb.putFloat(material.startY)
                 bb.putFloat(material.endX); bb.putFloat(material.endY)
                 bb.putInt(n)
+                bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f) // padding for wgsl vec4f alignment
                 for (i in 0 until 256) {
                     if (i < n) {
                         val pos = material.allStopPositions!!.getOrElse(i) { i.toFloat() / (n - 1).coerceAtLeast(1) }
@@ -162,6 +164,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
                         bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f)
                     }
                 }
+                bb.writeUniformMatrixTail( material.invLocalMatrix)
                 drawFullscreenStencilPass(
                     wgsl = LINEAR_GRADIENT_MULTI_WGSL,
                     colorFormat = config.gpuColorFormat.wgpuLabel,
@@ -177,7 +180,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
                     blendMode = blendMode,
                 )
             } else {
-                val bb = java.nio.ByteBuffer.allocate(48).order(java.nio.ByteOrder.nativeOrder())
+                val bb = java.nio.ByteBuffer.allocate(80).order(java.nio.ByteOrder.nativeOrder())
                 bb.putFloat(material.startX); bb.putFloat(material.startY)
                 bb.putFloat(material.endX); bb.putFloat(material.endY)
                 bb.putFloat(srgbToLinear(material.startR) * material.startA)
@@ -188,6 +191,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
                 bb.putFloat(srgbToLinear(material.endG) * material.endA)
                 bb.putFloat(srgbToLinear(material.endB) * material.endA)
                 bb.putFloat(material.endA)
+                bb.writeUniformMatrixTail( material.invLocalMatrix)
                 drawFullscreenStencilPass(
                     wgsl = LINEAR_GRADIENT_WGSL,
                     colorFormat = config.gpuColorFormat.wgpuLabel,
@@ -208,7 +212,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
             val multiStop = material.allStopPositions != null && material.allStopPositions!!.size > 2
             if (multiStop) {
                 val n = material.allStopPositions!!.size.coerceAtMost(256)
-                val bb = java.nio.ByteBuffer.allocate(8224).order(java.nio.ByteOrder.nativeOrder())
+                val bb = java.nio.ByteBuffer.allocate(8240).order(java.nio.ByteOrder.nativeOrder())
                 bb.putFloat(material.centerX); bb.putFloat(material.centerY)
                 bb.putFloat(material.radius)
                 bb.putInt(n)
@@ -225,6 +229,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
                         bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f)
                     }
                 }
+                bb.writeUniformMatrixTail( material.invLocalMatrix)
                 drawFullscreenStencilPass(
                     wgsl = RADIAL_GRADIENT_MULTI_WGSL,
                     colorFormat = config.gpuColorFormat.wgpuLabel,
@@ -240,7 +245,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
                     blendMode = blendMode,
                 )
             } else {
-                val bb = java.nio.ByteBuffer.allocate(48).order(java.nio.ByteOrder.nativeOrder())
+                val bb = java.nio.ByteBuffer.allocate(80).order(java.nio.ByteOrder.nativeOrder())
                 bb.putFloat(material.centerX); bb.putFloat(material.centerY)
                 bb.putFloat(material.radius)
                 bb.putFloat(0f) // padding — vec4f alignment at offset 16
@@ -252,6 +257,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
                 bb.putFloat(srgbToLinear(material.endG) * material.endA)
                 bb.putFloat(srgbToLinear(material.endB) * material.endA)
                 bb.putFloat(material.endA)
+                bb.writeUniformMatrixTail( material.invLocalMatrix)
                 drawFullscreenStencilPass(
                     wgsl = RADIAL_GRADIENT_WGSL,
                     colorFormat = config.gpuColorFormat.wgpuLabel,
@@ -272,10 +278,11 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
             val multiStop = material.allStopPositions != null && material.allStopPositions!!.size > 2
             if (multiStop) {
                 val n = material.allStopPositions!!.size.coerceAtMost(256)
-                val bb = java.nio.ByteBuffer.allocate(8224).order(java.nio.ByteOrder.nativeOrder())
+                val bb = java.nio.ByteBuffer.allocate(8256).order(java.nio.ByteOrder.nativeOrder())
                 bb.putFloat(material.centerX); bb.putFloat(material.centerY)
                 bb.putFloat(material.startAngle); bb.putFloat(material.endAngle)
                 bb.putInt(n)
+                bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f) // padding for wgsl vec4f alignment
                 for (i in 0 until 256) {
                     if (i < n) {
                         val pos = material.allStopPositions!!.getOrElse(i) { i.toFloat() / (n - 1).coerceAtLeast(1) }
@@ -293,6 +300,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
                         bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f)
                     }
                 }
+                bb.writeUniformMatrixTail( material.invLocalMatrix)
                 drawFullscreenStencilPass(
                     wgsl = SWEEP_GRADIENT_MULTI_WGSL,
                     colorFormat = config.gpuColorFormat.wgpuLabel,
@@ -308,7 +316,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
                     blendMode = blendMode,
                 )
             } else {
-                val bb = java.nio.ByteBuffer.allocate(48).order(java.nio.ByteOrder.nativeOrder())
+                val bb = java.nio.ByteBuffer.allocate(80).order(java.nio.ByteOrder.nativeOrder())
                 bb.putFloat(material.centerX); bb.putFloat(material.centerY)
                 bb.putFloat(material.startAngle); bb.putFloat(material.endAngle)
                 bb.putFloat(srgbToLinear(material.startR) * material.startA)
@@ -319,6 +327,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
                 bb.putFloat(srgbToLinear(material.endG) * material.endA)
                 bb.putFloat(srgbToLinear(material.endB) * material.endA)
                 bb.putFloat(material.endA)
+                bb.writeUniformMatrixTail( material.invLocalMatrix)
                 drawFullscreenStencilPass(
                     wgsl = SWEEP_GRADIENT_WGSL,
                     colorFormat = config.gpuColorFormat.wgpuLabel,
@@ -342,4 +351,18 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
     }
     dispatched.add(cmd.commandId.toString())
     diagnostics.degrade("dispatch:${cmd.diagnosticName}", cmd.diagnosticName, "dispatched")
+}
+
+internal fun ByteBuffer.writeUniformMatrixTail(invLocalMatrix: FloatArray?) {
+    if (invLocalMatrix != null && invLocalMatrix.size >= 6) {
+        putInt(1) // hasMatrix=1
+        putFloat(0f); putFloat(0f); putFloat(0f) // padding to align array<vec2f, 3> at offset+8
+        putFloat(invLocalMatrix[0]); putFloat(invLocalMatrix[1]) // vec2f: invSx, invKx
+        putFloat(invLocalMatrix[2]); putFloat(invLocalMatrix[3]) // vec2f: invKy, invSy
+        putFloat(invLocalMatrix[4]); putFloat(invLocalMatrix[5]) // vec2f: invTx, invTy
+    } else {
+        putInt(0) // hasMatrix=0
+        putFloat(0f); putFloat(0f); putFloat(0f) // padding
+        putFloat(0f); putFloat(0f); putFloat(0f); putFloat(0f); putFloat(0f); putFloat(0f) // zero matrix
+    }
 }

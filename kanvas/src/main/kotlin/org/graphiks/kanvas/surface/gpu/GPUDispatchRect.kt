@@ -93,8 +93,8 @@ internal fun GPUBackendRenderRecorder.dispatchFillRect(
             } else {
                 val multiStop = material.allStopPositions != null && material.allStopPositions!!.size > 2
                 if (multiStop) {
-                    val n = material.allStopPositions!!.size.coerceAtMost(8)
-                    val bb = java.nio.ByteBuffer.allocate(8224).order(java.nio.ByteOrder.nativeOrder())
+                    val n = material.allStopPositions!!.size.coerceAtMost(256)
+                    val bb = java.nio.ByteBuffer.allocate(8256).order(java.nio.ByteOrder.nativeOrder())
                     bb.putFloat(material.startX); bb.putFloat(material.startY)
                     bb.putFloat(material.endX); bb.putFloat(material.endY)
                     bb.putInt(n)
@@ -116,6 +116,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillRect(
                             bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f)
                         }
                     }
+                    bb.writeUniformMatrixTail( material.invLocalMatrix)
                     drawFullscreenRawUniformPass(
                         wgsl = LINEAR_GRADIENT_MULTI_WGSL,
                         colorFormat = config.gpuColorFormat.wgpuLabel,
@@ -129,7 +130,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillRect(
                         blendMode = blendMode,
                     )
                 } else {
-                    val bb = java.nio.ByteBuffer.allocate(48).order(java.nio.ByteOrder.nativeOrder())
+                    val bb = java.nio.ByteBuffer.allocate(80).order(java.nio.ByteOrder.nativeOrder())
                     bb.putFloat(material.startX); bb.putFloat(material.startY)
                     bb.putFloat(material.endX); bb.putFloat(material.endY)
                     bb.putFloat(srgbToLinear(material.startR) * material.startA)
@@ -140,6 +141,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillRect(
                     bb.putFloat(srgbToLinear(material.endG) * material.endA)
                     bb.putFloat(srgbToLinear(material.endB) * material.endA)
                     bb.putFloat(material.endA)
+                    bb.writeUniformMatrixTail( material.invLocalMatrix)
                     drawFullscreenRawUniformPass(
                         wgsl = LINEAR_GRADIENT_WGSL,
                         colorFormat = config.gpuColorFormat.wgpuLabel,
@@ -174,7 +176,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillRect(
                 val multiStop = material.allStopPositions != null && material.allStopPositions!!.size > 2
                 if (multiStop) {
                     val n = material.allStopPositions!!.size.coerceAtMost(256)
-                    val bb = java.nio.ByteBuffer.allocate(8224).order(java.nio.ByteOrder.nativeOrder())
+                    val bb = java.nio.ByteBuffer.allocate(8240).order(java.nio.ByteOrder.nativeOrder())
                     bb.putFloat(material.centerX); bb.putFloat(material.centerY)
                     bb.putFloat(material.radius)
                     bb.putInt(n)
@@ -198,6 +200,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillRect(
                             bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f)
                         }
                     }
+                    bb.writeUniformMatrixTail( material.invLocalMatrix)
                     drawFullscreenRawUniformPass(
                         wgsl = RADIAL_GRADIENT_MULTI_WGSL,
                         colorFormat = config.gpuColorFormat.wgpuLabel,
@@ -211,7 +214,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillRect(
                         blendMode = blendMode,
                     )
                 } else {
-                    val bb = java.nio.ByteBuffer.allocate(48).order(java.nio.ByteOrder.nativeOrder())
+                    val bb = java.nio.ByteBuffer.allocate(80).order(java.nio.ByteOrder.nativeOrder())
                     bb.putFloat(material.centerX); bb.putFloat(material.centerY)
                     bb.putFloat(material.radius)
                     bb.putFloat(0f)
@@ -223,6 +226,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillRect(
                     bb.putFloat(srgbToLinear(material.endG) * material.endA)
                     bb.putFloat(srgbToLinear(material.endB) * material.endA)
                     bb.putFloat(material.endA)
+                    bb.writeUniformMatrixTail( material.invLocalMatrix)
                     drawFullscreenRawUniformPass(
                         wgsl = RADIAL_GRADIENT_WGSL,
                         colorFormat = config.gpuColorFormat.wgpuLabel,
@@ -256,8 +260,8 @@ internal fun GPUBackendRenderRecorder.dispatchFillRect(
             } else {
                 val multiStop = material.allStopPositions != null && material.allStopPositions!!.size > 2
                 if (multiStop) {
-                    val n = material.allStopPositions!!.size.coerceAtMost(8)
-                    val bb = java.nio.ByteBuffer.allocate(8224).order(java.nio.ByteOrder.nativeOrder())
+                    val n = material.allStopPositions!!.size.coerceAtMost(256)
+                    val bb = java.nio.ByteBuffer.allocate(8256).order(java.nio.ByteOrder.nativeOrder())
                     bb.putFloat(material.centerX); bb.putFloat(material.centerY)
                     bb.putFloat(material.startAngle); bb.putFloat(material.endAngle)
                     bb.putInt(n)
@@ -279,6 +283,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillRect(
                             bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f)
                         }
                     }
+                    bb.writeUniformMatrixTail( material.invLocalMatrix)
                     drawFullscreenRawUniformPass(
                         wgsl = SWEEP_GRADIENT_MULTI_WGSL,
                         colorFormat = config.gpuColorFormat.wgpuLabel,
@@ -292,7 +297,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillRect(
                         blendMode = blendMode,
                     )
                 } else {
-                    val bb = java.nio.ByteBuffer.allocate(48).order(java.nio.ByteOrder.nativeOrder())
+                    val bb = java.nio.ByteBuffer.allocate(80).order(java.nio.ByteOrder.nativeOrder())
                     bb.putFloat(material.centerX); bb.putFloat(material.centerY)
                     bb.putFloat(material.startAngle); bb.putFloat(material.endAngle)
                     bb.putFloat(srgbToLinear(material.startR) * material.startA)
@@ -303,6 +308,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillRect(
                     bb.putFloat(srgbToLinear(material.endG) * material.endA)
                     bb.putFloat(srgbToLinear(material.endB) * material.endA)
                     bb.putFloat(material.endA)
+                    bb.writeUniformMatrixTail( material.invLocalMatrix)
                     drawFullscreenRawUniformPass(
                         wgsl = SWEEP_GRADIENT_WGSL,
                         colorFormat = config.gpuColorFormat.wgpuLabel,

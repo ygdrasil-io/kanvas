@@ -12,6 +12,7 @@ import org.graphiks.kanvas.types.a
 import org.graphiks.kanvas.types.b
 import org.graphiks.kanvas.types.g
 import org.graphiks.kanvas.types.r
+import kotlin.math.abs
 
 internal fun Paint.toMaterial(): GPUMaterialDescriptor {
     val shader = this.shader
@@ -141,7 +142,26 @@ internal fun Shader.toMaterial(): GPUMaterialDescriptor = when (this) {
         val id = this.effect.id
         GPUMaterialDescriptor.RuntimeEffect(effectId = id, descriptorVersion = 1)
     }
-    is Shader.WithLocalMatrix -> this.shader.toMaterial()
+    is Shader.WithLocalMatrix -> {
+        val inner = this.shader.toMaterial()
+        val m = this.matrix
+        val det = m.scaleX * m.scaleY - m.skewX * m.skewY
+        if (abs(det) < 1e-10f) return inner
+        val invSx = m.scaleY / det
+        val invKx = -m.skewX / det
+        val invTx = (m.skewX * m.transY - m.scaleY * m.transX) / det
+        val invKy = -m.skewY / det
+        val invSy = m.scaleX / det
+        val invTy = (m.skewY * m.transX - m.scaleX * m.transY) / det
+        val invMat = floatArrayOf(invSx, invKx, invTx, invKy, invSy, invTy)
+        when (inner) {
+            is GPUMaterialDescriptor.LinearGradient -> inner.copy(invLocalMatrix = invMat)
+            is GPUMaterialDescriptor.RadialGradient -> inner.copy(invLocalMatrix = invMat)
+            is GPUMaterialDescriptor.SweepGradient -> inner.copy(invLocalMatrix = invMat)
+            is GPUMaterialDescriptor.ConicalGradient -> inner.copy(invLocalMatrix = invMat)
+            else -> inner
+        }
+    }
     is Shader.WithColorFilter -> this.shader.toMaterial()
     is Shader.SweepGradient -> {
         val first = this.stops.first()
