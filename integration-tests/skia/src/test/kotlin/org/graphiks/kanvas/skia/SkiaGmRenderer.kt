@@ -1,7 +1,10 @@
 package org.graphiks.kanvas.skia
 
 import org.graphiks.kanvas.canvas.Canvas
+import org.graphiks.kanvas.canvas.DisplayOp
+import org.graphiks.kanvas.diagnostic.PipelineTracer
 import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.surface.DebugLevel
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
@@ -11,16 +14,23 @@ object SkiaGmRenderer {
     private const val DEFAULT_WIDTH = 800
     private const val DEFAULT_HEIGHT = 600
 
-    fun render(gm: SkiaGm, width: Int = gm.width, height: Int = gm.height, config: RenderConfig = RenderConfig.DEFAULT): SkiaRenderResult {
+    fun render(
+        gm: SkiaGm,
+        width: Int = gm.width,
+        height: Int = gm.height,
+        config: RenderConfig = RenderConfig.DEFAULT,
+    ): SkiaRenderResult {
         val surface = Surface(width = width, height = height, config = config)
+        val tracer = if (config.debugLevel >= DebugLevel.TRACE) PipelineTracer() else null
+        surface.renderOpListener = tracer
         val canvas = surface.canvas()
-        // Match Skia GM infrastructure: fill background before drawing the GM.
-        // Skia's GM::drawBackground() fills with fBGColor (default SK_ColorWHITE).
-        canvas.drawRect(Rect(0f, 0f, width.toFloat(), height.toFloat()), Paint(color = Color.fromRGBA(1f, 1f, 1f, 1f), antiAlias = false))
+        canvas.drawRect(Rect(0f, 0f, width.toFloat(), height.toFloat()),
+            Paint(color = Color.fromRGBA(1f, 1f, 1f, 1f), antiAlias = false))
         val gmCanvas = GmCanvas(canvas, width, height)
         gm.onOnceBeforeDraw(gmCanvas)
         gm.draw(gmCanvas, width, height)
         val result = surface.render()
+        val ops = surface.snapshotOps()
         return SkiaRenderResult(
             rgba = result.pixels.map { it.toByte() }.toByteArray(),
             width = width,
@@ -28,6 +38,8 @@ object SkiaGmRenderer {
             dispatchedCount = result.stats.opsDispatched,
             refusedCount = result.stats.opsRefused,
             diagnostics = result.diagnostics.entries.map { "${it.code}: ${it.reason}" },
+            ops = ops,
+            pipelineTracer = tracer,
         )
     }
 }
@@ -39,4 +51,6 @@ data class SkiaRenderResult(
     val dispatchedCount: Int = 0,
     val refusedCount: Int = 0,
     val diagnostics: List<String> = emptyList(),
+    val ops: List<DisplayOp> = emptyList(),
+    val pipelineTracer: PipelineTracer? = null,
 )
