@@ -19,11 +19,14 @@ import org.graphiks.kanvas.types.Rect
 
 private val typeface = Typefaces.fromResource("fonts/LiberationSans-Regular.ttf")!!
 
+<<<<<<< HEAD
 /**
  * Port of Skia's `DEF_SIMPLE_GM(clip_shader_difference, canvas, 512, 512)` in `gm/clip_shader.cpp`.
  * Tests clipShader with kDifference (SRC_OUT) using rectangle, round-rectangle, path, and text shapes.
  * @see https://github.com/google/skia/blob/main/gm/clip_shader.cpp
  */
+=======
+>>>>>>> 1f1c0a540 (gm: port 4 clipShader/clipRegion GMs (7 variants) via SRC_IN saveLayer)
 class ClipShaderDifferenceGm : SkiaGm {
     override val name = "clip_shader_difference"
     override val renderFamily = RenderFamily.COMPOSITE
