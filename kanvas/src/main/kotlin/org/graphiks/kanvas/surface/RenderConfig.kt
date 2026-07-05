@@ -26,7 +26,7 @@ data class RenderConfig(
                 diagnosticLevel = p.getProperty("kanvas.render.diagnosticLevel")
                     ?.let { runCatching { DiagnosticLevel.valueOf(it) }.getOrNull() }
                     ?: DEFAULT.diagnosticLevel,
-                debugLevel = p.getProperty("kanvas.debug")
+                debugLevel = p.getProperty("kanvas.render.debugLevel")
                     ?.let { runCatching { DebugLevel.valueOf(it) }.getOrNull() }
                     ?: DEFAULT.debugLevel,
             )
