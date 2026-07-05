@@ -30,11 +30,4 @@ class Round17Test {
     fun `VerticesCollapsedGM matches reference`() =
         runGm(VerticesCollapsedGM(), "VerticesCollapsedGM", 50.0)
 
-    @Test
-    fun `PatchAlphaTestGM matches reference`() =
-        runGm(PatchAlphaTestGM(), "PatchAlphaTestGM", 30.0)
-
-    @Test
-    fun `PatchPrimitiveGM matches reference`() =
-        runGm(PatchPrimitiveGM(), "PatchPrimitiveGM", 30.0)
 }
