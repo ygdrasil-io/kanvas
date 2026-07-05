@@ -480,3 +480,6 @@ org.graphiks.kanvas.skia.gm.text.TypefaceStylesGm
 org.graphiks.kanvas.skia.gm.text.TypefaceStylesKerningGm
 org.graphiks.kanvas.skia.gm.text.TypefaceStylingGm
 org.graphiks.kanvas.skia.gm.text.UserTypefaceGm
+org.graphiks.kanvas.skia.gm.image.Bc1TransparencyGm
+org.graphiks.kanvas.skia.gm.image.CompressedTexturesGm
+org.graphiks.kanvas.skia.gm.image.ExoticFormatsGm
