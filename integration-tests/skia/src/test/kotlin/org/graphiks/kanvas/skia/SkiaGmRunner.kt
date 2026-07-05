@@ -53,7 +53,6 @@ class SkiaGmRunner {
         }
 
         val t0 = System.nanoTime()
-
         val debugLevel = DebugLevel.valueOf(
             System.getProperty("kanvas.render.debugLevel") ?: "OFF"
         )
