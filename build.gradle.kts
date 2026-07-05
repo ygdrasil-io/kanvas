@@ -1316,11 +1316,6 @@ tasks.register("pipelineM69KadreHostAdapterSmoke") {
     group = "verification"
     description = "Generates M69 Kanvas/Kadre host adapter smoke evidence and a concrete native/headless route status."
     mustRunAfter("pipelineM65RuntimeSmoke")
-    mustRunAfter(":kadre-runtime:runM69KadreNativeSmoke")
-    if (providers.gradleProperty("kanvasRunNativeKadreSmoke").map(String::toBoolean).getOrElse(false)) {
-        dependsOn(":kadre-runtime:runM69KadreNativeSmoke")
-    }
-
     val scriptFile = layout.projectDirectory.file("scripts/m69_kadre_host_adapter_smoke.py")
     val outputDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m69-kadre-host-adapter")
     inputs.file(scriptFile)
@@ -1350,7 +1345,6 @@ tasks.register("pipelineM69KadreHostAdapterSmoke") {
 tasks.register("pipelineM70KadreLiveRuntimeEvidence") {
     group = "verification"
     description = "Generates M70-A Kadre live runtime route evidence from native demo telemetry."
-    mustRunAfter(":kadre-runtime:runM70KadreNativeDemo")
 
     val scriptFile = layout.projectDirectory.file("scripts/m70_kadre_live_runtime_evidence.py")
     val outputDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m70-kadre-live-runtime")
@@ -4845,20 +4839,6 @@ tasks.register<Exec>("validateMepRcRuntime") {
 tasks.register("pipelinePmBundle") {
     group = "verification"
     description = "Builds a portable PM review bundle for the WGSL scene dashboard."
-    mustRunAfter(":kadre-runtime:pipelineM75ReplayPackEvidence")
-    mustRunAfter(":kadre-runtime:pipelineM76GeneratedMetadataReplay")
-    mustRunAfter(":kadre-runtime:pipelineM77BlendAlphaReplay")
-    mustRunAfter(":kadre-runtime:pipelineM78ClipReplay")
-    mustRunAfter(":kadre-runtime:pipelineM79BitmapReplay")
-    mustRunAfter(":kadre-runtime:pipelineM80SharedReplayOracle")
-    mustRunAfter(":kadre-runtime:pipelineM81NativeFrameCapture")
-    mustRunAfter(":kadre-runtime:pipelineM82InputResizeRuntimeLoop")
-    mustRunAfter(":kadre-runtime:pipelineM83DisplayListReplay")
-    mustRunAfter(":kadre-runtime:pipelineM84NativeFrameTimingCandidate")
-    mustRunAfter(":kadre-runtime:pipelineM85ResourceLifetimeCacheHardening")
-    mustRunAfter(":kadre-runtime:pipelineM87RuntimeEffectLiveEditing")
-    mustRunAfter(":kadre-runtime:pipelineM88ReleaseCandidate2")
-
     dependsOn(
         "validatePureKotlinTextClaimDashboard",
         "validateKfontM12001TelemetryPmEvidence",
