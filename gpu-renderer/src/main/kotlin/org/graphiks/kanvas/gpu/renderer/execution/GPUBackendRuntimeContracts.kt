@@ -10,11 +10,13 @@ data class GPUOffscreenTargetRequest(
     val width: Int,
     val height: Int,
     val colorFormat: String = "rgba8unorm",
+    val sampleCount: Int = 1,
 ) {
     init {
         require(width > 0) { "GPUOffscreenTargetRequest.width must be positive" }
         require(height > 0) { "GPUOffscreenTargetRequest.height must be positive" }
         require(colorFormat.isNotBlank()) { "GPUOffscreenTargetRequest.colorFormat must not be blank" }
+        require(sampleCount >= 1) { "GPUOffscreenTargetRequest.sampleCount must be >= 1" }
     }
 }
 

@@ -65,6 +65,7 @@ internal fun renderViaGpu(
                 width = width,
                 height = height,
                 colorFormat = config.gpuColorFormat.wgpuLabel,
+                sampleCount = config.sampleCount,
             ),
         )
         target.use { t ->
