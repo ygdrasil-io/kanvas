@@ -7,14 +7,11 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
 
-<<<<<<< HEAD
 /**
  * Port of Skia's `gm/clip_sierpinski_region.cpp`.
  * Tests clip region performance by building a Sierpinski carpet fractal pattern of nested clip rects.
  * @see https://github.com/google/skia/blob/main/gm/clip_sierpinski_region.cpp
  */
-=======
->>>>>>> 1f1c0a540 (gm: port 4 clipShader/clipRegion GMs (7 variants) via SRC_IN saveLayer)
 class ClipSierpinskiRegionGm : SkiaGm {
     override val name = "clip_sierpinski_region"
     override val renderFamily = RenderFamily.CLIP
