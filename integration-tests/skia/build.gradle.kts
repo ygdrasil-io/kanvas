@@ -53,6 +53,34 @@ tasks.register<JavaExec>("generateSkiaRenders") {
     outputs.upToDateWhen { false }
 }
 
+tasks.register<JavaExec>("generateSkiaRendersFor") {
+    group = "verification"
+    description = "Generates Kanvas render PNGs for a subset of GMs."
+    dependsOn(tasks.named("testClasses"))
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass.set("org.graphiks.kanvas.skia.SkiaRenderGeneratorKt")
+    val outputDir = layout.projectDirectory.dir("src/test/resources/generated-renders")
+    val gmFamily = project.findProperty("gm.family")?.toString()
+    val gmName = project.findProperty("gm.name")?.toString()
+    val renderArgs = mutableListOf(outputDir.asFile.absolutePath)
+    if (gmFamily != null) { renderArgs.add("--family"); renderArgs.add(gmFamily) }
+    if (gmName != null) { renderArgs.add("--name"); renderArgs.add(gmName) }
+    args(renderArgs)
+    jvmArgs(buildList {
+        add("--add-opens=java.base/java.lang=ALL-UNNAMED")
+        add("--enable-native-access=ALL-UNNAMED")
+        if (org.gradle.internal.os.OperatingSystem.current().isMacOsX) {
+            add("-XstartOnFirstThread")
+        }
+        val maxPathVertices = project.findProperty("kanvas.render.maxPathVertices")?.toString()
+        if (maxPathVertices != null) {
+            add("-Dkanvas.render.maxPathVertices=$maxPathVertices")
+        }
+    })
+    outputs.dir(outputDir)
+    outputs.upToDateWhen { false }
+}
+
 tasks.register<JavaExec>("generateSkiaDashboard") {
     group = "verification"
     description = "Generates Skia GM visual comparison dashboard."

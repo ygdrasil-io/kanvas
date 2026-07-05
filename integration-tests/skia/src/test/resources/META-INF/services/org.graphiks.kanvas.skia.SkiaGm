@@ -127,6 +127,11 @@ org.graphiks.kanvas.skia.gm.composite.ModeColorFiltersGm
 org.graphiks.kanvas.skia.gm.composite.OffsetImageFilterGm
 org.graphiks.kanvas.skia.gm.composite.OverdrawCanvasGm
 org.graphiks.kanvas.skia.gm.composite.OverdrawColorFilterGm
+org.graphiks.kanvas.skia.gm.composite.PatchAlphaGm
+org.graphiks.kanvas.skia.gm.composite.PatchAlphaTestGm
+org.graphiks.kanvas.skia.gm.composite.PatchImageGm
+org.graphiks.kanvas.skia.gm.composite.PatchImagePerspGm
+org.graphiks.kanvas.skia.gm.composite.PatchPrimitiveGm
 org.graphiks.kanvas.skia.gm.composite.PerlinNoiseGm
 org.graphiks.kanvas.skia.gm.composite.PerlinNoiseLayeredGm
 org.graphiks.kanvas.skia.gm.composite.PerlinNoiseLocalMatrixGm

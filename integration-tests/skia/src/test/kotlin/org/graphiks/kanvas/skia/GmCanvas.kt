@@ -17,6 +17,7 @@ import org.graphiks.kanvas.types.RRect
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.types.Mesh
 import org.graphiks.kanvas.types.Vertices
+import org.graphiks.kanvas.types.VertexMode
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.TextBlob
 import kotlin.math.cos
@@ -404,6 +405,145 @@ class GmCanvas(
     fun drawPicture(picture: Picture, paint: Paint? = null) {
         withClip {
             inner.drawPicture(picture, paint)
+        }
+    }
+
+    /**
+     * Draw a Coons patch (cubic Bézier surface patch).
+     *
+     * @param cubics    12 control points forming 4 cubic Bézier edges:
+     *                  [corner0, cp1_edge0, cp2_edge0, corner1, cp1_edge1, cp2_edge1,
+     *                   corner2, cp1_edge2, cp2_edge2, corner3, cp1_edge3, cp2_edge3]
+     * @param colors    4 corner colors for vertex interpolation (optional)
+     * @param texCoords 4 corner texture coordinates (optional)
+     * @param blendMode blend mode for the patch
+     * @param paint     paint (shader is sampled at texCoords when provided)
+     */
+    fun drawPatch(
+        cubics: List<Point>,
+        colors: List<Color>? = null,
+        texCoords: List<Point>? = null,
+        blendMode: BlendMode = BlendMode.SRC_OVER,
+        paint: Paint,
+    ) {
+        require(cubics.size == 12) { "drawPatch requires 12 control points" }
+        val corners = listOf(cubics[0], cubics[3], cubics[6], cubics[9])
+        val curves = listOf(
+            CubicEdge(cubics[0], cubics[1], cubics[2], cubics[3]),
+            CubicEdge(cubics[3], cubics[4], cubics[5], cubics[6]),
+            CubicEdge(cubics[6], cubics[7], cubics[8], cubics[9]),
+            CubicEdge(cubics[9], cubics[10], cubics[11], cubics[0]),
+        )
+        val divisions = 20
+        val verts = mutableListOf<Point>()
+        val vertColors = mutableListOf<Color>()
+        val vertTexCoords = mutableListOf<Point>()
+        val indices = mutableListOf<Int>()
+
+        for (j in 0..divisions) {
+            val v = j.toFloat() / divisions
+            for (i in 0..divisions) {
+                val u = i.toFloat() / divisions
+                val pu = coonsPatchPoint(u, v, curves, corners)
+                verts.add(currentTransform * pu)
+                if (colors != null) {
+                    vertColors.add(bilinearInterp(u, v, colors))
+                }
+                if (texCoords != null) {
+                    vertTexCoords.add(bilinearInterp(u, v, texCoords))
+                }
+                if (i < divisions && j < divisions) {
+                    val idx = j * (divisions + 1) + i
+                    indices.add(idx)
+                    indices.add(idx + 1)
+                    indices.add(idx + divisions + 1)
+                    indices.add(idx + 1)
+                    indices.add(idx + divisions + 2)
+                    indices.add(idx + divisions + 1)
+                }
+            }
+        }
+
+        val finalColors = vertColors.ifEmpty { null }
+        val finalTexCoords = vertTexCoords.ifEmpty { null }
+        val vertices = Vertices(
+            mode = VertexMode.TRIANGLES,
+            positions = verts,
+            texCoords = finalTexCoords,
+            colors = finalColors,
+            indices = indices,
+        )
+
+        val currentClip = currentClip
+        if (currentClip != null) {
+            val innerRect = transformRect(currentClip) ?: return
+            inner.save()
+            inner.clipRect(innerRect)
+        }
+        inner.drawVertices(vertices, paint)
+        if (currentClip != null) {
+            inner.restore()
+        }
+    }
+
+    private fun coonsPatchPoint(
+        u: Float, v: Float,
+        curves: List<CubicEdge>,
+        corners: List<Point>,
+    ): Point {
+        val top = curves[0].eval(u)
+        val bottom = curves[2].eval(u)
+        val left = curves[3].eval(v)
+        val right = curves[1].eval(v)
+        val bilinear = Point(
+            corners[0].x * (1 - u) * (1 - v) + corners[1].x * u * (1 - v) +
+            corners[2].x * u * v + corners[3].x * (1 - u) * v,
+            corners[0].y * (1 - u) * (1 - v) + corners[1].y * u * (1 - v) +
+            corners[2].y * u * v + corners[3].y * (1 - u) * v,
+        )
+        return Point(
+            (1 - v) * top.x + v * bottom.x + (1 - u) * left.x + u * right.x - bilinear.x,
+            (1 - v) * top.y + v * bottom.y + (1 - u) * left.y + u * right.y - bilinear.y,
+        )
+    }
+
+    private fun Color.rf(): Float = ((packed shr 16) and 0xFFu).toFloat() / 255f
+    private fun Color.gf(): Float = ((packed shr 8) and 0xFFu).toFloat() / 255f
+    private fun Color.bf(): Float = (packed and 0xFFu).toFloat() / 255f
+    private fun Color.af(): Float = ((packed shr 24) and 0xFFu).toFloat() / 255f
+
+    private fun bilinearInterp(u: Float, v: Float, colors: List<Color>): Color {
+        val c00 = colors[0]; val c10 = colors[1]
+        val c01 = colors[3]; val c11 = colors[2]
+        val a = (1 - u) * (1 - v) * c00.af() + u * (1 - v) * c10.af() +
+                (1 - u) * v * c01.af() + u * v * c11.af()
+        val r = (1 - u) * (1 - v) * c00.rf() + u * (1 - v) * c10.rf() +
+                (1 - u) * v * c01.rf() + u * v * c11.rf()
+        val g = (1 - u) * (1 - v) * c00.gf() + u * (1 - v) * c10.gf() +
+                (1 - u) * v * c01.gf() + u * v * c11.gf()
+        val b = (1 - u) * (1 - v) * c00.bf() + u * (1 - v) * c10.bf() +
+                (1 - u) * v * c01.bf() + u * v * c11.bf()
+        return Color.fromRGBA(r, g, b, a)
+    }
+
+    private fun bilinearInterp(u: Float, v: Float, texCoords: List<Point>): Point {
+        val t00 = texCoords[0]; val t10 = texCoords[1]
+        val t01 = texCoords[3]; val t11 = texCoords[2]
+        return Point(
+            (1 - u) * (1 - v) * t00.x + u * (1 - v) * t10.x +
+            (1 - u) * v * t01.x + u * v * t11.x,
+            (1 - u) * (1 - v) * t00.y + u * (1 - v) * t10.y +
+            (1 - u) * v * t01.y + u * v * t11.y,
+        )
+    }
+
+    private data class CubicEdge(val p0: Point, val p1: Point, val p2: Point, val p3: Point) {
+        fun eval(t: Float): Point {
+            val t1 = 1f - t
+            return Point(
+                t1 * t1 * t1 * p0.x + 3 * t1 * t1 * t * p1.x + 3 * t1 * t * t * p2.x + t * t * t * p3.x,
+                t1 * t1 * t1 * p0.y + 3 * t1 * t1 * t * p1.y + 3 * t1 * t * t * p2.y + t * t * t * p3.y,
+            )
         }
     }
 
