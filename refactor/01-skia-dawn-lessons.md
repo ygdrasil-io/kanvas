@@ -39,7 +39,7 @@ WebGPU, pas de Graphite comme framework complet.
 - support MSAA render-to-single-sampled ;
 - construction des cles de pipeline.
 
-Ce point est majeur pour Kanvas. Sans equivalent `WgpuCaps`, le code finit par
+Ce point est majeur pour Kanvas. Sans equivalent `GPUCaps`, le code finit par
 mettre des constantes dans le runtime et par prendre des decisions locales.
 C'est dangereux parce que deux chemins peuvent croire des choses differentes
 sur le meme device.
@@ -49,7 +49,7 @@ Le modele a reprendre :
 ```text
 Device WebGPU
   -> lecture des features et limites
-  -> table WgpuCaps
+  -> table GPUCaps
   -> pipeline keys
   -> resource plans
   -> diagnostics/fallbacks
@@ -77,9 +77,9 @@ Idees importantes :
 - les readbacks et maps asynchrones sont attaches a la soumission.
 
 Pour Kanvas, le message est simple : il faut separer la construction logique du
-rendu et l'encodage WGPU. Un `GPUPassCommandStream` doit devenir la source
+rendu et l'encodage GPU. Un `GPUPassCommandStream` doit devenir la source
 principale de l'encodage, plutot que d'avoir des fonctions de rendu qui creent
-directement des objets WGPU au fil de l'eau.
+directement des objets GPU au fil de l'eau.
 
 ## Render pass et operations compatibles
 
@@ -125,10 +125,10 @@ Dawn utilise notamment :
 - des bind groups texture+sampler caches ;
 - des offsets dynamiques quand le layout le permet.
 
-Pour Kanvas, cela suggere un `WgpuResourceProvider` avec :
+Pour Kanvas, cela suggere un `GPUResourceProvider` avec :
 
 - une uniform slab ou ring buffer ;
-- un alignement lu depuis `WgpuCaps.minUniformBufferOffsetAlignment` ;
+- un alignement lu depuis `GPUCaps.minUniformBufferOffsetAlignment` ;
 - une cle de cache par layout + buffer + plage ;
 - une cle de cache par texture view + sampler descriptor ;
 - une strategie claire pour les ressources nulles ;
@@ -148,7 +148,7 @@ recorder.
 Dawn separe la demande de ressource et la ressource GPU concrete. Le provider
 decide s'il peut reutiliser, creer, refuser ou purger.
 
-Ce pattern correspond deja aux specs Kanvas, mais le runtime WGPU concret ne
+Ce pattern correspond deja aux specs Kanvas, mais le runtime GPU concret ne
 l'exploite pas encore assez.
 
 Les idees a reprendre :
@@ -242,11 +242,11 @@ Kanvas a deja des diagnostics forts, mais devrait les connecter plus bas :
 
 | Sujet | Idee Dawn | Adaptation Kanvas |
 | --- | --- | --- |
-| Capacites | `DawnCaps` centralise features/limits | `WgpuCaps` alimente cles, plans et diagnostics |
+| Capacites | `DawnCaps` centralise features/limits | `GPUCaps` alimente cles, plans et diagnostics |
 | Encodage | `DawnCommandBuffer` encode des passes preparees | encoder depuis `GPUPassCommandStream` |
-| Ressources | `DawnResourceProvider` reutilise et retient | `WgpuResourceProvider` concret |
+| Ressources | `DawnResourceProvider` reutilise et retient | `GPUResourceProvider` concret |
 | Uniforms | intrinsic buffers, null buffer, caches bind group | uniform slab/ring + caches bind group |
-| Queue | completion de soumission | `WgpuQueueManager` minimal |
+| Queue | completion de soumission | `GPUQueueManager` minimal |
 | MSAA/readback | strategie selon caps | planner destination-read/MSAA/intermediaires |
 | Erreurs | error checker backend | error scopes + diagnostics Kanvas |
 

@@ -21,7 +21,7 @@ DisplayList
   -> resource planning
   -> pass batching
   -> command stream
-  -> WGPU encoding
+  -> GPU encoding
   -> queue submission
   -> completion + resource recycling
 ```
@@ -31,7 +31,7 @@ pendant la migration.
 
 ## Composants cibles
 
-### `WgpuCaps`
+### `GPUCaps`
 
 Responsabilite :
 
@@ -44,7 +44,7 @@ Responsabilite :
 
 Ce composant ne rend rien. Il informe les autres.
 
-### `WgpuResourceProvider`
+### `GPUResourceProvider`
 
 Responsabilite :
 
@@ -53,12 +53,12 @@ Responsabilite :
 - gerer uniform slab/ring ;
 - retenir les ressources jusqu'a completion GPU ;
 - produire telemetry hit/miss/create/refuse ;
-- respecter `WgpuCaps`.
+- respecter `GPUCaps`.
 
 Il doit devenir le passage normal entre `GPUPassCommandStream` et les handles
-WGPU.
+GPU.
 
-### `GpuPassBatcher`
+### `GPUPassBatcher`
 
 Responsabilite :
 
@@ -71,7 +71,7 @@ Responsabilite :
 Le batcher ne doit pas cacher les decisions importantes. Ses decisions doivent
 etre dumpables.
 
-### `WgpuCommandEncoder`
+### `GPUCommandEncoder`
 
 Responsabilite :
 
@@ -84,7 +84,7 @@ Responsabilite :
 
 Ce composant remplace progressivement les encodages directs disperses.
 
-### `WgpuQueueManager`
+### `GPUQueueManager`
 
 Responsabilite :
 
@@ -106,7 +106,7 @@ Responsabilite :
 - planifier saveLayer ;
 - planifier filtres et blur ;
 - choisir textures intermediaires ;
-- choisir copy/render/compute selon `WgpuCaps` ;
+- choisir copy/render/compute selon `GPUCaps` ;
 - produire diagnostics et telemetry.
 
 Au debut, ce planner peut couvrir seulement les cas deja presents dans
@@ -158,7 +158,7 @@ saveLayer(bounds, paint)
    Les packets compatibles deviennent une pass
 
 7. Encoding
-   Le command stream devient WGPU commands
+   Le command stream devient GPU commands
 
 8. Submit
    La queue soumet et retient les ressources
@@ -202,7 +202,7 @@ Bind group
   -> offset dynamique
 ```
 
-Chaque offset doit etre aligne sur `WgpuCaps.minUniformBufferOffsetAlignment`.
+Chaque offset doit etre aligne sur `GPUCaps.minUniformBufferOffsetAlignment`.
 La valeur peut etre 256 octets sur D3D12, mais le provider ne doit pas la coder
 en dur : elle vient des limits du backend. Si l'alignement expose est plus fin,
 la slab peut reduire le padding et augmenter sa densite.
@@ -236,7 +236,7 @@ Chaque etape doit pouvoir refuser proprement :
 
 | Etape | Refus typique |
 | --- | --- |
-| `WgpuCaps` | feature absente, format non supporte |
+| `GPUCaps` | feature absente, format non supporte |
 | Material lowering | shader/wrapper non supporte |
 | Resource provider | budget, usage texture invalide, stale generation |
 | Batcher | ordre non batchable |
@@ -255,7 +255,7 @@ Le refus doit contenir :
 
 ### Tests unitaires
 
-- `WgpuCaps` : features/limits simules ;
+- `GPUCaps` : features/limits simules ;
 - uniform slab : alignement, overflow, reuse ;
 - bind group cache : hit/miss/stale generation ;
 - batcher : ordre preserve, coupes legales ;
@@ -263,7 +263,7 @@ Le refus doit contenir :
 
 ### Tests runtime
 
-- smoke WGPU offscreen ;
+- smoke GPU offscreen ;
 - pipeline cache telemetry ;
 - readback avec completion ;
 - ressources retenues jusqu'a completion.
@@ -280,9 +280,9 @@ Le refus doit contenir :
 `GPURenderer` ne doit pas etre remplace en une fois. Migration proposee :
 
 1. instrumenter le nombre de passes/submissions ;
-2. brancher `WgpuCaps` sans changer le rendu ;
-3. brancher `WgpuResourceProvider` pour uniforms/bind groups simples ;
-4. brancher `WgpuQueueManager` pour retenir les ressources jusqu'a completion ;
+2. brancher `GPUCaps` sans changer le rendu ;
+3. brancher `GPUResourceProvider` pour uniforms/bind groups simples ;
+4. brancher `GPUQueueManager` pour retenir les ressources jusqu'a completion ;
 5. batcher les rectangles/gradients simples ;
 6. batcher les images simples ;
 7. deplacer destination-read vers `IntermediatePlanner` ;

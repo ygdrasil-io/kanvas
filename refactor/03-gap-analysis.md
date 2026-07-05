@@ -8,15 +8,15 @@ les ecarts pratiques qui empechent Kanvas de tirer pleinement parti de WebGPU.
 
 | Sujet | Dawn / Graphite | Kanvas actuel | Opportunite |
 | --- | --- | --- | --- |
-| Backend cible | Dawn proche WebGPU | WGPU direct | Bonne proximite, inspiration pertinente |
+| Backend cible | Dawn proche WebGPU | GPU direct | Bonne proximite, inspiration pertinente |
 | Abstraction Graphite | Multi-backend, Skia-owned | WebGPU-only | Ne pas copier |
-| Capacites | `DawnCaps` central | Constantes et decisions locales | Creer `WgpuCaps` |
+| Capacites | `DawnCaps` central | Constantes et decisions locales | Creer `GPUCaps` |
 | Pipeline key | Cles derivees des axes backend | Preimages Kanvas solides | Injecter caps reelles et garder les cles Kanvas |
 | Command buffer | Passe preparee puis encodee | Encodage souvent par operation | Batch depuis `GPUPassCommandStream` |
-| Resource provider | Reutilisation et retention | Contrats forts, runtime direct | Provider WGPU concret |
+| Resource provider | Reutilisation et retention | Contrats forts, runtime direct | Provider GPU concret |
 | Uniforms | Intrinsic buffers et caches | Uniform buffers par draw frequents | Uniform slab/ring |
 | Bind groups | Caches single uniform et texture+sampler | Creation locale frequente | Cache par layout/ressource |
-| Queue | Completion suivie | Submit direct dans plusieurs chemins | `WgpuQueueManager` |
+| Queue | Completion suivie | Submit direct dans plusieurs chemins | `GPUQueueManager` |
 | MSAA/resolve | Strategie selon caps | Intermediaires manuels | Planner explicite |
 | Diagnostics | Erreurs backend controlees | Diagnostics forts mais pas partout backend | Relier error scopes aux decisions |
 | Dashboard | Skia a infra interne | Kanvas a dashboard GM local | Ajouter metrics pipeline dans evidence |
@@ -43,14 +43,14 @@ manquer un fait backend important.
 
 ### Correction cible
 
-Creer `WgpuCaps` :
+Creer `GPUCaps` :
 
 ```text
 Adapter/device
   -> features
   -> limits
   -> format table
-  -> WgpuCaps
+  -> GPUCaps
   -> pipeline keys + resource plans + diagnostics
 ```
 
@@ -58,7 +58,7 @@ Adapter/device
 
 ### Probleme
 
-Kanvas rend souvent en appelant directement le target WGPU pour chaque operation
+Kanvas rend souvent en appelant directement le target GPU pour chaque operation
 ou mini-sequence. Cela rend les chemins faciles a suivre localement, mais cela
 perd la vision globale de la frame.
 
@@ -80,14 +80,14 @@ DisplayOp
   -> GPUDrawPacket
   -> groupement compatible
   -> GPUPassCommandStream
-  -> encodage WGPU
+  -> encodage GPU
 ```
 
 ## Ecart 3 : ressources creees au mauvais niveau
 
 ### Probleme
 
-Le recorder WGPU cree souvent directement les objets GPU. Cela donne un chemin
+Le recorder GPU cree souvent directement les objets GPU. Cela donne un chemin
 fonctionnel, mais le provider de ressources n'a pas la main.
 
 ### Consequence
@@ -100,7 +100,7 @@ fonctionnel, mais le provider de ressources n'a pas la main.
 
 ### Correction cible
 
-Faire du provider WGPU le point de passage obligatoire pour :
+Faire du provider GPU le point de passage obligatoire pour :
 
 - uniform buffers ;
 - vertex/index buffers temporaires ;
@@ -136,13 +136,13 @@ Uniform payload C -> offset 512
              meme GPUBuffer
 ```
 
-Les offsets doivent respecter les limites de `WgpuCaps`.
+Les offsets doivent respecter les limites de `GPUCaps`.
 
 ## Ecart 5 : queue et lifetime
 
 ### Probleme
 
-Une ressource WGPU ne doit pas etre consideree libre seulement parce que le code
+Une ressource GPU ne doit pas etre consideree libre seulement parce que le code
 CPU a fini de l'encoder. Elle doit rester vivante jusqu'a la fin de la
 soumission GPU qui l'utilise.
 
@@ -155,7 +155,7 @@ soumission GPU qui l'utilise.
 
 ### Correction cible
 
-`WgpuQueueManager` minimal :
+`GPUQueueManager` minimal :
 
 ```text
 submit(commandBuffer, resources)
@@ -246,6 +246,6 @@ L'ecart n'est donc pas conceptuel. Il est dans la materialisation runtime.
 
 ## Conclusion
 
-La meilleure opportunite est de rapprocher le runtime WGPU concret des contrats
+La meilleure opportunite est de rapprocher le runtime GPU concret des contrats
 deja ecrits. Dawn montre comment faire cela efficacement, mais les noms, les
 objets publics et les dumps doivent rester Kanvas.

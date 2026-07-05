@@ -39,9 +39,9 @@ Kanvas a deja une bonne direction : les specs disent explicitement de ne pas
 porter Ganesh ou Graphite, de garder WebGPU, et de separer les contrats
 Kanvas des classes Skia. Le code a deja des fondations utiles : des
 `pipeline keys` (cles de pipeline) deterministes, des caches avec telemetry,
-des diagnostics de refus, et une session WGPU partagee.
+des diagnostics de refus, et une session GPU partagee.
 
-Le point faible principal est plus bas niveau : le runtime WGPU concret encode
+Le point faible principal est plus bas niveau : le runtime GPU concret encode
 encore trop souvent le rendu operation par operation. Beaucoup de chemins
 creent des buffers, textures, samplers ou `bind groups` (groupes de liaisons)
 au moment du draw. Cela fonctionne, mais cela limite la performance, complique
@@ -79,10 +79,10 @@ remplacer par Graphite.
 
 ## Ce qu'il faut reprendre
 
-### 1. Une couche `WgpuCaps`
+### 1. Une couche `GPUCaps`
 
-Aujourd'hui, certaines decisions WGPU sont encore implicites ou codees en dur.
-Une couche `WgpuCaps` devrait centraliser :
+Aujourd'hui, certaines decisions GPU sont encore implicites ou codees en dur.
+Une couche `GPUCaps` devrait centraliser :
 
 - formats couleur/depth-stencil supportes ;
 - usages texture/buffer autorises ;
@@ -95,12 +95,12 @@ Une couche `WgpuCaps` devrait centraliser :
 
 Cela evite les hypotheses cachees et rend les fallbacks plus propres.
 
-### 2. Un vrai provider de ressources WGPU
+### 2. Un vrai provider de ressources GPU
 
 Dawn reutilise fortement les petits objets GPU : uniform buffers, null buffers,
 bind groups single-uniform, bind groups texture+sampler, intrinsic constants.
 
-Kanvas devrait ajouter un `WgpuResourceProvider` concret qui materialise les
+Kanvas devrait ajouter un `GPUResourceProvider` concret qui materialise les
 contrats existants au lieu de laisser le recorder creer beaucoup de ressources
 locales. Le gain attendu est double :
 
@@ -109,13 +109,13 @@ locales. Le gain attendu est double :
 
 La slab d'uniforms ne doit pas supposer un alignement universel. Sur des routes
 D3D12 il faut s'attendre a 256 octets, alors que d'autres backends peuvent
-exposer un alignement plus fin. `WgpuCaps` doit donc fournir cette valeur, et le
+exposer un alignement plus fin. `GPUCaps` doit donc fournir cette valeur, et le
 provider doit adapter son padding.
 
 ### 3. Un `QueueManager` minimal
 
 Dawn suit les soumissions GPU et recycle les ressources seulement quand le GPU
-a termine. Kanvas a deja une session WGPU partagee, mais il lui manque une
+a termine. Kanvas a deja une session GPU partagee, mais il lui manque une
 couche explicite de soumission :
 
 - numero de submission ;
@@ -133,7 +133,7 @@ Le runtime actuel sait rendre, mais il soumet souvent des passes courtes :
 une operation, une texture intermediaire, une soumission. Dawn montre qu'il faut
 grouper les draws compatibles avant l'encodage.
 
-Kanvas devrait introduire un `GpuPassBatcher` ou equivalent, branche sur les
+Kanvas devrait introduire un `GPUPassBatcher` ou equivalent, branche sur les
 contrats existants :
 
 ```text
@@ -141,7 +141,7 @@ DisplayList
   -> analyse / material lowering
   -> GPUDrawPacket
   -> GPUPassCommandStream
-  -> WGPU encoder
+  -> GPU encoder
 ```
 
 Le but n'est pas de tout batcher. Les operations avec destination-read,
@@ -184,9 +184,9 @@ stable, chaque correction restera plus chere :
 
 ## Priorites recommandees
 
-1. Creer `WgpuCaps` et remplacer les hypotheses codees en dur par des faits de
+1. Creer `GPUCaps` et remplacer les hypotheses codees en dur par des faits de
    capacite.
-2. Ajouter un `WgpuResourceProvider` concret pour uniform slabs, null buffers,
+2. Ajouter un `GPUResourceProvider` concret pour uniform slabs, null buffers,
    textures, samplers et bind groups reutilisables.
 3. Ajouter une queue de soumission avec suivi de completion et retention des
    ressources.
@@ -204,8 +204,8 @@ Le refactor doit etre incremental :
 - ne pas introduire une copie de Graphite ;
 - renforcer d'abord les couches qui existent deja ;
 - garder les chemins actuels comme reference/fallback pendant la migration ;
-- mesurer chaque phase avec tests unitaires, smoke tests WGPU et dashboard GM.
+- mesurer chaque phase avec tests unitaires, smoke tests GPU et dashboard GM.
 
-Le premier chantier utile est donc : `WgpuCaps` + `WgpuResourceProvider`.
+Le premier chantier utile est donc : `GPUCaps` + `GPUResourceProvider`.
 Ce duo pose les bases pour tout le reste sans changer immediatement la
 semantique de rendu.
