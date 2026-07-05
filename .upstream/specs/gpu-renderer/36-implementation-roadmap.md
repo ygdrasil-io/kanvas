@@ -39,7 +39,7 @@ The current usable starting facts are:
 
 The first implementation work must therefore make the contracts executable
 inside `:gpu-renderer` before any product route is enabled through
-`:gpu-raster`. Shadow integration can be prepared in parallel, but the default
+`:gpu-renderer`. Shadow integration can be prepared in parallel, but the default
 legacy route remains unchanged until isolated evidence is green.
 
 ## Roadmap Shape
@@ -646,7 +646,7 @@ The target validation command for the isolated batch is:
 rtk ./gradlew --no-daemon :gpu-renderer:test
 ```
 
-Shadow integration later adds targeted `:gpu-raster` tests behind an explicit
+Shadow integration later adds targeted `:gpu-renderer` tests behind an explicit
 flag or shadow mode, without changing the default route.
 
 ## Expansion Order After First Route

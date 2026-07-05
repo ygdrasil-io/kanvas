@@ -159,7 +159,7 @@ object EmojiTypeface {
 }
 ```
 
-No per-format dispatch — `GlyphScaler` inspects available tables and adapts. `Format` is retained for debug naming only. Replaces the `cpu-raster` `STUB.EMOJI_TABLES`.
+No per-format dispatch — `GlyphScaler` inspects available tables and adapts. `Format` is retained for debug naming only. Replaces the former emoji-table stub with typed font/color-glyph data.
 
 ### 7. GM migration plan
 

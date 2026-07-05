@@ -83,7 +83,7 @@ Each shadow or compare run should be able to dump:
 
 Rules:
 
-- CPU comparison uses `:kanvas-skia` current output as oracle during migration.
+- CPU comparison uses `:kanvas` compatibility facade current output as oracle during migration.
 - WebGPU comparison uses existing cross-backend harnesses where available.
 - Thresholds must be named per primitive family and recorded with artifacts.
 - A descriptor path cannot become default unless the comparison artifact is

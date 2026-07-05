@@ -177,7 +177,7 @@ Add a backend-neutral pipeline module that owns the common lowering model:
 This module should not depend on WebGPU. Its shared contracts must not require
 Java Vector API support, although CPU execution experiments in the module may
 use Java 25 Vector paths behind scalar fallbacks. It is the contract between
-`kanvas-skia`, `cpu-raster`, and `gpu-raster`.
+`:kanvas`, `:font`, `:codec`, and `:gpu-renderer`.
 
 Representative API shape:
 
@@ -461,8 +461,7 @@ does not own glyph atlas invalidation.
 Unsupported geometry or coverage must use the same explicit diagnostic style as
 other pipeline fallbacks. A `GeometryPlan.Unsupported` means the draw cannot
 produce a safe geometry contract; it should either select a declared
-`:kanvas-skia` compatibility CPU route or produce a stable diagnostic. A
-backend-specific
+`:kanvas` CPU/reference route or produce a stable diagnostic. A backend-specific
 `CoveragePlan.Unsupported` means the geometry was understood but the selected
 backend cannot execute that coverage strategy. It must not silently reroute to a
 different backend or drop coverage. If geometry is unsupported, the derived
@@ -487,7 +486,7 @@ pipeline:
 1. Inventory current rect/path/stroke/clip behavior across CPU and GPU.
 2. Introduce `GeometryPlan` and `CoveragePlan` descriptors.
 3. Extract shared flattening and stroking invariants.
-4. Make `:kanvas-skia` CPU coverage the reference oracle.
+4. Make `:kanvas` plus `:integration-tests:skia` reference evidence the coverage oracle.
 5. Formalize GPU coverage strategies and fallback diagnostics.
 6. Add PM-visible geometry-heavy CPU/GPU diff evidence.
 
@@ -699,7 +698,7 @@ for Kanvas, even though it is not a Skia API change.
 The CPU backend owns:
 
 ```text
-:cpu-raster
+:kanvas / :gpu-renderer CPU reference route
   CpuPipelineCompiler
   CpuPipelinePlan
   CpuPipelineExecutor

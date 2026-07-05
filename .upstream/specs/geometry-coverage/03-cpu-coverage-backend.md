@@ -23,28 +23,27 @@ routing.
 
 ## Purpose
 
-Define the CPU coverage backend as the reference oracle for geometry behavior.
-The oracle is `:kanvas-skia`, not legacy `:kanvas`.
+Define the CPU/reference coverage path as the reference oracle for geometry
+behavior. The oracle is current `:kanvas` behavior plus
+`:integration-tests:skia` reference evidence, not retired `kanvas-skia` or
+`cpu-raster` code.
 
 ## Ownership
 
 Current owner modules:
 
-- `kanvas-skia/src/main/kotlin/org/skia/core/SkBitmapDevice.kt`
-- `kanvas-skia/src/main/kotlin/org/skia/foundation/SkAAClip.kt`
-- `kanvas-skia/src/main/kotlin/org/skia/foundation/SkStroker.kt`
-- `cpu-raster/src/main/kotlin/org/skia/**` for auxiliary CPU utilities,
-  pathops, SVG/tools/tests support, and future consumers.
+- `kanvas/src/main/kotlin/org/graphiks/kanvas/`
+- `kanvas/src/main/kotlin/org/skia/foundation/`
+- `integration-tests/skia/src/test/kotlin/org/graphiks/kanvas/skia/`
 
 Future target owner:
 
 - backend-neutral contracts in a geometry/coverage package;
 - CPU execution code that consumes `CoveragePlan`.
 
-`cpu-raster` is not the first owner of `CoveragePlan`. The first owner is
-`:render-pipeline`; `kanvas-skia` adapts current CPU drawing state into those
-contracts. `cpu-raster` may consume the contracts later for shared utilities
-only after the adapter and oracle tests are stable.
+Retired CPU-raster code is not the owner of `CoveragePlan`. The first owner is
+the Kanvas geometry/coverage contract; `:kanvas` adapts current CPU/reference
+drawing state into those contracts.
 
 ## Supported CoveragePlan Mapping
 
@@ -175,7 +174,7 @@ Track:
 
 ## Acceptance Criteria
 
-- `:kanvas-skia` is named as the oracle in tests and docs.
+- `:kanvas` compatibility facade is named as the oracle in tests and docs.
 - At least one descriptor dump can show CPU coverage selection for rect and
   path.
 - Existing CPU visual behavior does not regress.

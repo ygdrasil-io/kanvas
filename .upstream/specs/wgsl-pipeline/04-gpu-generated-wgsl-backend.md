@@ -30,7 +30,7 @@ semantics by itself.
 
 Current owner:
 
-- `gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/`
+- `gpu-renderer/src/main/kotlin/org/skia/gpu/webgpu/`
 
 Important current surfaces:
 

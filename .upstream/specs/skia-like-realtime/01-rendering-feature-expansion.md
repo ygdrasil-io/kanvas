@@ -186,8 +186,8 @@ Each node must declare:
 
 Ownership comes from `.upstream/specs/font/`. M62 must not invent a separate
 font stack. The deterministic reference font family is the bundled Liberation
-set under `kanvas-skia/src/main/resources/fonts/`, exposed through
-`LiberationFontMgr.Make()`; host system fonts are not deterministic reference
+set under `reports/font/fixtures/fonts/liberation/`, exposed through the
+pure-Kotlin font catalog; host system fonts are not deterministic reference
 evidence unless captured as fixtures.
 
 ### Target Subsets

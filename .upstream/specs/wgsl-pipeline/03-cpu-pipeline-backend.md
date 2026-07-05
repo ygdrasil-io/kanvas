@@ -35,7 +35,7 @@ Current pilot code lives in `:render-pipeline`:
 - `CpuExecutionResult`.
 
 Future broader CPU backend ownership may move execution code into
-`:cpu-raster`, but the `KanvasPipelineIR` semantic contract remains in
+`:kanvas` CPU/reference route, but the `KanvasPipelineIR` semantic contract remains in
 `:render-pipeline`.
 
 ## Execution Model
@@ -74,7 +74,7 @@ Required comparisons:
 - old CPU path vs CPU pipeline for each promoted shader family;
 - scalar vs vector output for each vectorized kernel;
 - CPU pipeline vs WebGPU generated path for cross-backend milestones;
-- `:kanvas-skia` oracle when Geometry/Coverage is involved.
+- `:kanvas` compatibility facade oracle when Geometry/Coverage is involved.
 
 The CPU backend is allowed to keep compatibility routes until equivalence is
 proven.

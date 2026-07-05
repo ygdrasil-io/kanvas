@@ -31,11 +31,11 @@ coverage contract remains shared with CPU.
 
 Current owner module:
 
-- `gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt`
+- `gpu-renderer/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt`
 
 Related resources:
 
-- `gpu-raster/src/main/resources/shaders/*.wgsl`
+- `gpu-renderer/src/main/resources/shaders/*.wgsl`
 - WGSL parser/generator integration from `webgpu-ktypes`
 
 ## Supported CoveragePlan Mapping

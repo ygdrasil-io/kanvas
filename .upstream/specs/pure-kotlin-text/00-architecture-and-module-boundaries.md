@@ -6,14 +6,14 @@ Date: 2026-06-13
 ## Purpose
 
 Define the architecture of the complete pure Kotlin text stack and its
-boundaries with `:kanvas-skia` and `:gpu-renderer`.
+boundaries with `:kanvas` compatibility facade and `:gpu-renderer`.
 
 The target separates font/text intelligence from GPU execution:
 
 - font/text modules resolve fonts, shape text, lay out paragraphs, choose glyph
   representations, and prepare glyph artifacts;
 - `:gpu-renderer` records and executes GPU work using typed text artifacts;
-- `:kanvas-skia` adapts Skia-like APIs onto the pure Kotlin core.
+- `:kanvas` compatibility facade adapts Skia-like APIs onto the pure Kotlin core.
 
 ## Target Modules
 
@@ -28,7 +28,7 @@ the target responsibilities are fixed:
 | Paragraph | `org.graphiks.kanvas.text.paragraph` | Paragraph builder, rich text runs, line breaking, alignment, truncation, metrics, selection, hit testing. |
 | Glyph artifacts | `org.graphiks.kanvas.glyph` | Glyph representation selection, A8 masks, SDF masks, color glyph plans, atlas planning, cache keys. |
 | GPU text handoff | `org.graphiks.kanvas.glyph.gpu` or equivalent | Typed artifacts consumed by `:gpu-renderer`, upload plans, generation tokens, budget facts. |
-| Skia facade | `org.skia.foundation` in `:kanvas-skia` | Compatibility surface for `SkFontMgr`, `SkTypeface`, `SkFont`, `SkShaper`, `SkTextBlob`, and paragraph-compatible APIs. |
+| Skia facade | `org.skia.foundation` in `:kanvas` compatibility facade | Compatibility surface for `SkFontMgr`, `SkTypeface`, `SkFont`, `SkShaper`, `SkTextBlob`, and paragraph-compatible APIs. |
 
 The implementation may group several target areas into one Gradle module at
 first, but package boundaries and dependency direction must still match this
@@ -39,7 +39,7 @@ table.
 Allowed dependencies:
 
 ```text
-:kanvas-skia facade
+:kanvas compatibility facade
   -> pure Kotlin font/text/glyph modules
 
 pure Kotlin glyph artifact modules
@@ -173,7 +173,7 @@ ideas, tests, fixtures, or diagnostics after their contracts are promoted.
 
 - Each subsystem has one owner and one boundary contract.
 - `:gpu-renderer` can consume text without parsing fonts or shaping text.
-- `:kanvas-skia` can expose compatibility APIs without becoming the core text
+- The `:kanvas` compatibility facade can expose compatibility APIs without becoming the core text
   implementation.
 - Native/external font engines remain outside normative product behavior.
 - Serialized diagnostics can explain every text route, fallback, and refusal.

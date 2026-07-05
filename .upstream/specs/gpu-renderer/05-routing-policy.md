@@ -298,7 +298,7 @@ A route may be promoted only when:
 ### `gpu-raster-legacy-path` → `REMOVED`
 
 The `gpu-raster` legacy path (backed by `SkWebGpuDevice` and `WebGpuContext`)
-was deleted in KGPU-M32-005 (commit 4bfdd9f). The `:gpu-raster` module is kept
+was deleted in KGPU-M32-005 (commit 4bfdd9f). The `:gpu-renderer` module is kept
 as host for shared WGSL-validation, pipeline-conformance, retirement/shadow
 gates, generated-WGSL, and inventory infrastructure. It no longer contains a
 render device.

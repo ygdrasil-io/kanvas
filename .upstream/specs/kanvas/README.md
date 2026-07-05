@@ -6,11 +6,12 @@ Target: Public API surface of the Kanvas Kotlin facade — a professional-grade 
 
 This pack captures the complete Kanvas Kotlin API surface: core types, Paint/effects, Path geometry, Canvas drawing commands, GPU pipeline interface, diagnostics/refusal policy, Surface rendering loop, DSL builders, export encoding bridge, and Picture/recording.
 
-These specs implement the design approved in `docs/superpowers/specs/2026-06-30-kanvas-reboot-design.md`. For the GPU backend execution model, see `../gpu-renderer/`.
+These specs implement the active Kanvas API target. For the GPU backend
+execution model, see `../gpu-renderer/`.
 
 ## Source Of Truth
 
-- Parent design: `docs/superpowers/specs/2026-06-30-kanvas-reboot-design.md`
+- Parent design: this spec pack and `.upstream/target/high-performance-wgsl-pipeline-target.md`
 - GPU renderer architecture: `../gpu-renderer/`
 - Upstream target: `.upstream/target/high-performance-wgsl-pipeline-target.md`
 - WGSL specification: https://www.w3.org/TR/WGSL/

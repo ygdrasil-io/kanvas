@@ -44,7 +44,7 @@ The intended CI gates are:
 | Gate | Purpose |
 |---|---|
 | `geometry-contracts` | Validate `GeometryPlan`, `CoveragePlan`, transform, clip, and reason-code contracts. |
-| `cpu-coverage-oracle` | Compare descriptor-driven coverage against `:kanvas-skia`. |
+| `cpu-coverage-oracle` | Compare descriptor-driven coverage against current `:kanvas` CPU/reference behavior. |
 | `webgpu-coverage-cross-backend` | Compare enabled WebGPU strategies against CPU reference. |
 | `wgsl-coverage-validate` | Parse touched/generated coverage WGSL and verify reflected packers. |
 | `geometry-cache-warmup` | Assert warmup/stable pipeline creation and module-count gates. |
@@ -67,7 +67,8 @@ Required:
 
 ## CPU Oracle Tests
 
-CPU oracle is `:kanvas-skia`.
+CPU oracle is current `:kanvas` CPU/reference behavior plus
+`:integration-tests:skia` reference evidence.
 
 Required:
 
@@ -107,7 +108,7 @@ Initial falsifiable thresholds:
 
 | Metric | Initial value |
 |---|---|
-| CPU descriptor vs `:kanvas-skia` integer fixtures | exact pixel match unless the primitive family names a tolerance. |
+| CPU descriptor vs `:kanvas` compatibility facade integer fixtures | exact pixel match unless the primitive family names a tolerance. |
 | CPU/WebGPU sRGB byte fixtures | max channel delta <= 1 for at least 99.5 percent of pixels, with no pixel above 3 unless the family-specific policy says otherwise. |
 | DeltaE family policy | Required before using DeltaE as the review metric; until then, use channel delta/PSNR/SSIM policies named by the test. |
 | Warmup before stable GPU measurement | >= 60 frames or documented 3-sigma stabilization. |
@@ -196,7 +197,7 @@ Evidence:
   - selector dump: WebGpuCoveragePlanSelectorTest
   - cross-backend: WebGpuCoveragePlanSelectorTest, p99.5 channel delta <= 1
 Commands:
-  - rtk ./gradlew :gpu-raster:test --tests org.skia.gpu.webgpu.WebGpuCoveragePlanSelectorTest
+  - rtk ./gradlew :gpu-renderer:test --tests org.skia.gpu.webgpu.WebGpuCoveragePlanSelectorTest
 Artifacts:
   - coverage selection dump
 Known limitations: production draw-route wiring remains a follow-up if not in scope.

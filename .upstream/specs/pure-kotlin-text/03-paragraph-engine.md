@@ -34,7 +34,7 @@ inspired concepts:
 - `TextDirection`;
 - `EllipsisPolicy`.
 
-The `:kanvas-skia` facade may expose compatibility builders, but the native
+The `:kanvas` compatibility facade may expose compatibility builders, but the native
 model lives under `org.graphiks.kanvas.text.paragraph`.
 
 ## Builder Contract

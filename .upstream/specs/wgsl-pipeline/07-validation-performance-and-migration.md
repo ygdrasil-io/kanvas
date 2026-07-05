@@ -242,11 +242,11 @@ Example:
 Milestone: M4 - Generated solid rect WGSL
 Capability: WebGPU renders solid-rect SrcOver through parser-validated generated WGSL.
 Evidence:
-  - golden WGSL: gpu-raster/src/test/resources/golden/solid-rect/gpu.generated.solid-rect.srcover@v1.wgsl
+  - golden WGSL: gpu-renderer/src/test/resources/golden/solid-rect/gpu.generated.solid-rect.srcover@v1.wgsl
   - parser report: GeneratedSolidRectWgslTest
   - cross-backend: GeneratedSolidRectMigrationTest, p99.5 channel delta = 0
 Commands:
-  - rtk ./gradlew :gpu-raster:test --tests '*GeneratedSolidRect*'
+  - rtk ./gradlew :gpu-renderer:test --tests '*GeneratedSolidRect*'
 Artifacts:
   - generated WGSL dump
   - pipeline key dump

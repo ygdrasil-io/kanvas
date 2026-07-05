@@ -103,8 +103,8 @@ M33 does not:
 
 Expected evidence sources:
 
-- `rtk ./gradlew --no-daemon :gpu-raster:gpuInventoryTest`
-- `gpu-raster/build/reports/gpu-inventory/gpu-inventory-failure-classification.md`
-- `rtk ./gradlew --no-daemon :gpu-raster:validateGpuSmokePromotionPolicy`
-- `rtk ./gradlew --no-daemon :gpu-raster:gpuSmokeTest`
+- `rtk ./gradlew --no-daemon :gpu-renderer:gpuInventoryTest`
+- `gpu-renderer/build/reports/gpu-inventory/gpu-inventory-failure-classification.md`
+- `rtk ./gradlew --no-daemon :gpu-renderer:validateGpuSmokePromotionPolicy`
+- `rtk ./gradlew --no-daemon :gpu-renderer:gpuSmokeTest`
 - M33 reports under `reports/wgsl-pipeline/`

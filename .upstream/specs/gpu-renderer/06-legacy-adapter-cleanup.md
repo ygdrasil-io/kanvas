@@ -16,7 +16,7 @@ boundary, not to rewrite rendering logic in place.
 
 The current WebGPU path concentrates routing, resources, pipelines, diagnostics,
 coverage, glyphs, readback, and submission behavior in large legacy files such
-as `gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt`.
+as `gpu-renderer/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt`.
 
 That shape makes direct in-place Graphite-like refactoring risky. Cleanup must
 create an adapter boundary before new GPU renderer behavior becomes default.
@@ -116,7 +116,7 @@ No broad deletion is allowed just because the new module exists.
 
 The legacy `SkWebGpuDevice`, `WebGpuContext`, `HeadlessTarget`,
 `WebGpuCoveragePlanSelector`, `SkWebGpuGlyphAtlas`, and all device-dependent
-classes were deleted in KGPU-M32-005 (commit 4bfdd9f). The `:gpu-raster`
+classes were deleted in KGPU-M32-005 (commit 4bfdd9f). The `:gpu-renderer`
 module is kept as host for shared WGSL-validation, pipeline-conformance,
 retirement/shadow gates, generated-WGSL, and inventory infrastructure.
 
@@ -124,14 +124,14 @@ The rollback flag (`-Dkanvas.rollback.legacy-gpu-raster` /
 `useLegacyGpuRaster`) was severed. The Kanvas bridge path is now the sole,
 unconditional render route.
 
-**Deferred (Option A):** Full `:gpu-raster` module removal + relocating
-shared infra to `:gpu-renderer` is deferred to a later step per
-`docs/superpowers/plans/2026-06-26-legacy-gpu-raster-decommission.md`.
+The former `:gpu-raster` module has been removed. Shared infrastructure that is
+still active belongs in `:gpu-renderer`, `:kanvas`, or
+`:integration-tests:skia`.
 The obsolete legacy-device CI gates (`validateKan*` chain, `gpuSmokeTest` in the
 root `build.gradle.kts` and CI workflow) were REMOVED as part of the device
 deletion because they broke the required WGSL scene dashboard release gate and
 the GPU smoke CI job. The GPU smoke job was repointed to the bridge GPU tests
-(`:kanvas-skia-bridge:test :kanvas:test`).
+(`:gpu-renderer:test :kanvas:test :integration-tests:skia:test`).
 
 Deletion report: `reports/gpu-renderer/2026-06-26-m32-005-legacy-device-deletion.md`
 

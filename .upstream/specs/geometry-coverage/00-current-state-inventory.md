@@ -12,24 +12,20 @@ contracts. This avoids writing specs against an imagined renderer.
 
 | Module | Current role |
 |---|---|
-| `kanvas-skia` | Public Skia-like API, `SkCanvas`, CPU raster device, paths, clips, stroker, masks. |
-| `cpu-raster` | Extra CPU raster/effects utilities, pathops/SVG/tools/test support, and possible future consumer of shared contracts. |
-| `gpu-raster` | WebGPU device, handwritten/generated WGSL resources, GPU tests and cross-backend harness. |
-| `render-pipeline` | Emerging paint/pipeline IR, not yet a full geometry owner. |
+| `:kanvas` | Public drawing API, CPU/reference behavior, paths, clips, stroker, masks. |
+| `:gpu-renderer` | WebGPU device, handwritten/generated WGSL resources, GPU tests and cross-backend harness. |
+| `:integration-tests:skia` | Skia GM reference comparisons and parity evidence. |
 
-`kanvas/src/main/kotlin` legacy code may be read as historical context only.
-It must not become a dependency for this target.
+Old `kanvas-skia`/`cpu-raster` code must be read from Git history only. It must
+not become a dependency for this target.
 
 ## Current CPU Geometry/Coverage
 
 Primary entry points:
 
-- `kanvas-skia/src/main/kotlin/org/skia/core/SkCanvas.kt`
-- `kanvas-skia/src/main/kotlin/org/skia/core/SkDevice.kt`
-- `kanvas-skia/src/main/kotlin/org/skia/core/SkBitmapDevice.kt`
-- `kanvas-skia/src/main/kotlin/org/skia/foundation/SkAAClip.kt`
-- `kanvas-skia/src/main/kotlin/org/skia/foundation/SkStroker.kt`
-- `kanvas-skia/src/main/kotlin/org/skia/core/SkClipShape.kt`
+- `kanvas/src/main/kotlin/org/graphiks/kanvas/`
+- `kanvas/src/main/kotlin/org/skia/foundation/`
+- `integration-tests/skia/src/test/kotlin/org/graphiks/kanvas/skia/`
 
 Current behavior:
 
@@ -53,14 +49,14 @@ Current risks:
 - Coverage is not represented as a standalone contract before execution.
 - Unsupported paths often depend on local behavior instead of one diagnostic
   taxonomy.
-- `cpu-raster` has substantial CPU-side utility code, but it is not currently
-  the active owner of draw coverage execution.
+- retired CPU-raster code must stay historical and must not become the active
+  owner of draw coverage execution.
 
 ## Current WebGPU Geometry/Coverage
 
 Primary entry point:
 
-- `gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt`
+- `gpu-renderer/src/main/kotlin/`
 
 Current behavior:
 
@@ -90,16 +86,9 @@ Current risks:
 
 Useful existing evidence families:
 
-- `kanvas-skia/src/test/kotlin/org/skia/core/*Path*`
-- `kanvas-skia/src/test/kotlin/org/skia/core/*Clip*`
-- `kanvas-skia/src/test/kotlin/org/skia/core/*Stroke*`
-- `gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/*Path*`
-- `gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/*Stroke*`
-- `gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/*Clip*`
-- `gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/crossbackend/*`
-- `skia-integration-tests/src/test/kotlin/org/skia/tests/*Path*`
-- `skia-integration-tests/src/test/kotlin/org/skia/tests/*Stroke*`
-- `skia-integration-tests/src/test/kotlin/org/skia/tests/*Clip*`
+- `kanvas/src/test/kotlin/`
+- `gpu-renderer/src/test/kotlin/`
+- `integration-tests/skia/src/test/kotlin/`
 
 The spec work should identify a small baseline set before implementation:
 

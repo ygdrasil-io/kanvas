@@ -8,7 +8,7 @@ Date: 2026-05-26
 `render-pipeline` already owns `KanvasPipelineIR`, `CoverageModel`,
 `FallbackPlan`, value records, and Java 25 CPU pipeline work. Geometry and
 coverage contracts need one backend-neutral owner without depending on
-`kanvas-skia` implementation classes or WebGPU.
+`:kanvas` implementation classes or WebGPU.
 
 ## Decision
 
@@ -16,7 +16,7 @@ Own `GeometryPlan`, `CoveragePlan`, diagnostic reason records, and their
 lowering adapter in `:render-pipeline`.
 
 Use render-pipeline value records or new dependency-free equivalents in the
-contract layer. `kanvas-skia` adapts public Skia-like types such as `SkRect`,
+contract layer. `:kanvas` adapts public Skia-like types such as `SkRect`,
 `SkRRect`, `SkPathFillType`, and `SkClipShape` at the module boundary instead
 of leaking them into the shared contracts.
 
@@ -37,5 +37,5 @@ Negative:
 
 ## Non-Goals
 
-- No new dependency from `:render-pipeline` to `:kanvas-skia`.
-- No move of the public drawing API out of `kanvas-skia`.
+- No new dependency from the backend-neutral contract layer to `:kanvas`.
+- No move of the public drawing API out of `:kanvas`.
