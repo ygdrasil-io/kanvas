@@ -3,6 +3,7 @@ package org.graphiks.kanvas.gpu.renderer.execution
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandBinding
 import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandKind
 import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandReference
@@ -85,6 +86,49 @@ class GPUBackendRuntimeContractsTest {
     }
 
     @Test
+    fun `runtime telemetry defaults to zero counters and deterministic dump`() {
+        val telemetry = GPUBackendRuntimeTelemetry()
+
+        assertEquals(0L, telemetry.renderPasses)
+        assertEquals(0L, telemetry.offscreenPasses)
+        assertEquals(0L, telemetry.windowPasses)
+        assertEquals(0L, telemetry.submissions)
+        assertEquals(0L, telemetry.buffersCreated)
+        assertEquals(0L, telemetry.texturesCreated)
+        assertEquals(0L, telemetry.bindGroupsCreated)
+        assertEquals(0L, telemetry.samplersCreated)
+        assertEquals(0L, telemetry.queueWrites)
+        assertEquals(
+            listOf(
+                "gpu-runtime.telemetry renderPasses=0 offscreenPasses=0 windowPasses=0 " +
+                    "submissions=0 buffersCreated=0 texturesCreated=0 bindGroupsCreated=0 " +
+                    "samplersCreated=0 queueWrites=0",
+            ),
+            telemetry.dumpLines(),
+        )
+        assertTrue(!telemetry.dumpLines().joinToString("\n").contains("@"))
+    }
+
+    @Test
+    fun `runtime telemetry rejects negative counters`() {
+        assertFailsWith<IllegalArgumentException> {
+            GPUBackendRuntimeTelemetry(renderPasses = -1L)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            GPUBackendRuntimeTelemetry(queueWrites = -1L)
+        }
+    }
+
+    @Test
+    fun `backend session defaults expose empty telemetry and no capabilities`() {
+        val session = NoopBackendSession()
+
+        assertEquals(GPUBackendRuntimeTelemetry.Empty, session.runtimeTelemetry)
+        assertEquals(GPUBackendRuntimeTelemetry.Empty.dumpLines(), session.runtimeTelemetryDumpLines)
+        assertEquals(null, session.capabilities)
+    }
+
+    @Test
     fun `uniform payload draw requires provider materialized uniform and bind group bridge`() {
         val accepted = GPUBackendUniformPayloadDraw(
             uniformBytes = byteArrayOf(1, 2, 3, 4),
@@ -157,4 +201,16 @@ class GPUBackendRuntimeContractsTest {
             GPUMaterializedCommandOperandKind.BindGroup -> "bind-group"
             else -> "other-${name.lowercase()}"
         }
+
+    private class NoopBackendSession : GPUBackendSession {
+        override val adapterInfo: GPUBackendAdapterSummary? = null
+
+        override fun createOffscreenTarget(request: GPUOffscreenTargetRequest): GPUBackendOffscreenTarget =
+            error("NoopBackendSession cannot create offscreen targets")
+
+        override fun createWindowSurface(binding: GPUNativeSurfaceBinding): GPUBackendWindowSurface =
+            error("NoopBackendSession cannot create window surfaces")
+
+        override fun close() = Unit
+    }
 }
