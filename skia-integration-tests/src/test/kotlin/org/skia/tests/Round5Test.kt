@@ -31,15 +31,6 @@ class Round5Test {
     fun `SquareHairGM matches reference`() = runGm(SquareHairGM(), "SquareHairGM", 95.0)
 
     @Test
-    @Disabled("Missing upstream reference squarehair_diffs.png")
-    fun `SquareHairDiffsGM matches reference`() =
-        runGm(SquareHairDiffsGM(), "SquareHairDiffsGM", 95.0)
-
-    @Test
-    fun `ZeroControlStrokeGM matches reference`() =
-        runGm(ZeroControlStrokeGM(), "ZeroControlStrokeGM", 98.0)
-
-    @Test
     fun `HairlineSubdivGM matches reference`() =
         runGm(HairlineSubdivGM(), "HairlineSubdivGM", 95.0)
 

@@ -34,6 +34,7 @@ org.graphiks.kanvas.skia.gm.blur.TableMaskFilterGm
 org.graphiks.kanvas.skia.gm.blur.TiledBlurBigSigmaGm
 org.graphiks.kanvas.skia.gm.clip.AAClipGm
 org.graphiks.kanvas.skia.gm.clip.CircularClipsGm
+org.graphiks.kanvas.skia.gm.clip.CroppedRectsGm
 org.graphiks.kanvas.skia.gm.clip.ClipCubicGm
 org.graphiks.kanvas.skia.gm.clip.ClipDrawDrawGm
 org.graphiks.kanvas.skia.gm.clip.ClipLargeRectGm
@@ -42,6 +43,14 @@ org.graphiks.kanvas.skia.gm.clip.ClipStrokeRectGm
 org.graphiks.kanvas.skia.gm.clip.ComplexClip2Gm
 org.graphiks.kanvas.skia.gm.clip.ComplexClip3Gm
 org.graphiks.kanvas.skia.gm.clip.ComplexClip4Gm
+org.graphiks.kanvas.skia.gm.clip.ComplexClipAaGm
+org.graphiks.kanvas.skia.gm.clip.ComplexClipAaInvertGm
+org.graphiks.kanvas.skia.gm.clip.ComplexClipAaLayerGm
+org.graphiks.kanvas.skia.gm.clip.ComplexClipAaLayerInvertGm
+org.graphiks.kanvas.skia.gm.clip.ComplexClipBwGm
+org.graphiks.kanvas.skia.gm.clip.ComplexClipBwInvertGm
+org.graphiks.kanvas.skia.gm.clip.ComplexClipBwLayerGm
+org.graphiks.kanvas.skia.gm.clip.ComplexClipBwLayerInvertGm
 org.graphiks.kanvas.skia.gm.clip.ComplexClipBlurTiledGm
 org.graphiks.kanvas.skia.gm.clip.ConvexPolyClipGm
 org.graphiks.kanvas.skia.gm.clip.Crbug892988Gm
@@ -79,6 +88,8 @@ org.graphiks.kanvas.skia.gm.composite.ComposeShaderBitmapGm
 org.graphiks.kanvas.skia.gm.composite.ComposeShaderGm
 org.graphiks.kanvas.skia.gm.composite.ComposeShaderGridGm
 org.graphiks.kanvas.skia.gm.composite.CompositorGm
+org.graphiks.kanvas.skia.gm.composite.Crbug918512Gm
+org.graphiks.kanvas.skia.gm.composite.DiscardGm
 org.graphiks.kanvas.skia.gm.composite.DisplacementGm
 org.graphiks.kanvas.skia.gm.composite.DrawAtlasColorGm
 org.graphiks.kanvas.skia.gm.composite.DrawAtlasGm
@@ -209,6 +220,7 @@ org.graphiks.kanvas.skia.gm.gradient.ShallowGradientSweepNoditherGm
 org.graphiks.kanvas.skia.gm.gradient.SmallColorStopGm
 org.graphiks.kanvas.skia.gm.gradient.SweepTilingGm
 org.graphiks.kanvas.skia.gm.gradient.TestGradientGm
+org.graphiks.kanvas.skia.gm.image.AllBitmapConfigsGm
 org.graphiks.kanvas.skia.gm.image.AllVariants8888Gm
 org.graphiks.kanvas.skia.gm.image.AlphaImageAlphaTintGm
 org.graphiks.kanvas.skia.gm.image.AnimCodecPlayerExifGm
@@ -226,6 +238,7 @@ org.graphiks.kanvas.skia.gm.image.AyncYUVNoScaleGm
 org.graphiks.kanvas.skia.gm.image.BicubicGm
 org.graphiks.kanvas.skia.gm.image.BigMatrixGm
 org.graphiks.kanvas.skia.gm.image.BitmapCopyGm
+org.graphiks.kanvas.skia.gm.image.BitmapFiltersGm
 org.graphiks.kanvas.skia.gm.image.BitmapImageGm
 org.graphiks.kanvas.skia.gm.image.BitmapPremulGm
 org.graphiks.kanvas.skia.gm.image.BitmapShaderGm
@@ -235,12 +248,18 @@ org.graphiks.kanvas.skia.gm.image.BleedDownscaleGm
 org.graphiks.kanvas.skia.gm.image.BmpFilterQualityRepeatGm
 org.graphiks.kanvas.skia.gm.image.Bug6783Gm
 org.graphiks.kanvas.skia.gm.image.ColorCubeGm
+org.graphiks.kanvas.skia.gm.image.ColorWheelAlphaTypesGm
 org.graphiks.kanvas.skia.gm.image.ColorWheelGm
+org.graphiks.kanvas.skia.gm.image.Colorspace2Gm
+org.graphiks.kanvas.skia.gm.image.ColorspaceGm
 org.graphiks.kanvas.skia.gm.image.CompositorQuadsImageGm
 org.graphiks.kanvas.skia.gm.image.CoordClampShaderGm
 org.graphiks.kanvas.skia.gm.image.CopyTo4444Gm
+org.graphiks.kanvas.skia.gm.image.Crbug224618Gm
 org.graphiks.kanvas.skia.gm.image.Crbug404394639Gm
+org.graphiks.kanvas.skia.gm.image.DrawBitmapRect2Gm
 org.graphiks.kanvas.skia.gm.image.DrawBitmapRect3Gm
+org.graphiks.kanvas.skia.gm.image.DrawBitmapRectSkbug4734Gm
 org.graphiks.kanvas.skia.gm.image.DrawBitmapRectGm
 org.graphiks.kanvas.skia.gm.image.DrawMiniBitmapRectGm
 org.graphiks.kanvas.skia.gm.image.DrawimageSamplingGm
@@ -266,6 +285,8 @@ org.graphiks.kanvas.skia.gm.image.ImageGm
 org.graphiks.kanvas.skia.gm.image.ImageMagnifierBoundsGm
 org.graphiks.kanvas.skia.gm.image.ImageMagnifierCroppedGm
 org.graphiks.kanvas.skia.gm.image.ImageMagnifierGm
+org.graphiks.kanvas.skia.gm.image.ImageMakeWithFilterGm
+org.graphiks.kanvas.skia.gm.image.ImageMaskSubsetGm
 org.graphiks.kanvas.skia.gm.image.ImageOutOfGamutGm
 org.graphiks.kanvas.skia.gm.image.ImagePictGm
 org.graphiks.kanvas.skia.gm.image.ImageResizeTiledGm
@@ -285,6 +306,7 @@ org.graphiks.kanvas.skia.gm.image.NinePatchStretchGm
 org.graphiks.kanvas.skia.gm.image.NotNative32BitmapConfigGm
 org.graphiks.kanvas.skia.gm.image.OrientationGm
 org.graphiks.kanvas.skia.gm.image.P3Gm
+org.graphiks.kanvas.skia.gm.image.PerspImagesGm
 org.graphiks.kanvas.skia.gm.image.PictureGeneratorGm
 org.graphiks.kanvas.skia.gm.image.PictureImageFilterGm
 org.graphiks.kanvas.skia.gm.image.PictureImageGeneratorGm
@@ -298,6 +320,8 @@ org.graphiks.kanvas.skia.gm.image.PosterCircleGm
 org.graphiks.kanvas.skia.gm.image.ReadPixelsCodecGm
 org.graphiks.kanvas.skia.gm.image.ReadPixelsPictureGm
 org.graphiks.kanvas.skia.gm.image.ReinterpretColorSpaceGm
+org.graphiks.kanvas.skia.gm.image.RepeatedBitmapGm
+org.graphiks.kanvas.skia.gm.image.RepeatedBitmapJpgGm
 org.graphiks.kanvas.skia.gm.image.ScaledTilemodesGm
 org.graphiks.kanvas.skia.gm.image.ScaledTilemodesNpotGm
 org.graphiks.kanvas.skia.gm.image.ScalepixelsUnpremulGm
@@ -342,9 +366,11 @@ org.graphiks.kanvas.skia.gm.path.ConcavePathsGm
 org.graphiks.kanvas.skia.gm.path.ConicPathsGm
 org.graphiks.kanvas.skia.gm.path.ConvexLineOnlyPathsGm
 org.graphiks.kanvas.skia.gm.path.ConvexPathsGm
+org.graphiks.kanvas.skia.gm.path.Crbug640176Gm
 org.graphiks.kanvas.skia.gm.path.Crbug691386Gm
 org.graphiks.kanvas.skia.gm.path.CubicClosePathGm
 org.graphiks.kanvas.skia.gm.path.CubicPathGm
+org.graphiks.kanvas.skia.gm.path.CubicPathShaderGm
 org.graphiks.kanvas.skia.gm.path.DashCircleGm
 org.graphiks.kanvas.skia.gm.path.DashTextCapsGm
 org.graphiks.kanvas.skia.gm.path.Dashing5Gm
@@ -357,6 +383,7 @@ org.graphiks.kanvas.skia.gm.path.FillTypePerspGm
 org.graphiks.kanvas.skia.gm.path.InnerJoinGeometryGm
 org.graphiks.kanvas.skia.gm.path.InnerShapesGm
 org.graphiks.kanvas.skia.gm.path.LinePathGm
+org.graphiks.kanvas.skia.gm.path.MandolineGm
 org.graphiks.kanvas.skia.gm.path.ManyCirclesGm
 org.graphiks.kanvas.skia.gm.path.NestedGm
 org.graphiks.kanvas.skia.gm.path.NonClosedPathsGm
@@ -370,9 +397,12 @@ org.graphiks.kanvas.skia.gm.path.PointsGm
 org.graphiks.kanvas.skia.gm.path.Poly2PolyGm
 org.graphiks.kanvas.skia.gm.path.PolygonOffsetGm
 org.graphiks.kanvas.skia.gm.path.PolygonsGm
+org.graphiks.kanvas.skia.gm.path.PreserveFillRuleBigGm
+org.graphiks.kanvas.skia.gm.path.PreserveFillRuleLittleGm
 org.graphiks.kanvas.skia.gm.path.QuadClosePathGm
 org.graphiks.kanvas.skia.gm.path.QuadPathGm
 org.graphiks.kanvas.skia.gm.path.RoundRectGm
+org.graphiks.kanvas.skia.gm.path.SharedCornersGm
 org.graphiks.kanvas.skia.gm.path.ShadowUtilsDirectionalGm
 org.graphiks.kanvas.skia.gm.path.SimpleShapesGm
 org.graphiks.kanvas.skia.gm.path.StLouisArchGm
@@ -380,6 +410,7 @@ org.graphiks.kanvas.skia.gm.path.StrokeRectShaderGm
 org.graphiks.kanvas.skia.gm.path.StrokedLineCapsGm
 org.graphiks.kanvas.skia.gm.path.Strokes5Gm
 org.graphiks.kanvas.skia.gm.path.StrokesGm
+org.graphiks.kanvas.skia.gm.path.Strokes3Gm
 org.graphiks.kanvas.skia.gm.path.TeenyStrokesGm
 org.graphiks.kanvas.skia.gm.path.ThinAaDashLinesGm
 org.graphiks.kanvas.skia.gm.path.ThinConcavePathsGm
@@ -391,6 +422,7 @@ org.graphiks.kanvas.skia.gm.path.TrickyCubicStrokesGm
 org.graphiks.kanvas.skia.gm.path.TrickyCubicStrokesLargeRadiusGm
 org.graphiks.kanvas.skia.gm.path.TrimGm
 org.graphiks.kanvas.skia.gm.path.WideButtCapsGm
+org.graphiks.kanvas.skia.gm.path.ZeroControlStrokeGm
 org.graphiks.kanvas.skia.gm.path.ZeroLenStrokesGm
 org.graphiks.kanvas.skia.gm.path.ZeroLineStrokeGm
 org.graphiks.kanvas.skia.gm.runtime_effect.AlternateLumaGm
@@ -422,6 +454,7 @@ org.graphiks.kanvas.skia.gm.text.BlobRSXformDistortableGm
 org.graphiks.kanvas.skia.gm.text.BlobRSXformGm
 org.graphiks.kanvas.skia.gm.text.ChromeGradText2Gm
 org.graphiks.kanvas.skia.gm.text.ColorEmojiGm
+org.graphiks.kanvas.skia.gm.text.ColorWheelNativeGm
 org.graphiks.kanvas.skia.gm.text.ColoremojiBlendmodesGm
 org.graphiks.kanvas.skia.gm.text.ColrV1Gm
 org.graphiks.kanvas.skia.gm.text.Crbug1073670Gm
