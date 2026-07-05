@@ -24,7 +24,7 @@ import org.graphiks.kanvas.types.Rect
 class SaveLayerF16Gm : SkiaGm {
     override val name = "savelayer_f16"
     override val renderFamily = RenderFamily.COMPOSITE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 900
     override val height = 300

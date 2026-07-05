@@ -21,7 +21,7 @@ import org.graphiks.kanvas.types.Rect
 class BlurredClippedCircleGm : SkiaGm {
     override val name = "blurredclippedcircle"
     override val renderFamily = RenderFamily.BLUR
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 85.6
     override val width = kWidth
     override val height = kHeight

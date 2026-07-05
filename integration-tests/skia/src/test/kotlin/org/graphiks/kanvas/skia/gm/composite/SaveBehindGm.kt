@@ -14,7 +14,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 class SaveBehindGm : SkiaGm {
     override val name = "save_behind"
     override val renderFamily = RenderFamily.COMPOSITE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.TRIVIAL
     override val minSimilarity = 0.0
     override val width = 830
     override val height = 670

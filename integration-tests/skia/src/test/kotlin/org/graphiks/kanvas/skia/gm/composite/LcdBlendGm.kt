@@ -25,7 +25,7 @@ import org.graphiks.kanvas.types.Rect
 class LcdBlendGm : SkiaGm {
     override val name = "lcdblendmodes"
     override val renderFamily = RenderFamily.COMPOSITE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.MEDIUM
     override val minSimilarity = 0.0
     override val width = kWidth
     override val height = kHeight

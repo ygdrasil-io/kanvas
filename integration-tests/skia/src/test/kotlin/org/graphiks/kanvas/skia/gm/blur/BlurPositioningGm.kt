@@ -18,7 +18,7 @@ import org.graphiks.kanvas.types.Rect
 class BlurPositioningGm : SkiaGm {
     override val name = "check_small_sigma_offset"
     override val renderFamily = RenderFamily.BLUR
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 91.7
     override val width = 200
     override val height = 1200

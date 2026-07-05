@@ -16,7 +16,7 @@ import org.graphiks.kanvas.types.Rect
 class BlurBigSigmaGm : SkiaGm {
     override val name = "BlurBigSigma"
     override val renderFamily = RenderFamily.BLUR
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 1024
     override val height = 1024

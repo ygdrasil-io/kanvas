@@ -25,7 +25,7 @@ import kotlin.math.sin
 class HairModesGm : SkiaGm {
     override val name = "hairmodes"
     override val renderFamily = RenderFamily.COMPOSITE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.SLOW
     override val minSimilarity = 42.9
     override val width = 640
     override val height = 480

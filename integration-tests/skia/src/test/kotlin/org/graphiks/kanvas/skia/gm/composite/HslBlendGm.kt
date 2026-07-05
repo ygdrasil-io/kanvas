@@ -22,7 +22,7 @@ import kotlin.math.min
 class HslBlendGm : SkiaGm {
     override val name = "hsl"
     override val renderFamily = RenderFamily.COMPOSITE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 600
     override val height = 100

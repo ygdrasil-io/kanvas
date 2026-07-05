@@ -19,7 +19,7 @@ import org.graphiks.kanvas.types.Rect
 class FastSlowBlurImageFilterGm : SkiaGm {
     override val name = "fast_slow_blurimagefilter"
     override val renderFamily = RenderFamily.BLUR
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 620
     override val height = 260

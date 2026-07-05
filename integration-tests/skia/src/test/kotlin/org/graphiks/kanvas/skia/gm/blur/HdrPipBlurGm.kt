@@ -20,7 +20,7 @@ import org.graphiks.kanvas.types.Rect
 class HdrPipBlurGm : SkiaGm {
     override val name = "hdr-pip-blur"
     override val renderFamily = RenderFamily.BLUR
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 640
     override val height = 360

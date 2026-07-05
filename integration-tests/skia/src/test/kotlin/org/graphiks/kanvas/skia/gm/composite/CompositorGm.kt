@@ -16,7 +16,7 @@ import org.graphiks.kanvas.types.Rect
 class CompositorGm : SkiaGm {
     override val name = "compositor_quads_color"
     override val renderFamily = RenderFamily.COMPOSITE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = (kCellWidth * kMatrixCount + 175f).toInt()
     override val height = (kCellHeight * 1 + 75f).toInt()

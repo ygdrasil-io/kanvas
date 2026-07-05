@@ -19,7 +19,7 @@ import org.graphiks.kanvas.types.Rect
 class AaRectModesGm : SkiaGm {
     override val name = "aarectmodes"
     override val renderFamily = RenderFamily.COMPOSITE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.MEDIUM
     override val minSimilarity = 30.8
     override val width = 640
     override val height = 480

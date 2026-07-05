@@ -22,7 +22,7 @@ import org.graphiks.kanvas.types.Rect
 class ImageFiltersBaseGm : SkiaGm {
     override val name = "imagefiltersbase"
     override val renderFamily = RenderFamily.COMPOSITE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 700
     override val height = 500

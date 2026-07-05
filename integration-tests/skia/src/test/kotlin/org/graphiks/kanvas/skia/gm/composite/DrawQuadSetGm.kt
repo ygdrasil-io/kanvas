@@ -69,7 +69,7 @@ private fun dqsDrawColorTilesMulticolor(canvas: GmCanvas) {
 class DrawQuadSetGm : SkiaGm {
     override val name = "draw_quad_set"
     override val renderFamily = RenderFamily.COMPOSITE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.MEDIUM
     override val minSimilarity = 0.0
     override val width = 800
     override val height = 800

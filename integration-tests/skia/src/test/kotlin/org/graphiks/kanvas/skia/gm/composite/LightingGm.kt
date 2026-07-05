@@ -24,7 +24,7 @@ import kotlin.math.sin
 class LightingGm : SkiaGm {
     override val name = "lighting"
     override val renderFamily = RenderFamily.COMPOSITE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.SLOW
     override val minSimilarity = 0.0
     override val width = WIDTH
     override val height = HEIGHT

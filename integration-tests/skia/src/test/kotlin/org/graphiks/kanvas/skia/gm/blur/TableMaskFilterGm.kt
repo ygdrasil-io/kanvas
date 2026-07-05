@@ -22,7 +22,7 @@ import kotlin.math.sin
 class TableMaskFilterGm : SkiaGm {
     override val name = "tablemaskfilter"
     override val renderFamily = RenderFamily.BLUR
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 400
     override val height = 400

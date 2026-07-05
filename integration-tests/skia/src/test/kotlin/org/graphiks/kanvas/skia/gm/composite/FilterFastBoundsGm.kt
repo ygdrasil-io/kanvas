@@ -23,7 +23,7 @@ import org.graphiks.kanvas.types.Rect
 class FilterFastBoundsGm : SkiaGm {
     override val name = "filterfastbounds"
     override val renderFamily = RenderFamily.COMPOSITE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = (gDrawMethods.size + kNumExtraCols) * kTileWidth
     override val height = kNumVerticalTiles * kTileHeight

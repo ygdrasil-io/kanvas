@@ -21,7 +21,7 @@ import org.graphiks.kanvas.types.Rect
 class ComposeShaderGridGm : SkiaGm {
     override val name = "composeshader_grid"
     override val renderFamily = RenderFamily.COMPOSITE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 18.0
     override val width = 882
     override val height = 882

@@ -20,7 +20,7 @@ import org.graphiks.kanvas.types.Rect
 class TiledBlurBigSigmaGm : SkiaGm {
     override val name = "TiledBlurBigSigma"
     override val renderFamily = RenderFamily.BLUR
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.MEDIUM
     override val minSimilarity = 0.0
     override val width = 1024
     override val height = 768

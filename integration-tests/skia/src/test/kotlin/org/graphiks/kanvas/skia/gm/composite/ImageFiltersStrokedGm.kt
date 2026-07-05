@@ -21,7 +21,7 @@ import org.graphiks.kanvas.types.Rect
 class ImageFiltersStrokedGm : SkiaGm {
     override val name = "imagefiltersstroked"
     override val renderFamily = RenderFamily.COMPOSITE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 860
     override val height = 500
