@@ -26,6 +26,15 @@ Les limits peuvent etre conservatrices quand le runtime ne fournit pas une
 source observee fiable. La source du fact doit rester explicite dans les dumps
 de capabilities.
 
+## Snapshot runtime
+
+`GPURuntimeBaselineSnapshot` relie les runtime counters, cache counters et
+capability facts dans des lignes courtes `gpu-phase0.baseline`,
+`gpu-phase0.cache` et `gpu-phase0.capability`.
+
+Le but est de detecter rapidement une derive entre ce rapport et la preuve
+runtime dumpable, sans exposer de runtime handles.
+
 ## Preuve de validation
 
 La validation ciblee couvre:

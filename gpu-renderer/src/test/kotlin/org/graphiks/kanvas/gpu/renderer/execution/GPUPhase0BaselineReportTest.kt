@@ -33,6 +33,10 @@ class GPUPhase0BaselineReportTest {
         assertTrue(text.contains("integration dashboard GM"))
         assertTrue(text.contains("rapport par famille"))
         assertTrue(text.contains("Hors Phase 0b"))
+        assertTrue(text.contains("Snapshot runtime"))
+        assertTrue(text.contains("gpu-phase0.baseline"))
+        assertTrue(text.contains("gpu-phase0.cache"))
+        assertTrue(text.contains("gpu-phase0.capability"))
         assertTrue(text.contains("follow-ups nommes"))
         assertTrue(text.contains("criteres implicites"))
 

@@ -136,6 +136,10 @@ interface GPUBackendSession : AutoCloseable {
     val executionCacheDumpLines: List<String>
         get() = emptyList()
 
+    /** Reports compact phase 0 baseline evidence without runtime handles. */
+    val phase0BaselineDumpLines: List<String>
+        get() = phase0BaselineSnapshot(label = "session").dumpLines()
+
     /** Allocates an offscreen render target using the requested size and color format. */
     fun createOffscreenTarget(request: GPUOffscreenTargetRequest): GPUBackendOffscreenTarget
 
