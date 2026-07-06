@@ -600,6 +600,7 @@ sealed interface GPUResourceMaterializationDecision {
         val operandRefs: List<GPUMaterializedCommandOperandReference> = emptyList(),
         val operandBridge: List<GPUMaterializedCommandOperandBinding> = emptyList(),
         val payloadTelemetry: List<GPUPayloadMaterializationTelemetryEvent> = emptyList(),
+        val resourceLeases: List<GPUResourceLease> = emptyList(),
     ) : GPUResourceMaterializationDecision {
         internal val dumpResourcesSnapshot: List<GPUTextureResourceRef> = resources.toList()
         internal val dumpDiagnosticsSnapshot: List<GPUResourceDiagnostic> = diagnostics.toList()
@@ -609,6 +610,7 @@ sealed interface GPUResourceMaterializationDecision {
         internal val dumpOperandBridgeSnapshot: List<GPUMaterializedCommandOperandBinding> = operandBridge.toList()
         internal val dumpPayloadTelemetrySnapshot: List<GPUPayloadMaterializationTelemetryEvent> =
             payloadTelemetry.toList()
+        internal val dumpResourceLeaseSnapshot: List<GPUResourceLease> = resourceLeases.toList()
     }
 
     /**
@@ -647,12 +649,14 @@ sealed interface GPUResourceMaterializationDecision {
         val resourcePlanLabels: List<String> = emptyList(),
         val diagnostics: List<GPUResourceDiagnostic> = listOf(diagnostic),
         val payloadTelemetry: List<GPUPayloadMaterializationTelemetryEvent> = emptyList(),
+        val resourceLeases: List<GPUResourceLease> = emptyList(),
     ) : GPUResourceMaterializationDecision {
         internal val dumpDiagnosticsSnapshot: List<GPUResourceDiagnostic> = diagnostics.toList()
         internal val dumpTaskIdsSnapshot: List<String> = taskIds.toList()
         internal val dumpResourcePlanLabelsSnapshot: List<String> = resourcePlanLabels.toList()
         internal val dumpPayloadTelemetrySnapshot: List<GPUPayloadMaterializationTelemetryEvent> =
             payloadTelemetry.toList()
+        internal val dumpResourceLeaseSnapshot: List<GPUResourceLease> = resourceLeases.toList()
 
         init {
             require(diagnostics.isNotEmpty()) {
@@ -1705,6 +1709,27 @@ data class GPUResourceDiagnostic(
                 ),
             )
 
+        /** Builds a generic refusal when resource facts target a different surface. */
+        fun resourceTargetMismatch(
+            resourceLabel: String,
+            requestTargetId: String,
+            contextTargetId: String,
+        ): GPUResourceDiagnostic {
+            requireDumpSafeValue("GPUResourceDiagnostic.resourceTargetMismatch.resourceLabel", resourceLabel)
+            requireDumpSafeValue("GPUResourceDiagnostic.resourceTargetMismatch.requestTargetId", requestTargetId)
+            requireDumpSafeValue("GPUResourceDiagnostic.resourceTargetMismatch.contextTargetId", contextTargetId)
+            return GPUResourceDiagnostic(
+                code = "unsupported.resource.target_mismatch",
+                resourceLabel = resourceLabel,
+                message = "Resource target mismatch for $resourceLabel: request=$requestTargetId context=$contextTargetId.",
+                terminal = true,
+                facts = mapOf(
+                    "contextTargetId" to contextTargetId,
+                    "requestTargetId" to requestTargetId,
+                ),
+            )
+        }
+
         /** Builds a missing usage diagnostic for a command-stream operand. */
         fun commandOperandUsageMissing(
             resourceLabel: String,
@@ -2052,6 +2077,22 @@ data class GPUResourceDiagnostic(
                 ),
             )
 
+        /** Builds a diagnostic when GPU resource adapter creation fails. */
+        fun adapterCreateFailed(
+            resourceLabel: String,
+            reason: String,
+        ): GPUResourceDiagnostic {
+            requireDumpSafeValue("GPUResourceDiagnostic.adapterCreateFailed.resourceLabel", resourceLabel)
+            requireDumpSafeValue("GPUResourceDiagnostic.adapterCreateFailed.reason", reason)
+            return GPUResourceDiagnostic(
+                code = "unsupported.resource.adapter_create_failed",
+                resourceLabel = resourceLabel,
+                message = "GPU resource adapter failed to create $resourceLabel.",
+                terminal = true,
+                facts = mapOf("reason" to reason),
+            )
+        }
+
         /** Builds a pipeline creation failure diagnostic recorded during materialization. */
         fun pipelineCreationFailure(resourceLabel: String, reason: String): GPUResourceDiagnostic =
             GPUResourceDiagnostic(
@@ -2107,7 +2148,8 @@ fun GPUResourceMaterializationDecision.dumpLines(): List<String> =
                     "resource.materialization:operand ${operand.dumpCommandOperandFields()}"
                 } +
                 dumpDiagnosticsSnapshot.dumpLines() +
-                dumpPayloadTelemetrySnapshot.dumpPayloadTelemetryLines()
+                dumpPayloadTelemetrySnapshot.dumpPayloadTelemetryLines() +
+                dumpResourceLeaseSnapshot.dumpResourceLeaseLines()
         }
         is GPUResourceMaterializationDecision.Deferred ->
             listOf(
@@ -2126,7 +2168,10 @@ fun GPUResourceMaterializationDecision.dumpLines(): List<String> =
                     "resourcePlans=${dumpResourcePlanLabelsSnapshot.dumpList()} " +
                     "code=${diagnostic.code} " +
                     "terminal=${diagnostic.terminal}",
-            ) + dumpDiagnosticsSnapshot.dumpLines() + dumpPayloadTelemetrySnapshot.dumpPayloadTelemetryLines()
+            ) +
+                dumpDiagnosticsSnapshot.dumpLines() +
+                dumpPayloadTelemetrySnapshot.dumpPayloadTelemetryLines() +
+                dumpResourceLeaseSnapshot.dumpResourceLeaseLines()
     }
 
 /** Emits deterministic evidence for a resource materialization preimage plan. */

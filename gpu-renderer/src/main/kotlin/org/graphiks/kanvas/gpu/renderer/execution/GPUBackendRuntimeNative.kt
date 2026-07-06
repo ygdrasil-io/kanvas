@@ -104,6 +104,7 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUResourceBindingBlock
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUResourceBindingSlot
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUUniformPayloadBlock
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUUniformPayloadSlot
+import org.graphiks.kanvas.gpu.renderer.resources.GPUBindGroupLeaseRequest
 import org.graphiks.kanvas.gpu.renderer.resources.GPUPayloadMaterializationRequest
 import org.graphiks.kanvas.gpu.renderer.resources.GPUPayloadSlabBatchPlan
 import org.graphiks.kanvas.gpu.renderer.resources.GPUPayloadSlabBatchPlanner
@@ -114,6 +115,10 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUPayloadSlabResourceLedger
 import org.graphiks.kanvas.gpu.renderer.resources.GPUPayloadSlabSlotBinding
 import org.graphiks.kanvas.gpu.renderer.resources.GPUTargetPreparationContext
 import org.graphiks.kanvas.gpu.renderer.resources.GPUConcreteResourceProvider
+import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceLease
+import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceMaterializationDecision
+import org.graphiks.kanvas.gpu.renderer.resources.GPUUniformSlabLeaseRequest
+import org.graphiks.kanvas.gpu.renderer.resources.dumpResourceLeaseLines
 
 private const val COPY_BYTES_PER_ROW_ALIGNMENT: Int = 256
 private const val FULL_SCREEN_TRIANGLE_VERTEX_COUNT: UInt = 3u
@@ -327,7 +332,9 @@ private class WgpuBackendSession(
     private val deviceGeneration = sessionDeviceGeneration(sessionOrdinal)
     private val executionCaches = WgpuExecutionCaches(deviceGeneration)
     private val telemetryRecorder = WgpuBackendRuntimeTelemetryRecorder()
-    private val resourceProvider = GPUConcreteResourceProvider()
+    private val runtimeResourceAdapter = GPURuntimeResourceAdapter(requirePreparedResources = true)
+    private val resourceProvider = GPUConcreteResourceProvider(leaseFactory = runtimeResourceAdapter)
+    private val runtimeResourceLeases = mutableListOf<GPUResourceLease>()
     private val queueManager = GPUQueueManager()
     private val adapterSummary = adapterSummary(glfw)
     private val backendLimits = GPULimits.conservative(
@@ -382,7 +389,7 @@ private class WgpuBackendSession(
         get() = executionCaches.dumpLines
 
     override val resourceProviderDumpLines: List<String>
-        get() = resourceProvider.telemetry.dumpLines()
+        get() = resourceProvider.telemetry.dumpLines() + runtimeResourceLeases.dumpResourceLeaseLines()
 
     override val queueDumpLines: List<String>
         get() = queueManager.telemetry.dumpLines()
@@ -399,7 +406,9 @@ private class WgpuBackendSession(
             executionCaches = executionCaches,
             telemetryRecorder = telemetryRecorder,
             resourceProvider = resourceProvider,
+            runtimeResourceAdapter = runtimeResourceAdapter,
             queueManager = queueManager,
+            recordRuntimeResourceLeasesAction = { leases -> recordRuntimeResourceLeases(leases) },
         )
 
     override fun createWindowSurface(binding: GPUNativeSurfaceBinding): GPUBackendWindowSurface =
@@ -407,20 +416,27 @@ private class WgpuBackendSession(
             binding = binding,
             capabilities = capabilities,
             telemetryRecorder = telemetryRecorder,
-            resourceProvider = resourceProvider,
         )
 
     override fun close() {
         try {
-            executionCaches.close()
+            runtimeResourceAdapter.close()
         } finally {
-            glfw.close()
+            try {
+                executionCaches.close()
+            } finally {
+                glfw.close()
+            }
         }
     }
 
     private fun nextOffscreenTargetOrdinal(): Long {
         offscreenTargetOrdinalCounter += 1L
         return offscreenTargetOrdinalCounter
+    }
+
+    private fun recordRuntimeResourceLeases(leases: List<GPUResourceLease>) {
+        runtimeResourceLeases += leases
     }
 }
 
@@ -567,7 +583,9 @@ private class WgpuOffscreenTarget(
     private val executionCaches: WgpuExecutionCaches,
     private val telemetryRecorder: WgpuBackendRuntimeTelemetryRecorder,
     private val resourceProvider: GPUConcreteResourceProvider,
+    private val runtimeResourceAdapter: GPURuntimeResourceAdapter,
     private val queueManager: GPUQueueManager,
+    private val recordRuntimeResourceLeasesAction: (List<GPUResourceLease>) -> Unit,
 ) : GPUBackendOffscreenTarget {
     private val safeWidth = request.width.coerceAtMost(MAX_TEXTURE_DIMENSION)
     private val safeHeight = request.height.coerceAtMost(MAX_TEXTURE_DIMENSION)
@@ -648,6 +666,7 @@ private class WgpuOffscreenTarget(
     ) {
         val frameOrdinal = frameOrdinalCounter.incrementAndGet()
         val frameId = "offscreen-$sessionOrdinal-$offscreenTargetOrdinal-frame-$frameOrdinal"
+        val frameResourceLeases = mutableListOf<GPUResourceLease>()
         GPUResourceScope().use { resources ->
             val view = resources.track(texture.createView()) { it.close() }
             val encoder = resources.trackIfAutoCloseable(device.createCommandEncoder())
@@ -684,6 +703,8 @@ private class WgpuOffscreenTarget(
                     executionCaches = executionCaches,
                     telemetryRecorder = telemetryRecorder,
                     resourceProvider = resourceProvider,
+                    runtimeResourceAdapter = runtimeResourceAdapter,
+                    recordResourceLeasesAction = { leases -> frameResourceLeases += leases },
                     setPipelineAction = { pipeline -> setPipeline(pipeline) },
                     setBindGroupAction = { index, bindGroup -> setBindGroup(index, bindGroup) },
                     setScissorAction = { x: UInt, y: UInt, width: UInt, height: UInt ->
@@ -722,8 +743,10 @@ private class WgpuOffscreenTarget(
             queue.submit(listOf(commandBuffer))
             val submission = queueManager.submit(
                 label = "offscreen-pass:$frameId",
-                retainedResources = listOf(GPUQueuedResourceRef("target:${target.targetId}")),
+                retainedResources = listOf(GPUQueuedResourceRef("target:${target.targetId}")) +
+                    frameResourceLeases.map { lease -> GPUQueuedResourceRef("lease:${lease.leaseId}") },
             )
+            recordRuntimeResourceLeasesAction(frameResourceLeases)
             queueManager.markCompleted(submission.id)
             queueManager.releaseCompleted()
             telemetryRecorder.recordSubmission()
@@ -819,6 +842,8 @@ private class WgpuOffscreenTarget(
         block: (WgpuRenderRecorder) -> Unit,
     ) {
         val textureFrameOrdinal = textureFrameOrdinalCounter.incrementAndGet()
+        val frameId = "offscreen-texture-$textureLabel-frame-$textureFrameOrdinal"
+        val frameResourceLeases = mutableListOf<GPUResourceLease>()
         val tex = offscreenTexture(textureLabel)
         val texView = resources.track(tex.createView()) { it.close() }
         val texWidth = tex.width
@@ -860,7 +885,7 @@ private class WgpuOffscreenTarget(
                 device = device,
                 queue = queue,
                 targetId = "${target.targetId}:$textureLabel",
-                frameId = "offscreen-texture-$textureLabel-frame-$textureFrameOrdinal",
+                frameId = frameId,
                 budgetClass = "runtime-fullscreen",
                 targetFormat = textureFormat,
                 capabilities = capabilities,
@@ -868,6 +893,8 @@ private class WgpuOffscreenTarget(
                 executionCaches = executionCaches,
                 telemetryRecorder = telemetryRecorder,
                 resourceProvider = resourceProvider,
+                runtimeResourceAdapter = runtimeResourceAdapter,
+                recordResourceLeasesAction = { leases -> frameResourceLeases += leases },
                 setPipelineAction = { pipeline -> setPipeline(pipeline) },
                 setBindGroupAction = { index, bindGroup -> setBindGroup(index, bindGroup) },
                 setScissorAction = { x: UInt, y: UInt, width: UInt, height: UInt ->
@@ -896,6 +923,14 @@ private class WgpuOffscreenTarget(
         val commandBuffer = resources.trackIfAutoCloseable(encoder.finish())
         telemetryRecorder.recordCommandBufferFinished()
         queue.submit(listOf(commandBuffer))
+        val submission = queueManager.submit(
+            label = "offscreen-texture-pass:$frameId",
+            retainedResources = listOf(GPUQueuedResourceRef("target:${target.targetId}:$textureLabel")) +
+                frameResourceLeases.map { lease -> GPUQueuedResourceRef("lease:${lease.leaseId}") },
+        )
+        recordRuntimeResourceLeasesAction(frameResourceLeases)
+        queueManager.markCompleted(submission.id)
+        queueManager.releaseCompleted()
         telemetryRecorder.recordSubmission()
         telemetryRecorder.recordOffscreenRenderPass()
     }
@@ -924,13 +959,15 @@ private class WgpuWindowSurface(
     binding: GPUNativeSurfaceBinding,
     private val capabilities: GPUCapabilities,
     private val telemetryRecorder: WgpuBackendRuntimeTelemetryRecorder,
-    private val resourceProvider: GPUConcreteResourceProvider,
 ) : GPUBackendWindowSurface {
     private val windowRuntimeOrdinal = nextWindowRuntimeOrdinal()
     private val deviceGeneration = windowSurfaceDeviceGeneration(windowRuntimeOrdinal)
     private val targetId = windowSurfaceTargetId(windowRuntimeOrdinal, binding)
     private val runtime = createNativeWindowRuntime(binding)
     private val executionCaches = WgpuExecutionCaches(deviceGeneration)
+    private val runtimeResourceAdapter = GPURuntimeResourceAdapter(requirePreparedResources = true)
+    private val resourceProvider = GPUConcreteResourceProvider(leaseFactory = runtimeResourceAdapter)
+    private var lastFrameResourceLeases: List<GPUResourceLease> = emptyList()
     private var width = binding.width
     private var height = binding.height
     private var targetGeneration = 0L
@@ -1013,6 +1050,8 @@ private class WgpuWindowSurface(
                     executionCaches = executionCaches,
                     telemetryRecorder = telemetryRecorder,
                     resourceProvider = resourceProvider,
+                    runtimeResourceAdapter = runtimeResourceAdapter,
+                    recordResourceLeasesAction = { leases -> lastFrameResourceLeases = leases },
                     setPipelineAction = { pipeline -> setPipeline(pipeline) },
                     setBindGroupAction = { index, bindGroup -> setBindGroup(index, bindGroup) },
                     setScissorAction = { x, y, surfaceWidth, surfaceHeight -> setScissorRect(x, y, surfaceWidth, surfaceHeight) },
@@ -1042,9 +1081,13 @@ private class WgpuWindowSurface(
 
     override fun close() {
         try {
-            executionCaches.close()
+            runtimeResourceAdapter.close()
         } finally {
-            runtime.close()
+            try {
+                executionCaches.close()
+            } finally {
+                runtime.close()
+            }
         }
     }
 }
@@ -1062,6 +1105,8 @@ private class WgpuRenderRecorder(
     private val executionCaches: WgpuExecutionCaches,
     private val telemetryRecorder: WgpuBackendRuntimeTelemetryRecorder,
     private val resourceProvider: GPUConcreteResourceProvider,
+    private val runtimeResourceAdapter: GPURuntimeResourceAdapter,
+    private val recordResourceLeasesAction: (List<GPUResourceLease>) -> Unit,
     private val setPipelineAction: (GPURenderPipeline) -> Unit,
     private val setBindGroupAction: (UInt, GPUBindGroup) -> Unit,
     private val setScissorAction: (UInt, UInt, UInt, UInt) -> Unit,
@@ -2338,30 +2383,21 @@ private class WgpuRenderRecorder(
             keys = keys,
             blendMode = blendMode,
         )
-        val slab = materializeFullscreenUniformSlab(draws = draws, sourceLabel = sourceLabel)
+        val slab = materializeFullscreenUniformSlab(
+            draws = draws,
+            sourceLabel = sourceLabel,
+            bindGroupLayout = bindGroupLayout,
+            bindGroupLayoutHash = keys.bindGroupLayoutKeyHash,
+        )
+        if (slab != null) {
+            recordResourceLeasesAction(slab.leases)
+        }
 
         setPipelineAction(pipeline)
         draws.forEachIndexed { drawIndex, draw ->
             val bindGroup = if (slab != null) {
                 val payloadSlotLabel = fullscreenPayloadSlabSlotLabel(drawIndex)
-                val upload = slab.uploadsBySlotLabel.getValue(payloadSlotLabel)
-                resourceScope.track(
-                    createTrackedBindGroup(
-                        BindGroupDescriptor(
-                            layout = bindGroupLayout,
-                            entries = listOf(
-                                BindGroupEntry(
-                                    binding = 0u,
-                                    resource = BufferBinding(
-                                        buffer = slab.buffer,
-                                        offset = upload.binding.alignedOffset.toULong(),
-                                        size = upload.binding.payloadBytes.toULong(),
-                                    ),
-                                ),
-                            ),
-                        ),
-                    ),
-                ) { it.close() }
+                slab.bindGroupsBySlotLabel.getValue(payloadSlotLabel)
             } else {
                 val uniform = resourceScope.track(
                     createTrackedBuffer(
@@ -2415,6 +2451,8 @@ private class WgpuRenderRecorder(
         val plan: GPUPayloadSlabBatchPlan,
         val buffer: GPUBuffer,
         val uploadsBySlotLabel: Map<String, WgpuPayloadSlabUpload>,
+        val bindGroupsBySlotLabel: Map<String, GPUBindGroup>,
+        val leases: List<GPUResourceLease>,
     )
 
     private fun fullscreenPayloadRequest(
@@ -2496,6 +2534,8 @@ private class WgpuRenderRecorder(
     private fun materializeFullscreenUniformSlab(
         draws: List<WgpuFullscreenUniformDraw>,
         sourceLabel: String,
+        bindGroupLayout: GPUBindGroupLayout,
+        bindGroupLayoutHash: String,
     ): WgpuPayloadSlabMaterialization? {
         val payloadRequests = draws.mapIndexed { index, draw -> fullscreenPayloadRequest(index, draw) }
         payloadRequests.forEach { request ->
@@ -2547,18 +2587,76 @@ private class WgpuRenderRecorder(
             }
             is GPUPayloadSlabBatchPlanningResult.Accepted -> {
                 val plan = planning.plan
-                val payloadsBySlotLabel = payloadRequests.mapIndexed { index, payload ->
-                    fullscreenPayloadSlabSlotLabel(index) to payload.uniformBlock.bytes.toByteArrayFromUnsignedInts()
-                }.toMap()
-                val buffer = resourceScope.track(
+                val uniformSlabDescriptorHash = plan.uniformSlabPlan.planHash
+                val uniformSlabLeaseSuffix = fullscreenUniformSlabLeaseSuffix(
+                    targetId = payloadTargetId,
+                    uniformSlabDescriptorHash = uniformSlabDescriptorHash,
+                )
+                val leaseRequest = GPUUniformSlabLeaseRequest(
+                    leaseId = "uniform-slab:fullscreen:$uniformSlabLeaseSuffix",
+                    targetId = payloadTargetId,
+                    frameId = sourceLabel,
+                    deviceGeneration = deviceGeneration.value,
+                    descriptorHash = uniformSlabDescriptorHash,
+                    totalBytes = plan.uniformSlabPlan.totalBytes,
+                    alignmentBytes = capabilities.uniformBufferOffsetAlignment(),
+                    releasePolicy = "submission-complete",
+                    payloadCount = plan.slotBindings.size,
+                )
+                val leaseContext = GPUTargetPreparationContext(
+                    targetId = payloadTargetId,
+                    frameId = frameId,
+                    deviceGeneration = deviceGeneration.value,
+                    budgetClass = budgetClass,
+                )
+                fun recordMaterializationFallback(reasonCode: String) {
+                    telemetryRecorder.recordUniformSlabFallback()
+                    telemetryRecorder.recordPayloadSlabResourceEvent(
+                        GPUPayloadSlabResourceEvent.Fallback(
+                            sourceLabel = resourceLedgerSourceLabel,
+                            reason = reasonCode,
+                            payloadCount = payloadRequests.size,
+                        ),
+                    )
+                }
+                runtimeResourceAdapter.prepareUniformSlab(leaseRequest.leaseId) {
                     createTrackedBuffer(
                         BufferDescriptor(
                             size = plan.uniformSlabPlan.totalBytes.toULong(),
                             usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
                             label = "GPUBackend.fullscreen.uniformSlab",
                         ),
-                    ),
-                ) { it.close() }
+                    ).also {
+                        telemetryRecorder.recordUniformSlabCreated(plan.uniformSlabPlan.totalBytes)
+                    }
+                }
+                val leaseDecision = try {
+                    resourceProvider.materializeFullscreenUniformSlabLease(
+                        request = leaseRequest,
+                        context = leaseContext,
+                    )
+                } finally {
+                    runtimeResourceAdapter.clearPreparedUniformSlab(leaseRequest.leaseId)
+                }
+                val leases = when (leaseDecision) {
+                    is GPUResourceMaterializationDecision.Materialized -> leaseDecision.dumpResourceLeaseSnapshot
+                    is GPUResourceMaterializationDecision.Refused -> {
+                        recordMaterializationFallback(leaseDecision.diagnostic.code)
+                        return null
+                    }
+                    is GPUResourceMaterializationDecision.Deferred -> {
+                        recordMaterializationFallback(leaseDecision.reasonCode)
+                        return null
+                    }
+                }
+                val buffer = runtimeResourceAdapter.uniformSlabBuffer(leaseRequest.leaseId)
+                if (buffer == null) {
+                    recordMaterializationFallback("unsupported.resource.adapter_create_failed")
+                    return null
+                }
+                val payloadsBySlotLabel = payloadRequests.mapIndexed { index, payload ->
+                    fullscreenPayloadSlabSlotLabel(index) to payload.uniformBlock.bytes.toByteArrayFromUnsignedInts()
+                }.toMap()
                 val uploadsBySlotLabel = plan.slotBindings.associate { binding ->
                     val payloadBytes = payloadsBySlotLabel.getValue(binding.slotLabel)
                     writeTrackedBuffer(
@@ -2571,7 +2669,70 @@ private class WgpuRenderRecorder(
                         payloadBytes = payloadBytes,
                     )
                 }
-                telemetryRecorder.recordUniformSlabCreated(plan.uniformSlabPlan.totalBytes)
+                val bindGroupLeases = mutableListOf<GPUResourceLease>()
+                val bindGroupsBySlotLabel = mutableMapOf<String, GPUBindGroup>()
+                plan.slotBindings.forEach { binding ->
+                    val bindGroupLeaseId = fullscreenBindGroupLeaseId(
+                        uniformSlabLeaseSuffix = uniformSlabLeaseSuffix,
+                        slotLabel = binding.slotLabel,
+                    )
+                    val bindGroupRequest = GPUBindGroupLeaseRequest(
+                        leaseId = bindGroupLeaseId,
+                        deviceGeneration = deviceGeneration.value,
+                        descriptorHash = fullscreenBindGroupDescriptorHash(
+                            bindGroupLayoutHash = bindGroupLayoutHash,
+                            uniformSlabDescriptorHash = uniformSlabDescriptorHash,
+                            binding = binding,
+                        ),
+                        ownerScope = sourceLabel,
+                        usageLabels = listOf("uniform"),
+                        releasePolicy = "submission-complete",
+                    )
+                    runtimeResourceAdapter.prepareBindGroup(bindGroupLeaseId) {
+                        createTrackedBindGroup(
+                            BindGroupDescriptor(
+                                layout = bindGroupLayout,
+                                entries = listOf(
+                                    BindGroupEntry(
+                                        binding = 0u,
+                                        resource = BufferBinding(
+                                            buffer = buffer,
+                                            offset = binding.alignedOffset.toULong(),
+                                            size = binding.payloadBytes.toULong(),
+                                        ),
+                                    ),
+                                ),
+                            ),
+                        )
+                    }
+                    val bindGroupDecision = try {
+                        resourceProvider.materializeBindGroupLease(
+                            request = bindGroupRequest,
+                            context = leaseContext,
+                        )
+                    } finally {
+                        runtimeResourceAdapter.clearPreparedBindGroup(bindGroupLeaseId)
+                    }
+                    when (bindGroupDecision) {
+                        is GPUResourceMaterializationDecision.Materialized -> {
+                            val bindGroup = runtimeResourceAdapter.bindGroup(bindGroupLeaseId)
+                            if (bindGroup == null) {
+                                recordMaterializationFallback("unsupported.resource.adapter_create_failed")
+                                return null
+                            }
+                            bindGroupLeases += bindGroupDecision.dumpResourceLeaseSnapshot
+                            bindGroupsBySlotLabel[binding.slotLabel] = bindGroup
+                        }
+                        is GPUResourceMaterializationDecision.Refused -> {
+                            recordMaterializationFallback(bindGroupDecision.diagnostic.code)
+                            return null
+                        }
+                        is GPUResourceMaterializationDecision.Deferred -> {
+                            recordMaterializationFallback(bindGroupDecision.reasonCode)
+                            return null
+                        }
+                    }
+                }
                 telemetryRecorder.recordPayloadSlabBatchPlan(plan)
                 telemetryRecorder.recordPayloadSlabResourceEvent(
                     GPUPayloadSlabResourceEvent.Accepted(
@@ -2585,6 +2746,8 @@ private class WgpuRenderRecorder(
                     plan = plan,
                     buffer = buffer,
                     uploadsBySlotLabel = uploadsBySlotLabel,
+                    bindGroupsBySlotLabel = bindGroupsBySlotLabel,
+                    leases = leases + bindGroupLeases,
                 )
             }
         }
@@ -2592,6 +2755,35 @@ private class WgpuRenderRecorder(
 
     private fun List<Int>.toByteArrayFromUnsignedInts(): ByteArray =
         ByteArray(size) { index -> this[index].toByte() }
+
+    private fun fullscreenUniformSlabLeaseSuffix(
+        targetId: String,
+        uniformSlabDescriptorHash: String,
+    ): String =
+        "target-${sha256Hex(targetId)}:$uniformSlabDescriptorHash"
+
+    private fun fullscreenBindGroupLeaseId(
+        uniformSlabLeaseSuffix: String,
+        slotLabel: String,
+    ): String =
+        "bind-group:fullscreen:$uniformSlabLeaseSuffix:slot:${sha256Hex(slotLabel)}"
+
+    private fun fullscreenBindGroupDescriptorHash(
+        bindGroupLayoutHash: String,
+        uniformSlabDescriptorHash: String,
+        binding: GPUPayloadSlabSlotBinding,
+    ): String =
+        stableSha256(
+            listOf(
+                "kind=bind-group",
+                "role=fullscreen-uniform",
+                "layout=$bindGroupLayoutHash",
+                "uniformSlab=$uniformSlabDescriptorHash",
+                "slot=${binding.slotLabel}",
+                "offset=${binding.alignedOffset}",
+                "payloadBytes=${binding.payloadBytes}",
+            ).joinToString("\n"),
+        )
 
     private fun createTexture(rgba: ByteArray, width: Int, height: Int, format: String): GPUTexture {
         val gpuFormat = format.toWgpuTextureFormat()

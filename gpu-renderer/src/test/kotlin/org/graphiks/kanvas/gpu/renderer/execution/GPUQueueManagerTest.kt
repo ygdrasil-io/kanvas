@@ -1,11 +1,38 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
+import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceLease
+import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceLeaseCacheResult
+import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceLeaseKind
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class GPUQueueManagerTest {
+    @Test
+    fun `queue manager retains resource leases until completion`() {
+        val manager = GPUQueueManager()
+        val lease = GPUResourceLease(
+            leaseId = "uniform-slab:frame-1",
+            resourceKind = GPUResourceLeaseKind.UniformSlab,
+            deviceGeneration = 11,
+            descriptorHash = "sha256:uniform-slab-frame-1",
+            ownerScope = "frame-1",
+            usageLabels = listOf("copy_dst", "uniform"),
+            releasePolicy = "submission-complete",
+            cacheResult = GPUResourceLeaseCacheResult.Create,
+        )
+
+        val submission = manager.submitLeases(
+            label = "frame-1",
+            retainedLeases = listOf(lease),
+        )
+
+        assertEquals(listOf(GPUQueuedResourceRef("lease:uniform-slab:frame-1")), manager.retainedResources(submission.id))
+        assertTrue(manager.markCompleted(submission.id))
+        assertEquals(listOf(GPUQueuedResourceRef("lease:uniform-slab:frame-1")), manager.releaseCompleted())
+    }
+
     @Test
     fun `queue manager retains resources until completion`() {
         val manager = GPUQueueManager()
