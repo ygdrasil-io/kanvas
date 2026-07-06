@@ -574,6 +574,106 @@ class GPUBackendRuntimeNativeSmokeTest {
     }
 
     @Test
+    fun `fullscreen uniform cache identity stays target scoped when runtime is available`() {
+        val runtime = GPUBackendRuntimeFactory.createOrNull()
+        assumeTrue(runtime != null, "GPU backend unavailable in current environment")
+
+        runtime!!.use { session ->
+            fun GPUBackendOffscreenTarget.encodeRedFrame() {
+                encode(GPUClearColor(0.0, 0.0, 0.0, 1.0)) {
+                    drawFullscreenPass(
+                        wgsl = solidColorFullscreenWgsl(),
+                        colorFormat = "rgba8unorm",
+                        draws = listOf(
+                            GPUBackendRectDraw(
+                                rgbaPremul = floatArrayOf(1f, 0f, 0f, 1f),
+                                scissorX = 0,
+                                scissorY = 0,
+                                scissorWidth = 4,
+                                scissorHeight = 4,
+                            ),
+                        ),
+                    )
+                }
+            }
+
+            val firstTarget = session.createOffscreenTarget(
+                GPUOffscreenTargetRequest(width = 4, height = 4, colorFormat = "rgba8unorm"),
+            )
+            val secondTarget = session.createOffscreenTarget(
+                GPUOffscreenTargetRequest(width = 4, height = 4, colorFormat = "rgba8unorm"),
+            )
+            firstTarget.use { target ->
+                val beforeFirst = session.runtimeTelemetry
+                target.encodeRedFrame()
+                val afterFirst = session.runtimeTelemetry
+                assertEquals(1L, afterFirst.uniformSlabsCreated - beforeFirst.uniformSlabsCreated)
+                assertEquals(1L, afterFirst.bindGroupsCreated - beforeFirst.bindGroupsCreated)
+            }
+            secondTarget.use { target ->
+                val beforeSecond = session.runtimeTelemetry
+                target.encodeRedFrame()
+                val afterSecond = session.runtimeTelemetry
+                assertEquals(1L, afterSecond.uniformSlabsCreated - beforeSecond.uniformSlabsCreated)
+                assertEquals(1L, afterSecond.bindGroupsCreated - beforeSecond.bindGroupsCreated)
+            }
+
+            val dumpLines = session.phase0EvidenceDumpLines
+            assertEquals(
+                2,
+                dumpLines.count { line -> line.contains("resource-provider.cache lane=uniform-slab result=create") },
+            )
+            assertEquals(
+                2,
+                dumpLines.count { line ->
+                    line.contains("resource-provider.cache lane=bind-group result=create") &&
+                        line.contains("key=lease=bind-group:fullscreen:")
+                },
+            )
+        }
+    }
+
+    @Test
+    fun `offscreen texture fullscreen pass records resource leases when runtime is available`() {
+        val runtime = GPUBackendRuntimeFactory.createOrNull()
+        assumeTrue(runtime != null, "GPU backend unavailable in current environment")
+
+        runtime!!.use { session ->
+            session.createOffscreenTarget(
+                GPUOffscreenTargetRequest(width = 4, height = 4, colorFormat = "rgba8unorm"),
+            ).use { target ->
+                val textureLabel = target.createOffscreenTexture(
+                    GPUBackendOffscreenTexture(width = 4, height = 4, format = "rgba8unorm"),
+                )
+                target.encodeOffscreenTexture(
+                    textureLabel = textureLabel,
+                    clearColor = GPUClearColor(0.0, 0.0, 0.0, 1.0),
+                ) {
+                    drawFullscreenPass(
+                        wgsl = solidColorFullscreenWgsl(),
+                        colorFormat = "rgba8unorm",
+                        draws = listOf(
+                            GPUBackendRectDraw(
+                                rgbaPremul = floatArrayOf(1f, 0f, 0f, 1f),
+                                scissorX = 0,
+                                scissorY = 0,
+                                scissorWidth = 4,
+                                scissorHeight = 4,
+                            ),
+                        ),
+                    )
+                }
+            }
+
+            val dumpLines = session.phase0EvidenceDumpLines
+            assertTrue(dumpLines.any { line -> line.contains("gpu-queue.submission") && line.contains("offscreen-texture-pass:") })
+            assertTrue(dumpLines.any { line -> line.contains("retained=3") })
+            assertTrue(dumpLines.any { line -> line.contains("kind=uniform-slab") && line.contains("result=create") })
+            assertTrue(dumpLines.any { line -> line.contains("kind=bind-group") && line.contains("result=create") })
+        }
+    }
+
+    @Test
     fun `backend runtime falls back when fullscreen uniform slab planner refuses and backend is available`() {
         val runtime = GPUBackendRuntimeFactory.createOrNull()
         assumeTrue(runtime != null, "GPU backend unavailable in current environment")
