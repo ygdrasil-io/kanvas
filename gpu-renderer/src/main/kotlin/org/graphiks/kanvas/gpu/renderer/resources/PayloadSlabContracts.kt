@@ -248,15 +248,22 @@ object GPUPayloadSlabBatchPlanner {
         }
 
         val layoutReference = request.payloadRequests.first().reflectedBindingLayoutHash
-        val layoutMismatch = request.payloadRequests.firstOrNull { payload ->
-            payload.alignmentBytes != request.alignmentBytes ||
-                payload.reflectedBindingLayoutHash != payload.resourceBlock.bindingPlanHash ||
-                payload.reflectedBindingLayoutHash != layoutReference
+        val layoutMismatch = request.payloadRequests.firstNotNullOfOrNull { payload ->
+            when {
+                payload.alignmentBytes != request.alignmentBytes -> payload to "alignment_mismatch"
+                payload.reflectedBindingLayoutHash != payload.resourceBlock.bindingPlanHash ->
+                    payload to "binding_layout_mismatch"
+                payload.reflectedBindingLayoutHash != layoutReference -> payload to "binding_layout_mismatch"
+                else -> null
+            }
         }
         if (layoutMismatch != null) {
             return refused(
                 "unsupported.payload_slab_layout_mismatch",
-                mapOf("packetId" to layoutMismatch.packetId),
+                mapOf(
+                    "packetId" to layoutMismatch.first.packetId,
+                    "reason" to layoutMismatch.second,
+                ),
             )
         }
 

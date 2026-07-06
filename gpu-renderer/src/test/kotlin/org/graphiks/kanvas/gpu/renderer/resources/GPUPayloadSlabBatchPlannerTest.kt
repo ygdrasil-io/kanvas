@@ -182,6 +182,7 @@ class GPUPayloadSlabBatchPlannerTest {
                 ),
             ),
             expectedCode = "unsupported.payload_slab_layout_mismatch",
+            expectedReason = "binding_layout_mismatch",
         )
         assertRefused(
             result = GPUPayloadSlabBatchPlanner.plan(
