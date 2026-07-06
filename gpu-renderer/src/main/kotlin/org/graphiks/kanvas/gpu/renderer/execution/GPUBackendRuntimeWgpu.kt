@@ -104,12 +104,38 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUUniformSlabSlot
 private const val COPY_BYTES_PER_ROW_ALIGNMENT: Int = 256
 private const val FULL_SCREEN_TRIANGLE_VERTEX_COUNT: UInt = 3u
 private const val FULLSCREEN_UNIFORM_SLAB_UPLOAD_BUDGET_BYTES = 1_048_576L
+private const val FULLSCREEN_UNIFORM_SLAB_SOURCE_LABEL = "fullscreen-uniform-pass"
+private const val FULLSCREEN_UNIFORM_SLAB_REFUSED_SOURCE_LABEL_FOR_TEST = "fullscreen-uniform-pass@refused"
 private const val RGBA_BYTES_PER_PIXEL: Int = 4
 private const val RECT_COLOR_UNIFORM_SIZE_BYTES: ULong = 16uL
 private const val VERTEX_COLOR_STRIDE_BYTES: Int = 32
 private const val TEXT_ATLAS_VERTEX_STRIDE_BYTES: Int = 16
 private val sessionOrdinalCounter = AtomicLong(0L)
 private val windowRuntimeOrdinalCounter = AtomicLong(0L)
+
+internal object FullscreenUniformSlabTestingHooks {
+    @Volatile
+    var sourceLabelOverride: String? = null
+}
+
+internal fun resetFullscreenUniformSlabTestingHooks() {
+    FullscreenUniformSlabTestingHooks.sourceLabelOverride = null
+}
+
+internal inline fun <T> withFullscreenUniformSlabRefusedForTesting(block: () -> T): T {
+    val previous = FullscreenUniformSlabTestingHooks.sourceLabelOverride
+    FullscreenUniformSlabTestingHooks.sourceLabelOverride = FULLSCREEN_UNIFORM_SLAB_REFUSED_SOURCE_LABEL_FOR_TEST
+    return try {
+        block()
+    } finally {
+        FullscreenUniformSlabTestingHooks.sourceLabelOverride = previous
+    }
+}
+
+private fun fullscreenUniformSlabSourceLabel(): String =
+    FullscreenUniformSlabTestingHooks.sourceLabelOverride ?: FULLSCREEN_UNIFORM_SLAB_SOURCE_LABEL
+
+private fun fullscreenUniformSlabSlotLabel(drawIndex: Int): String = "draw-$drawIndex"
 
 internal fun alignCopyBytesPerRow(unpaddedBytesPerRow: Int): Int {
     require(unpaddedBytesPerRow > 0) { "unpaddedBytesPerRow must be positive" }
@@ -953,8 +979,9 @@ private class WgpuRenderRecorder(
         recordFullscreenUniformPass(
             wgsl = wgsl,
             colorFormat = colorFormat,
-            draws = draws.map { draw ->
+            draws = draws.mapIndexed { index, draw ->
                 WgpuFullscreenUniformDraw(
+                    slotLabel = fullscreenUniformSlabSlotLabel(index),
                     uniformBytes = packFloatArray(draw.rgbaPremul),
                     uniformSizeBytes = RECT_COLOR_UNIFORM_SIZE_BYTES,
                     scissorX = draw.scissorX,
@@ -976,9 +1003,10 @@ private class WgpuRenderRecorder(
         recordFullscreenUniformPass(
             wgsl = wgsl,
             colorFormat = colorFormat,
-            draws = draws.map { draw ->
+            draws = draws.mapIndexed { index, draw ->
                 val uniformBytes = draw.uniformBytes()
                 WgpuFullscreenUniformDraw(
+                    slotLabel = fullscreenUniformSlabSlotLabel(index),
                     uniformBytes = uniformBytes,
                     uniformSizeBytes = draw.materializedUniformByteSize.toULong(),
                     scissorX = draw.scissorX,
@@ -1000,8 +1028,9 @@ private class WgpuRenderRecorder(
         recordFullscreenUniformPass(
             wgsl = wgsl,
             colorFormat = colorFormat,
-            draws = draws.map { draw ->
+            draws = draws.mapIndexed { index, draw ->
                 WgpuFullscreenUniformDraw(
+                    slotLabel = fullscreenUniformSlabSlotLabel(index),
                     uniformBytes = draw.uniformBytes,
                     uniformSizeBytes = draw.uniformBytes.size.toULong(),
                     scissorX = draw.scissorX,
@@ -1031,8 +1060,9 @@ private class WgpuRenderRecorder(
             textureWidth = textureWidth,
             textureHeight = textureHeight,
             textureFormat = textureFormat,
-            draws = draws.map { draw ->
+            draws = draws.mapIndexed { index, draw ->
                 WgpuFullscreenUniformDraw(
+                    slotLabel = fullscreenUniformSlabSlotLabel(index),
                     uniformBytes = draw.uniformBytes,
                     uniformSizeBytes = draw.uniformBytes.size.toULong(),
                     scissorX = draw.scissorX,
@@ -1065,8 +1095,9 @@ private class WgpuRenderRecorder(
             }
             GPUBackendStencilMode.Test -> {
                 require(draws.isNotEmpty()) { "draws required for stencil test mode" }
-                recordStencilTestPass(wgsl = wgsl, colorFormat = colorFormat, draws = draws.map { draw ->
+                recordStencilTestPass(wgsl = wgsl, colorFormat = colorFormat, draws = draws.mapIndexed { index, draw ->
                     WgpuFullscreenUniformDraw(
+                        slotLabel = fullscreenUniformSlabSlotLabel(index),
                         uniformBytes = draw.uniformBytes,
                         uniformSizeBytes = draw.uniformBytes.size.toULong(),
                         scissorX = draw.scissorX,
@@ -2152,9 +2183,9 @@ private class WgpuRenderRecorder(
         val slab = materializeFullscreenUniformSlab(draws)
 
         setPipelineAction(pipeline)
-        draws.forEachIndexed { index, draw ->
+        draws.forEach { draw ->
             val bindGroup = if (slab != null) {
-                val upload = slab.uploads[index]
+                val upload = slab.uploadsBySlotLabel.getValue(draw.slotLabel)
                 resourceScope.track(
                     createTrackedBindGroup(
                         BindGroupDescriptor(
@@ -2207,6 +2238,7 @@ private class WgpuRenderRecorder(
     }
 
     private data class WgpuFullscreenUniformDraw(
+        val slotLabel: String,
         val uniformBytes: ByteArray,
         val uniformSizeBytes: ULong,
         val scissorX: Int,
@@ -2222,21 +2254,21 @@ private class WgpuRenderRecorder(
 
     private data class WgpuUniformSlabMaterialization(
         val buffer: GPUBuffer,
-        val uploads: List<WgpuUniformSlabUpload>,
+        val uploadsBySlotLabel: Map<String, WgpuUniformSlabUpload>,
     )
 
     private fun materializeFullscreenUniformSlab(
         draws: List<WgpuFullscreenUniformDraw>,
     ): WgpuUniformSlabMaterialization? {
-        val payloads = draws.mapIndexed { index, draw ->
+        val payloads = draws.map { draw ->
             GPUUniformSlabPayload(
-                slotLabel = "draw-$index",
+                slotLabel = draw.slotLabel,
                 bytes = draw.uniformBytes,
             )
         }
         return when (
             val planning = GPUUniformSlabPlanner.plan(
-                sourceLabel = "fullscreen-uniform-pass",
+                sourceLabel = fullscreenUniformSlabSourceLabel(),
                 deviceGeneration = deviceGeneration.value,
                 alignmentBytes = MIN_UNIFORM_BUFFER_OFFSET_ALIGNMENT.toLong(),
                 uploadBudgetBytes = FULLSCREEN_UNIFORM_SLAB_UPLOAD_BUDGET_BYTES,
@@ -2259,14 +2291,14 @@ private class WgpuRenderRecorder(
                         ),
                     ),
                 ) { it.close() }
-                val uploads = plan.slots.map { slot ->
+                val uploadsBySlotLabel = plan.slots.associate { slot ->
                     val payloadBytes = payloadsByLabel.getValue(slot.slotLabel)
                     writeTrackedBuffer(
                         buffer = buffer,
                         offset = slot.alignedOffset.toULong(),
                         data = ArrayBuffer.of(payloadBytes),
                     )
-                    WgpuUniformSlabUpload(
+                    slot.slotLabel to WgpuUniformSlabUpload(
                         slot = slot,
                         payloadBytes = payloadBytes,
                     )
@@ -2274,7 +2306,7 @@ private class WgpuRenderRecorder(
                 telemetryRecorder.recordUniformSlabCreated(plan.totalBytes)
                 WgpuUniformSlabMaterialization(
                     buffer = buffer,
-                    uploads = uploads,
+                    uploadsBySlotLabel = uploadsBySlotLabel,
                 )
             }
         }
