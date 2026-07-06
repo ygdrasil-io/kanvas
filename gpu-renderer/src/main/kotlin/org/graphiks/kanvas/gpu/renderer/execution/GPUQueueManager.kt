@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
+import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceLease
+
 @JvmInline
 value class GPUQueueSubmissionId(val value: Long) {
     init {
@@ -82,6 +84,17 @@ class GPUQueueManager {
         submissions[submission.id] = submission
         return submission
     }
+
+    fun submitLeases(
+        label: String,
+        retainedLeases: List<GPUResourceLease>,
+    ): GPUQueueSubmission =
+        submit(
+            label = label,
+            retainedResources = retainedLeases.map { lease ->
+                GPUQueuedResourceRef("lease:${lease.leaseId}")
+            },
+        )
 
     fun markCompleted(
         id: GPUQueueSubmissionId,
