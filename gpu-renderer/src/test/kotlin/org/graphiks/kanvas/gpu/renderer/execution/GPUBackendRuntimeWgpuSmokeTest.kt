@@ -529,6 +529,141 @@ class GPUBackendRuntimeWgpuSmokeTest {
     }
 
     @Test
+    fun `backend runtime records gradient material payload slabs when backend is available`() {
+        val runtime = GPUBackendRuntimeFactory.createOrNull()
+        assumeTrue(runtime != null, "GPU backend unavailable in current environment")
+
+        runtime!!.use { session ->
+            val before = session.runtimeTelemetry
+
+            session.createOffscreenTarget(
+                GPUOffscreenTargetRequest(
+                    width = 6,
+                    height = 2,
+                    colorFormat = "rgba8unorm",
+                ),
+            ).use { target ->
+                target.encode(
+                    clearColor = GPUClearColor(red = 0.0, green = 0.0, blue = 0.0, alpha = 1.0),
+                ) {
+                    drawFullscreenUniformPayloadPass(
+                        wgsl = solidColorPayloadWgsl(),
+                        colorFormat = "rgba8unorm",
+                        draws = listOf(
+                            GPUBackendUniformPayloadDraw(
+                                uniformBytes = uniformPayloadBlock().bytes.map { byte -> byte.toByte() }.toByteArray(),
+                                materialization = gradientMaterialization("gradient-red"),
+                                scissorX = 0,
+                                scissorY = 0,
+                                scissorWidth = 3,
+                                scissorHeight = 2,
+                            ),
+                            GPUBackendUniformPayloadDraw(
+                                uniformBytes = uniformPayloadBlock().bytes.map { byte -> byte.toByte() }.toByteArray(),
+                                materialization = gradientMaterialization("gradient-green"),
+                                scissorX = 3,
+                                scissorY = 0,
+                                scissorWidth = 3,
+                                scissorHeight = 2,
+                            ),
+                        ),
+                        sourceLabel = "gradient-material-pass",
+                    )
+                }
+
+                val rgba = target.readRgba()
+                val after = session.runtimeTelemetry
+                val dump = session.runtimeTelemetryDumpLines.joinToString("\n")
+
+                assertContentEquals(
+                    byteArrayOf(0xFF.toByte(), 0, 0, 0xFF.toByte()),
+                    pixelAt(rgba = rgba, width = 6, x = 0, y = 0),
+                )
+                assertContentEquals(
+                    byteArrayOf(0xFF.toByte(), 0, 0, 0xFF.toByte()),
+                    pixelAt(rgba = rgba, width = 6, x = 3, y = 0),
+                )
+                assertEquals(1L, after.uniformSlabsCreated - before.uniformSlabsCreated)
+                assertTrue(dump.contains("payload-slab.batch.plan source=gradient-material-pass"))
+                assertTrue(dump.contains("payload-slab.resource.planned source=gradient-material-pass"))
+                assertTrue(dump.contains("payload-slab.resource.accepted source=gradient-material-pass"))
+                assertTrue(!dump.contains("@"))
+                assertTrue(!dump.contains("WGPU"))
+                assertTrue(!dump.contains("wgpu"))
+                assertTrue(!dump.contains("0x"))
+            }
+        }
+    }
+
+    @Test
+    fun `backend runtime falls back safely for unsafe public payload source labels when backend is available`() {
+        val runtime = GPUBackendRuntimeFactory.createOrNull()
+        assumeTrue(runtime != null, "GPU backend unavailable in current environment")
+
+        val uniformBlock = uniformPayloadBlock()
+        val materialized = assertIs<GPUResourceMaterializationDecision.Materialized>(
+            ValidatingPayloadResourceProvider().materializePayloadBindings(
+                request = payloadMaterializationRequest(uniformBlock),
+                context = GPUTargetPreparationContext(
+                    targetId = "root-target",
+                    frameId = "frame-1",
+                    deviceGeneration = 1,
+                    budgetClass = "smoke-test",
+                ),
+            ),
+        )
+
+        runtime!!.use { session ->
+            val before = session.runtimeTelemetry
+
+            session.createOffscreenTarget(
+                GPUOffscreenTargetRequest(
+                    width = 4,
+                    height = 4,
+                    colorFormat = "rgba8unorm",
+                ),
+            ).use { target ->
+                target.encode(
+                    clearColor = GPUClearColor(red = 0.0, green = 0.0, blue = 0.0, alpha = 1.0),
+                ) {
+                    drawFullscreenUniformPayloadPass(
+                        wgsl = solidColorPayloadWgsl(),
+                        colorFormat = "rgba8unorm",
+                        draws = listOf(
+                            GPUBackendUniformPayloadDraw(
+                                uniformBytes = uniformBlock.bytes.map { byte -> byte.toByte() }.toByteArray(),
+                                materialization = materialized,
+                                scissorX = 0,
+                                scissorY = 0,
+                                scissorWidth = 4,
+                                scissorHeight = 4,
+                            ),
+                        ),
+                        sourceLabel = "gradient-material-pass@unsafe",
+                    )
+                }
+
+                val rgba = target.readRgba()
+                val after = session.runtimeTelemetry
+                val dump = session.runtimeTelemetryDumpLines.joinToString("\n")
+
+                assertContentEquals(
+                    byteArrayOf(0xFF.toByte(), 0, 0, 0xFF.toByte()),
+                    pixelAt(rgba = rgba, width = 4, x = 0, y = 0),
+                )
+                assertEquals(1L, after.uniformSlabFallbacks - before.uniformSlabFallbacks)
+                assertTrue(dump.contains("payload-slab.resource.planned source=fullscreen-uniform-pass"))
+                assertTrue(dump.contains("payload-slab.resource.fallback source=fullscreen-uniform-pass"))
+                assertTrue(dump.contains("reason=unsupported.payload_slab_dump_unsafe"))
+                assertTrue(!dump.contains("@"))
+                assertTrue(!dump.contains("WGPU"))
+                assertTrue(!dump.contains("wgpu"))
+                assertTrue(!dump.contains("0x"))
+            }
+        }
+    }
+
+    @Test
     fun `backend runtime uploads uniform payload bytes and binds them when backend is available`() {
         val runtime = GPUBackendRuntimeFactory.createOrNull()
         assumeTrue(runtime != null, "WGPU backend unavailable in current environment")
@@ -724,12 +859,38 @@ class GPUBackendRuntimeWgpuSmokeTest {
         )
     }
 
-    private fun payloadMaterializationRequest(uniformBlock: GPUUniformPayloadBlock): GPUPayloadMaterializationRequest =
+    private fun gradientMaterialization(label: String): GPUResourceMaterializationDecision.Materialized {
+        val uniformBlock = uniformPayloadBlock()
+        val request = payloadMaterializationRequest(
+            uniformBlock = uniformBlock,
+            resourceDescriptorLabel = "uniform:gradient-material-payload",
+            layoutHash = "layout:linear-gradient-material-block:v1",
+            resourceLabel = label,
+        )
+        return assertIs<GPUResourceMaterializationDecision.Materialized>(
+            ValidatingPayloadResourceProvider().materializePayloadBindings(
+                request = request,
+                context = GPUTargetPreparationContext(
+                    targetId = "root-target",
+                    frameId = "frame-1",
+                    deviceGeneration = 1,
+                    budgetClass = "smoke-test",
+                ),
+            ),
+        )
+    }
+
+    private fun payloadMaterializationRequest(
+        uniformBlock: GPUUniformPayloadBlock,
+        resourceDescriptorLabel: String = "uniform:solid-payload",
+        layoutHash: String = "layout-solid-v1",
+        resourceLabel: String = "solid-fill",
+    ): GPUPayloadMaterializationRequest =
         GPUPayloadMaterializationRequest(
             targetId = "root-target",
             packetId = "packet-1",
             taskIds = listOf("task-payload-upload"),
-            resourcePlanLabels = listOf("payload-materialization:solid-fill"),
+            resourcePlanLabels = listOf("payload-materialization:$resourceLabel"),
             uniformBlock = uniformBlock,
             uniformSlot = GPUUniformPayloadSlot(
                 slotId = GPUPayloadSlotID("pass-a:uniform:0"),
@@ -738,9 +899,9 @@ class GPUBackendRuntimeWgpuSmokeTest {
             ),
             resourceBlock = GPUResourceBindingBlock(
                 fingerprint = GPUPayloadFingerprint("resource-fingerprint-smoke"),
-                bindingPlanHash = "layout-solid-v1",
+                bindingPlanHash = layoutHash,
                 bindingCount = 1,
-                resourceDescriptorLabels = listOf("uniform:solid-payload"),
+                resourceDescriptorLabels = listOf(resourceDescriptorLabel),
                 dynamicOffsets = listOf(0L),
             ),
             resourceSlot = GPUResourceBindingSlot(
@@ -755,7 +916,7 @@ class GPUBackendRuntimeWgpuSmokeTest {
                 budgetClass = "smoke-test",
                 beforeUseToken = "before-draw-1",
             ),
-            reflectedBindingLayoutHash = "layout-solid-v1",
+            reflectedBindingLayoutHash = layoutHash,
             deviceGeneration = 1,
             payloadGeneration = 1L,
             alignmentBytes = 256L,

@@ -153,6 +153,20 @@ private fun fullscreenUniformSlabSourceLabel(): String =
 
 internal fun currentFullscreenUniformSlabSourceLabelForTesting(): String = fullscreenUniformSlabSourceLabel()
 
+private fun fullscreenUniformSlabResourceLedgerSourceLabel(
+    sourceLabel: String,
+    planning: GPUPayloadSlabBatchPlanningResult,
+): String {
+    val refusedForUnsafeSourceLabel = planning is GPUPayloadSlabBatchPlanningResult.Refused &&
+        planning.diagnostic.code == "unsupported.payload_slab_dump_unsafe" &&
+        planning.diagnostic.facts["field"] == "sourceLabel"
+    return if (sourceLabel == FULLSCREEN_UNIFORM_SLAB_REFUSED_SOURCE_LABEL_FOR_TEST || refusedForUnsafeSourceLabel) {
+        FULLSCREEN_UNIFORM_SLAB_SOURCE_LABEL
+    } else {
+        sourceLabel
+    }
+}
+
 private fun fullscreenUniformSlabSlotLabel(drawIndex: Int): String = "draw-$drawIndex"
 
 private fun fullscreenPayloadPacketId(drawIndex: Int): String = "fullscreen-packet-$drawIndex"
@@ -1064,6 +1078,7 @@ private class WgpuRenderRecorder(
                 )
             },
             blendMode = blendMode,
+            sourceLabel = fullscreenUniformSlabSourceLabel(),
         )
     }
 
@@ -1072,6 +1087,7 @@ private class WgpuRenderRecorder(
         colorFormat: String,
         draws: List<GPUBackendUniformPayloadDraw>,
         blendMode: GPUBlendMode?,
+        sourceLabel: String,
     ) {
         recordFullscreenUniformPass(
             wgsl = wgsl,
@@ -1089,6 +1105,7 @@ private class WgpuRenderRecorder(
                 )
             },
             blendMode = blendMode,
+            sourceLabel = sourceLabel,
         )
     }
 
@@ -2229,6 +2246,7 @@ private class WgpuRenderRecorder(
         colorFormat: String,
         draws: List<WgpuFullscreenUniformDraw>,
         blendMode: GPUBlendMode? = null,
+        sourceLabel: String = fullscreenUniformSlabSourceLabel(),
     ) {
         require(wgsl.isNotBlank()) { "wgsl must not be blank" }
         require(colorFormat.normalizedColorFormat() == targetFormat.toBackendColorFormat()) {
@@ -2253,7 +2271,7 @@ private class WgpuRenderRecorder(
             keys = keys,
             blendMode = blendMode,
         )
-        val slab = materializeFullscreenUniformSlab(draws)
+        val slab = materializeFullscreenUniformSlab(draws = draws, sourceLabel = sourceLabel)
 
         setPipelineAction(pipeline)
         draws.forEachIndexed { drawIndex, draw ->
@@ -2410,37 +2428,39 @@ private class WgpuRenderRecorder(
 
     private fun materializeFullscreenUniformSlab(
         draws: List<WgpuFullscreenUniformDraw>,
+        sourceLabel: String,
     ): WgpuPayloadSlabMaterialization? {
         val payloadRequests = draws.mapIndexed { index, draw -> fullscreenPayloadRequest(index, draw) }
-        val sourceLabel = FULLSCREEN_UNIFORM_SLAB_SOURCE_LABEL
-        val plannerSourceLabel = fullscreenUniformSlabSourceLabel()
+        val planning = GPUPayloadSlabBatchPlanner.plan(
+            GPUPayloadSlabBatchRequest(
+                targetId = payloadTargetId,
+                frameId = frameId,
+                sourceLabel = sourceLabel,
+                deviceGeneration = deviceGeneration.value,
+                alignmentBytes = MIN_UNIFORM_BUFFER_OFFSET_ALIGNMENT.toLong(),
+                uploadBudgetBytes = FULLSCREEN_UNIFORM_SLAB_UPLOAD_BUDGET_BYTES,
+                payloadRequests = payloadRequests,
+            ),
+        )
+        val resourceLedgerSourceLabel = fullscreenUniformSlabResourceLedgerSourceLabel(
+            sourceLabel = sourceLabel,
+            planning = planning,
+        )
         telemetryRecorder.recordPayloadSlabResourceEvent(
             GPUPayloadSlabResourceEvent.Planned(
-                sourceLabel = sourceLabel,
+                sourceLabel = resourceLedgerSourceLabel,
                 targetId = payloadTargetId,
                 frameId = frameId,
                 deviceGeneration = deviceGeneration.value,
                 payloadCount = payloadRequests.size,
             ),
         )
-        return when (
-            val planning = GPUPayloadSlabBatchPlanner.plan(
-                GPUPayloadSlabBatchRequest(
-                    targetId = payloadTargetId,
-                    frameId = frameId,
-                    sourceLabel = plannerSourceLabel,
-                    deviceGeneration = deviceGeneration.value,
-                    alignmentBytes = MIN_UNIFORM_BUFFER_OFFSET_ALIGNMENT.toLong(),
-                    uploadBudgetBytes = FULLSCREEN_UNIFORM_SLAB_UPLOAD_BUDGET_BYTES,
-                    payloadRequests = payloadRequests,
-                ),
-            )
-        ) {
+        return when (planning) {
             is GPUPayloadSlabBatchPlanningResult.Refused -> {
                 telemetryRecorder.recordUniformSlabFallback()
                 telemetryRecorder.recordPayloadSlabResourceEvent(
                     GPUPayloadSlabResourceEvent.Fallback(
-                        sourceLabel = sourceLabel,
+                        sourceLabel = resourceLedgerSourceLabel,
                         reason = planning.diagnostic.code,
                         payloadCount = payloadRequests.size,
                     ),
@@ -2477,7 +2497,7 @@ private class WgpuRenderRecorder(
                 telemetryRecorder.recordPayloadSlabBatchPlan(plan)
                 telemetryRecorder.recordPayloadSlabResourceEvent(
                     GPUPayloadSlabResourceEvent.Accepted(
-                        sourceLabel = sourceLabel,
+                        sourceLabel = resourceLedgerSourceLabel,
                         planHash = plan.planHash,
                         totalBytes = plan.uniformSlabPlan.totalBytes,
                         slotCount = plan.slotBindings.size,

@@ -271,6 +271,7 @@ interface GPUBackendRenderRecorder {
         colorFormat: String,
         draws: List<GPUBackendUniformPayloadDraw>,
         blendMode: GPUBlendMode? = null,
+        sourceLabel: String = "fullscreen-uniform-pass",
     )
 
     /** Draws a fullscreen pass with raw uniform bytes per draw, bypassing provider materialization. */
