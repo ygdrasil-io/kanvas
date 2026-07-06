@@ -437,12 +437,12 @@ class GPUBackendRuntimeNativeSmokeTest {
             assertTrue(evidenceDump.contains("gpu-phase0.baseline"))
             assertTrue(
                 evidenceDump.contains(
-                    "gpu-queue.telemetry submitted=1 completed=1 released=1 waits=1 unknownCompletions=0",
+                    "gpu-queue.telemetry submitted=1 completed=1 released=1 pending=0 waits=1 unknownCompletions=0",
                 ),
             )
             assertTrue(evidenceDump.contains("gpu-queue.submission id=1 label=offscreen-pass:"))
             assertTrue(evidenceDump.contains("retained=3"))
-            assertTrue(evidenceDump.contains("completion=scaffold-immediate"))
+            assertTrue(evidenceDump.contains("completion=pending"))
             assertTrue(evidenceDump.contains("resource-provider.cache"))
             assertTrue(evidenceDump.contains("resource-provider.lease"))
             assertTrue(evidenceDump.contains("kind=uniform-slab"))

@@ -111,7 +111,10 @@ class GPUQueueManager {
             unknownCompletionCount += 1L
             return false
         }
-        if (!current.completed) {
+        if (!current.completed ||
+            current.completion == GPU_QUEUE_COMPLETION_PENDING &&
+            completion != GPU_QUEUE_COMPLETION_PENDING
+        ) {
             submissions[id] = current.copy(completed = true, completion = completion)
         }
         return true

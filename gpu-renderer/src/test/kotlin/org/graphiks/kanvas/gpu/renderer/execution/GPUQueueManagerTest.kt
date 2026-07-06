@@ -71,6 +71,21 @@ class GPUQueueManagerTest {
     }
 
     @Test
+    fun `queue manager can replace pending compatibility completion reason`() {
+        val manager = GPUQueueManager()
+        val submission = manager.submit(
+            label = "offscreen-pass:frame-1",
+            retainedResources = listOf(GPUQueuedResourceRef("readback:frame-1")),
+        )
+
+        assertTrue(manager.markCompleted(submission.id))
+        assertTrue(manager.markCompleted(submission.id, GPU_QUEUE_COMPLETION_READBACK_COMPLETE))
+
+        val dump = manager.telemetry.dumpLines().joinToString("\n")
+        assertTrue(dump.contains("completion=readback-complete"))
+    }
+
+    @Test
     fun `queue manager pending ids can be filtered by label prefix`() {
         val manager = GPUQueueManager()
         val first = manager.submit(
@@ -86,20 +101,6 @@ class GPUQueueManagerTest {
     }
 
     @Test
-    fun `queue manager rejects unsafe pending id prefix`() {
-        val manager = GPUQueueManager()
-        val submission = manager.submit(
-            label = "frame-1",
-            retainedResources = listOf(GPUQueuedResourceRef("target:frame-1")),
-        )
-        assertTrue(manager.pendingSubmissionIds().contains(submission.id))
-
-        assertFailsWith<IllegalArgumentException> {
-            manager.pendingSubmissionIds(labelPrefix = "bad prefix")
-        }
-    }
-
-    @Test
     fun `queue manager telemetry records waits and unknown completions`() {
         val manager = GPUQueueManager()
 
@@ -112,13 +113,25 @@ class GPUQueueManagerTest {
     }
 
     @Test
-    fun `queue manager rejects unsafe completion reasons`() {
+    fun `queue manager rejects unsafe dump tokens`() {
         val manager = GPUQueueManager()
         val submission = manager.submit(
             label = "frame-1",
             retainedResources = listOf(GPUQueuedResourceRef("target:frame-1")),
         )
 
+        assertFailsWith<IllegalArgumentException> {
+            GPUQueuedResourceRef("bad ref")
+        }
+        assertFailsWith<IllegalArgumentException> {
+            manager.submit(
+                label = "bad label",
+                retainedResources = listOf(GPUQueuedResourceRef("target:frame-1")),
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            manager.pendingSubmissionIds(labelPrefix = "bad prefix")
+        }
         assertFailsWith<IllegalArgumentException> {
             manager.markCompleted(submission.id, "bad reason")
         }
