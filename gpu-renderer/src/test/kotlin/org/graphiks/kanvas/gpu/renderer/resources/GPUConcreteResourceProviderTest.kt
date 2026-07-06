@@ -155,6 +155,31 @@ class GPUConcreteResourceProviderTest {
     }
 
     @Test
+    fun `concrete provider records texture sampler create then reuse`() {
+        val provider = GPUConcreteResourceProvider()
+        val context = targetPreparationContext()
+
+        val first = assertIs<GPUResourceMaterializationDecision.Materialized>(
+            provider.materializeTextureSamplerBinding(textureSamplerRequest(), context),
+        )
+        val second = assertIs<GPUResourceMaterializationDecision.Materialized>(
+            provider.materializeTextureSamplerBinding(textureSamplerRequest(), context),
+        )
+
+        assertEquals(3, first.dumpResourceLeaseSnapshot.size)
+        assertEquals(
+            listOf("create", "reuse"),
+            provider.telemetry.dumpEvents
+                .filter { event -> event.lane == "texture-sampler" }
+                .map { event -> event.result },
+        )
+        assertEquals(
+            setOf(GPUResourceLeaseCacheResult.Reuse),
+            second.dumpResourceLeaseSnapshot.map { lease -> lease.cacheResult }.toSet(),
+        )
+    }
+
+    @Test
     fun `concrete provider refuses fullscreen uniform slab target mismatch`() {
         var createCalls = 0
         val provider = GPUConcreteResourceProvider(

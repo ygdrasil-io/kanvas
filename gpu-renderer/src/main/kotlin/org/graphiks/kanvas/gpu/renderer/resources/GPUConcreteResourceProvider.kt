@@ -58,6 +58,7 @@ class GPUConcreteResourceProvider(
 ) : GPUResourceProvider {
     private val nullBufferKeys = linkedSetOf<String>()
     private val uniformSlabLeases = linkedMapOf<GPUUniformSlabLeaseCacheKey, GPUResourceLease>()
+    private val textureSamplerLeaseKeys = linkedSetOf<GPUTextureSamplerLeaseCacheKey>()
     private var mutableTelemetry = GPUConcreteResourceProviderTelemetry()
 
     val telemetry: GPUConcreteResourceProviderTelemetry
@@ -202,13 +203,63 @@ class GPUConcreteResourceProvider(
         context: GPUTargetPreparationContext,
     ): GPUResourceMaterializationDecision {
         val decision = textureSamplerProvider.materializeTextureSamplerBinding(request, context)
-        val result = when (decision) {
-            is GPUResourceMaterializationDecision.Materialized -> "create"
-            is GPUResourceMaterializationDecision.Refused -> "failure"
-            is GPUResourceMaterializationDecision.Deferred -> "deferred"
+        return when (decision) {
+            is GPUResourceMaterializationDecision.Materialized -> {
+                val cacheKey = GPUTextureSamplerLeaseCacheKey.from(request)
+                val cacheResult = if (textureSamplerLeaseKeys.add(cacheKey)) {
+                    GPUResourceLeaseCacheResult.Create
+                } else {
+                    GPUResourceLeaseCacheResult.Reuse
+                }
+                val leases = listOf(
+                    GPUResourceLease(
+                        leaseId = "texture:${request.ownership.ownerLabel}",
+                        resourceKind = GPUResourceLeaseKind.Texture,
+                        deviceGeneration = request.deviceGeneration,
+                        descriptorHash = request.textureDescriptor.materializationDescriptorHashForProvider(),
+                        ownerScope = request.ownership.ownerLabel,
+                        usageLabels = request.requiredTextureUsageLabelsForProvider(),
+                        releasePolicy = request.ownership.releasePolicy,
+                        cacheResult = cacheResult,
+                    ),
+                    GPUResourceLease(
+                        leaseId = "texture-view:${request.binding.bindingLabel}",
+                        resourceKind = GPUResourceLeaseKind.TextureView,
+                        deviceGeneration = request.deviceGeneration,
+                        descriptorHash = request.viewDescriptorHashForProvider(),
+                        ownerScope = request.ownership.ownerLabel,
+                        usageLabels = listOf("texture_binding"),
+                        releasePolicy = request.ownership.releasePolicy,
+                        cacheResult = cacheResult,
+                    ),
+                    GPUResourceLease(
+                        leaseId = "sampler:${request.binding.bindingLabel}",
+                        resourceKind = GPUResourceLeaseKind.Sampler,
+                        deviceGeneration = request.deviceGeneration,
+                        descriptorHash = request.samplerDescriptorHashForProvider(),
+                        ownerScope = "sampler-cache",
+                        usageLabels = listOf("sampler"),
+                        releasePolicy = "descriptor-cache",
+                        cacheResult = cacheResult,
+                    ),
+                )
+                record(
+                    lane = "texture-sampler",
+                    result = cacheResult.dumpToken,
+                    keyHash = cacheKey.dumpToken(),
+                    subjectHash = request.binding.bindingLabel,
+                )
+                decision.copyWithResourceLeases(leases)
+            }
+            is GPUResourceMaterializationDecision.Refused -> {
+                record("texture-sampler", "failure", request.bindingLayoutHash, request.binding.bindingLabel)
+                decision
+            }
+            is GPUResourceMaterializationDecision.Deferred -> {
+                record("texture-sampler", "deferred", request.bindingLayoutHash, request.binding.bindingLabel)
+                decision
+            }
         }
-        record("texture-sampler", result, request.bindingLayoutHash, request.binding.bindingLabel)
-        return decision
     }
 
     private fun record(lane: String, result: String, keyHash: String, subjectHash: String) {
@@ -255,11 +306,89 @@ private data class GPUUniformSlabLeaseCacheKey(
     }
 }
 
+private data class GPUTextureSamplerLeaseCacheKey(
+    val targetId: String,
+    val bindingLayoutHash: String,
+    val textureWidth: Int,
+    val textureHeight: Int,
+    val textureFormat: String,
+    val textureSampleCount: Int,
+    val textureUsageLabels: List<String>,
+    val viewTextureDescriptorHash: String,
+    val viewDimension: String,
+    val viewMipRangeFirst: Int,
+    val viewMipRangeLast: Int,
+    val viewArrayLayerRangeFirst: Int,
+    val viewArrayLayerRangeLast: Int,
+    val samplerAddressModeU: String,
+    val samplerAddressModeV: String,
+    val samplerMagFilter: String,
+    val samplerMinFilter: String,
+    val samplerMipmapFilter: String,
+    val samplerLodMinClamp: String,
+    val samplerLodMaxClamp: String,
+    val samplerCompareMode: String,
+    val samplerMaxAnisotropy: Int,
+    val samplerCapabilityRequirements: List<String>,
+    val deviceGeneration: Long,
+    val actualResourceGeneration: Long,
+) {
+    fun dumpToken(): String =
+        "target=$targetId;layout=$bindingLayoutHash;texture=${textureWidth}x$textureHeight:$textureFormat:" +
+            "samples=$textureSampleCount:usage=${textureUsageLabels.joinToString("+")};" +
+            "view=$viewTextureDescriptorHash:$viewDimension:$viewMipRangeFirst..$viewMipRangeLast:" +
+            "$viewArrayLayerRangeFirst..$viewArrayLayerRangeLast;" +
+            "sampler=$samplerAddressModeU:$samplerAddressModeV:$samplerMagFilter:$samplerMinFilter:" +
+            "$samplerMipmapFilter:$samplerLodMinClamp:$samplerLodMaxClamp:$samplerCompareMode:" +
+            "$samplerMaxAnisotropy:${samplerCapabilityRequirements.joinToString("+")};" +
+            "deviceGeneration=$deviceGeneration;resourceGeneration=$actualResourceGeneration"
+
+    companion object {
+        fun from(request: GPUTextureSamplerMaterializationRequest): GPUTextureSamplerLeaseCacheKey =
+            GPUTextureSamplerLeaseCacheKey(
+                targetId = request.targetId,
+                bindingLayoutHash = request.bindingLayoutHash,
+                textureWidth = request.textureDescriptor.width,
+                textureHeight = request.textureDescriptor.height,
+                textureFormat = request.textureDescriptor.format,
+                textureSampleCount = request.textureDescriptor.sampleCount,
+                textureUsageLabels = request.textureDescriptor.usageLabels.sorted(),
+                viewTextureDescriptorHash = request.viewDescriptor.textureDescriptorHash,
+                viewDimension = request.viewDescriptor.viewDimension,
+                viewMipRangeFirst = request.viewDescriptor.mipRange.first,
+                viewMipRangeLast = request.viewDescriptor.mipRange.last,
+                viewArrayLayerRangeFirst = request.viewDescriptor.arrayLayerRange.first,
+                viewArrayLayerRangeLast = request.viewDescriptor.arrayLayerRange.last,
+                samplerAddressModeU = request.samplerDescriptor.addressModeU,
+                samplerAddressModeV = request.samplerDescriptor.addressModeV,
+                samplerMagFilter = request.samplerDescriptor.magFilter,
+                samplerMinFilter = request.samplerDescriptor.minFilter,
+                samplerMipmapFilter = request.samplerDescriptor.mipmapFilter,
+                samplerLodMinClamp = request.samplerDescriptor.lodMinClamp,
+                samplerLodMaxClamp = request.samplerDescriptor.lodMaxClamp,
+                samplerCompareMode = request.samplerDescriptor.compareMode,
+                samplerMaxAnisotropy = request.samplerDescriptor.maxAnisotropy,
+                samplerCapabilityRequirements = request.samplerDescriptor.capabilityRequirements.sorted(),
+                deviceGeneration = request.deviceGeneration,
+                actualResourceGeneration = request.actualResourceGeneration,
+            )
+    }
+}
+
 private fun GPUResourceLease.snapshotForUniformSlabCache(): GPUResourceLease =
     copy(
         usageLabels = dumpUsageLabelsSnapshot,
         evidenceFacts = dumpEvidenceFactsSnapshot,
     )
+
+private fun GPUResourceMaterializationDecision.copyWithResourceLeases(
+    leases: List<GPUResourceLease>,
+): GPUResourceMaterializationDecision =
+    when (this) {
+        is GPUResourceMaterializationDecision.Materialized -> copy(resourceLeases = leases)
+        is GPUResourceMaterializationDecision.Refused -> copy(resourceLeases = leases)
+        is GPUResourceMaterializationDecision.Deferred -> this
+    }
 
 private fun GPUResourceMaterializationDecision.payloadEvents(): List<GPUPayloadMaterializationTelemetryEvent> =
     when (this) {
@@ -267,6 +396,42 @@ private fun GPUResourceMaterializationDecision.payloadEvents(): List<GPUPayloadM
         is GPUResourceMaterializationDecision.Refused -> dumpPayloadTelemetrySnapshot
         is GPUResourceMaterializationDecision.Deferred -> emptyList()
     }
+
+private fun GPUTextureDescriptor.materializationDescriptorHashForProvider(): String =
+    listOf(
+        "texture",
+        "${width}x$height",
+        format,
+        "samples=$sampleCount",
+        usageLabels.sorted().joinToString("+"),
+    ).joinToString(":")
+
+private fun GPUTextureSamplerMaterializationRequest.requiredTextureUsageLabelsForProvider(): List<String> =
+    dumpRequiredTextureUsageLabelsSnapshot.sorted()
+
+private fun GPUTextureSamplerMaterializationRequest.viewDescriptorHashForProvider(): String =
+    listOf(
+        "texture-view",
+        viewDescriptor.textureDescriptorHash,
+        viewDescriptor.viewDimension,
+        viewDescriptor.mipRange.toString(),
+        viewDescriptor.arrayLayerRange.toString(),
+    ).joinToString(":")
+
+private fun GPUTextureSamplerMaterializationRequest.samplerDescriptorHashForProvider(): String =
+    listOf(
+        "sampler",
+        samplerDescriptor.addressModeU,
+        samplerDescriptor.addressModeV,
+        samplerDescriptor.magFilter,
+        samplerDescriptor.minFilter,
+        samplerDescriptor.mipmapFilter,
+        samplerDescriptor.lodMinClamp,
+        samplerDescriptor.lodMaxClamp,
+        samplerDescriptor.compareMode,
+        samplerDescriptor.maxAnisotropy.toString(),
+        samplerDescriptor.capabilityRequirements.sorted().joinToString("+"),
+    ).joinToString(":")
 
 private val CONCRETE_PROVIDER_RAW_BACKEND_TOKEN = "w" + "gpu"
 private val CONCRETE_PROVIDER_UNSAFE_DUMP_PATTERN =
