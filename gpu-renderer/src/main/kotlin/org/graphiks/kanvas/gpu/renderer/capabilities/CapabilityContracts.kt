@@ -125,15 +125,42 @@ fun GPUTextureFormat.dumpLabel(): String =
 /** Returns stable public usage labels in deterministic order. */
 fun GPUTextureUsage.dumpLabels(): List<String> =
     buildList {
-        if (containsUsage(GPUTextureUsage.CopySrc)) add("copy_src")
-        if (containsUsage(GPUTextureUsage.CopyDst)) add("copy_dst")
-        if (containsUsage(GPUTextureUsage.TextureBinding)) add("texture_binding")
-        if (containsUsage(GPUTextureUsage.StorageBinding)) add("storage_binding")
-        if (containsUsage(GPUTextureUsage.RenderAttachment)) add("render_attachment")
+        for ((usage, label) in textureUsageDumpEntries) {
+            if (containsUsage(usage)) add(label)
+        }
+        val unknownBits = unknownUsageBits()
+        if (unknownBits != 0uL) add(unknownTextureUsageLabel(unknownBits))
     }
 
 private fun GPUTextureUsage.containsUsage(required: GPUTextureUsage): Boolean =
     (value and required.value) == required.value
+
+private val textureUsageDumpEntries: List<Pair<GPUTextureUsage, String>> =
+    listOf(
+        GPUTextureUsage.CopySrc to "copy_src",
+        GPUTextureUsage.CopyDst to "copy_dst",
+        GPUTextureUsage.TextureBinding to "texture_binding",
+        GPUTextureUsage.StorageBinding to "storage_binding",
+        GPUTextureUsage.RenderAttachment to "render_attachment",
+    )
+
+private val knownTextureUsageMask: ULong =
+    textureUsageDumpEntries.fold(0uL) { mask, (usage, _) -> mask or usage.value }
+
+private fun GPUTextureUsage.unknownUsageBits(): ULong =
+    value and knownTextureUsageMask.inv()
+
+private fun unknownTextureUsageLabel(bits: ULong): String =
+    "unknown:0x${bits.toString(16)}"
+
+private fun GPUTextureUsage.missingUsageLabelsFrom(supported: GPUTextureUsage): List<String> =
+    buildList {
+        for ((usage, label) in textureUsageDumpEntries) {
+            if (containsUsage(usage) && !supported.containsUsage(usage)) add(label)
+        }
+        val unknownMissingBits = unknownUsageBits() and supported.value.inv()
+        if (unknownMissingBits != 0uL) add(unknownTextureUsageLabel(unknownMissingBits))
+    }
 
 /** Single behavior-affecting capability fact. */
 data class GPUCapabilityFact(
@@ -227,55 +254,45 @@ data class GPUCapabilities(
     val knownUnsupportedFacts: List<GPUCapabilityFact> = emptyList(),
     val snapshotId: String,
     val limits: GPULimits? = null,
-    val supportedTextureFormats: Set<String> = emptySet(),
-    val supportedTextureUsageLabels: Set<String> = emptySet(),
-    val featureLabels: Set<String> = emptySet(),
+    val supportedTextureFormats: Set<GPUTextureFormat> = emptySet(),
+    val supportedTextureUsage: GPUTextureUsage? = null,
+    val rendererFeatures: Set<GPURendererFeature> = emptySet(),
 ) {
     init {
         require(snapshotId.isNotBlank()) { "GPUCapabilities.snapshotId must not be blank" }
-        require(supportedTextureFormats.none { it.isBlank() }) {
-            "GPUCapabilities.supportedTextureFormats must not contain blank labels"
-        }
-        require(supportedTextureUsageLabels.none { it.isBlank() }) {
-            "GPUCapabilities.supportedTextureUsageLabels must not contain blank labels"
-        }
-        require(featureLabels.none { it.isBlank() }) {
-            "GPUCapabilities.featureLabels must not contain blank labels"
-        }
     }
 }
 
 /** Validates a texture allocation request against known format, usage, and size capabilities. */
 fun GPUCapabilities.validateTextureRequest(
-    format: String,
+    format: GPUTextureFormat,
     width: Int,
     height: Int,
-    usageLabels: Set<String>,
+    usage: GPUTextureUsage,
 ): GPUCapabilityDiagnostic? {
-    require(format.isNotBlank()) { "format must not be blank" }
     require(width > 0) { "width must be positive" }
     require(height > 0) { "height must be positive" }
-    require(usageLabels.none { it.isBlank() }) { "usageLabels must not contain blank labels" }
 
     if (supportedTextureFormats.isNotEmpty() && format !in supportedTextureFormats) {
         return GPUCapabilityDiagnostic(
             code = "unsupported.capability.texture_format",
             severity = "error",
             requirementName = "texture.format",
-            required = format,
-            observed = supportedTextureFormats.sorted().joinToString(","),
+            required = format.dumpLabel(),
+            observed = supportedTextureFormats.map { it.dumpLabel() }.sorted().joinToString(","),
             isTerminal = true,
         )
     }
 
-    val missingUsageLabels = usageLabels.subtract(supportedTextureUsageLabels)
-    if (supportedTextureUsageLabels.isNotEmpty() && missingUsageLabels.isNotEmpty()) {
+    val supportedUsage = supportedTextureUsage
+    val missingUsageLabels = usage.missingUsageLabelsFrom(supportedUsage ?: usage)
+    if (supportedUsage != null && missingUsageLabels.isNotEmpty()) {
         return GPUCapabilityDiagnostic(
             code = "unsupported.capability.texture_usage",
             severity = "error",
             requirementName = "texture.usage",
-            required = missingUsageLabels.sorted().joinToString(","),
-            observed = supportedTextureUsageLabels.sorted().joinToString(","),
+            required = missingUsageLabels.joinToString(","),
+            observed = supportedUsage.dumpLabels().joinToString(","),
             isTerminal = true,
         )
     }
@@ -314,20 +331,14 @@ fun GPUCapabilities.validateUniformAlignment(alignmentBytes: Long): GPUCapabilit
     )
 }
 
-/** Validates that a named optional GPU feature is present when the snapshot has feature evidence. */
-fun GPUCapabilities.validateFeature(featureLabel: String): GPUCapabilityDiagnostic? {
-    require(featureLabel.isNotBlank()) { "featureLabel must not be blank" }
-
-    if (featureLabels.isEmpty() || featureLabel in featureLabels) {
-        return null
-    }
-
+fun GPUCapabilities.validateRendererFeature(feature: GPURendererFeature): GPUCapabilityDiagnostic? {
+    if (rendererFeatures.isEmpty() || feature in rendererFeatures) return null
     return GPUCapabilityDiagnostic(
         code = "unsupported.capability.feature",
         severity = "error",
         requirementName = "feature",
-        required = featureLabel,
-        observed = featureLabels.sorted().joinToString(","),
+        required = feature.dumpLabel,
+        observed = rendererFeatures.map { it.dumpLabel }.sorted().joinToString(","),
         isTerminal = true,
     )
 }

@@ -85,6 +85,7 @@ import kotlinx.coroutines.runBlocking
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUImplementationIdentity
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPURendererFeature
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPUPipelineKeyPreimage
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPUPipelineKeys
 import org.graphiks.kanvas.gpu.renderer.telemetry.GPUCacheTelemetry
@@ -350,19 +351,21 @@ private class WgpuBackendSession(
             facts = backendLimits.capabilityFacts(evidenceLabel = "runtime"),
             snapshotId = "gpu-runtime-${deviceGeneration.value}",
             limits = backendLimits,
-            supportedTextureFormats = setOf("rgba8unorm", "bgra8unorm"),
-            supportedTextureUsageLabels = setOf(
-                "copy_src",
-                "copy_dst",
-                "texture_binding",
-                "render_attachment",
+            supportedTextureFormats = setOf(
+                GPUTextureFormat.RGBA8Unorm,
+                GPUTextureFormat.BGRA8Unorm,
             ),
-            featureLabels = setOf(
-                "render-pass",
-                "copy-upload",
-                "readback",
-                "uniform-buffer",
-                "texture-sampling",
+            supportedTextureUsage =
+                GPUTextureUsage.CopySrc or
+                    GPUTextureUsage.CopyDst or
+                    GPUTextureUsage.TextureBinding or
+                    GPUTextureUsage.RenderAttachment,
+            rendererFeatures = setOf(
+                GPURendererFeature.RenderPass,
+                GPURendererFeature.CopyUpload,
+                GPURendererFeature.Readback,
+                GPURendererFeature.UniformBuffer,
+                GPURendererFeature.TextureSampling,
             ),
         )
 
