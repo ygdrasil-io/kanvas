@@ -440,18 +440,20 @@ private class WgpuOffscreenTarget(
         )
 
     private fun createTrackedTexture(descriptor: TextureDescriptor): GPUTexture {
+        val texture = device.createTexture(descriptor)
         telemetryRecorder.recordTextureCreated()
-        return device.createTexture(descriptor)
+        return texture
     }
 
     private fun createTrackedBuffer(descriptor: BufferDescriptor): GPUBuffer {
+        val buffer = device.createBuffer(descriptor)
         telemetryRecorder.recordBufferCreated()
-        return device.createBuffer(descriptor)
+        return buffer
     }
 
     private fun writeTrackedBuffer(buffer: GPUBuffer, offset: ULong, data: ArrayBuffer) {
-        telemetryRecorder.recordQueueWrite()
         queue.writeBuffer(buffer, offset, data)
+        telemetryRecorder.recordQueueWrite()
     }
 
     override fun encode(
@@ -461,7 +463,6 @@ private class WgpuOffscreenTarget(
         GPUResourceScope().use { resources ->
             val view = resources.track(texture.createView()) { it.close() }
             val encoder = resources.trackIfAutoCloseable(device.createCommandEncoder())
-            telemetryRecorder.recordOffscreenRenderPass()
             encoder.beginRenderPass(
                 RenderPassDescriptor(
                     colorAttachments = listOf(
@@ -512,6 +513,7 @@ private class WgpuOffscreenTarget(
                 }
                 end()
             }
+            telemetryRecorder.recordOffscreenRenderPass()
             encoder.copyTextureToBuffer(
                 source = TexelCopyTextureInfo(texture = texture),
                 destination = TexelCopyBufferInfo(
@@ -523,8 +525,8 @@ private class WgpuOffscreenTarget(
                 copySize = Extent3D(width = safeWidth.toUInt(), height = safeHeight.toUInt()),
             )
             val commandBuffer = resources.trackIfAutoCloseable(encoder.finish())
-            telemetryRecorder.recordSubmission()
             queue.submit(listOf(commandBuffer))
+            telemetryRecorder.recordSubmission()
         }
     }
 
@@ -630,7 +632,6 @@ private class WgpuOffscreenTarget(
         ) { it.close() }
         val dsView = resources.track(dsTex.createView()) { it.close() }
         val encoder = resources.trackIfAutoCloseable(device.createCommandEncoder())
-        telemetryRecorder.recordOffscreenRenderPass()
         encoder.beginRenderPass(
             RenderPassDescriptor(
                 colorAttachments = listOf(
@@ -683,9 +684,10 @@ private class WgpuOffscreenTarget(
             }
             end()
         }
+        telemetryRecorder.recordOffscreenRenderPass()
         val commandBuffer = resources.trackIfAutoCloseable(encoder.finish())
-        telemetryRecorder.recordSubmission()
         queue.submit(listOf(commandBuffer))
+        telemetryRecorder.recordSubmission()
     }
 
     override fun close() {
@@ -772,7 +774,6 @@ private class WgpuWindowSurface(
         GPUResourceScope().use { resources ->
             val view = resources.track(surfaceTexture.texture.createView(null)) { it.close() }
             val encoder = resources.trackIfAutoCloseable(runtime.device.createCommandEncoder())
-            telemetryRecorder.recordWindowRenderPass()
             encoder.beginRenderPass(
                 RenderPassDescriptor(
                     colorAttachments = listOf(
@@ -809,9 +810,10 @@ private class WgpuWindowSurface(
                 }
                 end()
             }
+            telemetryRecorder.recordWindowRenderPass()
             val commandBuffer = resources.trackIfAutoCloseable(encoder.finish())
-            telemetryRecorder.recordSubmission()
             runtime.device.queue.submit(listOf(commandBuffer))
+            telemetryRecorder.recordSubmission()
             runtime.surface.present()
         }
         return true
@@ -866,28 +868,32 @@ private class WgpuRenderRecorder(
     }
 
     private fun createTrackedBuffer(descriptor: BufferDescriptor): GPUBuffer {
+        val buffer = device.createBuffer(descriptor)
         telemetryRecorder.recordBufferCreated()
-        return device.createBuffer(descriptor)
+        return buffer
     }
 
     private fun createTrackedTexture(descriptor: TextureDescriptor): GPUTexture {
+        val texture = device.createTexture(descriptor)
         telemetryRecorder.recordTextureCreated()
-        return device.createTexture(descriptor)
+        return texture
     }
 
     private fun createTrackedBindGroup(descriptor: BindGroupDescriptor): GPUBindGroup {
+        val bindGroup = device.createBindGroup(descriptor)
         telemetryRecorder.recordBindGroupCreated()
-        return device.createBindGroup(descriptor)
+        return bindGroup
     }
 
     private fun createTrackedSampler(descriptor: SamplerDescriptor): GPUSampler {
+        val sampler = device.createSampler(descriptor)
         telemetryRecorder.recordSamplerCreated()
-        return device.createSampler(descriptor)
+        return sampler
     }
 
     private fun writeTrackedBuffer(buffer: GPUBuffer, offset: ULong, data: ArrayBuffer) {
-        telemetryRecorder.recordQueueWrite()
         queue.writeBuffer(buffer, offset, data)
+        telemetryRecorder.recordQueueWrite()
     }
 
     override fun drawFullscreenPass(
