@@ -35,10 +35,8 @@ class GPURuntimeResourceAdapter : GPUResourceLeaseFactory {
     }
 
     override fun createBindGroup(request: GPUBindGroupLeaseRequest): GPUResourceLeaseFactoryResult {
-        if (
-            request.leaseId.startsWith("bind-group:fullscreen") &&
-            request.leaseId !in liveLeaseIds
-        ) {
+        val prerequisiteLeaseId = request.fullscreenPrerequisiteLeaseId()
+        if (prerequisiteLeaseId != null && prerequisiteLeaseId !in liveLeaseIds) {
             return GPUResourceLeaseFactoryResult.Failed(
                 diagnostic = GPUResourceDiagnostic.adapterCreateFailed(
                     resourceLabel = request.leaseId,
@@ -63,4 +61,10 @@ class GPURuntimeResourceAdapter : GPUResourceLeaseFactory {
     }
 
     fun containsLease(leaseId: String): Boolean = leaseId in liveLeaseIds
+}
+
+private fun GPUBindGroupLeaseRequest.fullscreenPrerequisiteLeaseId(): String? {
+    val prefix = "bind-group:fullscreen:"
+    if (!leaseId.startsWith(prefix)) return null
+    return "uniform-slab:fullscreen:" + leaseId.removePrefix(prefix)
 }
