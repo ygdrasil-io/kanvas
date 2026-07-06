@@ -249,7 +249,7 @@ class GPUConcreteResourceProvider(
                     keyHash = cacheKey.dumpToken(),
                     subjectHash = request.binding.bindingLabel,
                 )
-                decision.copyWithResourceLeases(leases)
+                decision.withResourceLeases(leases)
             }
             is GPUResourceMaterializationDecision.Refused -> {
                 record("texture-sampler", "failure", request.bindingLayoutHash, request.binding.bindingLabel)
@@ -309,6 +309,11 @@ private data class GPUUniformSlabLeaseCacheKey(
 private data class GPUTextureSamplerLeaseCacheKey(
     val targetId: String,
     val bindingLayoutHash: String,
+    val bindingLabel: String,
+    val ownerLabel: String,
+    val lifetimeClass: String,
+    val releasePolicy: String,
+    val canAliasScratch: Boolean,
     val textureWidth: Int,
     val textureHeight: Int,
     val textureFormat: String,
@@ -334,7 +339,9 @@ private data class GPUTextureSamplerLeaseCacheKey(
     val actualResourceGeneration: Long,
 ) {
     fun dumpToken(): String =
-        "target=$targetId;layout=$bindingLayoutHash;texture=${textureWidth}x$textureHeight:$textureFormat:" +
+        "target=$targetId;layout=$bindingLayoutHash;binding=$bindingLabel;owner=$ownerLabel;" +
+            "lifetime=$lifetimeClass;release=$releasePolicy;canAliasScratch=$canAliasScratch;" +
+            "texture=${textureWidth}x$textureHeight:$textureFormat:" +
             "samples=$textureSampleCount:usage=${textureUsageLabels.joinToString("+")};" +
             "view=$viewTextureDescriptorHash:$viewDimension:$viewMipRangeFirst..$viewMipRangeLast:" +
             "$viewArrayLayerRangeFirst..$viewArrayLayerRangeLast;" +
@@ -348,6 +355,11 @@ private data class GPUTextureSamplerLeaseCacheKey(
             GPUTextureSamplerLeaseCacheKey(
                 targetId = request.targetId,
                 bindingLayoutHash = request.bindingLayoutHash,
+                bindingLabel = request.binding.bindingLabel,
+                ownerLabel = request.ownership.ownerLabel,
+                lifetimeClass = request.ownership.lifetimeClass,
+                releasePolicy = request.ownership.releasePolicy,
+                canAliasScratch = request.ownership.canAliasScratch,
                 textureWidth = request.textureDescriptor.width,
                 textureHeight = request.textureDescriptor.height,
                 textureFormat = request.textureDescriptor.format,
@@ -381,14 +393,9 @@ private fun GPUResourceLease.snapshotForUniformSlabCache(): GPUResourceLease =
         evidenceFacts = dumpEvidenceFactsSnapshot,
     )
 
-private fun GPUResourceMaterializationDecision.copyWithResourceLeases(
+private fun GPUResourceMaterializationDecision.Materialized.withResourceLeases(
     leases: List<GPUResourceLease>,
-): GPUResourceMaterializationDecision =
-    when (this) {
-        is GPUResourceMaterializationDecision.Materialized -> copy(resourceLeases = leases)
-        is GPUResourceMaterializationDecision.Refused -> copy(resourceLeases = leases)
-        is GPUResourceMaterializationDecision.Deferred -> this
-    }
+): GPUResourceMaterializationDecision.Materialized = copy(resourceLeases = leases)
 
 private fun GPUResourceMaterializationDecision.payloadEvents(): List<GPUPayloadMaterializationTelemetryEvent> =
     when (this) {

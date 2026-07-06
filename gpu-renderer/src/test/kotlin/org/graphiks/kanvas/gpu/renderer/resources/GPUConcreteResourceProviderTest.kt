@@ -3,6 +3,7 @@ package org.graphiks.kanvas.gpu.renderer.resources
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPayloadFingerprint
@@ -168,6 +169,10 @@ class GPUConcreteResourceProviderTest {
 
         assertEquals(3, first.dumpResourceLeaseSnapshot.size)
         assertEquals(
+            setOf(GPUResourceLeaseCacheResult.Create),
+            first.dumpResourceLeaseSnapshot.map { lease -> lease.cacheResult }.toSet(),
+        )
+        assertEquals(
             listOf("create", "reuse"),
             provider.telemetry.dumpEvents
                 .filter { event -> event.lane == "texture-sampler" }
@@ -176,6 +181,55 @@ class GPUConcreteResourceProviderTest {
         assertEquals(
             setOf(GPUResourceLeaseCacheResult.Reuse),
             second.dumpResourceLeaseSnapshot.map { lease -> lease.cacheResult }.toSet(),
+        )
+        assertFalse(first.dumpResourceLeaseSnapshot.dumpResourceLeaseLines().joinToString("\n").contains("@"))
+        assertFalse(provider.telemetry.dumpLines().joinToString("\n").contains("@"))
+    }
+
+    @Test
+    fun `concrete provider treats texture sampler lease identity changes as create`() {
+        val provider = GPUConcreteResourceProvider()
+        val context = targetPreparationContext()
+        val baseRequest = textureSamplerRequest()
+        provider.materializeTextureSamplerBinding(baseRequest, context)
+
+        val variants = listOf(
+            baseRequest.copy(
+                binding = baseRequest.binding.copy(bindingLabel = "sampled-texture.unit.variant"),
+            ),
+            baseRequest.copy(
+                ownership = baseRequest.ownership.copy(ownerLabel = "texture-owner-variant"),
+            ),
+            baseRequest.copy(
+                ownership = baseRequest.ownership.copy(releasePolicy = "frame-end"),
+            ),
+            baseRequest.copy(
+                expectedResourceGeneration = 1,
+                actualResourceGeneration = 1,
+            ),
+            baseRequest.copy(
+                ownership = baseRequest.ownership.copy(lifetimeClass = "scratch"),
+            ),
+            baseRequest.copy(
+                ownership = baseRequest.ownership.copy(canAliasScratch = true),
+            ),
+        )
+
+        variants.forEach { request ->
+            val materialized = assertIs<GPUResourceMaterializationDecision.Materialized>(
+                provider.materializeTextureSamplerBinding(request, context),
+            )
+            assertEquals(
+                setOf(GPUResourceLeaseCacheResult.Create),
+                materialized.dumpResourceLeaseSnapshot.map { lease -> lease.cacheResult }.toSet(),
+            )
+        }
+
+        assertEquals(
+            listOf("create") + List(variants.size) { "create" },
+            provider.telemetry.dumpEvents
+                .filter { event -> event.lane == "texture-sampler" }
+                .map { event -> event.result },
         )
     }
 
