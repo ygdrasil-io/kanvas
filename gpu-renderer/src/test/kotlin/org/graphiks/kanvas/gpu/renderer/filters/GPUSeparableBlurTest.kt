@@ -91,7 +91,7 @@ class GPUSeparableBlurTest {
     @Test
     fun `quality tier HIGH sigma=10 tap count matches spec ceil sigma 3 2 plus 1`() {
         val taps = SeparableBlurQualityTier.HIGH.tapCount(10f)
-        assertEquals(31, taps, "ceil(10)*3*2+1=31")
+        assertEquals(61, taps, "ceil(10)*3*2+1=61")
     }
 
     @Test

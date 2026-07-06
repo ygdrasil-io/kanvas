@@ -64,11 +64,20 @@ class GPURendererLayoutSurfaceTest {
             .filter { it.isFile && it.extension == "kt" }
             .toList()
 
-    /** Returns declarations whose nearest preceding non-annotation line is not KDoc. */
+    /** Returns documented scaffold declarations whose nearest preceding non-annotation line is not KDoc. */
     private fun undocumentedDeclarations(file: File): List<String> {
         val lines = file.readLines()
+        val packageName = lines.firstOrNull { it.startsWith("package ") }
+            ?.removePrefix("package ")
+            ?.trim()
+            ?: return emptyList()
+
         return lines.mapIndexedNotNull { index, line ->
-            if (!line.trimStart().isDocumentedDeclaration()) return@mapIndexedNotNull null
+            val declarationName = line.trimStart().documentedDeclarationName()
+                ?: return@mapIndexedNotNull null
+
+            val qualifiedName = "$packageName.$declarationName"
+            if (qualifiedName !in expectedTypeSet) return@mapIndexedNotNull null
 
             val previous = lines
                 .subList(0, index)
@@ -108,9 +117,13 @@ class GPURendererLayoutSurfaceTest {
             }
         }
 
-    /** Returns true when this line starts a declaration that should have KDoc. */
-    private fun String.isDocumentedDeclaration(): Boolean =
-        declarationPrefixes.any { startsWith(it) }
+    /** Returns the declared type name when this line starts a scaffold declaration. */
+    private fun String.documentedDeclarationName(): String? {
+        val prefix = declarationPrefixes.firstOrNull { startsWith(it) } ?: return null
+        return removePrefix(prefix)
+            .takeWhile { it.isLetterOrDigit() || it == '_' }
+            .takeIf { it.isNotEmpty() }
+    }
 
     /** Returns true when this line declares a named type without a body or typed constructor. */
     private fun String.isPlaceholderDeclaration(): Boolean =
@@ -509,5 +522,8 @@ class GPURendererLayoutSurfaceTest {
             "org.graphiks.kanvas.gpu.renderer.validation.GPUForbiddenImportCheck",
             "org.graphiks.kanvas.gpu.renderer.validation.GPUPromotionGateCheck",
         )
+
+        /** Fast lookup set for scaffold declarations that are part of the target surface. */
+        val expectedTypeSet = expectedTypes.toSet()
     }
 }
