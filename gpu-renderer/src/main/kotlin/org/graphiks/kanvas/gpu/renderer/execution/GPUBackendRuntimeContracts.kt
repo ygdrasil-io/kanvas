@@ -4,6 +4,7 @@ import org.graphiks.kanvas.gpu.renderer.telemetry.GPUCacheTelemetry
 import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandKind
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceMaterializationDecision
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 
 /** Describes an offscreen surface allocation request for the low-level GPU backend runtime. */
 data class GPUOffscreenTargetRequest(
@@ -61,9 +62,71 @@ data class GPUBackendAdapterSummary(
     val summary: String,
 )
 
+/** Aggregated passive counters for a GPU backend session. */
+data class GPUBackendRuntimeTelemetry(
+    val renderPasses: Long = 0L,
+    val offscreenPasses: Long = 0L,
+    val windowPasses: Long = 0L,
+    val submissions: Long = 0L,
+    val commandBuffers: Long = 0L,
+    val buffersCreated: Long = 0L,
+    val texturesCreated: Long = 0L,
+    val bindGroupsCreated: Long = 0L,
+    val samplersCreated: Long = 0L,
+    val queueWrites: Long = 0L,
+    val uniformSlabsCreated: Long = 0L,
+    val uniformSlabBytesAllocated: Long = 0L,
+    val uniformSlabFallbacks: Long = 0L,
+) {
+    init {
+        require(renderPasses >= 0L) { "GPUBackendRuntimeTelemetry.renderPasses must be non-negative" }
+        require(offscreenPasses >= 0L) { "GPUBackendRuntimeTelemetry.offscreenPasses must be non-negative" }
+        require(windowPasses >= 0L) { "GPUBackendRuntimeTelemetry.windowPasses must be non-negative" }
+        require(submissions >= 0L) { "GPUBackendRuntimeTelemetry.submissions must be non-negative" }
+        require(commandBuffers >= 0L) { "GPUBackendRuntimeTelemetry.commandBuffers must be non-negative" }
+        require(buffersCreated >= 0L) { "GPUBackendRuntimeTelemetry.buffersCreated must be non-negative" }
+        require(texturesCreated >= 0L) { "GPUBackendRuntimeTelemetry.texturesCreated must be non-negative" }
+        require(bindGroupsCreated >= 0L) { "GPUBackendRuntimeTelemetry.bindGroupsCreated must be non-negative" }
+        require(samplersCreated >= 0L) { "GPUBackendRuntimeTelemetry.samplersCreated must be non-negative" }
+        require(queueWrites >= 0L) { "GPUBackendRuntimeTelemetry.queueWrites must be non-negative" }
+        require(uniformSlabsCreated >= 0L) { "GPUBackendRuntimeTelemetry.uniformSlabsCreated must be non-negative" }
+        require(
+            uniformSlabBytesAllocated >= 0L,
+        ) { "GPUBackendRuntimeTelemetry.uniformSlabBytesAllocated must be non-negative" }
+        require(uniformSlabFallbacks >= 0L) { "GPUBackendRuntimeTelemetry.uniformSlabFallbacks must be non-negative" }
+    }
+
+    /** Deterministic diagnostic lines without backend object identities. */
+    fun dumpLines(): List<String> =
+        listOf(
+            "gpu-runtime.telemetry renderPasses=$renderPasses offscreenPasses=$offscreenPasses " +
+                "windowPasses=$windowPasses submissions=$submissions commandBuffers=$commandBuffers " +
+                "buffersCreated=$buffersCreated texturesCreated=$texturesCreated " +
+                "bindGroupsCreated=$bindGroupsCreated samplersCreated=$samplersCreated " +
+                "queueWrites=$queueWrites uniformSlabsCreated=$uniformSlabsCreated " +
+                "uniformSlabBytesAllocated=$uniformSlabBytesAllocated uniformSlabFallbacks=$uniformSlabFallbacks",
+        )
+
+    companion object {
+        val Empty = GPUBackendRuntimeTelemetry()
+    }
+}
+
 /** Owns a GPU backend session that can allocate offscreen and window-backed targets. */
 interface GPUBackendSession : AutoCloseable {
     val adapterInfo: GPUBackendAdapterSummary?
+
+    /** Reports the backend implementation and behavior-affecting limits when known. */
+    val capabilities: GPUCapabilities?
+        get() = null
+
+    /** Reports passive runtime counters emitted by this session. */
+    val runtimeTelemetry: GPUBackendRuntimeTelemetry
+        get() = GPUBackendRuntimeTelemetry.Empty
+
+    /** Reports deterministic runtime telemetry dump lines without backend handles. */
+    val runtimeTelemetryDumpLines: List<String>
+        get() = runtimeTelemetry.dumpLines()
 
     /** Reports live execution-cache counters emitted by this session. */
     val executionCacheTelemetry: List<GPUCacheTelemetry>
@@ -210,6 +273,7 @@ interface GPUBackendRenderRecorder {
         colorFormat: String,
         draws: List<GPUBackendUniformPayloadDraw>,
         blendMode: GPUBlendMode? = null,
+        sourceLabel: String = "fullscreen-uniform-pass",
     )
 
     /** Draws a fullscreen pass with raw uniform bytes per draw, bypassing provider materialization. */

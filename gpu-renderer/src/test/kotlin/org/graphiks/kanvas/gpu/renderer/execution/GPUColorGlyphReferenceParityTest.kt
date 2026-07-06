@@ -24,14 +24,18 @@ class GPUColorGlyphReferenceParityTest {
 
     @Test
     fun `GPU color glyph output matches CPU pixel-exact reference within tolerance`() {
-        val runtime = GPUBackendRuntimeFactory.createOrNull()
-        assumeTrue(runtime != null, "WGPU backend unavailable in current environment")
-
         val atlasResult = GlyphAtlasTextureBuilder().build("AB", fontSize = 48f)
+        assumeTrue(
+            atlasResult is GlyphAtlasTextureResult.Built,
+            "glyph atlas unavailable in current environment: ${(atlasResult as? GlyphAtlasTextureResult.Refused)?.reason}",
+        )
         val built = assertIs<GlyphAtlasTextureResult.Built>(atlasResult)
         val atlas = built.atlas
         val placements = atlas.placements
         assertTrue(placements.size >= 2, "need at least 2 glyph placements for 'A' and 'B'")
+
+        val runtime = GPUBackendRuntimeFactory.createOrNull()
+        assumeTrue(runtime != null, "GPU backend unavailable in current environment")
 
         val layers = listOf(
             LayerInput(

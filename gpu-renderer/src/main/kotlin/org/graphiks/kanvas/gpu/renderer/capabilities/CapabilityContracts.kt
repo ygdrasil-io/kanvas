@@ -35,12 +35,73 @@ data class GPULimitRequirement(
     val affectsValidity: Boolean,
 )
 
+/** Adapter/device limits that affect backend route validity and resource planning. */
+data class GPULimits(
+    val maxTextureDimension2D: Long,
+    val copyBytesPerRowAlignment: Long,
+    val minUniformBufferOffsetAlignment: Long,
+    val source: String = "device.limits",
+) {
+    init {
+        require(maxTextureDimension2D > 0L) { "GPULimits.maxTextureDimension2D must be positive" }
+        require(copyBytesPerRowAlignment > 0L) { "GPULimits.copyBytesPerRowAlignment must be positive" }
+        require(minUniformBufferOffsetAlignment > 0L) {
+            "GPULimits.minUniformBufferOffsetAlignment must be positive"
+        }
+        require(source.isNotBlank()) { "GPULimits.source must not be blank" }
+    }
+
+    /** Converts these limits to deterministic capability facts for diagnostics and evidence dumps. */
+    fun capabilityFacts(evidenceLabel: String): List<GPUCapabilityFact> {
+        require(evidenceLabel.isNotBlank()) { "evidenceLabel must not be blank" }
+        return listOf(
+            GPUCapabilityFact(
+                name = "maxTextureDimension2D",
+                source = source,
+                value = maxTextureDimension2D.toString(),
+                affectsValidity = true,
+                evidenceLabel = evidenceLabel,
+            ),
+            GPUCapabilityFact(
+                name = "copyBytesPerRowAlignment",
+                source = source,
+                value = copyBytesPerRowAlignment.toString(),
+                affectsValidity = true,
+                evidenceLabel = evidenceLabel,
+            ),
+            GPUCapabilityFact(
+                name = "minUniformBufferOffsetAlignment",
+                source = source,
+                value = minUniformBufferOffsetAlignment.toString(),
+                affectsValidity = true,
+                evidenceLabel = evidenceLabel,
+            ),
+        )
+    }
+
+    companion object {
+        /** Builds a limits snapshot from known conservative runtime assumptions. */
+        fun conservative(
+            maxTextureDimension2D: Long,
+            copyBytesPerRowAlignment: Long,
+            minUniformBufferOffsetAlignment: Long,
+        ): GPULimits =
+            GPULimits(
+                maxTextureDimension2D = maxTextureDimension2D,
+                copyBytesPerRowAlignment = copyBytesPerRowAlignment,
+                minUniformBufferOffsetAlignment = minUniformBufferOffsetAlignment,
+                source = "runtime.conservative",
+            )
+    }
+}
+
 /** Capability snapshot for the selected GPU facade implementation. */
 data class GPUCapabilities(
     val implementation: GPUImplementationIdentity,
     val facts: List<GPUCapabilityFact>,
     val knownUnsupportedFacts: List<GPUCapabilityFact> = emptyList(),
     val snapshotId: String,
+    val limits: GPULimits? = null,
 )
 
 /** Diagnostic emitted when capability facts block a route. */

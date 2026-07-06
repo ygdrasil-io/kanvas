@@ -77,9 +77,14 @@ import io.ygdrasil.webgpu.WGPUInstanceBackend
 import io.ygdrasil.webgpu.beginRenderPass
 import io.ygdrasil.webgpu.glfwContextRenderer
 import java.lang.foreign.MemorySegment
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.security.MessageDigest
 import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.runBlocking
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUImplementationIdentity
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPUPipelineKeyPreimage
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPUPipelineKeys
 import org.graphiks.kanvas.gpu.renderer.telemetry.GPUCacheTelemetry
@@ -91,15 +96,89 @@ import org.graphiks.kanvas.gpu.renderer.wgsl.TexturedVerticesDualBlendWgsl
 import org.graphiks.kanvas.gpu.renderer.wgsl.TexturedVerticesColorFilterWgsl
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendFactor
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPayloadFingerprint
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPayloadSlotID
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPayloadUploadPlan
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUResourceBindingBlock
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUResourceBindingSlot
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUUniformPayloadBlock
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUUniformPayloadSlot
+import org.graphiks.kanvas.gpu.renderer.resources.GPUPayloadMaterializationRequest
+import org.graphiks.kanvas.gpu.renderer.resources.GPUPayloadSlabBatchPlan
+import org.graphiks.kanvas.gpu.renderer.resources.GPUPayloadSlabBatchPlanner
+import org.graphiks.kanvas.gpu.renderer.resources.GPUPayloadSlabBatchPlanningResult
+import org.graphiks.kanvas.gpu.renderer.resources.GPUPayloadSlabBatchRequest
+import org.graphiks.kanvas.gpu.renderer.resources.GPUPayloadSlabResourceEvent
+import org.graphiks.kanvas.gpu.renderer.resources.GPUPayloadSlabResourceLedger
+import org.graphiks.kanvas.gpu.renderer.resources.GPUPayloadSlabSlotBinding
 
 private const val COPY_BYTES_PER_ROW_ALIGNMENT: Int = 256
 private const val FULL_SCREEN_TRIANGLE_VERTEX_COUNT: UInt = 3u
+private const val FULLSCREEN_UNIFORM_SLAB_UPLOAD_BUDGET_BYTES = 1_048_576L
+private const val FULLSCREEN_UNIFORM_SLAB_SOURCE_LABEL = "fullscreen-uniform-pass"
+private const val FULLSCREEN_UNIFORM_SLAB_REFUSED_SOURCE_LABEL_FOR_TEST = "fullscreen-uniform-pass@refused"
+private const val MAX_PAYLOAD_SLAB_DUMP_LINES = 256
 private const val RGBA_BYTES_PER_PIXEL: Int = 4
 private const val RECT_COLOR_UNIFORM_SIZE_BYTES: ULong = 16uL
 private const val VERTEX_COLOR_STRIDE_BYTES: Int = 32
 private const val TEXT_ATLAS_VERTEX_STRIDE_BYTES: Int = 16
 private val sessionOrdinalCounter = AtomicLong(0L)
 private val windowRuntimeOrdinalCounter = AtomicLong(0L)
+
+internal object FullscreenUniformSlabTestingHooks {
+    val sourceLabelOverride: ThreadLocal<String?> = ThreadLocal()
+}
+
+internal fun resetFullscreenUniformSlabTestingHooks() {
+    FullscreenUniformSlabTestingHooks.sourceLabelOverride.remove()
+}
+
+internal inline fun <T> withFullscreenUniformSlabRefusedForTesting(block: () -> T): T {
+    val overrides = FullscreenUniformSlabTestingHooks.sourceLabelOverride
+    val previous = overrides.get()
+    overrides.set(FULLSCREEN_UNIFORM_SLAB_REFUSED_SOURCE_LABEL_FOR_TEST)
+    return try {
+        block()
+    } finally {
+        if (previous == null) {
+            overrides.remove()
+        } else {
+            overrides.set(previous)
+        }
+    }
+}
+
+private fun fullscreenUniformSlabSourceLabel(): String =
+    FullscreenUniformSlabTestingHooks.sourceLabelOverride.get() ?: FULLSCREEN_UNIFORM_SLAB_SOURCE_LABEL
+
+internal fun currentFullscreenUniformSlabSourceLabelForTesting(): String = fullscreenUniformSlabSourceLabel()
+
+private fun fullscreenUniformSlabResourceLedgerSourceLabel(
+    sourceLabel: String,
+    planning: GPUPayloadSlabBatchPlanningResult,
+): String {
+    val refusedForUnsafeSourceLabel = planning is GPUPayloadSlabBatchPlanningResult.Refused &&
+        planning.diagnostic.code == "unsupported.payload_slab_dump_unsafe" &&
+        planning.diagnostic.facts["field"] == "sourceLabel"
+    return if (sourceLabel == FULLSCREEN_UNIFORM_SLAB_REFUSED_SOURCE_LABEL_FOR_TEST || refusedForUnsafeSourceLabel) {
+        FULLSCREEN_UNIFORM_SLAB_SOURCE_LABEL
+    } else {
+        sourceLabel
+    }
+}
+
+private fun fullscreenUniformSlabSlotLabel(drawIndex: Int): String = "draw-$drawIndex"
+
+private fun fullscreenPayloadPacketId(drawIndex: Int): String = "fullscreen-packet-$drawIndex"
+
+private fun fullscreenPayloadSlotId(drawIndex: Int): String = "fullscreen-pass:uniform:$drawIndex"
+
+private fun fullscreenResourceSlotId(drawIndex: Int): String = "fullscreen-pass:resource:$drawIndex"
+
+private fun fullscreenPayloadSlabSlotLabel(drawIndex: Int): String =
+    "${fullscreenPayloadPacketId(drawIndex)}:${fullscreenPayloadSlotId(drawIndex)}:${fullscreenResourceSlotId(drawIndex)}"
+
+private fun fullscreenPayloadTargetId(targetId: String): String = "payload-target-${sha256Hex(targetId)}"
 
 internal fun alignCopyBytesPerRow(unpaddedBytesPerRow: Int): Int {
     require(unpaddedBytesPerRow > 0) { "unpaddedBytesPerRow must be positive" }
@@ -245,10 +324,35 @@ private class WgpuBackendSession(
     private val sessionOrdinal = nextSessionOrdinal()
     private val deviceGeneration = sessionDeviceGeneration(sessionOrdinal)
     private val executionCaches = WgpuExecutionCaches(deviceGeneration)
+    private val telemetryRecorder = WgpuBackendRuntimeTelemetryRecorder()
+    private val backendLimits = GPULimits.conservative(
+        maxTextureDimension2D = MAX_TEXTURE_DIMENSION.toLong(),
+        copyBytesPerRowAlignment = COPY_BYTES_PER_ROW_ALIGNMENT.toLong(),
+        minUniformBufferOffsetAlignment = MIN_UNIFORM_BUFFER_OFFSET_ALIGNMENT.toLong(),
+    )
     private var offscreenTargetOrdinalCounter = 0L
 
     override val adapterInfo: GPUBackendAdapterSummary? =
         GPUBackendAdapterSummary(adapterSummary(glfw))
+
+    override val capabilities: GPUCapabilities =
+        GPUCapabilities(
+            implementation = GPUImplementationIdentity(
+                facadeName = "GPU",
+                implementationName = "wgpu4k",
+                adapterName = adapterInfo?.summary ?: "unknown-adapter",
+                deviceName = adapterInfo?.summary ?: "unknown-device",
+            ),
+            facts = backendLimits.capabilityFacts(evidenceLabel = "runtime"),
+            snapshotId = "gpu-runtime-session-$sessionOrdinal",
+            limits = backendLimits,
+        )
+
+    override val runtimeTelemetry: GPUBackendRuntimeTelemetry
+        get() = telemetryRecorder.snapshot()
+
+    override val runtimeTelemetryDumpLines: List<String>
+        get() = telemetryRecorder.dumpLines()
 
     override val executionCacheTelemetry: List<GPUCacheTelemetry>
         get() = executionCaches.cacheTelemetry
@@ -265,10 +369,14 @@ private class WgpuBackendSession(
             queue = glfw.wgpuContext.device.queue,
             request = request,
             executionCaches = executionCaches,
+            telemetryRecorder = telemetryRecorder,
         )
 
     override fun createWindowSurface(binding: GPUNativeSurfaceBinding): GPUBackendWindowSurface =
-        WgpuWindowSurface(binding = binding)
+        WgpuWindowSurface(
+            binding = binding,
+            telemetryRecorder = telemetryRecorder,
+        )
 
     override fun close() {
         try {
@@ -285,6 +393,133 @@ private class WgpuBackendSession(
 }
 
 private const val MAX_TEXTURE_DIMENSION: Int = 8192
+private const val MIN_UNIFORM_BUFFER_OFFSET_ALIGNMENT: Int = 256
+
+private class WgpuBackendRuntimeTelemetryRecorder {
+    private var renderPasses = 0L
+    private var offscreenPasses = 0L
+    private var windowPasses = 0L
+    private var submissions = 0L
+    private var commandBuffers = 0L
+    private var buffersCreated = 0L
+    private var texturesCreated = 0L
+    private var bindGroupsCreated = 0L
+    private var samplersCreated = 0L
+    private var queueWrites = 0L
+    private var uniformSlabsCreated = 0L
+    private var uniformSlabBytesAllocated = 0L
+    private var uniformSlabFallbacks = 0L
+    private val payloadSlabDumpLines = mutableListOf<String>()
+    private val payloadSlabResourceLedger = GPUPayloadSlabResourceLedger(maxEvents = MAX_PAYLOAD_SLAB_DUMP_LINES)
+
+    /** Records one successfully submitted non-presentable render pass. */
+    @Synchronized
+    fun recordOffscreenRenderPass() {
+        renderPasses += 1L
+        offscreenPasses += 1L
+    }
+
+    /** Records one successfully presented window render pass. */
+    @Synchronized
+    fun recordWindowRenderPass() {
+        renderPasses += 1L
+        windowPasses += 1L
+    }
+
+    /** Records one successful queue submission. */
+    @Synchronized
+    fun recordSubmission() {
+        submissions += 1L
+    }
+
+    /** Records one successfully-finished GPU command buffer. */
+    @Synchronized
+    fun recordCommandBufferFinished() {
+        commandBuffers += 1L
+    }
+
+    /** Records one successfully-created GPU buffer. */
+    @Synchronized
+    fun recordBufferCreated() {
+        buffersCreated += 1L
+    }
+
+    /** Records one successfully-created GPU texture. */
+    @Synchronized
+    fun recordTextureCreated() {
+        texturesCreated += 1L
+    }
+
+    /** Records one successfully-created GPU bind group. */
+    @Synchronized
+    fun recordBindGroupCreated() {
+        bindGroupsCreated += 1L
+    }
+
+    /** Records one successfully-created GPU sampler. */
+    @Synchronized
+    fun recordSamplerCreated() {
+        samplersCreated += 1L
+    }
+
+    /** Records one successful buffer write through the GPU queue. */
+    @Synchronized
+    fun recordQueueWrite() {
+        queueWrites += 1L
+    }
+
+    /** Records one fullscreen uniform slab allocation after successful writes. */
+    @Synchronized
+    fun recordUniformSlabCreated(bytesAllocated: Long) {
+        uniformSlabsCreated += 1L
+        uniformSlabBytesAllocated += bytesAllocated
+    }
+
+    /** Records one fullscreen uniform slab fallback for a refused pass plan. */
+    @Synchronized
+    fun recordUniformSlabFallback() {
+        uniformSlabFallbacks += 1L
+    }
+
+    /** Records accepted fullscreen payload slab planning evidence without changing counters. */
+    @Synchronized
+    fun recordPayloadSlabBatchPlan(plan: GPUPayloadSlabBatchPlan) {
+        payloadSlabDumpLines += plan.dumpLines()
+        while (payloadSlabDumpLines.size > MAX_PAYLOAD_SLAB_DUMP_LINES) {
+            payloadSlabDumpLines.removeAt(0)
+        }
+    }
+
+    /** Records backend-neutral payload slab planning/fallback evidence without changing counters. */
+    @Synchronized
+    fun recordPayloadSlabResourceEvent(event: GPUPayloadSlabResourceEvent) {
+        payloadSlabResourceLedger.record(event)
+    }
+
+    /** Returns an immutable point-in-time telemetry snapshot. */
+    @Synchronized
+    fun snapshot(): GPUBackendRuntimeTelemetry =
+        GPUBackendRuntimeTelemetry(
+            renderPasses = renderPasses,
+            offscreenPasses = offscreenPasses,
+            windowPasses = windowPasses,
+            submissions = submissions,
+            commandBuffers = commandBuffers,
+            buffersCreated = buffersCreated,
+            texturesCreated = texturesCreated,
+            bindGroupsCreated = bindGroupsCreated,
+            samplersCreated = samplersCreated,
+            queueWrites = queueWrites,
+            uniformSlabsCreated = uniformSlabsCreated,
+            uniformSlabBytesAllocated = uniformSlabBytesAllocated,
+            uniformSlabFallbacks = uniformSlabFallbacks,
+        )
+
+    /** Returns telemetry counters followed by deterministic payload slab planning evidence. */
+    @Synchronized
+    fun dumpLines(): List<String> =
+        snapshot().dumpLines() + payloadSlabDumpLines.toList() + payloadSlabResourceLedger.dumpLines()
+}
 
 private class WgpuOffscreenTarget(
     private val sessionOrdinal: Long,
@@ -294,6 +529,7 @@ private class WgpuOffscreenTarget(
     private val queue: GPUQueue,
     private val request: GPUOffscreenTargetRequest,
     private val executionCaches: WgpuExecutionCaches,
+    private val telemetryRecorder: WgpuBackendRuntimeTelemetryRecorder,
 ) : GPUBackendOffscreenTarget {
     private val safeWidth = request.width.coerceAtMost(MAX_TEXTURE_DIMENSION)
     private val safeHeight = request.height.coerceAtMost(MAX_TEXTURE_DIMENSION)
@@ -302,7 +538,7 @@ private class WgpuOffscreenTarget(
     private val tightBytesPerRow = safeWidth * bytesPerPixel
     private val paddedBytesPerRow = alignCopyBytesPerRow(tightBytesPerRow)
     private val stagingSize = (paddedBytesPerRow.toLong() * safeHeight.toLong()).toULong()
-    private val texture = device.createTexture(
+    private val texture = createTrackedTexture(
         TextureDescriptor(
             size = Extent3D(width = safeWidth.toUInt(), height = safeHeight.toUInt()),
             format = format,
@@ -310,7 +546,7 @@ private class WgpuOffscreenTarget(
             label = "GPUBackend.offscreen.color",
         ),
     )
-    private val depthStencilTexture = device.createTexture(
+    private val depthStencilTexture = createTrackedTexture(
         TextureDescriptor(
             size = Extent3D(width = safeWidth.toUInt(), height = safeHeight.toUInt()),
             format = GPUTextureFormat.Depth24PlusStencil8,
@@ -319,7 +555,7 @@ private class WgpuOffscreenTarget(
         ),
     )
     private val depthStencilView = depthStencilTexture.createView()
-    private val stagingBuffer = device.createBuffer(
+    private val stagingBuffer = createTrackedBuffer(
         BufferDescriptor(
             size = stagingSize,
             usage = GPUBufferUsage.MapRead or GPUBufferUsage.CopyDst,
@@ -329,6 +565,8 @@ private class WgpuOffscreenTarget(
     )
     private val vertexBuffers = mutableMapOf<String, Pair<GPUBuffer, Int>>()
     private val offscreenTextures = mutableMapOf<String, GPUTexture>()
+    private val frameOrdinalCounter = AtomicLong(0L)
+    private val textureFrameOrdinalCounter = AtomicLong(0L)
 
     override val target: GPUSurfaceTarget =
         GPUSurfaceTarget(
@@ -349,10 +587,28 @@ private class WgpuOffscreenTarget(
             deviceGeneration = deviceGeneration,
         )
 
+    private fun createTrackedTexture(descriptor: TextureDescriptor): GPUTexture {
+        val texture = device.createTexture(descriptor)
+        telemetryRecorder.recordTextureCreated()
+        return texture
+    }
+
+    private fun createTrackedBuffer(descriptor: BufferDescriptor): GPUBuffer {
+        val buffer = device.createBuffer(descriptor)
+        telemetryRecorder.recordBufferCreated()
+        return buffer
+    }
+
+    private fun writeTrackedBuffer(buffer: GPUBuffer, offset: ULong, data: ArrayBuffer) {
+        queue.writeBuffer(buffer, offset, data)
+        telemetryRecorder.recordQueueWrite()
+    }
+
     override fun encode(
         clearColor: GPUClearColor,
         block: GPUBackendRenderRecorder.() -> Unit,
     ) {
+        val frameOrdinal = frameOrdinalCounter.incrementAndGet()
         GPUResourceScope().use { resources ->
             val view = resources.track(texture.createView()) { it.close() }
             val encoder = resources.trackIfAutoCloseable(device.createCommandEncoder())
@@ -377,11 +633,16 @@ private class WgpuOffscreenTarget(
                 ),
             ) {
                 val recorder = WgpuRenderRecorder(
+                    deviceGeneration = deviceGeneration,
                     device = device,
                     queue = queue,
+                    targetId = target.targetId,
+                    frameId = "offscreen-$sessionOrdinal-$offscreenTargetOrdinal-frame-$frameOrdinal",
+                    budgetClass = "runtime-fullscreen",
                     targetFormat = format,
                     resourceScope = resources,
                     executionCaches = executionCaches,
+                    telemetryRecorder = telemetryRecorder,
                     setPipelineAction = { pipeline -> setPipeline(pipeline) },
                     setBindGroupAction = { index, bindGroup -> setBindGroup(index, bindGroup) },
                     setScissorAction = { x: UInt, y: UInt, width: UInt, height: UInt ->
@@ -416,7 +677,10 @@ private class WgpuOffscreenTarget(
                 copySize = Extent3D(width = safeWidth.toUInt(), height = safeHeight.toUInt()),
             )
             val commandBuffer = resources.trackIfAutoCloseable(encoder.finish())
+            telemetryRecorder.recordCommandBufferFinished()
             queue.submit(listOf(commandBuffer))
+            telemetryRecorder.recordSubmission()
+            telemetryRecorder.recordOffscreenRenderPass()
         }
     }
 
@@ -443,14 +707,14 @@ private class WgpuOffscreenTarget(
         val label = "vertexBuffer:${data.contentHashCode()}:${vertexBuffers.size}"
         if (label in vertexBuffers) return label
         val byteSize = (data.size * 4).toULong()
-        val buffer = device.createBuffer(
+        val buffer = createTrackedBuffer(
             BufferDescriptor(
                 size = byteSize,
                 usage = GPUBufferUsage.Vertex or GPUBufferUsage.CopyDst,
                 label = label,
             ),
         )
-        queue.writeBuffer(buffer, 0uL, ArrayBuffer.of(data))
+        writeTrackedBuffer(buffer, 0uL, ArrayBuffer.of(data))
         vertexBuffers[label] = buffer to data.size
         return label
     }
@@ -466,7 +730,7 @@ private class WgpuOffscreenTarget(
         val safeH = textureDesc.height.coerceAtMost(MAX_TEXTURE_DIMENSION)
         val label = "offscreenTex:${textureDesc.width}x${textureDesc.height}:${textureDesc.format}"
         if (label in offscreenTextures) return label
-        val tex = device.createTexture(
+        val tex = createTrackedTexture(
             TextureDescriptor(
                 size = Extent3D(width = safeW.toUInt(), height = safeH.toUInt()),
                 format = textureDesc.format.toWgpuTextureFormat(),
@@ -506,12 +770,13 @@ private class WgpuOffscreenTarget(
         resources: GPUResourceScope,
         block: (WgpuRenderRecorder) -> Unit,
     ) {
+        val textureFrameOrdinal = textureFrameOrdinalCounter.incrementAndGet()
         val tex = offscreenTexture(textureLabel)
         val texView = resources.track(tex.createView()) { it.close() }
         val texWidth = tex.width
         val texHeight = tex.height
         val dsTex = resources.track(
-            device.createTexture(
+            createTrackedTexture(
                 TextureDescriptor(
                     size = Extent3D(width = texWidth, height = texHeight),
                     format = GPUTextureFormat.Depth24PlusStencil8,
@@ -543,11 +808,16 @@ private class WgpuOffscreenTarget(
             ),
         ) {
             val recorder = WgpuRenderRecorder(
+                deviceGeneration = deviceGeneration,
                 device = device,
                 queue = queue,
+                targetId = "${target.targetId}:$textureLabel",
+                frameId = "offscreen-texture-$textureLabel-frame-$textureFrameOrdinal",
+                budgetClass = "runtime-fullscreen",
                 targetFormat = textureFormat,
                 resourceScope = resources,
                 executionCaches = executionCaches,
+                telemetryRecorder = telemetryRecorder,
                 setPipelineAction = { pipeline -> setPipeline(pipeline) },
                 setBindGroupAction = { index, bindGroup -> setBindGroup(index, bindGroup) },
                 setScissorAction = { x: UInt, y: UInt, width: UInt, height: UInt ->
@@ -574,7 +844,10 @@ private class WgpuOffscreenTarget(
             end()
         }
         val commandBuffer = resources.trackIfAutoCloseable(encoder.finish())
+        telemetryRecorder.recordCommandBufferFinished()
         queue.submit(listOf(commandBuffer))
+        telemetryRecorder.recordSubmission()
+        telemetryRecorder.recordOffscreenRenderPass()
     }
 
     override fun close() {
@@ -599,6 +872,7 @@ private class WgpuOffscreenTarget(
 
 private class WgpuWindowSurface(
     binding: GPUNativeSurfaceBinding,
+    private val telemetryRecorder: WgpuBackendRuntimeTelemetryRecorder,
 ) : GPUBackendWindowSurface {
     private val windowRuntimeOrdinal = nextWindowRuntimeOrdinal()
     private val deviceGeneration = windowSurfaceDeviceGeneration(windowRuntimeOrdinal)
@@ -608,6 +882,7 @@ private class WgpuWindowSurface(
     private var width = binding.width
     private var height = binding.height
     private var targetGeneration = 0L
+    private val frameOrdinalCounter = AtomicLong(0L)
 
     override val adapterInfo: GPUBackendAdapterSummary
         get() = runtime.adapterInfo
@@ -657,6 +932,7 @@ private class WgpuWindowSurface(
             SurfaceTextureStatus.timeout -> Unit
         }
 
+        val frameOrdinal = frameOrdinalCounter.incrementAndGet()
         GPUResourceScope().use { resources ->
             val view = resources.track(surfaceTexture.texture.createView(null)) { it.close() }
             val encoder = resources.trackIfAutoCloseable(runtime.device.createCommandEncoder())
@@ -673,11 +949,16 @@ private class WgpuWindowSurface(
                 ),
             ) {
                 val recorder = WgpuRenderRecorder(
+                    deviceGeneration = deviceGeneration,
                     device = runtime.device,
                     queue = runtime.device.queue,
+                    targetId = targetId,
+                    frameId = "window-$windowRuntimeOrdinal-frame-$targetGeneration-$frameOrdinal",
+                    budgetClass = "runtime-fullscreen",
                     targetFormat = runtime.format,
                     resourceScope = resources,
                     executionCaches = executionCaches,
+                    telemetryRecorder = telemetryRecorder,
                     setPipelineAction = { pipeline -> setPipeline(pipeline) },
                     setBindGroupAction = { index, bindGroup -> setBindGroup(index, bindGroup) },
                     setScissorAction = { x, y, surfaceWidth, surfaceHeight -> setScissorRect(x, y, surfaceWidth, surfaceHeight) },
@@ -696,8 +977,11 @@ private class WgpuWindowSurface(
                 end()
             }
             val commandBuffer = resources.trackIfAutoCloseable(encoder.finish())
+            telemetryRecorder.recordCommandBufferFinished()
             runtime.device.queue.submit(listOf(commandBuffer))
+            telemetryRecorder.recordSubmission()
             runtime.surface.present()
+            telemetryRecorder.recordWindowRenderPass()
         }
         return true
     }
@@ -712,11 +996,16 @@ private class WgpuWindowSurface(
 }
 
 private class WgpuRenderRecorder(
+    private val deviceGeneration: GPUDeviceGeneration,
     private val device: GPUDevice,
     private val queue: GPUQueue,
+    private val targetId: String,
+    private val frameId: String,
+    private val budgetClass: String,
     private val targetFormat: GPUTextureFormat,
     private val resourceScope: GPUResourceScope,
     private val executionCaches: WgpuExecutionCaches,
+    private val telemetryRecorder: WgpuBackendRuntimeTelemetryRecorder,
     private val setPipelineAction: (GPURenderPipeline) -> Unit,
     private val setBindGroupAction: (UInt, GPUBindGroup) -> Unit,
     private val setScissorAction: (UInt, UInt, UInt, UInt) -> Unit,
@@ -726,13 +1015,14 @@ private class WgpuRenderRecorder(
     private val setIndexBufferAction: (GPUBuffer, GPUIndexFormat) -> Unit,
     private val drawIndexedAction: (UInt) -> Unit,
     private val offscreenTextureStore: MutableMap<String, GPUTexture>,
-    ) : GPUBackendRenderRecorder {
+) : GPUBackendRenderRecorder {
     private val vertexBufferStore = mutableMapOf<String, Pair<GPUBuffer, Int>>()
     private val vertexColorIndexStore = mutableMapOf<String, IntArray>()
     private var texturedVertexPipelineCache = mutableMapOf<String, GPURenderPipeline>()
     private var texturedVertexBindGroupLayout: GPUBindGroupLayout? = null
     private var dualUVVertexPipelineCache = mutableMapOf<String, GPURenderPipeline>()
     private var dualUVVertexBindGroupLayout: GPUBindGroupLayout? = null
+    private val payloadTargetId = fullscreenPayloadTargetId(targetId)
 
     fun closeCachedResources() {
         texturedVertexBindGroupLayout?.let { closeQuietly { it.close() } }
@@ -749,6 +1039,35 @@ private class WgpuRenderRecorder(
         try { block() } catch (_: Throwable) { }
     }
 
+    private fun createTrackedBuffer(descriptor: BufferDescriptor): GPUBuffer {
+        val buffer = device.createBuffer(descriptor)
+        telemetryRecorder.recordBufferCreated()
+        return buffer
+    }
+
+    private fun createTrackedTexture(descriptor: TextureDescriptor): GPUTexture {
+        val texture = device.createTexture(descriptor)
+        telemetryRecorder.recordTextureCreated()
+        return texture
+    }
+
+    private fun createTrackedBindGroup(descriptor: BindGroupDescriptor): GPUBindGroup {
+        val bindGroup = device.createBindGroup(descriptor)
+        telemetryRecorder.recordBindGroupCreated()
+        return bindGroup
+    }
+
+    private fun createTrackedSampler(descriptor: SamplerDescriptor): GPUSampler {
+        val sampler = device.createSampler(descriptor)
+        telemetryRecorder.recordSamplerCreated()
+        return sampler
+    }
+
+    private fun writeTrackedBuffer(buffer: GPUBuffer, offset: ULong, data: ArrayBuffer) {
+        queue.writeBuffer(buffer, offset, data)
+        telemetryRecorder.recordQueueWrite()
+    }
+
     override fun drawFullscreenPass(
         wgsl: String,
         colorFormat: String,
@@ -758,9 +1077,10 @@ private class WgpuRenderRecorder(
         recordFullscreenUniformPass(
             wgsl = wgsl,
             colorFormat = colorFormat,
-            draws = draws.map { draw ->
+            draws = draws.mapIndexed { index, draw ->
                 WgpuFullscreenUniformDraw(
-                    uniformPayload = ArrayBuffer.of(draw.rgbaPremul),
+                    slotLabel = fullscreenUniformSlabSlotLabel(index),
+                    uniformBytes = packFloatArray(draw.rgbaPremul),
                     uniformSizeBytes = RECT_COLOR_UNIFORM_SIZE_BYTES,
                     scissorX = draw.scissorX,
                     scissorY = draw.scissorY,
@@ -769,6 +1089,7 @@ private class WgpuRenderRecorder(
                 )
             },
             blendMode = blendMode,
+            sourceLabel = fullscreenUniformSlabSourceLabel(),
         )
     }
 
@@ -777,14 +1098,16 @@ private class WgpuRenderRecorder(
         colorFormat: String,
         draws: List<GPUBackendUniformPayloadDraw>,
         blendMode: GPUBlendMode?,
+        sourceLabel: String,
     ) {
         recordFullscreenUniformPass(
             wgsl = wgsl,
             colorFormat = colorFormat,
-            draws = draws.map { draw ->
+            draws = draws.mapIndexed { index, draw ->
                 val uniformBytes = draw.uniformBytes()
                 WgpuFullscreenUniformDraw(
-                    uniformPayload = ArrayBuffer.of(uniformBytes),
+                    slotLabel = fullscreenUniformSlabSlotLabel(index),
+                    uniformBytes = uniformBytes,
                     uniformSizeBytes = draw.materializedUniformByteSize.toULong(),
                     scissorX = draw.scissorX,
                     scissorY = draw.scissorY,
@@ -793,6 +1116,7 @@ private class WgpuRenderRecorder(
                 )
             },
             blendMode = blendMode,
+            sourceLabel = sourceLabel,
         )
     }
 
@@ -805,9 +1129,10 @@ private class WgpuRenderRecorder(
         recordFullscreenUniformPass(
             wgsl = wgsl,
             colorFormat = colorFormat,
-            draws = draws.map { draw ->
+            draws = draws.mapIndexed { index, draw ->
                 WgpuFullscreenUniformDraw(
-                    uniformPayload = ArrayBuffer.of(draw.uniformBytes),
+                    slotLabel = fullscreenUniformSlabSlotLabel(index),
+                    uniformBytes = draw.uniformBytes,
                     uniformSizeBytes = draw.uniformBytes.size.toULong(),
                     scissorX = draw.scissorX,
                     scissorY = draw.scissorY,
@@ -836,9 +1161,10 @@ private class WgpuRenderRecorder(
             textureWidth = textureWidth,
             textureHeight = textureHeight,
             textureFormat = textureFormat,
-            draws = draws.map { draw ->
+            draws = draws.mapIndexed { index, draw ->
                 WgpuFullscreenUniformDraw(
-                    uniformPayload = ArrayBuffer.of(draw.uniformBytes),
+                    slotLabel = fullscreenUniformSlabSlotLabel(index),
+                    uniformBytes = draw.uniformBytes,
                     uniformSizeBytes = draw.uniformBytes.size.toULong(),
                     scissorX = draw.scissorX,
                     scissorY = draw.scissorY,
@@ -870,9 +1196,10 @@ private class WgpuRenderRecorder(
             }
             GPUBackendStencilMode.Test -> {
                 require(draws.isNotEmpty()) { "draws required for stencil test mode" }
-                recordStencilTestPass(wgsl = wgsl, colorFormat = colorFormat, draws = draws.map { draw ->
+                recordStencilTestPass(wgsl = wgsl, colorFormat = colorFormat, draws = draws.mapIndexed { index, draw ->
                     WgpuFullscreenUniformDraw(
-                        uniformPayload = ArrayBuffer.of(draw.uniformBytes),
+                        slotLabel = fullscreenUniformSlabSlotLabel(index),
+                        uniformBytes = draw.uniformBytes,
                         uniformSizeBytes = draw.uniformBytes.size.toULong(),
                         scissorX = draw.scissorX,
                         scissorY = draw.scissorY,
@@ -889,7 +1216,7 @@ private class WgpuRenderRecorder(
         if (label in vertexBufferStore) return label
         val byteSize = (data.vertexData.size * 4).toULong()
         val buffer = resourceScope.track(
-            device.createBuffer(
+            createTrackedBuffer(
                 BufferDescriptor(
                     size = byteSize,
                     usage = GPUBufferUsage.Vertex or GPUBufferUsage.CopyDst,
@@ -897,7 +1224,7 @@ private class WgpuRenderRecorder(
                 ),
             ),
         ) { it.close() }
-        queue.writeBuffer(buffer, 0uL, ArrayBuffer.of(data.vertexData))
+        writeTrackedBuffer(buffer, 0uL, ArrayBuffer.of(data.vertexData))
         vertexBufferStore[label] = buffer to data.vertexCount
         vertexColorIndexStore[label] = data.indices
         return label
@@ -923,7 +1250,7 @@ private class WgpuRenderRecorder(
         }
         val indexByteSize = (indices.size * 4).toULong()
         val indexBuffer = resourceScope.track(
-            device.createBuffer(
+            createTrackedBuffer(
                 BufferDescriptor(
                     size = indexByteSize,
                     usage = GPUBufferUsage.Index or GPUBufferUsage.CopyDst,
@@ -931,7 +1258,7 @@ private class WgpuRenderRecorder(
                 ),
             ),
         ) { it.close() }
-        queue.writeBuffer(indexBuffer, 0uL, ArrayBuffer.of(indices))
+        writeTrackedBuffer(indexBuffer, 0uL, ArrayBuffer.of(indices))
 
         val vertexWgsl = VERTEX_COLOR_WGSL
         val keys = stencilExecutionCacheKeys(wgsl = vertexWgsl, targetFormat = targetFormat, vertexStage = true, blendMode = blendMode)
@@ -949,7 +1276,7 @@ private class WgpuRenderRecorder(
         )
 
         val uniform = resourceScope.track(
-            device.createBuffer(
+            createTrackedBuffer(
                 BufferDescriptor(
                     size = uniformDraw.uniformBytes.size.toULong(),
                     usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
@@ -957,9 +1284,9 @@ private class WgpuRenderRecorder(
                 ),
             ),
         ) { it.close() }
-        queue.writeBuffer(uniform, 0uL, ArrayBuffer.of(uniformDraw.uniformBytes))
+        writeTrackedBuffer(uniform, 0uL, ArrayBuffer.of(uniformDraw.uniformBytes))
         val bindGroup = resourceScope.track(
-            device.createBindGroup(
+            createTrackedBindGroup(
                 BindGroupDescriptor(
                     layout = bindGroupLayout,
                     entries = listOf(
@@ -987,7 +1314,7 @@ private class WgpuRenderRecorder(
         if (label in vertexBufferStore) return label
         val byteSize = (data.vertexData.size * 4).toULong()
         val buffer = resourceScope.track(
-            device.createBuffer(
+            createTrackedBuffer(
                 BufferDescriptor(
                     size = byteSize,
                     usage = GPUBufferUsage.Vertex or GPUBufferUsage.CopyDst,
@@ -995,7 +1322,7 @@ private class WgpuRenderRecorder(
                 ),
             ),
         ) { it.close() }
-        queue.writeBuffer(buffer, 0uL, ArrayBuffer.of(data.vertexData))
+        writeTrackedBuffer(buffer, 0uL, ArrayBuffer.of(data.vertexData))
         vertexBufferStore[label] = buffer to data.vertexCount
         vertexColorIndexStore[label] = data.indices
         return label
@@ -1020,7 +1347,7 @@ private class WgpuRenderRecorder(
         }
         val indexByteSize = (indices.size * 4).toULong()
         val indexBuffer = resourceScope.track(
-            device.createBuffer(
+            createTrackedBuffer(
                 BufferDescriptor(
                     size = indexByteSize,
                     usage = GPUBufferUsage.Index or GPUBufferUsage.CopyDst,
@@ -1028,11 +1355,11 @@ private class WgpuRenderRecorder(
                 ),
             ),
         ) { it.close() }
-        queue.writeBuffer(indexBuffer, 0uL, ArrayBuffer.of(indices))
+        writeTrackedBuffer(indexBuffer, 0uL, ArrayBuffer.of(indices))
 
         val texture = createTexture(textureRgba, textureWidth, textureHeight, textureFormat)
         val sampler = resourceScope.track(
-            device.createSampler(
+            createTrackedSampler(
                 SamplerDescriptor(
                     addressModeU = GPUAddressMode.ClampToEdge,
                     addressModeV = GPUAddressMode.ClampToEdge,
@@ -1047,7 +1374,7 @@ private class WgpuRenderRecorder(
 
         val bindGroupLayout = getOrCreateTexturedVertexBindGroupLayout()
         val bindGroup = resourceScope.track(
-            device.createBindGroup(
+            createTrackedBindGroup(
                 BindGroupDescriptor(
                     label = "texturedVertex:$vertexBufferLabel",
                     layout = bindGroupLayout,
@@ -1095,7 +1422,7 @@ private class WgpuRenderRecorder(
         }
         val indexByteSize = (indices.size * 4).toULong()
         val indexBuffer = resourceScope.track(
-            device.createBuffer(
+            createTrackedBuffer(
                 BufferDescriptor(
                     size = indexByteSize,
                     usage = GPUBufferUsage.Index or GPUBufferUsage.CopyDst,
@@ -1103,12 +1430,12 @@ private class WgpuRenderRecorder(
                 ),
             ),
         ) { it.close() }
-        queue.writeBuffer(indexBuffer, 0uL, ArrayBuffer.of(indices))
+        writeTrackedBuffer(indexBuffer, 0uL, ArrayBuffer.of(indices))
 
         val tex1 = createTexture(texture1Rgba, texture1Width, texture1Height, textureFormat)
         val tex2 = createTexture(texture2Rgba, texture2Width, texture2Height, textureFormat)
         val sampler = resourceScope.track(
-            device.createSampler(
+            createTrackedSampler(
                 SamplerDescriptor(
                     addressModeU = GPUAddressMode.ClampToEdge,
                     addressModeV = GPUAddressMode.ClampToEdge,
@@ -1124,7 +1451,7 @@ private class WgpuRenderRecorder(
 
         val bindGroupLayout = getOrCreateDualUVVertexBindGroupLayout()
         val bindGroup = resourceScope.track(
-            device.createBindGroup(
+            createTrackedBindGroup(
                 BindGroupDescriptor(
                     label = "dualVertex:$vertexBufferLabel",
                     layout = bindGroupLayout,
@@ -1160,7 +1487,7 @@ private class WgpuRenderRecorder(
         val label = "offscreenTex:${texture.width}x${texture.height}:${texture.format}"
         if (label in offscreenTextureStore) return label
         val tex = resourceScope.track(
-            device.createTexture(
+            createTrackedTexture(
                 TextureDescriptor(
                     size = Extent3D(width = safeW.toUInt(), height = safeH.toUInt()),
                     format = texture.format.toWgpuTextureFormat(),
@@ -1221,7 +1548,7 @@ private class WgpuRenderRecorder(
         )
 
         val atlasTexture = resourceScope.track(
-            device.createTexture(
+            createTrackedTexture(
                 TextureDescriptor(
                     size = Extent3D(width = atlasWidth.toUInt(), height = atlasHeight.toUInt()),
                     format = textureFormat,
@@ -1252,7 +1579,7 @@ private class WgpuRenderRecorder(
         )
         val atlasView = resourceScope.track(atlasTexture.createView()) { it.close() }
         val sampler = resourceScope.track(
-            device.createSampler(
+            createTrackedSampler(
                 SamplerDescriptor(
                     addressModeU = GPUAddressMode.ClampToEdge,
                     addressModeV = GPUAddressMode.ClampToEdge,
@@ -1263,7 +1590,7 @@ private class WgpuRenderRecorder(
         ) { it.close() }
 
         val vertexBuffer = resourceScope.track(
-            device.createBuffer(
+            createTrackedBuffer(
                 BufferDescriptor(
                     size = (vertexData.size * 4).toULong(),
                     usage = GPUBufferUsage.Vertex or GPUBufferUsage.CopyDst,
@@ -1271,10 +1598,10 @@ private class WgpuRenderRecorder(
                 ),
             ),
         ) { it.close() }
-        queue.writeBuffer(vertexBuffer, 0uL, ArrayBuffer.of(vertexData))
+        writeTrackedBuffer(vertexBuffer, 0uL, ArrayBuffer.of(vertexData))
 
         val indexBuffer = resourceScope.track(
-            device.createBuffer(
+            createTrackedBuffer(
                 BufferDescriptor(
                     size = (indexData.size * 4).toULong(),
                     usage = GPUBufferUsage.Index or GPUBufferUsage.CopyDst,
@@ -1282,12 +1609,12 @@ private class WgpuRenderRecorder(
                 ),
             ),
         ) { it.close() }
-        queue.writeBuffer(indexBuffer, 0uL, ArrayBuffer.of(indexData))
+        writeTrackedBuffer(indexBuffer, 0uL, ArrayBuffer.of(indexData))
 
         setPipelineAction(pipeline)
         draws.forEach { draw ->
             val uniform = resourceScope.track(
-                device.createBuffer(
+                createTrackedBuffer(
                     BufferDescriptor(
                         size = draw.uniformBytes.size.toULong(),
                         usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
@@ -1295,9 +1622,9 @@ private class WgpuRenderRecorder(
                     ),
                 ),
             ) { it.close() }
-            queue.writeBuffer(uniform, 0uL, ArrayBuffer.of(draw.uniformBytes))
+            writeTrackedBuffer(uniform, 0uL, ArrayBuffer.of(draw.uniformBytes))
             val bindGroup = resourceScope.track(
-                device.createBindGroup(
+                createTrackedBindGroup(
                     BindGroupDescriptor(
                         layout = bindGroupLayout,
                         entries = listOf(
@@ -1307,7 +1634,7 @@ private class WgpuRenderRecorder(
                 ),
             ) { it.close() }
             val textureBindGroup = resourceScope.track(
-                device.createBindGroup(
+                createTrackedBindGroup(
                     BindGroupDescriptor(
                         layout = textureBindGroupLayout,
                         entries = listOf(
@@ -1372,7 +1699,7 @@ private class WgpuRenderRecorder(
         )
 
         val atlasTexture = resourceScope.track(
-            device.createTexture(
+            createTrackedTexture(
                 TextureDescriptor(
                     size = Extent3D(width = atlasWidth.toUInt(), height = atlasHeight.toUInt()),
                     format = textureFormat,
@@ -1403,7 +1730,7 @@ private class WgpuRenderRecorder(
         )
         val atlasView = resourceScope.track(atlasTexture.createView()) { it.close() }
         val sampler = resourceScope.track(
-            device.createSampler(
+            createTrackedSampler(
                 SamplerDescriptor(
                     addressModeU = GPUAddressMode.ClampToEdge,
                     addressModeV = GPUAddressMode.ClampToEdge,
@@ -1414,7 +1741,7 @@ private class WgpuRenderRecorder(
         ) { it.close() }
 
         val vertexBuffer = resourceScope.track(
-            device.createBuffer(
+            createTrackedBuffer(
                 BufferDescriptor(
                     size = (vertexData.size * 4).toULong(),
                     usage = GPUBufferUsage.Vertex or GPUBufferUsage.CopyDst,
@@ -1422,10 +1749,10 @@ private class WgpuRenderRecorder(
                 ),
             ),
         ) { it.close() }
-        queue.writeBuffer(vertexBuffer, 0uL, ArrayBuffer.of(vertexData))
+        writeTrackedBuffer(vertexBuffer, 0uL, ArrayBuffer.of(vertexData))
 
         val indexBuffer = resourceScope.track(
-            device.createBuffer(
+            createTrackedBuffer(
                 BufferDescriptor(
                     size = (indexData.size * 4).toULong(),
                     usage = GPUBufferUsage.Index or GPUBufferUsage.CopyDst,
@@ -1433,12 +1760,12 @@ private class WgpuRenderRecorder(
                 ),
             ),
         ) { it.close() }
-        queue.writeBuffer(indexBuffer, 0uL, ArrayBuffer.of(indexData))
+        writeTrackedBuffer(indexBuffer, 0uL, ArrayBuffer.of(indexData))
 
         setPipelineAction(pipeline)
         draws.forEach { draw ->
             val uniform = resourceScope.track(
-                device.createBuffer(
+                createTrackedBuffer(
                     BufferDescriptor(
                         size = draw.uniformBytes.size.toULong(),
                         usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
@@ -1446,9 +1773,9 @@ private class WgpuRenderRecorder(
                     ),
                 ),
             ) { it.close() }
-            queue.writeBuffer(uniform, 0uL, ArrayBuffer.of(draw.uniformBytes))
+            writeTrackedBuffer(uniform, 0uL, ArrayBuffer.of(draw.uniformBytes))
             val bindGroup = resourceScope.track(
-                device.createBindGroup(
+                createTrackedBindGroup(
                     BindGroupDescriptor(
                         layout = bindGroupLayout,
                         entries = listOf(
@@ -1458,7 +1785,7 @@ private class WgpuRenderRecorder(
                 ),
             ) { it.close() }
             val textureBindGroup = resourceScope.track(
-                device.createBindGroup(
+                createTrackedBindGroup(
                     BindGroupDescriptor(
                         layout = textureBindGroupLayout,
                         entries = listOf(
@@ -1528,7 +1855,7 @@ private class WgpuRenderRecorder(
 
         val textureView = resourceScope.track(tex.createView()) { it.close() }
         val sampler = resourceScope.track(
-            device.createSampler(
+            createTrackedSampler(
                 SamplerDescriptor(
                     addressModeU = GPUAddressMode.ClampToEdge,
                     addressModeV = GPUAddressMode.ClampToEdge,
@@ -1541,7 +1868,7 @@ private class WgpuRenderRecorder(
         setPipelineAction(pipeline)
         draws.forEach { draw ->
             val uniform = resourceScope.track(
-                device.createBuffer(
+                createTrackedBuffer(
                     BufferDescriptor(
                         size = draw.uniformBytes.size.toULong(),
                         usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
@@ -1549,9 +1876,9 @@ private class WgpuRenderRecorder(
                     ),
                 ),
             ) { it.close() }
-            queue.writeBuffer(uniform, 0uL, ArrayBuffer.of(draw.uniformBytes))
+            writeTrackedBuffer(uniform, 0uL, ArrayBuffer.of(draw.uniformBytes))
             val bindGroup = resourceScope.track(
-                device.createBindGroup(
+                createTrackedBindGroup(
                     BindGroupDescriptor(
                         layout = bindGroupLayout,
                         entries = listOf(
@@ -1561,7 +1888,7 @@ private class WgpuRenderRecorder(
                 ),
             ) { it.close() }
             val textureBindGroup = resourceScope.track(
-                device.createBindGroup(
+                createTrackedBindGroup(
                     BindGroupDescriptor(
                         layout = textureBindGroupLayout,
                         entries = listOf(
@@ -1632,7 +1959,7 @@ private class WgpuRenderRecorder(
         val srcView = resourceScope.track(srcTex.createView()) { it.close() }
         val dstView = resourceScope.track(dstTex.createView()) { it.close() }
         val sampler = resourceScope.track(
-            device.createSampler(
+            createTrackedSampler(
                 SamplerDescriptor(
                     addressModeU = GPUAddressMode.ClampToEdge,
                     addressModeV = GPUAddressMode.ClampToEdge,
@@ -1645,7 +1972,7 @@ private class WgpuRenderRecorder(
         setPipelineAction(pipeline)
         draws.forEach { draw ->
             val uniform = resourceScope.track(
-                device.createBuffer(
+                createTrackedBuffer(
                     BufferDescriptor(
                         size = draw.uniformBytes.size.toULong(),
                         usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
@@ -1653,9 +1980,9 @@ private class WgpuRenderRecorder(
                     ),
                 ),
             ) { it.close() }
-            queue.writeBuffer(uniform, 0uL, ArrayBuffer.of(draw.uniformBytes))
+            writeTrackedBuffer(uniform, 0uL, ArrayBuffer.of(draw.uniformBytes))
             val bindGroup = resourceScope.track(
-                device.createBindGroup(
+                createTrackedBindGroup(
                     BindGroupDescriptor(
                         layout = bindGroupLayout,
                         entries = listOf(
@@ -1665,7 +1992,7 @@ private class WgpuRenderRecorder(
                 ),
             ) { it.close() }
             val textureBindGroup = resourceScope.track(
-                device.createBindGroup(
+                createTrackedBindGroup(
                     BindGroupDescriptor(
                         layout = textureBindGroupLayout,
                         entries = listOf(
@@ -1695,7 +2022,7 @@ private class WgpuRenderRecorder(
         triangleData: GPUBackendTriangleData,
     ) {
         val vertexBuffer = resourceScope.track(
-            device.createBuffer(
+            createTrackedBuffer(
                 BufferDescriptor(
                     size = (triangleData.vertices.size * 4).toULong(),
                     usage = GPUBufferUsage.Vertex or GPUBufferUsage.CopyDst,
@@ -1703,10 +2030,10 @@ private class WgpuRenderRecorder(
                 ),
             ),
         ) { it.close() }
-        queue.writeBuffer(vertexBuffer, 0uL, ArrayBuffer.of(triangleData.vertices))
+        writeTrackedBuffer(vertexBuffer, 0uL, ArrayBuffer.of(triangleData.vertices))
 
         val indexBuffer = resourceScope.track(
-            device.createBuffer(
+            createTrackedBuffer(
                 BufferDescriptor(
                     size = (triangleData.indices.size * 4).toULong(),
                     usage = GPUBufferUsage.Index or GPUBufferUsage.CopyDst,
@@ -1714,7 +2041,7 @@ private class WgpuRenderRecorder(
                 ),
             ),
         ) { it.close() }
-        queue.writeBuffer(indexBuffer, 0uL, ArrayBuffer.of(triangleData.indices))
+        writeTrackedBuffer(indexBuffer, 0uL, ArrayBuffer.of(triangleData.indices))
 
         val keys = stencilExecutionCacheKeys(wgsl = wgsl, targetFormat = targetFormat, vertexStage = true)
         executionCaches.recordPreimages(keys)
@@ -1756,7 +2083,7 @@ private class WgpuRenderRecorder(
         setStencilReferenceAction(0u)
         draws.forEach { draw ->
             val uniform = resourceScope.track(
-                device.createBuffer(
+                createTrackedBuffer(
                     BufferDescriptor(
                         size = draw.uniformSizeBytes,
                         usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
@@ -1764,9 +2091,9 @@ private class WgpuRenderRecorder(
                     ),
                 ),
             ) { it.close() }
-            queue.writeBuffer(uniform, 0uL, draw.uniformPayload)
+            writeTrackedBuffer(uniform, 0uL, ArrayBuffer.of(draw.uniformBytes))
             val bindGroup = resourceScope.track(
-                device.createBindGroup(
+                createTrackedBindGroup(
                     BindGroupDescriptor(
                         layout = bindGroupLayout,
                         entries = listOf(
@@ -1848,7 +2175,7 @@ private class WgpuRenderRecorder(
         )
 
         val texture = resourceScope.track(
-            device.createTexture(
+            createTrackedTexture(
                 TextureDescriptor(
                     size = Extent3D(width = textureWidth.toUInt(), height = textureHeight.toUInt()),
                     format = gpuTextureFormat,
@@ -1869,7 +2196,7 @@ private class WgpuRenderRecorder(
         )
         val textureView = resourceScope.track(texture.createView()) { it.close() }
         val sampler = resourceScope.track(
-            device.createSampler(
+            createTrackedSampler(
                 SamplerDescriptor(
                     addressModeU = GPUAddressMode.ClampToEdge,
                     addressModeV = GPUAddressMode.ClampToEdge,
@@ -1882,7 +2209,7 @@ private class WgpuRenderRecorder(
         setPipelineAction(pipeline)
         draws.forEach { draw ->
             val uniform = resourceScope.track(
-                device.createBuffer(
+                createTrackedBuffer(
                     BufferDescriptor(
                         size = draw.uniformSizeBytes,
                         usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
@@ -1890,9 +2217,9 @@ private class WgpuRenderRecorder(
                     ),
                 ),
             ) { it.close() }
-            queue.writeBuffer(uniform, 0uL, draw.uniformPayload)
+            writeTrackedBuffer(uniform, 0uL, ArrayBuffer.of(draw.uniformBytes))
             val bindGroup = resourceScope.track(
-                device.createBindGroup(
+                createTrackedBindGroup(
                     BindGroupDescriptor(
                         layout = bindGroupLayout,
                         entries = listOf(
@@ -1902,7 +2229,7 @@ private class WgpuRenderRecorder(
                 ),
             ) { it.close() }
             val textureBindGroup = resourceScope.track(
-                device.createBindGroup(
+                createTrackedBindGroup(
                     BindGroupDescriptor(
                         layout = textureBindGroupLayout,
                         entries = listOf(
@@ -1930,6 +2257,7 @@ private class WgpuRenderRecorder(
         colorFormat: String,
         draws: List<WgpuFullscreenUniformDraw>,
         blendMode: GPUBlendMode? = null,
+        sourceLabel: String = fullscreenUniformSlabSourceLabel(),
     ) {
         require(wgsl.isNotBlank()) { "wgsl must not be blank" }
         require(colorFormat.normalizedColorFormat() == targetFormat.toBackendColorFormat()) {
@@ -1954,29 +2282,52 @@ private class WgpuRenderRecorder(
             keys = keys,
             blendMode = blendMode,
         )
+        val slab = materializeFullscreenUniformSlab(draws = draws, sourceLabel = sourceLabel)
 
         setPipelineAction(pipeline)
-        draws.forEach { draw ->
-            val uniform = resourceScope.track(
-                device.createBuffer(
-                    BufferDescriptor(
-                        size = draw.uniformSizeBytes,
-                        usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
-                        label = "GPUBackend.rect.color",
-                    ),
-                ),
-            ) { it.close() }
-            queue.writeBuffer(uniform, 0uL, draw.uniformPayload)
-            val bindGroup = resourceScope.track(
-                device.createBindGroup(
-                    BindGroupDescriptor(
-                        layout = bindGroupLayout,
-                        entries = listOf(
-                            BindGroupEntry(binding = 0u, resource = BufferBinding(buffer = uniform)),
+        draws.forEachIndexed { drawIndex, draw ->
+            val bindGroup = if (slab != null) {
+                val payloadSlotLabel = fullscreenPayloadSlabSlotLabel(drawIndex)
+                val upload = slab.uploadsBySlotLabel.getValue(payloadSlotLabel)
+                resourceScope.track(
+                    createTrackedBindGroup(
+                        BindGroupDescriptor(
+                            layout = bindGroupLayout,
+                            entries = listOf(
+                                BindGroupEntry(
+                                    binding = 0u,
+                                    resource = BufferBinding(
+                                        buffer = slab.buffer,
+                                        offset = upload.binding.alignedOffset.toULong(),
+                                        size = upload.binding.payloadBytes.toULong(),
+                                    ),
+                                ),
+                            ),
                         ),
                     ),
-                ),
-            ) { it.close() }
+                ) { it.close() }
+            } else {
+                val uniform = resourceScope.track(
+                    createTrackedBuffer(
+                        BufferDescriptor(
+                            size = draw.uniformSizeBytes,
+                            usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
+                            label = "GPUBackend.rect.color",
+                        ),
+                    ),
+                ) { it.close() }
+                writeTrackedBuffer(uniform, 0uL, ArrayBuffer.of(draw.uniformBytes))
+                resourceScope.track(
+                    createTrackedBindGroup(
+                        BindGroupDescriptor(
+                            layout = bindGroupLayout,
+                            entries = listOf(
+                                BindGroupEntry(binding = 0u, resource = BufferBinding(buffer = uniform)),
+                            ),
+                        ),
+                    ),
+                ) { it.close() }
+            }
 
             setBindGroupAction(0u, bindGroup)
             setScissorAction(
@@ -1990,7 +2341,8 @@ private class WgpuRenderRecorder(
     }
 
     private data class WgpuFullscreenUniformDraw(
-        val uniformPayload: ArrayBuffer,
+        val slotLabel: String,
+        val uniformBytes: ByteArray,
         val uniformSizeBytes: ULong,
         val scissorX: Int,
         val scissorY: Int,
@@ -1998,10 +2350,186 @@ private class WgpuRenderRecorder(
         val scissorHeight: Int,
     )
 
+    private data class WgpuPayloadSlabUpload(
+        val binding: GPUPayloadSlabSlotBinding,
+        val payloadBytes: ByteArray,
+    )
+
+    private data class WgpuPayloadSlabMaterialization(
+        val plan: GPUPayloadSlabBatchPlan,
+        val buffer: GPUBuffer,
+        val uploadsBySlotLabel: Map<String, WgpuPayloadSlabUpload>,
+    )
+
+    private fun fullscreenPayloadRequest(
+        drawIndex: Int,
+        draw: WgpuFullscreenUniformDraw,
+    ): GPUPayloadMaterializationRequest {
+        val byteSize = draw.uniformSizeBytes.toLong()
+        val unsignedBytes = draw.uniformBytes.map { byte -> byte.toInt() and 0xff }
+        val packetId = fullscreenPayloadPacketId(drawIndex)
+        val uniformSlotId = fullscreenPayloadSlotId(drawIndex)
+        val resourceSlotId = fullscreenResourceSlotId(drawIndex)
+        val uniformFingerprint = GPUPayloadFingerprint(
+            sha256Hex(
+                buildString {
+                    append("target=").append(targetId)
+                    append("|slot=").append(draw.slotLabel)
+                    append("|bytes=").append(unsignedBytes.joinToString(","))
+                },
+            ),
+        )
+        val resourceFingerprint = GPUPayloadFingerprint(
+            sha256Hex(
+                buildString {
+                    append("target=").append(targetId)
+                    append("|slot=").append(draw.slotLabel)
+                    append("|byteSize=").append(byteSize)
+                },
+            ),
+        )
+        return GPUPayloadMaterializationRequest(
+            targetId = payloadTargetId,
+            packetId = packetId,
+            taskIds = listOf("fullscreen-uniform-slab"),
+            resourcePlanLabels = listOf("payload-materialization:fullscreen-uniform-pass"),
+            uniformBlock = GPUUniformPayloadBlock(
+                fingerprint = uniformFingerprint,
+                packingPlanHash = "fullscreen-uniform-bytes",
+                byteSize = byteSize,
+                zeroedPadding = true,
+                scope = frameId,
+                bytes = unsignedBytes,
+            ),
+            uniformSlot = GPUUniformPayloadSlot(
+                slotId = GPUPayloadSlotID(uniformSlotId),
+                fingerprint = uniformFingerprint,
+                byteOffset = 0L,
+            ),
+            resourceBlock = GPUResourceBindingBlock(
+                fingerprint = resourceFingerprint,
+                bindingPlanHash = "fullscreen-uniform-layout-v1",
+                bindingCount = 1,
+                resourceDescriptorLabels = listOf("uniform:fullscreen-payload"),
+                dynamicOffsets = listOf(0L),
+            ),
+            resourceSlot = GPUResourceBindingSlot(
+                slotId = GPUPayloadSlotID(resourceSlotId),
+                fingerprint = resourceFingerprint,
+                bindingIndex = 0,
+            ),
+            uploadPlan = GPUPayloadUploadPlan(
+                planHash = "fullscreen-upload-$drawIndex-${draw.uniformBytes.size}",
+                byteRanges = listOf(0L until byteSize),
+                stagingScope = frameId,
+                budgetClass = budgetClass,
+                beforeUseToken = "before-fullscreen-draw-$drawIndex",
+            ),
+            reflectedBindingLayoutHash = "fullscreen-uniform-layout-v1",
+            deviceGeneration = deviceGeneration.value,
+            payloadGeneration = 0L,
+            alignmentBytes = MIN_UNIFORM_BUFFER_OFFSET_ALIGNMENT.toLong(),
+            uploadBudgetBytes = FULLSCREEN_UNIFORM_SLAB_UPLOAD_BUDGET_BYTES,
+            uploadCapabilityAvailable = true,
+            maxDynamicOffsets = 1,
+            requiredUniformUsageLabels = setOf("copy_dst", "uniform"),
+            availableUniformUsageLabels = setOf("copy_dst", "uniform"),
+        )
+    }
+
+    private fun materializeFullscreenUniformSlab(
+        draws: List<WgpuFullscreenUniformDraw>,
+        sourceLabel: String,
+    ): WgpuPayloadSlabMaterialization? {
+        val payloadRequests = draws.mapIndexed { index, draw -> fullscreenPayloadRequest(index, draw) }
+        val planning = GPUPayloadSlabBatchPlanner.plan(
+            GPUPayloadSlabBatchRequest(
+                targetId = payloadTargetId,
+                frameId = frameId,
+                sourceLabel = sourceLabel,
+                deviceGeneration = deviceGeneration.value,
+                alignmentBytes = MIN_UNIFORM_BUFFER_OFFSET_ALIGNMENT.toLong(),
+                uploadBudgetBytes = FULLSCREEN_UNIFORM_SLAB_UPLOAD_BUDGET_BYTES,
+                payloadRequests = payloadRequests,
+            ),
+        )
+        val resourceLedgerSourceLabel = fullscreenUniformSlabResourceLedgerSourceLabel(
+            sourceLabel = sourceLabel,
+            planning = planning,
+        )
+        telemetryRecorder.recordPayloadSlabResourceEvent(
+            GPUPayloadSlabResourceEvent.Planned(
+                sourceLabel = resourceLedgerSourceLabel,
+                targetId = payloadTargetId,
+                frameId = frameId,
+                deviceGeneration = deviceGeneration.value,
+                payloadCount = payloadRequests.size,
+            ),
+        )
+        return when (planning) {
+            is GPUPayloadSlabBatchPlanningResult.Refused -> {
+                telemetryRecorder.recordUniformSlabFallback()
+                telemetryRecorder.recordPayloadSlabResourceEvent(
+                    GPUPayloadSlabResourceEvent.Fallback(
+                        sourceLabel = resourceLedgerSourceLabel,
+                        reason = planning.diagnostic.code,
+                        payloadCount = payloadRequests.size,
+                    ),
+                )
+                null
+            }
+            is GPUPayloadSlabBatchPlanningResult.Accepted -> {
+                val plan = planning.plan
+                val payloadsBySlotLabel = payloadRequests.mapIndexed { index, payload ->
+                    fullscreenPayloadSlabSlotLabel(index) to payload.uniformBlock.bytes.toByteArrayFromUnsignedInts()
+                }.toMap()
+                val buffer = resourceScope.track(
+                    createTrackedBuffer(
+                        BufferDescriptor(
+                            size = plan.uniformSlabPlan.totalBytes.toULong(),
+                            usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
+                            label = "GPUBackend.fullscreen.uniformSlab",
+                        ),
+                    ),
+                ) { it.close() }
+                val uploadsBySlotLabel = plan.slotBindings.associate { binding ->
+                    val payloadBytes = payloadsBySlotLabel.getValue(binding.slotLabel)
+                    writeTrackedBuffer(
+                        buffer = buffer,
+                        offset = binding.alignedOffset.toULong(),
+                        data = ArrayBuffer.of(payloadBytes),
+                    )
+                    binding.slotLabel to WgpuPayloadSlabUpload(
+                        binding = binding,
+                        payloadBytes = payloadBytes,
+                    )
+                }
+                telemetryRecorder.recordUniformSlabCreated(plan.uniformSlabPlan.totalBytes)
+                telemetryRecorder.recordPayloadSlabBatchPlan(plan)
+                telemetryRecorder.recordPayloadSlabResourceEvent(
+                    GPUPayloadSlabResourceEvent.Accepted(
+                        sourceLabel = resourceLedgerSourceLabel,
+                        planHash = plan.planHash,
+                        totalBytes = plan.uniformSlabPlan.totalBytes,
+                        slotCount = plan.slotBindings.size,
+                    ),
+                )
+                WgpuPayloadSlabMaterialization(
+                    plan = plan,
+                    buffer = buffer,
+                    uploadsBySlotLabel = uploadsBySlotLabel,
+                )
+            }
+        }
+    }
+
+    private fun List<Int>.toByteArrayFromUnsignedInts(): ByteArray =
+        ByteArray(size) { index -> this[index].toByte() }
+
     private fun createTexture(rgba: ByteArray, width: Int, height: Int, format: String): GPUTexture {
         val gpuFormat = format.toWgpuTextureFormat()
         val texture = resourceScope.track(
-            device.createTexture(
+            createTrackedTexture(
                 TextureDescriptor(
                     size = Extent3D(width = width.toUInt(), height = height.toUInt()),
                     format = gpuFormat,
@@ -2037,7 +2565,7 @@ private class WgpuRenderRecorder(
 
     private fun createUniformBuffer(uniformBytes: ByteArray): GPUBuffer {
         val buffer = resourceScope.track(
-            device.createBuffer(
+            createTrackedBuffer(
                 BufferDescriptor(
                     size = uniformBytes.size.toULong(),
                     usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
@@ -2045,8 +2573,14 @@ private class WgpuRenderRecorder(
                 ),
             ),
         ) { it.close() }
-        queue.writeBuffer(buffer, 0uL, ArrayBuffer.of(uniformBytes))
+        writeTrackedBuffer(buffer, 0uL, ArrayBuffer.of(uniformBytes))
         return buffer
+    }
+
+    private fun packFloatArray(values: FloatArray): ByteArray {
+        val buffer = ByteBuffer.allocate(values.size * Float.SIZE_BYTES).order(ByteOrder.LITTLE_ENDIAN)
+        values.forEach(buffer::putFloat)
+        return buffer.array()
     }
 
     private fun getOrCreateTexturedVertexBindGroupLayout(): GPUBindGroupLayout {
@@ -3598,6 +4132,11 @@ private fun GPUDevice.createRenderPipelineWithValidationScope(
 private fun stableSha256(input: String): String {
     val digest = MessageDigest.getInstance("SHA-256").digest(input.toByteArray(Charsets.UTF_8))
     return "sha256:" + digest.joinToString(separator = "") { byte -> "%02x".format(byte) }
+}
+
+private fun sha256Hex(input: String): String {
+    val digest = MessageDigest.getInstance("SHA-256").digest(input.toByteArray(Charsets.UTF_8))
+    return digest.joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
 }
 
 private data class NativeWindowRuntime(

@@ -70,6 +70,157 @@ class GPUPayloadMaterializationProviderTest {
         assertFalse(lines.joinToString("\n").contains("@0x"))
     }
 
+    /** Accepted payload provider requests can seed the slab batch planner evidence. */
+    @Test
+    fun `accepted payload provider request can seed a payload slab batch plan`() {
+        val request = payloadMaterializationRequest()
+        val providerDecision = ValidatingPayloadResourceProvider().materializePayloadBindings(
+            request = request,
+            context = targetPreparationContext(),
+        )
+        assertIs<GPUResourceMaterializationDecision.Materialized>(providerDecision)
+
+        val planning = GPUPayloadSlabBatchPlanner.plan(
+            GPUPayloadSlabBatchRequest(
+                targetId = "root-target",
+                frameId = "frame-1",
+                sourceLabel = "fullscreen-uniform-pass",
+                deviceGeneration = 11L,
+                alignmentBytes = 256L,
+                uploadBudgetBytes = 1024L,
+                payloadRequests = listOf(request),
+            ),
+        )
+
+        val plan = assertIs<GPUPayloadSlabBatchPlanningResult.Accepted>(planning).plan
+        assertEquals("packet-9", plan.slotBindings.single().packetId)
+        assertEquals("pass-a:uniform:0", plan.slotBindings.single().uniformSlotId)
+        assertEquals("pass-a:resource:0", plan.slotBindings.single().resourceSlotId)
+        assertEquals("uniform-fingerprint-solid", plan.slotBindings.single().payloadFingerprint)
+        assertContains(
+            plan.dumpLines(),
+            "payload-slab.batch.slot source=fullscreen-uniform-pass slot=packet-9:pass-a:uniform:0:pass-a:resource:0 " +
+                "packet=packet-9 uniformSlot=pass-a:uniform:0 resourceSlot=pass-a:resource:0 offset=0 " +
+                "payloadBytes=64 payloadFingerprint=uniform-fingerprint-solid layout=layout-solid-v1",
+        )
+    }
+
+    @Test
+    fun `accepted gradient payload provider request can seed a gradient payload slab batch plan`() {
+        val firstRequest = payloadMaterializationRequest(
+            packetId = "gradient-packet-0",
+            resourcePlanLabel = "gradient-linear-0",
+            uniformBlock = uniformBlock(
+                fingerprint = "uniform-fingerprint-gradient-0",
+                packingPlanHash = "linear-gradient-layout-v1",
+                bytes = gradientUniformBytes(seed = 1),
+            ),
+            uniformSlot = uniformSlot(
+                slotId = "gradient-pass:uniform:0",
+                fingerprint = "uniform-fingerprint-gradient-0",
+            ),
+            resourceBlock = resourceBlock(
+                fingerprint = "resource-fingerprint-gradient-0",
+                bindingPlanHash = "layout:linear-gradient-material-block:v1",
+                resourceDescriptorLabels = listOf("uniform:gradient-material-payload"),
+            ),
+            resourceSlot = resourceSlot(
+                slotId = "gradient-pass:resource:0",
+                fingerprint = "resource-fingerprint-gradient-0",
+            ),
+            uploadPlan = uploadPlan(
+                planHash = "upload-gradient-v1-0",
+                stagingScope = "gradient-pass-staging",
+                beforeUseToken = "before-gradient-draw-0",
+            ),
+            reflectedBindingLayoutHash = "layout:linear-gradient-material-block:v1",
+        )
+        val secondRequest = payloadMaterializationRequest(
+            packetId = "gradient-packet-1",
+            resourcePlanLabel = "gradient-linear-1",
+            uniformBlock = uniformBlock(
+                fingerprint = "uniform-fingerprint-gradient-1",
+                packingPlanHash = "linear-gradient-layout-v1",
+                bytes = gradientUniformBytes(seed = 2),
+            ),
+            uniformSlot = uniformSlot(
+                slotId = "gradient-pass:uniform:1",
+                fingerprint = "uniform-fingerprint-gradient-1",
+            ),
+            resourceBlock = resourceBlock(
+                fingerprint = "resource-fingerprint-gradient-1",
+                bindingPlanHash = "layout:linear-gradient-material-block:v1",
+                resourceDescriptorLabels = listOf("uniform:gradient-material-payload"),
+            ),
+            resourceSlot = resourceSlot(
+                slotId = "gradient-pass:resource:1",
+                fingerprint = "resource-fingerprint-gradient-1",
+            ),
+            uploadPlan = uploadPlan(
+                planHash = "upload-gradient-v1-1",
+                stagingScope = "gradient-pass-staging",
+                beforeUseToken = "before-gradient-draw-1",
+            ),
+            reflectedBindingLayoutHash = "layout:linear-gradient-material-block:v1",
+        )
+
+        val provider = ValidatingPayloadResourceProvider()
+        val context = targetPreparationContext()
+        assertIs<GPUResourceMaterializationDecision.Materialized>(
+            provider.materializePayloadBindings(firstRequest, context),
+        )
+        assertIs<GPUResourceMaterializationDecision.Materialized>(
+            provider.materializePayloadBindings(secondRequest, context),
+        )
+
+        val slab = GPUPayloadSlabBatchPlanner.plan(
+            GPUPayloadSlabBatchRequest(
+                targetId = context.targetId,
+                frameId = context.frameId,
+                sourceLabel = "gradient-material-pass",
+                deviceGeneration = context.deviceGeneration,
+                alignmentBytes = 256L,
+                uploadBudgetBytes = 1024L,
+                payloadRequests = listOf(firstRequest, secondRequest),
+            ),
+        )
+
+        val accepted = assertIs<GPUPayloadSlabBatchPlanningResult.Accepted>(slab)
+        assertEquals("gradient-material-pass", accepted.plan.sourceLabel)
+        assertEquals(2, accepted.plan.slotBindings.size)
+        assertEquals(
+            listOf("layout:linear-gradient-material-block:v1", "layout:linear-gradient-material-block:v1"),
+            accepted.plan.slotBindings.map { binding -> binding.reflectedBindingLayoutHash },
+        )
+        assertEquals(
+            listOf("gradient-packet-0", "gradient-packet-1"),
+            accepted.plan.slotBindings.map { binding -> binding.packetId },
+        )
+        assertEquals(
+            listOf("gradient-pass:uniform:0", "gradient-pass:uniform:1"),
+            accepted.plan.slotBindings.map { binding -> binding.uniformSlotId },
+        )
+        assertEquals(
+            listOf("gradient-pass:resource:0", "gradient-pass:resource:1"),
+            accepted.plan.slotBindings.map { binding -> binding.resourceSlotId },
+        )
+        assertEquals(
+            listOf("uniform-fingerprint-gradient-0", "uniform-fingerprint-gradient-1"),
+            accepted.plan.slotBindings.map { binding -> binding.payloadFingerprint },
+        )
+        assertEquals(listOf(0L, 256L), accepted.plan.slotBindings.map { binding -> binding.alignedOffset })
+        assertEquals(listOf(64L, 64L), accepted.plan.slotBindings.map { binding -> binding.payloadBytes })
+        assertContains(
+            accepted.plan.dumpLines(),
+            "payload-slab.batch.slot source=gradient-material-pass " +
+                "slot=gradient-packet-0:gradient-pass:uniform:0:gradient-pass:resource:0 " +
+                "packet=gradient-packet-0 uniformSlot=gradient-pass:uniform:0 " +
+                "resourceSlot=gradient-pass:resource:0 offset=0 payloadBytes=64 " +
+                "payloadFingerprint=uniform-fingerprint-gradient-0 " +
+                "layout=layout:linear-gradient-material-block:v1",
+        )
+    }
+
     /** Provider-owned cache facts report reuse without changing support status. */
     @Test
     fun `payload provider records bind group and upload reuse telemetry`() {
@@ -322,6 +473,9 @@ class GPUPayloadMaterializationProviderTest {
         uploadBudgetBytes: Long = 256L,
         uploadCapabilityAvailable: Boolean = true,
         availableUniformUsageLabels: Set<String> = setOf("copy_dst", "uniform"),
+        packetId: String = "packet-9",
+        resourcePlanLabel: String = "solid-fill",
+        reflectedBindingLayoutHash: String = "layout-solid-v1",
         uniformBlock: GPUUniformPayloadBlock = uniformBlock(),
         uniformSlot: GPUUniformPayloadSlot = uniformSlot(),
         resourceBlock: GPUResourceBindingBlock = resourceBlock(),
@@ -330,15 +484,15 @@ class GPUPayloadMaterializationProviderTest {
     ): GPUPayloadMaterializationRequest =
         GPUPayloadMaterializationRequest(
             targetId = "root-target",
-            packetId = "packet-9",
+            packetId = packetId,
             taskIds = listOf("task-payload-upload"),
-            resourcePlanLabels = listOf("payload-materialization:solid-fill"),
+            resourcePlanLabels = listOf("payload-materialization:$resourcePlanLabel"),
             uniformBlock = uniformBlock,
             uniformSlot = uniformSlot,
             resourceBlock = resourceBlock,
             resourceSlot = resourceSlot,
             uploadPlan = uploadPlan,
-            reflectedBindingLayoutHash = "layout-solid-v1",
+            reflectedBindingLayoutHash = reflectedBindingLayoutHash,
             deviceGeneration = deviceGeneration,
             payloadGeneration = payloadGeneration,
             alignmentBytes = 256L,
@@ -349,24 +503,33 @@ class GPUPayloadMaterializationProviderTest {
             availableUniformUsageLabels = availableUniformUsageLabels,
         )
 
-    private fun uniformBlock(scope: String = "pass-a"): GPUUniformPayloadBlock =
+    private fun uniformBlock(
+        scope: String = "pass-a",
+        fingerprint: String = "uniform-fingerprint-solid",
+        packingPlanHash: String = "solid-rect-layout-v1",
+        bytes: List<Int> = listOf(1, 2, 3, 4) + List(60) { 0 },
+    ): GPUUniformPayloadBlock =
         GPUUniformPayloadBlock(
-            fingerprint = GPUPayloadFingerprint("uniform-fingerprint-solid"),
-            packingPlanHash = "solid-rect-layout-v1",
-            byteSize = 64L,
+            fingerprint = GPUPayloadFingerprint(fingerprint),
+            packingPlanHash = packingPlanHash,
+            byteSize = bytes.size.toLong(),
             zeroedPadding = true,
             scope = scope,
-            bytes = listOf(1, 2, 3, 4) + List(60) { 0 },
+            bytes = bytes,
         )
 
-    private fun uniformSlot(slotId: String = "pass-a:uniform:0"): GPUUniformPayloadSlot =
+    private fun uniformSlot(
+        slotId: String = "pass-a:uniform:0",
+        fingerprint: String = "uniform-fingerprint-solid",
+    ): GPUUniformPayloadSlot =
         GPUUniformPayloadSlot(
             slotId = GPUPayloadSlotID(slotId),
-            fingerprint = GPUPayloadFingerprint("uniform-fingerprint-solid"),
+            fingerprint = GPUPayloadFingerprint(fingerprint),
             byteOffset = 0L,
         )
 
     private fun resourceBlock(
+        fingerprint: String = "resource-fingerprint-solid",
         bindingPlanHash: String = "layout-solid-v1",
         dynamicOffsets: List<Long> = listOf(0L),
         resourceDescriptorLabels: List<String> = listOf("uniform:solid-payload"),
@@ -374,7 +537,7 @@ class GPUPayloadMaterializationProviderTest {
         bindingCount: Int = resourceDescriptorLabels.size,
     ): GPUResourceBindingBlock =
         GPUResourceBindingBlock(
-            fingerprint = GPUPayloadFingerprint("resource-fingerprint-solid"),
+            fingerprint = GPUPayloadFingerprint(fingerprint),
             bindingPlanHash = bindingPlanHash,
             bindingCount = bindingCount,
             resourceDescriptorLabels = resourceDescriptorLabels,
@@ -382,10 +545,13 @@ class GPUPayloadMaterializationProviderTest {
             bindingFacts = bindingFacts,
         )
 
-    private fun resourceSlot(slotId: String = "pass-a:resource:0"): GPUResourceBindingSlot =
+    private fun resourceSlot(
+        slotId: String = "pass-a:resource:0",
+        fingerprint: String = "resource-fingerprint-solid",
+    ): GPUResourceBindingSlot =
         GPUResourceBindingSlot(
             slotId = GPUPayloadSlotID(slotId),
-            fingerprint = GPUPayloadFingerprint("resource-fingerprint-solid"),
+            fingerprint = GPUPayloadFingerprint(fingerprint),
             bindingIndex = 0,
         )
 
@@ -419,14 +585,28 @@ class GPUPayloadMaterializationProviderTest {
             actualResourceGeneration = actualGeneration,
         )
 
-    private fun uploadPlan(byteRanges: List<LongRange> = listOf(0L..63L)): GPUPayloadUploadPlan =
+    private fun uploadPlan(
+        planHash: String = "upload-solid-v1",
+        byteRanges: List<LongRange> = listOf(0L..63L),
+        stagingScope: String = "pass-a-staging",
+        beforeUseToken: String = "before-draw-9",
+    ): GPUPayloadUploadPlan =
         GPUPayloadUploadPlan(
-            planHash = "upload-solid-v1",
+            planHash = planHash,
             byteRanges = byteRanges,
-            stagingScope = "pass-a-staging",
+            stagingScope = stagingScope,
             budgetClass = "unit-test",
-            beforeUseToken = "before-draw-9",
+            beforeUseToken = beforeUseToken,
         )
+
+    private fun gradientUniformBytes(seed: Int): List<Int> {
+        val bytes = ByteArray(64)
+        bytes[0] = seed.toByte()
+        bytes[4] = (seed + 1).toByte()
+        bytes[8] = (seed + 2).toByte()
+        bytes[12] = 1
+        return bytes.map { byte -> byte.toInt() and 0xff }
+    }
 
     private fun targetPreparationContext(): GPUTargetPreparationContext =
         GPUTargetPreparationContext(

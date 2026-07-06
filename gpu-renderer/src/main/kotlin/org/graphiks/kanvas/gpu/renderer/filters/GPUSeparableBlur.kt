@@ -10,12 +10,12 @@ enum class SeparableBlurQualityTier {
     fun tapCount(sigma: Float): Int = when (this) {
         FAST -> 5
         NORMAL -> {
-            if (sigma < 0.5f) return 1
+            if (sigma <= 0.5f) return 1
             val base = kotlin.math.ceil(sigma).toInt() * 2 + 1
             if (base % 2 == 0) base + 1 else base.coerceAtLeast(1)
         }
         HIGH -> {
-            if (sigma < 0.5f) return 1
+            if (sigma <= 0.5f) return 1
             val base = (sigma * 3f).toInt() * 2 + 1
             if (base % 2 == 0) base + 1 else base.coerceAtLeast(1)
         }

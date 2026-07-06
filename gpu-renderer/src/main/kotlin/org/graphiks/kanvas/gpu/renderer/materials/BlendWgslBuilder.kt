@@ -10,8 +10,7 @@ object BlendWgslBuilder {
         val dstEval = childEval("dst", dst)
         val srcEval = childEval("src", src)
         val blendFn = blendFormula(mode)
-        val hasImageDraw = (dst is GPUMaterialDescriptor.ImageDraw && dst.rgbaPixels.isNotEmpty()) ||
-            (src is GPUMaterialDescriptor.ImageDraw && src.rgbaPixels.isNotEmpty())
+        val hasImageDraw = dst is GPUMaterialDescriptor.ImageDraw || src is GPUMaterialDescriptor.ImageDraw
         val texDecl = if (hasImageDraw) """
 @group(1) @binding(1) var blend_image_texture: texture_2d<f32>;
 @group(1) @binding(2) var blend_image_sampler: sampler;
@@ -114,7 +113,8 @@ struct VertexOutput {
         is GPUMaterialDescriptor.SolidColor -> """
     let ${prefix}_result = blend.${prefix}_color;""".trimIndent()
         is GPUMaterialDescriptor.ImageDraw -> """
-    let ${prefix}_sampled = textureSample(blend_image_texture, blend_image_sampler, uv);
+    let ${prefix}_uv = uv;
+    let ${prefix}_sampled = textureSample(blend_image_texture, blend_image_sampler, ${prefix}_uv);
     let ${prefix}_result = ${prefix}_sampled * blend.${prefix}_color;""".trimIndent()
         else -> error("Unsupported blend child: ${child.kind}")
     }
