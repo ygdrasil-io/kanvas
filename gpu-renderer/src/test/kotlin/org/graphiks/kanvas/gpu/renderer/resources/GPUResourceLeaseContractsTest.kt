@@ -66,6 +66,38 @@ class GPUResourceLeaseContractsTest {
     }
 
     @Test
+    fun `resource lease snapshots caller owned dump inputs`() {
+        val usageLabels = mutableListOf("uniform")
+        val facts = mutableMapOf("alignment" to "256")
+
+        val lease = GPUResourceLease(
+            leaseId = "uniform-slab:snapshot",
+            resourceKind = GPUResourceLeaseKind.UniformSlab,
+            deviceGeneration = 11,
+            descriptorHash = "sha256:uniform-slab-snapshot",
+            ownerScope = "snapshot-test",
+            usageLabels = usageLabels,
+            releasePolicy = "submission-complete",
+            cacheResult = GPUResourceLeaseCacheResult.Create,
+            evidenceFacts = facts,
+        )
+
+        usageLabels += "storage"
+        facts["alignment"] = "512"
+        facts["extra"] = "changed"
+
+        assertEquals(
+            listOf(
+                "resource-provider.lease id=uniform-slab:snapshot kind=uniform-slab result=create " +
+                    "deviceGeneration=11 owner=snapshot-test release=submission-complete " +
+                    "usage=uniform descriptor=sha256:uniform-slab-snapshot " +
+                    "facts=alignment=256",
+            ),
+            lease.dumpLines(),
+        )
+    }
+
+    @Test
     fun `lease list dumps in stable order`() {
         val sampler = lease("sampler:linear", GPUResourceLeaseKind.Sampler)
         val uniform = lease("uniform-slab:frame-1", GPUResourceLeaseKind.UniformSlab)
