@@ -142,6 +142,7 @@ class GPUBackendRuntimeContractsTest {
 
         assertEquals(GPUBackendRuntimeTelemetry.Empty, session.runtimeTelemetry)
         assertEquals(GPUBackendRuntimeTelemetry.Empty.dumpLines(), session.runtimeTelemetryDumpLines)
+        assertEquals(emptyList(), session.queueDumpLines)
         assertEquals(
             listOf(
                 "gpu-phase0.baseline label=session renderPasses=0 offscreenPasses=0 windowPasses=0 " +
@@ -151,6 +152,7 @@ class GPUBackendRuntimeContractsTest {
             ),
             session.phase0BaselineDumpLines,
         )
+        assertEquals(session.phase0BaselineDumpLines, session.phase0EvidenceDumpLines)
         assertEquals(null, session.capabilities)
     }
 

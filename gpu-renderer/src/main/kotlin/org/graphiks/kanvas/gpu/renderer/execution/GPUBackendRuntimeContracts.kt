@@ -140,6 +140,10 @@ interface GPUBackendSession : AutoCloseable {
     val resourceProviderDumpLines: List<String>
         get() = emptyList()
 
+    /** Reports queue submission, completion, and resource-retention evidence. */
+    val queueDumpLines: List<String>
+        get() = emptyList()
+
     /** Reports compact phase 0 baseline evidence without runtime handles. */
     val phase0BaselineDumpLines: List<String>
         get() = phase0BaselineSnapshot(label = "session").dumpLines()
@@ -152,7 +156,7 @@ interface GPUBackendSession : AutoCloseable {
 }
 
 val GPUBackendSession.phase0EvidenceDumpLines: List<String>
-    get() = phase0BaselineDumpLines + resourceProviderDumpLines
+    get() = phase0BaselineDumpLines + queueDumpLines + resourceProviderDumpLines
 
 /** Represents an offscreen target that supports rendering then RGBA readback. */
 interface GPUBackendOffscreenTarget : AutoCloseable {
