@@ -155,6 +155,127 @@ class GPUConcreteResourceProviderTest {
     }
 
     @Test
+    fun `concrete provider refuses fullscreen uniform slab target mismatch`() {
+        var createCalls = 0
+        val provider = GPUConcreteResourceProvider(
+            leaseFactory = object : GPUResourceLeaseFactory {
+                override fun createUniformSlab(
+                    request: GPUUniformSlabLeaseRequest,
+                ): GPUResourceLeaseFactoryResult {
+                    createCalls += 1
+                    return EvidenceOnlyGPUResourceLeaseFactory.createUniformSlab(request)
+                }
+
+                override fun createBindGroup(
+                    request: GPUBindGroupLeaseRequest,
+                ): GPUResourceLeaseFactoryResult =
+                    EvidenceOnlyGPUResourceLeaseFactory.createBindGroup(request)
+            },
+        )
+        val refused = assertIs<GPUResourceMaterializationDecision.Refused>(
+            provider.materializeFullscreenUniformSlabLease(
+                request = fullscreenUniformSlabLeaseRequest(targetId = "other-target"),
+                context = targetPreparationContext(),
+            ),
+        )
+
+        assertEquals(0, createCalls)
+        assertEquals("unsupported.resource.target_mismatch", refused.diagnostic.code)
+        assertEquals("root-target", refused.targetId)
+        assertEquals(listOf("uniform-slab:fullscreen:frame-1"), refused.dumpResourcePlanLabelsSnapshot)
+        assertEquals(
+            listOf("target-mismatch"),
+            provider.telemetry.dumpEvents
+                .filter { event -> event.lane == "uniform-slab" }
+                .map { event -> event.result },
+        )
+    }
+
+    @Test
+    fun `concrete provider snapshots mutable fullscreen uniform slab lease before reuse`() {
+        val usageLabels = mutableListOf("copy_dst", "uniform")
+        val evidenceFacts = mutableMapOf(
+            "factory" to "mutable",
+            "payloadCount" to "one",
+        )
+        val request = fullscreenUniformSlabLeaseRequest()
+        val provider = GPUConcreteResourceProvider(
+            leaseFactory = object : GPUResourceLeaseFactory {
+                override fun createUniformSlab(
+                    request: GPUUniformSlabLeaseRequest,
+                ): GPUResourceLeaseFactoryResult =
+                    GPUResourceLeaseFactoryResult.Created(
+                        GPUResourceLease(
+                            leaseId = request.leaseId,
+                            resourceKind = GPUResourceLeaseKind.UniformSlab,
+                            deviceGeneration = request.deviceGeneration,
+                            descriptorHash = request.descriptorHash,
+                            ownerScope = request.frameId,
+                            usageLabels = usageLabels,
+                            releasePolicy = request.releasePolicy,
+                            cacheResult = GPUResourceLeaseCacheResult.Create,
+                            evidenceFacts = evidenceFacts,
+                        ),
+                    )
+
+                override fun createBindGroup(
+                    request: GPUBindGroupLeaseRequest,
+                ): GPUResourceLeaseFactoryResult =
+                    EvidenceOnlyGPUResourceLeaseFactory.createBindGroup(request)
+            },
+        )
+        val context = targetPreparationContext()
+
+        val first = assertIs<GPUResourceMaterializationDecision.Materialized>(
+            provider.materializeFullscreenUniformSlabLease(
+                request = request,
+                context = context,
+            ),
+        )
+        usageLabels += "storage"
+        evidenceFacts["factory"] = "changed"
+        evidenceFacts["extra"] = "changed"
+        val second = assertIs<GPUResourceMaterializationDecision.Materialized>(
+            provider.materializeFullscreenUniformSlabLease(
+                request = request,
+                context = context,
+            ),
+        )
+
+        assertEquals(
+            listOf("copy_dst", "uniform"),
+            first.dumpResourceLeaseSnapshot.single().usageLabels,
+        )
+        assertEquals(
+            mapOf(
+                "factory" to "mutable",
+                "payloadCount" to "one",
+            ),
+            first.dumpResourceLeaseSnapshot.single().evidenceFacts,
+        )
+        assertEquals(
+            listOf("copy_dst", "uniform"),
+            second.dumpResourceLeaseSnapshot.single().usageLabels,
+        )
+        assertEquals(
+            mapOf(
+                "factory" to "mutable",
+                "payloadCount" to "one",
+            ),
+            second.dumpResourceLeaseSnapshot.single().evidenceFacts,
+        )
+        assertEquals(GPUResourceLeaseCacheResult.Reuse, second.dumpResourceLeaseSnapshot.single().cacheResult)
+        assertEquals(
+            listOf(
+                "resource-provider.lease id=uniform-slab:fullscreen:frame-1 kind=uniform-slab result=reuse " +
+                    "deviceGeneration=11 owner=frame-1 release=submission-complete usage=copy_dst,uniform " +
+                    "descriptor=sha256:fullscreen-uniform-slab facts=factory=mutable;payloadCount=one",
+            ),
+            second.dumpResourceLeaseSnapshot.dumpResourceLeaseLines(),
+        )
+    }
+
+    @Test
     fun `concrete provider includes lifetime facts in fullscreen uniform slab lease key`() {
         val provider = GPUConcreteResourceProvider()
         val context = targetPreparationContext()
@@ -321,12 +442,13 @@ private fun targetPreparationContext(deviceGeneration: Long = 11L): GPUTargetPre
 
 private fun fullscreenUniformSlabLeaseRequest(
     deviceGeneration: Long = 11L,
+    targetId: String = "root-target",
     releasePolicy: String = "submission-complete",
     payloadCount: Int = 1,
 ): GPUUniformSlabLeaseRequest =
     GPUUniformSlabLeaseRequest(
         leaseId = "uniform-slab:fullscreen:frame-1",
-        targetId = "root-target",
+        targetId = targetId,
         frameId = "frame-1",
         deviceGeneration = deviceGeneration,
         descriptorHash = "sha256:fullscreen-uniform-slab",

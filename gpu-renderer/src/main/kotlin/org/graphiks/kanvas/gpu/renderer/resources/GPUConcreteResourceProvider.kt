@@ -57,7 +57,7 @@ class GPUConcreteResourceProvider(
     private val leaseFactory: GPUResourceLeaseFactory = EvidenceOnlyGPUResourceLeaseFactory,
 ) : GPUResourceProvider {
     private val nullBufferKeys = linkedSetOf<String>()
-    private val uniformSlabLeases = linkedMapOf<String, GPUResourceLease>()
+    private val uniformSlabLeases = linkedMapOf<GPUUniformSlabLeaseCacheKey, GPUResourceLease>()
     private var mutableTelemetry = GPUConcreteResourceProviderTelemetry()
 
     val telemetry: GPUConcreteResourceProviderTelemetry
@@ -117,6 +117,20 @@ class GPUConcreteResourceProvider(
         request: GPUUniformSlabLeaseRequest,
         context: GPUTargetPreparationContext,
     ): GPUResourceMaterializationDecision {
+        if (request.targetId != context.targetId) {
+            val diagnostic = GPUResourceDiagnostic.resourceTargetMismatch(
+                resourceLabel = request.leaseId,
+                requestTargetId = request.targetId,
+                contextTargetId = context.targetId,
+            )
+            record("uniform-slab", "target-mismatch", request.leaseId, context.targetId)
+            return GPUResourceMaterializationDecision.Refused(
+                diagnostic = diagnostic,
+                targetId = context.targetId,
+                resourcePlanLabels = listOf(request.leaseId),
+            )
+        }
+
         if (request.deviceGeneration != context.deviceGeneration) {
             val diagnostic = GPUResourceDiagnostic.deviceGenerationStale(
                 resourceLabel = request.leaseId,
@@ -132,20 +146,10 @@ class GPUConcreteResourceProvider(
             )
         }
 
-        val key = listOf(
-            request.leaseId,
-            request.targetId,
-            request.frameId,
-            request.descriptorHash,
-            request.deviceGeneration.toString(),
-            request.totalBytes.toString(),
-            request.alignmentBytes.toString(),
-            request.payloadCount.toString(),
-            request.releasePolicy,
-        ).joinToString("|")
+        val key = GPUUniformSlabLeaseCacheKey.from(request)
         uniformSlabLeases[key]?.let { cachedLease ->
             val lease = cachedLease.copy(cacheResult = GPUResourceLeaseCacheResult.Reuse)
-            record("uniform-slab", lease.cacheResult.dumpToken, key, context.targetId)
+            record("uniform-slab", lease.cacheResult.dumpToken, key.dumpToken(), context.targetId)
             return GPUResourceMaterializationDecision.Materialized(
                 resources = emptyList(),
                 targetId = context.targetId,
@@ -164,9 +168,9 @@ class GPUConcreteResourceProvider(
                 )
             }
             is GPUResourceLeaseFactoryResult.Created -> {
-                val lease = leaseResult.lease
+                val lease = leaseResult.lease.snapshotForUniformSlabCache()
                 uniformSlabLeases[key] = lease
-                record("uniform-slab", lease.cacheResult.dumpToken, key, context.targetId)
+                record("uniform-slab", lease.cacheResult.dumpToken, key.dumpToken(), context.targetId)
                 GPUResourceMaterializationDecision.Materialized(
                     resources = emptyList(),
                     targetId = context.targetId,
@@ -218,6 +222,44 @@ class GPUConcreteResourceProvider(
         )
     }
 }
+
+private data class GPUUniformSlabLeaseCacheKey(
+    val leaseId: String,
+    val targetId: String,
+    val frameId: String,
+    val descriptorHash: String,
+    val deviceGeneration: Long,
+    val totalBytes: Long,
+    val alignmentBytes: Long,
+    val payloadCount: Int,
+    val releasePolicy: String,
+) {
+    fun dumpToken(): String =
+        "lease=$leaseId;target=$targetId;frame=$frameId;descriptor=$descriptorHash;" +
+            "deviceGeneration=$deviceGeneration;totalBytes=$totalBytes;" +
+            "alignmentBytes=$alignmentBytes;payloadCount=$payloadCount;release=$releasePolicy"
+
+    companion object {
+        fun from(request: GPUUniformSlabLeaseRequest): GPUUniformSlabLeaseCacheKey =
+            GPUUniformSlabLeaseCacheKey(
+                leaseId = request.leaseId,
+                targetId = request.targetId,
+                frameId = request.frameId,
+                descriptorHash = request.descriptorHash,
+                deviceGeneration = request.deviceGeneration,
+                totalBytes = request.totalBytes,
+                alignmentBytes = request.alignmentBytes,
+                payloadCount = request.payloadCount,
+                releasePolicy = request.releasePolicy,
+            )
+    }
+}
+
+private fun GPUResourceLease.snapshotForUniformSlabCache(): GPUResourceLease =
+    copy(
+        usageLabels = dumpUsageLabelsSnapshot,
+        evidenceFacts = dumpEvidenceFactsSnapshot,
+    )
 
 private fun GPUResourceMaterializationDecision.payloadEvents(): List<GPUPayloadMaterializationTelemetryEvent> =
     when (this) {

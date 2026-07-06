@@ -1709,6 +1709,27 @@ data class GPUResourceDiagnostic(
                 ),
             )
 
+        /** Builds a generic refusal when resource facts target a different surface. */
+        fun resourceTargetMismatch(
+            resourceLabel: String,
+            requestTargetId: String,
+            contextTargetId: String,
+        ): GPUResourceDiagnostic {
+            requireDumpSafeValue("GPUResourceDiagnostic.resourceTargetMismatch.resourceLabel", resourceLabel)
+            requireDumpSafeValue("GPUResourceDiagnostic.resourceTargetMismatch.requestTargetId", requestTargetId)
+            requireDumpSafeValue("GPUResourceDiagnostic.resourceTargetMismatch.contextTargetId", contextTargetId)
+            return GPUResourceDiagnostic(
+                code = "unsupported.resource.target_mismatch",
+                resourceLabel = resourceLabel,
+                message = "Resource target mismatch for $resourceLabel: request=$requestTargetId context=$contextTargetId.",
+                terminal = true,
+                facts = mapOf(
+                    "contextTargetId" to contextTargetId,
+                    "requestTargetId" to requestTargetId,
+                ),
+            )
+        }
+
         /** Builds a missing usage diagnostic for a command-stream operand. */
         fun commandOperandUsageMissing(
             resourceLabel: String,
