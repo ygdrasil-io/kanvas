@@ -4,7 +4,6 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
-import kotlin.test.assertTrue
 
 class GPUResourceLeaseContractsTest {
     @Test
@@ -155,7 +154,21 @@ class GPUResourceLeaseContractsTest {
         assertEquals("uniform-slab:frame-1", failure.diagnostic.resourceLabel)
         assertEquals(true, failure.diagnostic.terminal)
         assertEquals(mapOf("reason" to "allocation-denied"), failure.diagnostic.facts)
-        assertTrue(failure.diagnostic.message.contains("GPU resource adapter failed to create"))
+        assertEquals(
+            "GPU resource adapter failed to create uniform-slab:frame-1.",
+            failure.diagnostic.message,
+        )
+        assertFalse(failure.diagnostic.message.contains("allocation-denied"))
+    }
+
+    @Test
+    fun `adapter create failed rejects unsafe reason`() {
+        assertFailsWith<IllegalArgumentException> {
+            GPUResourceDiagnostic.adapterCreateFailed(
+                resourceLabel = "uniform-slab:frame-1",
+                reason = "adapter-" + "w" + "gpu",
+            )
+        }
     }
 
     @Test
@@ -186,6 +199,51 @@ class GPUResourceLeaseContractsTest {
         )
     }
 
+    @Test
+    fun `bind group lease request validates blank and unsafe labels`() {
+        assertFailsWith<IllegalArgumentException> {
+            bindGroupRequest(usageLabels = listOf("uniform", " "))
+        }
+        assertFailsWith<IllegalArgumentException> {
+            bindGroupRequest(usageLabels = listOf("uniform", "bind-" + "w" + "gpu"))
+        }
+    }
+
+    @Test
+    fun `bind group lease factory snapshots request usage labels`() {
+        val usageLabels = mutableListOf("uniform")
+        val request = bindGroupRequest(usageLabels = usageLabels)
+
+        usageLabels += "storage"
+
+        val created = EvidenceOnlyGPUResourceLeaseFactory.createBindGroup(request)
+            as GPUResourceLeaseFactoryResult.Created
+
+        usageLabels += "sampled"
+
+        assertEquals(listOf("uniform"), created.lease.usageLabels)
+        assertEquals(
+            listOf(
+                "resource-provider.lease id=bind-group:unit kind=bind-group result=create " +
+                    "deviceGeneration=11 owner=fullscreen-pass release=submission-complete " +
+                    "usage=uniform descriptor=sha256:bind-group:unit facts=none",
+            ),
+            created.lease.dumpLines(),
+        )
+    }
+
+    @Test
+    fun `evidence only factory creates bind group lease`() {
+        val created = EvidenceOnlyGPUResourceLeaseFactory.createBindGroup(
+            bindGroupRequest(usageLabels = listOf("uniform", "sampled")),
+        ) as GPUResourceLeaseFactoryResult.Created
+
+        assertEquals(GPUResourceLeaseKind.BindGroup, created.lease.resourceKind)
+        assertEquals(GPUResourceLeaseCacheResult.Create, created.lease.cacheResult)
+        assertEquals("fullscreen-pass", created.lease.ownerScope)
+        assertEquals(listOf("uniform", "sampled"), created.lease.usageLabels)
+    }
+
     private fun lease(id: String, kind: GPUResourceLeaseKind): GPUResourceLease =
         GPUResourceLease(
             leaseId = id,
@@ -196,5 +254,17 @@ class GPUResourceLeaseContractsTest {
             usageLabels = listOf("uniform"),
             releasePolicy = "submission-complete",
             cacheResult = GPUResourceLeaseCacheResult.Create,
+        )
+
+    private fun bindGroupRequest(
+        usageLabels: List<String>,
+    ): GPUBindGroupLeaseRequest =
+        GPUBindGroupLeaseRequest(
+            leaseId = "bind-group:unit",
+            deviceGeneration = 11,
+            descriptorHash = "sha256:bind-group:unit",
+            ownerScope = "fullscreen-pass",
+            usageLabels = usageLabels,
+            releasePolicy = "submission-complete",
         )
 }

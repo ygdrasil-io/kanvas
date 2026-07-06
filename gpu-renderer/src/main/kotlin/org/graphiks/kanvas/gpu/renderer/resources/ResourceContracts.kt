@@ -2056,14 +2056,17 @@ data class GPUResourceDiagnostic(
         fun adapterCreateFailed(
             resourceLabel: String,
             reason: String,
-        ): GPUResourceDiagnostic =
-            GPUResourceDiagnostic(
+        ): GPUResourceDiagnostic {
+            requireDumpSafeValue("GPUResourceDiagnostic.adapterCreateFailed.resourceLabel", resourceLabel)
+            requireDumpSafeValue("GPUResourceDiagnostic.adapterCreateFailed.reason", reason)
+            return GPUResourceDiagnostic(
                 code = "unsupported.resource.adapter_create_failed",
                 resourceLabel = resourceLabel,
-                message = "GPU resource adapter failed to create $resourceLabel: $reason",
+                message = "GPU resource adapter failed to create $resourceLabel.",
                 terminal = true,
                 facts = mapOf("reason" to reason),
             )
+        }
 
         /** Builds a pipeline creation failure diagnostic recorded during materialization. */
         fun pipelineCreationFailure(resourceLabel: String, reason: String): GPUResourceDiagnostic =

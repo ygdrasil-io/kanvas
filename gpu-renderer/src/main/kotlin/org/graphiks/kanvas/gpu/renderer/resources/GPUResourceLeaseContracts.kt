@@ -161,6 +161,8 @@ data class GPUBindGroupLeaseRequest(
         }
         requireLeaseDumpSafe("GPUBindGroupLeaseRequest.releasePolicy", releasePolicy)
     }
+
+    internal val dumpUsageLabelsSnapshot: List<String> = usageLabels.toList()
 }
 
 sealed interface GPUResourceLeaseFactoryResult {
@@ -204,7 +206,7 @@ object EvidenceOnlyGPUResourceLeaseFactory : GPUResourceLeaseFactory {
                 deviceGeneration = request.deviceGeneration,
                 descriptorHash = request.descriptorHash,
                 ownerScope = request.ownerScope,
-                usageLabels = request.usageLabels,
+                usageLabels = request.dumpUsageLabelsSnapshot,
                 releasePolicy = request.releasePolicy,
                 cacheResult = GPUResourceLeaseCacheResult.Create,
             ),
