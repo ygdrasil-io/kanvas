@@ -60,7 +60,7 @@ class GPUResourceLeaseContractsTest {
                 usageLabels = listOf("sampler"),
                 releasePolicy = "descriptor-cache",
                 cacheResult = GPUResourceLeaseCacheResult.Create,
-                evidenceFacts = mapOf("backend" to ("G" + "PUHandle")),
+                evidenceFacts = mapOf("backend" to ("W" + "GPUHandle")),
             )
         }
     }
