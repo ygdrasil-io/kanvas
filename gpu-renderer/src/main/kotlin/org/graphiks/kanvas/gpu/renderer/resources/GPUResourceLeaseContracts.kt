@@ -129,14 +129,16 @@ data class GPUUniformSlabLeaseRequest(
     }
 }
 
-data class GPUBindGroupLeaseRequest(
+class GPUBindGroupLeaseRequest(
     val leaseId: String,
     val deviceGeneration: Long,
     val descriptorHash: String,
     val ownerScope: String,
-    val usageLabels: List<String>,
+    usageLabels: List<String>,
     val releasePolicy: String,
 ) {
+    val usageLabels: List<String> = usageLabels.toList()
+
     init {
         require(leaseId.isNotBlank()) { "GPUBindGroupLeaseRequest.leaseId must not be blank" }
         require(deviceGeneration >= 0L) {
@@ -146,14 +148,14 @@ data class GPUBindGroupLeaseRequest(
             "GPUBindGroupLeaseRequest.descriptorHash must not be blank"
         }
         require(ownerScope.isNotBlank()) { "GPUBindGroupLeaseRequest.ownerScope must not be blank" }
-        require(usageLabels.isNotEmpty()) { "GPUBindGroupLeaseRequest.usageLabels must not be empty" }
+        require(this.usageLabels.isNotEmpty()) { "GPUBindGroupLeaseRequest.usageLabels must not be empty" }
         require(releasePolicy.isNotBlank()) {
             "GPUBindGroupLeaseRequest.releasePolicy must not be blank"
         }
         requireLeaseDumpSafe("GPUBindGroupLeaseRequest.leaseId", leaseId)
         requireLeaseDumpSafe("GPUBindGroupLeaseRequest.descriptorHash", descriptorHash)
         requireLeaseDumpSafe("GPUBindGroupLeaseRequest.ownerScope", ownerScope)
-        usageLabels.forEach { usageLabel ->
+        this.usageLabels.forEach { usageLabel ->
             require(usageLabel.isNotBlank()) {
                 "GPUBindGroupLeaseRequest.usageLabels must not contain blank values"
             }
@@ -161,8 +163,6 @@ data class GPUBindGroupLeaseRequest(
         }
         requireLeaseDumpSafe("GPUBindGroupLeaseRequest.releasePolicy", releasePolicy)
     }
-
-    internal val dumpUsageLabelsSnapshot: List<String> = usageLabels.toList()
 }
 
 sealed interface GPUResourceLeaseFactoryResult {
@@ -206,7 +206,7 @@ object EvidenceOnlyGPUResourceLeaseFactory : GPUResourceLeaseFactory {
                 deviceGeneration = request.deviceGeneration,
                 descriptorHash = request.descriptorHash,
                 ownerScope = request.ownerScope,
-                usageLabels = request.dumpUsageLabelsSnapshot,
+                usageLabels = request.usageLabels,
                 releasePolicy = request.releasePolicy,
                 cacheResult = GPUResourceLeaseCacheResult.Create,
             ),

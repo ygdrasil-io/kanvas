@@ -172,6 +172,16 @@ class GPUResourceLeaseContractsTest {
     }
 
     @Test
+    fun `adapter create failed rejects unsafe resource label`() {
+        assertFailsWith<IllegalArgumentException> {
+            GPUResourceDiagnostic.adapterCreateFailed(
+                resourceLabel = "bind-" + "w" + "gpu",
+                reason = "allocation-denied",
+            )
+        }
+    }
+
+    @Test
     fun `evidence only factory creates uniform slab lease with stable evidence keys`() {
         val result = EvidenceOnlyGPUResourceLeaseFactory.createUniformSlab(
             GPUUniformSlabLeaseRequest(
@@ -215,6 +225,8 @@ class GPUResourceLeaseContractsTest {
         val request = bindGroupRequest(usageLabels = usageLabels)
 
         usageLabels += "storage"
+
+        assertEquals(listOf("uniform"), request.usageLabels)
 
         val created = EvidenceOnlyGPUResourceLeaseFactory.createBindGroup(request)
             as GPUResourceLeaseFactoryResult.Created
