@@ -105,14 +105,18 @@ data class GPUUniformSlabLeaseRequest(
 ) {
     init {
         require(leaseId.isNotBlank()) { "GPUUniformSlabLeaseRequest.leaseId must not be blank" }
+        requireLeaseDumpSafe("GPUUniformSlabLeaseRequest.leaseId", leaseId)
         require(targetId.isNotBlank()) { "GPUUniformSlabLeaseRequest.targetId must not be blank" }
+        requireLeaseDumpSafe("GPUUniformSlabLeaseRequest.targetId", targetId)
         require(frameId.isNotBlank()) { "GPUUniformSlabLeaseRequest.frameId must not be blank" }
+        requireLeaseDumpSafe("GPUUniformSlabLeaseRequest.frameId", frameId)
         require(deviceGeneration >= 0L) {
             "GPUUniformSlabLeaseRequest.deviceGeneration must be non-negative"
         }
         require(descriptorHash.isNotBlank()) {
             "GPUUniformSlabLeaseRequest.descriptorHash must not be blank"
         }
+        requireLeaseDumpSafe("GPUUniformSlabLeaseRequest.descriptorHash", descriptorHash)
         require(totalBytes > 0L) { "GPUUniformSlabLeaseRequest.totalBytes must be positive" }
         require(alignmentBytes > 0L) {
             "GPUUniformSlabLeaseRequest.alignmentBytes must be positive"
@@ -120,10 +124,8 @@ data class GPUUniformSlabLeaseRequest(
         require(releasePolicy.isNotBlank()) {
             "GPUUniformSlabLeaseRequest.releasePolicy must not be blank"
         }
+        requireLeaseDumpSafe("GPUUniformSlabLeaseRequest.releasePolicy", releasePolicy)
         require(payloadCount > 0) { "GPUUniformSlabLeaseRequest.payloadCount must be positive" }
-        listOf(leaseId, targetId, frameId, descriptorHash, releasePolicy).forEach { value ->
-            requireLeaseDumpSafe("GPUUniformSlabLeaseRequest", value)
-        }
     }
 }
 
@@ -186,9 +188,9 @@ object EvidenceOnlyGPUResourceLeaseFactory : GPUResourceLeaseFactory {
                 releasePolicy = request.releasePolicy,
                 cacheResult = GPUResourceLeaseCacheResult.Create,
                 evidenceFacts = mapOf(
-                    "alignment" to request.alignmentBytes.toString(),
+                    "alignmentBytes" to request.alignmentBytes.toString(),
                     "payloadCount" to request.payloadCount.toString(),
-                    "target" to request.targetId,
+                    "targetId" to request.targetId,
                     "totalBytes" to request.totalBytes.toString(),
                 ),
             ),

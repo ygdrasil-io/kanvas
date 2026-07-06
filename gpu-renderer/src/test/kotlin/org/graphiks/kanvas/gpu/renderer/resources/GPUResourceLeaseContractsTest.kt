@@ -4,6 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class GPUResourceLeaseContractsTest {
     @Test
@@ -152,6 +153,37 @@ class GPUResourceLeaseContractsTest {
 
         assertEquals("unsupported.resource.adapter_create_failed", failure.diagnostic.code)
         assertEquals("uniform-slab:frame-1", failure.diagnostic.resourceLabel)
+        assertEquals(true, failure.diagnostic.terminal)
+        assertEquals(mapOf("reason" to "allocation-denied"), failure.diagnostic.facts)
+        assertTrue(failure.diagnostic.message.contains("GPU resource adapter failed to create"))
+    }
+
+    @Test
+    fun `evidence only factory creates uniform slab lease with stable evidence keys`() {
+        val result = EvidenceOnlyGPUResourceLeaseFactory.createUniformSlab(
+            GPUUniformSlabLeaseRequest(
+                leaseId = "uniform-slab:frame-2",
+                targetId = "root-target",
+                frameId = "frame-2",
+                deviceGeneration = 12,
+                descriptorHash = "sha256:uniform-slab-frame-2",
+                totalBytes = 1024,
+                alignmentBytes = 256,
+                releasePolicy = "submission-complete",
+                payloadCount = 4,
+            ),
+        )
+
+        val created = result as GPUResourceLeaseFactoryResult.Created
+        assertEquals(
+            mapOf(
+                "alignmentBytes" to "256",
+                "payloadCount" to "4",
+                "targetId" to "root-target",
+                "totalBytes" to "1024",
+            ),
+            created.lease.evidenceFacts,
+        )
     }
 
     private fun lease(id: String, kind: GPUResourceLeaseKind): GPUResourceLease =
