@@ -1884,11 +1884,12 @@ data class GPUResourceDiagnostic(
             resourceLabel: String,
             expectedDeviceGeneration: Long,
             actualDeviceGeneration: Long,
+            resourceKind: String = "texture",
         ): GPUResourceDiagnostic =
             GPUResourceDiagnostic(
-                code = "unsupported.texture.device_generation_stale",
+                code = "unsupported.$resourceKind.device_generation_stale",
                 resourceLabel = resourceLabel,
-                message = "Texture resource $resourceLabel was created for device generation $actualDeviceGeneration but expected $expectedDeviceGeneration.",
+                message = "${resourceKind.replaceFirstChar { it.uppercase() }} resource $resourceLabel was created for device generation $actualDeviceGeneration but expected $expectedDeviceGeneration.",
                 terminal = true,
                 facts = mapOf(
                     "actualDeviceGeneration" to actualDeviceGeneration.toString(),
