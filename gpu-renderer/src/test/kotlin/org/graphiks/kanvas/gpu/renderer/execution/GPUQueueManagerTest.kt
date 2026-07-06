@@ -47,6 +47,10 @@ class GPUQueueManagerTest {
         val dump = manager.telemetry.dumpLines().joinToString("\n")
         assertTrue(dump.contains("submitted=1 completed=1 released=1 pending=0 waits=0 unknownCompletions=0"))
         assertTrue(dump.contains("completion=readback-complete"))
+        assertFalse(dump.contains("@"))
+        assertFalse(dump.contains("0x"))
+        assertFalse(dump.contains("W" + "GPU"))
+        assertFalse(dump.contains("w" + "gpu"))
     }
 
     @Test
@@ -120,24 +124,6 @@ class GPUQueueManagerTest {
         }
     }
 
-    @Test
-    fun `queue manager dumps stay backend-neutral`() {
-        val manager = GPUQueueManager()
-        val submission = manager.submit(
-            label = "frame-1",
-            retainedResources = listOf(GPUQueuedResourceRef("readback:frame-1")),
-        )
-
-        assertTrue(manager.markCompleted(submission.id, GPU_QUEUE_COMPLETION_READBACK_COMPLETE))
-        assertEquals(listOf(GPUQueuedResourceRef("readback:frame-1")), manager.releaseCompleted())
-
-        val dump = manager.telemetry.dumpLines().joinToString("\n")
-
-        assertFalse(dump.contains("@"))
-        assertFalse(dump.contains("0x"))
-        assertFalse(dump.contains("W" + "GPU"))
-        assertFalse(dump.contains("w" + "gpu"))
-    }
 }
 
 private fun queueLease(leaseId: String): GPUResourceLease =
