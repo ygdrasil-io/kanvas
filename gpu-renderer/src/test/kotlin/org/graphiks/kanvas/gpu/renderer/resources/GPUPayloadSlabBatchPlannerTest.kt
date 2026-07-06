@@ -280,13 +280,37 @@ class GPUPayloadSlabBatchPlannerTest {
     }
 
     @Test
-    fun `planner refuses short 0x handle-looking source labels`() {
+    fun `planner accepts dimension-style frame ids that contain zero x separators`() {
+        val accepted = assertIs<GPUPayloadSlabBatchPlanningResult.Accepted>(
+            GPUPayloadSlabBatchPlanner.plan(
+                GPUPayloadSlabBatchRequest(
+                    targetId = "payload-target-frame-size",
+                    frameId = "offscreen-texture-offscreenTex:320x512:rgba8unorm-srgb-frame-1",
+                    sourceLabel = "payload-slab-source",
+                    deviceGeneration = 11L,
+                    alignmentBytes = 256L,
+                    uploadBudgetBytes = 1024L,
+                    payloadRequests = listOf(
+                        payloadRequest(
+                            index = 0,
+                            targetId = "payload-target-frame-size",
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        assertEquals("offscreen-texture-offscreenTex:320x512:rgba8unorm-srgb-frame-1", accepted.plan.frameId)
+    }
+
+    @Test
+    fun `planner refuses long 0x handle-looking source labels`() {
         assertRefused(
             result = GPUPayloadSlabBatchPlanner.plan(
                 GPUPayloadSlabBatchRequest(
                     targetId = "root-target",
                     frameId = "frame-1",
-                    sourceLabel = "fullscreen-0x1",
+                    sourceLabel = "fullscreen-0xdeadbeef",
                     deviceGeneration = 11L,
                     alignmentBytes = 256L,
                     uploadBudgetBytes = 1024L,

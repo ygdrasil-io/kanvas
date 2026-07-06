@@ -779,4 +779,4 @@ private fun GPUPayloadSlabResourceEvent.dumpFields(): String =
     }
 
 private val RAW_HANDLE_PAYLOAD_SLAB_DUMP_PATTERN =
-    Regex("""(?i)(wgpu|externaltexturehandle|gpu[a-z0-9]*handle|0x)""")
+    Regex("""(?i)(wgpu|externaltexturehandle|gpu[a-z0-9]*handle|0x[0-9a-f]{6,})""")
