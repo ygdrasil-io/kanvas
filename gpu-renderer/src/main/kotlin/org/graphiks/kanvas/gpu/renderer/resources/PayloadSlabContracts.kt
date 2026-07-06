@@ -194,6 +194,126 @@ sealed class GPUPayloadSlabBatchPlanningResult {
     }
 }
 
+/** Backend-neutral bounded ledger for payload slab resource evidence. */
+class GPUPayloadSlabResourceLedger(maxEvents: Int) {
+    private val eventLimit: Int = maxEvents
+    private val events: ArrayDeque<GPUPayloadSlabResourceEvent> = ArrayDeque(maxEvents)
+
+    init {
+        require(maxEvents > 0) { "GPUPayloadSlabResourceLedger.maxEvents must be positive" }
+    }
+
+    fun record(event: GPUPayloadSlabResourceEvent) {
+        event.validate()
+        if (events.size == eventLimit) {
+            events.removeFirst()
+        }
+        events.addLast(event)
+    }
+
+    fun dumpLines(): List<String> =
+        events.mapIndexed { index, event ->
+            val line = event.dumpLine()
+            requireDumpSafePayloadSlabValue("GPUPayloadSlabResourceLedger.dumpLines[$index]", line)
+            line
+        }
+}
+
+/** Ledger event for payload slab resource evidence. */
+sealed interface GPUPayloadSlabResourceEvent {
+    fun validate()
+    data class Planned(
+        val sourceLabel: String,
+        val targetId: String,
+        val frameId: String,
+        val deviceGeneration: Long,
+        val payloadCount: Int,
+    ) : GPUPayloadSlabResourceEvent {
+        override fun validate() {
+            listOf(
+                "GPUPayloadSlabResourceEvent.Planned.sourceLabel" to sourceLabel,
+                "GPUPayloadSlabResourceEvent.Planned.targetId" to targetId,
+                "GPUPayloadSlabResourceEvent.Planned.frameId" to frameId,
+            ).forEach { (field, value) -> requireDumpSafePayloadSlabValue(field, value) }
+            require(deviceGeneration >= 0L) {
+                "GPUPayloadSlabResourceEvent.Planned.deviceGeneration must be non-negative"
+            }
+            require(payloadCount >= 0) {
+                "GPUPayloadSlabResourceEvent.Planned.payloadCount must be non-negative"
+            }
+        }
+    }
+
+    data class Accepted(
+        val sourceLabel: String,
+        val planHash: String,
+        val totalBytes: Long,
+        val slotCount: Int,
+    ) : GPUPayloadSlabResourceEvent {
+        override fun validate() {
+            listOf(
+                "GPUPayloadSlabResourceEvent.Accepted.sourceLabel" to sourceLabel,
+                "GPUPayloadSlabResourceEvent.Accepted.planHash" to planHash,
+            ).forEach { (field, value) -> requireDumpSafePayloadSlabValue(field, value) }
+            require(totalBytes >= 0L) {
+                "GPUPayloadSlabResourceEvent.Accepted.totalBytes must be non-negative"
+            }
+            require(slotCount >= 0) {
+                "GPUPayloadSlabResourceEvent.Accepted.slotCount must be non-negative"
+            }
+        }
+    }
+
+    data class Fallback(
+        val sourceLabel: String,
+        val reason: String,
+        val payloadCount: Int,
+    ) : GPUPayloadSlabResourceEvent {
+        override fun validate() {
+            listOf(
+                "GPUPayloadSlabResourceEvent.Fallback.sourceLabel" to sourceLabel,
+                "GPUPayloadSlabResourceEvent.Fallback.reason" to reason,
+            ).forEach { (field, value) -> requireDumpSafePayloadSlabValue(field, value) }
+            require(payloadCount >= 0) {
+                "GPUPayloadSlabResourceEvent.Fallback.payloadCount must be non-negative"
+            }
+        }
+    }
+
+    data class Invalidated(
+        val sourceLabel: String,
+        val targetId: String,
+        val reason: String,
+    ) : GPUPayloadSlabResourceEvent {
+        override fun validate() {
+            listOf(
+                "GPUPayloadSlabResourceEvent.Invalidated.sourceLabel" to sourceLabel,
+                "GPUPayloadSlabResourceEvent.Invalidated.targetId" to targetId,
+                "GPUPayloadSlabResourceEvent.Invalidated.reason" to reason,
+            ).forEach { (field, value) -> requireDumpSafePayloadSlabValue(field, value) }
+        }
+    }
+
+    data class BudgetRefused(
+        val sourceLabel: String,
+        val requestedBytes: Long,
+        val budgetBytes: Long,
+    ) : GPUPayloadSlabResourceEvent {
+        override fun validate() {
+            requireDumpSafePayloadSlabValue(
+                "GPUPayloadSlabResourceEvent.BudgetRefused.sourceLabel",
+                sourceLabel,
+            )
+            require(requestedBytes >= 0L) {
+                "GPUPayloadSlabResourceEvent.BudgetRefused.requestedBytes must be non-negative"
+            }
+            require(budgetBytes >= 0L) {
+                "GPUPayloadSlabResourceEvent.BudgetRefused.budgetBytes must be non-negative"
+            }
+        }
+    }
+}
+
 /** Planner that lifts payload materialization facts into a backend-neutral slab plan. */
 object GPUPayloadSlabBatchPlanner {
     fun plan(request: GPUPayloadSlabBatchRequest): GPUPayloadSlabBatchPlanningResult {
@@ -595,6 +715,7 @@ private fun sha256Hex(bytes: ByteArray): String {
 
 private fun isDumpSafePayloadSlabValue(value: String): Boolean =
     value.isNotBlank() &&
+        value.none(Char::isISOControl) &&
         !RAW_HANDLE_PAYLOAD_SLAB_DUMP_PATTERN.containsMatchIn(value) &&
         '@' !in value
 
@@ -610,6 +731,34 @@ private fun Map<String, String>.dumpFacts(): String =
     } else {
         entries.sortedBy { entry -> entry.key }
             .joinToString(",") { entry -> "${entry.key}=${entry.value}" }
+    }
+
+private fun GPUPayloadSlabResourceEvent.dumpLine(): String =
+    when (this) {
+        is GPUPayloadSlabResourceEvent.Planned ->
+            "payload-slab.resource.planned ${dumpFields()}"
+        is GPUPayloadSlabResourceEvent.Accepted ->
+            "payload-slab.resource.accepted ${dumpFields()}"
+        is GPUPayloadSlabResourceEvent.Fallback ->
+            "payload-slab.resource.fallback ${dumpFields()}"
+        is GPUPayloadSlabResourceEvent.Invalidated ->
+            "payload-slab.resource.invalidated ${dumpFields()}"
+        is GPUPayloadSlabResourceEvent.BudgetRefused ->
+            "payload-slab.resource.budget_refused ${dumpFields()}"
+    }
+
+private fun GPUPayloadSlabResourceEvent.dumpFields(): String =
+    when (this) {
+        is GPUPayloadSlabResourceEvent.Planned ->
+            "source=$sourceLabel target=$targetId frame=$frameId deviceGeneration=$deviceGeneration payloads=$payloadCount"
+        is GPUPayloadSlabResourceEvent.Accepted ->
+            "source=$sourceLabel plan=$planHash totalBytes=$totalBytes slots=$slotCount"
+        is GPUPayloadSlabResourceEvent.Fallback ->
+            "source=$sourceLabel reason=$reason payloads=$payloadCount"
+        is GPUPayloadSlabResourceEvent.Invalidated ->
+            "source=$sourceLabel target=$targetId reason=$reason"
+        is GPUPayloadSlabResourceEvent.BudgetRefused ->
+            "source=$sourceLabel requestedBytes=$requestedBytes budgetBytes=$budgetBytes"
     }
 
 private val RAW_HANDLE_PAYLOAD_SLAB_DUMP_PATTERN =

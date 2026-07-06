@@ -278,6 +278,88 @@ class GPUPayloadSlabBatchPlannerTest {
     }
 
     @Test
+    fun `resource ledger records bounded dump-safe payload slab events`() {
+        val ledger = GPUPayloadSlabResourceLedger(maxEvents = 2)
+
+        ledger.record(
+            GPUPayloadSlabResourceEvent.Planned(
+                sourceLabel = "payload-slab-source",
+                targetId = "root-target",
+                frameId = "frame-1",
+                deviceGeneration = 11L,
+                payloadCount = 3,
+            ),
+        )
+        ledger.record(
+            GPUPayloadSlabResourceEvent.Accepted(
+                sourceLabel = "payload-slab-source",
+                planHash = "plan-hash-1",
+                totalBytes = 768L,
+                slotCount = 3,
+            ),
+        )
+        ledger.record(
+            GPUPayloadSlabResourceEvent.Fallback(
+                sourceLabel = "gradient-material-pass",
+                reason = "binding_layout_mismatch",
+                payloadCount = 2,
+            ),
+        )
+
+        val dump = ledger.dumpLines()
+        val dumpText = dump.joinToString("\n")
+
+        assertEquals(2, dump.size)
+        assertEquals(
+            "payload-slab.resource.accepted source=payload-slab-source plan=plan-hash-1 totalBytes=768 slots=3",
+            dump[0],
+        )
+        assertEquals(
+            "payload-slab.resource.fallback source=gradient-material-pass reason=binding_layout_mismatch payloads=2",
+            dump[1],
+        )
+        assertFalse(dumpText.contains("WGPU"))
+        assertFalse(dumpText.contains("wgpu"))
+        assertFalse(dumpText.contains("@"))
+        assertFalse(dumpText.contains("0x"))
+    }
+
+    @Test
+    fun `resource ledger rejects unsafe evidence`() {
+        val ledger = GPUPayloadSlabResourceLedger(maxEvents = 4)
+
+        assertFailsWith<IllegalArgumentException> {
+            ledger.record(
+                GPUPayloadSlabResourceEvent.Fallback(
+                    sourceLabel = "payload@source",
+                    reason = "binding_layout_mismatch",
+                    payloadCount = 1,
+                ),
+            )
+        }
+
+        assertFailsWith<IllegalArgumentException> {
+            ledger.record(
+                GPUPayloadSlabResourceEvent.Fallback(
+                    sourceLabel = "payload-slab-source\nforged-line",
+                    reason = "binding_layout_mismatch",
+                    payloadCount = 1,
+                ),
+            )
+        }
+
+        assertFailsWith<IllegalArgumentException> {
+            ledger.record(
+                GPUPayloadSlabResourceEvent.BudgetRefused(
+                    sourceLabel = "payload-slab-source",
+                    requestedBytes = -1L,
+                    budgetBytes = 256L,
+                ),
+            )
+        }
+    }
+
+    @Test
     fun `planner refuses invalid upload and binding evidence before slab materialization`() {
         assertRefused(
             result = GPUPayloadSlabBatchPlanner.plan(
