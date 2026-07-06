@@ -52,6 +52,58 @@ class GPUConcreteResourceProviderTest {
     }
 
     @Test
+    fun `concrete provider retries fullscreen uniform slab creation after factory failure`() {
+        var createCalls = 0
+        val provider = GPUConcreteResourceProvider(
+            leaseFactory = object : GPUResourceLeaseFactory {
+                override fun createUniformSlab(
+                    request: GPUUniformSlabLeaseRequest,
+                ): GPUResourceLeaseFactoryResult {
+                    createCalls += 1
+                    return if (createCalls == 1) {
+                        GPUResourceLeaseFactoryResult.Failed(
+                            diagnostic = GPUResourceDiagnostic.adapterCreateFailed(
+                                resourceLabel = request.leaseId,
+                                reason = "allocation-denied",
+                            ),
+                        )
+                    } else {
+                        EvidenceOnlyGPUResourceLeaseFactory.createUniformSlab(request)
+                    }
+                }
+
+                override fun createBindGroup(
+                    request: GPUBindGroupLeaseRequest,
+                ): GPUResourceLeaseFactoryResult =
+                    EvidenceOnlyGPUResourceLeaseFactory.createBindGroup(request)
+            },
+        )
+        val context = targetPreparationContext()
+
+        val first = assertIs<GPUResourceMaterializationDecision.Refused>(
+            provider.materializeFullscreenUniformSlabLease(
+                request = fullscreenUniformSlabLeaseRequest(),
+                context = context,
+            ),
+        )
+        val second = assertIs<GPUResourceMaterializationDecision.Materialized>(
+            provider.materializeFullscreenUniformSlabLease(
+                request = fullscreenUniformSlabLeaseRequest(),
+                context = context,
+            ),
+        )
+
+        assertEquals("unsupported.resource.adapter_create_failed", first.diagnostic.code)
+        assertEquals(GPUResourceLeaseCacheResult.Create, second.dumpResourceLeaseSnapshot.single().cacheResult)
+        assertEquals(
+            listOf("adapter-failure", "create"),
+            provider.telemetry.dumpEvents
+                .filter { event -> event.lane == "uniform-slab" }
+                .map { event -> event.result },
+        )
+    }
+
+    @Test
     fun `concrete provider creates then reuses fullscreen uniform slab lease`() {
         val provider = GPUConcreteResourceProvider()
         val context = targetPreparationContext()

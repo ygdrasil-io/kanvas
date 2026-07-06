@@ -140,10 +140,8 @@ class GPUConcreteResourceProvider(
             request.totalBytes.toString(),
             request.alignmentBytes.toString(),
         ).joinToString("|")
-        val created = uniformSlabLeaseKeys.add(key)
-        val leaseResult = if (created) {
-            leaseFactory.createUniformSlab(request)
-        } else {
+        val reusable = key in uniformSlabLeaseKeys
+        val leaseResult = if (reusable) {
             GPUResourceLeaseFactoryResult.Created(
                 GPUResourceLease(
                     leaseId = request.leaseId,
@@ -162,6 +160,8 @@ class GPUConcreteResourceProvider(
                     ),
                 ),
             )
+        } else {
+            leaseFactory.createUniformSlab(request)
         }
 
         return when (leaseResult) {
@@ -174,10 +174,13 @@ class GPUConcreteResourceProvider(
                 )
             }
             is GPUResourceLeaseFactoryResult.Created -> {
-                val lease = if (created) {
-                    leaseResult.lease
-                } else {
+                if (!reusable) {
+                    uniformSlabLeaseKeys.add(key)
+                }
+                val lease = if (reusable) {
                     leaseResult.lease.copy(cacheResult = GPUResourceLeaseCacheResult.Reuse)
+                } else {
+                    leaseResult.lease
                 }
                 record("uniform-slab", lease.cacheResult.dumpToken, key, context.targetId)
                 GPUResourceMaterializationDecision.Materialized(
