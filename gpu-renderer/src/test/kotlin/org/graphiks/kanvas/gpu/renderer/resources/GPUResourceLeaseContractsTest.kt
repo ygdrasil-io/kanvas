@@ -115,6 +115,45 @@ class GPUResourceLeaseContractsTest {
         )
     }
 
+    @Test
+    fun `uniform slab lease request validates alignment budget and ids`() {
+        val request = GPUUniformSlabLeaseRequest(
+            leaseId = "uniform-slab:frame-1",
+            targetId = "root-target",
+            frameId = "frame-1",
+            deviceGeneration = 11,
+            descriptorHash = "sha256:uniform-slab-frame-1",
+            totalBytes = 512,
+            alignmentBytes = 256,
+            releasePolicy = "submission-complete",
+            payloadCount = 2,
+        )
+
+        assertEquals(512, request.totalBytes)
+        assertFailsWith<IllegalArgumentException> {
+            request.copy(totalBytes = 0)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            request.copy(alignmentBytes = 0)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            request.copy(payloadCount = 0)
+        }
+    }
+
+    @Test
+    fun `lease factory failure maps to stable diagnostic`() {
+        val failure = GPUResourceLeaseFactoryResult.Failed(
+            diagnostic = GPUResourceDiagnostic.adapterCreateFailed(
+                resourceLabel = "uniform-slab:frame-1",
+                reason = "allocation-denied",
+            ),
+        )
+
+        assertEquals("unsupported.resource.adapter_create_failed", failure.diagnostic.code)
+        assertEquals("uniform-slab:frame-1", failure.diagnostic.resourceLabel)
+    }
+
     private fun lease(id: String, kind: GPUResourceLeaseKind): GPUResourceLease =
         GPUResourceLease(
             leaseId = id,

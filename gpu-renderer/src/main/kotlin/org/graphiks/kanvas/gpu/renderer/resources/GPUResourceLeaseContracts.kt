@@ -91,3 +91,120 @@ private fun requireLeaseDumpSafe(fieldName: String, value: String) {
         "$fieldName must use dump-safe GPU evidence labels"
     }
 }
+
+data class GPUUniformSlabLeaseRequest(
+    val leaseId: String,
+    val targetId: String,
+    val frameId: String,
+    val deviceGeneration: Long,
+    val descriptorHash: String,
+    val totalBytes: Long,
+    val alignmentBytes: Long,
+    val releasePolicy: String,
+    val payloadCount: Int,
+) {
+    init {
+        require(leaseId.isNotBlank()) { "GPUUniformSlabLeaseRequest.leaseId must not be blank" }
+        require(targetId.isNotBlank()) { "GPUUniformSlabLeaseRequest.targetId must not be blank" }
+        require(frameId.isNotBlank()) { "GPUUniformSlabLeaseRequest.frameId must not be blank" }
+        require(deviceGeneration >= 0L) {
+            "GPUUniformSlabLeaseRequest.deviceGeneration must be non-negative"
+        }
+        require(descriptorHash.isNotBlank()) {
+            "GPUUniformSlabLeaseRequest.descriptorHash must not be blank"
+        }
+        require(totalBytes > 0L) { "GPUUniformSlabLeaseRequest.totalBytes must be positive" }
+        require(alignmentBytes > 0L) {
+            "GPUUniformSlabLeaseRequest.alignmentBytes must be positive"
+        }
+        require(releasePolicy.isNotBlank()) {
+            "GPUUniformSlabLeaseRequest.releasePolicy must not be blank"
+        }
+        require(payloadCount > 0) { "GPUUniformSlabLeaseRequest.payloadCount must be positive" }
+        listOf(leaseId, targetId, frameId, descriptorHash, releasePolicy).forEach { value ->
+            requireLeaseDumpSafe("GPUUniformSlabLeaseRequest", value)
+        }
+    }
+}
+
+data class GPUBindGroupLeaseRequest(
+    val leaseId: String,
+    val deviceGeneration: Long,
+    val descriptorHash: String,
+    val ownerScope: String,
+    val usageLabels: List<String>,
+    val releasePolicy: String,
+) {
+    init {
+        require(leaseId.isNotBlank()) { "GPUBindGroupLeaseRequest.leaseId must not be blank" }
+        require(deviceGeneration >= 0L) {
+            "GPUBindGroupLeaseRequest.deviceGeneration must be non-negative"
+        }
+        require(descriptorHash.isNotBlank()) {
+            "GPUBindGroupLeaseRequest.descriptorHash must not be blank"
+        }
+        require(ownerScope.isNotBlank()) { "GPUBindGroupLeaseRequest.ownerScope must not be blank" }
+        require(usageLabels.isNotEmpty()) { "GPUBindGroupLeaseRequest.usageLabels must not be empty" }
+        require(releasePolicy.isNotBlank()) {
+            "GPUBindGroupLeaseRequest.releasePolicy must not be blank"
+        }
+        requireLeaseDumpSafe("GPUBindGroupLeaseRequest.leaseId", leaseId)
+        requireLeaseDumpSafe("GPUBindGroupLeaseRequest.descriptorHash", descriptorHash)
+        requireLeaseDumpSafe("GPUBindGroupLeaseRequest.ownerScope", ownerScope)
+        usageLabels.forEach { usageLabel ->
+            require(usageLabel.isNotBlank()) {
+                "GPUBindGroupLeaseRequest.usageLabels must not contain blank values"
+            }
+            requireLeaseDumpSafe("GPUBindGroupLeaseRequest.usageLabels", usageLabel)
+        }
+        requireLeaseDumpSafe("GPUBindGroupLeaseRequest.releasePolicy", releasePolicy)
+    }
+}
+
+sealed interface GPUResourceLeaseFactoryResult {
+    data class Created(val lease: GPUResourceLease) : GPUResourceLeaseFactoryResult
+
+    data class Failed(val diagnostic: GPUResourceDiagnostic) : GPUResourceLeaseFactoryResult
+}
+
+interface GPUResourceLeaseFactory {
+    fun createUniformSlab(request: GPUUniformSlabLeaseRequest): GPUResourceLeaseFactoryResult
+
+    fun createBindGroup(request: GPUBindGroupLeaseRequest): GPUResourceLeaseFactoryResult
+}
+
+object EvidenceOnlyGPUResourceLeaseFactory : GPUResourceLeaseFactory {
+    override fun createUniformSlab(request: GPUUniformSlabLeaseRequest): GPUResourceLeaseFactoryResult =
+        GPUResourceLeaseFactoryResult.Created(
+            GPUResourceLease(
+                leaseId = request.leaseId,
+                resourceKind = GPUResourceLeaseKind.UniformSlab,
+                deviceGeneration = request.deviceGeneration,
+                descriptorHash = request.descriptorHash,
+                ownerScope = request.frameId,
+                usageLabels = listOf("copy_dst", "uniform"),
+                releasePolicy = request.releasePolicy,
+                cacheResult = GPUResourceLeaseCacheResult.Create,
+                evidenceFacts = mapOf(
+                    "alignment" to request.alignmentBytes.toString(),
+                    "payloadCount" to request.payloadCount.toString(),
+                    "target" to request.targetId,
+                    "totalBytes" to request.totalBytes.toString(),
+                ),
+            ),
+        )
+
+    override fun createBindGroup(request: GPUBindGroupLeaseRequest): GPUResourceLeaseFactoryResult =
+        GPUResourceLeaseFactoryResult.Created(
+            GPUResourceLease(
+                leaseId = request.leaseId,
+                resourceKind = GPUResourceLeaseKind.BindGroup,
+                deviceGeneration = request.deviceGeneration,
+                descriptorHash = request.descriptorHash,
+                ownerScope = request.ownerScope,
+                usageLabels = request.usageLabels,
+                releasePolicy = request.releasePolicy,
+                cacheResult = GPUResourceLeaseCacheResult.Create,
+            ),
+        )
+}

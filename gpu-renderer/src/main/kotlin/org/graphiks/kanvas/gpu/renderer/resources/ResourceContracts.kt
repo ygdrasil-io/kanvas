@@ -2052,6 +2052,19 @@ data class GPUResourceDiagnostic(
                 ),
             )
 
+        /** Builds a diagnostic when GPU resource adapter creation fails. */
+        fun adapterCreateFailed(
+            resourceLabel: String,
+            reason: String,
+        ): GPUResourceDiagnostic =
+            GPUResourceDiagnostic(
+                code = "unsupported.resource.adapter_create_failed",
+                resourceLabel = resourceLabel,
+                message = "GPU resource adapter failed to create $resourceLabel: $reason",
+                terminal = true,
+                facts = mapOf("reason" to reason),
+            )
+
         /** Builds a pipeline creation failure diagnostic recorded during materialization. */
         fun pipelineCreationFailure(resourceLabel: String, reason: String): GPUResourceDiagnostic =
             GPUResourceDiagnostic(
