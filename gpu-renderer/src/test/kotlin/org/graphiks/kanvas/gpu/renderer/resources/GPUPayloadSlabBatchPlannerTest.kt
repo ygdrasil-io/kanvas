@@ -12,6 +12,8 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUPayloadFingerprint
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPayloadSlotID
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPayloadUploadPlan
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUResourceBindingBlock
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUResourceBindingFact
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUResourceBindingKind
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUResourceBindingSlot
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUUniformPayloadBlock
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUUniformPayloadSlot
@@ -379,6 +381,165 @@ class GPUPayloadSlabBatchPlannerTest {
     }
 
     @Test
+    fun `planner refuses invalid resource binding facts before slab materialization`() {
+        assertRefused(
+            result = GPUPayloadSlabBatchPlanner.plan(
+                batchRequest(
+                    payloadRequests = listOf(
+                        payloadRequest(index = 0, resourceDescriptorLabels = listOf("texture:paint-image")),
+                    ),
+                ),
+            ),
+            expectedCode = "unsupported.payload_slab_layout_mismatch",
+            expectedReason = "binding_fact_missing",
+        )
+        assertRefused(
+            result = GPUPayloadSlabBatchPlanner.plan(
+                batchRequest(
+                    payloadRequests = listOf(
+                        payloadRequest(
+                            index = 0,
+                            resourceDescriptorLabels = listOf("texture:paint-image", "sampler:paint-image"),
+                            bindingFacts = listOf(sampledTextureFact()),
+                        ),
+                    ),
+                ),
+            ),
+            expectedCode = "unsupported.payload_slab_layout_mismatch",
+            expectedReason = "binding_fact_missing",
+        )
+        assertRefused(
+            result = GPUPayloadSlabBatchPlanner.plan(
+                batchRequest(
+                    payloadRequests = listOf(
+                        payloadRequest(
+                            index = 0,
+                            resourceDescriptorLabels = listOf("uniform:solid-payload"),
+                            bindingFacts = listOf(sampledTextureFact(bindingLabel = "texture:other-image")),
+                        ),
+                    ),
+                ),
+            ),
+            expectedCode = "unsupported.payload_slab_layout_mismatch",
+            expectedReason = "binding_fact_unexpected",
+        )
+        assertRefused(
+            result = GPUPayloadSlabBatchPlanner.plan(
+                batchRequest(
+                    payloadRequests = listOf(
+                        payloadRequest(
+                            index = 0,
+                            resourceDescriptorLabels = listOf("texture:paint-image", "sampler:paint-image"),
+                            bindingFacts = listOf(
+                                sampledTextureFact(availableUsageLabels = setOf("copy_src")),
+                                samplerFact(),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            expectedCode = "unsupported.payload_slab_layout_mismatch",
+            expectedReason = "binding_usage_missing",
+        )
+        assertRefused(
+            result = GPUPayloadSlabBatchPlanner.plan(
+                batchRequest(
+                    payloadRequests = listOf(
+                        payloadRequest(
+                            index = 0,
+                            resourceDescriptorLabels = listOf("texture:paint-image", "sampler:paint-image"),
+                            bindingFacts = listOf(sampledTextureFact(actualGeneration = 6L), samplerFact()),
+                        ),
+                    ),
+                ),
+            ),
+            expectedCode = "unsupported.payload_slab_layout_mismatch",
+            expectedReason = "binding_generation_stale",
+        )
+        assertRefused(
+            result = GPUPayloadSlabBatchPlanner.plan(
+                batchRequest(
+                    payloadRequests = listOf(
+                        payloadRequest(
+                            index = 0,
+                            resourceDescriptorLabels = listOf("texture:paint-image", "sampler:paint-image"),
+                            bindingFacts = listOf(
+                                sampledTextureFact(evictedReason = "resource-cache-purge"),
+                                samplerFact(),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            expectedCode = "unsupported.payload_slab_layout_mismatch",
+            expectedReason = "binding_resource_evicted",
+        )
+        assertRefused(
+            result = GPUPayloadSlabBatchPlanner.plan(
+                batchRequest(
+                    payloadRequests = listOf(
+                        payloadRequest(
+                            index = 0,
+                            resourceDescriptorLabels = listOf("texture:paint-image", "sampler:other-image"),
+                            bindingFacts = listOf(
+                                sampledTextureFact(bindingLabel = "texture:paint-image"),
+                                samplerFact(bindingLabel = "sampler:other-image"),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            expectedCode = "unsupported.payload_slab_layout_mismatch",
+            expectedReason = "sampled_texture_sampler_missing",
+        )
+        assertRefused(
+            result = GPUPayloadSlabBatchPlanner.plan(
+                batchRequest(
+                    payloadRequests = listOf(
+                        payloadRequest(
+                            index = 0,
+                            resourceDescriptorLabels = listOf("texture:paint-image"),
+                            bindingFacts = listOf(sampledTextureFact()),
+                        ),
+                    ),
+                ),
+            ),
+            expectedCode = "unsupported.payload_slab_layout_mismatch",
+            expectedReason = "sampled_texture_sampler_missing",
+        )
+        assertRefused(
+            result = GPUPayloadSlabBatchPlanner.plan(
+                batchRequest(
+                    payloadRequests = listOf(
+                        payloadRequest(
+                            index = 0,
+                            resourceDescriptorLabels = listOf("texture:paint-image", "sampler:paint-image"),
+                            bindingFacts = listOf(sampledTextureFact(), sampledTextureFact(), samplerFact()),
+                        ),
+                    ),
+                ),
+            ),
+            expectedCode = "unsupported.payload_slab_layout_mismatch",
+            expectedReason = "sampled_texture_sampler_missing",
+        )
+        assertRefused(
+            result = GPUPayloadSlabBatchPlanner.plan(
+                batchRequest(
+                    payloadRequests = listOf(
+                        payloadRequest(
+                            index = 0,
+                            resourceDescriptorLabels = listOf("texture:paint-image", "sampler:paint-image"),
+                            bindingFacts = listOf(sampledTextureFact(), samplerFact(), samplerFact()),
+                        ),
+                    ),
+                ),
+            ),
+            expectedCode = "unsupported.payload_slab_layout_mismatch",
+            expectedReason = "sampled_texture_sampler_missing",
+        )
+    }
+
+    @Test
     fun `plan constructor rejects invalid slot coverage invariants`() {
         val uniformSlabPlan = GPUUniformSlabPlan(
             planHash = "uniform-slab-hash",
@@ -524,10 +685,14 @@ class GPUPayloadSlabBatchPlannerTest {
     private fun assertRefused(
         result: GPUPayloadSlabBatchPlanningResult,
         expectedCode: String,
+        expectedReason: String? = null,
     ) {
         val refused = assertIs<GPUPayloadSlabBatchPlanningResult.Refused>(result)
         val dumpText = refused.dumpLines().joinToString("\n")
         assertEquals(expectedCode, refused.diagnostic.code)
+        if (expectedReason != null) {
+            assertEquals(expectedReason, refused.diagnostic.facts["reason"])
+        }
         assertTrue(
             dumpText.contains(
                 "payload-slab.batch.refused code=$expectedCode terminal=true facts=",
@@ -558,6 +723,8 @@ class GPUPayloadSlabBatchPlannerTest {
         uploadCapabilityAvailable: Boolean = true,
         requiredUniformUsageLabels: Set<String> = setOf("copy_dst", "uniform"),
         availableUniformUsageLabels: Set<String> = setOf("copy_dst", "uniform"),
+        resourceDescriptorLabels: List<String> = listOf("uniform:solid-payload"),
+        bindingFacts: List<GPUResourceBindingFact> = emptyList(),
     ): GPUPayloadMaterializationRequest =
         GPUPayloadMaterializationRequest(
             targetId = targetId,
@@ -581,8 +748,9 @@ class GPUPayloadSlabBatchPlannerTest {
                 fingerprint = GPUPayloadFingerprint(resourceFingerprint),
                 bindingPlanHash = reflectedBindingLayoutHash,
                 bindingCount = 1,
-                resourceDescriptorLabels = listOf("uniform:solid-payload"),
+                resourceDescriptorLabels = resourceDescriptorLabels,
                 dynamicOffsets = dynamicOffsets,
+                bindingFacts = bindingFacts,
             ),
             resourceSlot = GPUResourceBindingSlot(
                 slotId = GPUPayloadSlotID("pass-a:resource:$index"),
@@ -605,6 +773,40 @@ class GPUPayloadSlabBatchPlannerTest {
             maxDynamicOffsets = maxDynamicOffsets,
             requiredUniformUsageLabels = requiredUniformUsageLabels,
             availableUniformUsageLabels = availableUniformUsageLabels,
+        )
+
+    private fun sampledTextureFact(
+        bindingLabel: String = "texture:paint-image",
+        actualGeneration: Long = 7L,
+        availableUsageLabels: Set<String> = setOf("texture_binding"),
+        evictedReason: String? = null,
+    ): GPUResourceBindingFact =
+        GPUResourceBindingFact(
+            bindingLabel = bindingLabel,
+            kind = GPUResourceBindingKind.SampledTexture,
+            descriptorHash = "texture-descriptor:${bindingLabel.substringAfter(':')}",
+            requiredUsageLabels = setOf("texture_binding"),
+            availableUsageLabels = availableUsageLabels,
+            expectedResourceGeneration = 7L,
+            actualResourceGeneration = actualGeneration,
+            evictedReason = evictedReason,
+        )
+
+    private fun samplerFact(
+        bindingLabel: String = "sampler:paint-image",
+        actualGeneration: Long = 7L,
+        availableUsageLabels: Set<String> = setOf("sampler"),
+        evictedReason: String? = null,
+    ): GPUResourceBindingFact =
+        GPUResourceBindingFact(
+            bindingLabel = bindingLabel,
+            kind = GPUResourceBindingKind.Sampler,
+            descriptorHash = "sampler-descriptor:${bindingLabel.substringAfter(':')}",
+            requiredUsageLabels = setOf("sampler"),
+            availableUsageLabels = availableUsageLabels,
+            expectedResourceGeneration = 7L,
+            actualResourceGeneration = actualGeneration,
+            evictedReason = evictedReason,
         )
 
     private fun batchRequest(

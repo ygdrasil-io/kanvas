@@ -1,5 +1,8 @@
 package org.graphiks.kanvas.gpu.renderer.resources
 
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUResourceBindingBlock
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUResourceBindingFact
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUResourceBindingKind
 import java.security.MessageDigest
 import java.util.Collections
 
@@ -455,8 +458,63 @@ private fun GPUPayloadMaterializationRequest.invalidResourceEvidenceReason(): St
         resourceSlot.fingerprint != resourceBlock.fingerprint -> "resource_fingerprint_mismatch"
         resourceBlock.dynamicOffsets.size > maxDynamicOffsets -> "dynamic_offsets_exceeded"
         resourceBlock.dynamicOffsets.any { offset -> offset < 0L } -> "dynamic_offset_negative"
-        else -> null
+        else -> resourceBlock.invalidBindingFactsReason()
     }
+
+private fun GPUResourceBindingBlock.invalidBindingFactsReason(): String? {
+    if (bindingFacts.isEmpty()) {
+        return if (resourceDescriptorLabels.any { label -> !label.startsWith("uniform:") }) {
+            "binding_fact_missing"
+        } else {
+            null
+        }
+    }
+
+    val descriptorLabels = resourceDescriptorLabels.toSet()
+    val factLabels = bindingFacts.map { fact -> fact.bindingLabel }.toSet()
+    val missingFact = (descriptorLabels - factLabels).any { label -> !label.startsWith("uniform:") }
+    if (missingFact) {
+        return "binding_fact_missing"
+    }
+    if ((factLabels - descriptorLabels).isNotEmpty()) {
+        return "binding_fact_unexpected"
+    }
+    if (bindingFacts.any { fact -> (fact.requiredUsageLabels - fact.availableUsageLabels).isNotEmpty() }) {
+        return "binding_usage_missing"
+    }
+    if (bindingFacts.any { fact -> fact.actualResourceGeneration != fact.expectedResourceGeneration }) {
+        return "binding_generation_stale"
+    }
+    if (bindingFacts.any { fact -> fact.evictedReason != null }) {
+        return "binding_resource_evicted"
+    }
+    return if (bindingFacts.hasInvalidSampledTextureSamplerPair()) {
+        "sampled_texture_sampler_missing"
+    } else {
+        null
+    }
+}
+
+private fun List<GPUResourceBindingFact>.hasInvalidSampledTextureSamplerPair(): Boolean {
+    val sampledTextureKeys = filter { fact -> fact.kind == GPUResourceBindingKind.SampledTexture }
+        .map { fact -> fact.textureSamplerPairKey() }
+    val samplerKeys = filter { fact -> fact.kind == GPUResourceBindingKind.Sampler }
+        .map { fact -> fact.textureSamplerPairKey() }
+    if (sampledTextureKeys.isEmpty() && samplerKeys.isEmpty()) {
+        return false
+    }
+    return sampledTextureKeys.hasDuplicate() ||
+        samplerKeys.hasDuplicate() ||
+        sampledTextureKeys.sorted() != samplerKeys.sorted()
+}
+
+private fun GPUResourceBindingFact.textureSamplerPairKey(): String =
+    bindingLabel.substringAfter(':', bindingLabel)
+
+private fun <T> List<T>.hasDuplicate(): Boolean {
+    val seen = HashSet<T>()
+    return any { value -> !seen.add(value) }
+}
 
 private fun List<LongRange>.byteRangesMatchUniformByteSize(byteSize: Long): Boolean {
     if (byteSize <= 0L || isEmpty()) {

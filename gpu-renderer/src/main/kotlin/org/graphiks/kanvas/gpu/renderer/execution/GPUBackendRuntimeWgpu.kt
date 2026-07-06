@@ -153,9 +153,14 @@ internal fun currentFullscreenUniformSlabSourceLabelForTesting(): String = fulls
 
 private fun fullscreenUniformSlabSlotLabel(drawIndex: Int): String = "draw-$drawIndex"
 
+private fun fullscreenPayloadPacketId(drawIndex: Int): String = "fullscreen-packet-$drawIndex"
+
 private fun fullscreenPayloadSlotId(drawIndex: Int): String = "fullscreen-pass:uniform:$drawIndex"
 
 private fun fullscreenResourceSlotId(drawIndex: Int): String = "fullscreen-pass:resource:$drawIndex"
+
+private fun fullscreenPayloadSlabSlotLabel(drawIndex: Int): String =
+    "${fullscreenPayloadPacketId(drawIndex)}:${fullscreenPayloadSlotId(drawIndex)}:${fullscreenResourceSlotId(drawIndex)}"
 
 private fun fullscreenPayloadTargetId(targetId: String): String = "payload-target-${sha256Hex(targetId)}"
 
@@ -2244,7 +2249,7 @@ private class WgpuRenderRecorder(
         setPipelineAction(pipeline)
         draws.forEachIndexed { drawIndex, draw ->
             val bindGroup = if (slab != null) {
-                val payloadSlotLabel = slab.plan.slotBindings[drawIndex].slotLabel
+                val payloadSlotLabel = fullscreenPayloadSlabSlotLabel(drawIndex)
                 val upload = slab.uploadsBySlotLabel.getValue(payloadSlotLabel)
                 resourceScope.track(
                     createTrackedBindGroup(
@@ -2324,6 +2329,9 @@ private class WgpuRenderRecorder(
     ): GPUPayloadMaterializationRequest {
         val byteSize = draw.uniformSizeBytes.toLong()
         val unsignedBytes = draw.uniformBytes.map { byte -> byte.toInt() and 0xff }
+        val packetId = fullscreenPayloadPacketId(drawIndex)
+        val uniformSlotId = fullscreenPayloadSlotId(drawIndex)
+        val resourceSlotId = fullscreenResourceSlotId(drawIndex)
         val uniformFingerprint = GPUPayloadFingerprint(
             sha256Hex(
                 buildString {
@@ -2344,7 +2352,7 @@ private class WgpuRenderRecorder(
         )
         return GPUPayloadMaterializationRequest(
             targetId = payloadTargetId,
-            packetId = "fullscreen-packet-$drawIndex",
+            packetId = packetId,
             taskIds = listOf("fullscreen-uniform-slab"),
             resourcePlanLabels = listOf("payload-materialization:fullscreen-uniform-pass"),
             uniformBlock = GPUUniformPayloadBlock(
@@ -2356,7 +2364,7 @@ private class WgpuRenderRecorder(
                 bytes = unsignedBytes,
             ),
             uniformSlot = GPUUniformPayloadSlot(
-                slotId = GPUPayloadSlotID(fullscreenPayloadSlotId(drawIndex)),
+                slotId = GPUPayloadSlotID(uniformSlotId),
                 fingerprint = uniformFingerprint,
                 byteOffset = 0L,
             ),
@@ -2368,7 +2376,7 @@ private class WgpuRenderRecorder(
                 dynamicOffsets = listOf(0L),
             ),
             resourceSlot = GPUResourceBindingSlot(
-                slotId = GPUPayloadSlotID(fullscreenResourceSlotId(drawIndex)),
+                slotId = GPUPayloadSlotID(resourceSlotId),
                 fingerprint = resourceFingerprint,
                 bindingIndex = 0,
             ),
@@ -2414,10 +2422,9 @@ private class WgpuRenderRecorder(
             }
             is GPUPayloadSlabBatchPlanningResult.Accepted -> {
                 val plan = planning.plan
-                val payloadsBySlotLabel = payloadRequests.associate { payload ->
-                    "${payload.packetId}:${payload.uniformSlot.slotId.value}:${payload.resourceSlot.slotId.value}" to
-                        payload.uniformBlock.bytes.toByteArrayFromUnsignedInts()
-                }
+                val payloadsBySlotLabel = payloadRequests.mapIndexed { index, payload ->
+                    fullscreenPayloadSlabSlotLabel(index) to payload.uniformBlock.bytes.toByteArrayFromUnsignedInts()
+                }.toMap()
                 val buffer = resourceScope.track(
                     createTrackedBuffer(
                         BufferDescriptor(
