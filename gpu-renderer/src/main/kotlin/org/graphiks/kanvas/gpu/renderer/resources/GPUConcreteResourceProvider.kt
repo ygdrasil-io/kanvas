@@ -57,7 +57,7 @@ class GPUConcreteResourceProvider(
     private val leaseFactory: GPUResourceLeaseFactory = EvidenceOnlyGPUResourceLeaseFactory,
 ) : GPUResourceProvider {
     private val nullBufferKeys = linkedSetOf<String>()
-    private val uniformSlabLeaseKeys = linkedSetOf<String>()
+    private val uniformSlabLeases = linkedMapOf<String, GPUResourceLease>()
     private var mutableTelemetry = GPUConcreteResourceProviderTelemetry()
 
     val telemetry: GPUConcreteResourceProviderTelemetry
@@ -133,38 +133,28 @@ class GPUConcreteResourceProvider(
         }
 
         val key = listOf(
+            request.leaseId,
             request.targetId,
             request.frameId,
             request.descriptorHash,
             request.deviceGeneration.toString(),
             request.totalBytes.toString(),
             request.alignmentBytes.toString(),
+            request.payloadCount.toString(),
+            request.releasePolicy,
         ).joinToString("|")
-        val reusable = key in uniformSlabLeaseKeys
-        val leaseResult = if (reusable) {
-            GPUResourceLeaseFactoryResult.Created(
-                GPUResourceLease(
-                    leaseId = request.leaseId,
-                    resourceKind = GPUResourceLeaseKind.UniformSlab,
-                    deviceGeneration = request.deviceGeneration,
-                    descriptorHash = request.descriptorHash,
-                    ownerScope = request.frameId,
-                    usageLabels = listOf("copy_dst", "uniform"),
-                    releasePolicy = request.releasePolicy,
-                    cacheResult = GPUResourceLeaseCacheResult.Reuse,
-                    evidenceFacts = mapOf(
-                        "alignment" to request.alignmentBytes.toString(),
-                        "payloadCount" to request.payloadCount.toString(),
-                        "target" to request.targetId,
-                        "totalBytes" to request.totalBytes.toString(),
-                    ),
-                ),
+        uniformSlabLeases[key]?.let { cachedLease ->
+            val lease = cachedLease.copy(cacheResult = GPUResourceLeaseCacheResult.Reuse)
+            record("uniform-slab", lease.cacheResult.dumpToken, key, context.targetId)
+            return GPUResourceMaterializationDecision.Materialized(
+                resources = emptyList(),
+                targetId = context.targetId,
+                resourcePlanLabels = listOf(request.leaseId),
+                resourceLeases = listOf(lease),
             )
-        } else {
-            leaseFactory.createUniformSlab(request)
         }
 
-        return when (leaseResult) {
+        return when (val leaseResult = leaseFactory.createUniformSlab(request)) {
             is GPUResourceLeaseFactoryResult.Failed -> {
                 record("uniform-slab", "adapter-failure", request.leaseId, context.targetId)
                 GPUResourceMaterializationDecision.Refused(
@@ -174,14 +164,8 @@ class GPUConcreteResourceProvider(
                 )
             }
             is GPUResourceLeaseFactoryResult.Created -> {
-                if (!reusable) {
-                    uniformSlabLeaseKeys.add(key)
-                }
-                val lease = if (reusable) {
-                    leaseResult.lease.copy(cacheResult = GPUResourceLeaseCacheResult.Reuse)
-                } else {
-                    leaseResult.lease
-                }
+                val lease = leaseResult.lease
+                uniformSlabLeases[key] = lease
                 record("uniform-slab", lease.cacheResult.dumpToken, key, context.targetId)
                 GPUResourceMaterializationDecision.Materialized(
                     resources = emptyList(),

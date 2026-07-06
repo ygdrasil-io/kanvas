@@ -116,6 +116,56 @@ class GPUResourceLeaseContractsTest {
     }
 
     @Test
+    fun `materialized resource decision dumps resource lease lines`() {
+        val lease = lease("uniform-slab:frame-1", GPUResourceLeaseKind.UniformSlab)
+        val decision = GPUResourceMaterializationDecision.Materialized(
+            resources = emptyList(),
+            targetId = "root-target",
+            resourcePlanLabels = listOf("uniform-slab:frame-1"),
+            resourceLeases = listOf(lease),
+        )
+
+        assertEquals(
+            listOf(
+                "resource.materialization:materialized target=root-target tasks=none " +
+                    "resourcePlans=uniform-slab:frame-1 resourceCount=0 diagnostics=none",
+                "resource-provider.lease id=uniform-slab:frame-1 kind=uniform-slab result=create " +
+                    "deviceGeneration=11 owner=unit release=submission-complete usage=uniform " +
+                    "descriptor=sha256:uniform-slab:frame-1 facts=none",
+            ),
+            decision.dumpLines(),
+        )
+    }
+
+    @Test
+    fun `refused resource decision dumps resource lease lines`() {
+        val lease = lease("uniform-slab:refused", GPUResourceLeaseKind.UniformSlab)
+        val decision = GPUResourceMaterializationDecision.Refused(
+            diagnostic = GPUResourceDiagnostic.adapterCreateFailed(
+                resourceLabel = "uniform-slab:refused",
+                reason = "allocation-denied",
+            ),
+            targetId = "root-target",
+            resourcePlanLabels = listOf("uniform-slab:refused"),
+            resourceLeases = listOf(lease),
+        )
+
+        assertEquals(
+            listOf(
+                "resource.materialization:refused target=root-target tasks=none " +
+                    "resourcePlans=uniform-slab:refused " +
+                    "code=unsupported.resource.adapter_create_failed terminal=true",
+                "resource.diagnostic code=unsupported.resource.adapter_create_failed " +
+                    "resource=uniform-slab:refused terminal=true facts=reason=allocation-denied",
+                "resource-provider.lease id=uniform-slab:refused kind=uniform-slab result=create " +
+                    "deviceGeneration=11 owner=unit release=submission-complete usage=uniform " +
+                    "descriptor=sha256:uniform-slab:refused facts=none",
+            ),
+            decision.dumpLines(),
+        )
+    }
+
+    @Test
     fun `uniform slab lease request validates alignment budget and ids`() {
         val request = GPUUniformSlabLeaseRequest(
             leaseId = "uniform-slab:frame-1",

@@ -104,6 +104,83 @@ class GPUConcreteResourceProviderTest {
     }
 
     @Test
+    fun `concrete provider preserves custom fullscreen uniform slab lease evidence on reuse`() {
+        var createCalls = 0
+        val request = fullscreenUniformSlabLeaseRequest()
+        val provider = GPUConcreteResourceProvider(
+            leaseFactory = object : GPUResourceLeaseFactory {
+                override fun createUniformSlab(
+                    request: GPUUniformSlabLeaseRequest,
+                ): GPUResourceLeaseFactoryResult {
+                    createCalls += 1
+                    return GPUResourceLeaseFactoryResult.Created(
+                        customFullscreenUniformSlabLease(request),
+                    )
+                }
+
+                override fun createBindGroup(
+                    request: GPUBindGroupLeaseRequest,
+                ): GPUResourceLeaseFactoryResult =
+                    EvidenceOnlyGPUResourceLeaseFactory.createBindGroup(request)
+            },
+        )
+        val context = targetPreparationContext()
+
+        val first = assertIs<GPUResourceMaterializationDecision.Materialized>(
+            provider.materializeFullscreenUniformSlabLease(
+                request = request,
+                context = context,
+            ),
+        )
+        val second = assertIs<GPUResourceMaterializationDecision.Materialized>(
+            provider.materializeFullscreenUniformSlabLease(
+                request = request,
+                context = context,
+            ),
+        )
+
+        val createdLease = customFullscreenUniformSlabLease(request)
+        assertEquals(1, createCalls)
+        assertEquals(createdLease, first.dumpResourceLeaseSnapshot.single())
+        assertEquals(
+            createdLease.copy(cacheResult = GPUResourceLeaseCacheResult.Reuse),
+            second.dumpResourceLeaseSnapshot.single(),
+        )
+        assertEquals(
+            listOf("create", "reuse"),
+            provider.telemetry.dumpEvents
+                .filter { event -> event.lane == "uniform-slab" }
+                .map { event -> event.result },
+        )
+    }
+
+    @Test
+    fun `concrete provider includes lifetime facts in fullscreen uniform slab lease key`() {
+        val provider = GPUConcreteResourceProvider()
+        val context = targetPreparationContext()
+
+        provider.materializeFullscreenUniformSlabLease(
+            request = fullscreenUniformSlabLeaseRequest(),
+            context = context,
+        )
+        provider.materializeFullscreenUniformSlabLease(
+            request = fullscreenUniformSlabLeaseRequest(releasePolicy = "frame-complete"),
+            context = context,
+        )
+        provider.materializeFullscreenUniformSlabLease(
+            request = fullscreenUniformSlabLeaseRequest(payloadCount = 2),
+            context = context,
+        )
+
+        assertEquals(
+            listOf("create", "create", "create"),
+            provider.telemetry.dumpEvents
+                .filter { event -> event.lane == "uniform-slab" }
+                .map { event -> event.result },
+        )
+    }
+
+    @Test
     fun `concrete provider creates then reuses fullscreen uniform slab lease`() {
         val provider = GPUConcreteResourceProvider()
         val context = targetPreparationContext()
@@ -244,6 +321,8 @@ private fun targetPreparationContext(deviceGeneration: Long = 11L): GPUTargetPre
 
 private fun fullscreenUniformSlabLeaseRequest(
     deviceGeneration: Long = 11L,
+    releasePolicy: String = "submission-complete",
+    payloadCount: Int = 1,
 ): GPUUniformSlabLeaseRequest =
     GPUUniformSlabLeaseRequest(
         leaseId = "uniform-slab:fullscreen:frame-1",
@@ -253,8 +332,27 @@ private fun fullscreenUniformSlabLeaseRequest(
         descriptorHash = "sha256:fullscreen-uniform-slab",
         totalBytes = 256,
         alignmentBytes = 256,
-        releasePolicy = "submission-complete",
-        payloadCount = 1,
+        releasePolicy = releasePolicy,
+        payloadCount = payloadCount,
+    )
+
+private fun customFullscreenUniformSlabLease(
+    request: GPUUniformSlabLeaseRequest,
+): GPUResourceLease =
+    GPUResourceLease(
+        leaseId = request.leaseId,
+        resourceKind = GPUResourceLeaseKind.UniformSlab,
+        deviceGeneration = request.deviceGeneration,
+        descriptorHash = "sha256:factory-fullscreen-uniform-slab",
+        ownerScope = "factory-owner",
+        usageLabels = listOf("storage", "uniform"),
+        releasePolicy = "factory-release",
+        cacheResult = GPUResourceLeaseCacheResult.Create,
+        evidenceFacts = mapOf(
+            "factory" to "custom",
+            "payloadCount" to "factory-one",
+            "totalBytes" to "factory-allocated",
+        ),
     )
 
 private fun payloadRequest(): GPUPayloadMaterializationRequest =
