@@ -2588,7 +2588,7 @@ private class WgpuRenderRecorder(
                     deviceGeneration = deviceGeneration.value,
                     budgetClass = budgetClass,
                 )
-                fun materializationFallback(reasonCode: String): WgpuPayloadSlabMaterialization? {
+                fun recordMaterializationFallback(reasonCode: String) {
                     telemetryRecorder.recordUniformSlabFallback()
                     telemetryRecorder.recordPayloadSlabResourceEvent(
                         GPUPayloadSlabResourceEvent.Fallback(
@@ -2597,7 +2597,6 @@ private class WgpuRenderRecorder(
                             payloadCount = payloadRequests.size,
                         ),
                     )
-                    return null
                 }
                 val leaseDecision = resourceProvider.materializeFullscreenUniformSlabLease(
                     request = leaseRequest,
@@ -2605,10 +2604,14 @@ private class WgpuRenderRecorder(
                 )
                 val leases = when (leaseDecision) {
                     is GPUResourceMaterializationDecision.Materialized -> leaseDecision.dumpResourceLeaseSnapshot
-                    is GPUResourceMaterializationDecision.Refused ->
-                        return materializationFallback(leaseDecision.diagnostic.code)
-                    is GPUResourceMaterializationDecision.Deferred ->
-                        return materializationFallback(leaseDecision.reasonCode)
+                    is GPUResourceMaterializationDecision.Refused -> {
+                        recordMaterializationFallback(leaseDecision.diagnostic.code)
+                        return null
+                    }
+                    is GPUResourceMaterializationDecision.Deferred -> {
+                        recordMaterializationFallback(leaseDecision.reasonCode)
+                        return null
+                    }
                 }
                 val payloadsBySlotLabel = payloadRequests.mapIndexed { index, payload ->
                     fullscreenPayloadSlabSlotLabel(index) to payload.uniformBlock.bytes.toByteArrayFromUnsignedInts()
