@@ -278,6 +278,79 @@ class GPUBackendRuntimeWgpuSmokeTest {
     }
 
     @Test
+    fun `backend runtime batches fullscreen uniform draws into one slab when backend is available`() {
+        val runtime = GPUBackendRuntimeFactory.createOrNull()
+        assumeTrue(runtime != null, "GPU backend unavailable in current environment")
+
+        runtime!!.use { session ->
+            val before = session.runtimeTelemetry
+
+            session.createOffscreenTarget(
+                GPUOffscreenTargetRequest(
+                    width = 6,
+                    height = 2,
+                    colorFormat = "rgba8unorm",
+                ),
+            ).use { target ->
+                target.encode(
+                    clearColor = GPUClearColor(red = 0.0, green = 0.0, blue = 0.0, alpha = 1.0),
+                ) {
+                    drawFullscreenPass(
+                        wgsl = solidColorFullscreenWgsl(),
+                        colorFormat = "rgba8unorm",
+                        draws = listOf(
+                            GPUBackendRectDraw(
+                                rgbaPremul = floatArrayOf(1f, 0f, 0f, 1f),
+                                scissorX = 0,
+                                scissorY = 0,
+                                scissorWidth = 2,
+                                scissorHeight = 2,
+                            ),
+                            GPUBackendRectDraw(
+                                rgbaPremul = floatArrayOf(0f, 1f, 0f, 1f),
+                                scissorX = 2,
+                                scissorY = 0,
+                                scissorWidth = 2,
+                                scissorHeight = 2,
+                            ),
+                            GPUBackendRectDraw(
+                                rgbaPremul = floatArrayOf(0f, 0f, 1f, 1f),
+                                scissorX = 4,
+                                scissorY = 0,
+                                scissorWidth = 2,
+                                scissorHeight = 2,
+                            ),
+                        ),
+                    )
+                }
+
+                val rgba = target.readRgba()
+                val after = session.runtimeTelemetry
+                val dump = session.runtimeTelemetryDumpLines.joinToString("\n")
+
+                assertContentEquals(
+                    byteArrayOf(0xFF.toByte(), 0, 0, 0xFF.toByte()),
+                    pixelAt(rgba = rgba, width = 6, x = 0, y = 0),
+                )
+                assertContentEquals(
+                    byteArrayOf(0, 0xFF.toByte(), 0, 0xFF.toByte()),
+                    pixelAt(rgba = rgba, width = 6, x = 2, y = 0),
+                )
+                assertContentEquals(
+                    byteArrayOf(0, 0, 0xFF.toByte(), 0xFF.toByte()),
+                    pixelAt(rgba = rgba, width = 6, x = 4, y = 0),
+                )
+                assertEquals(1L, after.uniformSlabsCreated - before.uniformSlabsCreated)
+                assertEquals(768L, after.uniformSlabBytesAllocated - before.uniformSlabBytesAllocated)
+                assertEquals(0L, after.uniformSlabFallbacks - before.uniformSlabFallbacks)
+                assertTrue(after.buffersCreated - before.buffersCreated >= 1L)
+                assertTrue(dump.contains("uniformSlabsCreated="))
+                assertTrue(!dump.contains("@"))
+            }
+        }
+    }
+
+    @Test
     fun `backend runtime records WGPU execution cache hit miss and create telemetry when backend is available`() {
         val runtime = GPUBackendRuntimeFactory.createOrNull()
         assumeTrue(runtime != null, "WGPU backend unavailable in current environment")
@@ -516,6 +589,11 @@ class GPUBackendRuntimeWgpuSmokeTest {
                 return uniforms.color;
             }
         """.trimIndent()
+
+    private fun pixelAt(rgba: ByteArray, width: Int, x: Int, y: Int): ByteArray {
+        val offset = ((y * width) + x) * 4
+        return rgba.copyOfRange(offset, offset + 4)
+    }
 
     private fun uniformPayloadBlock(): GPUUniformPayloadBlock {
         val buffer = ByteBuffer.allocate(64).order(ByteOrder.LITTLE_ENDIAN)
