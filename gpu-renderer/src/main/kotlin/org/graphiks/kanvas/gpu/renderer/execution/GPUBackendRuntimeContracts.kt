@@ -479,12 +479,11 @@ private fun GPUResourceMaterializationDecision.Materialized.materializedUniformB
     return byteSize
 }
 
-/** Creates the default WebGPU-backed runtime when the local environment supports it. */
+/** Creates the default GPU runtime when the local environment supports it. */
 object GPUBackendRuntimeFactory {
-    /** Returns a WebGPU-backed session or null when backend initialization is unavailable. */
-    fun createOrNull(): GPUBackendSession? = WgpuBackendRuntimeFactory.createOrNull()
+    /** Returns a GPU session or null when runtime initialization is unavailable. */
+    fun createOrNull(): GPUBackendSession? = GPUBackendRuntimeNativeFactory.createOrNull()
 
-    /** Release the shared WGPU device and all cached resources. Must be called after
-     *  all rendering is complete, before the JVM shuts down. */
-    fun dispose() = WgpuBackendRuntimeFactory.dispose()
+    /** Releases the shared GPU runtime resources owned by this process. */
+    fun dispose() = GPUBackendRuntimeNativeFactory.dispose()
 }

@@ -90,10 +90,10 @@ import org.graphiks.kanvas.gpu.renderer.pipelines.GPUPipelineKeys
 import org.graphiks.kanvas.gpu.renderer.telemetry.GPUCacheTelemetry
 import org.graphiks.kanvas.gpu.renderer.telemetry.GPUTelemetryLedger
 
-import org.graphiks.kanvas.gpu.renderer.text.colorGlyphCompositeWgsl
 import org.graphiks.kanvas.gpu.renderer.wgsl.TexturedVerticesWgsl
 import org.graphiks.kanvas.gpu.renderer.wgsl.TexturedVerticesDualBlendWgsl
 import org.graphiks.kanvas.gpu.renderer.wgsl.TexturedVerticesColorFilterWgsl
+import org.graphiks.kanvas.gpu.renderer.wgsl.colorGlyphCompositeWgsl
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendFactor
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPayloadFingerprint
@@ -247,7 +247,7 @@ internal fun windowSurfaceTargetId(
     binding: GPUNativeSurfaceBinding,
 ): String {
     require(windowRuntimeOrdinal > 0L) { "windowRuntimeOrdinal must be positive" }
-    return "wgpu-window-surface-$windowRuntimeOrdinal-${binding.platform.name.lowercase()}-${binding.width}x${binding.height}"
+    return "gpu-window-surface-$windowRuntimeOrdinal-${binding.platform.name.lowercase()}-${binding.width}x${binding.height}"
 }
 
 internal fun sessionDeviceGeneration(sessionOrdinal: Long): GPUDeviceGeneration {
@@ -262,19 +262,19 @@ internal fun offscreenTargetId(
 ): String {
     require(sessionOrdinal > 0L) { "sessionOrdinal must be positive" }
     require(offscreenTargetOrdinal > 0L) { "offscreenTargetOrdinal must be positive" }
-    return "wgpu-offscreen-$sessionOrdinal-$offscreenTargetOrdinal-${request.width}x${request.height}-${request.colorFormat.normalizedColorFormat()}"
+    return "gpu-offscreen-$sessionOrdinal-$offscreenTargetOrdinal-" +
+        "${request.width}x${request.height}-${request.colorFormat.normalizedColorFormat()}"
 }
 
 private fun nextSessionOrdinal(): Long = sessionOrdinalCounter.incrementAndGet()
 private fun nextWindowRuntimeOrdinal(): Long = windowRuntimeOrdinalCounter.incrementAndGet()
 
-object WgpuBackendRuntimeFactory {
+object GPUBackendRuntimeNativeFactory {
     private var sharedInner: GPUBackendSession? = null
     private var shutdownHook: Thread? = null
 
-    /** Creates a WebGPU-backed runtime session when the host can initialize the backend.
-     *  The session is **reused** across renders — creating a new WGPU device per render
-     *  leaks native Metal/Dawn memory and causes "Context leak detected" after ~250 renders.
+    /** Creates a GPU runtime session when the host can initialize the backend.
+     *  The session is reused across renders so callers do not create one native device per render.
      *  The returned wrapper ignores close() so that callers using .use {} do not destroy
      *  the shared device. Call [dispose] to release native resources on shutdown. */
     fun createOrNull(): GPUBackendSession? {
@@ -285,7 +285,7 @@ object WgpuBackendRuntimeFactory {
                     glfwContextRenderer(
                         width = 1,
                         height = 1,
-                        title = "kanvas-gpu-renderer-wgpu-runtime",
+                        title = "kanvas-gpu-renderer-runtime",
                         deferredRendering = true,
                     )
                 }
@@ -302,8 +302,7 @@ object WgpuBackendRuntimeFactory {
         return sharedInner?.let { NonClosingSession(it) }
     }
 
-    /** Release the shared session and its native resources. Must be called
-     *  before JVM shutdown to avoid wgpu-native panics during cleanup. */
+    /** Releases the shared session and its native resources. */
     fun dispose() {
         shutdownHook?.let { Runtime.getRuntime().removeShutdownHook(it) }
         shutdownHook = null
@@ -314,7 +313,7 @@ object WgpuBackendRuntimeFactory {
     private class NonClosingSession(
         private val inner: GPUBackendSession,
     ) : GPUBackendSession by inner {
-        override fun close() { /* no-op: lifetime managed by WgpuBackendRuntimeFactory */ }
+        override fun close() { /* no-op: lifetime managed by GPUBackendRuntimeNativeFactory */ }
     }
 }
 
@@ -339,7 +338,7 @@ private class WgpuBackendSession(
         GPUCapabilities(
             implementation = GPUImplementationIdentity(
                 facadeName = "GPU",
-                implementationName = "wgpu4k",
+                implementationName = "native",
                 adapterName = adapterInfo?.summary ?: "unknown-adapter",
                 deviceName = adapterInfo?.summary ?: "unknown-device",
             ),
@@ -1505,7 +1504,7 @@ private class WgpuRenderRecorder(
         clearColor: GPUClearColor?,
         block: GPUBackendRenderRecorder.() -> Unit,
     ) {
-        error("encodeOffscreenTexture must be handled by WgpuOffscreenTarget via internal encodeOffscreenTexture")
+        error("encodeOffscreenTexture must be handled by the GPU offscreen target")
     }
 
     override fun drawTextAtlasPass(
@@ -3576,7 +3575,7 @@ private data class FullscreenExecutionCacheKeys(
     val renderPipelineSubjectHash: String,
     val renderPipelinePreimage: String,
 ) {
-    /** Emits backend-neutral cache-key preimage dumps without WGPU handles. */
+    /** Emits backend-neutral cache-key preimage dumps without GPU handles. */
     fun preimageDumpLines(): List<String> {
         val lines = mutableListOf(
             preimageDumpLine(
@@ -4111,9 +4110,9 @@ private fun <T : Any> GPUExecutionCacheDecision<T>.readyHandle(): T =
     when (this) {
         is GPUExecutionCacheDecision.Ready -> handle
         is GPUExecutionCacheDecision.Refused ->
-            error("WGPU execution cache refused materialization with $diagnosticCode")
+            error("GPU execution cache refused materialization with $diagnosticCode")
         is GPUExecutionCacheDecision.Evicted ->
-            error("WGPU execution cache entry was evicted before materialization")
+            error("GPU execution cache entry was evicted before materialization")
     }
 
 private fun GPUDevice.createRenderPipelineWithValidationScope(
@@ -4124,7 +4123,7 @@ private fun GPUDevice.createRenderPipelineWithValidationScope(
     val validationError = runBlocking { popErrorScope().getOrThrow() }
     if (validationError != null) {
         pipeline.close()
-        error("WGPU render pipeline validation failed: ${validationError.message}")
+        error("GPU render pipeline validation failed: ${validationError.message}")
     }
     return pipeline
 }
@@ -4176,15 +4175,15 @@ private fun createNativeWindowRuntime(binding: GPUNativeSurfaceBinding): NativeW
 
     LibraryLoader.load()
     val instance = WGPU.createInstance(WGPUInstanceBackend.Metal)
-        ?: error("WGPU Metal instance creation returned null")
+        ?: error("GPU runtime instance creation returned null")
     try {
         val layerAddress = binding.pointerLabels.firstNonZeroPointer("layerHandle", "nsLayer", "metalLayer")
-            ?: error("GPUNativeSurfaceBinding.pointerLabels must provide a non-zero AppKit Metal layer pointer")
+            ?: error("GPUNativeSurfaceBinding.pointerLabels must provide a non-zero native layer pointer")
         val surface = instance.getSurfaceFromMetalLayer(JvmNativeAddress(MemorySegment.ofAddress(layerAddress)))
-            ?: error("WGPU surface creation from Metal layer returned null")
+            ?: error("GPU surface creation from native layer returned null")
         try {
             val adapter = instance.requestAdapter(surface)
-                ?: error("WGPU adapter request failed for native surface")
+                ?: error("GPU adapter request failed for native surface")
             try {
                 surface.computeSurfaceCapabilities(adapter)
                 val adapterInfo = GPUBackendAdapterSummary(adapterSummary(adapter.info))

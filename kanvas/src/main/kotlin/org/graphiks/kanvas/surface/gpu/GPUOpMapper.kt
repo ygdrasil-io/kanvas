@@ -5,8 +5,8 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.commands.GPUClipFacts
-import org.graphiks.kanvas.gpu.renderer.commands.NormalizedMaskFilter
-import org.graphiks.kanvas.gpu.renderer.commands.NormalizedBlurStyle
+import org.graphiks.kanvas.gpu.renderer.filters.NormalizedBlurStyle
+import org.graphiks.kanvas.gpu.renderer.filters.NormalizedMaskFilter
 import org.graphiks.kanvas.paint.MaskFilter
 import org.graphiks.kanvas.paint.PathEffect
 import org.graphiks.kanvas.pipeline.BlurStyle

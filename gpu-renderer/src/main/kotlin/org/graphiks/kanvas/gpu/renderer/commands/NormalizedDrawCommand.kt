@@ -7,6 +7,7 @@ import org.graphiks.kanvas.gpu.renderer.filters.GPUFilterSourcePlan
 import org.graphiks.kanvas.gpu.renderer.filters.GPUSimpleFilterBounds
 import org.graphiks.kanvas.gpu.renderer.filters.GPUFilterCropPlan
 import org.graphiks.kanvas.gpu.renderer.filters.GPUFilterSamplingPlan
+import org.graphiks.kanvas.gpu.renderer.filters.NormalizedMaskFilter
 import org.graphiks.kanvas.gpu.renderer.text.GPUTextDiagnostic
 import org.graphiks.kanvas.gpu.renderer.text.GPUTextArtifactRef
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
@@ -318,22 +319,6 @@ enum class GPUBlendKind {
     Custom,
     /** Unsupported blend mode that must refuse deterministically. */
     Unsupported,
-}
-
-/**
- * Blur style for normalized mask filters, mirrored from Kanvas BlurStyle to avoid
- * cross-module dependency. Matches Skia's SkBlurStyle: NORMAL, SOLID, OUTER, INNER.
- */
-enum class NormalizedBlurStyle { NORMAL, SOLID, OUTER, INNER }
-
-/** Normalized mask filter descriptor captured by the command adapter before route analysis. */
-sealed interface NormalizedMaskFilter {
-    /** Gaussian blur mask filter with style and sigma parameters. */
-    data class Blur(val style: NormalizedBlurStyle, val sigma: Float) : NormalizedMaskFilter {
-        init {
-            require(sigma >= 0f && sigma.isFinite()) { "Blur sigma must be non-negative and finite" }
-        }
-    }
 }
 
 /** Captured blend facts; unsupported or destination-reading blends are refused before pass construction. */

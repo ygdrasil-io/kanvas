@@ -1,9 +1,9 @@
 package org.graphiks.kanvas.gpu.renderer.runtimeeffects
 
-import org.graphiks.wgsl.proc.WgslReflectionReport
+import org.graphiks.kanvas.gpu.renderer.wgsl.WgslReflectionReport
 
 /**
- * Concrete custom runtime-effect registry wired to wgsl4k validation and security checks.
+ * Concrete custom runtime-effect registry wired to registered WGSL validation and security checks.
  * Isolated from [KanvasRuntimeEffectRegistry]; does not share caches with registered effects.
  */
 class KanvasCustomRuntimeEffectRegistry(
@@ -109,11 +109,11 @@ interface WGSLReflectionProvider {
     fun reflect(module: WGSLParsedModule): WGSLReflectionResult
 }
 
-/** wgsl4k reflection result for a custom runtime-effect WGSL module.
+/** Parser-backed reflection result for a custom runtime-effect WGSL module.
  *  Contains hash-based module identity, entry point name, and resource counts
  *  derived from [WGSLReflectionProvider.reflect]. Fields are populated from
- *  live wgsl4k [Lowerer]/[Layouter] output when available, or from fixture
- *  defaults when wgsl4k is absent from the classpath. */
+ *  live parser-backed output when available, or from fixture defaults when the
+ *  parser-backed path is absent from the classpath. */
 data class WGSLReflectionResult(
     val moduleHash: String,
     val entryPoint: String,
@@ -121,6 +121,6 @@ data class WGSLReflectionResult(
     val textureCount: Int,
     val bindGroupCount: Int,
     val reflectionHash: String,
-    /** Full wgsl4k reflection report when produced by a live parse; null on fixture fallback. */
+    /** Full parser-backed reflection report when produced by a live parse; null on fixture fallback. */
     val report: WgslReflectionReport? = null,
 )

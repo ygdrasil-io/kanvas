@@ -6,7 +6,7 @@ import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRawUniformDraw
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRectDraw
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRenderRecorder
 import org.graphiks.kanvas.surface.Diagnostics
-import org.graphiks.kanvas.gpu.renderer.wgsl.GradientWgslShaderProvider
+import org.graphiks.kanvas.gpu.renderer.materials.GradientWgslShaderProvider
 import org.graphiks.kanvas.surface.RenderConfig
 
 internal fun GPUBackendRenderRecorder.dispatchFillRect(

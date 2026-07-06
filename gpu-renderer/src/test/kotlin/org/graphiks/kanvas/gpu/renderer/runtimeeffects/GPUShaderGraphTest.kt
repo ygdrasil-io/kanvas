@@ -361,7 +361,7 @@ class GPUShaderGraphTest {
     }
 
     @Test
-    fun `valid assembly produces wgsl4k reflection report with successful validation`() {
+    fun `valid assembly produces WGSL reflection report with successful validation`() {
         val graph = GPURuntimeEffectShaderGraph(
             nodes = listOf(
                 GPURuntimeEffectShaderGraphNode("root", mapOf("fg" to "child")),
@@ -378,7 +378,7 @@ class GPUShaderGraphTest {
             budget = generousBudget(),
         )
         val plan = assembled(result)
-        assertNotNull(plan.wgslReflection, "expected wgsl4k reflection report on assembled plan")
+        assertNotNull(plan.wgslReflection, "expected WGSL reflection report on assembled plan")
         assertTrue(
             plan.wgslReflection!!.validation.success,
             "expected validation to succeed, got: ${plan.wgslReflection!!.validation.diagnostics}",
@@ -386,7 +386,7 @@ class GPUShaderGraphTest {
     }
 
     @Test
-    fun `invalid wgsl node body causes refusal during wgsl4k parse`() {
+    fun `invalid wgsl node body causes refusal during parser-backed validation`() {
         val graph = GPURuntimeEffectShaderGraph(
             nodes = listOf(GPURuntimeEffectShaderGraphNode("a", emptyMap())),
             edges = emptyList(),
@@ -398,7 +398,7 @@ class GPUShaderGraphTest {
                 budget = generousBudget(),
             ),
         )
-        assertEquals("unsupported.runtime_effect.shader_graph_wgsl4k_parse_error", code)
+        assertEquals("unsupported.runtime_effect.shader_graph_wgsl_parse_error", code)
     }
 
     @Test
@@ -424,7 +424,7 @@ class GPUShaderGraphTest {
             budget = generousBudget(),
         )
         val plan = assembled(result)
-        val report = plan.wgslReflection ?: fail("expected wgsl4k reflection report")
+        val report = plan.wgslReflection ?: fail("expected WGSL reflection report")
         val epNames = report.entryPoints.map { it.name }
         val uniqueEpNames = epNames.toSet()
         assertEquals(

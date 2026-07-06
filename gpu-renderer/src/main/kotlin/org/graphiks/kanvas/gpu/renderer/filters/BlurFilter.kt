@@ -1,6 +1,5 @@
 package org.graphiks.kanvas.gpu.renderer.filters
 
-import org.graphiks.kanvas.gpu.renderer.commands.NormalizedBlurStyle
 import kotlin.math.exp
 
 /** Identity copy WGSL used when sigma is near-zero. */

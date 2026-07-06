@@ -19,8 +19,8 @@ class WGSLModuleAbiTest {
         assertEquals("solid-rect-render", module.moduleLabel)
         assertEquals("vs_main", module.vertexEntryPoint)
         assertEquals("fs_main", module.fragmentEntryPoint)
-        assertTrue(module.parserState.parserBacked, "Solid module must be parser-backed when wgsl4k is available")
-        assertTrue(module.parserState.toolName == "wgsl4k", "Parser tool must be wgsl4k")
+        assertTrue(module.parserState.parserBacked, "Solid module must be parser-backed when the WGSL parser is available")
+        assertTrue(module.parserState.toolName == "external-wgsl-parser", "Parser tool must be generic")
 
         assertEquals(
             listOf(
@@ -53,13 +53,13 @@ class WGSLModuleAbiTest {
         val dump = module.abiDump()
         assertContains(dump, "module=solid-rect-render")
         assertContains(dump, "entryPoints=vertex:vs_main,fragment:fs_main")
-        assertContains(dump, "parser=parser-backed:wgsl4k")
+        assertContains(dump, "parser=parser-backed:external-wgsl-parser")
         assertContains(dump, "binding=0/0 frame uniform-buffer min=64")
         assertContains(dump, "binding=1/0 material-solid uniform-buffer min=16")
         assertContains(dump, "uniform=layout:solid-material-block:v1")
         assertContains(dump, "color:vec4<f32>@0/16")
         assertContains(dump, "packing=pack:solid-material-block:v1 layout=layout:solid-material-block:v1 fields=color@0 padding=0")
-        assertContains(dump, "reflection=wgsl4k-parsed")
+        assertContains(dump, "reflection=parser-backed")
     }
 
     /** Module assembly rejects a fragment set that does not expose the requested complete entry points. */
@@ -126,7 +126,7 @@ class WGSLModuleAbiTest {
         val rejected = result as? WGSLModuleAssemblyResult.Rejected
             ?: fail("Expected unsupported feature to reject module assembly")
 
-        assertContains(rejected.diagnostics.map { it.code }, "unsupported.wgsl.feature_unrepresented_by_wgsl4k")
+        assertContains(rejected.diagnostics.map { it.code }, "unsupported.wgsl.feature_unrepresented_by_parser")
         assertContains(rejected.diagnostics.single().fieldOrBinding.orEmpty(), "shader-f16")
     }
 
@@ -215,7 +215,7 @@ class WGSLModuleAbiTest {
                 packingPlan("pack:intrinsic-draw-block:v1", "layout:intrinsic-draw-block:v1", mapOf("localToDevice" to 0L), padding = 16),
                 packingPlan("pack:solid-material-block:v1", "layout:solid-material-block:v1", mapOf("color" to 0L), padding = 0),
             ),
-            parserState = WGSLParserState.unavailable("wgsl4k", "wgsl4k dependency unavailable in :gpu-renderer"),
+            parserState = WGSLParserState.unavailable("external-wgsl-parser", "WGSL parser unavailable in :gpu-renderer"),
             capabilities = WGSLFacadeCapabilities(supportedFeatures = emptySet()),
         )
     }

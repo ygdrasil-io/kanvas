@@ -1,6 +1,8 @@
 package org.graphiks.kanvas.gpu.renderer.text
 
 import org.graphiks.kanvas.gpu.renderer.analysis.GPUColorGlyphRoutePlanner
+import org.graphiks.kanvas.gpu.renderer.wgsl.COLOR_GLYPH_COMPOSITE_MAX_LAYERS
+import org.graphiks.kanvas.gpu.renderer.wgsl.colorGlyphCompositeWgsl
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -10,7 +12,7 @@ import kotlin.test.assertTrue
 class GPUColorGlyphCompositeShaderTest {
 
     @Test
-    fun `builds a wgsl4k-validated COLRv0 composite shader`() {
+    fun `builds a parser-backed validated COLRv0 composite shader`() {
         val result = buildColorGlyphCompositeShader()
 
         val ready = assertIs<GPUColorGlyphCompositeShaderResult.Ready>(result)
