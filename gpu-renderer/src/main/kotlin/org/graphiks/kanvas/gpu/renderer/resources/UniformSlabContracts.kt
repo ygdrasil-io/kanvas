@@ -76,12 +76,16 @@ class GPUUniformSlabPlan(
         require(totalBytes >= 0L) { "GPUUniformSlabPlan.totalBytes must be non-negative" }
         require(uploadBudgetBytes >= 0L) { "GPUUniformSlabPlan.uploadBudgetBytes must be non-negative" }
         require(slotsSnapshot.isNotEmpty()) { "GPUUniformSlabPlan.slots must not be empty" }
+        val seenSlotLabels = linkedSetOf<String>()
         slotsSnapshot.forEachIndexed { index, slot ->
             require(slot.alignedOffset % alignmentBytes == 0L) {
                 "GPUUniformSlabPlan.slot.alignedOffset must be aligned"
             }
             require(slot.allocatedBytes % alignmentBytes == 0L) {
                 "GPUUniformSlabPlan.slot.allocatedBytes must be aligned"
+            }
+            require(seenSlotLabels.add(slot.slotLabel)) {
+                "GPUUniformSlabPlan.slotLabel must be unique"
             }
             requireDumpSafeUniformSlabValue("GPUUniformSlabPlan.slotLabel", slot.slotLabel)
             requireDumpSafeUniformSlabValue("GPUUniformSlabPlan.slot.payloadHash", slot.payloadHash)
@@ -245,6 +249,17 @@ object GPUUniformSlabPlanner {
             return refused(
                 code = "unsupported.uniform_slab_empty_payload",
                 facts = mapOf("payloadCount" to payloads.size.toString()),
+            )
+        }
+        val seenSlotLabels = linkedSetOf<String>()
+        val duplicateSlotLabel = payloads.firstOrNull { payload -> !seenSlotLabels.add(payload.slotLabel) }?.slotLabel
+        if (duplicateSlotLabel != null) {
+            return refused(
+                code = "unsupported.uniform_slab_duplicate_slot_label",
+                facts = mapOf(
+                    "payloadCount" to payloads.size.toString(),
+                    "slotLabel" to duplicateSlotLabel,
+                ),
             )
         }
 

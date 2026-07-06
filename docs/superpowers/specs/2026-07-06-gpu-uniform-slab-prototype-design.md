@@ -47,9 +47,9 @@ Inclus:
 
 - contrats backend-neutral pour decrire un slab uniforme;
 - planner deterministe pour calculer offsets, padding, taille totale et hash;
-- provider runtime prototype pour les fullscreen uniform passes;
-- integration limitee a la famille `drawFullscreen*Uniform*`;
-- telemetry et tests qui comparent des deltas avant/apres dans ce chemin;
+- materialisation runtime privee dans `GPUBackendRuntimeWgpu.kt`;
+- integration live limitee a `recordFullscreenUniformPass`;
+- preuve runtime via `GPUBackendRuntimeTelemetry` et sa dump line;
 - diagnostics stables pour les refus.
 
 Exclus:
@@ -65,26 +65,27 @@ Exclus:
 
 ## Architecture
 
-La tranche ajoute un plan backend-neutral et un prototype runtime prive ou
-`internal`. Le plan peut etre teste sans WebGPU. Le provider concret ne sert
-qu'a materialiser ce plan dans la route fullscreen uniforme.
+La tranche ajoute un plan backend-neutral et une materialisation runtime
+strictement privee dans `GPUBackendRuntimeWgpu.kt`. Le plan peut etre teste sans
+WebGPU. La creation du buffer slab, les `writeBuffer` et l'indexation par
+`slotLabel` restent des details internes du runtime.
 
 ```mermaid
 flowchart LR
     A["Fullscreen uniform draws"] --> B["GPUUniformSlabPlanner"]
     B --> C["GPUUniformSlabPlan"]
-    C --> D["GPUUniformSlabProvider prototype"]
+    C --> D["Private slab materialization in GPUBackendRuntimeWgpu"]
     D --> E["One GPU uniform buffer per pass"]
     E --> F["Bind groups for fullscreen draws"]
     F --> G["Existing render pass"]
-    G --> H["Runtime telemetry deltas"]
+    G --> H["Runtime telemetry counters and dump line"]
 ```
 
 Le point important est la separation:
 
 - le planner sait calculer un plan dumpable;
-- le provider sait creer les objets backend;
-- la route fullscreen reste proprietaire de l'encodage du pass;
+- le runtime prive sait creer les objets backend et ecrire les payloads;
+- seule la route fullscreen uniforme proprietaire du pass utilise ce prototype;
 - la telemetry reste observationnelle et ne pilote pas les decisions.
 
 ## Composants
@@ -120,6 +121,7 @@ Regles:
 - `alignmentBytes` est strictement positif;
 - `totalBytes` est aligne et ne depasse pas `uploadBudgetBytes`;
 - chaque `alignedOffset` respecte `alignmentBytes`;
+- chaque `slotLabel` est unique dans le snapshot du plan;
 - aucun label ou hash dumpable ne peut etre vide;
 - le plan ne contient aucun handle backend.
 
@@ -139,22 +141,24 @@ Il produit:
 
 Le planner est le coeur testable de la tranche. Il ne depend pas du runtime GPU.
 
-### 3. `GPUUniformSlabProvider` prototype
+### 3. Materialisation runtime privee
 
-Provider runtime limite. Il prend un plan accepte et:
+Le prototype n'expose pas de `GPUUniformSlabProvider` public. Dans l'etat livre,
+`GPUBackendRuntimeWgpu.kt` materialise directement un plan accepte:
 
 - cree un buffer uniforme de `totalBytes`;
 - ecrit chaque payload a son `alignedOffset`;
-- retourne une reference interne utilisable par la route fullscreen;
-- expose des facts dumpables: plan hash, total bytes, slots, generation,
-  alignment.
+- conserve une table interne par `slotLabel` pour retrouver la region a binder;
+- incremente les compteurs `uniformSlabsCreated`,
+  `uniformSlabBytesAllocated` et `uniformSlabFallbacks`.
 
-Le provider ne doit pas exposer de handles dans les dumps. Les objets backend
-restent internes au runtime.
+La preuve dumpable passe par `GPUBackendRuntimeTelemetry` et sa dump line. Il
+n'y a pas de nouveau provider public ni de dump detaille de slab expose comme
+surface runtime autonome.
 
 ### 4. Integration fullscreen uniform pass
 
-La route prototype est la famille `drawFullscreen*Uniform*`.
+La route live est limitee a `recordFullscreenUniformPass`.
 
 La route actuelle fait deja:
 
@@ -163,21 +167,18 @@ La route actuelle fait deja:
 3. creer les buffers/bind groups;
 4. dessiner avec scissor.
 
-La tranche remplace seulement la partie "un buffer uniforme par draw" par:
+La tranche remplace seulement la partie "un buffer uniforme par draw" dans ce
+chemin par:
 
 1. planifier tous les payloads du pass;
 2. creer un slab uniforme;
-3. binder chaque draw avec son offset/facts selon ce que le layout courant
-   permet;
+3. binder chaque draw avec l'offset du slot materialise;
 4. garder le rendu identique.
 
-Si le layout courant ne permet pas encore les dynamic offsets, la tranche garde
-un prototype moins ambitieux: un buffer slab unique et des bind groups par draw
-qui pointent vers la region correcte si l'API le permet. Si ce n'est pas
-possible de facon fiable, la route live garde le chemin actuel et emet un
-diagnostic de fallback temporaire visible dans les dumps. Elle ne doit pas
-rompre le rendu fullscreen existant seulement parce que le prototype slab n'est
-pas encore applicable.
+Les autres chemins restent hors scope de cette tranche tant qu'ils ne passent
+pas naturellement par cette representation fullscreen uniforme privee. Cela
+inclut les routes texture, stencil, text/color glyph et vertex, qui ne doivent
+pas etre decrites comme slabbed par cette spec.
 
 ## Flux de donnees
 
@@ -185,7 +186,7 @@ pas encore applicable.
 sequenceDiagram
     participant R as Fullscreen route
     participant P as Slab planner
-    participant V as Slab provider
+    participant V as Private slab materialization
     participant G as GPU runtime
     participant T as Telemetry
 
@@ -196,7 +197,7 @@ sequenceDiagram
     loop For each slot
         V->>G: writeBuffer(offset, payload)
     end
-    V-->>R: slab reference + slot facts
+    V-->>R: slab reference + slot map
     loop For each draw
         R->>G: bind slot + draw fullscreen triangle
     end
@@ -210,20 +211,20 @@ Les refus doivent etre stables et testables.
 Codes proposes:
 
 - `unsupported.uniform_slab_empty_payload`;
+- `unsupported.uniform_slab_duplicate_slot_label`;
 - `unsupported.uniform_slab_budget_exceeded`;
 - `unsupported.uniform_slab_alignment_invalid`;
 - `unsupported.uniform_slab_stale_generation`;
-- `unsupported.uniform_slab_layout_incompatible`;
-- `unsupported.uniform_slab_backend_materialization_failed`.
 
 Regles:
 
 - un payload vide est refuse avant materialisation;
+- un `slotLabel` duplique est refuse avant construction du plan;
 - un offset non aligne est impossible si le planner est correct, mais reste un
   invariant teste;
 - un budget depasse est refuse avant creation de buffer;
 - une generation device incoherente est refusee avant materialisation;
-- un fallback live vers le chemin actuel doit etre explicite dans les diagnostics;
+- un fallback live vers le chemin actuel doit etre explicite dans la telemetry;
 - aucun refus ne doit etre transforme en rendu CPU silencieux.
 
 ## Telemetry attendue
@@ -239,10 +240,10 @@ La telemetry doit rester observationnelle. La tranche peut mesurer:
 Pour plusieurs draws fullscreen dans un meme pass, le resultat attendu est:
 
 - `renderPasses` et `submissions` inchanges;
-- `buffersCreated` ne doit plus augmenter lineairement avec le nombre de draws
-  sur la route prototype si le slab est actif;
+- sur un target offscreen frais `6x2`, `buffersCreated` vaut 2 de plus dans le
+  chemin accepte: un staging buffer cible et un uniform slab fullscreen;
 - `queueWrites` peut rester egal au nombre de payloads au debut, sauf si le
-  provider ecrit un buffer agregat en une seule fois;
+  runtime ecrit un buffer agregat en une seule fois;
 - `bindGroupsCreated` peut rester par draw dans cette tranche.
 
 La spec ne demande pas une baisse globale. Elle demande une preuve locale,
@@ -257,6 +258,7 @@ lisible et comparable.
 - `planHash` est stable pour les memes inputs;
 - changer un payload change le hash;
 - payload vide refuse;
+- labels de slot dupliques refuses;
 - budget depasse refuse;
 - alignement invalide refuse;
 - labels et hashes non dump-safe refuses.
@@ -264,8 +266,9 @@ lisible et comparable.
 ### Tests runtime smoke
 
 - un fullscreen uniform pass avec deux ou trois draws rend comme avant;
-- la route expose des facts de slab sans handle backend;
-- les deltas telemetry montrent au moins un slab materialise;
+- la dump line runtime reste sans handle backend;
+- les deltas telemetry montrent un slab materialise et l'absence de buffers
+  uniformes par draw sur le chemin accepte;
 - les compteurs de passes/submissions restent coherents;
 - les tests existants de runtime GPU restent verts.
 

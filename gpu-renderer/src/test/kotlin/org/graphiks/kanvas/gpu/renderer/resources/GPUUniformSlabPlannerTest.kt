@@ -143,6 +143,23 @@ class GPUUniformSlabPlannerTest {
     }
 
     @Test
+    fun `planner refuses duplicate payload slot labels`() {
+        assertRefused(
+            result = GPUUniformSlabPlanner.plan(
+                sourceLabel = "fullscreen-uniform-pass",
+                deviceGeneration = 1L,
+                alignmentBytes = 256L,
+                uploadBudgetBytes = 1024L,
+                payloads = listOf(
+                    GPUUniformSlabPayload(slotLabel = "draw-0", bytes = ByteArray(16) { 1 }),
+                    GPUUniformSlabPayload(slotLabel = "draw-0", bytes = ByteArray(16) { 2 }),
+                ),
+            ),
+            expectedCode = "unsupported.uniform_slab_duplicate_slot_label",
+        )
+    }
+
+    @Test
     fun `diagnostic rejects unsafe facts in keys and values`() {
         assertFailsWith<IllegalArgumentException> {
             GPUUniformSlabDiagnostic(
@@ -218,6 +235,32 @@ class GPUUniformSlabPlannerTest {
                         payloadHash = "safe-payload-hash",
                         payloadBytes = 16L,
                         alignedOffset = 1L,
+                        allocatedBytes = 256L,
+                    ),
+                ),
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            GPUUniformSlabPlan(
+                planHash = "safe-plan-hash",
+                sourceLabel = "fullscreen-uniform-pass",
+                deviceGeneration = 1L,
+                alignmentBytes = 256L,
+                totalBytes = 512L,
+                uploadBudgetBytes = 512L,
+                slots = listOf(
+                    GPUUniformSlabSlot(
+                        slotLabel = "draw-0",
+                        payloadHash = "safe-payload-hash-0",
+                        payloadBytes = 16L,
+                        alignedOffset = 0L,
+                        allocatedBytes = 256L,
+                    ),
+                    GPUUniformSlabSlot(
+                        slotLabel = "draw-0",
+                        payloadHash = "safe-payload-hash-1",
+                        payloadBytes = 16L,
+                        alignedOffset = 256L,
                         allocatedBytes = 256L,
                     ),
                 ),
