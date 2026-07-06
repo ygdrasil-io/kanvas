@@ -73,6 +73,9 @@ data class GPUBackendRuntimeTelemetry(
     val bindGroupsCreated: Long = 0L,
     val samplersCreated: Long = 0L,
     val queueWrites: Long = 0L,
+    val uniformSlabsCreated: Long = 0L,
+    val uniformSlabBytesAllocated: Long = 0L,
+    val uniformSlabFallbacks: Long = 0L,
 ) {
     init {
         require(renderPasses >= 0L) { "GPUBackendRuntimeTelemetry.renderPasses must be non-negative" }
@@ -84,6 +87,11 @@ data class GPUBackendRuntimeTelemetry(
         require(bindGroupsCreated >= 0L) { "GPUBackendRuntimeTelemetry.bindGroupsCreated must be non-negative" }
         require(samplersCreated >= 0L) { "GPUBackendRuntimeTelemetry.samplersCreated must be non-negative" }
         require(queueWrites >= 0L) { "GPUBackendRuntimeTelemetry.queueWrites must be non-negative" }
+        require(uniformSlabsCreated >= 0L) { "GPUBackendRuntimeTelemetry.uniformSlabsCreated must be non-negative" }
+        require(
+            uniformSlabBytesAllocated >= 0L,
+        ) { "GPUBackendRuntimeTelemetry.uniformSlabBytesAllocated must be non-negative" }
+        require(uniformSlabFallbacks >= 0L) { "GPUBackendRuntimeTelemetry.uniformSlabFallbacks must be non-negative" }
     }
 
     /** Deterministic diagnostic lines without backend object identities. */
@@ -92,7 +100,9 @@ data class GPUBackendRuntimeTelemetry(
             "gpu-runtime.telemetry renderPasses=$renderPasses offscreenPasses=$offscreenPasses " +
                 "windowPasses=$windowPasses submissions=$submissions buffersCreated=$buffersCreated " +
                 "texturesCreated=$texturesCreated bindGroupsCreated=$bindGroupsCreated " +
-                "samplersCreated=$samplersCreated queueWrites=$queueWrites",
+                "samplersCreated=$samplersCreated queueWrites=$queueWrites " +
+                "uniformSlabsCreated=$uniformSlabsCreated uniformSlabBytesAllocated=$uniformSlabBytesAllocated " +
+                "uniformSlabFallbacks=$uniformSlabFallbacks",
         )
 
     companion object {
