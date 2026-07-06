@@ -70,6 +70,41 @@ class GPUPayloadMaterializationProviderTest {
         assertFalse(lines.joinToString("\n").contains("@0x"))
     }
 
+    /** Accepted payload provider requests can seed the slab batch planner evidence. */
+    @Test
+    fun `accepted payload provider request can seed a payload slab batch plan`() {
+        val request = payloadMaterializationRequest()
+        val providerDecision = ValidatingPayloadResourceProvider().materializePayloadBindings(
+            request = request,
+            context = targetPreparationContext(),
+        )
+        assertIs<GPUResourceMaterializationDecision.Materialized>(providerDecision)
+
+        val planning = GPUPayloadSlabBatchPlanner.plan(
+            GPUPayloadSlabBatchRequest(
+                targetId = "root-target",
+                frameId = "frame-1",
+                sourceLabel = "fullscreen-uniform-pass",
+                deviceGeneration = 11L,
+                alignmentBytes = 256L,
+                uploadBudgetBytes = 1024L,
+                payloadRequests = listOf(request),
+            ),
+        )
+
+        val plan = assertIs<GPUPayloadSlabBatchPlanningResult.Accepted>(planning).plan
+        assertEquals("packet-9", plan.slotBindings.single().packetId)
+        assertEquals("pass-a:uniform:0", plan.slotBindings.single().uniformSlotId)
+        assertEquals("pass-a:resource:0", plan.slotBindings.single().resourceSlotId)
+        assertEquals("uniform-fingerprint-solid", plan.slotBindings.single().payloadFingerprint)
+        assertContains(
+            plan.dumpLines(),
+            "payload-slab.batch.slot source=fullscreen-uniform-pass slot=packet-9:pass-a:uniform:0:pass-a:resource:0 " +
+                "packet=packet-9 uniformSlot=pass-a:uniform:0 resourceSlot=pass-a:resource:0 offset=0 " +
+                "payloadBytes=64 payloadFingerprint=uniform-fingerprint-solid layout=layout-solid-v1",
+        )
+    }
+
     /** Provider-owned cache facts report reuse without changing support status. */
     @Test
     fun `payload provider records bind group and upload reuse telemetry`() {
