@@ -90,6 +90,12 @@ class GPUPayloadSlabBatchPlan(
         require(deviceGeneration >= 0L) {
             "GPUPayloadSlabBatchPlan.deviceGeneration must be non-negative"
         }
+        require(uniformSlabPlan.sourceLabel == sourceLabel) {
+            "GPUPayloadSlabBatchPlan.uniformSlabPlan.sourceLabel must match sourceLabel"
+        }
+        require(uniformSlabPlan.deviceGeneration == deviceGeneration) {
+            "GPUPayloadSlabBatchPlan.uniformSlabPlan.deviceGeneration must match deviceGeneration"
+        }
         require(slotBindingsSnapshot.isNotEmpty()) {
             "GPUPayloadSlabBatchPlan.slotBindings must not be empty"
         }
@@ -276,6 +282,49 @@ object GPUPayloadSlabBatchPlanner {
             )
         }
 
+        val outOfRangePayload = request.payloadRequests.firstOrNull { payload ->
+            payload.uniformBlock.bytes.any { byte -> byte !in 0..255 }
+        }
+        if (outOfRangePayload != null) {
+            return refused(
+                "unsupported.payload_slab_uniform_missing",
+                mapOf(
+                    "packetId" to outOfRangePayload.packetId,
+                    "reason" to "byte_out_of_range",
+                ),
+            )
+        }
+
+        val invalidUniformEvidence = request.payloadRequests.firstNotNullOfOrNull { payload ->
+            payload.invalidUniformEvidenceReason()?.let { reason ->
+                payload to reason
+            }
+        }
+        if (invalidUniformEvidence != null) {
+            return refused(
+                "unsupported.payload_slab_uniform_missing",
+                mapOf(
+                    "packetId" to invalidUniformEvidence.first.packetId,
+                    "reason" to invalidUniformEvidence.second,
+                ),
+            )
+        }
+
+        val invalidResourceEvidence = request.payloadRequests.firstNotNullOfOrNull { payload ->
+            payload.invalidResourceEvidenceReason()?.let { reason ->
+                payload to reason
+            }
+        }
+        if (invalidResourceEvidence != null) {
+            return refused(
+                "unsupported.payload_slab_layout_mismatch",
+                mapOf(
+                    "packetId" to invalidResourceEvidence.first.packetId,
+                    "reason" to invalidResourceEvidence.second,
+                ),
+            )
+        }
+
         val overBudgetPayload = request.payloadRequests.firstOrNull { payload ->
             payload.uniformBlock.byteSize > payload.uploadBudgetBytes
         }
@@ -389,6 +438,46 @@ object GPUPayloadSlabBatchPlanner {
 
 private fun GPUPayloadMaterializationRequest.payloadSlabSlotLabel(): String =
     "$packetId:${uniformSlot.slotId.value}:${resourceSlot.slotId.value}"
+
+private fun GPUPayloadMaterializationRequest.invalidUniformEvidenceReason(): String? =
+    when {
+        !uploadCapabilityAvailable -> "upload_capability_missing"
+        (requiredUniformUsageLabels - availableUniformUsageLabels).isNotEmpty() -> "uniform_usage_missing"
+        !uniformBlock.zeroedPadding -> "zeroed_padding_false"
+        uniformSlot.fingerprint != uniformBlock.fingerprint -> "uniform_fingerprint_mismatch"
+        uploadPlan.byteRanges.isEmpty() -> "upload_ranges_empty"
+        !uploadPlan.byteRanges.byteRangesMatchUniformByteSize(uniformBlock.byteSize) -> "upload_ranges_invalid"
+        else -> null
+    }
+
+private fun GPUPayloadMaterializationRequest.invalidResourceEvidenceReason(): String? =
+    when {
+        resourceSlot.fingerprint != resourceBlock.fingerprint -> "resource_fingerprint_mismatch"
+        resourceBlock.dynamicOffsets.size > maxDynamicOffsets -> "dynamic_offsets_exceeded"
+        resourceBlock.dynamicOffsets.any { offset -> offset < 0L } -> "dynamic_offset_negative"
+        else -> null
+    }
+
+private fun List<LongRange>.byteRangesMatchUniformByteSize(byteSize: Long): Boolean {
+    if (byteSize <= 0L || isEmpty()) {
+        return false
+    }
+    val sortedRanges = sortedBy { range -> range.first }
+    var expectedStart = 0L
+    for (range in sortedRanges) {
+        if (range.isEmpty()) {
+            return false
+        }
+        if (range.first != expectedStart) {
+            return false
+        }
+        if (range.last < range.first) {
+            return false
+        }
+        expectedStart = range.last + 1L
+    }
+    return expectedStart == byteSize
+}
 
 private fun List<Int>.toUnsignedByteArray(): ByteArray =
     ByteArray(size) { index ->

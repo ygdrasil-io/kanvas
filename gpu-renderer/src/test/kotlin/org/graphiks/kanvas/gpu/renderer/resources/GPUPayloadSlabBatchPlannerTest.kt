@@ -76,6 +76,7 @@ class GPUPayloadSlabBatchPlannerTest {
         val plan = acceptedPlan()
 
         val dump = plan.dumpLines()
+        val dumpText = dump.joinToString("\n")
         assertContains(
             dump,
             "payload-slab.batch.plan source=payload-slab-source target=root-target frame=frame-1 " +
@@ -89,9 +90,10 @@ class GPUPayloadSlabBatchPlannerTest {
                 "payloadFingerprint=uniform-fingerprint-1 layout=layout-solid-v1",
         )
         assertTrue(dump.any { line -> line.startsWith("uniform-slab.plan ") })
-        assertFalse(dump.joinToString("\n").contains("@"))
-        assertFalse(dump.joinToString("\n").contains("0x"))
-        assertFalse(dump.joinToString("\n").contains("WGPU"))
+        assertFalse(dumpText.contains("WGPU"))
+        assertFalse(dumpText.contains("wgpu"))
+        assertFalse(dumpText.contains("@"))
+        assertFalse(dumpText.contains("0x"))
     }
 
     @Test
@@ -120,6 +122,22 @@ class GPUPayloadSlabBatchPlannerTest {
         assertEquals(first.planHash, second.planHash)
         assertNotEquals(first.planHash, changedBytes.planHash)
         assertNotEquals(first.planHash, changedLayout.planHash)
+    }
+
+    @Test
+    fun `planner accepts unsorted but contiguous upload byte ranges`() {
+        val accepted = assertIs<GPUPayloadSlabBatchPlanningResult.Accepted>(
+            GPUPayloadSlabBatchPlanner.plan(
+                batchRequest(
+                    payloadRequests = listOf(
+                        payloadRequest(index = 0, uploadByteRanges = listOf(32L..63L, 0L..31L)),
+                    ),
+                ),
+            ),
+        )
+
+        assertEquals(256L, accepted.plan.uniformSlabPlan.totalBytes)
+        assertEquals(listOf(0L), accepted.plan.slotBindings.map { binding -> binding.alignedOffset })
     }
 
     @Test
@@ -200,6 +218,20 @@ class GPUPayloadSlabBatchPlannerTest {
                     payloadRequests = listOf(
                         payloadRequest(
                             index = 0,
+                            bytes = listOf(256) + List(63) { 0 },
+                            byteSize = 64L,
+                        ),
+                    ),
+                ),
+            ),
+            expectedCode = "unsupported.payload_slab_uniform_missing",
+        )
+        assertRefused(
+            result = GPUPayloadSlabBatchPlanner.plan(
+                batchRequest(
+                    payloadRequests = listOf(
+                        payloadRequest(
+                            index = 0,
                             bytes = List(257) { 1 },
                             byteSize = 257L,
                         ),
@@ -239,6 +271,110 @@ class GPUPayloadSlabBatchPlannerTest {
                 ),
             ),
             expectedCode = "unsupported.payload_slab_dump_unsafe",
+        )
+    }
+
+    @Test
+    fun `planner refuses invalid upload and binding evidence before slab materialization`() {
+        assertRefused(
+            result = GPUPayloadSlabBatchPlanner.plan(
+                batchRequest(
+                    payloadRequests = listOf(
+                        payloadRequest(index = 0, zeroedPadding = false),
+                    ),
+                ),
+            ),
+            expectedCode = "unsupported.payload_slab_uniform_missing",
+        )
+        assertRefused(
+            result = GPUPayloadSlabBatchPlanner.plan(
+                batchRequest(
+                    payloadRequests = listOf(
+                        payloadRequest(index = 0, uploadByteRanges = emptyList()),
+                    ),
+                ),
+            ),
+            expectedCode = "unsupported.payload_slab_uniform_missing",
+        )
+        assertRefused(
+            result = GPUPayloadSlabBatchPlanner.plan(
+                batchRequest(
+                    payloadRequests = listOf(
+                        payloadRequest(index = 0, uploadByteRanges = listOf(0L..31L, 33L..63L)),
+                    ),
+                ),
+            ),
+            expectedCode = "unsupported.payload_slab_uniform_missing",
+        )
+        assertRefused(
+            result = GPUPayloadSlabBatchPlanner.plan(
+                batchRequest(
+                    payloadRequests = listOf(
+                        payloadRequest(index = 0, uploadByteRanges = listOf(0L..31L)),
+                    ),
+                ),
+            ),
+            expectedCode = "unsupported.payload_slab_uniform_missing",
+        )
+        assertRefused(
+            result = GPUPayloadSlabBatchPlanner.plan(
+                batchRequest(
+                    payloadRequests = listOf(
+                        payloadRequest(index = 0, uniformSlotFingerprint = "uniform-fingerprint-other"),
+                    ),
+                ),
+            ),
+            expectedCode = "unsupported.payload_slab_uniform_missing",
+        )
+        assertRefused(
+            result = GPUPayloadSlabBatchPlanner.plan(
+                batchRequest(
+                    payloadRequests = listOf(
+                        payloadRequest(index = 0, uploadCapabilityAvailable = false),
+                    ),
+                ),
+            ),
+            expectedCode = "unsupported.payload_slab_uniform_missing",
+        )
+        assertRefused(
+            result = GPUPayloadSlabBatchPlanner.plan(
+                batchRequest(
+                    payloadRequests = listOf(
+                        payloadRequest(index = 0, availableUniformUsageLabels = setOf("copy_dst")),
+                    ),
+                ),
+            ),
+            expectedCode = "unsupported.payload_slab_uniform_missing",
+        )
+        assertRefused(
+            result = GPUPayloadSlabBatchPlanner.plan(
+                batchRequest(
+                    payloadRequests = listOf(
+                        payloadRequest(index = 0, resourceSlotFingerprint = "resource-fingerprint-other"),
+                    ),
+                ),
+            ),
+            expectedCode = "unsupported.payload_slab_layout_mismatch",
+        )
+        assertRefused(
+            result = GPUPayloadSlabBatchPlanner.plan(
+                batchRequest(
+                    payloadRequests = listOf(
+                        payloadRequest(index = 0, dynamicOffsets = listOf(0L, 256L), maxDynamicOffsets = 1),
+                    ),
+                ),
+            ),
+            expectedCode = "unsupported.payload_slab_layout_mismatch",
+        )
+        assertRefused(
+            result = GPUPayloadSlabBatchPlanner.plan(
+                batchRequest(
+                    payloadRequests = listOf(
+                        payloadRequest(index = 0, dynamicOffsets = listOf(-1L)),
+                    ),
+                ),
+            ),
+            expectedCode = "unsupported.payload_slab_layout_mismatch",
         )
     }
 
@@ -326,6 +462,52 @@ class GPUPayloadSlabBatchPlannerTest {
         }
     }
 
+    @Test
+    fun `plan constructor rejects mismatched uniform slab source label`() {
+        assertFailsWith<IllegalArgumentException> {
+            GPUPayloadSlabBatchPlan(
+                planHash = "payload-slab-hash",
+                sourceLabel = "payload-slab-source",
+                targetId = "root-target",
+                frameId = "frame-1",
+                deviceGeneration = 11L,
+                uniformSlabPlan = GPUUniformSlabPlan(
+                    planHash = "uniform-slab-hash",
+                    sourceLabel = "other-source",
+                    deviceGeneration = 11L,
+                    alignmentBytes = 256L,
+                    totalBytes = 256L,
+                    uploadBudgetBytes = 1024L,
+                    slots = listOf(uniformSlabSlot(index = 0)),
+                ),
+                slotBindings = listOf(slotBinding(index = 0)),
+            )
+        }
+    }
+
+    @Test
+    fun `plan constructor rejects mismatched uniform slab device generation`() {
+        assertFailsWith<IllegalArgumentException> {
+            GPUPayloadSlabBatchPlan(
+                planHash = "payload-slab-hash",
+                sourceLabel = "payload-slab-source",
+                targetId = "root-target",
+                frameId = "frame-1",
+                deviceGeneration = 11L,
+                uniformSlabPlan = GPUUniformSlabPlan(
+                    planHash = "uniform-slab-hash",
+                    sourceLabel = "payload-slab-source",
+                    deviceGeneration = 12L,
+                    alignmentBytes = 256L,
+                    totalBytes = 256L,
+                    uploadBudgetBytes = 1024L,
+                    slots = listOf(uniformSlabSlot(index = 0)),
+                ),
+                slotBindings = listOf(slotBinding(index = 0)),
+            )
+        }
+    }
+
     private fun acceptedPlan(
         request: GPUPayloadSlabBatchRequest = batchRequest(
             payloadRequests = listOf(
@@ -344,13 +526,17 @@ class GPUPayloadSlabBatchPlannerTest {
         expectedCode: String,
     ) {
         val refused = assertIs<GPUPayloadSlabBatchPlanningResult.Refused>(result)
+        val dumpText = refused.dumpLines().joinToString("\n")
         assertEquals(expectedCode, refused.diagnostic.code)
         assertTrue(
-            refused.dumpLines().single().contains(
+            dumpText.contains(
                 "payload-slab.batch.refused code=$expectedCode terminal=true facts=",
             ),
         )
-        assertFalse(refused.dumpLines().joinToString("\n").contains("WGPU"))
+        assertFalse(dumpText.contains("WGPU"))
+        assertFalse(dumpText.contains("wgpu"))
+        assertFalse(dumpText.contains("@"))
+        assertFalse(dumpText.contains("0x"))
     }
 
     private fun payloadRequest(
@@ -361,6 +547,17 @@ class GPUPayloadSlabBatchPlannerTest {
         reflectedBindingLayoutHash: String = "layout-solid-v1",
         bytes: List<Int> = List(64) { index + 1 },
         byteSize: Long = bytes.size.toLong(),
+        zeroedPadding: Boolean = true,
+        uniformFingerprint: String = "uniform-fingerprint-$index",
+        uniformSlotFingerprint: String = uniformFingerprint,
+        resourceFingerprint: String = "resource-fingerprint-$index",
+        resourceSlotFingerprint: String = resourceFingerprint,
+        dynamicOffsets: List<Long> = listOf(0L),
+        uploadByteRanges: List<LongRange> = if (byteSize == 0L) emptyList() else listOf(0L until byteSize),
+        maxDynamicOffsets: Int = 1,
+        uploadCapabilityAvailable: Boolean = true,
+        requiredUniformUsageLabels: Set<String> = setOf("copy_dst", "uniform"),
+        availableUniformUsageLabels: Set<String> = setOf("copy_dst", "uniform"),
     ): GPUPayloadMaterializationRequest =
         GPUPayloadMaterializationRequest(
             targetId = targetId,
@@ -368,33 +565,33 @@ class GPUPayloadSlabBatchPlannerTest {
             taskIds = listOf("task-payload-upload"),
             resourcePlanLabels = listOf("payload-materialization:fullscreen-$index"),
             uniformBlock = GPUUniformPayloadBlock(
-                fingerprint = GPUPayloadFingerprint("uniform-fingerprint-$index"),
+                fingerprint = GPUPayloadFingerprint(uniformFingerprint),
                 packingPlanHash = "solid-rect-layout-v1",
                 byteSize = byteSize,
-                zeroedPadding = true,
+                zeroedPadding = zeroedPadding,
                 scope = "pass-a",
                 bytes = bytes,
             ),
             uniformSlot = GPUUniformPayloadSlot(
                 slotId = GPUPayloadSlotID("pass-a:uniform:$index"),
-                fingerprint = GPUPayloadFingerprint("uniform-fingerprint-$index"),
+                fingerprint = GPUPayloadFingerprint(uniformSlotFingerprint),
                 byteOffset = 0L,
             ),
             resourceBlock = GPUResourceBindingBlock(
-                fingerprint = GPUPayloadFingerprint("resource-fingerprint-$index"),
+                fingerprint = GPUPayloadFingerprint(resourceFingerprint),
                 bindingPlanHash = reflectedBindingLayoutHash,
                 bindingCount = 1,
                 resourceDescriptorLabels = listOf("uniform:solid-payload"),
-                dynamicOffsets = listOf(0L),
+                dynamicOffsets = dynamicOffsets,
             ),
             resourceSlot = GPUResourceBindingSlot(
                 slotId = GPUPayloadSlotID("pass-a:resource:$index"),
-                fingerprint = GPUPayloadFingerprint("resource-fingerprint-$index"),
+                fingerprint = GPUPayloadFingerprint(resourceSlotFingerprint),
                 bindingIndex = 0,
             ),
             uploadPlan = GPUPayloadUploadPlan(
                 planHash = "upload-solid-v1-$index",
-                byteRanges = if (byteSize == 0L) emptyList() else listOf(0L until byteSize),
+                byteRanges = uploadByteRanges,
                 stagingScope = "pass-a-staging",
                 budgetClass = "unit-test",
                 beforeUseToken = "before-draw-$index",
@@ -404,10 +601,10 @@ class GPUPayloadSlabBatchPlannerTest {
             payloadGeneration = 7L,
             alignmentBytes = 256L,
             uploadBudgetBytes = 256L,
-            uploadCapabilityAvailable = true,
-            maxDynamicOffsets = 1,
-            requiredUniformUsageLabels = setOf("copy_dst", "uniform"),
-            availableUniformUsageLabels = setOf("copy_dst", "uniform"),
+            uploadCapabilityAvailable = uploadCapabilityAvailable,
+            maxDynamicOffsets = maxDynamicOffsets,
+            requiredUniformUsageLabels = requiredUniformUsageLabels,
+            availableUniformUsageLabels = availableUniformUsageLabels,
         )
 
     private fun batchRequest(
@@ -422,5 +619,26 @@ class GPUPayloadSlabBatchPlannerTest {
             alignmentBytes = 256L,
             uploadBudgetBytes = uploadBudgetBytes,
             payloadRequests = payloadRequests,
+        )
+
+    private fun uniformSlabSlot(index: Int): GPUUniformSlabSlot =
+        GPUUniformSlabSlot(
+            slotLabel = "packet-$index:pass-a:uniform:$index:pass-a:resource:$index",
+            payloadHash = "payload-hash-$index",
+            payloadBytes = 64L,
+            alignedOffset = index * 256L,
+            allocatedBytes = 256L,
+        )
+
+    private fun slotBinding(index: Int): GPUPayloadSlabSlotBinding =
+        GPUPayloadSlabSlotBinding(
+            slotLabel = "packet-$index:pass-a:uniform:$index:pass-a:resource:$index",
+            packetId = "packet-$index",
+            uniformSlotId = "pass-a:uniform:$index",
+            resourceSlotId = "pass-a:resource:$index",
+            payloadFingerprint = "uniform-fingerprint-$index",
+            reflectedBindingLayoutHash = "layout-solid-v1",
+            alignedOffset = index * 256L,
+            payloadBytes = 64L,
         )
 }
