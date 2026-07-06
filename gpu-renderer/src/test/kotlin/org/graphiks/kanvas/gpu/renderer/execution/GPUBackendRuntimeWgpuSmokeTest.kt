@@ -345,6 +345,8 @@ class GPUBackendRuntimeWgpuSmokeTest {
                 assertEquals(0L, after.uniformSlabFallbacks - before.uniformSlabFallbacks)
                 assertTrue(after.buffersCreated - before.buffersCreated >= 1L)
                 assertTrue(dump.contains("uniformSlabsCreated="))
+                assertTrue(dump.contains("uniformSlabBytesAllocated="))
+                assertTrue(dump.contains("uniformSlabFallbacks="))
                 assertTrue(!dump.contains("@"))
             }
         }
