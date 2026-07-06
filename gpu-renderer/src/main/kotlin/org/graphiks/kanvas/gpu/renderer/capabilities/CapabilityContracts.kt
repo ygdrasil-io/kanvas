@@ -331,6 +331,7 @@ fun GPUCapabilities.validateUniformAlignment(alignmentBytes: Long): GPUCapabilit
     )
 }
 
+/** Validates that a renderer-owned feature gate is present when feature evidence is known. */
 fun GPUCapabilities.validateRendererFeature(feature: GPURendererFeature): GPUCapabilityDiagnostic? {
     if (rendererFeatures.isEmpty() || feature in rendererFeatures) return null
     return GPUCapabilityDiagnostic(
