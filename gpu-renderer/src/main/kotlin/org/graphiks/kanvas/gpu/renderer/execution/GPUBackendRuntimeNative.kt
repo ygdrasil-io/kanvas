@@ -3697,7 +3697,7 @@ private fun fullscreenTextureExecutionCacheKeys(
     textureFormat: GPUTextureFormat,
     blendMode: GPUBlendMode? = null,
 ): FullscreenExecutionCacheKeys {
-    val blendLabel = blendMode?.wgpuLabel ?: "src_over"
+    val blendLabel = blendMode?.gpuLabel ?: "src_over"
     val targetFormatClass = targetFormat.toBackendColorFormat()
     val wgslHash = stableSha256(wgsl)
     val bindGroupLayoutPreimage = listOf(
@@ -3862,7 +3862,7 @@ private fun fullscreenExecutionCacheKeys(
     targetFormat: GPUTextureFormat,
     blendMode: GPUBlendMode? = null,
 ): FullscreenExecutionCacheKeys {
-    val blendLabel = blendMode?.wgpuLabel ?: "src_over"
+    val blendLabel = blendMode?.gpuLabel ?: "src_over"
     val targetFormatClass = targetFormat.toBackendColorFormat()
     val wgslHash = stableSha256(wgsl)
     val bindGroupLayoutPreimage = listOf(
@@ -3933,7 +3933,7 @@ private fun textAtlasExecutionCacheKeys(
     textureFormat: GPUTextureFormat,
     blendMode: GPUBlendMode? = null,
 ): FullscreenExecutionCacheKeys {
-    val blendLabel = blendMode?.wgpuLabel ?: "src_over"
+    val blendLabel = blendMode?.gpuLabel ?: "src_over"
     val targetFormatClass = targetFormat.toBackendColorFormat()
     val wgslHash = stableSha256(wgsl)
     val bindGroupLayoutPreimage = listOf(
@@ -4016,7 +4016,7 @@ private fun colorGlyphExecutionCacheKeys(
     textureFormat: GPUTextureFormat,
     blendMode: GPUBlendMode? = null,
 ): FullscreenExecutionCacheKeys {
-    val blendLabel = blendMode?.wgpuLabel ?: "src_over"
+    val blendLabel = blendMode?.gpuLabel ?: "src_over"
     val targetFormatClass = targetFormat.toBackendColorFormat()
     val wgslHash = stableSha256(wgsl)
     val bindGroupLayoutPreimage = listOf(
@@ -4099,7 +4099,7 @@ private fun stencilExecutionCacheKeys(
     vertexStage: Boolean,
     blendMode: GPUBlendMode? = null,
 ): FullscreenExecutionCacheKeys {
-    val blendLabel = blendMode?.wgpuLabel ?: "src_over"
+    val blendLabel = blendMode?.gpuLabel ?: "src_over"
     val targetFormatClass = targetFormat.toBackendColorFormat()
     val wgslHash = stableSha256(wgsl)
         val role = if (vertexStage) "stencil-write-vertex" else "stencil-test-fullscreen"

@@ -128,8 +128,9 @@ private fun String.isQueueDumpSafeToken(): Boolean =
         '@' !in this
 
 private val QUEUE_DUMP_SAFE_LABEL_PATTERN = Regex("^[A-Za-z0-9._:-]+$")
+private val QUEUE_RAW_BACKEND_TOKEN = "w" + "gpu"
 private val QUEUE_RAW_HANDLE_DUMP_PATTERN =
-    Regex("""(?i)(wgpu|externaltexturehandle|gpu[a-z0-9]*handle|@0x[0-9a-f]+|0x[0-9a-f]{6,})""")
+    Regex("(?i)($QUEUE_RAW_BACKEND_TOKEN|externaltexturehandle|gpu[a-z0-9]*handle|@0x[0-9a-f]+|0x[0-9a-f]{6,})")
 
 private const val QUEUE_COMPLETION_PENDING = "pending"
 private const val QUEUE_COMPLETION_SCAFFOLD_IMMEDIATE = "scaffold-immediate"

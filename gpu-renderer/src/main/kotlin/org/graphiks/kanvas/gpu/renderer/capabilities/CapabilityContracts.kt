@@ -1,6 +1,6 @@
 package org.graphiks.kanvas.gpu.renderer.capabilities
 
-/** Implementation identity for wgpu4k, Dawn, or future pure Kotlin facade backends. */
+/** Implementation identity for native or future pure Kotlin GPU facade backends. */
 data class GPUImplementationIdentity(
     val facadeName: String,
     val implementationName: String,
@@ -120,6 +120,7 @@ data class GPUCapabilities(
     }
 }
 
+/** Validates a texture allocation request against known format, usage, and size capabilities. */
 fun GPUCapabilities.validateTextureRequest(
     format: String,
     width: Int,
@@ -169,6 +170,7 @@ fun GPUCapabilities.validateTextureRequest(
     return null
 }
 
+/** Validates a dynamic uniform-buffer alignment request against known device limits. */
 fun GPUCapabilities.validateUniformAlignment(alignmentBytes: Long): GPUCapabilityDiagnostic? {
     require(alignmentBytes > 0L) { "alignmentBytes must be positive" }
 
@@ -187,6 +189,7 @@ fun GPUCapabilities.validateUniformAlignment(alignmentBytes: Long): GPUCapabilit
     )
 }
 
+/** Validates that a named optional GPU feature is present when the snapshot has feature evidence. */
 fun GPUCapabilities.validateFeature(featureLabel: String): GPUCapabilityDiagnostic? {
     require(featureLabel.isNotBlank()) { "featureLabel must not be blank" }
 

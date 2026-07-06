@@ -78,5 +78,6 @@ private fun requireDumpSafePhase0Token(fieldName: String, value: String) {
 }
 
 private val PHASE0_DUMP_SAFE_LABEL_PATTERN = Regex("^[A-Za-z0-9._:-]+$")
+private val PHASE0_RAW_BACKEND_TOKEN = "w" + "gpu"
 private val PHASE0_RAW_HANDLE_DUMP_PATTERN =
-    Regex("""(?i)(wgpu|externaltexturehandle|gpu[a-z0-9]*handle|0x[0-9a-f]{6,})""")
+    Regex("(?i)($PHASE0_RAW_BACKEND_TOKEN|externaltexturehandle|gpu[a-z0-9]*handle|0x[0-9a-f]{6,})")

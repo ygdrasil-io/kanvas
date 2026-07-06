@@ -176,7 +176,7 @@ private fun parserBackedReflection(
 
     val parserState = WGSLParserState(
         status = "parser-backed",
-        toolName = "external-wgsl-parser",
+        toolName = "wgsl4k",
         message = "reflection produced by live WGSL parse",
     )
 
@@ -194,7 +194,7 @@ private fun parserBackedReflection(
         storage = input.storageLayouts.sortedBy { it.layoutHash },
         diagnostics = listOf(parserDiagnostic),
         parserState = parserState,
-        reflectionSource = "parser-backed",
+        reflectionSource = "wgsl4k-parsed",
     )
 
     return Pair(reflection, parserDiagnostic)

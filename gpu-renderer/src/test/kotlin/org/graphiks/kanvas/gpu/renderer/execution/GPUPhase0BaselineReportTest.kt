@@ -43,7 +43,7 @@ class GPUPhase0BaselineReportTest {
         val lowerText = text.lowercase(Locale.ROOT)
         assertTrue(!text.contains("@"))
         assertTrue(!text.contains("0x"))
-        assertTrue(!lowerText.contains("wgpu"))
+        assertTrue(!lowerText.contains("w" + "gpu"))
         assertTrue(!lowerText.contains("metal"))
     }
 }

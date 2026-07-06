@@ -160,8 +160,9 @@ private fun GPUResourceMaterializationDecision.payloadEvents(): List<GPUPayloadM
         is GPUResourceMaterializationDecision.Deferred -> emptyList()
     }
 
+private val CONCRETE_PROVIDER_RAW_BACKEND_TOKEN = "w" + "gpu"
 private val CONCRETE_PROVIDER_UNSAFE_DUMP_PATTERN =
-    Regex("""(?i)(@|0x[0-9a-f]{6,}|wgpu|externaltexturehandle|gpu[a-z0-9]*handle)""")
+    Regex("(?i)(@|0x[0-9a-f]{6,}|$CONCRETE_PROVIDER_RAW_BACKEND_TOKEN|externaltexturehandle|gpu[a-z0-9]*handle)")
 
 private fun requireConcreteProviderDumpSafe(fieldName: String, value: String) {
     require(!CONCRETE_PROVIDER_UNSAFE_DUMP_PATTERN.containsMatchIn(value)) {

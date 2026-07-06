@@ -244,7 +244,7 @@ internal fun BlendMode.toGpuBlendFacts(): GPUBlendFacts {
     }
     return GPUBlendFacts(
         kind = GPUBlendKind.Custom,
-        modeLabel = mode.wgpuLabel,
+        modeLabel = mode.gpuLabel,
         requiresDestinationRead = mode.requiresDestinationRead,
         blendMode = mode,
     )

@@ -52,7 +52,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillRRect(
 
     drawFullscreenRawUniformPass(
         wgsl = RRECT_WGSL,
-        colorFormat = config.gpuColorFormat.wgpuLabel,
+        colorFormat = config.gpuColorFormat.gpuLabel,
         draws = listOf(
             GPUBackendRawUniformDraw(
                 uniformBytes = bb.array(),
