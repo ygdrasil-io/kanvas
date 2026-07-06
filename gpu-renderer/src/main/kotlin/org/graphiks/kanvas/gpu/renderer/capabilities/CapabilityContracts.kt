@@ -1,5 +1,8 @@
 package org.graphiks.kanvas.gpu.renderer.capabilities
 
+import io.ygdrasil.webgpu.GPUTextureFormat
+import io.ygdrasil.webgpu.GPUTextureUsage
+
 /** Implementation identity for native or future pure Kotlin GPU facade backends. */
 data class GPUImplementationIdentity(
     val facadeName: String,
@@ -9,6 +12,128 @@ data class GPUImplementationIdentity(
     val vendorId: String? = null,
     val deviceId: String? = null,
 )
+
+/** Renderer-owned feature gates that do not correspond to GPU optional feature names. */
+enum class GPURendererFeature(val dumpLabel: String) {
+    RenderPass("render-pass"),
+    CopyUpload("copy-upload"),
+    Readback("readback"),
+    UniformBuffer("uniform-buffer"),
+    TextureSampling("texture-sampling"),
+}
+
+/** Stable dump label for GPU texture formats used in diagnostics and snapshots. */
+fun GPUTextureFormat.dumpLabel(): String =
+    when (this) {
+        GPUTextureFormat.R8Unorm -> "r8unorm"
+        GPUTextureFormat.R8Snorm -> "r8snorm"
+        GPUTextureFormat.R8Uint -> "r8uint"
+        GPUTextureFormat.R8Sint -> "r8sint"
+        GPUTextureFormat.R16Uint -> "r16uint"
+        GPUTextureFormat.R16Sint -> "r16sint"
+        GPUTextureFormat.R16Float -> "r16float"
+        GPUTextureFormat.RG8Unorm -> "rg8unorm"
+        GPUTextureFormat.RG8Snorm -> "rg8snorm"
+        GPUTextureFormat.RG8Uint -> "rg8uint"
+        GPUTextureFormat.RG8Sint -> "rg8sint"
+        GPUTextureFormat.R32Float -> "r32float"
+        GPUTextureFormat.R32Uint -> "r32uint"
+        GPUTextureFormat.R32Sint -> "r32sint"
+        GPUTextureFormat.RG16Uint -> "rg16uint"
+        GPUTextureFormat.RG16Sint -> "rg16sint"
+        GPUTextureFormat.RG16Float -> "rg16float"
+        GPUTextureFormat.RGBA8Unorm -> "rgba8unorm"
+        GPUTextureFormat.RGBA8UnormSrgb -> "rgba8unorm-srgb"
+        GPUTextureFormat.RGBA8Snorm -> "rgba8snorm"
+        GPUTextureFormat.RGBA8Uint -> "rgba8uint"
+        GPUTextureFormat.RGBA8Sint -> "rgba8sint"
+        GPUTextureFormat.BGRA8Unorm -> "bgra8unorm"
+        GPUTextureFormat.BGRA8UnormSrgb -> "bgra8unorm-srgb"
+        GPUTextureFormat.RGB10A2Uint -> "rgb10a2uint"
+        GPUTextureFormat.RGB10A2Unorm -> "rgb10a2unorm"
+        GPUTextureFormat.RG11B10Ufloat -> "rg11b10ufloat"
+        GPUTextureFormat.RGB9E5Ufloat -> "rgb9e5ufloat"
+        GPUTextureFormat.RG32Float -> "rg32float"
+        GPUTextureFormat.RG32Uint -> "rg32uint"
+        GPUTextureFormat.RG32Sint -> "rg32sint"
+        GPUTextureFormat.RGBA16Uint -> "rgba16uint"
+        GPUTextureFormat.RGBA16Sint -> "rgba16sint"
+        GPUTextureFormat.RGBA16Float -> "rgba16float"
+        GPUTextureFormat.RGBA32Float -> "rgba32float"
+        GPUTextureFormat.RGBA32Uint -> "rgba32uint"
+        GPUTextureFormat.RGBA32Sint -> "rgba32sint"
+        GPUTextureFormat.Stencil8 -> "stencil8"
+        GPUTextureFormat.Depth16Unorm -> "depth16unorm"
+        GPUTextureFormat.Depth24Plus -> "depth24plus"
+        GPUTextureFormat.Depth24PlusStencil8 -> "depth24plus-stencil8"
+        GPUTextureFormat.Depth32Float -> "depth32float"
+        GPUTextureFormat.Depth32FloatStencil8 -> "depth32float-stencil8"
+        GPUTextureFormat.BC1RGBAUnorm -> "bc1-rgba-unorm"
+        GPUTextureFormat.BC1RGBAUnormSrgb -> "bc1-rgba-unorm-srgb"
+        GPUTextureFormat.BC2RGBAUnorm -> "bc2-rgba-unorm"
+        GPUTextureFormat.BC2RGBAUnormSrgb -> "bc2-rgba-unorm-srgb"
+        GPUTextureFormat.BC3RGBAUnorm -> "bc3-rgba-unorm"
+        GPUTextureFormat.BC3RGBAUnormSrgb -> "bc3-rgba-unorm-srgb"
+        GPUTextureFormat.BC4RUnorm -> "bc4-r-unorm"
+        GPUTextureFormat.BC4RSnorm -> "bc4-r-snorm"
+        GPUTextureFormat.BC5RGUnorm -> "bc5-rg-unorm"
+        GPUTextureFormat.BC5RGSnorm -> "bc5-rg-snorm"
+        GPUTextureFormat.BC6HRGBUfloat -> "bc6h-rgb-ufloat"
+        GPUTextureFormat.BC6HRGBFloat -> "bc6h-rgb-float"
+        GPUTextureFormat.BC7RGBAUnorm -> "bc7-rgba-unorm"
+        GPUTextureFormat.BC7RGBAUnormSrgb -> "bc7-rgba-unorm-srgb"
+        GPUTextureFormat.ETC2RGB8Unorm -> "etc2-rgb8unorm"
+        GPUTextureFormat.ETC2RGB8UnormSrgb -> "etc2-rgb8unorm-srgb"
+        GPUTextureFormat.ETC2RGB8A1Unorm -> "etc2-rgb8a1unorm"
+        GPUTextureFormat.ETC2RGB8A1UnormSrgb -> "etc2-rgb8a1unorm-srgb"
+        GPUTextureFormat.ETC2RGBA8Unorm -> "etc2-rgba8unorm"
+        GPUTextureFormat.ETC2RGBA8UnormSrgb -> "etc2-rgba8unorm-srgb"
+        GPUTextureFormat.EACR11Unorm -> "eac-r11unorm"
+        GPUTextureFormat.EACR11Snorm -> "eac-r11snorm"
+        GPUTextureFormat.EACRG11Unorm -> "eac-rg11unorm"
+        GPUTextureFormat.EACRG11Snorm -> "eac-rg11snorm"
+        GPUTextureFormat.ASTC4x4Unorm -> "astc-4x4-unorm"
+        GPUTextureFormat.ASTC4x4UnormSrgb -> "astc-4x4-unorm-srgb"
+        GPUTextureFormat.ASTC5x4Unorm -> "astc-5x4-unorm"
+        GPUTextureFormat.ASTC5x4UnormSrgb -> "astc-5x4-unorm-srgb"
+        GPUTextureFormat.ASTC5x5Unorm -> "astc-5x5-unorm"
+        GPUTextureFormat.ASTC5x5UnormSrgb -> "astc-5x5-unorm-srgb"
+        GPUTextureFormat.ASTC6x5Unorm -> "astc-6x5-unorm"
+        GPUTextureFormat.ASTC6x5UnormSrgb -> "astc-6x5-unorm-srgb"
+        GPUTextureFormat.ASTC6x6Unorm -> "astc-6x6-unorm"
+        GPUTextureFormat.ASTC6x6UnormSrgb -> "astc-6x6-unorm-srgb"
+        GPUTextureFormat.ASTC8x5Unorm -> "astc-8x5-unorm"
+        GPUTextureFormat.ASTC8x5UnormSrgb -> "astc-8x5-unorm-srgb"
+        GPUTextureFormat.ASTC8x6Unorm -> "astc-8x6-unorm"
+        GPUTextureFormat.ASTC8x6UnormSrgb -> "astc-8x6-unorm-srgb"
+        GPUTextureFormat.ASTC8x8Unorm -> "astc-8x8-unorm"
+        GPUTextureFormat.ASTC8x8UnormSrgb -> "astc-8x8-unorm-srgb"
+        GPUTextureFormat.ASTC10x5Unorm -> "astc-10x5-unorm"
+        GPUTextureFormat.ASTC10x5UnormSrgb -> "astc-10x5-unorm-srgb"
+        GPUTextureFormat.ASTC10x6Unorm -> "astc-10x6-unorm"
+        GPUTextureFormat.ASTC10x6UnormSrgb -> "astc-10x6-unorm-srgb"
+        GPUTextureFormat.ASTC10x8Unorm -> "astc-10x8-unorm"
+        GPUTextureFormat.ASTC10x8UnormSrgb -> "astc-10x8-unorm-srgb"
+        GPUTextureFormat.ASTC10x10Unorm -> "astc-10x10-unorm"
+        GPUTextureFormat.ASTC10x10UnormSrgb -> "astc-10x10-unorm-srgb"
+        GPUTextureFormat.ASTC12x10Unorm -> "astc-12x10-unorm"
+        GPUTextureFormat.ASTC12x10UnormSrgb -> "astc-12x10-unorm-srgb"
+        GPUTextureFormat.ASTC12x12Unorm -> "astc-12x12-unorm"
+        GPUTextureFormat.ASTC12x12UnormSrgb -> "astc-12x12-unorm-srgb"
+    }
+
+/** Returns stable public usage labels in deterministic order. */
+fun GPUTextureUsage.dumpLabels(): List<String> =
+    buildList {
+        if (containsUsage(GPUTextureUsage.CopySrc)) add("copy_src")
+        if (containsUsage(GPUTextureUsage.CopyDst)) add("copy_dst")
+        if (containsUsage(GPUTextureUsage.TextureBinding)) add("texture_binding")
+        if (containsUsage(GPUTextureUsage.StorageBinding)) add("storage_binding")
+        if (containsUsage(GPUTextureUsage.RenderAttachment)) add("render_attachment")
+    }
+
+private fun GPUTextureUsage.containsUsage(required: GPUTextureUsage): Boolean =
+    (value and required.value) == required.value
 
 /** Single behavior-affecting capability fact. */
 data class GPUCapabilityFact(
