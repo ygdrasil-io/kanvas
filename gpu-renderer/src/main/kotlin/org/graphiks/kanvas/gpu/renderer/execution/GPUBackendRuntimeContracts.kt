@@ -136,6 +136,10 @@ interface GPUBackendSession : AutoCloseable {
     val executionCacheDumpLines: List<String>
         get() = emptyList()
 
+    /** Reports resource-provider evidence lines without runtime handles. */
+    val resourceProviderDumpLines: List<String>
+        get() = emptyList()
+
     /** Reports compact phase 0 baseline evidence without runtime handles. */
     val phase0BaselineDumpLines: List<String>
         get() = phase0BaselineSnapshot(label = "session").dumpLines()
@@ -146,6 +150,9 @@ interface GPUBackendSession : AutoCloseable {
     /** Binds a native window surface that can encode and present fullscreen passes. */
     fun createWindowSurface(binding: GPUNativeSurfaceBinding): GPUBackendWindowSurface
 }
+
+val GPUBackendSession.phase0EvidenceDumpLines: List<String>
+    get() = phase0BaselineDumpLines + resourceProviderDumpLines
 
 /** Represents an offscreen target that supports rendering then RGBA readback. */
 interface GPUBackendOffscreenTarget : AutoCloseable {

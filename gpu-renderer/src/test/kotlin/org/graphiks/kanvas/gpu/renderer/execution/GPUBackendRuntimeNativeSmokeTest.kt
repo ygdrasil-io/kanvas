@@ -232,6 +232,7 @@ class GPUBackendRuntimeNativeSmokeTest {
 
             val after = session.runtimeTelemetry
             val dump = session.runtimeTelemetryDumpLines.joinToString("\n")
+            val baselineDump = session.phase0BaselineDumpLines.joinToString("\n")
             val submissionDelta = after.submissions - before.submissions
             val commandBufferDelta = after.commandBuffers - before.commandBuffers
 
@@ -247,6 +248,8 @@ class GPUBackendRuntimeNativeSmokeTest {
             assertTrue(after.queueWrites - before.queueWrites >= 2L)
             assertTrue(dump.contains("gpu-runtime.telemetry"))
             assertTrue(dump.contains("commandBuffers="))
+            assertTrue(baselineDump.contains("gpu-phase0.baseline"))
+            assertTrue(baselineDump.contains("uniformSlabsCreated="))
             assertTrue(!dump.contains("@"))
         }
     }
@@ -393,6 +396,47 @@ class GPUBackendRuntimeNativeSmokeTest {
                 assertTrue(!dump.contains(forbiddenImplementationTokenLowerForAudit()))
                 assertTrue(!dump.contains("0x"))
             }
+        }
+    }
+
+    @Test
+    fun `fullscreen uniform path exposes provider cache evidence when runtime is available`() {
+        val runtime = GPUBackendRuntimeFactory.createOrNull()
+        assumeTrue(runtime != null, "GPU runtime unavailable in current environment")
+
+        runtime!!.use { session ->
+            session.createOffscreenTarget(
+                GPUOffscreenTargetRequest(
+                    width = 4,
+                    height = 4,
+                    colorFormat = "rgba8unorm",
+                ),
+            ).use { target ->
+                target.encode(
+                    clearColor = GPUClearColor(red = 0.0, green = 0.0, blue = 0.0, alpha = 1.0),
+                ) {
+                    drawFullscreenPass(
+                        wgsl = solidColorFullscreenWgsl(),
+                        colorFormat = "rgba8unorm",
+                        draws = listOf(
+                            GPUBackendRectDraw(
+                                rgbaPremul = floatArrayOf(1f, 0f, 0f, 1f),
+                                scissorX = 0,
+                                scissorY = 0,
+                                scissorWidth = 4,
+                                scissorHeight = 4,
+                            ),
+                        ),
+                    )
+                }
+                target.readRgba()
+            }
+
+            val evidenceDump = session.phase0EvidenceDumpLines.joinToString("\n")
+
+            assertTrue(evidenceDump.contains("gpu-phase0.baseline"))
+            assertTrue(evidenceDump.contains("resource-provider.cache"))
+            assertTrue(!evidenceDump.contains("@"))
         }
     }
 

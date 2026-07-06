@@ -111,6 +111,8 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUPayloadSlabBatchRequest
 import org.graphiks.kanvas.gpu.renderer.resources.GPUPayloadSlabResourceEvent
 import org.graphiks.kanvas.gpu.renderer.resources.GPUPayloadSlabResourceLedger
 import org.graphiks.kanvas.gpu.renderer.resources.GPUPayloadSlabSlotBinding
+import org.graphiks.kanvas.gpu.renderer.resources.GPUTargetPreparationContext
+import org.graphiks.kanvas.gpu.renderer.resources.GPUConcreteResourceProvider
 
 private const val COPY_BYTES_PER_ROW_ALIGNMENT: Int = 256
 private const val FULL_SCREEN_TRIANGLE_VERTEX_COUNT: UInt = 3u
@@ -324,6 +326,7 @@ private class WgpuBackendSession(
     private val deviceGeneration = sessionDeviceGeneration(sessionOrdinal)
     private val executionCaches = WgpuExecutionCaches(deviceGeneration)
     private val telemetryRecorder = WgpuBackendRuntimeTelemetryRecorder()
+    private val resourceProvider = GPUConcreteResourceProvider()
     private val adapterSummary = adapterSummary(glfw)
     private val backendLimits = GPULimits.conservative(
         maxTextureDimension2D = MAX_TEXTURE_DIMENSION.toLong(),
@@ -374,6 +377,9 @@ private class WgpuBackendSession(
     override val executionCacheDumpLines: List<String>
         get() = executionCaches.dumpLines
 
+    override val resourceProviderDumpLines: List<String>
+        get() = resourceProvider.telemetry.dumpLines()
+
     override fun createOffscreenTarget(request: GPUOffscreenTargetRequest): GPUBackendOffscreenTarget =
         WgpuOffscreenTarget(
             sessionOrdinal = sessionOrdinal,
@@ -385,6 +391,7 @@ private class WgpuBackendSession(
             capabilities = capabilities,
             executionCaches = executionCaches,
             telemetryRecorder = telemetryRecorder,
+            resourceProvider = resourceProvider,
         )
 
     override fun createWindowSurface(binding: GPUNativeSurfaceBinding): GPUBackendWindowSurface =
@@ -392,6 +399,7 @@ private class WgpuBackendSession(
             binding = binding,
             capabilities = capabilities,
             telemetryRecorder = telemetryRecorder,
+            resourceProvider = resourceProvider,
         )
 
     override fun close() {
@@ -550,6 +558,7 @@ private class WgpuOffscreenTarget(
     private val capabilities: GPUCapabilities,
     private val executionCaches: WgpuExecutionCaches,
     private val telemetryRecorder: WgpuBackendRuntimeTelemetryRecorder,
+    private val resourceProvider: GPUConcreteResourceProvider,
 ) : GPUBackendOffscreenTarget {
     private val safeWidth = request.width.coerceAtMost(MAX_TEXTURE_DIMENSION)
     private val safeHeight = request.height.coerceAtMost(MAX_TEXTURE_DIMENSION)
@@ -664,6 +673,7 @@ private class WgpuOffscreenTarget(
                     resourceScope = resources,
                     executionCaches = executionCaches,
                     telemetryRecorder = telemetryRecorder,
+                    resourceProvider = resourceProvider,
                     setPipelineAction = { pipeline -> setPipeline(pipeline) },
                     setBindGroupAction = { index, bindGroup -> setBindGroup(index, bindGroup) },
                     setScissorAction = { x: UInt, y: UInt, width: UInt, height: UInt ->
@@ -840,6 +850,7 @@ private class WgpuOffscreenTarget(
                 resourceScope = resources,
                 executionCaches = executionCaches,
                 telemetryRecorder = telemetryRecorder,
+                resourceProvider = resourceProvider,
                 setPipelineAction = { pipeline -> setPipeline(pipeline) },
                 setBindGroupAction = { index, bindGroup -> setBindGroup(index, bindGroup) },
                 setScissorAction = { x: UInt, y: UInt, width: UInt, height: UInt ->
@@ -896,6 +907,7 @@ private class WgpuWindowSurface(
     binding: GPUNativeSurfaceBinding,
     private val capabilities: GPUCapabilities,
     private val telemetryRecorder: WgpuBackendRuntimeTelemetryRecorder,
+    private val resourceProvider: GPUConcreteResourceProvider,
 ) : GPUBackendWindowSurface {
     private val windowRuntimeOrdinal = nextWindowRuntimeOrdinal()
     private val deviceGeneration = windowSurfaceDeviceGeneration(windowRuntimeOrdinal)
@@ -983,6 +995,7 @@ private class WgpuWindowSurface(
                     resourceScope = resources,
                     executionCaches = executionCaches,
                     telemetryRecorder = telemetryRecorder,
+                    resourceProvider = resourceProvider,
                     setPipelineAction = { pipeline -> setPipeline(pipeline) },
                     setBindGroupAction = { index, bindGroup -> setBindGroup(index, bindGroup) },
                     setScissorAction = { x, y, surfaceWidth, surfaceHeight -> setScissorRect(x, y, surfaceWidth, surfaceHeight) },
@@ -1031,6 +1044,7 @@ private class WgpuRenderRecorder(
     private val resourceScope: GPUResourceScope,
     private val executionCaches: WgpuExecutionCaches,
     private val telemetryRecorder: WgpuBackendRuntimeTelemetryRecorder,
+    private val resourceProvider: GPUConcreteResourceProvider,
     private val setPipelineAction: (GPURenderPipeline) -> Unit,
     private val setBindGroupAction: (UInt, GPUBindGroup) -> Unit,
     private val setScissorAction: (UInt, UInt, UInt, UInt) -> Unit,
@@ -2467,6 +2481,17 @@ private class WgpuRenderRecorder(
         sourceLabel: String,
     ): WgpuPayloadSlabMaterialization? {
         val payloadRequests = draws.mapIndexed { index, draw -> fullscreenPayloadRequest(index, draw) }
+        payloadRequests.forEach { request ->
+            resourceProvider.materializePayloadBindings(
+                request = request,
+                context = GPUTargetPreparationContext(
+                    targetId = payloadTargetId,
+                    frameId = frameId,
+                    deviceGeneration = deviceGeneration.value,
+                    budgetClass = budgetClass,
+                ),
+            )
+        }
         val planning = GPUPayloadSlabBatchPlanner.plan(
             GPUPayloadSlabBatchRequest(
                 targetId = payloadTargetId,
