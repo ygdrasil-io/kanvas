@@ -224,16 +224,21 @@ class GPUBackendRuntimeWgpuSmokeTest {
 
             val after = session.runtimeTelemetry
             val dump = session.runtimeTelemetryDumpLines.joinToString("\n")
+            val submissionDelta = after.submissions - before.submissions
+            val commandBufferDelta = after.commandBuffers - before.commandBuffers
 
             assertTrue(after.renderPasses - before.renderPasses >= 2L)
             assertTrue(after.offscreenPasses - before.offscreenPasses >= 2L)
             assertEquals(0L, after.windowPasses - before.windowPasses)
             assertTrue(after.submissions - before.submissions >= 2L)
+            assertTrue(commandBufferDelta >= 2L)
+            assertTrue(commandBufferDelta >= submissionDelta)
             assertTrue(after.buffersCreated - before.buffersCreated >= 3L)
             assertTrue(after.texturesCreated - before.texturesCreated >= 4L)
             assertTrue(after.bindGroupsCreated - before.bindGroupsCreated >= 2L)
             assertTrue(after.queueWrites - before.queueWrites >= 2L)
             assertTrue(dump.contains("gpu-runtime.telemetry"))
+            assertTrue(dump.contains("commandBuffers="))
             assertTrue(!dump.contains("@"))
         }
     }

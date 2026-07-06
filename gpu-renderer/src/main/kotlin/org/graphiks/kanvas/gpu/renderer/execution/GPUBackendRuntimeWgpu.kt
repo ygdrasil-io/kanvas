@@ -400,6 +400,7 @@ private class WgpuBackendRuntimeTelemetryRecorder {
     private var offscreenPasses = 0L
     private var windowPasses = 0L
     private var submissions = 0L
+    private var commandBuffers = 0L
     private var buffersCreated = 0L
     private var texturesCreated = 0L
     private var bindGroupsCreated = 0L
@@ -429,6 +430,12 @@ private class WgpuBackendRuntimeTelemetryRecorder {
     @Synchronized
     fun recordSubmission() {
         submissions += 1L
+    }
+
+    /** Records one successfully-finished GPU command buffer. */
+    @Synchronized
+    fun recordCommandBufferFinished() {
+        commandBuffers += 1L
     }
 
     /** Records one successfully-created GPU buffer. */
@@ -497,6 +504,7 @@ private class WgpuBackendRuntimeTelemetryRecorder {
             offscreenPasses = offscreenPasses,
             windowPasses = windowPasses,
             submissions = submissions,
+            commandBuffers = commandBuffers,
             buffersCreated = buffersCreated,
             texturesCreated = texturesCreated,
             bindGroupsCreated = bindGroupsCreated,
@@ -669,6 +677,7 @@ private class WgpuOffscreenTarget(
                 copySize = Extent3D(width = safeWidth.toUInt(), height = safeHeight.toUInt()),
             )
             val commandBuffer = resources.trackIfAutoCloseable(encoder.finish())
+            telemetryRecorder.recordCommandBufferFinished()
             queue.submit(listOf(commandBuffer))
             telemetryRecorder.recordSubmission()
             telemetryRecorder.recordOffscreenRenderPass()
@@ -835,6 +844,7 @@ private class WgpuOffscreenTarget(
             end()
         }
         val commandBuffer = resources.trackIfAutoCloseable(encoder.finish())
+        telemetryRecorder.recordCommandBufferFinished()
         queue.submit(listOf(commandBuffer))
         telemetryRecorder.recordSubmission()
         telemetryRecorder.recordOffscreenRenderPass()
@@ -967,6 +977,7 @@ private class WgpuWindowSurface(
                 end()
             }
             val commandBuffer = resources.trackIfAutoCloseable(encoder.finish())
+            telemetryRecorder.recordCommandBufferFinished()
             runtime.device.queue.submit(listOf(commandBuffer))
             telemetryRecorder.recordSubmission()
             runtime.surface.present()
