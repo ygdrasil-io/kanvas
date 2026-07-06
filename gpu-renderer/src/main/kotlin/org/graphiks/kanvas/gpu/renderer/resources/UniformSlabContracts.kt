@@ -89,18 +89,18 @@ data class GPUUniformSlabPlan(
 }
 
 /** Diagnostic for a refused uniform slab plan. */
-data class GPUUniformSlabDiagnostic(
+class GPUUniformSlabDiagnostic(
     val code: String,
     val terminal: Boolean = true,
-    val facts: Map<String, String> = emptyMap(),
+    factEntries: Map<String, String> = emptyMap(),
 ) {
+    val facts: Map<String, String> = factEntries.toMap()
+
     init {
         require(code.isNotBlank()) { "GPUUniformSlabDiagnostic.code must not be blank" }
-        require(facts.keys.none { key -> key.isBlank() }) {
-            "GPUUniformSlabDiagnostic.facts must not contain blank keys"
-        }
-        require(facts.values.none { value -> value.isBlank() }) {
-            "GPUUniformSlabDiagnostic.facts must not contain blank values"
+        factEntries.forEach { (key, value) ->
+            requireDumpSafeUniformSlabValue("GPUUniformSlabDiagnostic.facts key", key)
+            requireDumpSafeUniformSlabValue("GPUUniformSlabDiagnostic.facts value", value)
         }
     }
 
@@ -236,7 +236,7 @@ object GPUUniformSlabPlanner {
             GPUUniformSlabDiagnostic(
                 code = code,
                 terminal = true,
-                facts = facts,
+                factEntries = facts,
             ),
         )
 }

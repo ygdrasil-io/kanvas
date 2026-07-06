@@ -6,6 +6,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
+import kotlin.test.assertFailsWith
 
 /** Verifies backend-neutral uniform slab layout planning. */
 class GPUUniformSlabPlannerTest {
@@ -114,6 +115,28 @@ class GPUUniformSlabPlannerTest {
             ),
             expectedCode = "unsupported.uniform_slab_dump_unsafe",
         )
+    }
+
+    @Test
+    fun `diagnostic rejects unsafe facts in keys and values`() {
+        assertFailsWith<IllegalArgumentException> {
+            GPUUniformSlabDiagnostic(
+                code = "unsupported.uniform_slab_dump_unsafe",
+                factEntries = mapOf("Texture@1234" to "safe"),
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            GPUUniformSlabDiagnostic(
+                code = "unsupported.uniform_slab_dump_unsafe",
+                factEntries = mapOf("safe" to "0xdeadbeef"),
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            GPUUniformSlabDiagnostic(
+                code = "unsupported.uniform_slab_dump_unsafe",
+                factEntries = mapOf("safe" to "wgpuBufferHandle"),
+            )
+        }
     }
 
     private fun acceptedPlan(payloadByte: Byte): GPUUniformSlabPlan =
