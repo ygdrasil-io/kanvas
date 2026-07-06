@@ -188,9 +188,9 @@ object EvidenceOnlyGPUResourceLeaseFactory : GPUResourceLeaseFactory {
                 releasePolicy = request.releasePolicy,
                 cacheResult = GPUResourceLeaseCacheResult.Create,
                 evidenceFacts = mapOf(
-                    "alignmentBytes" to request.alignmentBytes.toString(),
+                    "alignment" to request.alignmentBytes.toString(),
                     "payloadCount" to request.payloadCount.toString(),
-                    "targetId" to request.targetId,
+                    "target" to request.targetId,
                     "totalBytes" to request.totalBytes.toString(),
                 ),
             ),

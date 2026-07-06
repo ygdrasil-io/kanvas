@@ -177,9 +177,9 @@ class GPUResourceLeaseContractsTest {
         val created = result as GPUResourceLeaseFactoryResult.Created
         assertEquals(
             mapOf(
-                "alignmentBytes" to "256",
+                "alignment" to "256",
                 "payloadCount" to "4",
-                "targetId" to "root-target",
+                "target" to "root-target",
                 "totalBytes" to "1024",
             ),
             created.lease.evidenceFacts,
