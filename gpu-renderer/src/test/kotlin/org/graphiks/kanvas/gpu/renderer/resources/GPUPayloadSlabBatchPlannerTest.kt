@@ -260,6 +260,26 @@ class GPUPayloadSlabBatchPlannerTest {
     }
 
     @Test
+    fun `planner refuses invalidated target evidence before slab materialization`() {
+        assertRefused(
+            result = GPUPayloadSlabBatchPlanner.plan(
+                GPUPayloadSlabBatchRequest(
+                    targetId = "root-target",
+                    frameId = "frame-1",
+                    sourceLabel = "payload-slab-source",
+                    deviceGeneration = 11L,
+                    alignmentBytes = 256L,
+                    uploadBudgetBytes = 1024L,
+                    payloadRequests = listOf(payloadRequest(index = 0)),
+                    invalidatedReason = "target_generation_invalidated",
+                ),
+            ),
+            expectedCode = "unsupported.payload_slab_resource_invalidated",
+            expectedReason = "target_generation_invalidated",
+        )
+    }
+
+    @Test
     fun `planner refuses short 0x handle-looking source labels`() {
         assertRefused(
             result = GPUPayloadSlabBatchPlanner.plan(

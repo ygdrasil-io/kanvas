@@ -15,6 +15,7 @@ class GPUPayloadSlabBatchRequest(
     val alignmentBytes: Long,
     val uploadBudgetBytes: Long,
     payloadRequests: List<GPUPayloadMaterializationRequest>,
+    val invalidatedReason: String? = null,
 ) {
     private val payloadRequestsSnapshot: List<GPUPayloadMaterializationRequest> =
         Collections.unmodifiableList(payloadRequests.toList())
@@ -32,6 +33,12 @@ class GPUPayloadSlabBatchRequest(
         require(alignmentBytes > 0L) { "GPUPayloadSlabBatchRequest.alignmentBytes must be positive" }
         require(uploadBudgetBytes >= 0L) {
             "GPUPayloadSlabBatchRequest.uploadBudgetBytes must be non-negative"
+        }
+        require(invalidatedReason == null || invalidatedReason.isNotBlank()) {
+            "GPUPayloadSlabBatchRequest.invalidatedReason must not be blank"
+        }
+        invalidatedReason?.let { reason ->
+            requireDumpSafePayloadSlabValue("GPUPayloadSlabBatchRequest.invalidatedReason", reason)
         }
     }
 }
@@ -340,6 +347,16 @@ object GPUPayloadSlabBatchPlanner {
             .firstOrNull()
         if (unsafePayloadField != null) {
             return refused("unsupported.payload_slab_dump_unsafe", mapOf("field" to unsafePayloadField.first))
+        }
+
+        request.invalidatedReason?.let { reason ->
+            return refused(
+                "unsupported.payload_slab_resource_invalidated",
+                mapOf(
+                    "targetId" to request.targetId,
+                    "reason" to reason,
+                ),
+            )
         }
 
         if (request.payloadRequests.isEmpty()) {
