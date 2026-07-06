@@ -2570,12 +2570,13 @@ private class WgpuRenderRecorder(
             }
             is GPUPayloadSlabBatchPlanningResult.Accepted -> {
                 val plan = planning.plan
+                val uniformSlabDescriptorHash = plan.uniformSlabPlan.planHash
                 val leaseRequest = GPUUniformSlabLeaseRequest(
-                    leaseId = "uniform-slab:fullscreen:$frameId",
+                    leaseId = "uniform-slab:fullscreen:$uniformSlabDescriptorHash",
                     targetId = payloadTargetId,
-                    frameId = frameId,
+                    frameId = sourceLabel,
                     deviceGeneration = deviceGeneration.value,
-                    descriptorHash = plan.planHash,
+                    descriptorHash = uniformSlabDescriptorHash,
                     totalBytes = plan.uniformSlabPlan.totalBytes,
                     alignmentBytes = capabilities.uniformBufferOffsetAlignment(),
                     releasePolicy = "submission-complete",
@@ -2603,23 +2604,7 @@ private class WgpuRenderRecorder(
                     context = leaseContext,
                 )
                 val leases = when (leaseDecision) {
-                    is GPUResourceMaterializationDecision.Materialized -> {
-                        // Re-read the same request once so provider telemetry records create/reuse
-                        // evidence against the accepted fullscreen slab descriptor.
-                        resourceProvider.materializeFullscreenUniformSlabLease(
-                            request = leaseRequest,
-                            context = leaseContext,
-                        ).let { repeatedDecision ->
-                            when (repeatedDecision) {
-                                is GPUResourceMaterializationDecision.Materialized ->
-                                    repeatedDecision.dumpResourceLeaseSnapshot
-                                is GPUResourceMaterializationDecision.Refused ->
-                                    return materializationFallback(repeatedDecision.diagnostic.code)
-                                is GPUResourceMaterializationDecision.Deferred ->
-                                    return materializationFallback(repeatedDecision.reasonCode)
-                            }
-                        }
-                    }
+                    is GPUResourceMaterializationDecision.Materialized -> leaseDecision.dumpResourceLeaseSnapshot
                     is GPUResourceMaterializationDecision.Refused ->
                         return materializationFallback(leaseDecision.diagnostic.code)
                     is GPUResourceMaterializationDecision.Deferred ->

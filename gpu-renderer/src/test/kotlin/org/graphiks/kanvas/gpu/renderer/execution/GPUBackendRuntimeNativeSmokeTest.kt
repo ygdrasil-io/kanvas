@@ -480,11 +480,17 @@ class GPUBackendRuntimeNativeSmokeTest {
                 }
             }
 
-            val dump = session.phase0EvidenceDumpLines.joinToString("\n")
-            assertTrue(dump.contains("resource-provider.cache lane=uniform-slab result=create"))
-            assertTrue(dump.contains("resource-provider.cache lane=uniform-slab result=reuse"))
-            assertTrue(dump.contains("gpu-queue.submission"))
-            assertTrue(!dump.contains("@"))
+            val dumpLines = session.phase0EvidenceDumpLines
+            assertEquals(
+                1,
+                dumpLines.count { line -> line.contains("resource-provider.cache lane=uniform-slab result=create") },
+            )
+            assertEquals(
+                1,
+                dumpLines.count { line -> line.contains("resource-provider.cache lane=uniform-slab result=reuse") },
+            )
+            assertTrue(dumpLines.any { line -> line.contains("gpu-queue.submission") })
+            assertTrue(dumpLines.none { line -> line.contains("@") })
         }
     }
 
