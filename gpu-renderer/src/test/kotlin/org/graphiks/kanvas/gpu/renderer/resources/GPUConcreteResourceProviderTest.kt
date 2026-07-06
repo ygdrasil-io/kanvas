@@ -52,6 +52,62 @@ class GPUConcreteResourceProviderTest {
     }
 
     @Test
+    fun `concrete provider creates then reuses fullscreen uniform slab lease`() {
+        val provider = GPUConcreteResourceProvider()
+        val context = targetPreparationContext()
+        val first = assertIs<GPUResourceMaterializationDecision.Materialized>(
+            provider.materializeFullscreenUniformSlabLease(
+                request = fullscreenUniformSlabLeaseRequest(),
+                context = context,
+            ),
+        )
+        val second = assertIs<GPUResourceMaterializationDecision.Materialized>(
+            provider.materializeFullscreenUniformSlabLease(
+                request = fullscreenUniformSlabLeaseRequest(),
+                context = context,
+            ),
+        )
+
+        assertEquals(
+            listOf("create", "reuse"),
+            provider.telemetry.dumpEvents
+                .filter { event -> event.lane == "uniform-slab" }
+                .map { event -> event.result },
+        )
+        assertEquals(
+            listOf(
+                "resource-provider.lease id=uniform-slab:fullscreen:frame-1 kind=uniform-slab result=create " +
+                    "deviceGeneration=11 owner=frame-1 release=submission-complete usage=copy_dst,uniform " +
+                    "descriptor=sha256:fullscreen-uniform-slab facts=alignment=256;payloadCount=1;target=root-target;totalBytes=256",
+            ),
+            first.dumpResourceLeaseSnapshot.dumpResourceLeaseLines(),
+        )
+        assertEquals(
+            GPUResourceLeaseCacheResult.Reuse,
+            second.dumpResourceLeaseSnapshot.single().cacheResult,
+        )
+    }
+
+    @Test
+    fun `concrete provider refuses stale fullscreen uniform slab generation`() {
+        val provider = GPUConcreteResourceProvider()
+        val refused = assertIs<GPUResourceMaterializationDecision.Refused>(
+            provider.materializeFullscreenUniformSlabLease(
+                request = fullscreenUniformSlabLeaseRequest(deviceGeneration = 7),
+                context = targetPreparationContext(deviceGeneration = 8),
+            ),
+        )
+
+        assertEquals("unsupported.resource.device_generation_stale", refused.diagnostic.code)
+        assertEquals(
+            listOf("stale-generation"),
+            provider.telemetry.dumpEvents
+                .filter { event -> event.lane == "uniform-slab" }
+                .map { event -> event.result },
+        )
+    }
+
+    @Test
     fun `concrete provider reuses payload upload and bind group keys`() {
         val provider = GPUConcreteResourceProvider()
         val context = targetPreparationContext()
@@ -132,6 +188,21 @@ private fun targetPreparationContext(deviceGeneration: Long = 11L): GPUTargetPre
         frameId = "frame-1",
         deviceGeneration = deviceGeneration,
         budgetClass = "unit",
+    )
+
+private fun fullscreenUniformSlabLeaseRequest(
+    deviceGeneration: Long = 11L,
+): GPUUniformSlabLeaseRequest =
+    GPUUniformSlabLeaseRequest(
+        leaseId = "uniform-slab:fullscreen:frame-1",
+        targetId = "root-target",
+        frameId = "frame-1",
+        deviceGeneration = deviceGeneration,
+        descriptorHash = "sha256:fullscreen-uniform-slab",
+        totalBytes = 256,
+        alignmentBytes = 256,
+        releasePolicy = "submission-complete",
+        payloadCount = 1,
     )
 
 private fun payloadRequest(): GPUPayloadMaterializationRequest =

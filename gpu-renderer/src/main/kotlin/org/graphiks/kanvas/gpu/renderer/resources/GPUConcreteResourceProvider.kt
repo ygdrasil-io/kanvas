@@ -54,8 +54,10 @@ class GPUConcreteResourceProviderTelemetry(
 class GPUConcreteResourceProvider(
     private val payloadProvider: GPUResourceProvider = ValidatingPayloadResourceProvider(),
     private val textureSamplerProvider: GPUResourceProvider = ValidatingTextureSamplerResourceProvider(),
+    private val leaseFactory: GPUResourceLeaseFactory = EvidenceOnlyGPUResourceLeaseFactory,
 ) : GPUResourceProvider {
     private val nullBufferKeys = linkedSetOf<String>()
+    private val uniformSlabLeaseKeys = linkedSetOf<String>()
     private var mutableTelemetry = GPUConcreteResourceProviderTelemetry()
 
     val telemetry: GPUConcreteResourceProviderTelemetry
@@ -109,6 +111,83 @@ class GPUConcreteResourceProvider(
                 ),
             ),
         )
+    }
+
+    fun materializeFullscreenUniformSlabLease(
+        request: GPUUniformSlabLeaseRequest,
+        context: GPUTargetPreparationContext,
+    ): GPUResourceMaterializationDecision {
+        if (request.deviceGeneration != context.deviceGeneration) {
+            val diagnostic = GPUResourceDiagnostic.deviceGenerationStale(
+                resourceLabel = request.leaseId,
+                expectedDeviceGeneration = context.deviceGeneration,
+                actualDeviceGeneration = request.deviceGeneration,
+                resourceKind = "resource",
+            )
+            record("uniform-slab", "stale-generation", request.leaseId, context.targetId)
+            return GPUResourceMaterializationDecision.Refused(
+                diagnostic = diagnostic,
+                targetId = context.targetId,
+                resourcePlanLabels = listOf(request.leaseId),
+            )
+        }
+
+        val key = listOf(
+            request.targetId,
+            request.frameId,
+            request.descriptorHash,
+            request.deviceGeneration.toString(),
+            request.totalBytes.toString(),
+            request.alignmentBytes.toString(),
+        ).joinToString("|")
+        val created = uniformSlabLeaseKeys.add(key)
+        val leaseResult = if (created) {
+            leaseFactory.createUniformSlab(request)
+        } else {
+            GPUResourceLeaseFactoryResult.Created(
+                GPUResourceLease(
+                    leaseId = request.leaseId,
+                    resourceKind = GPUResourceLeaseKind.UniformSlab,
+                    deviceGeneration = request.deviceGeneration,
+                    descriptorHash = request.descriptorHash,
+                    ownerScope = request.frameId,
+                    usageLabels = listOf("copy_dst", "uniform"),
+                    releasePolicy = request.releasePolicy,
+                    cacheResult = GPUResourceLeaseCacheResult.Reuse,
+                    evidenceFacts = mapOf(
+                        "alignment" to request.alignmentBytes.toString(),
+                        "payloadCount" to request.payloadCount.toString(),
+                        "target" to request.targetId,
+                        "totalBytes" to request.totalBytes.toString(),
+                    ),
+                ),
+            )
+        }
+
+        return when (leaseResult) {
+            is GPUResourceLeaseFactoryResult.Failed -> {
+                record("uniform-slab", "adapter-failure", request.leaseId, context.targetId)
+                GPUResourceMaterializationDecision.Refused(
+                    diagnostic = leaseResult.diagnostic,
+                    targetId = context.targetId,
+                    resourcePlanLabels = listOf(request.leaseId),
+                )
+            }
+            is GPUResourceLeaseFactoryResult.Created -> {
+                val lease = if (created) {
+                    leaseResult.lease
+                } else {
+                    leaseResult.lease.copy(cacheResult = GPUResourceLeaseCacheResult.Reuse)
+                }
+                record("uniform-slab", lease.cacheResult.dumpToken, key, context.targetId)
+                GPUResourceMaterializationDecision.Materialized(
+                    resources = emptyList(),
+                    targetId = context.targetId,
+                    resourcePlanLabels = listOf(request.leaseId),
+                    resourceLeases = listOf(lease),
+                )
+            }
+        }
     }
 
     override fun materializePayloadBindings(
