@@ -2,6 +2,7 @@ package org.graphiks.kanvas.gpu.renderer.execution
 
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.Locale
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
@@ -31,10 +32,14 @@ class GPUPhase0BaselineReportTest {
         assertTrue(text.contains("aggregation par GM"))
         assertTrue(text.contains("integration dashboard GM"))
         assertTrue(text.contains("rapport par famille"))
+        assertTrue(text.contains("Hors Phase 0b"))
+        assertTrue(text.contains("follow-ups nommes"))
+        assertTrue(text.contains("criteres implicites"))
+
+        val lowerText = text.lowercase(Locale.ROOT)
         assertTrue(!text.contains("@"))
         assertTrue(!text.contains("0x"))
-        assertTrue(!text.contains("WGPU"))
-        assertTrue(!text.contains("wgpu"))
-        assertTrue(!text.contains("Metal"))
+        assertTrue(!lowerText.contains("wgpu"))
+        assertTrue(!lowerText.contains("metal"))
     }
 }
