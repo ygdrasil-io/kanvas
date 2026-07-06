@@ -84,6 +84,24 @@ class GPUBackendRuntimeWgpuSmokeTest {
     }
 
     @Test
+    fun `fullscreen uniform slab test hook restores and resets thread local override`() {
+        resetFullscreenUniformSlabTestingHooks()
+        assertEquals("fullscreen-uniform-pass", currentFullscreenUniformSlabSourceLabelForTesting())
+
+        withFullscreenUniformSlabRefusedForTesting {
+            assertEquals("fullscreen-uniform-pass@refused", currentFullscreenUniformSlabSourceLabelForTesting())
+            withFullscreenUniformSlabRefusedForTesting {
+                assertEquals("fullscreen-uniform-pass@refused", currentFullscreenUniformSlabSourceLabelForTesting())
+            }
+            assertEquals("fullscreen-uniform-pass@refused", currentFullscreenUniformSlabSourceLabelForTesting())
+        }
+
+        assertEquals("fullscreen-uniform-pass", currentFullscreenUniformSlabSourceLabelForTesting())
+        resetFullscreenUniformSlabTestingHooks()
+        assertEquals("fullscreen-uniform-pass", currentFullscreenUniformSlabSourceLabelForTesting())
+    }
+
+    @Test
     fun `window surface helpers derive deterministic device generation and target id`() {
         val binding = GPUNativeSurfaceBinding(
             platform = GPUNativePlatform.AppKitMetalLayer,

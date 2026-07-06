@@ -114,26 +114,32 @@ private val sessionOrdinalCounter = AtomicLong(0L)
 private val windowRuntimeOrdinalCounter = AtomicLong(0L)
 
 internal object FullscreenUniformSlabTestingHooks {
-    @Volatile
-    var sourceLabelOverride: String? = null
+    val sourceLabelOverride: ThreadLocal<String?> = ThreadLocal()
 }
 
 internal fun resetFullscreenUniformSlabTestingHooks() {
-    FullscreenUniformSlabTestingHooks.sourceLabelOverride = null
+    FullscreenUniformSlabTestingHooks.sourceLabelOverride.remove()
 }
 
 internal inline fun <T> withFullscreenUniformSlabRefusedForTesting(block: () -> T): T {
-    val previous = FullscreenUniformSlabTestingHooks.sourceLabelOverride
-    FullscreenUniformSlabTestingHooks.sourceLabelOverride = FULLSCREEN_UNIFORM_SLAB_REFUSED_SOURCE_LABEL_FOR_TEST
+    val overrides = FullscreenUniformSlabTestingHooks.sourceLabelOverride
+    val previous = overrides.get()
+    overrides.set(FULLSCREEN_UNIFORM_SLAB_REFUSED_SOURCE_LABEL_FOR_TEST)
     return try {
         block()
     } finally {
-        FullscreenUniformSlabTestingHooks.sourceLabelOverride = previous
+        if (previous == null) {
+            overrides.remove()
+        } else {
+            overrides.set(previous)
+        }
     }
 }
 
 private fun fullscreenUniformSlabSourceLabel(): String =
-    FullscreenUniformSlabTestingHooks.sourceLabelOverride ?: FULLSCREEN_UNIFORM_SLAB_SOURCE_LABEL
+    FullscreenUniformSlabTestingHooks.sourceLabelOverride.get() ?: FULLSCREEN_UNIFORM_SLAB_SOURCE_LABEL
+
+internal fun currentFullscreenUniformSlabSourceLabelForTesting(): String = fullscreenUniformSlabSourceLabel()
 
 private fun fullscreenUniformSlabSlotLabel(drawIndex: Int): String = "draw-$drawIndex"
 
