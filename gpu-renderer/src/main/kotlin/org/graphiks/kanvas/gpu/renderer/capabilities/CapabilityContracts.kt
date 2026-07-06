@@ -51,6 +51,7 @@ data class GPULimits(
         require(source.isNotBlank()) { "GPULimits.source must not be blank" }
     }
 
+    /** Converts these limits to deterministic capability facts for diagnostics and evidence dumps. */
     fun capabilityFacts(evidenceLabel: String): List<GPUCapabilityFact> {
         require(evidenceLabel.isNotBlank()) { "evidenceLabel must not be blank" }
         return listOf(
@@ -79,6 +80,7 @@ data class GPULimits(
     }
 
     companion object {
+        /** Builds a limits snapshot from known conservative runtime assumptions. */
         fun conservative(
             maxTextureDimension2D: Long,
             copyBytesPerRowAlignment: Long,

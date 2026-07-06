@@ -327,40 +327,49 @@ private class WgpuBackendRuntimeTelemetryRecorder {
     private var samplersCreated = 0L
     private var queueWrites = 0L
 
+    /** Records one successfully encoded non-presentable render pass. */
     fun recordOffscreenRenderPass() {
         renderPasses += 1L
         offscreenPasses += 1L
     }
 
+    /** Records one successfully encoded presentable window render pass. */
     fun recordWindowRenderPass() {
         renderPasses += 1L
         windowPasses += 1L
     }
 
+    /** Records one successful queue submission. */
     fun recordSubmission() {
         submissions += 1L
     }
 
+    /** Records one successfully-created GPU buffer. */
     fun recordBufferCreated() {
         buffersCreated += 1L
     }
 
+    /** Records one successfully-created GPU texture. */
     fun recordTextureCreated() {
         texturesCreated += 1L
     }
 
+    /** Records one successfully-created GPU bind group. */
     fun recordBindGroupCreated() {
         bindGroupsCreated += 1L
     }
 
+    /** Records one successfully-created GPU sampler. */
     fun recordSamplerCreated() {
         samplersCreated += 1L
     }
 
+    /** Records one successful buffer write through the GPU queue. */
     fun recordQueueWrite() {
         queueWrites += 1L
     }
 
+    /** Returns an immutable point-in-time telemetry snapshot. */
     fun snapshot(): GPUBackendRuntimeTelemetry =
         GPUBackendRuntimeTelemetry(
             renderPasses = renderPasses,
