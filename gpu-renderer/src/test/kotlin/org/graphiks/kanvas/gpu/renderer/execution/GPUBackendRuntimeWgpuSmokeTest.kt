@@ -367,6 +367,8 @@ class GPUBackendRuntimeWgpuSmokeTest {
                 assertTrue(dump.contains("uniformSlabBytesAllocated="))
                 assertTrue(dump.contains("uniformSlabFallbacks="))
                 assertTrue(dump.contains("payload-slab.batch.plan source=fullscreen-uniform-pass"))
+                assertTrue(dump.contains("payload-slab.resource.planned source=fullscreen-uniform-pass"))
+                assertTrue(dump.contains("payload-slab.resource.accepted source=fullscreen-uniform-pass"))
                 assertTrue(
                     Regex("""payload-slab\.batch\.plan .* frame=offscreen-\d+-\d+-frame-\d+ """).containsMatchIn(dump),
                     "payload slab plan dump should include per-encode offscreen frame ordinal",
@@ -432,6 +434,10 @@ class GPUBackendRuntimeWgpuSmokeTest {
                     val rgba = target.readRgba()
                     val after = session.runtimeTelemetry
                     val dump = session.runtimeTelemetryDumpLines.joinToString("\n")
+
+                    assertTrue(dump.contains("payload-slab.resource.planned source=fullscreen-uniform-pass"))
+                    assertTrue(dump.contains("payload-slab.resource.fallback source=fullscreen-uniform-pass"))
+                    assertTrue(dump.contains("reason=unsupported.payload_slab_dump_unsafe"))
 
                     assertContentEquals(
                         byteArrayOf(0xFF.toByte(), 0, 0, 0xFF.toByte()),

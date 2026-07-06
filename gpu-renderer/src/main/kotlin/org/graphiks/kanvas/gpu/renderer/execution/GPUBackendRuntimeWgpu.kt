@@ -108,6 +108,8 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUPayloadSlabBatchPlan
 import org.graphiks.kanvas.gpu.renderer.resources.GPUPayloadSlabBatchPlanner
 import org.graphiks.kanvas.gpu.renderer.resources.GPUPayloadSlabBatchPlanningResult
 import org.graphiks.kanvas.gpu.renderer.resources.GPUPayloadSlabBatchRequest
+import org.graphiks.kanvas.gpu.renderer.resources.GPUPayloadSlabResourceEvent
+import org.graphiks.kanvas.gpu.renderer.resources.GPUPayloadSlabResourceLedger
 import org.graphiks.kanvas.gpu.renderer.resources.GPUPayloadSlabSlotBinding
 
 private const val COPY_BYTES_PER_ROW_ALIGNMENT: Int = 256
@@ -393,6 +395,7 @@ private class WgpuBackendRuntimeTelemetryRecorder {
     private var uniformSlabBytesAllocated = 0L
     private var uniformSlabFallbacks = 0L
     private val payloadSlabDumpLines = mutableListOf<String>()
+    private val payloadSlabResourceLedger = GPUPayloadSlabResourceLedger(maxEvents = MAX_PAYLOAD_SLAB_DUMP_LINES)
 
     /** Records one successfully submitted non-presentable render pass. */
     @Synchronized
@@ -466,6 +469,12 @@ private class WgpuBackendRuntimeTelemetryRecorder {
         }
     }
 
+    /** Records backend-neutral payload slab planning/fallback evidence without changing counters. */
+    @Synchronized
+    fun recordPayloadSlabResourceEvent(event: GPUPayloadSlabResourceEvent) {
+        payloadSlabResourceLedger.record(event)
+    }
+
     /** Returns an immutable point-in-time telemetry snapshot. */
     @Synchronized
     fun snapshot(): GPUBackendRuntimeTelemetry =
@@ -487,7 +496,7 @@ private class WgpuBackendRuntimeTelemetryRecorder {
     /** Returns telemetry counters followed by deterministic payload slab planning evidence. */
     @Synchronized
     fun dumpLines(): List<String> =
-        snapshot().dumpLines() + payloadSlabDumpLines.toList()
+        snapshot().dumpLines() + payloadSlabDumpLines.toList() + payloadSlabResourceLedger.dumpLines()
 }
 
 private class WgpuOffscreenTarget(
@@ -2403,12 +2412,23 @@ private class WgpuRenderRecorder(
         draws: List<WgpuFullscreenUniformDraw>,
     ): WgpuPayloadSlabMaterialization? {
         val payloadRequests = draws.mapIndexed { index, draw -> fullscreenPayloadRequest(index, draw) }
+        val sourceLabel = FULLSCREEN_UNIFORM_SLAB_SOURCE_LABEL
+        val plannerSourceLabel = fullscreenUniformSlabSourceLabel()
+        telemetryRecorder.recordPayloadSlabResourceEvent(
+            GPUPayloadSlabResourceEvent.Planned(
+                sourceLabel = sourceLabel,
+                targetId = payloadTargetId,
+                frameId = frameId,
+                deviceGeneration = deviceGeneration.value,
+                payloadCount = payloadRequests.size,
+            ),
+        )
         return when (
             val planning = GPUPayloadSlabBatchPlanner.plan(
                 GPUPayloadSlabBatchRequest(
                     targetId = payloadTargetId,
                     frameId = frameId,
-                    sourceLabel = fullscreenUniformSlabSourceLabel(),
+                    sourceLabel = plannerSourceLabel,
                     deviceGeneration = deviceGeneration.value,
                     alignmentBytes = MIN_UNIFORM_BUFFER_OFFSET_ALIGNMENT.toLong(),
                     uploadBudgetBytes = FULLSCREEN_UNIFORM_SLAB_UPLOAD_BUDGET_BYTES,
@@ -2418,6 +2438,13 @@ private class WgpuRenderRecorder(
         ) {
             is GPUPayloadSlabBatchPlanningResult.Refused -> {
                 telemetryRecorder.recordUniformSlabFallback()
+                telemetryRecorder.recordPayloadSlabResourceEvent(
+                    GPUPayloadSlabResourceEvent.Fallback(
+                        sourceLabel = sourceLabel,
+                        reason = planning.diagnostic.code,
+                        payloadCount = payloadRequests.size,
+                    ),
+                )
                 null
             }
             is GPUPayloadSlabBatchPlanningResult.Accepted -> {
@@ -2448,6 +2475,14 @@ private class WgpuRenderRecorder(
                 }
                 telemetryRecorder.recordUniformSlabCreated(plan.uniformSlabPlan.totalBytes)
                 telemetryRecorder.recordPayloadSlabBatchPlan(plan)
+                telemetryRecorder.recordPayloadSlabResourceEvent(
+                    GPUPayloadSlabResourceEvent.Accepted(
+                        sourceLabel = sourceLabel,
+                        planHash = plan.planHash,
+                        totalBytes = plan.uniformSlabPlan.totalBytes,
+                        slotCount = plan.slotBindings.size,
+                    ),
+                )
                 WgpuPayloadSlabMaterialization(
                     plan = plan,
                     buffer = buffer,
