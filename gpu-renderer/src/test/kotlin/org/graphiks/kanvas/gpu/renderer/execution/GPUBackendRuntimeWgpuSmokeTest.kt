@@ -144,6 +144,82 @@ class GPUBackendRuntimeWgpuSmokeTest {
     }
 
     @Test
+    fun `backend runtime records GPU runtime telemetry when backend is available`() {
+        val runtime = GPUBackendRuntimeFactory.createOrNull()
+        assumeTrue(runtime != null, "GPU backend unavailable in current environment")
+
+        runtime!!.use { session ->
+            val before = session.runtimeTelemetry
+
+            session.createOffscreenTarget(
+                GPUOffscreenTargetRequest(
+                    width = 4,
+                    height = 4,
+                    colorFormat = "rgba8unorm",
+                ),
+            ).use { target ->
+                val secondary = target.createOffscreenTexture(
+                    GPUBackendOffscreenTexture(
+                        width = 4,
+                        height = 4,
+                        format = "rgba8unorm",
+                    ),
+                )
+                target.encodeOffscreenTexture(
+                    textureLabel = secondary,
+                    clearColor = GPUClearColor(red = 0.0, green = 0.0, blue = 0.0, alpha = 1.0),
+                ) {
+                    drawFullscreenPass(
+                        wgsl = solidColorFullscreenWgsl(),
+                        colorFormat = "rgba8unorm",
+                        draws = listOf(
+                            GPUBackendRectDraw(
+                                rgbaPremul = floatArrayOf(0f, 1f, 0f, 1f),
+                                scissorX = 0,
+                                scissorY = 0,
+                                scissorWidth = 4,
+                                scissorHeight = 4,
+                            ),
+                        ),
+                    )
+                }
+                target.encode(
+                    clearColor = GPUClearColor(red = 0.0, green = 0.0, blue = 0.0, alpha = 1.0),
+                ) {
+                    drawFullscreenPass(
+                        wgsl = solidColorFullscreenWgsl(),
+                        colorFormat = "rgba8unorm",
+                        draws = listOf(
+                            GPUBackendRectDraw(
+                                rgbaPremul = floatArrayOf(1f, 0f, 0f, 1f),
+                                scissorX = 0,
+                                scissorY = 0,
+                                scissorWidth = 4,
+                                scissorHeight = 4,
+                            ),
+                        ),
+                    )
+                }
+                target.readRgba()
+            }
+
+            val after = session.runtimeTelemetry
+            val dump = session.runtimeTelemetryDumpLines.joinToString("\n")
+
+            assertTrue(after.renderPasses - before.renderPasses >= 2L)
+            assertTrue(after.offscreenPasses - before.offscreenPasses >= 2L)
+            assertEquals(0L, after.windowPasses - before.windowPasses)
+            assertTrue(after.submissions - before.submissions >= 2L)
+            assertTrue(after.buffersCreated - before.buffersCreated >= 3L)
+            assertTrue(after.texturesCreated - before.texturesCreated >= 4L)
+            assertTrue(after.bindGroupsCreated - before.bindGroupsCreated >= 2L)
+            assertTrue(after.queueWrites - before.queueWrites >= 2L)
+            assertTrue(dump.contains("gpu-runtime.telemetry"))
+            assertTrue(!dump.contains("@"))
+        }
+    }
+
+    @Test
     fun `backend runtime offscreen encode and read rgba when backend is available`() {
         val runtime = GPUBackendRuntimeFactory.createOrNull()
         assumeTrue(runtime != null, "WGPU backend unavailable in current environment")
