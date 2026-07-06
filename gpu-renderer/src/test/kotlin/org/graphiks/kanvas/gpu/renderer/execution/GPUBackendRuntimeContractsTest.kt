@@ -93,6 +93,7 @@ class GPUBackendRuntimeContractsTest {
         assertEquals(0L, telemetry.offscreenPasses)
         assertEquals(0L, telemetry.windowPasses)
         assertEquals(0L, telemetry.submissions)
+        assertEquals(0L, telemetry.commandBuffers)
         assertEquals(0L, telemetry.buffersCreated)
         assertEquals(0L, telemetry.texturesCreated)
         assertEquals(0L, telemetry.bindGroupsCreated)
@@ -104,7 +105,7 @@ class GPUBackendRuntimeContractsTest {
         assertEquals(
             listOf(
                 "gpu-runtime.telemetry renderPasses=0 offscreenPasses=0 windowPasses=0 " +
-                    "submissions=0 buffersCreated=0 texturesCreated=0 bindGroupsCreated=0 " +
+                    "submissions=0 commandBuffers=0 buffersCreated=0 texturesCreated=0 bindGroupsCreated=0 " +
                     "samplersCreated=0 queueWrites=0 uniformSlabsCreated=0 " +
                     "uniformSlabBytesAllocated=0 uniformSlabFallbacks=0",
             ),
@@ -120,6 +121,9 @@ class GPUBackendRuntimeContractsTest {
         }
         assertFailsWith<IllegalArgumentException> {
             GPUBackendRuntimeTelemetry(queueWrites = -1L)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            GPUBackendRuntimeTelemetry(commandBuffers = -1L)
         }
         assertFailsWith<IllegalArgumentException> {
             GPUBackendRuntimeTelemetry(uniformSlabsCreated = -1L)

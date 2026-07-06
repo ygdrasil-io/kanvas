@@ -68,6 +68,7 @@ data class GPUBackendRuntimeTelemetry(
     val offscreenPasses: Long = 0L,
     val windowPasses: Long = 0L,
     val submissions: Long = 0L,
+    val commandBuffers: Long = 0L,
     val buffersCreated: Long = 0L,
     val texturesCreated: Long = 0L,
     val bindGroupsCreated: Long = 0L,
@@ -82,6 +83,7 @@ data class GPUBackendRuntimeTelemetry(
         require(offscreenPasses >= 0L) { "GPUBackendRuntimeTelemetry.offscreenPasses must be non-negative" }
         require(windowPasses >= 0L) { "GPUBackendRuntimeTelemetry.windowPasses must be non-negative" }
         require(submissions >= 0L) { "GPUBackendRuntimeTelemetry.submissions must be non-negative" }
+        require(commandBuffers >= 0L) { "GPUBackendRuntimeTelemetry.commandBuffers must be non-negative" }
         require(buffersCreated >= 0L) { "GPUBackendRuntimeTelemetry.buffersCreated must be non-negative" }
         require(texturesCreated >= 0L) { "GPUBackendRuntimeTelemetry.texturesCreated must be non-negative" }
         require(bindGroupsCreated >= 0L) { "GPUBackendRuntimeTelemetry.bindGroupsCreated must be non-negative" }
@@ -98,11 +100,11 @@ data class GPUBackendRuntimeTelemetry(
     fun dumpLines(): List<String> =
         listOf(
             "gpu-runtime.telemetry renderPasses=$renderPasses offscreenPasses=$offscreenPasses " +
-                "windowPasses=$windowPasses submissions=$submissions buffersCreated=$buffersCreated " +
-                "texturesCreated=$texturesCreated bindGroupsCreated=$bindGroupsCreated " +
-                "samplersCreated=$samplersCreated queueWrites=$queueWrites " +
-                "uniformSlabsCreated=$uniformSlabsCreated uniformSlabBytesAllocated=$uniformSlabBytesAllocated " +
-                "uniformSlabFallbacks=$uniformSlabFallbacks",
+                "windowPasses=$windowPasses submissions=$submissions commandBuffers=$commandBuffers " +
+                "buffersCreated=$buffersCreated texturesCreated=$texturesCreated " +
+                "bindGroupsCreated=$bindGroupsCreated samplersCreated=$samplersCreated " +
+                "queueWrites=$queueWrites uniformSlabsCreated=$uniformSlabsCreated " +
+                "uniformSlabBytesAllocated=$uniformSlabBytesAllocated uniformSlabFallbacks=$uniformSlabFallbacks",
         )
 
     companion object {
