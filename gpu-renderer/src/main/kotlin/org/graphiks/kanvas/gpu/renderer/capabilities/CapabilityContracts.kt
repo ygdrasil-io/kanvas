@@ -102,7 +102,107 @@ data class GPUCapabilities(
     val knownUnsupportedFacts: List<GPUCapabilityFact> = emptyList(),
     val snapshotId: String,
     val limits: GPULimits? = null,
-)
+    val supportedTextureFormats: Set<String> = emptySet(),
+    val supportedTextureUsageLabels: Set<String> = emptySet(),
+    val featureLabels: Set<String> = emptySet(),
+) {
+    init {
+        require(snapshotId.isNotBlank()) { "GPUCapabilities.snapshotId must not be blank" }
+        require(supportedTextureFormats.none { it.isBlank() }) {
+            "GPUCapabilities.supportedTextureFormats must not contain blank labels"
+        }
+        require(supportedTextureUsageLabels.none { it.isBlank() }) {
+            "GPUCapabilities.supportedTextureUsageLabels must not contain blank labels"
+        }
+        require(featureLabels.none { it.isBlank() }) {
+            "GPUCapabilities.featureLabels must not contain blank labels"
+        }
+    }
+}
+
+fun GPUCapabilities.validateTextureRequest(
+    format: String,
+    width: Int,
+    height: Int,
+    usageLabels: Set<String>,
+): GPUCapabilityDiagnostic? {
+    require(format.isNotBlank()) { "format must not be blank" }
+    require(width > 0) { "width must be positive" }
+    require(height > 0) { "height must be positive" }
+    require(usageLabels.none { it.isBlank() }) { "usageLabels must not contain blank labels" }
+
+    if (supportedTextureFormats.isNotEmpty() && format !in supportedTextureFormats) {
+        return GPUCapabilityDiagnostic(
+            code = "unsupported.capability.texture_format",
+            severity = "error",
+            requirementName = "texture.format",
+            required = format,
+            observed = supportedTextureFormats.sorted().joinToString(","),
+            isTerminal = true,
+        )
+    }
+
+    val missingUsageLabels = usageLabels.subtract(supportedTextureUsageLabels)
+    if (supportedTextureUsageLabels.isNotEmpty() && missingUsageLabels.isNotEmpty()) {
+        return GPUCapabilityDiagnostic(
+            code = "unsupported.capability.texture_usage",
+            severity = "error",
+            requirementName = "texture.usage",
+            required = missingUsageLabels.sorted().joinToString(","),
+            observed = supportedTextureUsageLabels.sorted().joinToString(","),
+            isTerminal = true,
+        )
+    }
+
+    val maxTextureDimension2D = limits?.maxTextureDimension2D
+    if (maxTextureDimension2D != null && (width.toLong() > maxTextureDimension2D || height.toLong() > maxTextureDimension2D)) {
+        return GPUCapabilityDiagnostic(
+            code = "unsupported.capability.texture_size",
+            severity = "error",
+            requirementName = "texture.maxTextureDimension2D",
+            required = maxOf(width, height).toString(),
+            observed = maxTextureDimension2D.toString(),
+            isTerminal = true,
+        )
+    }
+
+    return null
+}
+
+fun GPUCapabilities.validateUniformAlignment(alignmentBytes: Long): GPUCapabilityDiagnostic? {
+    require(alignmentBytes > 0L) { "alignmentBytes must be positive" }
+
+    val required = limits?.minUniformBufferOffsetAlignment ?: return null
+    if (alignmentBytes >= required && alignmentBytes % required == 0L) {
+        return null
+    }
+
+    return GPUCapabilityDiagnostic(
+        code = "unsupported.capability.uniform_alignment",
+        severity = "error",
+        requirementName = "limits.minUniformBufferOffsetAlignment",
+        required = required.toString(),
+        observed = alignmentBytes.toString(),
+        isTerminal = true,
+    )
+}
+
+fun GPUCapabilities.validateFeature(featureLabel: String): GPUCapabilityDiagnostic? {
+    require(featureLabel.isNotBlank()) { "featureLabel must not be blank" }
+
+    if (featureLabels.isEmpty() || featureLabel in featureLabels) {
+        return null
+    }
+
+    return GPUCapabilityDiagnostic(
+        code = "unsupported.capability.feature",
+        severity = "error",
+        requirementName = "feature",
+        required = featureLabel,
+        observed = featureLabels.sorted().joinToString(","),
+        isTerminal = true,
+    )
+}
 
 /** Diagnostic emitted when capability facts block a route. */
 data class GPUCapabilityDiagnostic(

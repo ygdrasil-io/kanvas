@@ -324,27 +324,42 @@ private class WgpuBackendSession(
     private val deviceGeneration = sessionDeviceGeneration(sessionOrdinal)
     private val executionCaches = WgpuExecutionCaches(deviceGeneration)
     private val telemetryRecorder = WgpuBackendRuntimeTelemetryRecorder()
+    private val adapterSummary = adapterSummary(glfw)
     private val backendLimits = GPULimits.conservative(
         maxTextureDimension2D = MAX_TEXTURE_DIMENSION.toLong(),
         copyBytesPerRowAlignment = COPY_BYTES_PER_ROW_ALIGNMENT.toLong(),
-        minUniformBufferOffsetAlignment = MIN_UNIFORM_BUFFER_OFFSET_ALIGNMENT.toLong(),
+        minUniformBufferOffsetAlignment = DEFAULT_UNIFORM_BUFFER_OFFSET_ALIGNMENT.toLong(),
     )
     private var offscreenTargetOrdinalCounter = 0L
 
     override val adapterInfo: GPUBackendAdapterSummary? =
-        GPUBackendAdapterSummary(adapterSummary(glfw))
+        GPUBackendAdapterSummary(adapterSummary)
 
     override val capabilities: GPUCapabilities =
         GPUCapabilities(
             implementation = GPUImplementationIdentity(
                 facadeName = "GPU",
                 implementationName = "native",
-                adapterName = adapterInfo?.summary ?: "unknown-adapter",
-                deviceName = adapterInfo?.summary ?: "unknown-device",
+                adapterName = adapterSummary,
+                deviceName = "gpu-device",
             ),
             facts = backendLimits.capabilityFacts(evidenceLabel = "runtime"),
-            snapshotId = "gpu-runtime-session-$sessionOrdinal",
+            snapshotId = "gpu-runtime-${deviceGeneration.value}",
             limits = backendLimits,
+            supportedTextureFormats = setOf("rgba8unorm", "bgra8unorm"),
+            supportedTextureUsageLabels = setOf(
+                "copy_src",
+                "copy_dst",
+                "texture_binding",
+                "render_attachment",
+            ),
+            featureLabels = setOf(
+                "render-pass",
+                "copy-upload",
+                "readback",
+                "uniform-buffer",
+                "texture-sampling",
+            ),
         )
 
     override val runtimeTelemetry: GPUBackendRuntimeTelemetry
@@ -367,6 +382,7 @@ private class WgpuBackendSession(
             device = glfw.wgpuContext.device,
             queue = glfw.wgpuContext.device.queue,
             request = request,
+            capabilities = capabilities,
             executionCaches = executionCaches,
             telemetryRecorder = telemetryRecorder,
         )
@@ -374,6 +390,7 @@ private class WgpuBackendSession(
     override fun createWindowSurface(binding: GPUNativeSurfaceBinding): GPUBackendWindowSurface =
         WgpuWindowSurface(
             binding = binding,
+            capabilities = capabilities,
             telemetryRecorder = telemetryRecorder,
         )
 
@@ -392,7 +409,10 @@ private class WgpuBackendSession(
 }
 
 private const val MAX_TEXTURE_DIMENSION: Int = 8192
-private const val MIN_UNIFORM_BUFFER_OFFSET_ALIGNMENT: Int = 256
+private const val DEFAULT_UNIFORM_BUFFER_OFFSET_ALIGNMENT: Int = 256
+
+private fun GPUCapabilities.uniformBufferOffsetAlignment(): Long =
+    limits?.minUniformBufferOffsetAlignment ?: DEFAULT_UNIFORM_BUFFER_OFFSET_ALIGNMENT.toLong()
 
 private class WgpuBackendRuntimeTelemetryRecorder {
     private var renderPasses = 0L
@@ -527,6 +547,7 @@ private class WgpuOffscreenTarget(
     private val device: GPUDevice,
     private val queue: GPUQueue,
     private val request: GPUOffscreenTargetRequest,
+    private val capabilities: GPUCapabilities,
     private val executionCaches: WgpuExecutionCaches,
     private val telemetryRecorder: WgpuBackendRuntimeTelemetryRecorder,
 ) : GPUBackendOffscreenTarget {
@@ -639,6 +660,7 @@ private class WgpuOffscreenTarget(
                     frameId = "offscreen-$sessionOrdinal-$offscreenTargetOrdinal-frame-$frameOrdinal",
                     budgetClass = "runtime-fullscreen",
                     targetFormat = format,
+                    capabilities = capabilities,
                     resourceScope = resources,
                     executionCaches = executionCaches,
                     telemetryRecorder = telemetryRecorder,
@@ -814,6 +836,7 @@ private class WgpuOffscreenTarget(
                 frameId = "offscreen-texture-$textureLabel-frame-$textureFrameOrdinal",
                 budgetClass = "runtime-fullscreen",
                 targetFormat = textureFormat,
+                capabilities = capabilities,
                 resourceScope = resources,
                 executionCaches = executionCaches,
                 telemetryRecorder = telemetryRecorder,
@@ -871,6 +894,7 @@ private class WgpuOffscreenTarget(
 
 private class WgpuWindowSurface(
     binding: GPUNativeSurfaceBinding,
+    private val capabilities: GPUCapabilities,
     private val telemetryRecorder: WgpuBackendRuntimeTelemetryRecorder,
 ) : GPUBackendWindowSurface {
     private val windowRuntimeOrdinal = nextWindowRuntimeOrdinal()
@@ -955,6 +979,7 @@ private class WgpuWindowSurface(
                     frameId = "window-$windowRuntimeOrdinal-frame-$targetGeneration-$frameOrdinal",
                     budgetClass = "runtime-fullscreen",
                     targetFormat = runtime.format,
+                    capabilities = capabilities,
                     resourceScope = resources,
                     executionCaches = executionCaches,
                     telemetryRecorder = telemetryRecorder,
@@ -1002,6 +1027,7 @@ private class WgpuRenderRecorder(
     private val frameId: String,
     private val budgetClass: String,
     private val targetFormat: GPUTextureFormat,
+    private val capabilities: GPUCapabilities,
     private val resourceScope: GPUResourceScope,
     private val executionCaches: WgpuExecutionCaches,
     private val telemetryRecorder: WgpuBackendRuntimeTelemetryRecorder,
@@ -2427,7 +2453,7 @@ private class WgpuRenderRecorder(
             reflectedBindingLayoutHash = "fullscreen-uniform-layout-v1",
             deviceGeneration = deviceGeneration.value,
             payloadGeneration = 0L,
-            alignmentBytes = MIN_UNIFORM_BUFFER_OFFSET_ALIGNMENT.toLong(),
+            alignmentBytes = capabilities.uniformBufferOffsetAlignment(),
             uploadBudgetBytes = FULLSCREEN_UNIFORM_SLAB_UPLOAD_BUDGET_BYTES,
             uploadCapabilityAvailable = true,
             maxDynamicOffsets = 1,
@@ -2447,7 +2473,7 @@ private class WgpuRenderRecorder(
                 frameId = frameId,
                 sourceLabel = sourceLabel,
                 deviceGeneration = deviceGeneration.value,
-                alignmentBytes = MIN_UNIFORM_BUFFER_OFFSET_ALIGNMENT.toLong(),
+                alignmentBytes = capabilities.uniformBufferOffsetAlignment(),
                 uploadBudgetBytes = FULLSCREEN_UNIFORM_SLAB_UPLOAD_BUDGET_BYTES,
                 payloadRequests = payloadRequests,
             ),

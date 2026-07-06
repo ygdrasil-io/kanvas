@@ -100,4 +100,149 @@ class GPUCapabilityContractsTest {
         assertEquals(emptyList(), capabilities.facts)
         assertEquals("runtime.conservative", capabilities.limits?.source)
     }
+
+    @Test
+    fun `GPU capabilities validate texture format usage size and uniform alignment`() {
+        val capabilities = GPUCapabilities(
+            implementation = GPUImplementationIdentity(
+                facadeName = "GPU",
+                implementationName = "native",
+                adapterName = "unit-adapter",
+                deviceName = "unit-device",
+            ),
+            facts = emptyList(),
+            snapshotId = "unit-snapshot",
+            limits = GPULimits.conservative(
+                maxTextureDimension2D = 4096,
+                copyBytesPerRowAlignment = 256,
+                minUniformBufferOffsetAlignment = 256,
+            ),
+            supportedTextureFormats = setOf("rgba8unorm"),
+            supportedTextureUsageLabels = setOf("copy_dst", "texture_binding", "render_attachment"),
+            featureLabels = setOf("texture-sampling", "uniform-buffer"),
+        )
+
+        assertEquals(null, capabilities.validateTextureRequest("rgba8unorm", 128, 64, setOf("texture_binding")))
+        assertEquals(null, capabilities.validateUniformAlignment(512))
+        assertEquals(
+            "unsupported.capability.texture_format",
+            capabilities.validateTextureRequest("bgra8unorm", 128, 64, setOf("texture_binding"))?.code,
+        )
+        assertEquals(
+            "unsupported.capability.texture_usage",
+            capabilities.validateTextureRequest("rgba8unorm", 128, 64, setOf("storage_binding"))?.code,
+        )
+        assertEquals(
+            "unsupported.capability.texture_size",
+            capabilities.validateTextureRequest("rgba8unorm", 4097, 64, setOf("texture_binding"))?.code,
+        )
+        assertEquals(
+            "unsupported.capability.uniform_alignment",
+            capabilities.validateUniformAlignment(128)?.code,
+        )
+        assertEquals(
+            "unsupported.capability.feature",
+            capabilities.validateFeature("timestamp-query")?.code,
+        )
+    }
+
+    @Test
+    fun `GPU capabilities allow finer uniform alignment when observed limits allow it`() {
+        val capabilities = GPUCapabilities(
+            implementation = GPUImplementationIdentity(
+                facadeName = "GPU",
+                implementationName = "native",
+                adapterName = "unit-adapter",
+                deviceName = "unit-device",
+            ),
+            facts = emptyList(),
+            snapshotId = "unit-snapshot-64",
+            limits = GPULimits.conservative(
+                maxTextureDimension2D = 4096,
+                copyBytesPerRowAlignment = 256,
+                minUniformBufferOffsetAlignment = 64,
+            ),
+            supportedTextureFormats = setOf("rgba8unorm"),
+            supportedTextureUsageLabels = setOf("copy_dst", "texture_binding"),
+            featureLabels = setOf("uniform-buffer"),
+        )
+
+        assertEquals(null, capabilities.validateUniformAlignment(64))
+        assertEquals(
+            "unsupported.capability.uniform_alignment",
+            capabilities.validateUniformAlignment(32)?.code,
+        )
+    }
+
+    @Test
+    fun `GPU capabilities treat unknown supported usage labels as non-blocking`() {
+        val capabilities = GPUCapabilities(
+            implementation = GPUImplementationIdentity(
+                facadeName = "GPU",
+                implementationName = "native",
+                adapterName = "unit-adapter",
+                deviceName = "unit-device",
+            ),
+            facts = emptyList(),
+            snapshotId = "unit-snapshot-unknown-usage",
+            limits = GPULimits.conservative(
+                maxTextureDimension2D = 4096,
+                copyBytesPerRowAlignment = 256,
+                minUniformBufferOffsetAlignment = 256,
+            ),
+            supportedTextureFormats = setOf("rgba8unorm"),
+        )
+
+        assertEquals(
+            null,
+            capabilities.validateTextureRequest(
+                format = "rgba8unorm",
+                width = 128,
+                height = 64,
+                usageLabels = setOf("texture_binding"),
+            ),
+        )
+    }
+
+    @Test
+    fun `GPU capabilities validate nonblank snapshot and public labels`() {
+        val implementation = GPUImplementationIdentity(
+            facadeName = "GPU",
+            implementationName = "native",
+            adapterName = "unit-adapter",
+            deviceName = "unit-device",
+        )
+
+        assertFailsWith<IllegalArgumentException> {
+            GPUCapabilities(
+                implementation = implementation,
+                facts = emptyList(),
+                snapshotId = "",
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            GPUCapabilities(
+                implementation = implementation,
+                facts = emptyList(),
+                snapshotId = "unit-snapshot",
+                supportedTextureFormats = setOf(""),
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            GPUCapabilities(
+                implementation = implementation,
+                facts = emptyList(),
+                snapshotId = "unit-snapshot",
+                supportedTextureUsageLabels = setOf(""),
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            GPUCapabilities(
+                implementation = implementation,
+                facts = emptyList(),
+                snapshotId = "unit-snapshot",
+                featureLabels = setOf(""),
+            )
+        }
+    }
 }
