@@ -44,7 +44,7 @@ class GPUQueueManagerTest {
         )
         assertTrue(
             dump.contains(
-                "gpu-queue.submission id=1 label=frame-1 retained=1 completed=true released=true",
+                "gpu-queue.submission id=1 label=frame-1 retained=1 completed=true released=true completion=scaffold-immediate",
             ),
         )
         assertFalse(dump.contains("@"))

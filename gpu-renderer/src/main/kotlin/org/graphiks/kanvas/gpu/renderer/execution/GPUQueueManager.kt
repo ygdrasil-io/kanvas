@@ -23,10 +23,12 @@ data class GPUQueueSubmission(
     val retainedResources: List<GPUQueuedResourceRef>,
     val completed: Boolean = false,
     val released: Boolean = false,
+    val completion: String = QUEUE_COMPLETION_PENDING,
 ) {
     init {
         require(label.isNotBlank()) { "GPUQueueSubmission.label must not be blank" }
         require(label.isQueueDumpSafeToken()) { "GPUQueueSubmission.label must be dump-safe" }
+        require(completion.isQueueDumpSafeToken()) { "GPUQueueSubmission.completion must be dump-safe" }
     }
 }
 
@@ -45,7 +47,7 @@ data class GPUQueueTelemetry(
         ) + submissions.map { submission ->
             "gpu-queue.submission id=${submission.id.value} label=${submission.label} " +
                 "retained=${submission.retainedResources.size} completed=${submission.completed} " +
-                "released=${submission.released}"
+                "released=${submission.released} completion=${submission.completion}"
         }
 }
 
@@ -81,14 +83,18 @@ class GPUQueueManager {
         return submission
     }
 
-    fun markCompleted(id: GPUQueueSubmissionId): Boolean {
+    fun markCompleted(
+        id: GPUQueueSubmissionId,
+        completion: String = QUEUE_COMPLETION_SCAFFOLD_IMMEDIATE,
+    ): Boolean {
+        require(completion.isQueueDumpSafeToken()) { "completion must be dump-safe" }
         val current = submissions[id]
         if (current == null) {
             unknownCompletionCount += 1L
             return false
         }
         if (!current.completed) {
-            submissions[id] = current.copy(completed = true)
+            submissions[id] = current.copy(completed = true, completion = completion)
         }
         return true
     }
@@ -124,3 +130,6 @@ private fun String.isQueueDumpSafeToken(): Boolean =
 private val QUEUE_DUMP_SAFE_LABEL_PATTERN = Regex("^[A-Za-z0-9._:-]+$")
 private val QUEUE_RAW_HANDLE_DUMP_PATTERN =
     Regex("""(?i)(wgpu|externaltexturehandle|gpu[a-z0-9]*handle|@0x[0-9a-f]+|0x[0-9a-f]{6,})""")
+
+private const val QUEUE_COMPLETION_PENDING = "pending"
+private const val QUEUE_COMPLETION_SCAFFOLD_IMMEDIATE = "scaffold-immediate"

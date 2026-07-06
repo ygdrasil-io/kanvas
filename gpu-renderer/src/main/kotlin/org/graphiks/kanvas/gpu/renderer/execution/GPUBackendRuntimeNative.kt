@@ -327,6 +327,7 @@ private class WgpuBackendSession(
     private val executionCaches = WgpuExecutionCaches(deviceGeneration)
     private val telemetryRecorder = WgpuBackendRuntimeTelemetryRecorder()
     private val resourceProvider = GPUConcreteResourceProvider()
+    private val queueManager = GPUQueueManager()
     private val adapterSummary = adapterSummary(glfw)
     private val backendLimits = GPULimits.conservative(
         maxTextureDimension2D = MAX_TEXTURE_DIMENSION.toLong(),
@@ -380,6 +381,9 @@ private class WgpuBackendSession(
     override val resourceProviderDumpLines: List<String>
         get() = resourceProvider.telemetry.dumpLines()
 
+    override val queueDumpLines: List<String>
+        get() = queueManager.telemetry.dumpLines()
+
     override fun createOffscreenTarget(request: GPUOffscreenTargetRequest): GPUBackendOffscreenTarget =
         WgpuOffscreenTarget(
             sessionOrdinal = sessionOrdinal,
@@ -392,6 +396,7 @@ private class WgpuBackendSession(
             executionCaches = executionCaches,
             telemetryRecorder = telemetryRecorder,
             resourceProvider = resourceProvider,
+            queueManager = queueManager,
         )
 
     override fun createWindowSurface(binding: GPUNativeSurfaceBinding): GPUBackendWindowSurface =
@@ -559,6 +564,7 @@ private class WgpuOffscreenTarget(
     private val executionCaches: WgpuExecutionCaches,
     private val telemetryRecorder: WgpuBackendRuntimeTelemetryRecorder,
     private val resourceProvider: GPUConcreteResourceProvider,
+    private val queueManager: GPUQueueManager,
 ) : GPUBackendOffscreenTarget {
     private val safeWidth = request.width.coerceAtMost(MAX_TEXTURE_DIMENSION)
     private val safeHeight = request.height.coerceAtMost(MAX_TEXTURE_DIMENSION)
@@ -638,6 +644,7 @@ private class WgpuOffscreenTarget(
         block: GPUBackendRenderRecorder.() -> Unit,
     ) {
         val frameOrdinal = frameOrdinalCounter.incrementAndGet()
+        val frameId = "offscreen-$sessionOrdinal-$offscreenTargetOrdinal-frame-$frameOrdinal"
         GPUResourceScope().use { resources ->
             val view = resources.track(texture.createView()) { it.close() }
             val encoder = resources.trackIfAutoCloseable(device.createCommandEncoder())
@@ -666,7 +673,7 @@ private class WgpuOffscreenTarget(
                     device = device,
                     queue = queue,
                     targetId = target.targetId,
-                    frameId = "offscreen-$sessionOrdinal-$offscreenTargetOrdinal-frame-$frameOrdinal",
+                    frameId = frameId,
                     budgetClass = "runtime-fullscreen",
                     targetFormat = format,
                     capabilities = capabilities,
@@ -710,12 +717,19 @@ private class WgpuOffscreenTarget(
             val commandBuffer = resources.trackIfAutoCloseable(encoder.finish())
             telemetryRecorder.recordCommandBufferFinished()
             queue.submit(listOf(commandBuffer))
+            val submission = queueManager.submit(
+                label = "offscreen-pass:$frameId",
+                retainedResources = listOf(GPUQueuedResourceRef("target:${target.targetId}")),
+            )
+            queueManager.markCompleted(submission.id)
+            queueManager.releaseCompleted()
             telemetryRecorder.recordSubmission()
             telemetryRecorder.recordOffscreenRenderPass()
         }
     }
 
     override fun readRgba(): ByteArray {
+        queueManager.recordWait()
         runBlocking {
             stagingBuffer.mapAsync(GPUMapMode.Read, 0uL, stagingSize).getOrThrow()
         }
@@ -756,15 +770,15 @@ private class WgpuOffscreenTarget(
         return buffer
     }
 
-    override fun createOffscreenTexture(textureDesc: GPUBackendOffscreenTexture): String {
-        val safeW = textureDesc.width.coerceAtMost(MAX_TEXTURE_DIMENSION)
-        val safeH = textureDesc.height.coerceAtMost(MAX_TEXTURE_DIMENSION)
-        val label = "offscreenTex:${textureDesc.width}x${textureDesc.height}:${textureDesc.format}"
+    override fun createOffscreenTexture(texture: GPUBackendOffscreenTexture): String {
+        val safeW = texture.width.coerceAtMost(MAX_TEXTURE_DIMENSION)
+        val safeH = texture.height.coerceAtMost(MAX_TEXTURE_DIMENSION)
+        val label = "offscreenTex:${texture.width}x${texture.height}:${texture.format}"
         if (label in offscreenTextures) return label
         val tex = createTrackedTexture(
             TextureDescriptor(
                 size = Extent3D(width = safeW.toUInt(), height = safeH.toUInt()),
-                format = textureDesc.format.toWgpuTextureFormat(),
+                format = texture.format.toWgpuTextureFormat(),
                 usage = GPUTextureUsage.RenderAttachment or GPUTextureUsage.TextureBinding or GPUTextureUsage.CopySrc,
                 label = label,
             ),
