@@ -3,13 +3,30 @@ package org.graphiks.kanvas.gpu.renderer.resources
 import java.security.MessageDigest
 
 /** CPU-owned bytes for one pass-local uniform payload that can be placed in a slab. */
-data class GPUUniformSlabPayload(
+class GPUUniformSlabPayload(
     val slotLabel: String,
-    val bytes: ByteArray,
+    bytes: ByteArray,
 ) {
+    private val bytesSnapshot: ByteArray = bytes.copyOf()
+
+    val bytes: ByteArray
+        get() = bytesSnapshot.copyOf()
+
     init {
         require(slotLabel.isNotBlank()) { "GPUUniformSlabPayload.slotLabel must not be blank" }
+        requireDumpSafeUniformSlabValue("GPUUniformSlabPayload.slotLabel", slotLabel)
     }
+
+    override fun equals(other: Any?): Boolean =
+        other is GPUUniformSlabPayload &&
+            slotLabel == other.slotLabel &&
+            bytesSnapshot.contentEquals(other.bytesSnapshot)
+
+    override fun hashCode(): Int =
+        31 * slotLabel.hashCode() + bytesSnapshot.contentHashCode()
+
+    override fun toString(): String =
+        "GPUUniformSlabPayload(slotLabel=$slotLabel, bytes=${bytesSnapshot.size}b)"
 }
 
 /** One aligned payload range inside a backend-neutral uniform slab plan. */
@@ -22,7 +39,9 @@ data class GPUUniformSlabSlot(
 ) {
     init {
         require(slotLabel.isNotBlank()) { "GPUUniformSlabSlot.slotLabel must not be blank" }
+        requireDumpSafeUniformSlabValue("GPUUniformSlabSlot.slotLabel", slotLabel)
         require(payloadHash.isNotBlank()) { "GPUUniformSlabSlot.payloadHash must not be blank" }
+        requireDumpSafeUniformSlabValue("GPUUniformSlabSlot.payloadHash", payloadHash)
         require(payloadBytes > 0L) { "GPUUniformSlabSlot.payloadBytes must be positive" }
         require(alignedOffset >= 0L) { "GPUUniformSlabSlot.alignedOffset must be non-negative" }
         require(allocatedBytes >= payloadBytes) {
@@ -43,17 +62,33 @@ data class GPUUniformSlabPlan(
 ) {
     init {
         require(planHash.isNotBlank()) { "GPUUniformSlabPlan.planHash must not be blank" }
+        requireDumpSafeUniformSlabValue("GPUUniformSlabPlan.planHash", planHash)
         require(sourceLabel.isNotBlank()) { "GPUUniformSlabPlan.sourceLabel must not be blank" }
+        requireDumpSafeUniformSlabValue("GPUUniformSlabPlan.sourceLabel", sourceLabel)
         require(deviceGeneration >= 0L) { "GPUUniformSlabPlan.deviceGeneration must be non-negative" }
         require(alignmentBytes > 0L) { "GPUUniformSlabPlan.alignmentBytes must be positive" }
         require(totalBytes >= 0L) { "GPUUniformSlabPlan.totalBytes must be non-negative" }
         require(uploadBudgetBytes >= 0L) { "GPUUniformSlabPlan.uploadBudgetBytes must be non-negative" }
         require(slots.isNotEmpty()) { "GPUUniformSlabPlan.slots must not be empty" }
-        require(slots.none { slot -> !isDumpSafeUniformSlabValue(slot.slotLabel) }) {
-            "GPUUniformSlabPlan.slots must be dump-safe"
+        slots.forEach { slot ->
+            require(slot.alignedOffset % alignmentBytes == 0L) {
+                "GPUUniformSlabPlan.slot.alignedOffset must be aligned"
+            }
+            require(slot.allocatedBytes % alignmentBytes == 0L) {
+                "GPUUniformSlabPlan.slot.allocatedBytes must be aligned"
+            }
+            requireDumpSafeUniformSlabValue("GPUUniformSlabPlan.slotLabel", slot.slotLabel)
+            requireDumpSafeUniformSlabValue("GPUUniformSlabPlan.slot.payloadHash", slot.payloadHash)
         }
-        require(totalBytes >= slots.maxOf { slot -> slot.alignedOffset + slot.allocatedBytes }) {
+        val coveredBytes = slots.maxOf { slot -> slot.alignedOffset + slot.allocatedBytes }
+        require(totalBytes >= coveredBytes) {
             "GPUUniformSlabPlan.totalBytes must cover every slot"
+        }
+        require(totalBytes <= uploadBudgetBytes) {
+            "GPUUniformSlabPlan.totalBytes must not exceed uploadBudgetBytes"
+        }
+        require(totalBytes % alignmentBytes == 0L) {
+            "GPUUniformSlabPlan.totalBytes must be aligned"
         }
     }
 
@@ -98,6 +133,7 @@ class GPUUniformSlabDiagnostic(
 
     init {
         require(code.isNotBlank()) { "GPUUniformSlabDiagnostic.code must not be blank" }
+        requireDumpSafeUniformSlabValue("GPUUniformSlabDiagnostic.code", code)
         factEntries.forEach { (key, value) ->
             requireDumpSafeUniformSlabValue("GPUUniformSlabDiagnostic.facts key", key)
             requireDumpSafeUniformSlabValue("GPUUniformSlabDiagnostic.facts value", value)
@@ -174,8 +210,9 @@ object GPUUniformSlabPlanner {
         val slots = buildList {
             var nextOffset = 0L
             payloads.forEach { payload ->
-                val payloadBytes = payload.bytes.size.toLong()
-                val payloadHash = sha256Hex(payload.bytes)
+                val payloadBytesSnapshot = payload.bytes
+                val payloadBytes = payloadBytesSnapshot.size.toLong()
+                val payloadHash = sha256Hex(payloadBytesSnapshot)
                 val alignedOffset = alignUp(nextOffset, alignmentBytes)
                 val allocatedBytes = alignUp(payloadBytes, alignmentBytes)
                 add(

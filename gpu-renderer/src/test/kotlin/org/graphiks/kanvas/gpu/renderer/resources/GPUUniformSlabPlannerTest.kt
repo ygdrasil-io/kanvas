@@ -11,6 +11,22 @@ import kotlin.test.assertFailsWith
 /** Verifies backend-neutral uniform slab layout planning. */
 class GPUUniformSlabPlannerTest {
     @Test
+    fun `payload equality and hashing are content-based and bytes are defensive copies`() {
+        val sourceBytes = byteArrayOf(1, 2, 3, 4)
+        val payload = GPUUniformSlabPayload(slotLabel = "draw-0", bytes = sourceBytes)
+        val sameContent = GPUUniformSlabPayload(slotLabel = "draw-0", bytes = byteArrayOf(1, 2, 3, 4))
+
+        sourceBytes[0] = 9
+        assertEquals(byteArrayOf(1, 2, 3, 4).toList(), payload.bytes.toList())
+
+        val exposedBytes = payload.bytes
+        exposedBytes[1] = 8
+        assertEquals(byteArrayOf(1, 2, 3, 4).toList(), payload.bytes.toList())
+        assertEquals(payload, sameContent)
+        assertEquals(payload.hashCode(), sameContent.hashCode())
+    }
+
+    @Test
     fun `planner aligns payload slots and emits dump-safe facts`() {
         val result = GPUUniformSlabPlanner.plan(
             sourceLabel = "fullscreen-uniform-pass",
@@ -61,6 +77,15 @@ class GPUUniformSlabPlannerTest {
         assertEquals(first.slots.map { slot -> slot.payloadHash }, second.slots.map { slot -> slot.payloadHash })
         assertNotEquals(first.planHash, changed.planHash)
         assertNotEquals(first.slots.single().payloadHash, changed.slots.single().payloadHash)
+    }
+
+    @Test
+    fun `planner hashes high-bit payload bytes with unsigned hex`() {
+        val signed = acceptedPlan(payloadByte = (-1).toByte())
+        val zero = acceptedPlan(payloadByte = 0)
+
+        assertEquals("a8100ae6aa1940d0b663bb31cd466142ebbdbd5187131b92d93818987832eb89", signed.slots.single().payloadHash)
+        assertNotEquals(signed.slots.single().payloadHash, zero.slots.single().payloadHash)
     }
 
     @Test
@@ -135,6 +160,124 @@ class GPUUniformSlabPlannerTest {
             GPUUniformSlabDiagnostic(
                 code = "unsupported.uniform_slab_dump_unsafe",
                 factEntries = mapOf("safe" to "wgpuBufferHandle"),
+            )
+        }
+    }
+
+    @Test
+    fun `dump surfaced fields reject unsafe plan hashes payload hashes and diagnostic codes`() {
+        assertFailsWith<IllegalArgumentException> {
+            GPUUniformSlabPlan(
+                planHash = "Texture@1234",
+                sourceLabel = "fullscreen-uniform-pass",
+                deviceGeneration = 1L,
+                alignmentBytes = 256L,
+                totalBytes = 256L,
+                uploadBudgetBytes = 256L,
+                slots = listOf(
+                    GPUUniformSlabSlot(
+                        slotLabel = "draw-0",
+                        payloadHash = "safe-hash",
+                        payloadBytes = 4L,
+                        alignedOffset = 0L,
+                        allocatedBytes = 256L,
+                    ),
+                ),
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            GPUUniformSlabSlot(
+                slotLabel = "draw-0",
+                payloadHash = "0xdeadbeef",
+                payloadBytes = 4L,
+                alignedOffset = 0L,
+                allocatedBytes = 256L,
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            GPUUniformSlabDiagnostic(
+                code = "wgpuBufferHandle",
+                factEntries = mapOf("safe" to "safe"),
+            )
+        }
+    }
+
+    @Test
+    fun `plan rejects invalid slab invariants`() {
+        assertFailsWith<IllegalArgumentException> {
+            GPUUniformSlabPlan(
+                planHash = "safe-plan-hash",
+                sourceLabel = "fullscreen-uniform-pass",
+                deviceGeneration = 1L,
+                alignmentBytes = 256L,
+                totalBytes = 256L,
+                uploadBudgetBytes = 256L,
+                slots = listOf(
+                    GPUUniformSlabSlot(
+                        slotLabel = "draw-0",
+                        payloadHash = "safe-payload-hash",
+                        payloadBytes = 16L,
+                        alignedOffset = 1L,
+                        allocatedBytes = 256L,
+                    ),
+                ),
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            GPUUniformSlabPlan(
+                planHash = "safe-plan-hash",
+                sourceLabel = "fullscreen-uniform-pass",
+                deviceGeneration = 1L,
+                alignmentBytes = 256L,
+                totalBytes = 256L,
+                uploadBudgetBytes = 256L,
+                slots = listOf(
+                    GPUUniformSlabSlot(
+                        slotLabel = "draw-0",
+                        payloadHash = "safe-payload-hash",
+                        payloadBytes = 16L,
+                        alignedOffset = 0L,
+                        allocatedBytes = 272L,
+                    ),
+                ),
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            GPUUniformSlabPlan(
+                planHash = "safe-plan-hash",
+                sourceLabel = "fullscreen-uniform-pass",
+                deviceGeneration = 1L,
+                alignmentBytes = 256L,
+                totalBytes = 256L,
+                uploadBudgetBytes = 255L,
+                slots = listOf(
+                    GPUUniformSlabSlot(
+                        slotLabel = "draw-0",
+                        payloadHash = "safe-payload-hash",
+                        payloadBytes = 16L,
+                        alignedOffset = 0L,
+                        allocatedBytes = 256L,
+                    ),
+                ),
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            GPUUniformSlabPlan(
+                planHash = "safe-plan-hash",
+                sourceLabel = "fullscreen-uniform-pass",
+                deviceGeneration = 1L,
+                alignmentBytes = 256L,
+                totalBytes = 257L,
+                uploadBudgetBytes = 512L,
+                slots = listOf(
+                    GPUUniformSlabSlot(
+                        slotLabel = "draw-0",
+                        payloadHash = "safe-payload-hash",
+                        payloadBytes = 16L,
+                        alignedOffset = 0L,
+                        allocatedBytes = 256L,
+                    ),
+                ),
             )
         }
     }
