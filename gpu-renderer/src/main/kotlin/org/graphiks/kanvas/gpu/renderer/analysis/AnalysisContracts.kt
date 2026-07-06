@@ -14,7 +14,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPURRectCornerRadii
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
-import org.graphiks.kanvas.gpu.renderer.commands.NormalizedMaskFilter
+import org.graphiks.kanvas.gpu.renderer.filters.NormalizedMaskFilter
 import org.graphiks.kanvas.gpu.renderer.filters.GPUSimpleFilterRenderNodePlanner
 import org.graphiks.kanvas.gpu.renderer.geometry.GPUShapeDescriptor
 import org.graphiks.kanvas.gpu.renderer.geometry.GPUPathDescriptor

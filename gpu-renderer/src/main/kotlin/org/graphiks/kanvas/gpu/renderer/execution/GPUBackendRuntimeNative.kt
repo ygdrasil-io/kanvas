@@ -85,15 +85,16 @@ import kotlinx.coroutines.runBlocking
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUImplementationIdentity
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPURendererFeature
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPUPipelineKeyPreimage
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPUPipelineKeys
 import org.graphiks.kanvas.gpu.renderer.telemetry.GPUCacheTelemetry
 import org.graphiks.kanvas.gpu.renderer.telemetry.GPUTelemetryLedger
 
-import org.graphiks.kanvas.gpu.renderer.text.colorGlyphCompositeWgsl
 import org.graphiks.kanvas.gpu.renderer.wgsl.TexturedVerticesWgsl
 import org.graphiks.kanvas.gpu.renderer.wgsl.TexturedVerticesDualBlendWgsl
 import org.graphiks.kanvas.gpu.renderer.wgsl.TexturedVerticesColorFilterWgsl
+import org.graphiks.kanvas.gpu.renderer.wgsl.colorGlyphCompositeWgsl
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendFactor
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPayloadFingerprint
@@ -111,6 +112,8 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUPayloadSlabBatchRequest
 import org.graphiks.kanvas.gpu.renderer.resources.GPUPayloadSlabResourceEvent
 import org.graphiks.kanvas.gpu.renderer.resources.GPUPayloadSlabResourceLedger
 import org.graphiks.kanvas.gpu.renderer.resources.GPUPayloadSlabSlotBinding
+import org.graphiks.kanvas.gpu.renderer.resources.GPUTargetPreparationContext
+import org.graphiks.kanvas.gpu.renderer.resources.GPUConcreteResourceProvider
 
 private const val COPY_BYTES_PER_ROW_ALIGNMENT: Int = 256
 private const val FULL_SCREEN_TRIANGLE_VERTEX_COUNT: UInt = 3u
@@ -247,7 +250,7 @@ internal fun windowSurfaceTargetId(
     binding: GPUNativeSurfaceBinding,
 ): String {
     require(windowRuntimeOrdinal > 0L) { "windowRuntimeOrdinal must be positive" }
-    return "wgpu-window-surface-$windowRuntimeOrdinal-${binding.platform.name.lowercase()}-${binding.width}x${binding.height}"
+    return "gpu-window-surface-$windowRuntimeOrdinal-${binding.platform.name.lowercase()}-${binding.width}x${binding.height}"
 }
 
 internal fun sessionDeviceGeneration(sessionOrdinal: Long): GPUDeviceGeneration {
@@ -262,19 +265,19 @@ internal fun offscreenTargetId(
 ): String {
     require(sessionOrdinal > 0L) { "sessionOrdinal must be positive" }
     require(offscreenTargetOrdinal > 0L) { "offscreenTargetOrdinal must be positive" }
-    return "wgpu-offscreen-$sessionOrdinal-$offscreenTargetOrdinal-${request.width}x${request.height}-${request.colorFormat.normalizedColorFormat()}"
+    return "gpu-offscreen-$sessionOrdinal-$offscreenTargetOrdinal-" +
+        "${request.width}x${request.height}-${request.colorFormat.normalizedColorFormat()}"
 }
 
 private fun nextSessionOrdinal(): Long = sessionOrdinalCounter.incrementAndGet()
 private fun nextWindowRuntimeOrdinal(): Long = windowRuntimeOrdinalCounter.incrementAndGet()
 
-object WgpuBackendRuntimeFactory {
+object GPUBackendRuntimeNativeFactory {
     private var sharedInner: GPUBackendSession? = null
     private var shutdownHook: Thread? = null
 
-    /** Creates a WebGPU-backed runtime session when the host can initialize the backend.
-     *  The session is **reused** across renders — creating a new WGPU device per render
-     *  leaks native Metal/Dawn memory and causes "Context leak detected" after ~250 renders.
+    /** Creates a GPU runtime session when the host can initialize the backend.
+     *  The session is reused across renders so callers do not create one native device per render.
      *  The returned wrapper ignores close() so that callers using .use {} do not destroy
      *  the shared device. Call [dispose] to release native resources on shutdown. */
     fun createOrNull(): GPUBackendSession? {
@@ -285,7 +288,7 @@ object WgpuBackendRuntimeFactory {
                     glfwContextRenderer(
                         width = 1,
                         height = 1,
-                        title = "kanvas-gpu-renderer-wgpu-runtime",
+                        title = "kanvas-gpu-renderer-runtime",
                         deferredRendering = true,
                     )
                 }
@@ -302,8 +305,7 @@ object WgpuBackendRuntimeFactory {
         return sharedInner?.let { NonClosingSession(it) }
     }
 
-    /** Release the shared session and its native resources. Must be called
-     *  before JVM shutdown to avoid wgpu-native panics during cleanup. */
+    /** Releases the shared session and its native resources. */
     fun dispose() {
         shutdownHook?.let { Runtime.getRuntime().removeShutdownHook(it) }
         shutdownHook = null
@@ -314,7 +316,7 @@ object WgpuBackendRuntimeFactory {
     private class NonClosingSession(
         private val inner: GPUBackendSession,
     ) : GPUBackendSession by inner {
-        override fun close() { /* no-op: lifetime managed by WgpuBackendRuntimeFactory */ }
+        override fun close() { /* no-op: lifetime managed by GPUBackendRuntimeNativeFactory */ }
     }
 }
 
@@ -325,27 +327,46 @@ private class WgpuBackendSession(
     private val deviceGeneration = sessionDeviceGeneration(sessionOrdinal)
     private val executionCaches = WgpuExecutionCaches(deviceGeneration)
     private val telemetryRecorder = WgpuBackendRuntimeTelemetryRecorder()
+    private val resourceProvider = GPUConcreteResourceProvider()
+    private val queueManager = GPUQueueManager()
+    private val adapterSummary = adapterSummary(glfw)
     private val backendLimits = GPULimits.conservative(
         maxTextureDimension2D = MAX_TEXTURE_DIMENSION.toLong(),
         copyBytesPerRowAlignment = COPY_BYTES_PER_ROW_ALIGNMENT.toLong(),
-        minUniformBufferOffsetAlignment = MIN_UNIFORM_BUFFER_OFFSET_ALIGNMENT.toLong(),
+        minUniformBufferOffsetAlignment = DEFAULT_UNIFORM_BUFFER_OFFSET_ALIGNMENT.toLong(),
     )
     private var offscreenTargetOrdinalCounter = 0L
 
     override val adapterInfo: GPUBackendAdapterSummary? =
-        GPUBackendAdapterSummary(adapterSummary(glfw))
+        GPUBackendAdapterSummary(adapterSummary)
 
     override val capabilities: GPUCapabilities =
         GPUCapabilities(
             implementation = GPUImplementationIdentity(
                 facadeName = "GPU",
-                implementationName = "wgpu4k",
-                adapterName = adapterInfo?.summary ?: "unknown-adapter",
-                deviceName = adapterInfo?.summary ?: "unknown-device",
+                implementationName = "native",
+                adapterName = adapterSummary,
+                deviceName = "gpu-device",
             ),
             facts = backendLimits.capabilityFacts(evidenceLabel = "runtime"),
-            snapshotId = "gpu-runtime-session-$sessionOrdinal",
+            snapshotId = "gpu-runtime-${deviceGeneration.value}",
             limits = backendLimits,
+            supportedTextureFormats = setOf(
+                GPUTextureFormat.RGBA8Unorm,
+                GPUTextureFormat.BGRA8Unorm,
+            ),
+            supportedTextureUsage =
+                GPUTextureUsage.CopySrc or
+                    GPUTextureUsage.CopyDst or
+                    GPUTextureUsage.TextureBinding or
+                    GPUTextureUsage.RenderAttachment,
+            rendererFeatures = setOf(
+                GPURendererFeature.RenderPass,
+                GPURendererFeature.CopyUpload,
+                GPURendererFeature.Readback,
+                GPURendererFeature.UniformBuffer,
+                GPURendererFeature.TextureSampling,
+            ),
         )
 
     override val runtimeTelemetry: GPUBackendRuntimeTelemetry
@@ -360,6 +381,12 @@ private class WgpuBackendSession(
     override val executionCacheDumpLines: List<String>
         get() = executionCaches.dumpLines
 
+    override val resourceProviderDumpLines: List<String>
+        get() = resourceProvider.telemetry.dumpLines()
+
+    override val queueDumpLines: List<String>
+        get() = queueManager.telemetry.dumpLines()
+
     override fun createOffscreenTarget(request: GPUOffscreenTargetRequest): GPUBackendOffscreenTarget =
         WgpuOffscreenTarget(
             sessionOrdinal = sessionOrdinal,
@@ -368,14 +395,19 @@ private class WgpuBackendSession(
             device = glfw.wgpuContext.device,
             queue = glfw.wgpuContext.device.queue,
             request = request,
+            capabilities = capabilities,
             executionCaches = executionCaches,
             telemetryRecorder = telemetryRecorder,
+            resourceProvider = resourceProvider,
+            queueManager = queueManager,
         )
 
     override fun createWindowSurface(binding: GPUNativeSurfaceBinding): GPUBackendWindowSurface =
         WgpuWindowSurface(
             binding = binding,
+            capabilities = capabilities,
             telemetryRecorder = telemetryRecorder,
+            resourceProvider = resourceProvider,
         )
 
     override fun close() {
@@ -393,7 +425,10 @@ private class WgpuBackendSession(
 }
 
 private const val MAX_TEXTURE_DIMENSION: Int = 8192
-private const val MIN_UNIFORM_BUFFER_OFFSET_ALIGNMENT: Int = 256
+private const val DEFAULT_UNIFORM_BUFFER_OFFSET_ALIGNMENT: Int = 256
+
+private fun GPUCapabilities.uniformBufferOffsetAlignment(): Long =
+    limits?.minUniformBufferOffsetAlignment ?: DEFAULT_UNIFORM_BUFFER_OFFSET_ALIGNMENT.toLong()
 
 private class WgpuBackendRuntimeTelemetryRecorder {
     private var renderPasses = 0L
@@ -528,8 +563,11 @@ private class WgpuOffscreenTarget(
     private val device: GPUDevice,
     private val queue: GPUQueue,
     private val request: GPUOffscreenTargetRequest,
+    private val capabilities: GPUCapabilities,
     private val executionCaches: WgpuExecutionCaches,
     private val telemetryRecorder: WgpuBackendRuntimeTelemetryRecorder,
+    private val resourceProvider: GPUConcreteResourceProvider,
+    private val queueManager: GPUQueueManager,
 ) : GPUBackendOffscreenTarget {
     private val safeWidth = request.width.coerceAtMost(MAX_TEXTURE_DIMENSION)
     private val safeHeight = request.height.coerceAtMost(MAX_TEXTURE_DIMENSION)
@@ -609,6 +647,7 @@ private class WgpuOffscreenTarget(
         block: GPUBackendRenderRecorder.() -> Unit,
     ) {
         val frameOrdinal = frameOrdinalCounter.incrementAndGet()
+        val frameId = "offscreen-$sessionOrdinal-$offscreenTargetOrdinal-frame-$frameOrdinal"
         GPUResourceScope().use { resources ->
             val view = resources.track(texture.createView()) { it.close() }
             val encoder = resources.trackIfAutoCloseable(device.createCommandEncoder())
@@ -637,12 +676,14 @@ private class WgpuOffscreenTarget(
                     device = device,
                     queue = queue,
                     targetId = target.targetId,
-                    frameId = "offscreen-$sessionOrdinal-$offscreenTargetOrdinal-frame-$frameOrdinal",
+                    frameId = frameId,
                     budgetClass = "runtime-fullscreen",
                     targetFormat = format,
+                    capabilities = capabilities,
                     resourceScope = resources,
                     executionCaches = executionCaches,
                     telemetryRecorder = telemetryRecorder,
+                    resourceProvider = resourceProvider,
                     setPipelineAction = { pipeline -> setPipeline(pipeline) },
                     setBindGroupAction = { index, bindGroup -> setBindGroup(index, bindGroup) },
                     setScissorAction = { x: UInt, y: UInt, width: UInt, height: UInt ->
@@ -679,12 +720,19 @@ private class WgpuOffscreenTarget(
             val commandBuffer = resources.trackIfAutoCloseable(encoder.finish())
             telemetryRecorder.recordCommandBufferFinished()
             queue.submit(listOf(commandBuffer))
+            val submission = queueManager.submit(
+                label = "offscreen-pass:$frameId",
+                retainedResources = listOf(GPUQueuedResourceRef("target:${target.targetId}")),
+            )
+            queueManager.markCompleted(submission.id)
+            queueManager.releaseCompleted()
             telemetryRecorder.recordSubmission()
             telemetryRecorder.recordOffscreenRenderPass()
         }
     }
 
     override fun readRgba(): ByteArray {
+        queueManager.recordWait()
         runBlocking {
             stagingBuffer.mapAsync(GPUMapMode.Read, 0uL, stagingSize).getOrThrow()
         }
@@ -725,15 +773,15 @@ private class WgpuOffscreenTarget(
         return buffer
     }
 
-    override fun createOffscreenTexture(textureDesc: GPUBackendOffscreenTexture): String {
-        val safeW = textureDesc.width.coerceAtMost(MAX_TEXTURE_DIMENSION)
-        val safeH = textureDesc.height.coerceAtMost(MAX_TEXTURE_DIMENSION)
-        val label = "offscreenTex:${textureDesc.width}x${textureDesc.height}:${textureDesc.format}"
+    override fun createOffscreenTexture(texture: GPUBackendOffscreenTexture): String {
+        val safeW = texture.width.coerceAtMost(MAX_TEXTURE_DIMENSION)
+        val safeH = texture.height.coerceAtMost(MAX_TEXTURE_DIMENSION)
+        val label = "offscreenTex:${texture.width}x${texture.height}:${texture.format}"
         if (label in offscreenTextures) return label
         val tex = createTrackedTexture(
             TextureDescriptor(
                 size = Extent3D(width = safeW.toUInt(), height = safeH.toUInt()),
-                format = textureDesc.format.toWgpuTextureFormat(),
+                format = texture.format.toWgpuTextureFormat(),
                 usage = GPUTextureUsage.RenderAttachment or GPUTextureUsage.TextureBinding or GPUTextureUsage.CopySrc,
                 label = label,
             ),
@@ -815,9 +863,11 @@ private class WgpuOffscreenTarget(
                 frameId = "offscreen-texture-$textureLabel-frame-$textureFrameOrdinal",
                 budgetClass = "runtime-fullscreen",
                 targetFormat = textureFormat,
+                capabilities = capabilities,
                 resourceScope = resources,
                 executionCaches = executionCaches,
                 telemetryRecorder = telemetryRecorder,
+                resourceProvider = resourceProvider,
                 setPipelineAction = { pipeline -> setPipeline(pipeline) },
                 setBindGroupAction = { index, bindGroup -> setBindGroup(index, bindGroup) },
                 setScissorAction = { x: UInt, y: UInt, width: UInt, height: UInt ->
@@ -872,7 +922,9 @@ private class WgpuOffscreenTarget(
 
 private class WgpuWindowSurface(
     binding: GPUNativeSurfaceBinding,
+    private val capabilities: GPUCapabilities,
     private val telemetryRecorder: WgpuBackendRuntimeTelemetryRecorder,
+    private val resourceProvider: GPUConcreteResourceProvider,
 ) : GPUBackendWindowSurface {
     private val windowRuntimeOrdinal = nextWindowRuntimeOrdinal()
     private val deviceGeneration = windowSurfaceDeviceGeneration(windowRuntimeOrdinal)
@@ -956,9 +1008,11 @@ private class WgpuWindowSurface(
                     frameId = "window-$windowRuntimeOrdinal-frame-$targetGeneration-$frameOrdinal",
                     budgetClass = "runtime-fullscreen",
                     targetFormat = runtime.format,
+                    capabilities = capabilities,
                     resourceScope = resources,
                     executionCaches = executionCaches,
                     telemetryRecorder = telemetryRecorder,
+                    resourceProvider = resourceProvider,
                     setPipelineAction = { pipeline -> setPipeline(pipeline) },
                     setBindGroupAction = { index, bindGroup -> setBindGroup(index, bindGroup) },
                     setScissorAction = { x, y, surfaceWidth, surfaceHeight -> setScissorRect(x, y, surfaceWidth, surfaceHeight) },
@@ -1003,9 +1057,11 @@ private class WgpuRenderRecorder(
     private val frameId: String,
     private val budgetClass: String,
     private val targetFormat: GPUTextureFormat,
+    private val capabilities: GPUCapabilities,
     private val resourceScope: GPUResourceScope,
     private val executionCaches: WgpuExecutionCaches,
     private val telemetryRecorder: WgpuBackendRuntimeTelemetryRecorder,
+    private val resourceProvider: GPUConcreteResourceProvider,
     private val setPipelineAction: (GPURenderPipeline) -> Unit,
     private val setBindGroupAction: (UInt, GPUBindGroup) -> Unit,
     private val setScissorAction: (UInt, UInt, UInt, UInt) -> Unit,
@@ -1505,7 +1561,7 @@ private class WgpuRenderRecorder(
         clearColor: GPUClearColor?,
         block: GPUBackendRenderRecorder.() -> Unit,
     ) {
-        error("encodeOffscreenTexture must be handled by WgpuOffscreenTarget via internal encodeOffscreenTexture")
+        error("encodeOffscreenTexture must be handled by the GPU offscreen target")
     }
 
     override fun drawTextAtlasPass(
@@ -2428,7 +2484,7 @@ private class WgpuRenderRecorder(
             reflectedBindingLayoutHash = "fullscreen-uniform-layout-v1",
             deviceGeneration = deviceGeneration.value,
             payloadGeneration = 0L,
-            alignmentBytes = MIN_UNIFORM_BUFFER_OFFSET_ALIGNMENT.toLong(),
+            alignmentBytes = capabilities.uniformBufferOffsetAlignment(),
             uploadBudgetBytes = FULLSCREEN_UNIFORM_SLAB_UPLOAD_BUDGET_BYTES,
             uploadCapabilityAvailable = true,
             maxDynamicOffsets = 1,
@@ -2442,13 +2498,24 @@ private class WgpuRenderRecorder(
         sourceLabel: String,
     ): WgpuPayloadSlabMaterialization? {
         val payloadRequests = draws.mapIndexed { index, draw -> fullscreenPayloadRequest(index, draw) }
+        payloadRequests.forEach { request ->
+            resourceProvider.materializePayloadBindings(
+                request = request,
+                context = GPUTargetPreparationContext(
+                    targetId = payloadTargetId,
+                    frameId = frameId,
+                    deviceGeneration = deviceGeneration.value,
+                    budgetClass = budgetClass,
+                ),
+            )
+        }
         val planning = GPUPayloadSlabBatchPlanner.plan(
             GPUPayloadSlabBatchRequest(
                 targetId = payloadTargetId,
                 frameId = frameId,
                 sourceLabel = sourceLabel,
                 deviceGeneration = deviceGeneration.value,
-                alignmentBytes = MIN_UNIFORM_BUFFER_OFFSET_ALIGNMENT.toLong(),
+                alignmentBytes = capabilities.uniformBufferOffsetAlignment(),
                 uploadBudgetBytes = FULLSCREEN_UNIFORM_SLAB_UPLOAD_BUDGET_BYTES,
                 payloadRequests = payloadRequests,
             ),
@@ -3576,7 +3643,7 @@ private data class FullscreenExecutionCacheKeys(
     val renderPipelineSubjectHash: String,
     val renderPipelinePreimage: String,
 ) {
-    /** Emits backend-neutral cache-key preimage dumps without WGPU handles. */
+    /** Emits backend-neutral cache-key preimage dumps without GPU handles. */
     fun preimageDumpLines(): List<String> {
         val lines = mutableListOf(
             preimageDumpLine(
@@ -3633,7 +3700,7 @@ private fun fullscreenTextureExecutionCacheKeys(
     textureFormat: GPUTextureFormat,
     blendMode: GPUBlendMode? = null,
 ): FullscreenExecutionCacheKeys {
-    val blendLabel = blendMode?.wgpuLabel ?: "src_over"
+    val blendLabel = blendMode?.gpuLabel ?: "src_over"
     val targetFormatClass = targetFormat.toBackendColorFormat()
     val wgslHash = stableSha256(wgsl)
     val bindGroupLayoutPreimage = listOf(
@@ -3798,7 +3865,7 @@ private fun fullscreenExecutionCacheKeys(
     targetFormat: GPUTextureFormat,
     blendMode: GPUBlendMode? = null,
 ): FullscreenExecutionCacheKeys {
-    val blendLabel = blendMode?.wgpuLabel ?: "src_over"
+    val blendLabel = blendMode?.gpuLabel ?: "src_over"
     val targetFormatClass = targetFormat.toBackendColorFormat()
     val wgslHash = stableSha256(wgsl)
     val bindGroupLayoutPreimage = listOf(
@@ -3869,7 +3936,7 @@ private fun textAtlasExecutionCacheKeys(
     textureFormat: GPUTextureFormat,
     blendMode: GPUBlendMode? = null,
 ): FullscreenExecutionCacheKeys {
-    val blendLabel = blendMode?.wgpuLabel ?: "src_over"
+    val blendLabel = blendMode?.gpuLabel ?: "src_over"
     val targetFormatClass = targetFormat.toBackendColorFormat()
     val wgslHash = stableSha256(wgsl)
     val bindGroupLayoutPreimage = listOf(
@@ -3952,7 +4019,7 @@ private fun colorGlyphExecutionCacheKeys(
     textureFormat: GPUTextureFormat,
     blendMode: GPUBlendMode? = null,
 ): FullscreenExecutionCacheKeys {
-    val blendLabel = blendMode?.wgpuLabel ?: "src_over"
+    val blendLabel = blendMode?.gpuLabel ?: "src_over"
     val targetFormatClass = targetFormat.toBackendColorFormat()
     val wgslHash = stableSha256(wgsl)
     val bindGroupLayoutPreimage = listOf(
@@ -4035,7 +4102,7 @@ private fun stencilExecutionCacheKeys(
     vertexStage: Boolean,
     blendMode: GPUBlendMode? = null,
 ): FullscreenExecutionCacheKeys {
-    val blendLabel = blendMode?.wgpuLabel ?: "src_over"
+    val blendLabel = blendMode?.gpuLabel ?: "src_over"
     val targetFormatClass = targetFormat.toBackendColorFormat()
     val wgslHash = stableSha256(wgsl)
         val role = if (vertexStage) "stencil-write-vertex" else "stencil-test-fullscreen"
@@ -4111,9 +4178,9 @@ private fun <T : Any> GPUExecutionCacheDecision<T>.readyHandle(): T =
     when (this) {
         is GPUExecutionCacheDecision.Ready -> handle
         is GPUExecutionCacheDecision.Refused ->
-            error("WGPU execution cache refused materialization with $diagnosticCode")
+            error("GPU execution cache refused materialization with $diagnosticCode")
         is GPUExecutionCacheDecision.Evicted ->
-            error("WGPU execution cache entry was evicted before materialization")
+            error("GPU execution cache entry was evicted before materialization")
     }
 
 private fun GPUDevice.createRenderPipelineWithValidationScope(
@@ -4124,7 +4191,7 @@ private fun GPUDevice.createRenderPipelineWithValidationScope(
     val validationError = runBlocking { popErrorScope().getOrThrow() }
     if (validationError != null) {
         pipeline.close()
-        error("WGPU render pipeline validation failed: ${validationError.message}")
+        error("GPU render pipeline validation failed: ${validationError.message}")
     }
     return pipeline
 }
@@ -4176,15 +4243,15 @@ private fun createNativeWindowRuntime(binding: GPUNativeSurfaceBinding): NativeW
 
     LibraryLoader.load()
     val instance = WGPU.createInstance(WGPUInstanceBackend.Metal)
-        ?: error("WGPU Metal instance creation returned null")
+        ?: error("GPU runtime instance creation returned null")
     try {
         val layerAddress = binding.pointerLabels.firstNonZeroPointer("layerHandle", "nsLayer", "metalLayer")
-            ?: error("GPUNativeSurfaceBinding.pointerLabels must provide a non-zero AppKit Metal layer pointer")
+            ?: error("GPUNativeSurfaceBinding.pointerLabels must provide a non-zero native layer pointer")
         val surface = instance.getSurfaceFromMetalLayer(JvmNativeAddress(MemorySegment.ofAddress(layerAddress)))
-            ?: error("WGPU surface creation from Metal layer returned null")
+            ?: error("GPU surface creation from native layer returned null")
         try {
             val adapter = instance.requestAdapter(surface)
-                ?: error("WGPU adapter request failed for native surface")
+                ?: error("GPU adapter request failed for native surface")
             try {
                 surface.computeSurfaceCapabilities(adapter)
                 val adapterInfo = GPUBackendAdapterSummary(adapterSummary(adapter.info))

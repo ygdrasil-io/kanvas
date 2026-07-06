@@ -2,9 +2,9 @@ package org.graphiks.kanvas.gpu.renderer.runtimeeffects
 
 import org.graphiks.wgsl.parser.Lowerer
 import org.graphiks.wgsl.parser.parseWgslResult
-import org.graphiks.wgsl.proc.reflectWgslModule
+import org.graphiks.kanvas.gpu.renderer.wgsl.reflectWgslModule
 
-/** Reflects on parsed WGSL via wgsl4k with fixture fallback, extracting entry point and resource counts. */
+/** Reflects on parsed WGSL through parser-backed reflection with fixture fallback. */
 class KanvasWGSLReflectionProvider : WGSLReflectionProvider {
 
     override fun reflect(module: WGSLParsedModule): WGSLReflectionResult {

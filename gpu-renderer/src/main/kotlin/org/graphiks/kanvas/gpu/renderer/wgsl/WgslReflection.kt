@@ -1,6 +1,8 @@
-package org.graphiks.wgsl.proc
+package org.graphiks.kanvas.gpu.renderer.wgsl
 
 import kotlinx.serialization.Serializable
+import org.graphiks.wgsl.proc.Alignment
+import org.graphiks.wgsl.proc.Layouter
 import org.graphiks.wgsl.arena.Handle
 import org.graphiks.wgsl.ir.AccessMode
 import org.graphiks.wgsl.ir.ArraySize
@@ -96,7 +98,7 @@ fun Module.reflectWgslModule(
         layouts = reflectWgslLayouts(layouter),
         unsupportedFeatures = bindingReflections
             .filter { it.resourceKind == "unsupported" }
-            .map { "wgsl4k.reflection.feature_unrepresented:${it.name}:${unrepresentedTypeName(it.name)}" },
+            .map { "wgsl.reflection.feature_unrepresented:${it.name}:${unrepresentedTypeName(it.name)}" },
     )
 }
 

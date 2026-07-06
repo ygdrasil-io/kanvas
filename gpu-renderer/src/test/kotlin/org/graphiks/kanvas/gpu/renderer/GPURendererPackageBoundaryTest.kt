@@ -56,6 +56,25 @@ class GPURendererPackageBoundaryTest {
         )
     }
 
+    /** Ensures GPU capabilities do not reintroduce stringly typed GPU spec concepts. */
+    @Test
+    fun `gpu capabilities do not reintroduce stringly typed GPU spec concepts`() {
+        val capabilitySource = productionFile("capabilities/CapabilityContracts.kt").readText()
+
+        assertTrue(
+            actual = !capabilitySource.contains("supportedTextureFormats: Set<String>"),
+            message = "GPUCapabilities.supportedTextureFormats must use GPUTextureFormat, not String",
+        )
+        assertTrue(
+            actual = !capabilitySource.contains("supportedTextureUsageLabels: Set<String>"),
+            message = "GPUCapabilities.supportedTextureUsage must use GPUTextureUsage, not String labels",
+        )
+        assertTrue(
+            actual = !capabilitySource.contains("featureLabels: Set<String>"),
+            message = "Renderer feature gates must use GPURendererFeature, not String labels",
+        )
+    }
+
     /** Ensures package ownership violations fail with stable diagnostic text. */
     @Test
     fun `package boundary check rejects wrong roots reserved packages and validation imports`() {
@@ -225,6 +244,10 @@ class GPURendererPackageBoundaryTest {
     /** Creates a temporary Kotlin source root for negative package-boundary fixtures. */
     private fun temporarySourceRoot(): File =
         Files.createTempDirectory("gpu-renderer-boundary-test").toFile()
+
+    /** Resolves one production source file below the canonical renderer root. */
+    private fun productionFile(relativePath: String): File =
+        mainSourceRoot.resolve("org/graphiks/kanvas/gpu/renderer").resolve(relativePath)
 
     /** Test constants used by package-boundary validation. */
     private companion object {

@@ -2,7 +2,7 @@ package org.graphiks.kanvas.gpu.renderer.wgsl
 
 import org.graphiks.wgsl.parser.Lowerer
 import org.graphiks.wgsl.parser.parseWgslResult
-import org.graphiks.wgsl.proc.reflectWgslModule
+import org.graphiks.kanvas.gpu.renderer.wgsl.reflectWgslModule
 import java.security.MessageDigest
 
 /**
@@ -14,7 +14,7 @@ import java.security.MessageDigest
  * [WGSLModuleAssemblyResult.Rejected] with terminal diagnostics before any
  * backend shader creation can be claimed. When [WGSLParserState.parserBacked]
  * is false, reflection is explicitly labeled `fixture-declared` so callers
- * know the ABI came from descriptors rather than a live `wgsl4k` parse.
+ * know the ABI came from descriptors rather than live parser-backed reflection.
  */
 object WGSLModuleAssembler {
     /**
@@ -101,7 +101,7 @@ fun WGSLModule.abiDump(): String {
     }.joinToString("\n")
 }
 
-/** Attempts wgsl4k parser-backed reflection; falls back to fixture-declared if unavailable. */
+/** Attempts parser-backed WGSL reflection; falls back to fixture-declared if unavailable. */
 private fun tryParserBackedReflection(
     source: String,
     moduleHash: WGSLModuleHash,
@@ -116,7 +116,7 @@ private fun tryParserBackedReflection(
     }
 }
 
-/** Produces parser-backed WGSL reflection using live wgsl4k parse and layout computation. */
+/** Produces parser-backed WGSL reflection using live parse and layout computation. */
 private fun parserBackedReflection(
     source: String,
     moduleHash: WGSLModuleHash,
@@ -129,7 +129,7 @@ private fun parserBackedReflection(
         val diagnostic = WGSLValidationDiagnostic(
             code = "info.wgsl.parser_error",
             moduleHash = moduleHash,
-            message = "wgsl4k parse produced diagnostics: $errorMessages",
+            message = "WGSL parser produced diagnostics: $errorMessages",
             terminal = false,
         )
         val (reflection, _) = fixtureDeclaredReflection(moduleHash, input)
@@ -137,7 +137,7 @@ private fun parserBackedReflection(
     }
 
     // Lower the parsed translation unit and reflect it through the full
-    // wgsl4k WgslReflectionReport rather than reflecting structs manually.
+    // WGSL reflection report rather than reflecting structs manually.
     val module = Lowerer().lower(parsed.translationUnit)
     val report = module.reflectWgslModule(
         sourceId = input.moduleLabel,
@@ -177,13 +177,13 @@ private fun parserBackedReflection(
     val parserState = WGSLParserState(
         status = "parser-backed",
         toolName = "wgsl4k",
-        message = "reflection produced by live wgsl4k parse",
+        message = "reflection produced by live WGSL parse",
     )
 
     val parserDiagnostic = WGSLValidationDiagnostic(
         code = "info.wgsl.parser_backed",
         moduleHash = moduleHash,
-        message = "wgsl4k parser-backed reflection active",
+        message = "parser-backed WGSL reflection active",
         terminal = false,
     )
 
@@ -200,7 +200,7 @@ private fun parserBackedReflection(
     return Pair(reflection, parserDiagnostic)
 }
 
-/** Produces the legacy fixture-declared reflection when wgsl4k parser is unavailable. */
+/** Produces fixture-declared reflection when parser-backed WGSL reflection is unavailable. */
 private fun fixtureDeclaredReflection(
     moduleHash: WGSLModuleHash,
     input: WGSLModuleAssemblyInput,
@@ -278,7 +278,7 @@ private fun WGSLModuleAssemblyInput.capabilityDiagnostics(moduleHash: WGSLModule
         .filterNot { it in capabilities.supportedFeatures }
         .map { feature ->
             WGSLValidationDiagnostic(
-                code = "unsupported.wgsl.feature_unrepresented_by_wgsl4k",
+                code = "unsupported.wgsl.feature_unrepresented_by_parser",
                 moduleHash = moduleHash,
                 fieldOrBinding = feature,
                 message = "WGSL feature is not represented by the current facade fixture: $feature",

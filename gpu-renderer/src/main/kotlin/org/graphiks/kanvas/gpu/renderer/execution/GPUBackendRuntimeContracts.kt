@@ -136,12 +136,27 @@ interface GPUBackendSession : AutoCloseable {
     val executionCacheDumpLines: List<String>
         get() = emptyList()
 
+    /** Reports resource-provider evidence lines without runtime handles. */
+    val resourceProviderDumpLines: List<String>
+        get() = emptyList()
+
+    /** Reports queue submission, completion, and resource-retention evidence. */
+    val queueDumpLines: List<String>
+        get() = emptyList()
+
+    /** Reports compact phase 0 baseline evidence without runtime handles. */
+    val phase0BaselineDumpLines: List<String>
+        get() = phase0BaselineSnapshot(label = "session").dumpLines()
+
     /** Allocates an offscreen render target using the requested size and color format. */
     fun createOffscreenTarget(request: GPUOffscreenTargetRequest): GPUBackendOffscreenTarget
 
     /** Binds a native window surface that can encode and present fullscreen passes. */
     fun createWindowSurface(binding: GPUNativeSurfaceBinding): GPUBackendWindowSurface
 }
+
+val GPUBackendSession.phase0EvidenceDumpLines: List<String>
+    get() = phase0BaselineDumpLines + queueDumpLines + resourceProviderDumpLines
 
 /** Represents an offscreen target that supports rendering then RGBA readback. */
 interface GPUBackendOffscreenTarget : AutoCloseable {
@@ -479,12 +494,11 @@ private fun GPUResourceMaterializationDecision.Materialized.materializedUniformB
     return byteSize
 }
 
-/** Creates the default WebGPU-backed runtime when the local environment supports it. */
+/** Creates the default GPU runtime when the local environment supports it. */
 object GPUBackendRuntimeFactory {
-    /** Returns a WebGPU-backed session or null when backend initialization is unavailable. */
-    fun createOrNull(): GPUBackendSession? = WgpuBackendRuntimeFactory.createOrNull()
+    /** Returns a GPU session or null when runtime initialization is unavailable. */
+    fun createOrNull(): GPUBackendSession? = GPUBackendRuntimeNativeFactory.createOrNull()
 
-    /** Release the shared WGPU device and all cached resources. Must be called after
-     *  all rendering is complete, before the JVM shuts down. */
-    fun dispose() = WgpuBackendRuntimeFactory.dispose()
+    /** Releases the shared GPU runtime resources owned by this process. */
+    fun dispose() = GPUBackendRuntimeNativeFactory.dispose()
 }

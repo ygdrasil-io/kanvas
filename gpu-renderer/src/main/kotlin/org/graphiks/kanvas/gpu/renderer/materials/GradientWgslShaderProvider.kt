@@ -1,4 +1,4 @@
-package org.graphiks.kanvas.gpu.renderer.wgsl
+package org.graphiks.kanvas.gpu.renderer.materials
 
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import kotlin.math.pow

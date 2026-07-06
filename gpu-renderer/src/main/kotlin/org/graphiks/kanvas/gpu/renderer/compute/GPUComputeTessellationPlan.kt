@@ -11,8 +11,8 @@ import org.graphiks.kanvas.gpu.renderer.wgsl.WGSLParserState
 import org.graphiks.kanvas.gpu.renderer.wgsl.WGSLReflectionResult
 import org.graphiks.wgsl.parser.Lowerer
 import org.graphiks.wgsl.parser.parseWgslResult
-import org.graphiks.wgsl.proc.WgslReflectionReport
-import org.graphiks.wgsl.proc.reflectWgslModule
+import org.graphiks.kanvas.gpu.renderer.wgsl.WgslReflectionReport
+import org.graphiks.kanvas.gpu.renderer.wgsl.reflectWgslModule
 import java.security.MessageDigest
 import kotlin.math.ceil
 import kotlin.math.cos
@@ -82,13 +82,13 @@ data class GPUComputeTessellationPlan(
             val parserState = if (parsed.syntaxErrors.isEmpty()) {
                 WGSLParserState(
                     status = "parser-backed",
-                    toolName = "wgsl4k",
-                    message = "validated by wgsl4k",
+                    toolName = "external-wgsl-parser",
+                    message = "validated by parser-backed WGSL validation",
                 )
             } else {
                 WGSLParserState(
                     status = "parse-failed",
-                    toolName = "wgsl4k",
+                    toolName = "external-wgsl-parser",
                     message = parsed.syntaxErrors.joinToString("; "),
                 )
             }
@@ -100,7 +100,7 @@ data class GPUComputeTessellationPlan(
                 storage = emptyList(),
                 diagnostics = emptyList(),
                 parserState = parserState,
-                reflectionSource = if (parserState.parserBacked) "wgsl4k-parsed" else "fixture-declared",
+                reflectionSource = if (parserState.parserBacked) "parser-backed" else "fixture-declared",
             )
 
             val fragment = WGSLFragment(
@@ -145,9 +145,9 @@ data class GPUComputeTessellationPlan(
             } catch (_: ClassNotFoundException) {
                 emptyList()
             } catch (_: LinkageError) {
-                listOf("wgsl4k linkage error: validation unavailable")
+                listOf("WGSL parser linkage error: validation unavailable")
             } catch (e: Throwable) {
-                listOf("wgsl4k validation error: ${e.javaClass.simpleName}: ${e.message}")
+                listOf("WGSL parser validation error: ${e.javaClass.simpleName}: ${e.message}")
             }
         }
 

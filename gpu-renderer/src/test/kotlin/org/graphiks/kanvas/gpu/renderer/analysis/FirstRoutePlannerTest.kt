@@ -29,8 +29,8 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUPathFacts
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
-import org.graphiks.kanvas.gpu.renderer.commands.NormalizedMaskFilter
-import org.graphiks.kanvas.gpu.renderer.commands.NormalizedBlurStyle
+import org.graphiks.kanvas.gpu.renderer.filters.NormalizedBlurStyle
+import org.graphiks.kanvas.gpu.renderer.filters.NormalizedMaskFilter
 import org.graphiks.kanvas.gpu.renderer.filters.GPUFilterGraphDescriptor
 import org.graphiks.kanvas.gpu.renderer.filters.GPUFilterNodeDescriptor
 import org.graphiks.kanvas.gpu.renderer.filters.GPUFilterNodeID

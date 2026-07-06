@@ -3,8 +3,8 @@ package org.graphiks.kanvas.gpu.renderer.runtimeeffects
 import org.graphiks.kanvas.gpu.renderer.routing.RefuseDiagnostic
 import org.graphiks.wgsl.parser.Lowerer
 import org.graphiks.wgsl.parser.parseWgslResult
-import org.graphiks.wgsl.proc.WgslReflectionReport
-import org.graphiks.wgsl.proc.reflectWgslModule
+import org.graphiks.kanvas.gpu.renderer.wgsl.WgslReflectionReport
+import org.graphiks.kanvas.gpu.renderer.wgsl.reflectWgslModule
 
 /**
  * Dynamic shader graph assembly for runtime effects.
@@ -12,7 +12,7 @@ import org.graphiks.wgsl.proc.reflectWgslModule
  * Runtime effects with child effects form a directed acyclic graph (DAG) of
  * shader descriptors. Kanvas assembles the full WGSL module by inlining each
  * graph node with a deterministic prefix and merging uniforms; the single
- * combined WGSL module is then handed to wgsl4k for validation (wgsl4k does not
+ * combined WGSL module is then handed to parser-backed WGSL validation (the parser does not
  * do multi-fragment assembly).
  *
  * Simplified types per spec: descriptors and uniform blocks are modeled as
@@ -332,8 +332,8 @@ object GPURuntimeEffectShaderGraphAssembler {
         if (!parsed.isSuccess) {
             val errorMessages = parsed.errors.joinToString("; ") { it.message }
             return WgslValidationFailed(
-                code = "unsupported.runtime_effect.shader_graph_wgsl4k_parse_error",
-                message = "wgsl4k parse produced diagnostics: $errorMessages",
+                code = "unsupported.runtime_effect.shader_graph_wgsl_parse_error",
+                message = "WGSL parser produced diagnostics: $errorMessages",
             )
         }
 

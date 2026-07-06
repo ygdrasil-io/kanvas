@@ -2,7 +2,7 @@ package org.graphiks.kanvas.gpu.renderer.runtimeeffects
 
 import org.graphiks.wgsl.parser.Lowerer
 import org.graphiks.wgsl.parser.parseWgslResult
-import org.graphiks.wgsl.proc.reflectWgslModule
+import org.graphiks.kanvas.gpu.renderer.wgsl.reflectWgslModule
 
 enum class GPURuntimeEffectKind {
     Material,
@@ -96,9 +96,9 @@ object KanvasRuntimeEffectKindValidator : GPURuntimeEffectKindValidator {
     }
 
     /**
-     * Reflects [wgslSource] via wgsl4k and returns the first entry point stage
+     * Reflects [wgslSource] via parser-backed WGSL reflection and returns the first entry point stage
      * (`vertex`, `fragment`, or `compute`), or null when the source cannot be
-     * parsed/lowered or wgsl4k is unavailable on the classpath.
+     * parsed/lowered or the external WGSL parser is unavailable on the classpath.
      */
     fun entryPointStage(wgslSource: String): String? =
         try {

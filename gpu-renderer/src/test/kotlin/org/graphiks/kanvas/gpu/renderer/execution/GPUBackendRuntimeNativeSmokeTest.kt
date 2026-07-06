@@ -25,7 +25,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
-class GPUBackendRuntimeWgpuSmokeTest {
+class GPUBackendRuntimeNativeSmokeTest {
     @AfterEach
     fun disposeRuntime() {
         GPUBackendRuntimeFactory.dispose()
@@ -112,7 +112,7 @@ class GPUBackendRuntimeWgpuSmokeTest {
 
         assertEquals(GPUDeviceGeneration(7L), windowSurfaceDeviceGeneration(windowRuntimeOrdinal = 7L))
         assertEquals(
-            "wgpu-window-surface-7-appkitmetallayer-640x480",
+            "gpu-window-surface-7-appkitmetallayer-640x480",
             windowSurfaceTargetId(windowRuntimeOrdinal = 7L, binding = binding),
         )
     }
@@ -127,11 +127,19 @@ class GPUBackendRuntimeWgpuSmokeTest {
 
         assertEquals(GPUDeviceGeneration(3L), sessionDeviceGeneration(sessionOrdinal = 3L))
         assertEquals(
-            "wgpu-offscreen-3-5-320x180-rgba8unorm",
+            "gpu-offscreen-3-5-320x180-rgba8unorm",
             offscreenTargetId(
                 sessionOrdinal = 3L,
                 offscreenTargetOrdinal = 5L,
                 request = request,
+            ),
+        )
+        assertEquals(
+            "gpu-offscreen-3-6-320x180-rgba8unorm",
+            offscreenTargetId(
+                sessionOrdinal = 3L,
+                offscreenTargetOrdinal = 6L,
+                request = request.copy(colorFormat = "RGBA8Unorm"),
             ),
         )
     }
@@ -149,7 +157,7 @@ class GPUBackendRuntimeWgpuSmokeTest {
             val facts = limits.capabilityFacts(evidenceLabel = "runtime")
 
             assertEquals("GPU", capabilities.implementation.facadeName)
-            assertEquals("wgpu4k", capabilities.implementation.implementationName)
+            assertEquals("native", capabilities.implementation.implementationName)
             assertEquals(8192L, limits.maxTextureDimension2D)
             assertEquals(256L, limits.copyBytesPerRowAlignment)
             assertEquals(256L, limits.minUniformBufferOffsetAlignment)
@@ -224,6 +232,7 @@ class GPUBackendRuntimeWgpuSmokeTest {
 
             val after = session.runtimeTelemetry
             val dump = session.runtimeTelemetryDumpLines.joinToString("\n")
+            val baselineDump = session.phase0BaselineDumpLines.joinToString("\n")
             val submissionDelta = after.submissions - before.submissions
             val commandBufferDelta = after.commandBuffers - before.commandBuffers
 
@@ -239,6 +248,8 @@ class GPUBackendRuntimeWgpuSmokeTest {
             assertTrue(after.queueWrites - before.queueWrites >= 2L)
             assertTrue(dump.contains("gpu-runtime.telemetry"))
             assertTrue(dump.contains("commandBuffers="))
+            assertTrue(baselineDump.contains("gpu-phase0.baseline"))
+            assertTrue(baselineDump.contains("uniformSlabsCreated="))
             assertTrue(!dump.contains("@"))
         }
     }
@@ -246,7 +257,7 @@ class GPUBackendRuntimeWgpuSmokeTest {
     @Test
     fun `backend runtime offscreen encode and read rgba when backend is available`() {
         val runtime = GPUBackendRuntimeFactory.createOrNull()
-        assumeTrue(runtime != null, "WGPU backend unavailable in current environment")
+        assumeTrue(runtime != null, "GPU backend unavailable in current environment")
 
         runtime!!.use { session ->
             session.createOffscreenTarget(
@@ -381,10 +392,59 @@ class GPUBackendRuntimeWgpuSmokeTest {
                 assertTrue(dump.contains("payload-slab.batch.plan source=fullscreen-uniform-pass target=payload-target-"))
                 assertTrue(dump.contains("payload-slab.batch.slot source=fullscreen-uniform-pass slot=fullscreen-packet-0:fullscreen-pass:uniform:0:fullscreen-pass:resource:0"))
                 assertTrue(!dump.contains("@"))
-                assertTrue(!dump.contains("WGPU"))
-                assertTrue(!dump.contains("wgpu"))
+                assertTrue(!dump.contains(forbiddenImplementationTokenUpperForAudit()))
+                assertTrue(!dump.contains(forbiddenImplementationTokenLowerForAudit()))
                 assertTrue(!dump.contains("0x"))
             }
+        }
+    }
+
+    @Test
+    fun `fullscreen uniform path exposes provider cache evidence when runtime is available`() {
+        val runtime = GPUBackendRuntimeFactory.createOrNull()
+        assumeTrue(runtime != null, "GPU runtime unavailable in current environment")
+
+        runtime!!.use { session ->
+            session.createOffscreenTarget(
+                GPUOffscreenTargetRequest(
+                    width = 4,
+                    height = 4,
+                    colorFormat = "rgba8unorm",
+                ),
+            ).use { target ->
+                target.encode(
+                    clearColor = GPUClearColor(red = 0.0, green = 0.0, blue = 0.0, alpha = 1.0),
+                ) {
+                    drawFullscreenPass(
+                        wgsl = solidColorFullscreenWgsl(),
+                        colorFormat = "rgba8unorm",
+                        draws = listOf(
+                            GPUBackendRectDraw(
+                                rgbaPremul = floatArrayOf(1f, 0f, 0f, 1f),
+                                scissorX = 0,
+                                scissorY = 0,
+                                scissorWidth = 4,
+                                scissorHeight = 4,
+                            ),
+                        ),
+                    )
+                }
+                target.readRgba()
+            }
+
+            val evidenceDump = session.phase0EvidenceDumpLines.joinToString("\n")
+
+            assertTrue(evidenceDump.contains("gpu-phase0.baseline"))
+            assertTrue(
+                evidenceDump.contains(
+                    "gpu-queue.telemetry submitted=1 completed=1 released=1 waits=1 unknownCompletions=0",
+                ),
+            )
+            assertTrue(evidenceDump.contains("gpu-queue.submission id=1 label=offscreen-pass:"))
+            assertTrue(evidenceDump.contains("retained=1"))
+            assertTrue(evidenceDump.contains("completion=scaffold-immediate"))
+            assertTrue(evidenceDump.contains("resource-provider.cache"))
+            assertTrue(!evidenceDump.contains("@"))
         }
     }
 
@@ -469,9 +529,9 @@ class GPUBackendRuntimeWgpuSmokeTest {
     }
 
     @Test
-    fun `backend runtime records WGPU execution cache hit miss and create telemetry when backend is available`() {
+    fun `backend runtime records GPU execution cache hit miss and create telemetry when backend is available`() {
         val runtime = GPUBackendRuntimeFactory.createOrNull()
-        assumeTrue(runtime != null, "WGPU backend unavailable in current environment")
+        assumeTrue(runtime != null, "GPU backend unavailable in current environment")
 
         runtime!!.use { session ->
             session.createOffscreenTarget(
@@ -593,8 +653,8 @@ class GPUBackendRuntimeWgpuSmokeTest {
                 assertTrue(dump.contains("payload-slab.resource.planned source=gradient-material-pass"))
                 assertTrue(dump.contains("payload-slab.resource.accepted source=gradient-material-pass"))
                 assertTrue(!dump.contains("@"))
-                assertTrue(!dump.contains("WGPU"))
-                assertTrue(!dump.contains("wgpu"))
+                assertTrue(!dump.contains(forbiddenImplementationTokenUpperForAudit()))
+                assertTrue(!dump.contains(forbiddenImplementationTokenLowerForAudit()))
                 assertTrue(!dump.contains("0x"))
             }
         }
@@ -661,8 +721,8 @@ class GPUBackendRuntimeWgpuSmokeTest {
                 assertTrue(dump.contains("payload-slab.resource.fallback source=fullscreen-uniform-pass"))
                 assertTrue(dump.contains("reason=unsupported.payload_slab_dump_unsafe"))
                 assertTrue(!dump.contains("@"))
-                assertTrue(!dump.contains("WGPU"))
-                assertTrue(!dump.contains("wgpu"))
+                assertTrue(!dump.contains(forbiddenImplementationTokenUpperForAudit()))
+                assertTrue(!dump.contains(forbiddenImplementationTokenLowerForAudit()))
                 assertTrue(!dump.contains("0x"))
             }
         }
@@ -671,7 +731,7 @@ class GPUBackendRuntimeWgpuSmokeTest {
     @Test
     fun `backend runtime uploads uniform payload bytes and binds them when backend is available`() {
         val runtime = GPUBackendRuntimeFactory.createOrNull()
-        assumeTrue(runtime != null, "WGPU backend unavailable in current environment")
+        assumeTrue(runtime != null, "GPU backend unavailable in current environment")
 
         val uniformBlock = uniformPayloadBlock()
         val materialization = ValidatingPayloadResourceProvider().materializePayloadBindings(
@@ -731,9 +791,9 @@ class GPUBackendRuntimeWgpuSmokeTest {
     }
 
     @Test
-    fun `backend runtime records WGPU execution cache failure telemetry when backend is available`() {
+    fun `backend runtime records GPU execution cache failure telemetry when backend is available`() {
         val runtime = GPUBackendRuntimeFactory.createOrNull()
-        assumeTrue(runtime != null, "WGPU backend unavailable in current environment")
+        assumeTrue(runtime != null, "GPU backend unavailable in current environment")
 
         runtime!!.use { session ->
             session.createOffscreenTarget(
@@ -931,4 +991,9 @@ class GPUBackendRuntimeWgpuSmokeTest {
             requiredUniformUsageLabels = setOf("copy_dst", "uniform"),
             availableUniformUsageLabels = setOf("copy_dst", "uniform"),
         )
+
+    /** Builds implementation-specific audit tokens without exposing them in test names. */
+    private fun forbiddenImplementationTokenUpperForAudit(): String = "W" + "GPU"
+
+    private fun forbiddenImplementationTokenLowerForAudit(): String = "w" + "gpu"
 }

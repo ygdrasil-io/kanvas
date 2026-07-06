@@ -111,7 +111,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
 
     drawFullscreenStencilPass(
         wgsl = writeWgsl,
-        colorFormat = config.gpuColorFormat.wgpuLabel,
+        colorFormat = config.gpuColorFormat.gpuLabel,
         stencilMode = GPUBackendStencilMode.Write,
         triangleData = triangleData,
         draws = emptyList(),
@@ -126,7 +126,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
             colorBb.putFloat(material.a)
             drawFullscreenStencilPass(
                 wgsl = SOLID_RECT_WGSL,
-                colorFormat = config.gpuColorFormat.wgpuLabel,
+                colorFormat = config.gpuColorFormat.gpuLabel,
                 stencilMode = GPUBackendStencilMode.Test,
                 triangleData = null,
                 draws = listOf(
@@ -166,7 +166,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
                 }
                 drawFullscreenStencilPass(
                     wgsl = LINEAR_GRADIENT_MULTI_WGSL,
-                    colorFormat = config.gpuColorFormat.wgpuLabel,
+                    colorFormat = config.gpuColorFormat.gpuLabel,
                     stencilMode = GPUBackendStencilMode.Test,
                     triangleData = null,
                     draws = listOf(
@@ -192,7 +192,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
                 bb.putFloat(material.endA)
                 drawFullscreenStencilPass(
                     wgsl = LINEAR_GRADIENT_WGSL,
-                    colorFormat = config.gpuColorFormat.wgpuLabel,
+                    colorFormat = config.gpuColorFormat.gpuLabel,
                     stencilMode = GPUBackendStencilMode.Test,
                     triangleData = null,
                     draws = listOf(
@@ -229,7 +229,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
                 }
                 drawFullscreenStencilPass(
                     wgsl = RADIAL_GRADIENT_MULTI_WGSL,
-                    colorFormat = config.gpuColorFormat.wgpuLabel,
+                    colorFormat = config.gpuColorFormat.gpuLabel,
                     stencilMode = GPUBackendStencilMode.Test,
                     triangleData = null,
                     draws = listOf(
@@ -256,7 +256,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
                 bb.putFloat(material.endA)
                 drawFullscreenStencilPass(
                     wgsl = RADIAL_GRADIENT_WGSL,
-                    colorFormat = config.gpuColorFormat.wgpuLabel,
+                    colorFormat = config.gpuColorFormat.gpuLabel,
                     stencilMode = GPUBackendStencilMode.Test,
                     triangleData = null,
                     draws = listOf(
@@ -297,7 +297,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
                 }
                 drawFullscreenStencilPass(
                     wgsl = SWEEP_GRADIENT_MULTI_WGSL,
-                    colorFormat = config.gpuColorFormat.wgpuLabel,
+                    colorFormat = config.gpuColorFormat.gpuLabel,
                     stencilMode = GPUBackendStencilMode.Test,
                     triangleData = null,
                     draws = listOf(
@@ -323,7 +323,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
                 bb.putFloat(material.endA)
                 drawFullscreenStencilPass(
                     wgsl = SWEEP_GRADIENT_WGSL,
-                    colorFormat = config.gpuColorFormat.wgpuLabel,
+                    colorFormat = config.gpuColorFormat.gpuLabel,
                     stencilMode = GPUBackendStencilMode.Test,
                     triangleData = null,
                     draws = listOf(

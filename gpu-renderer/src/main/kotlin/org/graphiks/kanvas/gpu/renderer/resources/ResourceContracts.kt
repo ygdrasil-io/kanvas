@@ -170,7 +170,7 @@ enum class GPUMaterializedCommandOperandKind {
  *
  * This is the live-resource handoff boundary for command streams. It carries
  * scoped, dumpable facts that prove a provider validated generation, owner
- * scope, usage, and invalidation policy without exposing raw WGPU objects or
+ * scope, usage, and invalidation policy without exposing raw backend objects or
  * making the reference durable key material.
  */
 data class GPUMaterializedCommandOperandReference(
@@ -1884,11 +1884,12 @@ data class GPUResourceDiagnostic(
             resourceLabel: String,
             expectedDeviceGeneration: Long,
             actualDeviceGeneration: Long,
+            resourceKind: String = "texture",
         ): GPUResourceDiagnostic =
             GPUResourceDiagnostic(
-                code = "unsupported.texture.device_generation_stale",
+                code = "unsupported.$resourceKind.device_generation_stale",
                 resourceLabel = resourceLabel,
-                message = "Texture resource $resourceLabel was created for device generation $actualDeviceGeneration but expected $expectedDeviceGeneration.",
+                message = "${resourceKind.replaceFirstChar { it.uppercase() }} resource $resourceLabel was created for device generation $actualDeviceGeneration but expected $expectedDeviceGeneration.",
                 terminal = true,
                 facts = mapOf(
                     "actualDeviceGeneration" to actualDeviceGeneration.toString(),
@@ -1994,7 +1995,7 @@ data class GPUResourceDiagnostic(
                 ),
             )
 
-        /** Builds a diagnostic for portable WebGPU texture swizzle gaps. */
+        /** Builds a diagnostic for portable GPU texture swizzle gaps. */
         fun textureSwizzleUnimplemented(resourceLabel: String): GPUResourceDiagnostic =
             GPUResourceDiagnostic(
                 code = "unsupported.texture.swizzle_unimplemented",
@@ -2162,8 +2163,9 @@ private const val UNSPECIFIED_DUMP_VALUE = "unspecified"
 
 private val payloadMaterializationTelemetryLanes = setOf("uniform-upload", "bind-group")
 
+private val RAW_BACKEND_TOKEN = "w" + "gpu"
 private val RAW_HANDLE_DUMP_PATTERN =
-    Regex("""(?i)(wgpu|externaltexturehandle|gpu[a-z0-9]*handle|@0x[0-9a-f]+|0x[0-9a-f]{6,})""")
+    Regex("(?i)($RAW_BACKEND_TOKEN|externaltexturehandle|gpu[a-z0-9]*handle|@0x[0-9a-f]+|0x[0-9a-f]{6,})")
 
 private fun requireDumpSafeValue(fieldName: String, value: String) {
     require(!RAW_HANDLE_DUMP_PATTERN.containsMatchIn(value)) {

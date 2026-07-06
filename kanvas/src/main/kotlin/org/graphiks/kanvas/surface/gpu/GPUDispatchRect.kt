@@ -6,7 +6,7 @@ import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRawUniformDraw
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRectDraw
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRenderRecorder
 import org.graphiks.kanvas.surface.Diagnostics
-import org.graphiks.kanvas.gpu.renderer.wgsl.GradientWgslShaderProvider
+import org.graphiks.kanvas.gpu.renderer.materials.GradientWgslShaderProvider
 import org.graphiks.kanvas.surface.RenderConfig
 
 internal fun GPUBackendRenderRecorder.dispatchFillRect(
@@ -45,7 +45,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillRect(
                 aaBb.putFloat(0f); aaBb.putFloat(0f); aaBb.putFloat(0f) // padding to 48 bytes
                 drawFullscreenRawUniformPass(
                     wgsl = RECT_AA_WGSL,
-                    colorFormat = config.gpuColorFormat.wgpuLabel,
+                    colorFormat = config.gpuColorFormat.gpuLabel,
                     draws = listOf(
                         GPUBackendRawUniformDraw(
                             uniformBytes = aaBb.array(),
@@ -63,7 +63,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillRect(
                 )
                 drawFullscreenPass(
                     wgsl = SOLID_RECT_WGSL,
-                    colorFormat = config.gpuColorFormat.wgpuLabel,
+                    colorFormat = config.gpuColorFormat.gpuLabel,
                     draws = listOf(
                         GPUBackendRectDraw(
                             rgbaPremul = rgba,
@@ -81,7 +81,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillRect(
                 val uniformBytes = GradientWgslShaderProvider.uniformBytesFor(material)!!
                 drawFullscreenRawUniformPass(
                     wgsl = shader.wgslSource,
-                    colorFormat = config.gpuColorFormat.wgpuLabel,
+                    colorFormat = config.gpuColorFormat.gpuLabel,
                     draws = listOf(
                         GPUBackendRawUniformDraw(
                             uniformBytes = uniformBytes,
@@ -118,7 +118,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillRect(
                     }
                     drawFullscreenRawUniformPass(
                         wgsl = LINEAR_GRADIENT_MULTI_WGSL,
-                        colorFormat = config.gpuColorFormat.wgpuLabel,
+                        colorFormat = config.gpuColorFormat.gpuLabel,
                         draws = listOf(
                             GPUBackendRawUniformDraw(
                                 uniformBytes = bb.array(),
@@ -142,7 +142,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillRect(
                     bb.putFloat(material.endA)
                     drawFullscreenRawUniformPass(
                         wgsl = LINEAR_GRADIENT_WGSL,
-                        colorFormat = config.gpuColorFormat.wgpuLabel,
+                        colorFormat = config.gpuColorFormat.gpuLabel,
                         draws = listOf(
                             GPUBackendRawUniformDraw(
                                 uniformBytes = bb.array(),
@@ -161,7 +161,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillRect(
                 val uniformBytes = GradientWgslShaderProvider.uniformBytesFor(material)!!
                 drawFullscreenRawUniformPass(
                     wgsl = shader.wgslSource,
-                    colorFormat = config.gpuColorFormat.wgpuLabel,
+                    colorFormat = config.gpuColorFormat.gpuLabel,
                     draws = listOf(
                         GPUBackendRawUniformDraw(
                             uniformBytes = uniformBytes,
@@ -200,7 +200,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillRect(
                     }
                     drawFullscreenRawUniformPass(
                         wgsl = RADIAL_GRADIENT_MULTI_WGSL,
-                        colorFormat = config.gpuColorFormat.wgpuLabel,
+                        colorFormat = config.gpuColorFormat.gpuLabel,
                         draws = listOf(
                             GPUBackendRawUniformDraw(
                                 uniformBytes = bb.array(),
@@ -225,7 +225,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillRect(
                     bb.putFloat(material.endA)
                     drawFullscreenRawUniformPass(
                         wgsl = RADIAL_GRADIENT_WGSL,
-                        colorFormat = config.gpuColorFormat.wgpuLabel,
+                        colorFormat = config.gpuColorFormat.gpuLabel,
                         draws = listOf(
                             GPUBackendRawUniformDraw(
                                 uniformBytes = bb.array(),
@@ -244,7 +244,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillRect(
                 val uniformBytes = GradientWgslShaderProvider.uniformBytesFor(material)!!
                 drawFullscreenRawUniformPass(
                     wgsl = shader.wgslSource,
-                    colorFormat = config.gpuColorFormat.wgpuLabel,
+                    colorFormat = config.gpuColorFormat.gpuLabel,
                     draws = listOf(
                         GPUBackendRawUniformDraw(
                             uniformBytes = uniformBytes,
@@ -281,7 +281,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillRect(
                     }
                     drawFullscreenRawUniformPass(
                         wgsl = SWEEP_GRADIENT_MULTI_WGSL,
-                        colorFormat = config.gpuColorFormat.wgpuLabel,
+                        colorFormat = config.gpuColorFormat.gpuLabel,
                         draws = listOf(
                             GPUBackendRawUniformDraw(
                                 uniformBytes = bb.array(),
@@ -305,7 +305,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillRect(
                     bb.putFloat(material.endA)
                     drawFullscreenRawUniformPass(
                         wgsl = SWEEP_GRADIENT_WGSL,
-                        colorFormat = config.gpuColorFormat.wgpuLabel,
+                        colorFormat = config.gpuColorFormat.gpuLabel,
                         draws = listOf(
                             GPUBackendRawUniformDraw(
                                 uniformBytes = bb.array(),
@@ -324,7 +324,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillRect(
                 val uniformBytes = GradientWgslShaderProvider.uniformBytesFor(material)!!
                 drawFullscreenRawUniformPass(
                     wgsl = shader.wgslSource,
-                    colorFormat = config.gpuColorFormat.wgpuLabel,
+                    colorFormat = config.gpuColorFormat.gpuLabel,
                     draws = listOf(
                         GPUBackendRawUniformDraw(
                             uniformBytes = uniformBytes,
@@ -347,7 +347,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillRect(
                 if (imageChild != null && imageChild.rgbaPixels.isNotEmpty()) {
                     drawFullscreenTextureUniformPass(
                         wgsl = material.wgslCombined,
-                        colorFormat = config.gpuColorFormat.wgpuLabel,
+                        colorFormat = config.gpuColorFormat.gpuLabel,
                         textureRgba = imageChild.rgbaPixels,
                         textureWidth = imageChild.imageWidth,
                         textureHeight = imageChild.imageHeight,
@@ -363,7 +363,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillRect(
                 } else {
                     drawFullscreenRawUniformPass(
                         wgsl = material.wgslCombined,
-                        colorFormat = config.gpuColorFormat.wgpuLabel,
+                        colorFormat = config.gpuColorFormat.gpuLabel,
                         draws = listOf(
                             GPUBackendRawUniformDraw(
                                 uniformBytes = material.uniformBytes,

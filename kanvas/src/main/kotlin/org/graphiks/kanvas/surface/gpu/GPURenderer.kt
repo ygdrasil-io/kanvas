@@ -54,7 +54,7 @@ internal fun renderViaGpu(
     val ops = buffer.ops()
     val diagnostics = Diagnostics()
     val dispatched = mutableListOf<String>()
-    val targets = GPUTargetFacts(width = width, height = height, colorFormat = config.gpuColorFormat.wgpuLabel)
+    val targets = GPUTargetFacts(width = width, height = height, colorFormat = config.gpuColorFormat.gpuLabel)
 
     val session = GPUBackendRuntimeFactory.createOrNull()
         ?: error("webgpu-context-unavailable")
@@ -64,11 +64,11 @@ internal fun renderViaGpu(
             GPUOffscreenTargetRequest(
                 width = width,
                 height = height,
-                colorFormat = config.gpuColorFormat.wgpuLabel,
+                colorFormat = config.gpuColorFormat.gpuLabel,
             ),
         )
         target.use { t ->
-            val texFormat = config.gpuColorFormat.wgpuLabel
+            val texFormat = config.gpuColorFormat.gpuLabel
             val sceneLabel = t.createOffscreenTexture(GPUBackendOffscreenTexture(width, height, texFormat))
             val srcLabel = t.createOffscreenTexture(GPUBackendOffscreenTexture(width, height, texFormat))
             val snapLabel = t.createOffscreenTexture(GPUBackendOffscreenTexture(width, height, texFormat))

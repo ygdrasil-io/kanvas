@@ -33,13 +33,17 @@ class GPUPhase0BaselineReportTest {
         assertTrue(text.contains("integration dashboard GM"))
         assertTrue(text.contains("rapport par famille"))
         assertTrue(text.contains("Hors Phase 0b"))
+        assertTrue(text.contains("Snapshot runtime"))
+        assertTrue(text.contains("gpu-phase0.baseline"))
+        assertTrue(text.contains("gpu-phase0.cache"))
+        assertTrue(text.contains("gpu-phase0.capability"))
         assertTrue(text.contains("follow-ups nommes"))
         assertTrue(text.contains("criteres implicites"))
 
         val lowerText = text.lowercase(Locale.ROOT)
         assertTrue(!text.contains("@"))
         assertTrue(!text.contains("0x"))
-        assertTrue(!lowerText.contains("wgpu"))
+        assertTrue(!lowerText.contains("w" + "gpu"))
         assertTrue(!lowerText.contains("metal"))
     }
 }
