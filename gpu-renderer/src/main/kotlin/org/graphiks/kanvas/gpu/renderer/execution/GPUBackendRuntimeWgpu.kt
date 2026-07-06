@@ -327,49 +327,58 @@ private class WgpuBackendRuntimeTelemetryRecorder {
     private var samplersCreated = 0L
     private var queueWrites = 0L
 
-    /** Records one successfully encoded non-presentable render pass. */
+    /** Records one successfully submitted non-presentable render pass. */
+    @Synchronized
     fun recordOffscreenRenderPass() {
         renderPasses += 1L
         offscreenPasses += 1L
     }
 
-    /** Records one successfully encoded presentable window render pass. */
+    /** Records one successfully presented window render pass. */
+    @Synchronized
     fun recordWindowRenderPass() {
         renderPasses += 1L
         windowPasses += 1L
     }
 
     /** Records one successful queue submission. */
+    @Synchronized
     fun recordSubmission() {
         submissions += 1L
     }
 
     /** Records one successfully-created GPU buffer. */
+    @Synchronized
     fun recordBufferCreated() {
         buffersCreated += 1L
     }
 
     /** Records one successfully-created GPU texture. */
+    @Synchronized
     fun recordTextureCreated() {
         texturesCreated += 1L
     }
 
     /** Records one successfully-created GPU bind group. */
+    @Synchronized
     fun recordBindGroupCreated() {
         bindGroupsCreated += 1L
     }
 
     /** Records one successfully-created GPU sampler. */
+    @Synchronized
     fun recordSamplerCreated() {
         samplersCreated += 1L
     }
 
     /** Records one successful buffer write through the GPU queue. */
+    @Synchronized
     fun recordQueueWrite() {
         queueWrites += 1L
     }
 
     /** Returns an immutable point-in-time telemetry snapshot. */
+    @Synchronized
     fun snapshot(): GPUBackendRuntimeTelemetry =
         GPUBackendRuntimeTelemetry(
             renderPasses = renderPasses,
@@ -522,7 +531,6 @@ private class WgpuOffscreenTarget(
                 }
                 end()
             }
-            telemetryRecorder.recordOffscreenRenderPass()
             encoder.copyTextureToBuffer(
                 source = TexelCopyTextureInfo(texture = texture),
                 destination = TexelCopyBufferInfo(
@@ -536,6 +544,7 @@ private class WgpuOffscreenTarget(
             val commandBuffer = resources.trackIfAutoCloseable(encoder.finish())
             queue.submit(listOf(commandBuffer))
             telemetryRecorder.recordSubmission()
+            telemetryRecorder.recordOffscreenRenderPass()
         }
     }
 
@@ -693,10 +702,10 @@ private class WgpuOffscreenTarget(
             }
             end()
         }
-        telemetryRecorder.recordOffscreenRenderPass()
         val commandBuffer = resources.trackIfAutoCloseable(encoder.finish())
         queue.submit(listOf(commandBuffer))
         telemetryRecorder.recordSubmission()
+        telemetryRecorder.recordOffscreenRenderPass()
     }
 
     override fun close() {
@@ -819,11 +828,11 @@ private class WgpuWindowSurface(
                 }
                 end()
             }
-            telemetryRecorder.recordWindowRenderPass()
             val commandBuffer = resources.trackIfAutoCloseable(encoder.finish())
             runtime.device.queue.submit(listOf(commandBuffer))
             telemetryRecorder.recordSubmission()
             runtime.surface.present()
+            telemetryRecorder.recordWindowRenderPass()
         }
         return true
     }
