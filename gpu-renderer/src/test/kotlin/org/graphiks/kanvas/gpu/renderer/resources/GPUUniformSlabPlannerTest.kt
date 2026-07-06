@@ -229,6 +229,58 @@ class GPUUniformSlabPlannerTest {
                 sourceLabel = "fullscreen-uniform-pass",
                 deviceGeneration = 1L,
                 alignmentBytes = 256L,
+                totalBytes = 512L,
+                uploadBudgetBytes = 512L,
+                slots = listOf(
+                    GPUUniformSlabSlot(
+                        slotLabel = "draw-0",
+                        payloadHash = "safe-payload-hash-0",
+                        payloadBytes = 16L,
+                        alignedOffset = 256L,
+                        allocatedBytes = 256L,
+                    ),
+                    GPUUniformSlabSlot(
+                        slotLabel = "draw-1",
+                        payloadHash = "safe-payload-hash-1",
+                        payloadBytes = 16L,
+                        alignedOffset = 0L,
+                        allocatedBytes = 256L,
+                    ),
+                ),
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            GPUUniformSlabPlan(
+                planHash = "safe-plan-hash",
+                sourceLabel = "fullscreen-uniform-pass",
+                deviceGeneration = 1L,
+                alignmentBytes = 256L,
+                totalBytes = 512L,
+                uploadBudgetBytes = 512L,
+                slots = listOf(
+                    GPUUniformSlabSlot(
+                        slotLabel = "draw-0",
+                        payloadHash = "safe-payload-hash-0",
+                        payloadBytes = 16L,
+                        alignedOffset = 0L,
+                        allocatedBytes = 256L,
+                    ),
+                    GPUUniformSlabSlot(
+                        slotLabel = "draw-1",
+                        payloadHash = "safe-payload-hash-1",
+                        payloadBytes = 16L,
+                        alignedOffset = 0L,
+                        allocatedBytes = 256L,
+                    ),
+                ),
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            GPUUniformSlabPlan(
+                planHash = "safe-plan-hash",
+                sourceLabel = "fullscreen-uniform-pass",
+                deviceGeneration = 1L,
+                alignmentBytes = 256L,
                 totalBytes = 256L,
                 uploadBudgetBytes = 256L,
                 slots = listOf(
@@ -280,6 +332,48 @@ class GPUUniformSlabPlannerTest {
                 ),
             )
         }
+    }
+
+    @Test
+    fun `plan snapshots mutable slot lists at construction`() {
+        val mutableSlots = mutableListOf(
+            GPUUniformSlabSlot(
+                slotLabel = "draw-0",
+                payloadHash = "safe-payload-hash-0",
+                payloadBytes = 16L,
+                alignedOffset = 0L,
+                allocatedBytes = 256L,
+            ),
+        )
+        val plan = GPUUniformSlabPlan(
+            planHash = "safe-plan-hash",
+            sourceLabel = "fullscreen-uniform-pass",
+            deviceGeneration = 1L,
+            alignmentBytes = 256L,
+            totalBytes = 256L,
+            uploadBudgetBytes = 512L,
+            slots = mutableSlots,
+        )
+
+        mutableSlots.add(
+            GPUUniformSlabSlot(
+                slotLabel = "draw-1",
+                payloadHash = "safe-payload-hash-1",
+                payloadBytes = 16L,
+                alignedOffset = 256L,
+                allocatedBytes = 256L,
+            ),
+        )
+
+        assertEquals(1, plan.slots.size)
+        assertEquals("draw-0", plan.slots.single().slotLabel)
+        assertEquals(
+            listOf(
+                "uniform-slab.plan source=fullscreen-uniform-pass deviceGeneration=1 alignment=256 totalBytes=256 uploadBudgetBytes=512 slots=1 hash=safe-plan-hash",
+                "uniform-slab.slot source=fullscreen-uniform-pass slot=draw-0 offset=0 payloadBytes=16 allocatedBytes=256 payloadHash=safe-payload-hash-0",
+            ),
+            plan.dumpLines(),
+        )
     }
 
     private fun acceptedPlan(payloadByte: Byte): GPUUniformSlabPlan =

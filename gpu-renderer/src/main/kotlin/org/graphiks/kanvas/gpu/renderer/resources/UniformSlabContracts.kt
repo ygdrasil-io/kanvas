@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.gpu.renderer.resources
 
+import java.util.Collections
 import java.security.MessageDigest
 
 /** CPU-owned bytes for one pass-local uniform payload that can be placed in a slab. */
@@ -51,15 +52,20 @@ data class GPUUniformSlabSlot(
 }
 
 /** Backend-neutral uniform slab layout accepted before runtime materialization. */
-data class GPUUniformSlabPlan(
+class GPUUniformSlabPlan(
     val planHash: String,
     val sourceLabel: String,
     val deviceGeneration: Long,
     val alignmentBytes: Long,
     val totalBytes: Long,
     val uploadBudgetBytes: Long,
-    val slots: List<GPUUniformSlabSlot>,
+    slots: List<GPUUniformSlabSlot>,
 ) {
+    private val slotsSnapshot: List<GPUUniformSlabSlot> = Collections.unmodifiableList(slots.toList())
+
+    val slots: List<GPUUniformSlabSlot>
+        get() = slotsSnapshot
+
     init {
         require(planHash.isNotBlank()) { "GPUUniformSlabPlan.planHash must not be blank" }
         requireDumpSafeUniformSlabValue("GPUUniformSlabPlan.planHash", planHash)
@@ -69,8 +75,8 @@ data class GPUUniformSlabPlan(
         require(alignmentBytes > 0L) { "GPUUniformSlabPlan.alignmentBytes must be positive" }
         require(totalBytes >= 0L) { "GPUUniformSlabPlan.totalBytes must be non-negative" }
         require(uploadBudgetBytes >= 0L) { "GPUUniformSlabPlan.uploadBudgetBytes must be non-negative" }
-        require(slots.isNotEmpty()) { "GPUUniformSlabPlan.slots must not be empty" }
-        slots.forEach { slot ->
+        require(slotsSnapshot.isNotEmpty()) { "GPUUniformSlabPlan.slots must not be empty" }
+        slotsSnapshot.forEachIndexed { index, slot ->
             require(slot.alignedOffset % alignmentBytes == 0L) {
                 "GPUUniformSlabPlan.slot.alignedOffset must be aligned"
             }
@@ -79,8 +85,17 @@ data class GPUUniformSlabPlan(
             }
             requireDumpSafeUniformSlabValue("GPUUniformSlabPlan.slotLabel", slot.slotLabel)
             requireDumpSafeUniformSlabValue("GPUUniformSlabPlan.slot.payloadHash", slot.payloadHash)
+            if (index > 0) {
+                val previousSlot = slotsSnapshot[index - 1]
+                require(slot.alignedOffset >= previousSlot.alignedOffset) {
+                    "GPUUniformSlabPlan.slots must be ordered by alignedOffset"
+                }
+                require(slot.alignedOffset >= previousSlot.alignedOffset + previousSlot.allocatedBytes) {
+                    "GPUUniformSlabPlan.slots must not overlap"
+                }
+            }
         }
-        val coveredBytes = slots.maxOf { slot -> slot.alignedOffset + slot.allocatedBytes }
+        val coveredBytes = slotsSnapshot.maxOf { slot -> slot.alignedOffset + slot.allocatedBytes }
         require(totalBytes >= coveredBytes) {
             "GPUUniformSlabPlan.totalBytes must cover every slot"
         }
@@ -94,7 +109,7 @@ data class GPUUniformSlabPlan(
 
     fun dumpLines(): List<String> {
         requireDumpSafeUniformSlabValue("GPUUniformSlabPlan.sourceLabel", sourceLabel)
-        slots.forEach { slot ->
+        slotsSnapshot.forEach { slot ->
             requireDumpSafeUniformSlabValue("GPUUniformSlabPlan.slotLabel", slot.slotLabel)
         }
         return buildList {
@@ -105,10 +120,10 @@ data class GPUUniformSlabPlan(
                     "alignment=$alignmentBytes " +
                     "totalBytes=$totalBytes " +
                     "uploadBudgetBytes=$uploadBudgetBytes " +
-                    "slots=${slots.size} " +
+                    "slots=${slotsSnapshot.size} " +
                     "hash=$planHash",
             )
-            slots.forEach { slot ->
+            slotsSnapshot.forEach { slot ->
                 add(
                     "uniform-slab.slot " +
                         "source=$sourceLabel " +
@@ -121,6 +136,32 @@ data class GPUUniformSlabPlan(
             }
         }
     }
+
+    override fun equals(other: Any?): Boolean =
+        other is GPUUniformSlabPlan &&
+            planHash == other.planHash &&
+            sourceLabel == other.sourceLabel &&
+            deviceGeneration == other.deviceGeneration &&
+            alignmentBytes == other.alignmentBytes &&
+            totalBytes == other.totalBytes &&
+            uploadBudgetBytes == other.uploadBudgetBytes &&
+            slotsSnapshot == other.slots
+
+    override fun hashCode(): Int =
+        listOf(
+            planHash,
+            sourceLabel,
+            deviceGeneration,
+            alignmentBytes,
+            totalBytes,
+            uploadBudgetBytes,
+            slotsSnapshot,
+        ).hashCode()
+
+    override fun toString(): String =
+        "GPUUniformSlabPlan(planHash=$planHash, sourceLabel=$sourceLabel, deviceGeneration=$deviceGeneration, " +
+            "alignmentBytes=$alignmentBytes, totalBytes=$totalBytes, uploadBudgetBytes=$uploadBudgetBytes, " +
+            "slots=${slotsSnapshot.size})"
 }
 
 /** Diagnostic for a refused uniform slab plan. */
