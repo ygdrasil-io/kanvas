@@ -58,6 +58,7 @@ class GPUConcreteResourceProvider(
 ) : GPUResourceProvider {
     private val nullBufferKeys = linkedSetOf<String>()
     private val uniformSlabLeases = linkedMapOf<GPUUniformSlabLeaseCacheKey, GPUResourceLease>()
+    private val bindGroupLeases = linkedMapOf<GPUBindGroupLeaseCacheKey, GPUResourceLease>()
     private val textureSamplerLeaseKeys = linkedSetOf<GPUTextureSamplerLeaseCacheKey>()
     private var mutableTelemetry = GPUConcreteResourceProviderTelemetry()
 
@@ -84,8 +85,26 @@ class GPUConcreteResourceProvider(
         }
 
         val key = "${context.deviceGeneration}:${request.label}:${request.byteSize}"
-        val result = if (nullBufferKeys.add(key)) "create" else "reuse"
-        record("null-buffer", result, key, context.targetId)
+        val cacheResult = if (nullBufferKeys.add(key)) {
+            GPUResourceLeaseCacheResult.Create
+        } else {
+            GPUResourceLeaseCacheResult.Reuse
+        }
+        record("null-buffer", cacheResult.dumpToken, key, context.targetId)
+        val lease = GPUResourceLease(
+            leaseId = "null-buffer:${request.label}",
+            resourceKind = GPUResourceLeaseKind.NullBuffer,
+            deviceGeneration = context.deviceGeneration,
+            descriptorHash = "null-buffer:${request.byteSize}",
+            ownerScope = "resource-provider:null-buffer",
+            usageLabels = listOf("uniform"),
+            releasePolicy = "device-generation",
+            cacheResult = cacheResult,
+            evidenceFacts = mapOf(
+                "byteSize" to request.byteSize.toString(),
+                "zeroFilled" to "true",
+            ),
+        )
 
         val operand = GPUMaterializedCommandOperandReference(
             label = "null-buffer:${request.label}",
@@ -105,6 +124,7 @@ class GPUConcreteResourceProvider(
             resources = emptyList(),
             targetId = context.targetId,
             resourcePlanLabels = listOf(request.label),
+            resourceLeases = listOf(lease),
             operandBridge = listOf(
                 GPUMaterializedCommandOperandBinding(
                     commandLabel = "setBindGroup",
@@ -172,6 +192,60 @@ class GPUConcreteResourceProvider(
                 val lease = leaseResult.lease.snapshotForUniformSlabCache()
                 uniformSlabLeases[key] = lease
                 record("uniform-slab", lease.cacheResult.dumpToken, key.dumpToken(), context.targetId)
+                GPUResourceMaterializationDecision.Materialized(
+                    resources = emptyList(),
+                    targetId = context.targetId,
+                    resourcePlanLabels = listOf(request.leaseId),
+                    resourceLeases = listOf(lease),
+                )
+            }
+        }
+    }
+
+    fun materializeBindGroupLease(
+        request: GPUBindGroupLeaseRequest,
+        context: GPUTargetPreparationContext,
+    ): GPUResourceMaterializationDecision {
+        if (request.deviceGeneration != context.deviceGeneration) {
+            val diagnostic = GPUResourceDiagnostic.deviceGenerationStale(
+                resourceLabel = request.leaseId,
+                expectedDeviceGeneration = context.deviceGeneration,
+                actualDeviceGeneration = request.deviceGeneration,
+                resourceKind = "resource",
+            )
+            record("bind-group", "stale-generation", request.leaseId, context.targetId)
+            return GPUResourceMaterializationDecision.Refused(
+                diagnostic = diagnostic,
+                targetId = context.targetId,
+                resourcePlanLabels = listOf(request.leaseId),
+            )
+        }
+
+        val key = GPUBindGroupLeaseCacheKey.from(request)
+        bindGroupLeases[key]?.let { cachedLease ->
+            val lease = cachedLease.copy(cacheResult = GPUResourceLeaseCacheResult.Reuse)
+            record("bind-group", lease.cacheResult.dumpToken, key.dumpToken(), context.targetId)
+            return GPUResourceMaterializationDecision.Materialized(
+                resources = emptyList(),
+                targetId = context.targetId,
+                resourcePlanLabels = listOf(request.leaseId),
+                resourceLeases = listOf(lease),
+            )
+        }
+
+        return when (val leaseResult = leaseFactory.createBindGroup(request)) {
+            is GPUResourceLeaseFactoryResult.Failed -> {
+                record("bind-group", "adapter-failure", request.leaseId, context.targetId)
+                GPUResourceMaterializationDecision.Refused(
+                    diagnostic = leaseResult.diagnostic,
+                    targetId = context.targetId,
+                    resourcePlanLabels = listOf(request.leaseId),
+                )
+            }
+            is GPUResourceLeaseFactoryResult.Created -> {
+                val lease = leaseResult.lease.snapshotForBindGroupCache()
+                bindGroupLeases[key] = lease
+                record("bind-group", lease.cacheResult.dumpToken, key.dumpToken(), context.targetId)
                 GPUResourceMaterializationDecision.Materialized(
                     resources = emptyList(),
                     targetId = context.targetId,
@@ -252,7 +326,12 @@ class GPUConcreteResourceProvider(
                 decision.withResourceLeases(leases)
             }
             is GPUResourceMaterializationDecision.Refused -> {
-                record("texture-sampler", "failure", request.bindingLayoutHash, request.binding.bindingLabel)
+                record(
+                    lane = "texture-sampler",
+                    result = GPUResourceLeaseCacheResult.Refuse.dumpToken,
+                    keyHash = request.bindingLayoutHash,
+                    subjectHash = request.binding.bindingLabel,
+                )
                 decision
             }
             is GPUResourceMaterializationDecision.Deferred -> {
@@ -271,6 +350,31 @@ class GPUConcreteResourceProvider(
                 subjectHash = subjectHash,
             ),
         )
+    }
+}
+
+private data class GPUBindGroupLeaseCacheKey(
+    val leaseId: String,
+    val descriptorHash: String,
+    val ownerScope: String,
+    val usageLabels: List<String>,
+    val deviceGeneration: Long,
+    val releasePolicy: String,
+) {
+    fun dumpToken(): String =
+        "lease=$leaseId;descriptor=$descriptorHash;owner=$ownerScope;" +
+            "usage=${usageLabels.joinToString("+")};deviceGeneration=$deviceGeneration;release=$releasePolicy"
+
+    companion object {
+        fun from(request: GPUBindGroupLeaseRequest): GPUBindGroupLeaseCacheKey =
+            GPUBindGroupLeaseCacheKey(
+                leaseId = request.leaseId,
+                descriptorHash = request.descriptorHash,
+                ownerScope = request.ownerScope,
+                usageLabels = request.usageLabels.sorted(),
+                deviceGeneration = request.deviceGeneration,
+                releasePolicy = request.releasePolicy,
+            )
     }
 }
 
@@ -388,6 +492,12 @@ private data class GPUTextureSamplerLeaseCacheKey(
 }
 
 private fun GPUResourceLease.snapshotForUniformSlabCache(): GPUResourceLease =
+    copy(
+        usageLabels = dumpUsageLabelsSnapshot,
+        evidenceFacts = dumpEvidenceFactsSnapshot,
+    )
+
+private fun GPUResourceLease.snapshotForBindGroupCache(): GPUResourceLease =
     copy(
         usageLabels = dumpUsageLabelsSnapshot,
         evidenceFacts = dumpEvidenceFactsSnapshot,

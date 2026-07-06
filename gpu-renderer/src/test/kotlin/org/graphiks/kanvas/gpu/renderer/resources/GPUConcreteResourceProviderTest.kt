@@ -35,6 +35,15 @@ class GPUConcreteResourceProviderTest {
 
         assertEquals(listOf("create", "reuse"), provider.telemetry.dumpEvents.map { it.result })
         assertEquals(
+            listOf(
+                "resource-provider.lease id=null-buffer:null-uniform kind=null-buffer result=create " +
+                    "deviceGeneration=11 owner=resource-provider:null-buffer release=device-generation " +
+                    "usage=uniform descriptor=null-buffer:16 facts=byteSize=16;zeroFilled=true",
+            ),
+            first.dumpResourceLeaseSnapshot.dumpResourceLeaseLines(),
+        )
+        assertEquals(GPUResourceLeaseCacheResult.Reuse, second.dumpResourceLeaseSnapshot.single().cacheResult)
+        assertEquals(
             first.dumpOperandBridgeSnapshot.single().operand.label,
             second.dumpOperandBridgeSnapshot.single().operand.label,
         )
@@ -508,6 +517,39 @@ class GPUConcreteResourceProviderTest {
             provider.telemetry.dumpLines().joinToString("\n"),
             "resource-provider.cache lane=texture-sampler result=deferred",
         )
+    }
+
+    @Test
+    fun `concrete provider records refused texture sampler telemetry as refuse`() {
+        val provider = GPUConcreteResourceProvider(
+            textureSamplerProvider = object : GPUResourceProvider {
+                override fun materializeTextureSamplerBinding(
+                    request: GPUTextureSamplerMaterializationRequest,
+                    context: GPUTargetPreparationContext,
+                ): GPUResourceMaterializationDecision =
+                    GPUResourceMaterializationDecision.Refused(
+                        diagnostic = GPUResourceDiagnostic.deviceGenerationStale(
+                            resourceLabel = request.binding.bindingLabel,
+                            expectedDeviceGeneration = context.deviceGeneration,
+                            actualDeviceGeneration = request.deviceGeneration - 1,
+                            resourceKind = "resource",
+                        ),
+                        targetId = context.targetId,
+                        resourcePlanLabels = request.resourcePlanLabels,
+                    )
+            },
+        )
+
+        val decision = provider.materializeTextureSamplerBinding(
+            textureSamplerRequest(),
+            targetPreparationContext(),
+        )
+
+        val refused = assertIs<GPUResourceMaterializationDecision.Refused>(decision)
+        assertEquals("unsupported.resource.device_generation_stale", refused.diagnostic.code)
+        val lines = provider.telemetry.dumpLines().joinToString("\n")
+        assertContains(lines, "resource-provider.cache lane=texture-sampler result=refuse")
+        assertFalse(lines.contains("result=failure"))
     }
 }
 

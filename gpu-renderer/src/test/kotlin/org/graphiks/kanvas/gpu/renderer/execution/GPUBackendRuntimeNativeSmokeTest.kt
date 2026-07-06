@@ -441,11 +441,12 @@ class GPUBackendRuntimeNativeSmokeTest {
                 ),
             )
             assertTrue(evidenceDump.contains("gpu-queue.submission id=1 label=offscreen-pass:"))
-            assertTrue(evidenceDump.contains("retained=2"))
+            assertTrue(evidenceDump.contains("retained=3"))
             assertTrue(evidenceDump.contains("completion=scaffold-immediate"))
             assertTrue(evidenceDump.contains("resource-provider.cache"))
             assertTrue(evidenceDump.contains("resource-provider.lease"))
             assertTrue(evidenceDump.contains("kind=uniform-slab"))
+            assertTrue(evidenceDump.contains("kind=bind-group"))
             assertTrue(evidenceDump.contains("result=create") || evidenceDump.contains("result=reuse"))
             assertTrue(!evidenceDump.contains("W" + "GPU"))
             assertTrue(!evidenceDump.contains("@"))
@@ -491,6 +492,84 @@ class GPUBackendRuntimeNativeSmokeTest {
             )
             assertTrue(dumpLines.any { line -> line.contains("gpu-queue.submission") })
             assertTrue(dumpLines.none { line -> line.contains("@") })
+        }
+    }
+
+    @Test
+    fun `fullscreen uniform reuse keeps native resource counts stable on repeated frames when runtime is available`() {
+        val runtime = GPUBackendRuntimeFactory.createOrNull()
+        assumeTrue(runtime != null, "GPU backend unavailable in current environment")
+
+        runtime!!.use { session ->
+            session.createOffscreenTarget(
+                GPUOffscreenTargetRequest(width = 4, height = 4, colorFormat = "rgba8unorm"),
+            ).use { target ->
+                fun encodeRedFrame() {
+                    target.encode(GPUClearColor(0.0, 0.0, 0.0, 1.0)) {
+                        drawFullscreenPass(
+                            wgsl = solidColorFullscreenWgsl(),
+                            colorFormat = "rgba8unorm",
+                            draws = listOf(
+                                GPUBackendRectDraw(
+                                    rgbaPremul = floatArrayOf(1f, 0f, 0f, 1f),
+                                    scissorX = 0,
+                                    scissorY = 0,
+                                    scissorWidth = 4,
+                                    scissorHeight = 4,
+                                ),
+                            ),
+                        )
+                    }
+                }
+
+                val before = session.runtimeTelemetry
+                encodeRedFrame()
+                val afterFirst = session.runtimeTelemetry
+                encodeRedFrame()
+                val afterSecond = session.runtimeTelemetry
+
+                assertEquals(1L, afterFirst.uniformSlabsCreated - before.uniformSlabsCreated)
+                assertEquals(1L, afterFirst.buffersCreated - before.buffersCreated)
+                assertEquals(1L, afterFirst.bindGroupsCreated - before.bindGroupsCreated)
+                assertEquals(0L, afterSecond.uniformSlabsCreated - afterFirst.uniformSlabsCreated)
+                assertEquals(0L, afterSecond.uniformSlabBytesAllocated - afterFirst.uniformSlabBytesAllocated)
+                assertEquals(0L, afterSecond.buffersCreated - afterFirst.buffersCreated)
+                assertEquals(0L, afterSecond.bindGroupsCreated - afterFirst.bindGroupsCreated)
+                assertTrue(afterSecond.queueWrites - afterFirst.queueWrites >= 1L)
+            }
+
+            val dumpLines = session.phase0EvidenceDumpLines
+            val bindGroupCreateLines =
+                dumpLines.filter { line ->
+                    line.contains("resource-provider.cache lane=bind-group result=create") &&
+                        line.contains("key=lease=bind-group:fullscreen:")
+                }
+            val bindGroupReuseLines =
+                dumpLines.filter { line ->
+                    line.contains("resource-provider.cache lane=bind-group result=reuse") &&
+                        line.contains("key=lease=bind-group:fullscreen:")
+                }
+            assertEquals(
+                1,
+                dumpLines.count { line -> line.contains("resource-provider.cache lane=uniform-slab result=create") },
+            )
+            assertEquals(
+                1,
+                dumpLines.count { line -> line.contains("resource-provider.cache lane=uniform-slab result=reuse") },
+            )
+            assertTrue(
+                bindGroupCreateLines.size == 1,
+                "Expected one bind-group create line, got ${bindGroupCreateLines.size}:\n" +
+                    bindGroupCreateLines.joinToString("\n"),
+            )
+            assertTrue(
+                bindGroupReuseLines.size == 1,
+                "Expected one bind-group reuse line, got ${bindGroupReuseLines.size}:\n" +
+                    bindGroupReuseLines.joinToString("\n"),
+            )
+            assertTrue(dumpLines.none { line -> line.contains("@") })
+            assertTrue(dumpLines.none { line -> line.contains(forbiddenImplementationTokenUpperForAudit()) })
+            assertTrue(dumpLines.none { line -> line.contains(forbiddenImplementationTokenLowerForAudit()) })
         }
     }
 
