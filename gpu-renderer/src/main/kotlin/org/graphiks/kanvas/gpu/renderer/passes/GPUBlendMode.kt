@@ -7,6 +7,10 @@ package org.graphiks.kanvas.gpu.renderer.passes
  * directly. Shader-based modes ([requiresDestinationRead] = true) need dual
  * source / destination-read blending and currently fall back to SrcOver until
  * the shader blending pipeline is implemented.
+ *
+ * [gpuLabel] intentionally uses generic GPU wording. Backend-specific label
+ * aliases are not preserved because renderer diagnostics should not expose the
+ * concrete implementation behind the GPU abstraction.
  */
 enum class GPUBlendMode(
     val gpuLabel: String,
