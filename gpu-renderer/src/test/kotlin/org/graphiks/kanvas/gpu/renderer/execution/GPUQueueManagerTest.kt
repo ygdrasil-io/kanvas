@@ -82,6 +82,20 @@ class GPUQueueManagerTest {
     }
 
     @Test
+    fun `queue manager rejects unsafe pending id prefix`() {
+        val manager = GPUQueueManager()
+        val submission = manager.submit(
+            label = "frame-1",
+            retainedResources = listOf(GPUQueuedResourceRef("target:frame-1")),
+        )
+        assertTrue(manager.pendingSubmissionIds().contains(submission.id))
+
+        assertFailsWith<IllegalArgumentException> {
+            manager.pendingSubmissionIds(labelPrefix = "bad prefix")
+        }
+    }
+
+    @Test
     fun `queue manager telemetry records waits and unknown completions`() {
         val manager = GPUQueueManager()
 
