@@ -366,7 +366,17 @@ class GPUBackendRuntimeWgpuSmokeTest {
                 assertTrue(dump.contains("uniformSlabsCreated="))
                 assertTrue(dump.contains("uniformSlabBytesAllocated="))
                 assertTrue(dump.contains("uniformSlabFallbacks="))
+                assertTrue(dump.contains("payload-slab.batch.plan source=fullscreen-uniform-pass"))
+                assertTrue(
+                    Regex("""payload-slab\.batch\.plan .* frame=offscreen-\d+-\d+-frame-\d+ """).containsMatchIn(dump),
+                    "payload slab plan dump should include per-encode offscreen frame ordinal",
+                )
+                assertTrue(dump.contains("payload-slab.batch.plan source=fullscreen-uniform-pass target=payload-target-"))
+                assertTrue(dump.contains("payload-slab.batch.slot source=fullscreen-uniform-pass slot=fullscreen-packet-0:fullscreen-pass:uniform:0:fullscreen-pass:resource:0"))
                 assertTrue(!dump.contains("@"))
+                assertTrue(!dump.contains("WGPU"))
+                assertTrue(!dump.contains("wgpu"))
+                assertTrue(!dump.contains("0x"))
             }
         }
     }
