@@ -441,10 +441,50 @@ class GPUBackendRuntimeNativeSmokeTest {
                 ),
             )
             assertTrue(evidenceDump.contains("gpu-queue.submission id=1 label=offscreen-pass:"))
-            assertTrue(evidenceDump.contains("retained=1"))
+            assertTrue(evidenceDump.contains("retained=2"))
             assertTrue(evidenceDump.contains("completion=scaffold-immediate"))
             assertTrue(evidenceDump.contains("resource-provider.cache"))
+            assertTrue(evidenceDump.contains("resource-provider.lease"))
+            assertTrue(evidenceDump.contains("kind=uniform-slab"))
+            assertTrue(evidenceDump.contains("result=create") || evidenceDump.contains("result=reuse"))
+            assertTrue(!evidenceDump.contains("W" + "GPU"))
             assertTrue(!evidenceDump.contains("@"))
+        }
+    }
+
+    @Test
+    fun `fullscreen uniform path reuses provider lease evidence on repeated frames when runtime is available`() {
+        val runtime = GPUBackendRuntimeFactory.createOrNull()
+        assumeTrue(runtime != null, "GPU backend unavailable in current environment")
+
+        runtime!!.use { session ->
+            session.createOffscreenTarget(
+                GPUOffscreenTargetRequest(width = 4, height = 4, colorFormat = "rgba8unorm"),
+            ).use { target ->
+                repeat(2) {
+                    target.encode(GPUClearColor(0.0, 0.0, 0.0, 1.0)) {
+                        drawFullscreenPass(
+                            wgsl = solidColorFullscreenWgsl(),
+                            colorFormat = "rgba8unorm",
+                            draws = listOf(
+                                GPUBackendRectDraw(
+                                    rgbaPremul = floatArrayOf(1f, 0f, 0f, 1f),
+                                    scissorX = 0,
+                                    scissorY = 0,
+                                    scissorWidth = 4,
+                                    scissorHeight = 4,
+                                ),
+                            ),
+                        )
+                    }
+                }
+            }
+
+            val dump = session.phase0EvidenceDumpLines.joinToString("\n")
+            assertTrue(dump.contains("resource-provider.cache lane=uniform-slab result=create"))
+            assertTrue(dump.contains("resource-provider.cache lane=uniform-slab result=reuse"))
+            assertTrue(dump.contains("gpu-queue.submission"))
+            assertTrue(!dump.contains("@"))
         }
     }
 
