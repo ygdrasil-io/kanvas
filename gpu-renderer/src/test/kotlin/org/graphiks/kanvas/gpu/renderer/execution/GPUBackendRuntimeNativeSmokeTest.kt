@@ -313,6 +313,55 @@ class GPUBackendRuntimeNativeSmokeTest {
     }
 
     @Test
+    fun `offscreen submission stays pending until readback completes when backend is available`() {
+        val runtime = GPUBackendRuntimeFactory.createOrNull()
+        assumeTrue(runtime != null, "GPU backend unavailable in current environment")
+
+        runtime!!.use { session ->
+            session.createOffscreenTarget(
+                GPUOffscreenTargetRequest(width = 4, height = 4, colorFormat = "rgba8unorm"),
+            ).use { target ->
+                target.encode(
+                    clearColor = GPUClearColor(red = 0.0, green = 0.0, blue = 0.0, alpha = 1.0),
+                ) {
+                    drawFullscreenPass(
+                        wgsl = solidColorFullscreenWgsl(),
+                        colorFormat = "rgba8unorm",
+                        draws = listOf(
+                            GPUBackendRectDraw(
+                                rgbaPremul = floatArrayOf(1f, 0f, 0f, 1f),
+                                scissorX = 0,
+                                scissorY = 0,
+                                scissorWidth = 4,
+                                scissorHeight = 4,
+                            ),
+                        ),
+                    )
+                }
+
+                val pendingDump = session.phase0EvidenceDumpLines.joinToString("\n")
+                assertTrue(
+                    pendingDump.contains(
+                        "gpu-queue.telemetry submitted=1 completed=0 released=0 pending=1 waits=0 unknownCompletions=0",
+                    ),
+                )
+                assertTrue(pendingDump.contains("completion=pending"))
+
+                val rgba = target.readRgba()
+                assertContentEquals(byteArrayOf(0xFF.toByte(), 0, 0, 0xFF.toByte()), rgba.copyOfRange(0, 4))
+
+                val completedDump = session.phase0EvidenceDumpLines.joinToString("\n")
+                assertTrue(
+                    completedDump.contains(
+                        "gpu-queue.telemetry submitted=1 completed=1 released=1 pending=0 waits=1 unknownCompletions=0",
+                    ),
+                )
+                assertTrue(completedDump.contains("completion=readback-complete"))
+            }
+        }
+    }
+
+    @Test
     fun `backend runtime batches fullscreen uniform draws into one slab when backend is available`() {
         val runtime = GPUBackendRuntimeFactory.createOrNull()
         assumeTrue(runtime != null, "GPU backend unavailable in current environment")
@@ -441,8 +490,8 @@ class GPUBackendRuntimeNativeSmokeTest {
                 ),
             )
             assertTrue(evidenceDump.contains("gpu-queue.submission id=1 label=offscreen-pass:"))
-            assertTrue(evidenceDump.contains("retained=3"))
-            assertTrue(evidenceDump.contains("completion=pending"))
+            assertTrue(evidenceDump.contains("retained=4"))
+            assertTrue(evidenceDump.contains("completion=readback-complete"))
             assertTrue(evidenceDump.contains("resource-provider.cache"))
             assertTrue(evidenceDump.contains("resource-provider.lease"))
             assertTrue(evidenceDump.contains("kind=uniform-slab"))

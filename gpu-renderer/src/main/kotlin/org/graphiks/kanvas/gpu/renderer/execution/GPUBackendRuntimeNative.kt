@@ -274,6 +274,15 @@ internal fun offscreenTargetId(
         "${request.width}x${request.height}-${request.colorFormat.normalizedColorFormat()}"
 }
 
+internal fun gpuRuntimeRetainedResourceRefs(
+    targetRef: GPUQueuedResourceRef,
+    leases: List<GPUResourceLease>,
+    extraRefs: List<GPUQueuedResourceRef> = emptyList(),
+): List<GPUQueuedResourceRef> =
+    listOf(targetRef) + extraRefs + leases.map { lease ->
+        GPUQueuedResourceRef("lease:${lease.leaseId}")
+    }
+
 private fun nextSessionOrdinal(): Long = sessionOrdinalCounter.incrementAndGet()
 private fun nextWindowRuntimeOrdinal(): Long = windowRuntimeOrdinalCounter.incrementAndGet()
 
@@ -623,6 +632,7 @@ private class WgpuOffscreenTarget(
     private val offscreenTextures = mutableMapOf<String, GPUTexture>()
     private val frameOrdinalCounter = AtomicLong(0L)
     private val textureFrameOrdinalCounter = AtomicLong(0L)
+    private val pendingReadbackSubmissionIds = ArrayDeque<GPUQueueSubmissionId>()
 
     override val target: GPUSurfaceTarget =
         GPUSurfaceTarget(
@@ -658,6 +668,20 @@ private class WgpuOffscreenTarget(
     private fun writeTrackedBuffer(buffer: GPUBuffer, offset: ULong, data: ArrayBuffer) {
         queue.writeBuffer(buffer, offset, data)
         telemetryRecorder.recordQueueWrite()
+    }
+
+    private fun retainPendingReadbackSubmission(submission: GPUQueueSubmission) {
+        pendingReadbackSubmissionIds.addLast(submission.id)
+    }
+
+    private fun completePendingReadbackSubmissions(completion: String) {
+        while (pendingReadbackSubmissionIds.isNotEmpty()) {
+            queueManager.markCompleted(
+                id = pendingReadbackSubmissionIds.removeFirst(),
+                completion = completion,
+            )
+        }
+        queueManager.releaseCompleted()
     }
 
     override fun encode(
@@ -743,12 +767,14 @@ private class WgpuOffscreenTarget(
             queue.submit(listOf(commandBuffer))
             val submission = queueManager.submit(
                 label = "offscreen-pass:$frameId",
-                retainedResources = listOf(GPUQueuedResourceRef("target:${target.targetId}")) +
-                    frameResourceLeases.map { lease -> GPUQueuedResourceRef("lease:${lease.leaseId}") },
+                retainedResources = gpuRuntimeRetainedResourceRefs(
+                    targetRef = GPUQueuedResourceRef("target:${target.targetId}"),
+                    leases = frameResourceLeases,
+                    extraRefs = listOf(GPUQueuedResourceRef("readback:$frameId")),
+                ),
             )
             recordRuntimeResourceLeasesAction(frameResourceLeases)
-            queueManager.markCompleted(submission.id)
-            queueManager.releaseCompleted()
+            retainPendingReadbackSubmission(submission)
             telemetryRecorder.recordSubmission()
             telemetryRecorder.recordOffscreenRenderPass()
         }
@@ -771,6 +797,7 @@ private class WgpuOffscreenTarget(
             return if (format.isBgraFormat()) swizzleBgraToRgba(tightlyPacked) else tightlyPacked
         } finally {
             stagingBuffer.unmap()
+            completePendingReadbackSubmissions(GPU_QUEUE_COMPLETION_READBACK_COMPLETE)
         }
     }
 
@@ -925,17 +952,19 @@ private class WgpuOffscreenTarget(
         queue.submit(listOf(commandBuffer))
         val submission = queueManager.submit(
             label = "offscreen-texture-pass:$frameId",
-            retainedResources = listOf(GPUQueuedResourceRef("target:${target.targetId}:$textureLabel")) +
-                frameResourceLeases.map { lease -> GPUQueuedResourceRef("lease:${lease.leaseId}") },
+            retainedResources = gpuRuntimeRetainedResourceRefs(
+                targetRef = GPUQueuedResourceRef("target:${target.targetId}:$textureLabel"),
+                leases = frameResourceLeases,
+            ),
         )
         recordRuntimeResourceLeasesAction(frameResourceLeases)
-        queueManager.markCompleted(submission.id)
-        queueManager.releaseCompleted()
+        retainPendingReadbackSubmission(submission)
         telemetryRecorder.recordSubmission()
         telemetryRecorder.recordOffscreenRenderPass()
     }
 
     override fun close() {
+        completePendingReadbackSubmissions(GPU_QUEUE_COMPLETION_TARGET_CLOSE)
         var firstFailure: Throwable? = null
         /** Suppresses exceptions thrown inside [block] and collects the first failure for re-throw. */
         fun closeQuietly(block: () -> Unit) {
