@@ -164,5 +164,6 @@ private val QUEUE_RAW_HANDLE_DUMP_PATTERN =
 
 internal const val GPU_QUEUE_COMPLETION_PENDING = "pending"
 internal const val GPU_QUEUE_COMPLETION_READBACK_COMPLETE = "readback-complete"
+internal const val GPU_QUEUE_COMPLETION_PRESENT_FAILED = "present-failed"
 internal const val GPU_QUEUE_COMPLETION_PRESENTED = "presented"
 internal const val GPU_QUEUE_COMPLETION_TARGET_CLOSE = "target-close"

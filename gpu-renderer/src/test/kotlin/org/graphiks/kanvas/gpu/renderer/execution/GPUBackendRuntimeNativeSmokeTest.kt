@@ -115,6 +115,47 @@ class GPUBackendRuntimeNativeSmokeTest {
     }
 
     @Test
+    fun `window present cleanup completes and releases submitted frame on success`() {
+        val manager = GPUQueueManager()
+        val submission = manager.submit(
+            label = "window-frame:frame-1",
+            retainedResources = listOf(GPUQueuedResourceRef("target:window-frame-1")),
+        )
+
+        gpuRuntimeCompleteWindowPresentSubmission(
+            queueManager = manager,
+            submission = submission,
+            presentAction = {},
+        )
+
+        val dump = manager.telemetry.dumpLines().joinToString("\n")
+        assertTrue(dump.contains("submitted=1 completed=1 released=1 pending=0 waits=0 unknownCompletions=0"))
+        assertTrue(dump.contains("completion=presented"))
+    }
+
+    @Test
+    fun `window present cleanup marks failure and rethrows after release`() {
+        val manager = GPUQueueManager()
+        val submission = manager.submit(
+            label = "window-frame:frame-2",
+            retainedResources = listOf(GPUQueuedResourceRef("target:window-frame-2")),
+        )
+
+        val failure = assertFailsWith<IllegalStateException> {
+            gpuRuntimeCompleteWindowPresentSubmission(
+                queueManager = manager,
+                submission = submission,
+                presentAction = { error("present failed") },
+            )
+        }
+
+        val dump = manager.telemetry.dumpLines().joinToString("\n")
+        assertEquals("present failed", failure.message)
+        assertTrue(dump.contains("submitted=1 completed=1 released=1 pending=0 waits=0 unknownCompletions=0"))
+        assertTrue(dump.contains("completion=$GPU_QUEUE_COMPLETION_PRESENT_FAILED"))
+    }
+
+    @Test
     fun `fullscreen uniform slab test hook restores and resets thread local override`() {
         resetFullscreenUniformSlabTestingHooks()
         assertEquals("fullscreen-uniform-pass", currentFullscreenUniformSlabSourceLabelForTesting())

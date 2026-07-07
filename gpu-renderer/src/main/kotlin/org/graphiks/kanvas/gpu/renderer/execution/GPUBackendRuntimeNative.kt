@@ -270,6 +270,22 @@ internal inline fun <T> gpuRuntimeWithReadbackCleanup(
     }
 }
 
+internal fun gpuRuntimeCompleteWindowPresentSubmission(
+    queueManager: GPUQueueManager,
+    submission: GPUQueueSubmission,
+    presentAction: () -> Unit,
+) {
+    try {
+        presentAction()
+        queueManager.markCompleted(submission.id, GPU_QUEUE_COMPLETION_PRESENTED)
+    } catch (failure: Throwable) {
+        queueManager.markCompleted(submission.id, GPU_QUEUE_COMPLETION_PRESENT_FAILED)
+        throw failure
+    } finally {
+        queueManager.releaseCompleted()
+    }
+}
+
 internal fun windowSurfaceDeviceGeneration(windowRuntimeOrdinal: Long): GPUDeviceGeneration {
     require(windowRuntimeOrdinal > 0L) { "windowRuntimeOrdinal must be positive" }
     return GPUDeviceGeneration(windowRuntimeOrdinal)
@@ -1149,9 +1165,11 @@ private class WgpuWindowSurface(
             )
             recordRuntimeResourceLeasesAction(frameResourceLeases)
             telemetryRecorder.recordSubmission()
-            runtime.surface.present()
-            queueManager.markCompleted(submission.id, GPU_QUEUE_COMPLETION_PRESENTED)
-            queueManager.releaseCompleted()
+            gpuRuntimeCompleteWindowPresentSubmission(
+                queueManager = queueManager,
+                submission = submission,
+                presentAction = { runtime.surface.present() },
+            )
             telemetryRecorder.recordWindowRenderPass()
         }
         return true
