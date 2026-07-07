@@ -71,18 +71,21 @@ class GPUQueueManagerTest {
     }
 
     @Test
-    fun `queue manager can replace pending compatibility completion reason`() {
+    fun `queue manager keeps first real completion reason once recorded`() {
         val manager = GPUQueueManager()
         val submission = manager.submit(
             label = "offscreen-pass:frame-1",
             retainedResources = listOf(GPUQueuedResourceRef("readback:frame-1")),
         )
 
-        assertTrue(manager.markCompleted(submission.id))
         assertTrue(manager.markCompleted(submission.id, GPU_QUEUE_COMPLETION_READBACK_COMPLETE))
+        assertTrue(manager.markCompleted(submission.id, GPU_QUEUE_COMPLETION_TARGET_CLOSE))
 
-        val dump = manager.telemetry.dumpLines().joinToString("\n")
+        val telemetry = manager.telemetry
+        val dump = telemetry.dumpLines().joinToString("\n")
+        assertEquals(1L, telemetry.completed)
         assertTrue(dump.contains("completion=readback-complete"))
+        assertFalse(dump.contains("completion=target-close"))
     }
 
     @Test

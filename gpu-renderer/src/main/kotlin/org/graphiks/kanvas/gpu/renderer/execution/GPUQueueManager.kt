@@ -98,9 +98,6 @@ class GPUQueueManager {
             },
         )
 
-    fun markCompleted(id: GPUQueueSubmissionId): Boolean =
-        markCompleted(id, GPU_QUEUE_COMPLETION_PENDING)
-
     fun markCompleted(
         id: GPUQueueSubmissionId,
         completion: String,
