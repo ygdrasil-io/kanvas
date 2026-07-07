@@ -245,6 +245,31 @@ internal fun swizzleBgraToRgba(bytes: ByteArray): ByteArray {
     return rgba
 }
 
+internal inline fun <T> gpuRuntimeWithReadbackCleanup(
+    mapAction: () -> Unit,
+    readAction: () -> T,
+    unmapAction: () -> Unit,
+    completeAction: (String) -> Unit,
+): T {
+    var mapped = false
+    var completion = GPU_QUEUE_COMPLETION_READBACK_FAILED
+    try {
+        mapAction()
+        mapped = true
+        val readback = readAction()
+        completion = GPU_QUEUE_COMPLETION_READBACK_COMPLETE
+        return readback
+    } finally {
+        try {
+            if (mapped) {
+                unmapAction()
+            }
+        } finally {
+            completeAction(completion)
+        }
+    }
+}
+
 internal fun windowSurfaceDeviceGeneration(windowRuntimeOrdinal: Long): GPUDeviceGeneration {
     require(windowRuntimeOrdinal > 0L) { "windowRuntimeOrdinal must be positive" }
     return GPUDeviceGeneration(windowRuntimeOrdinal)
@@ -285,6 +310,8 @@ internal fun gpuRuntimeRetainedResourceRefs(
 
 private fun nextSessionOrdinal(): Long = sessionOrdinalCounter.incrementAndGet()
 private fun nextWindowRuntimeOrdinal(): Long = windowRuntimeOrdinalCounter.incrementAndGet()
+
+internal const val GPU_QUEUE_COMPLETION_READBACK_FAILED = "readback-failed"
 
 object GPUBackendRuntimeNativeFactory {
     private var sharedInner: GPUBackendSession? = null
@@ -782,23 +809,26 @@ private class WgpuOffscreenTarget(
 
     override fun readRgba(): ByteArray {
         queueManager.recordWait()
-        runBlocking {
-            stagingBuffer.mapAsync(GPUMapMode.Read, 0uL, stagingSize).getOrThrow()
-        }
-        try {
-            val mapped = stagingBuffer.getMappedRange(0uL, stagingSize).toByteArray()
-            val tightlyPacked = stripRowPadding(
-                bytes = mapped,
-                width = request.width,
-                height = request.height,
-                bytesPerPixel = bytesPerPixel,
-                paddedBytesPerRow = paddedBytesPerRow,
-            )
-            return if (format.isBgraFormat()) swizzleBgraToRgba(tightlyPacked) else tightlyPacked
-        } finally {
-            stagingBuffer.unmap()
-            completePendingReadbackSubmissions(GPU_QUEUE_COMPLETION_READBACK_COMPLETE)
-        }
+        return gpuRuntimeWithReadbackCleanup(
+            mapAction = {
+                runBlocking {
+                    stagingBuffer.mapAsync(GPUMapMode.Read, 0uL, stagingSize).getOrThrow()
+                }
+            },
+            readAction = {
+                val mapped = stagingBuffer.getMappedRange(0uL, stagingSize).toByteArray()
+                val tightlyPacked = stripRowPadding(
+                    bytes = mapped,
+                    width = request.width,
+                    height = request.height,
+                    bytesPerPixel = bytesPerPixel,
+                    paddedBytesPerRow = paddedBytesPerRow,
+                )
+                if (format.isBgraFormat()) swizzleBgraToRgba(tightlyPacked) else tightlyPacked
+            },
+            unmapAction = { stagingBuffer.unmap() },
+            completeAction = { completion -> completePendingReadbackSubmissions(completion) },
+        )
     }
 
     internal fun createVertexBuffer(data: FloatArray): String {

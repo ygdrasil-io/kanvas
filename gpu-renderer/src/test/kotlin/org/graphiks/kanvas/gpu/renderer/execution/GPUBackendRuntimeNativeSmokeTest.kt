@@ -84,6 +84,34 @@ class GPUBackendRuntimeNativeSmokeTest {
     }
 
     @Test
+    fun `readback cleanup completes and releases pending submission when map fails`() {
+        val manager = GPUQueueManager()
+        val submission = manager.submit(
+            label = "offscreen-pass:frame-1",
+            retainedResources = listOf(GPUQueuedResourceRef("readback:frame-1")),
+        )
+        var unmapCalls = 0
+
+        val failure = assertFailsWith<IllegalStateException> {
+            gpuRuntimeWithReadbackCleanup(
+                mapAction = { error("map failed") },
+                readAction = { byteArrayOf(1, 2, 3, 4) },
+                unmapAction = { unmapCalls += 1 },
+                completeAction = { completion ->
+                    manager.markCompleted(submission.id, completion)
+                    manager.releaseCompleted()
+                },
+            )
+        }
+
+        val dump = manager.telemetry.dumpLines().joinToString("\n")
+        assertEquals("map failed", failure.message)
+        assertEquals(0, unmapCalls)
+        assertTrue(dump.contains("submitted=1 completed=1 released=1 pending=0 waits=0 unknownCompletions=0"))
+        assertTrue(dump.contains("completion=readback-failed"))
+    }
+
+    @Test
     fun `fullscreen uniform slab test hook restores and resets thread local override`() {
         resetFullscreenUniformSlabTestingHooks()
         assertEquals("fullscreen-uniform-pass", currentFullscreenUniformSlabSourceLabelForTesting())
@@ -715,7 +743,19 @@ class GPUBackendRuntimeNativeSmokeTest {
             }
 
             val dumpLines = session.phase0EvidenceDumpLines
-            assertTrue(dumpLines.any { line -> line.contains("gpu-queue.submission") && line.contains("offscreen-texture-pass:") })
+            val textureSubmissionLine = dumpLines.singleOrNull { line ->
+                line.contains("gpu-queue.submission") && line.contains("offscreen-texture-pass:")
+            } ?: error("Expected one offscreen texture submission")
+            assertTrue(
+                dumpLines.any { line ->
+                    line.contains(
+                        "gpu-queue.telemetry submitted=1 completed=1 released=1 pending=0 waits=0 unknownCompletions=0",
+                    )
+                },
+            )
+            assertTrue(textureSubmissionLine.contains("completed=true"))
+            assertTrue(textureSubmissionLine.contains("released=true"))
+            assertTrue(textureSubmissionLine.contains("completion=target-close"))
             assertTrue(dumpLines.any { line -> line.contains("retained=3") })
             assertTrue(dumpLines.any { line -> line.contains("kind=uniform-slab") && line.contains("result=create") })
             assertTrue(dumpLines.any { line -> line.contains("kind=bind-group") && line.contains("result=create") })
