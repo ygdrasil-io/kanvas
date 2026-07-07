@@ -10,6 +10,9 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUResourceBindingSlot
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUUniformPayloadBlock
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUUniformPayloadSlot
 import org.graphiks.kanvas.gpu.renderer.resources.GPUPayloadMaterializationRequest
+import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceLease
+import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceLeaseCacheResult
+import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceLeaseKind
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceMaterializationDecision
 import org.graphiks.kanvas.gpu.renderer.resources.GPUTargetPreparationContext
 import org.graphiks.kanvas.gpu.renderer.resources.ValidatingPayloadResourceProvider
@@ -142,6 +145,35 @@ class GPUBackendRuntimeNativeSmokeTest {
         assertEquals(
             "gpu-window-surface-7-appkitmetallayer-640x480",
             windowSurfaceTargetId(windowRuntimeOrdinal = 7L, binding = binding),
+        )
+    }
+
+    @Test
+    fun `runtime retained resource refs include target extras and leases`() {
+        val refs = gpuRuntimeRetainedResourceRefs(
+            targetRef = GPUQueuedResourceRef("target:window-frame-1"),
+            leases = listOf(
+                GPUResourceLease(
+                    leaseId = "uniform-slab:frame-1",
+                    resourceKind = GPUResourceLeaseKind.UniformSlab,
+                    deviceGeneration = 11,
+                    descriptorHash = "sha256:uniform-slab-frame-1",
+                    ownerScope = "frame-1",
+                    usageLabels = listOf("copy_dst", "uniform"),
+                    releasePolicy = "submission-complete",
+                    cacheResult = GPUResourceLeaseCacheResult.Create,
+                ),
+            ),
+            extraRefs = listOf(GPUQueuedResourceRef("readback:frame-1")),
+        )
+
+        assertEquals(
+            listOf(
+                GPUQueuedResourceRef("target:window-frame-1"),
+                GPUQueuedResourceRef("readback:frame-1"),
+                GPUQueuedResourceRef("lease:uniform-slab:frame-1"),
+            ),
+            refs,
         )
     }
 

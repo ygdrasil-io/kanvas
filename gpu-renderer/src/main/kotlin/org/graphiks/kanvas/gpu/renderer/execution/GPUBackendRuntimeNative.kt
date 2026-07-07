@@ -452,6 +452,8 @@ private class WgpuBackendSession(
             binding = binding,
             capabilities = capabilities,
             telemetryRecorder = telemetryRecorder,
+            queueManager = queueManager,
+            recordRuntimeResourceLeasesAction = { leases -> recordRuntimeResourceLeases(leases) },
         )
 
     override fun close() {
@@ -1018,6 +1020,8 @@ private class WgpuWindowSurface(
     binding: GPUNativeSurfaceBinding,
     private val capabilities: GPUCapabilities,
     private val telemetryRecorder: WgpuBackendRuntimeTelemetryRecorder,
+    private val queueManager: GPUQueueManager,
+    private val recordRuntimeResourceLeasesAction: (List<GPUResourceLease>) -> Unit,
 ) : GPUBackendWindowSurface {
     private val windowRuntimeOrdinal = nextWindowRuntimeOrdinal()
     private val deviceGeneration = windowSurfaceDeviceGeneration(windowRuntimeOrdinal)
@@ -1081,6 +1085,8 @@ private class WgpuWindowSurface(
         }
 
         val frameOrdinal = frameOrdinalCounter.incrementAndGet()
+        val frameId = "window-$windowRuntimeOrdinal-frame-$targetGeneration-$frameOrdinal"
+        val frameResourceLeases = mutableListOf<GPUResourceLease>()
         GPUResourceScope().use { resources ->
             val view = resources.track(surfaceTexture.texture.createView(null)) { it.close() }
             val encoder = resources.trackIfAutoCloseable(runtime.device.createCommandEncoder())
@@ -1101,7 +1107,7 @@ private class WgpuWindowSurface(
                     device = runtime.device,
                     queue = runtime.device.queue,
                     targetId = targetId,
-                    frameId = "window-$windowRuntimeOrdinal-frame-$targetGeneration-$frameOrdinal",
+                    frameId = frameId,
                     budgetClass = "runtime-fullscreen",
                     targetFormat = runtime.format,
                     capabilities = capabilities,
@@ -1110,7 +1116,10 @@ private class WgpuWindowSurface(
                     telemetryRecorder = telemetryRecorder,
                     resourceProvider = resourceProvider,
                     runtimeResourceAdapter = runtimeResourceAdapter,
-                    recordResourceLeasesAction = { leases -> lastFrameResourceLeases = leases },
+                    recordResourceLeasesAction = { leases ->
+                        frameResourceLeases += leases
+                        lastFrameResourceLeases = frameResourceLeases.toList()
+                    },
                     setPipelineAction = { pipeline -> setPipeline(pipeline) },
                     setBindGroupAction = { index, bindGroup -> setBindGroup(index, bindGroup) },
                     setScissorAction = { x, y, surfaceWidth, surfaceHeight -> setScissorRect(x, y, surfaceWidth, surfaceHeight) },
@@ -1131,8 +1140,18 @@ private class WgpuWindowSurface(
             val commandBuffer = resources.trackIfAutoCloseable(encoder.finish())
             telemetryRecorder.recordCommandBufferFinished()
             runtime.device.queue.submit(listOf(commandBuffer))
+            val submission = queueManager.submit(
+                label = "window-frame:$frameId",
+                retainedResources = gpuRuntimeRetainedResourceRefs(
+                    targetRef = GPUQueuedResourceRef("target:$targetId"),
+                    leases = frameResourceLeases,
+                ),
+            )
+            recordRuntimeResourceLeasesAction(frameResourceLeases)
             telemetryRecorder.recordSubmission()
             runtime.surface.present()
+            queueManager.markCompleted(submission.id, GPU_QUEUE_COMPLETION_PRESENTED)
+            queueManager.releaseCompleted()
             telemetryRecorder.recordWindowRenderPass()
         }
         return true
