@@ -76,6 +76,30 @@ class GPUAlphaImageMaterialTest {
     }
 
     @Test
+    fun `draw image command uses black tint for alpha image without paint`() {
+        val op = DisplayOp.DrawImage(
+            image = alphaImage,
+            src = Rect(0f, 0f, 2f, 1f),
+            dst = Rect(0f, 0f, 2f, 1f),
+            paint = null,
+            transform = Matrix33.identity(),
+            clip = ClipStack.WideOpen,
+        )
+
+        val command = op.toImageRectCommand(
+            GPUDrawCommandID(9),
+            GPUTargetFacts(width = 16, height = 16, colorFormat = "bgra8unorm"),
+        )
+        val material = command.material as GPUMaterialDescriptor.ImageDraw
+
+        assertEquals(true, material.alphaOnly)
+        assertEquals(0f, material.tintR, 0.001f)
+        assertEquals(0f, material.tintG, 0.001f)
+        assertEquals(0f, material.tintB, 0.001f)
+        assertEquals(1f, material.tintA, 0.001f)
+    }
+
+    @Test
     fun `image material with pixels is accepted for fill dispatch`() {
         val material = Paint(
             color = Color.WHITE,
