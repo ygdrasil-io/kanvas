@@ -2,12 +2,30 @@
     "schemaVersion": "phase6-coverage-families-v1",
     "generatedBy": ":integration-tests:skia-evidence:generateGpuPhase6CoverageFamiliesEvidence",
     "dashboardSource": "integration-tests/skia/build/reports/skia-gm-dashboard/data/gms.json",
-    "sourceGeneratedAt": "2026-07-09T00:47:22.003568",
+    "sourceGeneratedAt": "2026-07-09T01:11:39.100531",
     "summary": {
         "totalRows": 141,
         "families": {
             "CLIP": 47,
             "PATH": 94
+        },
+        "familyDeltas": {
+            "CLIP": {
+                "baselineSource": "2026-07-08 local dashboard before #2010",
+                "currentSource": "integration-tests/skia/build/reports/skia-gm-dashboard/data/gms.json",
+                "currentGeneratedAt": "2026-07-09T01:11:39.100531",
+                "baselineCount": 32,
+                "currentCount": 47,
+                "delta": 15
+            },
+            "PATH": {
+                "baselineSource": "2026-07-08 local dashboard before #2010",
+                "currentSource": "integration-tests/skia/build/reports/skia-gm-dashboard/data/gms.json",
+                "currentGeneratedAt": "2026-07-09T01:11:39.100531",
+                "baselineCount": 58,
+                "currentCount": 94,
+                "delta": 36
+            }
         },
         "classifications": {
             "instrumented-existing": 76,
@@ -26,8 +44,9 @@
             "path-dash-gated": 9,
             "path-fill-concave": 16,
             "path-fill-convex": 4,
-            "path-fill-simple": 36,
+            "path-fill-simple": 34,
             "path-hairline-gated": 9,
+            "path-large-budget-gated": 2,
             "path-ops-gated": 6,
             "path-perspective-gated": 1,
             "path-shader-material-gated": 2,
@@ -53,6 +72,22 @@
             "similarity": 89.64236111111111,
             "minSimilarity": 88.2,
             "isPassing": true,
+            "width": 240,
+            "height": 120,
+            "matchingPixels": 25817,
+            "totalPixels": 28800,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 178,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 155.79,
+                "g": 181.96,
+                "b": 79.12,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/aaclip.png",
             "generatedPath": "images/generated/aaclip.png",
@@ -69,6 +104,22 @@
             "similarity": null,
             "minSimilarity": 80.0,
             "isPassing": null,
+            "width": 640,
+            "height": 480,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/bug339297_as_clip.png",
             "generatedPath": null,
@@ -85,6 +136,22 @@
             "similarity": 11.863125,
             "minSimilarity": 0.0,
             "isPassing": true,
+            "width": 800,
+            "height": 200,
+            "matchingPixels": 18981,
+            "totalPixels": 160000,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 114.71,
+                "g": 114.71,
+                "b": 114.71,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/circular-clips.png",
             "generatedPath": "images/generated/circular-clips.png",
@@ -101,6 +168,22 @@
             "similarity": 66.86768292682926,
             "minSimilarity": 61.9,
             "isPassing": true,
+            "width": 400,
+            "height": 410,
+            "matchingPixels": 109541,
+            "totalPixels": 164000,
+            "maxDiff": {
+                "r": 121,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 7.34,
+                "g": 15.88,
+                "b": 16.7,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/clipcubic.png",
             "generatedPath": "images/generated/clipcubic.png",
@@ -117,6 +200,22 @@
             "similarity": 29.035568237304688,
             "minSimilarity": 24.0,
             "isPassing": true,
+            "width": 512,
+            "height": 512,
+            "matchingPixels": 76115,
+            "totalPixels": 262144,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 203.0,
+                "g": 203.0,
+                "b": 203.0,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/clipdrawdraw.png",
             "generatedPath": "images/generated/clipdrawdraw.png",
@@ -133,6 +232,22 @@
             "similarity": 52.734375,
             "minSimilarity": 47.7,
             "isPassing": true,
+            "width": 256,
+            "height": 256,
+            "matchingPixels": 34560,
+            "totalPixels": 65536,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 111.2,
+                "g": 12.02,
+                "b": 186.57,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/cliplargerect.png",
             "generatedPath": "images/generated/cliplargerect.png",
@@ -149,6 +264,22 @@
             "similarity": 0.0,
             "minSimilarity": 0.0,
             "isPassing": true,
+            "width": 256,
+            "height": 256,
+            "matchingPixels": 0,
+            "totalPixels": 65536,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 236,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 242.38,
+                "g": 229.02,
+                "b": 20.7,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/clip_region.png",
             "generatedPath": "images/generated/clip_region.png",
@@ -165,6 +296,22 @@
             "similarity": 18.878399282915755,
             "minSimilarity": 0.0,
             "isPassing": true,
+            "width": 263,
+            "height": 263,
+            "matchingPixels": 13058,
+            "totalPixels": 69169,
+            "maxDiff": {
+                "r": 53,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 20.95,
+                "g": 185.39,
+                "b": 174.18,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/clip_sierpinski_region.png",
             "generatedPath": "images/generated/clip_sierpinski_region.png",
@@ -181,6 +328,22 @@
             "similarity": 88.3125,
             "minSimilarity": 71.8,
             "isPassing": true,
+            "width": 200,
+            "height": 400,
+            "matchingPixels": 70650,
+            "totalPixels": 80000,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 31.1,
+                "g": 223.29,
+                "b": 228.33,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/clip_strokerect.png",
             "generatedPath": "images/generated/clip_strokerect.png",
@@ -197,6 +360,22 @@
             "similarity": null,
             "minSimilarity": 0.0,
             "isPassing": null,
+            "width": 256,
+            "height": 256,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": null,
             "generatedPath": "images/generated/clipsuperrrect.png",
@@ -213,6 +392,22 @@
             "similarity": null,
             "minSimilarity": 0.0,
             "isPassing": null,
+            "width": 400,
+            "height": 950,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
             "fallbackReason": "unsupported.coverage.complex_clip",
             "referencePath": "images/reference/complexclip3_complex.png",
             "generatedPath": null,
@@ -229,6 +424,22 @@
             "similarity": null,
             "minSimilarity": 0.0,
             "isPassing": null,
+            "width": 400,
+            "height": 950,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
             "fallbackReason": "unsupported.coverage.complex_clip",
             "referencePath": "images/reference/complexclip3_simple.png",
             "generatedPath": null,
@@ -245,6 +456,22 @@
             "similarity": 0.0,
             "minSimilarity": 0.0,
             "isPassing": true,
+            "width": 970,
+            "height": 780,
+            "matchingPixels": 0,
+            "totalPixels": 756600,
+            "maxDiff": {
+                "r": 249,
+                "g": 36,
+                "b": 218,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 101.96,
+                "g": 27.12,
+                "b": 173.46,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/complexclip4_aa.png",
             "generatedPath": "images/generated/complexclip4_aa.png",
@@ -261,6 +488,22 @@
             "similarity": 0.0,
             "minSimilarity": 0.0,
             "isPassing": true,
+            "width": 970,
+            "height": 780,
+            "matchingPixels": 0,
+            "totalPixels": 756600,
+            "maxDiff": {
+                "r": 249,
+                "g": 36,
+                "b": 218,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 101.95,
+                "g": 27.12,
+                "b": 173.46,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/complexclip4_bw.png",
             "generatedPath": "images/generated/complexclip4_bw.png",
@@ -277,6 +520,22 @@
             "similarity": 9.872125297383029,
             "minSimilarity": 0.0,
             "isPassing": true,
+            "width": 388,
+            "height": 780,
+            "matchingPixels": 29877,
+            "totalPixels": 302640,
+            "maxDiff": {
+                "r": 229,
+                "g": 223,
+                "b": 222,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 115.92,
+                "g": 116.56,
+                "b": 115.94,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/complexclip_aa.png",
             "generatedPath": "images/generated/complexclip_aa.png",
@@ -293,6 +552,22 @@
             "similarity": 3.4899550621200106,
             "minSimilarity": 0.0,
             "isPassing": true,
+            "width": 388,
+            "height": 780,
+            "matchingPixels": 10562,
+            "totalPixels": 302640,
+            "maxDiff": {
+                "r": 229,
+                "g": 223,
+                "b": 229,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 127.58,
+                "g": 128.18,
+                "b": 127.63,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/complexclip_aa_invert.png",
             "generatedPath": "images/generated/complexclip_aa_invert.png",
@@ -309,6 +584,22 @@
             "similarity": 4.8337959291567545,
             "minSimilarity": 0.0,
             "isPassing": true,
+            "width": 388,
+            "height": 780,
+            "matchingPixels": 14629,
+            "totalPixels": 302640,
+            "maxDiff": {
+                "r": 255,
+                "g": 221,
+                "b": 241,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 126.89,
+                "g": 155.14,
+                "b": 153.97,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/complexclip_aa_layer.png",
             "generatedPath": "images/generated/complexclip_aa_layer.png",
@@ -325,6 +616,22 @@
             "similarity": 2.6133359767380386,
             "minSimilarity": 0.0,
             "isPassing": true,
+            "width": 388,
+            "height": 780,
+            "matchingPixels": 7909,
+            "totalPixels": 302640,
+            "maxDiff": {
+                "r": 255,
+                "g": 223,
+                "b": 241,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 131.03,
+                "g": 155.08,
+                "b": 153.97,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/complexclip_aa_layer_invert.png",
             "generatedPath": "images/generated/complexclip_aa_layer_invert.png",
@@ -341,6 +648,22 @@
             "similarity": 3.347015380859375,
             "minSimilarity": 0.0,
             "isPassing": true,
+            "width": 512,
+            "height": 512,
+            "matchingPixels": 8774,
+            "totalPixels": 262144,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 225.17,
+                "g": 225.15,
+                "b": 225.15,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/complexclip_blur_tiled.png",
             "generatedPath": "images/generated/complexclip_blur_tiled.png",
@@ -357,6 +680,22 @@
             "similarity": 10.412371134020619,
             "minSimilarity": 0.0,
             "isPassing": true,
+            "width": 388,
+            "height": 780,
+            "matchingPixels": 31512,
+            "totalPixels": 302640,
+            "maxDiff": {
+                "r": 229,
+                "g": 223,
+                "b": 222,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 116.7,
+                "g": 117.34,
+                "b": 116.71,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/complexclip_bw.png",
             "generatedPath": "images/generated/complexclip_bw.png",
@@ -373,6 +712,22 @@
             "similarity": 3.640298704731695,
             "minSimilarity": 0.0,
             "isPassing": true,
+            "width": 388,
+            "height": 780,
+            "matchingPixels": 11017,
+            "totalPixels": 302640,
+            "maxDiff": {
+                "r": 229,
+                "g": 223,
+                "b": 229,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 127.81,
+                "g": 128.41,
+                "b": 127.85,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/complexclip_bw_invert.png",
             "generatedPath": "images/generated/complexclip_bw_invert.png",
@@ -389,6 +744,22 @@
             "similarity": 5.104084060269627,
             "minSimilarity": 0.0,
             "isPassing": true,
+            "width": 388,
+            "height": 780,
+            "matchingPixels": 15447,
+            "totalPixels": 302640,
+            "maxDiff": {
+                "r": 255,
+                "g": 221,
+                "b": 241,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 127.29,
+                "g": 155.62,
+                "b": 154.45,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/complexclip_bw_layer.png",
             "generatedPath": "images/generated/complexclip_bw_layer.png",
@@ -405,6 +776,22 @@
             "similarity": 2.74781919111816,
             "minSimilarity": 0.0,
             "isPassing": true,
+            "width": 388,
+            "height": 780,
+            "matchingPixels": 8316,
+            "totalPixels": 302640,
+            "maxDiff": {
+                "r": 255,
+                "g": 223,
+                "b": 241,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 131.23,
+                "g": 155.32,
+                "b": 154.21,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/complexclip_bw_layer_invert.png",
             "generatedPath": "images/generated/complexclip_bw_layer_invert.png",
@@ -421,6 +808,22 @@
             "similarity": 0.03661132396764581,
             "minSimilarity": 0.0,
             "isPassing": true,
+            "width": 870,
+            "height": 540,
+            "matchingPixels": 172,
+            "totalPixels": 469800,
+            "maxDiff": {
+                "r": 228,
+                "g": 235,
+                "b": 233,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 97.55,
+                "g": 99.58,
+                "b": 78.04,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/convex_poly_clip.png",
             "generatedPath": "images/generated/convex_poly_clip.png",
@@ -437,6 +840,22 @@
             "similarity": 12.14752197265625,
             "minSimilarity": 9.5,
             "isPassing": true,
+            "width": 256,
+            "height": 256,
+            "matchingPixels": 7961,
+            "totalPixels": 65536,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 15
+            },
+            "meanDiff": {
+                "r": 20.0,
+                "g": 5.31,
+                "b": 5.31,
+                "a": 14.69
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/crbug_892988.png",
             "generatedPath": "images/generated/crbug_892988.png",
@@ -453,6 +872,22 @@
             "similarity": 32.92,
             "minSimilarity": 0.0,
             "isPassing": true,
+            "width": 500,
+            "height": 500,
+            "matchingPixels": 82300,
+            "totalPixels": 250000,
+            "maxDiff": {
+                "r": 190,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 75.48,
+                "g": 123.53,
+                "b": 192.49,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/croppedrects.png",
             "generatedPath": "images/generated/croppedrects.png",
@@ -469,6 +904,22 @@
             "similarity": 0.0,
             "minSimilarity": 0.0,
             "isPassing": true,
+            "width": 100,
+            "height": 100,
+            "matchingPixels": 0,
+            "totalPixels": 10000,
+            "maxDiff": {
+                "r": 145,
+                "g": 10,
+                "b": 69,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 145.0,
+                "g": 10.0,
+                "b": 69.0,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/distantclip.png",
             "generatedPath": "images/generated/distantclip.png",
@@ -485,6 +936,22 @@
             "similarity": null,
             "minSimilarity": 80.0,
             "isPassing": null,
+            "width": 256,
+            "height": 128,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/fast_constraint_red_is_allowed.png",
             "generatedPath": null,
@@ -501,6 +968,22 @@
             "similarity": null,
             "minSimilarity": 0.0,
             "isPassing": null,
+            "width": 256,
+            "height": 128,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/fast_constraint_red_is_allowed_manual.png",
             "generatedPath": null,
@@ -517,6 +1000,22 @@
             "similarity": 57.096250000000005,
             "minSimilarity": 52.1,
             "isPassing": true,
+            "width": 400,
+            "height": 400,
+            "matchingPixels": 91354,
+            "totalPixels": 160000,
+            "maxDiff": {
+                "r": 225,
+                "g": 242,
+                "b": 14,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 46.57,
+                "g": 18.02,
+                "b": 13.92,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/inverseclip.png",
             "generatedPath": "images/generated/inverseclip.png",
@@ -533,6 +1032,22 @@
             "similarity": null,
             "minSimilarity": 0.0,
             "isPassing": null,
+            "width": 128,
+            "height": 128,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/manypathatlases_128.png",
             "generatedPath": null,
@@ -549,6 +1064,22 @@
             "similarity": null,
             "minSimilarity": 0.0,
             "isPassing": null,
+            "width": 128,
+            "height": 128,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/manypathatlases_2048.png",
             "generatedPath": null,
@@ -565,6 +1096,22 @@
             "similarity": 63.34587707136726,
             "minSimilarity": 0.0,
             "isPassing": true,
+            "width": 612,
+            "height": 792,
+            "matchingPixels": 307040,
+            "totalPixels": 484704,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 255.0,
+                "g": 255.0,
+                "b": 255.0,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/pdf_crbug_772685.png",
             "generatedPath": "images/generated/pdf_crbug_772685.png",
@@ -581,6 +1128,22 @@
             "similarity": 66.21078125,
             "minSimilarity": 0.0,
             "isPassing": true,
+            "width": 800,
+            "height": 800,
+            "matchingPixels": 423749,
+            "totalPixels": 640000,
+            "maxDiff": {
+                "r": 232,
+                "g": 233,
+                "b": 240,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 130.34,
+                "g": 125.71,
+                "b": 130.45,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/perspective_clip.png",
             "generatedPath": "images/generated/perspective_clip.png",
@@ -597,6 +1160,22 @@
             "similarity": 0.2721354166666667,
             "minSimilarity": 0.0,
             "isPassing": true,
+            "width": 640,
+            "height": 480,
+            "matchingPixels": 836,
+            "totalPixels": 307200,
+            "maxDiff": {
+                "r": 217,
+                "g": 217,
+                "b": 220,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 39.46,
+                "g": 39.79,
+                "b": 26.66,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/rrect_clip_aa.png",
             "generatedPath": "images/generated/rrect_clip_aa.png",
@@ -613,6 +1192,22 @@
             "similarity": 0.2721354166666667,
             "minSimilarity": 0.0,
             "isPassing": true,
+            "width": 640,
+            "height": 480,
+            "matchingPixels": 836,
+            "totalPixels": 307200,
+            "maxDiff": {
+                "r": 217,
+                "g": 217,
+                "b": 220,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 39.45,
+                "g": 39.78,
+                "b": 26.64,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/rrect_clip_bw.png",
             "generatedPath": "images/generated/rrect_clip_bw.png",
@@ -629,6 +1224,22 @@
             "similarity": 0.0,
             "minSimilarity": 0.0,
             "isPassing": true,
+            "width": 256,
+            "height": 256,
+            "matchingPixels": 0,
+            "totalPixels": 65536,
+            "maxDiff": {
+                "r": 202,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 64.29,
+                "g": 89.18,
+                "b": 82.11,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/rrect_clip_draw_paint.png",
             "generatedPath": "images/generated/rrect_clip_draw_paint.png",
@@ -645,6 +1256,22 @@
             "similarity": 1.9566666666666666,
             "minSimilarity": 0.0,
             "isPassing": true,
+            "width": 500,
+            "height": 240,
+            "matchingPixels": 2348,
+            "totalPixels": 120000,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 50.85,
+                "g": 61.25,
+                "b": 61.12,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/simpleaaclip_path.png",
             "generatedPath": "images/generated/simpleaaclip_path.png",
@@ -661,6 +1288,22 @@
             "similarity": 1.9658333333333333,
             "minSimilarity": 0.0,
             "isPassing": true,
+            "width": 500,
+            "height": 240,
+            "matchingPixels": 2359,
+            "totalPixels": 120000,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 50.84,
+                "g": 61.25,
+                "b": 61.11,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/simpleaaclip_rect.png",
             "generatedPath": "images/generated/simpleaaclip_rect.png",
@@ -677,6 +1320,22 @@
             "similarity": null,
             "minSimilarity": 0.0,
             "isPassing": null,
+            "width": 256,
+            "height": 256,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": null,
             "generatedPath": "images/generated/simpleclip.png",
@@ -693,6 +1352,22 @@
             "similarity": 0.006666666666666667,
             "minSimilarity": 0.0,
             "isPassing": true,
+            "width": 300,
+            "height": 100,
+            "matchingPixels": 2,
+            "totalPixels": 30000,
+            "maxDiff": {
+                "r": 80,
+                "g": 80,
+                "b": 80,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 25.87,
+                "g": 25.87,
+                "b": 25.87,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/skbug1719.png",
             "generatedPath": "images/generated/skbug1719.png",
@@ -709,6 +1384,22 @@
             "similarity": 84.23309326171875,
             "minSimilarity": 0.0,
             "isPassing": true,
+            "width": 256,
+            "height": 512,
+            "matchingPixels": 110406,
+            "totalPixels": 131072,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 246.55,
+                "g": 246.55,
+                "b": 246.55,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/skbug_9319.png",
             "generatedPath": "images/generated/skbug_9319.png",
@@ -725,6 +1416,22 @@
             "similarity": null,
             "minSimilarity": 80.0,
             "isPassing": null,
+            "width": 256,
+            "height": 128,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/strict_constraint_batch_no_red_allowed.png",
             "generatedPath": null,
@@ -741,6 +1448,22 @@
             "similarity": null,
             "minSimilarity": 0.0,
             "isPassing": null,
+            "width": 256,
+            "height": 128,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/strict_constraint_batch_no_red_allowed_manual.png",
             "generatedPath": null,
@@ -757,6 +1480,22 @@
             "similarity": null,
             "minSimilarity": 80.0,
             "isPassing": null,
+            "width": 128,
+            "height": 128,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/strict_constraint_no_red_allowed.png",
             "generatedPath": null,
@@ -773,6 +1512,22 @@
             "similarity": null,
             "minSimilarity": 0.0,
             "isPassing": null,
+            "width": 128,
+            "height": 128,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/strict_constraint_no_red_allowed_manual.png",
             "generatedPath": null,
@@ -789,6 +1544,22 @@
             "similarity": 0.0,
             "minSimilarity": 0.0,
             "isPassing": true,
+            "width": 600,
+            "height": 600,
+            "matchingPixels": 0,
+            "totalPixels": 360000,
+            "maxDiff": {
+                "r": 255,
+                "g": 85,
+                "b": 127,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 117.06,
+                "g": 39.98,
+                "b": 47.76,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/windowrectangles.png",
             "generatedPath": "images/generated/windowrectangles.png",
@@ -805,6 +1576,22 @@
             "similarity": null,
             "minSimilarity": 0.0,
             "isPassing": null,
+            "width": 210,
+            "height": 250,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": null,
             "generatedPath": "images/generated/aa_rect_effect.png",
@@ -821,6 +1608,22 @@
             "similarity": null,
             "minSimilarity": 0.0,
             "isPassing": null,
+            "width": 256,
+            "height": 256,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": null,
             "generatedPath": "images/generated/bezier_conic_effects.png",
@@ -837,6 +1640,22 @@
             "similarity": null,
             "minSimilarity": 0.0,
             "isPassing": null,
+            "width": 256,
+            "height": 256,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": null,
             "generatedPath": "images/generated/bezier_quad_effects.png",
@@ -853,6 +1672,22 @@
             "similarity": 100.0,
             "minSimilarity": 0.0,
             "isPassing": true,
+            "width": 863,
+            "height": 473,
+            "matchingPixels": 408199,
+            "totalPixels": 408199,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/bug41422450.png",
             "generatedPath": "images/generated/bug41422450.png",
@@ -869,6 +1704,22 @@
             "similarity": 98.78645833333334,
             "minSimilarity": 0.0,
             "isPassing": true,
+            "width": 800,
+            "height": 600,
+            "matchingPixels": 473226,
+            "totalPixels": 480000,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 158.17,
+                "g": 25.34,
+                "b": 109.58,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/ctmpatheffect.png",
             "generatedPath": "images/generated/ctmpatheffect.png",
@@ -885,6 +1736,22 @@
             "similarity": null,
             "minSimilarity": 0.0,
             "isPassing": null,
+            "width": 722,
+            "height": 722,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": null,
             "generatedPath": "images/generated/big_rrect_circle_aa_effect.png",
@@ -901,6 +1768,22 @@
             "similarity": null,
             "minSimilarity": 0.0,
             "isPassing": null,
+            "width": 256,
+            "height": 256,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": null,
             "generatedPath": "images/generated/circle.png",
@@ -917,6 +1800,22 @@
             "similarity": 92.352294921875,
             "minSimilarity": 87.3,
             "isPassing": true,
+            "width": 128,
+            "height": 128,
+            "matchingPixels": 15131,
+            "totalPixels": 16384,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 148.55,
+                "g": 148.54,
+                "b": 148.54,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/circle_sizes.png",
             "generatedPath": "images/generated/circle_sizes.png",
@@ -933,6 +1832,22 @@
             "similarity": null,
             "minSimilarity": 0.0,
             "isPassing": null,
+            "width": 512,
+            "height": 512,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": null,
             "generatedPath": "images/generated/circular_arcs.png",
@@ -949,6 +1864,22 @@
             "similarity": null,
             "minSimilarity": 0.0,
             "isPassing": null,
+            "width": 512,
+            "height": 512,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": null,
             "generatedPath": "images/generated/circular_corner.png",
@@ -965,6 +1896,22 @@
             "similarity": null,
             "minSimilarity": 0.0,
             "isPassing": null,
+            "width": 300,
+            "height": 200,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": null,
             "generatedPath": "images/generated/clockwise.png",
@@ -981,6 +1928,22 @@
             "similarity": 95.40733333333333,
             "minSimilarity": 93.0,
             "isPassing": true,
+            "width": 500,
+            "height": 600,
+            "matchingPixels": 286222,
+            "totalPixels": 300000,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 216.49,
+                "g": 216.49,
+                "b": 216.49,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/concavepaths.png",
             "generatedPath": "images/generated/concavepaths.png",
@@ -997,6 +1960,22 @@
             "similarity": null,
             "minSimilarity": 0.0,
             "isPassing": null,
+            "width": 920,
+            "height": 960,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/conicpaths.png",
             "generatedPath": null,
@@ -1013,6 +1992,22 @@
             "similarity": null,
             "minSimilarity": 0.0,
             "isPassing": null,
+            "width": 512,
+            "height": 512,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": null,
             "generatedPath": "images/generated/convex_lineonly_paths.png",
@@ -1029,6 +2024,22 @@
             "similarity": null,
             "minSimilarity": 0.0,
             "isPassing": null,
+            "width": 512,
+            "height": 512,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": null,
             "generatedPath": "images/generated/convex_lineonly_paths_stroke_and_fill.png",
@@ -1045,6 +2056,22 @@
             "similarity": 0.0,
             "minSimilarity": 0.0,
             "isPassing": true,
+            "width": 1200,
+            "height": 1100,
+            "matchingPixels": 0,
+            "totalPixels": 1320000,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 250.6,
+                "g": 249.77,
+                "b": 250.62,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/convexpaths.png",
             "generatedPath": "images/generated/convexpaths.png",
@@ -1061,6 +2088,22 @@
             "similarity": null,
             "minSimilarity": 0.0,
             "isPassing": null,
+            "width": 720,
+            "height": 550,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": null,
             "generatedPath": "images/generated/convex_poly_effect.png",
@@ -1077,6 +2120,22 @@
             "similarity": null,
             "minSimilarity": 0.0,
             "isPassing": null,
+            "width": 512,
+            "height": 512,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/convex-polygon-inset.png",
             "generatedPath": null,
@@ -1093,6 +2152,22 @@
             "similarity": null,
             "minSimilarity": 0.0,
             "isPassing": null,
+            "width": 250,
+            "height": 250,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/crbug_640176.png",
             "generatedPath": null,
@@ -1109,6 +2184,22 @@
             "similarity": null,
             "minSimilarity": 0.0,
             "isPassing": null,
+            "width": 256,
+            "height": 256,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/crbug_691386.png",
             "generatedPath": null,
@@ -1125,6 +2216,22 @@
             "similarity": 79.87944582299421,
             "minSimilarity": 0.0,
             "isPassing": true,
+            "width": 1240,
+            "height": 390,
+            "matchingPixels": 342581,
+            "totalPixels": 483600,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 143.95,
+                "g": 155.13,
+                "b": 134.27,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/cubicclosepath.png",
             "generatedPath": "images/generated/cubicclosepath.png",
@@ -1141,6 +2248,22 @@
             "similarity": 79.94023986765923,
             "minSimilarity": 0.0,
             "isPassing": true,
+            "width": 1240,
+            "height": 390,
+            "matchingPixels": 342863,
+            "totalPixels": 483600,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 144.0,
+                "g": 155.2,
+                "b": 134.29,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/cubicpath.png",
             "generatedPath": "images/generated/cubicpath.png",
@@ -1157,6 +2280,22 @@
             "similarity": null,
             "minSimilarity": 0.0,
             "isPassing": null,
+            "width": 1240,
+            "height": 390,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
             "fallbackReason": "unsupported.material.shader_on_path",
             "referencePath": "images/reference/cubicpath_shader.png",
             "generatedPath": null,
@@ -1173,6 +2312,22 @@
             "similarity": 41.442499999999995,
             "minSimilarity": 36.5,
             "isPassing": true,
+            "width": 900,
+            "height": 1200,
+            "matchingPixels": 447579,
+            "totalPixels": 1080000,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 232.45,
+                "g": 225.04,
+                "b": 229.42,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/dashcircle.png",
             "generatedPath": "images/generated/dashcircle.png",
@@ -1189,6 +2344,22 @@
             "similarity": 90.09742736816406,
             "minSimilarity": 0.0,
             "isPassing": true,
+            "width": 512,
+            "height": 512,
+            "matchingPixels": 236185,
+            "totalPixels": 262144,
+            "maxDiff": {
+                "r": 115,
+                "g": 219,
+                "b": 246,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 104.51,
+                "g": 200.59,
+                "b": 224.41,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/dashtextcaps.png",
             "generatedPath": "images/generated/dashtextcaps.png",
@@ -1205,6 +2376,22 @@
             "similarity": 0.0,
             "minSimilarity": 0.0,
             "isPassing": true,
+            "width": 400,
+            "height": 200,
+            "matchingPixels": 0,
+            "totalPixels": 80000,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 255
+            },
+            "meanDiff": {
+                "r": 255.0,
+                "g": 255.0,
+                "b": 255.0,
+                "a": 255.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/dashing5_aa.png",
             "generatedPath": "images/generated/dashing5_aa.png",
@@ -1221,6 +2408,22 @@
             "similarity": 89.80974264705883,
             "minSimilarity": 84.8,
             "isPassing": true,
+            "width": 640,
+            "height": 340,
+            "matchingPixels": 195426,
+            "totalPixels": 217600,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 240.59,
+                "g": 240.59,
+                "b": 240.59,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/dashing.png",
             "generatedPath": "images/generated/dashing.png",
@@ -1237,6 +2440,22 @@
             "similarity": 0.0,
             "minSimilarity": 0.0,
             "isPassing": true,
+            "width": 500,
+            "height": 500,
+            "matchingPixels": 0,
+            "totalPixels": 250000,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 43.26,
+                "g": 11.77,
+                "b": 30.85,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/drawlines_with_local_matrix.png",
             "generatedPath": "images/generated/drawlines_with_local_matrix.png",
@@ -1253,6 +2472,22 @@
             "similarity": null,
             "minSimilarity": 0.0,
             "isPassing": null,
+            "width": 500,
+            "height": 500,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
             "fallbackReason": "unsupported.coverage.path_ops",
             "referencePath": "images/reference/drawregion.png",
             "generatedPath": null,
@@ -1269,6 +2504,22 @@
             "similarity": null,
             "minSimilarity": 0.0,
             "isPassing": null,
+            "width": 375,
+            "height": 500,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
             "fallbackReason": "unsupported.coverage.path_ops",
             "referencePath": "images/reference/drawregionmodes.png",
             "generatedPath": null,
@@ -1285,6 +2536,22 @@
             "similarity": null,
             "minSimilarity": 0.0,
             "isPassing": null,
+            "width": 256,
+            "height": 256,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": null,
             "generatedPath": "images/generated/ellipse.png",
@@ -1301,6 +2568,22 @@
             "similarity": null,
             "minSimilarity": 0.0,
             "isPassing": null,
+            "width": 512,
+            "height": 512,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": null,
             "generatedPath": "images/generated/elliptical_corner.png",
@@ -1317,6 +2600,22 @@
             "similarity": null,
             "minSimilarity": 0.0,
             "isPassing": null,
+            "width": 800,
+            "height": 300,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/fancy_gradients.png",
             "generatedPath": null,
@@ -1333,6 +2632,22 @@
             "similarity": null,
             "minSimilarity": 0.0,
             "isPassing": null,
+            "width": 288,
+            "height": 480,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/fatpathfill.png",
             "generatedPath": null,
@@ -1349,6 +2664,22 @@
             "similarity": 11.606786427145709,
             "minSimilarity": 0.0,
             "isPassing": true,
+            "width": 835,
+            "height": 840,
+            "matchingPixels": 81410,
+            "totalPixels": 701400,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 129.56,
+                "g": 30.15,
+                "b": 133.87,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/filltypespersp.png",
             "generatedPath": "images/generated/filltypespersp.png",
@@ -1365,6 +2696,22 @@
             "similarity": null,
             "minSimilarity": 0.0,
             "isPassing": null,
+            "width": 1000,
+            "height": 700,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/inner_join_geometry.png",
             "generatedPath": null,
@@ -1381,6 +2728,22 @@
             "similarity": null,
             "minSimilarity": 0.0,
             "isPassing": null,
+            "width": 800,
+            "height": 800,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/lattice2.png",
             "generatedPath": null,
@@ -1397,6 +2760,22 @@
             "similarity": null,
             "minSimilarity": 0.0,
             "isPassing": null,
+            "width": 1240,
+            "height": 390,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/lineclosepath.png",
             "generatedPath": null,
@@ -1413,6 +2792,22 @@
             "similarity": 77.09015715467329,
             "minSimilarity": 0.0,
             "isPassing": true,
+            "width": 1240,
+            "height": 390,
+            "matchingPixels": 372808,
+            "totalPixels": 483600,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 161.76,
+                "g": 149.22,
+                "b": 169.78,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/linepath.png",
             "generatedPath": "images/generated/linepath.png",
@@ -1429,6 +2824,22 @@
             "similarity": null,
             "minSimilarity": 0.0,
             "isPassing": null,
+            "width": 250,
+            "height": 250,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
             "fallbackReason": "unsupported.coverage.dash_pattern",
             "referencePath": null,
             "generatedPath": "images/generated/longrect_dash.png",
@@ -1445,6 +2856,22 @@
             "similarity": null,
             "minSimilarity": 0.0,
             "isPassing": null,
+            "width": 1024,
+            "height": 768,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/macaatest.png",
             "generatedPath": null,
@@ -1461,6 +2888,22 @@
             "similarity": 89.77142857142857,
             "minSimilarity": 84.8,
             "isPassing": true,
+            "width": 560,
+            "height": 475,
+            "matchingPixels": 238792,
+            "totalPixels": 266000,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 185.32,
+                "g": 185.34,
+                "b": 185.34,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/mandoline.png",
             "generatedPath": "images/generated/mandoline.png",
@@ -1477,6 +2920,22 @@
             "similarity": 0.0,
             "minSimilarity": 0.0,
             "isPassing": true,
+            "width": 800,
+            "height": 600,
+            "matchingPixels": 0,
+            "totalPixels": 480000,
+            "maxDiff": {
+                "r": 194,
+                "g": 228,
+                "b": 241,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 69.94,
+                "g": 79.67,
+                "b": 84.71,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/manycircles.png",
             "generatedPath": "images/generated/manycircles.png",
@@ -1488,12 +2947,28 @@
             "rowId": "manypathatlases",
             "name": "manypathatlases",
             "family": "PATH",
-            "subfamily": "path-fill-simple",
+            "subfamily": "path-large-budget-gated",
             "classification": "no-score",
             "similarity": null,
             "minSimilarity": 0.0,
             "isPassing": null,
-            "fallbackReason": "none",
+            "width": 128,
+            "height": 128,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
+            "fallbackReason": "unsupported.coverage.verb_budget_exceeded",
             "referencePath": null,
             "generatedPath": "images/generated/manypathatlases.png",
             "diffPath": null,
@@ -1509,6 +2984,22 @@
             "similarity": null,
             "minSimilarity": 0.0,
             "isPassing": null,
+            "width": 269,
+            "height": 134,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": null,
             "generatedPath": "images/generated/nested.png",
@@ -1525,6 +3016,22 @@
             "similarity": null,
             "minSimilarity": 0.0,
             "isPassing": null,
+            "width": 269,
+            "height": 134,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": null,
             "generatedPath": "images/generated/nested.png",
@@ -1541,6 +3048,22 @@
             "similarity": 64.8406762295082,
             "minSimilarity": 59.8,
             "isPassing": true,
+            "width": 1220,
+            "height": 1920,
+            "matchingPixels": 1518828,
+            "totalPixels": 2342400,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 246.27,
+                "g": 246.27,
+                "b": 246.27,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/nonclosedpaths.png",
             "generatedPath": "images/generated/nonclosedpaths.png",
@@ -1557,6 +3080,22 @@
             "similarity": null,
             "minSimilarity": 0.0,
             "isPassing": null,
+            "width": 500,
+            "height": 500,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/OverStroke.png",
             "generatedPath": null,
@@ -1573,6 +3112,22 @@
             "similarity": null,
             "minSimilarity": 0.0,
             "isPassing": null,
+            "width": 500,
+            "height": 500,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/parsedpaths.png",
             "generatedPath": null,
@@ -1584,12 +3139,28 @@
             "rowId": "path_huge_aa_manual",
             "name": "path_huge_aa_manual",
             "family": "PATH",
-            "subfamily": "path-fill-simple",
+            "subfamily": "path-large-budget-gated",
             "classification": "no-score",
             "similarity": null,
             "minSimilarity": 0.0,
             "isPassing": null,
-            "fallbackReason": "none",
+            "width": 200,
+            "height": 200,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
+            "fallbackReason": "unsupported.coverage.verb_budget_exceeded",
             "referencePath": "images/reference/path_huge_aa_manual.png",
             "generatedPath": null,
             "diffPath": null,
@@ -1605,6 +3176,22 @@
             "similarity": null,
             "minSimilarity": 0.0,
             "isPassing": null,
+            "width": 650,
+            "height": 950,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/path_mask_cache.png",
             "generatedPath": null,
@@ -1621,6 +3208,22 @@
             "similarity": null,
             "minSimilarity": 0.0,
             "isPassing": null,
+            "width": 500,
+            "height": 500,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": null,
             "generatedPath": "images/generated/PathMeasure_explosion.png",
@@ -1637,6 +3240,22 @@
             "similarity": null,
             "minSimilarity": 0.0,
             "isPassing": null,
+            "width": 130,
+            "height": 310,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
             "fallbackReason": "unsupported.coverage.path_ops",
             "referencePath": "images/reference/pathops_blend.png",
             "generatedPath": null,
@@ -1653,6 +3272,22 @@
             "similarity": null,
             "minSimilarity": 0.0,
             "isPassing": null,
+            "width": 1200,
+            "height": 900,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
             "fallbackReason": "unsupported.coverage.path_ops",
             "referencePath": "images/reference/pathopsinverse.png",
             "generatedPath": null,
@@ -1669,6 +3304,22 @@
             "similarity": null,
             "minSimilarity": 0.0,
             "isPassing": null,
+            "width": 256,
+            "height": 256,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
             "fallbackReason": "unsupported.coverage.path_ops",
             "referencePath": "images/reference/pathops_skbug_10155.png",
             "generatedPath": null,
@@ -1685,6 +3336,22 @@
             "similarity": 88.10221354166666,
             "minSimilarity": 0.0,
             "isPassing": true,
+            "width": 640,
+            "height": 480,
+            "matchingPixels": 270650,
+            "totalPixels": 307200,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 229.8,
+                "g": 241.99,
+                "b": 244.25,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/path-reverse.png",
             "generatedPath": "images/generated/path-reverse.png",
@@ -1701,6 +3368,22 @@
             "similarity": null,
             "minSimilarity": 80.0,
             "isPassing": null,
+            "width": 25,
+            "height": 50,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/path_stroke_clip_crbug1070835.png",
             "generatedPath": null,
@@ -1717,6 +3400,22 @@
             "similarity": 38.7515943877551,
             "minSimilarity": 0.0,
             "isPassing": true,
+            "width": 640,
+            "height": 490,
+            "matchingPixels": 99809,
+            "totalPixels": 313600,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 147.09,
+                "g": 125.39,
+                "b": 176.8,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/points.png",
             "generatedPath": "images/generated/points.png",
@@ -1733,6 +3432,22 @@
             "similarity": null,
             "minSimilarity": 0.0,
             "isPassing": null,
+            "width": 835,
+            "height": 840,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
             "fallbackReason": "unsupported.coverage.path_ops",
             "referencePath": "images/reference/poly2poly.png",
             "generatedPath": null,
@@ -1749,6 +3464,22 @@
             "similarity": 72.47211779448621,
             "minSimilarity": 69.0,
             "isPassing": true,
+            "width": 840,
+            "height": 1140,
+            "matchingPixels": 662612,
+            "totalPixels": 957600,
+            "maxDiff": {
+                "r": 255,
+                "g": 253,
+                "b": 254,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 86.59,
+                "g": 95.62,
+                "b": 91.65,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/polygons.png",
             "generatedPath": "images/generated/polygons.png",
@@ -1765,6 +3496,22 @@
             "similarity": 52.717499999999994,
             "minSimilarity": 47.7,
             "isPassing": true,
+            "width": 400,
+            "height": 400,
+            "matchingPixels": 84348,
+            "totalPixels": 160000,
+            "maxDiff": {
+                "r": 255,
+                "g": 10,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 169.5,
+                "g": 7.15,
+                "b": 135.96,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/preservefillrule_big.png",
             "generatedPath": "images/generated/preservefillrule_big.png",
@@ -1781,6 +3528,22 @@
             "similarity": null,
             "minSimilarity": 0.0,
             "isPassing": null,
+            "width": 400,
+            "height": 400,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": null,
             "generatedPath": "images/generated/preservefillrule.png",
@@ -1797,6 +3560,22 @@
             "similarity": 45.375,
             "minSimilarity": 40.4,
             "isPassing": true,
+            "width": 40,
+            "height": 40,
+            "matchingPixels": 726,
+            "totalPixels": 1600,
+            "maxDiff": {
+                "r": 255,
+                "g": 10,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 150.05,
+                "g": 6.86,
+                "b": 121.39,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/preservefillrule_little.png",
             "generatedPath": "images/generated/preservefillrule_little.png",
@@ -1813,6 +3592,22 @@
             "similarity": 80.20099255583126,
             "minSimilarity": 0.0,
             "isPassing": true,
+            "width": 1240,
+            "height": 390,
+            "matchingPixels": 342564,
+            "totalPixels": 483600,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 143.92,
+                "g": 155.41,
+                "b": 134.6,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/quadclosepath.png",
             "generatedPath": "images/generated/quadclosepath.png",
@@ -1829,6 +3624,22 @@
             "similarity": 80.25765095119934,
             "minSimilarity": 0.0,
             "isPassing": true,
+            "width": 1240,
+            "height": 390,
+            "matchingPixels": 342846,
+            "totalPixels": 483600,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 143.97,
+                "g": 155.49,
+                "b": 134.63,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/quadpath.png",
             "generatedPath": "images/generated/quadpath.png",
@@ -1845,6 +3656,22 @@
             "similarity": null,
             "minSimilarity": 0.0,
             "isPassing": null,
+            "width": 1200,
+            "height": 900,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/roundrects.png",
             "generatedPath": null,
@@ -1861,6 +3688,22 @@
             "similarity": null,
             "minSimilarity": 0.0,
             "isPassing": null,
+            "width": 256,
+            "height": 384,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/shadow_utils_directional.png",
             "generatedPath": null,
@@ -1877,6 +3720,22 @@
             "similarity": null,
             "minSimilarity": 0.0,
             "isPassing": null,
+            "width": 720,
+            "height": 740,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/sharedcorners.png",
             "generatedPath": null,
@@ -1893,6 +3752,22 @@
             "similarity": null,
             "minSimilarity": 80.0,
             "isPassing": null,
+            "width": 500,
+            "height": 500,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/simpleshapes_bw.png",
             "generatedPath": null,
@@ -1909,6 +3784,22 @@
             "similarity": null,
             "minSimilarity": 0.0,
             "isPassing": null,
+            "width": 500,
+            "height": 500,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/simpleshapes.png",
             "generatedPath": null,
@@ -1925,6 +3816,22 @@
             "similarity": 94.70062255859375,
             "minSimilarity": 0.0,
             "isPassing": true,
+            "width": 256,
+            "height": 256,
+            "matchingPixels": 25725,
+            "totalPixels": 65536,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 242.55,
+                "g": 242.55,
+                "b": 242.55,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/stlouisarch.png",
             "generatedPath": "images/generated/stlouisarch.png",
@@ -1941,6 +3848,22 @@
             "similarity": 52.761352657004835,
             "minSimilarity": 42.8,
             "isPassing": true,
+            "width": 690,
+            "height": 300,
+            "matchingPixels": 89811,
+            "totalPixels": 207000,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 236,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 221.81,
+                "g": 236.76,
+                "b": 40.29,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/stroke_rect_shader.png",
             "generatedPath": "images/generated/stroke_rect_shader.png",
@@ -1957,6 +3880,22 @@
             "similarity": 94.80569498069498,
             "minSimilarity": 92.0,
             "isPassing": true,
+            "width": 1400,
+            "height": 740,
+            "matchingPixels": 982187,
+            "totalPixels": 1036000,
+            "maxDiff": {
+                "r": 219,
+                "g": 245,
+                "b": 241,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 125.02,
+                "g": 138.89,
+                "b": 186.59,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/strokedline_caps.png",
             "generatedPath": "images/generated/strokedline_caps.png",
@@ -1973,6 +3912,22 @@
             "similarity": null,
             "minSimilarity": 0.0,
             "isPassing": null,
+            "width": 1500,
+            "height": 1500,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/strokes3.png",
             "generatedPath": null,
@@ -1989,6 +3944,22 @@
             "similarity": 93.89562500000001,
             "minSimilarity": 0.0,
             "isPassing": true,
+            "width": 400,
+            "height": 800,
+            "matchingPixels": 300466,
+            "totalPixels": 320000,
+            "maxDiff": {
+                "r": 53,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 51.48,
+                "g": 99.9,
+                "b": 85.2,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/zero_control_stroke.png",
             "generatedPath": "images/generated/zero_control_stroke.png",
@@ -2005,6 +3976,22 @@
             "similarity": 21.648125,
             "minSimilarity": 17.3,
             "isPassing": true,
+            "width": 400,
+            "height": 800,
+            "matchingPixels": 69274,
+            "totalPixels": 320000,
+            "maxDiff": {
+                "r": 254,
+                "g": 249,
+                "b": 252,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 100.33,
+                "g": 111.44,
+                "b": 122.85,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/strokes_round.png",
             "generatedPath": "images/generated/strokes_round.png",
@@ -2021,6 +4008,22 @@
             "similarity": 98.22375,
             "minSimilarity": 93.2,
             "isPassing": true,
+            "width": 400,
+            "height": 800,
+            "matchingPixels": 314316,
+            "totalPixels": 320000,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 148.28,
+                "g": 159.21,
+                "b": 157.48,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/teenyStrokes.png",
             "generatedPath": "images/generated/teenyStrokes.png",
@@ -2037,6 +4040,22 @@
             "similarity": 80.56198347107438,
             "minSimilarity": 75.6,
             "isPassing": true,
+            "width": 330,
+            "height": 110,
+            "matchingPixels": 29244,
+            "totalPixels": 36300,
+            "maxDiff": {
+                "r": 70,
+                "g": 70,
+                "b": 70,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 35.28,
+                "g": 35.34,
+                "b": 35.34,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/thin_aa_dash_lines.png",
             "generatedPath": "images/generated/thin_aa_dash_lines.png",
@@ -2053,6 +4072,22 @@
             "similarity": 96.94545454545455,
             "minSimilarity": 94.0,
             "isPassing": true,
+            "width": 550,
+            "height": 400,
+            "matchingPixels": 213280,
+            "totalPixels": 220000,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 170.77,
+                "g": 170.79,
+                "b": 170.79,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/thinconcavepaths.png",
             "generatedPath": "images/generated/thinconcavepaths.png",
@@ -2069,6 +4104,22 @@
             "similarity": 90.05729166666666,
             "minSimilarity": 85.1,
             "isPassing": true,
+            "width": 240,
+            "height": 320,
+            "matchingPixels": 69164,
+            "totalPixels": 76800,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 91.55,
+                "g": 90.01,
+                "b": 65.79,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/thinrects.png",
             "generatedPath": "images/generated/thinrects.png",
@@ -2085,6 +4136,22 @@
             "similarity": 89.53776041666667,
             "minSimilarity": 84.5,
             "isPassing": true,
+            "width": 240,
+            "height": 320,
+            "matchingPixels": 68765,
+            "totalPixels": 76800,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 103.53,
+                "g": 119.39,
+                "b": 79.03,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/thinroundrects.png",
             "generatedPath": "images/generated/thinroundrects.png",
@@ -2101,6 +4168,22 @@
             "similarity": 80.20833333333334,
             "minSimilarity": 75.2,
             "isPassing": true,
+            "width": 240,
+            "height": 320,
+            "matchingPixels": 60563,
+            "totalPixels": 76800,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 181.11,
+                "g": 105.54,
+                "b": 99.62,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/thinstrokedrects.png",
             "generatedPath": "images/generated/thinstrokedrects.png",
@@ -2117,6 +4200,22 @@
             "similarity": 99.90713587487781,
             "minSimilarity": 94.9,
             "isPassing": true,
+            "width": 620,
+            "height": 330,
+            "matchingPixels": 204283,
+            "totalPixels": 204600,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 184.62,
+                "g": 184.62,
+                "b": 184.62,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/tinyanglearcs.png",
             "generatedPath": "images/generated/tinyanglearcs.png",
@@ -2133,6 +4232,22 @@
             "similarity": 73.9288330078125,
             "minSimilarity": 68.9,
             "isPassing": true,
+            "width": 128,
+            "height": 256,
+            "matchingPixels": 24225,
+            "totalPixels": 32768,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 246.51,
+                "g": 246.51,
+                "b": 246.51,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/trickycubicstrokes_largeradius.png",
             "generatedPath": "images/generated/trickycubicstrokes_largeradius.png",
@@ -2149,6 +4264,22 @@
             "similarity": 79.1345,
             "minSimilarity": 74.1,
             "isPassing": true,
+            "width": 1400,
+            "height": 1000,
+            "matchingPixels": 1107883,
+            "totalPixels": 1400000,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 199.57,
+                "g": 201.19,
+                "b": 198.67,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/trimpatheffect.png",
             "generatedPath": "images/generated/trimpatheffect.png",
@@ -2165,6 +4296,22 @@
             "similarity": 31.28875,
             "minSimilarity": 26.3,
             "isPassing": true,
+            "width": 480,
+            "height": 500,
+            "matchingPixels": 75093,
+            "totalPixels": 240000,
+            "maxDiff": {
+                "r": 243,
+                "g": 255,
+                "b": 249,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 144.34,
+                "g": 166.84,
+                "b": 159.2,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/widebuttcaps.png",
             "generatedPath": "images/generated/widebuttcaps.png",
@@ -2181,6 +4328,22 @@
             "similarity": 93.89562500000001,
             "minSimilarity": 0.0,
             "isPassing": true,
+            "width": 400,
+            "height": 800,
+            "matchingPixels": 300466,
+            "totalPixels": 320000,
+            "maxDiff": {
+                "r": 53,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 51.48,
+                "g": 99.9,
+                "b": 85.2,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/zero_control_stroke.png",
             "generatedPath": "images/generated/zero_control_stroke.png",
@@ -2197,6 +4360,22 @@
             "similarity": 97.40062499999999,
             "minSimilarity": 92.4,
             "isPassing": true,
+            "width": 400,
+            "height": 800,
+            "matchingPixels": 311682,
+            "totalPixels": 320000,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 140.89,
+                "g": 140.89,
+                "b": 140.89,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/zeroPath.png",
             "generatedPath": "images/generated/zeroPath.png",
@@ -2213,6 +4392,22 @@
             "similarity": null,
             "minSimilarity": 80.0,
             "isPassing": null,
+            "width": 522,
+            "height": 398,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/zero_length_paths_aa.png",
             "generatedPath": null,
@@ -2229,6 +4424,22 @@
             "similarity": null,
             "minSimilarity": 80.0,
             "isPassing": null,
+            "width": 522,
+            "height": 398,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/zero_length_paths_bw.png",
             "generatedPath": null,
@@ -2245,6 +4456,22 @@
             "similarity": null,
             "minSimilarity": 80.0,
             "isPassing": null,
+            "width": 1874,
+            "height": 398,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/zero_length_paths_dbl_aa.png",
             "generatedPath": null,
@@ -2261,6 +4488,22 @@
             "similarity": null,
             "minSimilarity": 80.0,
             "isPassing": null,
+            "width": 1874,
+            "height": 398,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/zero_length_paths_dbl_bw.png",
             "generatedPath": null,
@@ -2277,6 +4520,22 @@
             "similarity": null,
             "minSimilarity": 80.0,
             "isPassing": null,
+            "width": 256,
+            "height": 256,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
             "fallbackReason": "unsupported.coverage.dash_pattern",
             "referencePath": "images/reference/zerolinedash.png",
             "generatedPath": null,
@@ -2293,6 +4552,22 @@
             "similarity": 74.05555555555556,
             "minSimilarity": 69.1,
             "isPassing": true,
+            "width": 90,
+            "height": 120,
+            "matchingPixels": 7998,
+            "totalPixels": 10800,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 247.77,
+                "g": 247.77,
+                "b": 247.77,
+                "a": 0.0
+            },
             "fallbackReason": "none",
             "referencePath": "images/reference/zerolinestroke.png",
             "generatedPath": "images/generated/zerolinestroke.png",

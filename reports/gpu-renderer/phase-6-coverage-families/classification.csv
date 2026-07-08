@@ -89,13 +89,13 @@ longrect_dash,longrect_dash,PATH,path-dash-gated,no-score,,0.0,unsupported.cover
 macaatest,macaatest,PATH,path-fill-simple,no-score,,0.0,none,generated-render-missing
 mandoline,mandoline,PATH,path-fill-concave,instrumented-existing,89.77142857142857,84.8,none,
 manycircles,manycircles,PATH,path-fill-concave,instrumented-existing,0.0,0.0,none,
-manypathatlases,manypathatlases,PATH,path-fill-simple,no-score,,0.0,none,reference-missing
+manypathatlases,manypathatlases,PATH,path-large-budget-gated,no-score,,0.0,unsupported.coverage.verb_budget_exceeded,reference-missing
 nested,nested,PATH,path-fill-simple,no-score,,0.0,none,reference-missing
 nested#2,nested,PATH,path-fill-simple,no-score,,0.0,none,reference-missing
 nonclosedpaths,nonclosedpaths,PATH,path-fill-simple,instrumented-existing,64.8406762295082,59.8,none,
 OverStroke,OverStroke,PATH,path-stroke-caps-joins,no-score,,0.0,none,generated-render-missing
 parsedpaths,parsedpaths,PATH,path-fill-simple,no-score,,0.0,none,generated-render-missing
-path_huge_aa_manual,path_huge_aa_manual,PATH,path-fill-simple,no-score,,0.0,none,generated-render-missing
+path_huge_aa_manual,path_huge_aa_manual,PATH,path-large-budget-gated,no-score,,0.0,unsupported.coverage.verb_budget_exceeded,generated-render-missing
 path_mask_cache,path_mask_cache,PATH,path-fill-simple,no-score,,0.0,none,generated-render-missing
 PathMeasure_explosion,PathMeasure_explosion,PATH,path-fill-simple,no-score,,0.0,none,reference-missing
 pathops_blend,pathops_blend,PATH,path-ops-gated,no-score,,0.0,unsupported.coverage.path_ops,generated-render-missing

@@ -45,6 +45,21 @@ class Phase6CoverageFamilyEvidenceTest {
     }
 
     @Test
+    fun `classifies large budget path rows with stable reason`() {
+        val huge = Phase6CoverageFamilyClassifier.classify(
+            row("path_huge_aa_manual", family = "PATH", similarity = null, isPassing = null),
+        )
+        val atlases = Phase6CoverageFamilyClassifier.classify(
+            row("manypathatlases", family = "PATH", similarity = null, isPassing = null, noReference = true),
+        )
+
+        assertEquals("path-large-budget-gated", huge.subfamily)
+        assertEquals("unsupported.coverage.verb_budget_exceeded", huge.fallbackReason)
+        assertEquals("path-large-budget-gated", atlases.subfamily)
+        assertEquals("unsupported.coverage.verb_budget_exceeded", atlases.fallbackReason)
+    }
+
+    @Test
     fun `classifies rect and rrect clips`() {
         val rect = Phase6CoverageFamilyClassifier.classify(row("windowrectangles", family = "CLIP"))
         val rrect = Phase6CoverageFamilyClassifier.classify(row("rrect_clip_aa", family = "CLIP"))
@@ -134,6 +149,59 @@ class Phase6CoverageFamilyEvidenceTest {
     }
 
     @Test
+    fun `markdown report includes separate path and clip deltas`() {
+        val evidence = Phase6CoverageFamilyClassifier.buildEvidence(
+            GmDashboard(
+                generatedAt = "2026-07-09T08:00:00",
+                rows = buildList {
+                    repeat(94) { add(row("path_$it", family = "PATH")) }
+                    repeat(47) { add(row("clip_$it", family = "CLIP")) }
+                },
+            ),
+        )
+
+        val markdown = evidence.toMarkdown()
+
+        assertContains(markdown, "## Family Deltas")
+        assertContains(markdown, "2026-07-08 local dashboard before #2010")
+        assertContains(markdown, "| `PATH` | 58 | 94 | +36 |")
+        assertContains(markdown, "| `CLIP` | 32 | 47 | +15 |")
+    }
+
+    @Test
+    fun `coverage evidence json includes diff stats and family deltas`() {
+        val evidence = Phase6CoverageFamilyClassifier.buildEvidence(
+            GmDashboard(
+                generatedAt = "2026-07-09T08:00:00",
+                rows = listOf(
+                    row(
+                        "cubicpath",
+                        family = "PATH",
+                        hasDiff = true,
+                        width = 320,
+                        height = 240,
+                        matchingPixels = 70000,
+                        totalPixels = 76800,
+                        maxDiff = GmRgbaInt(r = 12, g = 13, b = 14, a = 15),
+                        meanDiff = GmRgbaDouble(r = 1.25, g = 2.5, b = 3.75, a = 4.0),
+                    ),
+                ),
+            ),
+        )
+
+        val json = evidence.toJsonObject().toString()
+
+        assertContains(json, "\"familyDeltas\":{\"CLIP\":{\"baselineSource\":\"2026-07-08 local dashboard before #2010\"")
+        assertContains(json, "\"PATH\":{\"baselineSource\":\"2026-07-08 local dashboard before #2010\"")
+        assertContains(json, "\"width\":320")
+        assertContains(json, "\"height\":240")
+        assertContains(json, "\"matchingPixels\":70000")
+        assertContains(json, "\"totalPixels\":76800")
+        assertContains(json, "\"maxDiff\":{\"r\":12,\"g\":13,\"b\":14,\"a\":15}")
+        assertContains(json, "\"meanDiff\":{\"r\":1.25,\"g\":2.5,\"b\":3.75,\"a\":4.0}")
+    }
+
+    @Test
     fun `coverage writer creates json markdown and csv outputs`() {
         val evidence = Phase6CoverageFamilyClassifier.buildEvidence(
             GmDashboard(
@@ -155,7 +223,41 @@ class Phase6CoverageFamilyEvidenceTest {
         assertContains(java.nio.file.Files.readString(evidencePath), "\"schemaVersion\": \"phase6-coverage-families-v1\"")
         assertContains(java.nio.file.Files.readString(evidencePath), "\"totalRows\": 2")
         assertContains(java.nio.file.Files.readString(markdownPath), "No broad Path AA support is claimed")
+        assertContains(java.nio.file.Files.readString(markdownPath), "Coverage `unsupported.coverage.*` reason codes in this report are evidence refusal taxonomy only")
         assertContains(java.nio.file.Files.readString(csvPath), "cubicpath,cubicpath,PATH,path-fill-concave,instrumented-existing")
+    }
+
+    @Test
+    fun `coverage writer preserves existing validation section when rewriting markdown`() {
+        val evidence = Phase6CoverageFamilyClassifier.buildEvidence(
+            GmDashboard(
+                generatedAt = "2026-07-09T08:00:00",
+                rows = listOf(row("cubicpath", family = "PATH"), row("aaclip", family = "CLIP")),
+            ),
+        )
+
+        val root = kotlin.io.path.createTempDirectory("phase6-coverage-validation")
+        val markdownPath = root.resolve("reports/gpu-renderer/2026-07-09-gpu-phase-6-coverage-families.md")
+        Phase6CoverageFamilyEvidenceWriter.writeOutputs(root, evidence)
+        java.nio.file.Files.writeString(
+            markdownPath,
+            java.nio.file.Files.readString(markdownPath) +
+                """
+
+                ## Validation
+
+                - `:integration-tests:skia-evidence:test` passed.
+                - `generateGpuPhase6CoverageFamiliesEvidence` regenerated evidence.
+                """.trimIndent() +
+                "\n",
+        )
+
+        Phase6CoverageFamilyEvidenceWriter.writeOutputs(root, evidence)
+
+        val regenerated = java.nio.file.Files.readString(markdownPath)
+        assertContains(regenerated, "## Validation")
+        assertContains(regenerated, "- `:integration-tests:skia-evidence:test` passed.")
+        assertContains(regenerated, "- `generateGpuPhase6CoverageFamiliesEvidence` regenerated evidence.")
     }
 }
 
@@ -164,6 +266,12 @@ private fun row(
     family: String,
     similarity: Double? = 100.0,
     isPassing: Boolean? = true,
+    width: Int? = null,
+    height: Int? = null,
+    matchingPixels: Long? = null,
+    totalPixels: Long? = null,
+    maxDiff: GmRgbaInt? = null,
+    meanDiff: GmRgbaDouble? = null,
     noReference: Boolean = false,
     renderFailed: Boolean = false,
     sizeMismatch: Boolean = false,
@@ -175,6 +283,12 @@ private fun row(
         similarity = similarity,
         minSimilarity = 99.0,
         isPassing = isPassing,
+        width = width,
+        height = height,
+        maxDiff = maxDiff,
+        meanDiff = meanDiff,
+        matchingPixels = matchingPixels,
+        totalPixels = totalPixels,
         noReference = noReference,
         renderFailed = renderFailed,
         sizeMismatch = sizeMismatch,

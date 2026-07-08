@@ -8,13 +8,29 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.doubleOrNull
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.jsonPrimitive
 
 data class GmDashboard(
     val generatedAt: String?,
     val rows: List<GmDashboardRow>,
+)
+
+data class GmRgbaInt(
+    val r: Int,
+    val g: Int,
+    val b: Int,
+    val a: Int,
+)
+
+data class GmRgbaDouble(
+    val r: Double,
+    val g: Double,
+    val b: Double,
+    val a: Double,
 )
 
 data class GmDashboardRow(
@@ -23,6 +39,12 @@ data class GmDashboardRow(
     val similarity: Double?,
     val minSimilarity: Double?,
     val isPassing: Boolean?,
+    val width: Int?,
+    val height: Int?,
+    val maxDiff: GmRgbaInt?,
+    val meanDiff: GmRgbaDouble?,
+    val matchingPixels: Long?,
+    val totalPixels: Long?,
     val noReference: Boolean,
     val renderFailed: Boolean,
     val sizeMismatch: Boolean,
@@ -48,6 +70,12 @@ object GmDashboardJsonReader {
             similarity = row.double("similarity"),
             minSimilarity = row.double("minSimilarity"),
             isPassing = row.boolean("isPassing"),
+            width = row.int("width"),
+            height = row.int("height"),
+            maxDiff = row.rgbaInt("maxDiff"),
+            meanDiff = row.rgbaDouble("meanDiff"),
+            matchingPixels = row.long("matchingPixels"),
+            totalPixels = row.long("totalPixels"),
             noReference = row.boolean("noReference") ?: false,
             renderFailed = row.boolean("renderFailed") ?: false,
             sizeMismatch = row.boolean("sizeMismatch") ?: false,
@@ -63,6 +91,35 @@ internal fun JsonObject.double(key: String): Double? =
 
 internal fun JsonObject.boolean(key: String): Boolean? =
     this[key]?.jsonPrimitive?.booleanOrNull
+
+internal fun JsonObject.int(key: String): Int? =
+    this[key]?.jsonPrimitive?.intOrNull
+
+internal fun JsonObject.long(key: String): Long? =
+    this[key]?.jsonPrimitive?.longOrNull
+
+internal fun JsonObject.childObject(key: String): JsonObject? =
+    this[key] as? JsonObject
+
+internal fun JsonObject.rgbaInt(key: String): GmRgbaInt? =
+    childObject(key)?.let { value ->
+        GmRgbaInt(
+            r = value.int("r") ?: error("Missing `$key.r`"),
+            g = value.int("g") ?: error("Missing `$key.g`"),
+            b = value.int("b") ?: error("Missing `$key.b`"),
+            a = value.int("a") ?: error("Missing `$key.a`"),
+        )
+    }
+
+internal fun JsonObject.rgbaDouble(key: String): GmRgbaDouble? =
+    childObject(key)?.let { value ->
+        GmRgbaDouble(
+            r = value.double("r") ?: error("Missing `$key.r`"),
+            g = value.double("g") ?: error("Missing `$key.g`"),
+            b = value.double("b") ?: error("Missing `$key.b`"),
+            a = value.double("a") ?: error("Missing `$key.a`"),
+        )
+    }
 
 internal fun JsonObject.stringArray(key: String): List<String> =
     (this[key] as? JsonArray).orEmpty().mapNotNull { element -> element.jsonPrimitive.contentOrNull }

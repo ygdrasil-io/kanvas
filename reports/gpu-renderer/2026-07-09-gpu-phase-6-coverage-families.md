@@ -5,13 +5,27 @@
 - Total PATH + CLIP rows: 141
 - Families: {CLIP=47, PATH=94}
 - Classifications: {instrumented-existing=76, no-score=65}
-- Subfamilies: {clip-complex-gated=9, clip-convex=1, clip-inverse-gated=5, clip-large-budget-gated=2, clip-nested-bounded=19, clip-path-aa-gated=2, clip-perspective-gated=1, clip-rect=4, clip-rrect=4, path-dash-gated=9, path-fill-concave=16, path-fill-convex=4, path-fill-simple=36, path-hairline-gated=9, path-ops-gated=6, path-perspective-gated=1, path-shader-material-gated=2, path-stroke-basic=2, path-stroke-caps-joins=9}
+- Subfamilies: {clip-complex-gated=9, clip-convex=1, clip-inverse-gated=5, clip-large-budget-gated=2, clip-nested-bounded=19, clip-path-aa-gated=2, clip-perspective-gated=1, clip-rect=4, clip-rrect=4, path-dash-gated=9, path-fill-concave=16, path-fill-convex=4, path-fill-simple=34, path-hairline-gated=9, path-large-budget-gated=2, path-ops-gated=6, path-perspective-gated=1, path-shader-material-gated=2, path-stroke-basic=2, path-stroke-caps-joins=9}
+
+## Family Deltas
+
+- Baseline source: `2026-07-08 local dashboard before #2010`
+- Current dashboard: `integration-tests/skia/build/reports/skia-gm-dashboard/data/gms.json` (2026-07-09T01:11:39.100531)
+
+| Family | Baseline | Current | Delta |
+|---|---:|---:|---:|
+| `CLIP` | 32 | 47 | +15 |
+| `PATH` | 58 | 94 | +36 |
 
 ## Non-Claims
 
 - No broad Path AA support is claimed from classification alone.
 - No broad clip stack, inverse clip, perspective clip, path boolean, or global coverage budget support is added.
 - Rows without route diagnostics remain instrumented rather than promoted.
+
+## Reason Code Taxonomy
+
+- Coverage `unsupported.coverage.*` reason codes in this report are evidence refusal taxonomy only, not renderer route diagnostics unless separately attached.
 
 ## Rows
 
@@ -107,13 +121,13 @@
 | `macaatest` | `macaatest` | `PATH` | `path-fill-simple` | `no-score` | n/a | `none` |
 | `mandoline` | `mandoline` | `PATH` | `path-fill-concave` | `instrumented-existing` | 89.77 | `none` |
 | `manycircles` | `manycircles` | `PATH` | `path-fill-concave` | `instrumented-existing` | 0.00 | `none` |
-| `manypathatlases` | `manypathatlases` | `PATH` | `path-fill-simple` | `no-score` | n/a | `none` |
+| `manypathatlases` | `manypathatlases` | `PATH` | `path-large-budget-gated` | `no-score` | n/a | `unsupported.coverage.verb_budget_exceeded` |
 | `nested` | `nested` | `PATH` | `path-fill-simple` | `no-score` | n/a | `none` |
 | `nested#2` | `nested` | `PATH` | `path-fill-simple` | `no-score` | n/a | `none` |
 | `nonclosedpaths` | `nonclosedpaths` | `PATH` | `path-fill-simple` | `instrumented-existing` | 64.84 | `none` |
 | `OverStroke` | `OverStroke` | `PATH` | `path-stroke-caps-joins` | `no-score` | n/a | `none` |
 | `parsedpaths` | `parsedpaths` | `PATH` | `path-fill-simple` | `no-score` | n/a | `none` |
-| `path_huge_aa_manual` | `path_huge_aa_manual` | `PATH` | `path-fill-simple` | `no-score` | n/a | `none` |
+| `path_huge_aa_manual` | `path_huge_aa_manual` | `PATH` | `path-large-budget-gated` | `no-score` | n/a | `unsupported.coverage.verb_budget_exceeded` |
 | `path_mask_cache` | `path_mask_cache` | `PATH` | `path-fill-simple` | `no-score` | n/a | `none` |
 | `PathMeasure_explosion` | `PathMeasure_explosion` | `PATH` | `path-fill-simple` | `no-score` | n/a | `none` |
 | `pathops_blend` | `pathops_blend` | `PATH` | `path-ops-gated` | `no-score` | n/a | `unsupported.coverage.path_ops` |
