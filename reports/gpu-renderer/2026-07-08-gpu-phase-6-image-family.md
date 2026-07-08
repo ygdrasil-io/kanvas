@@ -3,8 +3,8 @@
 ## Summary
 
 - Total IMAGE rows: 121
-- Classifications: {expected-unsupported=31, instrumented-existing=64, no-score=26}
-- Subfamilies: {animation-gated=10, bitmap-shader-affine=14, color-management-gated=5, image-filter-gated=14, local-matrix-affine=1, mipmap-gated=3, perspective-gated=2, readpixels-or-snapshot-gated=3, sampler-policy-candidate=10, simple-image-rect=2, strict-nearest-linear=3, texture-cache-candidate=53, yuv-gated=1}
+- Classifications: {expected-unsupported=29, instrumented-existing=66, no-score=26}
+- Subfamilies: {animation-gated=10, bitmap-shader-affine=12, color-management-gated=6, image-filter-gated=11, local-matrix-affine=2, mipmap-gated=3, perspective-gated=2, readpixels-or-snapshot-gated=3, sampler-policy-candidate=15, simple-image-rect=3, strict-nearest-linear=4, texture-cache-candidate=49, yuv-gated=1}
 
 ## Non-Claims
 
@@ -56,7 +56,7 @@
 | `bitmapshaders` | `bitmapshaders` | `bitmap-shader-affine` | `instrumented-existing` | 0.00 | `none` |
 | `bitmap_subset_shader` | `bitmap_subset_shader` | `bitmap-shader-affine` | `instrumented-existing` | 67.61 | `none` |
 | `bleed_downscale` | `bleed_downscale` | `texture-cache-candidate` | `instrumented-existing` | 30.56 | `none` |
-| `bmp_filter_quality_repeat` | `bmp_filter_quality_repeat` | `image-filter-gated` | `expected-unsupported` | 0.00 | `unsupported.filter.node_unimplemented` |
+| `bmp_filter_quality_repeat` | `bmp_filter_quality_repeat` | `sampler-policy-candidate` | `instrumented-existing` | 0.00 | `none` |
 | `bug6783` | `bug6783` | `texture-cache-candidate` | `instrumented-existing` | 0.00 | `none` |
 | `jpg-color-cube` | `jpg-color-cube` | `texture-cache-candidate` | `instrumented-existing` | 0.00 | `none` |
 | `colorwheel_alphatypes` | `colorwheel_alphatypes` | `texture-cache-candidate` | `instrumented-existing` | 29.91 | `none` |
@@ -70,10 +70,10 @@
 | `crbug_224618` | `crbug_224618` | `texture-cache-candidate` | `instrumented-existing` | 0.23 | `none` |
 | `crbug_404394639` | `crbug_404394639` | `texture-cache-candidate` | `no-score` | n/a | `none` |
 | `3x3bitmaprect` | `3x3bitmaprect` | `simple-image-rect` | `instrumented-existing` | 2.44 | `none` |
-| `draw_bitmap_rect_skbug4734` | `draw_bitmap_rect_skbug4734` | `texture-cache-candidate` | `instrumented-existing` | 45.31 | `none` |
+| `draw_bitmap_rect_skbug4734` | `draw_bitmap_rect_skbug4734` | `simple-image-rect` | `instrumented-existing` | 45.31 | `none` |
 | `drawminibitmaprect` | `drawminibitmaprect` | `simple-image-rect` | `instrumented-existing` | 66.82 | `none` |
 | `drawimage_sampling` | `drawimage_sampling` | `strict-nearest-linear` | `no-score` | n/a | `none` |
-| `drawimagerect_filter` | `drawimagerect_filter` | `image-filter-gated` | `expected-unsupported` | 29.67 | `unsupported.filter.node_unimplemented` |
+| `drawimagerect_filter` | `drawimagerect_filter` | `strict-nearest-linear` | `instrumented-existing` | 29.67 | `none` |
 | `encode-alpha-jpeg` | `encode-alpha-jpeg` | `animation-gated` | `expected-unsupported` | 0.00 | `dependency.image.codec.unregistered` |
 | `encode-color-types-webp-lossless` | `encode-color-types-webp-lossless` | `animation-gated` | `expected-unsupported` | 42.71 | `dependency.image.codec.unregistered` |
 | `encode-alpha-jpeg-opts` | `encode-alpha-jpeg-opts` | `animation-gated` | `no-score` | n/a | `dependency.image.codec.unregistered` |
@@ -97,7 +97,7 @@
 | `imagemagnifier` | `imagemagnifier` | `image-filter-gated` | `expected-unsupported` | 52.14 | `unsupported.filter.node_unimplemented` |
 | `imagemakewithfilter` | `imagemakewithfilter` | `image-filter-gated` | `expected-unsupported` | 49.60 | `unsupported.filter.node_unimplemented` |
 | `imagemasksubset` | `imagemasksubset` | `texture-cache-candidate` | `instrumented-existing` | 73.96 | `none` |
-| `image_out_of_gamut` | `image_out_of_gamut` | `texture-cache-candidate` | `instrumented-existing` | 0.00 | `none` |
+| `image_out_of_gamut` | `image_out_of_gamut` | `color-management-gated` | `expected-unsupported` | 0.00 | `unsupported.color.image_profile_conversion` |
 | `image-picture` | `image-picture` | `texture-cache-candidate` | `instrumented-existing` | 58.68 | `none` |
 | `imageresizetiled` | `imageresizetiled` | `sampler-policy-candidate` | `instrumented-existing` | 81.85 | `none` |
 | `image-shader` | `image-shader` | `bitmap-shader-affine` | `instrumented-existing` | 84.47 | `none` |
@@ -105,7 +105,7 @@
 | `image_subset` | `image_subset` | `texture-cache-candidate` | `instrumented-existing` | 94.11 | `none` |
 | `imageshader_tinyscale` | `imageshader_tinyscale` | `bitmap-shader-affine` | `instrumented-existing` | 0.00 | `none` |
 | `jpg-color-cube#2` | `jpg-color-cube` | `texture-cache-candidate` | `instrumented-existing` | 0.00 | `none` |
-| `localmatriximageshader_filtering` | `localmatriximageshader_filtering` | `image-filter-gated` | `expected-unsupported` | 0.00 | `unsupported.filter.node_unimplemented` |
+| `localmatriximageshader_filtering` | `localmatriximageshader_filtering` | `local-matrix-affine` | `instrumented-existing` | 0.00 | `none` |
 | `localmatriximageshader` | `localmatriximageshader` | `local-matrix-affine` | `instrumented-existing` | 83.87 | `none` |
 | `makecolorspace` | `makecolorspace` | `color-management-gated` | `no-score` | n/a | `unsupported.color.image_profile_conversion` |
 | `makecolortypeandspace` | `makecolortypeandspace` | `texture-cache-candidate` | `no-score` | n/a | `none` |
@@ -124,13 +124,13 @@
 | `pictureshader` | `pictureshader` | `bitmap-shader-affine` | `instrumented-existing` | 30.84 | `none` |
 | `pictureshader_localwrapper` | `pictureshader_localwrapper` | `bitmap-shader-affine` | `instrumented-existing` | 30.84 | `none` |
 | `pictureshader_persp` | `pictureshader_persp` | `perspective-gated` | `expected-unsupported` | 11.86 | `unsupported.transform.perspective_route_rejected` |
-| `pictureshadertile` | `pictureshadertile` | `bitmap-shader-affine` | `instrumented-existing` | 44.08 | `none` |
+| `pictureshadertile` | `pictureshadertile` | `sampler-policy-candidate` | `instrumented-existing` | 44.08 | `none` |
 | `poster_circle` | `poster_circle` | `texture-cache-candidate` | `instrumented-existing` | 36.97 | `none` |
 | `readpixelscodec` | `readpixelscodec` | `animation-gated` | `no-score` | n/a | `dependency.image.codec.unregistered` |
 | `readpixelspicture` | `readpixelspicture` | `readpixels-or-snapshot-gated` | `expected-unsupported` | 7.54 | `unsupported.destination_read.strategy_unaccepted` |
 | `reinterpretcolorspace` | `reinterpretcolorspace` | `color-management-gated` | `no-score` | n/a | `unsupported.color.image_profile_conversion` |
-| `repeated_bitmap` | `repeated_bitmap` | `texture-cache-candidate` | `no-score` | n/a | `none` |
-| `repeated_bitmap_jpg` | `repeated_bitmap_jpg` | `texture-cache-candidate` | `no-score` | n/a | `none` |
+| `repeated_bitmap` | `repeated_bitmap` | `sampler-policy-candidate` | `no-score` | n/a | `none` |
+| `repeated_bitmap_jpg` | `repeated_bitmap_jpg` | `sampler-policy-candidate` | `no-score` | n/a | `none` |
 | `scaled_tilemodes` | `scaled_tilemodes` | `sampler-policy-candidate` | `instrumented-existing` | 51.74 | `none` |
 | `scaled_tilemodes_npot` | `scaled_tilemodes_npot` | `sampler-policy-candidate` | `instrumented-existing` | 72.57 | `none` |
 | `scalepixels_unpremul` | `scalepixels_unpremul` | `texture-cache-candidate` | `no-score` | n/a | `none` |
@@ -142,7 +142,7 @@
 | `stoplight_animated_image` | `stoplight_animated_image` | `animation-gated` | `expected-unsupported` | 77.32 | `dependency.image.codec.unregistered` |
 | `surface_underdraw` | `surface_underdraw` | `readpixels-or-snapshot-gated` | `expected-unsupported` | 0.00 | `unsupported.destination_read.strategy_unaccepted` |
 | `textureimage_and_shader` | `textureimage_and_shader` | `bitmap-shader-affine` | `no-score` | n/a | `none` |
-| `tiled_picture_shader` | `tiled_picture_shader` | `bitmap-shader-affine` | `instrumented-existing` | 0.00 | `none` |
+| `tiled_picture_shader` | `tiled_picture_shader` | `sampler-policy-candidate` | `instrumented-existing` | 0.00 | `none` |
 | `tiledscaledbitmap` | `tiledscaledbitmap` | `sampler-policy-candidate` | `instrumented-existing` | 77.47 | `none` |
 | `tilemode_decal` | `tilemode_decal` | `sampler-policy-candidate` | `instrumented-existing` | 25.38 | `none` |
 | `tilemodes_alpha` | `tilemodes_alpha` | `sampler-policy-candidate` | `instrumented-existing` | 25.47 | `none` |
@@ -153,14 +153,7 @@
 | `unpremul` | `unpremul` | `texture-cache-candidate` | `instrumented-existing` | 40.12 | `none` |
 | `verylargebitmap` | `verylargebitmap` | `texture-cache-candidate` | `no-score` | n/a | `none` |
 
-## Final Validation
+## Regeneration Notes
 
-```bash
-rtk ./gradlew :gpu-renderer:test --tests "org.graphiks.kanvas.gpu.renderer.images.ImageFamilyResourceEvidenceTest"
-rtk ./gradlew :integration-tests:skia:test --tests "org.graphiks.kanvas.skia.SkiaRenderGeneratorFilterTest"
-rtk ./gradlew :integration-tests:skia-evidence:test --tests "org.graphiks.kanvas.skia.evidence.Phase6ImageFamilyEvidenceTest"
-rtk ./gradlew generateGpuPhase6ImageFamilyEvidence
-rtk git diff --check
-```
-
-All Phase 6 IMAGE targeted validations passed. The wide `IMAGE` inventory is classified by the `:integration-tests:skia-evidence` Kotlin module, no-score rows remain separate from true fails, and the only renderer migration claim is the repeated texture/sampler provider create/reuse evidence.
+- IMAGE GM regeneration may require blocking rows; use `-Pgm.includeBlocking=true` when calling `:integration-tests:skia:generateSkiaRenders` or `:integration-tests:skia:generateSkiaRendersFor`.
+- `generateGpuPhase6ImageFamilyEvidence` inherits that property through `:integration-tests:skia:generateSkiaDashboard` -> `:integration-tests:skia:generateSkiaRenders`.

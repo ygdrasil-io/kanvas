@@ -80,13 +80,58 @@ data class Phase6ImageRowEvidence(
 
 object Phase6ImageFamilyClassifier {
     private val unsupportedRules = listOf(
-        UnsupportedRule(setOf("animated", "gif", "video", "codec", "encode"), "animation-gated", "dependency.image.codec.unregistered"),
-        UnsupportedRule(setOf("yuv"), "yuv-gated", "unsupported.color.yuv_conversion"),
-        UnsupportedRule(setOf("mip", "mipmap"), "mipmap-gated", "unsupported.image.mipmap_budget_exceeded"),
-        UnsupportedRule(setOf("persp", "perspective"), "perspective-gated", "unsupported.transform.perspective_route_rejected"),
-        UnsupportedRule(setOf("filter", "blur", "morphology", "magnifier"), "image-filter-gated", "unsupported.filter.node_unimplemented"),
-        UnsupportedRule(setOf("colorspace", "p3", "outofgamut", "working"), "color-management-gated", "unsupported.color.image_profile_conversion"),
-        UnsupportedRule(setOf("readpixels", "snap", "surface"), "readpixels-or-snapshot-gated", "unsupported.destination_read.strategy_unaccepted"),
+        UnsupportedRule(
+            subfamily = "animation-gated",
+            reason = "dependency.image.codec.unregistered",
+        ) { name ->
+            name.containsAny("animated", "gif", "video", "codec", "encode")
+        },
+        UnsupportedRule(
+            subfamily = "yuv-gated",
+            reason = "unsupported.color.yuv_conversion",
+        ) { name ->
+            name.contains("yuv")
+        },
+        UnsupportedRule(
+            subfamily = "mipmap-gated",
+            reason = "unsupported.image.mipmap_budget_exceeded",
+        ) { name ->
+            name.containsAny("mip", "mipmap")
+        },
+        UnsupportedRule(
+            subfamily = "perspective-gated",
+            reason = "unsupported.transform.perspective_route_rejected",
+        ) { name ->
+            name.containsAny("persp", "perspective")
+        },
+        UnsupportedRule(
+            subfamily = "image-filter-gated",
+            reason = "unsupported.filter.node_unimplemented",
+        ) { name ->
+            name.containsAny(
+                "bitmapfilters",
+                "filterbug",
+                "filterindiabox",
+                "imagefilter",
+                "magnifier",
+                "makewithfilter",
+                "pictureimagefilter",
+                "blur",
+                "morphology",
+            )
+        },
+        UnsupportedRule(
+            subfamily = "color-management-gated",
+            reason = "unsupported.color.image_profile_conversion",
+        ) { name ->
+            name.containsAny("colorspace", "p3", "outofgamut", "working")
+        },
+        UnsupportedRule(
+            subfamily = "readpixels-or-snapshot-gated",
+            reason = "unsupported.destination_read.strategy_unaccepted",
+        ) { name ->
+            name.containsAny("readpixels", "snap", "surface")
+        },
     )
 
     fun classify(
@@ -192,21 +237,21 @@ object Phase6ImageFamilyClassifier {
     }
 
     private fun imageSubfamily(row: GmDashboardRow): String {
-        val name = row.name.lowercase()
-        unsupportedRules.firstOrNull { rule -> rule.tokens.any(name::contains) }?.let { return it.subfamily }
+        val name = row.name.classifierKey()
+        unsupportedRules.firstOrNull { rule -> rule.matches(name) }?.let { return it.subfamily }
         return when {
             "drawbitmaprect" in name || "bitmaprect" in name || "drawmini" in name -> "simple-image-rect"
             "localmatrix" in name -> "local-matrix-affine"
+            "imagerectfilter" in name || "sampling" in name || "nearest" in name || "linear" in name -> "strict-nearest-linear"
+            "filterquality" in name || "repeat" in name || "tile" in name -> "sampler-policy-candidate"
             "shader" in name || "bitmapshader" in name -> "bitmap-shader-affine"
-            "sampling" in name || "nearest" in name || "linear" in name -> "strict-nearest-linear"
-            "tile" in name -> "sampler-policy-candidate"
             else -> "texture-cache-candidate"
         }
     }
 
     private fun expectedUnsupportedReason(row: GmDashboardRow): String? {
-        val name = row.name.lowercase()
-        return unsupportedRules.firstOrNull { rule -> rule.tokens.any(name::contains) }?.reason
+        val name = row.name.classifierKey()
+        return unsupportedRules.firstOrNull { rule -> rule.matches(name) }?.reason
     }
 
     private fun noScoreCause(row: GmDashboardRow): String =
@@ -220,10 +265,16 @@ object Phase6ImageFamilyClassifier {
 }
 
 private data class UnsupportedRule(
-    val tokens: Set<String>,
     val subfamily: String,
     val reason: String,
+    val matches: (String) -> Boolean,
 )
+
+private fun String.classifierKey(): String =
+    lowercase().filter { char -> char.isLetterOrDigit() }
+
+private fun String.containsAny(vararg tokens: String): Boolean =
+    tokens.any(this::contains)
 
 object GmDashboardJsonReader {
     private val json = Json { ignoreUnknownKeys = true }
@@ -403,6 +454,11 @@ fun Phase6ImageFamilyEvidence.toMarkdown(): String =
             val similarity = row.similarity?.let { "%.2f".format(java.util.Locale.US, it) } ?: "n/a"
             appendLine("| `${row.rowId}` | `${row.name}` | `${row.subfamily}` | `${row.classification}` | $similarity | `${row.fallbackReason}` |")
         }
+        appendLine()
+        appendLine("## Regeneration Notes")
+        appendLine()
+        appendLine("- IMAGE GM regeneration may require blocking rows; use `-Pgm.includeBlocking=true` when calling `:integration-tests:skia:generateSkiaRenders` or `:integration-tests:skia:generateSkiaRendersFor`.")
+        appendLine("- `generateGpuPhase6ImageFamilyEvidence` inherits that property through `:integration-tests:skia:generateSkiaDashboard` -> `:integration-tests:skia:generateSkiaRenders`.")
     }
 
 private fun String.csvCell(): String =

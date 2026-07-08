@@ -77,6 +77,24 @@ class SkiaRenderGeneratorFilterTest {
     }
 
     @Test
+    fun `selection includes blocking rows when explicitly requested`() {
+        val selected = selectSkiaGmsForRender(
+            listOf(
+                StubGm("fast-image", RenderFamily.IMAGE, RenderCost.FAST),
+                StubGm("blocking-image", RenderFamily.IMAGE, RenderCost.BLOCKING),
+            ),
+            SkiaRenderGeneratorOptions(
+                outputDir = File("/tmp/renders"),
+                family = RenderFamily.IMAGE,
+                name = null,
+                includeBlocking = true,
+            ),
+        )
+
+        assertEquals(listOf("fast-image", "blocking-image"), selected.map { it.name })
+    }
+
+    @Test
     fun `selection returns empty when no gm matches filters`() {
         val selected = selectSkiaGmsForRender(
             listOf(

@@ -38,6 +38,39 @@ class Phase6ImageFamilyEvidenceTest {
     }
 
     @Test
+    fun `draw image rect filter row stays in sampling family instead of image filter gate`() {
+        val classified = Phase6ImageFamilyClassifier.classify(
+            row("DrawimagerectFilter", similarity = 29.67, isPassing = false),
+        )
+
+        assertEquals("unexpected-fail", classified.classification)
+        assertEquals("strict-nearest-linear", classified.subfamily)
+        assertEquals("none", classified.fallbackReason)
+    }
+
+    @Test
+    fun `bitmap filter quality repeat row stays in sampler policy family instead of image filter gate`() {
+        val classified = Phase6ImageFamilyClassifier.classify(
+            row("BmpFilterQualityRepeat", similarity = 0.0, isPassing = false),
+        )
+
+        assertEquals("unexpected-fail", classified.classification)
+        assertEquals("sampler-policy-candidate", classified.subfamily)
+        assertEquals("none", classified.fallbackReason)
+    }
+
+    @Test
+    fun `local matrix image shader filtering row stays in local matrix family instead of image filter gate`() {
+        val classified = Phase6ImageFamilyClassifier.classify(
+            row("LocalMatrixImageShaderFiltering", similarity = 0.0, isPassing = false),
+        )
+
+        assertEquals("unexpected-fail", classified.classification)
+        assertEquals("local-matrix-affine", classified.subfamily)
+        assertEquals("none", classified.fallbackReason)
+    }
+
+    @Test
     fun `classifies no score separately from unexpected fail`() {
         val noScore = Phase6ImageFamilyClassifier.classify(
             row("MissingReferenceImage", similarity = null, isPassing = null, noReference = true),

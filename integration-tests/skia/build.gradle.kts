@@ -30,12 +30,16 @@ tasks.withType<Test> {
 
 tasks.register<JavaExec>("generateSkiaRenders") {
     group = "verification"
-    description = "Generates Kanvas render PNGs for all Skia GMs."
+    description = "Generates Kanvas render PNGs for all Skia GMs. Use -Pgm.includeBlocking=true to include RenderCost.BLOCKING rows."
     dependsOn(tasks.named("testClasses"))
     classpath = sourceSets["test"].runtimeClasspath
     mainClass.set("org.graphiks.kanvas.skia.SkiaRenderGeneratorKt")
     val outputDir = layout.projectDirectory.dir("src/test/resources/generated-renders")
+    val gmIncludeBlocking = project.findProperty("gm.includeBlocking")?.toString()?.toBoolean() ?: false
     args(outputDir.asFile.absolutePath)
+    if (gmIncludeBlocking) {
+        args("--include-blocking")
+    }
     jvmArgs(buildList {
         add("--add-opens=java.base/java.lang=ALL-UNNAMED")
         add("--enable-native-access=ALL-UNNAMED")
@@ -53,16 +57,18 @@ tasks.register<JavaExec>("generateSkiaRenders") {
 
 tasks.register<JavaExec>("generateSkiaRendersFor") {
     group = "verification"
-    description = "Generates Kanvas render PNGs for a subset of GMs."
+    description = "Generates Kanvas render PNGs for a subset of GMs. Use -Pgm.includeBlocking=true to include RenderCost.BLOCKING rows."
     dependsOn(tasks.named("testClasses"))
     classpath = sourceSets["test"].runtimeClasspath
     mainClass.set("org.graphiks.kanvas.skia.SkiaRenderGeneratorKt")
     val outputDir = layout.projectDirectory.dir("src/test/resources/generated-renders")
     val gmFamily = project.findProperty("gm.family")?.toString()
     val gmName = project.findProperty("gm.name")?.toString()
+    val gmIncludeBlocking = project.findProperty("gm.includeBlocking")?.toString()?.toBoolean() ?: false
     val renderArgs = mutableListOf(outputDir.asFile.absolutePath)
     if (gmFamily != null) { renderArgs.add("--family"); renderArgs.add(gmFamily) }
     if (gmName != null) { renderArgs.add("--name"); renderArgs.add(gmName) }
+    if (gmIncludeBlocking) { renderArgs.add("--include-blocking") }
     args(renderArgs)
     jvmArgs(buildList {
         add("--add-opens=java.base/java.lang=ALL-UNNAMED")
