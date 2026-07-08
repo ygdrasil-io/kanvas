@@ -222,7 +222,6 @@ Reason codes representatifs :
 - `dependency.image.decode.provenance_missing` ;
 - `unsupported.image.mipmap_budget_exceeded` ;
 - `unsupported.color.yuv_conversion` ;
-- `unsupported.image.yuv_converter_wgsl_unvalidated` ;
 - `unsupported.image.tile_mode` ;
 - `unsupported.transform.perspective_route_rejected` ;
 - `unsupported.filter.node_unimplemented` ;
