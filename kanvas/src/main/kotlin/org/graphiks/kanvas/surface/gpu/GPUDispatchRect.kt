@@ -5,6 +5,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRawUniformDraw
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRectDraw
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRenderRecorder
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendSimplePassBatchKind
 import org.graphiks.kanvas.surface.Diagnostics
 import org.graphiks.kanvas.gpu.renderer.materials.GradientWgslShaderProvider
 import org.graphiks.kanvas.surface.RenderConfig
@@ -151,6 +152,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillRect(
                             ),
                         ),
                         blendMode = blendMode,
+                        passBatchKind = GPUBackendSimplePassBatchKind.SimpleGradient,
                     )
                 }
             }
@@ -234,6 +236,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillRect(
                             ),
                         ),
                         blendMode = blendMode,
+                        passBatchKind = GPUBackendSimplePassBatchKind.SimpleGradient,
                     )
                 }
             }
@@ -314,6 +317,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillRect(
                             ),
                         ),
                         blendMode = blendMode,
+                        passBatchKind = GPUBackendSimplePassBatchKind.SimpleGradient,
                     )
                 }
             }

@@ -246,6 +246,12 @@ data class GPUBackendTriangleData(
     }
 }
 
+/** Explicit opt-in kinds for fullscreen simple-pass batch-plan recording. */
+enum class GPUBackendSimplePassBatchKind {
+    SolidFill,
+    SimpleGradient,
+}
+
 /** Holds interleaved vertex data (position + padding + color) for vertex buffer passes. */
 data class GPUBackendVertexColorData(
     val vertexData: FloatArray,
@@ -299,6 +305,7 @@ interface GPUBackendRenderRecorder {
         draws: List<GPUBackendUniformPayloadDraw>,
         blendMode: GPUBlendMode? = null,
         sourceLabel: String = "fullscreen-uniform-pass",
+        passBatchKind: GPUBackendSimplePassBatchKind? = null,
     )
 
     /** Draws a fullscreen pass with raw uniform bytes per draw, bypassing provider materialization. */
@@ -307,6 +314,7 @@ interface GPUBackendRenderRecorder {
         colorFormat: String,
         draws: List<GPUBackendRawUniformDraw>,
         blendMode: GPUBlendMode? = null,
+        passBatchKind: GPUBackendSimplePassBatchKind? = null,
     )
 
     /** Draws a fullscreen pass with a generated texture+sampler binding alongside packed uniforms. */

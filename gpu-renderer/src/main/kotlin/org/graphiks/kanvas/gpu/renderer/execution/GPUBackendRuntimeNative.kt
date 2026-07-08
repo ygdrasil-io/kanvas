@@ -178,6 +178,11 @@ internal fun currentFullscreenUniformSlabSourceLabelForTesting(): String = fulls
 private fun String.sanitizeBatchLabel(): String =
     replace(Regex("[^A-Za-z0-9._:-]"), "-")
 
+private fun GPUBackendSimplePassBatchKind.toNativePassBatchKind(): GPUPassBatchKind = when (this) {
+    GPUBackendSimplePassBatchKind.SolidFill -> GPUPassBatchKind.SolidFill
+    GPUBackendSimplePassBatchKind.SimpleGradient -> GPUPassBatchKind.SimpleGradient
+}
+
 private fun fullscreenUniformSlabResourceLedgerSourceLabel(
     sourceLabel: String,
     planning: GPUPayloadSlabBatchPlanningResult,
@@ -1346,6 +1351,7 @@ private class WgpuRenderRecorder(
             },
             blendMode = blendMode,
             sourceLabel = fullscreenUniformSlabSourceLabel(),
+            passBatchKind = GPUBackendSimplePassBatchKind.SolidFill,
         )
     }
 
@@ -1355,6 +1361,7 @@ private class WgpuRenderRecorder(
         draws: List<GPUBackendUniformPayloadDraw>,
         blendMode: GPUBlendMode?,
         sourceLabel: String,
+        passBatchKind: GPUBackendSimplePassBatchKind?,
     ) {
         recordFullscreenUniformPass(
             wgsl = wgsl,
@@ -1373,6 +1380,7 @@ private class WgpuRenderRecorder(
             },
             blendMode = blendMode,
             sourceLabel = sourceLabel,
+            passBatchKind = passBatchKind,
         )
     }
 
@@ -1381,6 +1389,7 @@ private class WgpuRenderRecorder(
         colorFormat: String,
         draws: List<GPUBackendRawUniformDraw>,
         blendMode: GPUBlendMode?,
+        passBatchKind: GPUBackendSimplePassBatchKind?,
     ) {
         recordFullscreenUniformPass(
             wgsl = wgsl,
@@ -1397,6 +1406,7 @@ private class WgpuRenderRecorder(
                 )
             },
             blendMode = blendMode,
+            passBatchKind = passBatchKind,
         )
     }
 
@@ -2514,6 +2524,7 @@ private class WgpuRenderRecorder(
         draws: List<WgpuFullscreenUniformDraw>,
         blendMode: GPUBlendMode? = null,
         sourceLabel: String = fullscreenUniformSlabSourceLabel(),
+        passBatchKind: GPUBackendSimplePassBatchKind? = null,
     ) {
         require(wgsl.isNotBlank()) { "wgsl must not be blank" }
         require(colorFormat.normalizedColorFormat() == targetFormat.toBackendColorFormat()) {
@@ -2545,18 +2556,16 @@ private class WgpuRenderRecorder(
             bindGroupLayoutHash = keys.bindGroupLayoutKeyHash,
         )
         val retainedLeases = slab?.leases.orEmpty()
-        recordFullscreenPassBatchPlan(
-            draws = draws,
-            sourceLabel = sourceLabel,
-            kind = if (sourceLabel.contains("gradient")) {
-                GPUPassBatchKind.SimpleGradient
-            } else {
-                GPUPassBatchKind.SolidFill
-            },
-            pipelineKeyLabel = keys.renderPipelineKeyHash,
-            fixedStateHash = "fixed:${blendMode?.name ?: "src-over"}:${targetFormat.toBackendColorFormat()}",
-            retainedLeases = retainedLeases,
-        )
+        passBatchKind?.let { batchKind ->
+            recordFullscreenPassBatchPlan(
+                draws = draws,
+                sourceLabel = sourceLabel,
+                kind = batchKind.toNativePassBatchKind(),
+                pipelineKeyLabel = keys.renderPipelineKeyHash,
+                fixedStateHash = "fixed:${blendMode?.name ?: "src-over"}:${targetFormat.toBackendColorFormat()}",
+                retainedLeases = retainedLeases,
+            )
+        }
         if (slab != null) {
             recordResourceLeasesAction(slab.leases)
         }
