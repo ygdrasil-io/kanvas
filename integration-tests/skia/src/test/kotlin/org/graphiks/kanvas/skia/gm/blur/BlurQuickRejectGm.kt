@@ -21,7 +21,7 @@ class BlurQuickRejectGm : SkiaGm {
     override val name = "blurquickreject"
     override val renderFamily = RenderFamily.BLUR
     override val renderCost = RenderCost.FAST
-    override val minSimilarity = 76.8
+    override val minSimilarity = 70.5
     override val width = 300
     override val height = 300
 

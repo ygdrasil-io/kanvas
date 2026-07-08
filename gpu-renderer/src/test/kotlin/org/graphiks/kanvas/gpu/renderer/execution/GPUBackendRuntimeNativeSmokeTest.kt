@@ -10,6 +10,9 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUResourceBindingSlot
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUUniformPayloadBlock
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUUniformPayloadSlot
 import org.graphiks.kanvas.gpu.renderer.resources.GPUPayloadMaterializationRequest
+import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceLease
+import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceLeaseCacheResult
+import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceLeaseKind
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceMaterializationDecision
 import org.graphiks.kanvas.gpu.renderer.resources.GPUTargetPreparationContext
 import org.graphiks.kanvas.gpu.renderer.resources.ValidatingPayloadResourceProvider
@@ -84,6 +87,77 @@ class GPUBackendRuntimeNativeSmokeTest {
     }
 
     @Test
+    fun `readback cleanup completes and releases pending submission when map fails`() {
+        val manager = GPUQueueManager()
+        val submission = manager.submit(
+            label = "offscreen-pass:frame-1",
+            retainedResources = listOf(GPUQueuedResourceRef("readback:frame-1")),
+        )
+        var unmapCalls = 0
+
+        val failure = assertFailsWith<IllegalStateException> {
+            gpuRuntimeWithReadbackCleanup(
+                mapAction = { error("map failed") },
+                readAction = { byteArrayOf(1, 2, 3, 4) },
+                unmapAction = { unmapCalls += 1 },
+                completeAction = { completion ->
+                    manager.markCompleted(submission.id, completion)
+                    manager.releaseCompleted()
+                },
+            )
+        }
+
+        val dump = manager.telemetry.dumpLines().joinToString("\n")
+        assertEquals("map failed", failure.message)
+        assertEquals(0, unmapCalls)
+        assertTrue(dump.contains("submitted=1 completed=1 released=1 pending=0 waits=0 unknownCompletions=0"))
+        assertTrue(dump.contains("completion=readback-failed"))
+    }
+
+    @Test
+    fun `window present cleanup completes and releases submitted frame on success`() {
+        // Full native window coverage requires platform surface handles; this helper keeps the lifecycle contract covered in CI.
+        val manager = GPUQueueManager()
+        val submission = manager.submit(
+            label = "window-frame:frame-1",
+            retainedResources = listOf(GPUQueuedResourceRef("target:window-frame-1")),
+        )
+
+        gpuRuntimeCompleteWindowPresentSubmission(
+            queueManager = manager,
+            submission = submission,
+            presentAction = {},
+        )
+
+        val dump = manager.telemetry.dumpLines().joinToString("\n")
+        assertTrue(dump.contains("submitted=1 completed=1 released=1 pending=0 waits=0 unknownCompletions=0"))
+        assertTrue(dump.contains("completion=presented"))
+    }
+
+    @Test
+    fun `window present cleanup marks failure and rethrows after release`() {
+        // Full native window coverage requires platform surface handles; this helper keeps the lifecycle contract covered in CI.
+        val manager = GPUQueueManager()
+        val submission = manager.submit(
+            label = "window-frame:frame-2",
+            retainedResources = listOf(GPUQueuedResourceRef("target:window-frame-2")),
+        )
+
+        val failure = assertFailsWith<IllegalStateException> {
+            gpuRuntimeCompleteWindowPresentSubmission(
+                queueManager = manager,
+                submission = submission,
+                presentAction = { error("present failed") },
+            )
+        }
+
+        val dump = manager.telemetry.dumpLines().joinToString("\n")
+        assertEquals("present failed", failure.message)
+        assertTrue(dump.contains("submitted=1 completed=1 released=1 pending=0 waits=0 unknownCompletions=0"))
+        assertTrue(dump.contains("completion=$GPU_QUEUE_COMPLETION_PRESENT_FAILED"))
+    }
+
+    @Test
     fun `fullscreen uniform slab test hook restores and resets thread local override`() {
         resetFullscreenUniformSlabTestingHooks()
         assertEquals("fullscreen-uniform-pass", currentFullscreenUniformSlabSourceLabelForTesting())
@@ -114,6 +188,35 @@ class GPUBackendRuntimeNativeSmokeTest {
         assertEquals(
             "gpu-window-surface-7-appkitmetallayer-640x480",
             windowSurfaceTargetId(windowRuntimeOrdinal = 7L, binding = binding),
+        )
+    }
+
+    @Test
+    fun `runtime retained resource refs include target extras and leases`() {
+        val refs = gpuRuntimeRetainedResourceRefs(
+            targetRef = GPUQueuedResourceRef("target:window-frame-1"),
+            leases = listOf(
+                GPUResourceLease(
+                    leaseId = "uniform-slab:frame-1",
+                    resourceKind = GPUResourceLeaseKind.UniformSlab,
+                    deviceGeneration = 11,
+                    descriptorHash = "sha256:uniform-slab-frame-1",
+                    ownerScope = "frame-1",
+                    usageLabels = listOf("copy_dst", "uniform"),
+                    releasePolicy = "submission-complete",
+                    cacheResult = GPUResourceLeaseCacheResult.Create,
+                ),
+            ),
+            extraRefs = listOf(GPUQueuedResourceRef("readback:frame-1")),
+        )
+
+        assertEquals(
+            listOf(
+                GPUQueuedResourceRef("target:window-frame-1"),
+                GPUQueuedResourceRef("readback:frame-1"),
+                GPUQueuedResourceRef("lease:uniform-slab:frame-1"),
+            ),
+            refs,
         )
     }
 
@@ -313,6 +416,55 @@ class GPUBackendRuntimeNativeSmokeTest {
     }
 
     @Test
+    fun `offscreen submission stays pending until readback completes when backend is available`() {
+        val runtime = GPUBackendRuntimeFactory.createOrNull()
+        assumeTrue(runtime != null, "GPU backend unavailable in current environment")
+
+        runtime!!.use { session ->
+            session.createOffscreenTarget(
+                GPUOffscreenTargetRequest(width = 4, height = 4, colorFormat = "rgba8unorm"),
+            ).use { target ->
+                target.encode(
+                    clearColor = GPUClearColor(red = 0.0, green = 0.0, blue = 0.0, alpha = 1.0),
+                ) {
+                    drawFullscreenPass(
+                        wgsl = solidColorFullscreenWgsl(),
+                        colorFormat = "rgba8unorm",
+                        draws = listOf(
+                            GPUBackendRectDraw(
+                                rgbaPremul = floatArrayOf(1f, 0f, 0f, 1f),
+                                scissorX = 0,
+                                scissorY = 0,
+                                scissorWidth = 4,
+                                scissorHeight = 4,
+                            ),
+                        ),
+                    )
+                }
+
+                val pendingDump = session.phase0EvidenceDumpLines.joinToString("\n")
+                assertTrue(
+                    pendingDump.contains(
+                        "gpu-queue.telemetry submitted=1 completed=0 released=0 pending=1 waits=0 unknownCompletions=0",
+                    ),
+                )
+                assertTrue(pendingDump.contains("completion=pending"))
+
+                val rgba = target.readRgba()
+                assertContentEquals(byteArrayOf(0xFF.toByte(), 0, 0, 0xFF.toByte()), rgba.copyOfRange(0, 4))
+
+                val completedDump = session.phase0EvidenceDumpLines.joinToString("\n")
+                assertTrue(
+                    completedDump.contains(
+                        "gpu-queue.telemetry submitted=1 completed=1 released=1 pending=0 waits=1 unknownCompletions=0",
+                    ),
+                )
+                assertTrue(completedDump.contains("completion=readback-complete"))
+            }
+        }
+    }
+
+    @Test
     fun `backend runtime batches fullscreen uniform draws into one slab when backend is available`() {
         val runtime = GPUBackendRuntimeFactory.createOrNull()
         assumeTrue(runtime != null, "GPU backend unavailable in current environment")
@@ -437,12 +589,12 @@ class GPUBackendRuntimeNativeSmokeTest {
             assertTrue(evidenceDump.contains("gpu-phase0.baseline"))
             assertTrue(
                 evidenceDump.contains(
-                    "gpu-queue.telemetry submitted=1 completed=1 released=1 waits=1 unknownCompletions=0",
+                    "gpu-queue.telemetry submitted=1 completed=1 released=1 pending=0 waits=1 unknownCompletions=0",
                 ),
             )
             assertTrue(evidenceDump.contains("gpu-queue.submission id=1 label=offscreen-pass:"))
-            assertTrue(evidenceDump.contains("retained=3"))
-            assertTrue(evidenceDump.contains("completion=scaffold-immediate"))
+            assertTrue(evidenceDump.contains("retained=4"))
+            assertTrue(evidenceDump.contains("completion=readback-complete"))
             assertTrue(evidenceDump.contains("resource-provider.cache"))
             assertTrue(evidenceDump.contains("resource-provider.lease"))
             assertTrue(evidenceDump.contains("kind=uniform-slab"))
@@ -666,10 +818,86 @@ class GPUBackendRuntimeNativeSmokeTest {
             }
 
             val dumpLines = session.phase0EvidenceDumpLines
-            assertTrue(dumpLines.any { line -> line.contains("gpu-queue.submission") && line.contains("offscreen-texture-pass:") })
+            val textureSubmissionLine = dumpLines.singleOrNull { line ->
+                line.contains("gpu-queue.submission") && line.contains("offscreen-texture-pass:")
+            } ?: error("Expected one offscreen texture submission")
+            assertTrue(
+                dumpLines.any { line ->
+                    line.contains(
+                        "gpu-queue.telemetry submitted=1 completed=1 released=1 pending=0 waits=0 unknownCompletions=0",
+                    )
+                },
+            )
+            assertTrue(textureSubmissionLine.contains("completed=true"))
+            assertTrue(textureSubmissionLine.contains("released=true"))
+            assertTrue(textureSubmissionLine.contains("completion=target-close"))
             assertTrue(dumpLines.any { line -> line.contains("retained=3") })
             assertTrue(dumpLines.any { line -> line.contains("kind=uniform-slab") && line.contains("result=create") })
             assertTrue(dumpLines.any { line -> line.contains("kind=bind-group") && line.contains("result=create") })
+        }
+    }
+
+    @Test
+    fun `offscreen texture pass is not completed by unrelated readback when backend is available`() {
+        val runtime = GPUBackendRuntimeFactory.createOrNull()
+        assumeTrue(runtime != null, "GPU backend unavailable in current environment")
+
+        runtime!!.use { session ->
+            session.createOffscreenTarget(
+                GPUOffscreenTargetRequest(width = 4, height = 4, colorFormat = "rgba8unorm"),
+            ).use { target ->
+                val textureLabel = target.createOffscreenTexture(
+                    GPUBackendOffscreenTexture(width = 4, height = 4, format = "rgba8unorm"),
+                )
+                target.encodeOffscreenTexture(
+                    textureLabel = textureLabel,
+                    clearColor = GPUClearColor(0.0, 0.0, 0.0, 1.0),
+                ) {
+                    drawFullscreenPass(
+                        wgsl = solidColorFullscreenWgsl(),
+                        colorFormat = "rgba8unorm",
+                        draws = listOf(
+                            GPUBackendRectDraw(
+                                rgbaPremul = floatArrayOf(1f, 0f, 0f, 1f),
+                                scissorX = 0,
+                                scissorY = 0,
+                                scissorWidth = 4,
+                                scissorHeight = 4,
+                            ),
+                        ),
+                    )
+                }
+
+                val pendingDump = session.phase0EvidenceDumpLines.joinToString("\n")
+                assertTrue(
+                    pendingDump.contains(
+                        "gpu-queue.telemetry submitted=1 completed=0 released=0 pending=1 waits=0 unknownCompletions=0",
+                    ),
+                )
+
+                target.readRgba()
+
+                val afterReadbackDump = session.phase0EvidenceDumpLines.joinToString("\n")
+                val textureSubmissionLine = session.phase0EvidenceDumpLines.singleOrNull { line ->
+                    line.contains("gpu-queue.submission") && line.contains("offscreen-texture-pass:")
+                } ?: error("Expected one offscreen texture submission")
+                assertTrue(
+                    afterReadbackDump.contains(
+                        "gpu-queue.telemetry submitted=1 completed=0 released=0 pending=1 waits=1 unknownCompletions=0",
+                    ),
+                )
+                assertTrue(textureSubmissionLine.contains("completed=false"))
+                assertTrue(textureSubmissionLine.contains("released=false"))
+                assertTrue(textureSubmissionLine.contains("completion=pending"))
+            }
+
+            val closedDump = session.phase0EvidenceDumpLines.joinToString("\n")
+            assertTrue(
+                closedDump.contains(
+                    "gpu-queue.telemetry submitted=1 completed=1 released=1 pending=0 waits=1 unknownCompletions=0",
+                ),
+            )
+            assertTrue(closedDump.contains("completion=target-close"))
         }
     }
 

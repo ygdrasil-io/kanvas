@@ -245,6 +245,47 @@ internal fun swizzleBgraToRgba(bytes: ByteArray): ByteArray {
     return rgba
 }
 
+internal inline fun <T> gpuRuntimeWithReadbackCleanup(
+    mapAction: () -> Unit,
+    readAction: () -> T,
+    unmapAction: () -> Unit,
+    completeAction: (String) -> Unit,
+): T {
+    var mapped = false
+    var completion = GPU_QUEUE_COMPLETION_READBACK_FAILED
+    try {
+        mapAction()
+        mapped = true
+        val readback = readAction()
+        completion = GPU_QUEUE_COMPLETION_READBACK_COMPLETE
+        return readback
+    } finally {
+        try {
+            if (mapped) {
+                unmapAction()
+            }
+        } finally {
+            completeAction(completion)
+        }
+    }
+}
+
+internal fun gpuRuntimeCompleteWindowPresentSubmission(
+    queueManager: GPUQueueManager,
+    submission: GPUQueueSubmission,
+    presentAction: () -> Unit,
+) {
+    try {
+        presentAction()
+        queueManager.markCompleted(submission.id, GPU_QUEUE_COMPLETION_PRESENTED)
+    } catch (failure: Throwable) {
+        queueManager.markCompleted(submission.id, GPU_QUEUE_COMPLETION_PRESENT_FAILED)
+        throw failure
+    } finally {
+        queueManager.releaseCompleted()
+    }
+}
+
 internal fun windowSurfaceDeviceGeneration(windowRuntimeOrdinal: Long): GPUDeviceGeneration {
     require(windowRuntimeOrdinal > 0L) { "windowRuntimeOrdinal must be positive" }
     return GPUDeviceGeneration(windowRuntimeOrdinal)
@@ -274,8 +315,19 @@ internal fun offscreenTargetId(
         "${request.width}x${request.height}-${request.colorFormat.normalizedColorFormat()}"
 }
 
+internal fun gpuRuntimeRetainedResourceRefs(
+    targetRef: GPUQueuedResourceRef,
+    leases: List<GPUResourceLease>,
+    extraRefs: List<GPUQueuedResourceRef> = emptyList(),
+): List<GPUQueuedResourceRef> =
+    listOf(targetRef) + extraRefs + leases.map { lease ->
+        GPUQueuedResourceRef("lease:${lease.leaseId}")
+    }
+
 private fun nextSessionOrdinal(): Long = sessionOrdinalCounter.incrementAndGet()
 private fun nextWindowRuntimeOrdinal(): Long = windowRuntimeOrdinalCounter.incrementAndGet()
+
+internal const val GPU_QUEUE_COMPLETION_READBACK_FAILED = "readback-failed"
 
 object GPUBackendRuntimeNativeFactory {
     private var sharedInner: GPUBackendSession? = null
@@ -416,6 +468,8 @@ private class WgpuBackendSession(
             binding = binding,
             capabilities = capabilities,
             telemetryRecorder = telemetryRecorder,
+            queueManager = queueManager,
+            recordRuntimeResourceLeasesAction = { leases -> recordRuntimeResourceLeases(leases) },
         )
 
     override fun close() {
@@ -623,6 +677,8 @@ private class WgpuOffscreenTarget(
     private val offscreenTextures = mutableMapOf<String, GPUTexture>()
     private val frameOrdinalCounter = AtomicLong(0L)
     private val textureFrameOrdinalCounter = AtomicLong(0L)
+    private val pendingReadbackSubmissionIds = ArrayDeque<GPUQueueSubmissionId>()
+    private val pendingTargetCloseSubmissionIds = ArrayDeque<GPUQueueSubmissionId>()
 
     override val target: GPUSurfaceTarget =
         GPUSurfaceTarget(
@@ -658,6 +714,35 @@ private class WgpuOffscreenTarget(
     private fun writeTrackedBuffer(buffer: GPUBuffer, offset: ULong, data: ArrayBuffer) {
         queue.writeBuffer(buffer, offset, data)
         telemetryRecorder.recordQueueWrite()
+    }
+
+    private fun retainPendingReadbackSubmission(submission: GPUQueueSubmission) {
+        pendingReadbackSubmissionIds.addLast(submission.id)
+    }
+
+    private fun retainPendingTargetCloseSubmission(submission: GPUQueueSubmission) {
+        pendingTargetCloseSubmissionIds.addLast(submission.id)
+    }
+
+    private fun completePendingReadbackSubmissions(completion: String) {
+        completePendingSubmissions(pendingReadbackSubmissionIds, completion)
+    }
+
+    private fun completePendingTargetCloseSubmissions() {
+        completePendingSubmissions(pendingTargetCloseSubmissionIds, GPU_QUEUE_COMPLETION_TARGET_CLOSE)
+    }
+
+    private fun completePendingSubmissions(
+        submissionIds: ArrayDeque<GPUQueueSubmissionId>,
+        completion: String,
+    ) {
+        while (submissionIds.isNotEmpty()) {
+            queueManager.markCompleted(
+                id = submissionIds.removeFirst(),
+                completion = completion,
+            )
+        }
+        queueManager.releaseCompleted()
     }
 
     override fun encode(
@@ -743,12 +828,14 @@ private class WgpuOffscreenTarget(
             queue.submit(listOf(commandBuffer))
             val submission = queueManager.submit(
                 label = "offscreen-pass:$frameId",
-                retainedResources = listOf(GPUQueuedResourceRef("target:${target.targetId}")) +
-                    frameResourceLeases.map { lease -> GPUQueuedResourceRef("lease:${lease.leaseId}") },
+                retainedResources = gpuRuntimeRetainedResourceRefs(
+                    targetRef = GPUQueuedResourceRef("target:${target.targetId}"),
+                    leases = frameResourceLeases,
+                    extraRefs = listOf(GPUQueuedResourceRef("readback:$frameId")),
+                ),
             )
             recordRuntimeResourceLeasesAction(frameResourceLeases)
-            queueManager.markCompleted(submission.id)
-            queueManager.releaseCompleted()
+            retainPendingReadbackSubmission(submission)
             telemetryRecorder.recordSubmission()
             telemetryRecorder.recordOffscreenRenderPass()
         }
@@ -756,22 +843,26 @@ private class WgpuOffscreenTarget(
 
     override fun readRgba(): ByteArray {
         queueManager.recordWait()
-        runBlocking {
-            stagingBuffer.mapAsync(GPUMapMode.Read, 0uL, stagingSize).getOrThrow()
-        }
-        try {
-            val mapped = stagingBuffer.getMappedRange(0uL, stagingSize).toByteArray()
-            val tightlyPacked = stripRowPadding(
-                bytes = mapped,
-                width = request.width,
-                height = request.height,
-                bytesPerPixel = bytesPerPixel,
-                paddedBytesPerRow = paddedBytesPerRow,
-            )
-            return if (format.isBgraFormat()) swizzleBgraToRgba(tightlyPacked) else tightlyPacked
-        } finally {
-            stagingBuffer.unmap()
-        }
+        return gpuRuntimeWithReadbackCleanup(
+            mapAction = {
+                runBlocking {
+                    stagingBuffer.mapAsync(GPUMapMode.Read, 0uL, stagingSize).getOrThrow()
+                }
+            },
+            readAction = {
+                val mapped = stagingBuffer.getMappedRange(0uL, stagingSize).toByteArray()
+                val tightlyPacked = stripRowPadding(
+                    bytes = mapped,
+                    width = request.width,
+                    height = request.height,
+                    bytesPerPixel = bytesPerPixel,
+                    paddedBytesPerRow = paddedBytesPerRow,
+                )
+                if (format.isBgraFormat()) swizzleBgraToRgba(tightlyPacked) else tightlyPacked
+            },
+            unmapAction = { stagingBuffer.unmap() },
+            completeAction = { completion -> completePendingReadbackSubmissions(completion) },
+        )
     }
 
     internal fun createVertexBuffer(data: FloatArray): String {
@@ -925,17 +1016,20 @@ private class WgpuOffscreenTarget(
         queue.submit(listOf(commandBuffer))
         val submission = queueManager.submit(
             label = "offscreen-texture-pass:$frameId",
-            retainedResources = listOf(GPUQueuedResourceRef("target:${target.targetId}:$textureLabel")) +
-                frameResourceLeases.map { lease -> GPUQueuedResourceRef("lease:${lease.leaseId}") },
+            retainedResources = gpuRuntimeRetainedResourceRefs(
+                targetRef = GPUQueuedResourceRef("target:${target.targetId}:$textureLabel"),
+                leases = frameResourceLeases,
+            ),
         )
         recordRuntimeResourceLeasesAction(frameResourceLeases)
-        queueManager.markCompleted(submission.id)
-        queueManager.releaseCompleted()
+        retainPendingTargetCloseSubmission(submission)
         telemetryRecorder.recordSubmission()
         telemetryRecorder.recordOffscreenRenderPass()
     }
 
     override fun close() {
+        completePendingReadbackSubmissions(GPU_QUEUE_COMPLETION_TARGET_CLOSE)
+        completePendingTargetCloseSubmissions()
         var firstFailure: Throwable? = null
         /** Suppresses exceptions thrown inside [block] and collects the first failure for re-throw. */
         fun closeQuietly(block: () -> Unit) {
@@ -959,6 +1053,8 @@ private class WgpuWindowSurface(
     binding: GPUNativeSurfaceBinding,
     private val capabilities: GPUCapabilities,
     private val telemetryRecorder: WgpuBackendRuntimeTelemetryRecorder,
+    private val queueManager: GPUQueueManager,
+    private val recordRuntimeResourceLeasesAction: (List<GPUResourceLease>) -> Unit,
 ) : GPUBackendWindowSurface {
     private val windowRuntimeOrdinal = nextWindowRuntimeOrdinal()
     private val deviceGeneration = windowSurfaceDeviceGeneration(windowRuntimeOrdinal)
@@ -1022,6 +1118,8 @@ private class WgpuWindowSurface(
         }
 
         val frameOrdinal = frameOrdinalCounter.incrementAndGet()
+        val frameId = "window-$windowRuntimeOrdinal-frame-$targetGeneration-$frameOrdinal"
+        val frameResourceLeases = mutableListOf<GPUResourceLease>()
         GPUResourceScope().use { resources ->
             val view = resources.track(surfaceTexture.texture.createView(null)) { it.close() }
             val encoder = resources.trackIfAutoCloseable(runtime.device.createCommandEncoder())
@@ -1042,7 +1140,7 @@ private class WgpuWindowSurface(
                     device = runtime.device,
                     queue = runtime.device.queue,
                     targetId = targetId,
-                    frameId = "window-$windowRuntimeOrdinal-frame-$targetGeneration-$frameOrdinal",
+                    frameId = frameId,
                     budgetClass = "runtime-fullscreen",
                     targetFormat = runtime.format,
                     capabilities = capabilities,
@@ -1051,7 +1149,10 @@ private class WgpuWindowSurface(
                     telemetryRecorder = telemetryRecorder,
                     resourceProvider = resourceProvider,
                     runtimeResourceAdapter = runtimeResourceAdapter,
-                    recordResourceLeasesAction = { leases -> lastFrameResourceLeases = leases },
+                    recordResourceLeasesAction = { leases ->
+                        frameResourceLeases += leases
+                        lastFrameResourceLeases = frameResourceLeases.toList()
+                    },
                     setPipelineAction = { pipeline -> setPipeline(pipeline) },
                     setBindGroupAction = { index, bindGroup -> setBindGroup(index, bindGroup) },
                     setScissorAction = { x, y, surfaceWidth, surfaceHeight -> setScissorRect(x, y, surfaceWidth, surfaceHeight) },
@@ -1072,8 +1173,20 @@ private class WgpuWindowSurface(
             val commandBuffer = resources.trackIfAutoCloseable(encoder.finish())
             telemetryRecorder.recordCommandBufferFinished()
             runtime.device.queue.submit(listOf(commandBuffer))
+            val submission = queueManager.submit(
+                label = "window-frame:$frameId",
+                retainedResources = gpuRuntimeRetainedResourceRefs(
+                    targetRef = GPUQueuedResourceRef("target:$targetId"),
+                    leases = frameResourceLeases,
+                ),
+            )
+            recordRuntimeResourceLeasesAction(frameResourceLeases)
             telemetryRecorder.recordSubmission()
-            runtime.surface.present()
+            gpuRuntimeCompleteWindowPresentSubmission(
+                queueManager = queueManager,
+                submission = submission,
+                presentAction = { runtime.surface.present() },
+            )
             telemetryRecorder.recordWindowRenderPass()
         }
         return true

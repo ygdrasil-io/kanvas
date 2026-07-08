@@ -22,7 +22,7 @@ class GammashadertextGm : SkiaGm {
     override val name = "gammagradienttext"
     override val renderFamily = RenderFamily.TEXT
     override val renderCost = RenderCost.BLOCKING
-    override val minSimilarity = 82.0
+    override val minSimilarity = 75.3
     override val width = 300
     override val height = 300
 

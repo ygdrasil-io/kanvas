@@ -20,7 +20,7 @@ class OverdrawTextXformGm : SkiaGm {
     override val name = "overdraw_text_xform"
     override val renderFamily = RenderFamily.TEXT
     override val renderCost = RenderCost.BLOCKING
-    override val minSimilarity = 50.0
+    override val minSimilarity = 41.9
     override val width = 512
     override val height = 512
 

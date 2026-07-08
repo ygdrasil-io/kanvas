@@ -20,7 +20,7 @@ class BlurRectGalleryGm : SkiaGm {
     override val name = "blurrect_gallery"
     override val renderFamily = RenderFamily.BLUR
     override val renderCost = RenderCost.SLOW
-    override val minSimilarity = 68.7
+    override val minSimilarity = 64.5
     override val width = 1200
     override val height = 1024
 

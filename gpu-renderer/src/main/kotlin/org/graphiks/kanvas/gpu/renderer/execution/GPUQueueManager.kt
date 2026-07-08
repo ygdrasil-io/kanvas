@@ -25,12 +25,15 @@ data class GPUQueueSubmission(
     val retainedResources: List<GPUQueuedResourceRef>,
     val completed: Boolean = false,
     val released: Boolean = false,
-    val completion: String = QUEUE_COMPLETION_PENDING,
+    val completion: String = GPU_QUEUE_COMPLETION_PENDING,
 ) {
     init {
         require(label.isNotBlank()) { "GPUQueueSubmission.label must not be blank" }
         require(label.isQueueDumpSafeToken()) { "GPUQueueSubmission.label must be dump-safe" }
         require(completion.isQueueDumpSafeToken()) { "GPUQueueSubmission.completion must be dump-safe" }
+        require(!completed || completion != GPU_QUEUE_COMPLETION_PENDING) {
+            "completed GPUQueueSubmission must use a real completion reason"
+        }
     }
 }
 
@@ -38,6 +41,7 @@ data class GPUQueueTelemetry(
     val submitted: Long = 0L,
     val completed: Long = 0L,
     val released: Long = 0L,
+    val pending: Long = 0L,
     val waits: Long = 0L,
     val unknownCompletions: Long = 0L,
     val submissions: List<GPUQueueSubmission> = emptyList(),
@@ -45,7 +49,7 @@ data class GPUQueueTelemetry(
     fun dumpLines(): List<String> =
         listOf(
             "gpu-queue.telemetry submitted=$submitted completed=$completed released=$released " +
-                "waits=$waits unknownCompletions=$unknownCompletions",
+                "pending=$pending waits=$waits unknownCompletions=$unknownCompletions",
         ) + submissions.map { submission ->
             "gpu-queue.submission id=${submission.id.value} label=${submission.label} " +
                 "retained=${submission.retainedResources.size} completed=${submission.completed} " +
@@ -66,6 +70,7 @@ class GPUQueueManager {
                 submitted = orderedSubmissions.size.toLong(),
                 completed = orderedSubmissions.count { submission -> submission.completed }.toLong(),
                 released = orderedSubmissions.count { submission -> submission.released }.toLong(),
+                pending = orderedSubmissions.count { submission -> !submission.completed }.toLong(),
                 waits = waitCount,
                 unknownCompletions = unknownCompletionCount,
                 submissions = orderedSubmissions,
@@ -98,18 +103,36 @@ class GPUQueueManager {
 
     fun markCompleted(
         id: GPUQueueSubmissionId,
-        completion: String = QUEUE_COMPLETION_SCAFFOLD_IMMEDIATE,
+        completion: String,
     ): Boolean {
         require(completion.isQueueDumpSafeToken()) { "completion must be dump-safe" }
+        require(completion != GPU_QUEUE_COMPLETION_PENDING) {
+            "completion must use a real completion reason"
+        }
         val current = submissions[id]
         if (current == null) {
             unknownCompletionCount += 1L
             return false
         }
-        if (!current.completed) {
+        if (!current.completed ||
+            current.completion == GPU_QUEUE_COMPLETION_PENDING &&
+            completion != GPU_QUEUE_COMPLETION_PENDING
+        ) {
             submissions[id] = current.copy(completed = true, completion = completion)
         }
         return true
+    }
+
+    fun pendingSubmissionIds(labelPrefix: String? = null): List<GPUQueueSubmissionId> {
+        labelPrefix?.let { prefix ->
+            require(prefix.isQueueDumpSafeToken()) { "labelPrefix must be dump-safe" }
+        }
+        return submissions.values
+            .asSequence()
+            .filter { submission -> !submission.completed }
+            .filter { submission -> labelPrefix == null || submission.label.startsWith(labelPrefix) }
+            .map { submission -> submission.id }
+            .toList()
     }
 
     fun retainedResources(id: GPUQueueSubmissionId): List<GPUQueuedResourceRef> =
@@ -145,5 +168,8 @@ private val QUEUE_RAW_BACKEND_TOKEN = "w" + "gpu"
 private val QUEUE_RAW_HANDLE_DUMP_PATTERN =
     Regex("(?i)($QUEUE_RAW_BACKEND_TOKEN|externaltexturehandle|gpu[a-z0-9]*handle|@0x[0-9a-f]+|0x[0-9a-f]{6,})")
 
-private const val QUEUE_COMPLETION_PENDING = "pending"
-private const val QUEUE_COMPLETION_SCAFFOLD_IMMEDIATE = "scaffold-immediate"
+internal const val GPU_QUEUE_COMPLETION_PENDING = "pending"
+internal const val GPU_QUEUE_COMPLETION_READBACK_COMPLETE = "readback-complete"
+internal const val GPU_QUEUE_COMPLETION_PRESENT_FAILED = "present-failed"
+internal const val GPU_QUEUE_COMPLETION_PRESENTED = "presented"
+internal const val GPU_QUEUE_COMPLETION_TARGET_CLOSE = "target-close"
