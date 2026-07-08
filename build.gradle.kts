@@ -6667,3 +6667,9 @@ tasks.register("generateGpuPhase6ImageFamilyEvidence") {
     description = "Delegates to :integration-tests:skia-evidence:generateGpuPhase6ImageFamilyEvidence."
     dependsOn(":integration-tests:skia-evidence:generateGpuPhase6ImageFamilyEvidence")
 }
+
+tasks.register("generateGpuPhase6CoverageFamiliesEvidence") {
+    group = "verification"
+    description = "Delegates to :integration-tests:skia-evidence:generateGpuPhase6CoverageFamiliesEvidence."
+    dependsOn(":integration-tests:skia-evidence:generateGpuPhase6CoverageFamiliesEvidence")
+}

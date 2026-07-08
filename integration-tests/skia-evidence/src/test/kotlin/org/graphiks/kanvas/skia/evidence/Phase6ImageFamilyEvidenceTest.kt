@@ -102,6 +102,52 @@ class Phase6ImageFamilyEvidenceTest {
     }
 
     @Test
+    fun `dashboard reader keeps path clip flags and diff stats for shared evidence`() {
+        val root = kotlin.io.path.createTempDirectory("phase6-shared-dashboard")
+        val dashboard = root.resolve("gms.json")
+        java.nio.file.Files.writeString(
+            dashboard,
+            """
+            {
+              "generatedAt": "2026-07-09T08:00:00",
+              "gms": [
+                {
+                  "name": "complexclip_aa",
+                  "family": "CLIP",
+                  "similarity": null,
+                  "minSimilarity": 99.0,
+                  "isPassing": null,
+                  "width": 320,
+                  "height": 240,
+                  "maxDiff": { "r": 12, "g": 13, "b": 14, "a": 15 },
+                  "meanDiff": { "r": 1.25, "g": 2.5, "b": 3.75, "a": 4.0 },
+                  "matchingPixels": 70000,
+                  "totalPixels": 76800,
+                  "noReference": false,
+                  "renderFailed": false,
+                  "sizeMismatch": true,
+                  "hasDiff": false
+                }
+              ]
+            }
+            """.trimIndent(),
+        )
+
+        val loaded = GmDashboardJsonReader.read(dashboard)
+
+        assertEquals("2026-07-09T08:00:00", loaded.generatedAt)
+        assertEquals("complexclip_aa", loaded.rows.single().name)
+        assertEquals("CLIP", loaded.rows.single().family)
+        assertEquals(320, loaded.rows.single().width)
+        assertEquals(240, loaded.rows.single().height)
+        assertEquals(70000L, loaded.rows.single().matchingPixels)
+        assertEquals(76800L, loaded.rows.single().totalPixels)
+        assertEquals(12, loaded.rows.single().maxDiff?.r)
+        assertEquals(4.0, loaded.rows.single().meanDiff?.a)
+        assertEquals(true, loaded.rows.single().sizeMismatch)
+    }
+
+    @Test
     fun `duplicate image rows receive stable row ids and surface them in csv and markdown`() {
         val evidence = Phase6ImageFamilyClassifier.buildEvidence(
             GmDashboard(
@@ -191,6 +237,12 @@ private fun row(
     family: String = "IMAGE",
     similarity: Double? = 100.0,
     isPassing: Boolean? = true,
+    width: Int? = null,
+    height: Int? = null,
+    matchingPixels: Long? = null,
+    totalPixels: Long? = null,
+    maxDiff: GmRgbaInt? = null,
+    meanDiff: GmRgbaDouble? = null,
     noReference: Boolean = false,
     renderFailed: Boolean = false,
     sizeMismatch: Boolean = false,
@@ -202,6 +254,12 @@ private fun row(
         similarity = similarity,
         minSimilarity = 99.0,
         isPassing = isPassing,
+        width = width,
+        height = height,
+        maxDiff = maxDiff,
+        meanDiff = meanDiff,
+        matchingPixels = matchingPixels,
+        totalPixels = totalPixels,
         noReference = noReference,
         renderFailed = renderFailed,
         sizeMismatch = sizeMismatch,
