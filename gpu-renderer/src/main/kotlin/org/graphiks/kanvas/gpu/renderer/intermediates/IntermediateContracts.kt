@@ -50,7 +50,14 @@ sealed interface GPUIntermediatePlanStep {
         val targetLabel: String,
         val routeLabel: String,
         val orderingToken: String,
-    ) : GPUIntermediatePlanStep
+    ) : GPUIntermediatePlanStep {
+        init {
+            require(commandId.isNotBlank()) { "GPUIntermediatePlanStep.RenderToTarget.commandId must not be blank" }
+            require(targetLabel.isNotBlank()) { "GPUIntermediatePlanStep.RenderToTarget.targetLabel must not be blank" }
+            require(routeLabel.isNotBlank()) { "GPUIntermediatePlanStep.RenderToTarget.routeLabel must not be blank" }
+            require(orderingToken.isNotBlank()) { "GPUIntermediatePlanStep.RenderToTarget.orderingToken must not be blank" }
+        }
+    }
 
     data class CreateIntermediate(val descriptor: GPUIntermediateTextureDescriptor) : GPUIntermediatePlanStep
 
@@ -63,20 +70,37 @@ sealed interface GPUIntermediatePlanStep {
         val tokenLabel: String,
         val passSplitRequired: Boolean,
         val copyBeforeSample: Boolean,
-    ) : GPUIntermediatePlanStep
+    ) : GPUIntermediatePlanStep {
+        init {
+            require(sourceLabel.isNotBlank()) { "GPUIntermediatePlanStep.CopyDestination.sourceLabel must not be blank" }
+            require(boundsLabel.isNotBlank()) { "GPUIntermediatePlanStep.CopyDestination.boundsLabel must not be blank" }
+            require(tokenLabel.isNotBlank()) { "GPUIntermediatePlanStep.CopyDestination.tokenLabel must not be blank" }
+        }
+    }
 
     data class BindIntermediate(
         val descriptor: GPUIntermediateTextureDescriptor,
         val bindingLabel: String,
         val layoutHash: String,
-    ) : GPUIntermediatePlanStep
+    ) : GPUIntermediatePlanStep {
+        init {
+            require(bindingLabel.isNotBlank()) { "GPUIntermediatePlanStep.BindIntermediate.bindingLabel must not be blank" }
+            require(layoutHash.isNotBlank()) { "GPUIntermediatePlanStep.BindIntermediate.layoutHash must not be blank" }
+        }
+    }
 
     data class RenderLayerChildren(
         val scopeLabel: String,
         val target: GPUIntermediateTextureDescriptor,
         val childrenLabel: String,
         val tokenLabel: String,
-    ) : GPUIntermediatePlanStep
+    ) : GPUIntermediatePlanStep {
+        init {
+            require(scopeLabel.isNotBlank()) { "GPUIntermediatePlanStep.RenderLayerChildren.scopeLabel must not be blank" }
+            require(childrenLabel.isNotBlank()) { "GPUIntermediatePlanStep.RenderLayerChildren.childrenLabel must not be blank" }
+            require(tokenLabel.isNotBlank()) { "GPUIntermediatePlanStep.RenderLayerChildren.tokenLabel must not be blank" }
+        }
+    }
 
     data class CompositeIntermediate(
         val source: GPUIntermediateTextureDescriptor,
@@ -84,19 +108,36 @@ sealed interface GPUIntermediatePlanStep {
         val blendModeLabel: String,
         val routeLabel: String,
         val tokenLabel: String,
-    ) : GPUIntermediatePlanStep
+    ) : GPUIntermediatePlanStep {
+        init {
+            require(parentTargetLabel.isNotBlank()) { "GPUIntermediatePlanStep.CompositeIntermediate.parentTargetLabel must not be blank" }
+            require(blendModeLabel.isNotBlank()) { "GPUIntermediatePlanStep.CompositeIntermediate.blendModeLabel must not be blank" }
+            require(routeLabel.isNotBlank()) { "GPUIntermediatePlanStep.CompositeIntermediate.routeLabel must not be blank" }
+            require(tokenLabel.isNotBlank()) { "GPUIntermediatePlanStep.CompositeIntermediate.tokenLabel must not be blank" }
+        }
+    }
 
     data class ResolveMSAA(
         val source: GPUIntermediateTextureDescriptor,
         val destination: GPUIntermediateTextureDescriptor,
         val strategyLabel: String,
         val tokenLabel: String,
-    ) : GPUIntermediatePlanStep
+    ) : GPUIntermediatePlanStep {
+        init {
+            require(strategyLabel.isNotBlank()) { "GPUIntermediatePlanStep.ResolveMSAA.strategyLabel must not be blank" }
+            require(tokenLabel.isNotBlank()) { "GPUIntermediatePlanStep.ResolveMSAA.tokenLabel must not be blank" }
+        }
+    }
 
     data class Refuse(
         val scopeLabel: String,
         val reasonCode: String,
-    ) : GPUIntermediatePlanStep
+    ) : GPUIntermediatePlanStep {
+        init {
+            require(scopeLabel.isNotBlank()) { "GPUIntermediatePlanStep.Refuse.scopeLabel must not be blank" }
+            require(reasonCode.isNotBlank()) { "GPUIntermediatePlanStep.Refuse.reasonCode must not be blank" }
+        }
+    }
 }
 
 data class GPUIntermediateDiagnostic(
@@ -126,6 +167,21 @@ data class GPUIntermediateTelemetry(
     val msaaTargets: Long = 0L,
     val msaaResolves: Long = 0L,
 ) {
+    init {
+        require(destinationReadCopies >= 0L) { "GPUIntermediateTelemetry.destinationReadCopies must be non-negative" }
+        require(destinationReadIntermediateBinds >= 0L) { "GPUIntermediateTelemetry.destinationReadIntermediateBinds must be non-negative" }
+        require(copiedBytes >= 0L) { "GPUIntermediateTelemetry.copiedBytes must be non-negative" }
+        require(passSplits >= 0L) { "GPUIntermediateTelemetry.passSplits must be non-negative" }
+        require(intermediatesCreated >= 0L) { "GPUIntermediateTelemetry.intermediatesCreated must be non-negative" }
+        require(intermediatesReused >= 0L) { "GPUIntermediateTelemetry.intermediatesReused must be non-negative" }
+        require(intermediatesRefused >= 0L) { "GPUIntermediateTelemetry.intermediatesRefused must be non-negative" }
+        require(liveIntermediateBytes >= 0L) { "GPUIntermediateTelemetry.liveIntermediateBytes must be non-negative" }
+        require(layerTargets >= 0L) { "GPUIntermediateTelemetry.layerTargets must be non-negative" }
+        require(layerComposites >= 0L) { "GPUIntermediateTelemetry.layerComposites must be non-negative" }
+        require(msaaTargets >= 0L) { "GPUIntermediateTelemetry.msaaTargets must be non-negative" }
+        require(msaaResolves >= 0L) { "GPUIntermediateTelemetry.msaaResolves must be non-negative" }
+    }
+
     fun dumpLine(): String =
         "intermediate.telemetry destinationReadCopies=$destinationReadCopies " +
             "destinationReadIntermediateBinds=$destinationReadIntermediateBinds copiedBytes=$copiedBytes " +
@@ -146,9 +202,17 @@ data class GPUIntermediatePlan(
         require(planId.isNotBlank()) { "GPUIntermediatePlan.planId must not be blank" }
         require(targetId.isNotBlank()) { "GPUIntermediatePlan.targetId must not be blank" }
         require(steps.isNotEmpty()) { "GPUIntermediatePlan.steps must not be empty" }
-        val hasRefusal = steps.any { it is GPUIntermediatePlanStep.Refuse }
+        val refusalStep = steps.singleOrNull { it is GPUIntermediatePlanStep.Refuse } as GPUIntermediatePlanStep.Refuse?
+        val terminalDiagnostics = diagnostics.filter { it.terminal }
+        val hasRefusal = refusalStep != null
         require(!hasRefusal || steps.size == 1) {
             "GPUIntermediatePlan cannot mix terminal refusal with executable steps"
+        }
+        require(!hasRefusal || terminalDiagnostics.isEmpty()) {
+            "GPUIntermediatePlan refusal-only plans must not duplicate terminal diagnostics"
+        }
+        require(terminalDiagnostics.size <= 1) {
+            "GPUIntermediatePlan must not contain more than one terminal diagnostic"
         }
     }
 }
@@ -156,8 +220,20 @@ data class GPUIntermediatePlan(
 fun GPUIntermediatePlan.dumpLines(): List<String> =
     listOf(
         "intermediate.plan id=$planId target=$targetId steps=${steps.size} " +
-            "diagnostics=${diagnostics.map { it.code }.ifEmpty { listOf("none") }.joinToString(",")}",
+            "diagnostics=${headerDiagnostics().ifEmpty { listOf("none") }.joinToString(",")}",
     ) + steps.map { step -> step.dumpLine() } + listOf(telemetry.dumpLine())
+
+private fun GPUIntermediatePlan.headerDiagnostics(): List<String> {
+    val terminalDiagnostic = diagnostics.singleOrNull { it.terminal }
+    if (terminalDiagnostic != null) {
+        return listOf(terminalDiagnostic.code)
+    }
+    val refusal = steps.singleOrNull() as? GPUIntermediatePlanStep.Refuse
+    if (refusal != null) {
+        return listOf(refusal.reasonCode)
+    }
+    return diagnostics.map { it.code }
+}
 
 private fun GPUIntermediatePlanStep.dumpLine(): String =
     when (this) {
