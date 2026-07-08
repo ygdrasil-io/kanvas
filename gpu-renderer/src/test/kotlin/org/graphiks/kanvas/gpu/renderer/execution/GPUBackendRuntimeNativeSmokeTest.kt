@@ -358,6 +358,26 @@ class GPUBackendRuntimeNativeSmokeTest {
     }
 
     @Test
+    fun `runtime telemetry dump includes pass batch counters`() {
+        val telemetry = GPUBackendRuntimeTelemetry(
+            renderPasses = 1,
+            submissions = 1,
+            commandBuffers = 1,
+            passBatchPlans = 1,
+            passBatchesAccepted = 1,
+            passBatchCuts = 0,
+            passBatchPackets = 3,
+        )
+
+        val dump = telemetry.dumpLines().joinToString("\n")
+
+        assertTrue(dump.contains("passBatchPlans=1"), dump)
+        assertTrue(dump.contains("passBatchesAccepted=1"), dump)
+        assertTrue(dump.contains("passBatchCuts=0"), dump)
+        assertTrue(dump.contains("passBatchPackets=3"), dump)
+    }
+
+    @Test
     fun `backend runtime offscreen encode and read rgba when backend is available`() {
         val runtime = GPUBackendRuntimeFactory.createOrNull()
         assumeTrue(runtime != null, "GPU backend unavailable in current environment")

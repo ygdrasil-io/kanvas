@@ -97,6 +97,8 @@ import org.graphiks.kanvas.gpu.renderer.wgsl.TexturedVerticesColorFilterWgsl
 import org.graphiks.kanvas.gpu.renderer.wgsl.colorGlyphCompositeWgsl
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendFactor
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
+import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchPlan
+import org.graphiks.kanvas.gpu.renderer.passes.dumpLines
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPayloadFingerprint
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPayloadSlotID
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPayloadUploadPlan
@@ -126,6 +128,7 @@ private const val FULLSCREEN_UNIFORM_SLAB_UPLOAD_BUDGET_BYTES = 1_048_576L
 private const val FULLSCREEN_UNIFORM_SLAB_SOURCE_LABEL = "fullscreen-uniform-pass"
 private const val FULLSCREEN_UNIFORM_SLAB_REFUSED_SOURCE_LABEL_FOR_TEST = "fullscreen-uniform-pass@refused"
 private const val MAX_PAYLOAD_SLAB_DUMP_LINES = 256
+private const val MAX_PASS_BATCH_DUMP_LINES = 200
 private const val RGBA_BYTES_PER_PIXEL: Int = 4
 private const val RECT_COLOR_UNIFORM_SIZE_BYTES: ULong = 16uL
 private const val VERTEX_COLOR_STRIDE_BYTES: Int = 32
@@ -516,6 +519,11 @@ private class WgpuBackendRuntimeTelemetryRecorder {
     private var uniformSlabFallbacks = 0L
     private val payloadSlabDumpLines = mutableListOf<String>()
     private val payloadSlabResourceLedger = GPUPayloadSlabResourceLedger(maxEvents = MAX_PAYLOAD_SLAB_DUMP_LINES)
+    private var passBatchPlans = 0L
+    private var passBatchesAccepted = 0L
+    private var passBatchCuts = 0L
+    private var passBatchPackets = 0L
+    private val passBatchDumpLines = mutableListOf<String>()
 
     /** Records one successfully submitted non-presentable render pass. */
     @Synchronized
@@ -601,6 +609,19 @@ private class WgpuBackendRuntimeTelemetryRecorder {
         payloadSlabResourceLedger.record(event)
     }
 
+    /** Records backend-neutral pass batch decisions without backend handles. */
+    @Synchronized
+    fun recordPassBatchPlan(plan: GPUPassBatchPlan) {
+        passBatchPlans += 1L
+        passBatchesAccepted += plan.acceptedBatchCount.toLong()
+        passBatchCuts += plan.cuts.size.toLong()
+        passBatchPackets += plan.packetCount.toLong()
+        passBatchDumpLines += plan.dumpLines()
+        while (passBatchDumpLines.size > MAX_PASS_BATCH_DUMP_LINES) {
+            passBatchDumpLines.removeAt(0)
+        }
+    }
+
     /** Returns an immutable point-in-time telemetry snapshot. */
     @Synchronized
     fun snapshot(): GPUBackendRuntimeTelemetry =
@@ -618,12 +639,19 @@ private class WgpuBackendRuntimeTelemetryRecorder {
             uniformSlabsCreated = uniformSlabsCreated,
             uniformSlabBytesAllocated = uniformSlabBytesAllocated,
             uniformSlabFallbacks = uniformSlabFallbacks,
+            passBatchPlans = passBatchPlans,
+            passBatchesAccepted = passBatchesAccepted,
+            passBatchCuts = passBatchCuts,
+            passBatchPackets = passBatchPackets,
         )
 
     /** Returns telemetry counters followed by deterministic payload slab planning evidence. */
     @Synchronized
     fun dumpLines(): List<String> =
-        snapshot().dumpLines() + payloadSlabDumpLines.toList() + payloadSlabResourceLedger.dumpLines()
+        snapshot().dumpLines() +
+            payloadSlabDumpLines.toList() +
+            payloadSlabResourceLedger.dumpLines() +
+            passBatchDumpLines.toList()
 }
 
 private class WgpuOffscreenTarget(

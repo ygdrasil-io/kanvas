@@ -77,6 +77,10 @@ data class GPUBackendRuntimeTelemetry(
     val uniformSlabsCreated: Long = 0L,
     val uniformSlabBytesAllocated: Long = 0L,
     val uniformSlabFallbacks: Long = 0L,
+    val passBatchPlans: Long = 0L,
+    val passBatchesAccepted: Long = 0L,
+    val passBatchCuts: Long = 0L,
+    val passBatchPackets: Long = 0L,
 ) {
     init {
         require(renderPasses >= 0L) { "GPUBackendRuntimeTelemetry.renderPasses must be non-negative" }
@@ -94,6 +98,10 @@ data class GPUBackendRuntimeTelemetry(
             uniformSlabBytesAllocated >= 0L,
         ) { "GPUBackendRuntimeTelemetry.uniformSlabBytesAllocated must be non-negative" }
         require(uniformSlabFallbacks >= 0L) { "GPUBackendRuntimeTelemetry.uniformSlabFallbacks must be non-negative" }
+        require(passBatchPlans >= 0L) { "GPUBackendRuntimeTelemetry.passBatchPlans must be non-negative" }
+        require(passBatchesAccepted >= 0L) { "GPUBackendRuntimeTelemetry.passBatchesAccepted must be non-negative" }
+        require(passBatchCuts >= 0L) { "GPUBackendRuntimeTelemetry.passBatchCuts must be non-negative" }
+        require(passBatchPackets >= 0L) { "GPUBackendRuntimeTelemetry.passBatchPackets must be non-negative" }
     }
 
     /** Deterministic diagnostic lines without backend object identities. */
@@ -104,7 +112,9 @@ data class GPUBackendRuntimeTelemetry(
                 "buffersCreated=$buffersCreated texturesCreated=$texturesCreated " +
                 "bindGroupsCreated=$bindGroupsCreated samplersCreated=$samplersCreated " +
                 "queueWrites=$queueWrites uniformSlabsCreated=$uniformSlabsCreated " +
-                "uniformSlabBytesAllocated=$uniformSlabBytesAllocated uniformSlabFallbacks=$uniformSlabFallbacks",
+                "uniformSlabBytesAllocated=$uniformSlabBytesAllocated uniformSlabFallbacks=$uniformSlabFallbacks " +
+                "passBatchPlans=$passBatchPlans passBatchesAccepted=$passBatchesAccepted " +
+                "passBatchCuts=$passBatchCuts passBatchPackets=$passBatchPackets",
         )
 
     companion object {
