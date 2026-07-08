@@ -202,13 +202,15 @@ data class GPUIntermediatePlan(
         require(planId.isNotBlank()) { "GPUIntermediatePlan.planId must not be blank" }
         require(targetId.isNotBlank()) { "GPUIntermediatePlan.targetId must not be blank" }
         require(steps.isNotEmpty()) { "GPUIntermediatePlan.steps must not be empty" }
-        val refusalStep = steps.singleOrNull { it is GPUIntermediatePlanStep.Refuse } as GPUIntermediatePlanStep.Refuse?
+        val refusalSteps = steps.filterIsInstance<GPUIntermediatePlanStep.Refuse>()
         val terminalDiagnostics = diagnostics.filter { it.terminal }
-        val hasRefusal = refusalStep != null
-        require(!hasRefusal || steps.size == 1) {
+        require(refusalSteps.size <= 1) {
+            "GPUIntermediatePlan must not contain multiple terminal refusal steps"
+        }
+        require(refusalSteps.size != 1 || steps.size == 1) {
             "GPUIntermediatePlan cannot mix terminal refusal with executable steps"
         }
-        require(!hasRefusal || terminalDiagnostics.isEmpty()) {
+        require(refusalSteps.isEmpty() || terminalDiagnostics.isEmpty()) {
             "GPUIntermediatePlan refusal-only plans must not duplicate terminal diagnostics"
         }
         require(terminalDiagnostics.size <= 1) {
@@ -224,13 +226,14 @@ fun GPUIntermediatePlan.dumpLines(): List<String> =
     ) + steps.map { step -> step.dumpLine() } + listOf(telemetry.dumpLine())
 
 private fun GPUIntermediatePlan.headerDiagnostics(): List<String> {
+    val refusalDiagnostic = steps.firstOrNull { it is GPUIntermediatePlanStep.Refuse } as? GPUIntermediatePlanStep.Refuse
+    if (refusalDiagnostic != null) {
+        return listOf(refusalDiagnostic.reasonCode)
+    }
+
     val terminalDiagnostic = diagnostics.singleOrNull { it.terminal }
     if (terminalDiagnostic != null) {
         return listOf(terminalDiagnostic.code)
-    }
-    val refusal = steps.singleOrNull() as? GPUIntermediatePlanStep.Refuse
-    if (refusal != null) {
-        return listOf(refusal.reasonCode)
     }
     return diagnostics.map { it.code }
 }

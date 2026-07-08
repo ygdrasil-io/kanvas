@@ -102,6 +102,26 @@ class GPUIntermediatePlanContractsTest {
     }
 
     @Test
+    fun `plans cannot contain multiple refusal steps`() {
+        assertFailsWith<IllegalArgumentException> {
+            GPUIntermediatePlan(
+                planId = "intermediate-plan:duplicate-refusal",
+                targetId = "target:main",
+                steps = listOf(
+                    GPUIntermediatePlanStep.Refuse(
+                        scopeLabel = "cmd-11",
+                        reasonCode = "unsupported.destination_read.active_attachment_sampled",
+                    ),
+                    GPUIntermediatePlanStep.Refuse(
+                        scopeLabel = "cmd-12",
+                        reasonCode = "unsupported.destination_read.target_unavailable",
+                    ),
+                ),
+            )
+        }
+    }
+
+    @Test
     fun `refusal-only plan dump derives terminal diagnostic in header`() {
         val plan = GPUIntermediatePlan(
             planId = "intermediate-plan:refused",
