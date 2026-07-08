@@ -36,7 +36,59 @@ class GPUIntermediateResourceProviderTest {
     }
 
     @Test
-    fun `intermediate texture refuses stale generation`() {
+    fun `intermediate texture cache partitions by generation lifetime and owner`() {
+        val provider = GPUConcreteResourceProvider()
+        val context = context()
+        val baseRequest = GPUIntermediateTextureMaterializationRequest(
+            targetId = "target:main",
+            descriptor = descriptor(),
+            deviceGeneration = 5,
+            actualResourceGeneration = 5,
+            requiredUsageLabels = setOf("render_attachment", "texture_binding"),
+            activeAttachmentSampled = false,
+        )
+
+        assertIs<GPUResourceMaterializationDecision.Materialized>(
+            provider.materializeIntermediateTexture(baseRequest, context),
+        )
+
+        val generationVariant = assertIs<GPUResourceMaterializationDecision.Materialized>(
+            provider.materializeIntermediateTexture(
+                baseRequest.copy(
+                    descriptor = descriptor(generation = 6),
+                    actualResourceGeneration = 6,
+                ),
+                context,
+            ),
+        )
+        val lifetimeVariant = assertIs<GPUResourceMaterializationDecision.Materialized>(
+            provider.materializeIntermediateTexture(
+                baseRequest.copy(
+                    descriptor = descriptor(lifetimeClass = "frame-local"),
+                ),
+                context,
+            ),
+        )
+        val ownerVariant = assertIs<GPUResourceMaterializationDecision.Materialized>(
+            provider.materializeIntermediateTexture(
+                baseRequest.copy(
+                    descriptor = descriptor(ownerScope = "scope:layer-b"),
+                ),
+                context,
+            ),
+        )
+
+        assertEquals(GPUResourceLeaseCacheResult.Create, generationVariant.dumpResourceLeaseSnapshot.single().cacheResult)
+        assertEquals(GPUResourceLeaseCacheResult.Create, lifetimeVariant.dumpResourceLeaseSnapshot.single().cacheResult)
+        assertEquals(GPUResourceLeaseCacheResult.Create, ownerVariant.dumpResourceLeaseSnapshot.single().cacheResult)
+        assertEquals(
+            listOf("create", "create", "create", "create"),
+            provider.telemetry.dumpEvents.filter { it.lane == "intermediate-texture" }.map { it.result },
+        )
+    }
+
+    @Test
+    fun `intermediate texture refuses mismatched descriptor generation`() {
         val provider = GPUConcreteResourceProvider()
         val refused = assertIs<GPUResourceMaterializationDecision.Refused>(
             provider.materializeIntermediateTexture(
@@ -44,7 +96,7 @@ class GPUIntermediateResourceProviderTest {
                     targetId = "target:main",
                     descriptor = descriptor(generation = 4),
                     deviceGeneration = 5,
-                    actualResourceGeneration = 4,
+                    actualResourceGeneration = 3,
                     requiredUsageLabels = setOf("render_attachment", "texture_binding"),
                     activeAttachmentSampled = false,
                 ),
@@ -53,6 +105,26 @@ class GPUIntermediateResourceProviderTest {
         )
 
         assertEquals("unsupported.intermediate.generation_stale", refused.diagnostic.code)
+    }
+
+    @Test
+    fun `intermediate texture refuses stale device generation separately`() {
+        val provider = GPUConcreteResourceProvider()
+        val refused = assertIs<GPUResourceMaterializationDecision.Refused>(
+            provider.materializeIntermediateTexture(
+                GPUIntermediateTextureMaterializationRequest(
+                    targetId = "target:main",
+                    descriptor = descriptor(),
+                    deviceGeneration = 4,
+                    actualResourceGeneration = 5,
+                    requiredUsageLabels = setOf("render_attachment", "texture_binding"),
+                    activeAttachmentSampled = false,
+                ),
+                context(),
+            ),
+        )
+
+        assertEquals("unsupported.intermediate.device_generation_stale", refused.diagnostic.code)
     }
 
     @Test
@@ -83,7 +155,11 @@ class GPUIntermediateResourceProviderTest {
             budgetClass = "test",
         )
 
-    private fun descriptor(generation: Long = 5): GPUIntermediateTextureDescriptor =
+    private fun descriptor(
+        generation: Long = 5,
+        lifetimeClass: String = "layer-local",
+        ownerScope: String = "scope:layer-a",
+    ): GPUIntermediateTextureDescriptor =
         GPUIntermediateTextureDescriptor(
             label = "intermediate:layer-a",
             purpose = GPUIntermediatePurpose.LayerTarget,
@@ -96,8 +172,8 @@ class GPUIntermediateResourceProviderTest {
             usageLabels = listOf("render_attachment", "texture_binding"),
             sampleCount = 1,
             generation = generation,
-            lifetimeClass = "layer-local",
-            ownerScope = "scope:layer-a",
+            lifetimeClass = lifetimeClass,
+            ownerScope = ownerScope,
             byteEstimate = 32000,
         )
 }

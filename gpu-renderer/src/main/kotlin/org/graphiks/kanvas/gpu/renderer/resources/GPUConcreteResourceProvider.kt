@@ -291,12 +291,11 @@ class GPUConcreteResourceProvider(
                     actualDeviceGeneration = request.deviceGeneration,
                     resourceKind = "intermediate",
                 )
-            request.descriptor.generation != context.deviceGeneration ||
-                request.actualResourceGeneration != context.deviceGeneration ->
+            request.actualResourceGeneration != request.descriptor.generation ->
                 GPUResourceDiagnostic(
                     code = "unsupported.intermediate.generation_stale",
                     resourceLabel = request.descriptor.label,
-                    message = "intermediate generation ${request.actualResourceGeneration} and descriptor generation ${request.descriptor.generation} do not match device generation ${context.deviceGeneration}",
+                    message = "intermediate generation ${request.actualResourceGeneration} != descriptor generation ${request.descriptor.generation}",
                     terminal = true,
                 )
             request.activeAttachmentSampled ->
