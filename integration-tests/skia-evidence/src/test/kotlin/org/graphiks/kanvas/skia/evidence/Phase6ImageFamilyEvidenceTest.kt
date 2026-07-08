@@ -67,6 +67,30 @@ class Phase6ImageFamilyEvidenceTest {
         assertEquals(1, evidence.summary.classifications["instrumented-existing"])
         assertEquals("DrawBitmapRect3", evidence.rows.single().name)
     }
+
+    @Test
+    fun `writer creates json markdown and csv outputs`() {
+        val evidence = Phase6ImageFamilyClassifier.buildEvidence(
+            GmDashboard(
+                generatedAt = "2026-07-08T21:00:00",
+                rows = listOf(row("DrawBitmapRect3")),
+            ),
+        )
+
+        val root = kotlin.io.path.createTempDirectory("phase6-image-evidence")
+        Phase6ImageFamilyEvidenceWriter.writeOutputs(root, evidence)
+
+        val evidencePath = root.resolve("reports/gpu-renderer/phase-6-image-family/evidence.json")
+        val markdownPath = root.resolve("reports/gpu-renderer/2026-07-08-gpu-phase-6-image-family.md")
+        val csvPath = root.resolve("reports/gpu-renderer/phase-6-image-family/classification.csv")
+
+        assertEquals(true, java.nio.file.Files.isRegularFile(evidencePath))
+        assertEquals(true, java.nio.file.Files.isRegularFile(markdownPath))
+        assertEquals(true, java.nio.file.Files.isRegularFile(csvPath))
+        assertContains(java.nio.file.Files.readString(evidencePath), "\"schemaVersion\": \"phase6-image-family-v1\"")
+        assertContains(java.nio.file.Files.readString(markdownPath), "No broad IMAGE support is claimed")
+        assertContains(java.nio.file.Files.readString(csvPath), "DrawBitmapRect3,simple-image-rect,instrumented-existing")
+    }
 }
 
 private fun row(

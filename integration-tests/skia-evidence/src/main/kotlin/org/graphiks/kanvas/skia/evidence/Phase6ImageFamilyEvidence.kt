@@ -2,14 +2,21 @@ package org.graphiks.kanvas.skia.evidence
 
 import java.nio.file.Files
 import java.nio.file.Path
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonObjectBuilder
 import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.doubleOrNull
+import kotlinx.serialization.json.add
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 
 data class GmDashboard(
     val generatedAt: String?,
@@ -235,3 +242,134 @@ internal fun JsonObject.double(key: String): Double? =
 
 internal fun JsonObject.boolean(key: String): Boolean? =
     this[key]?.jsonPrimitive?.booleanOrNull
+
+object Phase6ImageFamilyEvidenceWriter {
+    private val prettyJson = Json { prettyPrint = true }
+
+    fun writeOutputs(root: Path, evidence: Phase6ImageFamilyEvidence) {
+        val evidencePath = root.resolve("reports/gpu-renderer/phase-6-image-family/evidence.json")
+        val csvPath = root.resolve("reports/gpu-renderer/phase-6-image-family/classification.csv")
+        val markdownPath = root.resolve("reports/gpu-renderer/2026-07-08-gpu-phase-6-image-family.md")
+        Files.createDirectories(evidencePath.parent)
+        Files.createDirectories(markdownPath.parent)
+        Files.writeString(evidencePath, prettyJson.encodeToString(JsonObject.serializer(), evidence.toJsonObject()) + "\n")
+        Files.writeString(csvPath, evidence.toCsv())
+        Files.writeString(markdownPath, evidence.toMarkdown())
+    }
+}
+
+fun Phase6ImageFamilyEvidence.toJsonObject(): JsonObject =
+    buildJsonObject {
+        put("schemaVersion", schemaVersion)
+        put("generatedBy", generatedBy)
+        put("dashboardSource", dashboardSource)
+        if (sourceGeneratedAt == null) put("sourceGeneratedAt", JsonNull) else put("sourceGeneratedAt", sourceGeneratedAt)
+        put("summary", summary.toJsonObject())
+        if (resourceEvidence == null) put("resourceEvidence", JsonNull) else put("resourceEvidence", resourceEvidence.toJsonObject())
+        put("nonClaims", buildJsonArray { nonClaims.forEach { add(it) } })
+        put("rows", buildJsonArray { rows.forEach { add(it.toJsonObject()) } })
+    }
+
+private fun Phase6ImageSummary.toJsonObject(): JsonObject =
+    buildJsonObject {
+        put("totalImageRows", totalImageRows)
+        put("classifications", classifications.toCountJsonObject())
+        put("subfamilies", subfamilies.toCountJsonObject())
+        put("promotedRows", promotedRows)
+        put("unexpectedFails", unexpectedFails)
+        put("noScore", noScore)
+    }
+
+private fun ResourceEvidence.toJsonObject(): JsonObject =
+    buildJsonObject {
+        put("rowId", rowId)
+        put("dumpLines", buildJsonArray { dumpLines.forEach { add(it) } })
+        put("nonClaims", buildJsonArray { nonClaims.forEach { add(it) } })
+    }
+
+private fun Phase6ImageRowEvidence.toJsonObject(): JsonObject =
+    buildJsonObject {
+        put("name", name)
+        put("family", family)
+        put("subfamily", subfamily)
+        put("classification", classification)
+        putNullableDouble("similarity", similarity)
+        putNullableDouble("minSimilarity", minSimilarity)
+        if (isPassing == null) put("isPassing", JsonNull) else put("isPassing", isPassing)
+        put("fallbackReason", fallbackReason)
+        putNullableString("referencePath", referencePath)
+        putNullableString("generatedPath", generatedPath)
+        putNullableString("diffPath", diffPath)
+        putNullableString("noScoreCause", noScoreCause)
+        put("nonClaim", nonClaim)
+    }
+
+private fun Map<String, Int>.toCountJsonObject(): JsonObject =
+    buildJsonObject {
+        entries.sortedBy { it.key }.forEach { (key, value) -> put(key, value) }
+    }
+
+private fun JsonObjectBuilder.putNullableString(key: String, value: String?) {
+    if (value == null) put(key, JsonNull) else put(key, value)
+}
+
+private fun JsonObjectBuilder.putNullableDouble(key: String, value: Double?) {
+    if (value == null) put(key, JsonNull) else put(key, value)
+}
+
+fun Phase6ImageFamilyEvidence.toCsv(): String =
+    buildString {
+        appendLine("name,subfamily,classification,similarity,minSimilarity,fallbackReason,noScoreCause")
+        rows.forEach { row ->
+            appendLine(
+                listOf(
+                    row.name,
+                    row.subfamily,
+                    row.classification,
+                    row.similarity?.toString().orEmpty(),
+                    row.minSimilarity?.toString().orEmpty(),
+                    row.fallbackReason,
+                    row.noScoreCause.orEmpty(),
+                ).joinToString(",") { it.csvCell() },
+            )
+        }
+    }
+
+fun Phase6ImageFamilyEvidence.toMarkdown(): String =
+    buildString {
+        appendLine("# GPU Phase 6 IMAGE Family Evidence")
+        appendLine()
+        appendLine("## Summary")
+        appendLine()
+        appendLine("- Total IMAGE rows: ${summary.totalImageRows}")
+        appendLine("- Classifications: ${summary.classifications}")
+        appendLine("- Subfamilies: ${summary.subfamilies}")
+        appendLine()
+        appendLine("## Non-Claims")
+        appendLine()
+        nonClaims.forEach { appendLine("- $it") }
+        resourceEvidence?.let { resource ->
+            appendLine()
+            appendLine("## Resource And Cache Evidence")
+            appendLine()
+            appendLine("- Row id: `${resource.rowId}`")
+            resource.dumpLines.forEach { appendLine("- `$it`") }
+            resource.nonClaims.forEach { appendLine("- `$it`") }
+        }
+        appendLine()
+        appendLine("## Rows")
+        appendLine()
+        appendLine("| Row | Subfamily | Classification | Similarity | Fallback |")
+        appendLine("|---|---|---|---:|---|")
+        rows.forEach { row ->
+            val similarity = row.similarity?.let { "%.2f".format(java.util.Locale.US, it) } ?: "n/a"
+            appendLine("| `${row.name}` | `${row.subfamily}` | `${row.classification}` | $similarity | `${row.fallbackReason}` |")
+        }
+    }
+
+private fun String.csvCell(): String =
+    if (any { it == ',' || it == '"' || it == '\n' || it == '\r' }) {
+        "\"" + replace("\"", "\"\"") + "\""
+    } else {
+        this
+    }

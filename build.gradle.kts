@@ -6661,3 +6661,9 @@ tasks.named("pipelinePmBundle") {
     finalizedBy("injectGpuRendererR6FirstRoutePmEvidenceIntoPmBundle")
     finalizedBy("injectGpuRendererM9ReadinessPmEvidenceIntoPmBundle")
 }
+
+tasks.register("generateGpuPhase6ImageFamilyEvidence") {
+    group = "verification"
+    description = "Delegates to :integration-tests:skia-evidence:generateGpuPhase6ImageFamilyEvidence."
+    dependsOn(":integration-tests:skia-evidence:generateGpuPhase6ImageFamilyEvidence")
+}
