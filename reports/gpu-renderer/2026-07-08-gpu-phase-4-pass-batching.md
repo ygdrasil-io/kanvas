@@ -5,8 +5,9 @@ Date: 2026-07-08
 ## Scope
 
 Implemented conservative `GPUPassBatcher` support for solid fills and simple
-gradients. Destination-read, saveLayer, filters, text complex, copy, upload,
-readback, compute, and unretained materialized resources remain explicit cuts.
+linear two-stop gradients. Destination-read, saveLayer, filters, text complex,
+copy, upload, readback, compute, and unretained materialized resources remain
+explicit cuts.
 
 ## Commands
 
@@ -25,6 +26,22 @@ rtk git diff --check
 - `rtk git diff --check`: clean.
 - Follow-up review check after closeout commit `6ed88f510`: `rtk git status --short`
   and `rtk git diff --check` both produced no output.
+
+## Review Fix Follow-Up
+
+- `GPUPassCommandStream.fromBatchPlan(...)` now refuses plans unless every
+  input packet appears in exactly one lowered batch; cut/refused packets can no
+  longer disappear silently during grouped command emission.
+- Phase 4 `SimpleGradient` opt-in is constrained to explicit linear two-stop
+  routes. Radial and sweep fallback paths no longer mark themselves as
+  `SimpleGradient`.
+- Runtime pass-batch telemetry is recorded only when
+  `materializeFullscreenUniformSlab(...)` returns a materialized slab with
+  retained leases. Slab fallback keeps the runtime path functional but does not
+  emit accepted batch-plan evidence.
+- Static scene-fixture diagnostics now carry the
+  `passes.batching.wiring-fixture` prefix so they cannot be confused with live
+  runtime telemetry dumps.
 
 ## Runtime Evidence
 
@@ -47,6 +64,7 @@ gpu-queue.telemetry submitted=1 completed=1 released=1 pending=0 waits=1 unknown
 - No saveLayer batching.
 - No filter/intermediate batching.
 - No text complex batching.
+- No radial/sweep simple-gradient pass-batching opt-in in Phase 4.
 - No Graphite or Ganesh port.
 - No dynamic SkSL compilation.
 

@@ -114,7 +114,7 @@ class M25ExecutorWiringTest {
     @Test
     fun `KGPU phase 4 pass batching diagnostics stay explicit for simple rect route`() {
         val lines = passBatchingWiringDiagnostics()
-        assertTrue(lines.any { it.startsWith("passes.batch-plan ") }, lines.toString())
+        assertTrue(lines.any { it.startsWith("passes.batching.wiring-fixture passes.batch-plan ") }, lines.toString())
         assertTrue(lines.any { it.contains("accepted=") }, lines.toString())
         assertTrue(lines.any { it.contains("nonclaim:no-destination-read-batching") }, lines.toString())
         assertTrue(lines.any { it.contains("nonclaim:no-save-layer-batching") }, lines.toString())

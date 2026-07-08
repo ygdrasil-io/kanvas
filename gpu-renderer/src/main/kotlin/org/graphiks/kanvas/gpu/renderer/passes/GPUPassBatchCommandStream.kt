@@ -31,6 +31,17 @@ fun GPUPassCommandStream.Companion.fromBatchPlan(
             }
         }
     }
+    val expectedPacketIds = packetStream.packets.groupingBy { it.packetId }.eachCount()
+    val loweredPacketIds = batchPlan.batches.flatMap { batch -> batch.packets }.groupingBy { it.packetId }.eachCount()
+    require(loweredPacketIds == expectedPacketIds) {
+        val missingPacketIds = expectedPacketIds.keys - loweredPacketIds.keys
+        val unexpectedPacketIds = loweredPacketIds.keys - expectedPacketIds.keys
+        val duplicatePacketIds = loweredPacketIds.filterValues { count -> count > 1 }.keys
+        "GPUPassCommandStream.fromBatchPlan requires every input packet to appear in exactly one batch; " +
+            "missing=${missingPacketIds.map { it.value }.ifEmpty { listOf("none") }.joinToString(",")} " +
+            "unexpected=${unexpectedPacketIds.map { it.value }.ifEmpty { listOf("none") }.joinToString(",")} " +
+            "duplicate=${duplicatePacketIds.map { it.value }.ifEmpty { listOf("none") }.joinToString(",")}"
+    }
 
     val commands = buildList {
         for (batch in batchPlan.batches) {

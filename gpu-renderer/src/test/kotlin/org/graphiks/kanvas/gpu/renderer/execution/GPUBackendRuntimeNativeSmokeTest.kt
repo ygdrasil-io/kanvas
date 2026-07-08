@@ -1231,6 +1231,72 @@ class GPUBackendRuntimeNativeSmokeTest {
     }
 
     @Test
+    fun `backend runtime does not record accepted pass batch plan when fullscreen slab fallback handles marked solid fills`() {
+        val runtime = GPUBackendRuntimeFactory.createOrNull()
+        assumeTrue(runtime != null, "GPU backend unavailable in current environment")
+
+        withFullscreenUniformSlabRefusedForTesting {
+            runtime!!.use { session ->
+                val before = session.runtimeTelemetry
+
+                session.createOffscreenTarget(
+                    GPUOffscreenTargetRequest(
+                        width = 6,
+                        height = 2,
+                        colorFormat = "rgba8unorm",
+                    ),
+                ).use { target ->
+                    target.encode(
+                        clearColor = GPUClearColor(red = 0.0, green = 0.0, blue = 0.0, alpha = 1.0),
+                    ) {
+                        drawFullscreenPass(
+                            wgsl = solidColorFullscreenWgsl(),
+                            colorFormat = "rgba8unorm",
+                            draws = listOf(
+                                GPUBackendRectDraw(
+                                    rgbaPremul = floatArrayOf(1f, 0f, 0f, 1f),
+                                    scissorX = 0,
+                                    scissorY = 0,
+                                    scissorWidth = 2,
+                                    scissorHeight = 2,
+                                ),
+                                GPUBackendRectDraw(
+                                    rgbaPremul = floatArrayOf(0f, 1f, 0f, 1f),
+                                    scissorX = 2,
+                                    scissorY = 0,
+                                    scissorWidth = 2,
+                                    scissorHeight = 2,
+                                ),
+                            ),
+                            passBatchKind = GPUBackendSimplePassBatchKind.SolidFill,
+                        )
+                    }
+
+                    val rgba = target.readRgba()
+                    val after = session.runtimeTelemetry
+                    val dump = session.runtimeTelemetryDumpLines.joinToString("\n")
+
+                    assertContentEquals(
+                        byteArrayOf(0xFF.toByte(), 0, 0, 0xFF.toByte()),
+                        pixelAt(rgba = rgba, width = 6, x = 0, y = 0),
+                    )
+                    assertContentEquals(
+                        byteArrayOf(0, 0xFF.toByte(), 0, 0xFF.toByte()),
+                        pixelAt(rgba = rgba, width = 6, x = 2, y = 0),
+                    )
+                    assertEquals(1L, after.uniformSlabFallbacks - before.uniformSlabFallbacks)
+                    assertEquals(0L, after.passBatchPlans - before.passBatchPlans, dump)
+                    assertEquals(0L, after.passBatchesAccepted - before.passBatchesAccepted, dump)
+                    assertEquals(0L, after.passBatchPackets - before.passBatchPackets, dump)
+                    assertTrue(dump.contains("payload-slab.resource.fallback source=fullscreen-uniform-pass"))
+                    assertTrue(!dump.contains("passes.batch-plan stream=fullscreen-uniform-pass"), dump)
+                    assertTrue(!dump.contains("passes.batch id=batch-1 kind=solid-fill"), dump)
+                }
+            }
+        }
+    }
+
+    @Test
     fun `backend runtime records GPU execution cache hit miss and create telemetry when backend is available`() {
         val runtime = GPUBackendRuntimeFactory.createOrNull()
         assumeTrue(runtime != null, "GPU backend unavailable in current environment")

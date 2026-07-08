@@ -237,7 +237,6 @@ internal fun GPUBackendRenderRecorder.dispatchFillRect(
                             ),
                         ),
                         blendMode = blendMode,
-                        passBatchKind = GPUBackendSimplePassBatchKind.SimpleGradient,
                     )
                 }
             }
@@ -318,7 +317,6 @@ internal fun GPUBackendRenderRecorder.dispatchFillRect(
                             ),
                         ),
                         blendMode = blendMode,
-                        passBatchKind = GPUBackendSimplePassBatchKind.SimpleGradient,
                     )
                 }
             }

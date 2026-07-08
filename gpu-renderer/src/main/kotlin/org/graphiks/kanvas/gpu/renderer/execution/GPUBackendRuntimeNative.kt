@@ -2556,18 +2556,17 @@ private class WgpuRenderRecorder(
             bindGroupLayout = bindGroupLayout,
             bindGroupLayoutHash = keys.bindGroupLayoutKeyHash,
         )
-        val retainedLeases = slab?.leases.orEmpty()
-        passBatchKind?.let { batchKind ->
-            recordFullscreenPassBatchPlan(
-                draws = draws,
-                sourceLabel = sourceLabel,
-                kind = batchKind.toNativePassBatchKind(),
-                pipelineKeyLabel = keys.renderPipelineKeyHash,
-                fixedStateHash = "fixed:${blendMode?.name ?: "src-over"}:${targetFormat.toBackendColorFormat()}",
-                retainedLeases = retainedLeases,
-            )
-        }
         if (slab != null) {
+            passBatchKind?.let { batchKind ->
+                recordFullscreenPassBatchPlan(
+                    draws = draws,
+                    sourceLabel = sourceLabel,
+                    kind = batchKind.toNativePassBatchKind(),
+                    pipelineKeyLabel = keys.renderPipelineKeyHash,
+                    fixedStateHash = "fixed:${blendMode?.name ?: "src-over"}:${targetFormat.toBackendColorFormat()}",
+                    retainedLeases = slab.leases,
+                )
+            }
             recordResourceLeasesAction(slab.leases)
         }
 

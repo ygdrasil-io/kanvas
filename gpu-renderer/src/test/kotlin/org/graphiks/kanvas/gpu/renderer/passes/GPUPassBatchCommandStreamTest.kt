@@ -179,6 +179,27 @@ class GPUPassBatchCommandStreamTest {
         assertContains(error.message.orEmpty(), "batch-2")
     }
 
+    @Test
+    fun `from batch plan refuses plans that omit cut packets from lowered batches`() {
+        val packetStream = packetStream(
+            packet("packet-1", 1, "target-a"),
+            packet("packet-2", 2, "target-a", role = GPUDrawPacketRole.Readback),
+        )
+        val plan = GPUPassBatcher().plan(requestForAll(packetStream))
+
+        val error = assertFailsWith<IllegalArgumentException> {
+            GPUPassCommandStream.fromBatchPlan(
+                streamId = "batch-command-stream-main",
+                packetStream = packetStream,
+                batchPlan = plan,
+                loadStoreLabel = "clear-store",
+            )
+        }
+
+        assertContains(error.message.orEmpty(), "every input packet")
+        assertContains(error.message.orEmpty(), "packet-2")
+    }
+
     private fun requestForAll(
         packetStream: GPUDrawPacketStream,
         retainedRefs: List<String> = listOf("lease:uniform-slab:frame-1"),
@@ -240,7 +261,12 @@ class GPUPassBatchCommandStreamTest {
             packets = packets.toList(),
         )
 
-    private fun packet(packetId: String, commandId: Int, target: String): GPUDrawPacket =
+    private fun packet(
+        packetId: String,
+        commandId: Int,
+        target: String,
+        role: GPUDrawPacketRole = GPUDrawPacketRole.Shading,
+    ): GPUDrawPacket =
         GPUDrawPacket(
             packetId = GPUDrawPacketID(packetId),
             commandIdValue = commandId,
@@ -253,8 +279,8 @@ class GPUPassBatchCommandStreamTest {
             sortKeyPreimage = "paint|clip|transform|$commandId",
             renderStepId = GPURenderStepID("fill-rect"),
             renderStepVersion = 1,
-            role = GPUDrawPacketRole.Shading,
-            renderPipelineKey = GPURenderPipelineKey("render:solid-fill"),
+            role = role,
+            renderPipelineKey = if (role == GPUDrawPacketRole.Shading) GPURenderPipelineKey("render:solid-fill") else null,
             bindingLayoutHash = "layout-solid-v1",
             uniformSlot = GPUUniformPayloadSlot(
                 slotId = GPUPayloadSlotID("uniform-$commandId"),

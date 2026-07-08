@@ -549,7 +549,11 @@ class RectOnlyOffscreenRenderer {
                 drawFullscreenRawUniformPass(
                     wgsl = wgsl,
                     colorFormat = OFFSCREEN_COLOR_FORMAT,
-                    passBatchKind = GPUBackendSimplePassBatchKind.SimpleGradient,
+                    passBatchKind = if (family == "linear-gradient-rect") {
+                        GPUBackendSimplePassBatchKind.SimpleGradient
+                    } else {
+                        null
+                    },
                     draws = fills.map { fill ->
                         val bytes = when (family) {
                             "linear-gradient-rect" -> UniformPacker.linearGradientBytes(
@@ -1819,9 +1823,9 @@ internal fun rectOnlyRenderedDiagnostics(
 
 internal fun passBatchingWiringDiagnostics(): List<String> =
     listOf(
-        "passes.batch-plan stream=phase4-simple-rect-route pass=phase4-simple-rect-pass batches=1 accepted=1 cuts=0 packets=4 diagnostics=none",
-        "passes.batch id=batch-1 kind=solid-fill target=rgba8unorm packets=packet-1,packet-2,packet-3,packet-4 pipelines=render:solid-fill queueRetained=true",
-        "passes.batch-queue-guard batch=batch-1 retained=true required=lease:uniform-slab:phase4 retainedRefs=lease:uniform-slab:phase4",
+        "passes.batching.wiring-fixture passes.batch-plan stream=phase4-simple-rect-route pass=phase4-simple-rect-pass batches=1 accepted=1 cuts=0 packets=4 diagnostics=none",
+        "passes.batching.wiring-fixture passes.batch id=batch-1 kind=solid-fill target=rgba8unorm packets=packet-1,packet-2,packet-3,packet-4 pipelines=render:solid-fill queueRetained=true",
+        "passes.batching.wiring-fixture passes.batch-queue-guard batch=batch-1 retained=true required=lease:uniform-slab:phase4 retainedRefs=lease:uniform-slab:phase4",
         "passes.batching.nonclaim no-destination-read-batching nonclaim:no-destination-read-batching",
         "passes.batching.nonclaim no-save-layer-batching nonclaim:no-save-layer-batching",
         "passes.batching.nonclaim no-text-complex-batching nonclaim:no-text-complex-batching",
