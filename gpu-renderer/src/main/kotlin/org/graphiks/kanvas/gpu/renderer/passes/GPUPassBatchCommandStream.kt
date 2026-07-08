@@ -2,6 +2,10 @@ package org.graphiks.kanvas.gpu.renderer.passes
 
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceMaterializationDecision
 
+/**
+ * Lowers an accepted pass-batch plan into the explicit render-pass command stream used by
+ * runtime evidence and follow-on diagnostics.
+ */
 fun GPUPassCommandStream.Companion.fromBatchPlan(
     streamId: String,
     packetStream: GPUDrawPacketStream,

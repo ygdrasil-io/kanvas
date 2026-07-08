@@ -3,12 +3,13 @@ package org.graphiks.kanvas.gpu.renderer.scenes.offscreen
 import java.awt.image.BufferedImage
 import java.io.File
 import javax.imageio.ImageIO
-import org.graphiks.kanvas.Canvas
-import org.graphiks.kanvas.Paint
-import org.graphiks.kanvas.Path
-import org.graphiks.kanvas.RRect
-import org.graphiks.kanvas.Rect
-import org.graphiks.kanvas.Surface
+import org.graphiks.kanvas.geometry.Path
+import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.surface.RenderResult
+import org.graphiks.kanvas.surface.Surface
+import org.graphiks.kanvas.types.Color
+import org.graphiks.kanvas.types.RRect
+import org.graphiks.kanvas.types.Rect
 
 private const val BYTES_PER_PIXEL: Int = 4
 private const val RENDER_FILE_NAME: String = "render.png"
@@ -150,25 +151,20 @@ private data class SceneRender(
 
 private fun renderSolidRedRect(width: Int, height: Int): SceneRender {
     val surface = Surface(width = width, height = height)
-    val canvas = Canvas(surface)
+    val canvas = surface.canvas()
 
-    val red = Paint().apply {
-        r = 1f
-        g = 0f
-        b = 0f
-        a = 1f
-    }
+    val red = Paint.fill(Color.fromRGBA(1f, 0f, 0f, 1f))
     canvas.drawRect(Rect(50f, 50f, 270f, 190f), red)
 
-    val result = surface.renderToRgba()
+    val result = surface.render()
     val scene = RectScene(left = 50, top = 50, right = 270, bottom = 190, r = 255, g = 0, b = 0, a = 255)
 
     println(
-        "GPU render: nonTransparentPixels=${result.nonTransparentPixels} " +
-            "dispatched=${result.dispatchedCount} refused=${result.refusedCount}"
+        "GPU render: nonTransparentPixels=${result.nonTransparentPixels()} " +
+            "dispatched=${result.stats.opsDispatched} refused=${result.stats.opsRefused}"
     )
 
-    return SceneRender(rgba = result.rgba, width = width, height = height, scene = scene)
+    return SceneRender(rgba = result.rgbaBytes(), width = width, height = height, scene = scene)
 }
 
 private data class PathScene(
@@ -221,15 +217,10 @@ private data class PolygonScene(
 
 private fun renderSolidStarPath(width: Int, height: Int): SceneRender {
     val surface = Surface(width = width, height = height)
-    val canvas = Canvas(surface)
+    val canvas = surface.canvas()
 
-    val magenta = Paint().apply {
-        r = 1f
-        g = 0f
-        b = 1f
-        a = 1f
-    }
-    val path = Path().apply {
+    val magenta = Paint.fill(Color.fromRGBA(1f, 0f, 1f, 1f))
+    val path = Path {
         moveTo(160f, 20f)
         lineTo(180f, 80f)
         lineTo(250f, 80f)
@@ -244,7 +235,7 @@ private fun renderSolidStarPath(width: Int, height: Int): SceneRender {
     }
     canvas.drawPath(path, magenta)
 
-    val result = surface.renderToRgba()
+    val result = surface.render()
     val verts = listOf(
         160f to 20f, 180f to 80f, 250f to 80f, 195f to 120f, 215f to 185f,
         160f to 150f, 105f to 185f, 125f to 120f, 70f to 80f, 140f to 80f,
@@ -252,24 +243,19 @@ private fun renderSolidStarPath(width: Int, height: Int): SceneRender {
     val scene = PolygonScene(verts = verts, r = 255, g = 0, b = 255, a = 255)
 
     println(
-        "GPU render: nonTransparentPixels=${result.nonTransparentPixels} " +
-            "dispatched=${result.dispatchedCount} refused=${result.refusedCount}"
+        "GPU render: nonTransparentPixels=${result.nonTransparentPixels()} " +
+            "dispatched=${result.stats.opsDispatched} refused=${result.stats.opsRefused}"
     )
 
-    return SceneRender(rgba = result.rgba, width = width, height = height, scene = scene)
+    return SceneRender(rgba = result.rgbaBytes(), width = width, height = height, scene = scene)
 }
 
 private fun renderSolidPath(width: Int, height: Int): SceneRender {
     val surface = Surface(width = width, height = height)
-    val canvas = Canvas(surface)
+    val canvas = surface.canvas()
 
-    val green = Paint().apply {
-        r = 0f
-        g = 1f
-        b = 0f
-        a = 1f
-    }
-    val path = Path().apply {
+    val green = Paint.fill(Color.fromRGBA(0f, 1f, 0f, 1f))
+    val path = Path {
         moveTo(80f, 50f)
         lineTo(240f, 50f)
         lineTo(160f, 190f)
@@ -277,44 +263,54 @@ private fun renderSolidPath(width: Int, height: Int): SceneRender {
     }
     canvas.drawPath(path, green)
 
-    val result = surface.renderToRgba()
+    val result = surface.render()
     val scene = PathScene(
         ax = 80f, ay = 50f, bx = 240f, by = 50f, cx = 160f, cy = 190f,
         r = 0, g = 255, b = 0, a = 255,
     )
 
     println(
-        "GPU render: nonTransparentPixels=${result.nonTransparentPixels} " +
-            "dispatched=${result.dispatchedCount} refused=${result.refusedCount}"
+        "GPU render: nonTransparentPixels=${result.nonTransparentPixels()} " +
+            "dispatched=${result.stats.opsDispatched} refused=${result.stats.opsRefused}"
     )
 
-    return SceneRender(rgba = result.rgba, width = width, height = height, scene = scene)
+    return SceneRender(rgba = result.rgbaBytes(), width = width, height = height, scene = scene)
 }
 
 private fun renderSolidRRect(width: Int, height: Int): SceneRender {
     val surface = Surface(width = width, height = height)
-    val canvas = Canvas(surface)
+    val canvas = surface.canvas()
 
-    val blue = Paint().apply {
-        r = 0f
-        g = 0.5f
-        b = 1f
-        a = 1f
-    }
-    canvas.drawRRect(RRect(Rect(50f, 50f, 270f, 190f), 20f, 20f), blue)
+    val blue = Paint.fill(Color.fromRGBA(0f, 0.5f, 1f, 1f))
+    canvas.drawRRect(RRect(Rect(50f, 50f, 270f, 190f), 20f), blue)
 
-    val result = surface.renderToRgba()
+    val result = surface.render()
     val scene = RRectScene(
         left = 50f, top = 50f, right = 270f, bottom = 190f,
         rx = 20f, ry = 20f, r = 0, g = 128, b = 255, a = 255,
     )
 
     println(
-        "GPU render: nonTransparentPixels=${result.nonTransparentPixels} " +
-            "dispatched=${result.dispatchedCount} refused=${result.refusedCount}"
+        "GPU render: nonTransparentPixels=${result.nonTransparentPixels()} " +
+            "dispatched=${result.stats.opsDispatched} refused=${result.stats.opsRefused}"
     )
 
-    return SceneRender(rgba = result.rgba, width = width, height = height, scene = scene)
+    return SceneRender(rgba = result.rgbaBytes(), width = width, height = height, scene = scene)
+}
+
+@OptIn(ExperimentalUnsignedTypes::class)
+private fun RenderResult.rgbaBytes(): ByteArray =
+    ByteArray(pixels.size) { index -> pixels[index].toByte() }
+
+@OptIn(ExperimentalUnsignedTypes::class)
+private fun RenderResult.nonTransparentPixels(): Int {
+    var count = 0
+    var alphaIndex = 3
+    while (alphaIndex < pixels.size) {
+        if (pixels[alphaIndex] != 0.toUByte()) count++
+        alphaIndex += BYTES_PER_PIXEL
+    }
+    return count
 }
 
 private fun generateReferencePixels(width: Int, height: Int, scene: Scene): ByteArray {
