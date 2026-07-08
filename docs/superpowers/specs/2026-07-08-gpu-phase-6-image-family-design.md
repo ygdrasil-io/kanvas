@@ -82,14 +82,16 @@ renderer restent limites aux chemins simples et prouvables.
 ## Architecture
 
 La phase ajoute une orchestration d'evidence au-dessus des briques existantes.
-Elle ne cree pas un second renderer image.
+Elle ne cree pas un second renderer image et n'ajoute pas de scripts Python.
+L'orchestration d'evidence vit dans une librairie Gradle Kotlin dediee :
+`:integration-tests:skia-evidence`.
 
 Flux cible :
 
 ```text
 SkiaGmRegistry IMAGE rows
   -> generated renders + dashboard data
-  -> Image GM classifier
+  -> :integration-tests:skia-evidence classifier/report library
   -> per-row route expectations
   -> targeted migration hooks
   -> regenerated dashboard + evidence report
@@ -100,6 +102,9 @@ Responsabilites :
 - `integration-tests/skia` reste proprietaire du dashboard GM, des PNG
   references/generated/diff, et des taches `generateSkiaRenders`,
   `generateSkiaRendersFor`, `generateSkiaDashboard`.
+- `integration-tests/skia-evidence` reste proprietaire de la classification
+  row-level, du schema d'evidence, de l'export JSON/CSV/Markdown et du CLI
+  Gradle `generateGpuPhase6ImageFamilyEvidence`.
 - `gpu-renderer/images` reste proprietaire des plans decode/upload/sampler,
   des codec gates et des diagnostics image.
 - `gpu-renderer/resources` reste proprietaire de la materialisation
@@ -153,7 +158,8 @@ un non-claim.
 
 ### `ImageGmEvidenceReport`
 
-Ecrit le rapport JSON/Markdown de phase 6 IMAGE :
+Ecrit le rapport JSON/Markdown de phase 6 IMAGE depuis
+`:integration-tests:skia-evidence` :
 
 - counters globaux et par sous-famille ;
 - tables pass/fail/no-score ;
@@ -164,6 +170,10 @@ Ecrit le rapport JSON/Markdown de phase 6 IMAGE :
 - liens vers artifacts dashboard quand ils existent ;
 - deltas de score quand un score precedent existe ;
 - impact texture/sampler/cache/batching pour les rows migrees.
+
+Le module lit le JSON du dashboard avec `kotlinx.serialization-json` en mode
+`JsonObject`/`JsonElement`. Il n'utilise pas le compiler plugin serialization
+tant que les schemas de dashboard restent partiellement souples.
 
 ## Regles de classification
 
@@ -304,6 +314,14 @@ Artifacts attendus :
 - `reports/gpu-renderer/phase-6-image-family/classification.csv` si un export
   tabulaire simplifie la revue.
 
+Producteurs attendus :
+
+- `:integration-tests:skia:generateSkiaDashboard` produit le dashboard source ;
+- `:gpu-renderer:generateGpuPhase6ImageResourceEvidence` produit l'evidence
+  texture/sampler/cache ciblee ;
+- `:integration-tests:skia-evidence:generateGpuPhase6ImageFamilyEvidence`
+  agrege ces sources et ecrit les artifacts finaux.
+
 Le JSON d'evidence doit contenir :
 
 - schema version ;
@@ -341,6 +359,13 @@ Validation dashboard :
 
 ```bash
 rtk ./gradlew :integration-tests:skia:generateSkiaDashboard
+```
+
+Validation evidence :
+
+```bash
+rtk ./gradlew :integration-tests:skia-evidence:test
+rtk ./gradlew :integration-tests:skia-evidence:generateGpuPhase6ImageFamilyEvidence
 ```
 
 Validation renderer ciblee :
