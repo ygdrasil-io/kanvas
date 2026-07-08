@@ -344,7 +344,7 @@ class GPUConcreteResourceProvider(
             releasePolicy = request.descriptor.lifetimeClass,
             cacheResult = GPUResourceLeaseCacheResult.Create,
             evidenceFacts = mapOf(
-                "purpose" to request.descriptor.purpose.name,
+                "purpose" to request.descriptor.purposeLabel,
                 "bounds" to request.descriptor.boundsLabel,
                 "sampleCount" to request.descriptor.sampleCount.toString(),
             ),

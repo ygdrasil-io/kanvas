@@ -1,10 +1,25 @@
 package org.graphiks.kanvas.gpu.renderer.resources
 
-import org.graphiks.kanvas.gpu.renderer.intermediates.GPUIntermediateTextureDescriptor
+interface GPUIntermediateTextureMaterializationDescriptor {
+    val label: String
+    val purposeLabel: String
+    val descriptorHash: String
+    val sourceTargetLabel: String
+    val boundsLabel: String
+    val width: Int
+    val height: Int
+    val formatClass: String
+    val usageLabels: List<String>
+    val sampleCount: Int
+    val generation: Long
+    val lifetimeClass: String
+    val ownerScope: String
+    val byteEstimate: Long
+}
 
 data class GPUIntermediateTextureMaterializationRequest(
     val targetId: String,
-    val descriptor: GPUIntermediateTextureDescriptor,
+    val descriptor: GPUIntermediateTextureMaterializationDescriptor,
     val deviceGeneration: Long,
     val actualResourceGeneration: Long,
     val requiredUsageLabels: Set<String>,

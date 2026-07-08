@@ -136,10 +136,10 @@ class PaintBlendExecutionBoundaryTest {
         )
         val cases = listOf(
             RefusalCase(
-                expectedCode = "unsupported.blend.shader_route_unvalidated",
+                expectedCode = "unsupported.paint_blend.shader_blend_unvalidated",
                 request = paintBlendExecutionRequest(blendGate = shaderBlendGate),
                 expectedEvidence = "paint-blend:destination-read " +
-                    "strategy=RefuseDiagnostic;plan=gpu-renderer.destination-read.strategy:accepted;" +
+                    "strategy=TargetCopySnapshot;plan=gpu-renderer.destination-read.strategy:accepted;" +
                     "planStrategy=TargetCopySnapshot;activeAttachmentSampled=false",
             ),
             RefusalCase(

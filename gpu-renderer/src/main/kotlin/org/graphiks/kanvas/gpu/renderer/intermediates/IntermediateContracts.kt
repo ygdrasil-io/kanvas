@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.intermediates
 
+import org.graphiks.kanvas.gpu.renderer.resources.GPUIntermediateTextureMaterializationDescriptor
+
 enum class GPUIntermediatePurpose {
     DestinationCopy,
     ExistingIntermediate,
@@ -9,21 +11,21 @@ enum class GPUIntermediatePurpose {
 }
 
 data class GPUIntermediateTextureDescriptor(
-    val label: String,
+    override val label: String,
     val purpose: GPUIntermediatePurpose,
-    val descriptorHash: String,
-    val sourceTargetLabel: String,
-    val boundsLabel: String,
-    val width: Int,
-    val height: Int,
-    val formatClass: String,
-    val usageLabels: List<String>,
-    val sampleCount: Int,
-    val generation: Long,
-    val lifetimeClass: String,
-    val ownerScope: String,
-    val byteEstimate: Long,
-) {
+    override val descriptorHash: String,
+    override val sourceTargetLabel: String,
+    override val boundsLabel: String,
+    override val width: Int,
+    override val height: Int,
+    override val formatClass: String,
+    override val usageLabels: List<String>,
+    override val sampleCount: Int,
+    override val generation: Long,
+    override val lifetimeClass: String,
+    override val ownerScope: String,
+    override val byteEstimate: Long,
+) : GPUIntermediateTextureMaterializationDescriptor {
     init {
         require(label.isNotBlank()) { "GPUIntermediateTextureDescriptor.label must not be blank" }
         require(descriptorHash.isNotBlank()) { "GPUIntermediateTextureDescriptor.descriptorHash must not be blank" }
@@ -42,6 +44,7 @@ data class GPUIntermediateTextureDescriptor(
     }
 
     val usageLabel: String get() = usageLabels.joinToString(",")
+    override val purposeLabel: String get() = purpose.name
 }
 
 sealed interface GPUIntermediatePlanStep {
