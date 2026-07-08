@@ -436,6 +436,95 @@ class GPUBackendRuntimeNativeSmokeTest {
     }
 
     @Test
+    fun `backend runtime records pass batch plan for fullscreen rect draws when backend is available`() {
+        val runtime = GPUBackendRuntimeFactory.createOrNull()
+        assumeTrue(runtime != null, "GPU backend unavailable in current environment")
+
+        runtime!!.use { session ->
+            session.createOffscreenTarget(
+                GPUOffscreenTargetRequest(width = 4, height = 4, colorFormat = "rgba8unorm"),
+            ).use { target ->
+                target.encode(GPUClearColor(0.0, 0.0, 0.0, 1.0)) {
+                    drawFullscreenPass(
+                        wgsl = solidColorFullscreenWgsl(),
+                        colorFormat = "rgba8unorm",
+                        draws = listOf(
+                            GPUBackendRectDraw(floatArrayOf(1f, 0f, 0f, 1f), 0, 0, 2, 4),
+                            GPUBackendRectDraw(floatArrayOf(0f, 1f, 0f, 1f), 2, 0, 2, 4),
+                        ),
+                    )
+                }
+                target.readRgba()
+
+                val dump = session.runtimeTelemetryDumpLines.joinToString("\n")
+                assertTrue(dump.contains("passBatchPlans=1"), dump)
+                assertTrue(dump.contains("passBatchesAccepted=1"), dump)
+                assertTrue(dump.contains("passes.batch-plan stream=fullscreen-uniform-pass"), dump)
+                assertTrue(dump.contains("passes.batch id=batch-1 kind=solid-fill"), dump)
+            }
+        }
+    }
+
+    @Test
+    fun `batched rectangle scene uses fewer submissions than explicit unbatched baseline when backend is available`() {
+        val runtime = GPUBackendRuntimeFactory.createOrNull()
+        assumeTrue(runtime != null, "GPU backend unavailable in current environment")
+
+        runtime!!.use { session ->
+            val beforeBaseline = session.runtimeTelemetry
+            session.createOffscreenTarget(GPUOffscreenTargetRequest(width = 4, height = 4, colorFormat = "rgba8unorm")).use { target ->
+                repeat(4) { index ->
+                    target.encode(GPUClearColor(0.0, 0.0, 0.0, 1.0)) {
+                        drawFullscreenPass(
+                            wgsl = solidColorFullscreenWgsl(),
+                            colorFormat = "rgba8unorm",
+                            draws = listOf(
+                                GPUBackendRectDraw(
+                                    rgbaPremul = floatArrayOf(1f, 0f, 0f, 1f),
+                                    scissorX = index,
+                                    scissorY = 0,
+                                    scissorWidth = 1,
+                                    scissorHeight = 4,
+                                ),
+                            ),
+                        )
+                    }
+                    target.readRgba()
+                }
+            }
+            val afterBaseline = session.runtimeTelemetry
+            val baselineSubmissions = afterBaseline.submissions - beforeBaseline.submissions
+
+            val beforeBatched = session.runtimeTelemetry
+            session.createOffscreenTarget(GPUOffscreenTargetRequest(width = 4, height = 4, colorFormat = "rgba8unorm")).use { target ->
+                target.encode(GPUClearColor(0.0, 0.0, 0.0, 1.0)) {
+                    drawFullscreenPass(
+                        wgsl = solidColorFullscreenWgsl(),
+                        colorFormat = "rgba8unorm",
+                        draws = (0 until 4).map { index ->
+                            GPUBackendRectDraw(
+                                rgbaPremul = floatArrayOf(1f, 0f, 0f, 1f),
+                                scissorX = index,
+                                scissorY = 0,
+                                scissorWidth = 1,
+                                scissorHeight = 4,
+                            )
+                        },
+                    )
+                }
+                target.readRgba()
+            }
+            val afterBatched = session.runtimeTelemetry
+            val batchedSubmissions = afterBatched.submissions - beforeBatched.submissions
+
+            assertEquals(4L, baselineSubmissions)
+            assertEquals(1L, batchedSubmissions)
+            assertTrue(batchedSubmissions < baselineSubmissions)
+            assertTrue(afterBatched.passBatchesAccepted > beforeBatched.passBatchesAccepted)
+        }
+    }
+
+    @Test
     fun `offscreen submission stays pending until readback completes when backend is available`() {
         val runtime = GPUBackendRuntimeFactory.createOrNull()
         assumeTrue(runtime != null, "GPU backend unavailable in current environment")

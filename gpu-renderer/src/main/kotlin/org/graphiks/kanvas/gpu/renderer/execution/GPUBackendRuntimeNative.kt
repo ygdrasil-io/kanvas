@@ -97,7 +97,17 @@ import org.graphiks.kanvas.gpu.renderer.wgsl.TexturedVerticesColorFilterWgsl
 import org.graphiks.kanvas.gpu.renderer.wgsl.colorGlyphCompositeWgsl
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendFactor
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
+import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
+import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketID
+import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole
+import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketStream
+import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchEligibility
+import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchKind
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchPlan
+import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchQueueGuard
+import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatcher
+import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatcherRequest
+import org.graphiks.kanvas.gpu.renderer.passes.GPURenderStepID
 import org.graphiks.kanvas.gpu.renderer.passes.dumpLines
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPayloadFingerprint
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPayloadSlotID
@@ -120,6 +130,7 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUConcreteResourceProvider
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceLease
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceMaterializationDecision
 import org.graphiks.kanvas.gpu.renderer.resources.GPUUniformSlabLeaseRequest
+import org.graphiks.kanvas.gpu.renderer.pipelines.GPURenderPipelineKey
 import org.graphiks.kanvas.gpu.renderer.resources.dumpResourceLeaseLines
 
 private const val COPY_BYTES_PER_ROW_ALIGNMENT: Int = 256
@@ -163,6 +174,9 @@ private fun fullscreenUniformSlabSourceLabel(): String =
     FullscreenUniformSlabTestingHooks.sourceLabelOverride.get() ?: FULLSCREEN_UNIFORM_SLAB_SOURCE_LABEL
 
 internal fun currentFullscreenUniformSlabSourceLabelForTesting(): String = fullscreenUniformSlabSourceLabel()
+
+private fun String.sanitizeBatchLabel(): String =
+    replace(Regex("[^A-Za-z0-9._:-]"), "-")
 
 private fun fullscreenUniformSlabResourceLedgerSourceLabel(
     sourceLabel: String,
@@ -2530,6 +2544,19 @@ private class WgpuRenderRecorder(
             bindGroupLayout = bindGroupLayout,
             bindGroupLayoutHash = keys.bindGroupLayoutKeyHash,
         )
+        val retainedLeases = slab?.leases.orEmpty()
+        recordFullscreenPassBatchPlan(
+            draws = draws,
+            sourceLabel = sourceLabel,
+            kind = if (sourceLabel.contains("gradient")) {
+                GPUPassBatchKind.SimpleGradient
+            } else {
+                GPUPassBatchKind.SolidFill
+            },
+            pipelineKeyLabel = keys.renderPipelineKeyHash,
+            fixedStateHash = "fixed:${blendMode?.name ?: "src-over"}:${targetFormat.toBackendColorFormat()}",
+            retainedLeases = retainedLeases,
+        )
         if (slab != null) {
             recordResourceLeasesAction(slab.leases)
         }
@@ -2571,6 +2598,77 @@ private class WgpuRenderRecorder(
             )
             drawAction(FULL_SCREEN_TRIANGLE_VERTEX_COUNT)
         }
+    }
+
+    private fun recordFullscreenPassBatchPlan(
+        draws: List<WgpuFullscreenUniformDraw>,
+        sourceLabel: String,
+        kind: GPUPassBatchKind,
+        pipelineKeyLabel: String,
+        fixedStateHash: String,
+        retainedLeases: List<GPUResourceLease>,
+    ) {
+        if (draws.isEmpty()) return
+        val retainedRefs = retainedLeases.map { lease -> "lease:${lease.leaseId}" }
+        val queueGuard = GPUPassBatchQueueGuard(
+            requiredRetainedRefs = retainedRefs,
+            retainedRefs = retainedRefs,
+        )
+        val passId = "pass:$sourceLabel".sanitizeBatchLabel()
+        val packets = draws.mapIndexed { index, draw ->
+            val ordinal = index + 1
+            val packetId = GPUDrawPacketID("packet:$sourceLabel:$ordinal".sanitizeBatchLabel())
+            GPUDrawPacket(
+                packetId = packetId,
+                commandIdValue = ordinal,
+                analysisRecordId = "analysis:$sourceLabel:$ordinal".sanitizeBatchLabel(),
+                passId = passId,
+                layerId = "root-layer",
+                bindingListId = "bindings:$sourceLabel:$ordinal".sanitizeBatchLabel(),
+                insertionReasonCode = kind.dumpLabel,
+                sortKey = ordinal.toLong(),
+                sortKeyPreimage = "order:$ordinal",
+                renderStepId = GPURenderStepID(kind.dumpLabel),
+                renderStepVersion = 1,
+                role = GPUDrawPacketRole.Shading,
+                renderPipelineKey = GPURenderPipelineKey(pipelineKeyLabel.sanitizeBatchLabel()),
+                bindingLayoutHash = "layout:$sourceLabel".sanitizeBatchLabel(),
+                uniformSlot = GPUUniformPayloadSlot(
+                    slotId = GPUPayloadSlotID("uniform:${draw.slotLabel}".sanitizeBatchLabel()),
+                    fingerprint = GPUPayloadFingerprint("sha256:${draw.slotLabel}".sanitizeBatchLabel()),
+                    byteOffset = 0L,
+                ),
+                resourceSlot = GPUResourceBindingSlot(
+                    slotId = GPUPayloadSlotID("resource:${draw.slotLabel}".sanitizeBatchLabel()),
+                    fingerprint = GPUPayloadFingerprint("sha256:resource:${draw.slotLabel}".sanitizeBatchLabel()),
+                    bindingIndex = 0,
+                ),
+                vertexSourceLabel = "fullscreen-triangle",
+                scissorBoundsHash = "scissor:${draw.scissorX}:${draw.scissorY}:${draw.scissorWidth}:${draw.scissorHeight}".sanitizeBatchLabel(),
+                targetStateHash = targetFormat.toBackendColorFormat(),
+                originalPaintOrder = ordinal,
+                resourceGeneration = deviceGeneration.value,
+            )
+        }
+        val stream = GPUDrawPacketStream(
+            streamId = sourceLabel.sanitizeBatchLabel(),
+            passId = passId,
+            packets = packets,
+        )
+        val eligibility = packets.associate { packet ->
+            packet.packetId to GPUPassBatchEligibility(
+                kind = kind,
+                fixedStateHash = fixedStateHash.sanitizeBatchLabel(),
+                queueGuard = queueGuard,
+            )
+        }
+        val plan = GPUPassBatcher().plan(
+            GPUPassBatcherRequest(
+                packetStream = stream,
+                eligibilityByPacketId = eligibility,
+            ),
+        )
+        telemetryRecorder.recordPassBatchPlan(plan)
     }
 
     private data class WgpuFullscreenUniformDraw(
