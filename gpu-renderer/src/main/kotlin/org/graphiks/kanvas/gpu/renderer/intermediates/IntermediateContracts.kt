@@ -4,6 +4,8 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUIntermediateTextureMaterial
 
 enum class GPUIntermediatePurpose {
     DestinationCopy,
+    ReadbackSnapshot,
+    BlendSource,
     ExistingIntermediate,
     LayerTarget,
     FilterIntermediate,

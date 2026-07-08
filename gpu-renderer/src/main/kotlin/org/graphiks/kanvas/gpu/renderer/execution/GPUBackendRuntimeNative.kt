@@ -569,6 +569,7 @@ private class WgpuBackendRuntimeTelemetryRecorder {
     private var texturesCreated = 0L
     private var intermediateTexturesCreated = 0L
     private var destinationCopies = 0L
+    private var destinationReadbackSnapshots = 0L
     private var msaaTargets = 0L
     private var msaaResolves = 0L
     private var bindGroupsCreated = 0L
@@ -633,6 +634,12 @@ private class WgpuBackendRuntimeTelemetryRecorder {
     @Synchronized
     fun recordDestinationCopy() {
         destinationCopies += 1L
+    }
+
+    /** Records one destination readback snapshot used by a blend pass. */
+    @Synchronized
+    fun recordDestinationReadbackSnapshot() {
+        destinationReadbackSnapshots += 1L
     }
 
     /** Records one multisample target encode accepted by the backend. */
@@ -719,6 +726,7 @@ private class WgpuBackendRuntimeTelemetryRecorder {
             texturesCreated = texturesCreated,
             intermediateTexturesCreated = intermediateTexturesCreated,
             destinationCopies = destinationCopies,
+            destinationReadbackSnapshots = destinationReadbackSnapshots,
             msaaTargets = msaaTargets,
             msaaResolves = msaaResolves,
             bindGroupsCreated = bindGroupsCreated,
@@ -1021,7 +1029,7 @@ private class WgpuOffscreenTarget(
         return label
     }
 
-    override fun copyTargetToOffscreenTexture(textureLabel: String) {
+    override fun snapshotTargetToOffscreenTexture(textureLabel: String) {
         val snapshot = readRgba()
         encodeOffscreenTexture(
             textureLabel = textureLabel,
@@ -1045,7 +1053,7 @@ private class WgpuOffscreenTarget(
                 ),
             )
         }
-        telemetryRecorder.recordDestinationCopy()
+        telemetryRecorder.recordDestinationReadbackSnapshot()
     }
 
     override fun encodeOffscreenTexture(

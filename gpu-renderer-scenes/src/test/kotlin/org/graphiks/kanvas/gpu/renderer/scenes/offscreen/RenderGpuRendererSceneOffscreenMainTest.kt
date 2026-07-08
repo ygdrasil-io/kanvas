@@ -151,11 +151,15 @@ class RenderGpuRendererSceneOffscreenMainTest {
                     assertContains(diagnostics, "intermediate.composite source=layer-target:group-alpha-layer")
                 }
                 "dst-read-strategy" -> {
-                    assertContains(diagnostics, "intermediate.copy source=surface:dst-read-strategy")
+                    assertContains(diagnostics, "intermediate.readback-snapshot source=surface:dst-read-strategy")
+                    assertFalse(
+                        diagnostics.contains("intermediate.copy source=surface:dst-read-strategy"),
+                        diagnostics,
+                    )
                     assertContains(diagnostics, "intermediate.bind label=dst-copy:dst-foreground")
                     assertContains(diagnostics, "intermediate.render command=dst-foreground")
                     assertContains(diagnostics, "route=shader-blend:Screen")
-                    assertContains(diagnostics, "intermediateTexturesCreated=2 destinationCopies=1")
+                    assertContains(diagnostics, "intermediateTexturesCreated=2 destinationCopies=0 destinationReadbackSnapshots=1")
                 }
             }
             assertFalse(

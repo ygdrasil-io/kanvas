@@ -73,6 +73,7 @@ data class GPUBackendRuntimeTelemetry(
     val texturesCreated: Long = 0L,
     val intermediateTexturesCreated: Long = 0L,
     val destinationCopies: Long = 0L,
+    val destinationReadbackSnapshots: Long = 0L,
     val msaaTargets: Long = 0L,
     val msaaResolves: Long = 0L,
     val bindGroupsCreated: Long = 0L,
@@ -100,6 +101,9 @@ data class GPUBackendRuntimeTelemetry(
         require(destinationCopies >= 0L) {
             "GPUBackendRuntimeTelemetry.destinationCopies must be non-negative"
         }
+        require(destinationReadbackSnapshots >= 0L) {
+            "GPUBackendRuntimeTelemetry.destinationReadbackSnapshots must be non-negative"
+        }
         require(msaaTargets >= 0L) { "GPUBackendRuntimeTelemetry.msaaTargets must be non-negative" }
         require(msaaResolves >= 0L) { "GPUBackendRuntimeTelemetry.msaaResolves must be non-negative" }
         require(bindGroupsCreated >= 0L) { "GPUBackendRuntimeTelemetry.bindGroupsCreated must be non-negative" }
@@ -123,6 +127,7 @@ data class GPUBackendRuntimeTelemetry(
                 "windowPasses=$windowPasses submissions=$submissions commandBuffers=$commandBuffers " +
                 "buffersCreated=$buffersCreated texturesCreated=$texturesCreated " +
                 "intermediateTexturesCreated=$intermediateTexturesCreated destinationCopies=$destinationCopies " +
+                "destinationReadbackSnapshots=$destinationReadbackSnapshots " +
                 "msaaTargets=$msaaTargets msaaResolves=$msaaResolves " +
                 "bindGroupsCreated=$bindGroupsCreated samplersCreated=$samplersCreated " +
                 "queueWrites=$queueWrites uniformSlabsCreated=$uniformSlabsCreated " +
@@ -198,8 +203,8 @@ interface GPUBackendOffscreenTarget : AutoCloseable {
     /** Creates a secondary offscreen texture that can be bound as a texture source during a subsequent [encode]. */
     fun createOffscreenTexture(texture: GPUBackendOffscreenTexture): String
 
-    /** Snapshots the most recently encoded primary target into a previously-created offscreen texture. */
-    fun copyTargetToOffscreenTexture(textureLabel: String)
+    /** Readback-snapshots the most recently encoded primary target into a previously-created offscreen texture. */
+    fun snapshotTargetToOffscreenTexture(textureLabel: String)
 
     /** Renders into a previously-created offscreen texture via a separate render pass. When [clearColor] is null the pass preserves existing texture content via [GPULoadOp.Load]. */
     fun encodeOffscreenTexture(

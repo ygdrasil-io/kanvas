@@ -10,6 +10,7 @@ import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRenderRecorder
 import org.graphiks.kanvas.gpu.renderer.execution.GPUClearColor
 import org.graphiks.kanvas.gpu.renderer.intermediates.GPUIntermediatePlan
 import org.graphiks.kanvas.gpu.renderer.intermediates.GPUIntermediatePlanStep
+import org.graphiks.kanvas.gpu.renderer.intermediates.GPUIntermediatePurpose
 import org.graphiks.kanvas.gpu.renderer.intermediates.GPUIntermediateTextureDescriptor
 import org.graphiks.kanvas.gpu.renderer.intermediates.dumpLines
 import org.graphiks.kanvas.gpu.renderer.resources.GPUConcreteResourceProvider
@@ -128,19 +129,18 @@ internal class SceneIntermediatePlanExecutor(
 
                 val destinationTextureLabel = materializeAndCreateTexture(
                     target = target,
-                    descriptor = copyStep.destination,
-                    requiredUsageLabels = setOf("texture_binding", "copy_dst"),
+                    descriptor = copyStep.destination.toReadbackSnapshotDescriptor(),
+                    requiredUsageLabels = setOf("render_attachment", "texture_binding"),
                     diagnostics = diagnostics,
                     stage = "destination-read-preparation",
                 )
 
-                val sourceTextureLabel = target.createOffscreenTexture(
-                    GPUBackendOffscreenTexture(
-                        label = "blend-src:${renderStep.commandId}",
-                        width = copyStep.destination.width,
-                        height = copyStep.destination.height,
-                        format = copyStep.destination.formatClass,
-                    ),
+                val sourceTextureLabel = materializeAndCreateTexture(
+                    target = target,
+                    descriptor = copyStep.destination.toBlendSourceDescriptor(renderStep.commandId),
+                    requiredUsageLabels = setOf("render_attachment", "texture_binding"),
+                    diagnostics = diagnostics,
+                    stage = "destination-read-preparation",
                 )
                 target.encodeOffscreenTexture(
                     textureLabel = sourceTextureLabel,
@@ -160,7 +160,7 @@ internal class SceneIntermediatePlanExecutor(
                     drawLabels = linkedSetOf(sourceFill.label) + destinationFills.map { fill -> fill.label },
                 )
                 diagnostics +=
-                    "intermediate.scene.destination-read-copy-deferred command=${renderStep.commandId} " +
+                    "intermediate.scene.destination-read-readback-snapshot-deferred command=${renderStep.commandId} " +
                         "route=${renderStep.routeLabel} sourceTexture=$sourceTextureLabel " +
                         "destinationTexture=$destinationTextureLabel binding=${bindStep.bindingLabel} " +
                         "token=${copyStep.tokenLabel}"
@@ -205,7 +205,7 @@ internal class SceneIntermediatePlanExecutor(
                     "plannedTarget=${layerStep.target.label} texture=$textureLabel children=${layerStep.childrenLabel} token=${layerStep.tokenLabel}"
         }
 
-        diagnostics += plan.dumpLines()
+        diagnostics += plan.sceneRuntimeDumpLines()
 
         return SceneIntermediateExecutionResult.Prepared(
             childLabels = childLabels,
@@ -225,6 +225,7 @@ internal class SceneIntermediatePlanExecutor(
         diagnostics: MutableList<String>,
         stage: String,
     ): String {
+        val previousTelemetryLineCount = resourceProvider.telemetry.dumpLines().size
         val decision = resourceProvider.materializeIntermediateTexture(
             GPUIntermediateTextureMaterializationRequest(
                 targetId = target.target.targetId,
@@ -241,7 +242,7 @@ internal class SceneIntermediatePlanExecutor(
                 budgetClass = "scene-intermediate",
             ),
         )
-        diagnostics += resourceProvider.telemetry.dumpLines()
+        diagnostics += resourceProvider.telemetry.dumpLines().drop(previousTelemetryLineCount)
         return when (decision) {
             is GPUResourceMaterializationDecision.Materialized ->
                 target.createOffscreenTexture(
@@ -269,6 +270,42 @@ internal class SceneIntermediatePlanExecutor(
         }
     }
 
+    private fun GPUIntermediateTextureDescriptor.toReadbackSnapshotDescriptor(): GPUIntermediateTextureDescriptor =
+        copy(
+            purpose = GPUIntermediatePurpose.ReadbackSnapshot,
+            usageLabels = listOf("render_attachment", "texture_binding"),
+        )
+
+    private fun GPUIntermediateTextureDescriptor.toBlendSourceDescriptor(commandId: String): GPUIntermediateTextureDescriptor =
+        copy(
+            label = "blend-src:$commandId",
+            purpose = GPUIntermediatePurpose.BlendSource,
+            descriptorHash = "$descriptorHash:blend-src:$commandId",
+            sourceTargetLabel = "source:$commandId",
+            boundsLabel = "blend-source:$commandId",
+            usageLabels = listOf("render_attachment", "texture_binding"),
+            ownerScope = "source:$commandId",
+        )
+
+    private fun GPUIntermediatePlan.sceneRuntimeDumpLines(): List<String> =
+        dumpLines().map { line ->
+            when {
+                line.startsWith("intermediate.copy ") ->
+                    line.replaceFirst("intermediate.copy", "intermediate.readback-snapshot") +
+                        " nonclaim=not-gpu-copyTexture"
+                line.startsWith("intermediate.create ") && line.contains("purpose=DestinationCopy") ->
+                    line.replace("purpose=DestinationCopy", "purpose=ReadbackSnapshot")
+                        .replace(Regex("usage=[^ ]+"), "usage=render_attachment,texture_binding") +
+                        " nonclaim=not-gpu-copyTexture"
+                line.startsWith("intermediate.telemetry ") -> {
+                    val destinationReadRuntime =
+                        if (line.contains("destinationReadCopies=0 ")) "none" else "readback-snapshot"
+                    line.replace("destinationReadCopies=", "plannedDestinationReadCopies=") +
+                        " runtimeDestinationRead=$destinationReadRuntime"
+                }
+                else -> line
+            }
+        }
     fun GPUBackendRenderRecorder.compositeSaveLayers(
         drawPlan: RectOnlyDrawPlan,
         execution: SceneIntermediateExecutionResult.Prepared,

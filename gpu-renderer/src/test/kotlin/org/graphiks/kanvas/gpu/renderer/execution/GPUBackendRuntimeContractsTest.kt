@@ -98,6 +98,7 @@ class GPUBackendRuntimeContractsTest {
         assertEquals(0L, telemetry.texturesCreated)
         assertEquals(0L, telemetry.intermediateTexturesCreated)
         assertEquals(0L, telemetry.destinationCopies)
+        assertEquals(0L, telemetry.destinationReadbackSnapshots)
         assertEquals(0L, telemetry.msaaTargets)
         assertEquals(0L, telemetry.msaaResolves)
         assertEquals(0L, telemetry.bindGroupsCreated)
@@ -110,8 +111,8 @@ class GPUBackendRuntimeContractsTest {
             listOf(
                 "gpu-runtime.telemetry renderPasses=0 offscreenPasses=0 windowPasses=0 " +
                     "submissions=0 commandBuffers=0 buffersCreated=0 texturesCreated=0 " +
-                    "intermediateTexturesCreated=0 destinationCopies=0 msaaTargets=0 msaaResolves=0 " +
-                    "bindGroupsCreated=0 samplersCreated=0 queueWrites=0 uniformSlabsCreated=0 " +
+                    "intermediateTexturesCreated=0 destinationCopies=0 destinationReadbackSnapshots=0 " +
+                    "msaaTargets=0 msaaResolves=0 bindGroupsCreated=0 samplersCreated=0 queueWrites=0 uniformSlabsCreated=0 " +
                     "uniformSlabBytesAllocated=0 uniformSlabFallbacks=0 passBatchPlans=0 " +
                     "passBatchesAccepted=0 passBatchCuts=0 passBatchPackets=0",
             ),
@@ -136,6 +137,9 @@ class GPUBackendRuntimeContractsTest {
         }
         assertFailsWith<IllegalArgumentException> {
             GPUBackendRuntimeTelemetry(destinationCopies = -1L)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            GPUBackendRuntimeTelemetry(destinationReadbackSnapshots = -1L)
         }
         assertFailsWith<IllegalArgumentException> {
             GPUBackendRuntimeTelemetry(msaaTargets = -1L)

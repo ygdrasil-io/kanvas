@@ -256,7 +256,7 @@ class M25ExecutorWiringTest {
     }
 
     @Test
-    fun `destination read preparation materializes through provider and defers destination snapshot to backend copy`() {
+    fun `destination read preparation materializes both textures through provider and defers destination readback snapshot`() {
         val drawPlan = RectOnlyDrawPlan(
             sceneId = "destination-copy-scene",
             clearColor = SceneColor(0f, 0f, 0f, 0f),
@@ -315,16 +315,17 @@ class M25ExecutorWiringTest {
         val prepared = assertIs<SceneIntermediateExecutionResult.Prepared>(execution)
         assertEquals(listOf("dst-copy:foreground", "blend-src:foreground"), target.createdTextureLabels)
         assertEquals(1, target.offscreenEncodeCount, "only the source texture is rendered during preparation")
-        assertEquals(0, target.targetSnapshotCopies, "destination snapshot must happen through the backend copy hook later")
-        assertTrue(
-            prepared.diagnostics.any {
+        assertEquals(0, target.targetReadbackSnapshots, "destination snapshot must happen through the backend snapshot hook later")
+        assertEquals(
+            2,
+            prepared.diagnostics.count {
                 it.startsWith("resource-provider.cache lane=intermediate-texture result=create")
             },
             prepared.diagnostics.toString(),
         )
         assertTrue(
             prepared.diagnostics.any {
-                it.contains("intermediate.scene.destination-read-copy-deferred command=foreground")
+                it.contains("intermediate.scene.destination-read-readback-snapshot-deferred command=foreground")
             },
             prepared.diagnostics.toString(),
         )
@@ -540,7 +541,7 @@ class M25ExecutorWiringTest {
         var offscreenEncodeCount: Int = 0
             private set
         val createdTextureLabels: MutableList<String> = mutableListOf()
-        var targetSnapshotCopies: Int = 0
+        var targetReadbackSnapshots: Int = 0
             private set
 
         override fun encode(clearColor: GPUClearColor, block: GPUBackendRenderRecorder.() -> Unit) {
@@ -551,8 +552,8 @@ class M25ExecutorWiringTest {
         override fun readRgba(): ByteArray =
             ByteArray(target.descriptor.width * target.descriptor.height * 4)
 
-        override fun copyTargetToOffscreenTexture(textureLabel: String) {
-            targetSnapshotCopies += 1
+        override fun snapshotTargetToOffscreenTexture(textureLabel: String) {
+            targetReadbackSnapshots += 1
         }
 
         override fun createOffscreenTexture(texture: GPUBackendOffscreenTexture): String {

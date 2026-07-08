@@ -791,9 +791,9 @@ class RectOnlyOffscreenRenderer internal constructor(
         }
 
         execution.destinationReadBlends.forEach { blend ->
-            target.copyTargetToOffscreenTexture(blend.destinationTextureLabel)
+            target.snapshotTargetToOffscreenTexture(blend.destinationTextureLabel)
             intermediateDiagnostics?.add(
-                "intermediate.scene.destination-read-snapshotted command=${blend.commandId} " +
+                "intermediate.scene.destination-read-readback-snapshotted command=${blend.commandId} " +
                     "source=surface:${drawPlan.sceneId} destinationTexture=${blend.destinationTextureLabel}",
             )
         }
