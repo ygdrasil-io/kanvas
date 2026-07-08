@@ -16,7 +16,17 @@ import org.graphiks.kanvas.types.r
 internal fun Paint.toMaterial(): GPUMaterialDescriptor {
     val shader = this.shader
     val base = if (shader != null) {
-        shader.toMaterial()
+        val material = shader.toMaterial()
+        if (material is GPUMaterialDescriptor.ImageDraw && material.alphaOnly) {
+            material.copy(
+                tintR = this.color.r,
+                tintG = this.color.g,
+                tintB = this.color.b,
+                tintA = this.color.a,
+            )
+        } else {
+            material
+        }
     } else {
         GPUMaterialDescriptor.SolidColor(
             r = this.color.r,
@@ -116,6 +126,7 @@ internal fun Shader.toMaterial(): GPUMaterialDescriptor = when (this) {
             imageHeight = image.height,
             rgbaPixels = image.expandToRgba(),
             samplingFilterMode = filterMode,
+            alphaOnly = image.colorType == ColorType.ALPHA_8,
         )
     }
     is Shader.Blend -> {
@@ -221,9 +232,9 @@ private fun org.graphiks.kanvas.image.Image.expandToRgba(): ByteArray {
         for (i in 0 until width * height) {
             val a = pixels[i]
             val off = i * 4
-            rgba[off] = 0
-            rgba[off + 1] = 0
-            rgba[off + 2] = 0
+            rgba[off] = a
+            rgba[off + 1] = a
+            rgba[off + 2] = a
             rgba[off + 3] = a
         }
         return rgba

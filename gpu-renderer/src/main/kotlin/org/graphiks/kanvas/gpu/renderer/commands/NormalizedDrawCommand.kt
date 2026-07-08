@@ -450,6 +450,11 @@ sealed interface GPUMaterialDescriptor {
         val imageHeight: Int = 0,
         val rgbaPixels: ByteArray = byteArrayOf(),
         val samplingFilterMode: String = "nearest",
+        val alphaOnly: Boolean = false,
+        val tintR: Float = 1f,
+        val tintG: Float = 1f,
+        val tintB: Float = 1f,
+        val tintA: Float = 1f,
     ) : GPUMaterialDescriptor {
         override val kind: GPUMaterialKind = GPUMaterialKind.ImageDraw
     }

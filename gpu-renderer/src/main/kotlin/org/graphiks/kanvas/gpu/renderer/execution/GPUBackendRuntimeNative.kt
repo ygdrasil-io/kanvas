@@ -1525,6 +1525,7 @@ private class WgpuRenderRecorder(
         textureFormat: String,
         draws: List<GPUBackendRawUniformDraw>,
         blendMode: GPUBlendMode?,
+        stencilMode: GPUBackendStencilMode?,
     ) {
         recordFullscreenTextureUniformPass(
             wgsl = wgsl,
@@ -1545,6 +1546,7 @@ private class WgpuRenderRecorder(
                 )
             },
             blendMode = blendMode,
+            stencilMode = stencilMode,
         )
     }
 
@@ -2495,7 +2497,9 @@ private class WgpuRenderRecorder(
         textureFormat: String,
         draws: List<WgpuFullscreenUniformDraw>,
         blendMode: GPUBlendMode? = null,
+        stencilMode: GPUBackendStencilMode? = null,
     ) {
+        require(stencilMode != GPUBackendStencilMode.Write) { "texture uniform pass only supports stencil test mode" }
         require(wgsl.isNotBlank()) { "wgsl must not be blank" }
         require(colorFormat.normalizedColorFormat() == targetFormat.toBackendColorFormat()) {
             "Requested color format $colorFormat does not match target format ${targetFormat.toBackendColorFormat()}"
@@ -2528,6 +2532,7 @@ private class WgpuRenderRecorder(
             targetFormat = targetFormat,
             textureFormat = gpuTextureFormat,
             blendMode = blendMode,
+            stencilTest = stencilMode == GPUBackendStencilMode.Test,
         )
         executionCaches.recordPreimages(keys)
         val bindGroupLayout = executionCaches.bindGroupLayout(device = device, keys = keys)
@@ -2538,14 +2543,25 @@ private class WgpuRenderRecorder(
             bindGroupLayouts = listOf(bindGroupLayout, textureBindGroupLayout),
             keys = keys,
         )
-        val pipeline = executionCaches.renderPipeline(
-            device = device,
-            shader = shader,
-            pipelineLayout = pipelineLayout,
-            targetFormat = targetFormat,
-            keys = keys,
-            blendMode = blendMode,
-        )
+        val pipeline = if (stencilMode == GPUBackendStencilMode.Test) {
+            executionCaches.stencilTestRenderPipeline(
+                device = device,
+                shader = shader,
+                pipelineLayout = pipelineLayout,
+                targetFormat = targetFormat,
+                keys = keys,
+                blendMode = blendMode,
+            )
+        } else {
+            executionCaches.renderPipeline(
+                device = device,
+                shader = shader,
+                pipelineLayout = pipelineLayout,
+                targetFormat = targetFormat,
+                keys = keys,
+                blendMode = blendMode,
+            )
+        }
 
         val texture = resourceScope.track(
             createTrackedTexture(
@@ -2580,6 +2596,9 @@ private class WgpuRenderRecorder(
         ) { it.close() }
 
         setPipelineAction(pipeline)
+        if (stencilMode == GPUBackendStencilMode.Test) {
+            setStencilReferenceAction(0u)
+        }
         draws.forEach { draw ->
             val uniform = resourceScope.track(
                 createTrackedBuffer(
@@ -4245,10 +4264,23 @@ private fun fullscreenTextureExecutionCacheKeys(
     targetFormat: GPUTextureFormat,
     textureFormat: GPUTextureFormat,
     blendMode: GPUBlendMode? = null,
+    stencilTest: Boolean = false,
 ): FullscreenExecutionCacheKeys {
     val blendLabel = blendMode?.gpuLabel ?: "src_over"
     val targetFormatClass = targetFormat.toBackendColorFormat()
     val wgslHash = stableSha256(wgsl)
+    val role = if (stencilTest) "fullscreen-texture-stencil-test-pass" else "fullscreen-texture-pass"
+    val renderStepIdentity = if (stencilTest) {
+        "gpu-backend.fullscreen-texture-stencil-test-pass"
+    } else {
+        "gpu-backend.fullscreen-texture-pass"
+    }
+    val materialProgramId = if (stencilTest) "wgsl.fullscreen-texture-stencil-test" else "wgsl.fullscreen-texture-color"
+    val capabilityClass = if (stencilTest) {
+        "webgpu-wgsl-fullscreen-texture-stencil-test-pass"
+    } else {
+        "webgpu-wgsl-fullscreen-texture-pass"
+    }
     val bindGroupLayoutPreimage = listOf(
         "kind=bind-group-layout",
         "role=fullscreen-uniform",
@@ -4270,24 +4302,24 @@ private fun fullscreenTextureExecutionCacheKeys(
     val textureBindGroupLayoutHash = stableSha256(textureBindGroupLayoutPreimage)
     val modulePreimage = listOf(
         "kind=wgsl-module",
-        "role=fullscreen-texture-pass",
+        "role=$role",
         "entryPoints=vs_main,fs_main",
         "wgsl=$wgslHash",
     ).joinToString("\n")
     val moduleHash = stableSha256(modulePreimage)
     val pipelineLayoutPreimage = listOf(
         "kind=pipeline-layout",
-        "role=fullscreen-texture-pass",
+        "role=$role",
         "version=1",
         "bindGroupLayouts=$bindGroupLayoutHash,$textureBindGroupLayoutHash",
     ).joinToString("\n")
     val pipelineLayoutHash = stableSha256(pipelineLayoutPreimage)
     val renderPreimage = GPUPipelineKeyPreimage.Render(
-        renderStepIdentity = "gpu-backend.fullscreen-texture-pass",
+        renderStepIdentity = renderStepIdentity,
         renderStepVersion = "1",
         primitiveTopology = "triangle-list",
         materialKeyHash = stableSha256("material:fullscreen-texture-color-uniform:v1"),
-        materialProgramId = "wgsl.fullscreen-texture-color",
+        materialProgramId = materialProgramId,
         materialDictionaryVersion = "runtime-helper-v1",
         materialLayoutHash = "$bindGroupLayoutHash,$textureBindGroupLayoutHash",
         snippetIdentityHash = stableSha256("snippet:fullscreen-texture:v1"),
@@ -4297,8 +4329,13 @@ private fun fullscreenTextureExecutionCacheKeys(
         blendStateHash = stableSha256("blend:$blendLabel-premul:v1"),
         sampleStateHash = stableSha256("sample-state:count=1:mask=all"),
         bindGroupLayoutHash = "$bindGroupLayoutHash,$textureBindGroupLayoutHash",
-        capabilityClass = "webgpu-wgsl-fullscreen-texture-pass",
-        capabilityFacts = listOf("adapter-backed-helper", "targetFormat=$targetFormatClass", "textureFormat=${textureFormat.name}"),
+        capabilityClass = capabilityClass,
+        capabilityFacts = listOf(
+            "adapter-backed-helper",
+            "targetFormat=$targetFormatClass",
+            "textureFormat=${textureFormat.name}",
+            "stencilTest=$stencilTest",
+        ),
         rendererSalt = "kgpu-m26-001",
     )
     val canonicalRenderPreimage = GPUPipelineKeys.canonicalRenderPreimage(renderPreimage)

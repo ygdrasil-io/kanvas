@@ -352,6 +352,7 @@ interface GPUBackendRenderRecorder {
         textureFormat: String,
         draws: List<GPUBackendRawUniformDraw>,
         blendMode: GPUBlendMode? = null,
+        stencilMode: GPUBackendStencilMode? = null,
     )
 
     /** Draws a two-pass stencil-cover fill with triangle geometry (write) and fullscreen cover (test). */

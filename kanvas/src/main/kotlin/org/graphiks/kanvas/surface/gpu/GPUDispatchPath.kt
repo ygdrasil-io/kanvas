@@ -337,6 +337,41 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
                 )
             }
         }
+        is GPUMaterialDescriptor.ImageDraw -> {
+            if (material.rgbaPixels.isEmpty()) {
+                refuse("unsupported_material:image_draw_missing_pixels")
+                return
+            }
+            val iw = material.imageWidth.toFloat().coerceAtLeast(1f)
+            val ih = material.imageHeight.toFloat().coerceAtLeast(1f)
+            val uvScaleX = (pathBounds.right - pathBounds.left) / iw
+            val uvScaleY = (pathBounds.bottom - pathBounds.top) / ih
+            val bb = java.nio.ByteBuffer.allocate(48).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+            bb.putFloat(pathBounds.left).putFloat(pathBounds.top).putFloat(pathBounds.right).putFloat(pathBounds.bottom)
+            bb.putFloat(uvScaleX).putFloat(uvScaleY)
+            bb.putFloat(0f).putFloat(0f)
+            bb.putFloat(material.tintR)
+            bb.putFloat(material.tintG)
+            bb.putFloat(material.tintB)
+            bb.putFloat(material.tintA)
+            drawFullscreenTextureUniformPass(
+                wgsl = IMAGE_TEXTURE_WGSL,
+                colorFormat = config.gpuColorFormat.gpuLabel,
+                textureRgba = material.rgbaPixels,
+                textureWidth = material.imageWidth,
+                textureHeight = material.imageHeight,
+                textureFormat = "rgba8unorm",
+                stencilMode = GPUBackendStencilMode.Test,
+                draws = listOf(
+                    GPUBackendRawUniformDraw(
+                        uniformBytes = bb.array(),
+                        scissorX = sx, scissorY = sy,
+                        scissorWidth = sw, scissorHeight = sh,
+                    ),
+                ),
+                blendMode = blendMode,
+            )
+        }
         else -> {
             refuse("unsupported_material:${material.kind.name}")
             return
