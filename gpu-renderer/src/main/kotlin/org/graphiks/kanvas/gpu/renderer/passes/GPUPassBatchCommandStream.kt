@@ -1,0 +1,92 @@
+package org.graphiks.kanvas.gpu.renderer.passes
+
+import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceMaterializationDecision
+
+fun GPUPassCommandStream.Companion.fromBatchPlan(
+    streamId: String,
+    packetStream: GPUDrawPacketStream,
+    batchPlan: GPUPassBatchPlan,
+    loadStoreLabel: String,
+    materialization: GPUResourceMaterializationDecision.Materialized? = null,
+    operandBridge: List<GPUPassCommandOperandBridge> = emptyList(),
+): GPUPassCommandStream {
+    require(streamId.isNotBlank()) { "GPUPassCommandStream.fromBatchPlan streamId must not be blank" }
+    require(loadStoreLabel.isNotBlank()) { "GPUPassCommandStream.fromBatchPlan loadStoreLabel must not be blank" }
+    require(packetStream.streamId == batchPlan.streamId) {
+        "Batch plan stream ${batchPlan.streamId} must match packet stream ${packetStream.streamId}"
+    }
+    require(packetStream.passId == batchPlan.passId) {
+        "Batch plan pass ${batchPlan.passId} must match packet stream pass ${packetStream.passId}"
+    }
+
+    val commands = buildList {
+        for (batch in batchPlan.batches) {
+            add(
+                GPUPassCommand.BeginRenderPass(
+                    targetStateHash = batch.targetStateHash,
+                    loadStoreLabel = loadStoreLabel,
+                ),
+            )
+            for (packet in batch.packets) {
+                val renderPipelineKey = requireNotNull(packet.renderPipelineKey) {
+                    "Packet ${packet.packetId.value} cannot be lowered from batch plan without renderPipelineKey"
+                }
+                add(
+                    GPUPassCommand.SetRenderPipeline(
+                        pipelineKey = renderPipelineKey,
+                        packetId = packet.packetId,
+                    ),
+                )
+                add(
+                    GPUPassCommand.SetBindGroup(
+                        bindingLayoutHash = packet.bindingLayoutHash,
+                        uniformSlot = packet.uniformSlot,
+                        resourceSlot = packet.resourceSlot,
+                        packetId = packet.packetId,
+                    ),
+                )
+                packet.scissorBoundsHash?.let { scissorBoundsHash ->
+                    add(
+                        GPUPassCommand.SetScissor(
+                            scissorBoundsHash = scissorBoundsHash,
+                            packetId = packet.packetId,
+                        ),
+                    )
+                }
+                add(
+                    GPUPassCommand.Draw(
+                        vertexSourceLabel = packet.vertexSourceLabel,
+                        packetId = packet.packetId,
+                    ),
+                )
+            }
+            add(GPUPassCommand.EndRenderPass(passId = packetStream.passId))
+        }
+    }
+
+    val materializedOperandBridge =
+        materialization?.dumpOperandBridgeSnapshot
+            ?.map(GPUPassCommandOperandBridge::fromMaterializedBinding)
+            .orEmpty()
+    require(materializedOperandBridge.isEmpty() || operandBridge.isEmpty()) {
+        "GPUPassCommandStream accepts either provider materialization or explicit operandBridge, not both"
+    }
+
+    val batchDiagnostics = batchPlan.dumpLines().mapIndexed { index, line ->
+        GPUPassDiagnostic(
+            code = "batch-plan-line-$index",
+            passId = packetStream.passId,
+            invocationId = line.replace(' ', '_').take(120),
+            terminal = false,
+        )
+    }
+
+    return GPUPassCommandStream(
+        streamId = streamId,
+        packetStreamId = packetStream.streamId,
+        passId = packetStream.passId,
+        commands = commands,
+        diagnostics = packetStream.diagnostics + batchPlan.diagnostics + batchDiagnostics,
+        operandBridge = materializedOperandBridge.ifEmpty { operandBridge },
+    )
+}
