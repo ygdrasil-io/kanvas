@@ -2,8 +2,22 @@ package org.graphiks.kanvas.gpu.renderer.scenes.offscreen
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendOffscreenTarget
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendOffscreenTexture
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRawUniformDraw
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRectDraw
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRenderRecorder
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendStencilMode
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendTriangleData
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendVertexColorData
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendVertexPositionUVData
+import org.graphiks.kanvas.gpu.renderer.execution.GPUClearColor
+import org.graphiks.kanvas.gpu.renderer.execution.GPUDeviceGeneration
+import org.graphiks.kanvas.gpu.renderer.execution.GPUSurfaceTarget
+import org.graphiks.kanvas.gpu.renderer.execution.GPUSurfaceTargetDescriptor
 import org.graphiks.kanvas.gpu.renderer.geometry.ConvexFanExecutor
 import org.graphiks.kanvas.gpu.renderer.geometry.PathData
 import org.graphiks.kanvas.gpu.renderer.geometry.PathTessellator
@@ -11,8 +25,14 @@ import org.graphiks.kanvas.gpu.renderer.geometry.PathVerb
 import org.graphiks.kanvas.gpu.renderer.geometry.Point
 import org.graphiks.kanvas.gpu.renderer.geometry.StencilCoverExecutor
 import org.graphiks.kanvas.gpu.renderer.geometry.isPathConvex
+import org.graphiks.kanvas.gpu.renderer.intermediates.GPUIntermediatePlan
+import org.graphiks.kanvas.gpu.renderer.intermediates.GPUIntermediatePlanStep
+import org.graphiks.kanvas.gpu.renderer.intermediates.GPUIntermediatePurpose
+import org.graphiks.kanvas.gpu.renderer.intermediates.GPUIntermediateTextureDescriptor
 import org.graphiks.kanvas.gpu.renderer.intermediates.dumpLines
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererSceneRegistry
+import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneColor
 import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTEntryPoint
 import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTWgsl
 
@@ -97,6 +117,87 @@ class M25ExecutorWiringTest {
     }
 
     @Test
+    fun `KGPU-M25-004 save layer refusal aborts before main pass encode`() {
+        val scene = GPURendererSceneRegistry.scenes.single { it.sceneId.value == "savelayer-isolated" }
+        val drawPlan = prepareRectOnlyDrawPlan(
+            sceneId = scene.sceneId.value,
+            commands = scene.commands,
+            width = scene.dimensions.width,
+            height = scene.dimensions.height,
+        )
+        val refusalPlan = GPUIntermediatePlan(
+            planId = "scene-intermediate:${scene.sceneId.value}",
+            targetId = "target:${scene.sceneId.value}",
+            steps = listOf(
+                GPUIntermediatePlanStep.Refuse(
+                    scopeLabel = "layer:translucent-group",
+                    reasonCode = "unsupported.layer.save_layer_refused",
+                ),
+            ),
+        )
+        val renderer = RectOnlyOffscreenRenderer(
+            intermediatePlanAdapter = SceneIntermediatePlanAdapter { refusalPlan },
+            intermediatePlanExecutor = SceneIntermediatePlanExecutor(),
+        )
+        val target = RecordingOffscreenTarget(scene.dimensions.width, scene.dimensions.height)
+
+        val failure = assertFailsWith<SceneIntermediateExecutionRefused> {
+            renderer.renderToPixels(target, drawPlan)
+        }
+
+        assertEquals("unsupported.layer.save_layer_refused", failure.reasonCode)
+        assertTrue(
+            failure.diagnostics.any {
+                it == "intermediate.scene.refused scope=layer:translucent-group reason=unsupported.layer.save_layer_refused stage=save-layer-preparation"
+            },
+            failure.diagnostics.toString(),
+        )
+        assertEquals(0, target.mainEncodeCount)
+        assertEquals(0, target.offscreenEncodeCount)
+    }
+
+    @Test
+    fun `KGPU-M25-004 save layer composite order follows intermediate plan steps`() {
+        val drawPlan = RectOnlyDrawPlan(
+            sceneId = "composite-order-scene",
+            clearColor = SceneColor(0f, 0f, 0f, 0f),
+            clearCount = 1,
+            fills = listOf(
+                saveLayerFill(label = "layer-a", paintOrder = 1, groupAlpha = 0.25f),
+                saveLayerFill(label = "layer-b", paintOrder = 2, groupAlpha = 0.75f),
+            ),
+        )
+        val execution = SceneIntermediateExecutionResult.Prepared(
+            childLabels = emptySet(),
+            layerTextureByTargetLabel = linkedMapOf(
+                "layer-b-target" to "texture-b",
+                "layer-a-target" to "texture-a",
+            ),
+            fillLabelByTargetLabel = linkedMapOf(
+                "layer-b-target" to "layer-b",
+                "layer-a-target" to "layer-a",
+            ),
+            plannedComposites = listOf(
+                compositeStep(sourceLabel = "layer-b-target", tokenLabel = "token-b"),
+                compositeStep(sourceLabel = "layer-a-target", tokenLabel = "token-a"),
+            ),
+            diagnostics = emptyList(),
+        )
+        val recorder = RecordingRenderRecorder()
+
+        SceneIntermediatePlanExecutor().run {
+            recorder.compositeSaveLayers(
+                drawPlan = drawPlan,
+                execution = execution,
+                viewportWidth = 320,
+                viewportHeight = 200,
+            )
+        }
+
+        assertEquals(listOf("texture-b", "texture-a"), recorder.compositeTextureLabels)
+    }
+
+    @Test
     fun `KGPU-M25-005 path fill routes through PathTessellator StencilCoverExecutor and ConvexFanExecutor`() {
         val tessellator = PathTessellator()
 
@@ -171,5 +272,232 @@ class M25ExecutorWiringTest {
             val angle = 2.0 * Math.PI * i / sides - Math.PI / 2
             Point((centerX + radius * Math.cos(angle)).toFloat(), (centerY + radius * Math.sin(angle)).toFloat())
         }
+    }
+
+    private fun saveLayerFill(label: String, paintOrder: Int, groupAlpha: Float): RectOnlyFillDraw =
+        RectOnlyFillDraw(
+            label = label,
+            family = "save-layer",
+            startColor = SceneColor(1f, 1f, 1f, 1f),
+            endColor = SceneColor(1f, 1f, 1f, 1f),
+            bottomLeftColor = SceneColor(1f, 1f, 1f, 1f),
+            bottomRightColor = SceneColor(1f, 1f, 1f, 1f),
+            left = 0f,
+            top = 0f,
+            right = 64f,
+            bottom = 64f,
+            radius = 0f,
+            paintKind = 0f,
+            filterKind = 0f,
+            filterStrength = 0f,
+            scissorX = 0,
+            scissorY = 0,
+            scissorWidth = 64,
+            scissorHeight = 64,
+            paintOrder = paintOrder,
+            groupAlpha = groupAlpha,
+        )
+
+    private fun compositeStep(sourceLabel: String, tokenLabel: String): GPUIntermediatePlanStep.CompositeIntermediate =
+        GPUIntermediatePlanStep.CompositeIntermediate(
+            source = intermediateDescriptor(sourceLabel),
+            parentTargetLabel = "surface:composite-order-scene",
+            blendModeLabel = "srcOver",
+            routeLabel = "layer-composite",
+            tokenLabel = tokenLabel,
+        )
+
+    private fun intermediateDescriptor(label: String): GPUIntermediateTextureDescriptor =
+        GPUIntermediateTextureDescriptor(
+            label = label,
+            purpose = GPUIntermediatePurpose.LayerTarget,
+            descriptorHash = "descriptor:$label",
+            sourceTargetLabel = "surface:composite-order-scene",
+            boundsLabel = "bounds:$label",
+            width = 64,
+            height = 64,
+            formatClass = OFFSCREEN_COLOR_FORMAT,
+            usageLabels = listOf("render_attachment", "texture_binding"),
+            sampleCount = 1,
+            generation = 1L,
+            lifetimeClass = "pass",
+            ownerScope = "layer:$label",
+            byteEstimate = 64L * 64L * 4L,
+        )
+
+    private class RecordingOffscreenTarget(width: Int, height: Int) : GPUBackendOffscreenTarget {
+        override val target: GPUSurfaceTarget = GPUSurfaceTarget(
+            targetId = "recording-target",
+            descriptor = GPUSurfaceTargetDescriptor(
+                width = width,
+                height = height,
+                colorFormat = OFFSCREEN_COLOR_FORMAT,
+                surfaceBacked = false,
+                targetGeneration = 1L,
+                usageLabels = setOf("render_attachment", "copy_src", "copy_dst", "texture_binding"),
+                readbackAvailable = true,
+            ),
+            deviceGeneration = GPUDeviceGeneration(1L),
+        )
+
+        var mainEncodeCount: Int = 0
+            private set
+        var offscreenEncodeCount: Int = 0
+            private set
+
+        override fun encode(clearColor: GPUClearColor, block: GPUBackendRenderRecorder.() -> Unit) {
+            mainEncodeCount += 1
+            RecordingRenderRecorder().block()
+        }
+
+        override fun readRgba(): ByteArray =
+            ByteArray(target.descriptor.width * target.descriptor.height * 4)
+
+        override fun createOffscreenTexture(texture: GPUBackendOffscreenTexture): String =
+            "offscreen-${texture.width}x${texture.height}-$offscreenEncodeCount"
+
+        override fun encodeOffscreenTexture(
+            textureLabel: String,
+            clearColor: GPUClearColor?,
+            block: GPUBackendRenderRecorder.() -> Unit,
+        ) {
+            offscreenEncodeCount += 1
+            RecordingRenderRecorder().block()
+        }
+
+        override fun close() = Unit
+    }
+
+    private class RecordingRenderRecorder : GPUBackendRenderRecorder {
+        val compositeTextureLabels = mutableListOf<String>()
+
+        override fun drawFullscreenPass(
+            wgsl: String,
+            colorFormat: String,
+            draws: List<GPUBackendRectDraw>,
+            blendMode: GPUBlendMode?,
+            passBatchKind: org.graphiks.kanvas.gpu.renderer.execution.GPUBackendSimplePassBatchKind?,
+        ) = Unit
+
+        override fun drawFullscreenUniformPayloadPass(
+            wgsl: String,
+            colorFormat: String,
+            draws: List<org.graphiks.kanvas.gpu.renderer.execution.GPUBackendUniformPayloadDraw>,
+            blendMode: GPUBlendMode?,
+            sourceLabel: String,
+            passBatchKind: org.graphiks.kanvas.gpu.renderer.execution.GPUBackendSimplePassBatchKind?,
+        ) = Unit
+
+        override fun drawFullscreenRawUniformPass(
+            wgsl: String,
+            colorFormat: String,
+            draws: List<GPUBackendRawUniformDraw>,
+            blendMode: GPUBlendMode?,
+            passBatchKind: org.graphiks.kanvas.gpu.renderer.execution.GPUBackendSimplePassBatchKind?,
+        ) = Unit
+
+        override fun drawFullscreenTextureUniformPass(
+            wgsl: String,
+            colorFormat: String,
+            textureRgba: ByteArray,
+            textureWidth: Int,
+            textureHeight: Int,
+            textureFormat: String,
+            draws: List<GPUBackendRawUniformDraw>,
+            blendMode: GPUBlendMode?,
+        ) = Unit
+
+        override fun drawFullscreenStencilPass(
+            wgsl: String,
+            colorFormat: String,
+            stencilMode: GPUBackendStencilMode,
+            triangleData: GPUBackendTriangleData?,
+            draws: List<GPUBackendRawUniformDraw>,
+            blendMode: GPUBlendMode?,
+        ) = Unit
+
+        override fun createVertexColorBuffer(data: GPUBackendVertexColorData): String = "vertex-color"
+
+        override fun drawVertexColorIndexed(
+            vertexBufferLabel: String,
+            indexCount: Int,
+            uniformDraw: GPUBackendRawUniformDraw,
+            blendMode: GPUBlendMode?,
+        ) = Unit
+
+        override fun createVertexPositionUVBuffer(data: GPUBackendVertexPositionUVData): String = "vertex-uv"
+
+        override fun drawVertexPositionUVIndexed(
+            vertexBufferLabel: String,
+            indexCount: Int,
+            uniformDraw: GPUBackendRawUniformDraw,
+            textureRgba: ByteArray,
+            textureWidth: Int,
+            textureHeight: Int,
+            textureFormat: String,
+            blendMode: GPUBlendMode?,
+        ) = Unit
+
+        override fun drawVertexPositionDualUVIndexed(
+            vertexBufferLabel: String,
+            indexCount: Int,
+            uniformDraw: GPUBackendRawUniformDraw,
+            texture1Rgba: ByteArray,
+            texture1Width: Int,
+            texture1Height: Int,
+            texture2Rgba: ByteArray,
+            texture2Width: Int,
+            texture2Height: Int,
+            textureFormat: String,
+            blendMode: GPUBlendMode?,
+        ) = Unit
+
+        override fun createOffscreenTexture(texture: GPUBackendOffscreenTexture): String = "texture"
+
+        override fun encodeOffscreenTexture(
+            textureLabel: String,
+            clearColor: GPUClearColor?,
+            block: GPUBackendRenderRecorder.() -> Unit,
+        ) = Unit
+
+        override fun drawCompositePass(
+            wgsl: String,
+            colorFormat: String,
+            textureLabel: String,
+            draws: List<GPUBackendRawUniformDraw>,
+            blendMode: GPUBlendMode?,
+        ) {
+            compositeTextureLabels += textureLabel
+        }
+
+        override fun drawBlendPass(
+            wgsl: String,
+            colorFormat: String,
+            srcTextureLabel: String,
+            dstTextureLabel: String,
+            draws: List<GPUBackendRawUniformDraw>,
+        ) = Unit
+
+        override fun drawTextAtlasPass(
+            atlasRgba: ByteArray,
+            atlasWidth: Int,
+            atlasHeight: Int,
+            atlasFormat: String,
+            vertexData: FloatArray,
+            indexData: IntArray,
+            draws: List<GPUBackendRawUniformDraw>,
+            blendMode: GPUBlendMode?,
+        ) = Unit
+
+        override fun drawColorGlyphPass(
+            atlasRgba: ByteArray,
+            atlasWidth: Int,
+            atlasHeight: Int,
+            atlasFormat: String,
+            vertexData: FloatArray,
+            indexData: IntArray,
+            draws: List<GPUBackendRawUniformDraw>,
+            blendMode: GPUBlendMode?,
+        ) = Unit
     }
 }

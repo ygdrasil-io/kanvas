@@ -71,6 +71,7 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
 private const val BYTES_PER_PIXEL: Int = 4
+internal const val OFFSCREEN_COLOR_FORMAT: String = "rgba8unorm"
 
 private data class GradientWgslInfo(
     val snippet: String,
@@ -79,7 +80,15 @@ private data class GradientWgslInfo(
     val uniformArgs: String,
 )
 
-class RectOnlyOffscreenRenderer {
+class RectOnlyOffscreenRenderer internal constructor(
+    private val intermediatePlanAdapter: SceneIntermediatePlanAdapter,
+    private val intermediatePlanExecutor: SceneIntermediatePlanExecutor,
+) {
+    constructor() : this(
+        intermediatePlanAdapter = SceneIntermediatePlanAdapter(),
+        intermediatePlanExecutor = SceneIntermediatePlanExecutor(),
+    )
+
     fun render(scene: GPURendererScene<SceneCommand>, outputDir: Path): OffscreenRunReport {
         val sceneId = scene.sceneId.value
         outputDir.createDirectories()
@@ -101,14 +110,7 @@ class RectOnlyOffscreenRenderer {
                     colorFormat = OFFSCREEN_COLOR_FORMAT,
                 ),
             ).use { target ->
-                val intermediateDiagnostics = mutableListOf<String>()
-                val pixels = renderToPixels(target, drawPlan, intermediateDiagnostics)
-                val nonTransparentPixels = pixels.countNonTransparentPixels()
-                val imagePath = outputDir.resolve(RENDER_FILE_NAME)
-                val width = target.target.descriptor.width
-                val height = target.target.descriptor.height
-                writePng(pixels, width, height, imagePath)
-                val baseDiagnostics = rectOnlyRenderedDiagnostics(
+                val sharedDiagnostics = rectOnlyRenderedDiagnostics(
                     sceneId = sceneId,
                     adapterInfo = session.adapterInfo?.summary,
                     clearCount = drawPlan.clearCount,
@@ -133,20 +135,32 @@ class RectOnlyOffscreenRenderer {
                     saveLayers = drawPlan.saveLayers,
                     runtimeEffects = drawPlan.runtimeEffects,
                     meshRibbons = drawPlan.meshRibbons,
-                )
-                val diagnostics =
-                    baseDiagnostics +
-                        session.runtimeTelemetryDumpLines +
-                        passBatchingWiringDiagnostics() +
-                        drawPlan.tessellationDiagnostics +
-                        drawPlan.executorWiringDiagnostics +
-                        intermediateDiagnostics +
-                        scene.runtimeEffectRefusalGateDiagnostics() +
-                        scene.a8GlyphAtlasGateDiagnostics() +
-                        scene.textResourceBindingGateDiagnostics() +
-                        scene.pmReadinessFreezeDiagnostics() +
-                        scene.legacyRetirementBlockerDiagnostics() +
-                        scene.pathStencilCoverGateDiagnostics()
+                ) +
+                    session.runtimeTelemetryDumpLines +
+                    passBatchingWiringDiagnostics() +
+                    drawPlan.tessellationDiagnostics +
+                    drawPlan.executorWiringDiagnostics +
+                    scene.runtimeEffectRefusalGateDiagnostics() +
+                    scene.a8GlyphAtlasGateDiagnostics() +
+                    scene.textResourceBindingGateDiagnostics() +
+                    scene.pmReadinessFreezeDiagnostics() +
+                    scene.legacyRetirementBlockerDiagnostics() +
+                    scene.pathStencilCoverGateDiagnostics()
+                val intermediateDiagnostics = mutableListOf<String>()
+                val pixels = try {
+                    renderToPixels(target, drawPlan, intermediateDiagnostics)
+                } catch (failure: SceneIntermediateExecutionRefused) {
+                    return OffscreenRunReport.failed(
+                        sceneId = sceneId,
+                        reason = failure.reasonCode,
+                        diagnostics = sharedDiagnostics + failure.diagnostics,
+                    )
+                }
+                val nonTransparentPixels = pixels.countNonTransparentPixels()
+                val imagePath = outputDir.resolve(RENDER_FILE_NAME)
+                val width = target.target.descriptor.width
+                val height = target.target.descriptor.height
+                writePng(pixels, width, height, imagePath)
                 return OffscreenRunReport.rendered(
                     sceneId = sceneId,
                     imagePath = RENDER_FILE_NAME,
@@ -154,7 +168,7 @@ class RectOnlyOffscreenRenderer {
                     height = height,
                     byteCount = rectOnlyRawRgbaByteCount(pixels, width, height),
                     nonTransparentPixels = nonTransparentPixels,
-                    diagnostics = diagnostics,
+                    diagnostics = sharedDiagnostics + intermediateDiagnostics,
                 )
             }
         }
@@ -168,14 +182,14 @@ class RectOnlyOffscreenRenderer {
         val viewportWidth = target.target.descriptor.width
         val viewportHeight = target.target.descriptor.height
 
-        val intermediatePlan = SceneIntermediatePlanAdapter().plan(
+        val intermediatePlan = intermediatePlanAdapter.plan(
             sceneId = drawPlan.sceneId,
             drawPlan = drawPlan,
             width = viewportWidth,
             height = viewportHeight,
         )
-        val intermediateExecutor = SceneIntermediatePlanExecutor()
-        val intermediateExecution = intermediateExecutor.executeSaveLayerPreparation(
+        val preparedIntermediateExecution = when (
+            val intermediateExecution = intermediatePlanExecutor.executeSaveLayerPreparation(
             target = target,
             drawPlan = drawPlan,
             plan = intermediatePlan,
@@ -188,8 +202,20 @@ class RectOnlyOffscreenRenderer {
                     draws = solidDraws,
                 )
             }
+        }) {
+            is SceneIntermediateExecutionResult.Refused -> {
+                intermediateDiagnostics?.addAll(intermediateExecution.diagnostics)
+                throw SceneIntermediateExecutionRefused(
+                    scopeLabel = intermediateExecution.scopeLabel,
+                    reasonCode = intermediateExecution.reasonCode,
+                    diagnostics = intermediateExecution.diagnostics,
+                )
+            }
+            is SceneIntermediateExecutionResult.Prepared -> {
+                intermediateDiagnostics?.addAll(intermediateExecution.diagnostics)
+                intermediateExecution
+            }
         }
-        intermediateDiagnostics?.addAll(intermediateExecution.diagnostics)
 
         target.encode(clearColor = drawPlan.clearColor.toGpuClearColor()) {
             val saveLayerFills = drawPlan.fills.filter { it.family == "save-layer" }
@@ -208,7 +234,7 @@ class RectOnlyOffscreenRenderer {
                     it.family != "path-fill-stencil" &&
                     it.family != "path-fill-gradient" &&
                     it.family != "convex-fan-mesh" &&
-                    it.label !in intermediateExecution.childLabels
+                    it.label !in preparedIntermediateExecution.childLabels
             }
             if (solidFills.isNotEmpty()) {
                 drawFullscreenPass(
@@ -684,14 +710,15 @@ class RectOnlyOffscreenRenderer {
             }
 
             if (saveLayerFills.isNotEmpty()) {
-                intermediateExecutor.run {
+                val compositeDiagnostics = intermediatePlanExecutor.run {
                     compositeSaveLayers(
                         drawPlan = drawPlan,
-                        execution = intermediateExecution,
+                        execution = preparedIntermediateExecution,
                         viewportWidth = viewportWidth,
                         viewportHeight = viewportHeight,
                     )
                 }
+                intermediateDiagnostics?.addAll(compositeDiagnostics)
             }
         }
         return target.readRgba()
@@ -746,7 +773,6 @@ class RectOnlyOffscreenRenderer {
 
     companion object {
         const val RENDER_FILE_NAME: String = "render.png"
-        const val OFFSCREEN_COLOR_FORMAT: String = "rgba8unorm"
 
         fun composeGradientWgsl(
             snippetWgsl: String,
@@ -861,27 +887,6 @@ fn fs_main() -> @location(0) vec4f {
 }
 """.trimIndent()
 
-        fun composeSaveLayerCompositeWgsl(): String = """
-struct Uniforms { color: vec4f, params: vec4f };
-
-@group(0) @binding(0) var<uniform> uniforms: Uniforms;
-
-${LayerCompositeWgsl}
-
-@vertex
-fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
-    let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
-    let y = f32(idx & 2u) * 2.0 - 1.0;
-    return vec4f(x, y, 0.0, 1.0);
-}
-
-@fragment
-fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
-    let uv = pos.xy / vec2f(320.0, 200.0);
-    return layer_composite(uv, uniforms.color, uniforms.params.x);
-}
-"""
-
         val SOLID_RECT_WGSL: String = """
             struct Uniforms {
                 color: vec4f,
@@ -912,6 +917,27 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
         }
     }
 }
+
+internal fun composeSaveLayerCompositeWgsl(): String = """
+struct Uniforms { color: vec4f, params: vec4f };
+
+@group(0) @binding(0) var<uniform> uniforms: Uniforms;
+
+${LayerCompositeWgsl}
+
+@vertex
+fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
+    let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
+    let y = f32(idx & 2u) * 2.0 - 1.0;
+    return vec4f(x, y, 0.0, 1.0);
+}
+
+@fragment
+fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
+    let uv = pos.xy / vec2f(320.0, 200.0);
+    return layer_composite(uv, uniforms.color, uniforms.params.x);
+}
+"""
 
 internal data class RectOnlyDrawPlan(
     val sceneId: String,

@@ -10,7 +10,7 @@ import org.graphiks.kanvas.gpu.renderer.layers.GPULayerScopeID
 import org.graphiks.kanvas.gpu.renderer.state.GPUBlendMode
 
 internal class SceneIntermediatePlanAdapter(
-    private val planner: GPUIntermediatePlanner = GPUIntermediatePlanner(),
+    private val planIntermediate: (GPUIntermediatePlannerRequest) -> GPUIntermediatePlan = GPUIntermediatePlanner()::plan,
 ) {
     fun plan(
         sceneId: String,
@@ -61,11 +61,11 @@ internal class SceneIntermediatePlanAdapter(
             }
         }
 
-        return planner.plan(
+        return planIntermediate(
             GPUIntermediatePlannerRequest(
                 planId = "scene-intermediate:$sceneId",
                 targetId = "target:$sceneId",
-                targetFormatClass = RectOnlyOffscreenRenderer.OFFSCREEN_COLOR_FORMAT,
+                targetFormatClass = OFFSCREEN_COLOR_FORMAT,
                 targetUsageLabels = setOf("render_attachment", "copy_src", "copy_dst", "texture_binding"),
                 deviceGeneration = 1,
                 drawRequests = drawRequests,

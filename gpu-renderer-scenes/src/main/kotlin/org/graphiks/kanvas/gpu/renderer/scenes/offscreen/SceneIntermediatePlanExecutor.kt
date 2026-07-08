@@ -14,11 +14,29 @@ import org.graphiks.kanvas.gpu.renderer.intermediates.dumpLines
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneColor
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneRect
 
-internal data class SceneIntermediateExecutionResult(
-    val childLabels: Set<String>,
-    val layerTextureByFillLabel: Map<String, String>,
+internal sealed interface SceneIntermediateExecutionResult {
+    val diagnostics: List<String>
+
+    data class Prepared(
+        val childLabels: Set<String>,
+        val layerTextureByTargetLabel: Map<String, String>,
+        val fillLabelByTargetLabel: Map<String, String>,
+        val plannedComposites: List<GPUIntermediatePlanStep.CompositeIntermediate>,
+        override val diagnostics: List<String>,
+    ) : SceneIntermediateExecutionResult
+
+    data class Refused(
+        val scopeLabel: String,
+        val reasonCode: String,
+        override val diagnostics: List<String>,
+    ) : SceneIntermediateExecutionResult
+}
+
+internal class SceneIntermediateExecutionRefused(
+    val scopeLabel: String,
+    val reasonCode: String,
     val diagnostics: List<String>,
-)
+) : IllegalStateException("scene intermediate execution refused: scope=$scopeLabel reason=$reasonCode")
 
 internal class SceneIntermediatePlanExecutor {
     fun executeSaveLayerPreparation(
@@ -27,8 +45,20 @@ internal class SceneIntermediatePlanExecutor {
         plan: GPUIntermediatePlan,
         renderSolidFills: GPUBackendRenderRecorder.(List<RectOnlyFillDraw>) -> Unit,
     ): SceneIntermediateExecutionResult {
+        val refusal = plan.steps.singleOrNull() as? GPUIntermediatePlanStep.Refuse
+        if (refusal != null) {
+            return SceneIntermediateExecutionResult.Refused(
+                scopeLabel = refusal.scopeLabel,
+                reasonCode = refusal.reasonCode,
+                diagnostics = listOf(
+                    "intermediate.scene.refused scope=${refusal.scopeLabel} reason=${refusal.reasonCode} stage=save-layer-preparation",
+                ) + plan.dumpLines(),
+            )
+        }
+
         val childLabels = linkedSetOf<String>()
-        val layerTextureByFillLabel = linkedMapOf<String, String>()
+        val layerTextureByTargetLabel = linkedMapOf<String, String>()
+        val fillLabelByTargetLabel = linkedMapOf<String, String>()
         val diagnostics = mutableListOf<String>()
 
         plan.steps.filterIsInstance<GPUIntermediatePlanStep.RenderLayerChildren>().forEach { layerStep ->
@@ -51,49 +81,88 @@ internal class SceneIntermediatePlanExecutor {
                 renderSolidFills(saveLayerPreparationFills(fill, children))
             }
 
-            layerTextureByFillLabel[fill.label] = textureLabel
+            layerTextureByTargetLabel[layerStep.target.label] = textureLabel
+            fillLabelByTargetLabel[layerStep.target.label] = fill.label
             diagnostics +=
                 "intermediate.scene.layer-prepared scope=${layerStep.scopeLabel} " +
-                    "plannedTarget=${layerStep.target.label} texture=$textureLabel children=${layerStep.childrenLabel}"
+                    "plannedTarget=${layerStep.target.label} texture=$textureLabel children=${layerStep.childrenLabel} token=${layerStep.tokenLabel}"
         }
 
         diagnostics += plan.dumpLines()
 
-        return SceneIntermediateExecutionResult(
+        return SceneIntermediateExecutionResult.Prepared(
             childLabels = childLabels,
-            layerTextureByFillLabel = layerTextureByFillLabel,
+            layerTextureByTargetLabel = layerTextureByTargetLabel,
+            fillLabelByTargetLabel = fillLabelByTargetLabel,
+            plannedComposites = plan.steps.filterIsInstance<GPUIntermediatePlanStep.CompositeIntermediate>(),
             diagnostics = diagnostics,
         )
     }
 
     fun GPUBackendRenderRecorder.compositeSaveLayers(
         drawPlan: RectOnlyDrawPlan,
-        execution: SceneIntermediateExecutionResult,
+        execution: SceneIntermediateExecutionResult.Prepared,
         viewportWidth: Int,
         viewportHeight: Int,
-    ) {
-        drawPlan.fills
-            .filter { it.family == "save-layer" }
-            .forEach { fill ->
-                val textureLabel = execution.layerTextureByFillLabel[fill.label] ?: return@forEach
-                drawCompositePass(
-                    wgsl = RectOnlyOffscreenRenderer.composeSaveLayerCompositeWgsl(),
-                    colorFormat = RectOnlyOffscreenRenderer.OFFSCREEN_COLOR_FORMAT,
-                    textureLabel = textureLabel,
-                    draws = listOf(
-                        GPUBackendRawUniformDraw(
-                            uniformBytes = UniformPacker.layerCompositeBytes(
-                                SceneColor(0f, 0f, 0f, 0f),
-                                fill.groupAlpha,
-                            ),
-                            scissorX = 0,
-                            scissorY = 0,
-                            scissorWidth = viewportWidth,
-                            scissorHeight = viewportHeight,
-                        ),
-                    ),
+    ): List<String> {
+        if (execution.layerTextureByTargetLabel.isNotEmpty() && execution.plannedComposites.isEmpty()) {
+            throw refusal(
+                scopeLabel = drawPlan.sceneId,
+                reasonCode = "unsupported.layer.missing_composite_step",
+                diagnostics = execution.diagnostics,
+                stage = "save-layer-composite",
+            )
+        }
+
+        val diagnostics = mutableListOf<String>()
+
+        execution.plannedComposites.forEach { compositeStep ->
+            val sourceLabel = compositeStep.source.label
+            val fillLabel = execution.fillLabelByTargetLabel[sourceLabel]
+                ?: throw refusal(
+                    scopeLabel = sourceLabel,
+                    reasonCode = "unsupported.layer.composite_missing_fill",
+                    diagnostics = execution.diagnostics + diagnostics,
+                    stage = "save-layer-composite",
                 )
-            }
+            val fill = drawPlan.fills.firstOrNull { it.label == fillLabel }
+                ?: throw refusal(
+                    scopeLabel = fillLabel,
+                    reasonCode = "unsupported.layer.composite_fill_not_found",
+                    diagnostics = execution.diagnostics + diagnostics,
+                    stage = "save-layer-composite",
+                )
+            val textureLabel = execution.layerTextureByTargetLabel[sourceLabel]
+                ?: throw refusal(
+                    scopeLabel = sourceLabel,
+                    reasonCode = "unsupported.layer.composite_missing_texture",
+                    diagnostics = execution.diagnostics + diagnostics,
+                    stage = "save-layer-composite",
+                )
+            diagnostics +=
+                "intermediate.scene.composite source=${compositeStep.source.label} " +
+                    "parent=${compositeStep.parentTargetLabel} blend=${compositeStep.blendModeLabel} " +
+                    "route=${compositeStep.routeLabel} token=${compositeStep.tokenLabel} texture=$textureLabel fill=$fillLabel"
+            drawCompositePass(
+                wgsl = composeSaveLayerCompositeWgsl(),
+                colorFormat = OFFSCREEN_COLOR_FORMAT,
+                textureLabel = textureLabel,
+                draws = listOf(
+                    GPUBackendRawUniformDraw(
+                        uniformBytes = UniformPacker.layerCompositeBytes(
+                            SceneColor(0f, 0f, 0f, 0f),
+                            fill.groupAlpha,
+                        ),
+                        scissorX = 0,
+                        scissorY = 0,
+                        scissorWidth = viewportWidth,
+                        scissorHeight = viewportHeight,
+                    ),
+                ),
+            )
+        }
+
+        return diagnostics
     }
 
     companion object {
@@ -170,4 +239,18 @@ internal class SceneIntermediatePlanExecutor {
         offscreenFills += childFills
         return offscreenFills
     }
+
+    private fun refusal(
+        scopeLabel: String,
+        reasonCode: String,
+        diagnostics: List<String>,
+        stage: String,
+    ): SceneIntermediateExecutionRefused =
+        SceneIntermediateExecutionRefused(
+            scopeLabel = scopeLabel,
+            reasonCode = reasonCode,
+            diagnostics = diagnostics + listOf(
+                "intermediate.scene.refused scope=$scopeLabel reason=$reasonCode stage=$stage",
+            ),
+        )
 }
