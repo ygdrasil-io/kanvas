@@ -102,6 +102,40 @@ class Phase6ImageFamilyEvidenceTest {
     }
 
     @Test
+    fun `dashboard reader keeps path clip flags for shared evidence`() {
+        val root = kotlin.io.path.createTempDirectory("phase6-shared-dashboard")
+        val dashboard = root.resolve("gms.json")
+        java.nio.file.Files.writeString(
+            dashboard,
+            """
+            {
+              "generatedAt": "2026-07-09T08:00:00",
+              "gms": [
+                {
+                  "name": "complexclip_aa",
+                  "family": "CLIP",
+                  "similarity": null,
+                  "minSimilarity": 99.0,
+                  "isPassing": null,
+                  "noReference": false,
+                  "renderFailed": false,
+                  "sizeMismatch": true,
+                  "hasDiff": false
+                }
+              ]
+            }
+            """.trimIndent(),
+        )
+
+        val loaded = GmDashboardJsonReader.read(dashboard)
+
+        assertEquals("2026-07-09T08:00:00", loaded.generatedAt)
+        assertEquals("complexclip_aa", loaded.rows.single().name)
+        assertEquals("CLIP", loaded.rows.single().family)
+        assertEquals(true, loaded.rows.single().sizeMismatch)
+    }
+
+    @Test
     fun `duplicate image rows receive stable row ids and surface them in csv and markdown`() {
         val evidence = Phase6ImageFamilyClassifier.buildEvidence(
             GmDashboard(
