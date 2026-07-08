@@ -113,6 +113,50 @@ class Phase6CoverageFamilyEvidenceTest {
         assertEquals(mapOf("CLIP" to 1, "PATH" to 1), evidence.summary.families)
         assertEquals(listOf("cubicpath", "aaclip"), evidence.rows.map { it.name })
     }
+
+    @Test
+    fun `duplicate coverage rows receive stable row ids and surface them in csv and markdown`() {
+        val evidence = Phase6CoverageFamilyClassifier.buildEvidence(
+            GmDashboard(
+                generatedAt = "2026-07-09T08:00:00",
+                rows = listOf(
+                    row("duplicate_path", family = "PATH"),
+                    row("duplicate_path", family = "PATH", similarity = 20.0, isPassing = false),
+                ),
+            ),
+        )
+
+        assertEquals(listOf("duplicate_path", "duplicate_path#2"), evidence.rows.map { it.rowId })
+        assertContains(evidence.toCsv(), "duplicate_path,duplicate_path,PATH,path-fill-simple,instrumented-existing")
+        assertContains(evidence.toCsv(), "duplicate_path#2,duplicate_path,PATH,path-fill-simple,unexpected-fail")
+        assertContains(evidence.toMarkdown(), "| `duplicate_path` | `duplicate_path` | `PATH` | `path-fill-simple` | `instrumented-existing` |")
+        assertContains(evidence.toMarkdown(), "| `duplicate_path#2` | `duplicate_path` | `PATH` | `path-fill-simple` | `unexpected-fail` |")
+    }
+
+    @Test
+    fun `coverage writer creates json markdown and csv outputs`() {
+        val evidence = Phase6CoverageFamilyClassifier.buildEvidence(
+            GmDashboard(
+                generatedAt = "2026-07-09T08:00:00",
+                rows = listOf(row("cubicpath", family = "PATH"), row("aaclip", family = "CLIP")),
+            ),
+        )
+
+        val root = kotlin.io.path.createTempDirectory("phase6-coverage-evidence")
+        Phase6CoverageFamilyEvidenceWriter.writeOutputs(root, evidence)
+
+        val evidencePath = root.resolve("reports/gpu-renderer/phase-6-coverage-families/evidence.json")
+        val markdownPath = root.resolve("reports/gpu-renderer/2026-07-09-gpu-phase-6-coverage-families.md")
+        val csvPath = root.resolve("reports/gpu-renderer/phase-6-coverage-families/classification.csv")
+
+        assertEquals(true, java.nio.file.Files.isRegularFile(evidencePath))
+        assertEquals(true, java.nio.file.Files.isRegularFile(markdownPath))
+        assertEquals(true, java.nio.file.Files.isRegularFile(csvPath))
+        assertContains(java.nio.file.Files.readString(evidencePath), "\"schemaVersion\": \"phase6-coverage-families-v1\"")
+        assertContains(java.nio.file.Files.readString(evidencePath), "\"totalRows\": 2")
+        assertContains(java.nio.file.Files.readString(markdownPath), "No broad Path AA support is claimed")
+        assertContains(java.nio.file.Files.readString(csvPath), "cubicpath,cubicpath,PATH,path-fill-concave,instrumented-existing")
+    }
 }
 
 private fun row(

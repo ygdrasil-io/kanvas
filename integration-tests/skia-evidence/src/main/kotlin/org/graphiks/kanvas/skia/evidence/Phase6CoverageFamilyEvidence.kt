@@ -1,5 +1,17 @@
 package org.graphiks.kanvas.skia.evidence
 
+import java.nio.file.Files
+import java.nio.file.Path
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonObjectBuilder
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+
 data class Phase6CoverageFamiliesEvidence(
     val schemaVersion: String,
     val generatedBy: String,
@@ -194,8 +206,134 @@ object Phase6CoverageFamilyClassifier {
     }
 }
 
+object Phase6CoverageFamilyEvidenceWriter {
+    private val prettyJson = Json { prettyPrint = true }
+
+    fun writeOutputs(root: Path, evidence: Phase6CoverageFamiliesEvidence) {
+        val evidencePath = root.resolve("reports/gpu-renderer/phase-6-coverage-families/evidence.json")
+        val csvPath = root.resolve("reports/gpu-renderer/phase-6-coverage-families/classification.csv")
+        val markdownPath = root.resolve("reports/gpu-renderer/2026-07-09-gpu-phase-6-coverage-families.md")
+        Files.createDirectories(evidencePath.parent)
+        Files.createDirectories(markdownPath.parent)
+        Files.writeString(evidencePath, prettyJson.encodeToString(JsonObject.serializer(), evidence.toJsonObject()) + "\n")
+        Files.writeString(csvPath, evidence.toCsv())
+        Files.writeString(markdownPath, evidence.toMarkdown())
+    }
+}
+
+fun Phase6CoverageFamiliesEvidence.toJsonObject(): JsonObject =
+    buildJsonObject {
+        put("schemaVersion", schemaVersion)
+        put("generatedBy", generatedBy)
+        put("dashboardSource", dashboardSource)
+        if (sourceGeneratedAt == null) put("sourceGeneratedAt", JsonNull) else put("sourceGeneratedAt", sourceGeneratedAt)
+        put("summary", summary.toJsonObject())
+        put("nonClaims", buildJsonArray { nonClaims.forEach { add(it) } })
+        put("rows", buildJsonArray { rows.forEach { add(it.toJsonObject()) } })
+    }
+
+private fun Phase6CoverageSummary.toJsonObject(): JsonObject =
+    buildJsonObject {
+        put("totalRows", totalRows)
+        put("families", families.toCoverageCountJsonObject())
+        put("classifications", classifications.toCoverageCountJsonObject())
+        put("subfamilies", subfamilies.toCoverageCountJsonObject())
+        put("promotedRows", promotedRows)
+        put("unexpectedFails", unexpectedFails)
+        put("noScore", noScore)
+    }
+
+private fun Phase6CoverageRowEvidence.toJsonObject(): JsonObject =
+    buildJsonObject {
+        put("rowId", rowId)
+        put("name", name)
+        put("family", family)
+        put("subfamily", subfamily)
+        put("classification", classification)
+        putNullableCoverageDouble("similarity", similarity)
+        putNullableCoverageDouble("minSimilarity", minSimilarity)
+        if (isPassing == null) put("isPassing", JsonNull) else put("isPassing", isPassing)
+        put("fallbackReason", fallbackReason)
+        putNullableCoverageString("referencePath", referencePath)
+        putNullableCoverageString("generatedPath", generatedPath)
+        putNullableCoverageString("diffPath", diffPath)
+        putNullableCoverageString("noScoreCause", noScoreCause)
+        put("nonClaim", nonClaim)
+    }
+
+private fun Map<String, Int>.toCoverageCountJsonObject(): JsonObject =
+    buildJsonObject {
+        entries.sortedBy { it.key }.forEach { (key, value) -> put(key, value) }
+    }
+
+private fun JsonObjectBuilder.putNullableCoverageString(key: String, value: String?) {
+    if (value == null) put(key, JsonNull) else put(key, value)
+}
+
+private fun JsonObjectBuilder.putNullableCoverageDouble(key: String, value: Double?) {
+    if (value == null) put(key, JsonNull) else put(key, value)
+}
+
+fun Phase6CoverageFamiliesEvidence.toCsv(): String =
+    buildString {
+        appendLine("rowId,name,family,subfamily,classification,similarity,minSimilarity,fallbackReason,noScoreCause")
+        rows.forEach { row ->
+            appendLine(
+                listOf(
+                    row.rowId,
+                    row.name,
+                    row.family,
+                    row.subfamily,
+                    row.classification,
+                    row.similarity?.toString().orEmpty(),
+                    row.minSimilarity?.toString().orEmpty(),
+                    row.fallbackReason,
+                    row.noScoreCause.orEmpty(),
+                ).joinToString(",") { it.coverageCsvCell() },
+            )
+        }
+    }
+
+fun Phase6CoverageFamiliesEvidence.toMarkdown(): String =
+    buildString {
+        appendLine("# GPU Phase 6 Coverage Families Evidence")
+        appendLine()
+        appendLine("## Summary")
+        appendLine()
+        appendLine("- Total PATH + CLIP rows: ${summary.totalRows}")
+        appendLine("- Families: ${summary.families}")
+        appendLine("- Classifications: ${summary.classifications}")
+        appendLine("- Subfamilies: ${summary.subfamilies}")
+        appendLine()
+        appendLine("## Non-Claims")
+        appendLine()
+        nonClaims.forEach { appendLine("- $it") }
+        appendLine()
+        appendLine("## Rows")
+        appendLine()
+        appendLine("| Row ID | Row | Family | Subfamily | Classification | Similarity | Fallback |")
+        appendLine("|---|---|---|---|---|---:|---|")
+        rows.forEach { row ->
+            val similarity = row.similarity?.let { "%.2f".format(java.util.Locale.US, it) } ?: "n/a"
+            appendLine("| `${row.rowId}` | `${row.name}` | `${row.family}` | `${row.subfamily}` | `${row.classification}` | $similarity | `${row.fallbackReason}` |")
+        }
+        appendLine()
+        appendLine("## Regeneration Notes")
+        appendLine()
+        appendLine("- Run `:integration-tests:skia:generateSkiaDashboard` before generating coverage-family evidence.")
+        appendLine("- Dashboard data is read from `integration-tests/skia/build/reports/skia-gm-dashboard/data/gms.json`.")
+        appendLine("- Source counts changed after `#2010`; the regenerated dashboard is the evidence source of truth.")
+    }
+
 private fun String.coverageKey(): String =
     lowercase().filter { char -> char.isLetterOrDigit() }
 
 private fun String.containsAnyCoverage(vararg tokens: String): Boolean =
     tokens.any(this::contains)
+
+private fun String.coverageCsvCell(): String =
+    if (any { it == ',' || it == '"' || it == '\n' || it == '\r' }) {
+        "\"" + replace("\"", "\"\"") + "\""
+    } else {
+        this
+    }
