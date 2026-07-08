@@ -452,6 +452,7 @@ class GPUBackendRuntimeNativeSmokeTest {
                             GPUBackendRectDraw(floatArrayOf(1f, 0f, 0f, 1f), 0, 0, 2, 4),
                             GPUBackendRectDraw(floatArrayOf(0f, 1f, 0f, 1f), 2, 0, 2, 4),
                         ),
+                        passBatchKind = GPUBackendSimplePassBatchKind.SolidFill,
                     )
                 }
                 target.readRgba()
@@ -465,6 +466,42 @@ class GPUBackendRuntimeNativeSmokeTest {
                 assertTrue(!dump.contains("0x"))
                 assertTrue(!dump.contains(forbiddenImplementationTokenUpperForAudit()))
                 assertTrue(!dump.contains(forbiddenImplementationTokenLowerForAudit()))
+            }
+        }
+    }
+
+    @Test
+    fun `backend runtime does not record pass batch plan for unmarked generic fullscreen pass draws when backend is available`() {
+        val runtime = GPUBackendRuntimeFactory.createOrNull()
+        assumeTrue(runtime != null, "GPU backend unavailable in current environment")
+
+        runtime!!.use { session ->
+            val before = session.runtimeTelemetry
+
+            session.createOffscreenTarget(
+                GPUOffscreenTargetRequest(width = 4, height = 4, colorFormat = "rgba8unorm"),
+            ).use { target ->
+                target.encode(GPUClearColor(0.0, 0.0, 0.0, 1.0)) {
+                    drawFullscreenPass(
+                        wgsl = nonSimpleFullscreenWgsl(),
+                        colorFormat = "rgba8unorm",
+                        draws = listOf(
+                            GPUBackendRectDraw(floatArrayOf(1f, 0f, 0f, 1f), 0, 0, 4, 4),
+                            GPUBackendRectDraw(floatArrayOf(0f, 1f, 0f, 1f), 0, 0, 2, 4),
+                        ),
+                    )
+                }
+
+                val rgba = target.readRgba()
+                val after = session.runtimeTelemetry
+                val dump = session.runtimeTelemetryDumpLines.joinToString("\n")
+
+                assertEquals(4 * 4 * 4, rgba.size)
+                assertEquals(0L, after.passBatchPlans - before.passBatchPlans, dump)
+                assertEquals(0L, after.passBatchesAccepted - before.passBatchesAccepted, dump)
+                assertEquals(0L, after.passBatchPackets - before.passBatchPackets, dump)
+                assertTrue(!dump.contains("passes.batch-plan stream=fullscreen-uniform-pass"), dump)
+                assertTrue(!dump.contains("kind=solid-fill"), dump)
             }
         }
     }
@@ -574,6 +611,7 @@ class GPUBackendRuntimeNativeSmokeTest {
                                     scissorHeight = 4,
                                 ),
                             ),
+                            passBatchKind = GPUBackendSimplePassBatchKind.SolidFill,
                         )
                     }
                     target.readRgba()
@@ -600,6 +638,7 @@ class GPUBackendRuntimeNativeSmokeTest {
                                 scissorHeight = 4,
                             )
                         },
+                        passBatchKind = GPUBackendSimplePassBatchKind.SolidFill,
                     )
                 }
                 target.readRgba()
@@ -1542,6 +1581,32 @@ class GPUBackendRuntimeNativeSmokeTest {
             @fragment
             fn fs_main() -> @location(0) vec4f {
                 return payload.color;
+            }
+        """.trimIndent()
+
+    private fun nonSimpleFullscreenWgsl(): String =
+        """
+            struct Uniforms {
+                color: vec4f,
+            };
+
+            @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+
+            struct VertexOut {
+                @builtin(position) position: vec4f,
+            };
+
+            @vertex
+            fn vs_main(@builtin(vertex_index) idx: u32) -> VertexOut {
+                let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
+                let y = f32(idx & 2u) * 2.0 - 1.0;
+                return VertexOut(vec4f(x, y, 0.0, 1.0));
+            }
+
+            @fragment
+            fn fs_main(in: VertexOut) -> @location(0) vec4f {
+                let tint = select(0.35, 1.0, in.position.x >= 0.0);
+                return vec4f(uniforms.color.rgb * tint, uniforms.color.a);
             }
         """.trimIndent()
 

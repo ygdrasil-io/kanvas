@@ -1334,6 +1334,7 @@ private class WgpuRenderRecorder(
         colorFormat: String,
         draws: List<GPUBackendRectDraw>,
         blendMode: GPUBlendMode?,
+        passBatchKind: GPUBackendSimplePassBatchKind?,
     ) {
         recordFullscreenUniformPass(
             wgsl = wgsl,
@@ -1351,7 +1352,7 @@ private class WgpuRenderRecorder(
             },
             blendMode = blendMode,
             sourceLabel = fullscreenUniformSlabSourceLabel(),
-            passBatchKind = GPUBackendSimplePassBatchKind.SolidFill,
+            passBatchKind = passBatchKind,
         )
     }
 

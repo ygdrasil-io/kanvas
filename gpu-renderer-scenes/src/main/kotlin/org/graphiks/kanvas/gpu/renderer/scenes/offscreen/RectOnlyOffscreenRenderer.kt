@@ -9,6 +9,7 @@ import kotlin.math.floor
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRawUniformDraw
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRectDraw
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendSimplePassBatchKind
 import org.graphiks.kanvas.gpu.renderer.execution.GPUClearColor
 import org.graphiks.kanvas.gpu.renderer.execution.GPUOffscreenTargetRequest
 import org.graphiks.kanvas.gpu.renderer.wgsl.LinearGradientWgsl
@@ -281,6 +282,7 @@ class RectOnlyOffscreenRenderer {
                             scissorHeight = fill.scissorHeight,
                         )
                     },
+                    passBatchKind = GPUBackendSimplePassBatchKind.SolidFill,
                 )
             }
 

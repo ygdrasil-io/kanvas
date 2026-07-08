@@ -296,6 +296,7 @@ interface GPUBackendRenderRecorder {
         colorFormat: String,
         draws: List<GPUBackendRectDraw>,
         blendMode: GPUBlendMode? = null,
+        passBatchKind: GPUBackendSimplePassBatchKind? = null,
     )
 
     /** Draws a fullscreen pass by uploading prepacked uniform payload bytes for each draw. */

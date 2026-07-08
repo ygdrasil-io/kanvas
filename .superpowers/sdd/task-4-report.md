@@ -91,3 +91,33 @@ Command:
 Result:
 - All `GPUPassBatcherTest` tests passed.
 - Gradle exited `BUILD SUCCESSFUL`.
+
+## Fix Review Findings 2
+### RED
+Command:
+`rtk ./gradlew :gpu-renderer:test --tests 'org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeNativeSmokeTest.backend runtime does not record pass batch plan for unmarked generic fullscreen pass draws when backend is available'`
+
+Result:
+- Backend was available.
+- The new generic/unmarked `drawFullscreenPass(...)` smoke failed as expected.
+- Failure dump showed the current bug clearly:
+  - `passBatchPlans=1`
+  - `passBatchesAccepted=1`
+  - `passBatchPackets=2`
+  - `passes.batch-plan stream=fullscreen-uniform-pass`
+  - `passes.batch id=batch-1 kind=solid-fill`
+- This confirmed `drawFullscreenPass(...)` was still implicitly opting every fullscreen rect pass into Phase 4 solid-fill batching, including a non-simple fullscreen shader.
+
+### GREEN
+Command:
+`rtk ./gradlew :gpu-renderer:test --tests 'org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeNativeSmokeTest.backend runtime does not record pass batch plan for unmarked generic fullscreen pass draws when backend is available' --tests 'org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeNativeSmokeTest.backend runtime records pass batch plan for fullscreen rect draws when backend is available' --tests 'org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeNativeSmokeTest.backend runtime does not record pass batch plan for unmarked raw uniform fullscreen passes when backend is available' --tests 'org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeNativeSmokeTest.backend runtime records pass batch plan for explicitly marked simple gradient raw uniform fullscreen passes when backend is available' --tests 'org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeNativeSmokeTest.batched rectangle scene uses fewer submissions than explicit unbatched baseline when backend is available' --tests org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatcherTest`
+
+Result:
+- All five targeted runtime smokes passed.
+- The new generic/unmarked `drawFullscreenPass(...)` smoke now leaves `passBatchPlans`, `passBatchesAccepted`, and `passBatchPackets` unchanged and emits no accepted `kind=solid-fill` evidence.
+- The explicit solid-fill fullscreen rect smoke still records `passes.batch id=batch-1 kind=solid-fill`.
+- The unmarked raw-uniform smoke still records nothing.
+- The explicit simple-gradient raw-uniform smoke still records `kind=simple-gradient`.
+- The explicit-unbatched-baseline smoke still proves solid-fill batching only when callers opt in intentionally.
+- All `GPUPassBatcherTest` tests passed.
+- Gradle exited `BUILD SUCCESSFUL`.
