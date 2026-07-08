@@ -7,7 +7,7 @@ data class GPUNullBufferMaterializationRequest(
 ) {
     init {
         require(label.isNotBlank()) { "GPUNullBufferMaterializationRequest.label must not be blank" }
-        requireConcreteProviderDumpSafe(
+        requireResourceDumpSafe(
             fieldName = "GPUNullBufferMaterializationRequest.label",
             value = label,
         )
@@ -29,10 +29,10 @@ data class GPUConcreteResourceProviderEvent(
         require(result.isNotBlank()) { "GPUConcreteResourceProviderEvent.result must not be blank" }
         require(keyHash.isNotBlank()) { "GPUConcreteResourceProviderEvent.keyHash must not be blank" }
         require(subjectHash.isNotBlank()) { "GPUConcreteResourceProviderEvent.subjectHash must not be blank" }
-        requireConcreteProviderDumpSafe("GPUConcreteResourceProviderEvent.lane", lane)
-        requireConcreteProviderDumpSafe("GPUConcreteResourceProviderEvent.result", result)
-        requireConcreteProviderDumpSafe("GPUConcreteResourceProviderEvent.keyHash", keyHash)
-        requireConcreteProviderDumpSafe("GPUConcreteResourceProviderEvent.subjectHash", subjectHash)
+        requireResourceDumpSafe("GPUConcreteResourceProviderEvent.lane", lane)
+        requireResourceDumpSafe("GPUConcreteResourceProviderEvent.result", result)
+        requireResourceDumpSafe("GPUConcreteResourceProviderEvent.keyHash", keyHash)
+        requireResourceDumpSafe("GPUConcreteResourceProviderEvent.subjectHash", subjectHash)
     }
 }
 
@@ -277,84 +277,85 @@ class GPUConcreteResourceProvider(
         request: GPUIntermediateTextureMaterializationRequest,
         context: GPUTargetPreparationContext,
     ): GPUResourceMaterializationDecision {
+        val descriptor = request.validatedDescriptor
         val diagnostic = when {
             request.targetId != context.targetId ->
                 GPUResourceDiagnostic.resourceTargetMismatch(
-                    resourceLabel = request.descriptor.label,
+                    resourceLabel = descriptor.label,
                     requestTargetId = request.targetId,
                     contextTargetId = context.targetId,
                 )
             request.deviceGeneration != context.deviceGeneration ->
                 GPUResourceDiagnostic.deviceGenerationStale(
-                    resourceLabel = request.descriptor.label,
+                    resourceLabel = descriptor.label,
                     expectedDeviceGeneration = context.deviceGeneration,
                     actualDeviceGeneration = request.deviceGeneration,
                     resourceKind = "intermediate",
                 )
-            request.actualResourceGeneration != request.descriptor.generation ->
+            request.actualResourceGeneration != descriptor.generation ->
                 GPUResourceDiagnostic(
                     code = "unsupported.intermediate.generation_stale",
-                    resourceLabel = request.descriptor.label,
-                    message = "intermediate generation ${request.actualResourceGeneration} != descriptor generation ${request.descriptor.generation}",
+                    resourceLabel = descriptor.label,
+                    message = "intermediate generation ${request.actualResourceGeneration} != descriptor generation ${descriptor.generation}",
                     terminal = true,
                 )
             request.activeAttachmentSampled ->
                 GPUResourceDiagnostic(
                     code = "unsupported.destination_read.active_attachment_sampled",
-                    resourceLabel = request.descriptor.label,
+                    resourceLabel = descriptor.label,
                     message = "intermediate texture would sample the active attachment",
                     terminal = true,
                 )
-            (request.requiredUsageLabels - request.descriptor.usageLabels.toSet()).isNotEmpty() ->
+            (request.requiredUsageLabels - descriptor.usageLabels.toSet()).isNotEmpty() ->
                 GPUResourceDiagnostic.textureUsageMissing(
-                    resourceLabel = request.descriptor.label,
-                    missingUsageLabels = request.requiredUsageLabels - request.descriptor.usageLabels.toSet(),
-                    availableUsageLabels = request.descriptor.usageLabels.toSet(),
+                    resourceLabel = descriptor.label,
+                    missingUsageLabels = request.requiredUsageLabels - descriptor.usageLabels.toSet(),
+                    availableUsageLabels = descriptor.usageLabels.toSet(),
                 )
             else -> null
         }
         if (diagnostic != null) {
-            record("intermediate-texture", "refuse", request.descriptor.descriptorHash, request.descriptor.label)
+            record("intermediate-texture", "refuse", descriptor.descriptorHash, descriptor.label)
             return GPUResourceMaterializationDecision.Refused(
                 diagnostic = diagnostic,
                 targetId = context.targetId,
-                resourcePlanLabels = listOf(request.descriptor.label),
+                resourcePlanLabels = listOf(descriptor.label),
             )
         }
 
         val key = GPUIntermediateTextureLeaseCacheKey.from(request)
         intermediateTextureLeases[key]?.let { cachedLease ->
             val lease = cachedLease.copy(cacheResult = GPUResourceLeaseCacheResult.Reuse)
-            record("intermediate-texture", lease.cacheResult.dumpToken, key.dumpToken(), request.descriptor.label)
+            record("intermediate-texture", lease.cacheResult.dumpToken, key.dumpToken(), descriptor.label)
             return GPUResourceMaterializationDecision.Materialized(
-                resources = listOf(GPUTextureResourceRef("texture-ref:${request.descriptor.label}")),
+                resources = listOf(GPUTextureResourceRef("texture-ref:${descriptor.label}")),
                 targetId = context.targetId,
-                resourcePlanLabels = listOf(request.descriptor.label),
+                resourcePlanLabels = listOf(descriptor.label),
                 resourceLeases = listOf(lease),
             )
         }
 
         val lease = GPUResourceLease(
-            leaseId = "intermediate:${request.descriptor.label}",
+            leaseId = "intermediate:${descriptor.label}",
             resourceKind = GPUResourceLeaseKind.Texture,
             deviceGeneration = context.deviceGeneration,
-            descriptorHash = request.descriptor.descriptorHash,
-            ownerScope = request.descriptor.ownerScope,
-            usageLabels = request.descriptor.usageLabels,
-            releasePolicy = request.descriptor.lifetimeClass,
+            descriptorHash = descriptor.descriptorHash,
+            ownerScope = descriptor.ownerScope,
+            usageLabels = descriptor.usageLabels,
+            releasePolicy = descriptor.lifetimeClass,
             cacheResult = GPUResourceLeaseCacheResult.Create,
             evidenceFacts = mapOf(
-                "purpose" to request.descriptor.purposeLabel,
-                "bounds" to request.descriptor.boundsLabel,
-                "sampleCount" to request.descriptor.sampleCount.toString(),
+                "purpose" to descriptor.purposeLabel,
+                "bounds" to descriptor.boundsLabel,
+                "sampleCount" to descriptor.sampleCount.toString(),
             ),
         )
         intermediateTextureLeases[key] = lease
-        record("intermediate-texture", lease.cacheResult.dumpToken, key.dumpToken(), request.descriptor.label)
+        record("intermediate-texture", lease.cacheResult.dumpToken, key.dumpToken(), descriptor.label)
         return GPUResourceMaterializationDecision.Materialized(
-            resources = listOf(GPUTextureResourceRef("texture-ref:${request.descriptor.label}")),
+            resources = listOf(GPUTextureResourceRef("texture-ref:${descriptor.label}")),
             targetId = context.targetId,
-            resourcePlanLabels = listOf(request.descriptor.label),
+            resourcePlanLabels = listOf(descriptor.label),
             resourceLeases = listOf(lease),
         )
     }
@@ -636,13 +637,3 @@ private fun GPUTextureSamplerMaterializationRequest.samplerDescriptorHashForProv
         samplerDescriptor.maxAnisotropy.toString(),
         samplerDescriptor.capabilityRequirements.sorted().joinToString("+"),
     ).joinToString(":")
-
-private val CONCRETE_PROVIDER_RAW_BACKEND_TOKEN = "w" + "gpu"
-private val CONCRETE_PROVIDER_UNSAFE_DUMP_PATTERN =
-    Regex("(?i)(@|0x[0-9a-f]{6,}|$CONCRETE_PROVIDER_RAW_BACKEND_TOKEN|externaltexturehandle|gpu[a-z0-9]*handle)")
-
-private fun requireConcreteProviderDumpSafe(fieldName: String, value: String) {
-    require(!CONCRETE_PROVIDER_UNSAFE_DUMP_PATTERN.containsMatchIn(value)) {
-        "$fieldName must use dump-safe GPU evidence labels"
-    }
-}

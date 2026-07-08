@@ -24,13 +24,20 @@ Date: 2026-07-08
 | `rtk ./gradlew :gpu-renderer:test --tests "org.graphiks.kanvas.gpu.renderer.intermediates.*" --tests "org.graphiks.kanvas.gpu.renderer.resources.GPUIntermediateResourceProviderTest" --tests "org.graphiks.kanvas.gpu.renderer.state.BlendAllowlistGateTest"` | 0 | PASS | `gpu-renderer/build/test-results/test/TEST-org.graphiks.kanvas.gpu.renderer.intermediates.GPUIntermediateCommandStreamTest.xml`, `gpu-renderer/build/test-results/test/TEST-org.graphiks.kanvas.gpu.renderer.intermediates.GPUIntermediateMsaaPlanTest.xml`, `gpu-renderer/build/test-results/test/TEST-org.graphiks.kanvas.gpu.renderer.intermediates.GPUIntermediatePlanContractsTest.xml`, `gpu-renderer/build/test-results/test/TEST-org.graphiks.kanvas.gpu.renderer.intermediates.GPUIntermediatePlannerTest.xml`, `gpu-renderer/build/test-results/test/TEST-org.graphiks.kanvas.gpu.renderer.resources.GPUIntermediateResourceProviderTest.xml`, `gpu-renderer/build/test-results/test/TEST-org.graphiks.kanvas.gpu.renderer.state.BlendAllowlistGateTest.xml` |
 | `rtk ./gradlew :gpu-renderer-scenes:test --tests "org.graphiks.kanvas.gpu.renderer.scenes.offscreen.*"` | 0 | PASS | `gpu-renderer-scenes/build/reports/tests/test/index.html` |
 | `rtk ./gradlew :integration-tests:skia:regenerateSkiaGmRenders` | 1 | TASK_UNAVAILABLE | stdout/stderr only; task missing in `:integration-tests:skia` |
+| `rtk ./gradlew :integration-tests:skia:tasks --all` | 0 | DISCOVERY_PASS | stdout/stderr listed the locally available `:integration-tests:skia` tasks, including `generateSkiaRenders` and `generateSkiaDashboard` |
 | `rtk ./gradlew :integration-tests:skia:generateSkiaDashboard` | 0 | PASS_WITH_SKIPS | `integration-tests/skia/build/reports/skia-gm-dashboard/index.html` |
+| `rtk ./gradlew :gpu-renderer:test :gpu-renderer-scenes:test` | 1 | FAILED_ON_EXISTING_PACKAGE_BOUNDARY_TEST | `gpu-renderer/build/reports/tests/test/index.html` and `gpu-renderer-scenes/build/reports/tests/test/index.html` |
 | `rtk ./gradlew :gpu-renderer:test --rerun-tasks --tests "org.graphiks.kanvas.gpu.renderer.GPURendererPackageBoundaryTest"` | 0 | PASS_AFTER_PACKAGE_BOUNDARY_FIX | `gpu-renderer/build/test-results/test/TEST-org.graphiks.kanvas.gpu.renderer.GPURendererPackageBoundaryTest.xml` |
 | `rtk ./gradlew :gpu-renderer:test --tests "org.graphiks.kanvas.gpu.renderer.resources.GPUIntermediateResourceProviderTest" --tests "org.graphiks.kanvas.gpu.renderer.resources.GPUConcreteResourceProviderTest" --tests "org.graphiks.kanvas.gpu.renderer.intermediates.GPUIntermediatePlanContractsTest" --tests "org.graphiks.kanvas.gpu.renderer.intermediates.GPUIntermediatePlannerTest" --tests "org.graphiks.kanvas.gpu.renderer.intermediates.GPUIntermediateCommandStreamTest" --tests "org.graphiks.kanvas.gpu.renderer.intermediates.GPUIntermediateMsaaPlanTest"` | 0 | PASS_AFTER_PACKAGE_BOUNDARY_FIX | `gpu-renderer/build/reports/tests/test/index.html` |
 | `rtk ./gradlew :gpu-renderer:test --tests "org.graphiks.kanvas.gpu.renderer.paintblend.PaintBlendExecutionBoundaryTest"` | 0 | PASS_AFTER_SHADER_BLEND_TEST_ALIGNMENT | `gpu-renderer/build/test-results/test/TEST-org.graphiks.kanvas.gpu.renderer.paintblend.PaintBlendExecutionBoundaryTest.xml` |
 | `rtk ./gradlew :gpu-renderer:test :gpu-renderer-scenes:test` | 0 | PASS | `gpu-renderer/build/reports/tests/test/index.html` and `gpu-renderer-scenes/build/reports/tests/test/index.html` |
+| `rtk ./gradlew :gpu-renderer:test --tests "org.graphiks.kanvas.gpu.renderer.resources.GPUIntermediateResourceProviderTest"` | 1 | EXPECTED_RED_INVALID_DESCRIPTOR_BOUNDARY | `gpu-renderer/build/reports/tests/test/index.html` |
+| `rtk ./gradlew :gpu-renderer:test --tests "org.graphiks.kanvas.gpu.renderer.resources.GPUIntermediateResourceProviderTest"` | 0 | PASS_AFTER_REQUEST_BOUNDARY_VALIDATION_FIX | `gpu-renderer/build/test-results/test/TEST-org.graphiks.kanvas.gpu.renderer.resources.GPUIntermediateResourceProviderTest.xml` |
+| `rtk ./gradlew :gpu-renderer:test --tests "org.graphiks.kanvas.gpu.renderer.GPURendererPackageBoundaryTest"` | 0 | PASS_AFTER_CONTROLLER_REVIEW_FIXES | `gpu-renderer/build/test-results/test/TEST-org.graphiks.kanvas.gpu.renderer.GPURendererPackageBoundaryTest.xml` |
+| `rtk ./gradlew :gpu-renderer:test --tests "org.graphiks.kanvas.gpu.renderer.paintblend.PaintBlendExecutionBoundaryTest"` | 0 | PASS_AFTER_CONTROLLER_REVIEW_FIXES | `gpu-renderer/build/test-results/test/TEST-org.graphiks.kanvas.gpu.renderer.paintblend.PaintBlendExecutionBoundaryTest.xml` |
+| `rtk ./gradlew :gpu-renderer:test :gpu-renderer-scenes:test` | 0 | PASS_FINAL_SMOKE_AFTER_CONTROLLER_REVIEW_FIXES | `gpu-renderer/build/reports/tests/test/index.html` and `gpu-renderer-scenes/build/reports/tests/test/index.html` |
 | `rtk git diff --check` | 0 | PASS | stdout empty |
-| `rtk git status --short` | 0 | PASS_INTENTIONAL_CHANGES_ONLY | stdout listed only task-owned source/report/artifact changes at the time of execution |
+| `rtk git status --short` | 0 | PASS_INTENTIONAL_CHANGES_ONLY | stdout listed only intentional task-owned source, test, report, and artifact changes at the time of execution |
 
 ## Skia Availability Note
 
@@ -89,8 +96,24 @@ resource-provider.cache lane=intermediate-texture result=reuse key=target=target
   Phase 5 shader-blend acceptance contract: shader blend can now be accepted by
   the blend allowlist while the fixed paint-blend execution boundary still
   refuses it with `unsupported.paint_blend.shader_blend_unvalidated`.
-- `rtk ./gradlew :gpu-renderer:test :gpu-renderer-scenes:test` passed after
-  those fixes.
+- Controller review follow-up then hardened the intermediate texture request
+  boundary so interface-backed descriptors are snapshotted and validated before
+  they can influence cache keys or durable dumps.
+- The historical first full smoke failure was preserved as evidence, then fixed
+  in follow-up; the final smoke pass is green on
+  `rtk ./gradlew :gpu-renderer:test :gpu-renderer-scenes:test`.
 - `rtk git diff --check` was clean.
-- `rtk git status --short` showed only intentional task-owned
-  test/report/artifact changes.
+- `rtk git status --short` showed only intentional task-owned source, test,
+  report, and artifact changes.
+
+## Controller Review Follow-Up
+
+- Package-boundary gate fix:
+  criteria = no production `resources -> intermediates` import edge;
+  evidence = `rtk ./gradlew :gpu-renderer:test --tests "org.graphiks.kanvas.gpu.renderer.GPURendererPackageBoundaryTest"` passed and the production boundary remains interface-based.
+- Paint-blend gate alignment fix:
+  criteria = shader blends may be accepted by the allowlist while the execution boundary still refuses unvalidated shader blends with the stable reason code;
+  evidence = `rtk ./gradlew :gpu-renderer:test --tests "org.graphiks.kanvas.gpu.renderer.paintblend.PaintBlendExecutionBoundaryTest"` passed.
+- Request-boundary invariant fix:
+  criteria = arbitrary `GPUIntermediateTextureMaterializationDescriptor` implementations are rejected when labels, sizes, usages, generations, or sample counts are invalid, while stable keys/dumps stay dump-safe and backend-handle-free;
+  evidence = the red/green `GPUIntermediateResourceProviderTest` runs above and the production changes in `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/resources/IntermediateResourceProvider.kt`, `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/resources/ResourceDumpSafety.kt`, and `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/resources/GPUConcreteResourceProvider.kt`.
