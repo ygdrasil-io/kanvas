@@ -71,6 +71,10 @@ data class GPUBackendRuntimeTelemetry(
     val commandBuffers: Long = 0L,
     val buffersCreated: Long = 0L,
     val texturesCreated: Long = 0L,
+    val intermediateTexturesCreated: Long = 0L,
+    val destinationCopies: Long = 0L,
+    val msaaTargets: Long = 0L,
+    val msaaResolves: Long = 0L,
     val bindGroupsCreated: Long = 0L,
     val samplersCreated: Long = 0L,
     val queueWrites: Long = 0L,
@@ -90,6 +94,14 @@ data class GPUBackendRuntimeTelemetry(
         require(commandBuffers >= 0L) { "GPUBackendRuntimeTelemetry.commandBuffers must be non-negative" }
         require(buffersCreated >= 0L) { "GPUBackendRuntimeTelemetry.buffersCreated must be non-negative" }
         require(texturesCreated >= 0L) { "GPUBackendRuntimeTelemetry.texturesCreated must be non-negative" }
+        require(intermediateTexturesCreated >= 0L) {
+            "GPUBackendRuntimeTelemetry.intermediateTexturesCreated must be non-negative"
+        }
+        require(destinationCopies >= 0L) {
+            "GPUBackendRuntimeTelemetry.destinationCopies must be non-negative"
+        }
+        require(msaaTargets >= 0L) { "GPUBackendRuntimeTelemetry.msaaTargets must be non-negative" }
+        require(msaaResolves >= 0L) { "GPUBackendRuntimeTelemetry.msaaResolves must be non-negative" }
         require(bindGroupsCreated >= 0L) { "GPUBackendRuntimeTelemetry.bindGroupsCreated must be non-negative" }
         require(samplersCreated >= 0L) { "GPUBackendRuntimeTelemetry.samplersCreated must be non-negative" }
         require(queueWrites >= 0L) { "GPUBackendRuntimeTelemetry.queueWrites must be non-negative" }
@@ -110,6 +122,8 @@ data class GPUBackendRuntimeTelemetry(
             "gpu-runtime.telemetry renderPasses=$renderPasses offscreenPasses=$offscreenPasses " +
                 "windowPasses=$windowPasses submissions=$submissions commandBuffers=$commandBuffers " +
                 "buffersCreated=$buffersCreated texturesCreated=$texturesCreated " +
+                "intermediateTexturesCreated=$intermediateTexturesCreated destinationCopies=$destinationCopies " +
+                "msaaTargets=$msaaTargets msaaResolves=$msaaResolves " +
                 "bindGroupsCreated=$bindGroupsCreated samplersCreated=$samplersCreated " +
                 "queueWrites=$queueWrites uniformSlabsCreated=$uniformSlabsCreated " +
                 "uniformSlabBytesAllocated=$uniformSlabBytesAllocated uniformSlabFallbacks=$uniformSlabFallbacks " +

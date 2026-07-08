@@ -530,6 +530,10 @@ private class WgpuBackendRuntimeTelemetryRecorder {
     private var commandBuffers = 0L
     private var buffersCreated = 0L
     private var texturesCreated = 0L
+    private var intermediateTexturesCreated = 0L
+    private var destinationCopies = 0L
+    private var msaaTargets = 0L
+    private var msaaResolves = 0L
     private var bindGroupsCreated = 0L
     private var samplersCreated = 0L
     private var queueWrites = 0L
@@ -580,6 +584,30 @@ private class WgpuBackendRuntimeTelemetryRecorder {
     @Synchronized
     fun recordTextureCreated() {
         texturesCreated += 1L
+    }
+
+    /** Records one successfully-created intermediate texture. */
+    @Synchronized
+    fun recordIntermediateTextureCreated() {
+        intermediateTexturesCreated += 1L
+    }
+
+    /** Records one destination copy consumed by a blend pass. */
+    @Synchronized
+    fun recordDestinationCopy() {
+        destinationCopies += 1L
+    }
+
+    /** Records one multisample target encode accepted by the backend. */
+    @Synchronized
+    fun recordMsaaTarget() {
+        msaaTargets += 1L
+    }
+
+    /** Records one multisample resolve accepted by the backend. */
+    @Synchronized
+    fun recordMsaaResolve() {
+        msaaResolves += 1L
     }
 
     /** Records one successfully-created GPU bind group. */
@@ -652,6 +680,10 @@ private class WgpuBackendRuntimeTelemetryRecorder {
             commandBuffers = commandBuffers,
             buffersCreated = buffersCreated,
             texturesCreated = texturesCreated,
+            intermediateTexturesCreated = intermediateTexturesCreated,
+            destinationCopies = destinationCopies,
+            msaaTargets = msaaTargets,
+            msaaResolves = msaaResolves,
             bindGroupsCreated = bindGroupsCreated,
             samplersCreated = samplersCreated,
             queueWrites = queueWrites,
@@ -948,6 +980,7 @@ private class WgpuOffscreenTarget(
             ),
         )
         offscreenTextures[label] = tex
+        telemetryRecorder.recordIntermediateTextureCreated()
         return label
     }
 
@@ -1764,6 +1797,7 @@ private class WgpuRenderRecorder(
             ),
         ) { it.close() }
         offscreenTextureStore[label] = tex
+        telemetryRecorder.recordIntermediateTextureCreated()
         return label
     }
 
@@ -2195,6 +2229,9 @@ private class WgpuRenderRecorder(
             ?: error("Source texture not found: $srcTextureLabel")
         val dstTex = offscreenTextureStore[dstTextureLabel]
             ?: error("Destination texture not found: $dstTextureLabel")
+        if (dstTextureLabel != srcTextureLabel) {
+            telemetryRecorder.recordDestinationCopy()
+        }
         val textureFormat = GPUTextureFormat.RGBA8Unorm
 
         val textureKeys = blendTextureExecutionCacheKeys(wgsl = wgsl, targetFormat = targetFormat, textureFormat = textureFormat)

@@ -12,6 +12,11 @@ import org.graphiks.kanvas.gpu.renderer.layers.GPULayerExecutionPlan
 import org.graphiks.kanvas.gpu.renderer.layers.GPULayerSaveRecord
 import org.graphiks.kanvas.gpu.renderer.layers.GPUSaveLayerIsolatedTargetPlanner
 import org.graphiks.kanvas.gpu.renderer.layers.GPUSaveLayerIsolatedTargetRequest
+import org.graphiks.kanvas.gpu.renderer.passes.GPUMsaa
+import org.graphiks.kanvas.gpu.renderer.passes.GPUMsaaAdapterCapability
+import org.graphiks.kanvas.gpu.renderer.passes.GPUMsaaCoverageMode
+import org.graphiks.kanvas.gpu.renderer.passes.GPUMsaaRequest
+import org.graphiks.kanvas.gpu.renderer.passes.GPUMsaaRoute
 import org.graphiks.kanvas.gpu.renderer.state.GPUBlendAllowlistPlanner
 import org.graphiks.kanvas.gpu.renderer.state.GPUBlendAllowlistRequest
 import org.graphiks.kanvas.gpu.renderer.state.GPUBlendMode
@@ -42,6 +47,8 @@ data class GPUIntermediatePlannerRequest(
     val targetFormatClass: String,
     val targetUsageLabels: Set<String>,
     val deviceGeneration: Long,
+    val requestedSampleCount: Int = 1,
+    val msaaAdapter: GPUMsaaAdapterCapability? = null,
     val drawRequests: List<GPUIntermediateDrawRequest>,
 ) {
     init {
@@ -54,6 +61,9 @@ data class GPUIntermediatePlannerRequest(
             "GPUIntermediatePlannerRequest.targetUsageLabels must not contain blanks"
         }
         require(deviceGeneration >= 0L) { "GPUIntermediatePlannerRequest.deviceGeneration must be non-negative" }
+        require(requestedSampleCount > 0) {
+            "GPUIntermediatePlannerRequest.requestedSampleCount must be positive"
+        }
         require(drawRequests.isNotEmpty()) { "GPUIntermediatePlannerRequest.drawRequests must not be empty" }
     }
 }
@@ -66,6 +76,20 @@ class GPUIntermediatePlanner(
     fun plan(request: GPUIntermediatePlannerRequest): GPUIntermediatePlan {
         val steps = mutableListOf<GPUIntermediatePlanStep>()
         var telemetry = GPUIntermediateTelemetry()
+        val msaaRoute = if (request.requestedSampleCount > 1) {
+            GPUMsaa.resolve(
+                GPUMsaaRequest(
+                    requestedSampleCount = request.requestedSampleCount,
+                    coverageMode = GPUMsaaCoverageMode.Standard,
+                    adapter = request.msaaAdapter,
+                ),
+            )
+        } else {
+            null
+        }
+        if (msaaRoute is GPUMsaaRoute.Refused) {
+            return request.refused(request.targetId, msaaRoute.diagnostic.code)
+        }
 
         for (draw in request.drawRequests) {
             if (draw.activeAttachmentSampled) {
@@ -165,12 +189,36 @@ class GPUIntermediatePlanner(
                 )
             }
         }
+        val finalSteps = if (request.requestedSampleCount > 1) {
+            val msaaTarget = request.msaaTargetDescriptor()
+            val resolvedTarget = request.msaaResolvedDescriptor(msaaTarget)
+            listOf(GPUIntermediatePlanStep.CreateIntermediate(msaaTarget)) +
+                steps +
+                listOf(
+                    GPUIntermediatePlanStep.ResolveMSAA(
+                        source = msaaTarget,
+                        destination = resolvedTarget,
+                        strategyLabel = "WGPU_BUILTIN",
+                        tokenLabel = "msaa-token:${request.targetId}",
+                    ),
+                )
+        } else {
+            steps
+        }
+        val finalTelemetry = if (request.requestedSampleCount > 1) {
+            telemetry.copy(
+                msaaTargets = telemetry.msaaTargets + 1,
+                msaaResolves = telemetry.msaaResolves + 1,
+            )
+        } else {
+            telemetry
+        }
 
         return GPUIntermediatePlan(
             planId = request.planId,
             targetId = request.targetId,
-            steps = steps,
-            telemetry = telemetry,
+            steps = finalSteps,
+            telemetry = finalTelemetry,
         )
     }
 
@@ -246,6 +294,41 @@ private fun GPUIntermediatePlannerRequest.refused(scopeLabel: String, reasonCode
         targetId = targetId,
         steps = listOf(GPUIntermediatePlanStep.Refuse(scopeLabel = scopeLabel, reasonCode = reasonCode)),
         telemetry = GPUIntermediateTelemetry(intermediatesRefused = 1),
+    )
+
+private fun GPUIntermediatePlannerRequest.msaaTargetDescriptor(): GPUIntermediateTextureDescriptor {
+    val bounds = drawRequests.first().bounds
+    return GPUIntermediateTextureDescriptor(
+        label = "intermediate:msaa:$targetId",
+        purpose = GPUIntermediatePurpose.LayerTarget,
+        descriptorHash = "msaa:$targetFormatClass:$requestedSampleCount:$targetId",
+        sourceTargetLabel = targetId,
+        boundsLabel = bounds.boundsLabel,
+        width = bounds.targetWidth,
+        height = bounds.targetHeight,
+        formatClass = targetFormatClass,
+        usageLabels = listOf("render_attachment"),
+        sampleCount = requestedSampleCount,
+        generation = deviceGeneration,
+        lifetimeClass = "pass-local",
+        ownerScope = targetId,
+        byteEstimate = bounds.targetWidth.toLong() *
+            bounds.targetHeight.toLong() *
+            4L *
+            requestedSampleCount.toLong(),
+    )
+}
+
+private fun GPUIntermediatePlannerRequest.msaaResolvedDescriptor(
+    msaaTarget: GPUIntermediateTextureDescriptor,
+): GPUIntermediateTextureDescriptor =
+    msaaTarget.copy(
+        label = "intermediate:msaa-resolved:$targetId",
+        purpose = GPUIntermediatePurpose.MsaaResolve,
+        descriptorHash = "msaa-resolved:$targetFormatClass:1:$targetId",
+        usageLabels = listOf("texture_binding", "copy_src"),
+        sampleCount = 1,
+        byteEstimate = msaaTarget.width.toLong() * msaaTarget.height.toLong() * 4L,
     )
 
 private fun GPUIntermediateDrawRequest.destinationReadRequest(
