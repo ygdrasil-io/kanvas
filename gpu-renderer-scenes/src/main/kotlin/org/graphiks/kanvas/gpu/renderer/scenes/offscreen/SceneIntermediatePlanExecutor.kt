@@ -45,7 +45,7 @@ internal class SceneIntermediatePlanExecutor {
         plan: GPUIntermediatePlan,
         renderSolidFills: GPUBackendRenderRecorder.(List<RectOnlyFillDraw>) -> Unit,
     ): SceneIntermediateExecutionResult {
-        val refusal = plan.steps.singleOrNull() as? GPUIntermediatePlanStep.Refuse
+        val refusal = plan.steps.firstOrNull { it is GPUIntermediatePlanStep.Refuse } as? GPUIntermediatePlanStep.Refuse
         if (refusal != null) {
             return SceneIntermediateExecutionResult.Refused(
                 scopeLabel = refusal.scopeLabel,

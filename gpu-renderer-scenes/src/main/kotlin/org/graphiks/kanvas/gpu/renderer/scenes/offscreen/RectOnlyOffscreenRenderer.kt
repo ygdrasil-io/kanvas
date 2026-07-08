@@ -771,7 +771,7 @@ class RectOnlyOffscreenRenderer internal constructor(
         }
     }
 
-    companion object {
+    private companion object {
         const val RENDER_FILE_NAME: String = "render.png"
 
         fun composeGradientWgsl(
