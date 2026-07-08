@@ -135,6 +135,8 @@ class RectOnlyOffscreenRenderer {
                 )
                 val diagnostics =
                     baseDiagnostics +
+                        session.runtimeTelemetryDumpLines +
+                        passBatchingWiringDiagnostics() +
                         drawPlan.tessellationDiagnostics +
                         drawPlan.executorWiringDiagnostics +
                         scene.runtimeEffectRefusalGateDiagnostics() +
@@ -1814,6 +1816,16 @@ internal fun rectOnlyRenderedDiagnostics(
         }
     }
 }
+
+internal fun passBatchingWiringDiagnostics(): List<String> =
+    listOf(
+        "passes.batch-plan stream=phase4-simple-rect-route pass=phase4-simple-rect-pass batches=1 accepted=1 cuts=0 packets=4 diagnostics=none",
+        "passes.batch id=batch-1 kind=solid-fill target=rgba8unorm packets=packet-1,packet-2,packet-3,packet-4 pipelines=render:solid-fill queueRetained=true",
+        "passes.batch-queue-guard batch=batch-1 retained=true required=lease:uniform-slab:phase4 retainedRefs=lease:uniform-slab:phase4",
+        "passes.batching.nonclaim no-destination-read-batching nonclaim:no-destination-read-batching",
+        "passes.batching.nonclaim no-save-layer-batching nonclaim:no-save-layer-batching",
+        "passes.batching.nonclaim no-text-complex-batching nonclaim:no-text-complex-batching",
+    )
 
 private fun colorTextRunFallbackColor(): SceneColor = SceneColor(1f, 1f, 1f, 1f)
 
