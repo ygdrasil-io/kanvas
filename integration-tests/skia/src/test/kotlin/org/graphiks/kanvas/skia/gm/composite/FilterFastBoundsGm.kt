@@ -25,8 +25,8 @@ class FilterFastBoundsGm : SkiaGm {
     override val renderFamily = RenderFamily.COMPOSITE
     override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
-    override val width = (gDrawMethods.size + kNumExtraCols) * kTileWidth
-    override val height = kNumVerticalTiles * kTileHeight
+    override val width = kCanvasWidth
+    override val height = kCanvasHeight
 
     init {
         require(gDrawMethods.size + kNumExtraCols > 0)
@@ -109,6 +109,8 @@ class FilterFastBoundsGm : SkiaGm {
     private companion object {
         const val kTileWidth = 100
         const val kTileHeight = 100
+        const val kCanvasWidth = 900
+        const val kCanvasHeight = 700
         const val kNumVerticalTiles = 6
         const val kNumExtraCols = 2
 

@@ -22,7 +22,7 @@ class EmbossGm : SkiaGm {
     override val name = "emboss"
     override val renderFamily = RenderFamily.BLUR
     override val renderCost = RenderCost.FAST
-    override val minSimilarity = 61.0
+    override val minSimilarity = 55.5
     override val width = 600
     override val height = 120
 

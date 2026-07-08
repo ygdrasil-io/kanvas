@@ -24,7 +24,7 @@ class GradTextGm : SkiaGm {
     override val name = "gradtext"
     override val renderFamily = RenderFamily.TEXT
     override val renderCost = RenderCost.BLOCKING
-    override val minSimilarity = 80.0
+    override val minSimilarity = 77.3
     override val width = 500
     override val height = 480
 

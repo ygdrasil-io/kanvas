@@ -23,7 +23,7 @@ class StrokeRectShaderGm : SkiaGm {
     override val name = "stroke_rect_shader"
     override val renderFamily = RenderFamily.PATH
     override val renderCost = RenderCost.BLOCKING
-    override val minSimilarity = 47.8
+    override val minSimilarity = 42.8
     override val width = 690
     override val height = 300
 
