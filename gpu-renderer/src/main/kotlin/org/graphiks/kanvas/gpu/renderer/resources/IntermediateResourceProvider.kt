@@ -35,84 +35,99 @@ internal class GPUValidatedIntermediateTextureMaterializationDescriptor private 
 ) : GPUIntermediateTextureMaterializationDescriptor {
     companion object {
         fun from(descriptor: GPUIntermediateTextureMaterializationDescriptor): GPUValidatedIntermediateTextureMaterializationDescriptor {
-            require(descriptor.label.isNotBlank()) {
+            val label = descriptor.label
+            val purposeLabel = descriptor.purposeLabel
+            val descriptorHash = descriptor.descriptorHash
+            val sourceTargetLabel = descriptor.sourceTargetLabel
+            val boundsLabel = descriptor.boundsLabel
+            val width = descriptor.width
+            val height = descriptor.height
+            val formatClass = descriptor.formatClass
+            val usageLabels = descriptor.usageLabels.toList()
+            val sampleCount = descriptor.sampleCount
+            val generation = descriptor.generation
+            val lifetimeClass = descriptor.lifetimeClass
+            val ownerScope = descriptor.ownerScope
+            val byteEstimate = descriptor.byteEstimate
+
+            require(label.isNotBlank()) {
                 "GPUIntermediateTextureMaterializationRequest.descriptor.label must not be blank"
             }
-            require(descriptor.purposeLabel.isNotBlank()) {
+            require(purposeLabel.isNotBlank()) {
                 "GPUIntermediateTextureMaterializationRequest.descriptor.purposeLabel must not be blank"
             }
-            require(descriptor.descriptorHash.isNotBlank()) {
+            require(descriptorHash.isNotBlank()) {
                 "GPUIntermediateTextureMaterializationRequest.descriptor.descriptorHash must not be blank"
             }
-            require(descriptor.sourceTargetLabel.isNotBlank()) {
+            require(sourceTargetLabel.isNotBlank()) {
                 "GPUIntermediateTextureMaterializationRequest.descriptor.sourceTargetLabel must not be blank"
             }
-            require(descriptor.boundsLabel.isNotBlank()) {
+            require(boundsLabel.isNotBlank()) {
                 "GPUIntermediateTextureMaterializationRequest.descriptor.boundsLabel must not be blank"
             }
-            require(descriptor.width > 0) {
+            require(width > 0) {
                 "GPUIntermediateTextureMaterializationRequest.descriptor.width must be positive"
             }
-            require(descriptor.height > 0) {
+            require(height > 0) {
                 "GPUIntermediateTextureMaterializationRequest.descriptor.height must be positive"
             }
-            require(descriptor.formatClass.isNotBlank()) {
+            require(formatClass.isNotBlank()) {
                 "GPUIntermediateTextureMaterializationRequest.descriptor.formatClass must not be blank"
             }
-            require(descriptor.usageLabels.isNotEmpty()) {
+            require(usageLabels.isNotEmpty()) {
                 "GPUIntermediateTextureMaterializationRequest.descriptor.usageLabels must not be empty"
             }
-            require(descriptor.usageLabels.none { it.isBlank() }) {
+            require(usageLabels.none { it.isBlank() }) {
                 "GPUIntermediateTextureMaterializationRequest.descriptor.usageLabels must not contain blanks"
             }
-            require(descriptor.sampleCount > 0) {
+            require(sampleCount > 0) {
                 "GPUIntermediateTextureMaterializationRequest.descriptor.sampleCount must be positive"
             }
-            require(descriptor.generation >= 0L) {
+            require(generation >= 0L) {
                 "GPUIntermediateTextureMaterializationRequest.descriptor.generation must be non-negative"
             }
-            require(descriptor.lifetimeClass.isNotBlank()) {
+            require(lifetimeClass.isNotBlank()) {
                 "GPUIntermediateTextureMaterializationRequest.descriptor.lifetimeClass must not be blank"
             }
-            require(descriptor.ownerScope.isNotBlank()) {
+            require(ownerScope.isNotBlank()) {
                 "GPUIntermediateTextureMaterializationRequest.descriptor.ownerScope must not be blank"
             }
-            require(descriptor.byteEstimate >= 0L) {
+            require(byteEstimate >= 0L) {
                 "GPUIntermediateTextureMaterializationRequest.descriptor.byteEstimate must be non-negative"
             }
             listOf(
-                "GPUIntermediateTextureMaterializationRequest.descriptor.label" to descriptor.label,
-                "GPUIntermediateTextureMaterializationRequest.descriptor.purposeLabel" to descriptor.purposeLabel,
-                "GPUIntermediateTextureMaterializationRequest.descriptor.descriptorHash" to descriptor.descriptorHash,
-                "GPUIntermediateTextureMaterializationRequest.descriptor.sourceTargetLabel" to descriptor.sourceTargetLabel,
-                "GPUIntermediateTextureMaterializationRequest.descriptor.boundsLabel" to descriptor.boundsLabel,
-                "GPUIntermediateTextureMaterializationRequest.descriptor.formatClass" to descriptor.formatClass,
-                "GPUIntermediateTextureMaterializationRequest.descriptor.lifetimeClass" to descriptor.lifetimeClass,
-                "GPUIntermediateTextureMaterializationRequest.descriptor.ownerScope" to descriptor.ownerScope,
+                "GPUIntermediateTextureMaterializationRequest.descriptor.label" to label,
+                "GPUIntermediateTextureMaterializationRequest.descriptor.purposeLabel" to purposeLabel,
+                "GPUIntermediateTextureMaterializationRequest.descriptor.descriptorHash" to descriptorHash,
+                "GPUIntermediateTextureMaterializationRequest.descriptor.sourceTargetLabel" to sourceTargetLabel,
+                "GPUIntermediateTextureMaterializationRequest.descriptor.boundsLabel" to boundsLabel,
+                "GPUIntermediateTextureMaterializationRequest.descriptor.formatClass" to formatClass,
+                "GPUIntermediateTextureMaterializationRequest.descriptor.lifetimeClass" to lifetimeClass,
+                "GPUIntermediateTextureMaterializationRequest.descriptor.ownerScope" to ownerScope,
             ).forEach { (fieldName, value) ->
                 requireResourceDumpSafe(fieldName, value)
             }
-            descriptor.usageLabels.forEachIndexed { index, usageLabel ->
+            usageLabels.forEachIndexed { index, usageLabel ->
                 requireResourceDumpSafe(
                     fieldName = "GPUIntermediateTextureMaterializationRequest.descriptor.usageLabels[$index]",
                     value = usageLabel,
                 )
             }
             return GPUValidatedIntermediateTextureMaterializationDescriptor(
-                label = descriptor.label,
-                purposeLabel = descriptor.purposeLabel,
-                descriptorHash = descriptor.descriptorHash,
-                sourceTargetLabel = descriptor.sourceTargetLabel,
-                boundsLabel = descriptor.boundsLabel,
-                width = descriptor.width,
-                height = descriptor.height,
-                formatClass = descriptor.formatClass,
-                usageLabels = descriptor.usageLabels.toList(),
-                sampleCount = descriptor.sampleCount,
-                generation = descriptor.generation,
-                lifetimeClass = descriptor.lifetimeClass,
-                ownerScope = descriptor.ownerScope,
-                byteEstimate = descriptor.byteEstimate,
+                label = label,
+                purposeLabel = purposeLabel,
+                descriptorHash = descriptorHash,
+                sourceTargetLabel = sourceTargetLabel,
+                boundsLabel = boundsLabel,
+                width = width,
+                height = height,
+                formatClass = formatClass,
+                usageLabels = usageLabels,
+                sampleCount = sampleCount,
+                generation = generation,
+                lifetimeClass = lifetimeClass,
+                ownerScope = ownerScope,
+                byteEstimate = byteEstimate,
             )
         }
     }

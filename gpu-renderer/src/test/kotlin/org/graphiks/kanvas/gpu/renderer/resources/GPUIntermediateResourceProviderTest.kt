@@ -175,6 +175,56 @@ class GPUIntermediateResourceProviderTest {
     }
 
     @Test
+    fun `intermediate texture request snapshots interface descriptor label once`() {
+        val provider = GPUConcreteResourceProvider()
+        var labelReads = 0
+        val descriptor = object : GPUIntermediateTextureMaterializationDescriptor {
+            override val label: String
+                get() {
+                    labelReads += 1
+                    return if (labelReads == 1) "intermediate:layer-a" else ""
+                }
+
+            override val purposeLabel: String = "LayerTarget"
+            override val descriptorHash: String = "sha256:layer-a"
+            override val sourceTargetLabel: String = "surface:main"
+            override val boundsLabel: String = "bounds:layer-a"
+            override val width: Int = 100
+            override val height: Int = 80
+            override val formatClass: String = "rgba8unorm"
+            override val usageLabels: List<String> = listOf("render_attachment", "texture_binding")
+            override val sampleCount: Int = 1
+            override val generation: Long = 5
+            override val lifetimeClass: String = "layer-local"
+            override val ownerScope: String = "scope:layer-a"
+            override val byteEstimate: Long = 32000
+        }
+
+        val request = GPUIntermediateTextureMaterializationRequest(
+            targetId = "target:main",
+            descriptor = descriptor,
+            deviceGeneration = 5,
+            actualResourceGeneration = 5,
+            requiredUsageLabels = setOf("render_attachment", "texture_binding"),
+            activeAttachmentSampled = false,
+        )
+
+        val materialized = assertIs<GPUResourceMaterializationDecision.Materialized>(
+            provider.materializeIntermediateTexture(request, context()),
+        )
+
+        assertEquals(1, labelReads)
+        assertEquals(GPUResourceLeaseCacheResult.Create, materialized.dumpResourceLeaseSnapshot.single().cacheResult)
+        assertEquals(
+            "resource-provider.cache lane=intermediate-texture result=create " +
+                "key=target=target:main;descriptor=sha256:layer-a;bounds=bounds:layer-a;" +
+                "format=rgba8unorm;usage=render_attachment+texture_binding;sampleCount=1;" +
+                "generation=5;lifetime=layer-local;owner=scope:layer-a subject=intermediate:layer-a",
+            provider.telemetry.dumpLines().single(),
+        )
+    }
+
+    @Test
     fun `intermediate texture request rejects invalid interface descriptor implementations`() {
         val cases = listOf(
             "GPUIntermediateTextureMaterializationRequest.descriptor.label must not be blank" to
