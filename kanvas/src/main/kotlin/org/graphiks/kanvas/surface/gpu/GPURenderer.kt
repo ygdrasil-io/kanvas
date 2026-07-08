@@ -1422,11 +1422,12 @@ private fun expandToRgba(image: org.graphiks.kanvas.image.Image, pixels: ByteArr
     if (image.colorType == ColorType.ALPHA_8) {
         val rgba = ByteArray(image.width * image.height * 4)
         for (i in pixels.indices) {
+            val a = pixels[i]
             val off = i * 4
-            rgba[off] = 0
-            rgba[off + 1] = 0
-            rgba[off + 2] = 0
-            rgba[off + 3] = pixels[i]
+            rgba[off] = a
+            rgba[off + 1] = a
+            rgba[off + 2] = a
+            rgba[off + 3] = a
         }
         return rgba
     }

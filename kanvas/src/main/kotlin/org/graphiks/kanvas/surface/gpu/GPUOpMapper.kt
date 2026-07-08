@@ -451,6 +451,11 @@ internal fun DisplayOp.DrawImage.toImageRectCommand(
         imageWidth = image.width,
         imageHeight = image.height,
         samplingFilterMode = samplingFilterMode,
+        alphaOnly = image.colorType == org.graphiks.kanvas.image.ColorType.ALPHA_8,
+        tintR = if (image.colorType == org.graphiks.kanvas.image.ColorType.ALPHA_8) this.paint?.color?.r ?: 1f else 1f,
+        tintG = if (image.colorType == org.graphiks.kanvas.image.ColorType.ALPHA_8) this.paint?.color?.g ?: 1f else 1f,
+        tintB = if (image.colorType == org.graphiks.kanvas.image.ColorType.ALPHA_8) this.paint?.color?.b ?: 1f else 1f,
+        tintA = if (image.colorType == org.graphiks.kanvas.image.ColorType.ALPHA_8) this.paint?.color?.a ?: 1f else 1f,
     )
     val src = GPURect(this.src.left, this.src.top, this.src.right, this.src.bottom)
     val dst = GPURect(this.dst.left, this.dst.top, this.dst.right, this.dst.bottom)

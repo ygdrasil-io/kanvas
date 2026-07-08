@@ -412,7 +412,7 @@ internal val IMAGE_TEXTURE_WGSL: String = """
         dstRect: vec4f,
         uvScale: vec2f,
         uvOffset: vec2f,
-        alpha: f32,
+        tintColor: vec4f,
     };
 
     @group(0) @binding(0) var<uniform> uniforms: Uniforms;
@@ -434,7 +434,7 @@ internal val IMAGE_TEXTURE_WGSL: String = """
             uniforms.uvOffset.y + (coord.y - uniforms.dstRect.y) / dstSize.y * uniforms.uvScale.y,
         );
         let color = textureSample(imageTex, imageSam, uv);
-        return vec4f(color.rgb * uniforms.alpha, color.a * uniforms.alpha);
+        return vec4f(color.rgb * uniforms.tintColor.rgb * uniforms.tintColor.a, color.a * uniforms.tintColor.a);
     }
 """.trimIndent()
 

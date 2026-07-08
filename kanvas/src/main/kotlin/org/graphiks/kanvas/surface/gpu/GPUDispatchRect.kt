@@ -340,6 +340,42 @@ internal fun GPUBackendRenderRecorder.dispatchFillRect(
                 refuse("unsupported_material:conical_gradient_fallback")
             }
         }
+        is GPUMaterialDescriptor.ImageDraw -> {
+            if (material.rgbaPixels.isEmpty()) {
+                refuse("unsupported_material:image_draw_missing_pixels")
+                return
+            }
+            val iw = material.imageWidth.toFloat().coerceAtLeast(1f)
+            val ih = material.imageHeight.toFloat().coerceAtLeast(1f)
+            val uvScaleX = (rect.right - rect.left) / iw
+            val uvScaleY = (rect.bottom - rect.top) / ih
+            val bb = java.nio.ByteBuffer.allocate(48).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+            bb.putFloat(rect.left).putFloat(rect.top).putFloat(rect.right).putFloat(rect.bottom)
+            bb.putFloat(uvScaleX).putFloat(uvScaleY)
+            bb.putFloat(0f).putFloat(0f)
+            bb.putFloat(material.tintR)
+            bb.putFloat(material.tintG)
+            bb.putFloat(material.tintB)
+            bb.putFloat(material.tintA)
+            drawFullscreenTextureUniformPass(
+                wgsl = IMAGE_TEXTURE_WGSL,
+                colorFormat = config.gpuColorFormat.gpuLabel,
+                textureRgba = material.rgbaPixels,
+                textureWidth = material.imageWidth,
+                textureHeight = material.imageHeight,
+                textureFormat = "rgba8unorm",
+                draws = listOf(
+                    GPUBackendRawUniformDraw(
+                        uniformBytes = bb.array(),
+                        scissorX = sx,
+                        scissorY = sy,
+                        scissorWidth = sw,
+                        scissorHeight = sh,
+                    ),
+                ),
+                blendMode = blendMode,
+            )
+        }
         is GPUMaterialDescriptor.BlendShader -> {
             if (material.wgslCombined.isNotBlank()) {
                 val imageChild = when {

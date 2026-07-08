@@ -55,7 +55,11 @@ internal fun GPUBackendRenderRecorder.dispatchImageRect(
     bb.putFloat(dst.left).putFloat(dst.top).putFloat(dst.right).putFloat(dst.bottom)
     bb.putFloat(uvScaleX).putFloat(uvScaleY)
     bb.putFloat(uvOffsetX).putFloat(uvOffsetY)
-    bb.putFloat(1.0f) // alpha
+    val material = cmd.material as? org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor.ImageDraw
+    bb.putFloat(material?.tintR ?: 1f)
+    bb.putFloat(material?.tintG ?: 1f)
+    bb.putFloat(material?.tintB ?: 1f)
+    bb.putFloat(material?.tintA ?: 1f)
 
     // TODO: read cmd.samplingFilterMode and create an appropriate GPU sampler.
     // Currently hardcoded to Nearest/ClampToEdge in the native GPU runtime.
