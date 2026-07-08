@@ -3,6 +3,7 @@ package org.graphiks.kanvas.gpu.renderer.scenes.offscreen
 import java.awt.image.BufferedImage
 import java.io.File
 import javax.imageio.ImageIO
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.surface.RenderResult
@@ -25,6 +26,14 @@ private data class BitmapComparison(
 )
 
 fun main(args: Array<String>) {
+    try {
+        compareKanvasSurfaceOffscreen(args)
+    } finally {
+        GPUBackendRuntimeFactory.dispose()
+    }
+}
+
+fun compareKanvasSurfaceOffscreen(args: Array<String>) {
     require(args.size == 2) {
         "Usage: CompareKanvasSurfaceOffscreenMainKt <output-dir> <scene-name>"
     }

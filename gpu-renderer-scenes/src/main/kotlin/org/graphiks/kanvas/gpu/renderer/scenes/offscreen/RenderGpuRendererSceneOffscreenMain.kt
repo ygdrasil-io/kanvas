@@ -9,7 +9,10 @@ import org.graphiks.kanvas.gpu.renderer.scenes.commands.textRunRouteUnavailableD
 
 fun main(args: Array<String>) {
     try {
-        renderGpuRendererSceneOffscreen(args)
+        val report = renderGpuRendererSceneOffscreen(args)
+        if (report.runStatus == OffscreenRunStatus.RenderFailed) {
+            error("GPU renderer scene offscreen render failed: ${report.diagnostics.joinToString("; ")}")
+        }
     } finally {
         GPUBackendRuntimeFactory.dispose()
     }

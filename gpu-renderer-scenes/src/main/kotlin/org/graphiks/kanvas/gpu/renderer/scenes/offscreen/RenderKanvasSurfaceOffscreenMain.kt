@@ -3,6 +3,7 @@ package org.graphiks.kanvas.gpu.renderer.scenes.offscreen
 import java.awt.image.BufferedImage
 import java.io.File
 import javax.imageio.ImageIO
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.surface.RenderResult
@@ -15,9 +16,15 @@ private const val BYTES_PER_PIXEL: Int = 4
 private const val RENDER_FILE_NAME: String = "render.png"
 
 fun main(args: Array<String>) {
-    require(args.size == 2) {
-        "Usage: RenderKanvasSurfaceOffscreenMainKt <output-dir> <scene-name>"
+    try {
+        renderKanvasSurfaceOffscreen(args)
+    } finally {
+        GPUBackendRuntimeFactory.dispose()
     }
+}
+
+fun renderKanvasSurfaceOffscreen(args: Array<String>) {
+    require(args.size == 2) { "Usage: RenderKanvasSurfaceOffscreenMainKt <output-dir> <scene-name>" }
 
     val outputDir = File(args[0])
     val sceneName = args[1]
@@ -53,6 +60,7 @@ fun main(args: Array<String>) {
     if (result.stats.opsRefused > 0) {
         println("WARNING: ${result.stats.opsRefused} command(s) refused:")
         result.diagnostics.entries.forEach { d -> if (d.code.startsWith("refuse:")) println("  $d") }
+        error("GPU refused ${result.stats.opsRefused} command(s) for scene=$sceneName")
     }
 }
 
