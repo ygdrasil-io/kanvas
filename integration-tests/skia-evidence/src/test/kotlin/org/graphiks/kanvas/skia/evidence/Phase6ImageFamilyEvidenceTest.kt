@@ -27,6 +27,17 @@ class Phase6ImageFamilyEvidenceTest {
     }
 
     @Test
+    fun `classifies yuv rows with stable conversion reason`() {
+        val classified = Phase6ImageFamilyClassifier.classify(
+            row("YUV", similarity = 22.0, isPassing = false),
+        )
+
+        assertEquals("expected-unsupported", classified.classification)
+        assertEquals("yuv-gated", classified.subfamily)
+        assertEquals("unsupported.color.yuv_conversion", classified.fallbackReason)
+    }
+
+    @Test
     fun `classifies no score separately from unexpected fail`() {
         val noScore = Phase6ImageFamilyClassifier.classify(
             row("MissingReferenceImage", similarity = null, isPassing = null, noReference = true),

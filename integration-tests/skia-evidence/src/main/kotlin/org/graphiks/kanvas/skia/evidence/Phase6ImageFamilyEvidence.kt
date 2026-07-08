@@ -73,7 +73,7 @@ data class Phase6ImageRowEvidence(
 object Phase6ImageFamilyClassifier {
     private val unsupportedRules = listOf(
         UnsupportedRule(setOf("animated", "gif", "video", "codec", "encode"), "animation-gated", "dependency.image.codec.unregistered"),
-        UnsupportedRule(setOf("yuv"), "yuv-gated", "unsupported.image.yuv_color_space"),
+        UnsupportedRule(setOf("yuv"), "yuv-gated", "unsupported.color.yuv_conversion"),
         UnsupportedRule(setOf("mip", "mipmap"), "mipmap-gated", "unsupported.image.mipmap_budget_exceeded"),
         UnsupportedRule(setOf("persp", "perspective"), "perspective-gated", "unsupported.transform.perspective_route_rejected"),
         UnsupportedRule(setOf("filter", "blur", "morphology", "magnifier"), "image-filter-gated", "unsupported.filter.node_unimplemented"),
