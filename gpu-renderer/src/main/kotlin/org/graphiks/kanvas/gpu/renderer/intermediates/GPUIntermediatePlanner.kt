@@ -90,6 +90,7 @@ class GPUIntermediatePlanner(
         if (msaaRoute is GPUMsaaRoute.Refused) {
             return request.refused(request.targetId, msaaRoute.diagnostic.code)
         }
+        val acceptedMsaaRoute = msaaRoute as? GPUMsaaRoute.Accepted
 
         for (draw in request.drawRequests) {
             if (draw.activeAttachmentSampled) {
@@ -189,10 +190,13 @@ class GPUIntermediatePlanner(
                 )
             }
         }
-        val finalSteps = if (request.requestedSampleCount > 1) {
+        val finalSteps = if (acceptedMsaaRoute != null) {
             val msaaTarget = request.msaaTargetDescriptor()
             val resolvedTarget = request.msaaResolvedDescriptor(msaaTarget)
-            listOf(GPUIntermediatePlanStep.CreateIntermediate(msaaTarget)) +
+            listOf(
+                GPUIntermediatePlanStep.CreateIntermediate(msaaTarget),
+                GPUIntermediatePlanStep.CreateIntermediate(resolvedTarget),
+            ) +
                 steps +
                 listOf(
                     GPUIntermediatePlanStep.ResolveMSAA(
@@ -205,7 +209,7 @@ class GPUIntermediatePlanner(
         } else {
             steps
         }
-        val finalTelemetry = if (request.requestedSampleCount > 1) {
+        val finalTelemetry = if (acceptedMsaaRoute != null) {
             telemetry.copy(
                 msaaTargets = telemetry.msaaTargets + 1,
                 msaaResolves = telemetry.msaaResolves + 1,
