@@ -59,6 +59,7 @@ class GPUIntermediatePlannerTest {
         assertEquals(1L, plan.telemetry.destinationReadCopies)
         assertEquals(1L, plan.telemetry.passSplits)
         assertTrue(plan.dumpLines().any { it.contains("shader-blend:Screen") })
+        assertTrue(plan.dumpLines().none { it.contains("unsupported.blend.shader_route_unvalidated") })
     }
 
     @Test

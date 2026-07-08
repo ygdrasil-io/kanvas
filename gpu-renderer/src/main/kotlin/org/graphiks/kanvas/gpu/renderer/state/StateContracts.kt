@@ -182,17 +182,23 @@ data class GPUBlendAllowlistGatePlan(
         }
 
         val diagnostic = diagnostics.single()
+        val stateLine = fixedFunctionState?.dumpLine()
+            ?: "blend:shader mode=${plan.mode} destinationRead=TextureCopy route=shaderBlend"
         return listOf(
             "blend:allowlist row=$evidenceRow routeKind=$routeKind classification=$classification " +
                 "promoted=$promoted productActivation=$productActivation materialized=$materialized " +
                 "command=$commandId mode=${plan.mode} plan=$planKind target=$targetFormatClass " +
                 "state=$blendStateHash pipeline=$pipelineBlendStateKey",
             alphaPlan.dumpLine(),
-            requireNotNull(fixedFunctionState).dumpLine(),
+            stateLine,
             "blend:pipeline-key material=$materialKeyHash renderStep=$renderStepIdentity " +
                 "blendState=$blendStateHash pipelineKey=$pipelineKeyHash",
             "blend:diagnostic code=${diagnostic.code} terminal=${diagnostic.terminal} mode=${diagnostic.mode}",
-            BLEND_ALLOWLIST_NONCLAIM_LINE,
+            if (planKind == GPUBlendPlanKind.ShaderBlendWithDstRead) {
+                "blend:nonclaim nativeAdvancedBlend=false shaderBlend=true framebufferFetch=false inputAttachment=false destinationReadTexture=true productActivation=true"
+            } else {
+                BLEND_ALLOWLIST_NONCLAIM_LINE
+            },
         )
     }
 
@@ -250,6 +256,9 @@ class GPUBlendAllowlistPlanner {
 
         val planKind = request.mode.planKind()
         val reasonCode = request.refusalCode()
+        if (planKind == GPUBlendPlanKind.ShaderBlendWithDstRead && reasonCode == "unsupported.blend.shader_route_unvalidated") {
+            return acceptedShaderBlendPlan(request)
+        }
 
         return refusedPlan(
             request = request,
@@ -300,6 +309,48 @@ class GPUBlendAllowlistPlanner {
             citedDestinationReadPlanStrategy = null,
             activeAttachmentSampled = request.activeAttachmentSampled,
             pipelineKeyHash = pipelineKeyHash,
+            diagnostics = listOf(diagnostic),
+        )
+    }
+
+    private fun acceptedShaderBlendPlan(request: GPUBlendAllowlistRequest): GPUBlendAllowlistGatePlan {
+        val destinationReadPlan = requireNotNull(request.destinationReadPlan) {
+            "accepted shader blend requires destinationReadPlan"
+        }
+        val blendStateHash = "shader-blend:${request.mode}:${request.targetFormatClass}:${destinationReadPlan.copyDescriptorHash}"
+        val plan = GPUBlendPlan(
+            mode = request.mode,
+            requiresDestinationRead = true,
+            pipelineBlendStateKey = blendStateHash,
+        )
+        val diagnostic = GPUBlendDiagnostic(
+            code = "accepted.blend.shader_destination_read",
+            mode = request.mode,
+            message = "blend allowlist accepted shader destination-read mode ${request.mode}",
+            terminal = false,
+        )
+        return GPUBlendAllowlistGatePlan(
+            commandId = request.commandId,
+            evidenceRow = BLEND_ALLOWLIST_EVIDENCE_ROW,
+            routeKind = "GPUNative",
+            classification = "TargetNative",
+            promoted = false,
+            productActivation = true,
+            materialized = false,
+            targetFormatClass = request.targetFormatClass,
+            materialKeyHash = request.materialKeyHash,
+            renderStepIdentity = request.renderStepIdentity,
+            alphaPlan = request.alphaPlan,
+            planKind = GPUBlendPlanKind.ShaderBlendWithDstRead,
+            plan = plan,
+            fixedFunctionState = null,
+            destinationReadRequirement = request.mode.destinationReadRequirement(),
+            destinationReadStrategy = destinationReadPlan.plan.strategy,
+            destinationReadAction = destinationReadPlan.action,
+            citedDestinationReadPlanRef = destinationReadPlan.planRef(),
+            citedDestinationReadPlanStrategy = destinationReadPlan.plan.strategy,
+            activeAttachmentSampled = request.activeAttachmentSampled,
+            pipelineKeyHash = pipelineKeyHash(request, blendStateHash),
             diagnostics = listOf(diagnostic),
         )
     }

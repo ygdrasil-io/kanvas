@@ -84,27 +84,55 @@ class BlendAllowlistGateTest {
     }
 
     @Test
-    fun destinationReadStrategyEvidenceDoesNotPromoteShaderBlendRoutes() {
-        val destinationReadPlan = GPUDestinationReadStrategyPlanner().plan(destinationReadRequest())
-        val result = GPUBlendAllowlistPlanner().plan(
-            blendRequest(
-                mode = GPUBlendMode.Screen,
-                commandId = "blend:screen",
-                destinationReadPlan = destinationReadPlan,
+    fun `screen blend accepts shader route when destination read plan is valid`() {
+        val destination = GPUDestinationReadStrategyPlanner().plan(
+            GPUDestinationReadStrategyRequest(
+                commandId = "cmd-screen",
+                requirement = GPUDestinationReadRequirement.TargetCopy,
+                strategy = GPUDestinationReadStrategy.CopyTarget,
+                action = GPUDestinationReadAction.SplitPassAndCopyTarget,
+                bounds = GPUDestinationReadBounds(
+                    boundsLabel = "bounds:screen",
+                    conservative = true,
+                    pixelAligned = true,
+                    copyBoundsLabel = "copy:screen",
+                    width = 32,
+                    height = 32,
+                    targetWidth = 320,
+                    targetHeight = 200,
+                ),
+                sourceTargetLabel = "surface:main",
+                sourceUsageLabels = setOf("render_attachment", "copy_src"),
+                copyUsageLabels = setOf("copy_dst", "texture_binding"),
+                targetFormatClass = "rgba8unorm",
+                targetGeneration = 7,
             ),
         )
 
-        assertEquals(GPUDestinationReadStrategy.Refuse, result.destinationReadStrategy)
-        assertEquals(GPUDestinationReadAction.Refuse, result.destinationReadAction)
-        assertEquals("unsupported.blend.shader_route_unvalidated", result.diagnostics.single().code)
-        assertEquals(
-            listOf(
-                "blend:allowlist.refused row=gpu-renderer.blend-allowlist routeKind=RefuseDiagnostic classification=TargetNative promoted=false productActivation=true materialized=false command=blend:screen mode=Screen plan=ShaderBlendWithDstRead reason=unsupported.blend.shader_route_unvalidated target=rgba8unorm",
-                "blend:destination-read mode=Screen requirement=ShaderBlend strategy=RefuseDiagnostic action=Refuse plan=gpu-renderer.destination-read.strategy:accepted planStrategy=TargetCopySnapshot activeAttachmentSampled=false",
-                "blend:nonclaim nativeAdvancedBlend=false shaderBlend=false framebufferFetch=false inputAttachment=false destinationReadTexture=false productActivation=true",
+        val plan = GPUBlendAllowlistPlanner().plan(
+            GPUBlendAllowlistRequest(
+                commandId = "cmd-screen",
+                mode = GPUBlendMode.Screen,
+                targetFormatClass = "rgba8unorm",
+                materialKeyHash = "material:screen",
+                renderStepIdentity = "rect-fill",
+                destinationReadPlan = destination,
+                destinationReadCopyBoundsLabel = "copy:screen",
+                destinationReadGeneration = 7,
             ),
-            result.dumpLines(),
         )
+
+        assertEquals(GPUBlendPlanKind.ShaderBlendWithDstRead, plan.planKind)
+        assertEquals("GPUNative", plan.routeKind)
+        assertEquals(false, plan.diagnostics.any { it.terminal })
+        assertEquals(GPUDestinationReadStrategy.CopyTarget, plan.destinationReadStrategy)
+        assertEquals(GPUDestinationReadAction.SplitPassAndCopyTarget, plan.destinationReadAction)
+        assertTrue(plan.dumpLines().any { it.contains("shaderBlend=true") })
+    }
+
+    @Test
+    fun destinationReadStrategyMismatchRefusesShaderBlendRoutes() {
+        val destinationReadPlan = GPUDestinationReadStrategyPlanner().plan(destinationReadRequest())
 
         val mismatchedPlan = GPUBlendAllowlistPlanner().plan(
             blendRequest(
