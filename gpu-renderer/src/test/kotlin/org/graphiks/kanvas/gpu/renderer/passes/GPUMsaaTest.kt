@@ -133,6 +133,21 @@ class GPUMsaaTest {
     }
 
     @Test
+    fun `one sample resolve is refused without throwing`() {
+        val route = GPUMsaa.resolve(
+            GPUMsaaRequest(
+                requestedSampleCount = 1,
+                coverageMode = GPUMsaaCoverageMode.Standard,
+                adapter = adapter4x,
+            )
+        )
+
+        val refused = assertIs<GPUMsaaRoute.Refused>(route)
+        assertEquals("unsupported.msaa.sample_count", refused.diagnostic.code)
+        assertTrue(refused.diagnostic.message.contains("4x or 8x"))
+    }
+
+    @Test
     fun `PSNR evidence computed for 4x MSAA quality measurement`() {
         val reference = FloatArray(64 * 64 * 4) { 0.5f }
         val resolved = FloatArray(64 * 64 * 4) { index ->

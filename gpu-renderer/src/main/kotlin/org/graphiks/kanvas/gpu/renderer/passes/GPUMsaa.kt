@@ -199,6 +199,17 @@ object GPUMsaa {
                 request = request,
             )
         }
+        if (request.requestedSampleCount == 1) {
+            return GPUMsaaRoute.Refused(
+                diagnostic = RefuseDiagnostic(
+                    code = Reason.UNSUPPORTED_SAMPLE_COUNT,
+                    message = "MSAA resolve requires 4x or 8x sample count",
+                    stage = "msaa.resolve",
+                    terminal = true,
+                ),
+                request = request,
+            )
+        }
 
         val adapter = request.adapter ?: return GPUMsaaRoute.Refused(
             diagnostic = RefuseDiagnostic(

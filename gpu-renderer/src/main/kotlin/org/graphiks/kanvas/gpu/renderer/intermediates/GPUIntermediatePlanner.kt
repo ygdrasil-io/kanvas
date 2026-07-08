@@ -91,6 +91,7 @@ class GPUIntermediatePlanner(
             return request.refused(request.targetId, msaaRoute.diagnostic.code)
         }
         val acceptedMsaaRoute = msaaRoute as? GPUMsaaRoute.Accepted
+        val acceptedMsaaTarget = acceptedMsaaRoute?.let { request.msaaTargetDescriptor() }
 
         for (draw in request.drawRequests) {
             if (draw.activeAttachmentSampled) {
@@ -157,7 +158,7 @@ class GPUIntermediatePlanner(
                 )
                 steps += GPUIntermediatePlanStep.RenderToTarget(
                     commandId = draw.commandId,
-                    targetLabel = draw.targetLabel,
+                    targetLabel = acceptedMsaaTarget?.label ?: draw.targetLabel,
                     routeLabel = "shader-blend:${draw.blendMode}",
                     orderingToken = "order:${draw.commandId}",
                 )
@@ -184,14 +185,14 @@ class GPUIntermediatePlanner(
                 }
                 steps += GPUIntermediatePlanStep.RenderToTarget(
                     commandId = draw.commandId,
-                    targetLabel = draw.targetLabel,
+                    targetLabel = acceptedMsaaTarget?.label ?: draw.targetLabel,
                     routeLabel = "fixed-function:${draw.blendMode}",
                     orderingToken = "order:${draw.commandId}",
                 )
             }
         }
         val finalSteps = if (acceptedMsaaRoute != null) {
-            val msaaTarget = request.msaaTargetDescriptor()
+            val msaaTarget = requireNotNull(acceptedMsaaTarget)
             val resolvedTarget = request.msaaResolvedDescriptor(msaaTarget)
             listOf(
                 GPUIntermediatePlanStep.CreateIntermediate(msaaTarget),

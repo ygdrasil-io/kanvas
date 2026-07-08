@@ -72,6 +72,10 @@ class GPUIntermediateMsaaPlanTest {
         val resolve = assertIs<GPUIntermediatePlanStep.ResolveMSAA>(plan.steps.last())
         assertTrue(createSteps.any { it.descriptor.label == resolve.source.label })
         assertTrue(createSteps.any { it.descriptor.label == resolve.destination.label })
+        assertTrue(
+            plan.steps.filterIsInstance<GPUIntermediatePlanStep.RenderToTarget>()
+                .all { it.targetLabel == resolve.source.label },
+        )
         assertEquals(1, plan.telemetry.msaaTargets)
         assertEquals(1, plan.telemetry.msaaResolves)
     }
