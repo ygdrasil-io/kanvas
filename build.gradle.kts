@@ -659,221 +659,6 @@ tasks.register("pipelineConformanceReport") {
     }
 }
 
-tasks.register("pipelineM86FidelityBurndown") {
-    group = "verification"
-    description = "Generates M86 fidelity burn-down ranking, root-cause classification, and PM evidence."
-
-    val scriptFile = layout.projectDirectory.file("scripts/m86_fidelity_burndown.py")
-    val m66ContractFile = layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m66-gm-promotion-wave.json")
-    val generatedManifestFile = layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/results.json")
-    val artifactDir = layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts")
-    val generatedArtifactDir = layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/generated/artifacts")
-    val outputDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m86-fidelity-burndown")
-    val reportFile = layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-02-m86-sprint-report-and-readiness-accounting.md")
-    inputs.file(scriptFile)
-    inputs.file(m66ContractFile)
-    inputs.file(generatedManifestFile)
-    inputs.dir(artifactDir)
-    inputs.dir(generatedArtifactDir)
-    outputs.dir(outputDir)
-    outputs.file(reportFile)
-    outputs.upToDateWhen { false }
-
-    doLast {
-        providers.exec {
-            commandLine(
-                "python3",
-                scriptFile.asFile.absolutePath,
-                "--project-root",
-                rootDir.absolutePath,
-                "--output-dir",
-                outputDir.asFile.relativeTo(rootDir).path,
-                "--report",
-                reportFile.asFile.relativeTo(rootDir).path,
-            )
-        }.result.get().assertNormalExitValue()
-    }
-}
-
-tasks.register("pipelineM65RuntimeSmoke") {
-    group = "verification"
-    description = "Generates M65 headless/offscreen runtime smoke telemetry and nonblank frame artifacts."
-
-    val scriptFile = layout.projectDirectory.file("scripts/m65_runtime_smoke.py")
-    val outputDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m65-runtime-smoke")
-    inputs.file(scriptFile)
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/gradient-color-filter-linear-kplus/gpu.png"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/gradient-color-filter-linear-kplus/route-gpu.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/runtime-effect-simple/gpu.png"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/runtime-effect-simple/route-gpu.json"))
-    outputs.dir(outputDir)
-    outputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-01-m65-runtime-smoke.md"))
-    outputs.upToDateWhen { false }
-
-    doLast {
-        providers.exec {
-            commandLine(
-                "python3",
-                scriptFile.asFile.absolutePath,
-                "--project-root",
-                rootDir.absolutePath,
-                "--output-dir",
-                outputDir.asFile.relativeTo(rootDir).path,
-            )
-        }.result.get().assertNormalExitValue()
-    }
-}
-
-tasks.register("pipelineM67PerformanceTiering") {
-    group = "verification"
-    description = "Generates M67 frame gate candidate and family performance budget artifacts from M65 telemetry."
-
-    dependsOn("pipelineM65RuntimeSmoke")
-
-    val scriptFile = layout.projectDirectory.file("scripts/m67_performance_tiering.py")
-    val telemetryFile = layout.projectDirectory.file("reports/wgsl-pipeline/m65-runtime-smoke/telemetry.json")
-    val outputDir = layout.projectDirectory.dir("reports/wgsl-pipeline/performance/m67-performance-tiering")
-    inputs.file(scriptFile)
-    inputs.file(telemetryFile)
-    outputs.dir(outputDir)
-    outputs.upToDateWhen { false }
-
-    doLast {
-        providers.exec {
-            commandLine(
-                "python3",
-                scriptFile.asFile.absolutePath,
-                "--project-root",
-                rootDir.absolutePath,
-                "--telemetry",
-                telemetryFile.asFile.relativeTo(rootDir).path,
-                "--output-dir",
-                outputDir.asFile.relativeTo(rootDir).path,
-            )
-        }.result.get().assertNormalExitValue()
-    }
-}
-
-tasks.register("pipelineM67PerformanceTieringNegative") {
-    group = "verification"
-    description = "Runs the M67 deterministic negative fixture for quarantine/rebaseline behavior."
-
-    dependsOn("pipelineM65RuntimeSmoke")
-
-    val scriptFile = layout.projectDirectory.file("scripts/m67_performance_tiering.py")
-    val telemetryFile = layout.projectDirectory.file("reports/wgsl-pipeline/m65-runtime-smoke/telemetry.json")
-    val outputDir = layout.projectDirectory.dir("reports/wgsl-pipeline/performance/m67-performance-tiering-negative")
-    inputs.file(scriptFile)
-    inputs.file(telemetryFile)
-    outputs.dir(outputDir)
-    outputs.upToDateWhen { false }
-
-    doLast {
-        providers.exec {
-            commandLine(
-                "python3",
-                scriptFile.asFile.absolutePath,
-                "--project-root",
-                rootDir.absolutePath,
-                "--telemetry",
-                telemetryFile.asFile.relativeTo(rootDir).path,
-                "--output-dir",
-                outputDir.asFile.relativeTo(rootDir).path,
-                "--fixture",
-                "negative-quarantine",
-            )
-        }.result.get().assertNormalExitValue()
-    }
-}
-
-tasks.register("pipelineM68KadreDemoEvidence") {
-    group = "verification"
-    description = "Generates M68 Kadre native demo bridge-smoke evidence and explicit native-launch blocker."
-
-    dependsOn("pipelineM65RuntimeSmoke")
-
-    val scriptFile = layout.projectDirectory.file("scripts/m68_kadre_demo_evidence.py")
-    val outputDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m68-kadre-demo")
-    inputs.file(scriptFile)
-    inputs.file(layout.projectDirectory.file(".gitmodules"))
-    inputs.file(layout.projectDirectory.file("settings.gradle.kts"))
-    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts"))
-    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/m65-runtime-smoke"))
-    outputs.dir(outputDir)
-    outputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-01-m68-kadre-demo-evidence.md"))
-    outputs.upToDateWhen { false }
-
-    doLast {
-        providers.exec {
-            commandLine(
-                "python3",
-                scriptFile.asFile.absolutePath,
-                "--project-root",
-                rootDir.absolutePath,
-                "--output-dir",
-                outputDir.asFile.relativeTo(rootDir).path,
-            )
-        }.result.get().assertNormalExitValue()
-    }
-}
-
-tasks.register("pipelineM69KadreHostAdapterSmoke") {
-    group = "verification"
-    description = "Generates M69 Kanvas/Kadre host adapter smoke evidence and a concrete native/headless route status."
-    mustRunAfter("pipelineM65RuntimeSmoke")
-    val scriptFile = layout.projectDirectory.file("scripts/m69_kadre_host_adapter_smoke.py")
-    val outputDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m69-kadre-host-adapter")
-    inputs.file(scriptFile)
-    inputs.file(layout.projectDirectory.file(".gitmodules"))
-    inputs.file(layout.projectDirectory.file("settings.gradle.kts"))
-    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/m65-runtime-smoke"))
-    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts"))
-    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/m69-kadre-native"))
-    outputs.dir(outputDir)
-    outputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-01-m69-kadre-host-adapter-smoke.md"))
-    outputs.upToDateWhen { false }
-
-    doLast {
-        providers.exec {
-            commandLine(
-                "python3",
-                scriptFile.asFile.absolutePath,
-                "--project-root",
-                rootDir.absolutePath,
-                "--output-dir",
-                outputDir.asFile.relativeTo(rootDir).path,
-            )
-        }.result.get().assertNormalExitValue()
-    }
-}
-
-tasks.register("pipelineM70KadreLiveRuntimeEvidence") {
-    group = "verification"
-    description = "Generates M70-A Kadre live runtime route evidence from native demo telemetry."
-
-    val scriptFile = layout.projectDirectory.file("scripts/m70_kadre_live_runtime_evidence.py")
-    val outputDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m70-kadre-live-runtime")
-    inputs.file(scriptFile)
-    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/m70-kadre-native"))
-    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/m69-kadre-native"))
-    outputs.dir(outputDir)
-    outputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-01-m70-a-kadre-live-runtime.md"))
-    outputs.upToDateWhen { false }
-
-    doLast {
-        providers.exec {
-            commandLine(
-                "python3",
-                scriptFile.asFile.absolutePath,
-                "--project-root",
-                rootDir.absolutePath,
-                "--output-dir",
-                outputDir.asFile.relativeTo(rootDir).path,
-            )
-        }.result.get().assertNormalExitValue()
-    }
-}
-
 tasks.register("pipelineGeneratedSceneExport") {
     group = "verification"
     description = "Materializes generated WGSL scene result artifacts into the dashboard export layout."
@@ -4049,7 +3834,6 @@ tasks.register("pipelineSceneDashboardGateNegativeFixture") {
 tasks.register<Exec>("validateM88ReleaseCandidate2") {
     group = "verification"
     description = "Validates checked-in M88 RC2 evidence without resolving Kadre runtime dependencies."
-    dependsOn("pipelineM86FidelityBurndown")
     commandLine("python3", "scripts/validate_m88_rc2.py", rootDir.absolutePath)
     inputs.file(layout.projectDirectory.file("scripts/validate_m88_rc2.py"))
     inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/m88-realtime-rc2"))
@@ -4119,19 +3903,12 @@ tasks.register("pipelinePmBundle") {
         "validatePureKotlinTextClaimDashboard",
         "validateKfontM12001TelemetryPmEvidence",
         "validateKfontM13001FacadeInventory",
-        "pipelineM65RuntimeSmoke",
-        "pipelineM86FidelityBurndown",
         "validateM88ReleaseCandidate2",
         "validateMepNextFeatureBreadth",
         "pipelineSceneDashboardGate",
         "pipelineDashboardFrontQa",
         "pipelinePerformanceTrendWarnings",
         "pipelinePerformanceReleaseGate",
-        "pipelineM67PerformanceTiering",
-        "pipelineM67PerformanceTieringNegative",
-        "pipelineM68KadreDemoEvidence",
-        "pipelineM69KadreHostAdapterSmoke",
-        "pipelineM70KadreLiveRuntimeEvidence",
         "validateMepNextRuntimeInteractive",
         "validateMepRcScenePack",
         "validateMepRcRuntime",
