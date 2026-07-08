@@ -155,6 +155,7 @@ class RenderGpuRendererSceneOffscreenMainTest {
                     assertContains(diagnostics, "intermediate.bind label=dst-copy:dst-foreground")
                     assertContains(diagnostics, "intermediate.render command=dst-foreground")
                     assertContains(diagnostics, "route=shader-blend:Screen")
+                    assertContains(diagnostics, "intermediateTexturesCreated=2 destinationCopies=1")
                 }
             }
             assertFalse(

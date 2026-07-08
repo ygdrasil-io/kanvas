@@ -36,6 +36,11 @@ Date: 2026-07-08
 | `rtk ./gradlew :gpu-renderer:test --tests "org.graphiks.kanvas.gpu.renderer.GPURendererPackageBoundaryTest"` | 0 | PASS_AFTER_CONTROLLER_REVIEW_FIXES | `gpu-renderer/build/test-results/test/TEST-org.graphiks.kanvas.gpu.renderer.GPURendererPackageBoundaryTest.xml` |
 | `rtk ./gradlew :gpu-renderer:test --tests "org.graphiks.kanvas.gpu.renderer.paintblend.PaintBlendExecutionBoundaryTest"` | 0 | PASS_AFTER_CONTROLLER_REVIEW_FIXES | `gpu-renderer/build/test-results/test/TEST-org.graphiks.kanvas.gpu.renderer.paintblend.PaintBlendExecutionBoundaryTest.xml` |
 | `rtk ./gradlew :gpu-renderer:test :gpu-renderer-scenes:test` | 0 | PASS_FINAL_SMOKE_AFTER_CONTROLLER_REVIEW_FIXES | `gpu-renderer/build/reports/tests/test/index.html` and `gpu-renderer-scenes/build/reports/tests/test/index.html` |
+| `rtk ./gradlew :gpu-renderer-scenes:test --tests "org.graphiks.kanvas.gpu.renderer.scenes.offscreen.SceneIntermediatePlanAdapterTest" --tests "org.graphiks.kanvas.gpu.renderer.scenes.offscreen.M25ExecutorWiringTest" --tests "org.graphiks.kanvas.gpu.renderer.scenes.offscreen.RenderGpuRendererSceneOffscreenMainTest.phase five validation scenes expose intermediate diagnostics"` | 0 | PASS_AFTER_RUNTIME_DESTINATION_READ_FIX | `gpu-renderer-scenes/build/reports/tests/test/index.html` |
+| `rtk ./gradlew :gpu-renderer-scenes:renderGpuRendererSceneOffscreen -PsceneId=dst-read-strategy` | 0 | RENDERED_AFTER_RUNTIME_DESTINATION_READ_FIX | `reports/gpu-renderer-scenes/offscreen/dst-read-strategy/diagnostics.txt` and `reports/gpu-renderer-scenes/offscreen/dst-read-strategy/render.png` |
+| `rtk ./gradlew :gpu-renderer:test --tests "org.graphiks.kanvas.gpu.renderer.intermediates.GPUIntermediateCommandStreamTest"` | 0 | PASS_AFTER_RUNTIME_DESTINATION_READ_FIX | `gpu-renderer/build/test-results/test/TEST-org.graphiks.kanvas.gpu.renderer.intermediates.GPUIntermediateCommandStreamTest.xml` |
+| `rtk ./gradlew :gpu-renderer-scenes:test --tests "org.graphiks.kanvas.gpu.renderer.scenes.offscreen.*"` | 0 | PASS_AFTER_RUNTIME_DESTINATION_READ_FIX | `gpu-renderer-scenes/build/reports/tests/test/index.html` |
+| `rtk ./gradlew :gpu-renderer:test :gpu-renderer-scenes:test` | 0 | PASS_FINAL_SMOKE_AFTER_RUNTIME_DESTINATION_READ_FIX | `gpu-renderer/build/reports/tests/test/index.html` and `gpu-renderer-scenes/build/reports/tests/test/index.html` |
 | `rtk git diff --check` | 0 | PASS | stdout empty |
 | `rtk git status --short` | 0 | PASS_INTENTIONAL_CHANGES_ONLY | stdout listed only intentional task-owned source, test, report, and artifact changes at the time of execution |
 
@@ -69,6 +74,7 @@ Short diagnostic lines captured from the regenerated offscreen reports:
 
 ```text
 gpu-runtime.telemetry renderPasses=2 offscreenPasses=2 windowPasses=0 submissions=2 commandBuffers=2 buffersCreated=4 texturesCreated=4 intermediateTexturesCreated=1 destinationCopies=0 msaaTargets=0 msaaResolves=0 bindGroupsCreated=6 samplersCreated=1 queueWrites=5 uniformSlabsCreated=2 uniformSlabBytesAllocated=1024 uniformSlabFallbacks=0 passBatchPlans=1 passBatchesAccepted=0 passBatchCuts=0 passBatchPackets=1
+gpu-runtime.telemetry renderPasses=3 offscreenPasses=3 windowPasses=0 submissions=3 commandBuffers=3 buffersCreated=4 texturesCreated=6 intermediateTexturesCreated=2 destinationCopies=1 msaaTargets=0 msaaResolves=0 bindGroupsCreated=4 samplersCreated=1 queueWrites=3 uniformSlabsCreated=2 uniformSlabBytesAllocated=512 uniformSlabFallbacks=0 passBatchPlans=0 passBatchesAccepted=0 passBatchCuts=0 passBatchPackets=0
 intermediate.telemetry destinationReadCopies=0 destinationReadIntermediateBinds=0 copiedBytes=0 passSplits=0 intermediatesCreated=1 intermediatesReused=0 intermediatesRefused=0 liveIntermediateBytes=256000 layerTargets=1 layerComposites=1 msaaTargets=0 msaaResolves=0
 intermediate.telemetry destinationReadCopies=1 destinationReadIntermediateBinds=1 copiedBytes=256000 passSplits=1 intermediatesCreated=1 intermediatesReused=0 intermediatesRefused=0 liveIntermediateBytes=256000 layerTargets=0 layerComposites=0 msaaTargets=0 msaaResolves=0
 ```
@@ -124,14 +130,14 @@ resource-provider.cache lane=intermediate-texture result=reuse key=target=target
   criteria = same-size layer targets carry planner labels into runtime texture labels/keys;
   evidence = `intermediate.scene.layer-prepared ... plannedTarget=layer-target:translucent-group texture=offscreenTex:layer-target:translucent-group:320x200:rgba8unorm` and same-size unit coverage in `M25ExecutorWiringTest`.
 - Destination-read validation fix:
-  criteria = `dst-read-strategy` emits destination copy, bind, and shader-blend render evidence instead of a single direct `SrcOver` step;
-  evidence = `intermediate.copy source=surface:dst-read-strategy destination=dst-copy:dst-foreground`, `intermediate.bind label=dst-copy:dst-foreground binding=dst-read:dst-foreground`, and `route=shader-blend:Screen`.
+  criteria = `dst-read-strategy` executes destination copy, bind, and shader-blend render evidence instead of a single direct `SrcOver` step;
+  evidence = `intermediate.scene.destination-read-prepared command=dst-foreground`, `intermediate.copy source=surface:dst-read-strategy destination=dst-copy:dst-foreground`, `intermediate.bind label=dst-copy:dst-foreground binding=dst-read:dst-foreground`, `route=shader-blend:Screen`, and runtime telemetry `intermediateTexturesCreated=2 destinationCopies=1`.
 - Command stream evidence fix:
   criteria = `BindIntermediate` is a concrete pass command ordered between copy and draw;
   evidence = `GPUIntermediateCommandStreamTest.destination copy lowers before draw that samples it`.
 - Runtime telemetry fix:
   criteria = reports capture post-render telemetry;
-  evidence = regenerated offscreen diagnostics now show nonzero `renderPasses`, `commandBuffers`, and `intermediateTexturesCreated` after rendering saveLayer scenes.
+  evidence = regenerated offscreen diagnostics now show nonzero `renderPasses`, `commandBuffers`, `intermediateTexturesCreated`, and `destinationCopies` after rendering intermediate saveLayer and destination-read scenes.
 - Unsupported saveLayer child fix:
   criteria = transitional offscreen saveLayer preparation accepts only supported solid child families and refuses others with stable reason codes;
   evidence = `unsupported.layer.child_family.linear-gradient-rect` unit coverage in adapter and executor tests.

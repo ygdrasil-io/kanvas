@@ -233,7 +233,8 @@ class RectOnlyOffscreenRenderer internal constructor(
                     it.family != "path-fill-stencil" &&
                     it.family != "path-fill-gradient" &&
                     it.family != "convex-fan-mesh" &&
-                    it.label !in preparedIntermediateExecution.childLabels
+                    it.label !in preparedIntermediateExecution.childLabels &&
+                    it.label !in preparedIntermediateExecution.destinationReadDrawLabels
             }
             if (solidFills.isNotEmpty()) {
                 drawFullscreenPass(
@@ -249,6 +250,24 @@ class RectOnlyOffscreenRenderer internal constructor(
                         )
                     },
                     passBatchKind = GPUBackendSimplePassBatchKind.SolidFill,
+                )
+            }
+
+            preparedIntermediateExecution.destinationReadBlends.forEach { blend ->
+                drawBlendPass(
+                    wgsl = composeSceneDestinationReadBlendWgsl(blend.routeLabel),
+                    colorFormat = OFFSCREEN_COLOR_FORMAT,
+                    srcTextureLabel = blend.sourceTextureLabel,
+                    dstTextureLabel = blend.destinationTextureLabel,
+                    draws = listOf(
+                        GPUBackendRawUniformDraw(
+                            uniformBytes = UniformPacker.solidColorBytes(SceneColor(1f, 1f, 1f, 1f)),
+                            scissorX = 0,
+                            scissorY = 0,
+                            scissorWidth = viewportWidth,
+                            scissorHeight = viewportHeight,
+                        ),
+                    ),
                 )
             }
 
@@ -937,6 +956,41 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     return layer_composite(uv, uniforms.color, uniforms.params.x);
 }
 """
+
+internal fun composeSceneDestinationReadBlendWgsl(routeLabel: String): String {
+    val blendExpression = when (routeLabel) {
+        "shader-blend:Screen" -> "src.rgb + dst.rgb - (src.rgb * dst.rgb)"
+        "shader-blend:Multiply" -> "(src.rgb * dst.rgb) + (src.rgb * (1.0 - dst.a)) + (dst.rgb * (1.0 - src.a))"
+        else -> error("unsupported destination-read blend route: $routeLabel")
+    }
+    return """
+struct Uniforms { color: vec4f };
+
+@group(0) @binding(0) var<uniform> uniforms: Uniforms;
+@group(1) @binding(1) var src_texture: texture_2d<f32>;
+@group(1) @binding(2) var src_sampler: sampler;
+@group(1) @binding(3) var dst_texture: texture_2d<f32>;
+@group(1) @binding(4) var dst_sampler: sampler;
+
+@vertex
+fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
+    let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
+    let y = f32(idx & 2u) * 2.0 - 1.0;
+    return vec4f(x, y, 0.0, 1.0);
+}
+
+@fragment
+fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
+    let dims = vec2f(textureDimensions(src_texture));
+    let uv = pos.xy / dims;
+    let src = textureSample(src_texture, src_sampler, uv);
+    let dst = textureSample(dst_texture, dst_sampler, uv);
+    let outAlpha = src.a + dst.a * (1.0 - src.a);
+    let outRgb = $blendExpression;
+    return vec4f(outRgb, outAlpha) * uniforms.color;
+}
+"""
+}
 
 internal data class RectOnlyDrawPlan(
     val sceneId: String,

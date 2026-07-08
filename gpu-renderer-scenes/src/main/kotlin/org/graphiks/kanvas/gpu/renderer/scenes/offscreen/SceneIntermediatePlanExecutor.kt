@@ -19,8 +19,18 @@ private val TRANSITIONAL_LAYER_CHILD_FAMILIES = setOf("fill-rect")
 internal sealed interface SceneIntermediateExecutionResult {
     val diagnostics: List<String>
 
+    data class DestinationReadBlend(
+        val commandId: String,
+        val routeLabel: String,
+        val sourceTextureLabel: String,
+        val destinationTextureLabel: String,
+        val drawLabels: Set<String>,
+    )
+
     data class Prepared(
         val childLabels: Set<String>,
+        val destinationReadDrawLabels: Set<String>,
+        val destinationReadBlends: List<DestinationReadBlend>,
         val layerTextureByTargetLabel: Map<String, String>,
         val fillLabelByTargetLabel: Map<String, String>,
         val plannedComposites: List<GPUIntermediatePlanStep.CompositeIntermediate>,
@@ -59,9 +69,88 @@ internal class SceneIntermediatePlanExecutor {
         }
 
         val childLabels = linkedSetOf<String>()
+        val destinationReadDrawLabels = linkedSetOf<String>()
+        val destinationReadBlends = mutableListOf<SceneIntermediateExecutionResult.DestinationReadBlend>()
         val layerTextureByTargetLabel = linkedMapOf<String, String>()
         val fillLabelByTargetLabel = linkedMapOf<String, String>()
         val diagnostics = mutableListOf<String>()
+
+        plan.steps.filterIsInstance<GPUIntermediatePlanStep.RenderToTarget>()
+            .filter { renderStep -> renderStep.routeLabel.startsWith("shader-blend:") }
+            .forEach { renderStep ->
+                val copyStep = plan.steps.filterIsInstance<GPUIntermediatePlanStep.CopyDestination>()
+                    .firstOrNull { copy -> copy.destination.label.endsWith(":${renderStep.commandId}") }
+                    ?: return@forEach
+                val bindStep = plan.steps.filterIsInstance<GPUIntermediatePlanStep.BindIntermediate>()
+                    .firstOrNull { bind -> bind.descriptor.label == copyStep.destination.label }
+                    ?: return@forEach
+                val sourceFill = drawPlan.fills.firstOrNull { fill -> fill.label == renderStep.commandId }
+                    ?: throw refusal(
+                        scopeLabel = renderStep.commandId,
+                        reasonCode = "unsupported.destination_read.source_fill_missing",
+                        diagnostics = diagnostics + plan.dumpLines(),
+                        stage = "destination-read-preparation",
+                    )
+                val destinationFills = drawPlan.fills.filter { fill ->
+                    fill.paintOrder < sourceFill.paintOrder && fill.family == "fill-rect"
+                }
+                val unsupportedDestinationFill = drawPlan.fills.firstOrNull { fill ->
+                    fill.paintOrder < sourceFill.paintOrder && fill.family != "fill-rect"
+                }
+                if (unsupportedDestinationFill != null) {
+                    throw refusal(
+                        scopeLabel = renderStep.commandId,
+                        reasonCode = "unsupported.destination_read.prior_family.${unsupportedDestinationFill.family}",
+                        diagnostics = diagnostics + plan.dumpLines(),
+                        stage = "destination-read-preparation",
+                    )
+                }
+
+                val destinationTextureLabel = target.createOffscreenTexture(
+                    GPUBackendOffscreenTexture(
+                        label = copyStep.destination.label,
+                        width = copyStep.destination.width,
+                        height = copyStep.destination.height,
+                        format = copyStep.destination.formatClass,
+                    ),
+                )
+                target.encodeOffscreenTexture(
+                    textureLabel = destinationTextureLabel,
+                    clearColor = GPUClearColor(0.0, 0.0, 0.0, 0.0),
+                ) {
+                    renderSolidFills(destinationFills)
+                }
+
+                val sourceTextureLabel = target.createOffscreenTexture(
+                    GPUBackendOffscreenTexture(
+                        label = "blend-src:${renderStep.commandId}",
+                        width = copyStep.destination.width,
+                        height = copyStep.destination.height,
+                        format = copyStep.destination.formatClass,
+                    ),
+                )
+                target.encodeOffscreenTexture(
+                    textureLabel = sourceTextureLabel,
+                    clearColor = GPUClearColor(0.0, 0.0, 0.0, 0.0),
+                ) {
+                    renderSolidFills(listOf(sourceFill))
+                }
+
+                destinationReadDrawLabels += sourceFill.label
+                destinationReadDrawLabels += destinationFills.map { fill -> fill.label }
+                destinationReadBlends += SceneIntermediateExecutionResult.DestinationReadBlend(
+                    commandId = renderStep.commandId,
+                    routeLabel = renderStep.routeLabel,
+                    sourceTextureLabel = sourceTextureLabel,
+                    destinationTextureLabel = destinationTextureLabel,
+                    drawLabels = linkedSetOf(sourceFill.label) + destinationFills.map { fill -> fill.label },
+                )
+                diagnostics +=
+                    "intermediate.scene.destination-read-prepared command=${renderStep.commandId} " +
+                        "route=${renderStep.routeLabel} sourceTexture=$sourceTextureLabel " +
+                        "destinationTexture=$destinationTextureLabel binding=${bindStep.bindingLabel} " +
+                        "token=${copyStep.tokenLabel}"
+            }
 
         plan.steps.filterIsInstance<GPUIntermediatePlanStep.RenderLayerChildren>().forEach { layerStep ->
             val fillLabel = layerStep.scopeLabel.removePrefix("layer:")
@@ -107,6 +196,8 @@ internal class SceneIntermediatePlanExecutor {
 
         return SceneIntermediateExecutionResult.Prepared(
             childLabels = childLabels,
+            destinationReadDrawLabels = destinationReadDrawLabels,
+            destinationReadBlends = destinationReadBlends,
             layerTextureByTargetLabel = layerTextureByTargetLabel,
             fillLabelByTargetLabel = fillLabelByTargetLabel,
             plannedComposites = plan.steps.filterIsInstance<GPUIntermediatePlanStep.CompositeIntermediate>(),

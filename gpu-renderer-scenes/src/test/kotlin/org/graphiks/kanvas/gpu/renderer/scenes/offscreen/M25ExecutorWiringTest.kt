@@ -170,6 +170,8 @@ class M25ExecutorWiringTest {
         )
         val execution = SceneIntermediateExecutionResult.Prepared(
             childLabels = emptySet(),
+            destinationReadDrawLabels = emptySet(),
+            destinationReadBlends = emptyList(),
             layerTextureByTargetLabel = linkedMapOf(
                 "layer-b-target" to "texture-b",
                 "layer-a-target" to "texture-a",
