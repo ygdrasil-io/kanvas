@@ -79,3 +79,15 @@ tasks.register<JavaExec>("gpuRendererWgsl4kEvolutionReportFixtures") {
         outputDir.asFile.deleteRecursively()
     }
 }
+
+tasks.register<JavaExec>("generateGpuPhase6ImageResourceEvidence") {
+    group = "verification"
+    description = "Writes Phase 6 IMAGE texture/sampler resource evidence."
+    dependsOn("testClasses")
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("org.graphiks.kanvas.gpu.renderer.images.ImageFamilyResourceEvidenceKt")
+    val outputFile =
+        rootProject.layout.projectDirectory.file("reports/gpu-renderer/phase-6-image-family/resource-evidence.json")
+    args(outputFile.asFile.absolutePath)
+    outputs.file(outputFile)
+}

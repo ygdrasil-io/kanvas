@@ -1,0 +1,18 @@
+{
+  "rowId": "phase6-image-repeated-texture-sampler",
+  "dumpLines": [
+    "resource-provider.cache lane=texture-sampler result=create key=target=phase6-image-target;layout=layout-image-sampler-v1;binding=sampled-texture.phase6-checker;owner=phase6-image-cache;lifetime=recording-local;release=submission-complete;canAliasScratch=false;texture=64x64:rgba8unorm:samples=1:usage=copy_dst+texture_binding;view=texture:phase6-checker:2d:0..0:0..0;sampler=clamp-to-edge:clamp-to-edge:nearest:nearest:none:0:0:none:1:;deviceGeneration=17;resourceGeneration=3 subject=sampled-texture.phase6-checker",
+    "resource-provider.cache lane=texture-sampler result=reuse key=target=phase6-image-target;layout=layout-image-sampler-v1;binding=sampled-texture.phase6-checker;owner=phase6-image-cache;lifetime=recording-local;release=submission-complete;canAliasScratch=false;texture=64x64:rgba8unorm:samples=1:usage=copy_dst+texture_binding;view=texture:phase6-checker:2d:0..0:0..0;sampler=clamp-to-edge:clamp-to-edge:nearest:nearest:none:0:0:none:1:;deviceGeneration=17;resourceGeneration=3 subject=sampled-texture.phase6-checker"
+  ],
+  "nonClaims": [
+    "no-broad-image-support",
+    "no-codec-support",
+    "no-animation-support",
+    "no-mipmap-support",
+    "no-yuv-support",
+    "no-image-filter-support",
+    "no-perspective-support",
+    "no-picture-shader-support",
+    "no-broad-color-management-support"
+  ]
+}
