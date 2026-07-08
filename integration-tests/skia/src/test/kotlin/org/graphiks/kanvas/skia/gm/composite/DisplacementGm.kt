@@ -19,6 +19,11 @@ import org.graphiks.kanvas.types.r
 import org.graphiks.kanvas.types.g
 import org.graphiks.kanvas.types.b
 
+/** Port of Skia's `gm/displacement.cpp`.
+ *  Tests displacement image filter — renders text and shapes with
+ *  displacement map filters applied.
+ *  @see https://github.com/google/skia/blob/main/gm/displacement.cpp
+ */
 class DisplacementGm : SkiaGm {
     override val name = "displacement"
     override val renderFamily = RenderFamily.COMPOSITE

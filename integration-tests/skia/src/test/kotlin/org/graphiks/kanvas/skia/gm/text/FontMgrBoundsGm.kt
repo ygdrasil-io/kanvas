@@ -10,6 +10,11 @@ import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
 
+/** Port of Skia's `gm/fontmgr.cpp` (font-mgr bounds variant).
+ *  Tests font bounding-box calculations with various skew and scaleX
+ *  parameters.
+ *  @see https://github.com/google/skia/blob/main/gm/fontmgr.cpp
+ */
 class FontMgrBoundsGm(
     private val fScaleX: Float,
     private val fSkewX: Float,

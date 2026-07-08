@@ -13,6 +13,11 @@ import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.types.Rect
 
+/** Port of Skia's `gm/filterbug.cpp`.
+ *  Regression test — renders a surface-snapshot image shader with skew
+ *  and translation to filter-bug scenario.
+ *  @see https://github.com/google/skia/blob/main/gm/filterbug.cpp
+ */
 class FilterBugGm : SkiaGm {
     override val name = "filterbug"
     override val renderFamily = RenderFamily.IMAGE

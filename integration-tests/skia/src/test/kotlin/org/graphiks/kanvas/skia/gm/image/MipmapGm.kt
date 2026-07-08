@@ -11,6 +11,11 @@ import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
 
+/** Port of Skia's `gm/mipmap.cpp`.
+ *  Creates a gradient image and draws it at various scales to test
+ *  mipmap generation and rendering.
+ *  @see https://github.com/google/skia/blob/main/gm/mipmap.cpp
+ */
 class MipmapGm : SkiaGm {
     override val name = "mipmap"
     override val renderFamily = RenderFamily.IMAGE

@@ -21,7 +21,7 @@ import org.graphiks.kanvas.types.Rect
  * Two variants: composeshader_bitmap and composeshader_bitmap_lm.
  * @see https://github.com/google/skia/blob/main/gm/composeshader.cpp
  */
-class ComposeShaderBitmapGm(private val useLm: Boolean) : SkiaGm {
+open class ComposeShaderBitmapGm(private val useLm: Boolean) : SkiaGm {
     constructor() : this(false)
 
     override val name = "composeshader_bitmap${if (useLm) "_lm" else ""}"
@@ -119,3 +119,5 @@ class ComposeShaderBitmapGm(private val useLm: Boolean) : SkiaGm {
         const val SQUARE_LENGTH: Int = 20
     }
 }
+
+class ComposeShaderBitmapLmGm : ComposeShaderBitmapGm(true)

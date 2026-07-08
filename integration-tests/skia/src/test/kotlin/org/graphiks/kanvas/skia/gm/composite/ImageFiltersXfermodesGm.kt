@@ -10,6 +10,11 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
 
+/** Port of Skia's `gm/imagefilters.cpp` (xfermodes variant).
+ *  Tests image filters with xfer modes — draws coloured rectangles
+ *  with various image-filter and blend-mode combinations.
+ *  @see https://github.com/google/skia/blob/main/gm/imagefilters.cpp
+ */
 class ImageFiltersXfermodesGm : SkiaGm {
     override val name = "imagefilters_xfermodes"
     override val renderFamily = RenderFamily.COMPOSITE

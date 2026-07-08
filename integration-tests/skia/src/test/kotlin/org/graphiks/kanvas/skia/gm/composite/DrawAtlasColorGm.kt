@@ -14,6 +14,11 @@ import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.types.Rect
 
+/** Port of Skia's `gm/drawatlascolor.cpp`.
+ *  Tests draw-atlas colour — renders sprite atlases with various blend
+ *  modes and colour filters.
+ *  @see https://github.com/google/skia/blob/main/gm/drawatlascolor.cpp
+ */
 class DrawAtlasColorGm : SkiaGm {
     override val name = "draw-atlas-colors"
     override val renderFamily = RenderFamily.COMPOSITE

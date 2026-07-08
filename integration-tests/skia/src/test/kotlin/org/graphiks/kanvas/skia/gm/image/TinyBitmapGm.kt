@@ -11,6 +11,11 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
 
+/** Port of Skia's `gm/tinybitmap.cpp`.
+ *  Creates a small gradient image and renders it as a tiled shader
+ *  across the canvas.
+ *  @see https://github.com/google/skia/blob/main/gm/tinybitmap.cpp
+ */
 class TinyBitmapGm : SkiaGm {
     override val name = "tinybitmap"
     override val renderFamily = RenderFamily.IMAGE

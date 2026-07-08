@@ -12,6 +12,11 @@ import org.graphiks.kanvas.canvas.drawCircle
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
 
+/** Port of Skia's `gm/spritebitmap.cpp`.
+ *  Tests sprite bitmap rendering — creates a gradient image and draws it
+ *  as a sprite with image filters (blur/offset).
+ *  @see https://github.com/google/skia/blob/main/gm/spritebitmap.cpp
+ */
 class SpriteBitmapGm : SkiaGm {
     override val name = "spritebitmap"
     override val renderFamily = RenderFamily.IMAGE

@@ -8,6 +8,10 @@ import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
 
+/** Port of Skia's `gm/surface.cpp` (simple-snap-image variant 1).
+ *  Creates a red surface snapshot and draws it via drawImage.
+ *  @see https://github.com/google/skia/blob/main/gm/surface.cpp
+ */
 class SimpleSnapImageGm : SkiaGm {
     override val name = "simple_snap_image"
     override val renderFamily = RenderFamily.IMAGE

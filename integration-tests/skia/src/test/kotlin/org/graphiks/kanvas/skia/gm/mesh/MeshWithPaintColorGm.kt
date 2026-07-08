@@ -16,6 +16,10 @@ import org.graphiks.kanvas.types.Vertices
 import org.graphiks.kanvas.types.VertexMode
 import kotlin.math.sin
 
+/** Port of Skia's `gm/mesh.cpp` (paint-color variant).
+ *  Renders a gradient-filled mesh with per-vertex colours and textures.
+ *  @see https://github.com/google/skia/blob/main/gm/mesh.cpp
+ */
 class MeshWithPaintColorGm : SkiaGm {
     override val name = "mesh_with_paint_color"
     override val renderFamily = RenderFamily.MESH

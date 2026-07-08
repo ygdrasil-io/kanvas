@@ -9,6 +9,11 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.RRect
 import org.graphiks.kanvas.types.Rect
 
+/** Port of Skia's `gm/crbug_946965.cpp`.
+ *  Regression test for crbug.com/946965 — draws stroked rounded rects
+ *  with varying corner radii.
+ *  @see https://github.com/google/skia/blob/main/gm/crbug_946965.cpp
+ */
 class Crbug946965Gm : SkiaGm {
     override val name = "crbug_946965"
     override val renderFamily = RenderFamily.PATH

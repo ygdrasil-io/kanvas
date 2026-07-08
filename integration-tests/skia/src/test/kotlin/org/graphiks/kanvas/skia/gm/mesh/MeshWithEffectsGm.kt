@@ -17,6 +17,10 @@ import org.graphiks.kanvas.types.Vertices
 import org.graphiks.kanvas.types.VertexMode
 import kotlin.math.sin
 
+/** Port of Skia's `gm/mesh.cpp` (effects variant).
+ *  Renders a gradient mesh with color filters and blenders applied.
+ *  @see https://github.com/google/skia/blob/main/gm/mesh.cpp
+ */
 class MeshWithEffectsGm : SkiaGm {
     override val name = "mesh_with_effects"
     override val renderFamily = RenderFamily.MESH

@@ -17,6 +17,11 @@ import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 
+/** Port of Skia's `gm/tilemodes.cpp`.
+ *  Renders a grid of Shader.Image tiles with various TileMode/filter
+ *  combinations (POT and NPOT sizes).
+ *  @see https://github.com/google/skia/blob/main/gm/tilemodes.cpp
+ */
 class TilemodesGm(
     private val powerOfTwoSize: Boolean = true,
 ) : SkiaGm {

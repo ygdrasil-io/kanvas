@@ -9,6 +9,11 @@ import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
 
+/** Port of Skia's `gm/fontmgr.cpp` (font-mgr iter variant).
+ *  Tests font manager family iteration — renders "Hello World" with
+ *  each available font family.
+ *  @see https://github.com/google/skia/blob/main/gm/fontmgr.cpp
+ */
 class FontMgrGm : SkiaGm {
     override val name = "fontmgr_iter"
     override val renderFamily = RenderFamily.TEXT

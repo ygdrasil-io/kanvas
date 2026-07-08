@@ -10,6 +10,11 @@ import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
 
+/** Port of Skia's `gm/anisotropic.cpp` (aniso-mips variant).
+ *  Draws a gradient-backed image at various scale factors to test
+ *  anisotropic mipmap filtering.
+ *  @see https://github.com/google/skia/blob/main/gm/anisotropic.cpp
+ */
 class AnisoMipsGm : SkiaGm {
     override val name = "anisomips"
     override val renderFamily = RenderFamily.IMAGE

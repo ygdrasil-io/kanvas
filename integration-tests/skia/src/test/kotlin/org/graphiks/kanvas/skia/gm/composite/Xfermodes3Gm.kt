@@ -21,6 +21,11 @@ import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 
+/** Port of Skia's `gm/xfermodes3.cpp`.
+ *  Tests all Skia blend modes (xfermodes) — draws layered coloured
+ *  shapes with each blend mode applied.
+ *  @see https://github.com/google/skia/blob/main/gm/xfermodes3.cpp
+ */
 class Xfermodes3Gm : SkiaGm {
     override val name = "xfermodes3"
     override val renderFamily = RenderFamily.COMPOSITE

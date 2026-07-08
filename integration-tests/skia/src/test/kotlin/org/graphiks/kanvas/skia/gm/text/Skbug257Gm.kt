@@ -22,6 +22,11 @@ import org.graphiks.kanvas.types.PointMode
 import org.graphiks.kanvas.types.RRect
 import org.graphiks.kanvas.types.Rect
 
+/** Port of Skia's `gm/skbug_257.cpp`.
+ *  Regression test for skbug.com/257 — draws text blobs with rotated
+ *  image shaders to test glyph positioning with shaders.
+ *  @see https://github.com/google/skia/blob/main/gm/skbug_257.cpp
+ */
 class Skbug257Gm : SkiaGm {
     override val name = "skbug_257"
     override val renderFamily = RenderFamily.TEXT

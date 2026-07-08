@@ -13,6 +13,11 @@ import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 
+/** Port of Skia's `gm/gradients.cpp` (local perspective variant).
+ *  Tests gradient rendering with local perspective transforms — draws
+ *  linear and radial gradients with perspective matrices.
+ *  @see https://github.com/google/skia/blob/main/gm/gradients.cpp
+ */
 class GradientsLocalPerspectiveGm : SkiaGm {
     override val name = "gradients_local_perspective"
     override val renderFamily = RenderFamily.GRADIENT

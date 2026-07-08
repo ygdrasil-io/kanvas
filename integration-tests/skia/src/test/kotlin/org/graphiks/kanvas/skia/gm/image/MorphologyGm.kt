@@ -10,6 +10,11 @@ import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
 
+/** Port of Skia's `gm/morphology.cpp`.
+ *  Tests ImageFilter morphology (dilate/erode) — draws rectangles with
+ *  morphology filters applied.
+ *  @see https://github.com/google/skia/blob/main/gm/morphology.cpp
+ */
 class MorphologyGm : SkiaGm {
     override val name = "morphology"
     override val renderFamily = RenderFamily.IMAGE

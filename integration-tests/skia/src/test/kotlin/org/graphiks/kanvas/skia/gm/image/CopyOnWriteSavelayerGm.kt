@@ -9,6 +9,11 @@ import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
 
+/** Port of Skia's `gm/surface.cpp` (copy-on-write savelayer).
+ *  Tests copy-on-write with saveLayer — creates a surface, draws to it,
+ *  snapshots, then modifies with saveLayer.
+ *  @see https://github.com/google/skia/blob/main/gm/surface.cpp
+ */
 class CopyOnWriteSavelayerGm : SkiaGm {
     override val name = "copy_on_write_savelayer"
     override val renderFamily = RenderFamily.IMAGE

@@ -19,6 +19,11 @@ import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 
+/** Port of Skia's `gm/srcmode.cpp`.
+ *  Tests source mode blending with Shader.kSrc — draws layered shapes
+ *  and text using Src blend mode.
+ *  @see https://github.com/google/skia/blob/main/gm/srcmode.cpp
+ */
 class SrcModeGm : SkiaGm {
     override val name = "srcmode"
     override val renderFamily = RenderFamily.COMPOSITE

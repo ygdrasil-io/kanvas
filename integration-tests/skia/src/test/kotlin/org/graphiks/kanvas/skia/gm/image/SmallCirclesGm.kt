@@ -9,6 +9,11 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Rect
 
+/** Port of Skia's `gm/smallcircles.cpp`.
+ *  Draws many small anti-aliased circles onto a surface to test small
+ *  circle rendering performance and accuracy.
+ *  @see https://github.com/google/skia/blob/main/gm/smallcircles.cpp
+ */
 class SmallCirclesGm : SkiaGm {
     override val name = "smallcircles"
     override val renderFamily = RenderFamily.IMAGE

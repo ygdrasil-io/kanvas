@@ -15,6 +15,11 @@ import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 
+/** Port of Skia's `gm/surface.cpp` (surface-props variant).
+ *  Tests surface properties with text rendering — draws text strings
+ *  on a gradient surface with shader-based rendering.
+ *  @see https://github.com/google/skia/blob/main/gm/surface.cpp
+ */
 class SurfacePropsGm(
     private val useDistanceField: Boolean = false,
 ) : SkiaGm {

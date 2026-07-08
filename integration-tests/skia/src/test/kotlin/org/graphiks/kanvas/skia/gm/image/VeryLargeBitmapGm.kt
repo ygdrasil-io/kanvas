@@ -14,6 +14,11 @@ import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 
+/** Port of Skia's `gm/verylargebitmap.cpp`.
+ *  Creates a very large (65K wide) bitmap and renders it as a tiled
+ *  shader to test large-bitmap handling.
+ *  @see https://github.com/google/skia/blob/main/gm/verylargebitmap.cpp
+ */
 class VeryLargeBitmapGm : SkiaGm {
     override val name = "verylargebitmap"
     override val renderFamily = RenderFamily.IMAGE

@@ -15,6 +15,11 @@ import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 
+/** Port of Skia's `gm/gradients_degenerate.cpp`.
+ *  Tests degenerate gradient rendering — draws linear and radial
+ *  gradients with zero-length or single-stop configurations.
+ *  @see https://github.com/google/skia/blob/main/gm/gradients_degenerate.cpp
+ */
 class DegenerateGradientGm : SkiaGm {
     override val name = "degenerate_gradients"
     override val renderFamily = RenderFamily.GRADIENT

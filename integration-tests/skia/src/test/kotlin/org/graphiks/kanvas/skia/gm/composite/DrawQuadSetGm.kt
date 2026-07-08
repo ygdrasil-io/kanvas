@@ -66,6 +66,11 @@ private fun dqsDrawColorTilesMulticolor(canvas: GmCanvas) {
     }
 }
 
+/** Port of Skia's `gm/drawquadset.cpp`.
+ *  Tests quad-set drawing — renders a grid of coloured quads with
+ *  various transforms and text labels.
+ *  @see https://github.com/google/skia/blob/main/gm/drawquadset.cpp
+ */
 class DrawQuadSetGm : SkiaGm {
     override val name = "draw_quad_set"
     override val renderFamily = RenderFamily.COMPOSITE

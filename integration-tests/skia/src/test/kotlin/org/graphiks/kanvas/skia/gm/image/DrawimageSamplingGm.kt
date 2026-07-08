@@ -11,6 +11,11 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.types.Rect
 
+/** Port of Skia's `gm/image_shader.cpp` (draw-image-sampling variant).
+ *  Compares drawImage, shader-based, and drawImageRect paths for a
+ *  checkerboard image at reduced scale with different filter modes.
+ *  @see https://github.com/google/skia/blob/main/gm/image_shader.cpp
+ */
 class DrawimageSamplingGm : SkiaGm {
     override val name = "drawimage_sampling"
     override val renderFamily = RenderFamily.IMAGE

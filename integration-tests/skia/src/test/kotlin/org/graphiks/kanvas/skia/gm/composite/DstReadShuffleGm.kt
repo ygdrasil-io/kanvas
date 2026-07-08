@@ -23,6 +23,11 @@ import org.graphiks.kanvas.types.g
 import org.graphiks.kanvas.types.b
 import kotlin.random.Random
 
+/** Port of Skia's `gm/dstreadshuffle.cpp`.
+ *  Tests destination-read shuffle with various blend modes — draws
+ *  overlapping shapes and text to verify read-shuffle behaviour.
+ *  @see https://github.com/google/skia/blob/main/gm/dstreadshuffle.cpp
+ */
 class DstReadShuffleGm : SkiaGm {
     override val name = "dstreadshuffle"
     override val renderFamily = RenderFamily.COMPOSITE

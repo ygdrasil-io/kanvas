@@ -9,6 +9,11 @@ import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
 
+/** Port of Skia's `gm/fontmgr.cpp` (font-mgr match variant).
+ *  Tests font manager family matching — renders "Hello World" with
+ *  various font families to verify font-matching logic.
+ *  @see https://github.com/google/skia/blob/main/gm/fontmgr.cpp
+ */
 class FontMgrMatchGm : SkiaGm {
     override val name = "fontmgr_match"
     override val renderFamily = RenderFamily.TEXT

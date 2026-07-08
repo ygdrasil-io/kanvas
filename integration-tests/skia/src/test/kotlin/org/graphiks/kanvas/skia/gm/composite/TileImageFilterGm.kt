@@ -17,6 +17,11 @@ import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
 
+/** Port of Skia's `gm/bigtileimagefilter.cpp` (tile-image-filter variant).
+ *  Tests tiled image filter rendering — renders a gradient image with
+ *  tiled image filters and colour filters.
+ *  @see https://github.com/google/skia/blob/main/gm/bigtileimagefilter.cpp
+ */
 class TileImageFilterGm : SkiaGm {
     override val name = "tileimagefilter"
     override val renderFamily = RenderFamily.COMPOSITE

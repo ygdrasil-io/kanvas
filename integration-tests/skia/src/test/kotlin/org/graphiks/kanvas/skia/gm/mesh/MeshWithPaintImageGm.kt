@@ -14,6 +14,10 @@ import org.graphiks.kanvas.types.Vertices
 import org.graphiks.kanvas.types.VertexMode
 import kotlin.math.sin
 
+/** Port of Skia's `gm/mesh.cpp` (paint-image variant).
+ *  Renders a mesh with an image shader applied through paint.
+ *  @see https://github.com/google/skia/blob/main/gm/mesh.cpp
+ */
 class MeshWithPaintImageGm : SkiaGm {
     override val name = "mesh_with_paint_image"
     override val renderFamily = RenderFamily.MESH

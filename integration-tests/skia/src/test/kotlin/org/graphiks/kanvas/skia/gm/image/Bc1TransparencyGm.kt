@@ -23,6 +23,11 @@ import org.graphiks.math.SK_ColorGREEN
 import org.graphiks.math.SK_ColorRED
 import org.graphiks.math.SK_ColorWHITE
 
+/** Port of Skia's `gm/bc1_transparency.cpp`.
+ *  Tests BC1 compressed texture transparency — decodes and renders
+ *  compressed texture data with various colours.
+ *  @see https://github.com/google/skia/blob/main/gm/bc1_transparency.cpp
+ */
 class Bc1TransparencyGm : SkiaGm {
     override val name = "bc1_transparency"
     override val renderFamily = RenderFamily.IMAGE

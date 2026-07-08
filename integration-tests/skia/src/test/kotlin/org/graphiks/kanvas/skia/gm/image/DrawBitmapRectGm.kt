@@ -21,6 +21,11 @@ import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 
+/** Port of Skia's `gm/bitmaprect.cpp` (draw-bitmap-rect variant 1).
+ *  Draws a colour-wheel bitmap with various shaders, blur mask filters,
+ *  and styles to test bitmap-rect rendering.
+ *  @see https://github.com/google/skia/blob/main/gm/bitmaprect.cpp
+ */
 class DrawBitmapRectGm(private val variant: Variant) : SkiaGm {
     enum class Variant(val suffix: String?) {
         BITMAP(null), BITMAP_SUBSET("-subset"), IMAGE("-imagerect"), IMAGE_SUBSET("-imagerect-subset")

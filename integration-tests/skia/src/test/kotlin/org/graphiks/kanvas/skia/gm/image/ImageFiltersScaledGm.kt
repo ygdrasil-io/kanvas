@@ -11,6 +11,11 @@ import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 
+/** Port of Skia's `gm/imagefiltersscaled.cpp`.
+ *  Tests scaled image filters — draws circles and paths with blur and
+ *  offset image filters applied.
+ *  @see https://github.com/google/skia/blob/main/gm/imagefiltersscaled.cpp
+ */
 class ImageFiltersScaledGm : SkiaGm {
     override val name = "imagefiltersscaled"
     override val renderFamily = RenderFamily.IMAGE

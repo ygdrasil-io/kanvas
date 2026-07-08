@@ -16,6 +16,11 @@ import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
 
+/** Port of Skia's `gm/xfermodeimagefilter.cpp`.
+ *  Tests xfermode image filter — renders images and shapes layered
+ *  with various blend-mode image filters.
+ *  @see https://github.com/google/skia/blob/main/gm/xfermodeimagefilter.cpp
+ */
 class XfermodeImageFilterGm : SkiaGm {
     override val name = "xfermodeimagefilter"
     override val renderFamily = RenderFamily.COMPOSITE

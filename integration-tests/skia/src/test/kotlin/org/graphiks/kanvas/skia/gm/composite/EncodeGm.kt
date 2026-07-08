@@ -11,6 +11,9 @@ import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
 
+/** Tests image encoding — creates a surface with text and encodes it
+ *  as a PNG image, then draws the decoded image.
+ */
 class EncodeGm : SkiaGm {
     override val name = "encode"
     override val renderFamily = RenderFamily.IMAGE

@@ -11,6 +11,11 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
 
+/** Port of Skia's `gm/alpha_image.cpp` (alpha-tint variant).
+ *  Creates an ALPHA_8 image from pixel data and renders it with a
+ *  tiled image shader to test alpha-image tinting.
+ *  @see https://github.com/google/skia/blob/main/gm/alpha_image.cpp
+ */
 class AlphaImageAlphaTintGm : SkiaGm {
     override val name = "alpha_image_alpha_tint"
     override val renderFamily = RenderFamily.IMAGE

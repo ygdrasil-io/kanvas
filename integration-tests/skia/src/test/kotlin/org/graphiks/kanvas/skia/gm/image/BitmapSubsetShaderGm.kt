@@ -12,6 +12,11 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.types.Rect
 
+/** Port of Skia's `gm/subsetshader.cpp`.
+ *  Extracts left/right subsets of a decoded PNG, then renders each with a
+ *  rotated/repeated image shader.
+ *  @see https://github.com/google/skia/blob/main/gm/subsetshader.cpp
+ */
 class BitmapSubsetShaderGm : SkiaGm {
     override val name = "bitmap_subset_shader"
     override val renderFamily = RenderFamily.IMAGE
