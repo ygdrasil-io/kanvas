@@ -60,6 +60,7 @@ class GPUConcreteResourceProvider(
     private val uniformSlabLeases = linkedMapOf<GPUUniformSlabLeaseCacheKey, GPUResourceLease>()
     private val bindGroupLeases = linkedMapOf<GPUBindGroupLeaseCacheKey, GPUResourceLease>()
     private val textureSamplerLeaseKeys = linkedSetOf<GPUTextureSamplerLeaseCacheKey>()
+    private val intermediateTextureLeases = linkedMapOf<GPUIntermediateTextureLeaseCacheKey, GPUResourceLease>()
     private var mutableTelemetry = GPUConcreteResourceProviderTelemetry()
 
     val telemetry: GPUConcreteResourceProviderTelemetry
@@ -270,6 +271,93 @@ class GPUConcreteResourceProvider(
             )
         }
         return decision
+    }
+
+    fun materializeIntermediateTexture(
+        request: GPUIntermediateTextureMaterializationRequest,
+        context: GPUTargetPreparationContext,
+    ): GPUResourceMaterializationDecision {
+        val diagnostic = when {
+            request.targetId != context.targetId ->
+                GPUResourceDiagnostic.resourceTargetMismatch(
+                    resourceLabel = request.descriptor.label,
+                    requestTargetId = request.targetId,
+                    contextTargetId = context.targetId,
+                )
+            request.deviceGeneration != context.deviceGeneration ->
+                GPUResourceDiagnostic.deviceGenerationStale(
+                    resourceLabel = request.descriptor.label,
+                    expectedDeviceGeneration = context.deviceGeneration,
+                    actualDeviceGeneration = request.deviceGeneration,
+                    resourceKind = "intermediate",
+                )
+            request.descriptor.generation != context.deviceGeneration ||
+                request.actualResourceGeneration != context.deviceGeneration ->
+                GPUResourceDiagnostic(
+                    code = "unsupported.intermediate.generation_stale",
+                    resourceLabel = request.descriptor.label,
+                    message = "intermediate generation ${request.actualResourceGeneration} and descriptor generation ${request.descriptor.generation} do not match device generation ${context.deviceGeneration}",
+                    terminal = true,
+                )
+            request.activeAttachmentSampled ->
+                GPUResourceDiagnostic(
+                    code = "unsupported.destination_read.active_attachment_sampled",
+                    resourceLabel = request.descriptor.label,
+                    message = "intermediate texture would sample the active attachment",
+                    terminal = true,
+                )
+            (request.requiredUsageLabels - request.descriptor.usageLabels.toSet()).isNotEmpty() ->
+                GPUResourceDiagnostic.textureUsageMissing(
+                    resourceLabel = request.descriptor.label,
+                    missingUsageLabels = request.requiredUsageLabels - request.descriptor.usageLabels.toSet(),
+                    availableUsageLabels = request.descriptor.usageLabels.toSet(),
+                )
+            else -> null
+        }
+        if (diagnostic != null) {
+            record("intermediate-texture", "refuse", request.descriptor.descriptorHash, request.descriptor.label)
+            return GPUResourceMaterializationDecision.Refused(
+                diagnostic = diagnostic,
+                targetId = context.targetId,
+                resourcePlanLabels = listOf(request.descriptor.label),
+            )
+        }
+
+        val key = GPUIntermediateTextureLeaseCacheKey.from(request)
+        intermediateTextureLeases[key]?.let { cachedLease ->
+            val lease = cachedLease.copy(cacheResult = GPUResourceLeaseCacheResult.Reuse)
+            record("intermediate-texture", lease.cacheResult.dumpToken, key.dumpToken(), request.descriptor.label)
+            return GPUResourceMaterializationDecision.Materialized(
+                resources = listOf(GPUTextureResourceRef("texture-ref:${request.descriptor.label}")),
+                targetId = context.targetId,
+                resourcePlanLabels = listOf(request.descriptor.label),
+                resourceLeases = listOf(lease),
+            )
+        }
+
+        val lease = GPUResourceLease(
+            leaseId = "intermediate:${request.descriptor.label}",
+            resourceKind = GPUResourceLeaseKind.Texture,
+            deviceGeneration = context.deviceGeneration,
+            descriptorHash = request.descriptor.descriptorHash,
+            ownerScope = request.descriptor.ownerScope,
+            usageLabels = request.descriptor.usageLabels,
+            releasePolicy = request.descriptor.lifetimeClass,
+            cacheResult = GPUResourceLeaseCacheResult.Create,
+            evidenceFacts = mapOf(
+                "purpose" to request.descriptor.purpose.name,
+                "bounds" to request.descriptor.boundsLabel,
+                "sampleCount" to request.descriptor.sampleCount.toString(),
+            ),
+        )
+        intermediateTextureLeases[key] = lease
+        record("intermediate-texture", lease.cacheResult.dumpToken, key.dumpToken(), request.descriptor.label)
+        return GPUResourceMaterializationDecision.Materialized(
+            resources = listOf(GPUTextureResourceRef("texture-ref:${request.descriptor.label}")),
+            targetId = context.targetId,
+            resourcePlanLabels = listOf(request.descriptor.label),
+            resourceLeases = listOf(lease),
+        )
     }
 
     override fun materializeTextureSamplerBinding(
