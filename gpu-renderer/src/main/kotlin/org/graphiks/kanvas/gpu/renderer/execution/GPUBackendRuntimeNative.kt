@@ -678,6 +678,7 @@ private class WgpuOffscreenTarget(
     private val frameOrdinalCounter = AtomicLong(0L)
     private val textureFrameOrdinalCounter = AtomicLong(0L)
     private val pendingReadbackSubmissionIds = ArrayDeque<GPUQueueSubmissionId>()
+    private val pendingTargetCloseSubmissionIds = ArrayDeque<GPUQueueSubmissionId>()
 
     override val target: GPUSurfaceTarget =
         GPUSurfaceTarget(
@@ -719,10 +720,25 @@ private class WgpuOffscreenTarget(
         pendingReadbackSubmissionIds.addLast(submission.id)
     }
 
+    private fun retainPendingTargetCloseSubmission(submission: GPUQueueSubmission) {
+        pendingTargetCloseSubmissionIds.addLast(submission.id)
+    }
+
     private fun completePendingReadbackSubmissions(completion: String) {
-        while (pendingReadbackSubmissionIds.isNotEmpty()) {
+        completePendingSubmissions(pendingReadbackSubmissionIds, completion)
+    }
+
+    private fun completePendingTargetCloseSubmissions() {
+        completePendingSubmissions(pendingTargetCloseSubmissionIds, GPU_QUEUE_COMPLETION_TARGET_CLOSE)
+    }
+
+    private fun completePendingSubmissions(
+        submissionIds: ArrayDeque<GPUQueueSubmissionId>,
+        completion: String,
+    ) {
+        while (submissionIds.isNotEmpty()) {
             queueManager.markCompleted(
-                id = pendingReadbackSubmissionIds.removeFirst(),
+                id = submissionIds.removeFirst(),
                 completion = completion,
             )
         }
@@ -1006,13 +1022,14 @@ private class WgpuOffscreenTarget(
             ),
         )
         recordRuntimeResourceLeasesAction(frameResourceLeases)
-        retainPendingReadbackSubmission(submission)
+        retainPendingTargetCloseSubmission(submission)
         telemetryRecorder.recordSubmission()
         telemetryRecorder.recordOffscreenRenderPass()
     }
 
     override fun close() {
         completePendingReadbackSubmissions(GPU_QUEUE_COMPLETION_TARGET_CLOSE)
+        completePendingTargetCloseSubmissions()
         var firstFailure: Throwable? = null
         /** Suppresses exceptions thrown inside [block] and collects the first failure for re-throw. */
         fun closeQuietly(block: () -> Unit) {

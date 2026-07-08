@@ -1,10 +1,10 @@
 # GPU Phase 3 Queue Lifetime Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox syntax for tracking. This checked-in copy records the executed phase 3 work.
 
 **Goal:** Finaliser la phase 3 GPU en gardant les ressources retenues entre `submit` et une vraie preuve de fin sur les routes offscreen/readback et fenetre/present.
 
-**Architecture:** `GPUQueueManager` devient le carnet de suivi des soumissions. Le runtime offscreen laisse les soumissions pending jusqu'au readback, et la route fenetre marque la completion apres un `present` reussi. Les caches provider ne sont pas fermes a chaque frame ; la release est logique et visible dans les dumps.
+**Architecture:** `GPUQueueManager` devient le carnet de suivi des soumissions. Le runtime offscreen laisse les soumissions pending jusqu'au readback prouve, ou jusqu'a la fermeture de target pour les passes texture-only. La route fenetre marque la completion apres un `present` reussi. Les caches provider ne sont pas fermes a chaque frame ; la release est logique et visible dans les dumps.
 
 **Tech Stack:** Kotlin/JVM, Gradle, `kotlin.test`, module `:gpu-renderer`, runtime GPU natif Kanvas, Skia GM scan pour smoke de non-regression.
 
@@ -40,7 +40,7 @@
 - Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUQueueManager.kt`
 - Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUQueueManagerTest.kt`
 
-- [ ] **Step 1: Replace queue manager tests with failing phase 3 expectations**
+- [x] **Step 1: Replace queue manager tests with failing phase 3 expectations**
 
 Replace `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUQueueManagerTest.kt` with:
 
@@ -186,7 +186,7 @@ private fun queueLease(leaseId: String): GPUResourceLease =
     )
 ```
 
-- [ ] **Step 2: Run queue tests and verify failure**
+- [x] **Step 2: Run queue tests and verify failure**
 
 Run:
 
@@ -196,7 +196,7 @@ rtk ./gradlew :gpu-renderer:test --tests org.graphiks.kanvas.gpu.renderer.execut
 
 Expected: FAIL because `pendingSubmissionIds`, `GPU_QUEUE_COMPLETION_READBACK_COMPLETE`, and `GPU_QUEUE_COMPLETION_PRESENTED` do not exist yet, and telemetry does not include `pending=`.
 
-- [ ] **Step 3: Replace `GPUQueueManager.kt` with the phase 3 model**
+- [x] **Step 3: Replace `GPUQueueManager.kt` with the phase 3 model**
 
 Replace `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUQueueManager.kt` with:
 
@@ -368,7 +368,7 @@ internal const val GPU_QUEUE_COMPLETION_PRESENTED = "presented"
 internal const val GPU_QUEUE_COMPLETION_TARGET_CLOSE = "target-close"
 ```
 
-- [ ] **Step 4: Run queue tests and verify pass**
+- [x] **Step 4: Run queue tests and verify pass**
 
 Run:
 
@@ -378,7 +378,7 @@ rtk ./gradlew :gpu-renderer:test --tests org.graphiks.kanvas.gpu.renderer.execut
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit queue manager model**
+- [x] **Step 5: Commit queue manager model**
 
 Run:
 
@@ -397,7 +397,7 @@ Expected: commit created.
 - Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeNative.kt`
 - Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeNativeSmokeTest.kt`
 
-- [ ] **Step 1: Add failing offscreen pending/readback smoke test**
+- [x] **Step 1: Add failing offscreen pending/readback smoke test**
 
 Insert this test in `GPUBackendRuntimeNativeSmokeTest` after `backend runtime offscreen encode and read rgba when backend is available`:
 
@@ -452,7 +452,7 @@ Insert this test in `GPUBackendRuntimeNativeSmokeTest` after `backend runtime of
     }
 ```
 
-- [ ] **Step 2: Update existing queue evidence smoke expectations**
+- [x] **Step 2: Update existing queue evidence smoke expectations**
 
 In `GPUBackendRuntimeNativeSmokeTest`, update `fullscreen uniform path exposes provider cache evidence when runtime is available`.
 
@@ -482,7 +482,7 @@ with:
             assertTrue(evidenceDump.contains("completion=readback-complete"))
 ```
 
-- [ ] **Step 3: Run native smoke test and verify failure**
+- [x] **Step 3: Run native smoke test and verify failure**
 
 Run:
 
@@ -492,7 +492,7 @@ rtk ./gradlew :gpu-renderer:test --tests org.graphiks.kanvas.gpu.renderer.execut
 
 Expected: FAIL because runtime still marks offscreen submissions completed immediately and retained count is still 3.
 
-- [ ] **Step 4: Add retained-resource helper to native runtime**
+- [x] **Step 4: Add retained-resource helper to native runtime**
 
 In `GPUBackendRuntimeNative.kt`, add this helper near the other internal helpers, before `private const val MAX_TEXTURE_DIMENSION`:
 
@@ -507,7 +507,7 @@ internal fun gpuRuntimeRetainedResourceRefs(
     }
 ```
 
-- [ ] **Step 5: Track pending offscreen submissions**
+- [x] **Step 5: Track pending offscreen submissions**
 
 Inside the private offscreen target class in `GPUBackendRuntimeNative.kt`, add this field after `textureFrameOrdinalCounter`:
 
@@ -533,7 +533,7 @@ Add these helper methods inside the same class, before `override fun encode`:
     }
 ```
 
-- [ ] **Step 6: Leave primary offscreen encode pending until readback**
+- [x] **Step 6: Leave primary offscreen encode pending until readback**
 
 In `GPUBackendRuntimeNative.kt`, inside primary offscreen `encode`, replace the queue submission block:
 
@@ -567,7 +567,7 @@ with:
             telemetryRecorder.recordOffscreenRenderPass()
 ```
 
-- [ ] **Step 7: Leave offscreen texture encode pending until readback or target close**
+- [x] **Step 7: Leave offscreen texture encode pending until target close**
 
 In `GPUBackendRuntimeNative.kt`, inside `encodeOffscreenTextureInternal`, replace the queue submission block:
 
@@ -595,12 +595,12 @@ with:
             ),
         )
         recordRuntimeResourceLeasesAction(frameResourceLeases)
-        retainPendingReadbackSubmission(submission)
+        retainPendingTargetCloseSubmission(submission)
         telemetryRecorder.recordSubmission()
         telemetryRecorder.recordOffscreenRenderPass()
 ```
 
-- [ ] **Step 8: Complete offscreen submissions after readback wait**
+- [x] **Step 8: Complete offscreen submissions after readback wait**
 
 In `GPUBackendRuntimeNative.kt`, inside `readRgba`, replace the `finally` block:
 
@@ -619,7 +619,7 @@ with:
         }
 ```
 
-- [ ] **Step 9: Complete pending offscreen submissions on target close**
+- [x] **Step 9: Complete pending offscreen submissions on target close**
 
 At the start of the offscreen target `close()` method, before `var firstFailure: Throwable? = null`, add:
 
@@ -627,7 +627,7 @@ At the start of the offscreen target `close()` method, before `var firstFailure:
         completePendingReadbackSubmissions(GPU_QUEUE_COMPLETION_TARGET_CLOSE)
 ```
 
-- [ ] **Step 10: Run native smoke test and verify pass**
+- [x] **Step 10: Run native smoke test and verify pass**
 
 Run:
 
@@ -637,7 +637,7 @@ rtk ./gradlew :gpu-renderer:test --tests org.graphiks.kanvas.gpu.renderer.execut
 
 Expected: PASS, or individual backend-dependent tests skipped with the existing "GPU backend unavailable" assumption.
 
-- [ ] **Step 11: Commit offscreen readback lifetime**
+- [x] **Step 11: Commit offscreen readback lifetime**
 
 Run:
 
@@ -656,7 +656,7 @@ Expected: commit created.
 - Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeNative.kt`
 - Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeNativeSmokeTest.kt`
 
-- [ ] **Step 1: Add helper test for retained refs used by window and offscreen routes**
+- [x] **Step 1: Add helper test for retained refs used by window and offscreen routes**
 
 Insert this test in `GPUBackendRuntimeNativeSmokeTest` after `offscreen target helper derives deterministic unique target id per session and target`:
 
@@ -699,7 +699,7 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceLeaseCacheResult
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceLeaseKind
 ```
 
-- [ ] **Step 2: Run helper test and verify pass**
+- [x] **Step 2: Run helper test and verify pass**
 
 Run:
 
@@ -709,7 +709,7 @@ rtk ./gradlew :gpu-renderer:test --tests org.graphiks.kanvas.gpu.renderer.execut
 
 Expected: PASS if Task 2 is complete. The helper was added in Task 2, so this test should pass.
 
-- [ ] **Step 3: Pass the session queue manager into the window surface**
+- [x] **Step 3: Pass the session queue manager into the window surface**
 
 In `GPUBackendRuntimeNative.kt`, update `createWindowSurface` in the backend session.
 
@@ -731,7 +731,7 @@ the existing `private val telemetryRecorder` constructor parameter:
 
 Do not rename the existing private class in this task.
 
-- [ ] **Step 4: Record frame leases during window encoding**
+- [x] **Step 4: Record frame leases during window encoding**
 
 Inside `encodeAndPresent`, immediately after `val frameOrdinal = frameOrdinalCounter.incrementAndGet()`, add:
 
@@ -767,7 +767,7 @@ with:
                     },
 ```
 
-- [ ] **Step 5: Submit window frames through `GPUQueueManager` and complete after present**
+- [x] **Step 5: Submit window frames through `GPUQueueManager` and complete after present**
 
 In `encodeAndPresent`, replace:
 
@@ -797,7 +797,7 @@ with:
             telemetryRecorder.recordWindowRenderPass()
 ```
 
-- [ ] **Step 6: Run native smoke test**
+- [x] **Step 6: Run native smoke test**
 
 Run:
 
@@ -807,7 +807,7 @@ rtk ./gradlew :gpu-renderer:test --tests org.graphiks.kanvas.gpu.renderer.execut
 
 Expected: PASS, or backend-dependent tests skipped with the existing assumption.
 
-- [ ] **Step 7: Run queue tests again**
+- [x] **Step 7: Run queue tests again**
 
 Run:
 
@@ -817,7 +817,7 @@ rtk ./gradlew :gpu-renderer:test --tests org.graphiks.kanvas.gpu.renderer.execut
 
 Expected: PASS.
 
-- [ ] **Step 8: Commit window queue integration**
+- [x] **Step 8: Commit window queue integration**
 
 Run:
 
@@ -836,7 +836,7 @@ Expected: commit created.
 - No code edits expected.
 - Verify all files changed by Tasks 1-3.
 
-- [ ] **Step 1: Run focused tests**
+- [x] **Step 1: Run focused tests**
 
 Run:
 
@@ -847,7 +847,7 @@ rtk ./gradlew :gpu-renderer:test --tests org.graphiks.kanvas.gpu.renderer.execut
 
 Expected: both PASS, with backend-dependent tests skipped only when the existing assumption says the GPU backend is unavailable.
 
-- [ ] **Step 2: Run full GPU renderer tests**
+- [x] **Step 2: Run full GPU renderer tests**
 
 Run:
 
@@ -857,7 +857,7 @@ rtk ./gradlew :gpu-renderer:test
 
 Expected: PASS.
 
-- [ ] **Step 3: Run Skia scan smoke**
+- [x] **Step 3: Run Skia scan smoke**
 
 Run:
 
@@ -867,7 +867,7 @@ rtk ./gradlew :integration-tests:skia:generateSkiaScan --args='--from 0 --to 8 -
 
 Expected: PASS for the scan task with no timeout. The support percentage must not regress in a way that indicates a rendering regression.
 
-- [ ] **Step 4: Check whitespace**
+- [x] **Step 4: Check whitespace**
 
 Run:
 
@@ -877,7 +877,7 @@ rtk git diff --check
 
 Expected: no output.
 
-- [ ] **Step 5: Audit added public wording**
+- [x] **Step 5: Audit added public wording**
 
 Run:
 
@@ -887,7 +887,7 @@ rtk git diff -U0 HEAD~3..HEAD | rtk rg '^\\+.*(W''GPU|W''gpu|w''gpu|Web''GPU)'
 
 Expected: no output. Exact existing imports or package names should not appear as added public wording. If this command reports a new public label, dump, test name, comment, or doc sentence, replace the wording with `GPU`.
 
-- [ ] **Step 6: Review changed files**
+- [x] **Step 6: Review changed files**
 
 Run:
 
@@ -899,13 +899,15 @@ rtk git diff --name-status HEAD~3..HEAD
 Expected: only these files changed:
 
 ```text
+docs/superpowers/plans/2026-07-07-gpu-phase-3-queue-lifetime.md
+docs/superpowers/specs/2026-07-07-gpu-phase-3-queue-lifetime-design.md
 gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUQueueManager.kt
 gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUQueueManagerTest.kt
 gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeNative.kt
 gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeNativeSmokeTest.kt
 ```
 
-- [ ] **Step 7: Commit verification note only if files changed during audit**
+- [x] **Step 7: Commit verification note only if files changed during audit**
 
 If Step 4 or Step 5 required edits, run:
 
@@ -923,7 +925,7 @@ Expected: commit created only if audit edits were necessary.
 **Files:**
 - No code edits expected.
 
-- [ ] **Step 1: Capture final status**
+- [x] **Step 1: Capture final status**
 
 Run:
 
@@ -934,7 +936,7 @@ rtk git log --oneline -n 6
 
 Expected: working tree clean except for intentionally ignored local files, and the latest commits are the phase 3 commits.
 
-- [ ] **Step 2: Prepare PR summary**
+- [x] **Step 2: Prepare PR summary**
 
 Use this summary:
 

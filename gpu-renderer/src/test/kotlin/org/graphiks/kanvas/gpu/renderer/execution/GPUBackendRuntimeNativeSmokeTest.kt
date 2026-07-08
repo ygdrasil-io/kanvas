@@ -836,6 +836,70 @@ class GPUBackendRuntimeNativeSmokeTest {
     }
 
     @Test
+    fun `offscreen texture pass is not completed by unrelated readback when backend is available`() {
+        val runtime = GPUBackendRuntimeFactory.createOrNull()
+        assumeTrue(runtime != null, "GPU backend unavailable in current environment")
+
+        runtime!!.use { session ->
+            session.createOffscreenTarget(
+                GPUOffscreenTargetRequest(width = 4, height = 4, colorFormat = "rgba8unorm"),
+            ).use { target ->
+                val textureLabel = target.createOffscreenTexture(
+                    GPUBackendOffscreenTexture(width = 4, height = 4, format = "rgba8unorm"),
+                )
+                target.encodeOffscreenTexture(
+                    textureLabel = textureLabel,
+                    clearColor = GPUClearColor(0.0, 0.0, 0.0, 1.0),
+                ) {
+                    drawFullscreenPass(
+                        wgsl = solidColorFullscreenWgsl(),
+                        colorFormat = "rgba8unorm",
+                        draws = listOf(
+                            GPUBackendRectDraw(
+                                rgbaPremul = floatArrayOf(1f, 0f, 0f, 1f),
+                                scissorX = 0,
+                                scissorY = 0,
+                                scissorWidth = 4,
+                                scissorHeight = 4,
+                            ),
+                        ),
+                    )
+                }
+
+                val pendingDump = session.phase0EvidenceDumpLines.joinToString("\n")
+                assertTrue(
+                    pendingDump.contains(
+                        "gpu-queue.telemetry submitted=1 completed=0 released=0 pending=1 waits=0 unknownCompletions=0",
+                    ),
+                )
+
+                target.readRgba()
+
+                val afterReadbackDump = session.phase0EvidenceDumpLines.joinToString("\n")
+                val textureSubmissionLine = session.phase0EvidenceDumpLines.singleOrNull { line ->
+                    line.contains("gpu-queue.submission") && line.contains("offscreen-texture-pass:")
+                } ?: error("Expected one offscreen texture submission")
+                assertTrue(
+                    afterReadbackDump.contains(
+                        "gpu-queue.telemetry submitted=1 completed=0 released=0 pending=1 waits=1 unknownCompletions=0",
+                    ),
+                )
+                assertTrue(textureSubmissionLine.contains("completed=false"))
+                assertTrue(textureSubmissionLine.contains("released=false"))
+                assertTrue(textureSubmissionLine.contains("completion=pending"))
+            }
+
+            val closedDump = session.phase0EvidenceDumpLines.joinToString("\n")
+            assertTrue(
+                closedDump.contains(
+                    "gpu-queue.telemetry submitted=1 completed=1 released=1 pending=0 waits=1 unknownCompletions=0",
+                ),
+            )
+            assertTrue(closedDump.contains("completion=target-close"))
+        }
+    }
+
+    @Test
     fun `backend runtime falls back when fullscreen uniform slab planner refuses and backend is available`() {
         val runtime = GPUBackendRuntimeFactory.createOrNull()
         assumeTrue(runtime != null, "GPU backend unavailable in current environment")

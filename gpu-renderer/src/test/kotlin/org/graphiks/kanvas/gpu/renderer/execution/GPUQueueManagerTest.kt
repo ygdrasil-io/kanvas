@@ -89,6 +89,24 @@ class GPUQueueManagerTest {
     }
 
     @Test
+    fun `queue manager rejects pending as a completion reason`() {
+        val manager = GPUQueueManager()
+        val submission = manager.submit(
+            label = "offscreen-pass:frame-1",
+            retainedResources = listOf(GPUQueuedResourceRef("readback:frame-1")),
+        )
+
+        assertFailsWith<IllegalArgumentException> {
+            manager.markCompleted(submission.id, GPU_QUEUE_COMPLETION_PENDING)
+        }
+
+        assertEquals(listOf(submission.id), manager.pendingSubmissionIds())
+        val dump = manager.telemetry.dumpLines().joinToString("\n")
+        assertTrue(dump.contains("submitted=1 completed=0 released=0 pending=1 waits=0 unknownCompletions=0"))
+        assertTrue(dump.contains("completion=pending"))
+    }
+
+    @Test
     fun `queue manager pending ids can be filtered by label prefix`() {
         val manager = GPUQueueManager()
         val first = manager.submit(

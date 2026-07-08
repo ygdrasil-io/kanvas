@@ -31,6 +31,9 @@ data class GPUQueueSubmission(
         require(label.isNotBlank()) { "GPUQueueSubmission.label must not be blank" }
         require(label.isQueueDumpSafeToken()) { "GPUQueueSubmission.label must be dump-safe" }
         require(completion.isQueueDumpSafeToken()) { "GPUQueueSubmission.completion must be dump-safe" }
+        require(!completed || completion != GPU_QUEUE_COMPLETION_PENDING) {
+            "completed GPUQueueSubmission must use a real completion reason"
+        }
     }
 }
 
@@ -103,6 +106,9 @@ class GPUQueueManager {
         completion: String,
     ): Boolean {
         require(completion.isQueueDumpSafeToken()) { "completion must be dump-safe" }
+        require(completion != GPU_QUEUE_COMPLETION_PENDING) {
+            "completion must use a real completion reason"
+        }
         val current = submissions[id]
         if (current == null) {
             unknownCompletionCount += 1L

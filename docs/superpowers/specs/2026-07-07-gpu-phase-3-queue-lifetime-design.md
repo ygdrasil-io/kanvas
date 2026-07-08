@@ -188,7 +188,7 @@ Les dumps doivent permettre de repondre a quatre questions :
 Exemple attendu :
 
 ```text
-gpu-queue.telemetry submitted=2 completed=2 released=2 waits=1 unknownCompletions=0
+gpu-queue.telemetry submitted=2 completed=2 released=2 pending=0 waits=1 unknownCompletions=0
 gpu-queue.submission id=1 label=offscreen-pass:... retained=3 completed=true released=true completion=readback-complete
 gpu-queue.submission id=2 label=window-frame:... retained=2 completed=true released=true completion=presented
 ```
