@@ -1363,6 +1363,84 @@ class GPUBackendRuntimeNativeSmokeTest {
     }
 
     @Test
+    fun `backend runtime does not auto record pass batch evidence for unmarked payload fullscreen passes when backend is available`() {
+        val runtime = GPUBackendRuntimeFactory.createOrNull()
+        assumeTrue(runtime != null, "GPU backend unavailable in current environment")
+
+        val uniformBlock = uniformPayloadBlock()
+        val materialized = assertIs<GPUResourceMaterializationDecision.Materialized>(
+            ValidatingPayloadResourceProvider().materializePayloadBindings(
+                request = payloadMaterializationRequest(uniformBlock),
+                context = GPUTargetPreparationContext(
+                    targetId = "root-target",
+                    frameId = "frame-1",
+                    deviceGeneration = 1,
+                    budgetClass = "smoke-test",
+                ),
+            ),
+        )
+
+        runtime!!.use { session ->
+            val before = session.runtimeTelemetry
+
+            session.createOffscreenTarget(
+                GPUOffscreenTargetRequest(
+                    width = 6,
+                    height = 2,
+                    colorFormat = "rgba8unorm",
+                ),
+            ).use { target ->
+                target.encode(
+                    clearColor = GPUClearColor(red = 0.0, green = 0.0, blue = 0.0, alpha = 1.0),
+                ) {
+                    drawFullscreenUniformPayloadPass(
+                        wgsl = solidColorPayloadWgsl(),
+                        colorFormat = "rgba8unorm",
+                        draws = listOf(
+                            GPUBackendUniformPayloadDraw(
+                                uniformBytes = uniformBlock.bytes.map { byte -> byte.toByte() }.toByteArray(),
+                                materialization = materialized,
+                                scissorX = 0,
+                                scissorY = 0,
+                                scissorWidth = 3,
+                                scissorHeight = 2,
+                            ),
+                            GPUBackendUniformPayloadDraw(
+                                uniformBytes = uniformBlock.bytes.map { byte -> byte.toByte() }.toByteArray(),
+                                materialization = materialized,
+                                scissorX = 3,
+                                scissorY = 0,
+                                scissorWidth = 3,
+                                scissorHeight = 2,
+                            ),
+                        ),
+                    )
+                }
+
+                val rgba = target.readRgba()
+                val after = session.runtimeTelemetry
+                val dump = session.runtimeTelemetryDumpLines.joinToString("\n")
+
+                assertContentEquals(
+                    byteArrayOf(0xFF.toByte(), 0, 0, 0xFF.toByte()),
+                    pixelAt(rgba = rgba, width = 6, x = 0, y = 0),
+                )
+                assertContentEquals(
+                    byteArrayOf(0xFF.toByte(), 0, 0, 0xFF.toByte()),
+                    pixelAt(rgba = rgba, width = 6, x = 3, y = 0),
+                )
+                assertEquals(0L, after.passBatchPlans - before.passBatchPlans, dump)
+                assertEquals(0L, after.passBatchesAccepted - before.passBatchesAccepted, dump)
+                assertEquals(0L, after.passBatchPackets - before.passBatchPackets, dump)
+                assertTrue(!dump.contains("passes.batch-plan"), dump)
+                assertTrue(!dump.contains("passes.batch id="), dump)
+                assertTrue(!dump.contains("kind=solid-fill"), dump)
+                assertTrue(!dump.contains("kind=simple-gradient"), dump)
+            }
+        }
+    }
+
+    @Test
     fun `backend runtime falls back safely for unsafe public payload source labels when backend is available`() {
         val runtime = GPUBackendRuntimeFactory.createOrNull()
         assumeTrue(runtime != null, "GPU backend unavailable in current environment")

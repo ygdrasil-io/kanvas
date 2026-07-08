@@ -121,3 +121,29 @@ Result:
 - The explicit-unbatched-baseline smoke still proves solid-fill batching only when callers opt in intentionally.
 - All `GPUPassBatcherTest` tests passed.
 - Gradle exited `BUILD SUCCESSFUL`.
+
+## Fix Review Findings 3
+### RED
+Command:
+`rtk ./gradlew :gpu-renderer:test --tests 'org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeNativeSmokeTest.backend runtime does not auto record pass batch evidence for unmarked payload fullscreen passes when backend is available'`
+
+Result:
+- Backend was available.
+- The new payload-path smoke passed immediately.
+- This confirmed the current `drawFullscreenUniformPayloadPass(...)` default `passBatchKind = null` behavior was already correct:
+  - `passBatchPlans` delta stayed `0`
+  - `passBatchesAccepted` delta stayed `0`
+  - `passBatchPackets` delta stayed `0`
+  - no `passes.batch-plan` dump was emitted
+  - no accepted simple `passes.batch` dump (`kind=solid-fill` / `kind=simple-gradient`) was emitted
+- No production change was required; this was a coverage/evidence-only fix.
+
+### GREEN
+Command:
+`rtk ./gradlew :gpu-renderer:test --tests 'org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeNativeSmokeTest.backend runtime records pass batch plan for fullscreen rect draws when backend is available' --tests 'org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeNativeSmokeTest.backend runtime does not record pass batch plan for unmarked generic fullscreen pass draws when backend is available' --tests 'org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeNativeSmokeTest.backend runtime does not record pass batch plan for unmarked raw uniform fullscreen passes when backend is available' --tests 'org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeNativeSmokeTest.backend runtime records pass batch plan for explicitly marked simple gradient raw uniform fullscreen passes when backend is available' --tests 'org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeNativeSmokeTest.backend runtime does not auto record pass batch evidence for unmarked payload fullscreen passes when backend is available' --tests 'org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeNativeSmokeTest.batched rectangle scene uses fewer submissions than explicit unbatched baseline when backend is available' --tests org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatcherTest`
+
+Result:
+- All six targeted backend/runtime smokes passed.
+- The new unmarked payload smoke stayed green alongside the existing generic fullscreen, raw-uniform, explicit simple-gradient, explicit solid-fill, and explicit-unbatched-baseline coverage.
+- All `GPUPassBatcherTest` tests passed.
+- Gradle exited `BUILD SUCCESSFUL`.
