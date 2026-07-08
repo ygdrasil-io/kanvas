@@ -23,12 +23,15 @@ rtk git diff --check
 - `:gpu-renderer-scenes:test --tests org.graphiks.kanvas.gpu.renderer.scenes.offscreen.M25ExecutorWiringTest`: BLOCKED in `:gpu-renderer-scenes:compileKotlin`.
 - `rtk git status --short`: clean when checked before writing this report.
 - `rtk git diff --check`: clean.
+- Follow-up review check after closeout commit `6ed88f510`: `rtk git status --short`
+  and `rtk git diff --check` both produced no output.
 
 ## Runtime Evidence
 
-Representative dump lines from the executed test bundle. These are accurate to
-the current tests/design, but they are not pasted live stdout because Gradle's
-default test logging only exposed the PASS summaries in this run.
+Representative dump lines derived from the deterministic dump formats and the
+assertions exercised by the executed test bundle. They are not pasted live
+stdout because Gradle's default test logging only exposed the PASS summaries in
+this run.
 
 ```text
 passes.batch-plan stream=fullscreen-uniform-pass pass=pass:fullscreen-uniform-pass batches=1 accepted=1 cuts=0 packets=2 diagnostics=none
