@@ -9,6 +9,11 @@ import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 
+/** Port of Skia's `gm/filterindiabox.cpp`.
+ *  Tests ImageFilter.IndiaBox — renders a checkerboard image with
+ *  transformed crop rects and filter configurations.
+ *  @see https://github.com/google/skia/blob/main/gm/filterindiabox.cpp
+ */
 class FilterIndiaBoxGm : SkiaGm {
     override val name = "filterindiabox"
     override val renderFamily = RenderFamily.IMAGE

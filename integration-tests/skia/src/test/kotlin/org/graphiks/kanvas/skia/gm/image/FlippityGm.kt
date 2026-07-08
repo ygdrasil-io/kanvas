@@ -15,6 +15,11 @@ import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 
+/** Port of Skia's `gm/flippity.cpp`.
+ *  Tests flipped bitmap rendering — creates a radial-gradient bitmap then
+ *  draws it with various flip-matrix transforms.
+ *  @see https://github.com/google/skia/blob/main/gm/flippity.cpp
+ */
 class FlippityGm : SkiaGm {
     override val name = "flippity"
     override val renderFamily = RenderFamily.IMAGE

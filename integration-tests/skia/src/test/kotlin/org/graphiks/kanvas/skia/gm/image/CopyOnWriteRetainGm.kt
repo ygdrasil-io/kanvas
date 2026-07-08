@@ -8,6 +8,11 @@ import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
 
+/** Port of Skia's `gm/surface.cpp` (copy-on-write retain).
+ *  Tests copy-on-write retain behaviour — creates a surface, snapshots it,
+ *  then draws a yellow rect before re-snapshotting.
+ *  @see https://github.com/google/skia/blob/main/gm/surface.cpp
+ */
 class CopyOnWriteRetainGm : SkiaGm {
     override val name = "copy_on_write_retain"
     override val renderFamily = RenderFamily.IMAGE

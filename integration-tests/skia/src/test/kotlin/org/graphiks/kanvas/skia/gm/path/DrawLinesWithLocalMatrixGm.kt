@@ -15,6 +15,11 @@ import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.PointMode
 import org.graphiks.kanvas.types.Rect
 
+/** Port of Skia's `gm/drawlines_with_local_matrix.cpp`.
+ *  Tests drawLines with local matrix — draws lines and points with
+ *  gradient shaders and local matrix transforms.
+ *  @see https://github.com/google/skia/blob/main/gm/drawlines_with_local_matrix.cpp
+ */
 class DrawLinesWithLocalMatrixGm : SkiaGm {
     override val name = "drawlines_with_local_matrix"
     override val renderFamily = RenderFamily.PATH

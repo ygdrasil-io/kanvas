@@ -12,6 +12,11 @@ import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.PointMode
 import kotlin.random.Random
 
+/** Port of Skia's `gm/points.cpp`.
+ *  Tests point-mode rendering — draws random coloured points with
+ *  various stroke cap styles.
+ *  @see https://github.com/google/skia/blob/main/gm/points.cpp
+ */
 class PointsGm : SkiaGm {
     override val name = "points"
     override val renderFamily = RenderFamily.PATH

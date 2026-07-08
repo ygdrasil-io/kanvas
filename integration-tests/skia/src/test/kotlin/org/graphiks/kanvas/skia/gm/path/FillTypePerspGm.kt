@@ -12,6 +12,11 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
 
+/** Port of Skia's `gm/filltypespersp.cpp`.
+ *  Tests fill types with perspective — draws star-shaped paths with
+ *  EvenOdd and Winding fill types under perspective transforms.
+ *  @see https://github.com/google/skia/blob/main/gm/filltypespersp.cpp
+ */
 class FillTypePerspGm : SkiaGm {
     override val name = "filltypespersp"
     override val renderFamily = RenderFamily.PATH

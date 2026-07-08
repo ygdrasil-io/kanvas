@@ -11,8 +11,13 @@ import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.RRect
 import org.graphiks.kanvas.types.Rect
 
+/** Port of Skia's `gm/hugepath.cpp` (huge-AA variant).
+ *  Tests anti-aliased rendering of huge paths — draws large rounded
+ *  rects and paths on a surface.
+ *  @see https://github.com/google/skia/blob/main/gm/hugepath.cpp
+ */
 class PathHugeAaGm : SkiaGm {
-    override val name = "pathhugeaa"
+    override val name = "path_huge_aa"
     override val renderFamily = RenderFamily.IMAGE
     override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0

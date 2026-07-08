@@ -10,6 +10,11 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 
+/** Port of Skia's `gm/nonclosedpaths.cpp`.
+ *  Tests non-closed path rendering — draws open paths with various
+ *  stroke caps, joins, and styles.
+ *  @see https://github.com/google/skia/blob/main/gm/nonclosedpaths.cpp
+ */
 class NonClosedPathsGm : SkiaGm {
     override val name = "nonclosedpaths"
     override val renderFamily = RenderFamily.PATH

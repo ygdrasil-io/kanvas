@@ -15,6 +15,11 @@ import org.graphiks.kanvas.canvas.drawCircle
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
 
+/** Port of Skia's `gm/bicubic.cpp`.
+ *  Creates a small checkerboard image and renders it with a tiled image
+ *  shader drawn inside a circle at centre.
+ *  @see https://github.com/google/skia/blob/main/gm/bicubic.cpp
+ */
 class BicubicGm : SkiaGm {
     override val name = "bicubic"
     override val renderFamily = RenderFamily.IMAGE

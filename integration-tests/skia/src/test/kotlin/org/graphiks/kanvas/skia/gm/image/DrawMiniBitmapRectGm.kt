@@ -16,6 +16,11 @@ import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 import kotlin.random.Random
 
+/** Port of Skia's `gm/drawminibitmaprect.cpp`.
+ *  Tests mini bitmap-rect drawing — creates a gradient image and renders
+ *  it with various local-matrix shader variants.
+ *  @see https://github.com/google/skia/blob/main/gm/drawminibitmaprect.cpp
+ */
 class DrawMiniBitmapRectGm : SkiaGm {
     override val name = "drawminibitmaprect"
     override val renderFamily = RenderFamily.IMAGE

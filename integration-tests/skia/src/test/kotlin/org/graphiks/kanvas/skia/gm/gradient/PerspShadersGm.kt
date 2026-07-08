@@ -21,7 +21,7 @@ import org.graphiks.kanvas.types.Rect
  * Draws image and gradient shaders under perspective transforms.
  * @see https://github.com/google/skia/blob/main/gm/perspshaders.cpp
  */
-class PerspShadersGm(private val doAA: Boolean = true) : SkiaGm {
+open class PerspShadersGm(private val doAA: Boolean = true) : SkiaGm {
     override val name = if (doAA) "persp_shaders_aa" else "persp_shaders_bw"
     override val renderFamily = RenderFamily.GRADIENT
     override val renderCost = RenderCost.BLOCKING
@@ -145,3 +145,5 @@ class PerspShadersGm(private val doAA: Boolean = true) : SkiaGm {
         fun bw(): PerspShadersGm = PerspShadersGm(doAA = false)
     }
 }
+
+class PerspShadersBwGm : PerspShadersGm(false)

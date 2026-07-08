@@ -22,6 +22,11 @@ import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
 
+/** Port of Skia's `gm/convexpolyclip.cpp`.
+ *  Tests convex polygon clipping — renders clipped polygons with paths
+ *  and gradient shaders.
+ *  @see https://github.com/google/skia/blob/main/gm/convexpolyclip.cpp
+ */
 class ConvexPolyClipGm : SkiaGm {
     override val name = "convex_poly_clip"
     override val renderFamily = RenderFamily.CLIP

@@ -18,6 +18,11 @@ import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 
+/** Port of Skia's `gm/imagefilterscropexpand.cpp`.
+ *  Tests image-filter crop/expand — draws paths and shapes with blur
+ *  and offset image filters combined with crop rects.
+ *  @see https://github.com/google/skia/blob/main/gm/imagefilterscropexpand.cpp
+ */
 class ImageFiltersCropExpandGm : SkiaGm {
     override val name = "imagefilterscropexpand"
     override val renderFamily = RenderFamily.IMAGE

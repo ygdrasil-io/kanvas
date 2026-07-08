@@ -13,6 +13,11 @@ import org.graphiks.kanvas.canvas.drawCircle
 import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.types.Rect
 
+/** Port of Skia's `gm/tiledscaledbitmap.cpp`.
+ *  Tests tiled scaled bitmap rendering — creates a gradient image and
+ *  renders it as a scaled tiled shader with linear filter.
+ *  @see https://github.com/google/skia/blob/main/gm/tiledscaledbitmap.cpp
+ */
 class TiledScaledBitmapGm : SkiaGm {
     override val name = "tiledscaledbitmap"
     override val renderFamily = RenderFamily.IMAGE

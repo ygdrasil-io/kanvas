@@ -22,7 +22,7 @@ import org.graphiks.kanvas.types.Rect
  * the INT variant uses rects derived from the original pixel rect.
  * @see https://github.com/google/skia/blob/main/gm/bitmaprect.cpp
  */
-class DrawBitmapRect2Gm(private val variant: Variant) : SkiaGm {
+open class DrawBitmapRect2Gm(private val variant: Variant) : SkiaGm {
     enum class Variant(val suffix: String) {
         FLOAT("s"), INT("i"),
     }
@@ -88,3 +88,6 @@ class DrawBitmapRect2Gm(private val variant: Variant) : SkiaGm {
         return surface.makeImageSnapshot()
     }
 }
+
+class DrawBitmapRect2FloatGm : DrawBitmapRect2Gm(DrawBitmapRect2Gm.Variant.FLOAT)
+class DrawBitmapRect2IntGm : DrawBitmapRect2Gm(DrawBitmapRect2Gm.Variant.INT)

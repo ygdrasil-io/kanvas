@@ -11,6 +11,11 @@ import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
 
+/** Port of Skia's `gm/batchedconvexpaths.cpp`.
+ *  Tests batched convex path rendering — draws many convex polygon
+ *  paths (triangles, pentagons, stars) at various positions.
+ *  @see https://github.com/google/skia/blob/main/gm/batchedconvexpaths.cpp
+ */
 class BatchedConvexPathsGm : SkiaGm {
     override val name = "batchedconvexpaths"
     override val renderFamily = RenderFamily.PATH

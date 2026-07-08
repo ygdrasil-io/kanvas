@@ -15,6 +15,11 @@ import org.graphiks.kanvas.types.PointMode
 import org.graphiks.kanvas.types.Rect
 import kotlin.random.Random
 
+/** Port of Skia's `gm/hittestpath.cpp`.
+ *  Tests hit-testing on paths — draws paths and points with various
+ *  fill types, transforms, and point modes.
+ *  @see https://github.com/google/skia/blob/main/gm/hittestpath.cpp
+ */
 class HitTestPathGm : SkiaGm {
     override val name = "hittestpath"
     override val renderFamily = RenderFamily.PATH

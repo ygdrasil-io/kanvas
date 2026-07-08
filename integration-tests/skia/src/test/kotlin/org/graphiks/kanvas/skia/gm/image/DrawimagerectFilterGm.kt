@@ -11,6 +11,11 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.types.Rect
 
+/** Port of Skia's `gm/spritebitmap.cpp` (draw-image-rect filter variant).
+ *  Draws a checkerboard image at various positions with image shaders to
+ *  test drawImageRect filtering.
+ *  @see https://github.com/google/skia/blob/main/gm/spritebitmap.cpp
+ */
 class DrawimagerectFilterGm : SkiaGm {
     override val name = "drawimagerect_filter"
     override val renderFamily = RenderFamily.IMAGE

@@ -11,6 +11,9 @@ import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Point
 
+/** Tests typeface styles with kerning — draws text blobs with various
+ *  font styles to verify kerning behaviour across typeface variants.
+ */
 class TypefaceStylesKerningGm : SkiaGm {
     override val name = "typefacestyles_kerning"
     override val renderFamily = RenderFamily.TEXT

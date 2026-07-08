@@ -10,6 +10,11 @@ import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 
+/** Port of Skia's `gm/filltypes.cpp`.
+ *  Tests fill types — draws paths with EvenOdd and Winding fill types
+ *  to verify non-zero and inverse fill rules.
+ *  @see https://github.com/google/skia/blob/main/gm/filltypes.cpp
+ */
 class FillTypesGm : SkiaGm {
     override val name = "filltypes"
     override val renderFamily = RenderFamily.PATH

@@ -11,6 +11,11 @@ import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.RRect
 import org.graphiks.kanvas.types.Rect
 
+/** Port of Skia's `gm/blurroundrect.cpp` (large rrects variant).
+ *  Tests blur mask filter on large rounded rectangles — draws filled
+ *  and stroked rounded rects with various blur styles.
+ *  @see https://github.com/google/skia/blob/main/gm/blurroundrect.cpp
+ */
 class BlurLargeRRectsGm : SkiaGm {
     override val name = "blur_large_rrects"
     override val renderFamily = RenderFamily.BLUR

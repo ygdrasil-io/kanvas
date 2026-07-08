@@ -14,6 +14,11 @@ import org.graphiks.kanvas.types.Vertices
 import org.graphiks.kanvas.types.VertexMode
 import kotlin.math.sin
 
+/** Port of Skia's `gm/mesh.cpp` (image variant).
+ *  Renders a mesh with an image shader and per-vertex texture
+ *  coordinates.
+ *  @see https://github.com/google/skia/blob/main/gm/mesh.cpp
+ */
 class MeshWithImageGm : SkiaGm {
     override val name = "mesh_with_image"
     override val renderFamily = RenderFamily.MESH

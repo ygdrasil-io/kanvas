@@ -9,6 +9,11 @@ import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
 
+/** Port of Skia's `gm/thinrects.cpp` (clipped variant).
+ *  Renders a clipped thin rectangle onto a small surface, then expands
+ *  the result via drawImageRect.
+ *  @see https://github.com/google/skia/blob/main/gm/thinrects.cpp
+ */
 class ClippedThinRectGm : SkiaGm {
     override val name = "clipped_thinrect"
     override val renderFamily = RenderFamily.IMAGE

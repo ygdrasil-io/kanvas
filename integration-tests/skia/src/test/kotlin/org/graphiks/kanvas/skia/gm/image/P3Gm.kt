@@ -14,6 +14,11 @@ import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 
+/** Port of Skia's `gm/p3.cpp`.
+ *  Tests P3 color space rendering — draws gradient colours and a
+ *  colour checker to exercise wide-gamut rendering.
+ *  @see https://github.com/google/skia/blob/main/gm/p3.cpp
+ */
 class P3Gm : SkiaGm {
     override val name = "p3"
     override val renderFamily = RenderFamily.IMAGE

@@ -22,6 +22,11 @@ import org.graphiks.math.SK_ColorBLUE
 import org.graphiks.math.SkISize
 import org.graphiks.math.SkColor
 
+/** Port of Skia's `gm/exoticformats.cpp`.
+ *  Tests compressed texture rendering with exotic formats (BC1, ETC1,
+ *  ASTC) — draws compressed images with various pixel formats.
+ *  @see https://github.com/google/skia/blob/main/gm/exoticformats.cpp
+ */
 class ExoticFormatsGm : SkiaGm {
     override val name = "exoticformats"
     override val renderFamily = RenderFamily.IMAGE

@@ -14,6 +14,11 @@ import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
 
+/** Port of Skia's `gm/smallpaths.cpp`.
+ *  Tests small path rendering — draws many small paths (circles, rects,
+ *  arcs, stars) with fills and strokes.
+ *  @see https://github.com/google/skia/blob/main/gm/smallpaths.cpp
+ */
 class SmallPathsGm : SkiaGm {
     override val name = "smallpaths"
     override val renderFamily = RenderFamily.PATH

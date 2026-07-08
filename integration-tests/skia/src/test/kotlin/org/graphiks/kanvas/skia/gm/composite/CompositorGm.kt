@@ -13,6 +13,11 @@ import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 
+/** Port of Skia's `gm/compositor_quads.cpp` (compositor variant).
+ *  Tests compositor quad rendering — draws a grid of coloured filled
+ *  and stroked quads with transforms.
+ *  @see https://github.com/google/skia/blob/main/gm/compositor_quads.cpp
+ */
 class CompositorGm : SkiaGm {
     override val name = "compositor_quads_color"
     override val renderFamily = RenderFamily.COMPOSITE

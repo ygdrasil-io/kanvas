@@ -10,6 +10,11 @@ import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
 
+/** Port of Skia's `gm/resizeimagefilter.cpp`.
+ *  Tests ImageFilter resize — draws checkerboard and gradient shapes
+ *  with resize image filters.
+ *  @see https://github.com/google/skia/blob/main/gm/resizeimagefilter.cpp
+ */
 class ResizeImageFilterGm : SkiaGm {
     override val name = "resizeimagefilter"
     override val renderFamily = RenderFamily.IMAGE

@@ -13,6 +13,11 @@ import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.types.Rect
 
+/** Port of Skia's `gm/badpaint.cpp`.
+ *  Tests rendering with degenerate/invalid paint configurations — draws
+ *  scaled image shaders with extreme transforms.
+ *  @see https://github.com/google/skia/blob/main/gm/badpaint.cpp
+ */
 class BadPaintGm : SkiaGm {
     override val name = "badpaint"
     override val renderFamily = RenderFamily.COMPOSITE

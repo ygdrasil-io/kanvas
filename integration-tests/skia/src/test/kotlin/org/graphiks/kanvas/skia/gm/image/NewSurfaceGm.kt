@@ -8,6 +8,11 @@ import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
 
+/** Port of Skia's `gm/surface.cpp` (new-surface variant).
+ *  Tests Surface creation — creates a surface, draws a yellow/blue rect,
+ *  snapshots the image, and draws it.
+ *  @see https://github.com/google/skia/blob/main/gm/surface.cpp
+ */
 class NewSurfaceGm : SkiaGm {
     override val name = "surfacenew"
     override val renderFamily = RenderFamily.IMAGE

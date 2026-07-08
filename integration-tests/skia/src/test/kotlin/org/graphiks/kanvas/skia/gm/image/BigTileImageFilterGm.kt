@@ -13,6 +13,11 @@ import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
 
+/** Port of Skia's `gm/bigtileimagefilter.cpp`.
+ *  Tests large-tile image filter rendering — draws paths with blur and
+ *  offset image filters on a tiled surface.
+ *  @see https://github.com/google/skia/blob/main/gm/bigtileimagefilter.cpp
+ */
 class BigTileImageFilterGm : SkiaGm {
     override val name = "bigtileimagefilter"
     override val renderFamily = RenderFamily.IMAGE

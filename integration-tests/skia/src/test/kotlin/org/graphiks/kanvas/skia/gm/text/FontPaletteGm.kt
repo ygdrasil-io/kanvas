@@ -12,6 +12,11 @@ import org.graphiks.kanvas.types.r
 import org.graphiks.kanvas.types.g
 import org.graphiks.kanvas.types.b
 
+/** Port of Skia's `gm/palette.cpp` (font palette variant).
+ *  Tests font palette overrides for color fonts — draws emoji text with
+ *  custom palette colours.
+ *  @see https://github.com/google/skia/blob/main/gm/palette.cpp
+ */
 class FontPaletteGm : SkiaGm {
     override val name = "font_palette_default"
     override val renderFamily = RenderFamily.TEXT

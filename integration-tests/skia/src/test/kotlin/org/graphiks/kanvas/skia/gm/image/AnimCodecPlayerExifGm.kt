@@ -10,6 +10,11 @@ import org.skia.codec.SkAnimCodecPlayer
 
 private const val CELL_SIZE = 100
 
+/** Port of Skia's `gm/animated_gif.cpp` (EXIF variant).
+ *  Tests animated codec playback with EXIF orientation — renders frames
+ *  from an animated image codec with EXIF metadata.
+ *  @see https://github.com/google/skia/blob/main/gm/animated_gif.cpp
+ */
 open class AnimCodecPlayerExifGm(
     private val path: String,
 ) : SkiaGm {

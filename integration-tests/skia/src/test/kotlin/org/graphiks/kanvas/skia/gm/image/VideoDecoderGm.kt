@@ -13,7 +13,7 @@ import org.graphiks.kanvas.skia.SkiaGm
  * @see https://github.com/google/skia/blob/main/gm/video_decoder.cpp
  */
 class VideoDecoderGm : SkiaGm {
-    override val name = "video-decoder"
+    override val name = "videodecoder"
     override val renderFamily = RenderFamily.IMAGE
     override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0

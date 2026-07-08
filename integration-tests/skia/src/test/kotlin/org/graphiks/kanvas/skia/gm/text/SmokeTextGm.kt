@@ -9,6 +9,9 @@ import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Color
 
+/** Basic smoke test for text rendering — draws a simple string "Hello"
+ *  at a fixed position using Liberation Sans to verify basic text output.
+ */
 class SmokeTextGm : SkiaGm {
     override val name = "smoke_text"
     override val renderFamily = RenderFamily.TEXT

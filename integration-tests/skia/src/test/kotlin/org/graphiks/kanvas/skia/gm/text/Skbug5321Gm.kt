@@ -11,6 +11,11 @@ import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.kanvas.types.Point
 
+/** Port of Skia's `gm/skbug_5321.cpp`.
+ *  Regression test for skbug.com/5321 — draws text blobs to test glyph
+ *  positioning with custom typeface variations.
+ *  @see https://github.com/google/skia/blob/main/gm/skbug_5321.cpp
+ */
 class Skbug5321Gm : SkiaGm {
     override val name = "skbug_5321"
     override val renderFamily = RenderFamily.TEXT

@@ -7,6 +7,10 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Rect
 
+/** Port of Skia's `gm/grayscalejpg.cpp`.
+ *  Decodes and renders a grayscale JPEG image.
+ *  @see https://github.com/google/skia/blob/main/gm/grayscalejpg.cpp
+ */
 class GrayscaleJpgGm : SkiaGm {
     override val name = "grayscalejpg"
     override val renderFamily = RenderFamily.IMAGE

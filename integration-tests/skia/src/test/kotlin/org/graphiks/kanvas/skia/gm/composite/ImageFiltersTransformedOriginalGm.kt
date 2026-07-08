@@ -14,6 +14,11 @@ import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 
+/** Port of Skia's `gm/imagefilterstransformed.cpp`.
+ *  Tests transformed image filters — renders gradient images with blur,
+ *  displacement, and colour-filter image filters.
+ *  @see https://github.com/google/skia/blob/main/gm/imagefilterstransformed.cpp
+ */
 class ImageFiltersTransformedOriginalGm : SkiaGm {
     override val name = "imagefilterstransformed"
     override val renderFamily = RenderFamily.COMPOSITE

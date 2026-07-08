@@ -13,6 +13,11 @@ import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
 
+/** Port of Skia's `gm/crop_imagefilter.cpp`.
+ *  Tests [ImageFilter] crop rect — renders a checkerboard through
+ *  various crop-image-filter configurations.
+ *  @see https://github.com/google/skia/blob/main/gm/crop_imagefilter.cpp
+ */
 class CropImageFilterGm : SkiaGm {
     override val name = "cropimagefilter"
     override val renderFamily = RenderFamily.IMAGE

@@ -11,6 +11,11 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 
+/** Port of Skia's `gm/bitmapshader.cpp` (huge-bitmap variant).
+ *  Creates a 1x60000 ALPHA_8 image and renders it as a mirrored shader
+ *  in a circle to test large-bitmap-shader handling.
+ *  @see https://github.com/google/skia/blob/main/gm/bitmapshader.cpp
+ */
 class HugeBitmapShaderGm : SkiaGm {
     override val name = "hugebitmapshader"
     override val renderFamily = RenderFamily.IMAGE

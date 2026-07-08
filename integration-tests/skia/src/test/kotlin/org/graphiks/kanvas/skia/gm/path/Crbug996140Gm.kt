@@ -10,6 +10,11 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 
+/** Port of Skia's `gm/crbug_996140.cpp`.
+ *  Regression test for crbug.com/996140 — draws complex overlapping
+ *  paths with stroke styles.
+ *  @see https://github.com/google/skia/blob/main/gm/crbug_996140.cpp
+ */
 class Crbug996140Gm : SkiaGm {
     override val name = "crbug_996140"
     override val renderFamily = RenderFamily.PATH

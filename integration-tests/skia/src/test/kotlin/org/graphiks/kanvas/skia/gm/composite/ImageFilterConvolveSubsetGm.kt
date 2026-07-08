@@ -12,6 +12,11 @@ import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.types.Size
 
+/** Port of Skia's `gm/imagefiltersclipped.cpp` (convolve subset variant).
+ *  Tests convolve image filter with subset rects — renders a checkerboard
+ *  image with various convolution matrix kernels.
+ *  @see https://github.com/google/skia/blob/main/gm/imagefiltersclipped.cpp
+ */
 class ImageFilterConvolveSubsetGm : SkiaGm {
     override val name = "imagefilter_convolve_subset"
     override val renderFamily = RenderFamily.COMPOSITE

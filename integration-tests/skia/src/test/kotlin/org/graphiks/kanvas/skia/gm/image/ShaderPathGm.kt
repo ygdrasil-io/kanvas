@@ -18,6 +18,11 @@ import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.geometry.Path
 
+/** Port of Skia's `gm/shaderpath.cpp`.
+ *  Tests shader-filled paths — creates bitmap and gradient shaders and
+ *  renders them via filled paths and stroked paths.
+ *  @see https://github.com/google/skia/blob/main/gm/shaderpath.cpp
+ */
 class ShaderPathGm : SkiaGm {
     override val name = "shaderpath"
     override val renderFamily = RenderFamily.IMAGE

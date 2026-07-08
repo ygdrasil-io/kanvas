@@ -8,6 +8,11 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.Typefaces
 
+/** Port of Skia's `gm/typeface.cpp` (typeface styles variant).
+ *  Draws text strings with various typeface styles (normal, bold, italic)
+ *  to test typeface style handling.
+ *  @see https://github.com/google/skia/blob/main/gm/typeface.cpp
+ */
 class TypefaceStylesGm : SkiaGm {
     override val name = "typefacestyles"
     override val renderFamily = RenderFamily.TEXT

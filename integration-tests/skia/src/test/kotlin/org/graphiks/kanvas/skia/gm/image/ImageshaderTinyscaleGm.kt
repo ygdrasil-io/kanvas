@@ -11,6 +11,11 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.types.Rect
 
+/** Port of Skia's `gm/image_shader.cpp` (tiny-scale variant).
+ *  Applies an image shader with a 0.01x scale matrix to a decoded JPEG
+ *  to exercise very-small-scale image-shader rendering.
+ *  @see https://github.com/google/skia/blob/main/gm/image_shader.cpp
+ */
 class ImageshaderTinyscaleGm : SkiaGm {
     override val name = "imageshader_tinyscale"
     override val renderFamily = RenderFamily.IMAGE

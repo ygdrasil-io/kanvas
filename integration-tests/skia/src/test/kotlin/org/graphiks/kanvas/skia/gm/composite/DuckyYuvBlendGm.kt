@@ -10,6 +10,11 @@ import org.graphiks.kanvas.skia.SkiaGm
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
 
+/** Port of Skia's `gm/ducky_yuv_blend.cpp`.
+ *  Tests YUV blend rendering — draws coloured bars with a test
+ *  pattern to verify YUV blend-mode correctness.
+ *  @see https://github.com/google/skia/blob/main/gm/ducky_yuv_blend.cpp
+ */
 class DuckyYuvBlendGm : SkiaGm {
     override val name = "ducky_yuv_blend"
     override val renderFamily = RenderFamily.COMPOSITE

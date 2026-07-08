@@ -12,6 +12,11 @@ import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
 
+/** Port of Skia's `gm/nearesthalfpixelimage.cpp`.
+ *  Tests nearest-neighbour half-pixel image rendering with sub-pixel
+ *  positioning and shader variations.
+ *  @see https://github.com/google/skia/blob/main/gm/nearesthalfpixelimage.cpp
+ */
 class NearestHalfPixelImageGm : SkiaGm {
     override val name = "nearest_half_pixel_image"
     override val renderFamily = RenderFamily.IMAGE

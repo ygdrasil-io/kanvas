@@ -10,6 +10,9 @@ import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
 
+/** Tests image source creation — creates a red surface, snapshots it,
+ *  then draws the snapshot as an image at full canvas size.
+ */
 class ImageSource2Gm : SkiaGm {
     override val name = "imagesource2"
     override val renderFamily = RenderFamily.IMAGE

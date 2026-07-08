@@ -14,6 +14,11 @@ import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.PointMode
 import kotlin.random.Random
 
+/** Port of Skia's `gm/points.cpp` (mask-filter variant).
+ *  Tests point rendering with mask filters — draws random coloured
+ *  points with blur mask filter and various stroke caps.
+ *  @see https://github.com/google/skia/blob/main/gm/points.cpp
+ */
 class PointsMaskFilterGm : SkiaGm {
     override val name = "points_maskfilter"
     override val renderFamily = RenderFamily.PATH

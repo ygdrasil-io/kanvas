@@ -12,6 +12,11 @@ import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.types.Rect
 
+/** Port of Skia's `gm/bug6783.cpp`.
+ *  Regression test for crbug.com/6783 — renders a surface snapshot with a
+ *  skewed/repeated image shader.
+ *  @see https://github.com/google/skia/blob/main/gm/bug6783.cpp
+ */
 class Bug6783Gm : SkiaGm {
     override val name = "bug6783"
     override val renderFamily = RenderFamily.IMAGE

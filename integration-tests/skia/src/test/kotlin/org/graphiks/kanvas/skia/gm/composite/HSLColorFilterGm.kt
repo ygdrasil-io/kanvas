@@ -16,6 +16,11 @@ import org.graphiks.kanvas.types.Rect
 import kotlin.math.abs
 import kotlin.math.max
 
+/** Port of Skia's `gm/colorfilters.cpp` (HSL variant).
+ *  Tests HSL colour filter — draws gradient images with HSL-based
+ *  colour filters applied.
+ *  @see https://github.com/google/skia/blob/main/gm/colorfilters.cpp
+ */
 class HSLColorFilterGm : SkiaGm {
     override val name = "hslcolorfilter"
     override val renderFamily = RenderFamily.COMPOSITE

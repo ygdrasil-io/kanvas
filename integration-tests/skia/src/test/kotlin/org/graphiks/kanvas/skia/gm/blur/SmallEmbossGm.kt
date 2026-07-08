@@ -11,6 +11,11 @@ import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
 
+/** Port of Skia's `gm/emboss.cpp` (small emboss variant).
+ *  Tests small emboss mask filter — renders a surface snapshot with
+ *  emboss blur applied.
+ *  @see https://github.com/google/skia/blob/main/gm/emboss.cpp
+ */
 class SmallEmbossGm : SkiaGm {
     override val name = "smallemboss"
     override val renderFamily = RenderFamily.BLUR
