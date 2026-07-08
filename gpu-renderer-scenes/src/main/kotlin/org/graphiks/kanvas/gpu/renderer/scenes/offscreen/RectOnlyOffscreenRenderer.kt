@@ -547,6 +547,7 @@ class RectOnlyOffscreenRenderer {
                 drawFullscreenRawUniformPass(
                     wgsl = wgsl,
                     colorFormat = OFFSCREEN_COLOR_FORMAT,
+                    passBatchKind = GPUBackendSimplePassBatchKind.SimpleGradient,
                     draws = fills.map { fill ->
                         val bytes = when (family) {
                             "linear-gradient-rect" -> UniformPacker.linearGradientBytes(
