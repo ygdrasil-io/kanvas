@@ -116,6 +116,7 @@ class GPUBackendRuntimeNativeSmokeTest {
 
     @Test
     fun `window present cleanup completes and releases submitted frame on success`() {
+        // Full native window coverage requires platform surface handles; this helper keeps the lifecycle contract covered in CI.
         val manager = GPUQueueManager()
         val submission = manager.submit(
             label = "window-frame:frame-1",
@@ -135,6 +136,7 @@ class GPUBackendRuntimeNativeSmokeTest {
 
     @Test
     fun `window present cleanup marks failure and rethrows after release`() {
+        // Full native window coverage requires platform surface handles; this helper keeps the lifecycle contract covered in CI.
         val manager = GPUQueueManager()
         val submission = manager.submit(
             label = "window-frame:frame-2",
