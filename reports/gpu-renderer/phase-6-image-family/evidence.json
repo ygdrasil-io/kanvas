@@ -2,7 +2,7 @@
     "schemaVersion": "phase6-image-family-v1",
     "generatedBy": ":integration-tests:skia-evidence:generateGpuPhase6ImageFamilyEvidence",
     "dashboardSource": "integration-tests/skia/build/reports/skia-gm-dashboard/data/gms.json",
-    "sourceGeneratedAt": "2026-07-08T23:11:28.123949",
+    "sourceGeneratedAt": "2026-07-08T23:20:43.030248",
     "summary": {
         "totalImageRows": 121,
         "classifications": {
@@ -41,7 +41,10 @@
             "no-animation-support",
             "no-mipmap-support",
             "no-yuv-support",
-            "no-image-filter-support"
+            "no-image-filter-support",
+            "no-perspective-support",
+            "no-picture-shader-support",
+            "no-broad-color-management-support"
         ]
     },
     "nonClaims": [
@@ -51,6 +54,7 @@
     ],
     "rows": [
         {
+            "rowId": "encode",
             "name": "encode",
             "family": "IMAGE",
             "subfamily": "animation-gated",
@@ -66,6 +70,7 @@
             "nonClaim": "animation-gated remains outside Phase 6 IMAGE migration scope."
         },
         {
+            "rowId": "all_bitmap_configs",
             "name": "all_bitmap_configs",
             "family": "IMAGE",
             "subfamily": "texture-cache-candidate",
@@ -81,6 +86,7 @@
             "nonClaim": "Rendered row remains instrumented until route/cache/batching evidence missing from dashboard is attached."
         },
         {
+            "rowId": "all_variants_8888",
             "name": "all_variants_8888",
             "family": "IMAGE",
             "subfamily": "texture-cache-candidate",
@@ -96,6 +102,7 @@
             "nonClaim": "Rendered row remains instrumented until route/cache/batching evidence missing from dashboard is attached."
         },
         {
+            "rowId": "alpha_image_alpha_tint",
             "name": "alpha_image_alpha_tint",
             "family": "IMAGE",
             "subfamily": "texture-cache-candidate",
@@ -111,6 +118,7 @@
             "nonClaim": "Rendered row remains instrumented until route/cache/batching evidence missing from dashboard is attached."
         },
         {
+            "rowId": "animatedGif",
             "name": "animatedGif",
             "family": "IMAGE",
             "subfamily": "animation-gated",
@@ -126,6 +134,7 @@
             "nonClaim": "animation-gated remains outside Phase 6 IMAGE migration scope."
         },
         {
+            "rowId": "anisomips",
             "name": "anisomips",
             "family": "IMAGE",
             "subfamily": "mipmap-gated",
@@ -141,6 +150,7 @@
             "nonClaim": "mipmap-gated remains outside Phase 6 IMAGE migration scope."
         },
         {
+            "rowId": "anisotropic_image_scale",
             "name": "anisotropic_image_scale",
             "family": "IMAGE",
             "subfamily": "texture-cache-candidate",
@@ -156,6 +166,7 @@
             "nonClaim": "No score is not counted as fail or support; reference/render/size/comparison evidence is incomplete."
         },
         {
+            "rowId": "anisotropic_image_scale_aniso",
             "name": "anisotropic_image_scale_aniso",
             "family": "IMAGE",
             "subfamily": "texture-cache-candidate",
@@ -171,6 +182,7 @@
             "nonClaim": "Rendered row remains instrumented until route/cache/batching evidence missing from dashboard is attached."
         },
         {
+            "rowId": "anisotropic_image_scale_linear",
             "name": "anisotropic_image_scale_linear",
             "family": "IMAGE",
             "subfamily": "strict-nearest-linear",
@@ -186,6 +198,7 @@
             "nonClaim": "Rendered row remains instrumented until route/cache/batching evidence missing from dashboard is attached."
         },
         {
+            "rowId": "anisotropic_image_scale_mip",
             "name": "anisotropic_image_scale_mip",
             "family": "IMAGE",
             "subfamily": "mipmap-gated",
@@ -201,6 +214,7 @@
             "nonClaim": "mipmap-gated remains outside Phase 6 IMAGE migration scope."
         },
         {
+            "rowId": "async_rescale_and_read_alpha_type",
             "name": "async_rescale_and_read_alpha_type",
             "family": "IMAGE",
             "subfamily": "texture-cache-candidate",
@@ -216,6 +230,7 @@
             "nonClaim": "Rendered row remains instrumented until route/cache/batching evidence missing from dashboard is attached."
         },
         {
+            "rowId": "async_rescale_and_read_rose",
             "name": "async_rescale_and_read_rose",
             "family": "IMAGE",
             "subfamily": "texture-cache-candidate",
@@ -231,6 +246,7 @@
             "nonClaim": "Rendered row remains instrumented until route/cache/batching evidence missing from dashboard is attached."
         },
         {
+            "rowId": "async_rescale_and_read_no_bleed",
             "name": "async_rescale_and_read_no_bleed",
             "family": "IMAGE",
             "subfamily": "texture-cache-candidate",
@@ -246,6 +262,7 @@
             "nonClaim": "No score is not counted as fail or support; reference/render/size/comparison evidence is incomplete."
         },
         {
+            "rowId": "attributes",
             "name": "attributes",
             "family": "IMAGE",
             "subfamily": "texture-cache-candidate",
@@ -261,6 +278,7 @@
             "nonClaim": "No score is not counted as fail or support; reference/render/size/comparison evidence is incomplete."
         },
         {
+            "rowId": "async_yuv_no_scale",
             "name": "async_yuv_no_scale",
             "family": "IMAGE",
             "subfamily": "yuv-gated",
@@ -276,6 +294,7 @@
             "nonClaim": "yuv-gated remains outside Phase 6 IMAGE migration scope."
         },
         {
+            "rowId": "bc1_transparency",
             "name": "bc1_transparency",
             "family": "IMAGE",
             "subfamily": "texture-cache-candidate",
@@ -291,6 +310,7 @@
             "nonClaim": "Rendered row remains instrumented until route/cache/batching evidence missing from dashboard is attached."
         },
         {
+            "rowId": "bicubic",
             "name": "bicubic",
             "family": "IMAGE",
             "subfamily": "texture-cache-candidate",
@@ -306,6 +326,7 @@
             "nonClaim": "Rendered row remains instrumented until route/cache/batching evidence missing from dashboard is attached."
         },
         {
+            "rowId": "bigmatrix",
             "name": "bigmatrix",
             "family": "IMAGE",
             "subfamily": "texture-cache-candidate",
@@ -321,6 +342,7 @@
             "nonClaim": "Rendered row remains instrumented until route/cache/batching evidence missing from dashboard is attached."
         },
         {
+            "rowId": "bitmapcopy",
             "name": "bitmapcopy",
             "family": "IMAGE",
             "subfamily": "texture-cache-candidate",
@@ -336,6 +358,7 @@
             "nonClaim": "No score is not counted as fail or support; reference/render/size/comparison evidence is incomplete."
         },
         {
+            "rowId": "bitmapfilters",
             "name": "bitmapfilters",
             "family": "IMAGE",
             "subfamily": "image-filter-gated",
@@ -351,6 +374,7 @@
             "nonClaim": "image-filter-gated remains outside Phase 6 IMAGE migration scope."
         },
         {
+            "rowId": "bitmap-image-srgb-legacy",
             "name": "bitmap-image-srgb-legacy",
             "family": "IMAGE",
             "subfamily": "texture-cache-candidate",
@@ -366,6 +390,7 @@
             "nonClaim": "No score is not counted as fail or support; reference/render/size/comparison evidence is incomplete."
         },
         {
+            "rowId": "bitmap_premul",
             "name": "bitmap_premul",
             "family": "IMAGE",
             "subfamily": "texture-cache-candidate",
@@ -381,6 +406,7 @@
             "nonClaim": "Rendered row remains instrumented until route/cache/batching evidence missing from dashboard is attached."
         },
         {
+            "rowId": "bitmapshaders",
             "name": "bitmapshaders",
             "family": "IMAGE",
             "subfamily": "bitmap-shader-affine",
@@ -396,6 +422,7 @@
             "nonClaim": "Rendered row remains instrumented until route/cache/batching evidence missing from dashboard is attached."
         },
         {
+            "rowId": "bitmap_subset_shader",
             "name": "bitmap_subset_shader",
             "family": "IMAGE",
             "subfamily": "bitmap-shader-affine",
@@ -411,6 +438,7 @@
             "nonClaim": "Rendered row remains instrumented until route/cache/batching evidence missing from dashboard is attached."
         },
         {
+            "rowId": "bleed_downscale",
             "name": "bleed_downscale",
             "family": "IMAGE",
             "subfamily": "texture-cache-candidate",
@@ -426,6 +454,7 @@
             "nonClaim": "Rendered row remains instrumented until route/cache/batching evidence missing from dashboard is attached."
         },
         {
+            "rowId": "bmp_filter_quality_repeat",
             "name": "bmp_filter_quality_repeat",
             "family": "IMAGE",
             "subfamily": "image-filter-gated",
@@ -441,6 +470,7 @@
             "nonClaim": "image-filter-gated remains outside Phase 6 IMAGE migration scope."
         },
         {
+            "rowId": "bug6783",
             "name": "bug6783",
             "family": "IMAGE",
             "subfamily": "texture-cache-candidate",
@@ -456,6 +486,7 @@
             "nonClaim": "Rendered row remains instrumented until route/cache/batching evidence missing from dashboard is attached."
         },
         {
+            "rowId": "jpg-color-cube",
             "name": "jpg-color-cube",
             "family": "IMAGE",
             "subfamily": "texture-cache-candidate",
@@ -471,6 +502,7 @@
             "nonClaim": "Rendered row remains instrumented until route/cache/batching evidence missing from dashboard is attached."
         },
         {
+            "rowId": "colorwheel_alphatypes",
             "name": "colorwheel_alphatypes",
             "family": "IMAGE",
             "subfamily": "texture-cache-candidate",
@@ -486,6 +518,7 @@
             "nonClaim": "Rendered row remains instrumented until route/cache/batching evidence missing from dashboard is attached."
         },
         {
+            "rowId": "colorwheel",
             "name": "colorwheel",
             "family": "IMAGE",
             "subfamily": "texture-cache-candidate",
@@ -501,6 +534,7 @@
             "nonClaim": "Rendered row remains instrumented until route/cache/batching evidence missing from dashboard is attached."
         },
         {
+            "rowId": "colorspace2",
             "name": "colorspace2",
             "family": "IMAGE",
             "subfamily": "color-management-gated",
@@ -516,6 +550,7 @@
             "nonClaim": "color-management-gated remains outside Phase 6 IMAGE migration scope."
         },
         {
+            "rowId": "colorspace",
             "name": "colorspace",
             "family": "IMAGE",
             "subfamily": "color-management-gated",
@@ -531,6 +566,7 @@
             "nonClaim": "color-management-gated remains outside Phase 6 IMAGE migration scope."
         },
         {
+            "rowId": "compositor_quads_image",
             "name": "compositor_quads_image",
             "family": "IMAGE",
             "subfamily": "texture-cache-candidate",
@@ -546,6 +582,7 @@
             "nonClaim": "Rendered row remains instrumented until route/cache/batching evidence missing from dashboard is attached."
         },
         {
+            "rowId": "compressed_textures",
             "name": "compressed_textures",
             "family": "IMAGE",
             "subfamily": "texture-cache-candidate",
@@ -561,6 +598,7 @@
             "nonClaim": "Rendered row remains instrumented until route/cache/batching evidence missing from dashboard is attached."
         },
         {
+            "rowId": "coordclampshader",
             "name": "coordclampshader",
             "family": "IMAGE",
             "subfamily": "bitmap-shader-affine",
@@ -576,6 +614,7 @@
             "nonClaim": "Rendered row remains instrumented until route/cache/batching evidence missing from dashboard is attached."
         },
         {
+            "rowId": "copyTo4444",
             "name": "copyTo4444",
             "family": "IMAGE",
             "subfamily": "texture-cache-candidate",
@@ -591,6 +630,7 @@
             "nonClaim": "No score is not counted as fail or support; reference/render/size/comparison evidence is incomplete."
         },
         {
+            "rowId": "crbug_224618",
             "name": "crbug_224618",
             "family": "IMAGE",
             "subfamily": "texture-cache-candidate",
@@ -606,6 +646,7 @@
             "nonClaim": "Rendered row remains instrumented until route/cache/batching evidence missing from dashboard is attached."
         },
         {
+            "rowId": "crbug_404394639",
             "name": "crbug_404394639",
             "family": "IMAGE",
             "subfamily": "texture-cache-candidate",
@@ -621,6 +662,7 @@
             "nonClaim": "No score is not counted as fail or support; reference/render/size/comparison evidence is incomplete."
         },
         {
+            "rowId": "3x3bitmaprect",
             "name": "3x3bitmaprect",
             "family": "IMAGE",
             "subfamily": "simple-image-rect",
@@ -636,6 +678,7 @@
             "nonClaim": "Rendered row remains instrumented until route/cache/batching evidence missing from dashboard is attached."
         },
         {
+            "rowId": "draw_bitmap_rect_skbug4734",
             "name": "draw_bitmap_rect_skbug4734",
             "family": "IMAGE",
             "subfamily": "texture-cache-candidate",
@@ -651,6 +694,7 @@
             "nonClaim": "Rendered row remains instrumented until route/cache/batching evidence missing from dashboard is attached."
         },
         {
+            "rowId": "drawminibitmaprect",
             "name": "drawminibitmaprect",
             "family": "IMAGE",
             "subfamily": "simple-image-rect",
@@ -666,6 +710,7 @@
             "nonClaim": "Rendered row remains instrumented until route/cache/batching evidence missing from dashboard is attached."
         },
         {
+            "rowId": "drawimage_sampling",
             "name": "drawimage_sampling",
             "family": "IMAGE",
             "subfamily": "strict-nearest-linear",
@@ -681,6 +726,7 @@
             "nonClaim": "No score is not counted as fail or support; reference/render/size/comparison evidence is incomplete."
         },
         {
+            "rowId": "drawimagerect_filter",
             "name": "drawimagerect_filter",
             "family": "IMAGE",
             "subfamily": "image-filter-gated",
@@ -696,6 +742,7 @@
             "nonClaim": "image-filter-gated remains outside Phase 6 IMAGE migration scope."
         },
         {
+            "rowId": "encode-alpha-jpeg",
             "name": "encode-alpha-jpeg",
             "family": "IMAGE",
             "subfamily": "animation-gated",
@@ -711,6 +758,7 @@
             "nonClaim": "animation-gated remains outside Phase 6 IMAGE migration scope."
         },
         {
+            "rowId": "encode-color-types-webp-lossless",
             "name": "encode-color-types-webp-lossless",
             "family": "IMAGE",
             "subfamily": "animation-gated",
@@ -726,6 +774,7 @@
             "nonClaim": "animation-gated remains outside Phase 6 IMAGE migration scope."
         },
         {
+            "rowId": "encode-alpha-jpeg-opts",
             "name": "encode-alpha-jpeg-opts",
             "family": "IMAGE",
             "subfamily": "animation-gated",
@@ -741,6 +790,7 @@
             "nonClaim": "No score is not counted as fail or support; reference/render/size/comparison evidence is incomplete."
         },
         {
+            "rowId": "encode-platform",
             "name": "encode-platform",
             "family": "IMAGE",
             "subfamily": "animation-gated",
@@ -756,6 +806,7 @@
             "nonClaim": "animation-gated remains outside Phase 6 IMAGE migration scope."
         },
         {
+            "rowId": "encode-srgb-png",
             "name": "encode-srgb-png",
             "family": "IMAGE",
             "subfamily": "animation-gated",
@@ -771,6 +822,7 @@
             "nonClaim": "animation-gated remains outside Phase 6 IMAGE migration scope."
         },
         {
+            "rowId": "exoticformats",
             "name": "exoticformats",
             "family": "IMAGE",
             "subfamily": "texture-cache-candidate",
@@ -786,6 +838,7 @@
             "nonClaim": "Rendered row remains instrumented until route/cache/batching evidence missing from dashboard is attached."
         },
         {
+            "rowId": "filterbug",
             "name": "filterbug",
             "family": "IMAGE",
             "subfamily": "image-filter-gated",
@@ -801,6 +854,7 @@
             "nonClaim": "image-filter-gated remains outside Phase 6 IMAGE migration scope."
         },
         {
+            "rowId": "filterindiabox",
             "name": "filterindiabox",
             "family": "IMAGE",
             "subfamily": "image-filter-gated",
@@ -816,6 +870,7 @@
             "nonClaim": "image-filter-gated remains outside Phase 6 IMAGE migration scope."
         },
         {
+            "rowId": "flight_animated_image",
             "name": "flight_animated_image",
             "family": "IMAGE",
             "subfamily": "animation-gated",
@@ -831,6 +886,7 @@
             "nonClaim": "No score is not counted as fail or support; reference/render/size/comparison evidence is incomplete."
         },
         {
+            "rowId": "flippity",
             "name": "flippity",
             "family": "IMAGE",
             "subfamily": "texture-cache-candidate",
@@ -846,6 +902,7 @@
             "nonClaim": "Rendered row remains instrumented until route/cache/batching evidence missing from dashboard is attached."
         },
         {
+            "rowId": "format4444",
             "name": "format4444",
             "family": "IMAGE",
             "subfamily": "texture-cache-candidate",
@@ -861,6 +918,7 @@
             "nonClaim": "No score is not counted as fail or support; reference/render/size/comparison evidence is incomplete."
         },
         {
+            "rowId": "grayscalejpg",
             "name": "grayscalejpg",
             "family": "IMAGE",
             "subfamily": "texture-cache-candidate",
@@ -876,6 +934,7 @@
             "nonClaim": "Rendered row remains instrumented until route/cache/batching evidence missing from dashboard is attached."
         },
         {
+            "rowId": "hugebitmapshader",
             "name": "hugebitmapshader",
             "family": "IMAGE",
             "subfamily": "bitmap-shader-affine",
@@ -891,6 +950,7 @@
             "nonClaim": "Rendered row remains instrumented until route/cache/batching evidence missing from dashboard is attached."
         },
         {
+            "rowId": "image-cacherator-from-picture",
             "name": "image-cacherator-from-picture",
             "family": "IMAGE",
             "subfamily": "texture-cache-candidate",
@@ -906,6 +966,7 @@
             "nonClaim": "Rendered row remains instrumented until route/cache/batching evidence missing from dashboard is attached."
         },
         {
+            "rowId": "imagefilter_transformed_image",
             "name": "imagefilter_transformed_image",
             "family": "IMAGE",
             "subfamily": "image-filter-gated",
@@ -921,6 +982,7 @@
             "nonClaim": "image-filter-gated remains outside Phase 6 IMAGE migration scope."
         },
         {
+            "rowId": "imagefilterscropexpand",
             "name": "imagefilterscropexpand",
             "family": "IMAGE",
             "subfamily": "image-filter-gated",
@@ -936,6 +998,7 @@
             "nonClaim": "image-filter-gated remains outside Phase 6 IMAGE migration scope."
         },
         {
+            "rowId": "imagefiltersgraph",
             "name": "imagefiltersgraph",
             "family": "IMAGE",
             "subfamily": "image-filter-gated",
@@ -951,6 +1014,7 @@
             "nonClaim": "image-filter-gated remains outside Phase 6 IMAGE migration scope."
         },
         {
+            "rowId": "image-surface",
             "name": "image-surface",
             "family": "IMAGE",
             "subfamily": "readpixels-or-snapshot-gated",
@@ -966,6 +1030,7 @@
             "nonClaim": "readpixels-or-snapshot-gated remains outside Phase 6 IMAGE migration scope."
         },
         {
+            "rowId": "imagemagnifier_bounds",
             "name": "imagemagnifier_bounds",
             "family": "IMAGE",
             "subfamily": "image-filter-gated",
@@ -981,6 +1046,7 @@
             "nonClaim": "image-filter-gated remains outside Phase 6 IMAGE migration scope."
         },
         {
+            "rowId": "imagemagnifier_cropped",
             "name": "imagemagnifier_cropped",
             "family": "IMAGE",
             "subfamily": "image-filter-gated",
@@ -996,6 +1062,7 @@
             "nonClaim": "image-filter-gated remains outside Phase 6 IMAGE migration scope."
         },
         {
+            "rowId": "imagemagnifier",
             "name": "imagemagnifier",
             "family": "IMAGE",
             "subfamily": "image-filter-gated",
@@ -1011,6 +1078,7 @@
             "nonClaim": "image-filter-gated remains outside Phase 6 IMAGE migration scope."
         },
         {
+            "rowId": "imagemakewithfilter",
             "name": "imagemakewithfilter",
             "family": "IMAGE",
             "subfamily": "image-filter-gated",
@@ -1026,6 +1094,7 @@
             "nonClaim": "image-filter-gated remains outside Phase 6 IMAGE migration scope."
         },
         {
+            "rowId": "imagemasksubset",
             "name": "imagemasksubset",
             "family": "IMAGE",
             "subfamily": "texture-cache-candidate",
@@ -1041,6 +1110,7 @@
             "nonClaim": "Rendered row remains instrumented until route/cache/batching evidence missing from dashboard is attached."
         },
         {
+            "rowId": "image_out_of_gamut",
             "name": "image_out_of_gamut",
             "family": "IMAGE",
             "subfamily": "texture-cache-candidate",
@@ -1056,6 +1126,7 @@
             "nonClaim": "Rendered row remains instrumented until route/cache/batching evidence missing from dashboard is attached."
         },
         {
+            "rowId": "image-picture",
             "name": "image-picture",
             "family": "IMAGE",
             "subfamily": "texture-cache-candidate",
@@ -1071,6 +1142,7 @@
             "nonClaim": "Rendered row remains instrumented until route/cache/batching evidence missing from dashboard is attached."
         },
         {
+            "rowId": "imageresizetiled",
             "name": "imageresizetiled",
             "family": "IMAGE",
             "subfamily": "sampler-policy-candidate",
@@ -1086,6 +1158,7 @@
             "nonClaim": "Rendered row remains instrumented until route/cache/batching evidence missing from dashboard is attached."
         },
         {
+            "rowId": "image-shader",
             "name": "image-shader",
             "family": "IMAGE",
             "subfamily": "bitmap-shader-affine",
@@ -1101,6 +1174,7 @@
             "nonClaim": "Rendered row remains instrumented until route/cache/batching evidence missing from dashboard is attached."
         },
         {
+            "rowId": "imagesource",
             "name": "imagesource",
             "family": "IMAGE",
             "subfamily": "texture-cache-candidate",
@@ -1116,6 +1190,7 @@
             "nonClaim": "Rendered row remains instrumented until route/cache/batching evidence missing from dashboard is attached."
         },
         {
+            "rowId": "image_subset",
             "name": "image_subset",
             "family": "IMAGE",
             "subfamily": "texture-cache-candidate",
@@ -1131,6 +1206,7 @@
             "nonClaim": "Rendered row remains instrumented until route/cache/batching evidence missing from dashboard is attached."
         },
         {
+            "rowId": "imageshader_tinyscale",
             "name": "imageshader_tinyscale",
             "family": "IMAGE",
             "subfamily": "bitmap-shader-affine",
@@ -1146,6 +1222,7 @@
             "nonClaim": "Rendered row remains instrumented until route/cache/batching evidence missing from dashboard is attached."
         },
         {
+            "rowId": "jpg-color-cube#2",
             "name": "jpg-color-cube",
             "family": "IMAGE",
             "subfamily": "texture-cache-candidate",
@@ -1161,6 +1238,7 @@
             "nonClaim": "Rendered row remains instrumented until route/cache/batching evidence missing from dashboard is attached."
         },
         {
+            "rowId": "localmatriximageshader_filtering",
             "name": "localmatriximageshader_filtering",
             "family": "IMAGE",
             "subfamily": "image-filter-gated",
@@ -1176,6 +1254,7 @@
             "nonClaim": "image-filter-gated remains outside Phase 6 IMAGE migration scope."
         },
         {
+            "rowId": "localmatriximageshader",
             "name": "localmatriximageshader",
             "family": "IMAGE",
             "subfamily": "local-matrix-affine",
@@ -1191,6 +1270,7 @@
             "nonClaim": "Rendered row remains instrumented until route/cache/batching evidence missing from dashboard is attached."
         },
         {
+            "rowId": "makecolorspace",
             "name": "makecolorspace",
             "family": "IMAGE",
             "subfamily": "color-management-gated",
@@ -1206,6 +1286,7 @@
             "nonClaim": "No score is not counted as fail or support; reference/render/size/comparison evidence is incomplete."
         },
         {
+            "rowId": "makecolortypeandspace",
             "name": "makecolortypeandspace",
             "family": "IMAGE",
             "subfamily": "texture-cache-candidate",
@@ -1221,6 +1302,7 @@
             "nonClaim": "No score is not counted as fail or support; reference/render/size/comparison evidence is incomplete."
         },
         {
+            "rowId": "makeRasterImage",
             "name": "makeRasterImage",
             "family": "IMAGE",
             "subfamily": "texture-cache-candidate",
@@ -1236,6 +1318,7 @@
             "nonClaim": "Rendered row remains instrumented until route/cache/batching evidence missing from dashboard is attached."
         },
         {
+            "rowId": "mirror_tile",
             "name": "mirror_tile",
             "family": "IMAGE",
             "subfamily": "sampler-policy-candidate",
@@ -1251,6 +1334,7 @@
             "nonClaim": "Rendered row remains instrumented until route/cache/batching evidence missing from dashboard is attached."
         },
         {
+            "rowId": "nearest_half_pixel_image",
             "name": "nearest_half_pixel_image",
             "family": "IMAGE",
             "subfamily": "strict-nearest-linear",
@@ -1266,6 +1350,7 @@
             "nonClaim": "Rendered row remains instrumented until route/cache/batching evidence missing from dashboard is attached."
         },
         {
+            "rowId": "ninepatch-stretch",
             "name": "ninepatch-stretch",
             "family": "IMAGE",
             "subfamily": "texture-cache-candidate",
@@ -1281,6 +1366,7 @@
             "nonClaim": "No score is not counted as fail or support; reference/render/size/comparison evidence is incomplete."
         },
         {
+            "rowId": "not_native32_bitmap_config",
             "name": "not_native32_bitmap_config",
             "family": "IMAGE",
             "subfamily": "texture-cache-candidate",
@@ -1296,6 +1382,7 @@
             "nonClaim": "Rendered row remains instrumented until route/cache/batching evidence missing from dashboard is attached."
         },
         {
+            "rowId": "p3",
             "name": "p3",
             "family": "IMAGE",
             "subfamily": "color-management-gated",
@@ -1311,6 +1398,7 @@
             "nonClaim": "color-management-gated remains outside Phase 6 IMAGE migration scope."
         },
         {
+            "rowId": "persp_images",
             "name": "persp_images",
             "family": "IMAGE",
             "subfamily": "perspective-gated",
@@ -1326,6 +1414,7 @@
             "nonClaim": "No score is not counted as fail or support; reference/render/size/comparison evidence is incomplete."
         },
         {
+            "rowId": "pictureimagegenerator",
             "name": "pictureimagegenerator",
             "family": "IMAGE",
             "subfamily": "texture-cache-candidate",
@@ -1341,6 +1430,7 @@
             "nonClaim": "No score is not counted as fail or support; reference/render/size/comparison evidence is incomplete."
         },
         {
+            "rowId": "pictureimagefilter",
             "name": "pictureimagefilter",
             "family": "IMAGE",
             "subfamily": "image-filter-gated",
@@ -1356,6 +1446,7 @@
             "nonClaim": "image-filter-gated remains outside Phase 6 IMAGE migration scope."
         },
         {
+            "rowId": "pictureimagegenerator#2",
             "name": "pictureimagegenerator",
             "family": "IMAGE",
             "subfamily": "texture-cache-candidate",
@@ -1371,6 +1462,7 @@
             "nonClaim": "No score is not counted as fail or support; reference/render/size/comparison evidence is incomplete."
         },
         {
+            "rowId": "pictureshader_alpha",
             "name": "pictureshader_alpha",
             "family": "IMAGE",
             "subfamily": "bitmap-shader-affine",
@@ -1386,6 +1478,7 @@
             "nonClaim": "Rendered row remains instrumented until route/cache/batching evidence missing from dashboard is attached."
         },
         {
+            "rowId": "pictureshadercache",
             "name": "pictureshadercache",
             "family": "IMAGE",
             "subfamily": "bitmap-shader-affine",
@@ -1401,6 +1494,7 @@
             "nonClaim": "Rendered row remains instrumented until route/cache/batching evidence missing from dashboard is attached."
         },
         {
+            "rowId": "pictureshader",
             "name": "pictureshader",
             "family": "IMAGE",
             "subfamily": "bitmap-shader-affine",
@@ -1416,6 +1510,7 @@
             "nonClaim": "Rendered row remains instrumented until route/cache/batching evidence missing from dashboard is attached."
         },
         {
+            "rowId": "pictureshader_localwrapper",
             "name": "pictureshader_localwrapper",
             "family": "IMAGE",
             "subfamily": "bitmap-shader-affine",
@@ -1431,6 +1526,7 @@
             "nonClaim": "Rendered row remains instrumented until route/cache/batching evidence missing from dashboard is attached."
         },
         {
+            "rowId": "pictureshader_persp",
             "name": "pictureshader_persp",
             "family": "IMAGE",
             "subfamily": "perspective-gated",
@@ -1446,6 +1542,7 @@
             "nonClaim": "perspective-gated remains outside Phase 6 IMAGE migration scope."
         },
         {
+            "rowId": "pictureshadertile",
             "name": "pictureshadertile",
             "family": "IMAGE",
             "subfamily": "bitmap-shader-affine",
@@ -1461,6 +1558,7 @@
             "nonClaim": "Rendered row remains instrumented until route/cache/batching evidence missing from dashboard is attached."
         },
         {
+            "rowId": "poster_circle",
             "name": "poster_circle",
             "family": "IMAGE",
             "subfamily": "texture-cache-candidate",
@@ -1476,6 +1574,7 @@
             "nonClaim": "Rendered row remains instrumented until route/cache/batching evidence missing from dashboard is attached."
         },
         {
+            "rowId": "readpixelscodec",
             "name": "readpixelscodec",
             "family": "IMAGE",
             "subfamily": "animation-gated",
@@ -1491,6 +1590,7 @@
             "nonClaim": "No score is not counted as fail or support; reference/render/size/comparison evidence is incomplete."
         },
         {
+            "rowId": "readpixelspicture",
             "name": "readpixelspicture",
             "family": "IMAGE",
             "subfamily": "readpixels-or-snapshot-gated",
@@ -1506,6 +1606,7 @@
             "nonClaim": "readpixels-or-snapshot-gated remains outside Phase 6 IMAGE migration scope."
         },
         {
+            "rowId": "reinterpretcolorspace",
             "name": "reinterpretcolorspace",
             "family": "IMAGE",
             "subfamily": "color-management-gated",
@@ -1521,6 +1622,7 @@
             "nonClaim": "No score is not counted as fail or support; reference/render/size/comparison evidence is incomplete."
         },
         {
+            "rowId": "repeated_bitmap",
             "name": "repeated_bitmap",
             "family": "IMAGE",
             "subfamily": "texture-cache-candidate",
@@ -1536,6 +1638,7 @@
             "nonClaim": "No score is not counted as fail or support; reference/render/size/comparison evidence is incomplete."
         },
         {
+            "rowId": "repeated_bitmap_jpg",
             "name": "repeated_bitmap_jpg",
             "family": "IMAGE",
             "subfamily": "texture-cache-candidate",
@@ -1551,6 +1654,7 @@
             "nonClaim": "No score is not counted as fail or support; reference/render/size/comparison evidence is incomplete."
         },
         {
+            "rowId": "scaled_tilemodes",
             "name": "scaled_tilemodes",
             "family": "IMAGE",
             "subfamily": "sampler-policy-candidate",
@@ -1566,6 +1670,7 @@
             "nonClaim": "Rendered row remains instrumented until route/cache/batching evidence missing from dashboard is attached."
         },
         {
+            "rowId": "scaled_tilemodes_npot",
             "name": "scaled_tilemodes_npot",
             "family": "IMAGE",
             "subfamily": "sampler-policy-candidate",
@@ -1581,6 +1686,7 @@
             "nonClaim": "Rendered row remains instrumented until route/cache/batching evidence missing from dashboard is attached."
         },
         {
+            "rowId": "scalepixels_unpremul",
             "name": "scalepixels_unpremul",
             "family": "IMAGE",
             "subfamily": "texture-cache-candidate",
@@ -1596,6 +1702,7 @@
             "nonClaim": "No score is not counted as fail or support; reference/render/size/comparison evidence is incomplete."
         },
         {
+            "rowId": "shaderpath",
             "name": "shaderpath",
             "family": "IMAGE",
             "subfamily": "bitmap-shader-affine",
@@ -1611,6 +1718,7 @@
             "nonClaim": "Rendered row remains instrumented until route/cache/batching evidence missing from dashboard is attached."
         },
         {
+            "rowId": "showmiplevels_explicit",
             "name": "showmiplevels_explicit",
             "family": "IMAGE",
             "subfamily": "mipmap-gated",
@@ -1626,6 +1734,7 @@
             "nonClaim": "No score is not counted as fail or support; reference/render/size/comparison evidence is incomplete."
         },
         {
+            "rowId": "skbug_8664",
             "name": "skbug_8664",
             "family": "IMAGE",
             "subfamily": "texture-cache-candidate",
@@ -1641,6 +1750,7 @@
             "nonClaim": "Rendered row remains instrumented until route/cache/batching evidence missing from dashboard is attached."
         },
         {
+            "rowId": "skbug_9819",
             "name": "skbug_9819",
             "family": "IMAGE",
             "subfamily": "texture-cache-candidate",
@@ -1656,6 +1766,7 @@
             "nonClaim": "Rendered row remains instrumented until route/cache/batching evidence missing from dashboard is attached."
         },
         {
+            "rowId": "srcrectconstraint",
             "name": "srcrectconstraint",
             "family": "IMAGE",
             "subfamily": "texture-cache-candidate",
@@ -1671,6 +1782,7 @@
             "nonClaim": "No score is not counted as fail or support; reference/render/size/comparison evidence is incomplete."
         },
         {
+            "rowId": "stoplight_animated_image",
             "name": "stoplight_animated_image",
             "family": "IMAGE",
             "subfamily": "animation-gated",
@@ -1686,6 +1798,7 @@
             "nonClaim": "animation-gated remains outside Phase 6 IMAGE migration scope."
         },
         {
+            "rowId": "surface_underdraw",
             "name": "surface_underdraw",
             "family": "IMAGE",
             "subfamily": "readpixels-or-snapshot-gated",
@@ -1701,6 +1814,7 @@
             "nonClaim": "readpixels-or-snapshot-gated remains outside Phase 6 IMAGE migration scope."
         },
         {
+            "rowId": "textureimage_and_shader",
             "name": "textureimage_and_shader",
             "family": "IMAGE",
             "subfamily": "bitmap-shader-affine",
@@ -1716,6 +1830,7 @@
             "nonClaim": "No score is not counted as fail or support; reference/render/size/comparison evidence is incomplete."
         },
         {
+            "rowId": "tiled_picture_shader",
             "name": "tiled_picture_shader",
             "family": "IMAGE",
             "subfamily": "bitmap-shader-affine",
@@ -1731,6 +1846,7 @@
             "nonClaim": "Rendered row remains instrumented until route/cache/batching evidence missing from dashboard is attached."
         },
         {
+            "rowId": "tiledscaledbitmap",
             "name": "tiledscaledbitmap",
             "family": "IMAGE",
             "subfamily": "sampler-policy-candidate",
@@ -1746,6 +1862,7 @@
             "nonClaim": "Rendered row remains instrumented until route/cache/batching evidence missing from dashboard is attached."
         },
         {
+            "rowId": "tilemode_decal",
             "name": "tilemode_decal",
             "family": "IMAGE",
             "subfamily": "sampler-policy-candidate",
@@ -1761,6 +1878,7 @@
             "nonClaim": "Rendered row remains instrumented until route/cache/batching evidence missing from dashboard is attached."
         },
         {
+            "rowId": "tilemodes_alpha",
             "name": "tilemodes_alpha",
             "family": "IMAGE",
             "subfamily": "sampler-policy-candidate",
@@ -1776,6 +1894,7 @@
             "nonClaim": "Rendered row remains instrumented until route/cache/batching evidence missing from dashboard is attached."
         },
         {
+            "rowId": "tilemodes",
             "name": "tilemodes",
             "family": "IMAGE",
             "subfamily": "sampler-policy-candidate",
@@ -1791,6 +1910,7 @@
             "nonClaim": "Rendered row remains instrumented until route/cache/batching evidence missing from dashboard is attached."
         },
         {
+            "rowId": "tilemode_bitmap",
             "name": "tilemode_bitmap",
             "family": "IMAGE",
             "subfamily": "sampler-policy-candidate",
@@ -1806,6 +1926,7 @@
             "nonClaim": "Rendered row remains instrumented until route/cache/batching evidence missing from dashboard is attached."
         },
         {
+            "rowId": "tilemode_gradient",
             "name": "tilemode_gradient",
             "family": "IMAGE",
             "subfamily": "sampler-policy-candidate",
@@ -1821,6 +1942,7 @@
             "nonClaim": "Rendered row remains instrumented until route/cache/batching evidence missing from dashboard is attached."
         },
         {
+            "rowId": "tinybitmap",
             "name": "tinybitmap",
             "family": "IMAGE",
             "subfamily": "texture-cache-candidate",
@@ -1836,6 +1958,7 @@
             "nonClaim": "Rendered row remains instrumented until route/cache/batching evidence missing from dashboard is attached."
         },
         {
+            "rowId": "unpremul",
             "name": "unpremul",
             "family": "IMAGE",
             "subfamily": "texture-cache-candidate",
@@ -1851,6 +1974,7 @@
             "nonClaim": "Rendered row remains instrumented until route/cache/batching evidence missing from dashboard is attached."
         },
         {
+            "rowId": "verylargebitmap",
             "name": "verylargebitmap",
             "family": "IMAGE",
             "subfamily": "texture-cache-candidate",

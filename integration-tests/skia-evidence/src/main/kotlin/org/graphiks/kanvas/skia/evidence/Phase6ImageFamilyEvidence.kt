@@ -62,6 +62,7 @@ data class Phase6ImageSummary(
 )
 
 data class Phase6ImageRowEvidence(
+    val rowId: String,
     val name: String,
     val family: String,
     val subfamily: String,
@@ -88,7 +89,10 @@ object Phase6ImageFamilyClassifier {
         UnsupportedRule(setOf("readpixels", "snap", "surface"), "readpixels-or-snapshot-gated", "unsupported.destination_read.strategy_unaccepted"),
     )
 
-    fun classify(row: GmDashboardRow): Phase6ImageRowEvidence {
+    fun classify(
+        row: GmDashboardRow,
+        rowId: String = row.name,
+    ): Phase6ImageRowEvidence {
         require(row.family == "IMAGE") { "Expected IMAGE row, got ${row.family}" }
         val subfamily = imageSubfamily(row)
         val reason = expectedUnsupportedReason(row)
@@ -126,6 +130,7 @@ object Phase6ImageFamilyClassifier {
         }
 
         return Phase6ImageRowEvidence(
+            rowId = rowId,
             name = row.name,
             family = "IMAGE",
             subfamily = subfamily,
@@ -146,9 +151,11 @@ object Phase6ImageFamilyClassifier {
         dashboard: GmDashboard,
         resourceEvidence: ResourceEvidence? = null,
     ): Phase6ImageFamilyEvidence {
-        val rows = dashboard.rows
+        val imageRows = dashboard.rows
             .filter { row -> row.family == "IMAGE" }
-            .map(::classify)
+        val rows = imageRows
+            .withStableRowIds()
+            .map { (rowId, row) -> classify(row, rowId) }
         val classifications = rows.groupingBy { row -> row.classification }.eachCount().toSortedMap()
         val subfamilies = rows.groupingBy { row -> row.subfamily }.eachCount().toSortedMap()
         return Phase6ImageFamilyEvidence(
@@ -172,6 +179,16 @@ object Phase6ImageFamilyClassifier {
             ),
             rows = rows,
         )
+    }
+
+    private fun List<GmDashboardRow>.withStableRowIds(): List<Pair<String, GmDashboardRow>> {
+        val seenCounts = linkedMapOf<String, Int>()
+        return map { row ->
+            val count = seenCounts.getOrDefault(row.name, 0) + 1
+            seenCounts[row.name] = count
+            val rowId = if (count == 1) row.name else "${row.name}#$count"
+            rowId to row
+        }
     }
 
     private fun imageSubfamily(row: GmDashboardRow): String {
@@ -308,6 +325,7 @@ private fun ResourceEvidence.toJsonObject(): JsonObject =
 
 private fun Phase6ImageRowEvidence.toJsonObject(): JsonObject =
     buildJsonObject {
+        put("rowId", rowId)
         put("name", name)
         put("family", family)
         put("subfamily", subfamily)
@@ -338,10 +356,11 @@ private fun JsonObjectBuilder.putNullableDouble(key: String, value: Double?) {
 
 fun Phase6ImageFamilyEvidence.toCsv(): String =
     buildString {
-        appendLine("name,subfamily,classification,similarity,minSimilarity,fallbackReason,noScoreCause")
+        appendLine("rowId,name,subfamily,classification,similarity,minSimilarity,fallbackReason,noScoreCause")
         rows.forEach { row ->
             appendLine(
                 listOf(
+                    row.rowId,
                     row.name,
                     row.subfamily,
                     row.classification,
@@ -378,11 +397,11 @@ fun Phase6ImageFamilyEvidence.toMarkdown(): String =
         appendLine()
         appendLine("## Rows")
         appendLine()
-        appendLine("| Row | Subfamily | Classification | Similarity | Fallback |")
-        appendLine("|---|---|---|---:|---|")
+        appendLine("| Row ID | Row | Subfamily | Classification | Similarity | Fallback |")
+        appendLine("|---|---|---|---|---:|---|")
         rows.forEach { row ->
             val similarity = row.similarity?.let { "%.2f".format(java.util.Locale.US, it) } ?: "n/a"
-            appendLine("| `${row.name}` | `${row.subfamily}` | `${row.classification}` | $similarity | `${row.fallbackReason}` |")
+            appendLine("| `${row.rowId}` | `${row.name}` | `${row.subfamily}` | `${row.classification}` | $similarity | `${row.fallbackReason}` |")
         }
     }
 

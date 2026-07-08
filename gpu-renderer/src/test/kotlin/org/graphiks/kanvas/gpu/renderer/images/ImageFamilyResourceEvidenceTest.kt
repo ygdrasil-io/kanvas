@@ -17,6 +17,13 @@ class ImageFamilyResourceEvidenceTest {
         assertContains(lines, "subject=sampled-texture.phase6-checker")
         assertContains(evidence.nonClaims, "no-broad-image-support")
         assertContains(evidence.nonClaims, "no-codec-support")
+        assertContains(evidence.nonClaims, "no-animation-support")
+        assertContains(evidence.nonClaims, "no-mipmap-support")
+        assertContains(evidence.nonClaims, "no-yuv-support")
+        assertContains(evidence.nonClaims, "no-image-filter-support")
+        assertContains(evidence.nonClaims, "no-perspective-support")
+        assertContains(evidence.nonClaims, "no-picture-shader-support")
+        assertContains(evidence.nonClaims, "no-broad-color-management-support")
         assertFalse(lines.contains("handle:") || lines.contains("0x") || lines.contains("@"))
     }
 }

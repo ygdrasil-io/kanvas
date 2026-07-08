@@ -40,6 +40,9 @@ fun buildRepeatedImageTextureSamplerEvidence(
             "no-mipmap-support",
             "no-yuv-support",
             "no-image-filter-support",
+            "no-perspective-support",
+            "no-picture-shader-support",
+            "no-broad-color-management-support",
         ),
     )
 }

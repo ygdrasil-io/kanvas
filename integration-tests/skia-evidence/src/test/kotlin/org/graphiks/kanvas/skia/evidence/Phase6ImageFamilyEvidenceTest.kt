@@ -69,6 +69,27 @@ class Phase6ImageFamilyEvidenceTest {
     }
 
     @Test
+    fun `duplicate image rows receive stable row ids and surface them in csv and markdown`() {
+        val evidence = Phase6ImageFamilyClassifier.buildEvidence(
+            GmDashboard(
+                generatedAt = "2026-07-08T21:00:00",
+                rows = listOf(
+                    row("duplicate"),
+                    row("aaclip", family = "CLIP"),
+                    row("duplicate", similarity = 40.0, isPassing = false),
+                ),
+            ),
+        )
+
+        assertEquals(listOf("duplicate", "duplicate#2"), evidence.rows.map { it.rowId })
+        assertEquals(listOf("duplicate", "duplicate"), evidence.rows.map { it.name })
+        assertContains(evidence.toCsv(), "duplicate,duplicate,texture-cache-candidate,instrumented-existing")
+        assertContains(evidence.toCsv(), "duplicate#2,duplicate,texture-cache-candidate,unexpected-fail")
+        assertContains(evidence.toMarkdown(), "| `duplicate` | `duplicate` | `texture-cache-candidate` | `instrumented-existing` |")
+        assertContains(evidence.toMarkdown(), "| `duplicate#2` | `duplicate` | `texture-cache-candidate` | `unexpected-fail` |")
+    }
+
+    @Test
     fun `writer creates json markdown and csv outputs`() {
         val evidence = Phase6ImageFamilyClassifier.buildEvidence(
             GmDashboard(
@@ -88,8 +109,9 @@ class Phase6ImageFamilyEvidenceTest {
         assertEquals(true, java.nio.file.Files.isRegularFile(markdownPath))
         assertEquals(true, java.nio.file.Files.isRegularFile(csvPath))
         assertContains(java.nio.file.Files.readString(evidencePath), "\"schemaVersion\": \"phase6-image-family-v1\"")
+        assertContains(java.nio.file.Files.readString(evidencePath), "\"rowId\": \"DrawBitmapRect3\"")
         assertContains(java.nio.file.Files.readString(markdownPath), "No broad IMAGE support is claimed")
-        assertContains(java.nio.file.Files.readString(csvPath), "DrawBitmapRect3,simple-image-rect,instrumented-existing")
+        assertContains(java.nio.file.Files.readString(csvPath), "DrawBitmapRect3,DrawBitmapRect3,simple-image-rect,instrumented-existing")
     }
 
     @Test
