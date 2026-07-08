@@ -44,6 +44,14 @@ import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.text.TextBridge
 import kotlin.math.abs
 
+internal fun productIntermediatePlannerScopeDiagnostics(): List<String> =
+    listOf(
+        "gpu.product.phase5 phase5PlannerActivation=false " +
+            "reason=product-display-list-route-not-yet-planner-backed " +
+            "route=kanvas:scene-src-snap advancedBlend=local-procedural " +
+            "scenePlannerActivation=out-of-scope",
+    )
+
 internal fun renderViaGpu(
     buffer: DisplayListBuffer,
     width: Int,
@@ -69,9 +77,15 @@ internal fun renderViaGpu(
         )
         target.use { t ->
             val texFormat = config.gpuColorFormat.gpuLabel
-            val sceneLabel = t.createOffscreenTexture(GPUBackendOffscreenTexture(width, height, texFormat))
-            val srcLabel = t.createOffscreenTexture(GPUBackendOffscreenTexture(width, height, texFormat))
-            val snapLabel = t.createOffscreenTexture(GPUBackendOffscreenTexture(width, height, texFormat))
+            val sceneLabel = t.createOffscreenTexture(
+                GPUBackendOffscreenTexture(label = "kanvas:scene", width = width, height = height, format = texFormat),
+            )
+            val srcLabel = t.createOffscreenTexture(
+                GPUBackendOffscreenTexture(label = "kanvas:src", width = width, height = height, format = texFormat),
+            )
+            val snapLabel = t.createOffscreenTexture(
+                GPUBackendOffscreenTexture(label = "kanvas:snap", width = width, height = height, format = texFormat),
+            )
 
             var sceneHasContent = false
             val clearTransparent = GPUClearColor(0.0, 0.0, 0.0, 0.0)
@@ -89,6 +103,13 @@ internal fun renderViaGpu(
             }
 
             fun renderAdvancedBlend(cmd: NormalizedDrawCommand.FillRect) {
+                productIntermediatePlannerScopeDiagnostics().forEach { line ->
+                    diagnostics.warn(
+                        code = "phase5:product-destination-read:not-planner-backed",
+                        operation = "drawRect",
+                        reason = line,
+                    )
+                }
                 if (sceneHasContent) {
                     // 1a. Snapshot existing scene -> snap
                     t.encodeOffscreenTexture(snapLabel, null) {

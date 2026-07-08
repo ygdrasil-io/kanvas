@@ -146,6 +146,28 @@ private const val VERTEX_COLOR_STRIDE_BYTES: Int = 32
 private const val TEXT_ATLAS_VERTEX_STRIDE_BYTES: Int = 16
 private val sessionOrdinalCounter = AtomicLong(0L)
 private val windowRuntimeOrdinalCounter = AtomicLong(0L)
+private val TARGET_SNAPSHOT_WGSL: String = """
+struct Uniforms {
+    color: vec4f,
+    texRect: vec4f,
+}
+@group(0) @binding(0) var<uniform> uniforms: Uniforms;
+@group(1) @binding(1) var snapshotTexture: texture_2d<f32>;
+@group(1) @binding(2) var snapshotSampler: sampler;
+
+@vertex
+fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
+    let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
+    let y = f32(idx & 2u) * 2.0 - 1.0;
+    return vec4f(x, y, 0.0, 1.0);
+}
+
+@fragment
+fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
+    let uv = (pos.xy - uniforms.texRect.xy) / uniforms.texRect.zw;
+    return textureSample(snapshotTexture, snapshotSampler, uv) * uniforms.color;
+}
+""".trimIndent()
 
 internal object FullscreenUniformSlabTestingHooks {
     val sourceLabelOverride: ThreadLocal<String?> = ThreadLocal()
@@ -209,6 +231,21 @@ private fun fullscreenPayloadSlabSlotLabel(drawIndex: Int): String =
     "${fullscreenPayloadPacketId(drawIndex)}:${fullscreenPayloadSlotId(drawIndex)}:${fullscreenResourceSlotId(drawIndex)}"
 
 private fun fullscreenPayloadTargetId(targetId: String): String = "payload-target-${sha256Hex(targetId)}"
+
+private fun targetSnapshotUniformBytes(width: Int, height: Int): ByteArray {
+    require(width > 0) { "snapshot width must be positive" }
+    require(height > 0) { "snapshot height must be positive" }
+    return ByteBuffer.allocate(32).order(ByteOrder.nativeOrder()).apply {
+        putFloat(1f)
+        putFloat(1f)
+        putFloat(1f)
+        putFloat(1f)
+        putFloat(0f)
+        putFloat(0f)
+        putFloat(width.toFloat())
+        putFloat(height.toFloat())
+    }.array()
+}
 
 internal fun alignCopyBytesPerRow(unpaddedBytesPerRow: Int): Int {
     require(unpaddedBytesPerRow > 0) { "unpaddedBytesPerRow must be positive" }
@@ -530,6 +567,11 @@ private class WgpuBackendRuntimeTelemetryRecorder {
     private var commandBuffers = 0L
     private var buffersCreated = 0L
     private var texturesCreated = 0L
+    private var intermediateTexturesCreated = 0L
+    private var destinationCopies = 0L
+    private var destinationReadbackSnapshots = 0L
+    private var msaaTargets = 0L
+    private var msaaResolves = 0L
     private var bindGroupsCreated = 0L
     private var samplersCreated = 0L
     private var queueWrites = 0L
@@ -580,6 +622,36 @@ private class WgpuBackendRuntimeTelemetryRecorder {
     @Synchronized
     fun recordTextureCreated() {
         texturesCreated += 1L
+    }
+
+    /** Records one successfully-created intermediate texture. */
+    @Synchronized
+    fun recordIntermediateTextureCreated() {
+        intermediateTexturesCreated += 1L
+    }
+
+    /** Records one destination copy consumed by a blend pass. */
+    @Synchronized
+    fun recordDestinationCopy() {
+        destinationCopies += 1L
+    }
+
+    /** Records one destination readback snapshot used by a blend pass. */
+    @Synchronized
+    fun recordDestinationReadbackSnapshot() {
+        destinationReadbackSnapshots += 1L
+    }
+
+    /** Records one multisample target encode accepted by the backend. */
+    @Synchronized
+    fun recordMsaaTarget() {
+        msaaTargets += 1L
+    }
+
+    /** Records one multisample resolve accepted by the backend. */
+    @Synchronized
+    fun recordMsaaResolve() {
+        msaaResolves += 1L
     }
 
     /** Records one successfully-created GPU bind group. */
@@ -652,6 +724,11 @@ private class WgpuBackendRuntimeTelemetryRecorder {
             commandBuffers = commandBuffers,
             buffersCreated = buffersCreated,
             texturesCreated = texturesCreated,
+            intermediateTexturesCreated = intermediateTexturesCreated,
+            destinationCopies = destinationCopies,
+            destinationReadbackSnapshots = destinationReadbackSnapshots,
+            msaaTargets = msaaTargets,
+            msaaResolves = msaaResolves,
             bindGroupsCreated = bindGroupsCreated,
             samplersCreated = samplersCreated,
             queueWrites = queueWrites,
@@ -937,7 +1014,7 @@ private class WgpuOffscreenTarget(
     override fun createOffscreenTexture(texture: GPUBackendOffscreenTexture): String {
         val safeW = texture.width.coerceAtMost(MAX_TEXTURE_DIMENSION)
         val safeH = texture.height.coerceAtMost(MAX_TEXTURE_DIMENSION)
-        val label = "offscreenTex:${texture.width}x${texture.height}:${texture.format}"
+        val label = "offscreenTex:${texture.label}:${texture.width}x${texture.height}:${texture.format}"
         if (label in offscreenTextures) return label
         val tex = createTrackedTexture(
             TextureDescriptor(
@@ -948,7 +1025,35 @@ private class WgpuOffscreenTarget(
             ),
         )
         offscreenTextures[label] = tex
+        telemetryRecorder.recordIntermediateTextureCreated()
         return label
+    }
+
+    override fun snapshotTargetToOffscreenTexture(textureLabel: String) {
+        val snapshot = readRgba()
+        encodeOffscreenTexture(
+            textureLabel = textureLabel,
+            clearColor = GPUClearColor(0.0, 0.0, 0.0, 0.0),
+        ) {
+            drawFullscreenTextureUniformPass(
+                wgsl = TARGET_SNAPSHOT_WGSL,
+                colorFormat = request.colorFormat,
+                textureRgba = snapshot,
+                textureWidth = request.width,
+                textureHeight = request.height,
+                textureFormat = "rgba8unorm",
+                draws = listOf(
+                    GPUBackendRawUniformDraw(
+                        uniformBytes = targetSnapshotUniformBytes(request.width, request.height),
+                        scissorX = 0,
+                        scissorY = 0,
+                        scissorWidth = request.width,
+                        scissorHeight = request.height,
+                    ),
+                ),
+            )
+        }
+        telemetryRecorder.recordDestinationReadbackSnapshot()
     }
 
     override fun encodeOffscreenTexture(
@@ -1751,7 +1856,7 @@ private class WgpuRenderRecorder(
     override fun createOffscreenTexture(texture: GPUBackendOffscreenTexture): String {
         val safeW = texture.width.coerceAtMost(MAX_TEXTURE_DIMENSION)
         val safeH = texture.height.coerceAtMost(MAX_TEXTURE_DIMENSION)
-        val label = "offscreenTex:${texture.width}x${texture.height}:${texture.format}"
+        val label = "offscreenTex:${texture.label}:${texture.width}x${texture.height}:${texture.format}"
         if (label in offscreenTextureStore) return label
         val tex = resourceScope.track(
             createTrackedTexture(
@@ -1764,6 +1869,7 @@ private class WgpuRenderRecorder(
             ),
         ) { it.close() }
         offscreenTextureStore[label] = tex
+        telemetryRecorder.recordIntermediateTextureCreated()
         return label
     }
 

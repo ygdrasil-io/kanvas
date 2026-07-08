@@ -32,7 +32,9 @@ data class GPUMultisampleTargetDescriptor(
     val resolvePlan: GPUMultisampleResolvePlan,
 ) {
     init {
-        require(sampleCount > 0) { "GPUMultisampleTargetDescriptor.sampleCount must be positive" }
+        require(sampleCount in setOf(1, 4, 8)) {
+            "GPUMultisampleTargetDescriptor.sampleCount must be 1, 4, or 8"
+        }
     }
 }
 
@@ -40,6 +42,7 @@ data class GPUMsaaAdapterCapability(
     val adapterLabel: String,
     val maxSampleCount: Int,
     val supportsAlphaToCoverage: Boolean,
+    val supportsNativeResolve: Boolean = false,
 ) {
     init {
         require(adapterLabel.isNotBlank()) { "GPUMsaaAdapterCapability.adapterLabel must not be blank" }
@@ -66,9 +69,12 @@ data class GPUMsaaAccepted(
     val psnrEvidence: GPUMsaaPsnrEvidence? = null,
 ) {
     init {
-        require(sampleCount > 1) { "MSAA sampleCount must be > 1" }
+        require(sampleCount in setOf(4, 8)) { "MSAA sampleCount must be 4 or 8" }
         require(adapter.maxSampleCount >= sampleCount) {
             "Adapter maxSampleCount ${adapter.maxSampleCount} < requested $sampleCount"
+        }
+        require(adapter.supportsNativeResolve) {
+            "Adapter ${adapter.adapterLabel} does not expose native MSAA resolve support"
         }
     }
 }
@@ -140,8 +146,10 @@ fun computeMsaaPsnr(reference: FloatArray, resolved: FloatArray, sampleCount: In
 object GPUMsaa {
     object Reason {
         const val UNSUPPORTED_MSAA_WEBGPU_MISSING_ADAPTER = "unsupported.msaa.webgpu_missing_adapter"
+        const val UNSUPPORTED_SAMPLE_COUNT = "unsupported.msaa.sample_count"
         const val ADAPTER_CAPABILITY_INSUFFICIENT = "unsupported.msaa.adapter_capability"
         const val ALPHA_TO_COVERAGE_UNSUPPORTED = "unsupported.msaa.alpha_to_coverage"
+        const val NATIVE_RESOLVE_UNAVAILABLE = "unsupported.msaa.native_resolve_unavailable"
         const val MULTISAMPLE_RESOLVE_FORMAT = "unsupported.target.multisample_resolve_format"
     }
 
@@ -180,6 +188,29 @@ object GPUMsaa {
         referencePixels: FloatArray = floatArrayOf(),
         resolvedPixels: FloatArray = floatArrayOf(),
     ): GPUMsaaRoute {
+        if (!request.requestedSampleCount.isSupportedMsaaSampleCount()) {
+            return GPUMsaaRoute.Refused(
+                diagnostic = RefuseDiagnostic(
+                    code = Reason.UNSUPPORTED_SAMPLE_COUNT,
+                    message = "MSAA sampleCount ${request.requestedSampleCount} must be 1, 4, or 8",
+                    stage = "msaa.resolve",
+                    terminal = true,
+                ),
+                request = request,
+            )
+        }
+        if (request.requestedSampleCount == 1) {
+            return GPUMsaaRoute.Refused(
+                diagnostic = RefuseDiagnostic(
+                    code = Reason.UNSUPPORTED_SAMPLE_COUNT,
+                    message = "MSAA resolve requires 4x or 8x sample count",
+                    stage = "msaa.resolve",
+                    terminal = true,
+                ),
+                request = request,
+            )
+        }
+
         val adapter = request.adapter ?: return GPUMsaaRoute.Refused(
             diagnostic = RefuseDiagnostic(
                 code = Reason.UNSUPPORTED_MSAA_WEBGPU_MISSING_ADAPTER,
@@ -189,6 +220,18 @@ object GPUMsaa {
             ),
             request = request,
         )
+
+        if (!adapter.supportsNativeResolve) {
+            return GPUMsaaRoute.Refused(
+                diagnostic = RefuseDiagnostic(
+                    code = Reason.NATIVE_RESOLVE_UNAVAILABLE,
+                    message = "Adapter does not expose native MSAA resolve support",
+                    stage = "msaa.resolve",
+                    terminal = true,
+                ),
+                request = request,
+            )
+        }
 
         if (adapter.maxSampleCount < request.requestedSampleCount) {
             return GPUMsaaRoute.Refused(
@@ -232,6 +275,8 @@ object GPUMsaa {
         )
     }
 }
+
+private fun Int.isSupportedMsaaSampleCount(): Boolean = this in setOf(1, 4, 8)
 
 fun GPUMultisamplePlan.dumpLines(): List<String> =
     listOf(

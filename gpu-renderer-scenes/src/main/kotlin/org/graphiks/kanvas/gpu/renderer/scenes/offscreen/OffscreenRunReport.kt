@@ -122,7 +122,12 @@ class OffscreenRunReport(
                 diagnostics = diagnostics,
             )
 
-        fun failed(sceneId: String, reason: String, backend: String = "webgpu-offscreen"): OffscreenRunReport =
+        fun failed(
+            sceneId: String,
+            reason: String,
+            backend: String = "webgpu-offscreen",
+            diagnostics: List<String> = singleDiagnostic(reason),
+        ): OffscreenRunReport =
             OffscreenRunReport(
                 sceneId = sceneId,
                 runStatus = OffscreenRunStatus.RenderFailed,
@@ -132,7 +137,7 @@ class OffscreenRunReport(
                 height = null,
                 byteCount = null,
                 nonTransparentPixels = null,
-                diagnostics = singleDiagnostic(reason),
+                diagnostics = diagnostics,
             )
 
         fun rendered(

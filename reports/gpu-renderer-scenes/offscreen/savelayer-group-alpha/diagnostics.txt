@@ -12,11 +12,50 @@ blurRectCommands=0
 colorMatrixRectCommands=0
 strokeRectCommands=0
 textRunCommands=0
+colorTextRunCommands=0
 saveLayerRectCommands=1
 pathFillStencilCommands=0
+pathFillGradientCommands=0
 convexFanMeshCommands=0
-savelayer:executor targetAllocated=true childrenRendered=2 compositeApplied=true adapterBacked=false productActivation=false
+customRuntimeEffectRectCommands=0
+passes.batching.wiring-fixture passes.batch-plan stream=phase4-simple-rect-route pass=phase4-simple-rect-pass batches=1 accepted=1 cuts=0 packets=4 diagnostics=none
+passes.batching.wiring-fixture passes.batch id=batch-1 kind=solid-fill target=rgba8unorm packets=packet-1,packet-2,packet-3,packet-4 pipelines=render:solid-fill queueRetained=true
+passes.batching.wiring-fixture passes.batch-queue-guard batch=batch-1 retained=true required=lease:uniform-slab:phase4 retainedRefs=lease:uniform-slab:phase4
+passes.batching.nonclaim no-destination-read-batching nonclaim:no-destination-read-batching
+passes.batching.nonclaim no-save-layer-batching nonclaim:no-save-layer-batching
+passes.batching.nonclaim no-text-complex-batching nonclaim:no-text-complex-batching
+savelayer:executor targetAllocated=true childrenRendered=2 compositeApplied=true adapterBacked=false productActivation=true
 savelayer:executor.nonclaim nativeSaveLayer=false adapterBacked=false cpuLayerTextureFallback=false framebufferFetch=false inputAttachment=false
 saveLayer:compositeSnippetSourceHash=fragment:layer_composite:v1
 saveLayer:compositeEntryPoint=layer_composite
-saveLayer:secondaryTargetAllocated=true childContentSampled=true productActivation=false
+saveLayer:secondaryTargetAllocated=true childContentSampled=true productActivation=true
+resource-provider.cache lane=intermediate-texture result=create key=target=gpu-offscreen-1-1-320x200-rgba8unorm;descriptor=sha256:d071cd586648d78c;bounds=device:320:x:200;format=rgba8unorm;usage=render_attachment+texture_binding;sampleCount=1;generation=1;lifetime=layer-local;owner=GPURecorderScope subject=layer-target:group-alpha-layer
+intermediate.scene.layer-prepared scope=layer:group-alpha-layer plannedTarget=layer-target:group-alpha-layer texture=offscreenTex:layer-target:group-alpha-layer:320x200:rgba8unorm children=group-alpha-child-a,group-alpha-child-b token=layer-order:layer:group-alpha-layer:restore
+intermediate.plan id=scene-intermediate:savelayer-group-alpha target=target:savelayer-group-alpha steps=3 diagnostics=none
+intermediate.create label=layer-target:group-alpha-layer purpose=LayerTarget descriptor=sha256:d071cd586648d78c source=surface:savelayer-group-alpha bounds=device:320:x:200 size=320x200 format=rgba8unorm sampleCount=1 generation=1 usage=render_attachment,texture_binding lifetime=layer-local owner=GPURecorderScope bytes=256000
+intermediate.layer-children scope=layer:group-alpha-layer target=layer-target:group-alpha-layer children=group-alpha-child-a,group-alpha-child-b token=layer-order:layer:group-alpha-layer:restore
+intermediate.composite source=layer-target:group-alpha-layer parent=surface:savelayer-group-alpha blend=srcOver route=fixed-function-srcOver token=layer-order:layer:group-alpha-layer:restore
+intermediate.telemetry plannedDestinationReadCopies=0 destinationReadIntermediateBinds=0 copiedBytes=0 passSplits=0 intermediatesCreated=1 intermediatesReused=0 intermediatesRefused=0 liveIntermediateBytes=256000 layerTargets=1 layerComposites=1 msaaTargets=0 msaaResolves=0 runtimeDestinationRead=none
+intermediate.scene.composite source=layer-target:group-alpha-layer parent=surface:savelayer-group-alpha blend=srcOver route=fixed-function-srcOver token=layer-order:layer:group-alpha-layer:restore texture=offscreenTex:layer-target:group-alpha-layer:320x200:rgba8unorm fill=group-alpha-layer
+gpu-runtime.telemetry renderPasses=2 offscreenPasses=2 windowPasses=0 submissions=2 commandBuffers=2 buffersCreated=4 texturesCreated=4 intermediateTexturesCreated=1 destinationCopies=0 destinationReadbackSnapshots=0 msaaTargets=0 msaaResolves=0 bindGroupsCreated=7 samplersCreated=1 queueWrites=6 uniformSlabsCreated=2 uniformSlabBytesAllocated=1280 uniformSlabFallbacks=0 passBatchPlans=1 passBatchesAccepted=0 passBatchCuts=0 passBatchPackets=1
+payload-slab.batch.plan source=fullscreen-uniform-pass target=payload-target-67b8bd3a67e4b7834f1dc41123cec7e84824d9bed6dd6613cc9bc398fd6907fc frame=offscreen-texture-offscreenTex:layer-target:group-alpha-layer:320x200:rgba8unorm-frame-1 deviceGeneration=1 slots=4 totalBytes=1024 hash=c231252839300e35fee91d4609b06a3e5511882827c6ad7d1b88f0ad01a166de
+payload-slab.batch.slot source=fullscreen-uniform-pass slot=fullscreen-packet-0:fullscreen-pass:uniform:0:fullscreen-pass:resource:0 packet=fullscreen-packet-0 uniformSlot=fullscreen-pass:uniform:0 resourceSlot=fullscreen-pass:resource:0 offset=0 payloadBytes=16 payloadFingerprint=3a489044e71000bb282a325fa5716e3bddcd5535bd5675475b858edb0b121213 layout=fullscreen-uniform-layout-v1
+payload-slab.batch.slot source=fullscreen-uniform-pass slot=fullscreen-packet-1:fullscreen-pass:uniform:1:fullscreen-pass:resource:1 packet=fullscreen-packet-1 uniformSlot=fullscreen-pass:uniform:1 resourceSlot=fullscreen-pass:resource:1 offset=256 payloadBytes=16 payloadFingerprint=6beefa3ff4337f23d5b877c9df9f42d13e45cb27e4eb99fe7b6e8363af4d249d layout=fullscreen-uniform-layout-v1
+payload-slab.batch.slot source=fullscreen-uniform-pass slot=fullscreen-packet-2:fullscreen-pass:uniform:2:fullscreen-pass:resource:2 packet=fullscreen-packet-2 uniformSlot=fullscreen-pass:uniform:2 resourceSlot=fullscreen-pass:resource:2 offset=512 payloadBytes=16 payloadFingerprint=e7fb9f5f1a301dcb6bc642c02528df3e02cb2a6786459f6fd5e3499a4efe6b26 layout=fullscreen-uniform-layout-v1
+payload-slab.batch.slot source=fullscreen-uniform-pass slot=fullscreen-packet-3:fullscreen-pass:uniform:3:fullscreen-pass:resource:3 packet=fullscreen-packet-3 uniformSlot=fullscreen-pass:uniform:3 resourceSlot=fullscreen-pass:resource:3 offset=768 payloadBytes=16 payloadFingerprint=6095f812303d2e2e0f9b0d7942b6a4fad239d47e36caf12edefae0c7b077a947 layout=fullscreen-uniform-layout-v1
+uniform-slab.plan source=fullscreen-uniform-pass deviceGeneration=1 alignment=256 totalBytes=1024 uploadBudgetBytes=1048576 slots=4 hash=9c96151ff53668cc642554f3f311322035d0f6e02b5de222e6a9a2862b05fe17
+uniform-slab.slot source=fullscreen-uniform-pass slot=fullscreen-packet-0:fullscreen-pass:uniform:0:fullscreen-pass:resource:0 offset=0 payloadBytes=16 allocatedBytes=256 payloadHash=374708fff7719dd5979ec875d56cd2286f6d3cf7ec317a3b25632aab28ec37bb
+uniform-slab.slot source=fullscreen-uniform-pass slot=fullscreen-packet-1:fullscreen-pass:uniform:1:fullscreen-pass:resource:1 offset=256 payloadBytes=16 allocatedBytes=256 payloadHash=374708fff7719dd5979ec875d56cd2286f6d3cf7ec317a3b25632aab28ec37bb
+uniform-slab.slot source=fullscreen-uniform-pass slot=fullscreen-packet-2:fullscreen-pass:uniform:2:fullscreen-pass:resource:2 offset=512 payloadBytes=16 allocatedBytes=256 payloadHash=b836f126ee4dad2ae02211c65d58070df434991ccf9328f78b7497fc7eba6ac3
+uniform-slab.slot source=fullscreen-uniform-pass slot=fullscreen-packet-3:fullscreen-pass:uniform:3:fullscreen-pass:resource:3 offset=768 payloadBytes=16 allocatedBytes=256 payloadHash=81be54c0025b5531444d567167162261935e604662b166c53a4502b6875f899c
+payload-slab.batch.plan source=fullscreen-uniform-pass target=payload-target-0c6d4750fa652cacc3b793920e40b2eca0d6f428f251583c78c6339a747090d9 frame=offscreen-1-1-frame-1 deviceGeneration=1 slots=1 totalBytes=256 hash=7d81bd6d02b1e4fc35423a8861d377bf3ee453c3b4d6ee7935a2cf39a0646072
+payload-slab.batch.slot source=fullscreen-uniform-pass slot=fullscreen-packet-0:fullscreen-pass:uniform:0:fullscreen-pass:resource:0 packet=fullscreen-packet-0 uniformSlot=fullscreen-pass:uniform:0 resourceSlot=fullscreen-pass:resource:0 offset=0 payloadBytes=16 payloadFingerprint=a45c95aea4a4fc8b6b13a8b7db6894f8ba4f50a5313aa8baac6887d85a00c81d layout=fullscreen-uniform-layout-v1
+uniform-slab.plan source=fullscreen-uniform-pass deviceGeneration=1 alignment=256 totalBytes=256 uploadBudgetBytes=1048576 slots=1 hash=12796f5e0f54c03854cf3e16be08d902e99431e6827af4af3c6f7070dde92337
+uniform-slab.slot source=fullscreen-uniform-pass slot=fullscreen-packet-0:fullscreen-pass:uniform:0:fullscreen-pass:resource:0 offset=0 payloadBytes=16 allocatedBytes=256 payloadHash=13cf88613c1602972e58033b7f43e7c5060574d9baaa15a8c2fae0867e25ecf7
+payload-slab.resource.planned source=fullscreen-uniform-pass target=payload-target-67b8bd3a67e4b7834f1dc41123cec7e84824d9bed6dd6613cc9bc398fd6907fc frame=offscreen-texture-offscreenTex:layer-target:group-alpha-layer:320x200:rgba8unorm-frame-1 deviceGeneration=1 payloads=4
+payload-slab.resource.accepted source=fullscreen-uniform-pass plan=c231252839300e35fee91d4609b06a3e5511882827c6ad7d1b88f0ad01a166de totalBytes=1024 slots=4
+payload-slab.resource.planned source=fullscreen-uniform-pass target=payload-target-0c6d4750fa652cacc3b793920e40b2eca0d6f428f251583c78c6339a747090d9 frame=offscreen-1-1-frame-1 deviceGeneration=1 payloads=1
+payload-slab.resource.accepted source=fullscreen-uniform-pass plan=7d81bd6d02b1e4fc35423a8861d377bf3ee453c3b4d6ee7935a2cf39a0646072 totalBytes=256 slots=1
+passes.batch-plan stream=fullscreen-uniform-pass pass=pass:fullscreen-uniform-pass batches=1 accepted=0 cuts=0 packets=1 diagnostics=none
+passes.batch id=batch-1 kind=solid-fill target=rgba8unorm packets=packet:fullscreen-uniform-pass:1 pipelines=render:ef7af97642d0b03cea17f8e6d29a8bbbdd1564ff24bd9fc0ab9af488cc1b8424 queueRetained=true
+passes.batch-queue-guard batch=batch-1 retained=true required=lease:uniform-slab:fullscreen:target-4ce6e40752edecf1a32df824cc732011b38f76e7ef407ee79aecddb5cd8bf343:12796f5e0f54c03854cf3e16be08d902e99431e6827af4af3c6f7070dde92337,lease:bind-group:fullscreen:target-4ce6e40752edecf1a32df824cc732011b38f76e7ef407ee79aecddb5cd8bf343:12796f5e0f54c03854cf3e16be08d902e99431e6827af4af3c6f7070dde92337:slot:7e7392cbf2a92559a5e342f1b3aa94e4ba7bf5467ff2f079b3cfbb39e61afaf7 retainedRefs=lease:uniform-slab:fullscreen:target-4ce6e40752edecf1a32df824cc732011b38f76e7ef407ee79aecddb5cd8bf343:12796f5e0f54c03854cf3e16be08d902e99431e6827af4af3c6f7070dde92337,lease:bind-group:fullscreen:target-4ce6e40752edecf1a32df824cc732011b38f76e7ef407ee79aecddb5cd8bf343:12796f5e0f54c03854cf3e16be08d902e99431e6827af4af3c6f7070dde92337:slot:7e7392cbf2a92559a5e342f1b3aa94e4ba7bf5467ff2f079b3cfbb39e61afaf7

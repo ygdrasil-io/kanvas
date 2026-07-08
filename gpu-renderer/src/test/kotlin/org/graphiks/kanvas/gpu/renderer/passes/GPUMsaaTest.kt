@@ -13,11 +13,13 @@ class GPUMsaaTest {
         adapterLabel = "adapter:wgpu4k:test-device",
         maxSampleCount = 4,
         supportsAlphaToCoverage = false,
+        supportsNativeResolve = true,
     )
     private val adapter8x = GPUMsaaAdapterCapability(
         adapterLabel = "adapter:wgpu4k:test-device-8x",
         maxSampleCount = 8,
         supportsAlphaToCoverage = true,
+        supportsNativeResolve = true,
     )
 
     @Test
@@ -93,6 +95,56 @@ class GPUMsaaTest {
 
         val refused = assertIs<GPUMsaaRoute.Refused>(route)
         assertEquals("unsupported.msaa.webgpu_missing_adapter", refused.diagnostic.code)
+    }
+
+    @Test
+    fun `refused when native resolve capability evidence is absent`() {
+        val route = GPUMsaa.resolve(
+            GPUMsaaRequest(
+                requestedSampleCount = 4,
+                coverageMode = GPUMsaaCoverageMode.Standard,
+                adapter = GPUMsaaAdapterCapability(
+                    adapterLabel = "adapter:no-resolve",
+                    maxSampleCount = 4,
+                    supportsAlphaToCoverage = false,
+                ),
+            )
+        )
+
+        val refused = assertIs<GPUMsaaRoute.Refused>(route)
+        assertEquals("unsupported.msaa.native_resolve_unavailable", refused.diagnostic.code)
+        assertEquals("msaa.resolve", refused.diagnostic.stage)
+        assertTrue(refused.diagnostic.terminal)
+    }
+
+    @Test
+    fun `refused when sample count is outside supported invariant`() {
+        val route = GPUMsaa.resolve(
+            GPUMsaaRequest(
+                requestedSampleCount = 6,
+                coverageMode = GPUMsaaCoverageMode.Standard,
+                adapter = adapter8x,
+            )
+        )
+
+        val refused = assertIs<GPUMsaaRoute.Refused>(route)
+        assertEquals("unsupported.msaa.sample_count", refused.diagnostic.code)
+        assertTrue(refused.diagnostic.message.contains("1, 4, or 8"))
+    }
+
+    @Test
+    fun `one sample resolve is refused without throwing`() {
+        val route = GPUMsaa.resolve(
+            GPUMsaaRequest(
+                requestedSampleCount = 1,
+                coverageMode = GPUMsaaCoverageMode.Standard,
+                adapter = adapter4x,
+            )
+        )
+
+        val refused = assertIs<GPUMsaaRoute.Refused>(route)
+        assertEquals("unsupported.msaa.sample_count", refused.diagnostic.code)
+        assertTrue(refused.diagnostic.message.contains("4x or 8x"))
     }
 
     @Test

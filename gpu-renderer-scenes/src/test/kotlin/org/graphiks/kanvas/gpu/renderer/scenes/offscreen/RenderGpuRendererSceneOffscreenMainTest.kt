@@ -106,6 +106,70 @@ class RenderGpuRendererSceneOffscreenMainTest {
     }
 
     @Test
+    fun `saveLayer scene diagnostics include intermediate plan evidence`() {
+        val root = Files.createTempDirectory("gpu-renderer-scenes-offscreen-main")
+
+        renderSceneInWebGpuCapableProcess(root, "savelayer-isolated")
+
+        val sceneOutput = root.resolve("savelayer-isolated")
+        val runJson = sceneOutput.resolve("run.json").readText()
+        val diagnostics = sceneOutput.resolve("diagnostics.txt").readText()
+
+        assertTrue(sceneOutput.resolve("render.png").exists())
+        assertContains(runJson, "\"sceneId\": \"savelayer-isolated\"")
+        assertContains(runJson, "\"status\": \"${OffscreenRunStatus.Rendered.wireName}\"")
+        assertContains(diagnostics, "intermediate.plan id=scene-intermediate:savelayer-isolated")
+        assertContains(diagnostics, "intermediate.layer-children scope=layer:translucent-group")
+    }
+
+    @Test
+    fun `phase five validation scenes expose intermediate diagnostics`() {
+        val root = Files.createTempDirectory("gpu-intermediate-scenes")
+        val scenes = listOf("savelayer-isolated", "savelayer-group-alpha", "dst-read-strategy")
+
+        scenes.forEach { sceneId ->
+            renderSceneInWebGpuCapableProcess(root, sceneId)
+
+            val sceneOutput = root.resolve(sceneId)
+            val runJson = sceneOutput.resolve("run.json").readText()
+            val diagnostics = sceneOutput.resolve("diagnostics.txt").readText()
+
+            assertTrue(sceneOutput.resolve("render.png").exists(), sceneId)
+            assertContains(runJson, "\"sceneId\": \"$sceneId\"")
+            assertContains(runJson, "\"status\": \"${OffscreenRunStatus.Rendered.wireName}\"")
+            assertTrue(
+                diagnostics.lineSequence().any { it.startsWith("intermediate.plan id=scene-intermediate:$sceneId") },
+                diagnostics,
+            )
+            when (sceneId) {
+                "savelayer-isolated" -> {
+                    assertContains(diagnostics, "intermediate.layer-children scope=layer:translucent-group")
+                    assertContains(diagnostics, "intermediate.composite source=layer-target:translucent-group")
+                }
+                "savelayer-group-alpha" -> {
+                    assertContains(diagnostics, "intermediate.layer-children scope=layer:group-alpha-layer")
+                    assertContains(diagnostics, "intermediate.composite source=layer-target:group-alpha-layer")
+                }
+                "dst-read-strategy" -> {
+                    assertContains(diagnostics, "intermediate.readback-snapshot source=surface:dst-read-strategy")
+                    assertFalse(
+                        diagnostics.contains("intermediate.copy source=surface:dst-read-strategy"),
+                        diagnostics,
+                    )
+                    assertContains(diagnostics, "intermediate.bind label=dst-copy:dst-foreground")
+                    assertContains(diagnostics, "intermediate.render command=dst-foreground")
+                    assertContains(diagnostics, "route=shader-blend:Screen")
+                    assertContains(diagnostics, "intermediateTexturesCreated=2 destinationCopies=0 destinationReadbackSnapshots=1")
+                }
+            }
+            assertFalse(
+                diagnostics.contains("CrashOrException"),
+                "Unexpected crash/exception diagnostics for $sceneId:\n$diagnostics",
+            )
+        }
+    }
+
+    @Test
     fun `solid card stack backend failure report remains representable`() {
         val root = Files.createTempDirectory("gpu-renderer-scenes-offscreen-main")
         val sceneOutput = root.resolve("solid-card-stack")
