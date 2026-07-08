@@ -123,6 +123,32 @@ class RenderGpuRendererSceneOffscreenMainTest {
     }
 
     @Test
+    fun `phase five validation scenes expose intermediate diagnostics`() {
+        val root = Files.createTempDirectory("gpu-intermediate-scenes")
+        val scenes = listOf("savelayer-isolated", "savelayer-group-alpha", "dst-read-strategy")
+
+        scenes.forEach { sceneId ->
+            renderSceneInWebGpuCapableProcess(root, sceneId)
+
+            val sceneOutput = root.resolve(sceneId)
+            val runJson = sceneOutput.resolve("run.json").readText()
+            val diagnostics = sceneOutput.resolve("diagnostics.txt").readText()
+
+            assertTrue(sceneOutput.resolve("render.png").exists(), sceneId)
+            assertContains(runJson, "\"sceneId\": \"$sceneId\"")
+            assertContains(runJson, "\"status\": \"${OffscreenRunStatus.Rendered.wireName}\"")
+            assertTrue(
+                diagnostics.lineSequence().any { it.startsWith("intermediate.plan id=scene-intermediate:$sceneId") },
+                diagnostics,
+            )
+            assertFalse(
+                diagnostics.contains("CrashOrException"),
+                "Unexpected crash/exception diagnostics for $sceneId:\n$diagnostics",
+            )
+        }
+    }
+
+    @Test
     fun `solid card stack backend failure report remains representable`() {
         val root = Files.createTempDirectory("gpu-renderer-scenes-offscreen-main")
         val sceneOutput = root.resolve("solid-card-stack")
