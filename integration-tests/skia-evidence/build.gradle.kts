@@ -18,11 +18,16 @@ dependencies {
 tasks.register<JavaExec>("generateGpuPhase6ImageFamilyEvidence") {
     group = "verification"
     description = "Generates the GPU Phase 6 IMAGE family classification and evidence report."
-    dependsOn(":integration-tests:skia:generateSkiaDashboard", tasks.named("classes"))
+    dependsOn(
+        ":integration-tests:skia:generateSkiaDashboard",
+        ":gpu-renderer:generateGpuPhase6ImageResourceEvidence",
+        tasks.named("classes"),
+    )
     classpath = sourceSets.main.get().runtimeClasspath
     mainClass.set("org.graphiks.kanvas.skia.evidence.Phase6ImageFamilyEvidenceCliKt")
     args(rootDir.absolutePath)
     inputs.file(rootProject.layout.projectDirectory.file("integration-tests/skia/build/reports/skia-gm-dashboard/data/gms.json"))
+    inputs.file(rootProject.layout.projectDirectory.file("reports/gpu-renderer/phase-6-image-family/resource-evidence.json"))
     outputs.file(rootProject.layout.projectDirectory.file("reports/gpu-renderer/phase-6-image-family/evidence.json"))
     outputs.file(rootProject.layout.projectDirectory.file("reports/gpu-renderer/phase-6-image-family/classification.csv"))
     outputs.file(rootProject.layout.projectDirectory.file("reports/gpu-renderer/2026-07-08-gpu-phase-6-image-family.md"))

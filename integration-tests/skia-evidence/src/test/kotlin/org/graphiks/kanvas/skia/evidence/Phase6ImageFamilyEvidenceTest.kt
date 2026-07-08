@@ -91,6 +91,44 @@ class Phase6ImageFamilyEvidenceTest {
         assertContains(java.nio.file.Files.readString(markdownPath), "No broad IMAGE support is claimed")
         assertContains(java.nio.file.Files.readString(csvPath), "DrawBitmapRect3,simple-image-rect,instrumented-existing")
     }
+
+    @Test
+    fun `resource evidence is attached when present`() {
+        val evidence = Phase6ImageFamilyClassifier.buildEvidence(
+            dashboard = GmDashboard("2026-07-08T21:00:00", listOf(row("DrawBitmapRect3"))),
+            resourceEvidence = ResourceEvidence(
+                rowId = "phase6-image-repeated-texture-sampler",
+                dumpLines = listOf("resource-provider.cache lane=texture-sampler result=create key=k subject=s"),
+                nonClaims = listOf("no-broad-image-support"),
+            ),
+        )
+
+        assertEquals("phase6-image-repeated-texture-sampler", evidence.resourceEvidence?.rowId)
+        assertContains(evidence.toMarkdown(), "## Resource And Cache Evidence")
+        assertContains(evidence.toMarkdown(), "resource-provider.cache lane=texture-sampler result=create")
+    }
+
+    @Test
+    fun `resource evidence reader loads optional json file`() {
+        val root = kotlin.io.path.createTempDirectory("phase6-resource-evidence")
+        val evidencePath = root.resolve("reports/gpu-renderer/phase-6-image-family/resource-evidence.json")
+        java.nio.file.Files.createDirectories(evidencePath.parent)
+        java.nio.file.Files.writeString(
+            evidencePath,
+            """
+            {
+              "rowId": "phase6-image-repeated-texture-sampler",
+              "dumpLines": ["resource-provider.cache lane=texture-sampler result=create key=k subject=s"],
+              "nonClaims": ["no-broad-image-support"]
+            }
+            """.trimIndent(),
+        )
+
+        val loaded = ResourceEvidenceReader.readIfPresent(root)
+
+        assertEquals("phase6-image-repeated-texture-sampler", loaded?.rowId)
+        assertEquals(listOf("no-broad-image-support"), loaded?.nonClaims)
+    }
 }
 
 private fun row(

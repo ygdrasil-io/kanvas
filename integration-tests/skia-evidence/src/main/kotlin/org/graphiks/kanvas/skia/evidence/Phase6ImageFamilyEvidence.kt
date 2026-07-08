@@ -243,6 +243,25 @@ internal fun JsonObject.double(key: String): Double? =
 internal fun JsonObject.boolean(key: String): Boolean? =
     this[key]?.jsonPrimitive?.booleanOrNull
 
+internal fun JsonObject.stringArray(key: String): List<String> =
+    (this[key] as? kotlinx.serialization.json.JsonArray).orEmpty().mapNotNull { element -> element.jsonPrimitive.contentOrNull }
+
+object ResourceEvidenceReader {
+    private val json = Json { ignoreUnknownKeys = true }
+    private val resourceEvidencePath = Path.of("reports/gpu-renderer/phase-6-image-family/resource-evidence.json")
+
+    fun readIfPresent(root: Path): ResourceEvidence? {
+        val path = root.resolve(resourceEvidencePath)
+        if (!Files.isRegularFile(path)) return null
+        val obj = json.parseToJsonElement(Files.readString(path)).jsonObject
+        return ResourceEvidence(
+            rowId = obj.string("rowId") ?: error("resource evidence missing rowId"),
+            dumpLines = obj.stringArray("dumpLines"),
+            nonClaims = obj.stringArray("nonClaims"),
+        )
+    }
+}
+
 object Phase6ImageFamilyEvidenceWriter {
     private val prettyJson = Json { prettyPrint = true }
 

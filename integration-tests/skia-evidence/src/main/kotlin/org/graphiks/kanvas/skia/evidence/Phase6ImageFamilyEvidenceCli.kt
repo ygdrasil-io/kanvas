@@ -11,7 +11,11 @@ fun main(args: Array<String>) {
     require(dashboardPath.exists()) { "Missing dashboard JSON: $dashboardPath" }
 
     val dashboard = GmDashboardJsonReader.read(dashboardPath)
-    val evidence = Phase6ImageFamilyClassifier.buildEvidence(dashboard)
+    val resourceEvidence = ResourceEvidenceReader.readIfPresent(root)
+    val evidence = Phase6ImageFamilyClassifier.buildEvidence(
+        dashboard = dashboard,
+        resourceEvidence = resourceEvidence,
+    )
     Phase6ImageFamilyEvidenceWriter.writeOutputs(root, evidence)
     println("Wrote ${root.resolve("reports/gpu-renderer/phase-6-image-family/evidence.json")}")
     println("Wrote ${root.resolve("reports/gpu-renderer/phase-6-image-family/classification.csv")}")
