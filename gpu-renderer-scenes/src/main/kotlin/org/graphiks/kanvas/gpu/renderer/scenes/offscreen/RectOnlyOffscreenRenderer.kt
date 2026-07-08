@@ -136,7 +136,6 @@ class RectOnlyOffscreenRenderer internal constructor(
                     runtimeEffects = drawPlan.runtimeEffects,
                     meshRibbons = drawPlan.meshRibbons,
                 ) +
-                    session.runtimeTelemetryDumpLines +
                     passBatchingWiringDiagnostics() +
                     drawPlan.tessellationDiagnostics +
                     drawPlan.executorWiringDiagnostics +
@@ -168,7 +167,7 @@ class RectOnlyOffscreenRenderer internal constructor(
                     height = height,
                     byteCount = rectOnlyRawRgbaByteCount(pixels, width, height),
                     nonTransparentPixels = nonTransparentPixels,
-                    diagnostics = sharedDiagnostics + intermediateDiagnostics,
+                    diagnostics = sharedDiagnostics + intermediateDiagnostics + session.runtimeTelemetryDumpLines,
                 )
             }
         }

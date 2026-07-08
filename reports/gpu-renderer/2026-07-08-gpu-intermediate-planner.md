@@ -59,18 +59,18 @@ in this workspace.
 | --- | ---: | --- | --- | --- | --- |
 | `savelayer-isolated` | 0 | `reports/gpu-renderer-scenes/offscreen/savelayer-isolated/render.png` | rendered-no-crash-no-exception | render unchanged; diagnostics/run metadata updated | `intermediate.plan id=scene-intermediate:savelayer-isolated target=target:savelayer-isolated steps=3 diagnostics=none` |
 | `savelayer-group-alpha` | 0 | `reports/gpu-renderer-scenes/offscreen/savelayer-group-alpha/render.png` | rendered-no-crash-no-exception | render unchanged; diagnostics/run metadata updated | `intermediate.plan id=scene-intermediate:savelayer-group-alpha target=target:savelayer-group-alpha steps=3 diagnostics=none` |
-| `dst-read-strategy` | 0 | `reports/gpu-renderer-scenes/offscreen/dst-read-strategy/render.png` | rendered-no-crash-no-exception | render unchanged; diagnostics/run metadata updated | `intermediate.plan id=scene-intermediate:dst-read-strategy target=target:dst-read-strategy steps=1 diagnostics=none` |
-| `destination-read-strategy-gate-board` | 0 | `reports/gpu-renderer-scenes/offscreen/destination-read-strategy-gate-board/render.png` | rendered-no-crash-no-exception | new committed PNG plus `not-yet-rendered` -> `rendered` transition | `intermediate.plan id=scene-intermediate:destination-read-strategy-gate-board target=target:destination-read-strategy-gate-board steps=1 diagnostics=none` |
-| `savelayer-isolation-gate-board` | 0 | `reports/gpu-renderer-scenes/offscreen/savelayer-isolation-gate-board/render.png` | rendered-no-crash-no-exception | new committed PNG plus `not-yet-rendered` -> `rendered` transition | `intermediate.plan id=scene-intermediate:savelayer-isolation-gate-board target=target:savelayer-isolation-gate-board steps=1 diagnostics=none` |
+| `dst-read-strategy` | 0 | `reports/gpu-renderer-scenes/offscreen/dst-read-strategy/render.png` | rendered-no-crash-no-exception | render unchanged; diagnostics/run metadata updated | `intermediate.plan id=scene-intermediate:dst-read-strategy target=target:dst-read-strategy steps=5 diagnostics=none`; route evidence includes `intermediate.copy source=surface:dst-read-strategy destination=dst-copy:dst-foreground` and `intermediate.bind label=dst-copy:dst-foreground binding=dst-read:dst-foreground` |
+| `destination-read-strategy-gate-board` | 0 | `reports/gpu-renderer-scenes/offscreen/destination-read-strategy-gate-board/render.png` | rendered-no-crash-no-exception | diagnostics/run metadata updated | `intermediate.plan id=scene-intermediate:destination-read-strategy-gate-board target=target:destination-read-strategy-gate-board steps=9 diagnostics=none` |
+| `savelayer-isolation-gate-board` | 0 | `reports/gpu-renderer-scenes/offscreen/savelayer-isolation-gate-board/render.png` | rendered-no-crash-no-exception | diagnostics/run metadata updated | `intermediate.plan id=scene-intermediate:savelayer-isolation-gate-board target=target:savelayer-isolation-gate-board steps=8 diagnostics=none` |
 
 ## Telemetry
 
 Short diagnostic lines captured from the regenerated offscreen reports:
 
 ```text
-gpu-runtime.telemetry renderPasses=0 offscreenPasses=0 windowPasses=0 submissions=0 commandBuffers=0 buffersCreated=1 texturesCreated=2 intermediateTexturesCreated=0 destinationCopies=0 msaaTargets=0 msaaResolves=0 bindGroupsCreated=0 samplersCreated=0 queueWrites=0 uniformSlabsCreated=0 uniformSlabBytesAllocated=0 uniformSlabFallbacks=0 passBatchPlans=0 passBatchesAccepted=0 passBatchCuts=0 passBatchPackets=0
+gpu-runtime.telemetry renderPasses=2 offscreenPasses=2 windowPasses=0 submissions=2 commandBuffers=2 buffersCreated=4 texturesCreated=4 intermediateTexturesCreated=1 destinationCopies=0 msaaTargets=0 msaaResolves=0 bindGroupsCreated=6 samplersCreated=1 queueWrites=5 uniformSlabsCreated=2 uniformSlabBytesAllocated=1024 uniformSlabFallbacks=0 passBatchPlans=1 passBatchesAccepted=0 passBatchCuts=0 passBatchPackets=1
 intermediate.telemetry destinationReadCopies=0 destinationReadIntermediateBinds=0 copiedBytes=0 passSplits=0 intermediatesCreated=1 intermediatesReused=0 intermediatesRefused=0 liveIntermediateBytes=256000 layerTargets=1 layerComposites=1 msaaTargets=0 msaaResolves=0
-intermediate.telemetry destinationReadCopies=0 destinationReadIntermediateBinds=0 copiedBytes=0 passSplits=0 intermediatesCreated=0 intermediatesReused=0 intermediatesRefused=0 liveIntermediateBytes=0 layerTargets=0 layerComposites=0 msaaTargets=0 msaaResolves=0
+intermediate.telemetry destinationReadCopies=1 destinationReadIntermediateBinds=1 copiedBytes=256000 passSplits=1 intermediatesCreated=1 intermediatesReused=0 intermediatesRefused=0 liveIntermediateBytes=256000 layerTargets=0 layerComposites=0 msaaTargets=0 msaaResolves=0
 ```
 
 Deterministic intermediate resource-provider dump format covered by
@@ -117,3 +117,21 @@ resource-provider.cache lane=intermediate-texture result=reuse key=target=target
 - Request-boundary invariant fix:
   criteria = arbitrary `GPUIntermediateTextureMaterializationDescriptor` implementations are rejected when labels, sizes, usages, generations, or sample counts are invalid, while stable keys/dumps stay dump-safe and backend-handle-free;
   evidence = the red/green `GPUIntermediateResourceProviderTest` runs above and the production changes in `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/resources/IntermediateResourceProvider.kt`, `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/resources/ResourceDumpSafety.kt`, and `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/resources/GPUConcreteResourceProvider.kt`.
+
+## Final Whole-Branch Review Follow-Up
+
+- Offscreen intermediate aliasing fix:
+  criteria = same-size layer targets carry planner labels into runtime texture labels/keys;
+  evidence = `intermediate.scene.layer-prepared ... plannedTarget=layer-target:translucent-group texture=offscreenTex:layer-target:translucent-group:320x200:rgba8unorm` and same-size unit coverage in `M25ExecutorWiringTest`.
+- Destination-read validation fix:
+  criteria = `dst-read-strategy` emits destination copy, bind, and shader-blend render evidence instead of a single direct `SrcOver` step;
+  evidence = `intermediate.copy source=surface:dst-read-strategy destination=dst-copy:dst-foreground`, `intermediate.bind label=dst-copy:dst-foreground binding=dst-read:dst-foreground`, and `route=shader-blend:Screen`.
+- Command stream evidence fix:
+  criteria = `BindIntermediate` is a concrete pass command ordered between copy and draw;
+  evidence = `GPUIntermediateCommandStreamTest.destination copy lowers before draw that samples it`.
+- Runtime telemetry fix:
+  criteria = reports capture post-render telemetry;
+  evidence = regenerated offscreen diagnostics now show nonzero `renderPasses`, `commandBuffers`, and `intermediateTexturesCreated` after rendering saveLayer scenes.
+- Unsupported saveLayer child fix:
+  criteria = transitional offscreen saveLayer preparation accepts only supported solid child families and refuses others with stable reason codes;
+  evidence = `unsupported.layer.child_family.linear-gradient-rect` unit coverage in adapter and executor tests.

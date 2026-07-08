@@ -31,6 +31,11 @@ class GPUIntermediateCommandStreamTest {
                         passSplitRequired = true,
                         copyBeforeSample = true,
                     ),
+                    GPUIntermediatePlanStep.BindIntermediate(
+                        descriptor = descriptor,
+                        bindingLabel = "dst-read:cmd-1",
+                        layoutHash = "layout:dst-read",
+                    ),
                     GPUIntermediatePlanStep.RenderToTarget(
                         commandId = "cmd-1",
                         targetLabel = "surface:main",
@@ -42,7 +47,7 @@ class GPUIntermediateCommandStreamTest {
         )
 
         assertEquals(
-            listOf("prepareIntermediateTexture", "copyTexture", "beginRenderPass", "draw", "endRenderPass"),
+            listOf("prepareIntermediateTexture", "copyTexture", "bindIntermediate", "beginRenderPass", "draw", "endRenderPass"),
             stream.commandLabels,
         )
         val prepare = assertIs<GPUPassCommand.PrepareIntermediateTexture>(stream.commands[0])
@@ -50,6 +55,10 @@ class GPUIntermediateCommandStreamTest {
         val copy = assertIs<GPUPassCommand.CopyTexture>(stream.commands[1])
         assertEquals("surface:main", copy.sourceLabel)
         assertEquals("intermediate:dst-copy:cmd-1", copy.destinationLabel)
+        val bind = assertIs<GPUPassCommand.BindIntermediate>(stream.commands[2])
+        assertEquals("intermediate:dst-copy:cmd-1", bind.textureLabel)
+        assertEquals("dst-read:cmd-1", bind.bindingLabel)
+        assertEquals("layout:dst-read", bind.layoutHash)
     }
 
     @Test

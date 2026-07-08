@@ -4,6 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendOffscreenTarget
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendOffscreenTexture
@@ -198,6 +199,100 @@ class M25ExecutorWiringTest {
     }
 
     @Test
+    fun `KGPU-M25-004 same size saveLayer targets keep distinct planned texture labels`() {
+        val drawPlan = RectOnlyDrawPlan(
+            sceneId = "same-size-layer-scene",
+            clearColor = SceneColor(0f, 0f, 0f, 0f),
+            clearCount = 1,
+            fills = listOf(
+                saveLayerFill(label = "layer-a", paintOrder = 1, groupAlpha = 1f),
+                saveLayerFill(label = "layer-b", paintOrder = 2, groupAlpha = 1f),
+            ),
+        )
+        val plan = GPUIntermediatePlan(
+            planId = "scene-intermediate:same-size-layer-scene",
+            targetId = "target:same-size-layer-scene",
+            steps = listOf(
+                GPUIntermediatePlanStep.RenderLayerChildren(
+                    scopeLabel = "layer:layer-a",
+                    target = intermediateDescriptor("intermediate:layer:layer-a"),
+                    childrenLabel = "none",
+                    tokenLabel = "token-a",
+                ),
+                GPUIntermediatePlanStep.RenderLayerChildren(
+                    scopeLabel = "layer:layer-b",
+                    target = intermediateDescriptor("intermediate:layer:layer-b"),
+                    childrenLabel = "none",
+                    tokenLabel = "token-b",
+                ),
+                compositeStep(sourceLabel = "intermediate:layer:layer-a", tokenLabel = "token-a"),
+                compositeStep(sourceLabel = "intermediate:layer:layer-b", tokenLabel = "token-b"),
+            ),
+        )
+        val target = RecordingOffscreenTarget(width = 64, height = 64)
+
+        val execution = SceneIntermediatePlanExecutor().executeSaveLayerPreparation(
+            target = target,
+            drawPlan = drawPlan,
+            plan = plan,
+        ) { fills ->
+            val solidDraws = SceneIntermediatePlanExecutor.solidRectDraws(fills)
+            if (solidDraws.isNotEmpty()) {
+                drawFullscreenPass("solid-rect-wgsl", OFFSCREEN_COLOR_FORMAT, solidDraws)
+            }
+        }
+
+        val prepared = assertIs<SceneIntermediateExecutionResult.Prepared>(execution)
+        assertEquals(
+            listOf("intermediate:layer:layer-a", "intermediate:layer:layer-b"),
+            target.createdTextureLabels,
+        )
+        assertEquals(
+            listOf("intermediate:layer:layer-a", "intermediate:layer:layer-b"),
+            prepared.layerTextureByTargetLabel.values.toList(),
+        )
+    }
+
+    @Test
+    fun `KGPU-M25-004 executor refuses unsupported saveLayer child family instead of solid rect rendering it`() {
+        val drawPlan = RectOnlyDrawPlan(
+            sceneId = "unsupported-child-scene",
+            clearColor = SceneColor(0f, 0f, 0f, 0f),
+            clearCount = 1,
+            fills = listOf(
+                saveLayerFill(label = "layer-a", paintOrder = 1, groupAlpha = 1f),
+                saveLayerFill(label = "gradient-child", paintOrder = 2, groupAlpha = 1f).copy(
+                    family = "linear-gradient-rect",
+                ),
+            ),
+        )
+        val plan = GPUIntermediatePlan(
+            planId = "scene-intermediate:unsupported-child-scene",
+            targetId = "target:unsupported-child-scene",
+            steps = listOf(
+                GPUIntermediatePlanStep.RenderLayerChildren(
+                    scopeLabel = "layer:layer-a",
+                    target = intermediateDescriptor("intermediate:layer:layer-a"),
+                    childrenLabel = "gradient-child",
+                    tokenLabel = "token-a",
+                ),
+            ),
+        )
+
+        val execution = SceneIntermediatePlanExecutor().executeSaveLayerPreparation(
+            target = RecordingOffscreenTarget(width = 64, height = 64),
+            drawPlan = drawPlan,
+            plan = plan,
+        ) {
+            drawFullscreenPass("solid-rect-wgsl", OFFSCREEN_COLOR_FORMAT, SceneIntermediatePlanExecutor.solidRectDraws(it))
+        }
+
+        val refusal = assertIs<SceneIntermediateExecutionResult.Refused>(execution)
+        assertEquals("layer:layer-a", refusal.scopeLabel)
+        assertEquals("unsupported.layer.child_family.linear-gradient-rect", refusal.reasonCode)
+    }
+
+    @Test
     fun `KGPU-M25-005 path fill routes through PathTessellator StencilCoverExecutor and ConvexFanExecutor`() {
         val tessellator = PathTessellator()
 
@@ -344,6 +439,7 @@ class M25ExecutorWiringTest {
             private set
         var offscreenEncodeCount: Int = 0
             private set
+        val createdTextureLabels: MutableList<String> = mutableListOf()
 
         override fun encode(clearColor: GPUClearColor, block: GPUBackendRenderRecorder.() -> Unit) {
             mainEncodeCount += 1
@@ -353,8 +449,10 @@ class M25ExecutorWiringTest {
         override fun readRgba(): ByteArray =
             ByteArray(target.descriptor.width * target.descriptor.height * 4)
 
-        override fun createOffscreenTexture(texture: GPUBackendOffscreenTexture): String =
-            "offscreen-${texture.width}x${texture.height}-$offscreenEncodeCount"
+        override fun createOffscreenTexture(texture: GPUBackendOffscreenTexture): String {
+            createdTextureLabels += texture.label
+            return texture.label
+        }
 
         override fun encodeOffscreenTexture(
             textureLabel: String,

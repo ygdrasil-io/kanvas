@@ -14,6 +14,8 @@ import org.graphiks.kanvas.gpu.renderer.intermediates.dumpLines
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneColor
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneRect
 
+private val TRANSITIONAL_LAYER_CHILD_FAMILIES = setOf("fill-rect")
+
 internal sealed interface SceneIntermediateExecutionResult {
     val diagnostics: List<String>
 
@@ -65,10 +67,23 @@ internal class SceneIntermediatePlanExecutor {
             val fillLabel = layerStep.scopeLabel.removePrefix("layer:")
             val fill = drawPlan.fills.firstOrNull { it.label == fillLabel } ?: return@forEach
             val children = layerChildren(drawPlan, layerStep.childrenLabel)
+            val unsupportedChild = children.firstOrNull { it.family !in TRANSITIONAL_LAYER_CHILD_FAMILIES }
+            if (unsupportedChild != null) {
+                return SceneIntermediateExecutionResult.Refused(
+                    scopeLabel = layerStep.scopeLabel,
+                    reasonCode = "unsupported.layer.child_family.${unsupportedChild.family}",
+                    diagnostics = diagnostics + listOf(
+                        "intermediate.scene.refused scope=${layerStep.scopeLabel} " +
+                            "reason=unsupported.layer.child_family.${unsupportedChild.family} " +
+                            "stage=save-layer-preparation child=${unsupportedChild.label}",
+                    ) + plan.dumpLines(),
+                )
+            }
             childLabels += children.map { it.label }
 
             val textureLabel = target.createOffscreenTexture(
                 GPUBackendOffscreenTexture(
+                    label = layerStep.target.label,
                     width = layerStep.target.width,
                     height = layerStep.target.height,
                     format = layerStep.target.formatClass,

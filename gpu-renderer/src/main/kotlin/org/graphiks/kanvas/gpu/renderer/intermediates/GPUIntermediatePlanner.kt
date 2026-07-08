@@ -167,6 +167,7 @@ class GPUIntermediatePlanner(
                     copiedBytes = telemetry.copiedBytes + descriptor.byteEstimate,
                     passSplits = telemetry.passSplits + 1,
                     intermediatesCreated = telemetry.intermediatesCreated + 1,
+                    destinationReadIntermediateBinds = telemetry.destinationReadIntermediateBinds + 1,
                     liveIntermediateBytes = telemetry.liveIntermediateBytes + descriptor.byteEstimate,
                 )
             } else {

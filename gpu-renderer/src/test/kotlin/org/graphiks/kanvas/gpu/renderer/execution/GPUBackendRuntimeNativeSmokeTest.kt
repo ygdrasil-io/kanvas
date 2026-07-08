@@ -290,6 +290,7 @@ class GPUBackendRuntimeNativeSmokeTest {
             ).use { target ->
                 val secondary = target.createOffscreenTexture(
                     GPUBackendOffscreenTexture(
+                        label = "telemetry-secondary",
                         width = 4,
                         height = 4,
                         format = "rgba8unorm",
@@ -1044,7 +1045,7 @@ class GPUBackendRuntimeNativeSmokeTest {
                 GPUOffscreenTargetRequest(width = 4, height = 4, colorFormat = "rgba8unorm"),
             ).use { target ->
                 val textureLabel = target.createOffscreenTexture(
-                    GPUBackendOffscreenTexture(width = 4, height = 4, format = "rgba8unorm"),
+                    GPUBackendOffscreenTexture(label = "lease-secondary", width = 4, height = 4, format = "rgba8unorm"),
                 )
                 target.encodeOffscreenTexture(
                     textureLabel = textureLabel,
@@ -1096,7 +1097,7 @@ class GPUBackendRuntimeNativeSmokeTest {
                 GPUOffscreenTargetRequest(width = 4, height = 4, colorFormat = "rgba8unorm"),
             ).use { target ->
                 val textureLabel = target.createOffscreenTexture(
-                    GPUBackendOffscreenTexture(width = 4, height = 4, format = "rgba8unorm"),
+                    GPUBackendOffscreenTexture(label = "pending-secondary", width = 4, height = 4, format = "rgba8unorm"),
                 )
                 target.encodeOffscreenTexture(
                     textureLabel = textureLabel,

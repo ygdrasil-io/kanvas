@@ -467,6 +467,22 @@ sealed interface GPUPassCommand {
         }
     }
 
+    /** Binds an intermediate texture for a later shader blend or composite draw. */
+    data class BindIntermediate(
+        val textureLabel: String,
+        val bindingLabel: String,
+        val layoutHash: String,
+    ) : GPUPassCommand {
+        override val commandLabel: String get() = "bindIntermediate"
+        override val sourcePacketId: GPUDrawPacketID? get() = null
+
+        init {
+            require(textureLabel.isNotBlank()) { "BindIntermediate.textureLabel must not be blank" }
+            require(bindingLabel.isNotBlank()) { "BindIntermediate.bindingLabel must not be blank" }
+            require(layoutHash.isNotBlank()) { "BindIntermediate.layoutHash must not be blank" }
+        }
+    }
+
     /** Materializes or reuses an offscreen layer target before rendering children. */
     data class PrepareLayerTarget(
         val targetLabel: String,
@@ -1049,6 +1065,8 @@ private fun GPUPassCommand.dumpLine(): String =
         is GPUPassCommand.CopyTexture ->
             "passes.command copyTexture source=$sourceLabel destination=$destinationLabel " +
                 "bounds=$boundsLabel token=$tokenLabel"
+        is GPUPassCommand.BindIntermediate ->
+            "passes.command bindIntermediate texture=$textureLabel binding=$bindingLabel layout=$layoutHash"
         is GPUPassCommand.PrepareLayerTarget ->
             "passes.command prepareLayerTarget target=$targetLabel descriptor=$descriptorHash " +
                 "usage=$usageLabel bytes=$byteEstimate"

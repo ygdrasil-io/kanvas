@@ -57,7 +57,16 @@ fun GPUPassCommandStream.Companion.fromIntermediatePlan(
                         ),
                     )
                 }
-                is GPUIntermediatePlanStep.BindIntermediate -> Unit
+                is GPUIntermediatePlanStep.BindIntermediate -> {
+                    closeRenderPassIfOpen()
+                    add(
+                        GPUPassCommand.BindIntermediate(
+                            textureLabel = step.descriptor.label,
+                            bindingLabel = step.bindingLabel,
+                            layoutHash = step.layoutHash,
+                        ),
+                    )
+                }
                 is GPUIntermediatePlanStep.RenderToTarget -> {
                     openRenderPassIfNeeded()
                     add(

@@ -232,11 +232,13 @@ enum class GPUBackendStencilMode {
 
 /** Describes a secondary offscreen texture that can be bound as a texture source. */
 data class GPUBackendOffscreenTexture(
+    val label: String,
     val width: Int,
     val height: Int,
     val format: String,
 ) {
     init {
+        require(label.isNotBlank()) { "GPUBackendOffscreenTexture.label must not be blank" }
         require(width > 0) { "GPUBackendOffscreenTexture.width must be positive" }
         require(height > 0) { "GPUBackendOffscreenTexture.height must be positive" }
         require(format.isNotBlank()) { "GPUBackendOffscreenTexture.format must not be blank" }

@@ -969,7 +969,7 @@ private class WgpuOffscreenTarget(
     override fun createOffscreenTexture(texture: GPUBackendOffscreenTexture): String {
         val safeW = texture.width.coerceAtMost(MAX_TEXTURE_DIMENSION)
         val safeH = texture.height.coerceAtMost(MAX_TEXTURE_DIMENSION)
-        val label = "offscreenTex:${texture.width}x${texture.height}:${texture.format}"
+        val label = "offscreenTex:${texture.label}:${texture.width}x${texture.height}:${texture.format}"
         if (label in offscreenTextures) return label
         val tex = createTrackedTexture(
             TextureDescriptor(
@@ -1784,7 +1784,7 @@ private class WgpuRenderRecorder(
     override fun createOffscreenTexture(texture: GPUBackendOffscreenTexture): String {
         val safeW = texture.width.coerceAtMost(MAX_TEXTURE_DIMENSION)
         val safeH = texture.height.coerceAtMost(MAX_TEXTURE_DIMENSION)
-        val label = "offscreenTex:${texture.width}x${texture.height}:${texture.format}"
+        val label = "offscreenTex:${texture.label}:${texture.width}x${texture.height}:${texture.format}"
         if (label in offscreenTextureStore) return label
         val tex = resourceScope.track(
             createTrackedTexture(

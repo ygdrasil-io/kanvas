@@ -141,6 +141,22 @@ class RenderGpuRendererSceneOffscreenMainTest {
                 diagnostics.lineSequence().any { it.startsWith("intermediate.plan id=scene-intermediate:$sceneId") },
                 diagnostics,
             )
+            when (sceneId) {
+                "savelayer-isolated" -> {
+                    assertContains(diagnostics, "intermediate.layer-children scope=layer:translucent-group")
+                    assertContains(diagnostics, "intermediate.composite source=layer-target:translucent-group")
+                }
+                "savelayer-group-alpha" -> {
+                    assertContains(diagnostics, "intermediate.layer-children scope=layer:group-alpha-layer")
+                    assertContains(diagnostics, "intermediate.composite source=layer-target:group-alpha-layer")
+                }
+                "dst-read-strategy" -> {
+                    assertContains(diagnostics, "intermediate.copy source=surface:dst-read-strategy")
+                    assertContains(diagnostics, "intermediate.bind label=dst-copy:dst-foreground")
+                    assertContains(diagnostics, "intermediate.render command=dst-foreground")
+                    assertContains(diagnostics, "route=shader-blend:Screen")
+                }
+            }
             assertFalse(
                 diagnostics.contains("CrashOrException"),
                 "Unexpected crash/exception diagnostics for $sceneId:\n$diagnostics",

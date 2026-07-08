@@ -69,9 +69,15 @@ internal fun renderViaGpu(
         )
         target.use { t ->
             val texFormat = config.gpuColorFormat.gpuLabel
-            val sceneLabel = t.createOffscreenTexture(GPUBackendOffscreenTexture(width, height, texFormat))
-            val srcLabel = t.createOffscreenTexture(GPUBackendOffscreenTexture(width, height, texFormat))
-            val snapLabel = t.createOffscreenTexture(GPUBackendOffscreenTexture(width, height, texFormat))
+            val sceneLabel = t.createOffscreenTexture(
+                GPUBackendOffscreenTexture(label = "kanvas:scene", width = width, height = height, format = texFormat),
+            )
+            val srcLabel = t.createOffscreenTexture(
+                GPUBackendOffscreenTexture(label = "kanvas:src", width = width, height = height, format = texFormat),
+            )
+            val snapLabel = t.createOffscreenTexture(
+                GPUBackendOffscreenTexture(label = "kanvas:snap", width = width, height = height, format = texFormat),
+            )
 
             var sceneHasContent = false
             val clearTransparent = GPUClearColor(0.0, 0.0, 0.0, 0.0)
