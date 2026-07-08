@@ -485,6 +485,28 @@ sealed interface GPUPassCommand {
         }
     }
 
+    /** Materializes or reuses a generic intermediate texture before copy, layer, filter, or MSAA work. */
+    data class PrepareIntermediateTexture(
+        val textureLabel: String,
+        val purposeLabel: String,
+        val descriptorHash: String,
+        val usageLabel: String,
+        val sampleCount: Int,
+        val byteEstimate: Long,
+    ) : GPUPassCommand {
+        override val commandLabel: String get() = "prepareIntermediateTexture"
+        override val sourcePacketId: GPUDrawPacketID? get() = null
+
+        init {
+            require(textureLabel.isNotBlank()) { "PrepareIntermediateTexture.textureLabel must not be blank" }
+            require(purposeLabel.isNotBlank()) { "PrepareIntermediateTexture.purposeLabel must not be blank" }
+            require(descriptorHash.isNotBlank()) { "PrepareIntermediateTexture.descriptorHash must not be blank" }
+            require(usageLabel.isNotBlank()) { "PrepareIntermediateTexture.usageLabel must not be blank" }
+            require(sampleCount > 0) { "PrepareIntermediateTexture.sampleCount must be positive" }
+            require(byteEstimate >= 0L) { "PrepareIntermediateTexture.byteEstimate must be non-negative" }
+        }
+    }
+
     /** Clears an isolated layer target before child rendering. */
     data class ClearLayerTarget(
         val targetLabel: String,
@@ -615,6 +637,38 @@ sealed interface GPUPassCommand {
             require(blendModeLabel.isNotBlank()) { "CompositeLayer.blendModeLabel must not be blank" }
             require(routeLabel.isNotBlank()) { "CompositeLayer.routeLabel must not be blank" }
             require(tokenLabel.isNotBlank()) { "CompositeLayer.tokenLabel must not be blank" }
+        }
+    }
+
+    /** Resolves a multisample intermediate into a single-sample texture before sampling or presentation. */
+    data class ResolveMSAA(
+        val sourceLabel: String,
+        val destinationLabel: String,
+        val strategyLabel: String,
+        val tokenLabel: String,
+    ) : GPUPassCommand {
+        override val commandLabel: String get() = "resolveMSAA"
+        override val sourcePacketId: GPUDrawPacketID? get() = null
+
+        init {
+            require(sourceLabel.isNotBlank()) { "ResolveMSAA.sourceLabel must not be blank" }
+            require(destinationLabel.isNotBlank()) { "ResolveMSAA.destinationLabel must not be blank" }
+            require(strategyLabel.isNotBlank()) { "ResolveMSAA.strategyLabel must not be blank" }
+            require(tokenLabel.isNotBlank()) { "ResolveMSAA.tokenLabel must not be blank" }
+        }
+    }
+
+    /** Records a stable intermediate planning or materialization refusal. */
+    data class RefuseIntermediate(
+        val scopeLabel: String,
+        val reasonCode: String,
+    ) : GPUPassCommand {
+        override val commandLabel: String get() = "refuseIntermediate"
+        override val sourcePacketId: GPUDrawPacketID? get() = null
+
+        init {
+            require(scopeLabel.isNotBlank()) { "RefuseIntermediate.scopeLabel must not be blank" }
+            require(reasonCode.isNotBlank()) { "RefuseIntermediate.reasonCode must not be blank" }
         }
     }
 
@@ -998,6 +1052,9 @@ private fun GPUPassCommand.dumpLine(): String =
         is GPUPassCommand.PrepareLayerTarget ->
             "passes.command prepareLayerTarget target=$targetLabel descriptor=$descriptorHash " +
                 "usage=$usageLabel bytes=$byteEstimate"
+        is GPUPassCommand.PrepareIntermediateTexture ->
+            "passes.command prepareIntermediateTexture texture=$textureLabel purpose=$purposeLabel " +
+                "descriptor=$descriptorHash usage=$usageLabel samples=$sampleCount bytes=$byteEstimate"
         is GPUPassCommand.ClearLayerTarget ->
             "passes.command clearLayerTarget target=$targetLabel clear=$clearPolicy"
         is GPUPassCommand.PrepareStencilAttachment ->
@@ -1021,6 +1078,11 @@ private fun GPUPassCommand.dumpLine(): String =
         is GPUPassCommand.CompositeLayer ->
             "passes.command compositeLayer source=$sourceLabel parent=$parentTargetLabel " +
                 "blend=$blendModeLabel route=$routeLabel token=$tokenLabel"
+        is GPUPassCommand.ResolveMSAA ->
+            "passes.command resolveMSAA source=$sourceLabel destination=$destinationLabel " +
+                "strategy=$strategyLabel token=$tokenLabel"
+        is GPUPassCommand.RefuseIntermediate ->
+            "passes.command refuseIntermediate scope=$scopeLabel reason=$reasonCode"
         is GPUPassCommand.RefuseLayer ->
             "passes.command refuseLayer scope=$scopeLabel reason=$reasonCode"
         is GPUPassCommand.RefuseStencilCover ->
@@ -1041,6 +1103,7 @@ private fun GPUPassCommandOperandBridge.matchesCommandOperandKind(): Boolean =
                 GPUMaterializedCommandOperandKind.TextureView,
             )
         "copyTexture" -> operand.kind == GPUMaterializedCommandOperandKind.DestinationCopyTexture
+        "prepareIntermediateTexture" -> operand.kind == GPUMaterializedCommandOperandKind.Texture
         "prepareLayerTarget" -> operand.kind == GPUMaterializedCommandOperandKind.Texture
         "clearLayerTarget", "renderLayerChildren" ->
             operand.kind == GPUMaterializedCommandOperandKind.RenderTarget
@@ -1056,6 +1119,11 @@ private fun GPUPassCommandOperandBridge.matchesCommandOperandKind(): Boolean =
             operand.kind in setOf(
                 GPUMaterializedCommandOperandKind.TextureView,
                 GPUMaterializedCommandOperandKind.Sampler,
+            )
+        "resolveMSAA" ->
+            operand.kind in setOf(
+                GPUMaterializedCommandOperandKind.Texture,
+                GPUMaterializedCommandOperandKind.TextureView,
             )
         "setRenderPipeline" -> operand.kind == GPUMaterializedCommandOperandKind.RenderPipeline
         "setBindGroup" ->
