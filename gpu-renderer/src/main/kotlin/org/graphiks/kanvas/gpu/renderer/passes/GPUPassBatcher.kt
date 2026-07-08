@@ -110,18 +110,19 @@ class GPUPassBatchPlan(
     batches: List<GPUPassBatch>,
     cuts: List<GPUPassBatchCut>,
     diagnostics: List<GPUPassDiagnostic> = emptyList(),
+    inputPacketCount: Int,
 ) {
     val batches: List<GPUPassBatch> = batches.toList()
     val cuts: List<GPUPassBatchCut> = cuts.toList()
     val diagnostics: List<GPUPassDiagnostic> = diagnostics.toList()
-    val packetCount: Int
-        get() = batches.sumOf { it.packetCount }
+    val packetCount: Int = inputPacketCount
     val acceptedBatchCount: Int
         get() = batches.count { it.acceptedForBatching }
 
     init {
         require(streamId.isNotBlank()) { "GPUPassBatchPlan.streamId must not be blank" }
         require(passId.isNotBlank()) { "GPUPassBatchPlan.passId must not be blank" }
+        require(inputPacketCount >= 0) { "GPUPassBatchPlan.inputPacketCount must be non-negative" }
     }
 }
 
@@ -198,6 +199,7 @@ class GPUPassBatcher {
             batches = batches,
             cuts = cuts,
             diagnostics = stream.diagnostics,
+            inputPacketCount = stream.packetCount,
         )
     }
 
@@ -280,19 +282,19 @@ class GPUPassBatcher {
                     reasonCode = GPUPassBatchReason.TEXT_COMPLEX,
                     message = "packet ${packetId.value} requires text complex route",
                 )
-            renderPipelineKey == null ->
-                GPUPassBatchCut(
-                    beforePacketId = null,
-                    afterPacketId = packetId,
-                    reasonCode = GPUPassBatchReason.MISSING_PIPELINE_KEY,
-                    message = "packet ${packetId.value} has no render pipeline key",
-                )
             role != GPUDrawPacketRole.Shading ->
                 GPUPassBatchCut(
                     beforePacketId = null,
                     afterPacketId = packetId,
                     reasonCode = GPUPassBatchReason.BLEND_OR_FIXED_STATE_CHANGED,
                     message = "packet ${packetId.value} role $role is not a simple shading packet",
+                )
+            renderPipelineKey == null ->
+                GPUPassBatchCut(
+                    beforePacketId = null,
+                    afterPacketId = packetId,
+                    reasonCode = GPUPassBatchReason.MISSING_PIPELINE_KEY,
+                    message = "packet ${packetId.value} has no render pipeline key",
                 )
             eligibility == null ->
                 GPUPassBatchCut(
@@ -327,7 +329,7 @@ class GPUPassBatcher {
 
 fun GPUPassBatchPlan.dumpLines(): List<String> =
     listOf(
-        "passes.batch-plan stream=$streamId pass=$passId batches=${batches.size} " +
+        "passes.batch-plan stream=${streamId.toPassBatchDumpToken()} pass=${passId.toPassBatchDumpToken()} batches=${batches.size} " +
             "accepted=$acceptedBatchCount cuts=${cuts.size} packets=$packetCount " +
             "diagnostics=${diagnostics.dumpPassBatchCodes()}",
     ) +
@@ -337,21 +339,21 @@ fun GPUPassBatchPlan.dumpLines(): List<String> =
 
 fun GPUPassBatch.dumpLines(): List<String> =
     listOf(
-        "passes.batch id=$batchId kind=${kind.dumpLabel} target=$targetStateHash " +
-            "packets=${packetIds.map { it.value }.joinToString(",")} " +
-            "pipelines=${renderPipelineKeys.map { it.value }.ifEmpty { listOf("none") }.joinToString(",")} " +
+        "passes.batch id=${batchId.toPassBatchDumpToken()} kind=${kind.dumpLabel} target=${targetStateHash.toPassBatchDumpToken()} " +
+            "packets=${packetIds.map { it.value.toPassBatchDumpToken() }.joinToString(",")} " +
+            "pipelines=${renderPipelineKeys.map { it.value.toPassBatchDumpToken() }.ifEmpty { listOf("none") }.joinToString(",")} " +
             "queueRetained=${queueGuard.retained}",
-        "passes.batch-queue-guard batch=$batchId retained=${queueGuard.retained} " +
-            "required=${queueGuard.requiredRetainedRefs.ifEmpty { listOf("none") }.joinToString(",")} " +
-            "retainedRefs=${queueGuard.retainedRefs.ifEmpty { listOf("none") }.joinToString(",")}",
+        "passes.batch-queue-guard batch=${batchId.toPassBatchDumpToken()} retained=${queueGuard.retained} " +
+            "required=${queueGuard.requiredRetainedRefs.ifEmpty { listOf("none") }.map { it.toPassBatchDumpToken() }.joinToString(",")} " +
+            "retainedRefs=${queueGuard.retainedRefs.ifEmpty { listOf("none") }.map { it.toPassBatchDumpToken() }.joinToString(",")}",
     )
 
 private fun GPUPassBatchCut.dumpLine(): String =
-    "passes.batch-cut before=${beforePacketId?.value ?: "none"} after=${afterPacketId.value} " +
-        "code=$reasonCode message=$message"
+    "passes.batch-cut before=${beforePacketId?.value?.toPassBatchDumpToken() ?: "none"} after=${afterPacketId.value.toPassBatchDumpToken()} " +
+        "code=${reasonCode.toPassBatchDumpToken()} message=${message.toPassBatchDumpMessage()}"
 
 private fun List<GPUPassDiagnostic>.dumpPassBatchCodes(): String =
-    if (isEmpty()) "none" else joinToString(",") { it.code }
+    if (isEmpty()) "none" else joinToString(",") { it.code.toPassBatchDumpToken() }
 
 private fun List<GPUPassDiagnostic>.dumpPassBatchLines(): List<String> =
     sortedWith(
@@ -361,9 +363,9 @@ private fun List<GPUPassDiagnostic>.dumpPassBatchLines(): List<String> =
             .thenBy { it.terminal.toString() },
     )
         .map { diagnostic ->
-            "passes.batch-diagnostic code=${diagnostic.code} " +
-                "pass=${diagnostic.passId ?: "none"} " +
-                "invocation=${diagnostic.invocationId ?: "none"} " +
+            "passes.batch-diagnostic code=${diagnostic.code.toPassBatchDumpToken()} " +
+                "pass=${diagnostic.passId?.toPassBatchDumpToken() ?: "none"} " +
+                "invocation=${diagnostic.invocationId?.toPassBatchDumpToken() ?: "none"} " +
                 "terminal=${diagnostic.terminal}"
         }
 
@@ -373,3 +375,20 @@ private fun String.isPassBatchDumpSafeToken(): Boolean =
         !contains("@") &&
         !contains("0x", ignoreCase = true) &&
         !contains("wgpu", ignoreCase = true)
+
+private fun String.toPassBatchDumpToken(): String =
+    if (isPassBatchDumpSafeToken()) {
+        this
+    } else {
+        "sanitized-${stablePassBatchDumpFingerprint()}"
+    }
+
+private fun String.toPassBatchDumpMessage(): String =
+    trim().split(Regex("\\s+"))
+        .filter { it.isNotEmpty() }
+        .joinToString(" ") { token -> token.toPassBatchDumpToken() }
+
+private fun String.stablePassBatchDumpFingerprint(): Long =
+    fold(17L) { acc, char ->
+        ((acc * 131L) + char.code.toLong()).mod(1_000_000_007L)
+    }
