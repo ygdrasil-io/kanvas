@@ -153,7 +153,7 @@ class GPUMultiStopGradientTest {
     }
 
     @Test
-    fun `toMaterial preserves ConicalGradient fallback`() {
+    fun `toMaterial preserves ConicalGradient descriptor stops`() {
         val shader = Shader.ConicalGradient(
             start = Point(0f, 0f), startRadius = 0f,
             end = Point(100f, 0f), endRadius = 50f,
@@ -162,8 +162,9 @@ class GPUMultiStopGradientTest {
                 GradientStop(1f, Color.fromRGBA(0f, 0f, 1f, 1f)),
             ),
         )
-        val material = shader.toMaterial() as GPUMaterialDescriptor.LinearGradient
-        assertNull(material.allStopPositions)
-        assertNull(material.allStopColors)
+        val material = shader.toMaterial() as GPUMaterialDescriptor.ConicalGradient
+        assertArrayEquals(floatArrayOf(0f, 1f), material.allStopPositions, 0.001f)
+        assertNotNull(material.allStopColors)
+        assertEquals(8, material.allStopColors!!.size)
     }
 }

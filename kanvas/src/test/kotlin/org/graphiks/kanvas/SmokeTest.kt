@@ -1,14 +1,20 @@
 package org.graphiks.kanvas
 
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.surface.PixelFormat
 import org.graphiks.kanvas.types.*
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 
 class KanvasSmokeTest {
+    @AfterEach
+    fun disposeGpuRuntime() {
+        GPUBackendRuntimeFactory.dispose()
+    }
 
     @Test
     fun `surface creates with default RGBA8 format`() {

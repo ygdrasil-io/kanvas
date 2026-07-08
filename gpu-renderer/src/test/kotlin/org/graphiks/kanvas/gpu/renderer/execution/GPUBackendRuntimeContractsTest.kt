@@ -107,7 +107,8 @@ class GPUBackendRuntimeContractsTest {
                 "gpu-runtime.telemetry renderPasses=0 offscreenPasses=0 windowPasses=0 " +
                     "submissions=0 commandBuffers=0 buffersCreated=0 texturesCreated=0 bindGroupsCreated=0 " +
                     "samplersCreated=0 queueWrites=0 uniformSlabsCreated=0 " +
-                    "uniformSlabBytesAllocated=0 uniformSlabFallbacks=0",
+                    "uniformSlabBytesAllocated=0 uniformSlabFallbacks=0 passBatchPlans=0 " +
+                    "passBatchesAccepted=0 passBatchCuts=0 passBatchPackets=0",
             ),
             telemetry.dumpLines(),
         )

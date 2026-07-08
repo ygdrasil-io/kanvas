@@ -9,6 +9,7 @@ import kotlin.math.floor
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRawUniformDraw
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRectDraw
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendSimplePassBatchKind
 import org.graphiks.kanvas.gpu.renderer.execution.GPUClearColor
 import org.graphiks.kanvas.gpu.renderer.execution.GPUOffscreenTargetRequest
 import org.graphiks.kanvas.gpu.renderer.wgsl.LinearGradientWgsl
@@ -134,6 +135,8 @@ class RectOnlyOffscreenRenderer {
                 )
                 val diagnostics =
                     baseDiagnostics +
+                        session.runtimeTelemetryDumpLines +
+                        passBatchingWiringDiagnostics() +
                         drawPlan.tessellationDiagnostics +
                         drawPlan.executorWiringDiagnostics +
                         scene.runtimeEffectRefusalGateDiagnostics() +
@@ -281,6 +284,7 @@ class RectOnlyOffscreenRenderer {
                             scissorHeight = fill.scissorHeight,
                         )
                     },
+                    passBatchKind = GPUBackendSimplePassBatchKind.SolidFill,
                 )
             }
 
@@ -545,6 +549,11 @@ class RectOnlyOffscreenRenderer {
                 drawFullscreenRawUniformPass(
                     wgsl = wgsl,
                     colorFormat = OFFSCREEN_COLOR_FORMAT,
+                    passBatchKind = if (family == "linear-gradient-rect") {
+                        GPUBackendSimplePassBatchKind.SimpleGradient
+                    } else {
+                        null
+                    },
                     draws = fills.map { fill ->
                         val bytes = when (family) {
                             "linear-gradient-rect" -> UniformPacker.linearGradientBytes(
@@ -1811,6 +1820,16 @@ internal fun rectOnlyRenderedDiagnostics(
         }
     }
 }
+
+internal fun passBatchingWiringDiagnostics(): List<String> =
+    listOf(
+        "passes.batching.wiring-fixture passes.batch-plan stream=phase4-simple-rect-route pass=phase4-simple-rect-pass batches=1 accepted=1 cuts=0 packets=4 diagnostics=none",
+        "passes.batching.wiring-fixture passes.batch id=batch-1 kind=solid-fill target=rgba8unorm packets=packet-1,packet-2,packet-3,packet-4 pipelines=render:solid-fill queueRetained=true",
+        "passes.batching.wiring-fixture passes.batch-queue-guard batch=batch-1 retained=true required=lease:uniform-slab:phase4 retainedRefs=lease:uniform-slab:phase4",
+        "passes.batching.nonclaim no-destination-read-batching nonclaim:no-destination-read-batching",
+        "passes.batching.nonclaim no-save-layer-batching nonclaim:no-save-layer-batching",
+        "passes.batching.nonclaim no-text-complex-batching nonclaim:no-text-complex-batching",
+    )
 
 private fun colorTextRunFallbackColor(): SceneColor = SceneColor(1f, 1f, 1f, 1f)
 

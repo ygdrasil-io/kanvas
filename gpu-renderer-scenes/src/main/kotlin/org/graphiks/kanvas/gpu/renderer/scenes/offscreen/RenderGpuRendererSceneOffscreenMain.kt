@@ -1,13 +1,21 @@
 package org.graphiks.kanvas.gpu.renderer.scenes.offscreen
 
 import java.nio.file.Path
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererScene
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererSceneRegistry
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneCommand
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.textRunRouteUnavailableDiagnostics
 
 fun main(args: Array<String>) {
-    renderGpuRendererSceneOffscreen(args)
+    try {
+        val report = renderGpuRendererSceneOffscreen(args)
+        if (report.runStatus == OffscreenRunStatus.RenderFailed) {
+            error("GPU renderer scene offscreen render failed: ${report.diagnostics.joinToString("; ")}")
+        }
+    } finally {
+        GPUBackendRuntimeFactory.dispose()
+    }
 }
 
 fun renderGpuRendererSceneOffscreen(args: Array<String>): OffscreenRunReport {

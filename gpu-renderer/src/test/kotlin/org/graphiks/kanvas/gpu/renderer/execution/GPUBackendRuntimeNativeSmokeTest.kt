@@ -358,6 +358,26 @@ class GPUBackendRuntimeNativeSmokeTest {
     }
 
     @Test
+    fun `runtime telemetry dump includes pass batch counters`() {
+        val telemetry = GPUBackendRuntimeTelemetry(
+            renderPasses = 1,
+            submissions = 1,
+            commandBuffers = 1,
+            passBatchPlans = 1,
+            passBatchesAccepted = 1,
+            passBatchCuts = 0,
+            passBatchPackets = 3,
+        )
+
+        val dump = telemetry.dumpLines().joinToString("\n")
+
+        assertTrue(dump.contains("passBatchPlans=1"), dump)
+        assertTrue(dump.contains("passBatchesAccepted=1"), dump)
+        assertTrue(dump.contains("passBatchCuts=0"), dump)
+        assertTrue(dump.contains("passBatchPackets=3"), dump)
+    }
+
+    @Test
     fun `backend runtime offscreen encode and read rgba when backend is available`() {
         val runtime = GPUBackendRuntimeFactory.createOrNull()
         assumeTrue(runtime != null, "GPU backend unavailable in current environment")
@@ -412,6 +432,235 @@ class GPUBackendRuntimeNativeSmokeTest {
                 assertContentEquals(byteArrayOf(0xFF.toByte(), 0, 0, 0xFF.toByte()), rgba.copyOfRange(0, 4))
                 assertTrue(rgba.asList().chunked(4).all { pixel -> pixel[3] == 0xFF.toByte() })
             }
+        }
+    }
+
+    @Test
+    fun `backend runtime records pass batch plan for fullscreen rect draws when backend is available`() {
+        val runtime = GPUBackendRuntimeFactory.createOrNull()
+        assumeTrue(runtime != null, "GPU backend unavailable in current environment")
+
+        runtime!!.use { session ->
+            session.createOffscreenTarget(
+                GPUOffscreenTargetRequest(width = 4, height = 4, colorFormat = "rgba8unorm"),
+            ).use { target ->
+                target.encode(GPUClearColor(0.0, 0.0, 0.0, 1.0)) {
+                    drawFullscreenPass(
+                        wgsl = solidColorFullscreenWgsl(),
+                        colorFormat = "rgba8unorm",
+                        draws = listOf(
+                            GPUBackendRectDraw(floatArrayOf(1f, 0f, 0f, 1f), 0, 0, 2, 4),
+                            GPUBackendRectDraw(floatArrayOf(0f, 1f, 0f, 1f), 2, 0, 2, 4),
+                        ),
+                        passBatchKind = GPUBackendSimplePassBatchKind.SolidFill,
+                    )
+                }
+                target.readRgba()
+
+                val dump = session.runtimeTelemetryDumpLines.joinToString("\n")
+                assertTrue(dump.contains("passBatchPlans=1"), dump)
+                assertTrue(dump.contains("passBatchesAccepted=1"), dump)
+                assertTrue(dump.contains("passes.batch-plan stream=fullscreen-uniform-pass"), dump)
+                assertTrue(dump.contains("passes.batch id=batch-1 kind=solid-fill"), dump)
+                assertTrue(!dump.contains("@"))
+                assertTrue(!dump.contains("0x"))
+                assertTrue(!dump.contains(forbiddenImplementationTokenUpperForAudit()))
+                assertTrue(!dump.contains(forbiddenImplementationTokenLowerForAudit()))
+            }
+        }
+    }
+
+    @Test
+    fun `backend runtime does not record pass batch plan for unmarked generic fullscreen pass draws when backend is available`() {
+        val runtime = GPUBackendRuntimeFactory.createOrNull()
+        assumeTrue(runtime != null, "GPU backend unavailable in current environment")
+
+        runtime!!.use { session ->
+            val before = session.runtimeTelemetry
+
+            session.createOffscreenTarget(
+                GPUOffscreenTargetRequest(width = 4, height = 4, colorFormat = "rgba8unorm"),
+            ).use { target ->
+                target.encode(GPUClearColor(0.0, 0.0, 0.0, 1.0)) {
+                    drawFullscreenPass(
+                        wgsl = nonSimpleFullscreenWgsl(),
+                        colorFormat = "rgba8unorm",
+                        draws = listOf(
+                            GPUBackendRectDraw(floatArrayOf(1f, 0f, 0f, 1f), 0, 0, 4, 4),
+                            GPUBackendRectDraw(floatArrayOf(0f, 1f, 0f, 1f), 0, 0, 2, 4),
+                        ),
+                    )
+                }
+
+                val rgba = target.readRgba()
+                val after = session.runtimeTelemetry
+                val dump = session.runtimeTelemetryDumpLines.joinToString("\n")
+
+                assertEquals(4 * 4 * 4, rgba.size)
+                assertEquals(0L, after.passBatchPlans - before.passBatchPlans, dump)
+                assertEquals(0L, after.passBatchesAccepted - before.passBatchesAccepted, dump)
+                assertEquals(0L, after.passBatchPackets - before.passBatchPackets, dump)
+                assertTrue(!dump.contains("passes.batch-plan stream=fullscreen-uniform-pass"), dump)
+                assertTrue(!dump.contains("kind=solid-fill"), dump)
+            }
+        }
+    }
+
+    @Test
+    fun `backend runtime does not record pass batch plan for unmarked raw uniform fullscreen passes when backend is available`() {
+        val runtime = GPUBackendRuntimeFactory.createOrNull()
+        assumeTrue(runtime != null, "GPU backend unavailable in current environment")
+
+        runtime!!.use { session ->
+            val before = session.runtimeTelemetry
+
+            session.createOffscreenTarget(
+                GPUOffscreenTargetRequest(width = 4, height = 4, colorFormat = "rgba8unorm"),
+            ).use { target ->
+                target.encode(GPUClearColor(0.0, 0.0, 0.0, 1.0)) {
+                    drawFullscreenRawUniformPass(
+                        wgsl = solidColorFullscreenWgsl(),
+                        colorFormat = "rgba8unorm",
+                        draws = listOf(
+                            GPUBackendRawUniformDraw(
+                                uniformBytes = solidColorUniformBytes(1f, 0f, 0f, 1f),
+                                scissorX = 0,
+                                scissorY = 0,
+                                scissorWidth = 4,
+                                scissorHeight = 4,
+                            ),
+                        ),
+                    )
+                }
+
+                val rgba = target.readRgba()
+                val after = session.runtimeTelemetry
+                val dump = session.runtimeTelemetryDumpLines.joinToString("\n")
+
+                assertContentEquals(byteArrayOf(0xFF.toByte(), 0, 0, 0xFF.toByte()), rgba.copyOfRange(0, 4))
+                assertEquals(0L, after.passBatchPlans - before.passBatchPlans, dump)
+                assertEquals(0L, after.passBatchesAccepted - before.passBatchesAccepted, dump)
+                assertEquals(0L, after.passBatchPackets - before.passBatchPackets, dump)
+                assertTrue(!dump.contains("passes.batch-plan stream=fullscreen-uniform-pass"), dump)
+                assertTrue(!dump.contains("kind=simple-gradient"), dump)
+            }
+        }
+    }
+
+    @Test
+    fun `backend runtime records pass batch plan for explicitly marked simple gradient raw uniform fullscreen passes when backend is available`() {
+        val runtime = GPUBackendRuntimeFactory.createOrNull()
+        assumeTrue(runtime != null, "GPU backend unavailable in current environment")
+
+        runtime!!.use { session ->
+            val before = session.runtimeTelemetry
+
+            session.createOffscreenTarget(
+                GPUOffscreenTargetRequest(width = 4, height = 4, colorFormat = "rgba8unorm"),
+            ).use { target ->
+                target.encode(GPUClearColor(0.0, 0.0, 0.0, 1.0)) {
+                    drawFullscreenRawUniformPass(
+                        wgsl = solidColorFullscreenWgsl(),
+                        colorFormat = "rgba8unorm",
+                        draws = listOf(
+                            GPUBackendRawUniformDraw(
+                                uniformBytes = solidColorUniformBytes(0f, 1f, 0f, 1f),
+                                scissorX = 0,
+                                scissorY = 0,
+                                scissorWidth = 4,
+                                scissorHeight = 4,
+                            ),
+                        ),
+                        passBatchKind = GPUBackendSimplePassBatchKind.SimpleGradient,
+                    )
+                }
+
+                val rgba = target.readRgba()
+                val after = session.runtimeTelemetry
+                val dump = session.runtimeTelemetryDumpLines.joinToString("\n")
+
+                assertContentEquals(byteArrayOf(0, 0xFF.toByte(), 0, 0xFF.toByte()), rgba.copyOfRange(0, 4))
+                assertEquals(1L, after.passBatchPlans - before.passBatchPlans, dump)
+                assertEquals(0L, after.passBatchesAccepted - before.passBatchesAccepted, dump)
+                assertEquals(1L, after.passBatchPackets - before.passBatchPackets, dump)
+                assertTrue(dump.contains("passes.batch-plan stream=fullscreen-uniform-pass"), dump)
+                assertTrue(dump.contains("passes.batch id=batch-1 kind=simple-gradient"), dump)
+            }
+        }
+    }
+
+    @Test
+    fun `batched rectangle scene uses fewer submissions than explicit unbatched baseline when backend is available`() {
+        val runtime = GPUBackendRuntimeFactory.createOrNull()
+        assumeTrue(runtime != null, "GPU backend unavailable in current environment")
+
+        runtime!!.use { session ->
+            val beforeBaseline = session.runtimeTelemetry
+            session.createOffscreenTarget(GPUOffscreenTargetRequest(width = 4, height = 4, colorFormat = "rgba8unorm")).use { target ->
+                repeat(4) { index ->
+                    target.encode(GPUClearColor(0.0, 0.0, 0.0, 1.0)) {
+                        drawFullscreenPass(
+                            wgsl = solidColorFullscreenWgsl(),
+                            colorFormat = "rgba8unorm",
+                            draws = listOf(
+                                GPUBackendRectDraw(
+                                    rgbaPremul = floatArrayOf(1f, 0f, 0f, 1f),
+                                    scissorX = index,
+                                    scissorY = 0,
+                                    scissorWidth = 1,
+                                    scissorHeight = 4,
+                                ),
+                            ),
+                            passBatchKind = GPUBackendSimplePassBatchKind.SolidFill,
+                        )
+                    }
+                    target.readRgba()
+                }
+            }
+            val afterBaseline = session.runtimeTelemetry
+            val baselineSubmissions = afterBaseline.submissions - beforeBaseline.submissions
+            val baselinePassBatchPlans = afterBaseline.passBatchPlans - beforeBaseline.passBatchPlans
+            val baselinePassBatchesAccepted = afterBaseline.passBatchesAccepted - beforeBaseline.passBatchesAccepted
+            val baselinePassBatchPackets = afterBaseline.passBatchPackets - beforeBaseline.passBatchPackets
+
+            val beforeBatched = session.runtimeTelemetry
+            session.createOffscreenTarget(GPUOffscreenTargetRequest(width = 4, height = 4, colorFormat = "rgba8unorm")).use { target ->
+                target.encode(GPUClearColor(0.0, 0.0, 0.0, 1.0)) {
+                    drawFullscreenPass(
+                        wgsl = solidColorFullscreenWgsl(),
+                        colorFormat = "rgba8unorm",
+                        draws = (0 until 4).map { index ->
+                            GPUBackendRectDraw(
+                                rgbaPremul = floatArrayOf(1f, 0f, 0f, 1f),
+                                scissorX = index,
+                                scissorY = 0,
+                                scissorWidth = 1,
+                                scissorHeight = 4,
+                            )
+                        },
+                        passBatchKind = GPUBackendSimplePassBatchKind.SolidFill,
+                    )
+                }
+                target.readRgba()
+            }
+            val afterBatched = session.runtimeTelemetry
+            val batchedSubmissions = afterBatched.submissions - beforeBatched.submissions
+            val batchedPassBatchPlans = afterBatched.passBatchPlans - beforeBatched.passBatchPlans
+            val batchedPassBatchesAccepted = afterBatched.passBatchesAccepted - beforeBatched.passBatchesAccepted
+            val batchedPassBatchPackets = afterBatched.passBatchPackets - beforeBatched.passBatchPackets
+            val dump = session.runtimeTelemetryDumpLines.joinToString("\n")
+
+            assertEquals(4L, baselineSubmissions)
+            assertEquals(1L, batchedSubmissions)
+            assertTrue(batchedSubmissions < baselineSubmissions)
+            assertEquals(4L, baselinePassBatchPlans)
+            assertEquals(0L, baselinePassBatchesAccepted)
+            assertEquals(4L, baselinePassBatchPackets)
+            assertEquals(1L, batchedPassBatchPlans)
+            assertEquals(1L, batchedPassBatchesAccepted)
+            assertEquals(4L, batchedPassBatchPackets)
+            assertTrue(dump.contains("passes.batch-plan stream=fullscreen-uniform-pass"), dump)
+            assertTrue(dump.contains("passes.batch id=batch-1 kind=solid-fill"), dump)
         }
     }
 
@@ -982,6 +1231,72 @@ class GPUBackendRuntimeNativeSmokeTest {
     }
 
     @Test
+    fun `backend runtime does not record accepted pass batch plan when fullscreen slab fallback handles marked solid fills`() {
+        val runtime = GPUBackendRuntimeFactory.createOrNull()
+        assumeTrue(runtime != null, "GPU backend unavailable in current environment")
+
+        withFullscreenUniformSlabRefusedForTesting {
+            runtime!!.use { session ->
+                val before = session.runtimeTelemetry
+
+                session.createOffscreenTarget(
+                    GPUOffscreenTargetRequest(
+                        width = 6,
+                        height = 2,
+                        colorFormat = "rgba8unorm",
+                    ),
+                ).use { target ->
+                    target.encode(
+                        clearColor = GPUClearColor(red = 0.0, green = 0.0, blue = 0.0, alpha = 1.0),
+                    ) {
+                        drawFullscreenPass(
+                            wgsl = solidColorFullscreenWgsl(),
+                            colorFormat = "rgba8unorm",
+                            draws = listOf(
+                                GPUBackendRectDraw(
+                                    rgbaPremul = floatArrayOf(1f, 0f, 0f, 1f),
+                                    scissorX = 0,
+                                    scissorY = 0,
+                                    scissorWidth = 2,
+                                    scissorHeight = 2,
+                                ),
+                                GPUBackendRectDraw(
+                                    rgbaPremul = floatArrayOf(0f, 1f, 0f, 1f),
+                                    scissorX = 2,
+                                    scissorY = 0,
+                                    scissorWidth = 2,
+                                    scissorHeight = 2,
+                                ),
+                            ),
+                            passBatchKind = GPUBackendSimplePassBatchKind.SolidFill,
+                        )
+                    }
+
+                    val rgba = target.readRgba()
+                    val after = session.runtimeTelemetry
+                    val dump = session.runtimeTelemetryDumpLines.joinToString("\n")
+
+                    assertContentEquals(
+                        byteArrayOf(0xFF.toByte(), 0, 0, 0xFF.toByte()),
+                        pixelAt(rgba = rgba, width = 6, x = 0, y = 0),
+                    )
+                    assertContentEquals(
+                        byteArrayOf(0, 0xFF.toByte(), 0, 0xFF.toByte()),
+                        pixelAt(rgba = rgba, width = 6, x = 2, y = 0),
+                    )
+                    assertEquals(1L, after.uniformSlabFallbacks - before.uniformSlabFallbacks)
+                    assertEquals(0L, after.passBatchPlans - before.passBatchPlans, dump)
+                    assertEquals(0L, after.passBatchesAccepted - before.passBatchesAccepted, dump)
+                    assertEquals(0L, after.passBatchPackets - before.passBatchPackets, dump)
+                    assertTrue(dump.contains("payload-slab.resource.fallback source=fullscreen-uniform-pass"))
+                    assertTrue(!dump.contains("passes.batch-plan stream=fullscreen-uniform-pass"), dump)
+                    assertTrue(!dump.contains("passes.batch id=batch-1 kind=solid-fill"), dump)
+                }
+            }
+        }
+    }
+
+    @Test
     fun `backend runtime records GPU execution cache hit miss and create telemetry when backend is available`() {
         val runtime = GPUBackendRuntimeFactory.createOrNull()
         assumeTrue(runtime != null, "GPU backend unavailable in current environment")
@@ -1109,6 +1424,84 @@ class GPUBackendRuntimeNativeSmokeTest {
                 assertTrue(!dump.contains(forbiddenImplementationTokenUpperForAudit()))
                 assertTrue(!dump.contains(forbiddenImplementationTokenLowerForAudit()))
                 assertTrue(!dump.contains("0x"))
+            }
+        }
+    }
+
+    @Test
+    fun `backend runtime does not auto record pass batch evidence for unmarked payload fullscreen passes when backend is available`() {
+        val runtime = GPUBackendRuntimeFactory.createOrNull()
+        assumeTrue(runtime != null, "GPU backend unavailable in current environment")
+
+        val uniformBlock = uniformPayloadBlock()
+        val materialized = assertIs<GPUResourceMaterializationDecision.Materialized>(
+            ValidatingPayloadResourceProvider().materializePayloadBindings(
+                request = payloadMaterializationRequest(uniformBlock),
+                context = GPUTargetPreparationContext(
+                    targetId = "root-target",
+                    frameId = "frame-1",
+                    deviceGeneration = 1,
+                    budgetClass = "smoke-test",
+                ),
+            ),
+        )
+
+        runtime!!.use { session ->
+            val before = session.runtimeTelemetry
+
+            session.createOffscreenTarget(
+                GPUOffscreenTargetRequest(
+                    width = 6,
+                    height = 2,
+                    colorFormat = "rgba8unorm",
+                ),
+            ).use { target ->
+                target.encode(
+                    clearColor = GPUClearColor(red = 0.0, green = 0.0, blue = 0.0, alpha = 1.0),
+                ) {
+                    drawFullscreenUniformPayloadPass(
+                        wgsl = solidColorPayloadWgsl(),
+                        colorFormat = "rgba8unorm",
+                        draws = listOf(
+                            GPUBackendUniformPayloadDraw(
+                                uniformBytes = uniformBlock.bytes.map { byte -> byte.toByte() }.toByteArray(),
+                                materialization = materialized,
+                                scissorX = 0,
+                                scissorY = 0,
+                                scissorWidth = 3,
+                                scissorHeight = 2,
+                            ),
+                            GPUBackendUniformPayloadDraw(
+                                uniformBytes = uniformBlock.bytes.map { byte -> byte.toByte() }.toByteArray(),
+                                materialization = materialized,
+                                scissorX = 3,
+                                scissorY = 0,
+                                scissorWidth = 3,
+                                scissorHeight = 2,
+                            ),
+                        ),
+                    )
+                }
+
+                val rgba = target.readRgba()
+                val after = session.runtimeTelemetry
+                val dump = session.runtimeTelemetryDumpLines.joinToString("\n")
+
+                assertContentEquals(
+                    byteArrayOf(0xFF.toByte(), 0, 0, 0xFF.toByte()),
+                    pixelAt(rgba = rgba, width = 6, x = 0, y = 0),
+                )
+                assertContentEquals(
+                    byteArrayOf(0xFF.toByte(), 0, 0, 0xFF.toByte()),
+                    pixelAt(rgba = rgba, width = 6, x = 3, y = 0),
+                )
+                assertEquals(0L, after.passBatchPlans - before.passBatchPlans, dump)
+                assertEquals(0L, after.passBatchesAccepted - before.passBatchesAccepted, dump)
+                assertEquals(0L, after.passBatchPackets - before.passBatchPackets, dump)
+                assertTrue(!dump.contains("passes.batch-plan"), dump)
+                assertTrue(!dump.contains("passes.batch id="), dump)
+                assertTrue(!dump.contains("kind=solid-fill"), dump)
+                assertTrue(!dump.contains("kind=simple-gradient"), dump)
             }
         }
     }
@@ -1335,6 +1728,32 @@ class GPUBackendRuntimeNativeSmokeTest {
             }
         """.trimIndent()
 
+    private fun nonSimpleFullscreenWgsl(): String =
+        """
+            struct Uniforms {
+                color: vec4f,
+            };
+
+            @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+
+            struct VertexOut {
+                @builtin(position) position: vec4f,
+            };
+
+            @vertex
+            fn vs_main(@builtin(vertex_index) idx: u32) -> VertexOut {
+                let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
+                let y = f32(idx & 2u) * 2.0 - 1.0;
+                return VertexOut(vec4f(x, y, 0.0, 1.0));
+            }
+
+            @fragment
+            fn fs_main(in: VertexOut) -> @location(0) vec4f {
+                let tint = select(0.35, 1.0, in.position.x >= 0.0);
+                return vec4f(uniforms.color.rgb * tint, uniforms.color.a);
+            }
+        """.trimIndent()
+
     private fun fullscreenWgslWithoutFragmentEntry(): String =
         """
             struct Uniforms {
@@ -1375,6 +1794,15 @@ class GPUBackendRuntimeNativeSmokeTest {
             scope = "pass-a",
             bytes = buffer.array().map { byte -> byte.toInt() and 0xff },
         )
+    }
+
+    private fun solidColorUniformBytes(red: Float, green: Float, blue: Float, alpha: Float): ByteArray {
+        val buffer = ByteBuffer.allocate(16).order(ByteOrder.LITTLE_ENDIAN)
+        buffer.putFloat(red)
+        buffer.putFloat(green)
+        buffer.putFloat(blue)
+        buffer.putFloat(alpha)
+        return buffer.array()
     }
 
     private fun gradientMaterialization(label: String): GPUResourceMaterializationDecision.Materialized {
