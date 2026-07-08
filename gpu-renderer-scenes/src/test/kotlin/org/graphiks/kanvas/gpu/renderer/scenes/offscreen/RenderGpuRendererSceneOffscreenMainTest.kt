@@ -106,6 +106,23 @@ class RenderGpuRendererSceneOffscreenMainTest {
     }
 
     @Test
+    fun `saveLayer scene diagnostics include intermediate plan evidence`() {
+        val root = Files.createTempDirectory("gpu-renderer-scenes-offscreen-main")
+
+        renderSceneInWebGpuCapableProcess(root, "savelayer-isolated")
+
+        val sceneOutput = root.resolve("savelayer-isolated")
+        val runJson = sceneOutput.resolve("run.json").readText()
+        val diagnostics = sceneOutput.resolve("diagnostics.txt").readText()
+
+        assertTrue(sceneOutput.resolve("render.png").exists())
+        assertContains(runJson, "\"sceneId\": \"savelayer-isolated\"")
+        assertContains(runJson, "\"status\": \"${OffscreenRunStatus.Rendered.wireName}\"")
+        assertContains(diagnostics, "intermediate.plan id=scene-intermediate:savelayer-isolated")
+        assertContains(diagnostics, "intermediate.layer-children scope=layer:translucent-group")
+    }
+
+    @Test
     fun `solid card stack backend failure report remains representable`() {
         val root = Files.createTempDirectory("gpu-renderer-scenes-offscreen-main")
         val sceneOutput = root.resolve("solid-card-stack")

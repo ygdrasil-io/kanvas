@@ -101,7 +101,8 @@ class RectOnlyOffscreenRenderer {
                     colorFormat = OFFSCREEN_COLOR_FORMAT,
                 ),
             ).use { target ->
-                val pixels = renderToPixels(target, drawPlan)
+                val intermediateDiagnostics = mutableListOf<String>()
+                val pixels = renderToPixels(target, drawPlan, intermediateDiagnostics)
                 val nonTransparentPixels = pixels.countNonTransparentPixels()
                 val imagePath = outputDir.resolve(RENDER_FILE_NAME)
                 val width = target.target.descriptor.width
@@ -139,6 +140,7 @@ class RectOnlyOffscreenRenderer {
                         passBatchingWiringDiagnostics() +
                         drawPlan.tessellationDiagnostics +
                         drawPlan.executorWiringDiagnostics +
+                        intermediateDiagnostics +
                         scene.runtimeEffectRefusalGateDiagnostics() +
                         scene.a8GlyphAtlasGateDiagnostics() +
                         scene.textResourceBindingGateDiagnostics() +
@@ -161,99 +163,36 @@ class RectOnlyOffscreenRenderer {
     internal fun renderToPixels(
         target: org.graphiks.kanvas.gpu.renderer.execution.GPUBackendOffscreenTarget,
         drawPlan: RectOnlyDrawPlan,
+        intermediateDiagnostics: MutableList<String>? = null,
     ): ByteArray {
         val viewportWidth = target.target.descriptor.width
         val viewportHeight = target.target.descriptor.height
 
-        val saveLayerFills = drawPlan.fills.filter { it.family == "save-layer" }
-        val saveLayerReroutes = mutableMapOf<String, SaveLayerReroute>()
-        val saveLayerChildLabels = mutableSetOf<String>()
-
-        for ((layerIndex, saveLayerFill) in saveLayerFills.withIndex()) {
-            val nextPaintOrder = if (layerIndex + 1 < saveLayerFills.size)
-                saveLayerFills[layerIndex + 1].paintOrder else Int.MAX_VALUE
-            val childFills = drawPlan.fills.filter {
-                it.paintOrder > saveLayerFill.paintOrder &&
-                    it.paintOrder < nextPaintOrder &&
-                    it.family != "save-layer"
+        val intermediatePlan = SceneIntermediatePlanAdapter().plan(
+            sceneId = drawPlan.sceneId,
+            drawPlan = drawPlan,
+            width = viewportWidth,
+            height = viewportHeight,
+        )
+        val intermediateExecutor = SceneIntermediatePlanExecutor()
+        val intermediateExecution = intermediateExecutor.executeSaveLayerPreparation(
+            target = target,
+            drawPlan = drawPlan,
+            plan = intermediatePlan,
+        ) { fills ->
+            val solidDraws = SceneIntermediatePlanExecutor.solidRectDraws(fills)
+            if (solidDraws.isNotEmpty()) {
+                drawFullscreenPass(
+                    wgsl = SOLID_RECT_WGSL,
+                    colorFormat = OFFSCREEN_COLOR_FORMAT,
+                    draws = solidDraws,
+                )
             }
-            childFills.forEach { saveLayerChildLabels.add(it.label) }
-
-            val texDesc = org.graphiks.kanvas.gpu.renderer.execution.GPUBackendOffscreenTexture(
-                width = viewportWidth,
-                height = viewportHeight,
-                format = "rgba8unorm",
-            )
-            val texLabel = target.createOffscreenTexture(texDesc)
-
-            target.encodeOffscreenTexture(
-                texLabel,
-                clearColor = GPUClearColor(0.0, 0.0, 0.0, 0.0),
-            ) {
-                val offscreenFills = mutableListOf<RectOnlyFillDraw>()
-
-                if (saveLayerFill.shadowColor != null) {
-                    val shadowRect = SceneRect(
-                        saveLayerFill.left + saveLayerFill.shadowOffsetX,
-                        saveLayerFill.top + saveLayerFill.shadowOffsetY,
-                        saveLayerFill.right + saveLayerFill.shadowOffsetX,
-                        saveLayerFill.bottom + saveLayerFill.shadowOffsetY,
-                    )
-                    val sl = floor(shadowRect.left).toInt()
-                    val st = floor(shadowRect.top).toInt()
-                    val sr = ceil(shadowRect.right).toInt()
-                    val sb = ceil(shadowRect.bottom).toInt()
-                    offscreenFills.add(
-                        RectOnlyFillDraw(
-                            label = "${saveLayerFill.label}-shadow",
-                            family = "fill-rect",
-                            startColor = saveLayerFill.shadowColor,
-                            endColor = saveLayerFill.shadowColor,
-                            bottomLeftColor = saveLayerFill.shadowColor,
-                            bottomRightColor = saveLayerFill.shadowColor,
-                            left = shadowRect.left,
-                            top = shadowRect.top,
-                            right = shadowRect.right,
-                            bottom = shadowRect.bottom,
-                            radius = saveLayerFill.radius,
-                            paintKind = 0f,
-                            filterKind = 0f,
-                            filterStrength = 0f,
-                            scissorX = sl,
-                            scissorY = st,
-                            scissorWidth = sr - sl,
-                            scissorHeight = sb - st,
-                            paintOrder = 0,
-                        ),
-                    )
-                }
-
-                offscreenFills.add(saveLayerFill)
-
-                offscreenFills.addAll(childFills)
-
-                val solidDraws = offscreenFills.map { fill ->
-                    GPUBackendRectDraw(
-                        rgbaPremul = fill.toPremulColorArray(),
-                        scissorX = fill.scissorX,
-                        scissorY = fill.scissorY,
-                        scissorWidth = fill.scissorWidth,
-                        scissorHeight = fill.scissorHeight,
-                    )
-                }
-                if (solidDraws.isNotEmpty()) {
-                    drawFullscreenPass(
-                        wgsl = SOLID_RECT_WGSL,
-                        colorFormat = OFFSCREEN_COLOR_FORMAT,
-                        draws = solidDraws,
-                    )
-                }
-            }
-
-            saveLayerReroutes[saveLayerFill.label] = SaveLayerReroute(texLabel)
         }
+        intermediateDiagnostics?.addAll(intermediateExecution.diagnostics)
 
         target.encode(clearColor = drawPlan.clearColor.toGpuClearColor()) {
+            val saveLayerFills = drawPlan.fills.filter { it.family == "save-layer" }
             val effectFamilies = setOf(
                 "linear-gradient-rect", "radial-gradient-rect", "sweep-gradient-rect",
                 "blur-rect", "color-matrix-rect", "stroke-rect",
@@ -269,7 +208,7 @@ class RectOnlyOffscreenRenderer {
                     it.family != "path-fill-stencil" &&
                     it.family != "path-fill-gradient" &&
                     it.family != "convex-fan-mesh" &&
-                    it.label !in saveLayerChildLabels
+                    it.label !in intermediateExecution.childLabels
             }
             if (solidFills.isNotEmpty()) {
                 drawFullscreenPass(
@@ -745,25 +684,12 @@ class RectOnlyOffscreenRenderer {
             }
 
             if (saveLayerFills.isNotEmpty()) {
-                saveLayerFills.forEach { fill ->
-                    val reroute = saveLayerReroutes[fill.label] ?: return@forEach
-                    val compositeWgsl = composeSaveLayerCompositeWgsl()
-                    drawCompositePass(
-                        wgsl = compositeWgsl,
-                        colorFormat = OFFSCREEN_COLOR_FORMAT,
-                        textureLabel = reroute.texLabel,
-                        draws = listOf(
-                            GPUBackendRawUniformDraw(
-                                uniformBytes = UniformPacker.layerCompositeBytes(
-                                    SceneColor(0f, 0f, 0f, 0f),
-                                    fill.groupAlpha,
-                                ),
-                                scissorX = 0,
-                                scissorY = 0,
-                                scissorWidth = viewportWidth,
-                                scissorHeight = viewportHeight,
-                            ),
-                        ),
+                intermediateExecutor.run {
+                    compositeSaveLayers(
+                        drawPlan = drawPlan,
+                        execution = intermediateExecution,
+                        viewportWidth = viewportWidth,
+                        viewportHeight = viewportHeight,
                     )
                 }
             }
@@ -818,7 +744,7 @@ class RectOnlyOffscreenRenderer {
         }
     }
 
-    private companion object {
+    companion object {
         const val RENDER_FILE_NAME: String = "render.png"
         const val OFFSCREEN_COLOR_FORMAT: String = "rgba8unorm"
 
@@ -986,10 +912,6 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
         }
     }
 }
-
-internal data class SaveLayerReroute(
-    val texLabel: String,
-)
 
 internal data class RectOnlyDrawPlan(
     val sceneId: String,

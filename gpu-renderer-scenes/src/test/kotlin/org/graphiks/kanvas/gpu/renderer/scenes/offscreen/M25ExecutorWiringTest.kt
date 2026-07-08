@@ -11,6 +11,8 @@ import org.graphiks.kanvas.gpu.renderer.geometry.PathVerb
 import org.graphiks.kanvas.gpu.renderer.geometry.Point
 import org.graphiks.kanvas.gpu.renderer.geometry.StencilCoverExecutor
 import org.graphiks.kanvas.gpu.renderer.geometry.isPathConvex
+import org.graphiks.kanvas.gpu.renderer.intermediates.dumpLines
+import org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererSceneRegistry
 import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTEntryPoint
 import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTWgsl
 
@@ -68,7 +70,27 @@ class M25ExecutorWiringTest {
 
     @Test
     fun `KGPU-M25-004 save layer routes through SaveLayerExecutor`() {
-        val lines = saveLayerWiringDiagnostics(sceneId = "savelayer-composite", width = 320, height = 200)
+        val scene = GPURendererSceneRegistry.scenes.single { it.sceneId.value == "savelayer-isolated" }
+        val drawPlan = prepareRectOnlyDrawPlan(
+            sceneId = scene.sceneId.value,
+            commands = scene.commands,
+            width = scene.dimensions.width,
+            height = scene.dimensions.height,
+        )
+        val plan = SceneIntermediatePlanAdapter().plan(
+            sceneId = scene.sceneId.value,
+            drawPlan = drawPlan,
+            width = scene.dimensions.width,
+            height = scene.dimensions.height,
+        )
+        val lines = plan.dumpLines() + saveLayerWiringDiagnostics(
+            fills = drawPlan.fills,
+            sceneId = scene.sceneId.value,
+            width = scene.dimensions.width,
+            height = scene.dimensions.height,
+        )
+        assertTrue(lines.any { it.startsWith("intermediate.plan id=scene-intermediate:savelayer-isolated") }, lines.toString())
+        assertTrue(lines.any { it.contains("intermediate.layer-children scope=layer:translucent-group") }, lines.toString())
         assertTrue(lines.any { it.contains("savelayer:executor targetAllocated=true") }, lines.toString())
         assertTrue(lines.any { it.contains("compositeSnippetSourceHash=fragment:layer_composite:v1") }, lines.toString())
         assertTrue(lines.any { it.contains("secondaryTargetAllocated=true") }, lines.toString())
