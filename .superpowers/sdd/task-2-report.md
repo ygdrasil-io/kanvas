@@ -126,3 +126,67 @@ Observed:
 - all `GPUDrawPacketCommandStreamTest` tests passed
 - all `GPURenderStepScaffoldTest` tests passed
 - Gradle exit code: `0`
+
+### Fix: conservative per-batch submission-complete retention guard
+
+#### RED
+
+Added a focused multi-batch regression test where:
+
+- `materialization.dumpResourceLeaseSnapshot` includes `lease:bind-group:frame-1`
+- `batch-1` retains that lease
+- `batch-2` does not retain that lease
+- the plan-wide retained-ref union still contains the lease
+
+Then ran:
+
+```bash
+rtk ./gradlew :gpu-renderer:test --tests org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchCommandStreamTest
+```
+
+Observed before the fix:
+
+- `GPUPassBatchCommandStreamTest > from batch plan refuses submission complete lease missing from one batch retained refs() FAILED`
+- `org.opentest4j.AssertionFailedError at GPUPassBatchCommandStreamTest.kt:167`
+- `5 tests completed, 1 failed`
+- Gradle exit code: `1`
+
+That RED confirmed the prior guard was still validating against a plan-wide union of `retainedRefs`, which allowed one batch to mask another batch's missing retention.
+
+#### GREEN
+
+Updated `GPUPassCommandStream.fromBatchPlan(...)` to:
+
+- extract all `submission-complete` lease ids from `materialization.dumpResourceLeaseSnapshot`
+- require every batch in `batchPlan.batches` to retain every such lease id
+- refuse before command emission with a batch-specific `require(...)` message
+- deduplicate diagnostics when `batchPlan.diagnostics` already repeats `packetStream.diagnostics`
+
+Reran:
+
+```bash
+rtk ./gradlew :gpu-renderer:test --tests org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchCommandStreamTest
+```
+
+Observed:
+
+- `GPUPassBatchCommandStreamTest > from batch plan refuses submission complete lease missing from retained refs() PASSED`
+- `GPUPassBatchCommandStreamTest > from batch plan accepts retained submission complete lease from materialization() PASSED`
+- `GPUPassBatchCommandStreamTest > from batch plan refuses submission complete lease missing from one batch retained refs() PASSED`
+- `GPUPassBatchCommandStreamTest > single accepted batch lowers to one render pass() PASSED`
+- `GPUPassBatchCommandStreamTest > cut batches lower to separate render pass scopes in order() PASSED`
+- Gradle exit code: `0`
+
+#### Covering verification
+
+Ran:
+
+```bash
+rtk ./gradlew :gpu-renderer:test --tests org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketCommandStreamTest --tests org.graphiks.kanvas.gpu.renderer.passes.GPURenderStepScaffoldTest
+```
+
+Observed:
+
+- all `GPUDrawPacketCommandStreamTest` tests passed
+- all `GPURenderStepScaffoldTest` tests passed
+- Gradle exit code: `0`

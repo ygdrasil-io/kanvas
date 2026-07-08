@@ -129,6 +129,56 @@ class GPUPassBatchCommandStreamTest {
         assertContains(commandStream.dumpLines().joinToString("\n"), "batch-plan-line-0")
     }
 
+    @Test
+    fun `from batch plan refuses submission complete lease missing from one batch retained refs`() {
+        val packetStream = packetStream(
+            packet("packet-1", 1, "target-a"),
+            packet("packet-2", 2, "target-b"),
+        )
+        val plan = GPUPassBatchPlan(
+            streamId = packetStream.streamId,
+            passId = packetStream.passId,
+            batches = listOf(
+                batch(
+                    batchId = "batch-1",
+                    packet = packetStream.packets[0],
+                    targetStateHash = "target-a",
+                    retainedRefs = listOf("lease:uniform-slab:frame-1", "lease:bind-group:frame-1"),
+                ),
+                batch(
+                    batchId = "batch-2",
+                    packet = packetStream.packets[1],
+                    targetStateHash = "target-b",
+                    retainedRefs = listOf("lease:uniform-slab:frame-1"),
+                ),
+            ),
+            cuts = listOf(
+                GPUPassBatchCut(
+                    beforePacketId = packetStream.packets[0].packetId,
+                    afterPacketId = packetStream.packets[1].packetId,
+                    reasonCode = GPUPassBatchReason.TARGET_CHANGED,
+                    message = "target target-a cannot batch with target-b",
+                ),
+            ),
+            diagnostics = packetStream.diagnostics,
+            inputPacketCount = packetStream.packetCount,
+        )
+
+        val error = assertFailsWith<IllegalArgumentException> {
+            GPUPassCommandStream.fromBatchPlan(
+                streamId = "batch-command-stream-main",
+                packetStream = packetStream,
+                batchPlan = plan,
+                loadStoreLabel = "clear-store",
+                materialization = materializedDecision(resourceLease("lease:bind-group:frame-1")),
+            )
+        }
+
+        assertContains(error.message.orEmpty(), "submission-complete")
+        assertContains(error.message.orEmpty(), "lease:bind-group:frame-1")
+        assertContains(error.message.orEmpty(), "batch-2")
+    }
+
     private fun requestForAll(
         packetStream: GPUDrawPacketStream,
         retainedRefs: List<String> = listOf("lease:uniform-slab:frame-1"),
@@ -151,6 +201,24 @@ class GPUPassBatchCommandStreamTest {
         GPUResourceMaterializationDecision.Materialized(
             resources = emptyList(),
             resourceLeases = leases.toList(),
+        )
+
+    private fun batch(
+        batchId: String,
+        packet: GPUDrawPacket,
+        targetStateHash: String,
+        retainedRefs: List<String>,
+    ): GPUPassBatch =
+        GPUPassBatch(
+            batchId = batchId,
+            packets = listOf(packet),
+            kind = GPUPassBatchKind.SolidFill,
+            targetStateHash = targetStateHash,
+            fixedStateHash = "fixed:src-over",
+            queueGuard = GPUPassBatchQueueGuard(
+                requiredRetainedRefs = retainedRefs,
+                retainedRefs = retainedRefs,
+            ),
         )
 
     private fun resourceLease(leaseId: String): GPUResourceLease =
