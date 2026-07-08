@@ -18,6 +18,17 @@ fun GPUPassCommandStream.Companion.fromBatchPlan(
     require(packetStream.passId == batchPlan.passId) {
         "Batch plan pass ${batchPlan.passId} must match packet stream pass ${packetStream.passId}"
     }
+    val retainedRefs = batchPlan.batches.flatMap { batch -> batch.queueGuard.retainedRefs }.toSet()
+    materialization
+        ?.dumpResourceLeaseSnapshot
+        .orEmpty()
+        .filter { lease -> lease.releasePolicy == "submission-complete" }
+        .forEach { lease ->
+            require(lease.leaseId in retainedRefs) {
+                "GPUPassCommandStream.fromBatchPlan requires submission-complete lease ${lease.leaseId} " +
+                    "to appear in batchPlan queueGuard retainedRefs before grouped command emission"
+            }
+        }
 
     val commands = buildList {
         for (batch in batchPlan.batches) {
@@ -73,8 +84,9 @@ fun GPUPassCommandStream.Companion.fromBatchPlan(
     }
 
     val batchDiagnostics = batchPlan.dumpLines().mapIndexed { index, line ->
+        val lineCode = index.toString().padStart(3, '0')
         GPUPassDiagnostic(
-            code = "batch-plan-line-$index",
+            code = "batch-plan-line-$lineCode",
             passId = packetStream.passId,
             invocationId = line.replace(' ', '_').take(120),
             terminal = false,
