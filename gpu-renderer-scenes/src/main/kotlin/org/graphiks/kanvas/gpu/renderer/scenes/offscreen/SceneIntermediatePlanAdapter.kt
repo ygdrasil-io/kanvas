@@ -9,6 +9,7 @@ import org.graphiks.kanvas.gpu.renderer.intermediates.GPUIntermediatePlanStep
 import org.graphiks.kanvas.gpu.renderer.intermediates.GPUIntermediateTelemetry
 import org.graphiks.kanvas.gpu.renderer.layers.GPULayerSaveRecord
 import org.graphiks.kanvas.gpu.renderer.layers.GPULayerScopeID
+import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneBlendMode
 import org.graphiks.kanvas.gpu.renderer.state.GPUBlendMode
 
 private val TRANSITIONAL_LAYER_CHILD_FAMILIES = setOf("fill-rect")
@@ -30,7 +31,7 @@ internal class SceneIntermediatePlanAdapter(
                     targetLabel = "surface:$sceneId",
                     targetGeneration = 1,
                     bounds = sceneBounds(commandId = fill.label, width = width, height = height),
-                    blendMode = fill.intermediateBlendMode(sceneId),
+                    blendMode = fill.intermediateBlendMode(),
                     materialKeyHash = "material:${fill.family}:${fill.label}",
                     renderStepIdentity = fill.family,
                 )
@@ -116,9 +117,8 @@ internal class SceneIntermediatePlanAdapter(
         )
 }
 
-private fun RectOnlyFillDraw.intermediateBlendMode(sceneId: String): GPUBlendMode =
-    if (sceneId == "dst-read-strategy" && label == "dst-foreground") {
-        GPUBlendMode.Screen
-    } else {
-        GPUBlendMode.SrcOver
+private fun RectOnlyFillDraw.intermediateBlendMode(): GPUBlendMode =
+    when (blendMode) {
+        SceneBlendMode.Screen -> GPUBlendMode.Screen
+        SceneBlendMode.SrcOver -> GPUBlendMode.SrcOver
     }

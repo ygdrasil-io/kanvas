@@ -91,6 +91,11 @@ enum class SceneFilterKind(val wireName: String) {
     ColorMatrix("color-matrix"),
 }
 
+enum class SceneBlendMode {
+    SrcOver,
+    Screen,
+}
+
 sealed interface SceneCommand {
     val label: String
     val family: String
@@ -105,6 +110,7 @@ sealed interface SceneCommand {
         val rect: SceneRect,
         val color: SceneColor,
         val paintOrder: Int = 0,
+        val blendMode: SceneBlendMode = SceneBlendMode.SrcOver,
     ) : SceneCommand {
         override val family: String = "fill-rect"
 

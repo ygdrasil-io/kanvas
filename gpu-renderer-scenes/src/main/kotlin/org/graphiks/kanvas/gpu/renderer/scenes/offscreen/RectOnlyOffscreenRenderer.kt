@@ -52,6 +52,7 @@ import org.graphiks.kanvas.gpu.renderer.scenes.catalog.runtimeEffectRefusalGateD
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.textResourceBindingGateDiagnostics
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneBitmapSampling
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneBitmapSource
+import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneBlendMode
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneColor
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneCommand
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneFilterKind
@@ -214,6 +215,18 @@ class RectOnlyOffscreenRenderer internal constructor(
                 intermediateDiagnostics?.addAll(intermediateExecution.diagnostics)
                 intermediateExecution
             }
+        }
+
+        if (preparedIntermediateExecution.destinationReadBlends.isNotEmpty()) {
+            renderDestinationReadBlends(
+                target = target,
+                drawPlan = drawPlan,
+                execution = preparedIntermediateExecution,
+                viewportWidth = viewportWidth,
+                viewportHeight = viewportHeight,
+                intermediateDiagnostics = intermediateDiagnostics,
+            )
+            return target.readRgba()
         }
 
         target.encode(clearColor = drawPlan.clearColor.toGpuClearColor()) {
@@ -742,6 +755,70 @@ class RectOnlyOffscreenRenderer internal constructor(
         return target.readRgba()
     }
 
+    private fun renderDestinationReadBlends(
+        target: org.graphiks.kanvas.gpu.renderer.execution.GPUBackendOffscreenTarget,
+        drawPlan: RectOnlyDrawPlan,
+        execution: SceneIntermediateExecutionResult.Prepared,
+        viewportWidth: Int,
+        viewportHeight: Int,
+        intermediateDiagnostics: MutableList<String>?,
+    ) {
+        require(execution.destinationReadBlends.size == 1) {
+            "scene destination-read execution currently supports one shader blend per scene"
+        }
+        val destinationDrawLabels = execution.destinationReadBlends
+            .flatMap { blend -> blend.destinationDrawLabels }
+            .toSet()
+        val destinationFills = drawPlan.fills.filter { fill -> fill.label in destinationDrawLabels }
+
+        target.encode(clearColor = drawPlan.clearColor.toGpuClearColor()) {
+            if (destinationFills.isNotEmpty()) {
+                drawFullscreenPass(
+                    wgsl = SOLID_RECT_WGSL,
+                    colorFormat = OFFSCREEN_COLOR_FORMAT,
+                    draws = destinationFills.map { fill ->
+                        GPUBackendRectDraw(
+                            rgbaPremul = fill.toPremulColorArray(),
+                            scissorX = fill.scissorX,
+                            scissorY = fill.scissorY,
+                            scissorWidth = fill.scissorWidth,
+                            scissorHeight = fill.scissorHeight,
+                        )
+                    },
+                    passBatchKind = GPUBackendSimplePassBatchKind.SolidFill,
+                )
+            }
+        }
+
+        execution.destinationReadBlends.forEach { blend ->
+            target.copyTargetToOffscreenTexture(blend.destinationTextureLabel)
+            intermediateDiagnostics?.add(
+                "intermediate.scene.destination-read-snapshotted command=${blend.commandId} " +
+                    "source=surface:${drawPlan.sceneId} destinationTexture=${blend.destinationTextureLabel}",
+            )
+        }
+
+        target.encode(clearColor = GPUClearColor(0.0, 0.0, 0.0, 0.0)) {
+            execution.destinationReadBlends.forEach { blend ->
+                drawBlendPass(
+                    wgsl = composeSceneDestinationReadBlendWgsl(blend.routeLabel),
+                    colorFormat = OFFSCREEN_COLOR_FORMAT,
+                    srcTextureLabel = blend.sourceTextureLabel,
+                    dstTextureLabel = blend.destinationTextureLabel,
+                    draws = listOf(
+                        GPUBackendRawUniformDraw(
+                            uniformBytes = UniformPacker.solidColorBytes(SceneColor(1f, 1f, 1f, 1f)),
+                            scissorX = 0,
+                            scissorY = 0,
+                            scissorWidth = viewportWidth,
+                            scissorHeight = viewportHeight,
+                        ),
+                    ),
+                )
+            }
+        }
+    }
+
     /**
      * KGPU-M27-002: pipeline-cache telemetry for the passes this renderer emits
      * for [drawPlan], modeled across [frameCount] steady-state frames. Derived
@@ -1118,6 +1195,7 @@ internal data class RectOnlyFillDraw(
     val colorTextRunText: String? = null,
     val colorTextRunFontSize: Float? = null,
     val colorTextRunLayerColors: List<SceneColor>? = null,
+    val blendMode: SceneBlendMode = SceneBlendMode.SrcOver,
 )
 
 private data class RectOnlyIndexedDraw(
@@ -1236,6 +1314,7 @@ internal fun prepareRectOnlyDrawPlan(
                 colorTextRunText = colorTextRunCommand?.glyphText,
                 colorTextRunFontSize = colorTextRunCommand?.glyphFontSize,
                 colorTextRunLayerColors = colorTextRunCommand?.layerColors,
+                blendMode = (command as? SceneCommand.FillRect)?.blendMode ?: SceneBlendMode.SrcOver,
             )
         }
     require(fills.isNotEmpty()) {
@@ -1601,6 +1680,7 @@ private fun rectOnlyFillDraw(
     colorTextRunText: String? = null,
     colorTextRunFontSize: Float? = null,
     colorTextRunLayerColors: List<SceneColor>? = null,
+    blendMode: SceneBlendMode = SceneBlendMode.SrcOver,
 ): RectOnlyFillDraw {
     requireInsideTarget(sceneId, label, rect, width, height, "fill shape")
     clip?.let { requireInsideTarget(sceneId, it.label, it.rect, width, height, "clip") }
@@ -1652,6 +1732,7 @@ private fun rectOnlyFillDraw(
         colorTextRunText = colorTextRunText,
         colorTextRunFontSize = colorTextRunFontSize,
         colorTextRunLayerColors = colorTextRunLayerColors,
+        blendMode = blendMode,
     )
 }
 

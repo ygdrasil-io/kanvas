@@ -7,6 +7,7 @@ import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.intermediates.GPUIntermediatePlanStep
 import org.graphiks.kanvas.gpu.renderer.intermediates.dumpLines
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererSceneRegistry
+import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneBlendMode
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneColor
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneCommand
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneRect
@@ -64,6 +65,46 @@ class SceneIntermediatePlanAdapterTest {
         assertEquals(1L, plan.telemetry.destinationReadCopies)
         assertEquals(1L, plan.telemetry.destinationReadIntermediateBinds)
         assertEquals(1L, plan.telemetry.passSplits)
+    }
+
+    @Test
+    fun `destination-read blend mode comes from command metadata not scene label`() {
+        val drawPlan = prepareRectOnlyDrawPlan(
+            sceneId = "metadata-driven-dst-read",
+            commands = listOf(
+                SceneCommand.Clear(SceneColor(0f, 0f, 0f, 1f)),
+                SceneCommand.FillRect(
+                    label = "background",
+                    rect = SceneRect(0f, 0f, 64f, 64f),
+                    color = SceneColor.green(1f),
+                    paintOrder = 1,
+                ),
+                SceneCommand.FillRect(
+                    label = "foreground",
+                    rect = SceneRect(8f, 8f, 56f, 56f),
+                    color = SceneColor.amber(0.6f),
+                    paintOrder = 2,
+                    blendMode = SceneBlendMode.Screen,
+                ),
+            ),
+            width = 64,
+            height = 64,
+        )
+
+        val plan = SceneIntermediatePlanAdapter().plan(
+            sceneId = "metadata-driven-dst-read",
+            drawPlan = drawPlan,
+            width = 64,
+            height = 64,
+        )
+
+        assertTrue(plan.steps.any { it is GPUIntermediatePlanStep.CopyDestination }, plan.dumpLines().joinToString("\n"))
+        assertTrue(
+            plan.steps.any {
+                it is GPUIntermediatePlanStep.RenderToTarget && it.routeLabel == "shader-blend:Screen"
+            },
+            plan.dumpLines().joinToString("\n"),
+        )
     }
 
     @Test

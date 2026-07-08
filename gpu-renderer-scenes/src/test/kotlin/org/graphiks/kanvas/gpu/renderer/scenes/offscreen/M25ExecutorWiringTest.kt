@@ -256,6 +256,81 @@ class M25ExecutorWiringTest {
     }
 
     @Test
+    fun `destination read preparation materializes through provider and defers destination snapshot to backend copy`() {
+        val drawPlan = RectOnlyDrawPlan(
+            sceneId = "destination-copy-scene",
+            clearColor = SceneColor(0f, 0f, 0f, 0f),
+            clearCount = 1,
+            fills = listOf(
+                fillRect(label = "background", paintOrder = 1),
+                fillRect(label = "foreground", paintOrder = 2),
+            ),
+        )
+        val plan = GPUIntermediatePlan(
+            planId = "scene-intermediate:destination-copy-scene",
+            targetId = "target:destination-copy-scene",
+            steps = listOf(
+                GPUIntermediatePlanStep.CreateIntermediate(
+                    intermediateDescriptor("dst-copy:foreground").copy(
+                        purpose = GPUIntermediatePurpose.DestinationCopy,
+                        sourceTargetLabel = "surface:destination-copy-scene",
+                        usageLabels = listOf("render_attachment", "texture_binding", "copy_dst"),
+                    ),
+                ),
+                GPUIntermediatePlanStep.CopyDestination(
+                    sourceLabel = "surface:destination-copy-scene",
+                    destination = intermediateDescriptor("dst-copy:foreground").copy(
+                        purpose = GPUIntermediatePurpose.DestinationCopy,
+                        sourceTargetLabel = "surface:destination-copy-scene",
+                        usageLabels = listOf("render_attachment", "texture_binding", "copy_dst"),
+                    ),
+                    boundsLabel = "copy:foreground",
+                    tokenLabel = "copy-token:foreground",
+                    passSplitRequired = true,
+                    copyBeforeSample = true,
+                ),
+                GPUIntermediatePlanStep.BindIntermediate(
+                    descriptor = intermediateDescriptor("dst-copy:foreground"),
+                    bindingLabel = "dst-read:foreground",
+                    layoutHash = "layout:foreground",
+                ),
+                GPUIntermediatePlanStep.RenderToTarget(
+                    commandId = "foreground",
+                    targetLabel = "surface:destination-copy-scene",
+                    routeLabel = "shader-blend:Screen",
+                    orderingToken = "order:foreground",
+                ),
+            ),
+        )
+        val target = RecordingOffscreenTarget(width = 64, height = 64)
+
+        val execution = SceneIntermediatePlanExecutor().executeSaveLayerPreparation(
+            target = target,
+            drawPlan = drawPlan,
+            plan = plan,
+        ) {
+            drawFullscreenPass("solid-rect-wgsl", OFFSCREEN_COLOR_FORMAT, SceneIntermediatePlanExecutor.solidRectDraws(it))
+        }
+
+        val prepared = assertIs<SceneIntermediateExecutionResult.Prepared>(execution)
+        assertEquals(listOf("dst-copy:foreground", "blend-src:foreground"), target.createdTextureLabels)
+        assertEquals(1, target.offscreenEncodeCount, "only the source texture is rendered during preparation")
+        assertEquals(0, target.targetSnapshotCopies, "destination snapshot must happen through the backend copy hook later")
+        assertTrue(
+            prepared.diagnostics.any {
+                it.startsWith("resource-provider.cache lane=intermediate-texture result=create")
+            },
+            prepared.diagnostics.toString(),
+        )
+        assertTrue(
+            prepared.diagnostics.any {
+                it.contains("intermediate.scene.destination-read-copy-deferred command=foreground")
+            },
+            prepared.diagnostics.toString(),
+        )
+    }
+
+    @Test
     fun `KGPU-M25-004 executor refuses unsupported saveLayer child family instead of solid rect rendering it`() {
         val drawPlan = RectOnlyDrawPlan(
             sceneId = "unsupported-child-scene",
@@ -395,6 +470,29 @@ class M25ExecutorWiringTest {
             groupAlpha = groupAlpha,
         )
 
+    private fun fillRect(label: String, paintOrder: Int): RectOnlyFillDraw =
+        RectOnlyFillDraw(
+            label = label,
+            family = "fill-rect",
+            startColor = SceneColor(1f, 1f, 1f, 1f),
+            endColor = SceneColor(1f, 1f, 1f, 1f),
+            bottomLeftColor = SceneColor(1f, 1f, 1f, 1f),
+            bottomRightColor = SceneColor(1f, 1f, 1f, 1f),
+            left = 0f,
+            top = 0f,
+            right = 64f,
+            bottom = 64f,
+            radius = 0f,
+            paintKind = 0f,
+            filterKind = 0f,
+            filterStrength = 0f,
+            scissorX = 0,
+            scissorY = 0,
+            scissorWidth = 64,
+            scissorHeight = 64,
+            paintOrder = paintOrder,
+        )
+
     private fun compositeStep(sourceLabel: String, tokenLabel: String): GPUIntermediatePlanStep.CompositeIntermediate =
         GPUIntermediatePlanStep.CompositeIntermediate(
             source = intermediateDescriptor(sourceLabel),
@@ -442,6 +540,8 @@ class M25ExecutorWiringTest {
         var offscreenEncodeCount: Int = 0
             private set
         val createdTextureLabels: MutableList<String> = mutableListOf()
+        var targetSnapshotCopies: Int = 0
+            private set
 
         override fun encode(clearColor: GPUClearColor, block: GPUBackendRenderRecorder.() -> Unit) {
             mainEncodeCount += 1
@@ -450,6 +550,10 @@ class M25ExecutorWiringTest {
 
         override fun readRgba(): ByteArray =
             ByteArray(target.descriptor.width * target.descriptor.height * 4)
+
+        override fun copyTargetToOffscreenTexture(textureLabel: String) {
+            targetSnapshotCopies += 1
+        }
 
         override fun createOffscreenTexture(texture: GPUBackendOffscreenTexture): String {
             createdTextureLabels += texture.label

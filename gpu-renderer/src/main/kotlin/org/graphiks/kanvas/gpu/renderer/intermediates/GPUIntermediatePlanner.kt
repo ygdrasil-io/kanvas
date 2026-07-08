@@ -91,7 +91,9 @@ class GPUIntermediatePlanner(
             return request.refused(request.targetId, msaaRoute.diagnostic.code)
         }
         val acceptedMsaaRoute = msaaRoute as? GPUMsaaRoute.Accepted
-        val acceptedMsaaTarget = acceptedMsaaRoute?.let { request.msaaTargetDescriptor() }
+        if (acceptedMsaaRoute != null) {
+            return request.refused(request.targetId, "unsupported.msaa.runtime_resolve_unwired")
+        }
 
         for (draw in request.drawRequests) {
             if (draw.activeAttachmentSampled) {
@@ -158,7 +160,7 @@ class GPUIntermediatePlanner(
                 )
                 steps += GPUIntermediatePlanStep.RenderToTarget(
                     commandId = draw.commandId,
-                    targetLabel = acceptedMsaaTarget?.label ?: draw.targetLabel,
+                    targetLabel = draw.targetLabel,
                     routeLabel = "shader-blend:${draw.blendMode}",
                     orderingToken = "order:${draw.commandId}",
                 )
@@ -186,45 +188,17 @@ class GPUIntermediatePlanner(
                 }
                 steps += GPUIntermediatePlanStep.RenderToTarget(
                     commandId = draw.commandId,
-                    targetLabel = acceptedMsaaTarget?.label ?: draw.targetLabel,
+                    targetLabel = draw.targetLabel,
                     routeLabel = "fixed-function:${draw.blendMode}",
                     orderingToken = "order:${draw.commandId}",
                 )
             }
         }
-        val finalSteps = if (acceptedMsaaRoute != null) {
-            val msaaTarget = requireNotNull(acceptedMsaaTarget)
-            val resolvedTarget = request.msaaResolvedDescriptor(msaaTarget)
-            listOf(
-                GPUIntermediatePlanStep.CreateIntermediate(msaaTarget),
-                GPUIntermediatePlanStep.CreateIntermediate(resolvedTarget),
-            ) +
-                steps +
-                listOf(
-                    GPUIntermediatePlanStep.ResolveMSAA(
-                        source = msaaTarget,
-                        destination = resolvedTarget,
-                        strategyLabel = "WGPU_BUILTIN",
-                        tokenLabel = "msaa-token:${request.targetId}",
-                    ),
-                )
-        } else {
-            steps
-        }
-        val finalTelemetry = if (acceptedMsaaRoute != null) {
-            telemetry.copy(
-                msaaTargets = telemetry.msaaTargets + 1,
-                msaaResolves = telemetry.msaaResolves + 1,
-            )
-        } else {
-            telemetry
-        }
-
         return GPUIntermediatePlan(
             planId = request.planId,
             targetId = request.targetId,
-            steps = finalSteps,
-            telemetry = finalTelemetry,
+            steps = steps,
+            telemetry = telemetry,
         )
     }
 
@@ -300,41 +274,6 @@ private fun GPUIntermediatePlannerRequest.refused(scopeLabel: String, reasonCode
         targetId = targetId,
         steps = listOf(GPUIntermediatePlanStep.Refuse(scopeLabel = scopeLabel, reasonCode = reasonCode)),
         telemetry = GPUIntermediateTelemetry(intermediatesRefused = 1),
-    )
-
-private fun GPUIntermediatePlannerRequest.msaaTargetDescriptor(): GPUIntermediateTextureDescriptor {
-    val bounds = drawRequests.first().bounds
-    return GPUIntermediateTextureDescriptor(
-        label = "intermediate:msaa:$targetId",
-        purpose = GPUIntermediatePurpose.LayerTarget,
-        descriptorHash = "msaa:$targetFormatClass:$requestedSampleCount:$targetId",
-        sourceTargetLabel = targetId,
-        boundsLabel = bounds.boundsLabel,
-        width = bounds.targetWidth,
-        height = bounds.targetHeight,
-        formatClass = targetFormatClass,
-        usageLabels = listOf("render_attachment"),
-        sampleCount = requestedSampleCount,
-        generation = deviceGeneration,
-        lifetimeClass = "pass-local",
-        ownerScope = targetId,
-        byteEstimate = bounds.targetWidth.toLong() *
-            bounds.targetHeight.toLong() *
-            4L *
-            requestedSampleCount.toLong(),
-    )
-}
-
-private fun GPUIntermediatePlannerRequest.msaaResolvedDescriptor(
-    msaaTarget: GPUIntermediateTextureDescriptor,
-): GPUIntermediateTextureDescriptor =
-    msaaTarget.copy(
-        label = "intermediate:msaa-resolved:$targetId",
-        purpose = GPUIntermediatePurpose.MsaaResolve,
-        descriptorHash = "msaa-resolved:$targetFormatClass:1:$targetId",
-        usageLabels = listOf("texture_binding", "copy_src"),
-        sampleCount = 1,
-        byteEstimate = msaaTarget.width.toLong() * msaaTarget.height.toLong() * 4L,
     )
 
 private fun GPUIntermediateDrawRequest.destinationReadRequest(

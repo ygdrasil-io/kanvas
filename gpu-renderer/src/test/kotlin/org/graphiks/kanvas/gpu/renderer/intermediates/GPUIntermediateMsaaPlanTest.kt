@@ -54,7 +54,7 @@ class GPUIntermediateMsaaPlanTest {
     }
 
     @Test
-    fun `native resolve evidence prepares both targets before resolve step`() {
+    fun `native resolve remains refused until runtime resolve evidence is wired`() {
         val plan = GPUIntermediatePlanner().plan(
             msaaRequest(
                 requestedSampleCount = 4,
@@ -67,17 +67,13 @@ class GPUIntermediateMsaaPlanTest {
             ),
         )
 
-        val createSteps = plan.steps.filterIsInstance<GPUIntermediatePlanStep.CreateIntermediate>()
-        assertEquals(2, createSteps.size)
-        val resolve = assertIs<GPUIntermediatePlanStep.ResolveMSAA>(plan.steps.last())
-        assertTrue(createSteps.any { it.descriptor.label == resolve.source.label })
-        assertTrue(createSteps.any { it.descriptor.label == resolve.destination.label })
-        assertTrue(
-            plan.steps.filterIsInstance<GPUIntermediatePlanStep.RenderToTarget>()
-                .all { it.targetLabel == resolve.source.label },
-        )
-        assertEquals(1, plan.telemetry.msaaTargets)
-        assertEquals(1, plan.telemetry.msaaResolves)
+        val refusal = assertIs<GPUIntermediatePlanStep.Refuse>(plan.steps.single())
+        assertEquals("unsupported.msaa.runtime_resolve_unwired", refusal.reasonCode)
+        assertEquals("target:main", refusal.scopeLabel)
+        assertEquals(1, plan.telemetry.intermediatesRefused)
+        assertEquals(0, plan.telemetry.msaaTargets)
+        assertEquals(0, plan.telemetry.msaaResolves)
+        assertFalse(plan.steps.any { it is GPUIntermediatePlanStep.ResolveMSAA })
     }
 
     private fun msaaRequest(

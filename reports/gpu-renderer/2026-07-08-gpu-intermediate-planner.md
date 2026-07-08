@@ -9,6 +9,10 @@ Date: 2026-07-08
 - Product flags required: none for the normal phase-5 path; product flags are
   not required to activate the validated intermediate planner routes in this
   phase.
+- Product renderer scope: the broad `kanvas` display-list renderer still owns
+  its local `kanvas:scene` / `kanvas:src` / `kanvas:snap` advanced-blend route.
+  It now emits a product diagnostic with `phase5PlannerActivation=false` for
+  that path and is not counted as Phase 5 planner activation.
 - Crash/exception status: no crash, no undocumented exception, and no
   `CrashOrException` diagnostic was observed in the validation-scene test or
   offscreen regeneration commands executed for this task.
@@ -74,7 +78,7 @@ Short diagnostic lines captured from the regenerated offscreen reports:
 
 ```text
 gpu-runtime.telemetry renderPasses=2 offscreenPasses=2 windowPasses=0 submissions=2 commandBuffers=2 buffersCreated=4 texturesCreated=4 intermediateTexturesCreated=1 destinationCopies=0 msaaTargets=0 msaaResolves=0 bindGroupsCreated=6 samplersCreated=1 queueWrites=5 uniformSlabsCreated=2 uniformSlabBytesAllocated=1024 uniformSlabFallbacks=0 passBatchPlans=1 passBatchesAccepted=0 passBatchCuts=0 passBatchPackets=1
-gpu-runtime.telemetry renderPasses=3 offscreenPasses=3 windowPasses=0 submissions=3 commandBuffers=3 buffersCreated=4 texturesCreated=6 intermediateTexturesCreated=2 destinationCopies=1 msaaTargets=0 msaaResolves=0 bindGroupsCreated=4 samplersCreated=1 queueWrites=3 uniformSlabsCreated=2 uniformSlabBytesAllocated=512 uniformSlabFallbacks=0 passBatchPlans=0 passBatchesAccepted=0 passBatchCuts=0 passBatchPackets=0
+gpu-runtime.telemetry renderPasses=4 offscreenPasses=4 windowPasses=0 submissions=4 commandBuffers=4 buffersCreated=5 texturesCreated=7 intermediateTexturesCreated=2 destinationCopies=1 msaaTargets=0 msaaResolves=0 bindGroupsCreated=6 samplersCreated=2 queueWrites=4 uniformSlabsCreated=2 uniformSlabBytesAllocated=512 uniformSlabFallbacks=0 passBatchPlans=1 passBatchesAccepted=0 passBatchCuts=0 passBatchPackets=1
 intermediate.telemetry destinationReadCopies=0 destinationReadIntermediateBinds=0 copiedBytes=0 passSplits=0 intermediatesCreated=1 intermediatesReused=0 intermediatesRefused=0 liveIntermediateBytes=256000 layerTargets=1 layerComposites=1 msaaTargets=0 msaaResolves=0
 intermediate.telemetry destinationReadCopies=1 destinationReadIntermediateBinds=1 copiedBytes=256000 passSplits=1 intermediatesCreated=1 intermediatesReused=0 intermediatesRefused=0 liveIntermediateBytes=256000 layerTargets=0 layerComposites=0 msaaTargets=0 msaaResolves=0
 ```
@@ -92,6 +96,9 @@ resource-provider.cache lane=intermediate-texture result=reuse key=target=target
 - Visual correctness is not globally complete in this phase.
 - Remaining unsupported routes keep stable reason codes.
 - No CPU-rendered texture product fallback was added.
+- MSAA is refused with `unsupported.msaa.runtime_resolve_unwired` even when the
+  adapter advertises native resolve, because runtime resolve counters and hooks
+  are not wired in this Phase 5 scene branch.
 
 ## Final Verification Notes
 
@@ -130,8 +137,8 @@ resource-provider.cache lane=intermediate-texture result=reuse key=target=target
   criteria = same-size layer targets carry planner labels into runtime texture labels/keys;
   evidence = `intermediate.scene.layer-prepared ... plannedTarget=layer-target:translucent-group texture=offscreenTex:layer-target:translucent-group:320x200:rgba8unorm` and same-size unit coverage in `M25ExecutorWiringTest`.
 - Destination-read validation fix:
-  criteria = `dst-read-strategy` executes destination copy, bind, and shader-blend render evidence instead of a single direct `SrcOver` step;
-  evidence = `intermediate.scene.destination-read-prepared command=dst-foreground`, `intermediate.copy source=surface:dst-read-strategy destination=dst-copy:dst-foreground`, `intermediate.bind label=dst-copy:dst-foreground binding=dst-read:dst-foreground`, `route=shader-blend:Screen`, and runtime telemetry `intermediateTexturesCreated=2 destinationCopies=1`.
+  criteria = `dst-read-strategy` executes destination materialization, a real target snapshot, bind, and shader-blend render evidence instead of replaying prior fills as copy evidence;
+  evidence = `resource-provider.cache lane=intermediate-texture result=create`, `intermediate.scene.destination-read-copy-deferred command=dst-foreground`, `intermediate.scene.destination-read-snapshotted command=dst-foreground source=surface:dst-read-strategy`, `intermediate.copy source=surface:dst-read-strategy destination=dst-copy:dst-foreground`, `intermediate.bind label=dst-copy:dst-foreground binding=dst-read:dst-foreground`, `route=shader-blend:Screen`, and runtime telemetry `intermediateTexturesCreated=2 destinationCopies=1`.
 - Command stream evidence fix:
   criteria = `BindIntermediate` is a concrete pass command ordered between copy and draw;
   evidence = `GPUIntermediateCommandStreamTest.destination copy lowers before draw that samples it`.
@@ -141,3 +148,21 @@ resource-provider.cache lane=intermediate-texture result=reuse key=target=target
 - Unsupported saveLayer child fix:
   criteria = transitional offscreen saveLayer preparation accepts only supported solid child families and refuses others with stable reason codes;
   evidence = `unsupported.layer.child_family.linear-gradient-rect` unit coverage in adapter and executor tests.
+
+## Final Review Fix Follow-Up
+
+- Copy telemetry fix:
+  criteria = `destinationCopies` increments only from the explicit backend target snapshot operation, not from `drawBlendPass` label differences;
+  evidence = `GPUBackendOffscreenTarget.copyTargetToOffscreenTexture`, `intermediate.scene.destination-read-snapshotted`, and regenerated `dst-read-strategy` runtime telemetry `destinationCopies=1`.
+- Provider materialization fix:
+  criteria = scene `CreateIntermediate`/destination copy texture allocation is accepted or refused through `GPUConcreteResourceProvider` before backend texture allocation;
+  evidence = regenerated diagnostics include `resource-provider.cache lane=intermediate-texture result=create ... subject=dst-copy:dst-foreground`, and unit coverage asserts preparation defers the destination snapshot.
+- Product route non-claim:
+  criteria = the product display-list advanced-blend route is not represented as Phase 5 planner activation;
+  evidence = `GPUProductIntermediatePlannerScopeTest` covers `phase5PlannerActivation=false reason=product-display-list-route-not-yet-planner-backed`.
+- MSAA refusal:
+  criteria = accepted plan-only native MSAA resolve is removed until runtime hooks/counters are wired;
+  evidence = `GPUIntermediateMsaaPlanTest.native resolve remains refused until runtime resolve evidence is wired`.
+- Blend metadata fix:
+  criteria = scene destination-read blend selection comes from command metadata, not scene-id/label hardcoding;
+  evidence = `SceneIntermediatePlanAdapterTest.destination-read blend mode comes from command metadata not scene label`.

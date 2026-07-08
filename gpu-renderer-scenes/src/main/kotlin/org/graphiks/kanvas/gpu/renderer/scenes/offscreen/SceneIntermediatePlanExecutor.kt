@@ -10,7 +10,12 @@ import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRenderRecorder
 import org.graphiks.kanvas.gpu.renderer.execution.GPUClearColor
 import org.graphiks.kanvas.gpu.renderer.intermediates.GPUIntermediatePlan
 import org.graphiks.kanvas.gpu.renderer.intermediates.GPUIntermediatePlanStep
+import org.graphiks.kanvas.gpu.renderer.intermediates.GPUIntermediateTextureDescriptor
 import org.graphiks.kanvas.gpu.renderer.intermediates.dumpLines
+import org.graphiks.kanvas.gpu.renderer.resources.GPUConcreteResourceProvider
+import org.graphiks.kanvas.gpu.renderer.resources.GPUIntermediateTextureMaterializationRequest
+import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceMaterializationDecision
+import org.graphiks.kanvas.gpu.renderer.resources.GPUTargetPreparationContext
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneColor
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneRect
 
@@ -24,6 +29,8 @@ internal sealed interface SceneIntermediateExecutionResult {
         val routeLabel: String,
         val sourceTextureLabel: String,
         val destinationTextureLabel: String,
+        val sourceDrawLabel: String,
+        val destinationDrawLabels: Set<String>,
         val drawLabels: Set<String>,
     )
 
@@ -50,7 +57,9 @@ internal class SceneIntermediateExecutionRefused(
     val diagnostics: List<String>,
 ) : IllegalStateException("scene intermediate execution refused: scope=$scopeLabel reason=$reasonCode")
 
-internal class SceneIntermediatePlanExecutor {
+internal class SceneIntermediatePlanExecutor(
+    private val resourceProvider: GPUConcreteResourceProvider = GPUConcreteResourceProvider(),
+) {
     fun executeSaveLayerPreparation(
         target: GPUBackendOffscreenTarget,
         drawPlan: RectOnlyDrawPlan,
@@ -105,21 +114,25 @@ internal class SceneIntermediatePlanExecutor {
                         stage = "destination-read-preparation",
                     )
                 }
-
-                val destinationTextureLabel = target.createOffscreenTexture(
-                    GPUBackendOffscreenTexture(
-                        label = copyStep.destination.label,
-                        width = copyStep.destination.width,
-                        height = copyStep.destination.height,
-                        format = copyStep.destination.formatClass,
-                    ),
-                )
-                target.encodeOffscreenTexture(
-                    textureLabel = destinationTextureLabel,
-                    clearColor = GPUClearColor(0.0, 0.0, 0.0, 0.0),
-                ) {
-                    renderSolidFills(destinationFills)
+                val followingFill = drawPlan.fills.firstOrNull { fill ->
+                    fill.paintOrder > sourceFill.paintOrder
                 }
+                if (followingFill != null) {
+                    throw refusal(
+                        scopeLabel = renderStep.commandId,
+                        reasonCode = "unsupported.destination_read.following_draw.${followingFill.family}",
+                        diagnostics = diagnostics + plan.dumpLines(),
+                        stage = "destination-read-preparation",
+                    )
+                }
+
+                val destinationTextureLabel = materializeAndCreateTexture(
+                    target = target,
+                    descriptor = copyStep.destination,
+                    requiredUsageLabels = setOf("texture_binding", "copy_dst"),
+                    diagnostics = diagnostics,
+                    stage = "destination-read-preparation",
+                )
 
                 val sourceTextureLabel = target.createOffscreenTexture(
                     GPUBackendOffscreenTexture(
@@ -137,16 +150,17 @@ internal class SceneIntermediatePlanExecutor {
                 }
 
                 destinationReadDrawLabels += sourceFill.label
-                destinationReadDrawLabels += destinationFills.map { fill -> fill.label }
                 destinationReadBlends += SceneIntermediateExecutionResult.DestinationReadBlend(
                     commandId = renderStep.commandId,
                     routeLabel = renderStep.routeLabel,
                     sourceTextureLabel = sourceTextureLabel,
                     destinationTextureLabel = destinationTextureLabel,
+                    sourceDrawLabel = sourceFill.label,
+                    destinationDrawLabels = destinationFills.mapTo(linkedSetOf()) { fill -> fill.label },
                     drawLabels = linkedSetOf(sourceFill.label) + destinationFills.map { fill -> fill.label },
                 )
                 diagnostics +=
-                    "intermediate.scene.destination-read-prepared command=${renderStep.commandId} " +
+                    "intermediate.scene.destination-read-copy-deferred command=${renderStep.commandId} " +
                         "route=${renderStep.routeLabel} sourceTexture=$sourceTextureLabel " +
                         "destinationTexture=$destinationTextureLabel binding=${bindStep.bindingLabel} " +
                         "token=${copyStep.tokenLabel}"
@@ -170,13 +184,12 @@ internal class SceneIntermediatePlanExecutor {
             }
             childLabels += children.map { it.label }
 
-            val textureLabel = target.createOffscreenTexture(
-                GPUBackendOffscreenTexture(
-                    label = layerStep.target.label,
-                    width = layerStep.target.width,
-                    height = layerStep.target.height,
-                    format = layerStep.target.formatClass,
-                ),
+            val textureLabel = materializeAndCreateTexture(
+                target = target,
+                descriptor = layerStep.target,
+                requiredUsageLabels = setOf("render_attachment", "texture_binding"),
+                diagnostics = diagnostics,
+                stage = "save-layer-preparation",
             )
             target.encodeOffscreenTexture(
                 textureLabel,
@@ -203,6 +216,57 @@ internal class SceneIntermediatePlanExecutor {
             plannedComposites = plan.steps.filterIsInstance<GPUIntermediatePlanStep.CompositeIntermediate>(),
             diagnostics = diagnostics,
         )
+    }
+
+    private fun materializeAndCreateTexture(
+        target: GPUBackendOffscreenTarget,
+        descriptor: GPUIntermediateTextureDescriptor,
+        requiredUsageLabels: Set<String>,
+        diagnostics: MutableList<String>,
+        stage: String,
+    ): String {
+        val decision = resourceProvider.materializeIntermediateTexture(
+            GPUIntermediateTextureMaterializationRequest(
+                targetId = target.target.targetId,
+                descriptor = descriptor,
+                deviceGeneration = target.target.deviceGeneration.value,
+                actualResourceGeneration = target.target.deviceGeneration.value,
+                requiredUsageLabels = requiredUsageLabels,
+                activeAttachmentSampled = false,
+            ),
+            GPUTargetPreparationContext(
+                targetId = target.target.targetId,
+                frameId = "scene-intermediate:${descriptor.label}",
+                deviceGeneration = target.target.deviceGeneration.value,
+                budgetClass = "scene-intermediate",
+            ),
+        )
+        diagnostics += resourceProvider.telemetry.dumpLines()
+        return when (decision) {
+            is GPUResourceMaterializationDecision.Materialized ->
+                target.createOffscreenTexture(
+                    GPUBackendOffscreenTexture(
+                        label = descriptor.label,
+                        width = descriptor.width,
+                        height = descriptor.height,
+                        format = descriptor.formatClass,
+                    ),
+                )
+            is GPUResourceMaterializationDecision.Refused ->
+                throw refusal(
+                    scopeLabel = descriptor.label,
+                    reasonCode = decision.diagnostic.code,
+                    diagnostics = diagnostics,
+                    stage = stage,
+                )
+            is GPUResourceMaterializationDecision.Deferred ->
+                throw refusal(
+                    scopeLabel = descriptor.label,
+                    reasonCode = decision.reasonCode,
+                    diagnostics = diagnostics,
+                    stage = stage,
+                )
+        }
     }
 
     fun GPUBackendRenderRecorder.compositeSaveLayers(

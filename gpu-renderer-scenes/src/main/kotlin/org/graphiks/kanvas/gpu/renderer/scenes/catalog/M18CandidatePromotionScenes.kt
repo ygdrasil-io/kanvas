@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.scenes.catalog
 
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneColor
+import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneBlendMode
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneCommand
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneRect
 
@@ -63,6 +64,7 @@ val dstReadStrategyScene: GPURendererScene<SceneCommand> =
                 rect = SceneRect(48f, 56f, 272f, 144f),
                 color = SceneColor.amber(0.60f),
                 paintOrder = 2,
+                blendMode = SceneBlendMode.Screen,
             ),
         ),
     )
