@@ -164,3 +164,10 @@
 - Run `:integration-tests:skia:generateSkiaDashboard` before generating coverage-family evidence.
 - Dashboard data is read from `integration-tests/skia/build/reports/skia-gm-dashboard/data/gms.json`.
 - Source counts changed after `#2010`; the regenerated dashboard is the evidence source of truth.
+
+## Validation
+
+- `:integration-tests:skia-evidence:test` passed for coverage and image evidence tests.
+- `generateGpuPhase6CoverageFamiliesEvidence` regenerated dashboard-backed PATH + CLIP evidence.
+- `git diff --check` reported no whitespace errors.
+- This wave adds evidence and classification only; renderer fixes remain out of scope.
