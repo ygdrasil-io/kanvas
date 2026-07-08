@@ -21,8 +21,11 @@ internal fun generateSkiaRenders(args: Array<String>) {
     val gms = selectSkiaGmsForRender(SkiaGmRegistry.all(), options)
 
     if (gms.isEmpty()) {
-        println("No GMs registered")
-        kotlin.system.exitProcess(0)
+        println(
+            "No GMs match the selected filters " +
+                "(family=${options.family ?: "ANY"}, name=${options.name ?: "ANY"}, includeBlocking=${options.includeBlocking})",
+        )
+        kotlin.system.exitProcess(1)
     }
 
     var rendered = 0

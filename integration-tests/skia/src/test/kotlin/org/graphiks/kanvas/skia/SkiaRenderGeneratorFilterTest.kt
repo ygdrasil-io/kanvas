@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.skia
 
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
 import java.io.File
@@ -73,6 +74,24 @@ class SkiaRenderGeneratorFilterTest {
         )
 
         assertEquals(listOf("fast-image"), selected.map { it.name })
+    }
+
+    @Test
+    fun `selection returns empty when no gm matches filters`() {
+        val selected = selectSkiaGmsForRender(
+            listOf(
+                StubGm("draw-rect", RenderFamily.IMAGE),
+                StubGm("clip-rect", RenderFamily.CLIP),
+            ),
+            SkiaRenderGeneratorOptions(
+                outputDir = File("/tmp/renders"),
+                family = RenderFamily.PATH,
+                name = "missing-name",
+                includeBlocking = false,
+            ),
+        )
+
+        assertTrue(selected.isEmpty())
     }
 }
 
