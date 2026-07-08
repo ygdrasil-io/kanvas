@@ -152,3 +152,15 @@
 | `tinybitmap` | `tinybitmap` | `texture-cache-candidate` | `instrumented-existing` | 0.00 | `none` |
 | `unpremul` | `unpremul` | `texture-cache-candidate` | `instrumented-existing` | 40.12 | `none` |
 | `verylargebitmap` | `verylargebitmap` | `texture-cache-candidate` | `no-score` | n/a | `none` |
+
+## Final Validation
+
+```bash
+rtk ./gradlew :gpu-renderer:test --tests "org.graphiks.kanvas.gpu.renderer.images.ImageFamilyResourceEvidenceTest"
+rtk ./gradlew :integration-tests:skia:test --tests "org.graphiks.kanvas.skia.SkiaRenderGeneratorFilterTest"
+rtk ./gradlew :integration-tests:skia-evidence:test --tests "org.graphiks.kanvas.skia.evidence.Phase6ImageFamilyEvidenceTest"
+rtk ./gradlew generateGpuPhase6ImageFamilyEvidence
+rtk git diff --check
+```
+
+All Phase 6 IMAGE targeted validations passed. The wide `IMAGE` inventory is classified by the `:integration-tests:skia-evidence` Kotlin module, no-score rows remain separate from true fails, and the only renderer migration claim is the repeated texture/sampler provider create/reuse evidence.
