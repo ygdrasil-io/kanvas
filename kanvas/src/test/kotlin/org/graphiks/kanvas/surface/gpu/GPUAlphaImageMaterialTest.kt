@@ -2,20 +2,44 @@ package org.graphiks.kanvas.surface.gpu
 
 import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.canvas.DisplayOp
+import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialKind
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
+import org.graphiks.kanvas.gpu.renderer.execution.GPUClearColor
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendOffscreenTexture
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRawUniformDraw
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRectDraw
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRenderRecorder
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendSimplePassBatchKind
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendStencilMode
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendTriangleData
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendUniformPayloadDraw
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendVertexColorData
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendVertexPositionUVData
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.Image
+import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.Shader
+import org.graphiks.kanvas.surface.Diagnostics
+import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.types.Rect
+import org.graphiks.kanvas.types.a
+import org.graphiks.kanvas.types.b
+import org.graphiks.kanvas.types.g
+import org.graphiks.kanvas.types.r
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
 class GPUAlphaImageMaterialTest {
     private val halfAlpha = 0x80 / 255f
@@ -119,4 +143,286 @@ class GPUAlphaImageMaterialTest {
         assertEquals(GPUMaterialKind.ImageDraw, material.kind)
         assertEquals(null, command.fillGuardRefusalReasonOrNull())
     }
+
+    @Test
+    fun `draw image command dispatches alpha texture and tint uniforms`() {
+        val paint = Paint(
+            color = Color.fromRGBA(0.25f, 0.5f, 0.75f, 0.8f),
+            blendMode = BlendMode.SRC_OVER,
+        )
+        val op = DisplayOp.DrawImage(
+            image = alphaImage,
+            src = Rect(1f, 0f, 2f, 1f),
+            dst = Rect(4f, 5f, 8f, 7f),
+            paint = paint,
+            transform = Matrix33.identity(),
+            clip = ClipStack.DeviceRect(Rect(5f, 5f, 7f, 7f)),
+        )
+        val command = op.toImageRectCommand(
+            GPUDrawCommandID(10),
+            GPUTargetFacts(width = 16, height = 16, colorFormat = "bgra8unorm"),
+        )
+        val recorder = CapturingRenderRecorder()
+        val diagnostics = Diagnostics()
+
+        recorder.dispatchImageRect(
+            cmd = command,
+            textureCache = mapOf("alpha-mask" to expandedAlphaPixels),
+            dispatched = mutableListOf(),
+            diagnostics = diagnostics,
+            surfaceWidth = 16,
+            surfaceHeight = 16,
+            config = RenderConfig.DEFAULT,
+        )
+
+        assertFalse(diagnostics.hasFatal)
+        val pass = recorder.singleTexturePass()
+        assertArrayEquals(expandedAlphaPixels, pass.textureRgba)
+        assertEquals(2, pass.textureWidth)
+        assertEquals(1, pass.textureHeight)
+        assertEquals("rgba8unorm", pass.textureFormat)
+        assertEquals(GPUBlendMode.SRC_OVER, pass.blendMode)
+        assertNull(pass.stencilMode)
+
+        val draw = pass.draws.single()
+        assertEquals(4, draw.scissorX)
+        assertEquals(5, draw.scissorY)
+        assertEquals(4, draw.scissorWidth)
+        assertEquals(2, draw.scissorHeight)
+        assertFloatUniforms(
+            draw.uniformBytes,
+            4f, 5f, 8f, 7f,
+            0.5f, 1f,
+            0.5f, 0f,
+            paint.color.r, paint.color.g, paint.color.b, paint.color.a,
+        )
+    }
+
+    @Test
+    fun `alpha image shader fill path dispatches texture with stencil test`() {
+        val paint = Paint(
+            color = Color.fromRGBA(0.2f, 0.4f, 0.6f, 0.7f),
+            shader = Shader.Image(alphaImage),
+        )
+        val op = DisplayOp.DrawPath(
+            path = Path().addRect(Rect(2f, 3f, 6f, 5f)),
+            paint = paint,
+            transform = Matrix33.identity(),
+            clip = ClipStack.WideOpen,
+        )
+        val vertices = listOf(2f, 3f, 6f, 3f, 6f, 5f, 2f, 5f)
+        val command = op.toNormalizedCommand(
+            GPUDrawCommandID(11),
+            GPUTargetFacts(width = 16, height = 16, colorFormat = "bgra8unorm"),
+            tessellatedVertices = vertices,
+            contourStarts = listOf(0),
+            edgeCount = 4,
+        )
+        val recorder = CapturingRenderRecorder()
+        val diagnostics = Diagnostics()
+
+        recorder.dispatchFillPath(
+            cmd = command,
+            dispatched = mutableListOf(),
+            diagnostics = diagnostics,
+            surfaceWidth = 16,
+            surfaceHeight = 16,
+            config = RenderConfig.DEFAULT,
+        )
+
+        assertFalse(diagnostics.hasFatal)
+        val pass = recorder.singleTexturePass()
+        assertArrayEquals(expandedAlphaPixels, pass.textureRgba)
+        assertEquals(2, pass.textureWidth)
+        assertEquals(1, pass.textureHeight)
+        assertEquals("rgba8unorm", pass.textureFormat)
+        assertEquals(GPUBackendStencilMode.Test, pass.stencilMode)
+
+        val draw = pass.draws.single()
+        assertEquals(2, draw.scissorX)
+        assertEquals(3, draw.scissorY)
+        assertEquals(4, draw.scissorWidth)
+        assertEquals(2, draw.scissorHeight)
+        assertFloatUniforms(
+            draw.uniformBytes,
+            2f, 3f, 6f, 5f,
+            2f, 2f,
+            0f, 0f,
+            paint.color.r, paint.color.g, paint.color.b, paint.color.a,
+        )
+    }
+
+    private val expandedAlphaPixels = byteArrayOf(
+        0x00, 0x00, 0x00, 0x00,
+        0x80.toByte(), 0x80.toByte(), 0x80.toByte(), 0x80.toByte(),
+    )
+
+    private fun assertFloatUniforms(bytes: ByteArray, vararg expected: Float) {
+        val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
+        assertEquals(expected.size * 4, bytes.size)
+        expected.forEachIndexed { index, value ->
+            assertEquals(value, buffer.getFloat(index * 4), 0.001f, "uniform[$index]")
+        }
+    }
+
+    private class CapturingRenderRecorder : GPUBackendRenderRecorder {
+        private val texturePasses = mutableListOf<TexturePass>()
+
+        fun singleTexturePass(): TexturePass {
+            assertEquals(1, texturePasses.size)
+            return texturePasses.single()
+        }
+
+        override fun drawFullscreenTextureUniformPass(
+            wgsl: String,
+            colorFormat: String,
+            textureRgba: ByteArray,
+            textureWidth: Int,
+            textureHeight: Int,
+            textureFormat: String,
+            draws: List<GPUBackendRawUniformDraw>,
+            blendMode: GPUBlendMode?,
+            stencilMode: GPUBackendStencilMode?,
+        ) {
+            texturePasses.add(
+                TexturePass(
+                    textureRgba = textureRgba,
+                    textureWidth = textureWidth,
+                    textureHeight = textureHeight,
+                    textureFormat = textureFormat,
+                    draws = draws,
+                    blendMode = blendMode,
+                    stencilMode = stencilMode,
+                ),
+            )
+        }
+
+        override fun drawFullscreenPass(
+            wgsl: String,
+            colorFormat: String,
+            draws: List<GPUBackendRectDraw>,
+            blendMode: GPUBlendMode?,
+            passBatchKind: GPUBackendSimplePassBatchKind?,
+        ) = unsupported()
+
+        override fun drawFullscreenUniformPayloadPass(
+            wgsl: String,
+            colorFormat: String,
+            draws: List<GPUBackendUniformPayloadDraw>,
+            blendMode: GPUBlendMode?,
+            sourceLabel: String,
+            passBatchKind: GPUBackendSimplePassBatchKind?,
+        ) = unsupported()
+
+        override fun drawFullscreenRawUniformPass(
+            wgsl: String,
+            colorFormat: String,
+            draws: List<GPUBackendRawUniformDraw>,
+            blendMode: GPUBlendMode?,
+            passBatchKind: GPUBackendSimplePassBatchKind?,
+        ) = unsupported()
+
+        override fun drawFullscreenStencilPass(
+            wgsl: String,
+            colorFormat: String,
+            stencilMode: GPUBackendStencilMode,
+            triangleData: GPUBackendTriangleData?,
+            draws: List<GPUBackendRawUniformDraw>,
+            blendMode: GPUBlendMode?,
+        ) = Unit
+
+        override fun createVertexColorBuffer(data: GPUBackendVertexColorData): String = unsupported()
+
+        override fun drawVertexColorIndexed(
+            vertexBufferLabel: String,
+            indexCount: Int,
+            uniformDraw: GPUBackendRawUniformDraw,
+            blendMode: GPUBlendMode?,
+        ) = unsupported()
+
+        override fun createVertexPositionUVBuffer(data: GPUBackendVertexPositionUVData): String = unsupported()
+
+        override fun drawVertexPositionUVIndexed(
+            vertexBufferLabel: String,
+            indexCount: Int,
+            uniformDraw: GPUBackendRawUniformDraw,
+            textureRgba: ByteArray,
+            textureWidth: Int,
+            textureHeight: Int,
+            textureFormat: String,
+            blendMode: GPUBlendMode?,
+        ) = unsupported()
+
+        override fun drawVertexPositionDualUVIndexed(
+            vertexBufferLabel: String,
+            indexCount: Int,
+            uniformDraw: GPUBackendRawUniformDraw,
+            texture1Rgba: ByteArray,
+            texture1Width: Int,
+            texture1Height: Int,
+            texture2Rgba: ByteArray,
+            texture2Width: Int,
+            texture2Height: Int,
+            textureFormat: String,
+            blendMode: GPUBlendMode?,
+        ) = unsupported()
+
+        override fun createOffscreenTexture(texture: GPUBackendOffscreenTexture): String = unsupported()
+
+        override fun encodeOffscreenTexture(
+            textureLabel: String,
+            clearColor: GPUClearColor?,
+            block: GPUBackendRenderRecorder.() -> Unit,
+        ) = unsupported()
+
+        override fun drawCompositePass(
+            wgsl: String,
+            colorFormat: String,
+            textureLabel: String,
+            draws: List<GPUBackendRawUniformDraw>,
+            blendMode: GPUBlendMode?,
+        ) = unsupported()
+
+        override fun drawBlendPass(
+            wgsl: String,
+            colorFormat: String,
+            srcTextureLabel: String,
+            dstTextureLabel: String,
+            draws: List<GPUBackendRawUniformDraw>,
+        ) = unsupported()
+
+        override fun drawTextAtlasPass(
+            atlasRgba: ByteArray,
+            atlasWidth: Int,
+            atlasHeight: Int,
+            atlasFormat: String,
+            vertexData: FloatArray,
+            indexData: IntArray,
+            draws: List<GPUBackendRawUniformDraw>,
+            blendMode: GPUBlendMode?,
+        ) = unsupported()
+
+        override fun drawColorGlyphPass(
+            atlasRgba: ByteArray,
+            atlasWidth: Int,
+            atlasHeight: Int,
+            atlasFormat: String,
+            vertexData: FloatArray,
+            indexData: IntArray,
+            draws: List<GPUBackendRawUniformDraw>,
+            blendMode: GPUBlendMode?,
+        ) = unsupported()
+
+        private fun unsupported(): Nothing = error("Unexpected recorder call")
+    }
+
+    private data class TexturePass(
+        val textureRgba: ByteArray,
+        val textureWidth: Int,
+        val textureHeight: Int,
+        val textureFormat: String,
+        val draws: List<GPUBackendRawUniformDraw>,
+        val blendMode: GPUBlendMode?,
+        val stencilMode: GPUBackendStencilMode?,
+    )
 }
