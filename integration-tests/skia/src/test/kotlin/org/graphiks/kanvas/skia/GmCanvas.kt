@@ -20,6 +20,7 @@ import org.graphiks.kanvas.types.Vertices
 import org.graphiks.kanvas.types.VertexMode
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.TextBlob
+import org.graphiks.math.SkColor
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.PI
@@ -178,6 +179,14 @@ class GmCanvas(
             Rect(0f, 0f, width.toFloat(), height.toFloat()),
             Paint(color = Color.fromRGBA(r, g, b, a)),
         )
+    }
+
+    fun clear(color: Color) {
+        inner.clear(color)
+    }
+
+    fun clear(color: SkColor) {
+        clear(Color.fromArgbInt(color))
     }
 
     fun drawCircle(cx: Float, cy: Float, radius: Float, paint: Paint) {
