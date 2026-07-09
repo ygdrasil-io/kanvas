@@ -65,6 +65,36 @@ class BasicPathFillPreparedRouteTest {
     }
 
     @Test
+    fun `all Skia fill rule names are accepted by prepared fill evidence`() {
+        val fillRules = listOf("NonZero", "EvenOdd", "InverseNonZero", "InverseEvenOdd")
+
+        for (fillRule in fillRules) {
+            val plan = GPUBasicPathFillPreparedPlanner().plan(
+                descriptor = triangleShape,
+                path = trianglePath.copy(
+                    fillRule = fillRule,
+                    inverseFill = fillRule.startsWith("Inverse"),
+                ),
+            )
+            val route = assertIs<GPUGeometryRoute.Prepared>(plan.route)
+            assertEquals("coverage-mask.sample.path-fill", route.plan.consumerKind)
+            assertContains(plan.dumpLines().joinToString("\n"), "fillRule=$fillRule")
+        }
+    }
+
+    @Test
+    fun `perspective path fill refuses with split-ready diagnostic`() {
+        val plan = GPUBasicPathFillPreparedPlanner().plan(
+            descriptor = triangleShape,
+            path = trianglePath.copy(transformClass = "perspective"),
+        )
+
+        val route = assertIs<GPUGeometryRoute.Refused>(plan.route)
+        assertEquals("unsupported.transform.path_perspective", route.diagnostic.code)
+        assertContains(route.diagnostic.message, "perspective")
+    }
+
+    @Test
     fun `unsupported path fill variants refuse with stable diagnostics`() {
         val cases = listOf(
             RefusalCase("unsupported.path.noncanonical_key", path = trianglePath.copy(pathKey = "handle:0xdeadbeef")),
