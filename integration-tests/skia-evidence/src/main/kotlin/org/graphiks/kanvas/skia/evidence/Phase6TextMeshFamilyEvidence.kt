@@ -206,6 +206,7 @@ object Phase6TextMeshFamilyClassifier {
             name.containsAnyTextMesh("rsxform") -> "text-rsxform-gated"
             name.containsAnyTextMesh("persp", "perspective", "dftextblobpersp") -> "text-perspective-or-transform-gated"
             name.containsAnyTextMesh("fontmgr", "fontmanager") -> "text-font-manager-gated"
+            name.containsAnyTextMesh("bigtext") -> "text-large-or-cache"
             name.containsAnyTextMesh("fontcache", "glyphcache") -> "text-large-or-cache"
             name.containsAnyTextMesh("fontregen", "fallback") -> "text-font-fallback-gated"
             name.containsAnyTextMesh("coloremoji", "emoji") -> "text-emoji-gated"

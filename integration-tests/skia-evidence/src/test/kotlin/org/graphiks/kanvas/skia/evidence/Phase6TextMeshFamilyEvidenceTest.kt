@@ -29,7 +29,7 @@ class Phase6TextMeshFamilyEvidenceTest {
 
     @Test
     fun `classifies text subfamilies with stable reasons`() {
-        val basic = classify("bigtext", "TEXT")
+        val largeOrCache = classify("bigtext", "TEXT")
         val rsxform = classify("drawTextRSXform", "TEXT", similarity = null, isPassing = null, renderFailed = true)
         val perspective = classify("dftext_blob_persp", "TEXT", similarity = null, isPassing = null, renderFailed = true)
         val fontManager = classify("fontmgr_match", "TEXT")
@@ -39,8 +39,8 @@ class Phase6TextMeshFamilyEvidenceTest {
         val filter = classify("textfilter_image", "TEXT")
         val clip = classify("cliperror", "TEXT", similarity = null, isPassing = null, renderFailed = true)
 
-        assertEquals("text-basic-latin", basic.subfamily)
-        assertEquals("instrumented-existing", basic.classification)
+        assertEquals("text-large-or-cache", largeOrCache.subfamily)
+        assertEquals("instrumented-existing", largeOrCache.classification)
         assertEquals("text-rsxform-gated", rsxform.subfamily)
         assertEquals("unsupported.text.rsxform", rsxform.fallbackReason)
         assertEquals("no-score", rsxform.classification)
