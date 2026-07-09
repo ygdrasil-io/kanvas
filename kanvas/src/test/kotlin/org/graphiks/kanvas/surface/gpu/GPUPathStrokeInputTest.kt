@@ -123,6 +123,73 @@ class GPUPathStrokeInputTest {
     }
 
     @Test
+    fun `zero length round stroke without dash emits cap geometry`() {
+        val stroke = strokeToFillGeometry(
+            contourVertices = listOf(10f, 10f, 10f, 10f),
+            contourStarts = listOf(0),
+            strokeWidth = 4f,
+            capStyle = StrokeCap.ROUND,
+        )
+
+        assertTrue(stroke.vertices.isNotEmpty())
+        assertEquals(stroke.vertices.size / 2, stroke.contourStarts.last())
+        assertTrue(stroke.contourStarts.zipWithNext().all { (start, end) -> end - start == 3 })
+    }
+
+    @Test
+    fun `tiny round stroke preserves caps around a very short segment`() {
+        val stroke = strokeToFillGeometry(
+            contourVertices = listOf(10f, 10f, 10.05f, 10f),
+            contourStarts = listOf(0),
+            strokeWidth = 4f,
+            capStyle = StrokeCap.ROUND,
+        )
+
+        assertEquals(18, stroke.vertices.size / 2)
+        assertEquals(listOf(0, 4, 11, 18), stroke.contourStarts)
+    }
+
+    @Test
+    fun `short diagonal round stroke above Euclidean threshold keeps segment caps`() {
+        val stroke = strokeToFillGeometry(
+            contourVertices = listOf(10f, 10f, 10f + 0.95e-6f, 10f + 0.95e-6f),
+            contourStarts = listOf(0),
+            strokeWidth = 4f,
+            capStyle = StrokeCap.ROUND,
+        )
+
+        assertEquals(18, stroke.vertices.size / 2)
+        assertEquals(listOf(0, 4, 11, 18), stroke.contourStarts)
+    }
+
+    @Test
+    fun `round stroke does not collapse when only non-consecutive points are near`() {
+        val stroke = strokeToFillGeometry(
+            contourVertices = listOf(
+                10f, 10f,
+                10f + 0.75e-6f, 10f,
+                10f + 3e-6f, 10f,
+            ),
+            contourStarts = listOf(0),
+            strokeWidth = 4f,
+            capStyle = StrokeCap.ROUND,
+        )
+
+        val hasNonDegenerateTriangle = stroke.vertices.chunked(6).any { triangle ->
+            val ax = triangle[0]
+            val ay = triangle[1]
+            val bx = triangle[2]
+            val by = triangle[3]
+            val cx = triangle[4]
+            val cy = triangle[5]
+            kotlin.math.abs((bx - ax) * (cy - ay) - (by - ay) * (cx - ax)) > 1e-6f
+        }
+
+        assertTrue(stroke.vertices.size / 2 != 36)
+        assertTrue(hasNonDegenerateTriangle)
+    }
+
+    @Test
     fun `dashed zero length round stroke emits cap geometry`() {
         val stroke = strokeToFillGeometry(
             contourVertices = listOf(10f, 10f, 10f, 10f),

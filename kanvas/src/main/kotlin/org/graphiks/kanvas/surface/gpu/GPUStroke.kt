@@ -172,16 +172,20 @@ internal fun strokeToFillGeometry(
             Pair(contourVertices[i], contourVertices[i + 1])
         }
 
-        if (n < 2) {
-            val shouldDrawSinglePointRoundCap = dashArray == null ||
+        if (points.isEmpty()) continue
+
+        val center = points.first()
+        val allSamePoint = points.zipWithNext().all { (previous, point) ->
+            val dx = point.first - previous.first
+            val dy = point.second - previous.second
+            dx * dx + dy * dy < 1e-12f
+        }
+        if (allSamePoint) {
+            val shouldDrawRoundCap = dashArray == null ||
                 dashArray.isEmpty() ||
                 dashStartsOnInterval(dashArray.map { it.coerceAtLeast(0.1f) }, dashPhase)
-            if (
-                n == 1 &&
-                capStyle == StrokeCap.ROUND &&
-                shouldDrawSinglePointRoundCap
-            ) {
-                addRoundDot(points.first())
+            if (capStyle == StrokeCap.ROUND && shouldDrawRoundCap) {
+                addRoundDot(center)
             }
             continue
         }
@@ -241,20 +245,6 @@ internal fun strokeToFillGeometry(
                         )
                     }
                 }
-            }
-        } else if (
-            dashArray != null &&
-            dashArray.isNotEmpty() &&
-            capStyle == StrokeCap.ROUND &&
-            dashStartsOnInterval(dashArray.map { it.coerceAtLeast(0.1f) }, dashPhase)
-        ) {
-            val center = points.first()
-            val allSamePoint = points.all { point ->
-                kotlin.math.abs(point.first - center.first) < 1e-6f &&
-                    kotlin.math.abs(point.second - center.second) < 1e-6f
-            }
-            if (allSamePoint) {
-                addRoundDot(center)
             }
         } else if (!isClosed || n == 2) {
             for (ei in 0 until n - 1) {
