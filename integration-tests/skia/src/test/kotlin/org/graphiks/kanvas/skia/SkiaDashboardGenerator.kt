@@ -8,7 +8,6 @@ import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import java.util.Properties
-import javax.imageio.ImageIO
 
 data class GmEntry(
     val name: String,
@@ -71,13 +70,23 @@ internal fun generateSkiaDashboard(args: Array<String>, gms: List<SkiaGm> = Skia
             continue
         }
 
-        val refImg = ImageIO.read(refFile) ?: error("Failed to decode reference PNG: ${refFile.name}")
-        val genImg = ImageIO.read(genFile) ?: error("Failed to decode generated PNG: ${genFile.name}")
+        val refImg = ComparisonUtils.readPngAsSrgbBufferedImage(refFile)
+        val genImg = ComparisonUtils.readPngAsSrgbBufferedImage(genFile)
 
         if (refImg.width != genImg.width || refImg.height != genImg.height) {
             println("[SKIP] ${gm.name}: size mismatch (ref=${refImg.width}x${refImg.height}, gen=${genImg.width}x${genImg.height})")
-            refFile.copyTo(outputDir.resolve("images/reference/${gm.name}.png"), overwrite = true)
-            genFile.copyTo(outputDir.resolve("images/generated/${gm.name}.png"), overwrite = true)
+            ComparisonUtils.saveRgbaAsPng(
+                ComparisonUtils.bufferedImageToRgba(refImg),
+                refImg.width,
+                refImg.height,
+                outputDir.resolve("images/reference/${gm.name}.png"),
+            )
+            ComparisonUtils.saveRgbaAsPng(
+                ComparisonUtils.bufferedImageToRgba(genImg),
+                genImg.width,
+                genImg.height,
+                outputDir.resolve("images/generated/${gm.name}.png"),
+            )
             entries.add(GmEntry(gm.name, fam, null, gm.minSimilarity, null, refImg.width, refImg.height, 0,0,0,0, 0.0,0.0,0.0,0.0, null, null, false, false, false, true))
             noScore++
             continue
@@ -97,8 +106,8 @@ internal fun generateSkiaDashboard(args: Array<String>, gms: List<SkiaGm> = Skia
             )
         } catch (e: Exception) {
             println("[SKIP] ${gm.name}: comparison failed (${e.message})")
-            refFile.copyTo(outputDir.resolve("images/reference/${gm.name}.png"), overwrite = true)
-            genFile.copyTo(outputDir.resolve("images/generated/${gm.name}.png"), overwrite = true)
+            ComparisonUtils.saveRgbaAsPng(refRgba, refImg.width, refImg.height, outputDir.resolve("images/reference/${gm.name}.png"))
+            ComparisonUtils.saveRgbaAsPng(genRgba, genImg.width, genImg.height, outputDir.resolve("images/generated/${gm.name}.png"))
             entries.add(GmEntry(gm.name, fam, null, gm.minSimilarity, null, refImg.width, refImg.height, 0,0,0,0, 0.0,0.0,0.0,0.0, null, null, false, false, false, false))
             noScore++
             continue
@@ -109,8 +118,8 @@ internal fun generateSkiaDashboard(args: Array<String>, gms: List<SkiaGm> = Skia
             ComparisonUtils.saveRgbaAsPng(diffRgba, refImg.width, refImg.height, outputDir.resolve("images/diff/${gm.name}.png"))
         }
 
-        refFile.copyTo(outputDir.resolve("images/reference/${gm.name}.png"), overwrite = true)
-        genFile.copyTo(outputDir.resolve("images/generated/${gm.name}.png"), overwrite = true)
+        ComparisonUtils.saveRgbaAsPng(refRgba, refImg.width, refImg.height, outputDir.resolve("images/reference/${gm.name}.png"))
+        ComparisonUtils.saveRgbaAsPng(genRgba, genImg.width, genImg.height, outputDir.resolve("images/generated/${gm.name}.png"))
 
         val previousScore = scores.getProperty(gm.name)?.toDoubleOrNull()
         val similarity = previousScore ?: result.similarity

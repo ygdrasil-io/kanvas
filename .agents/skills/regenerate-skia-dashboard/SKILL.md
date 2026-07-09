@@ -13,6 +13,33 @@ description: Use when asked to regenerate the Skia GM visual dashboard, renders,
 
 The task `generateSkiaDashboard` depends on `generateSkiaRenders`, so renders are regenerated automatically before the dashboard.
 
+## Up-to-date Scores
+
+If the user asks to update or push current similarity scores, run the Skia GM
+test before or after regenerating the dashboard:
+
+```bash
+./gradlew :integration-tests:skia:test
+```
+
+This updates `integration-tests/skia/test-similarity-scores.properties` through
+`SimilarityTracker`. By default, blocking GMs are skipped. If the user explicitly
+asks to include blocking GMs, use:
+
+```bash
+./gradlew :integration-tests:skia:test -Dkanvas.gm.includeBlocking=true --rerun-tasks
+```
+
+When the user asks for fresh renders, dashboard, and scores, run:
+
+```bash
+./gradlew :integration-tests:skia:generateSkiaDashboard
+./gradlew :integration-tests:skia:test
+```
+
+Then commit `integration-tests/skia/test-similarity-scores.properties` and any
+intended generated render PNG changes.
+
 ## Output
 
 `integration-tests/skia/build/reports/skia-gm-dashboard/index.html`
@@ -33,4 +60,7 @@ The task `generateSkiaDashboard` depends on `generateSkiaRenders`, so renders ar
 
 ## Note
 
-Scores in `test-similarity-scores.properties` are managed by `SimilarityTracker` during test runs (`./gradlew :integration-tests:skia:test`), not by the dashboard task. The dashboard reads existing scores and displays them.
+Scores in `test-similarity-scores.properties` are managed by `SimilarityTracker`
+during test runs, not by the dashboard task. The dashboard reads existing scores
+and displays them; its live comparison logs may show newly computed values that
+are not persisted until `:integration-tests:skia:test` runs.

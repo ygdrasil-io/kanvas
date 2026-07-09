@@ -162,7 +162,6 @@ org.graphiks.kanvas.skia.gm.composite.DuckyYuvBlendGm
 org.graphiks.kanvas.skia.gm.composite.EncodeGm
 org.graphiks.kanvas.skia.gm.composite.FadeFilterGm
 org.graphiks.kanvas.skia.gm.composite.FilterFastBoundsGm
-org.graphiks.kanvas.skia.gm.composite.GraphiteReplayGm
 org.graphiks.kanvas.skia.gm.composite.GraphiteStartGm
 org.graphiks.kanvas.skia.gm.composite.HSLColorFilterGm
 org.graphiks.kanvas.skia.gm.composite.HairModesGm
@@ -171,7 +170,6 @@ org.graphiks.kanvas.skia.gm.composite.HslBlendGm
 org.graphiks.kanvas.skia.gm.composite.HslGm
 org.graphiks.kanvas.skia.gm.composite.ImageFilterComposedTransformGm
 org.graphiks.kanvas.skia.gm.composite.ImageFilterConvolveSubsetGm
-org.graphiks.kanvas.skia.gm.composite.ImageFilterOffsetGm
 org.graphiks.kanvas.skia.gm.composite.ImageFiltersBaseGm
 org.graphiks.kanvas.skia.gm.composite.ImageFiltersClippedGm
 org.graphiks.kanvas.skia.gm.composite.ImageFiltersCroppedGm

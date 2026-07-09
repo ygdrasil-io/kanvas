@@ -2,8 +2,6 @@ package org.graphiks.kanvas.test
 
 import java.awt.image.BufferedImage
 import java.io.File
-import java.io.InputStream
-import javax.imageio.ImageIO
 
 object ReferenceManager {
     private const val BYTES_PER_PIXEL = 4
@@ -16,9 +14,7 @@ object ReferenceManager {
         val resource = object {}.javaClass.getResourceAsStream(path)
             ?: error("Reference PNG not found: $path")
         return resource.use { stream ->
-            val image = ImageIO.read(stream)
-                ?: error("Failed to decode PNG: $path")
-            ComparisonUtils.bufferedImageToRgba(image)
+            ComparisonUtils.loadPngAsSrgbRgba(stream)
         }
     }
 
