@@ -15,12 +15,18 @@ shape, while `SkICC.Make` returns `null`. The production tree therefore cannot
 parse general ICC profiles, evaluate ICC curves or CLUTs, prepare reusable
 pixel transforms, or process CICP PQ/HLG HDR content.
 
-## Required baseline commands
+## Validation
 
 | Command | Result |
 | --- | --- |
 | `rtk ./gradlew projects --console=plain` | Passed. The hierarchy contains `:math`, `:kanvas`, and `:codec` with codec submodules, and contains no `:color-management`. |
-| `rtk ./gradlew :kanvas:test --tests '*SkColorSpace*' --rerun-tasks` | Failed after compile because Gradle reported `No tests found for given includes: [*SkColorSpace*](--tests filter)`. No selected compatibility test ran. |
+| `rtk ./gradlew :kanvas:test --rerun-tasks` | Passed. `:kanvas:test` completed with `BUILD SUCCESSFUL` in 18 seconds; 37 tasks executed. |
+
+The earlier filtered command, `rtk ./gradlew :kanvas:test --tests
+'*SkColorSpace*' --rerun-tasks`, was a plan defect: the current test suite has
+no matching test class, so Gradle correctly reported `No tests found for given
+includes`. It was superseded by the unfiltered baseline command above; this is
+not a production or test failure.
 
 An additional source audit found no `ColorTransform` declaration or reference
 under `kanvas/src/main` or `kanvas/src/test`. Current `SkColorSpace` is a
