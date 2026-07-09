@@ -117,6 +117,15 @@ internal fun strokeToFillGeometry(
     val result = mutableListOf<Float>()
     val contourResult = mutableListOf(0)
 
+    fun addTriangle(
+        ax: Float, ay: Float,
+        bx: Float, by: Float,
+        cx: Float, cy: Float,
+    ) {
+        result.addAll(listOf(ax, ay, bx, by, cx, cy))
+        contourResult.add(result.size / 2)
+    }
+
     fun edgeNormal(x1: Float, y1: Float, x2: Float, y2: Float): Pair<Float, Float> {
         val dx = x2 - x1
         val dy = y2 - y1
@@ -267,16 +276,16 @@ internal fun strokeToFillGeometry(
                     val en = edgeNormals[i]
                     val nx = en.first * halfWidth; val ny = en.second * halfWidth
 
-                    result.addAll(listOf(
+                    addTriangle(
                         p0.first - nx, p0.second - ny,
                         p0.first + nx, p0.second + ny,
                         p1.first + nx, p1.second + ny,
-                    ))
-                    result.addAll(listOf(
+                    )
+                    addTriangle(
                         p0.first - nx, p0.second - ny,
                         p1.first + nx, p1.second + ny,
                         p1.first - nx, p1.second - ny,
-                    ))
+                    )
                 }
 
                 for (i in 0 until effectiveN) {
@@ -286,11 +295,11 @@ internal fun strokeToFillGeometry(
 
                     val joinRight = generateRoundJoin(p, outNorm, inNorm, halfWidth, segments)
                     for (vi in 0 until joinRight.size - 2 step 2) {
-                        result.addAll(listOf(
+                        addTriangle(
                             p.first, p.second,
                             joinRight[vi], joinRight[vi + 1],
                             joinRight[vi + 2], joinRight[vi + 3],
-                        ))
+                        )
                     }
 
                     val joinLeft = generateRoundJoin(
@@ -298,11 +307,11 @@ internal fun strokeToFillGeometry(
                         Pair(-inNorm.first, -inNorm.second), halfWidth, segments,
                     )
                     for (vi in 0 until joinLeft.size - 2 step 2) {
-                        result.addAll(listOf(
+                        addTriangle(
                             p.first, p.second,
                             joinLeft[vi], joinLeft[vi + 1],
                             joinLeft[vi + 2], joinLeft[vi + 3],
-                        ))
+                        )
                     }
                 }
             } else {
@@ -325,12 +334,10 @@ internal fun strokeToFillGeometry(
                     val r0x = p0.first + n0.first; val r0y = p0.second + n0.second
                     val r1x = p1.first + n1.first; val r1y = p1.second + n1.second
 
-                    result.addAll(listOf(l0x, l0y, r0x, r0y, r1x, r1y))
-                    result.addAll(listOf(l0x, l0y, r1x, r1y, l1x, l1y))
+                    addTriangle(l0x, l0y, r0x, r0y, r1x, r1y)
+                    addTriangle(l0x, l0y, r1x, r1y, l1x, l1y)
                 }
             }
-
-            contourResult.add(result.size / 2)
         }
     }
 
