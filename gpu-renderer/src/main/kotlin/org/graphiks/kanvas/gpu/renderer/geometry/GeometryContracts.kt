@@ -51,6 +51,17 @@ data class GPUStrokeDescriptor(
     val edgeCount: Int = 0,
 )
 
+/** DrawPoints descriptor captured before route selection. */
+data class GPUDrawPointsDescriptor(
+    val pointMode: String,
+    val pointCount: Int,
+    val strokeWidth: Float,
+    val strokeCap: String,
+    val localMatrixHash: String?,
+    val transformClass: String = "identity",
+    val finiteProof: String = "finite",
+)
+
 /** Geometry route selected for a shape. */
 sealed interface GPUGeometryRoute {
     /** Analytic geometry route. */
@@ -80,6 +91,7 @@ data class GPUGeometryPlan(
     val descriptor: GPUShapeDescriptor,
     val path: GPUPathDescriptor? = null,
     val stroke: GPUStrokeDescriptor? = null,
+    val points: GPUDrawPointsDescriptor? = null,
     val route: GPUGeometryRoute,
     val diagnostics: List<GPUGeometryDiagnostic> = emptyList(),
 )
@@ -653,6 +665,70 @@ class GPUSimpleStrokePreparedPlanner(
     }
 }
 
+/** Builds drawPoints prepared-route evidence without runtime local-matrix compilation. */
+class GPUDrawPointsPreparedPlanner {
+    fun plan(
+        descriptor: GPUShapeDescriptor,
+        points: GPUDrawPointsDescriptor,
+    ): GPUGeometryPlan {
+        val refusalCode = descriptor.drawPointsRefusalCode() ?: points.refusalCode()
+        if (refusalCode != null) {
+            val diagnostic = GPUGeometryDiagnostic(
+                code = refusalCode,
+                geometryLabel = descriptor.shapeKind.ifBlank { "draw-points" },
+                message = "Prepared drawPoints refused: $refusalCode",
+                terminal = true,
+            )
+            return GPUGeometryPlan(
+                descriptor = descriptor,
+                points = points,
+                route = GPUGeometryRoute.Refused(diagnostic),
+                diagnostics = listOf(diagnostic),
+            )
+        }
+
+        val artifact = PrecomputedGeometryArtifact(
+            artifactKey = points.preparedArtifactKey(),
+            boundsLabel = descriptor.boundsLabel,
+            generation = 1,
+            lifetimeClass = "recording-local",
+            budgetClass = "draw-points",
+        )
+
+        return GPUGeometryPlan(
+            descriptor = descriptor,
+            points = points,
+            route = GPUGeometryRoute.Prepared(
+                GPUPreparedGeometryPlan(
+                    artifact = artifact,
+                    consumerKind = points.consumerKind(),
+                    invalidationFacts = drawPointsInvalidationFacts,
+                ),
+            ),
+            diagnostics = listOf(
+                GPUGeometryDiagnostic(
+                    code = "geometry:draw-points.prepared",
+                    geometryLabel = descriptor.shapeKind,
+                    message = "Prepared drawPoints artifact is available for ${points.consumerKind()}",
+                    terminal = false,
+                ),
+            ),
+        )
+    }
+
+    private companion object {
+        val drawPointsInvalidationFacts = listOf(
+            "point-mode",
+            "point-count",
+            "stroke-width",
+            "stroke-cap",
+            "transform-class",
+            "local-matrix",
+            "bounds-proof",
+        )
+    }
+}
+
 /** Builds the M3 native stencil-cover gate evidence without product activation. */
 class GPUStencilCoverGatePlanner(
     private val maxEdges: Int = 256,
@@ -741,7 +817,20 @@ class GPUStencilCoverGatePlanner(
 fun GPUGeometryPlan.dumpLines(): List<String> =
     when (val selectedRoute = route) {
         is GPUGeometryRoute.Prepared -> {
-            if (stroke != null) {
+            if (points != null) {
+                listOf(
+                    "geometry:draw-points.prepared routeKind=CPUPreparedGPU consumer=${selectedRoute.plan.consumerKind}",
+                    "draw-points:descriptor mode=${points.pointMode} count=${points.pointCount} " +
+                        "width=${points.strokeWidth} cap=${points.strokeCap} " +
+                        "transform=${points.transformClass} finite=${points.finiteProof} " +
+                        "localMatrix=${points.localMatrixHash ?: "none"}",
+                    "artifact:key=${selectedRoute.plan.artifact.artifactKey} " +
+                        "lifetime=${selectedRoute.plan.artifact.lifetimeClass} " +
+                        "budget=${selectedRoute.plan.artifact.budgetClass} " +
+                        "bounds=${selectedRoute.plan.artifact.boundsLabel}",
+                    drawPointsNonClaimLine,
+                )
+            } else if (stroke != null) {
                 val pathDescriptor = requireNotNull(path) { "prepared stroke dump requires a path descriptor" }
                 val expansionPlan = GPUStrokeExpansionPlan(
                     strokeDescriptorHash = stroke.preparedStrokeDescriptorHash(pathDescriptor),
@@ -790,6 +879,11 @@ fun GPUGeometryPlan.dumpLines(): List<String> =
                         "classification=TargetNative routeKind=GPUNative reason=${selectedRoute.diagnostic.code}",
                     selectedRoute.diagnostic.stencilCoverSkippedLine(),
                     stencilCoverRefusalNonClaimLine,
+                )
+            } else if (points != null) {
+                listOf(
+                    "geometry:draw-points.refused reason=${selectedRoute.diagnostic.code}",
+                    drawPointsNonClaimLine,
                 )
             } else if (stroke != null) {
                 listOf(
@@ -1560,6 +1654,14 @@ internal fun GPUShapeDescriptor.strokeRefusalCode(): String? =
         else -> null
     }
 
+private fun GPUShapeDescriptor.drawPointsRefusalCode(): String? =
+    when {
+        shapeKind != "draw-points" -> "unsupported.geometry.shape_kind"
+        boundsLabel.isBlank() -> "unsupported.bounds.draw_points"
+        antiAliasMode !in setOf("coverage-aa", "none") -> "unsupported.draw_points.aa_mode"
+        else -> null
+    }
+
 internal fun GPUPathDescriptor.strokePathRefusalCode(): String? =
     when {
         !pathKey.isCanonicalPathKey() -> "unsupported.geometry.path_key_nondeterministic"
@@ -1595,6 +1697,30 @@ private fun GPUStrokeDescriptor.preparedStrokeDescriptorHash(path: GPUPathDescri
     "stroke.${path.pathKey.sanitizeForArtifactKey()}.width${width.stableLabel()}.${cap.lowercase()}." +
         "${join.lowercase()}${miter.stableLabel()}.$transformClass.edges$edgeCount"
 
+private fun GPUDrawPointsDescriptor.refusalCode(): String? =
+    when {
+        pointMode !in setOf("Points", "Lines", "Polygon") -> "unsupported.draw_points.mode"
+        pointCount <= 0 -> "unsupported.draw_points.empty"
+        !strokeWidth.isFinite() || strokeWidth < 0f -> "unsupported.draw_points.stroke_width"
+        strokeCap !in setOf("Butt", "Round", "Square") -> "unsupported.draw_points.cap"
+        transformClass !in setOf("identity", "translate", "scale", "affine") -> "unsupported.draw_points.transform"
+        finiteProof != "finite" -> "unsupported.bounds.draw_points"
+        localMatrixHash != null && !localMatrixHash.isStableDrawPointsEvidenceKey() ->
+            "unsupported.draw_points.local_matrix_key"
+        else -> null
+    }
+
+private fun GPUDrawPointsDescriptor.preparedArtifactKey(): String =
+    "prepared.draw-points.${pointMode.lowercase()}.count$pointCount.width${strokeWidth.stableLabel()}." +
+        "${strokeCap.lowercase()}.$transformClass.lm_${(localMatrixHash ?: "none").sanitizeForArtifactKey()}"
+
+private fun GPUDrawPointsDescriptor.consumerKind(): String =
+    when (pointMode) {
+        "Lines" -> "draw-points-line-strip.render-step"
+        "Polygon" -> "draw-points-polyline.render-step"
+        else -> "draw-points-sprites.render-step"
+    }
+
 private fun Float.stableLabel(): String =
     if (this % 1f == 0f) {
         toInt().toString()
@@ -1605,6 +1731,16 @@ private fun Float.stableLabel(): String =
 private const val strokeNonClaimLine =
     "nonclaim:no-product-activation no-adapter-backed-execution no-hidden-cpu-texture-fallback " +
         "no-broad-stroke-parity no-hairline no-dash no-round-cap-join"
+
+private fun String.isStableDrawPointsEvidenceKey(): Boolean =
+    isNotBlank() &&
+        !contains("handle", ignoreCase = true) &&
+        !contains("pointer", ignoreCase = true) &&
+        !contains("0x", ignoreCase = true)
+
+private const val drawPointsNonClaimLine =
+    "nonclaim:no-product-activation no-adapter-backed-execution no-hidden-cpu-texture-fallback " +
+        "no-broad-draw-points-parity no-local-matrix-runtime-compilation"
 
 private fun GPUShapeDescriptor.stencilCoverRefusalCode(): String? =
     when {
