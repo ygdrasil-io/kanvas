@@ -157,7 +157,7 @@ object Phase6MaterialFamilyClassifier {
             nonClaims = listOf(
                 "No broad shader support is claimed from classification alone.",
                 "No dynamic SkSL compiler or arbitrary SkRuntimeEffect support is added.",
-                "COMPOSITE blend, compose shader, filter DAG, saveLayer, and destination-read rows remain outside this material-family wave.",
+                "Blend composition, compose-shader pipelines, filter-graph, saveLayer, and destination-read rows remain outside this material-family wave.",
                 "Rows without route and material diagnostics remain instrumented rather than promoted.",
             ),
             rows = rows,

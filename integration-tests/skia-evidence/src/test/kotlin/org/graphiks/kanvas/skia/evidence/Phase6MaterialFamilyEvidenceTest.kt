@@ -2,6 +2,7 @@ package org.graphiks.kanvas.skia.evidence
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 
 class Phase6MaterialFamilyEvidenceTest {
     @Test
@@ -82,6 +83,90 @@ class Phase6MaterialFamilyEvidenceTest {
         assertEquals(3, evidence.summary.totalRows)
         assertEquals(mapOf("COLOR" to 1, "GRADIENT" to 1, "RUNTIME_EFFECT" to 1), evidence.summary.families)
         assertEquals(listOf("linear_gradient", "linear_gradient_rt", "color"), evidence.rows.map { it.name })
+    }
+
+    @Test
+    fun `build evidence computes family deltas from baseline`() {
+        val evidence = Phase6MaterialFamilyClassifier.buildEvidence(
+            GmDashboard(
+                generatedAt = "2026-07-09T10:00:00",
+                rows = listOf(
+                    row("linear_gradient", family = "GRADIENT"),
+                    row("second_gradient", family = "GRADIENT"),
+                    row("color", family = "COLOR"),
+                ),
+            ),
+        )
+
+        assertEquals(
+            mapOf(
+                "COLOR" to Phase6MaterialFamilyDelta(
+                    baselineSource = "2026-07-09 local dashboard before material-family wave",
+                    currentSource = "integration-tests/skia/build/reports/skia-gm-dashboard/data/gms.json",
+                    currentGeneratedAt = "2026-07-09T10:00:00",
+                    baselineCount = 20,
+                    currentCount = 1,
+                    delta = -19,
+                ),
+                "GRADIENT" to Phase6MaterialFamilyDelta(
+                    baselineSource = "2026-07-09 local dashboard before material-family wave",
+                    currentSource = "integration-tests/skia/build/reports/skia-gm-dashboard/data/gms.json",
+                    currentGeneratedAt = "2026-07-09T10:00:00",
+                    baselineCount = 56,
+                    currentCount = 2,
+                    delta = -54,
+                ),
+                "RUNTIME_EFFECT" to Phase6MaterialFamilyDelta(
+                    baselineSource = "2026-07-09 local dashboard before material-family wave",
+                    currentSource = "integration-tests/skia/build/reports/skia-gm-dashboard/data/gms.json",
+                    currentGeneratedAt = "2026-07-09T10:00:00",
+                    baselineCount = 25,
+                    currentCount = 0,
+                    delta = -25,
+                ),
+            ),
+            evidence.summary.familyDeltas,
+        )
+    }
+
+    @Test
+    fun `build evidence assigns stable row ids for duplicate names`() {
+        val evidence = Phase6MaterialFamilyClassifier.buildEvidence(
+            GmDashboard(
+                generatedAt = "2026-07-09T11:00:00",
+                rows = listOf(
+                    row("linear_gradient", family = "GRADIENT"),
+                    row("linear_gradient", family = "GRADIENT"),
+                    row("linear_gradient", family = "GRADIENT"),
+                    row("color", family = "COLOR"),
+                ),
+            ),
+        )
+
+        assertEquals(
+            listOf("linear_gradient", "linear_gradient#2", "linear_gradient#3", "color"),
+            evidence.rows.map { it.rowId },
+        )
+    }
+
+    @Test
+    fun `non-claims do not mention excluded families`() {
+        val evidence = Phase6MaterialFamilyClassifier.buildEvidence(
+            GmDashboard(
+                generatedAt = "2026-07-09T12:00:00",
+                rows = listOf(
+                    row("linear_gradient", family = "GRADIENT"),
+                    row("color", family = "COLOR"),
+                ),
+            ),
+        )
+
+        val claimsText = evidence.nonClaims.joinToString(" ")
+        assertFalse(claimsText.contains("COMPOSITE"))
+        assertFalse(claimsText.contains("BLUR"))
+        assertFalse(claimsText.contains("IMAGE_FILTERS"))
+        assertFalse(claimsText.contains("MESH"))
+        assertFalse(claimsText.contains("TEXT"))
     }
 
     private fun classify(
