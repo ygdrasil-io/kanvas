@@ -1,0 +1,3216 @@
+{
+    "schemaVersion": "phase6-text-mesh-families-v1",
+    "generatedBy": ":integration-tests:skia-evidence:generateGpuPhase6TextMeshFamiliesEvidence",
+    "dashboardSource": "integration-tests/skia/build/reports/skia-gm-dashboard/data/gms.json",
+    "sourceGeneratedAt": "2026-07-09T14:15:45.701762",
+    "summary": {
+        "totalRows": 93,
+        "families": {
+            "MESH": 16,
+            "TEXT": 77
+        },
+        "familyDeltas": {
+            "MESH": {
+                "baselineSource": "2026-07-09 local dashboard before text-mesh-family wave",
+                "currentSource": "integration-tests/skia/build/reports/skia-gm-dashboard/data/gms.json",
+                "currentGeneratedAt": "2026-07-09T14:15:45.701762",
+                "baselineCount": 16,
+                "currentCount": 16,
+                "delta": 0
+            },
+            "TEXT": {
+                "baselineSource": "2026-07-09 local dashboard before text-mesh-family wave",
+                "currentSource": "integration-tests/skia/build/reports/skia-gm-dashboard/data/gms.json",
+                "currentGeneratedAt": "2026-07-09T14:15:45.701762",
+                "baselineCount": 77,
+                "currentCount": 77,
+                "delta": 0
+            }
+        },
+        "classifications": {
+            "expected-unsupported": 38,
+            "instrumented-existing": 32,
+            "no-score": 23
+        },
+        "subfamilies": {
+            "mesh-basic-vertices": 4,
+            "mesh-color-space-gated": 1,
+            "mesh-custom-basic": 1,
+            "mesh-custom-uniforms-gated": 2,
+            "mesh-effect-dependency-gated": 1,
+            "mesh-image-dependency-gated": 1,
+            "mesh-paint-color-dependency-gated": 1,
+            "mesh-paint-image-dependency-gated": 1,
+            "mesh-perspective-gated": 1,
+            "mesh-picture-dependency-gated": 1,
+            "mesh-update-or-dynamic-gated": 1,
+            "mesh-zero-init-gated": 1,
+            "text-annotation-gated": 1,
+            "text-basic-latin": 31,
+            "text-blob-gated": 11,
+            "text-clip-interaction-gated": 1,
+            "text-color-font-gated": 1,
+            "text-color-palette-gated": 2,
+            "text-emoji-gated": 7,
+            "text-filter-or-blur-gated": 3,
+            "text-font-fallback-gated": 1,
+            "text-font-manager-gated": 3,
+            "text-large-or-cache": 3,
+            "text-perspective-or-transform-gated": 4,
+            "text-rsxform-gated": 3,
+            "text-shader-or-gradient-gated": 6
+        },
+        "promotedRows": 0,
+        "unexpectedFails": 0,
+        "noScore": 23
+    },
+    "nonClaims": [
+        "No broad TEXT or MESH support is claimed from classification alone.",
+        "shaping, font fallback, glyph atlas, glyph cache, color fonts, emoji, palettes, transformed text, text filters, and clip/text interactions remain outside this evidence wave unless row diagnostics prove a bounded route.",
+        "custom mesh, dynamic mesh updates, perspective mesh, picture mesh, image dependencies, paint-image dependencies, mesh effects, and arbitrary vertices remain outside this evidence wave unless row diagnostics prove a bounded route.",
+        "Rows without route and text/mesh diagnostics remain instrumented rather than promoted."
+    ],
+    "followUpCandidates": [
+        {
+            "rootCause": "generated-render-missing",
+            "classification": "no-score",
+            "rowCount": 16,
+            "sampleRows": [
+                "cliperror",
+                "colorwheelnative",
+                "dftext_blob_persp",
+                "drawTextRSXform",
+                "fontcache"
+            ]
+        },
+        {
+            "rootCause": "reference-missing",
+            "classification": "no-score",
+            "rowCount": 6,
+            "sampleRows": [
+                "coloremoji",
+                "coloremoji_blendmodes",
+                "crbug_478659067",
+                "custommesh_cs_uniforms",
+                "textblobrandomfont"
+            ]
+        },
+        {
+            "rootCause": "size-mismatch",
+            "classification": "no-score",
+            "rowCount": 1,
+            "sampleRows": [
+                "rsx_blob_shader"
+            ]
+        },
+        {
+            "rootCause": "unsupported.mesh.color_space",
+            "classification": "expected-unsupported",
+            "rowCount": 1,
+            "sampleRows": [
+                "custommesh_cs"
+            ]
+        },
+        {
+            "rootCause": "unsupported.mesh.custom_uniforms",
+            "classification": "expected-unsupported",
+            "rowCount": 1,
+            "sampleRows": [
+                "custommesh_uniforms"
+            ]
+        },
+        {
+            "rootCause": "unsupported.mesh.dynamic_updates",
+            "classification": "expected-unsupported",
+            "rowCount": 1,
+            "sampleRows": [
+                "mesh_updates"
+            ]
+        },
+        {
+            "rootCause": "unsupported.mesh.picture_dependency",
+            "classification": "expected-unsupported",
+            "rowCount": 1,
+            "sampleRows": [
+                "picture_mesh"
+            ]
+        },
+        {
+            "rootCause": "unsupported.text.annotation",
+            "classification": "expected-unsupported",
+            "rowCount": 1,
+            "sampleRows": [
+                "annotated_text"
+            ]
+        },
+        {
+            "rootCause": "unsupported.text.color_font",
+            "classification": "expected-unsupported",
+            "rowCount": 1,
+            "sampleRows": [
+                "colrv1_gradient_stops_repeat"
+            ]
+        },
+        {
+            "rootCause": "unsupported.text.emoji",
+            "classification": "expected-unsupported",
+            "rowCount": 5,
+            "sampleRows": [
+                "coloremoji_blendmodes_colrv0",
+                "coloremoji_colrv0",
+                "scaledemoji_colrv0",
+                "scaledemoji_rendering",
+                "scaledemojipos_colrv0"
+            ]
+        },
+        {
+            "rootCause": "unsupported.text.filter_or_blur",
+            "classification": "expected-unsupported",
+            "rowCount": 3,
+            "sampleRows": [
+                "largeglyphblur",
+                "textfilter_color",
+                "textfilter_image"
+            ]
+        },
+        {
+            "rootCause": "unsupported.text.font_manager",
+            "classification": "expected-unsupported",
+            "rowCount": 3,
+            "sampleRows": [
+                "fontmgr_bounds",
+                "fontmgr_iter",
+                "fontmgr_match"
+            ]
+        },
+        {
+            "rootCause": "unsupported.text.glyph_cache",
+            "classification": "expected-unsupported",
+            "rowCount": 10,
+            "sampleRows": [
+                "fancyblobunderline",
+                "mixedtextblobs",
+                "textblob",
+                "textblob_intercepts",
+                "textblobblockreordering"
+            ]
+        },
+        {
+            "rootCause": "unsupported.text.palette",
+            "classification": "expected-unsupported",
+            "rowCount": 2,
+            "sampleRows": [
+                "font_palette_default",
+                "palette"
+            ]
+        },
+        {
+            "rootCause": "unsupported.text.perspective",
+            "classification": "expected-unsupported",
+            "rowCount": 2,
+            "sampleRows": [
+                "persptext",
+                "scaledemojiperspective_colrv0"
+            ]
+        },
+        {
+            "rootCause": "unsupported.text.rsxform",
+            "classification": "expected-unsupported",
+            "rowCount": 2,
+            "sampleRows": [
+                "blob_rsxform",
+                "blob_rsxform_distortable"
+            ]
+        },
+        {
+            "rootCause": "unsupported.text.shader_or_gradient",
+            "classification": "expected-unsupported",
+            "rowCount": 5,
+            "sampleRows": [
+                "chrome_gradtext2",
+                "gammatext_color_shader",
+                "gradtext",
+                "shadertext3",
+                "textblobshader"
+            ]
+        }
+    ],
+    "rows": [
+        {
+            "rowId": "custommesh_cs",
+            "name": "custommesh_cs",
+            "family": "MESH",
+            "subfamily": "mesh-color-space-gated",
+            "classification": "expected-unsupported",
+            "similarity": 83.27039024713443,
+            "minSimilarity": 83.0,
+            "isPassing": true,
+            "width": 468,
+            "height": 258,
+            "matchingPixels": 100544,
+            "totalPixels": 120744,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 255.0,
+                "g": 255.0,
+                "b": 255.0,
+                "a": 0.0
+            },
+            "fallbackReason": "unsupported.mesh.color_space",
+            "referencePath": "images/reference/custommesh_cs.png",
+            "generatedPath": "images/generated/custommesh_cs.png",
+            "diffPath": "images/diff/custommesh_cs.png",
+            "noScoreCause": null,
+            "nonClaim": "mesh-color-space-gated remains outside Phase 6 text/mesh-family migration scope."
+        },
+        {
+            "rowId": "custommesh_cs_uniforms",
+            "name": "custommesh_cs_uniforms",
+            "family": "MESH",
+            "subfamily": "mesh-custom-uniforms-gated",
+            "classification": "no-score",
+            "similarity": null,
+            "minSimilarity": 0.0,
+            "isPassing": null,
+            "width": 200,
+            "height": 900,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
+            "fallbackReason": "unsupported.mesh.custom_uniforms",
+            "referencePath": null,
+            "generatedPath": "images/generated/custommesh_cs_uniforms.png",
+            "diffPath": null,
+            "noScoreCause": "reference-missing",
+            "nonClaim": "No score is not counted as fail or support; text/mesh evidence is incomplete."
+        },
+        {
+            "rowId": "custommesh",
+            "name": "custommesh",
+            "family": "MESH",
+            "subfamily": "mesh-custom-basic",
+            "classification": "instrumented-existing",
+            "similarity": 84.3304110656536,
+            "minSimilarity": 84.0,
+            "isPassing": true,
+            "width": 435,
+            "height": 1180,
+            "matchingPixels": 432868,
+            "totalPixels": 513300,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 255
+            },
+            "meanDiff": {
+                "r": 255.0,
+                "g": 205.78,
+                "b": 255.0,
+                "a": 214.94
+            },
+            "fallbackReason": "none",
+            "referencePath": "images/reference/custommesh.png",
+            "generatedPath": "images/generated/custommesh.png",
+            "diffPath": "images/diff/custommesh.png",
+            "noScoreCause": null,
+            "nonClaim": "MESH row remains instrumented until route and text/mesh diagnostics are attached."
+        },
+        {
+            "rowId": "custommesh_uniforms",
+            "name": "custommesh_uniforms",
+            "family": "MESH",
+            "subfamily": "mesh-custom-uniforms-gated",
+            "classification": "expected-unsupported",
+            "similarity": 100.0,
+            "minSimilarity": 99.0,
+            "isPassing": true,
+            "width": 140,
+            "height": 250,
+            "matchingPixels": 35000,
+            "totalPixels": 35000,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
+            "fallbackReason": "unsupported.mesh.custom_uniforms",
+            "referencePath": "images/reference/custommesh_uniforms.png",
+            "generatedPath": "images/generated/custommesh_uniforms.png",
+            "diffPath": null,
+            "noScoreCause": null,
+            "nonClaim": "mesh-custom-uniforms-gated remains outside Phase 6 text/mesh-family migration scope."
+        },
+        {
+            "rowId": "mesh_updates",
+            "name": "mesh_updates",
+            "family": "MESH",
+            "subfamily": "mesh-update-or-dynamic-gated",
+            "classification": "expected-unsupported",
+            "similarity": 0.0,
+            "minSimilarity": 0.0,
+            "isPassing": true,
+            "width": 270,
+            "height": 490,
+            "matchingPixels": 0,
+            "totalPixels": 132300,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 238.24,
+                "g": 241.16,
+                "b": 240.56,
+                "a": 0.0
+            },
+            "fallbackReason": "unsupported.mesh.dynamic_updates",
+            "referencePath": "images/reference/mesh_updates.png",
+            "generatedPath": "images/generated/mesh_updates.png",
+            "diffPath": "images/diff/mesh_updates.png",
+            "noScoreCause": null,
+            "nonClaim": "mesh-update-or-dynamic-gated remains outside Phase 6 text/mesh-family migration scope."
+        },
+        {
+            "rowId": "mesh_with_effects",
+            "name": "mesh_with_effects",
+            "family": "MESH",
+            "subfamily": "mesh-effect-dependency-gated",
+            "classification": "no-score",
+            "similarity": null,
+            "minSimilarity": 0.0,
+            "isPassing": null,
+            "width": 320,
+            "height": 320,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
+            "fallbackReason": "unsupported.mesh.effect_dependency",
+            "referencePath": "images/reference/mesh_with_effects.png",
+            "generatedPath": null,
+            "diffPath": null,
+            "noScoreCause": "generated-render-missing",
+            "nonClaim": "No score is not counted as fail or support; text/mesh evidence is incomplete."
+        },
+        {
+            "rowId": "mesh_with_image",
+            "name": "mesh_with_image",
+            "family": "MESH",
+            "subfamily": "mesh-image-dependency-gated",
+            "classification": "no-score",
+            "similarity": null,
+            "minSimilarity": 0.0,
+            "isPassing": null,
+            "width": 320,
+            "height": 320,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
+            "fallbackReason": "unsupported.mesh.image_dependency",
+            "referencePath": "images/reference/mesh_with_image.png",
+            "generatedPath": null,
+            "diffPath": null,
+            "noScoreCause": "generated-render-missing",
+            "nonClaim": "No score is not counted as fail or support; text/mesh evidence is incomplete."
+        },
+        {
+            "rowId": "mesh_with_paint_color",
+            "name": "mesh_with_paint_color",
+            "family": "MESH",
+            "subfamily": "mesh-paint-color-dependency-gated",
+            "classification": "no-score",
+            "similarity": null,
+            "minSimilarity": 0.0,
+            "isPassing": null,
+            "width": 320,
+            "height": 320,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
+            "fallbackReason": "unsupported.mesh.paint_color_dependency",
+            "referencePath": "images/reference/mesh_with_paint_color.png",
+            "generatedPath": null,
+            "diffPath": null,
+            "noScoreCause": "generated-render-missing",
+            "nonClaim": "No score is not counted as fail or support; text/mesh evidence is incomplete."
+        },
+        {
+            "rowId": "mesh_with_paint_image",
+            "name": "mesh_with_paint_image",
+            "family": "MESH",
+            "subfamily": "mesh-paint-image-dependency-gated",
+            "classification": "no-score",
+            "similarity": null,
+            "minSimilarity": 0.0,
+            "isPassing": null,
+            "width": 320,
+            "height": 320,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
+            "fallbackReason": "unsupported.mesh.paint_image_dependency",
+            "referencePath": "images/reference/mesh_with_paint_image.png",
+            "generatedPath": null,
+            "diffPath": null,
+            "noScoreCause": "generated-render-missing",
+            "nonClaim": "No score is not counted as fail or support; text/mesh evidence is incomplete."
+        },
+        {
+            "rowId": "mesh_zero_init",
+            "name": "mesh_zero_init",
+            "family": "MESH",
+            "subfamily": "mesh-zero-init-gated",
+            "classification": "no-score",
+            "similarity": null,
+            "minSimilarity": 0.0,
+            "isPassing": null,
+            "width": 90,
+            "height": 30,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
+            "fallbackReason": "unsupported.mesh.zero_init",
+            "referencePath": "images/reference/mesh_zero_init.png",
+            "generatedPath": null,
+            "diffPath": null,
+            "noScoreCause": "generated-render-missing",
+            "nonClaim": "No score is not counted as fail or support; text/mesh evidence is incomplete."
+        },
+        {
+            "rowId": "picture_mesh",
+            "name": "picture_mesh",
+            "family": "MESH",
+            "subfamily": "mesh-picture-dependency-gated",
+            "classification": "expected-unsupported",
+            "similarity": 100.0,
+            "minSimilarity": 99.0,
+            "isPassing": true,
+            "width": 390,
+            "height": 90,
+            "matchingPixels": 35100,
+            "totalPixels": 35100,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
+            "fallbackReason": "unsupported.mesh.picture_dependency",
+            "referencePath": "images/reference/picture_mesh.png",
+            "generatedPath": "images/generated/picture_mesh.png",
+            "diffPath": null,
+            "noScoreCause": null,
+            "nonClaim": "mesh-picture-dependency-gated remains outside Phase 6 text/mesh-family migration scope."
+        },
+        {
+            "rowId": "skbug_13047",
+            "name": "skbug_13047",
+            "family": "MESH",
+            "subfamily": "mesh-basic-vertices",
+            "classification": "instrumented-existing",
+            "similarity": 0.0,
+            "minSimilarity": 0.0,
+            "isPassing": true,
+            "width": 200,
+            "height": 200,
+            "matchingPixels": 0,
+            "totalPixels": 40000,
+            "maxDiff": {
+                "r": 236,
+                "g": 240,
+                "b": 254,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 131.34,
+                "g": 131.9,
+                "b": 150.7,
+                "a": 0.0
+            },
+            "fallbackReason": "none",
+            "referencePath": "images/reference/skbug_13047.png",
+            "generatedPath": "images/generated/skbug_13047.png",
+            "diffPath": "images/diff/skbug_13047.png",
+            "noScoreCause": null,
+            "nonClaim": "MESH row remains instrumented until route and text/mesh diagnostics are attached."
+        },
+        {
+            "rowId": "vertices_batching",
+            "name": "vertices_batching",
+            "family": "MESH",
+            "subfamily": "mesh-basic-vertices",
+            "classification": "instrumented-existing",
+            "similarity": 66.208,
+            "minSimilarity": 0.0,
+            "isPassing": true,
+            "width": 100,
+            "height": 500,
+            "matchingPixels": 33104,
+            "totalPixels": 50000,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 115.7,
+                "g": 112.24,
+                "b": 140.45,
+                "a": 0.0
+            },
+            "fallbackReason": "none",
+            "referencePath": "images/reference/vertices_batching.png",
+            "generatedPath": "images/generated/vertices_batching.png",
+            "diffPath": "images/diff/vertices_batching.png",
+            "noScoreCause": null,
+            "nonClaim": "MESH row remains instrumented until route and text/mesh diagnostics are attached."
+        },
+        {
+            "rowId": "vertices_collapsed",
+            "name": "vertices_collapsed",
+            "family": "MESH",
+            "subfamily": "mesh-basic-vertices",
+            "classification": "instrumented-existing",
+            "similarity": 36.0,
+            "minSimilarity": 0.0,
+            "isPassing": true,
+            "width": 50,
+            "height": 50,
+            "matchingPixels": 900,
+            "totalPixels": 2500,
+            "maxDiff": {
+                "r": 255,
+                "g": 0,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 255.0,
+                "g": 0.0,
+                "b": 255.0,
+                "a": 0.0
+            },
+            "fallbackReason": "none",
+            "referencePath": "images/reference/vertices_collapsed.png",
+            "generatedPath": "images/generated/vertices_collapsed.png",
+            "diffPath": "images/diff/vertices_collapsed.png",
+            "noScoreCause": null,
+            "nonClaim": "MESH row remains instrumented until route and text/mesh diagnostics are attached."
+        },
+        {
+            "rowId": "vertices",
+            "name": "vertices",
+            "family": "MESH",
+            "subfamily": "mesh-basic-vertices",
+            "classification": "instrumented-existing",
+            "similarity": 58.26417894162576,
+            "minSimilarity": 0.0,
+            "isPassing": true,
+            "width": 975,
+            "height": 1175,
+            "matchingPixels": 667489,
+            "totalPixels": 1145625,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 127.34,
+                "g": 120.58,
+                "b": 67.53,
+                "a": 0.0
+            },
+            "fallbackReason": "none",
+            "referencePath": "images/reference/vertices.png",
+            "generatedPath": "images/generated/vertices.png",
+            "diffPath": "images/diff/vertices.png",
+            "noScoreCause": null,
+            "nonClaim": "MESH row remains instrumented until route and text/mesh diagnostics are attached."
+        },
+        {
+            "rowId": "vertices_perspective",
+            "name": "vertices_perspective",
+            "family": "MESH",
+            "subfamily": "mesh-perspective-gated",
+            "classification": "no-score",
+            "similarity": null,
+            "minSimilarity": 0.0,
+            "isPassing": null,
+            "width": 256,
+            "height": 256,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
+            "fallbackReason": "unsupported.mesh.perspective",
+            "referencePath": "images/reference/vertices_perspective.png",
+            "generatedPath": null,
+            "diffPath": null,
+            "noScoreCause": "generated-render-missing",
+            "nonClaim": "No score is not counted as fail or support; text/mesh evidence is incomplete."
+        },
+        {
+            "rowId": "annotated_text",
+            "name": "annotated_text",
+            "family": "TEXT",
+            "subfamily": "text-annotation-gated",
+            "classification": "expected-unsupported",
+            "similarity": 22.241973876953125,
+            "minSimilarity": 0.0,
+            "isPassing": true,
+            "width": 512,
+            "height": 512,
+            "matchingPixels": 58306,
+            "totalPixels": 262144,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 25.57,
+                "g": 25.65,
+                "b": 25.1,
+                "a": 0.0
+            },
+            "fallbackReason": "unsupported.text.annotation",
+            "referencePath": "images/reference/annotated_text.png",
+            "generatedPath": "images/generated/annotated_text.png",
+            "diffPath": "images/diff/annotated_text.png",
+            "noScoreCause": null,
+            "nonClaim": "text-annotation-gated remains outside Phase 6 text/mesh-family migration scope."
+        },
+        {
+            "rowId": "bigtext_crbug_1370488",
+            "name": "bigtext_crbug_1370488",
+            "family": "TEXT",
+            "subfamily": "text-large-or-cache",
+            "classification": "instrumented-existing",
+            "similarity": 8.739089965820312,
+            "minSimilarity": 5.0,
+            "isPassing": true,
+            "width": 512,
+            "height": 512,
+            "matchingPixels": 22909,
+            "totalPixels": 262144,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 254.83,
+                "g": 254.83,
+                "b": 254.83,
+                "a": 0.0
+            },
+            "fallbackReason": "none",
+            "referencePath": "images/reference/bigtext_crbug_1370488.png",
+            "generatedPath": "images/generated/bigtext_crbug_1370488.png",
+            "diffPath": "images/diff/bigtext_crbug_1370488.png",
+            "noScoreCause": null,
+            "nonClaim": "TEXT row remains instrumented until route and text/mesh diagnostics are attached."
+        },
+        {
+            "rowId": "bigtext",
+            "name": "bigtext",
+            "family": "TEXT",
+            "subfamily": "text-large-or-cache",
+            "classification": "instrumented-existing",
+            "similarity": 71.416015625,
+            "minSimilarity": 65.0,
+            "isPassing": true,
+            "width": 640,
+            "height": 480,
+            "matchingPixels": 219390,
+            "totalPixels": 307200,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 163.35,
+                "g": 253.35,
+                "b": 90.0,
+                "a": 0.0
+            },
+            "fallbackReason": "none",
+            "referencePath": "images/reference/bigtext.png",
+            "generatedPath": "images/generated/bigtext.png",
+            "diffPath": "images/diff/bigtext.png",
+            "noScoreCause": null,
+            "nonClaim": "TEXT row remains instrumented until route and text/mesh diagnostics are attached."
+        },
+        {
+            "rowId": "blob_rsxform_distortable",
+            "name": "blob_rsxform_distortable",
+            "family": "TEXT",
+            "subfamily": "text-rsxform-gated",
+            "classification": "expected-unsupported",
+            "similarity": 78.00200000000001,
+            "minSimilarity": 45.0,
+            "isPassing": true,
+            "width": 500,
+            "height": 100,
+            "matchingPixels": 39001,
+            "totalPixels": 50000,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 139.03,
+                "g": 139.03,
+                "b": 139.03,
+                "a": 0.0
+            },
+            "fallbackReason": "unsupported.text.rsxform",
+            "referencePath": "images/reference/blob_rsxform_distortable.png",
+            "generatedPath": "images/generated/blob_rsxform_distortable.png",
+            "diffPath": "images/diff/blob_rsxform_distortable.png",
+            "noScoreCause": null,
+            "nonClaim": "text-rsxform-gated remains outside Phase 6 text/mesh-family migration scope."
+        },
+        {
+            "rowId": "blob_rsxform",
+            "name": "blob_rsxform",
+            "family": "TEXT",
+            "subfamily": "text-rsxform-gated",
+            "classification": "expected-unsupported",
+            "similarity": 46.482,
+            "minSimilarity": 20.0,
+            "isPassing": true,
+            "width": 500,
+            "height": 100,
+            "matchingPixels": 23241,
+            "totalPixels": 50000,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 83.51,
+                "g": 83.51,
+                "b": 83.51,
+                "a": 0.0
+            },
+            "fallbackReason": "unsupported.text.rsxform",
+            "referencePath": "images/reference/blob_rsxform.png",
+            "generatedPath": "images/generated/blob_rsxform.png",
+            "diffPath": "images/diff/blob_rsxform.png",
+            "noScoreCause": null,
+            "nonClaim": "text-rsxform-gated remains outside Phase 6 text/mesh-family migration scope."
+        },
+        {
+            "rowId": "chrome_gradtext2",
+            "name": "chrome_gradtext2",
+            "family": "TEXT",
+            "subfamily": "text-shader-or-gradient-gated",
+            "classification": "expected-unsupported",
+            "similarity": 97.30541666666667,
+            "minSimilarity": 95.0,
+            "isPassing": true,
+            "width": 500,
+            "height": 480,
+            "matchingPixels": 233533,
+            "totalPixels": 240000,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 253.9,
+                "g": 113.8,
+                "b": 253.9,
+                "a": 0.0
+            },
+            "fallbackReason": "unsupported.text.shader_or_gradient",
+            "referencePath": "images/reference/chrome_gradtext2.png",
+            "generatedPath": "images/generated/chrome_gradtext2.png",
+            "diffPath": "images/diff/chrome_gradtext2.png",
+            "noScoreCause": null,
+            "nonClaim": "text-shader-or-gradient-gated remains outside Phase 6 text/mesh-family migration scope."
+        },
+        {
+            "rowId": "cliperror",
+            "name": "cliperror",
+            "family": "TEXT",
+            "subfamily": "text-clip-interaction-gated",
+            "classification": "no-score",
+            "similarity": null,
+            "minSimilarity": 0.0,
+            "isPassing": null,
+            "width": 800,
+            "height": 800,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
+            "fallbackReason": "unsupported.text.clip_interaction",
+            "referencePath": "images/reference/cliperror.png",
+            "generatedPath": null,
+            "diffPath": null,
+            "noScoreCause": "generated-render-missing",
+            "nonClaim": "No score is not counted as fail or support; text/mesh evidence is incomplete."
+        },
+        {
+            "rowId": "coloremoji_colrv0",
+            "name": "coloremoji_colrv0",
+            "family": "TEXT",
+            "subfamily": "text-emoji-gated",
+            "classification": "expected-unsupported",
+            "similarity": 0.20692307692307693,
+            "minSimilarity": 0.0,
+            "isPassing": true,
+            "width": 650,
+            "height": 1200,
+            "matchingPixels": 1614,
+            "totalPixels": 780000,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 16.05,
+                "g": 14.15,
+                "b": 16.26,
+                "a": 0.0
+            },
+            "fallbackReason": "unsupported.text.emoji",
+            "referencePath": "images/reference/coloremoji_colrv0.png",
+            "generatedPath": "images/generated/coloremoji_colrv0.png",
+            "diffPath": "images/diff/coloremoji_colrv0.png",
+            "noScoreCause": null,
+            "nonClaim": "text-emoji-gated remains outside Phase 6 text/mesh-family migration scope."
+        },
+        {
+            "rowId": "coloremoji",
+            "name": "coloremoji",
+            "family": "TEXT",
+            "subfamily": "text-emoji-gated",
+            "classification": "no-score",
+            "similarity": null,
+            "minSimilarity": 0.0,
+            "isPassing": null,
+            "width": 400,
+            "height": 200,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
+            "fallbackReason": "unsupported.text.emoji",
+            "referencePath": null,
+            "generatedPath": "images/generated/coloremoji.png",
+            "diffPath": null,
+            "noScoreCause": "reference-missing",
+            "nonClaim": "No score is not counted as fail or support; text/mesh evidence is incomplete."
+        },
+        {
+            "rowId": "colorwheelnative",
+            "name": "colorwheelnative",
+            "family": "TEXT",
+            "subfamily": "text-basic-latin",
+            "classification": "no-score",
+            "similarity": null,
+            "minSimilarity": 0.0,
+            "isPassing": null,
+            "width": 128,
+            "height": 28,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
+            "fallbackReason": "none",
+            "referencePath": "images/reference/colorwheelnative.png",
+            "generatedPath": null,
+            "diffPath": null,
+            "noScoreCause": "generated-render-missing",
+            "nonClaim": "No score is not counted as fail or support; text/mesh evidence is incomplete."
+        },
+        {
+            "rowId": "coloremoji_blendmodes_colrv0",
+            "name": "coloremoji_blendmodes_colrv0",
+            "family": "TEXT",
+            "subfamily": "text-emoji-gated",
+            "classification": "expected-unsupported",
+            "similarity": 0.0328125,
+            "minSimilarity": 0.0,
+            "isPassing": true,
+            "width": 400,
+            "height": 640,
+            "matchingPixels": 84,
+            "totalPixels": 256000,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 255
+            },
+            "meanDiff": {
+                "r": 98.36,
+                "g": 140.49,
+                "b": 136.43,
+                "a": 14.77
+            },
+            "fallbackReason": "unsupported.text.emoji",
+            "referencePath": "images/reference/coloremoji_blendmodes_colrv0.png",
+            "generatedPath": "images/generated/coloremoji_blendmodes_colrv0.png",
+            "diffPath": "images/diff/coloremoji_blendmodes_colrv0.png",
+            "noScoreCause": null,
+            "nonClaim": "text-emoji-gated remains outside Phase 6 text/mesh-family migration scope."
+        },
+        {
+            "rowId": "coloremoji_blendmodes",
+            "name": "coloremoji_blendmodes",
+            "family": "TEXT",
+            "subfamily": "text-emoji-gated",
+            "classification": "no-score",
+            "similarity": null,
+            "minSimilarity": 0.0,
+            "isPassing": null,
+            "width": 300,
+            "height": 300,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
+            "fallbackReason": "unsupported.text.emoji",
+            "referencePath": null,
+            "generatedPath": "images/generated/coloremoji_blendmodes.png",
+            "diffPath": null,
+            "noScoreCause": "reference-missing",
+            "nonClaim": "No score is not counted as fail or support; text/mesh evidence is incomplete."
+        },
+        {
+            "rowId": "colrv1_gradient_stops_repeat",
+            "name": "colrv1_gradient_stops_repeat",
+            "family": "TEXT",
+            "subfamily": "text-color-font-gated",
+            "classification": "expected-unsupported",
+            "similarity": 97.43625,
+            "minSimilarity": 90.0,
+            "isPassing": true,
+            "width": 1200,
+            "height": 1200,
+            "matchingPixels": 1403082,
+            "totalPixels": 1440000,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 241.01,
+                "g": 247.45,
+                "b": 19.61,
+                "a": 0.0
+            },
+            "fallbackReason": "unsupported.text.color_font",
+            "referencePath": "images/reference/colrv1_gradient_stops_repeat.png",
+            "generatedPath": "images/generated/colrv1_gradient_stops_repeat.png",
+            "diffPath": "images/diff/colrv1_gradient_stops_repeat.png",
+            "noScoreCause": null,
+            "nonClaim": "text-color-font-gated remains outside Phase 6 text/mesh-family migration scope."
+        },
+        {
+            "rowId": "crbug_1073670",
+            "name": "crbug_1073670",
+            "family": "TEXT",
+            "subfamily": "text-basic-latin",
+            "classification": "instrumented-existing",
+            "similarity": 70.6528,
+            "minSimilarity": 0.0,
+            "isPassing": true,
+            "width": 250,
+            "height": 250,
+            "matchingPixels": 44158,
+            "totalPixels": 62500,
+            "maxDiff": {
+                "r": 254,
+                "g": 255,
+                "b": 231,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 139.31,
+                "g": 246.13,
+                "b": 106.81,
+                "a": 0.0
+            },
+            "fallbackReason": "none",
+            "referencePath": "images/reference/crbug_1073670.png",
+            "generatedPath": "images/generated/crbug_1073670.png",
+            "diffPath": "images/diff/crbug_1073670.png",
+            "noScoreCause": null,
+            "nonClaim": "TEXT row remains instrumented until route and text/mesh diagnostics are attached."
+        },
+        {
+            "rowId": "crbug_478659067",
+            "name": "crbug_478659067",
+            "family": "TEXT",
+            "subfamily": "text-basic-latin",
+            "classification": "no-score",
+            "similarity": null,
+            "minSimilarity": 0.0,
+            "isPassing": null,
+            "width": 1024,
+            "height": 1280,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
+            "fallbackReason": "none",
+            "referencePath": null,
+            "generatedPath": "images/generated/crbug_478659067.png",
+            "diffPath": null,
+            "noScoreCause": "reference-missing",
+            "nonClaim": "No score is not counted as fail or support; text/mesh evidence is incomplete."
+        },
+        {
+            "rowId": "dftext_blob_persp",
+            "name": "dftext_blob_persp",
+            "family": "TEXT",
+            "subfamily": "text-perspective-or-transform-gated",
+            "classification": "no-score",
+            "similarity": null,
+            "minSimilarity": 0.0,
+            "isPassing": null,
+            "width": 900,
+            "height": 350,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
+            "fallbackReason": "unsupported.text.perspective",
+            "referencePath": "images/reference/dftext_blob_persp.png",
+            "generatedPath": null,
+            "diffPath": null,
+            "noScoreCause": "generated-render-missing",
+            "nonClaim": "No score is not counted as fail or support; text/mesh evidence is incomplete."
+        },
+        {
+            "rowId": "dftext",
+            "name": "dftext",
+            "family": "TEXT",
+            "subfamily": "text-basic-latin",
+            "classification": "instrumented-existing",
+            "similarity": 74.45996602376303,
+            "minSimilarity": 73.0,
+            "isPassing": true,
+            "width": 1024,
+            "height": 768,
+            "matchingPixels": 585577,
+            "totalPixels": 786432,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 180.73,
+                "g": 180.72,
+                "b": 181.32,
+                "a": 0.0
+            },
+            "fallbackReason": "none",
+            "referencePath": "images/reference/dftext.png",
+            "generatedPath": "images/generated/dftext.png",
+            "diffPath": "images/diff/dftext.png",
+            "noScoreCause": null,
+            "nonClaim": "TEXT row remains instrumented until route and text/mesh diagnostics are attached."
+        },
+        {
+            "rowId": "drawTextRSXform",
+            "name": "drawTextRSXform",
+            "family": "TEXT",
+            "subfamily": "text-rsxform-gated",
+            "classification": "no-score",
+            "similarity": null,
+            "minSimilarity": 0.0,
+            "isPassing": null,
+            "width": 430,
+            "height": 860,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
+            "fallbackReason": "unsupported.text.rsxform",
+            "referencePath": "images/reference/drawTextRSXform.png",
+            "generatedPath": null,
+            "diffPath": null,
+            "noScoreCause": "generated-render-missing",
+            "nonClaim": "No score is not counted as fail or support; text/mesh evidence is incomplete."
+        },
+        {
+            "rowId": "fontcache",
+            "name": "fontcache",
+            "family": "TEXT",
+            "subfamily": "text-large-or-cache",
+            "classification": "no-score",
+            "similarity": null,
+            "minSimilarity": 0.0,
+            "isPassing": null,
+            "width": 1280,
+            "height": 1280,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
+            "fallbackReason": "none",
+            "referencePath": "images/reference/fontcache.png",
+            "generatedPath": null,
+            "diffPath": null,
+            "noScoreCause": "generated-render-missing",
+            "nonClaim": "No score is not counted as fail or support; text/mesh evidence is incomplete."
+        },
+        {
+            "rowId": "fontmgr_bounds",
+            "name": "fontmgr_bounds",
+            "family": "TEXT",
+            "subfamily": "text-font-manager-gated",
+            "classification": "expected-unsupported",
+            "similarity": 82.23000919117646,
+            "minSimilarity": 0.0,
+            "isPassing": true,
+            "width": 1024,
+            "height": 850,
+            "matchingPixels": 715730,
+            "totalPixels": 870400,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 80.65,
+                "g": 126.59,
+                "b": 102.25,
+                "a": 0.0
+            },
+            "fallbackReason": "unsupported.text.font_manager",
+            "referencePath": "images/reference/fontmgr_bounds.png",
+            "generatedPath": "images/generated/fontmgr_bounds.png",
+            "diffPath": "images/diff/fontmgr_bounds.png",
+            "noScoreCause": null,
+            "nonClaim": "text-font-manager-gated remains outside Phase 6 text/mesh-family migration scope."
+        },
+        {
+            "rowId": "fontmgr_iter",
+            "name": "fontmgr_iter",
+            "family": "TEXT",
+            "subfamily": "text-font-manager-gated",
+            "classification": "expected-unsupported",
+            "similarity": 87.65530056423611,
+            "minSimilarity": 0.0,
+            "isPassing": true,
+            "width": 1536,
+            "height": 768,
+            "matchingPixels": 1034024,
+            "totalPixels": 1179648,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 115.22,
+                "g": 124.58,
+                "b": 148.5,
+                "a": 0.0
+            },
+            "fallbackReason": "unsupported.text.font_manager",
+            "referencePath": "images/reference/fontmgr_iter.png",
+            "generatedPath": "images/generated/fontmgr_iter.png",
+            "diffPath": "images/diff/fontmgr_iter.png",
+            "noScoreCause": null,
+            "nonClaim": "text-font-manager-gated remains outside Phase 6 text/mesh-family migration scope."
+        },
+        {
+            "rowId": "fontmgr_match",
+            "name": "fontmgr_match",
+            "family": "TEXT",
+            "subfamily": "text-font-manager-gated",
+            "classification": "expected-unsupported",
+            "similarity": 94.68460083007812,
+            "minSimilarity": 0.0,
+            "isPassing": true,
+            "width": 640,
+            "height": 1024,
+            "matchingPixels": 620525,
+            "totalPixels": 655360,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 155.85,
+                "g": 155.85,
+                "b": 155.85,
+                "a": 0.0
+            },
+            "fallbackReason": "unsupported.text.font_manager",
+            "referencePath": "images/reference/fontmgr_match.png",
+            "generatedPath": "images/generated/fontmgr_match.png",
+            "diffPath": "images/diff/fontmgr_match.png",
+            "noScoreCause": null,
+            "nonClaim": "text-font-manager-gated remains outside Phase 6 text/mesh-family migration scope."
+        },
+        {
+            "rowId": "font_palette_default",
+            "name": "font_palette_default",
+            "family": "TEXT",
+            "subfamily": "text-color-palette-gated",
+            "classification": "expected-unsupported",
+            "similarity": 48.925000000000004,
+            "minSimilarity": 0.0,
+            "isPassing": true,
+            "width": 1000,
+            "height": 400,
+            "matchingPixels": 195700,
+            "totalPixels": 400000,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 108.5,
+                "g": 130.41,
+                "b": 148.68,
+                "a": 0.0
+            },
+            "fallbackReason": "unsupported.text.palette",
+            "referencePath": "images/reference/font_palette_default.png",
+            "generatedPath": "images/generated/font_palette_default.png",
+            "diffPath": "images/diff/font_palette_default.png",
+            "noScoreCause": null,
+            "nonClaim": "text-color-palette-gated remains outside Phase 6 text/mesh-family migration scope."
+        },
+        {
+            "rowId": "fontregen",
+            "name": "fontregen",
+            "family": "TEXT",
+            "subfamily": "text-font-fallback-gated",
+            "classification": "no-score",
+            "similarity": null,
+            "minSimilarity": 0.0,
+            "isPassing": null,
+            "width": 512,
+            "height": 512,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
+            "fallbackReason": "unsupported.text.font_fallback",
+            "referencePath": "images/reference/fontregen.png",
+            "generatedPath": null,
+            "diffPath": null,
+            "noScoreCause": "generated-render-missing",
+            "nonClaim": "No score is not counted as fail or support; text/mesh evidence is incomplete."
+        },
+        {
+            "rowId": "fontscalerdistortable",
+            "name": "fontscalerdistortable",
+            "family": "TEXT",
+            "subfamily": "text-basic-latin",
+            "classification": "instrumented-existing",
+            "similarity": 90.9638961038961,
+            "minSimilarity": 0.0,
+            "isPassing": true,
+            "width": 550,
+            "height": 700,
+            "matchingPixels": 350211,
+            "totalPixels": 385000,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 159.39,
+                "g": 159.39,
+                "b": 159.39,
+                "a": 0.0
+            },
+            "fallbackReason": "none",
+            "referencePath": "images/reference/fontscalerdistortable.png",
+            "generatedPath": "images/generated/fontscalerdistortable.png",
+            "diffPath": "images/diff/fontscalerdistortable.png",
+            "noScoreCause": null,
+            "nonClaim": "TEXT row remains instrumented until route and text/mesh diagnostics are attached."
+        },
+        {
+            "rowId": "fontscaler",
+            "name": "fontscaler",
+            "family": "TEXT",
+            "subfamily": "text-basic-latin",
+            "classification": "instrumented-existing",
+            "similarity": 77.51328735632184,
+            "minSimilarity": 0.0,
+            "isPassing": true,
+            "width": 1450,
+            "height": 750,
+            "matchingPixels": 842957,
+            "totalPixels": 1087500,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 126.05,
+                "g": 125.99,
+                "b": 126.29,
+                "a": 0.0
+            },
+            "fallbackReason": "none",
+            "referencePath": "images/reference/fontscaler.png",
+            "generatedPath": "images/generated/fontscaler.png",
+            "diffPath": "images/diff/fontscaler.png",
+            "noScoreCause": null,
+            "nonClaim": "TEXT row remains instrumented until route and text/mesh diagnostics are attached."
+        },
+        {
+            "rowId": "gammagradienttext",
+            "name": "gammagradienttext",
+            "family": "TEXT",
+            "subfamily": "text-basic-latin",
+            "classification": "instrumented-existing",
+            "similarity": 75.84666666666666,
+            "minSimilarity": 75.3,
+            "isPassing": true,
+            "width": 300,
+            "height": 300,
+            "matchingPixels": 68262,
+            "totalPixels": 90000,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 92.99,
+                "g": 138.42,
+                "b": 90.96,
+                "a": 0.0
+            },
+            "fallbackReason": "none",
+            "referencePath": "images/reference/gammagradienttext.png",
+            "generatedPath": "images/generated/gammagradienttext.png",
+            "diffPath": "images/diff/gammagradienttext.png",
+            "noScoreCause": null,
+            "nonClaim": "TEXT row remains instrumented until route and text/mesh diagnostics are attached."
+        },
+        {
+            "rowId": "gammatext_color_shader",
+            "name": "gammatext_color_shader",
+            "family": "TEXT",
+            "subfamily": "text-shader-or-gradient-gated",
+            "classification": "expected-unsupported",
+            "similarity": 34.80242424242424,
+            "minSimilarity": 0.0,
+            "isPassing": true,
+            "width": 300,
+            "height": 275,
+            "matchingPixels": 28712,
+            "totalPixels": 82500,
+            "maxDiff": {
+                "r": 136,
+                "g": 136,
+                "b": 136,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 61.28,
+                "g": 61.22,
+                "b": 61.15,
+                "a": 0.0
+            },
+            "fallbackReason": "unsupported.text.shader_or_gradient",
+            "referencePath": "images/reference/gammatext_color_shader.png",
+            "generatedPath": "images/generated/gammatext_color_shader.png",
+            "diffPath": "images/diff/gammatext_color_shader.png",
+            "noScoreCause": null,
+            "nonClaim": "text-shader-or-gradient-gated remains outside Phase 6 text/mesh-family migration scope."
+        },
+        {
+            "rowId": "gammatext",
+            "name": "gammatext",
+            "family": "TEXT",
+            "subfamily": "text-basic-latin",
+            "classification": "instrumented-existing",
+            "similarity": 45.05716959635417,
+            "minSimilarity": 10.0,
+            "isPassing": true,
+            "width": 1024,
+            "height": 480,
+            "matchingPixels": 221465,
+            "totalPixels": 491520,
+            "maxDiff": {
+                "r": 249,
+                "g": 249,
+                "b": 249,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 58.56,
+                "g": 58.56,
+                "b": 58.53,
+                "a": 0.0
+            },
+            "fallbackReason": "none",
+            "referencePath": "images/reference/gammatext.png",
+            "generatedPath": "images/generated/gammatext.png",
+            "diffPath": "images/diff/gammatext.png",
+            "noScoreCause": null,
+            "nonClaim": "TEXT row remains instrumented until route and text/mesh diagnostics are attached."
+        },
+        {
+            "rowId": "getpostextpath",
+            "name": "getpostextpath",
+            "family": "TEXT",
+            "subfamily": "text-basic-latin",
+            "classification": "instrumented-existing",
+            "similarity": 94.19978632478633,
+            "minSimilarity": 90.0,
+            "isPassing": true,
+            "width": 480,
+            "height": 780,
+            "matchingPixels": 352684,
+            "totalPixels": 374400,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 68.06,
+                "g": 209.41,
+                "b": 209.41,
+                "a": 0.0
+            },
+            "fallbackReason": "none",
+            "referencePath": "images/reference/getpostextpath.png",
+            "generatedPath": "images/generated/getpostextpath.png",
+            "diffPath": "images/diff/getpostextpath.png",
+            "noScoreCause": null,
+            "nonClaim": "TEXT row remains instrumented until route and text/mesh diagnostics are attached."
+        },
+        {
+            "rowId": "gradtext",
+            "name": "gradtext",
+            "family": "TEXT",
+            "subfamily": "text-shader-or-gradient-gated",
+            "classification": "expected-unsupported",
+            "similarity": 77.41333333333333,
+            "minSimilarity": 77.3,
+            "isPassing": true,
+            "width": 500,
+            "height": 480,
+            "matchingPixels": 185792,
+            "totalPixels": 240000,
+            "maxDiff": {
+                "r": 255,
+                "g": 252,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 137.72,
+                "g": 43.72,
+                "b": 43.65,
+                "a": 0.0
+            },
+            "fallbackReason": "unsupported.text.shader_or_gradient",
+            "referencePath": "images/reference/gradtext.png",
+            "generatedPath": "images/generated/gradtext.png",
+            "diffPath": "images/diff/gradtext.png",
+            "noScoreCause": null,
+            "nonClaim": "text-shader-or-gradient-gated remains outside Phase 6 text/mesh-family migration scope."
+        },
+        {
+            "rowId": "largeglyphblur",
+            "name": "largeglyphblur",
+            "family": "TEXT",
+            "subfamily": "text-filter-or-blur-gated",
+            "classification": "expected-unsupported",
+            "similarity": 30.239149305555557,
+            "minSimilarity": 0.0,
+            "isPassing": true,
+            "width": 1920,
+            "height": 600,
+            "matchingPixels": 348355,
+            "totalPixels": 1152000,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 96.36,
+                "g": 96.36,
+                "b": 96.36,
+                "a": 0.0
+            },
+            "fallbackReason": "unsupported.text.filter_or_blur",
+            "referencePath": "images/reference/largeglyphblur.png",
+            "generatedPath": "images/generated/largeglyphblur.png",
+            "diffPath": "images/diff/largeglyphblur.png",
+            "noScoreCause": null,
+            "nonClaim": "text-filter-or-blur-gated remains outside Phase 6 text/mesh-family migration scope."
+        },
+        {
+            "rowId": "lcdoverlap",
+            "name": "lcdoverlap",
+            "family": "TEXT",
+            "subfamily": "text-basic-latin",
+            "classification": "instrumented-existing",
+            "similarity": 81.55893333333334,
+            "minSimilarity": 0.0,
+            "isPassing": true,
+            "width": 750,
+            "height": 750,
+            "matchingPixels": 458769,
+            "totalPixels": 562500,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 255
+            },
+            "meanDiff": {
+                "r": 97.24,
+                "g": 98.26,
+                "b": 105.11,
+                "a": 72.43
+            },
+            "fallbackReason": "none",
+            "referencePath": "images/reference/lcdoverlap.png",
+            "generatedPath": "images/generated/lcdoverlap.png",
+            "diffPath": "images/diff/lcdoverlap.png",
+            "noScoreCause": null,
+            "nonClaim": "TEXT row remains instrumented until route and text/mesh diagnostics are attached."
+        },
+        {
+            "rowId": "macaa_colors",
+            "name": "macaa_colors",
+            "family": "TEXT",
+            "subfamily": "text-basic-latin",
+            "classification": "instrumented-existing",
+            "similarity": 87.18825,
+            "minSimilarity": 0.0,
+            "isPassing": true,
+            "width": 800,
+            "height": 500,
+            "matchingPixels": 348753,
+            "totalPixels": 400000,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 120.83,
+                "g": 120.83,
+                "b": 120.83,
+                "a": 0.0
+            },
+            "fallbackReason": "none",
+            "referencePath": "images/reference/macaa_colors.png",
+            "generatedPath": "images/generated/macaa_colors.png",
+            "diffPath": "images/diff/macaa_colors.png",
+            "noScoreCause": null,
+            "nonClaim": "TEXT row remains instrumented until route and text/mesh diagnostics are attached."
+        },
+        {
+            "rowId": "mixedtextblobs",
+            "name": "mixedtextblobs",
+            "family": "TEXT",
+            "subfamily": "text-blob-gated",
+            "classification": "expected-unsupported",
+            "similarity": 0.8509714285714285,
+            "minSimilarity": 0.0,
+            "isPassing": true,
+            "width": 1250,
+            "height": 700,
+            "matchingPixels": 7446,
+            "totalPixels": 875000,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 74.8,
+                "g": 74.74,
+                "b": 75.9,
+                "a": 0.0
+            },
+            "fallbackReason": "unsupported.text.glyph_cache",
+            "referencePath": "images/reference/mixedtextblobs.png",
+            "generatedPath": "images/generated/mixedtextblobs.png",
+            "diffPath": "images/diff/mixedtextblobs.png",
+            "noScoreCause": null,
+            "nonClaim": "text-blob-gated remains outside Phase 6 text/mesh-family migration scope."
+        },
+        {
+            "rowId": "overdraw_text_xform",
+            "name": "overdraw_text_xform",
+            "family": "TEXT",
+            "subfamily": "text-basic-latin",
+            "classification": "instrumented-existing",
+            "similarity": 42.391204833984375,
+            "minSimilarity": 41.9,
+            "isPassing": true,
+            "width": 512,
+            "height": 512,
+            "matchingPixels": 111126,
+            "totalPixels": 262144,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 179.84,
+                "g": 179.84,
+                "b": 179.84,
+                "a": 0.0
+            },
+            "fallbackReason": "none",
+            "referencePath": "images/reference/overdraw_text_xform.png",
+            "generatedPath": "images/generated/overdraw_text_xform.png",
+            "diffPath": "images/diff/overdraw_text_xform.png",
+            "noScoreCause": null,
+            "nonClaim": "TEXT row remains instrumented until route and text/mesh diagnostics are attached."
+        },
+        {
+            "rowId": "palette",
+            "name": "palette",
+            "family": "TEXT",
+            "subfamily": "text-color-palette-gated",
+            "classification": "expected-unsupported",
+            "similarity": 97.9888916015625,
+            "minSimilarity": 0.0,
+            "isPassing": true,
+            "width": 512,
+            "height": 256,
+            "matchingPixels": 128436,
+            "totalPixels": 131072,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 254.5,
+                "g": 127.5,
+                "b": 127.5,
+                "a": 0.0
+            },
+            "fallbackReason": "unsupported.text.palette",
+            "referencePath": "images/reference/palette.png",
+            "generatedPath": "images/generated/palette.png",
+            "diffPath": "images/diff/palette.png",
+            "noScoreCause": null,
+            "nonClaim": "text-color-palette-gated remains outside Phase 6 text/mesh-family migration scope."
+        },
+        {
+            "rowId": "pdf_never_embed",
+            "name": "pdf_never_embed",
+            "family": "TEXT",
+            "subfamily": "text-basic-latin",
+            "classification": "no-score",
+            "similarity": null,
+            "minSimilarity": 0.0,
+            "isPassing": null,
+            "width": 512,
+            "height": 512,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
+            "fallbackReason": "none",
+            "referencePath": "images/reference/pdf_never_embed.png",
+            "generatedPath": null,
+            "diffPath": null,
+            "noScoreCause": "generated-render-missing",
+            "nonClaim": "No score is not counted as fail or support; text/mesh evidence is incomplete."
+        },
+        {
+            "rowId": "pdf_table_based_subset",
+            "name": "pdf_table_based_subset",
+            "family": "TEXT",
+            "subfamily": "text-basic-latin",
+            "classification": "no-score",
+            "similarity": null,
+            "minSimilarity": 0.0,
+            "isPassing": null,
+            "width": 512,
+            "height": 128,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
+            "fallbackReason": "none",
+            "referencePath": "images/reference/pdf_table_based_subset.png",
+            "generatedPath": null,
+            "diffPath": null,
+            "noScoreCause": "generated-render-missing",
+            "nonClaim": "No score is not counted as fail or support; text/mesh evidence is incomplete."
+        },
+        {
+            "rowId": "persptext",
+            "name": "persptext",
+            "family": "TEXT",
+            "subfamily": "text-perspective-or-transform-gated",
+            "classification": "expected-unsupported",
+            "similarity": 90.45270284016928,
+            "minSimilarity": 90.0,
+            "isPassing": true,
+            "width": 1024,
+            "height": 768,
+            "matchingPixels": 711349,
+            "totalPixels": 786432,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 205.67,
+                "g": 205.67,
+                "b": 205.67,
+                "a": 0.0
+            },
+            "fallbackReason": "unsupported.text.perspective",
+            "referencePath": "images/reference/persptext.png",
+            "generatedPath": "images/generated/persptext.png",
+            "diffPath": "images/diff/persptext.png",
+            "noScoreCause": null,
+            "nonClaim": "text-perspective-or-transform-gated remains outside Phase 6 text/mesh-family migration scope."
+        },
+        {
+            "rowId": "persptext_minimal",
+            "name": "persptext_minimal",
+            "family": "TEXT",
+            "subfamily": "text-perspective-or-transform-gated",
+            "classification": "no-score",
+            "similarity": null,
+            "minSimilarity": 80.0,
+            "isPassing": null,
+            "width": 1024,
+            "height": 768,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
+            "fallbackReason": "unsupported.text.perspective",
+            "referencePath": "images/reference/persptext_minimal.png",
+            "generatedPath": null,
+            "diffPath": null,
+            "noScoreCause": "generated-render-missing",
+            "nonClaim": "No score is not counted as fail or support; text/mesh evidence is incomplete."
+        },
+        {
+            "rowId": "rsx_blob_shader",
+            "name": "rsx_blob_shader",
+            "family": "TEXT",
+            "subfamily": "text-shader-or-gradient-gated",
+            "classification": "no-score",
+            "similarity": null,
+            "minSimilarity": 0.0,
+            "isPassing": null,
+            "width": 881,
+            "height": 881,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
+            "fallbackReason": "unsupported.text.shader_or_gradient",
+            "referencePath": "images/reference/rsx_blob_shader.png",
+            "generatedPath": "images/generated/rsx_blob_shader.png",
+            "diffPath": null,
+            "noScoreCause": "size-mismatch",
+            "nonClaim": "No score is not counted as fail or support; text/mesh evidence is incomplete."
+        },
+        {
+            "rowId": "scaledemojiperspective_colrv0",
+            "name": "scaledemojiperspective_colrv0",
+            "family": "TEXT",
+            "subfamily": "text-perspective-or-transform-gated",
+            "classification": "expected-unsupported",
+            "similarity": 0.04555555555555556,
+            "minSimilarity": 0.0,
+            "isPassing": true,
+            "width": 1200,
+            "height": 1200,
+            "matchingPixels": 656,
+            "totalPixels": 1440000,
+            "maxDiff": {
+                "r": 128,
+                "g": 128,
+                "b": 128,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 25.88,
+                "g": 21.04,
+                "b": 25.54,
+                "a": 0.0
+            },
+            "fallbackReason": "unsupported.text.perspective",
+            "referencePath": "images/reference/scaledemojiperspective_colrv0.png",
+            "generatedPath": "images/generated/scaledemojiperspective_colrv0.png",
+            "diffPath": "images/diff/scaledemojiperspective_colrv0.png",
+            "noScoreCause": null,
+            "nonClaim": "text-perspective-or-transform-gated remains outside Phase 6 text/mesh-family migration scope."
+        },
+        {
+            "rowId": "scaledemojipos_colrv0",
+            "name": "scaledemojipos_colrv0",
+            "family": "TEXT",
+            "subfamily": "text-emoji-gated",
+            "classification": "expected-unsupported",
+            "similarity": 0.017777777777777778,
+            "minSimilarity": 0.0,
+            "isPassing": true,
+            "width": 1200,
+            "height": 1200,
+            "matchingPixels": 256,
+            "totalPixels": 1440000,
+            "maxDiff": {
+                "r": 128,
+                "g": 128,
+                "b": 128,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 27.53,
+                "g": 22.08,
+                "b": 27.05,
+                "a": 0.0
+            },
+            "fallbackReason": "unsupported.text.emoji",
+            "referencePath": "images/reference/scaledemojipos_colrv0.png",
+            "generatedPath": "images/generated/scaledemojipos_colrv0.png",
+            "diffPath": "images/diff/scaledemojipos_colrv0.png",
+            "noScoreCause": null,
+            "nonClaim": "text-emoji-gated remains outside Phase 6 text/mesh-family migration scope."
+        },
+        {
+            "rowId": "scaledemoji_colrv0",
+            "name": "scaledemoji_colrv0",
+            "family": "TEXT",
+            "subfamily": "text-emoji-gated",
+            "classification": "expected-unsupported",
+            "similarity": 0.008888888888888889,
+            "minSimilarity": 0.0,
+            "isPassing": true,
+            "width": 1200,
+            "height": 1200,
+            "matchingPixels": 128,
+            "totalPixels": 1440000,
+            "maxDiff": {
+                "r": 128,
+                "g": 128,
+                "b": 128,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 19.07,
+                "g": 16.03,
+                "b": 18.51,
+                "a": 0.0
+            },
+            "fallbackReason": "unsupported.text.emoji",
+            "referencePath": "images/reference/scaledemoji_colrv0.png",
+            "generatedPath": "images/generated/scaledemoji_colrv0.png",
+            "diffPath": "images/diff/scaledemoji_colrv0.png",
+            "noScoreCause": null,
+            "nonClaim": "text-emoji-gated remains outside Phase 6 text/mesh-family migration scope."
+        },
+        {
+            "rowId": "scaledemoji_rendering",
+            "name": "scaledemoji_rendering",
+            "family": "TEXT",
+            "subfamily": "text-emoji-gated",
+            "classification": "expected-unsupported",
+            "similarity": 0.07930555555555555,
+            "minSimilarity": 0.0,
+            "isPassing": true,
+            "width": 1200,
+            "height": 1200,
+            "matchingPixels": 1142,
+            "totalPixels": 1440000,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 25.35,
+                "g": 27.92,
+                "b": 28.51,
+                "a": 0.0
+            },
+            "fallbackReason": "unsupported.text.emoji",
+            "referencePath": "images/reference/scaledemoji_rendering.png",
+            "generatedPath": "images/generated/scaledemoji_rendering.png",
+            "diffPath": "images/diff/scaledemoji_rendering.png",
+            "noScoreCause": null,
+            "nonClaim": "text-emoji-gated remains outside Phase 6 text/mesh-family migration scope."
+        },
+        {
+            "rowId": "shadertext3",
+            "name": "shadertext3",
+            "family": "TEXT",
+            "subfamily": "text-shader-or-gradient-gated",
+            "classification": "expected-unsupported",
+            "similarity": 55.0034093889326,
+            "minSimilarity": 0.0,
+            "isPassing": true,
+            "width": 820,
+            "height": 930,
+            "matchingPixels": 419456,
+            "totalPixels": 762600,
+            "maxDiff": {
+                "r": 246,
+                "g": 236,
+                "b": 233,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 125.95,
+                "g": 108.73,
+                "b": 135.45,
+                "a": 0.0
+            },
+            "fallbackReason": "unsupported.text.shader_or_gradient",
+            "referencePath": "images/reference/shadertext3.png",
+            "generatedPath": "images/generated/shadertext3.png",
+            "diffPath": "images/diff/shadertext3.png",
+            "noScoreCause": null,
+            "nonClaim": "text-shader-or-gradient-gated remains outside Phase 6 text/mesh-family migration scope."
+        },
+        {
+            "rowId": "skbug_12212",
+            "name": "skbug_12212",
+            "family": "TEXT",
+            "subfamily": "text-basic-latin",
+            "classification": "instrumented-existing",
+            "similarity": 0.0,
+            "minSimilarity": 0.0,
+            "isPassing": true,
+            "width": 400,
+            "height": 400,
+            "matchingPixels": 0,
+            "totalPixels": 160000,
+            "maxDiff": {
+                "r": 255,
+                "g": 128,
+                "b": 128,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 255.0,
+                "g": 8.05,
+                "b": 8.05,
+                "a": 0.0
+            },
+            "fallbackReason": "none",
+            "referencePath": "images/reference/skbug_12212.png",
+            "generatedPath": "images/generated/skbug_12212.png",
+            "diffPath": "images/diff/skbug_12212.png",
+            "noScoreCause": null,
+            "nonClaim": "TEXT row remains instrumented until route and text/mesh diagnostics are attached."
+        },
+        {
+            "rowId": "skbug_257",
+            "name": "skbug_257",
+            "family": "TEXT",
+            "subfamily": "text-basic-latin",
+            "classification": "instrumented-existing",
+            "similarity": 40.58113098144531,
+            "minSimilarity": 0.0,
+            "isPassing": true,
+            "width": 512,
+            "height": 512,
+            "matchingPixels": 106381,
+            "totalPixels": 262144,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 151.2,
+                "g": 105.05,
+                "b": 105.33,
+                "a": 0.0
+            },
+            "fallbackReason": "none",
+            "referencePath": "images/reference/skbug_257.png",
+            "generatedPath": "images/generated/skbug_257.png",
+            "diffPath": "images/diff/skbug_257.png",
+            "noScoreCause": null,
+            "nonClaim": "TEXT row remains instrumented until route and text/mesh diagnostics are attached."
+        },
+        {
+            "rowId": "skbug_5321",
+            "name": "skbug_5321",
+            "family": "TEXT",
+            "subfamily": "text-basic-latin",
+            "classification": "instrumented-existing",
+            "similarity": 94.9462890625,
+            "minSimilarity": 0.0,
+            "isPassing": true,
+            "width": 128,
+            "height": 128,
+            "matchingPixels": 15556,
+            "totalPixels": 16384,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 255.0,
+                "g": 255.0,
+                "b": 255.0,
+                "a": 0.0
+            },
+            "fallbackReason": "none",
+            "referencePath": "images/reference/skbug_5321.png",
+            "generatedPath": "images/generated/skbug_5321.png",
+            "diffPath": "images/diff/skbug_5321.png",
+            "noScoreCause": null,
+            "nonClaim": "TEXT row remains instrumented until route and text/mesh diagnostics are attached."
+        },
+        {
+            "rowId": "skbug_8955",
+            "name": "skbug_8955",
+            "family": "TEXT",
+            "subfamily": "text-basic-latin",
+            "classification": "instrumented-existing",
+            "similarity": 97.69,
+            "minSimilarity": 0.0,
+            "isPassing": true,
+            "width": 100,
+            "height": 100,
+            "matchingPixels": 9769,
+            "totalPixels": 10000,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 176.96,
+                "g": 176.96,
+                "b": 176.96,
+                "a": 0.0
+            },
+            "fallbackReason": "none",
+            "referencePath": "images/reference/skbug_8955.png",
+            "generatedPath": "images/generated/skbug_8955.png",
+            "diffPath": "images/diff/skbug_8955.png",
+            "noScoreCause": null,
+            "nonClaim": "TEXT row remains instrumented until route and text/mesh diagnostics are attached."
+        },
+        {
+            "rowId": "slug",
+            "name": "slug",
+            "family": "TEXT",
+            "subfamily": "text-basic-latin",
+            "classification": "no-score",
+            "similarity": null,
+            "minSimilarity": 0.0,
+            "isPassing": null,
+            "width": 1000,
+            "height": 480,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
+            "fallbackReason": "none",
+            "referencePath": "images/reference/slug.png",
+            "generatedPath": null,
+            "diffPath": null,
+            "noScoreCause": "generated-render-missing",
+            "nonClaim": "No score is not counted as fail or support; text/mesh evidence is incomplete."
+        },
+        {
+            "rowId": "stroketext",
+            "name": "stroketext",
+            "family": "TEXT",
+            "subfamily": "text-basic-latin",
+            "classification": "instrumented-existing",
+            "similarity": 75.621875,
+            "minSimilarity": 75.0,
+            "isPassing": true,
+            "width": 1200,
+            "height": 480,
+            "matchingPixels": 435582,
+            "totalPixels": 576000,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 138.6,
+                "g": 226.16,
+                "b": 226.16,
+                "a": 0.0
+            },
+            "fallbackReason": "none",
+            "referencePath": "images/reference/stroketext.png",
+            "generatedPath": "images/generated/stroketext.png",
+            "diffPath": "images/diff/stroketext.png",
+            "noScoreCause": null,
+            "nonClaim": "TEXT row remains instrumented until route and text/mesh diagnostics are attached."
+        },
+        {
+            "rowId": "stroketext_native",
+            "name": "stroketext_native",
+            "family": "TEXT",
+            "subfamily": "text-basic-latin",
+            "classification": "instrumented-existing",
+            "similarity": 82.1098901098901,
+            "minSimilarity": 0.0,
+            "isPassing": true,
+            "width": 650,
+            "height": 420,
+            "matchingPixels": 224160,
+            "totalPixels": 273000,
+            "maxDiff": {
+                "r": 68,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 61.5,
+                "g": 230.62,
+                "b": 230.62,
+                "a": 0.0
+            },
+            "fallbackReason": "none",
+            "referencePath": "images/reference/stroketext_native.png",
+            "generatedPath": "images/generated/stroketext_native.png",
+            "diffPath": "images/diff/stroketext_native.png",
+            "noScoreCause": null,
+            "nonClaim": "TEXT row remains instrumented until route and text/mesh diagnostics are attached."
+        },
+        {
+            "rowId": "surfaceprops",
+            "name": "surfaceprops",
+            "family": "TEXT",
+            "subfamily": "text-basic-latin",
+            "classification": "instrumented-existing",
+            "similarity": 5.830555555555556,
+            "minSimilarity": 0.0,
+            "isPassing": true,
+            "width": 800,
+            "height": 900,
+            "matchingPixels": 41980,
+            "totalPixels": 720000,
+            "maxDiff": {
+                "r": 85,
+                "g": 85,
+                "b": 85,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 30.61,
+                "g": 30.62,
+                "b": 30.61,
+                "a": 0.0
+            },
+            "fallbackReason": "none",
+            "referencePath": "images/reference/surfaceprops.png",
+            "generatedPath": "images/generated/surfaceprops.png",
+            "diffPath": "images/diff/surfaceprops.png",
+            "noScoreCause": null,
+            "nonClaim": "TEXT row remains instrumented until route and text/mesh diagnostics are attached."
+        },
+        {
+            "rowId": "textblobblockreordering",
+            "name": "textblobblockreordering",
+            "family": "TEXT",
+            "subfamily": "text-blob-gated",
+            "classification": "expected-unsupported",
+            "similarity": 3.314545454545455,
+            "minSimilarity": 0.0,
+            "isPassing": true,
+            "width": 275,
+            "height": 200,
+            "matchingPixels": 1823,
+            "totalPixels": 55000,
+            "maxDiff": {
+                "r": 255,
+                "g": 136,
+                "b": 136,
+                "a": 255
+            },
+            "meanDiff": {
+                "r": 30.41,
+                "g": 26.23,
+                "b": 26.23,
+                "a": 7.8
+            },
+            "fallbackReason": "unsupported.text.glyph_cache",
+            "referencePath": "images/reference/textblobblockreordering.png",
+            "generatedPath": "images/generated/textblobblockreordering.png",
+            "diffPath": "images/diff/textblobblockreordering.png",
+            "noScoreCause": null,
+            "nonClaim": "text-blob-gated remains outside Phase 6 text/mesh-family migration scope."
+        },
+        {
+            "rowId": "textblobcolortrans",
+            "name": "textblobcolortrans",
+            "family": "TEXT",
+            "subfamily": "text-blob-gated",
+            "classification": "expected-unsupported",
+            "similarity": 0.0,
+            "minSimilarity": 0.0,
+            "isPassing": true,
+            "width": 675,
+            "height": 1600,
+            "matchingPixels": 0,
+            "totalPixels": 1080000,
+            "maxDiff": {
+                "r": 128,
+                "g": 127,
+                "b": 128,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 24.62,
+                "g": 24.58,
+                "b": 24.62,
+                "a": 0.0
+            },
+            "fallbackReason": "unsupported.text.glyph_cache",
+            "referencePath": "images/reference/textblobcolortrans.png",
+            "generatedPath": "images/generated/textblobcolortrans.png",
+            "diffPath": "images/diff/textblobcolortrans.png",
+            "noScoreCause": null,
+            "nonClaim": "text-blob-gated remains outside Phase 6 text/mesh-family migration scope."
+        },
+        {
+            "rowId": "textblobgeometrychange",
+            "name": "textblobgeometrychange",
+            "family": "TEXT",
+            "subfamily": "text-blob-gated",
+            "classification": "expected-unsupported",
+            "similarity": 91.9975,
+            "minSimilarity": 90.0,
+            "isPassing": true,
+            "width": 200,
+            "height": 200,
+            "matchingPixels": 36799,
+            "totalPixels": 40000,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 147.86,
+                "g": 147.47,
+                "b": 147.62,
+                "a": 0.0
+            },
+            "fallbackReason": "unsupported.text.glyph_cache",
+            "referencePath": "images/reference/textblobgeometrychange.png",
+            "generatedPath": "images/generated/textblobgeometrychange.png",
+            "diffPath": "images/diff/textblobgeometrychange.png",
+            "noScoreCause": null,
+            "nonClaim": "text-blob-gated remains outside Phase 6 text/mesh-family migration scope."
+        },
+        {
+            "rowId": "textblob",
+            "name": "textblob",
+            "family": "TEXT",
+            "subfamily": "text-blob-gated",
+            "classification": "expected-unsupported",
+            "similarity": 87.21354166666667,
+            "minSimilarity": 86.5,
+            "isPassing": true,
+            "width": 640,
+            "height": 480,
+            "matchingPixels": 267920,
+            "totalPixels": 307200,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 220.01,
+                "g": 220.01,
+                "b": 28.58,
+                "a": 0.0
+            },
+            "fallbackReason": "unsupported.text.glyph_cache",
+            "referencePath": "images/reference/textblob.png",
+            "generatedPath": "images/generated/textblob.png",
+            "diffPath": "images/diff/textblob.png",
+            "noScoreCause": null,
+            "nonClaim": "text-blob-gated remains outside Phase 6 text/mesh-family migration scope."
+        },
+        {
+            "rowId": "textblob_intercepts",
+            "name": "textblob_intercepts",
+            "family": "TEXT",
+            "subfamily": "text-blob-gated",
+            "classification": "expected-unsupported",
+            "similarity": 86.27393617021276,
+            "minSimilarity": 85.0,
+            "isPassing": true,
+            "width": 940,
+            "height": 800,
+            "matchingPixels": 648780,
+            "totalPixels": 752000,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 228.86,
+                "g": 228.86,
+                "b": 228.86,
+                "a": 0.0
+            },
+            "fallbackReason": "unsupported.text.glyph_cache",
+            "referencePath": "images/reference/textblob_intercepts.png",
+            "generatedPath": "images/generated/textblob_intercepts.png",
+            "diffPath": "images/diff/textblob_intercepts.png",
+            "noScoreCause": null,
+            "nonClaim": "text-blob-gated remains outside Phase 6 text/mesh-family migration scope."
+        },
+        {
+            "rowId": "textblobmixedsizes",
+            "name": "textblobmixedsizes",
+            "family": "TEXT",
+            "subfamily": "text-blob-gated",
+            "classification": "expected-unsupported",
+            "similarity": 86.23213032581454,
+            "minSimilarity": 85.0,
+            "isPassing": true,
+            "width": 2100,
+            "height": 1900,
+            "matchingPixels": 3440662,
+            "totalPixels": 3990000,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 109.33,
+                "g": 109.33,
+                "b": 109.33,
+                "a": 0.0
+            },
+            "fallbackReason": "unsupported.text.glyph_cache",
+            "referencePath": "images/reference/textblobmixedsizes.png",
+            "generatedPath": "images/generated/textblobmixedsizes.png",
+            "diffPath": "images/diff/textblobmixedsizes.png",
+            "noScoreCause": null,
+            "nonClaim": "text-blob-gated remains outside Phase 6 text/mesh-family migration scope."
+        },
+        {
+            "rowId": "textblobrandomfont",
+            "name": "textblobrandomfont",
+            "family": "TEXT",
+            "subfamily": "text-blob-gated",
+            "classification": "no-score",
+            "similarity": null,
+            "minSimilarity": 0.0,
+            "isPassing": null,
+            "width": 2000,
+            "height": 1600,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
+            "fallbackReason": "unsupported.text.glyph_cache",
+            "referencePath": null,
+            "generatedPath": "images/generated/textblobrandomfont.png",
+            "diffPath": null,
+            "noScoreCause": "reference-missing",
+            "nonClaim": "No score is not counted as fail or support; text/mesh evidence is incomplete."
+        },
+        {
+            "rowId": "textblobshader",
+            "name": "textblobshader",
+            "family": "TEXT",
+            "subfamily": "text-shader-or-gradient-gated",
+            "classification": "expected-unsupported",
+            "similarity": 86.05859375,
+            "minSimilarity": 85.0,
+            "isPassing": true,
+            "width": 640,
+            "height": 480,
+            "matchingPixels": 264372,
+            "totalPixels": 307200,
+            "maxDiff": {
+                "r": 249,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 101.23,
+                "g": 98.21,
+                "b": 199.47,
+                "a": 0.0
+            },
+            "fallbackReason": "unsupported.text.shader_or_gradient",
+            "referencePath": "images/reference/textblobshader.png",
+            "generatedPath": "images/generated/textblobshader.png",
+            "diffPath": "images/diff/textblobshader.png",
+            "noScoreCause": null,
+            "nonClaim": "text-shader-or-gradient-gated remains outside Phase 6 text/mesh-family migration scope."
+        },
+        {
+            "rowId": "textblobtransforms",
+            "name": "textblobtransforms",
+            "family": "TEXT",
+            "subfamily": "text-blob-gated",
+            "classification": "expected-unsupported",
+            "similarity": 0.0,
+            "minSimilarity": 0.0,
+            "isPassing": true,
+            "width": 1000,
+            "height": 1200,
+            "matchingPixels": 0,
+            "totalPixels": 1200000,
+            "maxDiff": {
+                "r": 128,
+                "g": 128,
+                "b": 128,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 17.46,
+                "g": 17.46,
+                "b": 17.46,
+                "a": 0.0
+            },
+            "fallbackReason": "unsupported.text.glyph_cache",
+            "referencePath": "images/reference/textblobtransforms.png",
+            "generatedPath": "images/generated/textblobtransforms.png",
+            "diffPath": "images/diff/textblobtransforms.png",
+            "noScoreCause": null,
+            "nonClaim": "text-blob-gated remains outside Phase 6 text/mesh-family migration scope."
+        },
+        {
+            "rowId": "textblobuseaftergpufree",
+            "name": "textblobuseaftergpufree",
+            "family": "TEXT",
+            "subfamily": "text-blob-gated",
+            "classification": "expected-unsupported",
+            "similarity": 93.7775,
+            "minSimilarity": 90.0,
+            "isPassing": true,
+            "width": 200,
+            "height": 200,
+            "matchingPixels": 37511,
+            "totalPixels": 40000,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 162.43,
+                "g": 162.43,
+                "b": 162.43,
+                "a": 0.0
+            },
+            "fallbackReason": "unsupported.text.glyph_cache",
+            "referencePath": "images/reference/textblobuseaftergpufree.png",
+            "generatedPath": "images/generated/textblobuseaftergpufree.png",
+            "diffPath": "images/diff/textblobuseaftergpufree.png",
+            "noScoreCause": null,
+            "nonClaim": "text-blob-gated remains outside Phase 6 text/mesh-family migration scope."
+        },
+        {
+            "rowId": "fancyblobunderline",
+            "name": "fancyblobunderline",
+            "family": "TEXT",
+            "subfamily": "text-blob-gated",
+            "classification": "expected-unsupported",
+            "similarity": 88.75612025068547,
+            "minSimilarity": 85.0,
+            "isPassing": true,
+            "width": 1480,
+            "height": 1380,
+            "matchingPixels": 1812755,
+            "totalPixels": 2042400,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 211.79,
+                "g": 211.79,
+                "b": 211.79,
+                "a": 0.0
+            },
+            "fallbackReason": "unsupported.text.glyph_cache",
+            "referencePath": "images/reference/fancyblobunderline.png",
+            "generatedPath": "images/generated/fancyblobunderline.png",
+            "diffPath": "images/diff/fancyblobunderline.png",
+            "noScoreCause": null,
+            "nonClaim": "text-blob-gated remains outside Phase 6 text/mesh-family migration scope."
+        },
+        {
+            "rowId": "textfilter_color",
+            "name": "textfilter_color",
+            "family": "TEXT",
+            "subfamily": "text-filter-or-blur-gated",
+            "classification": "expected-unsupported",
+            "similarity": 80.49045138888889,
+            "minSimilarity": 75.0,
+            "isPassing": true,
+            "width": 512,
+            "height": 342,
+            "matchingPixels": 140942,
+            "totalPixels": 175104,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 209.94,
+                "g": 209.81,
+                "b": 160.8,
+                "a": 0.0
+            },
+            "fallbackReason": "unsupported.text.filter_or_blur",
+            "referencePath": "images/reference/textfilter_color.png",
+            "generatedPath": "images/generated/textfilter_color.png",
+            "diffPath": "images/diff/textfilter_color.png",
+            "noScoreCause": null,
+            "nonClaim": "text-filter-or-blur-gated remains outside Phase 6 text/mesh-family migration scope."
+        },
+        {
+            "rowId": "textfilter_image",
+            "name": "textfilter_image",
+            "family": "TEXT",
+            "subfamily": "text-filter-or-blur-gated",
+            "classification": "expected-unsupported",
+            "similarity": 72.7836028874269,
+            "minSimilarity": 65.0,
+            "isPassing": true,
+            "width": 512,
+            "height": 342,
+            "matchingPixels": 127447,
+            "totalPixels": 175104,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 149.34,
+                "g": 149.29,
+                "b": 149.29,
+                "a": 0.0
+            },
+            "fallbackReason": "unsupported.text.filter_or_blur",
+            "referencePath": "images/reference/textfilter_image.png",
+            "generatedPath": "images/generated/textfilter_image.png",
+            "diffPath": "images/diff/textfilter_image.png",
+            "noScoreCause": null,
+            "nonClaim": "text-filter-or-blur-gated remains outside Phase 6 text/mesh-family migration scope."
+        },
+        {
+            "rowId": "text_scale_skew",
+            "name": "text_scale_skew",
+            "family": "TEXT",
+            "subfamily": "text-basic-latin",
+            "classification": "instrumented-existing",
+            "similarity": 81.585693359375,
+            "minSimilarity": 80.0,
+            "isPassing": true,
+            "width": 256,
+            "height": 128,
+            "matchingPixels": 26734,
+            "totalPixels": 32768,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 167.58,
+                "g": 167.58,
+                "b": 167.58,
+                "a": 0.0
+            },
+            "fallbackReason": "none",
+            "referencePath": "images/reference/text_scale_skew.png",
+            "generatedPath": "images/generated/text_scale_skew.png",
+            "diffPath": "images/diff/text_scale_skew.png",
+            "noScoreCause": null,
+            "nonClaim": "TEXT row remains instrumented until route and text/mesh diagnostics are attached."
+        },
+        {
+            "rowId": "typefacerendering",
+            "name": "typefacerendering",
+            "family": "TEXT",
+            "subfamily": "text-basic-latin",
+            "classification": "instrumented-existing",
+            "similarity": 88.97395833333334,
+            "minSimilarity": 0.0,
+            "isPassing": true,
+            "width": 640,
+            "height": 840,
+            "matchingPixels": 478324,
+            "totalPixels": 537600,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 129.03,
+                "g": 129.03,
+                "b": 129.03,
+                "a": 0.0
+            },
+            "fallbackReason": "none",
+            "referencePath": "images/reference/typefacerendering.png",
+            "generatedPath": "images/generated/typefacerendering.png",
+            "diffPath": "images/diff/typefacerendering.png",
+            "noScoreCause": null,
+            "nonClaim": "TEXT row remains instrumented until route and text/mesh diagnostics are attached."
+        },
+        {
+            "rowId": "typefacerendering_pfa",
+            "name": "typefacerendering_pfa",
+            "family": "TEXT",
+            "subfamily": "text-basic-latin",
+            "classification": "instrumented-existing",
+            "similarity": 84.59877232142857,
+            "minSimilarity": 0.0,
+            "isPassing": true,
+            "width": 640,
+            "height": 840,
+            "matchingPixels": 454803,
+            "totalPixels": 537600,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 149.25,
+                "g": 149.25,
+                "b": 149.25,
+                "a": 0.0
+            },
+            "fallbackReason": "none",
+            "referencePath": "images/reference/typefacerendering_pfa.png",
+            "generatedPath": "images/generated/typefacerendering_pfa.png",
+            "diffPath": "images/diff/typefacerendering_pfa.png",
+            "noScoreCause": null,
+            "nonClaim": "TEXT row remains instrumented until route and text/mesh diagnostics are attached."
+        },
+        {
+            "rowId": "typefacerendering_pfb",
+            "name": "typefacerendering_pfb",
+            "family": "TEXT",
+            "subfamily": "text-basic-latin",
+            "classification": "instrumented-existing",
+            "similarity": 84.59877232142857,
+            "minSimilarity": 0.0,
+            "isPassing": true,
+            "width": 640,
+            "height": 840,
+            "matchingPixels": 454803,
+            "totalPixels": 537600,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 149.25,
+                "g": 149.25,
+                "b": 149.25,
+                "a": 0.0
+            },
+            "fallbackReason": "none",
+            "referencePath": "images/reference/typefacerendering_pfb.png",
+            "generatedPath": "images/generated/typefacerendering_pfb.png",
+            "diffPath": "images/diff/typefacerendering_pfb.png",
+            "noScoreCause": null,
+            "nonClaim": "TEXT row remains instrumented until route and text/mesh diagnostics are attached."
+        },
+        {
+            "rowId": "typefacestyles",
+            "name": "typefacestyles",
+            "family": "TEXT",
+            "subfamily": "text-basic-latin",
+            "classification": "instrumented-existing",
+            "similarity": 96.7705078125,
+            "minSimilarity": 0.0,
+            "isPassing": true,
+            "width": 640,
+            "height": 480,
+            "matchingPixels": 297279,
+            "totalPixels": 307200,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 194.23,
+                "g": 194.23,
+                "b": 194.23,
+                "a": 0.0
+            },
+            "fallbackReason": "none",
+            "referencePath": "images/reference/typefacestyles.png",
+            "generatedPath": "images/generated/typefacestyles.png",
+            "diffPath": "images/diff/typefacestyles.png",
+            "noScoreCause": null,
+            "nonClaim": "TEXT row remains instrumented until route and text/mesh diagnostics are attached."
+        },
+        {
+            "rowId": "typefacestyles_kerning",
+            "name": "typefacestyles_kerning",
+            "family": "TEXT",
+            "subfamily": "text-basic-latin",
+            "classification": "instrumented-existing",
+            "similarity": 95.103515625,
+            "minSimilarity": 0.0,
+            "isPassing": true,
+            "width": 640,
+            "height": 480,
+            "matchingPixels": 292158,
+            "totalPixels": 307200,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 197.23,
+                "g": 197.23,
+                "b": 197.23,
+                "a": 0.0
+            },
+            "fallbackReason": "none",
+            "referencePath": "images/reference/typefacestyles_kerning.png",
+            "generatedPath": "images/generated/typefacestyles_kerning.png",
+            "diffPath": "images/diff/typefacestyles_kerning.png",
+            "noScoreCause": null,
+            "nonClaim": "TEXT row remains instrumented until route and text/mesh diagnostics are attached."
+        },
+        {
+            "rowId": "typeface_styling",
+            "name": "typeface_styling",
+            "family": "TEXT",
+            "subfamily": "text-basic-latin",
+            "classification": "instrumented-existing",
+            "similarity": 83.89593114241002,
+            "minSimilarity": 0.0,
+            "isPassing": true,
+            "width": 710,
+            "height": 360,
+            "matchingPixels": 214438,
+            "totalPixels": 255600,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 180.48,
+                "g": 180.48,
+                "b": 219.28,
+                "a": 0.0
+            },
+            "fallbackReason": "none",
+            "referencePath": "images/reference/typeface_styling.png",
+            "generatedPath": "images/generated/typeface_styling.png",
+            "diffPath": "images/diff/typeface_styling.png",
+            "noScoreCause": null,
+            "nonClaim": "TEXT row remains instrumented until route and text/mesh diagnostics are attached."
+        },
+        {
+            "rowId": "user_typeface",
+            "name": "user_typeface",
+            "family": "TEXT",
+            "subfamily": "text-basic-latin",
+            "classification": "instrumented-existing",
+            "similarity": 80.64978695509669,
+            "minSimilarity": 0.0,
+            "isPassing": true,
+            "width": 810,
+            "height": 452,
+            "matchingPixels": 295275,
+            "totalPixels": 366120,
+            "maxDiff": {
+                "r": 255,
+                "g": 255,
+                "b": 255,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 147.64,
+                "g": 126.32,
+                "b": 147.64,
+                "a": 0.0
+            },
+            "fallbackReason": "none",
+            "referencePath": "images/reference/user_typeface.png",
+            "generatedPath": "images/generated/user_typeface.png",
+            "diffPath": "images/diff/user_typeface.png",
+            "noScoreCause": null,
+            "nonClaim": "TEXT row remains instrumented until route and text/mesh diagnostics are attached."
+        },
+        {
+            "rowId": "variedtext",
+            "name": "variedtext",
+            "family": "TEXT",
+            "subfamily": "text-basic-latin",
+            "classification": "no-score",
+            "similarity": null,
+            "minSimilarity": 0.0,
+            "isPassing": null,
+            "width": 640,
+            "height": 480,
+            "matchingPixels": null,
+            "totalPixels": null,
+            "maxDiff": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 0
+            },
+            "meanDiff": {
+                "r": 0.0,
+                "g": 0.0,
+                "b": 0.0,
+                "a": 0.0
+            },
+            "fallbackReason": "none",
+            "referencePath": null,
+            "generatedPath": "images/generated/variedtext.png",
+            "diffPath": null,
+            "noScoreCause": "reference-missing",
+            "nonClaim": "No score is not counted as fail or support; text/mesh evidence is incomplete."
+        }
+    ]
+}
