@@ -199,6 +199,7 @@ unsupported.text.glyph_cache
 unsupported.text.color_font
 unsupported.text.emoji
 unsupported.text.palette
+unsupported.text.annotation
 unsupported.text.rsxform
 unsupported.text.perspective
 unsupported.text.shader_or_gradient
@@ -316,4 +317,3 @@ Les tests doivent couvrir :
 - Le diff ne contient pas de PNG generated ni d'artefact `.superpowers/sdd`.
 - Le rapport ne claim pas de support large texte, glyph, font, emoji, mesh,
   custom mesh ou vertices.
-
