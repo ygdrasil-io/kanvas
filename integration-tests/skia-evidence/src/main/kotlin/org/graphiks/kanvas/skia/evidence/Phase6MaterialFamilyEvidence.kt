@@ -473,11 +473,11 @@ fun Phase6MaterialFamiliesEvidence.toMarkdown(): String =
         appendLine()
         appendLine("## Rows")
         appendLine()
-        appendLine("| Row ID | Row | Family | Subfamily | Classification | Fallback | Similarity | No Score Cause |")
-        appendLine("|---|---|---|---|---|---|---:|---|")
+        appendLine("| Row ID | Row | Family | Subfamily | Classification | Similarity | Fallback | No Score Cause |")
+        appendLine("|---|---|---|---|---|---:|---|---|")
         rows.forEach { row ->
             val similarity = row.similarity?.let { "%.2f".format(Locale.US, it) } ?: "n/a"
-            appendLine("| `${row.rowId}` | `${row.name}` | `${row.family}` | `${row.subfamily}` | `${row.classification}` | `${row.fallbackReason}` | $similarity | `${row.noScoreCause ?: ""}` |")
+            appendLine("| `${row.rowId}` | `${row.name}` | `${row.family}` | `${row.subfamily}` | `${row.classification}` | $similarity | `${row.fallbackReason}` | `${row.noScoreCause ?: ""}` |")
         }
         appendLine()
         appendLine("## Regeneration Notes")

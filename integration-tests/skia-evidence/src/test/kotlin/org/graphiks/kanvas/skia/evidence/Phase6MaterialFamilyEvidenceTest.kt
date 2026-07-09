@@ -194,8 +194,9 @@ class Phase6MaterialFamilyEvidenceTest {
         assertEquals(listOf("linear_gradient", "linear_gradient#2"), evidence.rows.map { it.rowId })
         assertContains(evidence.toCsv(), "linear_gradient,linear_gradient,GRADIENT,gradient-linear,instrumented-existing")
         assertContains(evidence.toCsv(), "linear_gradient#2,linear_gradient,GRADIENT,gradient-linear,unexpected-fail")
-        assertContains(evidence.toMarkdown(), "| `linear_gradient` | `linear_gradient` | `GRADIENT` | `gradient-linear` | `instrumented-existing` |")
-        assertContains(evidence.toMarkdown(), "| `linear_gradient#2` | `linear_gradient` | `GRADIENT` | `gradient-linear` | `unexpected-fail` |")
+        assertContains(evidence.toMarkdown(), "| Row ID | Row | Family | Subfamily | Classification | Similarity | Fallback | No Score Cause |")
+        assertContains(evidence.toMarkdown(), "| `linear_gradient` | `linear_gradient` | `GRADIENT` | `gradient-linear` | `instrumented-existing` | 100.00 | `none` | `` |")
+        assertContains(evidence.toMarkdown(), "| `linear_gradient#2` | `linear_gradient` | `GRADIENT` | `gradient-linear` | `unexpected-fail` | 20.00 | `none` | `` |")
     }
 
     @Test
