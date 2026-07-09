@@ -16,6 +16,9 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.filters.NormalizedMaskFilter
 import org.graphiks.kanvas.gpu.renderer.filters.GPUSimpleFilterRenderNodePlanner
+import org.graphiks.kanvas.gpu.renderer.geometry.GPUDrawPointsDescriptor
+import org.graphiks.kanvas.gpu.renderer.geometry.GPUGeometryPlan
+import org.graphiks.kanvas.gpu.renderer.geometry.GPUGeometryRoute
 import org.graphiks.kanvas.gpu.renderer.geometry.GPUShapeDescriptor
 import org.graphiks.kanvas.gpu.renderer.geometry.GPUPathDescriptor
 import org.graphiks.kanvas.gpu.renderer.geometry.GPUStrokeDescriptor
@@ -82,6 +85,64 @@ sealed interface GPUDrawAnalysisDecision {
     data class Refuse(val recordId: String, val diagnostic: GPUAnalysisDiagnostic) : GPUDrawAnalysisDecision
 }
 
+/** Minimal analysis-facing drawPoints evidence projection for prepared/refused route facts. */
+data class GPUDrawPointsAnalysisTouchpoint(
+    val routeDecisionLabel: String,
+    val renderStepCandidates: List<String>,
+    val resourceDeclarations: List<String>,
+    val diagnostics: List<GPUAnalysisDiagnostic>,
+)
+
+/**
+ * Projects drawPoints geometry facts into an analysis-owned evidence surface
+ * without claiming a full command-routing implementation.
+ */
+fun GPUGeometryPlan.toDrawPointsAnalysisTouchpoint(recordId: String): GPUDrawPointsAnalysisTouchpoint {
+    require(descriptor.shapeKind == "draw-points") {
+        "DrawPoints analysis touchpoint requires a draw-points geometry descriptor"
+    }
+    val pointsDescriptor = requireNotNull(points) {
+        "DrawPoints analysis touchpoint requires GPUDrawPointsDescriptor evidence"
+    }
+    val baseDiagnostics = pointsDescriptor.analysisDiagnostics(recordId = recordId)
+
+    return when (val selectedRoute = route) {
+        is GPUGeometryRoute.Prepared -> {
+            val routeDecisionLabel = "prepared.draw_points.${pointsDescriptor.pointMode.lowercase()}"
+            GPUDrawPointsAnalysisTouchpoint(
+                routeDecisionLabel = routeDecisionLabel,
+                renderStepCandidates = listOf(selectedRoute.plan.consumerKind),
+                resourceDeclarations = listOf("prepared_draw_points:${selectedRoute.plan.artifact.artifactKey}"),
+                diagnostics = baseDiagnostics + GPUAnalysisDiagnostic(
+                    code = "draw_points.consumer",
+                    recordId = recordId,
+                    decisionId = routeDecisionLabel,
+                    terminal = false,
+                    message = "drawPoints consumer=${selectedRoute.plan.consumerKind}",
+                    facts = mapOf("consumerKind" to selectedRoute.plan.consumerKind),
+                ),
+            )
+        }
+        is GPUGeometryRoute.Refused -> {
+            val routeDecisionLabel = "refused.draw_points"
+            GPUDrawPointsAnalysisTouchpoint(
+                routeDecisionLabel = routeDecisionLabel,
+                renderStepCandidates = emptyList(),
+                resourceDeclarations = emptyList(),
+                diagnostics = listOf(
+                    GPUAnalysisDiagnostic(
+                        code = selectedRoute.diagnostic.code,
+                        recordId = recordId,
+                        decisionId = routeDecisionLabel,
+                        terminal = true,
+                    ),
+                ) + baseDiagnostics,
+            )
+        }
+        else -> error("DrawPoints analysis touchpoint only supports prepared or refused geometry routes")
+    }
+}
+
 /** Occlusion analysis service contract. */
 interface GPUOcclusionTracker {
     /** Proves occlusion without mutating recordings. */
@@ -113,6 +174,8 @@ data class GPUAnalysisDiagnostic(
     val recordId: String? = null,
     val decisionId: String? = null,
     val terminal: Boolean,
+    val message: String? = null,
+    val facts: Map<String, String> = emptyMap(),
 )
 
 /** Immutable first-route planning product before resource, pipeline, or backend materialization. */
@@ -1842,6 +1905,47 @@ private fun String.sanitizeForAnalysisKey(): String =
         }
     }.joinToString("")
         .trim('_')
+
+private fun GPUDrawPointsDescriptor.analysisDiagnostics(recordId: String): List<GPUAnalysisDiagnostic> =
+    listOf(
+        GPUAnalysisDiagnostic(
+            code = "draw_points.point_mode",
+            recordId = recordId,
+            terminal = false,
+            message = "drawPoints pointMode=$pointMode",
+            facts = mapOf("pointMode" to pointMode),
+        ),
+        GPUAnalysisDiagnostic(
+            code = "draw_points.stroke_cap",
+            recordId = recordId,
+            terminal = false,
+            message = "drawPoints strokeCap=$strokeCap",
+            facts = mapOf("strokeCap" to strokeCap),
+        ),
+        GPUAnalysisDiagnostic(
+            code = "draw_points.local_matrix",
+            recordId = recordId,
+            terminal = false,
+            message = "drawPoints local matrix=${stableLocalMatrixEvidenceLabel()}",
+            facts = mapOf("localMatrix" to stableLocalMatrixEvidenceLabel()),
+        ),
+    )
+
+private fun GPUDrawPointsDescriptor.stableLocalMatrixEvidenceLabel(): String =
+    when {
+        localMatrixHash == null -> "none"
+        localMatrixHash.allowsStableAnalysisLocalMatrix() -> localMatrixHash
+        else -> "invalid"
+    }
+
+private fun String.allowsStableAnalysisLocalMatrix(): Boolean =
+    isNotBlank() &&
+        length <= maxStableAnalysisLocalMatrixLength &&
+        all { char ->
+            char in 'a'..'z' || char in 'A'..'Z' || char in '0'..'9' || char == '.' || char == '_' || char == '-'
+        }
+
+private const val maxStableAnalysisLocalMatrixLength = 64
 
 /** Returns true when any rectangle coordinate is NaN. */
 private fun GPURect.hasNaN(): Boolean =

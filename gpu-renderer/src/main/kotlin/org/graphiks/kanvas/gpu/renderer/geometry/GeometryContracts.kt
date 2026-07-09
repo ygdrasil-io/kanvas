@@ -51,6 +51,17 @@ data class GPUStrokeDescriptor(
     val edgeCount: Int = 0,
 )
 
+/** DrawPoints descriptor captured before route selection. */
+data class GPUDrawPointsDescriptor(
+    val pointMode: String,
+    val pointCount: Int,
+    val strokeWidth: Float,
+    val strokeCap: String,
+    val localMatrixHash: String?,
+    val transformClass: String = "identity",
+    val finiteProof: String = "finite",
+)
+
 /** Geometry route selected for a shape. */
 sealed interface GPUGeometryRoute {
     /** Analytic geometry route. */
@@ -80,6 +91,7 @@ data class GPUGeometryPlan(
     val descriptor: GPUShapeDescriptor,
     val path: GPUPathDescriptor? = null,
     val stroke: GPUStrokeDescriptor? = null,
+    val points: GPUDrawPointsDescriptor? = null,
     val route: GPUGeometryRoute,
     val diagnostics: List<GPUGeometryDiagnostic> = emptyList(),
 )
@@ -653,6 +665,141 @@ class GPUSimpleStrokePreparedPlanner(
     }
 }
 
+/** Prepared route planner for PaintStyle.STROKE_AND_FILL path coverage. */
+class GPUStrokeAndFillPreparedPlanner(
+    private val maxCombinedEdges: Int = 512,
+) {
+    fun plan(
+        descriptor: GPUShapeDescriptor,
+        path: GPUPathDescriptor,
+        stroke: GPUStrokeDescriptor,
+    ): GPUGeometryPlan {
+        val refusalCode = descriptor.strokeAndFillRefusalCode() ?: path.strokeAndFillRefusalCode(stroke, maxCombinedEdges)
+        if (refusalCode != null) {
+            val diagnostic = GPUGeometryDiagnostic(
+                code = refusalCode,
+                geometryLabel = descriptor.shapeKind.ifBlank { "path-stroke-and-fill" },
+                message = "Stroke-and-fill prepared path coverage refused: $refusalCode",
+                terminal = true,
+            )
+            return GPUGeometryPlan(
+                descriptor = descriptor,
+                path = path,
+                stroke = stroke,
+                route = GPUGeometryRoute.Refused(diagnostic),
+                diagnostics = listOf(diagnostic),
+            )
+        }
+
+        val preparedPlan = GPUPreparedGeometryPlan(
+            artifact = PrecomputedGeometryArtifact(
+                artifactKey = stroke.preparedStrokeAndFillArtifactKey(path),
+                boundsLabel = descriptor.boundsLabel,
+                generation = 1,
+                lifetimeClass = "recording-local",
+                budgetClass = "stroke-and-fill",
+            ),
+            consumerKind = strokeAndFillConsumerKind,
+            invalidationFacts = strokeAndFillInvalidationFacts,
+        )
+
+        return GPUGeometryPlan(
+            descriptor = descriptor,
+            path = path,
+            stroke = stroke,
+            route = GPUGeometryRoute.Prepared(preparedPlan),
+            diagnostics = listOf(
+                GPUGeometryDiagnostic(
+                    code = "geometry:stroke-and-fill.prepared",
+                    geometryLabel = descriptor.shapeKind,
+                    message = "Prepared stroke-and-fill artifact is available for $strokeAndFillConsumerKind",
+                    terminal = false,
+                ),
+            ),
+        )
+    }
+
+    private companion object {
+        const val strokeAndFillConsumerKind = "stroke-and-fill.coverage-composite"
+        val strokeAndFillInvalidationFacts = listOf(
+            "path-content-hash",
+            "fill-rule",
+            "inverse-fill",
+            "stroke-width",
+            "cap",
+            "join",
+            "miter",
+            "transform-class",
+            "bounds-proof",
+        )
+    }
+}
+
+/** Builds drawPoints prepared-route evidence without runtime local-matrix compilation. */
+class GPUDrawPointsPreparedPlanner {
+    fun plan(
+        descriptor: GPUShapeDescriptor,
+        points: GPUDrawPointsDescriptor,
+    ): GPUGeometryPlan {
+        val refusalCode = descriptor.drawPointsRefusalCode() ?: points.refusalCode()
+        if (refusalCode != null) {
+            val diagnostic = GPUGeometryDiagnostic(
+                code = refusalCode,
+                geometryLabel = descriptor.shapeKind.ifBlank { "draw-points" },
+                message = "Prepared drawPoints refused: $refusalCode",
+                terminal = true,
+                facts = points.stableFacts(),
+            )
+            return GPUGeometryPlan(
+                descriptor = descriptor,
+                points = points,
+                route = GPUGeometryRoute.Refused(diagnostic),
+                diagnostics = listOf(diagnostic),
+            )
+        }
+
+        val artifact = PrecomputedGeometryArtifact(
+            artifactKey = points.preparedArtifactKey(),
+            boundsLabel = descriptor.boundsLabel,
+            generation = 1,
+            lifetimeClass = "recording-local",
+            budgetClass = "draw-points",
+        )
+
+        return GPUGeometryPlan(
+            descriptor = descriptor,
+            points = points,
+            route = GPUGeometryRoute.Prepared(
+                GPUPreparedGeometryPlan(
+                    artifact = artifact,
+                    consumerKind = points.consumerKind(),
+                    invalidationFacts = drawPointsInvalidationFacts,
+                ),
+            ),
+            diagnostics = listOf(
+                GPUGeometryDiagnostic(
+                    code = "geometry:draw-points.prepared",
+                    geometryLabel = descriptor.shapeKind,
+                    message = "Prepared drawPoints artifact is available for ${points.consumerKind()}",
+                    terminal = false,
+                ),
+            ),
+        )
+    }
+
+    private companion object {
+        val drawPointsInvalidationFacts = listOf(
+            "point-mode",
+            "point-count",
+            "stroke-width",
+            "stroke-cap",
+            "transform-class",
+            "local-matrix",
+            "bounds-proof",
+        )
+    }
+}
+
 /** Builds the M3 native stencil-cover gate evidence without product activation. */
 class GPUStencilCoverGatePlanner(
     private val maxEdges: Int = 256,
@@ -741,7 +888,37 @@ class GPUStencilCoverGatePlanner(
 fun GPUGeometryPlan.dumpLines(): List<String> =
     when (val selectedRoute = route) {
         is GPUGeometryRoute.Prepared -> {
-            if (stroke != null) {
+            if (descriptor.shapeKind == "path-stroke-and-fill") {
+                val pathDescriptor = requireNotNull(path) { "prepared stroke-and-fill dump requires a path descriptor" }
+                val strokeDescriptor = requireNotNull(stroke) { "prepared stroke-and-fill dump requires a stroke descriptor" }
+                listOf(
+                    "geometry:stroke-and-fill.prepared routeKind=CPUPreparedGPU consumer=${selectedRoute.plan.consumerKind}",
+                    "stroke-and-fill:path=${pathDescriptor.pathKey} fillRule=${pathDescriptor.fillRule} " +
+                        "inverse=${pathDescriptor.inverseFill} strokeWidth=${strokeDescriptor.width} " +
+                        "cap=${strokeDescriptor.cap} join=${strokeDescriptor.join} " +
+                        "miter=${strokeDescriptor.miter} " +
+                        "pathTransform=${pathDescriptor.transformClass} " +
+                        "strokeTransform=${strokeDescriptor.transformClass}",
+                    "artifact:key=${selectedRoute.plan.artifact.artifactKey} " +
+                        "lifetime=${selectedRoute.plan.artifact.lifetimeClass} " +
+                        "budget=${selectedRoute.plan.artifact.budgetClass} " +
+                        "bounds=${selectedRoute.plan.artifact.boundsLabel}",
+                    strokeAndFillNonClaimLine,
+                )
+            } else if (points != null) {
+                listOf(
+                    "geometry:draw-points.prepared routeKind=CPUPreparedGPU consumer=${selectedRoute.plan.consumerKind}",
+                    "draw-points:descriptor mode=${points.pointMode} count=${points.pointCount} " +
+                        "width=${points.strokeWidth} cap=${points.strokeCap} " +
+                        "transform=${points.transformClass} finite=${points.finiteProof} " +
+                        "localMatrix=${points.stableLocalMatrixEvidenceLabel()}",
+                    "artifact:key=${selectedRoute.plan.artifact.artifactKey} " +
+                        "lifetime=${selectedRoute.plan.artifact.lifetimeClass} " +
+                        "budget=${selectedRoute.plan.artifact.budgetClass} " +
+                        "bounds=${selectedRoute.plan.artifact.boundsLabel}",
+                    drawPointsNonClaimLine,
+                )
+            } else if (stroke != null) {
                 val pathDescriptor = requireNotNull(path) { "prepared stroke dump requires a path descriptor" }
                 val expansionPlan = GPUStrokeExpansionPlan(
                     strokeDescriptorHash = stroke.preparedStrokeDescriptorHash(pathDescriptor),
@@ -790,6 +967,20 @@ fun GPUGeometryPlan.dumpLines(): List<String> =
                         "classification=TargetNative routeKind=GPUNative reason=${selectedRoute.diagnostic.code}",
                     selectedRoute.diagnostic.stencilCoverSkippedLine(),
                     stencilCoverRefusalNonClaimLine,
+                )
+            } else if (points != null) {
+                listOf(
+                    "geometry:draw-points.refused reason=${selectedRoute.diagnostic.code}",
+                    "draw-points:descriptor mode=${points.pointMode} count=${points.pointCount} " +
+                        "width=${points.strokeWidth.stableLabel()} cap=${points.strokeCap} " +
+                        "transform=${points.transformClass} finite=${points.finiteProof} " +
+                        "localMatrix=${points.stableLocalMatrixEvidenceLabel()}",
+                    drawPointsNonClaimLine,
+                )
+            } else if (descriptor.shapeKind == "path-stroke-and-fill") {
+                listOf(
+                    "geometry:stroke-and-fill.refused reason=${selectedRoute.diagnostic.code}",
+                    strokeAndFillNonClaimLine,
                 )
             } else if (stroke != null) {
                 listOf(
@@ -1560,6 +1751,22 @@ internal fun GPUShapeDescriptor.strokeRefusalCode(): String? =
         else -> null
     }
 
+private fun GPUShapeDescriptor.strokeAndFillRefusalCode(): String? =
+    when {
+        shapeKind != "path-stroke-and-fill" -> "unsupported.geometry.shape_kind"
+        boundsLabel.isBlank() -> "unsupported.bounds.stroke_and_fill"
+        antiAliasMode !in setOf("coverage-aa", "none") -> "unsupported.stroke_and_fill.aa_mode"
+        else -> null
+    }
+
+private fun GPUShapeDescriptor.drawPointsRefusalCode(): String? =
+    when {
+        shapeKind != "draw-points" -> "unsupported.geometry.shape_kind"
+        boundsLabel.isBlank() -> "unsupported.bounds.draw_points"
+        antiAliasMode !in setOf("coverage-aa", "none") -> "unsupported.draw_points.aa_mode"
+        else -> null
+    }
+
 internal fun GPUPathDescriptor.strokePathRefusalCode(): String? =
     when {
         !pathKey.isCanonicalPathKey() -> "unsupported.geometry.path_key_nondeterministic"
@@ -1567,6 +1774,31 @@ internal fun GPUPathDescriptor.strokePathRefusalCode(): String? =
         finiteProof != "finite" -> "unsupported.geometry.path_nonfinite"
         volatility != "immutable" -> "unsupported.geometry.path_mutable"
         inverseFill -> "unsupported.geometry.path_empty_inverse_unbounded"
+        else -> null
+    }
+
+private fun GPUPathDescriptor.strokeAndFillRefusalCode(
+    stroke: GPUStrokeDescriptor,
+    maxCombinedEdges: Int,
+): String? =
+    when {
+        !pathKey.isCanonicalPathKey() -> "unsupported.geometry.path_key_nondeterministic"
+        verbCount <= 0 || pointCount <= 0 -> "unsupported.geometry.descriptor_invalid"
+        fillRule !in setOf("NonZero", "EvenOdd", "InverseWinding", "InverseEvenOdd") ->
+            "unsupported.path.fill_rule"
+        finiteProof != "finite" -> "unsupported.geometry.path_nonfinite"
+        volatility != "immutable" -> "unsupported.path.volatile"
+        transformClass !in strokeAndFillSupportedTransforms -> "unsupported.stroke_and_fill.path_transform"
+        stroke.transformClass !in strokeAndFillSupportedTransforms -> "unsupported.stroke_and_fill.stroke_transform"
+        transformClass != stroke.transformClass -> "unsupported.stroke_and_fill.transform_mismatch"
+        !stroke.finiteWidth || !stroke.width.isFinite() || stroke.width <= 0f -> "unsupported.stroke.width_invalid"
+        stroke.hairline -> "unsupported.stroke.hairline_policy"
+        stroke.cap !in setOf("Butt", "Round", "Square") -> "unsupported.stroke.cap"
+        stroke.join !in setOf("Miter", "Round", "Bevel") -> "unsupported.stroke.join"
+        stroke.miter < 1f -> "unsupported.stroke.miter_limit"
+        stroke.dashOrPathEffectRef != null -> "unsupported.stroke_and_fill.path_effect"
+        edgeCount < 0 || stroke.edgeCount < 0 || edgeCount + stroke.edgeCount > maxCombinedEdges ->
+            "unsupported.stroke_and_fill.expansion_budget_exceeded"
         else -> null
     }
 
@@ -1595,6 +1827,54 @@ private fun GPUStrokeDescriptor.preparedStrokeDescriptorHash(path: GPUPathDescri
     "stroke.${path.pathKey.sanitizeForArtifactKey()}.width${width.stableLabel()}.${cap.lowercase()}." +
         "${join.lowercase()}${miter.stableLabel()}.$transformClass.edges$edgeCount"
 
+private fun GPUStrokeDescriptor.preparedStrokeAndFillArtifactKey(path: GPUPathDescriptor): String =
+    "prepared.stroke-and-fill.${path.pathKey.sanitizeForArtifactKey()}." +
+        "${path.fillRule.lowercase()}.width${width.stableLabel()}." +
+        "${cap.lowercase()}.${join.lowercase()}.miter${miter.stableLabel()}.$transformClass." +
+        "edges${path.edgeCount}_$edgeCount"
+
+private fun GPUDrawPointsDescriptor.refusalCode(): String? =
+    when {
+        pointMode !in setOf("Points", "Lines", "Polygon") -> "unsupported.draw_points.mode"
+        pointCount <= 0 -> "unsupported.draw_points.empty"
+        !strokeWidth.isFinite() || strokeWidth < 0f -> "unsupported.draw_points.stroke_width"
+        strokeCap !in setOf("Butt", "Round", "Square") -> "unsupported.draw_points.cap"
+        transformClass !in setOf("identity", "translate", "scale", "affine") -> "unsupported.draw_points.transform"
+        finiteProof != "finite" -> "unsupported.bounds.draw_points"
+        localMatrixHash != null && !localMatrixHash.isStableDrawPointsEvidenceKey() ->
+            "unsupported.draw_points.local_matrix_key"
+        else -> null
+    }
+
+private fun GPUDrawPointsDescriptor.preparedArtifactKey(): String =
+    "prepared.draw-points.${pointMode.lowercase()}.count$pointCount.width${strokeWidth.stableLabel()}." +
+        "${strokeCap.lowercase()}.$transformClass.lm_${(localMatrixHash ?: "none").sanitizeForArtifactKey()}"
+
+private fun GPUDrawPointsDescriptor.consumerKind(): String =
+    when (pointMode) {
+        "Lines" -> "draw-points-line-strip.render-step"
+        "Polygon" -> "draw-points-polyline.render-step"
+        else -> "draw-points-sprites.render-step"
+    }
+
+private fun GPUDrawPointsDescriptor.stableFacts(): Map<String, String> =
+    mapOf(
+        "pointMode" to pointMode,
+        "pointCount" to pointCount.toString(),
+        "strokeWidth" to strokeWidth.stableLabel(),
+        "strokeCap" to strokeCap,
+        "transformClass" to transformClass,
+        "finiteProof" to finiteProof,
+        "localMatrix" to stableLocalMatrixEvidenceLabel(),
+    )
+
+private fun GPUDrawPointsDescriptor.stableLocalMatrixEvidenceLabel(): String =
+    when {
+        localMatrixHash == null -> "none"
+        localMatrixHash.isStableDrawPointsEvidenceKey() -> localMatrixHash
+        else -> "invalid"
+    }
+
 private fun Float.stableLabel(): String =
     if (this % 1f == 0f) {
         toInt().toString()
@@ -1605,6 +1885,31 @@ private fun Float.stableLabel(): String =
 private const val strokeNonClaimLine =
     "nonclaim:no-product-activation no-adapter-backed-execution no-hidden-cpu-texture-fallback " +
         "no-broad-stroke-parity no-hairline no-dash no-round-cap-join"
+
+private const val strokeAndFillNonClaimLine =
+    "nonclaim:no-product-activation no-adapter-backed-execution no-hidden-cpu-texture-fallback " +
+        "no-broad-stroke-and-fill-parity"
+
+private val strokeAndFillSupportedTransforms = setOf("identity", "translate", "scale", "affine")
+
+private fun String.isStableDrawPointsEvidenceKey(): Boolean =
+    isNotBlank() &&
+        length <= maxDrawPointsEvidenceKeyLength &&
+        all { char ->
+            char.isAsciiLetterOrDigit() ||
+                char == '.' ||
+                char == '_' ||
+                char == '-'
+        }
+
+private fun Char.isAsciiLetterOrDigit(): Boolean =
+    this in 'a'..'z' || this in 'A'..'Z' || this in '0'..'9'
+
+private const val maxDrawPointsEvidenceKeyLength = 64
+
+private const val drawPointsNonClaimLine =
+    "nonclaim:no-product-activation no-adapter-backed-execution no-hidden-cpu-texture-fallback " +
+        "no-broad-draw-points-parity no-local-matrix-runtime-compilation"
 
 private fun GPUShapeDescriptor.stencilCoverRefusalCode(): String? =
     when {

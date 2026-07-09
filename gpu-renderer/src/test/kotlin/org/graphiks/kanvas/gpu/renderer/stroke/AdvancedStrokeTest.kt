@@ -1,11 +1,14 @@
 package org.graphiks.kanvas.gpu.renderer.stroke
 
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import kotlin.test.fail
 
 class AdvancedStrokeTest {
 
@@ -21,6 +24,97 @@ class AdvancedStrokeTest {
         val dashes = floatArrayOf(10f, 5f)
         val expansion = DashExpansion.expand(dashes, dashOffset = 3f, pathLength = 100f)
         assertTrue { expansion.intervals.first().length > 0f }
+    }
+
+    @Test
+    fun `dash expansion normalizes large positive phase`() {
+        val expansion = DashExpansion.expand(floatArrayOf(10f, 5f), dashOffset = 37f, pathLength = 30f)
+
+        assertEquals(
+            listOf(
+                DashInterval(length = 3f, isOn = true),
+                DashInterval(length = 5f, isOn = false),
+                DashInterval(length = 10f, isOn = true),
+                DashInterval(length = 5f, isOn = false),
+                DashInterval(length = 7f, isOn = true),
+            ),
+            expansion.intervals,
+        )
+    }
+
+    @Test
+    fun `dash expansion normalizes negative phase`() {
+        val expansion = DashExpansion.expand(floatArrayOf(10f, 5f), dashOffset = -3f, pathLength = 20f)
+
+        assertEquals(DashInterval(length = 3f, isOn = false), expansion.intervals.first())
+        assertEquals(DashInterval(length = 10f, isOn = true), expansion.intervals.first { it.isOn })
+        assertEquals(
+            listOf(
+                DashInterval(length = 3f, isOn = false),
+                DashInterval(length = 10f, isOn = true),
+                DashInterval(length = 5f, isOn = false),
+                DashInterval(length = 2f, isOn = true),
+            ),
+            expansion.intervals,
+        )
+    }
+
+    @Test
+    fun `dash plan refuses all zero pattern`() {
+        val result = runCatching { GPUComplexDashPlan.plan(floatArrayOf(0f, 0f), 0f) }
+
+        assertTrue(result.isFailure)
+        assertEquals("Dash array must contain a positive interval", result.exceptionOrNull()?.message)
+    }
+
+    @Test
+    fun `dash expansion handles zero off intervals without hanging`() {
+        val executor = Executors.newSingleThreadExecutor { runnable ->
+            Thread(runnable, "dash-zero-off-test").apply { isDaemon = true }
+        }
+
+        try {
+            val future = executor.submit<DashExpansion> {
+                DashExpansion.expand(floatArrayOf(5f, 0f, 2f, 0f), dashOffset = 0f, pathLength = 10f)
+            }
+            val expansion = try {
+                future.get(1, TimeUnit.SECONDS)
+            } catch (e: Exception) {
+                fail("DashExpansion.expand should complete for zero off intervals: ${e::class.simpleName}")
+            }
+
+            assertEquals(listOf(DashInterval(length = 10f, isOn = true)), expansion.intervals)
+        } finally {
+            executor.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `dash vertex expansion handles zero off intervals without hanging`() {
+        val executor = Executors.newSingleThreadExecutor { runnable ->
+            Thread(runnable, "dash-vertex-zero-off-test").apply { isDaemon = true }
+        }
+
+        try {
+            val future = executor.submit<DashVertexExpansion> {
+                DashVertexExpansion.expandVertices(
+                    tessellatedVertices = listOf(0f, 0f, 10f, 0f),
+                    dashIntervals = floatArrayOf(5f, 0f, 2f, 0f),
+                    dashPhase = 0f,
+                    strokeWidth = 1f,
+                )
+            }
+            val expansion = try {
+                future.get(1, TimeUnit.SECONDS)
+            } catch (e: Exception) {
+                fail("DashVertexExpansion.expandVertices should complete for zero off intervals: ${e::class.simpleName}")
+            }
+
+            assertEquals(4, expansion.vertices.size)
+            assertEquals(listOf(0), expansion.contourStarts)
+        } finally {
+            executor.shutdownNow()
+        }
     }
 
     @Test

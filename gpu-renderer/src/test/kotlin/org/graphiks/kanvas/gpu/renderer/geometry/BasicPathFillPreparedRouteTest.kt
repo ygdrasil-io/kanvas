@@ -8,6 +8,25 @@ import kotlin.test.assertIs
 
 class BasicPathFillPreparedRouteTest {
     @Test
+    fun `inverse fill remains visible in stroke and fill planning`() {
+        val plan = GPUStrokeAndFillPreparedPlanner().plan(
+            descriptor = triangleShape.copy(shapeKind = "path-stroke-and-fill"),
+            path = trianglePath.copy(fillRule = "InverseEvenOdd", inverseFill = true),
+            stroke = GPUStrokeDescriptor(
+                width = 3f,
+                cap = "Square",
+                join = "Miter",
+                miter = 4f,
+                edgeCount = 6,
+            ),
+        )
+
+        val route = assertIs<GPUGeometryRoute.Prepared>(plan.route)
+        assertEquals("stroke-and-fill.coverage-composite", route.plan.consumerKind)
+        assertContains(plan.dumpLines().joinToString("\n"), "inverse=true")
+    }
+
+    @Test
     fun `bounded path fill builds CPU prepared GPU artifact evidence`() {
         val plan = GPUBasicPathFillPreparedPlanner().plan(
             descriptor = triangleShape,
@@ -43,6 +62,36 @@ class BasicPathFillPreparedRouteTest {
         val route = assertIs<GPUGeometryRoute.Prepared>(plan.route)
         assertEquals("coverage-mask.sample.path-fill", route.plan.consumerKind)
         assertContains(plan.dumpLines().joinToString("\n"), "inverse=true")
+    }
+
+    @Test
+    fun `all Kanvas fill rule names are accepted by prepared fill evidence`() {
+        val fillRules = listOf("NonZero", "EvenOdd", "InverseWinding", "InverseEvenOdd")
+
+        for (fillRule in fillRules) {
+            val plan = GPUBasicPathFillPreparedPlanner().plan(
+                descriptor = triangleShape,
+                path = trianglePath.copy(
+                    fillRule = fillRule,
+                    inverseFill = fillRule.startsWith("Inverse"),
+                ),
+            )
+            val route = assertIs<GPUGeometryRoute.Prepared>(plan.route)
+            assertEquals("coverage-mask.sample.path-fill", route.plan.consumerKind)
+            assertContains(plan.dumpLines().joinToString("\n"), "fillRule=$fillRule")
+        }
+    }
+
+    @Test
+    fun `perspective path fill refuses with split-ready diagnostic`() {
+        val plan = GPUBasicPathFillPreparedPlanner().plan(
+            descriptor = triangleShape,
+            path = trianglePath.copy(transformClass = "perspective"),
+        )
+
+        val route = assertIs<GPUGeometryRoute.Refused>(plan.route)
+        assertEquals("unsupported.transform.path_perspective", route.diagnostic.code)
+        assertContains(route.diagnostic.message, "perspective")
     }
 
     @Test

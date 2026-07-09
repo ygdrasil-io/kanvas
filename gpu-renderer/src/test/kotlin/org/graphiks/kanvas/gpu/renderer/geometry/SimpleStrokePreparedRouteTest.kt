@@ -9,6 +9,30 @@ import kotlin.test.assertNotEquals
 
 class SimpleStrokePreparedRouteTest {
     @Test
+    fun `stroke and fill emits combined coverage evidence`() {
+        val plan = GPUStrokeAndFillPreparedPlanner().plan(
+            descriptor = strokeShape.copy(shapeKind = "path-stroke-and-fill"),
+            path = strokePath.copy(fillRule = "EvenOdd", transformClass = "translate", edgeCount = 3),
+            stroke = simpleStroke.copy(width = 10f, cap = "Round", join = "Round", transformClass = "translate", edgeCount = 8),
+        )
+
+        val route = assertIs<GPUGeometryRoute.Prepared>(plan.route)
+        val artifact = route.plan.artifact
+
+        assertEquals("stroke-and-fill.coverage-composite", route.plan.consumerKind)
+        assertEquals(
+            "prepared.stroke-and-fill.path_segment_v1.evenodd.width10.round.round.miter4.translate.edges3_8",
+            artifact.artifactKey,
+        )
+        assertContains(plan.dumpLines().joinToString("\n"), "fillRule=EvenOdd")
+        assertContains(plan.dumpLines().joinToString("\n"), "pathTransform=translate")
+        assertContains(plan.dumpLines().joinToString("\n"), "strokeTransform=translate")
+        assertContains(plan.dumpLines().joinToString("\n"), "strokeWidth=10.0")
+        assertContains(plan.dumpLines().joinToString("\n"), "cap=Round")
+        assertContains(plan.dumpLines().joinToString("\n"), "join=Round")
+    }
+
+    @Test
     fun `simple bounded stroke builds CPU prepared GPU artifact evidence`() {
         val plan = GPUSimpleStrokePreparedPlanner().plan(
             descriptor = strokeShape,
@@ -58,6 +82,85 @@ class SimpleStrokePreparedRouteTest {
         assertEquals("prepared.stroke.path_segment_v1.width2.butt.miter2.identity.edges4", miterTwoArtifact.artifactKey)
         assertEquals("prepared.stroke.path_segment_v1.width2.butt.miter4.identity.edges4", miterFourArtifact.artifactKey)
         assertNotEquals(miterTwoArtifact.artifactKey, miterFourArtifact.artifactKey)
+    }
+
+    @Test
+    fun `stroke and fill refuses transform mismatch with stable diagnostics`() {
+        val plan = GPUStrokeAndFillPreparedPlanner().plan(
+            descriptor = strokeShape.copy(shapeKind = "path-stroke-and-fill"),
+            path = strokePath.copy(fillRule = "EvenOdd", transformClass = "translate", edgeCount = 3),
+            stroke = simpleStroke.copy(transformClass = "scale", edgeCount = 8),
+        )
+
+        val route = assertIs<GPUGeometryRoute.Refused>(plan.route)
+
+        assertEquals("unsupported.stroke_and_fill.transform_mismatch", route.diagnostic.code)
+        assertContains(plan.diagnostics.map { it.code }, "unsupported.stroke_and_fill.transform_mismatch")
+        assertEquals(
+            listOf(
+                "geometry:stroke-and-fill.refused reason=unsupported.stroke_and_fill.transform_mismatch",
+                "nonclaim:no-product-activation no-adapter-backed-execution no-hidden-cpu-texture-fallback no-broad-stroke-and-fill-parity",
+            ),
+            plan.dumpLines(),
+        )
+    }
+
+    @Test
+    fun `stroke and fill keys include miter limit`() {
+        val miterTwo = GPUStrokeAndFillPreparedPlanner().plan(
+            descriptor = strokeShape.copy(shapeKind = "path-stroke-and-fill"),
+            path = strokePath,
+            stroke = simpleStroke.copy(miter = 2f),
+        )
+        val miterFour = GPUStrokeAndFillPreparedPlanner().plan(
+            descriptor = strokeShape.copy(shapeKind = "path-stroke-and-fill"),
+            path = strokePath,
+            stroke = simpleStroke.copy(miter = 4f),
+        )
+
+        val miterTwoArtifact = assertIs<GPUGeometryRoute.Prepared>(miterTwo.route).plan.artifact
+        val miterFourArtifact = assertIs<GPUGeometryRoute.Prepared>(miterFour.route).plan.artifact
+
+        assertEquals(
+            "prepared.stroke-and-fill.path_segment_v1.nonzero.width2.butt.miter.miter2.identity.edges1_4",
+            miterTwoArtifact.artifactKey,
+        )
+        assertEquals(
+            "prepared.stroke-and-fill.path_segment_v1.nonzero.width2.butt.miter.miter4.identity.edges1_4",
+            miterFourArtifact.artifactKey,
+        )
+        assertNotEquals(miterTwoArtifact.artifactKey, miterFourArtifact.artifactKey)
+    }
+
+    @Test
+    fun `stroke and fill refuses hairline with stable diagnostics before artifact planning`() {
+        val accepted = GPUStrokeAndFillPreparedPlanner().plan(
+            descriptor = strokeShape.copy(shapeKind = "path-stroke-and-fill"),
+            path = strokePath.copy(fillRule = "EvenOdd"),
+            stroke = simpleStroke.copy(cap = "Square", join = "Bevel"),
+        )
+        val acceptedRoute = assertIs<GPUGeometryRoute.Prepared>(accepted.route)
+
+        val refused = GPUStrokeAndFillPreparedPlanner().plan(
+            descriptor = strokeShape.copy(shapeKind = "path-stroke-and-fill"),
+            path = strokePath.copy(fillRule = "EvenOdd"),
+            stroke = simpleStroke.copy(cap = "Square", join = "Bevel", hairline = true),
+        )
+        val refusedRoute = assertIs<GPUGeometryRoute.Refused>(refused.route)
+
+        assertEquals(
+            "prepared.stroke-and-fill.path_segment_v1.evenodd.width2.square.bevel.miter4.identity.edges1_4",
+            acceptedRoute.plan.artifact.artifactKey,
+        )
+        assertEquals("unsupported.stroke.hairline_policy", refusedRoute.diagnostic.code)
+        assertContains(refused.diagnostics.map { it.code }, "unsupported.stroke.hairline_policy")
+        assertEquals(
+            listOf(
+                "geometry:stroke-and-fill.refused reason=unsupported.stroke.hairline_policy",
+                "nonclaim:no-product-activation no-adapter-backed-execution no-hidden-cpu-texture-fallback no-broad-stroke-and-fill-parity",
+            ),
+            refused.dumpLines(),
+        )
     }
 
     @Test
