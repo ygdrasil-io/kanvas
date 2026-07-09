@@ -162,6 +162,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
                 bb.putFloat(material.startX); bb.putFloat(material.startY)
                 bb.putFloat(material.endX); bb.putFloat(material.endY)
                 bb.putInt(n)
+                bb.alignUniformArray()
                 for (i in 0 until 256) {
                     if (i < n) {
                         val pos = material.allStopPositions!!.getOrElse(i) { i.toFloat() / (n - 1).coerceAtLeast(1) }
@@ -293,6 +294,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
                 bb.putFloat(material.centerX); bb.putFloat(material.centerY)
                 bb.putFloat(material.startAngle); bb.putFloat(material.endAngle)
                 bb.putInt(n)
+                bb.alignUniformArray()
                 for (i in 0 until 256) {
                     if (i < n) {
                         val pos = material.allStopPositions!!.getOrElse(i) { i.toFloat() / (n - 1).coerceAtLeast(1) }
@@ -398,4 +400,10 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
     }
     dispatched.add(cmd.commandId.toString())
     diagnostics.degrade("dispatch:${cmd.diagnosticName}", cmd.diagnosticName, "dispatched")
+}
+
+private fun java.nio.ByteBuffer.alignUniformArray() {
+    while (position() % 16 != 0) {
+        putInt(0)
+    }
 }
