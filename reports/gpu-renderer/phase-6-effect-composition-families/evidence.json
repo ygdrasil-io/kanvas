@@ -2,7 +2,7 @@
     "schemaVersion": "phase6-effect-composition-families-v1",
     "generatedBy": ":integration-tests:skia-evidence:generateGpuPhase6EffectCompositionFamiliesEvidence",
     "dashboardSource": "integration-tests/skia/build/reports/skia-gm-dashboard/data/gms.json",
-    "sourceGeneratedAt": "2026-07-09T10:54:01.141678",
+    "sourceGeneratedAt": "2026-07-09T11:04:08.12663",
     "summary": {
         "totalRows": 156,
         "families": {
@@ -13,7 +13,7 @@
             "BLUR": {
                 "baselineSource": "2026-07-09 local dashboard before effect-composition-family wave",
                 "currentSource": "integration-tests/skia/build/reports/skia-gm-dashboard/data/gms.json",
-                "currentGeneratedAt": "2026-07-09T10:54:01.141678",
+                "currentGeneratedAt": "2026-07-09T11:04:08.12663",
                 "baselineCount": 45,
                 "currentCount": 45,
                 "delta": 0
@@ -21,7 +21,7 @@
             "COMPOSITE": {
                 "baselineSource": "2026-07-09 local dashboard before effect-composition-family wave",
                 "currentSource": "integration-tests/skia/build/reports/skia-gm-dashboard/data/gms.json",
-                "currentGeneratedAt": "2026-07-09T10:54:01.141678",
+                "currentGeneratedAt": "2026-07-09T11:04:08.12663",
                 "baselineCount": 113,
                 "currentCount": 111,
                 "delta": -2

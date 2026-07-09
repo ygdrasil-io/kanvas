@@ -6,11 +6,14 @@
 - Families: {BLUR=45, COMPOSITE=111}
 - Classifications: {expected-unsupported=47, instrumented-existing=83, no-score=26}
 - Subfamilies: {blur-backdrop-gated=1, blur-clip-interaction-gated=2, blur-filter-graph-gated=3, blur-image-basic=6, blur-large-sigma-gated=2, blur-mask-basic=6, blur-matrix-convolution-gated=6, blur-rect-rrect-circle=9, blur-resource-budget-gated=1, blur-small-sigma=3, blur-text-dependent-gated=2, blur-transform-or-perspective-gated=4, composite-advanced-blend-gated=4, composite-atlas-or-vertices-gated=9, composite-backdrop-gated=2, composite-color-filter-gated=8, composite-destination-read-gated=1, composite-image-filter-gated=19, composite-layer-bounds-gated=1, composite-overdraw-diagnostic=1, composite-porter-duff=8, composite-save-layer-gated=5, composite-src-over-basic=53}
+- Promoted rows: 0
+- Unexpected fails: 0
+- No score: 26
 
 ## Family Deltas
 
 - Baseline source: `2026-07-09 local dashboard before effect-composition-family wave`
-- Current dashboard: `integration-tests/skia/build/reports/skia-gm-dashboard/data/gms.json` (2026-07-09T10:54:01.141678)
+- Current dashboard: `integration-tests/skia/build/reports/skia-gm-dashboard/data/gms.json` (2026-07-09T11:04:08.12663)
 
 | Family | Baseline | Current | Delta |
 |---|---:|---:|---:|

@@ -189,6 +189,26 @@ class Phase6EffectCompositionFamilyEvidenceTest {
     }
 
     @Test
+    fun `markdown summary surfaces promoted unexpected fail and no score counters`() {
+        val evidence = Phase6EffectCompositionFamilyClassifier.buildEvidence(
+            GmDashboard(
+                generatedAt = "2026-07-09T10:00:00",
+                rows = listOf(
+                    row("srcmode", family = "COMPOSITE", similarity = 100.0, isPassing = true),
+                    row("plain_composite_fail", family = "COMPOSITE", similarity = 20.0, isPassing = false),
+                    row("animatedbackdropblur", family = "BLUR", similarity = null, isPassing = null, noReference = true),
+                ),
+            ),
+        )
+
+        val markdown = evidence.toMarkdown()
+
+        assertContains(markdown, "- Promoted rows: 0")
+        assertContains(markdown, "- Unexpected fails: 1")
+        assertContains(markdown, "- No score: 1")
+    }
+
+    @Test
     fun `writer creates json markdown and csv outputs and preserves validation section`() {
         val root = Files.createTempDirectory("phase6-effect-composition-evidence-test")
         val markdown = root.resolve("reports/gpu-renderer/2026-07-09-gpu-phase-6-effect-composition-families.md")
