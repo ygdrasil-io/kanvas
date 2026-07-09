@@ -218,7 +218,7 @@ struct VertexOutput {
             t_raw = (-B + sqrt(disc)) / (2.0 * A);
         }
     }
-    let t = $tileFn;
+    $tileFn
     var positions: array<vec4<f32>, 16>;
     var colors: array<vec4<f32>, 16>;
     for (var i: u32 = 0u; i < ${stopCount}u; i = i + 1u) {

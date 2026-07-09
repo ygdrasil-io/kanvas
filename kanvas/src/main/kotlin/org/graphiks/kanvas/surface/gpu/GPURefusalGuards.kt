@@ -37,6 +37,7 @@ internal fun NormalizedDrawCommand.fillGuardRefusalReasonOrNull(): String? {
          (material !is GPUMaterialDescriptor.LinearGradient &&
           material !is GPUMaterialDescriptor.RadialGradient &&
           material !is GPUMaterialDescriptor.SweepGradient &&
+          material !is GPUMaterialDescriptor.ConicalGradient &&
           !(this is NormalizedDrawCommand.FillRect && material is GPUMaterialDescriptor.ImageDraw) &&
           !(this is NormalizedDrawCommand.FillPath && material is GPUMaterialDescriptor.ImageDraw)))
     ) {

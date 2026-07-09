@@ -355,6 +355,31 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
                 )
             }
         }
+        is GPUMaterialDescriptor.ConicalGradient -> {
+            if (material.snippetSourceHash != null) {
+                val shader = org.graphiks.kanvas.gpu.renderer.materials.GradientWgslShaderProvider.shaderFor(material)!!
+                val uniformBytes = org.graphiks.kanvas.gpu.renderer.materials.GradientWgslShaderProvider.uniformBytesFor(material)!!
+                drawFullscreenStencilPass(
+                    wgsl = shader.wgslSource,
+                    colorFormat = config.gpuColorFormat.gpuLabel,
+                    stencilMode = GPUBackendStencilMode.Test,
+                    triangleData = null,
+                    draws = listOf(
+                        GPUBackendRawUniformDraw(
+                            uniformBytes = uniformBytes,
+                            scissorX = sx,
+                            scissorY = sy,
+                            scissorWidth = sw,
+                            scissorHeight = sh,
+                        ),
+                    ),
+                    blendMode = blendMode,
+                )
+            } else {
+                refuse("unsupported_material:conical_gradient_fallback")
+                return
+            }
+        }
         is GPUMaterialDescriptor.ImageDraw -> {
             if (material.rgbaPixels.isEmpty()) {
                 refuse("unsupported_material:image_draw_missing_pixels")
