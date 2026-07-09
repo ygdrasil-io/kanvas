@@ -7,14 +7,15 @@ private val textMeshDashboardJson = Path.of("integration-tests/skia/build/report
 
 fun main(args: Array<String>) {
     val root = if (args.isEmpty()) Path.of(".") else Path.of(args[0])
-    runPhase6TextMeshFamiliesEvidence(root)
+    val dashboardPath = args.getOrNull(1)?.let(Path::of)
+    runPhase6TextMeshFamiliesEvidence(root, dashboardPath)
 }
 
-internal fun runPhase6TextMeshFamiliesEvidence(root: Path) {
-    val dashboardPath = root.resolve(textMeshDashboardJson)
-    require(dashboardPath.exists()) { "Missing dashboard JSON: $dashboardPath" }
+internal fun runPhase6TextMeshFamiliesEvidence(root: Path, dashboardPath: Path? = null) {
+    val resolvedDashboardPath = dashboardPath ?: root.resolve(textMeshDashboardJson)
+    require(resolvedDashboardPath.exists()) { "Missing dashboard JSON: $resolvedDashboardPath" }
 
-    val dashboard = GmDashboardJsonReader.read(dashboardPath)
+    val dashboard = GmDashboardJsonReader.read(resolvedDashboardPath)
     val evidence = Phase6TextMeshFamilyClassifier.buildEvidence(dashboard)
     Phase6TextMeshFamilyEvidenceWriter.writeOutputs(root, evidence)
     println("Wrote ${root.resolve("reports/gpu-renderer/phase-6-text-mesh-families/evidence.json")}")

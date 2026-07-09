@@ -254,6 +254,39 @@ class Phase6TextMeshFamilyEvidenceTest {
     }
 
     @Test
+    fun `cli uses explicit dashboard path when provided`() {
+        val root = Files.createTempDirectory("phase6-text-mesh-cli-test")
+        val dashboard = root.resolve("custom-dashboard.json")
+        Files.writeString(
+            dashboard,
+            """
+            {
+              "generatedAt": "2026-07-09T12:00:00",
+              "gms": [
+                {
+                  "name": "fontregen_bigtext",
+                  "family": "TEXT",
+                  "similarity": 100.0,
+                  "minSimilarity": 99.0,
+                  "isPassing": true,
+                  "noReference": false,
+                  "renderFailed": false,
+                  "sizeMismatch": false,
+                  "hasDiff": false
+                }
+              ]
+            }
+            """.trimIndent(),
+        )
+
+        runPhase6TextMeshFamiliesEvidence(root, dashboard)
+
+        val csv = Files.readString(root.resolve("reports/gpu-renderer/phase-6-text-mesh-families/classification.csv"))
+        assertContains(csv, "fontregen_bigtext,TEXT,text-font-fallback-gated,expected-unsupported")
+        assertContains(csv, "unsupported.text.font_fallback")
+    }
+
+    @Test
     fun `non claims do not mention excluded support as complete`() {
         val evidence = Phase6TextMeshFamilyClassifier.buildEvidence(
             GmDashboard(
