@@ -3,11 +3,9 @@ package org.graphiks.kanvas.skia
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
 import org.graphiks.kanvas.test.ComparisonUtils
 import java.io.File
-import java.io.FileInputStream
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
-import java.util.Properties
 
 data class GmEntry(
     val name: String,
@@ -38,12 +36,8 @@ fun main(args: Array<String>) {
 internal fun generateSkiaDashboard(args: Array<String>, gms: List<SkiaGm> = SkiaGmRegistry.all()) {
     val refDir = File(argAt(args, "--ref-dir"))
     val genDir = File(argAt(args, "--gen-dir"))
-    val scoresFile = File(argAt(args, "--scores"))
+    argAt(args, "--scores")
     val outputDir = File(argAt(args, "--output-dir"))
-
-    val scores = Properties().apply {
-        if (scoresFile.exists()) FileInputStream(scoresFile).use { load(it) }
-    }
 
     val entries = mutableListOf<GmEntry>()
     var passed = 0; var failed = 0; var noScore = 0; var sumSim = 0.0; var simCount = 0
@@ -121,13 +115,10 @@ internal fun generateSkiaDashboard(args: Array<String>, gms: List<SkiaGm> = Skia
         ComparisonUtils.saveRgbaAsPng(refRgba, refImg.width, refImg.height, outputDir.resolve("images/reference/${gm.name}.png"))
         ComparisonUtils.saveRgbaAsPng(genRgba, genImg.width, genImg.height, outputDir.resolve("images/generated/${gm.name}.png"))
 
-        val previousScore = scores.getProperty(gm.name)?.toDoubleOrNull()
-        val similarity = previousScore ?: result.similarity
-
         entries.add(GmEntry(
             name = gm.name,
             family = fam,
-            similarity = similarity,
+            similarity = result.similarity,
             minSimilarity = gm.minSimilarity,
             isPassing = result.isPassing,
             width = refImg.width,
