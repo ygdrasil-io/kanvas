@@ -834,7 +834,8 @@ private fun GPUDecodedImagePixelsDescriptor.refusalCode(maxUploadBytes: Long): S
 
 private fun GPUDecodedImageSamplingPlan.refusalCode(): String? =
     when {
-        tileModeX != "clamp" || tileModeY != "clamp" -> "unsupported.image.tile_mode"
+        tileModeX !in supportedDecodedImageTileModes ||
+            tileModeY !in supportedDecodedImageTileModes -> "unsupported.image.tile_mode"
         mipmapMode != "none" -> "unsupported.image.mip_required"
         filterMode == "cubic" -> "unsupported.image.sampling_cubic"
         filterMode !in setOf("nearest", "linear") -> "unsupported.image.sampling_filter"
@@ -848,7 +849,8 @@ private fun GPUDecodedImageSamplingPlan.refusalCode(): String? =
 
 private fun GPUDecodedImageSamplingPlan.samplerBoundaryRefusalCode(availableMipLevels: Int): String? =
     when {
-        tileModeX != "clamp" || tileModeY != "clamp" -> "unsupported.image.tile_mode"
+        tileModeX !in supportedDecodedImageTileModes ||
+            tileModeY !in supportedDecodedImageTileModes -> "unsupported.image.tile_mode"
         mipmapMode != "none" && availableMipLevels <= 1 -> "unsupported.texture.mipmap_unavailable"
         filterMode == "cubic" -> "unsupported.image.sampling_cubic"
         filterMode !in setOf("nearest", "linear") -> "unsupported.image.sampling_filter"
@@ -968,8 +970,11 @@ private fun String.toAddressMode(): String =
         "clamp" -> "clamp-to-edge"
         "repeat" -> "repeat"
         "mirror" -> "mirror-repeat"
+        "decal" -> "clamp-to-edge"
         else -> this
     }
+
+private val supportedDecodedImageTileModes = setOf("clamp", "repeat", "mirror", "decal")
 
 private fun String.toMaterialTileMode(): GPUMaterialTileMode =
     when (this) {
