@@ -30,7 +30,10 @@ class SkiaGmRunner {
         }
 
         @JvmStatic
-        fun allGms() = SkiaGmRegistry.all()
+        fun allGms() = selectSkiaGmsForRunner(
+            SkiaGmRegistry.all(),
+            System.getProperty("kanvas.gm.name"),
+        )
 
         @AfterAll
         @JvmStatic
@@ -144,3 +147,6 @@ class SkiaGmRunner {
         }
     }
 }
+
+internal fun selectSkiaGmsForRunner(gms: List<SkiaGm>, name: String?): List<SkiaGm> =
+    if (name == null) gms else gms.filter { it.name == name }

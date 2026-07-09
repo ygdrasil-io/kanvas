@@ -26,6 +26,15 @@ tasks.withType<Test> {
     if (org.gradle.internal.os.OperatingSystem.current().isMacOsX) {
         jvmArgs("-XstartOnFirstThread")
     }
+    listOf(
+        "kanvas.gm.includeBlocking",
+        "kanvas.gm.name",
+        "kanvas.render.debugLevel",
+    ).forEach { propertyName ->
+        System.getProperty(propertyName)?.let { value ->
+            systemProperty(propertyName, value)
+        }
+    }
 }
 
 tasks.register<JavaExec>("generateSkiaRenders") {

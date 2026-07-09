@@ -662,6 +662,7 @@ org.graphiks.kanvas.skia.gm.text.TextEffectsGm
 org.graphiks.kanvas.skia.gm.text.TextFilterColorGm
 org.graphiks.kanvas.skia.gm.text.TextFilterImageGm
 org.graphiks.kanvas.skia.gm.text.TextScaleSkewGm
+org.graphiks.kanvas.skia.gm.text.TextScaleSkewRotateGm
 org.graphiks.kanvas.skia.gm.text.TypefaceRenderingGm
 org.graphiks.kanvas.skia.gm.text.TypefaceRenderingPfaGm
 org.graphiks.kanvas.skia.gm.text.TypefaceRenderingPfbGm
