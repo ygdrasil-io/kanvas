@@ -38,6 +38,8 @@ class Phase6EffectCompositionFamilyEvidenceTest {
         val imageFilter = classify("imagefilters_xfermodes", "COMPOSITE")
         val atlas = classify("draw-atlas-colors", "COMPOSITE")
         val colorFilter = classify("modecolorfilters", "COMPOSITE")
+        val colorShader = classify("color4shader", "COMPOSITE")
+        val colorMatrix = classify("colormatrix", "COMPOSITE")
 
         assertEquals("composite-src-over-basic", srcOver.subfamily)
         assertEquals("instrumented-existing", srcOver.classification)
@@ -60,6 +62,12 @@ class Phase6EffectCompositionFamilyEvidenceTest {
         assertEquals("composite-color-filter-gated", colorFilter.subfamily)
         assertEquals("unsupported.composition.color_dependency", colorFilter.fallbackReason)
         assertEquals("expected-unsupported", colorFilter.classification)
+        assertEquals("composite-color-filter-gated", colorShader.subfamily)
+        assertEquals("unsupported.composition.color_dependency", colorShader.fallbackReason)
+        assertEquals("expected-unsupported", colorShader.classification)
+        assertEquals("composite-color-filter-gated", colorMatrix.subfamily)
+        assertEquals("unsupported.composition.color_dependency", colorMatrix.fallbackReason)
+        assertEquals("expected-unsupported", colorMatrix.classification)
     }
 
     @Test
@@ -115,6 +123,20 @@ class Phase6EffectCompositionFamilyEvidenceTest {
         assertEquals("unsupported.composition.advanced_blend", advanced.fallbackReason)
         assertEquals("expected-unsupported", bigBlur.classification)
         assertEquals("unsupported.blur.large_sigma", bigBlur.fallbackReason)
+    }
+
+    @Test
+    fun `no score color dependency rows keep stable color refusal reason`() {
+        val colorCompose = classify("colorcomposefilter_alpha", "COMPOSITE", similarity = null, isPassing = null, renderFailed = true)
+        val composeCf = classify("composeCFIF", "COMPOSITE", similarity = null, isPassing = null, renderFailed = true)
+        val mixer = classify("mixerCF", "COMPOSITE", similarity = null, isPassing = null, renderFailed = true)
+
+        listOf(colorCompose, composeCf, mixer).forEach { row ->
+            assertEquals("composite-color-filter-gated", row.subfamily)
+            assertEquals("no-score", row.classification)
+            assertEquals("unsupported.composition.color_dependency", row.fallbackReason)
+            assertEquals("generated-render-missing", row.noScoreCause)
+        }
     }
 
     @Test
@@ -199,6 +221,7 @@ class Phase6EffectCompositionFamilyEvidenceTest {
                 generatedAt = "2026-07-09T10:00:00",
                 rows = listOf(
                     row("modecolorfilters", family = "COMPOSITE"),
+                    row("color4shader", family = "COMPOSITE"),
                     row("advanced_blend_modes", family = "COMPOSITE"),
                     row("animatedbackdropblur", family = "BLUR", similarity = null, isPassing = null, noReference = true),
                     row("plain_composite_fail", family = "COMPOSITE", similarity = 20.0, isPassing = false),
@@ -217,7 +240,7 @@ class Phase6EffectCompositionFamilyEvidenceTest {
         assertContains(json, "\"rootCause\":\"unexpected-fail.without-stable-refusal\"")
         assertFalse(json.contains("\"rootCause\":\"none\""))
         assertContains(markdown, "## Follow-Up Candidates")
-        assertContains(markdown, "| `unsupported.composition.color_dependency` | `expected-unsupported` | 1 | `modecolorfilters` |")
+        assertContains(markdown, "| `unsupported.composition.color_dependency` | `expected-unsupported` | 2 | `color4shader`, `modecolorfilters` |")
     }
 
     @Test

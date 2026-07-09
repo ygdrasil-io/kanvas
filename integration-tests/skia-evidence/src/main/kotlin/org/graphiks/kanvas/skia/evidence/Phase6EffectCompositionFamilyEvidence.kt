@@ -204,7 +204,17 @@ object Phase6EffectCompositionFamilyClassifier {
             name.containsAnyEffectComposition("dstread", "readshuffle", "destinationread") -> "composite-destination-read-gated"
             name.containsAnyEffectComposition("imagefilter", "imagefilters", "filtergraph", "offsetimagefilter", "matriximagefilter", "localmatriximagefilter") -> "composite-image-filter-gated"
             name.containsAnyEffectComposition("atlas", "vertices", "patch") -> "composite-atlas-or-vertices-gated"
-            name.containsAnyEffectComposition("colorfilter", "color4blendcf", "modecolorfilters", "tablecolorfilter") -> "composite-color-filter-gated"
+            name.containsAnyEffectComposition(
+                "colorfilter",
+                "color4blendcf",
+                "color4shader",
+                "colormatrix",
+                "colorcomposefilter",
+                "composecfif",
+                "mixercf",
+                "modecolorfilters",
+                "tablecolorfilter",
+            ) -> "composite-color-filter-gated"
             name.containsAnyEffectComposition("xfer", "mode", "porterduff", "srcmode", "aaxfer", "hairmodes", "lcdblend") -> "composite-porter-duff"
             name.containsAnyEffectComposition("overdraw") -> "composite-overdraw-diagnostic"
             name.containsAnyEffectComposition("bounds", "croprect") -> "composite-layer-bounds-gated"

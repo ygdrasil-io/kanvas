@@ -631,19 +631,23 @@ Run:
 rtk jq '.summary | {totalRows, families, classifications, promotedRows, unexpectedFails, noScore}' reports/gpu-renderer/phase-6-effect-composition-families/evidence.json
 ```
 
-Expected: the command prints a JSON object with `totalRows` equal to `158`, `families.BLUR` equal to `45`, `families.COMPOSITE` equal to `113`, `promotedRows` equal to `0`, and non-negative `unexpectedFails` / `noScore` counters. Example shape:
+Expected: the command prints a JSON object with `totalRows` equal to `156`, `families.BLUR` equal to `45`, `families.COMPOSITE` equal to `111`, `promotedRows` equal to `0`, and non-negative `unexpectedFails` / `noScore` counters. Example shape:
 
 ```json
 {
-  "totalRows": 158,
+  "totalRows": 156,
   "families": {
     "BLUR": 45,
-    "COMPOSITE": 113
+    "COMPOSITE": 111
   },
-  "classifications": {},
+  "classifications": {
+    "expected-unsupported": 57,
+    "instrumented-existing": 73,
+    "no-score": 26
+  },
   "promotedRows": 0,
   "unexpectedFails": 0,
-  "noScore": 0
+  "noScore": 26
 }
 ```
 

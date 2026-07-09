@@ -2,7 +2,7 @@
     "schemaVersion": "phase6-effect-composition-families-v1",
     "generatedBy": ":integration-tests:skia-evidence:generateGpuPhase6EffectCompositionFamiliesEvidence",
     "dashboardSource": "integration-tests/skia/build/reports/skia-gm-dashboard/data/gms.json",
-    "sourceGeneratedAt": "2026-07-09T11:20:52.542444",
+    "sourceGeneratedAt": "2026-07-09T11:41:19.089573",
     "summary": {
         "totalRows": 156,
         "families": {
@@ -13,7 +13,7 @@
             "BLUR": {
                 "baselineSource": "2026-07-09 local dashboard before effect-composition-family wave",
                 "currentSource": "integration-tests/skia/build/reports/skia-gm-dashboard/data/gms.json",
-                "currentGeneratedAt": "2026-07-09T11:20:52.542444",
+                "currentGeneratedAt": "2026-07-09T11:41:19.089573",
                 "baselineCount": 45,
                 "currentCount": 45,
                 "delta": 0
@@ -21,15 +21,15 @@
             "COMPOSITE": {
                 "baselineSource": "2026-07-09 local dashboard before effect-composition-family wave",
                 "currentSource": "integration-tests/skia/build/reports/skia-gm-dashboard/data/gms.json",
-                "currentGeneratedAt": "2026-07-09T11:20:52.542444",
+                "currentGeneratedAt": "2026-07-09T11:41:19.089573",
                 "baselineCount": 113,
                 "currentCount": 111,
                 "delta": -2
             }
         },
         "classifications": {
-            "expected-unsupported": 55,
-            "instrumented-existing": 75,
+            "expected-unsupported": 57,
+            "instrumented-existing": 73,
             "no-score": 26
         },
         "subfamilies": {
@@ -48,14 +48,14 @@
             "composite-advanced-blend-gated": 4,
             "composite-atlas-or-vertices-gated": 9,
             "composite-backdrop-gated": 2,
-            "composite-color-filter-gated": 8,
+            "composite-color-filter-gated": 14,
             "composite-destination-read-gated": 1,
             "composite-image-filter-gated": 19,
             "composite-layer-bounds-gated": 1,
             "composite-overdraw-diagnostic": 1,
             "composite-porter-duff": 8,
             "composite-save-layer-gated": 5,
-            "composite-src-over-basic": 53
+            "composite-src-over-basic": 47
         },
         "promotedRows": 0,
         "unexpectedFails": 0,
@@ -170,13 +170,13 @@
         {
             "rootCause": "unsupported.composition.color_dependency",
             "classification": "expected-unsupported",
-            "rowCount": 8,
+            "rowCount": 10,
             "sampleRows": [
                 "color4blendcf",
+                "color4shader",
                 "colorfiltershader",
-                "lightingcolorfilter",
-                "modecolorfilters",
-                "modecolorfilters#2"
+                "colormatrix",
+                "lightingcolorfilter"
             ]
         },
         {
@@ -2081,8 +2081,8 @@
             "rowId": "color4shader",
             "name": "color4shader",
             "family": "COMPOSITE",
-            "subfamily": "composite-src-over-basic",
-            "classification": "instrumented-existing",
+            "subfamily": "composite-color-filter-gated",
+            "classification": "expected-unsupported",
             "similarity": 82.11805555555556,
             "minSimilarity": 0.0,
             "isPassing": true,
@@ -2102,12 +2102,12 @@
                 "b": 169.59,
                 "a": 0.0
             },
-            "fallbackReason": "none",
+            "fallbackReason": "unsupported.composition.color_dependency",
             "referencePath": "images/reference/color4shader.png",
             "generatedPath": "images/generated/color4shader.png",
             "diffPath": "images/diff/color4shader.png",
             "noScoreCause": null,
-            "nonClaim": "COMPOSITE row remains instrumented until route and effect/composition diagnostics are attached."
+            "nonClaim": "composite-color-filter-gated remains outside Phase 6 effect/composition-family migration scope."
         },
         {
             "rowId": "colorfilterimagefilter",
@@ -2241,8 +2241,8 @@
             "rowId": "colormatrix",
             "name": "colormatrix",
             "family": "COMPOSITE",
-            "subfamily": "composite-src-over-basic",
-            "classification": "instrumented-existing",
+            "subfamily": "composite-color-filter-gated",
+            "classification": "expected-unsupported",
             "similarity": 38.585,
             "minSimilarity": 0.0,
             "isPassing": true,
@@ -2262,18 +2262,18 @@
                 "b": 109.68,
                 "a": 74.63
             },
-            "fallbackReason": "none",
+            "fallbackReason": "unsupported.composition.color_dependency",
             "referencePath": "images/reference/colormatrix.png",
             "generatedPath": "images/generated/colormatrix.png",
             "diffPath": "images/diff/colormatrix.png",
             "noScoreCause": null,
-            "nonClaim": "COMPOSITE row remains instrumented until route and effect/composition diagnostics are attached."
+            "nonClaim": "composite-color-filter-gated remains outside Phase 6 effect/composition-family migration scope."
         },
         {
             "rowId": "colorcomposefilter_alpha",
             "name": "colorcomposefilter_alpha",
             "family": "COMPOSITE",
-            "subfamily": "composite-src-over-basic",
+            "subfamily": "composite-color-filter-gated",
             "classification": "no-score",
             "similarity": null,
             "minSimilarity": 0.0,
@@ -2294,7 +2294,7 @@
                 "b": 0.0,
                 "a": 0.0
             },
-            "fallbackReason": "none",
+            "fallbackReason": "unsupported.composition.color_dependency",
             "referencePath": "images/reference/colorcomposefilter_alpha.png",
             "generatedPath": null,
             "diffPath": null,
@@ -2305,7 +2305,7 @@
             "rowId": "colorcomposefilter_wacky",
             "name": "colorcomposefilter_wacky",
             "family": "COMPOSITE",
-            "subfamily": "composite-src-over-basic",
+            "subfamily": "composite-color-filter-gated",
             "classification": "no-score",
             "similarity": null,
             "minSimilarity": 0.0,
@@ -2326,7 +2326,7 @@
                 "b": 0.0,
                 "a": 0.0
             },
-            "fallbackReason": "none",
+            "fallbackReason": "unsupported.composition.color_dependency",
             "referencePath": "images/reference/colorcomposefilter_wacky.png",
             "generatedPath": null,
             "diffPath": null,
@@ -2529,7 +2529,7 @@
             "rowId": "composeCFIF",
             "name": "composeCFIF",
             "family": "COMPOSITE",
-            "subfamily": "composite-src-over-basic",
+            "subfamily": "composite-color-filter-gated",
             "classification": "no-score",
             "similarity": null,
             "minSimilarity": 0.0,
@@ -2550,7 +2550,7 @@
                 "b": 0.0,
                 "a": 0.0
             },
-            "fallbackReason": "none",
+            "fallbackReason": "unsupported.composition.color_dependency",
             "referencePath": "images/reference/composeCFIF.png",
             "generatedPath": null,
             "diffPath": null,
@@ -3937,7 +3937,7 @@
             "rowId": "mixerCF",
             "name": "mixerCF",
             "family": "COMPOSITE",
-            "subfamily": "composite-src-over-basic",
+            "subfamily": "composite-color-filter-gated",
             "classification": "no-score",
             "similarity": null,
             "minSimilarity": 0.0,
@@ -3958,7 +3958,7 @@
                 "b": 0.0,
                 "a": 0.0
             },
-            "fallbackReason": "none",
+            "fallbackReason": "unsupported.composition.color_dependency",
             "referencePath": "images/reference/mixerCF.png",
             "generatedPath": null,
             "diffPath": null,

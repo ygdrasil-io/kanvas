@@ -4,8 +4,8 @@
 
 - Total COMPOSITE + BLUR rows: 156
 - Families: {BLUR=45, COMPOSITE=111}
-- Classifications: {expected-unsupported=55, instrumented-existing=75, no-score=26}
-- Subfamilies: {blur-backdrop-gated=1, blur-clip-interaction-gated=2, blur-filter-graph-gated=3, blur-image-basic=6, blur-large-sigma-gated=2, blur-mask-basic=6, blur-matrix-convolution-gated=6, blur-rect-rrect-circle=9, blur-resource-budget-gated=1, blur-small-sigma=3, blur-text-dependent-gated=2, blur-transform-or-perspective-gated=4, composite-advanced-blend-gated=4, composite-atlas-or-vertices-gated=9, composite-backdrop-gated=2, composite-color-filter-gated=8, composite-destination-read-gated=1, composite-image-filter-gated=19, composite-layer-bounds-gated=1, composite-overdraw-diagnostic=1, composite-porter-duff=8, composite-save-layer-gated=5, composite-src-over-basic=53}
+- Classifications: {expected-unsupported=57, instrumented-existing=73, no-score=26}
+- Subfamilies: {blur-backdrop-gated=1, blur-clip-interaction-gated=2, blur-filter-graph-gated=3, blur-image-basic=6, blur-large-sigma-gated=2, blur-mask-basic=6, blur-matrix-convolution-gated=6, blur-rect-rrect-circle=9, blur-resource-budget-gated=1, blur-small-sigma=3, blur-text-dependent-gated=2, blur-transform-or-perspective-gated=4, composite-advanced-blend-gated=4, composite-atlas-or-vertices-gated=9, composite-backdrop-gated=2, composite-color-filter-gated=14, composite-destination-read-gated=1, composite-image-filter-gated=19, composite-layer-bounds-gated=1, composite-overdraw-diagnostic=1, composite-porter-duff=8, composite-save-layer-gated=5, composite-src-over-basic=47}
 - Promoted rows: 0
 - Unexpected fails: 0
 - No score: 26
@@ -13,7 +13,7 @@
 ## Family Deltas
 
 - Baseline source: `2026-07-09 local dashboard before effect-composition-family wave`
-- Current dashboard: `integration-tests/skia/build/reports/skia-gm-dashboard/data/gms.json` (2026-07-09T11:20:52.542444)
+- Current dashboard: `integration-tests/skia/build/reports/skia-gm-dashboard/data/gms.json` (2026-07-09T11:41:19.089573)
 
 | Family | Baseline | Current | Delta |
 |---|---:|---:|---:|
@@ -45,7 +45,7 @@
 | `unsupported.composition.advanced_blend` | `expected-unsupported` | 4 | `HSL_duck`, `hsl`, `hslcolorfilter`, `luminosity_overflow` |
 | `unsupported.composition.atlas_or_vertices` | `expected-unsupported` | 7 | `compare_atlas_vertices`, `draw-atlas`, `draw-atlas-colors`, `patch_alpha`, `patch_alpha_test` |
 | `unsupported.composition.backdrop_filter` | `expected-unsupported` | 2 | `backdrop_hintrect_clipping`, `backdrop_imagefilter_croprect` |
-| `unsupported.composition.color_dependency` | `expected-unsupported` | 8 | `color4blendcf`, `colorfiltershader`, `lightingcolorfilter`, `modecolorfilters`, `modecolorfilters#2` |
+| `unsupported.composition.color_dependency` | `expected-unsupported` | 10 | `color4blendcf`, `color4shader`, `colorfiltershader`, `colormatrix`, `lightingcolorfilter` |
 | `unsupported.composition.destination_read` | `expected-unsupported` | 1 | `dstreadshuffle` |
 | `unsupported.composition.image_filter_dag` | `expected-unsupported` | 18 | `colorfilterimagefilter`, `imagefilter_composed_transform`, `imagefilter_convolve_subset`, `imagefilter_matrix_localmatrix`, `imagefilters_effect_order` |
 | `unsupported.composition.layer_bounds` | `expected-unsupported` | 1 | `filterfastbounds` |
@@ -113,21 +113,21 @@
 | `clip_shader_persp` | `clip_shader_persp` | `COMPOSITE` | `composite-src-over-basic` | `instrumented-existing` | 76.54 | `none` | `n/a` |
 | `clip_shader` | `clip_shader` | `COMPOSITE` | `composite-src-over-basic` | `instrumented-existing` | 61.90 | `none` | `n/a` |
 | `color4blendcf` | `color4blendcf` | `COMPOSITE` | `composite-color-filter-gated` | `expected-unsupported` | 30.56 | `unsupported.composition.color_dependency` | `n/a` |
-| `color4shader` | `color4shader` | `COMPOSITE` | `composite-src-over-basic` | `instrumented-existing` | 82.12 | `none` | `n/a` |
+| `color4shader` | `color4shader` | `COMPOSITE` | `composite-color-filter-gated` | `expected-unsupported` | 82.12 | `unsupported.composition.color_dependency` | `n/a` |
 | `colorfilterimagefilter` | `colorfilterimagefilter` | `COMPOSITE` | `composite-image-filter-gated` | `expected-unsupported` | 69.80 | `unsupported.composition.image_filter_dag` | `n/a` |
 | `colorfilterimagefilter_layer` | `colorfilterimagefilter_layer` | `COMPOSITE` | `composite-save-layer-gated` | `expected-unsupported` | 0.00 | `unsupported.composition.save_layer` | `n/a` |
 | `colorfiltershader` | `colorfiltershader` | `COMPOSITE` | `composite-color-filter-gated` | `expected-unsupported` | 39.31 | `unsupported.composition.color_dependency` | `n/a` |
 | `lightingcolorfilter` | `lightingcolorfilter` | `COMPOSITE` | `composite-color-filter-gated` | `expected-unsupported` | 21.23 | `unsupported.composition.color_dependency` | `n/a` |
-| `colormatrix` | `colormatrix` | `COMPOSITE` | `composite-src-over-basic` | `instrumented-existing` | 38.59 | `none` | `n/a` |
-| `colorcomposefilter_alpha` | `colorcomposefilter_alpha` | `COMPOSITE` | `composite-src-over-basic` | `no-score` | n/a | `none` | `generated-render-missing` |
-| `colorcomposefilter_wacky` | `colorcomposefilter_wacky` | `COMPOSITE` | `composite-src-over-basic` | `no-score` | n/a | `none` | `generated-render-missing` |
+| `colormatrix` | `colormatrix` | `COMPOSITE` | `composite-color-filter-gated` | `expected-unsupported` | 38.59 | `unsupported.composition.color_dependency` | `n/a` |
+| `colorcomposefilter_alpha` | `colorcomposefilter_alpha` | `COMPOSITE` | `composite-color-filter-gated` | `no-score` | n/a | `unsupported.composition.color_dependency` | `generated-render-missing` |
+| `colorcomposefilter_wacky` | `colorcomposefilter_wacky` | `COMPOSITE` | `composite-color-filter-gated` | `no-score` | n/a | `unsupported.composition.color_dependency` | `generated-render-missing` |
 | `compare_atlas_vertices` | `compare_atlas_vertices` | `COMPOSITE` | `composite-atlas-or-vertices-gated` | `expected-unsupported` | 0.02 | `unsupported.composition.atlas_or_vertices` | `n/a` |
 | `composeshader_alpha` | `composeshader_alpha` | `COMPOSITE` | `composite-src-over-basic` | `instrumented-existing` | 15.15 | `none` | `n/a` |
 | `composeshader_bitmap` | `composeshader_bitmap` | `COMPOSITE` | `composite-src-over-basic` | `instrumented-existing` | 37.14 | `none` | `n/a` |
 | `composeshader_bitmap_lm` | `composeshader_bitmap_lm` | `COMPOSITE` | `composite-src-over-basic` | `no-score` | n/a | `none` | `generated-render-missing` |
 | `composeshader` | `composeshader` | `COMPOSITE` | `composite-src-over-basic` | `instrumented-existing` | 30.56 | `none` | `n/a` |
 | `composeshader_grid` | `composeshader_grid` | `COMPOSITE` | `composite-src-over-basic` | `instrumented-existing` | 20.47 | `none` | `n/a` |
-| `composeCFIF` | `composeCFIF` | `COMPOSITE` | `composite-src-over-basic` | `no-score` | n/a | `none` | `generated-render-missing` |
+| `composeCFIF` | `composeCFIF` | `COMPOSITE` | `composite-color-filter-gated` | `no-score` | n/a | `unsupported.composition.color_dependency` | `generated-render-missing` |
 | `compositor_quads_color` | `compositor_quads_color` | `COMPOSITE` | `composite-src-over-basic` | `instrumented-existing` | 69.57 | `none` | `n/a` |
 | `crbug_1162942` | `crbug_1162942` | `COMPOSITE` | `composite-src-over-basic` | `instrumented-existing` | 98.64 | `none` | `n/a` |
 | `crbug_1167277` | `crbug_1167277` | `COMPOSITE` | `composite-src-over-basic` | `instrumented-existing` | 96.81 | `none` | `n/a` |
@@ -171,7 +171,7 @@
 | `localmatriximagefilter` | `localmatriximagefilter` | `COMPOSITE` | `composite-image-filter-gated` | `expected-unsupported` | 63.90 | `unsupported.composition.image_filter_dag` | `n/a` |
 | `luminosity_overflow` | `luminosity_overflow` | `COMPOSITE` | `composite-advanced-blend-gated` | `expected-unsupported` | 99.62 | `unsupported.composition.advanced_blend` | `n/a` |
 | `matriximagefilter` | `matriximagefilter` | `COMPOSITE` | `composite-image-filter-gated` | `expected-unsupported` | 0.03 | `unsupported.composition.image_filter_dag` | `n/a` |
-| `mixerCF` | `mixerCF` | `COMPOSITE` | `composite-src-over-basic` | `no-score` | n/a | `none` | `generated-render-missing` |
+| `mixerCF` | `mixerCF` | `COMPOSITE` | `composite-color-filter-gated` | `no-score` | n/a | `unsupported.composition.color_dependency` | `generated-render-missing` |
 | `modecolorfilters` | `modecolorfilters` | `COMPOSITE` | `composite-color-filter-gated` | `expected-unsupported` | 14.70 | `unsupported.composition.color_dependency` | `n/a` |
 | `modecolorfilters#2` | `modecolorfilters` | `COMPOSITE` | `composite-color-filter-gated` | `expected-unsupported` | 14.70 | `unsupported.composition.color_dependency` | `n/a` |
 | `offsetimagefilter` | `offsetimagefilter` | `COMPOSITE` | `composite-image-filter-gated` | `expected-unsupported` | 62.68 | `unsupported.composition.image_filter_dag` | `n/a` |
