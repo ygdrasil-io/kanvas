@@ -4,13 +4,13 @@
 
 - Total GRADIENT + RUNTIME_EFFECT + COLOR rows: 101
 - Families: {COLOR=20, GRADIENT=56, RUNTIME_EFFECT=25}
-- Classifications: {expected-unsupported=15, instrumented-existing=51, no-score=35}
-- Subfamilies: {color-alpha=1, color-filter-gated=1, color-processor-gated=1, color-solid=15, color-space-gated=2, gradient-color-space-gated=4, gradient-conical=5, gradient-hard-stops=3, gradient-linear=22, gradient-local-matrix=1, gradient-many-stops-gated=3, gradient-perspective-gated=4, gradient-radial=9, gradient-sweep=2, gradient-tile-mode=3, runtime-effect-color-filter=2, runtime-effect-registered=20, runtime-effect-unregistered-gated=3}
+- Classifications: {expected-unsupported=20, instrumented-existing=46, no-score=35}
+- Subfamilies: {color-alpha=1, color-filter-gated=1, color-processor-gated=1, color-solid=15, color-space-gated=2, gradient-color-space-gated=4, gradient-conical=5, gradient-hard-stops=3, gradient-linear=22, gradient-local-matrix=1, gradient-many-stops-gated=3, gradient-perspective-gated=4, gradient-radial=9, gradient-sweep=2, gradient-tile-mode=3, runtime-effect-registered=16, runtime-effect-unregistered-gated=9}
 
 ## Family Deltas
 
 - Baseline source: `2026-07-09 local dashboard before material-family wave`
-- Current dashboard: `integration-tests/skia/build/reports/skia-gm-dashboard/data/gms.json` (2026-07-09T02:48:34.808845)
+- Current dashboard: `integration-tests/skia/build/reports/skia-gm-dashboard/data/gms.json` (2026-07-09T03:08:29.728129)
 
 | Family | Baseline | Current | Delta |
 |---|---:|---:|---:|
@@ -109,10 +109,10 @@
 | `small_color_stop` | `small_color_stop` | `GRADIENT` | `gradient-linear` | `instrumented-existing` | 0.00 | `none` | `n/a` |
 | `sweep_tiling` | `sweep_tiling` | `GRADIENT` | `gradient-tile-mode` | `expected-unsupported` | 13.04 | `unsupported.material.gradient_tile_mode` | `n/a` |
 | `testgradient` | `testgradient` | `GRADIENT` | `gradient-linear` | `instrumented-existing` | 95.61 | `none` | `n/a` |
-| `AlternateLuma` | `AlternateLuma` | `RUNTIME_EFFECT` | `runtime-effect-registered` | `instrumented-existing` | 0.00 | `none` | `n/a` |
+| `AlternateLuma` | `AlternateLuma` | `RUNTIME_EFFECT` | `runtime-effect-unregistered-gated` | `expected-unsupported` | 0.00 | `unsupported.runtime_effect.unregistered_descriptor` | `n/a` |
 | `arithmode` | `arithmode` | `RUNTIME_EFFECT` | `runtime-effect-registered` | `no-score` | n/a | `none` | `size-mismatch` |
-| `colorcubecolorfilterrt` | `colorcubecolorfilterrt` | `RUNTIME_EFFECT` | `runtime-effect-color-filter` | `no-score` | n/a | `none` | `reference-missing` |
-| `color_cube_rt` | `color_cube_rt` | `RUNTIME_EFFECT` | `runtime-effect-registered` | `instrumented-existing` | 0.00 | `none` | `n/a` |
+| `colorcubecolorfilterrt` | `colorcubecolorfilterrt` | `RUNTIME_EFFECT` | `runtime-effect-unregistered-gated` | `no-score` | n/a | `unsupported.runtime_effect.unregistered_descriptor` | `reference-missing` |
+| `color_cube_rt` | `color_cube_rt` | `RUNTIME_EFFECT` | `runtime-effect-unregistered-gated` | `expected-unsupported` | 0.00 | `unsupported.runtime_effect.unregistered_descriptor` | `n/a` |
 | `composeCF` | `composeCF` | `RUNTIME_EFFECT` | `runtime-effect-registered` | `instrumented-existing` | 0.00 | `none` | `n/a` |
 | `runtime_intrinsics_common` | `runtime_intrinsics_common` | `RUNTIME_EFFECT` | `runtime-effect-registered` | `no-score` | n/a | `none` | `size-mismatch` |
 | `runtime_intrinsics_exponential` | `runtime_intrinsics_exponential` | `RUNTIME_EFFECT` | `runtime-effect-registered` | `no-score` | n/a | `none` | `size-mismatch` |
@@ -120,20 +120,20 @@
 | `runtime_intrinsics_matrix` | `runtime_intrinsics_matrix` | `RUNTIME_EFFECT` | `runtime-effect-registered` | `no-score` | n/a | `none` | `size-mismatch` |
 | `runtime_intrinsics_relational` | `runtime_intrinsics_relational` | `RUNTIME_EFFECT` | `runtime-effect-registered` | `no-score` | n/a | `none` | `size-mismatch` |
 | `runtime_intrinsics_trig` | `runtime_intrinsics_trig` | `RUNTIME_EFFECT` | `runtime-effect-registered` | `no-score` | n/a | `none` | `size-mismatch` |
-| `kawase_blur_rt` | `kawase_blur_rt` | `RUNTIME_EFFECT` | `runtime-effect-registered` | `instrumented-existing` | 76.67 | `none` | `n/a` |
+| `kawase_blur_rt` | `kawase_blur_rt` | `RUNTIME_EFFECT` | `runtime-effect-unregistered-gated` | `expected-unsupported` | 76.67 | `unsupported.runtime_effect.unregistered_descriptor` | `n/a` |
 | `lineargradientrt` | `lineargradientrt` | `RUNTIME_EFFECT` | `runtime-effect-registered` | `no-score` | n/a | `none` | `reference-missing` |
 | `lumafilter` | `lumafilter` | `RUNTIME_EFFECT` | `runtime-effect-registered` | `no-score` | n/a | `none` | `size-mismatch` |
 | `rippleshader` | `rippleshader` | `RUNTIME_EFFECT` | `runtime-effect-registered` | `instrumented-existing` | 0.00 | `none` | `n/a` |
-| `rtif_distort` | `rtif_distort` | `RUNTIME_EFFECT` | `runtime-effect-registered` | `instrumented-existing` | 0.00 | `none` | `n/a` |
-| `rtif_unsharp` | `rtif_unsharp` | `RUNTIME_EFFECT` | `runtime-effect-registered` | `instrumented-existing` | 0.00 | `none` | `n/a` |
-| `runtimecolorfilter` | `runtimecolorfilter` | `RUNTIME_EFFECT` | `runtime-effect-color-filter` | `instrumented-existing` | 16.67 | `none` | `n/a` |
-| `runtimefunctions` | `runtimefunctions` | `RUNTIME_EFFECT` | `runtime-effect-unregistered-gated` | `expected-unsupported` | 10.26 | `unsupported.runtime_effect.unregistered_descriptor` | `n/a` |
-| `runtime_shader` | `runtime_shader` | `RUNTIME_EFFECT` | `runtime-effect-unregistered-gated` | `expected-unsupported` | 50.00 | `unsupported.runtime_effect.unregistered_descriptor` | `n/a` |
+| `rtif_distort` | `rtif_distort` | `RUNTIME_EFFECT` | `runtime-effect-unregistered-gated` | `expected-unsupported` | 0.00 | `unsupported.runtime_effect.unregistered_descriptor` | `n/a` |
+| `rtif_unsharp` | `rtif_unsharp` | `RUNTIME_EFFECT` | `runtime-effect-unregistered-gated` | `expected-unsupported` | 0.00 | `unsupported.runtime_effect.unregistered_descriptor` | `n/a` |
+| `runtimecolorfilter` | `runtimecolorfilter` | `RUNTIME_EFFECT` | `runtime-effect-registered` | `instrumented-existing` | 16.67 | `none` | `n/a` |
+| `runtimefunctions` | `runtimefunctions` | `RUNTIME_EFFECT` | `runtime-effect-registered` | `instrumented-existing` | 10.26 | `none` | `n/a` |
+| `runtime_shader` | `runtime_shader` | `RUNTIME_EFFECT` | `runtime-effect-registered` | `instrumented-existing` | 50.00 | `none` | `n/a` |
 | `simplert` | `simplert` | `RUNTIME_EFFECT` | `runtime-effect-registered` | `no-score` | n/a | `none` | `reference-missing` |
-| `spiral_rt` | `spiral_rt` | `RUNTIME_EFFECT` | `runtime-effect-unregistered-gated` | `expected-unsupported` | 0.00 | `unsupported.runtime_effect.unregistered_descriptor` | `n/a` |
-| `threshold_rt` | `threshold_rt` | `RUNTIME_EFFECT` | `runtime-effect-registered` | `instrumented-existing` | 0.01 | `none` | `n/a` |
-| `unsharp_rt` | `unsharp_rt` | `RUNTIME_EFFECT` | `runtime-effect-registered` | `instrumented-existing` | 1.02 | `none` | `n/a` |
-| `workingspace` | `workingspace` | `RUNTIME_EFFECT` | `runtime-effect-registered` | `instrumented-existing` | 14.46 | `none` | `n/a` |
+| `spiral_rt` | `spiral_rt` | `RUNTIME_EFFECT` | `runtime-effect-registered` | `instrumented-existing` | 0.00 | `none` | `n/a` |
+| `threshold_rt` | `threshold_rt` | `RUNTIME_EFFECT` | `runtime-effect-unregistered-gated` | `expected-unsupported` | 0.01 | `unsupported.runtime_effect.unregistered_descriptor` | `n/a` |
+| `unsharp_rt` | `unsharp_rt` | `RUNTIME_EFFECT` | `runtime-effect-unregistered-gated` | `expected-unsupported` | 1.02 | `unsupported.runtime_effect.unregistered_descriptor` | `n/a` |
+| `workingspace` | `workingspace` | `RUNTIME_EFFECT` | `runtime-effect-unregistered-gated` | `expected-unsupported` | 14.46 | `unsupported.runtime_effect.unregistered_descriptor` | `n/a` |
 
 ## Regeneration Notes
 

@@ -43,7 +43,7 @@ class Phase6MaterialFamilyEvidenceTest {
     @Test
     fun `classifies runtime effects and refusals`() {
         val registered = classify("linear_gradient_rt", "RUNTIME_EFFECT")
-        val missing = classify("spiral_rt", "RUNTIME_EFFECT", similarity = 10.0, isPassing = false)
+        val missing = classify("kawase_blur_rt", "RUNTIME_EFFECT", similarity = 10.0, isPassing = false)
         val child = classify("runtime_shader_child_shader", "RUNTIME_EFFECT", similarity = 10.0, isPassing = false)
         val imageInput = classify("runtime_shader_image_surface", "RUNTIME_EFFECT", similarity = 10.0, isPassing = false)
 
@@ -55,6 +55,32 @@ class Phase6MaterialFamilyEvidenceTest {
         assertEquals("unsupported.runtime_effect.child_shader", child.fallbackReason)
         assertEquals("runtime-effect-image-or-surface-gated", imageInput.subfamily)
         assertEquals("unsupported.runtime_effect.image_or_surface_input", imageInput.fallbackReason)
+    }
+
+    @Test
+    fun `classifies descriptor backed runtime effect rows as registered`() {
+        val spiral = classify("spiral_rt", "RUNTIME_EFFECT")
+        val functions = classify("runtimefunctions", "RUNTIME_EFFECT")
+
+        assertEquals("runtime-effect-registered", spiral.subfamily)
+        assertEquals("instrumented-existing", spiral.classification)
+        assertEquals("none", spiral.fallbackReason)
+        assertEquals("runtime-effect-registered", functions.subfamily)
+        assertEquals("instrumented-existing", functions.classification)
+        assertEquals("none", functions.fallbackReason)
+    }
+
+    @Test
+    fun `classifies unmapped runtime effect rows as unregistered descriptor gated`() {
+        val kawase = classify("kawase_blur_rt", "RUNTIME_EFFECT")
+        val threshold = classify("threshold_rt", "RUNTIME_EFFECT")
+
+        assertEquals("runtime-effect-unregistered-gated", kawase.subfamily)
+        assertEquals("expected-unsupported", kawase.classification)
+        assertEquals("unsupported.runtime_effect.unregistered_descriptor", kawase.fallbackReason)
+        assertEquals("runtime-effect-unregistered-gated", threshold.subfamily)
+        assertEquals("expected-unsupported", threshold.classification)
+        assertEquals("unsupported.runtime_effect.unregistered_descriptor", threshold.fallbackReason)
     }
 
     @Test

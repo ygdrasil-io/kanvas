@@ -201,13 +201,31 @@ object Phase6MaterialFamilyClassifier {
             else -> "gradient-linear"
         }
 
+    private val registeredRuntimeEffectRows = setOf(
+        "arithmode",
+        "composecf",
+        "lineargradientrt",
+        "lumafilter",
+        "rippleshader",
+        "runtimefunctions",
+        "runtimeintrinsicscommon",
+        "runtimeintrinsicsexponential",
+        "runtimeintrinsicsgeometric",
+        "runtimeintrinsicsmatrix",
+        "runtimeintrinsicsrelational",
+        "runtimeintrinsicstrig",
+        "runtimecolorfilter",
+        "runtimeshader",
+        "simplert",
+        "spiralrt",
+    )
+
     private fun runtimeEffectSubfamily(name: String): String =
         when {
+            name in registeredRuntimeEffectRows -> "runtime-effect-registered"
             name.containsAnyMaterial("childshader", "child") -> "runtime-effect-child-shader-gated"
             name.containsAnyMaterial("image", "surface") -> "runtime-effect-image-or-surface-gated"
-            name.containsAnyMaterial("colorfilter", "colorfilterrt") -> "runtime-effect-color-filter"
-            name.containsAnyMaterial("spiral", "runtimefunctions", "runtimeshader") -> "runtime-effect-unregistered-gated"
-            else -> "runtime-effect-registered"
+            else -> "runtime-effect-unregistered-gated"
         }
 
     private fun colorSubfamily(name: String): String =

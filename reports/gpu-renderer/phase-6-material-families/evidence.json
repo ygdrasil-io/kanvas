@@ -2,7 +2,7 @@
     "schemaVersion": "phase6-material-families-v1",
     "generatedBy": ":integration-tests:skia-evidence:generateGpuPhase6MaterialFamiliesEvidence",
     "dashboardSource": "integration-tests/skia/build/reports/skia-gm-dashboard/data/gms.json",
-    "sourceGeneratedAt": "2026-07-09T02:48:34.808845",
+    "sourceGeneratedAt": "2026-07-09T03:08:29.728129",
     "summary": {
         "totalRows": 101,
         "families": {
@@ -14,7 +14,7 @@
             "COLOR": {
                 "baselineSource": "2026-07-09 local dashboard before material-family wave",
                 "currentSource": "integration-tests/skia/build/reports/skia-gm-dashboard/data/gms.json",
-                "currentGeneratedAt": "2026-07-09T02:48:34.808845",
+                "currentGeneratedAt": "2026-07-09T03:08:29.728129",
                 "baselineCount": 20,
                 "currentCount": 20,
                 "delta": 0
@@ -22,7 +22,7 @@
             "GRADIENT": {
                 "baselineSource": "2026-07-09 local dashboard before material-family wave",
                 "currentSource": "integration-tests/skia/build/reports/skia-gm-dashboard/data/gms.json",
-                "currentGeneratedAt": "2026-07-09T02:48:34.808845",
+                "currentGeneratedAt": "2026-07-09T03:08:29.728129",
                 "baselineCount": 56,
                 "currentCount": 56,
                 "delta": 0
@@ -30,15 +30,15 @@
             "RUNTIME_EFFECT": {
                 "baselineSource": "2026-07-09 local dashboard before material-family wave",
                 "currentSource": "integration-tests/skia/build/reports/skia-gm-dashboard/data/gms.json",
-                "currentGeneratedAt": "2026-07-09T02:48:34.808845",
+                "currentGeneratedAt": "2026-07-09T03:08:29.728129",
                 "baselineCount": 25,
                 "currentCount": 25,
                 "delta": 0
             }
         },
         "classifications": {
-            "expected-unsupported": 15,
-            "instrumented-existing": 51,
+            "expected-unsupported": 20,
+            "instrumented-existing": 46,
             "no-score": 35
         },
         "subfamilies": {
@@ -57,9 +57,8 @@
             "gradient-radial": 9,
             "gradient-sweep": 2,
             "gradient-tile-mode": 3,
-            "runtime-effect-color-filter": 2,
-            "runtime-effect-registered": 20,
-            "runtime-effect-unregistered-gated": 3
+            "runtime-effect-registered": 16,
+            "runtime-effect-unregistered-gated": 9
         },
         "promotedRows": 0,
         "unexpectedFails": 0,
@@ -2508,8 +2507,8 @@
             "rowId": "AlternateLuma",
             "name": "AlternateLuma",
             "family": "RUNTIME_EFFECT",
-            "subfamily": "runtime-effect-registered",
-            "classification": "instrumented-existing",
+            "subfamily": "runtime-effect-unregistered-gated",
+            "classification": "expected-unsupported",
             "similarity": 0.0,
             "minSimilarity": 0.0,
             "isPassing": true,
@@ -2529,12 +2528,12 @@
                 "b": 137.69,
                 "a": 0.0
             },
-            "fallbackReason": "none",
+            "fallbackReason": "unsupported.runtime_effect.unregistered_descriptor",
             "referencePath": "images/reference/AlternateLuma.png",
             "generatedPath": "images/generated/AlternateLuma.png",
             "diffPath": "images/diff/AlternateLuma.png",
             "noScoreCause": null,
-            "nonClaim": "RUNTIME_EFFECT row remains instrumented until route and material diagnostics are attached."
+            "nonClaim": "runtime-effect-unregistered-gated remains outside Phase 6 material-family migration scope."
         },
         {
             "rowId": "arithmode",
@@ -2572,7 +2571,7 @@
             "rowId": "colorcubecolorfilterrt",
             "name": "colorcubecolorfilterrt",
             "family": "RUNTIME_EFFECT",
-            "subfamily": "runtime-effect-color-filter",
+            "subfamily": "runtime-effect-unregistered-gated",
             "classification": "no-score",
             "similarity": null,
             "minSimilarity": 0.0,
@@ -2593,7 +2592,7 @@
                 "b": 0.0,
                 "a": 0.0
             },
-            "fallbackReason": "none",
+            "fallbackReason": "unsupported.runtime_effect.unregistered_descriptor",
             "referencePath": null,
             "generatedPath": "images/generated/colorcubecolorfilterrt.png",
             "diffPath": null,
@@ -2604,8 +2603,8 @@
             "rowId": "color_cube_rt",
             "name": "color_cube_rt",
             "family": "RUNTIME_EFFECT",
-            "subfamily": "runtime-effect-registered",
-            "classification": "instrumented-existing",
+            "subfamily": "runtime-effect-unregistered-gated",
+            "classification": "expected-unsupported",
             "similarity": 0.0,
             "minSimilarity": 0.0,
             "isPassing": true,
@@ -2625,12 +2624,12 @@
                 "b": 155.81,
                 "a": 0.0
             },
-            "fallbackReason": "none",
+            "fallbackReason": "unsupported.runtime_effect.unregistered_descriptor",
             "referencePath": "images/reference/color_cube_rt.png",
             "generatedPath": "images/generated/color_cube_rt.png",
             "diffPath": "images/diff/color_cube_rt.png",
             "noScoreCause": null,
-            "nonClaim": "RUNTIME_EFFECT row remains instrumented until route and material diagnostics are attached."
+            "nonClaim": "runtime-effect-unregistered-gated remains outside Phase 6 material-family migration scope."
         },
         {
             "rowId": "composeCF",
@@ -2860,8 +2859,8 @@
             "rowId": "kawase_blur_rt",
             "name": "kawase_blur_rt",
             "family": "RUNTIME_EFFECT",
-            "subfamily": "runtime-effect-registered",
-            "classification": "instrumented-existing",
+            "subfamily": "runtime-effect-unregistered-gated",
+            "classification": "expected-unsupported",
             "similarity": 76.66666666666667,
             "minSimilarity": 76.66666666666667,
             "isPassing": true,
@@ -2881,12 +2880,12 @@
                 "b": 152.41,
                 "a": 0.0
             },
-            "fallbackReason": "none",
+            "fallbackReason": "unsupported.runtime_effect.unregistered_descriptor",
             "referencePath": "images/reference/kawase_blur_rt.png",
             "generatedPath": "images/generated/kawase_blur_rt.png",
             "diffPath": "images/diff/kawase_blur_rt.png",
             "noScoreCause": null,
-            "nonClaim": "RUNTIME_EFFECT row remains instrumented until route and material diagnostics are attached."
+            "nonClaim": "runtime-effect-unregistered-gated remains outside Phase 6 material-family migration scope."
         },
         {
             "rowId": "lineargradientrt",
@@ -2988,8 +2987,8 @@
             "rowId": "rtif_distort",
             "name": "rtif_distort",
             "family": "RUNTIME_EFFECT",
-            "subfamily": "runtime-effect-registered",
-            "classification": "instrumented-existing",
+            "subfamily": "runtime-effect-unregistered-gated",
+            "classification": "expected-unsupported",
             "similarity": 0.0,
             "minSimilarity": 0.0,
             "isPassing": true,
@@ -3009,19 +3008,19 @@
                 "b": 190.0,
                 "a": 0.0
             },
-            "fallbackReason": "none",
+            "fallbackReason": "unsupported.runtime_effect.unregistered_descriptor",
             "referencePath": "images/reference/rtif_distort.png",
             "generatedPath": "images/generated/rtif_distort.png",
             "diffPath": "images/diff/rtif_distort.png",
             "noScoreCause": null,
-            "nonClaim": "RUNTIME_EFFECT row remains instrumented until route and material diagnostics are attached."
+            "nonClaim": "runtime-effect-unregistered-gated remains outside Phase 6 material-family migration scope."
         },
         {
             "rowId": "rtif_unsharp",
             "name": "rtif_unsharp",
             "family": "RUNTIME_EFFECT",
-            "subfamily": "runtime-effect-registered",
-            "classification": "instrumented-existing",
+            "subfamily": "runtime-effect-unregistered-gated",
+            "classification": "expected-unsupported",
             "similarity": 0.00152587890625,
             "minSimilarity": 0.00152587890625,
             "isPassing": true,
@@ -3041,18 +3040,18 @@
                 "b": 93.4,
                 "a": 0.0
             },
-            "fallbackReason": "none",
+            "fallbackReason": "unsupported.runtime_effect.unregistered_descriptor",
             "referencePath": "images/reference/rtif_unsharp.png",
             "generatedPath": "images/generated/rtif_unsharp.png",
             "diffPath": "images/diff/rtif_unsharp.png",
             "noScoreCause": null,
-            "nonClaim": "RUNTIME_EFFECT row remains instrumented until route and material diagnostics are attached."
+            "nonClaim": "runtime-effect-unregistered-gated remains outside Phase 6 material-family migration scope."
         },
         {
             "rowId": "runtimecolorfilter",
             "name": "runtimecolorfilter",
             "family": "RUNTIME_EFFECT",
-            "subfamily": "runtime-effect-color-filter",
+            "subfamily": "runtime-effect-registered",
             "classification": "instrumented-existing",
             "similarity": 16.666666666666664,
             "minSimilarity": 0.0,
@@ -3084,8 +3083,8 @@
             "rowId": "runtimefunctions",
             "name": "runtimefunctions",
             "family": "RUNTIME_EFFECT",
-            "subfamily": "runtime-effect-unregistered-gated",
-            "classification": "expected-unsupported",
+            "subfamily": "runtime-effect-registered",
+            "classification": "instrumented-existing",
             "similarity": 10.25848388671875,
             "minSimilarity": 10.25848388671875,
             "isPassing": true,
@@ -3105,19 +3104,19 @@
                 "b": 64.59,
                 "a": 0.0
             },
-            "fallbackReason": "unsupported.runtime_effect.unregistered_descriptor",
+            "fallbackReason": "none",
             "referencePath": "images/reference/runtimefunctions.png",
             "generatedPath": "images/generated/runtimefunctions.png",
             "diffPath": "images/diff/runtimefunctions.png",
             "noScoreCause": null,
-            "nonClaim": "runtime-effect-unregistered-gated remains outside Phase 6 material-family migration scope."
+            "nonClaim": "RUNTIME_EFFECT row remains instrumented until route and material diagnostics are attached."
         },
         {
             "rowId": "runtime_shader",
             "name": "runtime_shader",
             "family": "RUNTIME_EFFECT",
-            "subfamily": "runtime-effect-unregistered-gated",
-            "classification": "expected-unsupported",
+            "subfamily": "runtime-effect-registered",
+            "classification": "instrumented-existing",
             "similarity": 50.0,
             "minSimilarity": 50.0,
             "isPassing": true,
@@ -3137,12 +3136,12 @@
                 "b": 224.11,
                 "a": 0.0
             },
-            "fallbackReason": "unsupported.runtime_effect.unregistered_descriptor",
+            "fallbackReason": "none",
             "referencePath": "images/reference/runtime_shader.png",
             "generatedPath": "images/generated/runtime_shader.png",
             "diffPath": "images/diff/runtime_shader.png",
             "noScoreCause": null,
-            "nonClaim": "runtime-effect-unregistered-gated remains outside Phase 6 material-family migration scope."
+            "nonClaim": "RUNTIME_EFFECT row remains instrumented until route and material diagnostics are attached."
         },
         {
             "rowId": "simplert",
@@ -3180,8 +3179,8 @@
             "rowId": "spiral_rt",
             "name": "spiral_rt",
             "family": "RUNTIME_EFFECT",
-            "subfamily": "runtime-effect-unregistered-gated",
-            "classification": "expected-unsupported",
+            "subfamily": "runtime-effect-registered",
+            "classification": "instrumented-existing",
             "similarity": 0.0,
             "minSimilarity": 0.0,
             "isPassing": true,
@@ -3201,19 +3200,19 @@
                 "b": 223.2,
                 "a": 0.0
             },
-            "fallbackReason": "unsupported.runtime_effect.unregistered_descriptor",
+            "fallbackReason": "none",
             "referencePath": "images/reference/spiral_rt.png",
             "generatedPath": "images/generated/spiral_rt.png",
             "diffPath": "images/diff/spiral_rt.png",
             "noScoreCause": null,
-            "nonClaim": "runtime-effect-unregistered-gated remains outside Phase 6 material-family migration scope."
+            "nonClaim": "RUNTIME_EFFECT row remains instrumented until route and material diagnostics are attached."
         },
         {
             "rowId": "threshold_rt",
             "name": "threshold_rt",
             "family": "RUNTIME_EFFECT",
-            "subfamily": "runtime-effect-registered",
-            "classification": "instrumented-existing",
+            "subfamily": "runtime-effect-unregistered-gated",
+            "classification": "expected-unsupported",
             "similarity": 0.006103515625,
             "minSimilarity": 0.006103515625,
             "isPassing": true,
@@ -3233,19 +3232,19 @@
                 "b": 168.77,
                 "a": 0.0
             },
-            "fallbackReason": "none",
+            "fallbackReason": "unsupported.runtime_effect.unregistered_descriptor",
             "referencePath": "images/reference/threshold_rt.png",
             "generatedPath": "images/generated/threshold_rt.png",
             "diffPath": "images/diff/threshold_rt.png",
             "noScoreCause": null,
-            "nonClaim": "RUNTIME_EFFECT row remains instrumented until route and material diagnostics are attached."
+            "nonClaim": "runtime-effect-unregistered-gated remains outside Phase 6 material-family migration scope."
         },
         {
             "rowId": "unsharp_rt",
             "name": "unsharp_rt",
             "family": "RUNTIME_EFFECT",
-            "subfamily": "runtime-effect-registered",
-            "classification": "instrumented-existing",
+            "subfamily": "runtime-effect-unregistered-gated",
+            "classification": "expected-unsupported",
             "similarity": 1.0223388671875,
             "minSimilarity": 1.0223388671875,
             "isPassing": true,
@@ -3265,19 +3264,19 @@
                 "b": 117.86,
                 "a": 0.0
             },
-            "fallbackReason": "none",
+            "fallbackReason": "unsupported.runtime_effect.unregistered_descriptor",
             "referencePath": "images/reference/unsharp_rt.png",
             "generatedPath": "images/generated/unsharp_rt.png",
             "diffPath": "images/diff/unsharp_rt.png",
             "noScoreCause": null,
-            "nonClaim": "RUNTIME_EFFECT row remains instrumented until route and material diagnostics are attached."
+            "nonClaim": "runtime-effect-unregistered-gated remains outside Phase 6 material-family migration scope."
         },
         {
             "rowId": "workingspace",
             "name": "workingspace",
             "family": "RUNTIME_EFFECT",
-            "subfamily": "runtime-effect-registered",
-            "classification": "instrumented-existing",
+            "subfamily": "runtime-effect-unregistered-gated",
+            "classification": "expected-unsupported",
             "similarity": 14.464285714285715,
             "minSimilarity": 14.464285714285715,
             "isPassing": true,
@@ -3297,12 +3296,12 @@
                 "b": 152.98,
                 "a": 0.0
             },
-            "fallbackReason": "none",
+            "fallbackReason": "unsupported.runtime_effect.unregistered_descriptor",
             "referencePath": "images/reference/workingspace.png",
             "generatedPath": "images/generated/workingspace.png",
             "diffPath": "images/diff/workingspace.png",
             "noScoreCause": null,
-            "nonClaim": "RUNTIME_EFFECT row remains instrumented until route and material diagnostics are attached."
+            "nonClaim": "runtime-effect-unregistered-gated remains outside Phase 6 material-family migration scope."
         }
     ]
 }
