@@ -37,6 +37,7 @@ class Phase6EffectCompositionFamilyEvidenceTest {
         val dstRead = classify("dstreadshuffle", "COMPOSITE")
         val imageFilter = classify("imagefilters_xfermodes", "COMPOSITE")
         val atlas = classify("draw-atlas-colors", "COMPOSITE")
+        val colorFilter = classify("modecolorfilters", "COMPOSITE")
 
         assertEquals("composite-src-over-basic", srcOver.subfamily)
         assertEquals("instrumented-existing", srcOver.classification)
@@ -56,6 +57,9 @@ class Phase6EffectCompositionFamilyEvidenceTest {
         assertEquals("unsupported.composition.image_filter_dag", imageFilter.fallbackReason)
         assertEquals("composite-atlas-or-vertices-gated", atlas.subfamily)
         assertEquals("unsupported.composition.atlas_or_vertices", atlas.fallbackReason)
+        assertEquals("composite-color-filter-gated", colorFilter.subfamily)
+        assertEquals("unsupported.composition.color_dependency", colorFilter.fallbackReason)
+        assertEquals("expected-unsupported", colorFilter.classification)
     }
 
     @Test
@@ -189,6 +193,34 @@ class Phase6EffectCompositionFamilyEvidenceTest {
     }
 
     @Test
+    fun `evidence json and markdown include follow up candidates by root cause`() {
+        val evidence = Phase6EffectCompositionFamilyClassifier.buildEvidence(
+            GmDashboard(
+                generatedAt = "2026-07-09T10:00:00",
+                rows = listOf(
+                    row("modecolorfilters", family = "COMPOSITE"),
+                    row("advanced_blend_modes", family = "COMPOSITE"),
+                    row("animatedbackdropblur", family = "BLUR", similarity = null, isPassing = null, noReference = true),
+                    row("plain_composite_fail", family = "COMPOSITE", similarity = 20.0, isPassing = false),
+                    row("srcmode", family = "COMPOSITE", similarity = 100.0, isPassing = true),
+                ),
+            ),
+        )
+
+        val json = evidence.toJsonObject().toString()
+        val markdown = evidence.toMarkdown()
+
+        assertContains(json, "\"followUpCandidates\"")
+        assertContains(json, "\"rootCause\":\"unsupported.composition.color_dependency\"")
+        assertContains(json, "\"rootCause\":\"unsupported.composition.advanced_blend\"")
+        assertContains(json, "\"rootCause\":\"reference-missing\"")
+        assertContains(json, "\"rootCause\":\"unexpected-fail.without-stable-refusal\"")
+        assertFalse(json.contains("\"rootCause\":\"none\""))
+        assertContains(markdown, "## Follow-Up Candidates")
+        assertContains(markdown, "| `unsupported.composition.color_dependency` | `expected-unsupported` | 1 | `modecolorfilters` |")
+    }
+
+    @Test
     fun `markdown summary surfaces promoted unexpected fail and no score counters`() {
         val evidence = Phase6EffectCompositionFamilyClassifier.buildEvidence(
             GmDashboard(
@@ -264,6 +296,7 @@ class Phase6EffectCompositionFamilyEvidenceTest {
         val nonClaims = evidence.nonClaims.joinToString("\n")
         assertContains(nonClaims, "No broad COMPOSITE or BLUR support is claimed from classification alone.")
         assertContains(nonClaims, "saveLayer, destination-read, backdrop filters, image-filter DAGs, matrix convolution, and advanced blend chains remain outside this evidence wave unless row diagnostics prove a bounded route.")
+        assertContains(nonClaims, "COLOR, TEXT, IMAGE, PATH, CLIP, MATERIAL, and MESH dependencies are not absorbed into this wave.")
         assertFalse(nonClaims.contains("complete support", ignoreCase = true))
     }
 

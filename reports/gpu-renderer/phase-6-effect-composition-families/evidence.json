@@ -2,7 +2,7 @@
     "schemaVersion": "phase6-effect-composition-families-v1",
     "generatedBy": ":integration-tests:skia-evidence:generateGpuPhase6EffectCompositionFamiliesEvidence",
     "dashboardSource": "integration-tests/skia/build/reports/skia-gm-dashboard/data/gms.json",
-    "sourceGeneratedAt": "2026-07-09T11:04:08.12663",
+    "sourceGeneratedAt": "2026-07-09T11:20:52.542444",
     "summary": {
         "totalRows": 156,
         "families": {
@@ -13,7 +13,7 @@
             "BLUR": {
                 "baselineSource": "2026-07-09 local dashboard before effect-composition-family wave",
                 "currentSource": "integration-tests/skia/build/reports/skia-gm-dashboard/data/gms.json",
-                "currentGeneratedAt": "2026-07-09T11:04:08.12663",
+                "currentGeneratedAt": "2026-07-09T11:20:52.542444",
                 "baselineCount": 45,
                 "currentCount": 45,
                 "delta": 0
@@ -21,15 +21,15 @@
             "COMPOSITE": {
                 "baselineSource": "2026-07-09 local dashboard before effect-composition-family wave",
                 "currentSource": "integration-tests/skia/build/reports/skia-gm-dashboard/data/gms.json",
-                "currentGeneratedAt": "2026-07-09T11:04:08.12663",
+                "currentGeneratedAt": "2026-07-09T11:20:52.542444",
                 "baselineCount": 113,
                 "currentCount": 111,
                 "delta": -2
             }
         },
         "classifications": {
-            "expected-unsupported": 47,
-            "instrumented-existing": 83,
+            "expected-unsupported": 55,
+            "instrumented-existing": 75,
             "no-score": 26
         },
         "subfamilies": {
@@ -65,7 +65,160 @@
         "No broad COMPOSITE or BLUR support is claimed from classification alone.",
         "saveLayer, destination-read, backdrop filters, image-filter DAGs, matrix convolution, and advanced blend chains remain outside this evidence wave unless row diagnostics prove a bounded route.",
         "Rows without route and effect/composition diagnostics remain instrumented rather than promoted.",
-        "TEXT, IMAGE, PATH, CLIP, MATERIAL, and MESH dependencies are not absorbed into this wave."
+        "COLOR, TEXT, IMAGE, PATH, CLIP, MATERIAL, and MESH dependencies are not absorbed into this wave."
+    ],
+    "followUpCandidates": [
+        {
+            "rootCause": "generated-render-missing",
+            "classification": "no-score",
+            "rowCount": 22,
+            "sampleRows": [
+                "blur_ignore_xform_circle",
+                "blur_ignore_xform_rect",
+                "blur_ignore_xform_rrect",
+                "colorcomposefilter_alpha",
+                "colorcomposefilter_wacky"
+            ]
+        },
+        {
+            "rootCause": "reference-missing",
+            "classification": "no-score",
+            "rowCount": 4,
+            "sampleRows": [
+                "animatedbackdropblur",
+                "graphitestart",
+                "imagefilterstext_cf",
+                "imagefilterstext_if"
+            ]
+        },
+        {
+            "rootCause": "unsupported.blur.clip_interaction",
+            "classification": "expected-unsupported",
+            "rowCount": 2,
+            "sampleRows": [
+                "blurredclippedcircle",
+                "imageblurrepeatunclipped"
+            ]
+        },
+        {
+            "rootCause": "unsupported.blur.image_filter_graph",
+            "classification": "expected-unsupported",
+            "rowCount": 3,
+            "sampleRows": [
+                "fast_slow_blurimagefilter",
+                "inverse_fill_filters",
+                "inverse_windingmode_filters"
+            ]
+        },
+        {
+            "rootCause": "unsupported.blur.large_sigma",
+            "classification": "expected-unsupported",
+            "rowCount": 2,
+            "sampleRows": [
+                "BlurBigSigma",
+                "TiledBlurBigSigma"
+            ]
+        },
+        {
+            "rootCause": "unsupported.blur.resource_budget",
+            "classification": "expected-unsupported",
+            "rowCount": 1,
+            "sampleRows": [
+                "hdr-pip-blur"
+            ]
+        },
+        {
+            "rootCause": "unsupported.blur.transform_or_perspective",
+            "classification": "expected-unsupported",
+            "rowCount": 1,
+            "sampleRows": [
+                "blur_matrix_rect"
+            ]
+        },
+        {
+            "rootCause": "unsupported.composition.advanced_blend",
+            "classification": "expected-unsupported",
+            "rowCount": 4,
+            "sampleRows": [
+                "HSL_duck",
+                "hsl",
+                "hslcolorfilter",
+                "luminosity_overflow"
+            ]
+        },
+        {
+            "rootCause": "unsupported.composition.atlas_or_vertices",
+            "classification": "expected-unsupported",
+            "rowCount": 7,
+            "sampleRows": [
+                "compare_atlas_vertices",
+                "draw-atlas",
+                "draw-atlas-colors",
+                "patch_alpha",
+                "patch_alpha_test"
+            ]
+        },
+        {
+            "rootCause": "unsupported.composition.backdrop_filter",
+            "classification": "expected-unsupported",
+            "rowCount": 2,
+            "sampleRows": [
+                "backdrop_hintrect_clipping",
+                "backdrop_imagefilter_croprect"
+            ]
+        },
+        {
+            "rootCause": "unsupported.composition.color_dependency",
+            "classification": "expected-unsupported",
+            "rowCount": 8,
+            "sampleRows": [
+                "color4blendcf",
+                "colorfiltershader",
+                "lightingcolorfilter",
+                "modecolorfilters",
+                "modecolorfilters#2"
+            ]
+        },
+        {
+            "rootCause": "unsupported.composition.destination_read",
+            "classification": "expected-unsupported",
+            "rowCount": 1,
+            "sampleRows": [
+                "dstreadshuffle"
+            ]
+        },
+        {
+            "rootCause": "unsupported.composition.image_filter_dag",
+            "classification": "expected-unsupported",
+            "rowCount": 18,
+            "sampleRows": [
+                "colorfilterimagefilter",
+                "imagefilter_composed_transform",
+                "imagefilter_convolve_subset",
+                "imagefilter_matrix_localmatrix",
+                "imagefilters_effect_order"
+            ]
+        },
+        {
+            "rootCause": "unsupported.composition.layer_bounds",
+            "classification": "expected-unsupported",
+            "rowCount": 1,
+            "sampleRows": [
+                "filterfastbounds"
+            ]
+        },
+        {
+            "rootCause": "unsupported.composition.save_layer",
+            "classification": "expected-unsupported",
+            "rowCount": 5,
+            "sampleRows": [
+                "clip_shader_layer",
+                "colorfilterimagefilter_layer",
+                "perlinnoise_layered",
+                "savelayer_f16",
+                "savelayer_initfromprev"
+            ]
+        }
     ],
     "rows": [
         {
@@ -1897,7 +2050,7 @@
             "name": "color4blendcf",
             "family": "COMPOSITE",
             "subfamily": "composite-color-filter-gated",
-            "classification": "instrumented-existing",
+            "classification": "expected-unsupported",
             "similarity": 30.555555555555557,
             "minSimilarity": 0.0,
             "isPassing": true,
@@ -1917,12 +2070,12 @@
                 "b": 159.33,
                 "a": 0.0
             },
-            "fallbackReason": "none",
+            "fallbackReason": "unsupported.composition.color_dependency",
             "referencePath": "images/reference/color4blendcf.png",
             "generatedPath": "images/generated/color4blendcf.png",
             "diffPath": "images/diff/color4blendcf.png",
             "noScoreCause": null,
-            "nonClaim": "COMPOSITE row remains instrumented until route and effect/composition diagnostics are attached."
+            "nonClaim": "composite-color-filter-gated remains outside Phase 6 effect/composition-family migration scope."
         },
         {
             "rowId": "color4shader",
@@ -2025,7 +2178,7 @@
             "name": "colorfiltershader",
             "family": "COMPOSITE",
             "subfamily": "composite-color-filter-gated",
-            "classification": "instrumented-existing",
+            "classification": "expected-unsupported",
             "similarity": 39.31335662456329,
             "minSimilarity": 34.3,
             "isPassing": true,
@@ -2045,19 +2198,19 @@
                 "b": 80.35,
                 "a": 0.0
             },
-            "fallbackReason": "none",
+            "fallbackReason": "unsupported.composition.color_dependency",
             "referencePath": "images/reference/colorfiltershader.png",
             "generatedPath": "images/generated/colorfiltershader.png",
             "diffPath": "images/diff/colorfiltershader.png",
             "noScoreCause": null,
-            "nonClaim": "COMPOSITE row remains instrumented until route and effect/composition diagnostics are attached."
+            "nonClaim": "composite-color-filter-gated remains outside Phase 6 effect/composition-family migration scope."
         },
         {
             "rowId": "lightingcolorfilter",
             "name": "lightingcolorfilter",
             "family": "COMPOSITE",
             "subfamily": "composite-color-filter-gated",
-            "classification": "instrumented-existing",
+            "classification": "expected-unsupported",
             "similarity": 21.230307576894223,
             "minSimilarity": 0.0,
             "isPassing": true,
@@ -2077,12 +2230,12 @@
                 "b": 181.89,
                 "a": 0.0
             },
-            "fallbackReason": "none",
+            "fallbackReason": "unsupported.composition.color_dependency",
             "referencePath": "images/reference/lightingcolorfilter.png",
             "generatedPath": "images/generated/lightingcolorfilter.png",
             "diffPath": "images/diff/lightingcolorfilter.png",
             "noScoreCause": null,
-            "nonClaim": "COMPOSITE row remains instrumented until route and effect/composition diagnostics are attached."
+            "nonClaim": "composite-color-filter-gated remains outside Phase 6 effect/composition-family migration scope."
         },
         {
             "rowId": "colormatrix",
@@ -3817,7 +3970,7 @@
             "name": "modecolorfilters",
             "family": "COMPOSITE",
             "subfamily": "composite-color-filter-gated",
-            "classification": "instrumented-existing",
+            "classification": "expected-unsupported",
             "similarity": 14.703369140625,
             "minSimilarity": 0.0,
             "isPassing": true,
@@ -3837,19 +3990,19 @@
                 "b": 97.06,
                 "a": 0.0
             },
-            "fallbackReason": "none",
+            "fallbackReason": "unsupported.composition.color_dependency",
             "referencePath": "images/reference/modecolorfilters.png",
             "generatedPath": "images/generated/modecolorfilters.png",
             "diffPath": "images/diff/modecolorfilters.png",
             "noScoreCause": null,
-            "nonClaim": "COMPOSITE row remains instrumented until route and effect/composition diagnostics are attached."
+            "nonClaim": "composite-color-filter-gated remains outside Phase 6 effect/composition-family migration scope."
         },
         {
             "rowId": "modecolorfilters#2",
             "name": "modecolorfilters",
             "family": "COMPOSITE",
             "subfamily": "composite-color-filter-gated",
-            "classification": "instrumented-existing",
+            "classification": "expected-unsupported",
             "similarity": 14.703369140625,
             "minSimilarity": 0.0,
             "isPassing": true,
@@ -3869,12 +4022,12 @@
                 "b": 97.06,
                 "a": 0.0
             },
-            "fallbackReason": "none",
+            "fallbackReason": "unsupported.composition.color_dependency",
             "referencePath": "images/reference/modecolorfilters.png",
             "generatedPath": "images/generated/modecolorfilters.png",
             "diffPath": "images/diff/modecolorfilters.png",
             "noScoreCause": null,
-            "nonClaim": "COMPOSITE row remains instrumented until route and effect/composition diagnostics are attached."
+            "nonClaim": "composite-color-filter-gated remains outside Phase 6 effect/composition-family migration scope."
         },
         {
             "rowId": "offsetimagefilter",
@@ -3945,7 +4098,7 @@
             "name": "overdrawcolorfilter",
             "family": "COMPOSITE",
             "subfamily": "composite-color-filter-gated",
-            "classification": "instrumented-existing",
+            "classification": "expected-unsupported",
             "similarity": 12.5,
             "minSimilarity": 10.0,
             "isPassing": true,
@@ -3965,12 +4118,12 @@
                 "b": 55.86,
                 "a": 0.0
             },
-            "fallbackReason": "none",
+            "fallbackReason": "unsupported.composition.color_dependency",
             "referencePath": "images/reference/overdrawcolorfilter.png",
             "generatedPath": "images/generated/overdrawcolorfilter.png",
             "diffPath": "images/diff/overdrawcolorfilter.png",
             "noScoreCause": null,
-            "nonClaim": "COMPOSITE row remains instrumented until route and effect/composition diagnostics are attached."
+            "nonClaim": "composite-color-filter-gated remains outside Phase 6 effect/composition-family migration scope."
         },
         {
             "rowId": "patch_alpha",
@@ -4777,7 +4930,7 @@
             "name": "srgb_colorfilter",
             "family": "COMPOSITE",
             "subfamily": "composite-color-filter-gated",
-            "classification": "instrumented-existing",
+            "classification": "expected-unsupported",
             "similarity": 0.051371256510416664,
             "minSimilarity": 0.0,
             "isPassing": true,
@@ -4797,19 +4950,19 @@
                 "b": 93.18,
                 "a": 0.0
             },
-            "fallbackReason": "none",
+            "fallbackReason": "unsupported.composition.color_dependency",
             "referencePath": "images/reference/srgb_colorfilter.png",
             "generatedPath": "images/generated/srgb_colorfilter.png",
             "diffPath": "images/diff/srgb_colorfilter.png",
             "noScoreCause": null,
-            "nonClaim": "COMPOSITE row remains instrumented until route and effect/composition diagnostics are attached."
+            "nonClaim": "composite-color-filter-gated remains outside Phase 6 effect/composition-family migration scope."
         },
         {
             "rowId": "tablecolorfilter",
             "name": "tablecolorfilter",
             "family": "COMPOSITE",
             "subfamily": "composite-color-filter-gated",
-            "classification": "instrumented-existing",
+            "classification": "expected-unsupported",
             "similarity": 39.10857142857142,
             "minSimilarity": 0.0,
             "isPassing": true,
@@ -4829,12 +4982,12 @@
                 "b": 71.29,
                 "a": 0.0
             },
-            "fallbackReason": "none",
+            "fallbackReason": "unsupported.composition.color_dependency",
             "referencePath": "images/reference/tablecolorfilter.png",
             "generatedPath": "images/generated/tablecolorfilter.png",
             "diffPath": "images/diff/tablecolorfilter.png",
             "noScoreCause": null,
-            "nonClaim": "COMPOSITE row remains instrumented until route and effect/composition diagnostics are attached."
+            "nonClaim": "composite-color-filter-gated remains outside Phase 6 effect/composition-family migration scope."
         },
         {
             "rowId": "extractalpha",

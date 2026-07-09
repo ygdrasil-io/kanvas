@@ -20,6 +20,7 @@ data class Phase6EffectCompositionFamiliesEvidence(
     val sourceGeneratedAt: String?,
     val summary: Phase6EffectCompositionSummary,
     val nonClaims: List<String>,
+    val followUpCandidates: List<Phase6EffectCompositionFollowUpCandidate>,
     val rows: List<Phase6EffectCompositionRowEvidence>,
 )
 
@@ -41,6 +42,13 @@ data class Phase6EffectCompositionFamilyDelta(
     val baselineCount: Int,
     val currentCount: Int,
     val delta: Int,
+)
+
+data class Phase6EffectCompositionFollowUpCandidate(
+    val rootCause: String,
+    val classification: String,
+    val rowCount: Int,
+    val sampleRows: List<String>,
 )
 
 data class Phase6EffectCompositionRowEvidence(
@@ -171,8 +179,9 @@ object Phase6EffectCompositionFamilyClassifier {
                 "No broad COMPOSITE or BLUR support is claimed from classification alone.",
                 "saveLayer, destination-read, backdrop filters, image-filter DAGs, matrix convolution, and advanced blend chains remain outside this evidence wave unless row diagnostics prove a bounded route.",
                 "Rows without route and effect/composition diagnostics remain instrumented rather than promoted.",
-                "TEXT, IMAGE, PATH, CLIP, MATERIAL, and MESH dependencies are not absorbed into this wave.",
+                "COLOR, TEXT, IMAGE, PATH, CLIP, MATERIAL, and MESH dependencies are not absorbed into this wave.",
             ),
+            followUpCandidates = rows.toEffectCompositionFollowUpCandidates(),
             rows = rows,
         )
     }
@@ -227,6 +236,7 @@ object Phase6EffectCompositionFamilyClassifier {
             "composite-destination-read-gated" -> "unsupported.composition.destination_read"
             "composite-image-filter-gated" -> "unsupported.composition.image_filter_dag"
             "composite-atlas-or-vertices-gated" -> "unsupported.composition.atlas_or_vertices"
+            "composite-color-filter-gated" -> "unsupported.composition.color_dependency"
             "composite-layer-bounds-gated" -> "unsupported.composition.layer_bounds"
             "blur-large-sigma-gated" -> "unsupported.blur.large_sigma"
             "blur-transform-or-perspective-gated" -> "unsupported.blur.transform_or_perspective"
@@ -308,6 +318,7 @@ fun Phase6EffectCompositionFamiliesEvidence.toJsonObject(): JsonObject =
         if (sourceGeneratedAt == null) put("sourceGeneratedAt", JsonNull) else put("sourceGeneratedAt", sourceGeneratedAt)
         put("summary", summary.toJsonObject())
         put("nonClaims", buildJsonArray { nonClaims.forEach { add(it) } })
+        put("followUpCandidates", buildJsonArray { followUpCandidates.forEach { add(it.toJsonObject()) } })
         put("rows", buildJsonArray { rows.forEach { add(it.toJsonObject()) } })
     }
 
@@ -362,6 +373,14 @@ private fun Phase6EffectCompositionFamilyDelta.toJsonObject(): JsonObject =
         put("baselineCount", baselineCount)
         put("currentCount", currentCount)
         put("delta", delta)
+    }
+
+private fun Phase6EffectCompositionFollowUpCandidate.toJsonObject(): JsonObject =
+    buildJsonObject {
+        put("rootCause", rootCause)
+        put("classification", classification)
+        put("rowCount", rowCount)
+        put("sampleRows", buildJsonArray { sampleRows.forEach { add(it) } })
     }
 
 private fun Map<String, Int>.toEffectCompositionCountJsonObject(): JsonObject =
@@ -480,6 +499,14 @@ fun Phase6EffectCompositionFamiliesEvidence.toMarkdown(): String =
         appendLine()
         appendLine("- Effect/composition `unsupported.composition.*` and `unsupported.blur.*` reason codes in this report are evidence refusal taxonomy only, not renderer route diagnostics unless separately attached.")
         appendLine()
+        appendLine("## Follow-Up Candidates")
+        appendLine()
+        appendLine("| Root Cause | Classification | Rows | Samples |")
+        appendLine("|---|---|---:|---|")
+        followUpCandidates.forEach { candidate ->
+            appendLine("| `${candidate.rootCause}` | `${candidate.classification}` | ${candidate.rowCount} | ${candidate.sampleRows.joinToString(", ") { "`$it`" }} |")
+        }
+        appendLine()
         appendLine("## Rows")
         appendLine()
         appendLine("| Row ID | Row | Family | Subfamily | Classification | Similarity | Fallback | No Score Cause |")
@@ -505,3 +532,24 @@ private fun String.effectCompositionCsvCell(): String =
     }
 
 private fun Int.toSignedEffectCompositionDelta(): String = if (this >= 0) "+$this" else toString()
+
+private fun List<Phase6EffectCompositionRowEvidence>.toEffectCompositionFollowUpCandidates(): List<Phase6EffectCompositionFollowUpCandidate> =
+    filter { row -> row.classification != "instrumented-existing" }
+        .groupBy { row -> row.followUpRootCause() to row.classification }
+        .entries
+        .map { (key, rows) ->
+            Phase6EffectCompositionFollowUpCandidate(
+                rootCause = key.first,
+                classification = key.second,
+                rowCount = rows.size,
+                sampleRows = rows.map { it.rowId }.sorted().take(5),
+            )
+        }
+        .sortedWith(compareBy<Phase6EffectCompositionFollowUpCandidate> { it.rootCause }.thenBy { it.classification })
+
+private fun Phase6EffectCompositionRowEvidence.followUpRootCause(): String =
+    when (classification) {
+        "no-score" -> noScoreCause ?: "no-score.unknown"
+        "unexpected-fail" -> "unexpected-fail.without-stable-refusal"
+        else -> fallbackReason.takeUnless { it == "none" } ?: subfamily
+    }

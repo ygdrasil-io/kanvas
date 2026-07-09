@@ -4,7 +4,7 @@
 
 - Total COMPOSITE + BLUR rows: 156
 - Families: {BLUR=45, COMPOSITE=111}
-- Classifications: {expected-unsupported=47, instrumented-existing=83, no-score=26}
+- Classifications: {expected-unsupported=55, instrumented-existing=75, no-score=26}
 - Subfamilies: {blur-backdrop-gated=1, blur-clip-interaction-gated=2, blur-filter-graph-gated=3, blur-image-basic=6, blur-large-sigma-gated=2, blur-mask-basic=6, blur-matrix-convolution-gated=6, blur-rect-rrect-circle=9, blur-resource-budget-gated=1, blur-small-sigma=3, blur-text-dependent-gated=2, blur-transform-or-perspective-gated=4, composite-advanced-blend-gated=4, composite-atlas-or-vertices-gated=9, composite-backdrop-gated=2, composite-color-filter-gated=8, composite-destination-read-gated=1, composite-image-filter-gated=19, composite-layer-bounds-gated=1, composite-overdraw-diagnostic=1, composite-porter-duff=8, composite-save-layer-gated=5, composite-src-over-basic=53}
 - Promoted rows: 0
 - Unexpected fails: 0
@@ -13,7 +13,7 @@
 ## Family Deltas
 
 - Baseline source: `2026-07-09 local dashboard before effect-composition-family wave`
-- Current dashboard: `integration-tests/skia/build/reports/skia-gm-dashboard/data/gms.json` (2026-07-09T11:04:08.12663)
+- Current dashboard: `integration-tests/skia/build/reports/skia-gm-dashboard/data/gms.json` (2026-07-09T11:20:52.542444)
 
 | Family | Baseline | Current | Delta |
 |---|---:|---:|---:|
@@ -25,11 +25,31 @@
 - No broad COMPOSITE or BLUR support is claimed from classification alone.
 - saveLayer, destination-read, backdrop filters, image-filter DAGs, matrix convolution, and advanced blend chains remain outside this evidence wave unless row diagnostics prove a bounded route.
 - Rows without route and effect/composition diagnostics remain instrumented rather than promoted.
-- TEXT, IMAGE, PATH, CLIP, MATERIAL, and MESH dependencies are not absorbed into this wave.
+- COLOR, TEXT, IMAGE, PATH, CLIP, MATERIAL, and MESH dependencies are not absorbed into this wave.
 
 ## Reason Code Taxonomy
 
 - Effect/composition `unsupported.composition.*` and `unsupported.blur.*` reason codes in this report are evidence refusal taxonomy only, not renderer route diagnostics unless separately attached.
+
+## Follow-Up Candidates
+
+| Root Cause | Classification | Rows | Samples |
+|---|---|---:|---|
+| `generated-render-missing` | `no-score` | 22 | `blur_ignore_xform_circle`, `blur_ignore_xform_rect`, `blur_ignore_xform_rrect`, `colorcomposefilter_alpha`, `colorcomposefilter_wacky` |
+| `reference-missing` | `no-score` | 4 | `animatedbackdropblur`, `graphitestart`, `imagefilterstext_cf`, `imagefilterstext_if` |
+| `unsupported.blur.clip_interaction` | `expected-unsupported` | 2 | `blurredclippedcircle`, `imageblurrepeatunclipped` |
+| `unsupported.blur.image_filter_graph` | `expected-unsupported` | 3 | `fast_slow_blurimagefilter`, `inverse_fill_filters`, `inverse_windingmode_filters` |
+| `unsupported.blur.large_sigma` | `expected-unsupported` | 2 | `BlurBigSigma`, `TiledBlurBigSigma` |
+| `unsupported.blur.resource_budget` | `expected-unsupported` | 1 | `hdr-pip-blur` |
+| `unsupported.blur.transform_or_perspective` | `expected-unsupported` | 1 | `blur_matrix_rect` |
+| `unsupported.composition.advanced_blend` | `expected-unsupported` | 4 | `HSL_duck`, `hsl`, `hslcolorfilter`, `luminosity_overflow` |
+| `unsupported.composition.atlas_or_vertices` | `expected-unsupported` | 7 | `compare_atlas_vertices`, `draw-atlas`, `draw-atlas-colors`, `patch_alpha`, `patch_alpha_test` |
+| `unsupported.composition.backdrop_filter` | `expected-unsupported` | 2 | `backdrop_hintrect_clipping`, `backdrop_imagefilter_croprect` |
+| `unsupported.composition.color_dependency` | `expected-unsupported` | 8 | `color4blendcf`, `colorfiltershader`, `lightingcolorfilter`, `modecolorfilters`, `modecolorfilters#2` |
+| `unsupported.composition.destination_read` | `expected-unsupported` | 1 | `dstreadshuffle` |
+| `unsupported.composition.image_filter_dag` | `expected-unsupported` | 18 | `colorfilterimagefilter`, `imagefilter_composed_transform`, `imagefilter_convolve_subset`, `imagefilter_matrix_localmatrix`, `imagefilters_effect_order` |
+| `unsupported.composition.layer_bounds` | `expected-unsupported` | 1 | `filterfastbounds` |
+| `unsupported.composition.save_layer` | `expected-unsupported` | 5 | `clip_shader_layer`, `colorfilterimagefilter_layer`, `perlinnoise_layered`, `savelayer_f16`, `savelayer_initfromprev` |
 
 ## Rows
 
@@ -92,12 +112,12 @@
 | `clip_shader_nested` | `clip_shader_nested` | `COMPOSITE` | `composite-src-over-basic` | `instrumented-existing` | 6.78 | `none` | `n/a` |
 | `clip_shader_persp` | `clip_shader_persp` | `COMPOSITE` | `composite-src-over-basic` | `instrumented-existing` | 76.54 | `none` | `n/a` |
 | `clip_shader` | `clip_shader` | `COMPOSITE` | `composite-src-over-basic` | `instrumented-existing` | 61.90 | `none` | `n/a` |
-| `color4blendcf` | `color4blendcf` | `COMPOSITE` | `composite-color-filter-gated` | `instrumented-existing` | 30.56 | `none` | `n/a` |
+| `color4blendcf` | `color4blendcf` | `COMPOSITE` | `composite-color-filter-gated` | `expected-unsupported` | 30.56 | `unsupported.composition.color_dependency` | `n/a` |
 | `color4shader` | `color4shader` | `COMPOSITE` | `composite-src-over-basic` | `instrumented-existing` | 82.12 | `none` | `n/a` |
 | `colorfilterimagefilter` | `colorfilterimagefilter` | `COMPOSITE` | `composite-image-filter-gated` | `expected-unsupported` | 69.80 | `unsupported.composition.image_filter_dag` | `n/a` |
 | `colorfilterimagefilter_layer` | `colorfilterimagefilter_layer` | `COMPOSITE` | `composite-save-layer-gated` | `expected-unsupported` | 0.00 | `unsupported.composition.save_layer` | `n/a` |
-| `colorfiltershader` | `colorfiltershader` | `COMPOSITE` | `composite-color-filter-gated` | `instrumented-existing` | 39.31 | `none` | `n/a` |
-| `lightingcolorfilter` | `lightingcolorfilter` | `COMPOSITE` | `composite-color-filter-gated` | `instrumented-existing` | 21.23 | `none` | `n/a` |
+| `colorfiltershader` | `colorfiltershader` | `COMPOSITE` | `composite-color-filter-gated` | `expected-unsupported` | 39.31 | `unsupported.composition.color_dependency` | `n/a` |
+| `lightingcolorfilter` | `lightingcolorfilter` | `COMPOSITE` | `composite-color-filter-gated` | `expected-unsupported` | 21.23 | `unsupported.composition.color_dependency` | `n/a` |
 | `colormatrix` | `colormatrix` | `COMPOSITE` | `composite-src-over-basic` | `instrumented-existing` | 38.59 | `none` | `n/a` |
 | `colorcomposefilter_alpha` | `colorcomposefilter_alpha` | `COMPOSITE` | `composite-src-over-basic` | `no-score` | n/a | `none` | `generated-render-missing` |
 | `colorcomposefilter_wacky` | `colorcomposefilter_wacky` | `COMPOSITE` | `composite-src-over-basic` | `no-score` | n/a | `none` | `generated-render-missing` |
@@ -152,11 +172,11 @@
 | `luminosity_overflow` | `luminosity_overflow` | `COMPOSITE` | `composite-advanced-blend-gated` | `expected-unsupported` | 99.62 | `unsupported.composition.advanced_blend` | `n/a` |
 | `matriximagefilter` | `matriximagefilter` | `COMPOSITE` | `composite-image-filter-gated` | `expected-unsupported` | 0.03 | `unsupported.composition.image_filter_dag` | `n/a` |
 | `mixerCF` | `mixerCF` | `COMPOSITE` | `composite-src-over-basic` | `no-score` | n/a | `none` | `generated-render-missing` |
-| `modecolorfilters` | `modecolorfilters` | `COMPOSITE` | `composite-color-filter-gated` | `instrumented-existing` | 14.70 | `none` | `n/a` |
-| `modecolorfilters#2` | `modecolorfilters` | `COMPOSITE` | `composite-color-filter-gated` | `instrumented-existing` | 14.70 | `none` | `n/a` |
+| `modecolorfilters` | `modecolorfilters` | `COMPOSITE` | `composite-color-filter-gated` | `expected-unsupported` | 14.70 | `unsupported.composition.color_dependency` | `n/a` |
+| `modecolorfilters#2` | `modecolorfilters` | `COMPOSITE` | `composite-color-filter-gated` | `expected-unsupported` | 14.70 | `unsupported.composition.color_dependency` | `n/a` |
 | `offsetimagefilter` | `offsetimagefilter` | `COMPOSITE` | `composite-image-filter-gated` | `expected-unsupported` | 62.68 | `unsupported.composition.image_filter_dag` | `n/a` |
 | `overdraw_canvas` | `overdraw_canvas` | `COMPOSITE` | `composite-overdraw-diagnostic` | `instrumented-existing` | 84.98 | `none` | `n/a` |
-| `overdrawcolorfilter` | `overdrawcolorfilter` | `COMPOSITE` | `composite-color-filter-gated` | `instrumented-existing` | 12.50 | `none` | `n/a` |
+| `overdrawcolorfilter` | `overdrawcolorfilter` | `COMPOSITE` | `composite-color-filter-gated` | `expected-unsupported` | 12.50 | `unsupported.composition.color_dependency` | `n/a` |
 | `patch_alpha` | `patch_alpha` | `COMPOSITE` | `composite-atlas-or-vertices-gated` | `expected-unsupported` | 71.76 | `unsupported.composition.atlas_or_vertices` | `n/a` |
 | `patch_alpha_test` | `patch_alpha_test` | `COMPOSITE` | `composite-atlas-or-vertices-gated` | `expected-unsupported` | 41.79 | `unsupported.composition.atlas_or_vertices` | `n/a` |
 | `patch_image` | `patch_image` | `COMPOSITE` | `composite-atlas-or-vertices-gated` | `no-score` | n/a | `unsupported.composition.atlas_or_vertices` | `generated-render-missing` |
@@ -182,8 +202,8 @@
 | `sk3d_simple` | `sk3d_simple` | `COMPOSITE` | `composite-src-over-basic` | `instrumented-existing` | 52.29 | `none` | `n/a` |
 | `skbug_14554` | `skbug_14554` | `COMPOSITE` | `composite-src-over-basic` | `instrumented-existing` | 41.76 | `none` | `n/a` |
 | `srcmode` | `srcmode` | `COMPOSITE` | `composite-src-over-basic` | `instrumented-existing` | 74.03 | `none` | `n/a` |
-| `srgb_colorfilter` | `srgb_colorfilter` | `COMPOSITE` | `composite-color-filter-gated` | `instrumented-existing` | 0.05 | `none` | `n/a` |
-| `tablecolorfilter` | `tablecolorfilter` | `COMPOSITE` | `composite-color-filter-gated` | `instrumented-existing` | 39.11 | `none` | `n/a` |
+| `srgb_colorfilter` | `srgb_colorfilter` | `COMPOSITE` | `composite-color-filter-gated` | `expected-unsupported` | 0.05 | `unsupported.composition.color_dependency` | `n/a` |
+| `tablecolorfilter` | `tablecolorfilter` | `COMPOSITE` | `composite-color-filter-gated` | `expected-unsupported` | 39.11 | `unsupported.composition.color_dependency` | `n/a` |
 | `extractalpha` | `extractalpha` | `COMPOSITE` | `composite-src-over-basic` | `no-score` | n/a | `none` | `generated-render-missing` |
 | `tileimagefilter` | `tileimagefilter` | `COMPOSITE` | `composite-image-filter-gated` | `no-score` | n/a | `unsupported.composition.image_filter_dag` | `generated-render-missing` |
 | `transparency_check` | `transparency_check` | `COMPOSITE` | `composite-src-over-basic` | `instrumented-existing` | 0.86 | `none` | `n/a` |
