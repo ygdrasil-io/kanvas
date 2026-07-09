@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.surface.gpu
 
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
+import org.graphiks.kanvas.gpu.renderer.commands.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRawUniformDraw
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRenderRecorder
@@ -33,10 +34,16 @@ internal fun GPUBackendRenderRecorder.dispatchFillRRect(
     val ry = rrect.topLeft.y
     val rect = rrect.rect
     val clipBounds = cmd.clip.bounds
-    val sx = maxOf(rect.left, clipBounds.left).toInt().coerceIn(0, surfaceWidth - 1)
-    val sy = maxOf(rect.top, clipBounds.top).toInt().coerceIn(0, surfaceHeight - 1)
-    val sw = (minOf(rect.right, clipBounds.right).toInt() - sx).coerceIn(1, surfaceWidth - sx)
-    val sh = (minOf(rect.bottom, clipBounds.bottom).toInt() - sy).coerceIn(1, surfaceHeight - sy)
+    val bounds = GPUBounds(rect.left, rect.top, rect.right, rect.bottom)
+    val scissor = if (cmd.antiAlias) {
+        coverageScissor(bounds, clipBounds, surfaceWidth, surfaceHeight)
+    } else {
+        truncatedScissor(bounds, clipBounds, surfaceWidth, surfaceHeight)
+    } ?: return
+    val sx = scissor.x
+    val sy = scissor.y
+    val sw = scissor.width
+    val sh = scissor.height
 
     val bb = java.nio.ByteBuffer.allocate(64).order(java.nio.ByteOrder.nativeOrder())
     bb.putFloat(rect.left); bb.putFloat(rect.top)
