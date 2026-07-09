@@ -13,7 +13,7 @@
 ## Family Deltas
 
 - Baseline source: `2026-07-09 local dashboard before text-mesh-family wave`
-- Current dashboard: `integration-tests/skia/build/reports/skia-gm-dashboard/data/gms.json` (2026-07-09T14:15:45.701762)
+- Current dashboard: `integration-tests/skia/build/reports/skia-gm-dashboard/data/gms.json` (2026-07-09T14:21:53.369111)
 
 | Family | Baseline | Current | Delta |
 |---|---:|---:|---:|
