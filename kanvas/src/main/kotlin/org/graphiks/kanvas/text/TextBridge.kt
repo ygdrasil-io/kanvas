@@ -170,7 +170,7 @@ object TextBridge {
         }
 
         val finalUvs = uvs.map { it ?: Rect.fromLTRB(0f, 0f, 0f, 0f) }
-        val finalRects = glyphRects.map { it ?: Rect(0f, 0f, 10f, 10f) }
+        val finalRects = glyphRects.map { it ?: Rect.fromLTRB(0f, 0f, 0f, 0f) }
 
         return GpuTextBlob(blob, plan.atlasBytes, plan.atlasWidth, plan.atlasHeight, finalUvs, glyphRects = finalRects)
     }
