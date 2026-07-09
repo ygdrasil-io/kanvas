@@ -40,6 +40,12 @@ data class TriangleList(
     val triangleCount: Int get() = indices.size / 3
 }
 
+/** Flattened path points and the point index where each contour begins. */
+data class FlattenedPath(
+    val points: List<Point>,
+    val contourStarts: List<Int>,
+)
+
 /**
  * Flattens bezier curves into line segments and triangulates
  * the resulting polygon into a triangle fan.
@@ -56,77 +62,77 @@ class PathTessellator(
      * Flattens a [PathData] into a list of [Point]s by
      * approximating quad/cubic curves with line segments.
      */
-    fun flatten(path: PathData): List<Point> {
-        if (path.verbs.isEmpty()) return emptyList()
+    fun flatten(path: PathData): List<Point> = flattenWithContours(path).points
+
+    /** Flattens a [PathData] while preserving each [PathVerb.MoveTo] boundary. */
+    fun flattenWithContours(path: PathData): FlattenedPath {
+        if (path.verbs.isEmpty()) return FlattenedPath(emptyList(), emptyList())
 
         val result = mutableListOf<Point>()
-        var contourStart = Point(0f, 0f)
+        val contourStarts = mutableListOf<Int>()
         var current = Point(0f, 0f)
-        var contourStartSet = false
+        val contour = ContourState(start = current)
         for (verb in path.verbs) {
             when (verb) {
                 is PathVerb.MoveTo -> {
                     current = verb.p
-                    contourStart = verb.p
-                    contourStartSet = true
+                    contour.start = verb.p
+                    contour.isOpen = false
                 }
                 is PathVerb.LineTo -> {
-                    if (!contourStartSet) {
-                        contourStart = verb.p
-                        contourStartSet = true
-                    }
-                    if (result.isEmpty()) {
-                        result.add(contourStart)
-                        current = contourStart
-                    }
+                    beginContourIfNeeded(contour, current, result, contourStarts)
                     val next = verb.p
                     if (next != current) {
-                        checkBudget(result)
-                        result.add(next)
+                        appendPoint(result, next)
                         current = next
                     }
                 }
                 is PathVerb.QuadTo -> {
-                    if (!contourStartSet) {
-                        contourStart = verb.p
-                        contourStartSet = true
-                    }
-                    if (result.isEmpty()) {
-                        result.add(current)
-                    }
+                    beginContourIfNeeded(contour, current, result, contourStarts)
                     emitQuadraticSegments(current, verb.c, verb.p, result)
                     current = verb.p
                 }
                 is PathVerb.CubicTo -> {
-                    if (!contourStartSet) {
-                        contourStart = verb.p
-                        contourStartSet = true
-                    }
-                    if (result.isEmpty()) {
-                        result.add(current)
-                    }
+                    beginContourIfNeeded(contour, current, result, contourStarts)
                     emitCubicSegments(current, verb.c1, verb.c2, verb.p, result)
                     current = verb.p
                 }
                 is PathVerb.Close -> {
-                    if (current != contourStart) {
-                        checkBudget(result)
-                        result.add(contourStart)
+                    if (contour.isOpen && current != contour.start) {
+                        appendPoint(result, contour.start)
                     }
-                    current = contourStart
+                    if (contour.isOpen) {
+                        current = contour.start
+                    }
+                    contour.isOpen = false
                 }
             }
         }
 
-        return result
+        return FlattenedPath(points = result, contourStarts = contourStarts)
     }
 
-    private fun checkBudget(result: List<Point>) {
-        if (result.size > maxVertices) {
+    private fun beginContourIfNeeded(
+        contour: ContourState,
+        current: Point,
+        result: MutableList<Point>,
+        contourStarts: MutableList<Int>,
+    ) {
+        if (contour.isOpen) return
+
+        contour.start = current
+        contourStarts.add(result.size)
+        appendPoint(result, current)
+        contour.isOpen = true
+    }
+
+    private fun appendPoint(result: MutableList<Point>, point: Point) {
+        if (result.size >= maxVertices) {
             throw IllegalStateException(
-                "Path flattened to ${result.size} vertices, exceeds budget of $maxVertices"
+                "Path flattened to ${result.size + 1} vertices, exceeds budget of $maxVertices"
             )
         }
+        result.add(point)
     }
 
     private fun emitQuadraticSegments(p0: Point, p1: Point, p2: Point, result: MutableList<Point>) {
@@ -135,8 +141,7 @@ class PathTessellator(
             val t = i.toFloat() / steps
             val x = (1 - t) * (1 - t) * p0.x + 2 * (1 - t) * t * p1.x + t * t * p2.x
             val y = (1 - t) * (1 - t) * p0.y + 2 * (1 - t) * t * p1.y + t * t * p2.y
-            checkBudget(result)
-            result.add(Point(x, y))
+            appendPoint(result, Point(x, y))
         }
     }
 
@@ -152,8 +157,7 @@ class PathTessellator(
                 3 * (1 - t) * (1 - t) * t * p1.y +
                 3 * (1 - t) * t * t * p2.y +
                 t * t * t * p3.y
-            checkBudget(result)
-            result.add(Point(x, y))
+            appendPoint(result, Point(x, y))
         }
     }
 
@@ -199,4 +203,9 @@ class PathTessellator(
             kotlin.math.sqrt(dx3 * dx3 + dy3 * dy3)
         return (len / tolerance).toInt().coerceAtLeast(2)
     }
+
+    private data class ContourState(
+        var start: Point,
+        var isOpen: Boolean = false,
+    )
 }

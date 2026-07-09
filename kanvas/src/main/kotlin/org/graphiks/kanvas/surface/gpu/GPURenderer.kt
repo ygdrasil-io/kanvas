@@ -227,17 +227,18 @@ internal fun renderViaGpu(
                     tolerance = config.curveTolerance,
                     maxVertices = config.maxPathVertices.toInt(),
                 )
-                val flat = tessellator.flatten(pathData)
+                val flattened = tessellator.flattenWithContours(pathData)
+                val flat = flattened.points
                 if (flat.size < 3) return
-                val tri = tessellator.triangulate(flat)
-                val vertices = tri.vertices.flatMap { listOf(it.x, it.y) }
+                val vertices = flat.flatMap { listOf(it.x, it.y) }
                 val syntheticOp = DisplayOp.DrawPath(
                     path = Path { },
                     paint = org.graphiks.kanvas.paint.Paint(color = color),
                     transform = Matrix33.identity(),
                     clip = op.clip,
                 )
-                val cmd = syntheticOp.toNormalizedCommand(cmdId, targets, vertices, listOf(0), flat.size)
+                val contourStarts = flattened.contourStarts.ifEmpty { listOf(0) }
+                val cmd = syntheticOp.toNormalizedCommand(cmdId, targets, vertices, contourStarts, flat.size)
                 t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
                     dispatchFillPath(cmd, dispatched, diagnostics, width, height, config)
                 }
@@ -306,10 +307,10 @@ internal fun renderViaGpu(
                             tolerance = config.curveTolerance,
                             maxVertices = config.maxPathVertices.toInt(),
                         )
-                        val flat = tessellator.flatten(pathData)
+                        val flattened = tessellator.flattenWithContours(pathData)
+                        val flat = flattened.points
                         if (flat.size < 3) continue
-                        val tri = tessellator.triangulate(flat)
-                        val vertices = tri.vertices.flatMap { listOf(it.x, it.y) }
+                        val vertices = flat.flatMap { listOf(it.x, it.y) }
                         val syntheticOp = DisplayOp.DrawPath(
                             path = Path { },
                             paint = op.paint,
@@ -317,7 +318,8 @@ internal fun renderViaGpu(
                             clip = op.clip,
                         )
                         val glyphCmdId = GPUDrawCommandID(dispatched.size)
-                        val cmd = syntheticOp.toNormalizedCommand(glyphCmdId, targets, vertices, listOf(0), flat.size)
+                        val contourStarts = flattened.contourStarts.ifEmpty { listOf(0) }
+                        val cmd = syntheticOp.toNormalizedCommand(glyphCmdId, targets, vertices, contourStarts, flat.size)
                         if (cmd.blend.requiresDestinationRead) {
                             diagnostics.fatal("refuse:drawText:shader:${glyphCmdId.value}", "drawText", "unsupported_blend:advanced")
                             continue
@@ -524,7 +526,8 @@ internal fun renderViaGpu(
                             tolerance = config.curveTolerance,
                             maxVertices = config.maxPathVertices.toInt(),
                         )
-                        val flat = tessellator.flatten(pathData)
+                        val flattened = tessellator.flattenWithContours(pathData)
+                        val flat = flattened.points
                         val allowsDegenerateRoundStroke = isStroke && paint.strokeCap.name.lowercase() == "round"
                         val minVertices = if (isStroke) {
                             if (allowsDegenerateRoundStroke) 1 else 2
@@ -535,13 +538,12 @@ internal fun renderViaGpu(
                             diagnostics.fatal("refuse:${op.hashCode()}", "drawPath", "insufficient_vertices:${flat.size}")
                             continue
                         }
-                        val tri = tessellator.triangulate(flat)
                         val vertices = selectPathVerticesForCommand(
                             isStroke = isStroke,
                             flattened = flat,
-                            triangulated = tri.vertices,
+                            triangulated = flat,
                         ).flatMap { listOf(it.x, it.y) }
-                        val contourStarts = listOf(0)
+                        val contourStarts = flattened.contourStarts.ifEmpty { listOf(0) }
                         val cmd = op.toNormalizedCommand(cmdId, targets, vertices, contourStarts, flat.size)
                         if (cmd.blend.requiresDestinationRead) {
                             diagnostics.fatal("refuse:drawPath:${cmdId.value}", "drawPath", "unsupported_blend:advanced")
@@ -673,14 +675,14 @@ internal fun renderViaGpu(
                                     tolerance = config.curveTolerance,
                                     maxVertices = config.maxPathVertices.toInt(),
                                 )
-                                val flat = tessellator.flatten(pathData)
+                                val flattened = tessellator.flattenWithContours(pathData)
+                                val flat = flattened.points
                                 if (flat.size < 3) {
                                     diagnostics.fatal("refuse:drawPoints:${cmdId.value}", "drawPoints", "insufficient_vertices:${flat.size}")
                                     continue
                                 }
-                                val tri = tessellator.triangulate(flat)
-                                val vertices = tri.vertices.flatMap { listOf(it.x, it.y) }
-                                val contourStarts = listOf(0)
+                                val vertices = flat.flatMap { listOf(it.x, it.y) }
+                                val contourStarts = flattened.contourStarts.ifEmpty { listOf(0) }
                                 val isStroke = op.mode == PointMode.LINES
                                 val drawPathOp = DisplayOp.DrawPath(path, op.paint, op.transform, op.clip)
                                 val cmd = drawPathOp.toNormalizedCommand(
@@ -708,14 +710,14 @@ internal fun renderViaGpu(
                             tolerance = config.curveTolerance,
                             maxVertices = config.maxPathVertices.toInt(),
                         )
-                        val flat = tessellator.flatten(pathData)
+                        val flattened = tessellator.flattenWithContours(pathData)
+                        val flat = flattened.points
                         if (flat.size < 3) {
                             diagnostics.fatal("refuse:drawDRRect:${cmdId.value}", "drawDRRect", "insufficient_vertices:${flat.size}")
                             continue
                         }
-                        val tri = tessellator.triangulate(flat)
-                        val vertices = tri.vertices.flatMap { listOf(it.x, it.y) }
-                        val contourStarts = listOf(0)
+                        val vertices = flat.flatMap { listOf(it.x, it.y) }
+                        val contourStarts = flattened.contourStarts.ifEmpty { listOf(0) }
                         val drawPathOp = DisplayOp.DrawPath(path, op.paint, op.transform, op.clip)
                         val cmd = drawPathOp.toNormalizedCommand(cmdId, targets, vertices, contourStarts, flat.size)
                         if (cmd.blend.requiresDestinationRead) {
@@ -818,7 +820,8 @@ internal fun renderViaGpu(
                                     val isStroke = paint.isStroke()
                                     val pd = nestedOp.path.toPathTessellatorData()
                                     val tess = PathTessellator(config.curveTolerance, config.maxPathVertices.toInt())
-                                    val fl = tess.flatten(pd)
+                                    val flattened = tess.flattenWithContours(pd)
+                                    val fl = flattened.points
                                     val allowsDegenerateRoundStroke = isStroke && paint.strokeCap.name.lowercase() == "round"
                                     val minVertices = if (isStroke) {
                                         if (allowsDegenerateRoundStroke) 1 else 2
@@ -829,9 +832,10 @@ internal fun renderViaGpu(
                                         val verts = selectPathVerticesForCommand(
                                             isStroke = isStroke,
                                             flattened = fl,
-                                            triangulated = if (isStroke) emptyList() else tess.triangulate(fl).vertices,
+                                            triangulated = fl,
                                         ).flatMap { listOf(it.x, it.y) }
-                                        val cmd = nestedOp.toNormalizedCommand(nestedCmdId, targets, verts, listOf(0), fl.size)
+                                        val contourStarts = flattened.contourStarts.ifEmpty { listOf(0) }
+                                        val cmd = nestedOp.toNormalizedCommand(nestedCmdId, targets, verts, contourStarts, fl.size)
                                         t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
                                             dispatchFillPath(cmd, dispatched, diagnostics, width, height, config)
                                         }
@@ -863,13 +867,14 @@ internal fun renderViaGpu(
                                     val p = nestedOp.toPath()
                                     val pd = p.toPathTessellatorData()
                                     val tess = PathTessellator(config.curveTolerance, config.maxPathVertices.toInt())
-                                    val fl = tess.flatten(pd)
+                                    val flattened = tess.flattenWithContours(pd)
+                                    val fl = flattened.points
                                     if (fl.size >= 3) {
-                                        val tri = tess.triangulate(fl)
-                                        val verts = tri.vertices.flatMap { listOf(it.x, it.y) }
+                                        val verts = fl.flatMap { listOf(it.x, it.y) }
                                         val isStroke = nestedOp.mode == PointMode.LINES
                                         val dpOp = DisplayOp.DrawPath(p, nestedOp.paint, nestedOp.transform, nestedOp.clip)
-                                        val cmd = dpOp.toNormalizedCommand(nestedCmdId, targets, verts, listOf(0), fl.size).copy(stroke = isStroke)
+                                        val contourStarts = flattened.contourStarts.ifEmpty { listOf(0) }
+                                        val cmd = dpOp.toNormalizedCommand(nestedCmdId, targets, verts, contourStarts, fl.size).copy(stroke = isStroke)
                                         t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
                                             dispatchFillPath(cmd, dispatched, diagnostics, width, height, config)
                                         }
@@ -880,12 +885,13 @@ internal fun renderViaGpu(
                                     val p = nestedOp.toPath()
                                     val pd = p.toPathTessellatorData()
                                     val tess = PathTessellator(config.curveTolerance, config.maxPathVertices.toInt())
-                                    val fl = tess.flatten(pd)
+                                    val flattened = tess.flattenWithContours(pd)
+                                    val fl = flattened.points
                                     if (fl.size >= 3) {
-                                        val tri = tess.triangulate(fl)
-                                        val verts = tri.vertices.flatMap { listOf(it.x, it.y) }
+                                        val verts = fl.flatMap { listOf(it.x, it.y) }
                                         val dpOp = DisplayOp.DrawPath(p, nestedOp.paint, nestedOp.transform, nestedOp.clip)
-                                        val cmd = dpOp.toNormalizedCommand(nestedCmdId, targets, verts, listOf(0), fl.size)
+                                        val contourStarts = flattened.contourStarts.ifEmpty { listOf(0) }
+                                        val cmd = dpOp.toNormalizedCommand(nestedCmdId, targets, verts, contourStarts, fl.size)
                                         t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
                                             dispatchFillPath(cmd, dispatched, diagnostics, width, height, config)
                                         }
@@ -1111,11 +1117,11 @@ internal fun renderViaGpu(
                             }
                             val pathData = path.toPathTessellatorData()
                             val tessellator = PathTessellator(config.curveTolerance, config.maxPathVertices.toInt())
-                            val flat = tessellator.flatten(pathData)
+                            val flattened = tessellator.flattenWithContours(pathData)
+                            val flat = flattened.points
                             if (flat.size >= 3) {
-                                val tri = tessellator.triangulate(flat)
-                                val vertices = tri.vertices.flatMap { listOf(it.x, it.y) }
-                                val contourStarts = listOf(0)
+                                val vertices = flat.flatMap { listOf(it.x, it.y) }
+                                val contourStarts = flattened.contourStarts.ifEmpty { listOf(0) }
                                 val drawPathOp = DisplayOp.DrawPath(path, op.paint, op.transform, op.clip)
                                 val cmd = drawPathOp.toNormalizedCommand(cmdId, targets, vertices, contourStarts, flat.size)
                                 t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
@@ -1203,11 +1209,11 @@ internal fun renderViaGpu(
                             }
                             val pathData = path.toPathTessellatorData()
                             val tessellator = PathTessellator(config.curveTolerance, config.maxPathVertices.toInt())
-                            val flat = tessellator.flatten(pathData)
+                            val flattened = tessellator.flattenWithContours(pathData)
+                            val flat = flattened.points
                             if (flat.size >= 3) {
-                                val tri = tessellator.triangulate(flat)
-                                val vertices = tri.vertices.flatMap { listOf(it.x, it.y) }
-                                val contourStarts = listOf(0)
+                                val vertices = flat.flatMap { listOf(it.x, it.y) }
+                                val contourStarts = flattened.contourStarts.ifEmpty { listOf(0) }
                                 val drawPathOp = DisplayOp.DrawPath(path, op.paint, op.transform, op.clip)
                                 val cmd = drawPathOp.toNormalizedCommand(cmdId, targets, vertices, contourStarts, flat.size)
                                 t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
