@@ -80,3 +80,19 @@ tasks.register<JavaExec>("generateGpuPhase6EffectCompositionFamiliesEvidence") {
     outputs.file(rootProject.layout.projectDirectory.file("reports/gpu-renderer/phase-6-effect-composition-families/classification.csv"))
     outputs.file(rootProject.layout.projectDirectory.file("reports/gpu-renderer/2026-07-09-gpu-phase-6-effect-composition-families.md"))
 }
+
+tasks.register<JavaExec>("generateGpuPhase6TextMeshFamiliesEvidence") {
+    group = "verification"
+    description = "Generate GPU Phase 6 TEXT + MESH family evidence reports."
+    dependsOn(
+        ":integration-tests:skia:generateSkiaDashboard",
+        tasks.named("classes"),
+    )
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("org.graphiks.kanvas.skia.evidence.Phase6TextMeshFamiliesEvidenceCliKt")
+    args(rootDir.absolutePath)
+    inputs.file(rootProject.layout.projectDirectory.file("integration-tests/skia/build/reports/skia-gm-dashboard/data/gms.json"))
+    outputs.file(rootProject.layout.projectDirectory.file("reports/gpu-renderer/phase-6-text-mesh-families/evidence.json"))
+    outputs.file(rootProject.layout.projectDirectory.file("reports/gpu-renderer/phase-6-text-mesh-families/classification.csv"))
+    outputs.file(rootProject.layout.projectDirectory.file("reports/gpu-renderer/2026-07-09-gpu-phase-6-text-mesh-families.md"))
+}
