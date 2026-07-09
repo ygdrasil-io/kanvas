@@ -6,6 +6,10 @@ import kotlin.io.path.exists
 private val textMeshDashboardJson = Path.of("integration-tests/skia/build/reports/skia-gm-dashboard/data/gms.json")
 
 fun main(args: Array<String>) {
+    runPhase6TextMeshFamiliesEvidenceCli(args)
+}
+
+internal fun runPhase6TextMeshFamiliesEvidenceCli(args: Array<String>) {
     val root = if (args.isEmpty()) Path.of(".") else Path.of(args[0])
     val dashboardPath = args.getOrNull(1)?.let(Path::of)
     runPhase6TextMeshFamiliesEvidence(root, dashboardPath)

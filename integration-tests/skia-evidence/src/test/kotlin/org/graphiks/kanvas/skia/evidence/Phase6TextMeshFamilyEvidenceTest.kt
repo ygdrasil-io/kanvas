@@ -279,11 +279,44 @@ class Phase6TextMeshFamilyEvidenceTest {
             """.trimIndent(),
         )
 
-        runPhase6TextMeshFamiliesEvidence(root, dashboard)
+        runPhase6TextMeshFamiliesEvidenceCli(arrayOf(root.toString(), dashboard.toString()))
 
         val csv = Files.readString(root.resolve("reports/gpu-renderer/phase-6-text-mesh-families/classification.csv"))
         assertContains(csv, "fontregen_bigtext,TEXT,text-font-fallback-gated,expected-unsupported")
         assertContains(csv, "unsupported.text.font_fallback")
+    }
+
+    @Test
+    fun `cli falls back to default dashboard path when dashboard argument is absent`() {
+        val root = Files.createTempDirectory("phase6-text-mesh-cli-default-test")
+        val dashboard = root.resolve("integration-tests/skia/build/reports/skia-gm-dashboard/data/gms.json")
+        Files.createDirectories(dashboard.parent)
+        Files.writeString(
+            dashboard,
+            """
+            {
+              "generatedAt": "2026-07-09T12:00:00",
+              "gms": [
+                {
+                  "name": "vertices",
+                  "family": "MESH",
+                  "similarity": 100.0,
+                  "minSimilarity": 99.0,
+                  "isPassing": true,
+                  "noReference": false,
+                  "renderFailed": false,
+                  "sizeMismatch": false,
+                  "hasDiff": false
+                }
+              ]
+            }
+            """.trimIndent(),
+        )
+
+        runPhase6TextMeshFamiliesEvidenceCli(arrayOf(root.toString()))
+
+        val csv = Files.readString(root.resolve("reports/gpu-renderer/phase-6-text-mesh-families/classification.csv"))
+        assertContains(csv, "vertices,MESH,mesh-basic-vertices,instrumented-existing")
     }
 
     @Test
