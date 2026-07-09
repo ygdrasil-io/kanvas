@@ -48,3 +48,19 @@ tasks.register<JavaExec>("generateGpuPhase6CoverageFamiliesEvidence") {
     outputs.file(rootProject.layout.projectDirectory.file("reports/gpu-renderer/phase-6-coverage-families/classification.csv"))
     outputs.file(rootProject.layout.projectDirectory.file("reports/gpu-renderer/2026-07-09-gpu-phase-6-coverage-families.md"))
 }
+
+tasks.register<JavaExec>("generateGpuPhase6MaterialFamiliesEvidence") {
+    group = "verification"
+    description = "Generates the GPU Phase 6 GRADIENT + RUNTIME_EFFECT + COLOR material family classification and evidence report."
+    dependsOn(
+        ":integration-tests:skia:generateSkiaDashboard",
+        tasks.named("classes"),
+    )
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("org.graphiks.kanvas.skia.evidence.Phase6MaterialFamiliesEvidenceCliKt")
+    args(rootDir.absolutePath)
+    inputs.file(rootProject.layout.projectDirectory.file("integration-tests/skia/build/reports/skia-gm-dashboard/data/gms.json"))
+    outputs.file(rootProject.layout.projectDirectory.file("reports/gpu-renderer/phase-6-material-families/evidence.json"))
+    outputs.file(rootProject.layout.projectDirectory.file("reports/gpu-renderer/phase-6-material-families/classification.csv"))
+    outputs.file(rootProject.layout.projectDirectory.file("reports/gpu-renderer/2026-07-09-gpu-phase-6-material-families.md"))
+}
