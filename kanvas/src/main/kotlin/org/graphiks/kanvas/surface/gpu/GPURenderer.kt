@@ -454,7 +454,7 @@ internal fun renderViaGpu(
                 if (image.sourceId !in textureCache) {
                     val px = image.pixels
                     if (px != null) {
-                        textureCache[image.sourceId] = expandToRgba(image, px)
+                        textureCache[image.sourceId] = image.expandToRgbaForGpu()
                     } else {
                         diagnostics.warn("no_pixels:${image.sourceId}", "cachePixels", "cpu_pixels_unavailable")
                     }
@@ -1422,23 +1422,6 @@ private fun extractSolidShaderColor(shader: Shader): Color? = when (shader) {
     is Shader.WithWorkingColorSpace -> extractSolidShaderColor(shader.shader)
     is Shader.CoordClamp -> extractSolidShaderColor(shader.shader)
     else -> null
-}
-
-private fun expandToRgba(image: org.graphiks.kanvas.image.Image, pixels: ByteArray): ByteArray {
-    if (image.colorType == ColorType.RGBA_8888 || image.colorType == ColorType.BGRA_8888) return pixels
-    if (image.colorType == ColorType.ALPHA_8) {
-        val rgba = ByteArray(image.width * image.height * 4)
-        for (i in pixels.indices) {
-            val a = pixels[i]
-            val off = i * 4
-            rgba[off] = a
-            rgba[off + 1] = a
-            rgba[off + 2] = a
-            rgba[off + 3] = a
-        }
-        return rgba
-    }
-    return pixels
 }
 
 /** Extract the effective scale for text rasterization from a CTM. */
