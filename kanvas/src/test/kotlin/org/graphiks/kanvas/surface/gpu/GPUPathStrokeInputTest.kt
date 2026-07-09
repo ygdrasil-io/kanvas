@@ -151,4 +151,20 @@ class GPUPathStrokeInputTest {
         assertEquals(stroke.vertices.size / 2, stroke.contourStarts.last())
         assertTrue(stroke.contourStarts.zipWithNext().all { (start, end) -> end - start == 3 })
     }
+
+    @Test
+    fun `dashed zero length non round strokes emit no geometry`() {
+        for (cap in listOf(StrokeCap.BUTT, StrokeCap.SQUARE)) {
+            val stroke = strokeToFillGeometry(
+                contourVertices = listOf(10f, 10f),
+                contourStarts = listOf(0),
+                strokeWidth = 4f,
+                dashArray = floatArrayOf(1f, 5f),
+                capStyle = cap,
+            )
+
+            assertTrue(stroke.vertices.isEmpty())
+            assertEquals(listOf(0), stroke.contourStarts)
+        }
+    }
 }
