@@ -2,6 +2,7 @@ package org.graphiks.kanvas.surface.gpu
 
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.materials.GradientWgslShaderProvider
+import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.ColorFilter
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
@@ -12,6 +13,7 @@ import org.graphiks.kanvas.types.a
 import org.graphiks.kanvas.types.b
 import org.graphiks.kanvas.types.g
 import org.graphiks.kanvas.types.r
+import kotlin.math.pow
 
 internal fun Paint.toMaterial(): GPUMaterialDescriptor {
     val shader = this.shader
@@ -42,6 +44,12 @@ internal fun Paint.toMaterial(): GPUMaterialDescriptor {
             effectId = cf.effect.id,
             descriptorVersion = 1,
         )
+    }
+    if (cf != null) {
+        base.withGradientColorFilter(cf)?.let { return it }
+    }
+    if (cf != null && base is GPUMaterialDescriptor.SolidColor) {
+        return cf.applyTo(base)?.toSolidColor() ?: base
     }
     return base
 }
@@ -153,7 +161,9 @@ internal fun Shader.toMaterial(): GPUMaterialDescriptor = when (this) {
         GPUMaterialDescriptor.RuntimeEffect(effectId = id, descriptorVersion = 1)
     }
     is Shader.WithLocalMatrix -> this.shader.toMaterial()
-    is Shader.WithColorFilter -> this.shader.toMaterial()
+    is Shader.WithColorFilter -> this.shader.toMaterial().let { material ->
+        material.withGradientColorFilter(this.filter) ?: material
+    }
     is Shader.SweepGradient -> {
         val first = this.stops.first()
         val last = this.stops.last()
@@ -240,4 +250,162 @@ private fun org.graphiks.kanvas.image.Image.expandToRgba(): ByteArray {
         return rgba
     }
     return pixels
+}
+
+private data class Rgba(
+    val r: Float,
+    val g: Float,
+    val b: Float,
+    val a: Float,
+) {
+    fun clamped(): Rgba = Rgba(
+        r = r.coerceIn(0f, 1f),
+        g = g.coerceIn(0f, 1f),
+        b = b.coerceIn(0f, 1f),
+        a = a.coerceIn(0f, 1f),
+    )
+
+    fun toSolidColor(): GPUMaterialDescriptor.SolidColor {
+        val c = clamped()
+        return GPUMaterialDescriptor.SolidColor(c.r, c.g, c.b, c.a)
+    }
+}
+
+private fun GPUMaterialDescriptor.SolidColor.toRgba(): Rgba = Rgba(r, g, b, a)
+
+private fun ColorFilter.applyTo(input: GPUMaterialDescriptor.SolidColor): Rgba? =
+    applyTo(input.toRgba())
+
+private fun ColorFilter.applyTo(input: Rgba): Rgba? = when (this) {
+    is ColorFilter.Matrix -> values.applyColorMatrix(input)
+    is ColorFilter.HSLAMatrix -> values.applyColorMatrix(input)
+    is ColorFilter.Table -> table.applyTable(input)
+    is ColorFilter.Lighting -> Rgba(
+        r = input.r * mul.r + add.r,
+        g = input.g * mul.g + add.g,
+        b = input.b * mul.b + add.b,
+        a = input.a,
+    ).clamped()
+    is ColorFilter.Blend -> blendColorFilter(color.toRgba(), input, mode)
+    is ColorFilter.Compose -> inner.applyTo(input)?.let { outer.applyTo(it) }
+    is ColorFilter.Lerp -> {
+        val dstColor = dst.applyTo(input) ?: return null
+        val srcColor = src.applyTo(input) ?: return null
+        lerp(dstColor, srcColor, t)
+    }
+    ColorFilter.Luma -> {
+        val luma = 0.2126f * input.r + 0.7152f * input.g + 0.0722f * input.b
+        Rgba(0f, 0f, 0f, luma * input.a).clamped()
+    }
+    ColorFilter.SRGBToLinear -> Rgba(
+        r = srgbToLinear(input.r),
+        g = srgbToLinear(input.g),
+        b = srgbToLinear(input.b),
+        a = input.a,
+    )
+    ColorFilter.LinearToSRGB -> Rgba(
+        r = linearToSrgb(input.r),
+        g = linearToSrgb(input.g),
+        b = linearToSrgb(input.b),
+        a = input.a,
+    )
+    ColorFilter.HighContrast,
+    ColorFilter.Overdraw,
+    is ColorFilter.RuntimeEffect -> null
+}
+
+private fun org.graphiks.kanvas.types.Color.toRgba(): Rgba = Rgba(r, g, b, a)
+
+private fun FloatArray.applyColorMatrix(input: Rgba): Rgba? {
+    if (size < 20) return null
+    return Rgba(
+        r = this[0] * input.r + this[1] * input.g + this[2] * input.b + this[3] * input.a + this[4],
+        g = this[5] * input.r + this[6] * input.g + this[7] * input.b + this[8] * input.a + this[9],
+        b = this[10] * input.r + this[11] * input.g + this[12] * input.b + this[13] * input.a + this[14],
+        a = this[15] * input.r + this[16] * input.g + this[17] * input.b + this[18] * input.a + this[19],
+    ).clamped()
+}
+
+private fun UByteArray.applyTable(input: Rgba): Rgba? {
+    if (size < 256) return null
+    fun sample(v: Float): Float = this[(v.coerceIn(0f, 1f) * 255f + 0.5f).toInt()].toInt() / 255f
+    return Rgba(sample(input.r), sample(input.g), sample(input.b), sample(input.a))
+}
+
+private fun blendColorFilter(src: Rgba, dst: Rgba, mode: BlendMode): Rgba? {
+    val sp = src.premultiplied()
+    val dp = dst.premultiplied()
+    val out = when (mode) {
+        BlendMode.CLEAR -> Premul(0f, 0f, 0f, 0f)
+        BlendMode.SRC -> sp
+        BlendMode.DST -> dp
+        BlendMode.SRC_OVER -> sp + dp * (1f - sp.a)
+        BlendMode.DST_OVER -> dp + sp * (1f - dp.a)
+        BlendMode.SRC_IN -> sp * dp.a
+        BlendMode.DST_IN -> dp * sp.a
+        BlendMode.SRC_OUT -> sp * (1f - dp.a)
+        BlendMode.DST_OUT -> dp * (1f - sp.a)
+        BlendMode.SRC_ATOP -> sp * dp.a + dp * (1f - sp.a)
+        BlendMode.DST_ATOP -> dp * sp.a + sp * (1f - dp.a)
+        BlendMode.XOR -> sp * (1f - dp.a) + dp * (1f - sp.a)
+        BlendMode.PLUS -> (sp + dp).clamped()
+        BlendMode.MODULATE -> Premul(
+            r = sp.r * dp.r,
+            g = sp.g * dp.g,
+            b = sp.b * dp.b,
+            a = sp.a * dp.a,
+        )
+        else -> return null
+    }
+    return out.toUnpremultiplied()
+}
+
+private data class Premul(
+    val r: Float,
+    val g: Float,
+    val b: Float,
+    val a: Float,
+) {
+    operator fun plus(other: Premul): Premul =
+        Premul(r + other.r, g + other.g, b + other.b, a + other.a)
+
+    operator fun times(scale: Float): Premul =
+        Premul(r * scale, g * scale, b * scale, a * scale)
+
+    fun clamped(): Premul = Premul(
+        r = r.coerceIn(0f, 1f),
+        g = g.coerceIn(0f, 1f),
+        b = b.coerceIn(0f, 1f),
+        a = a.coerceIn(0f, 1f),
+    )
+
+    fun toUnpremultiplied(): Rgba {
+        val c = clamped()
+        if (c.a <= 0f) return Rgba(0f, 0f, 0f, 0f)
+        return Rgba(c.r / c.a, c.g / c.a, c.b / c.a, c.a).clamped()
+    }
+}
+
+private fun Rgba.premultiplied(): Premul {
+    val c = clamped()
+    return Premul(c.r * c.a, c.g * c.a, c.b * c.a, c.a)
+}
+
+private fun lerp(dst: Rgba, src: Rgba, t: Float): Rgba {
+    val u = t.coerceIn(0f, 1f)
+    return Rgba(
+        r = dst.r * (1f - u) + src.r * u,
+        g = dst.g * (1f - u) + src.g * u,
+        b = dst.b * (1f - u) + src.b * u,
+        a = dst.a * (1f - u) + src.a * u,
+    ).clamped()
+}
+
+private fun linearToSrgb(c: Float): Float {
+    val v = c.coerceIn(0f, 1f)
+    return if (v <= 0.0031308f) {
+        v * 12.92f
+    } else {
+        1.055f * v.pow(1f / 2.4f) - 0.055f
+    }
 }
