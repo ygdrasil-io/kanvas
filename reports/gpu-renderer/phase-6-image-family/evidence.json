@@ -2,13 +2,13 @@
     "schemaVersion": "phase6-image-family-v1",
     "generatedBy": ":integration-tests:skia-evidence:generateGpuPhase6ImageFamilyEvidence",
     "dashboardSource": "integration-tests/skia/build/reports/skia-gm-dashboard/data/gms.json",
-    "sourceGeneratedAt": "2026-07-09T23:17:27.722417",
+    "sourceGeneratedAt": "2026-07-10T00:06:44.861744",
     "summary": {
         "totalImageRows": 173,
         "classifications": {
             "expected-unsupported": 29,
-            "instrumented-existing": 68,
-            "no-score": 76
+            "instrumented-existing": 73,
+            "no-score": 71
         },
         "subfamilies": {
             "animation-gated": 11,
@@ -27,7 +27,7 @@
         },
         "promotedRows": 0,
         "unexpectedFails": 0,
-        "noScore": 76
+        "noScore": 71
     },
     "resourceEvidence": {
         "rowId": "phase6-image-repeated-texture-sampler",
@@ -394,16 +394,16 @@
             "name": "bitmapcopy",
             "family": "IMAGE",
             "subfamily": "texture-cache-candidate",
-            "classification": "no-score",
-            "similarity": null,
+            "classification": "instrumented-existing",
+            "similarity": 95.47474747474747,
             "minSimilarity": 0.0,
-            "isPassing": null,
+            "isPassing": true,
             "fallbackReason": "none",
             "referencePath": "images/reference/bitmapcopy.png",
-            "generatedPath": null,
-            "diffPath": null,
-            "noScoreCause": "generated-render-missing",
-            "nonClaim": "No score is not counted as fail or support; reference/render/size/comparison evidence is incomplete."
+            "generatedPath": "images/generated/bitmapcopy.png",
+            "diffPath": "images/diff/bitmapcopy.png",
+            "noScoreCause": null,
+            "nonClaim": "Rendered row remains instrumented until route/cache/batching evidence missing from dashboard is attached."
         },
         {
             "rowId": "bitmapfilters",
@@ -746,16 +746,16 @@
             "name": "copyTo4444",
             "family": "IMAGE",
             "subfamily": "texture-cache-candidate",
-            "classification": "no-score",
-            "similarity": null,
+            "classification": "instrumented-existing",
+            "similarity": 0.07098765432098765,
             "minSimilarity": 0.0,
-            "isPassing": null,
+            "isPassing": true,
             "fallbackReason": "none",
             "referencePath": "images/reference/copyTo4444.png",
-            "generatedPath": null,
-            "diffPath": null,
-            "noScoreCause": "generated-render-missing",
-            "nonClaim": "No score is not counted as fail or support; reference/render/size/comparison evidence is incomplete."
+            "generatedPath": "images/generated/copyTo4444.png",
+            "diffPath": "images/diff/copyTo4444.png",
+            "noScoreCause": null,
+            "nonClaim": "Rendered row remains instrumented until route/cache/batching evidence missing from dashboard is attached."
         },
         {
             "rowId": "crbug_224618",
@@ -1098,16 +1098,16 @@
             "name": "format4444",
             "family": "IMAGE",
             "subfamily": "texture-cache-candidate",
-            "classification": "no-score",
-            "similarity": null,
+            "classification": "instrumented-existing",
+            "similarity": 87.5,
             "minSimilarity": 0.0,
-            "isPassing": null,
+            "isPassing": true,
             "fallbackReason": "none",
             "referencePath": "images/reference/format4444.png",
-            "generatedPath": null,
-            "diffPath": null,
-            "noScoreCause": "generated-render-missing",
-            "nonClaim": "No score is not counted as fail or support; reference/render/size/comparison evidence is incomplete."
+            "generatedPath": "images/generated/format4444.png",
+            "diffPath": "images/diff/format4444.png",
+            "noScoreCause": null,
+            "nonClaim": "Rendered row remains instrumented until route/cache/batching evidence missing from dashboard is attached."
         },
         {
             "rowId": "giantbitmap_clamp_bilerp_rotate",
@@ -1354,16 +1354,16 @@
             "name": "image_dither",
             "family": "IMAGE",
             "subfamily": "texture-cache-candidate",
-            "classification": "no-score",
-            "similarity": null,
+            "classification": "instrumented-existing",
+            "similarity": 18.26096256684492,
             "minSimilarity": 0.0,
-            "isPassing": null,
+            "isPassing": true,
             "fallbackReason": "none",
             "referencePath": "images/reference/image_dither.png",
-            "generatedPath": null,
-            "diffPath": null,
-            "noScoreCause": "generated-render-missing",
-            "nonClaim": "No score is not counted as fail or support; reference/render/size/comparison evidence is incomplete."
+            "generatedPath": "images/generated/image_dither.png",
+            "diffPath": "images/diff/image_dither.png",
+            "noScoreCause": null,
+            "nonClaim": "Rendered row remains instrumented until route/cache/batching evidence missing from dashboard is attached."
         },
         {
             "rowId": "imagefilter_transformed_image",
@@ -1914,16 +1914,16 @@
             "name": "ninepatch-stretch",
             "family": "IMAGE",
             "subfamily": "texture-cache-candidate",
-            "classification": "no-score",
-            "similarity": null,
+            "classification": "instrumented-existing",
+            "similarity": 78.48305921052632,
             "minSimilarity": 0.0,
-            "isPassing": null,
+            "isPassing": true,
             "fallbackReason": "none",
             "referencePath": "images/reference/ninepatch-stretch.png",
-            "generatedPath": null,
-            "diffPath": null,
-            "noScoreCause": "generated-render-missing",
-            "nonClaim": "No score is not counted as fail or support; reference/render/size/comparison evidence is incomplete."
+            "generatedPath": "images/generated/ninepatch-stretch.png",
+            "diffPath": "images/diff/ninepatch-stretch.png",
+            "noScoreCause": null,
+            "nonClaim": "Rendered row remains instrumented until route/cache/batching evidence missing from dashboard is attached."
         },
         {
             "rowId": "not_native32_bitmap_config",

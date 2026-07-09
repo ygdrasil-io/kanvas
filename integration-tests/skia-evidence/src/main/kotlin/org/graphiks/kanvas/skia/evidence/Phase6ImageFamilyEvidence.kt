@@ -10,6 +10,7 @@ import kotlinx.serialization.json.JsonObjectBuilder
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.add
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
 
@@ -173,12 +174,14 @@ object Phase6ImageFamilyClassifier {
     fun buildEvidence(
         dashboard: GmDashboard,
         resourceEvidence: ResourceEvidence? = null,
+        previousRows: List<Phase6ImageRowEvidence> = emptyList(),
     ): Phase6ImageFamilyEvidence {
         val imageRows = dashboard.rows
             .filter { row -> row.family == "IMAGE" }
-        val rows = imageRows
+        val currentRows = imageRows
             .withStableRowIds()
             .map { (rowId, row) -> classify(row, rowId) }
+        val rows = mergeCurrentRowsWithPrevious(currentRows, previousRows)
         val classifications = rows.groupingBy { row -> row.classification }.eachCount().toSortedMap()
         val subfamilies = rows.groupingBy { row -> row.subfamily }.eachCount().toSortedMap()
         return Phase6ImageFamilyEvidence(
@@ -202,6 +205,24 @@ object Phase6ImageFamilyClassifier {
             ),
             rows = rows,
         )
+    }
+
+    private fun mergeCurrentRowsWithPrevious(
+        currentRows: List<Phase6ImageRowEvidence>,
+        previousRows: List<Phase6ImageRowEvidence>,
+    ): List<Phase6ImageRowEvidence> {
+        if (previousRows.isEmpty()) return currentRows
+
+        val currentByRowId = currentRows.associateBy { row -> row.rowId }
+        val previousRowIds = previousRows.mapTo(linkedSetOf()) { row -> row.rowId }
+        return buildList {
+            previousRows.forEach { previousRow ->
+                add(currentByRowId[previousRow.rowId] ?: previousRow)
+            }
+            currentRows
+                .filterNot { row -> row.rowId in previousRowIds }
+                .forEach(::add)
+        }
     }
 
     private fun List<GmDashboardRow>.withStableRowIds(): List<Pair<String, GmDashboardRow>> {
@@ -267,6 +288,36 @@ object ResourceEvidenceReader {
             dumpLines = obj.stringArray("dumpLines"),
             nonClaims = obj.stringArray("nonClaims"),
         )
+    }
+}
+
+object Phase6ImagePreviousEvidenceReader {
+    private val json = Json { ignoreUnknownKeys = true }
+    private val evidencePath = Path.of("reports/gpu-renderer/phase-6-image-family/evidence.json")
+
+    fun readRowsIfPresent(root: Path): List<Phase6ImageRowEvidence> {
+        val path = root.resolve(evidencePath)
+        if (!Files.isRegularFile(path)) return emptyList()
+        val obj = json.parseToJsonElement(Files.readString(path)).jsonObject
+        return obj["rows"]?.jsonArray.orEmpty().map { element ->
+            val row = element.jsonObject
+            Phase6ImageRowEvidence(
+                rowId = row.string("rowId") ?: error("phase6 IMAGE row missing rowId"),
+                name = row.string("name") ?: error("phase6 IMAGE row missing name"),
+                family = row.string("family") ?: "IMAGE",
+                subfamily = row.string("subfamily") ?: error("phase6 IMAGE row missing subfamily"),
+                classification = row.string("classification") ?: error("phase6 IMAGE row missing classification"),
+                similarity = row.double("similarity"),
+                minSimilarity = row.double("minSimilarity"),
+                isPassing = row.boolean("isPassing"),
+                fallbackReason = row.string("fallbackReason") ?: "none",
+                referencePath = row.string("referencePath"),
+                generatedPath = row.string("generatedPath"),
+                diffPath = row.string("diffPath"),
+                noScoreCause = row.string("noScoreCause"),
+                nonClaim = row.string("nonClaim") ?: "",
+            )
+        }
     }
 }
 
