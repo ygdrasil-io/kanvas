@@ -117,7 +117,7 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
 
     /** Draw a string at (x, y) using [font], rendered with [paint]. */
     fun drawString(str: String, x: Float, y: Float, font: Font, paint: Paint) {
-        val blob = font.toTextBlob(str, x, y)
+        val blob = font.toTextBlob(str, 0f, 0f)
         drawText(blob, x, y, paint)
     }
 
