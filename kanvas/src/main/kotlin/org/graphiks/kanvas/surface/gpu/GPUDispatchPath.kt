@@ -230,6 +230,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
                 bb.putFloat(material.centerX); bb.putFloat(material.centerY)
                 bb.putFloat(material.radius)
                 bb.putInt(n)
+                bb.alignUniformArray()
                 for (i in 0 until 256) {
                     if (i >= n) { bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f); continue }
                     val pos = material.allStopPositions!!.getOrElse(i) { i.toFloat() / (n - 1).coerceAtLeast(1) }
