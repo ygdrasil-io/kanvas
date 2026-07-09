@@ -1,13 +1,91 @@
 package org.graphiks.kanvas.surface.gpu
 
+import org.graphiks.kanvas.geometry.Path
+import org.graphiks.kanvas.gpu.renderer.geometry.PathTessellator
 import org.graphiks.kanvas.gpu.renderer.geometry.Point
+import org.graphiks.kanvas.gpu.renderer.geometry.PathVerb as GpuPathVerb
 import org.graphiks.kanvas.paint.StrokeCap
 import org.graphiks.kanvas.paint.StrokeJoin
+import org.graphiks.kanvas.types.RRect
+import org.graphiks.kanvas.types.Rect
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 class GPUPathStrokeInputTest {
+    @Test
+    fun `path tessellator conversion preserves arcTo as flattened line segments`() {
+        val path = Path().apply {
+            moveTo(1f, 0f)
+            arcTo(1f, 1f, 0f, largeArc = false, sweep = true, x = 0f, y = 1f)
+        }
+
+        val flat = PathTessellator(tolerance = 0.25f, maxVertices = 64)
+            .flatten(path.toPathTessellatorData())
+
+        assertTrue(flat.size > 2)
+        assertEquals(0f, flat.last().x, 1e-5f)
+        assertEquals(1f, flat.last().y, 1e-5f)
+    }
+
+    @Test
+    fun `large radius tiny sweep uses finite bounded intermediate points`() {
+        val linePoints = Path().apply {
+            moveTo(0f, 0f)
+            arcTo(1_000_000f, 1_000_000f, 0f, largeArc = false, sweep = true, x = 10_000f, y = 0f)
+        }.toPathTessellatorData().verbs
+            .filterIsInstance<GpuPathVerb.LineTo>()
+            .map { it.p }
+
+        assertTrue(linePoints.size in 2..64)
+        assertTrue(linePoints.all { it.x.isFinite() && it.y.isFinite() })
+        assertTrue(linePoints.all { it.x in -1f..10_001f && it.y in -20f..1f })
+        assertEquals(Point(10_000f, 0f), linePoints.last())
+    }
+
+    @Test
+    fun `arc sweep direction selects opposite sides of the chord`() {
+        fun intermediateY(sweep: Boolean): List<Float> = Path().apply {
+            moveTo(0f, 0f)
+            arcTo(10f, 10f, 0f, largeArc = false, sweep = sweep, x = 10f, y = 0f)
+        }.toPathTessellatorData().verbs
+            .filterIsInstance<GpuPathVerb.LineTo>()
+            .dropLast(1)
+            .map { it.p.y }
+
+        val clockwise = intermediateY(sweep = true)
+        val counterClockwise = intermediateY(sweep = false)
+
+        assertTrue(clockwise.isNotEmpty() && clockwise.all { it < 0f })
+        assertTrue(counterClockwise.isNotEmpty() && counterClockwise.all { it > 0f })
+    }
+
+    @Test
+    fun `path tessellator conversion keeps degenerate arcs as endpoint lines`() {
+        val zeroRadius = Path().apply {
+            moveTo(1f, 2f)
+            arcTo(0f, 1f, 0f, largeArc = false, sweep = true, x = 3f, y = 4f)
+        }.toPathTessellatorData().verbs.last()
+        val coincidentEndpoint = Path().apply {
+            moveTo(1f, 2f)
+            arcTo(1f, 1f, 0f, largeArc = false, sweep = true, x = 1f, y = 2f)
+        }.toPathTessellatorData().verbs.last()
+
+        assertEquals(GpuPathVerb.LineTo(Point(3f, 4f)), zeroRadius)
+        assertEquals(GpuPathVerb.LineTo(Point(1f, 2f)), coincidentEndpoint)
+    }
+
+    @Test
+    fun `rounded rect conversion keeps curved corners and closes the contour`() {
+        val path = Path().addRRect(RRect(Rect.fromLTRB(0f, 0f, 10f, 8f), radius = 2f))
+
+        val flat = PathTessellator(tolerance = 0.25f, maxVertices = 64)
+            .flatten(path.toPathTessellatorData())
+
+        assertTrue(flat.size > 9)
+        assertEquals(flat.first(), flat.last())
+    }
+
     @Test
     fun `dash application carries interval progress across polyline segments`() {
         val dashed = applyDash(
