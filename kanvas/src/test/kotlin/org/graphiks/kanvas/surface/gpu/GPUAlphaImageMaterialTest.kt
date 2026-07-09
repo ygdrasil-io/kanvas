@@ -50,6 +50,13 @@ class GPUAlphaImageMaterialTest {
         colorType = ColorType.ALPHA_8,
         sourceId = "alpha-mask",
     )
+    private val rgbaImage = Image.fromPixels(
+        width = 1,
+        height = 1,
+        pixels = byteArrayOf(0x20, 0x40, 0x60, 0xFF.toByte()),
+        colorType = ColorType.RGBA_8888,
+        sourceId = "rgba-tile",
+    )
 
     @Test
     fun `alpha image shader uploads white mask pixels and carries paint tint`() {
@@ -121,6 +128,31 @@ class GPUAlphaImageMaterialTest {
         assertEquals(0f, material.tintG, 0.001f)
         assertEquals(0f, material.tintB, 0.001f)
         assertEquals(1f, material.tintA, 0.001f)
+    }
+
+    @Test
+    fun `draw image command carries paint alpha for rgba image without rgb tint`() {
+        val paint = Paint(color = Color.fromRGBA(0.2f, 0.4f, 0.6f, 0.4f))
+        val op = DisplayOp.DrawImage(
+            image = rgbaImage,
+            src = Rect(0f, 0f, 1f, 1f),
+            dst = Rect(0f, 0f, 4f, 4f),
+            paint = paint,
+            transform = Matrix33.identity(),
+            clip = ClipStack.WideOpen,
+        )
+
+        val command = op.toImageRectCommand(
+            GPUDrawCommandID(12),
+            GPUTargetFacts(width = 16, height = 16, colorFormat = "bgra8unorm"),
+        )
+        val material = command.material as GPUMaterialDescriptor.ImageDraw
+
+        assertEquals(false, material.alphaOnly)
+        assertEquals(1f, material.tintR, 0.001f)
+        assertEquals(1f, material.tintG, 0.001f)
+        assertEquals(1f, material.tintB, 0.001f)
+        assertEquals(paint.color.a, material.tintA, 0.001f)
     }
 
     @Test
@@ -252,6 +284,50 @@ class GPUAlphaImageMaterialTest {
         )
     }
 
+    @Test
+    fun `image shader larger than recorder texture limit is refused before texture upload`() {
+        val image = Image.fromPixels(
+            width = 1,
+            height = 8_193,
+            pixels = ByteArray(8_193),
+            colorType = ColorType.ALPHA_8,
+            sourceId = "too-tall-alpha-mask",
+        )
+        val op = DisplayOp.DrawPath(
+            path = Path().addRect(Rect(2f, 3f, 6f, 5f)),
+            paint = Paint(shader = Shader.Image(image)),
+            transform = Matrix33.identity(),
+            clip = ClipStack.WideOpen,
+        )
+        val command = op.toNormalizedCommand(
+            GPUDrawCommandID(13),
+            GPUTargetFacts(width = 16, height = 16, colorFormat = "bgra8unorm"),
+            tessellatedVertices = listOf(2f, 3f, 6f, 3f, 6f, 5f, 2f, 5f),
+            contourStarts = listOf(0),
+            edgeCount = 4,
+        )
+        val recorder = CapturingRenderRecorder(maxTextureDimension2D = 8_192)
+        val diagnostics = Diagnostics()
+        val dispatched = mutableListOf<String>()
+
+        recorder.dispatchFillPath(
+            cmd = command,
+            dispatched = dispatched,
+            diagnostics = diagnostics,
+            surfaceWidth = 16,
+            surfaceHeight = 16,
+            config = RenderConfig.DEFAULT,
+        )
+
+        assertEquals(1, diagnostics.fatalCount)
+        assertEquals(
+            "texture_dimensions_exceed_max_texture_dimension:1x8193>8192",
+            diagnostics.entries.single().reason,
+        )
+        assertEquals(0, recorder.texturePassCount)
+        assertEquals(emptyList<String>(), dispatched)
+    }
+
     private val expandedAlphaPixels = byteArrayOf(
         0x00, 0x00, 0x00, 0x00,
         0x80.toByte(), 0x80.toByte(), 0x80.toByte(), 0x80.toByte(),
@@ -265,8 +341,12 @@ class GPUAlphaImageMaterialTest {
         }
     }
 
-    private class CapturingRenderRecorder : GPUBackendRenderRecorder {
+    private class CapturingRenderRecorder(
+        override val maxTextureDimension2D: Int = Int.MAX_VALUE,
+    ) : GPUBackendRenderRecorder {
         private val texturePasses = mutableListOf<TexturePass>()
+
+        val texturePassCount: Int get() = texturePasses.size
 
         fun singleTexturePass(): TexturePass {
             assertEquals(1, texturePasses.size)

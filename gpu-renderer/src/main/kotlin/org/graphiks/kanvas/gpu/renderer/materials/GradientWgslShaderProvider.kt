@@ -204,8 +204,9 @@ struct VertexOutput {
     let dy = gradient.end.y - gradient.start.y;
     let fx = pos.x - gradient.start.x;
     let fy = pos.y - gradient.start.y;
-    let A = dx*dx + dy*dy - (gradient.r2 - gradient.r1)*(gradient.r2 - gradient.r1);
-    let B = 2.0 * (dx*fx + dy*fy + gradient.r1*(gradient.r2 - gradient.r1));
+    let dr = gradient.r2 - gradient.r1;
+    let A = dx*dx + dy*dy - dr*dr;
+    let B = -2.0 * (dx*fx + dy*fy + gradient.r1*dr);
     let C = fx*fx + fy*fy - gradient.r1*gradient.r1;
     var t_raw: f32 = 0.0;
     if (abs(A) < 1.0e-12) {
@@ -215,10 +216,23 @@ struct VertexOutput {
     } else {
         let disc = B*B - 4.0*A*C;
         if (disc >= 0.0) {
-            t_raw = (-B + sqrt(disc)) / (2.0 * A);
+            let s = sqrt(disc);
+            let t0 = (-B - s) / (2.0 * A);
+            let t1 = (-B + s) / (2.0 * A);
+            let r0 = gradient.r1 + t0 * dr;
+            let r1 = gradient.r1 + t1 * dr;
+            let t0Valid = r0 >= 0.0;
+            let t1Valid = r1 >= 0.0;
+            if (t0Valid && t1Valid) {
+                t_raw = min(t0, t1);
+            } else if (t0Valid) {
+                t_raw = t0;
+            } else if (t1Valid) {
+                t_raw = t1;
+            }
         }
     }
-    let t = $tileFn;
+    $tileFn
     var positions: array<vec4<f32>, 16>;
     var colors: array<vec4<f32>, 16>;
     for (var i: u32 = 0u; i < ${stopCount}u; i = i + 1u) {

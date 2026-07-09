@@ -6,7 +6,7 @@ import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
 
 /**
- * Stub — Skia's `gm/rsx_blob_shader.cpp` (640 × 480).
+ * Stub — Skia's `gm/rsx_blob_shader.cpp` (881 × 881).
  * Missing API: RSX transforms on text blobs.
  * @see https://github.com/google/skia/blob/main/gm/rsx_blob_shader.cpp
  */
@@ -15,8 +15,8 @@ class RsxBlobShaderGm : SkiaGm {
     override val renderFamily = RenderFamily.TEXT
     override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
-    override val width = 640
-    override val height = 480
+    override val width = 881
+    override val height = 881
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         /* TODO: requires RSX transform support */
     }

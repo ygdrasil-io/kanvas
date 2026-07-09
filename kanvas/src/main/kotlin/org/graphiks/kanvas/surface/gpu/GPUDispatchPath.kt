@@ -162,6 +162,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
                 bb.putFloat(material.startX); bb.putFloat(material.startY)
                 bb.putFloat(material.endX); bb.putFloat(material.endY)
                 bb.putInt(n)
+                bb.alignUniformArray()
                 for (i in 0 until 256) {
                     if (i < n) {
                         val pos = material.allStopPositions!!.getOrElse(i) { i.toFloat() / (n - 1).coerceAtLeast(1) }
@@ -229,6 +230,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
                 bb.putFloat(material.centerX); bb.putFloat(material.centerY)
                 bb.putFloat(material.radius)
                 bb.putInt(n)
+                bb.alignUniformArray()
                 for (i in 0 until 256) {
                     if (i >= n) { bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f); continue }
                     val pos = material.allStopPositions!!.getOrElse(i) { i.toFloat() / (n - 1).coerceAtLeast(1) }
@@ -293,6 +295,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
                 bb.putFloat(material.centerX); bb.putFloat(material.centerY)
                 bb.putFloat(material.startAngle); bb.putFloat(material.endAngle)
                 bb.putInt(n)
+                bb.alignUniformArray()
                 for (i in 0 until 256) {
                     if (i < n) {
                         val pos = material.allStopPositions!!.getOrElse(i) { i.toFloat() / (n - 1).coerceAtLeast(1) }
@@ -352,9 +355,38 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
                 )
             }
         }
+        is GPUMaterialDescriptor.ConicalGradient -> {
+            if (material.snippetSourceHash != null) {
+                val shader = org.graphiks.kanvas.gpu.renderer.materials.GradientWgslShaderProvider.shaderFor(material)!!
+                val uniformBytes = org.graphiks.kanvas.gpu.renderer.materials.GradientWgslShaderProvider.uniformBytesFor(material)!!
+                drawFullscreenStencilPass(
+                    wgsl = shader.wgslSource,
+                    colorFormat = config.gpuColorFormat.gpuLabel,
+                    stencilMode = GPUBackendStencilMode.Test,
+                    triangleData = null,
+                    draws = listOf(
+                        GPUBackendRawUniformDraw(
+                            uniformBytes = uniformBytes,
+                            scissorX = sx,
+                            scissorY = sy,
+                            scissorWidth = sw,
+                            scissorHeight = sh,
+                        ),
+                    ),
+                    blendMode = blendMode,
+                )
+            } else {
+                refuse("unsupported_material:conical_gradient_fallback")
+                return
+            }
+        }
         is GPUMaterialDescriptor.ImageDraw -> {
             if (material.rgbaPixels.isEmpty()) {
                 refuse("unsupported_material:image_draw_missing_pixels")
+                return
+            }
+            textureDimensionsRefusalReasonOrNull(material.imageWidth, material.imageHeight)?.let { reason ->
+                refuse(reason)
                 return
             }
             val iw = material.imageWidth.toFloat().coerceAtLeast(1f)
@@ -394,4 +426,10 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
     }
     dispatched.add(cmd.commandId.toString())
     diagnostics.degrade("dispatch:${cmd.diagnosticName}", cmd.diagnosticName, "dispatched")
+}
+
+private fun java.nio.ByteBuffer.alignUniformArray() {
+    while (position() % 16 != 0) {
+        putInt(0)
+    }
 }

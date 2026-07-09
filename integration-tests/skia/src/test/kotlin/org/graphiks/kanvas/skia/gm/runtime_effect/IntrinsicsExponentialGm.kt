@@ -29,8 +29,8 @@ class IntrinsicsExponentialGm : SkiaGm {
     override val renderFamily = RenderFamily.RUNTIME_EFFECT
     override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
-    override val width = 512
-    override val height = 256
+    override val width = 215
+    override val height = 605
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val effect = RuntimeEffect.compile(IntrinsicsExponentialWgsl).getOrThrow()

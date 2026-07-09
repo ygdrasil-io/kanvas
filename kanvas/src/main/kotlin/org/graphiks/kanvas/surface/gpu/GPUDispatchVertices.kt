@@ -43,6 +43,10 @@ internal fun GPUBackendRenderRecorder.dispatchTexturedVertices(
         refuse("no_texture_bytes")
         return
     }
+    textureDimensionsRefusalReasonOrNull(textureWidth, textureHeight)?.let { reason ->
+        refuse(reason)
+        return
+    }
     val vertexCount = positions.size / 2
 
     val hasColorFilter = paint.colorFilter is ColorFilter.Matrix

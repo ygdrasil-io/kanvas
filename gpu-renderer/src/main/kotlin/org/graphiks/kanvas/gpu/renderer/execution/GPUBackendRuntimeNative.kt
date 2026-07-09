@@ -1382,6 +1382,12 @@ private class WgpuRenderRecorder(
     private val drawIndexedAction: (UInt) -> Unit,
     private val offscreenTextureStore: MutableMap<String, GPUTexture>,
 ) : GPUBackendRenderRecorder {
+    override val maxTextureDimension2D: Int = capabilities.limits
+        ?.maxTextureDimension2D
+        ?.coerceAtMost(Int.MAX_VALUE.toLong())
+        ?.toInt()
+        ?: Int.MAX_VALUE
+
     private val vertexBufferStore = mutableMapOf<String, Pair<GPUBuffer, Int>>()
     private val vertexColorIndexStore = mutableMapOf<String, IntArray>()
     private var texturedVertexPipelineCache = mutableMapOf<String, GPURenderPipeline>()

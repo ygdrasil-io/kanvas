@@ -22,12 +22,12 @@ class AsyncRescaleAndReadNoBleedGm : SkiaGm {
     override val renderFamily = RenderFamily.IMAGE
     override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
-    override val width = 120
+    override val width = 60
     override val height = 60
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val src = makeSource()
-        canvas.drawImageRect(src, Rect(0f, 0f, 12f, 6f), Rect(0f, 0f, 120f, 60f))
+        canvas.drawImageRect(src, Rect(0f, 0f, 12f, 6f), Rect(0f, 0f, 60f, 60f))
     }
 
     private fun makeSource(): Image {
