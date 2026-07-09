@@ -1,0 +1,665 @@
+group	family	name	similarity	threshold	status	matchingPixels	totalPixels	unmatchedPixels
+B	COMPOSITE	transparency_check	1.6674933862433863	0.0	pass	32272	1935360	1903088
+Z	GRADIENT	hardstop_gradients_many	10.792	0.0	pass	215840	2000000	1784160
+A	IMAGE	animatedGif	37.50159022703549	0.0	pass	919719	2452480	1532761
+Z	TEXT	scaledemoji_colrv0	0.008888888888888889	0.0	pass	128	1440000	1439872
+Z	TEXT	scaledemojipos_colrv0	0.017777777777777778	0.0	pass	256	1440000	1439744
+Z	TEXT	scaledemojiperspective_colrv0	0.04555555555555556	0.0	pass	656	1440000	1439344
+Z	TEXT	scaledemoji_rendering	0.07930555555555555	0.0	pass	1142	1440000	1438858
+A	IMAGE	pictureshader	30.83743842364532	0.0	pass	626000	2030000	1404000
+A	IMAGE	pictureshader_alpha	30.83743842364532	0.0	pass	626000	2030000	1404000
+A	IMAGE	pictureshader_localwrapper	30.83743842364532	0.0	pass	626000	2030000	1404000
+Z	TEXT	textblobtransforms	0.0	0.0	pass	0	1200000	1200000
+Z	TEXT	textblobcolortrans	0.0	0.0	pass	0	1080000	1080000
+Z	GRADIENT	radial_gradient	34.87353515625	33.5	pass	571368	1638400	1067032
+B	COMPOSITE	draw_image_set_rect_to_rect	0.025788235294117647	0.0	pass	274	1062500	1062226
+Z	BLUR	BlurBigSigma	0.0	0.0	pass	0	1048576	1048576
+A	IMAGE	async_rescale_and_read_rose	0.001288915328177672	0.0	pass	13	1008600	1008587
+A	IMAGE	imageshader_tinyscale	0.0	0.0	pass	0	1000000	1000000
+Z	TEXT	mixedtextblobs	0.8509714285714285	0.0	pass	7446	875000	867554
+A	IMAGE	encode-platform	14.018351236979168	0.0	pass	137806	983040	845234
+C	PATH	nonclosedpaths	64.8406762295082	59.8	pass	1518828	2342400	823572
+Z	TEXT	largeglyphblur	30.239149305555557	0.0	pass	348355	1152000	803645
+A	IMAGE	imagemakewithfilter	50.22807128412538	0.0	pass	794809	1582400	787591
+Z	BLUR	TiledBlurBigSigma	0.0	0.0	pass	0	786432	786432
+Z	TEXT	coloremoji_colrv0	0.20692307692307693	0.0	pass	1614	780000	778386
+B	COMPOSITE	tablecolorfilter	39.10857142857142	0.0	pass	451704	1155000	703296
+Z	GRADIENT	gradients_interesting	17.215384615384615	10.8	pass	143232	832000	688768
+Z	TEXT	surfaceprops	5.830555555555556	0.0	pass	41980	720000	678020
+Z	GRADIENT	gradients_local_perspective	6.115980134385043	0.0	pass	41870	684600	642730
+Z	GRADIENT	shallow_gradient_conical	0.0	0.0	pass	0	640000	640000
+Z	GRADIENT	shallow_gradient_conical_nodither	0.0	0.0	pass	0	640000	640000
+A	IMAGE	crbug_224618	0.23171874999999997	0.0	pass	1483	640000	638517
+C	CLIP	complexclip4_aa	15.907877346021676	0.0	pass	120359	756600	636241
+C	CLIP	complexclip4_bw	15.948321438012158	0.0	pass	120665	756600	635935
+B	COMPOSITE	filterfastbounds	0.048412698412698414	0.0	pass	305	630000	629695
+B	COMPOSITE	hslcolorfilter	32.89123376623377	0.0	pass	303915	924000	620085
+C	PATH	filltypespersp	11.96036498431708	0.0	pass	83890	701400	617510
+B	COMPOSITE	xfermodes	45.62673014193776	45.0	pass	517544	1134300	616756
+B	COMPOSITE	composeshader_grid	21.272772147407714	4.5	pass	165486	777924	612438
+B	COMPOSITE	ducky_yuv_blend	6.619469026548673	0.0	pass	41888	632800	590912
+A	IMAGE	tilemode_decal	27.45669191919192	0.0	pass	217457	792000	574543
+A	IMAGE	colorspace	0.7244001116071428	0.0	pass	4154	573440	569286
+A	IMAGE	colorspace2	0.7244001116071428	0.0	pass	4154	573440	569286
+Z	TEXT	textblobmixedsizes	86.23213032581454	85.0	pass	3440662	3990000	549338
+B	COMPOSITE	HSL_duck	23.26474861958733	0.0	pass	160108	688200	528092
+A	IMAGE	encode	14.51123046875	0.0	pass	89157	614400	525243
+A	IMAGE	coordclampshader	38.83559959242472	0.0	pass	331590	853830	522240
+B	COMPOSITE	save_behind	7.930228376191333	0.0	pass	44100	556100	512000
+B	COMPOSITE	aaxfermodes	17.382764227642276	14.0	pass	106904	615000	508096
+A	IMAGE	flippity	44.158822518807874	0.0	pass	390689	884736	494047
+Z	MESH	vertices	58.26417894162576	0.0	pass	667489	1145625	478136
+C	CLIP	convex_poly_clip	0.04555129842486164	0.0	pass	214	469800	469586
+B	COMPOSITE	patch_alpha	71.76333333333334	0.0	pass	1184095	1650000	465905
+B	COMPOSITE	patch_image_persp	71.79842424242425	0.0	pass	1184674	1650000	465326
+Z	BLUR	imageblurrepeatmode	40.62148337595908	0.0	pass	317660	782000	464340
+B	COMPOSITE	patch_primitive	72.24490909090909	0.0	pass	1192041	1650000	457959
+Z	BLUR	blurcircles2	53.96823947234907	49.2	pass	531857	985500	453643
+B	COMPOSITE	modecolorfilters	14.703369140625	0.0	pass	77088	524288	447200
+B	COMPOSITE	modecolorfilters	14.703369140625	0.0	pass	77088	524288	447200
+A	IMAGE	anisotropic_image_scale_mip	39.667758991022744	0.0	pass	288099	726280	438181
+Z	BLUR	blurrect_gallery	65.05875651041667	64.5	pass	799442	1228800	429358
+B	COMPOSITE	lcdblendmodes	20.614814814814814	0.0	pass	111320	540000	428680
+A	IMAGE	bmp_filter_quality_repeat	0.00375	0.0	pass	15	400000	399985
+B	COMPOSITE	srgb_colorfilter	0.049336751302083336	0.0	pass	194	393216	393022
+Z	BLUR	blurrects	44.389534883720934	44.0	pass	313035	705200	392165
+C	PATH	manycircles	20.5175	0.0	pass	98484	480000	381516
+D	RUNTIME_EFFECT	rtif_distort	0.0	0.0	pass	0	375000	375000
+A	IMAGE	skbug_8664	17.898795180722892	0.0	pass	81708	456500	374792
+A	IMAGE	scaled_tilemodes	51.74457644628099	0.0	pass	400710	774400	373690
+A	IMAGE	anisotropic_image_scale_aniso	49.658120834939695	0.0	pass	360657	726280	365623
+A	IMAGE	anisotropic_image_scale_linear	49.658120834939695	0.0	pass	360657	726280	365623
+B	COMPOSITE	dstreadshuffle	0.0	0.0	pass	0	360400	360400
+A	IMAGE	drawminibitmaprect	66.90826416015625	0.0	pass	701584	1048576	346992
+Z	TEXT	shadertext3	55.0034093889326	0.0	pass	419456	762600	343144
+A	IMAGE	imagemagnifier_bounds	15.037790934244791	0.0	pass	59131	393216	334085
+B	COMPOSITE	clip_shader_persp	76.54000425200198	0.0	pass	1080056	1411100	331044
+B	RUNTIME_EFFECT	runtimecolorfilter	16.666666666666664	0.0	pass	65536	393216	327680
+B	COMPOSITE	compare_atlas_vertices	0.010378510378510378	0.0	pass	34	327600	327566
+A	IMAGE	imagefilterscropexpand	34.5940990516333	0.0	pass	164149	474500	310351
+B	COMPOSITE	backdrop_hintrect_clipping	42.755889892578125	0.0	pass	224164	524288	300124
+A	IMAGE	3x3bitmaprect	3.662109375	0.0	pass	11250	307200	295950
+C	PATH	trimpatheffect	79.099	74.1	pass	1107386	1400000	292614
+Z	GRADIENT	sweep_tiling	20.28985507246377	10.4	pass	71680	353280	281600
+B	COMPOSITE	lighting	35.48393021120294	0.0	pass	154568	435600	281032
+Z	BLUR	blurredclippedcircle	71.01875894456299	70.5	pass	662980	933528	270548
+Z	TEXT	gammatext	45.05716959635417	10.0	pass	221465	491520	270055
+Z	GRADIENT	gradients_2pt_conical_inside_nodither	60.58895705521472	0.0	pass	414792	684600	269808
+B	COMPOSITE	imagefilterscropped	29.89921875	0.0	pass	114813	384000	269187
+A	IMAGE	pictureshadertile	44.07666666666666	0.0	pass	211568	480000	268432
+Z	GRADIENT	gradients_dup_color_stops	33.600801901998715	21.6	pass	133414	397056	263642
+A	IMAGE	async_rescale_and_read_alpha_type	0.0	0.0	pass	0	262144	262144
+B	COMPOSITE	clip_shader_difference	0.0	0.0	pass	0	262144	262144
+D	RUNTIME_EFFECT	color_cube_rt	0.0	0.0	pass	0	262144	262144
+D	RUNTIME_EFFECT	rippleshader	0.0	0.0	pass	0	262144	262144
+D	RUNTIME_EFFECT	spiral_rt	0.0	0.0	pass	0	262144	262144
+A	IMAGE	jpg-color-cube	7.62939453125E-4	0.0	pass	2	262144	262142
+A	IMAGE	jpg-color-cube	7.62939453125E-4	0.0	pass	2	262144	262142
+C	CLIP	complexclip_blur_tiled	0.3963470458984375	0.0	pass	1039	262144	261105
+B	COMPOSITE	imagefilters_effect_order	1.019287109375	0.0	pass	2672	262144	259472
+B	TEXT	coloremoji_blendmodes_colrv0	0.0328125	0.0	pass	84	256000	255916
+Z	GRADIENT	gradients	63.08486707566462	0.0	pass	431879	684600	252721
+A	IMAGE	encode-srgb-png	48.592936197916664	0.0	pass	238844	491520	252676
+A	IMAGE	bug6783	0.0	0.0	pass	0	250000	250000
+B	COMPOSITE	perlinnoise_layered	0.0	0.0	pass	0	250000	250000
+Z	GRADIENT	gradients_color_space_many_stops	0.0	0.0	pass	0	250000	250000
+C	PATH	polygons	73.89327485380117	69.0	pass	707602	957600	249998
+Z	TEXT	fontscaler	77.51328735632184	0.0	pass	842957	1087500	244543
+B	COMPOSITE	arithmode_blender	43.46030245746692	0.0	pass	183924	423200	239276
+Z	TEXT	bigtext_crbug_1370488	8.739089965820312	5.0	pass	22909	262144	239235
+Z	BLUR	hdr-pip-blur	0.0	0.0	pass	0	230400	230400
+Z	TEXT	fancyblobunderline	88.75612025068547	85.0	pass	1812755	2042400	229645
+D	RUNTIME_EFFECT	kawase_blur_rt	76.66666666666667	76.66666666666667	pass	753664	983040	229376
+Z	GRADIENT	hardstop_gradients	13.701629638671875	0.0	pass	35918	262144	226226
+B	COMPOSITE	colorfiltershader	39.272507390486425	34.3	pass	146133	372100	225967
+Z	BLUR	imageblur2	9.9844	5.0	pass	24961	250000	225039
+Z	GRADIENT	linear_gradient	9.9948	0.0	pass	24987	250000	225013
+Z	GRADIENT	degenerate_gradients	65.5884375	0.0	pass	419766	640000	220234
+Z	GRADIENT	alphagradients	28.816080729166664	0.0	pass	88523	307200	218677
+C	CLIP	complexclip_aa_layer_invert	28.17472905101771	0.0	pass	85268	302640	217372
+C	CLIP	complexclip_bw_layer_invert	28.31086439333862	0.0	pass	85680	302640	216960
+Z	BLUR	blurrect_compare	80.53752276867031	79.7	pass	884302	1098000	213698
+Z	GRADIENT	analytic_gradients	59.41009521484375	0.0	pass	311480	524288	212808
+A	IMAGE	scaled_tilemodes_npot	72.57102272727273	0.0	pass	561990	774400	212410
+B	COMPOSITE	savelayer_f16	21.565555555555555	0.0	pass	58227	270000	211773
+C	CLIP	complexclip_aa_layer	30.39551942902458	0.0	pass	91989	302640	210651
+B	COMPOSITE	lightingcolorfilter	21.230307576894223	0.0	pass	56600	266600	210000
+C	CLIP	complexclip_bw_layer	30.668781390430876	0.0	pass	92816	302640	209824
+C	CLIP	perspective_clip	67.21953125	0.0	pass	430205	640000	209795
+B	COMPOSITE	clip_shader	61.901282051282045	0.0	pass	337981	546000	208019
+C	CLIP	windowrectangles	42.43666666666667	0.0	pass	152772	360000	207228
+Z	TEXT	font_palette_default	48.925000000000004	0.0	pass	195700	400000	204300
+B	COMPOSITE	draw-atlas-colors	17.58347481607244	0.0	pass	43498	247380	203882
+Z	TEXT	annotated_text	22.241973876953125	0.0	pass	58306	262144	203838
+Z	GRADIENT	gradients_many	42.64204545454545	0.0	pass	150100	352000	201900
+Z	TEXT	dftext	74.45996602376303	73.0	pass	585577	786432	200855
+A	IMAGE	compositor_quads_image	70.00516819090848	0.0	pass	467316	667545	200229
+B	COMPOSITE	xfermodeimagefilter	52.41714285714286	0.0	pass	220152	420000	199848
+C	PATH	dashcircle	81.56722222222223	36.5	pass	880926	1080000	199074
+B	COMPOSITE	draw_image_set	72.94137931034483	0.0	pass	528825	725000	196175
+A	IMAGE	tilemodes_alpha	25.47454833984375	0.0	pass	66780	262144	195364
+Z	GRADIENT	gradient_many_stops	22.1832	0.0	pass	55458	250000	194542
+C	CLIP	croppedrects	22.2144	0.0	pass	55536	250000	194464
+B	COMPOSITE	highcontrastfilter	42.74077380952381	0.0	pass	143609	336000	192391
+A	IMAGE	tilemode_bitmap	52.05699873896595	0.0	pass	206406	396500	190094
+Z	GRADIENT	gradient_matrix	70.64765625	0.0	pass	452145	640000	187855
+C	CLIP	clipdrawdraw	29.035568237304688	24.0	pass	76115	262144	186029
+C	CLIP	complexclip_aa_invert	40.202550885540575	0.0	pass	121669	302640	180971
+C	CLIP	complexclip_bw_invert	40.356529209621996	0.0	pass	122135	302640	180505
+A	IMAGE	pictureimagefilter	0.16666666666666669	0.0	pass	300	180000	179700
+C	CLIP	pdf_crbug_772685	63.34587707136726	0.0	pass	307040	484704	177664
+Z	BLUR	imageblur	30.0068	27.9	pass	75017	250000	174983
+A	IMAGE	image-cacherator-from-picture	59.645138888888894	0.0	pass	257667	432000	174333
+A	IMAGE	poster_circle	36.965185185185184	0.0	pass	99806	270000	170194
+Z	BLUR	imageblurclampmode	78.27314578005115	0.0	pass	612096	782000	169904
+A	IMAGE	tiled_picture_shader	0.0	0.0	pass	0	160000	160000
+Z	TEXT	skbug_12212	0.0	0.0	pass	0	160000	160000
+A	IMAGE	tilemode_gradient	60.18259773013871	0.0	pass	238624	396500	157876
+A	IMAGE	image-picture	58.809150326797386	0.0	pass	224945	382500	157555
+A	GRADIENT	scaled_tilemode_gradient	60.53972257250946	0.0	pass	240040	396500	156460
+C	CLIP	complexclip_aa	48.370671424795134	0.0	pass	146389	302640	156251
+Z	TEXT	skbug_257	40.58113098144531	0.0	pass	106381	262144	155763
+Z	TEXT	fontmgr_bounds	82.23000919117646	0.0	pass	715730	870400	154670
+C	CLIP	complexclip_bw	48.916864922019556	0.0	pass	148042	302640	154598
+Z	GRADIENT	gradient_many_hard_stops	38.2688	0.0	pass	95672	250000	154328
+Z	BLUR	simpleblurroundrect	69.214	64.3	pass	346070	500000	153930
+A	IMAGE	tilemodes	69.25243506493507	0.0	pass	341276	492800	151524
+Z	TEXT	overdraw_text_xform	42.391204833984375	41.9	pass	111126	262144	151018
+C	PATH	points	52.719068877551024	0.0	pass	165327	313600	148273
+Z	TEXT	fontmgr_iter	87.65530056423611	0.0	pass	1034024	1179648	145624
+A	IMAGE	all_variants_8888	0.0	0.0	pass	0	144172	144172
+B	COMPOSITE	aarectmodes	53.12988281249999	30.8	pass	163215	307200	143985
+B	COMPOSITE	localmatriximagefilter	64.876220703125	0.0	pass	265733	409600	143867
+C	PATH	widebuttcaps	40.3775	26.3	pass	96906	240000	143094
+Z	GRADIENT	radial_gradient2	55.88375	50.9	pass	178828	320000	141172
+C	CLIP	circular-clips	11.87125	0.0	pass	18994	160000	141006
+A	IMAGE	tiledscaledbitmap	77.4726135085387	0.0	pass	484867	625856	140989
+A	IMAGE	image-surface	87.79418402777777	0.0	pass	1011389	1152000	140611
+Z	TEXT	stroketext	75.621875	75.0	pass	435582	576000	140418
+B	COMPOSITE	composeshader_alpha	15.151515151515152	12.1	pass	25000	165000	140000
+A	IMAGE	readpixelspicture	7.535807291666667	0.0	pass	11112	147456	136344
+B	COMPOSITE	backdrop_imagefilter_croprect	54.800000000000004	0.0	pass	164400	300000	135600
+Z	BLUR	embossmaskfilter	78.10009765625	0.0	pass	479847	614400	134553
+C	CLIP	rrect_clip_aa	56.81738281249999	0.0	pass	174543	307200	132657
+Z	MESH	mesh_updates	0.0	0.0	pass	0	132300	132300
+B	COMPOSITE	xfermodes2	38.79976865240023	33.8	pass	83856	216125	132269
+C	CLIP	rrect_clip_bw	56.96126302083333	0.0	pass	174985	307200	132215
+D	RUNTIME_EFFECT	rtif_unsharp	7.62939453125E-4	0.00152587890625	fail	1	131072	131071
+B	COMPOSITE	rasterallocator	27.282222222222224	0.0	pass	49108	180000	130892
+D	RUNTIME_EFFECT	unsharp_rt	1.007080078125	1.0223388671875	fail	1320	131072	129752
+B	COMPOSITE	srcmode	74.02898848684211	0.0	pass	360077	486400	126323
+Z	BLUR	blurcircles	86.05861495844876	81.6	pass	776679	902500	125821
+A	IMAGE	imagemagnifier	51.8372	0.0	pass	129593	250000	120407
+B	COMPOSITE	color4blendcf	30.555555555555557	0.0	pass	52800	172800	120000
+Z	GRADIENT	linear_gradient_tiny	60.0	55.0	pass	180000	300000	120000
+B	COMPOSITE	hairmodes	61.368815104166664	41.5	pass	188525	307200	118675
+C	CLIP	simpleaaclip_path	2.2508333333333335	0.0	pass	2701	120000	117299
+C	CLIP	simpleaaclip_rect	2.2666666666666666	0.0	pass	2720	120000	117280
+C	PATH	stroke_rect_shader	43.38937198067633	42.8	pass	89816	207000	117184
+B	COMPOSITE	imagefiltersclipped	73.14093023255815	0.0	pass	314506	430000	115494
+A	IMAGE	anisomips	14.792899408284024	0.0	pass	20000	135200	115200
+B	COMPOSITE	perlinnoise_localmatrix	62.5	0.0	pass	192000	307200	115200
+B	COMPOSITE	skbug_14554	41.75627240143369	0.0	pass	81550	195300	113750
+C	PATH	drawlines_with_local_matrix	54.901199999999996	0.0	pass	137253	250000	112747
+C	PATH	strokes_round	64.7728125	17.3	pass	207273	320000	112727
+Z	GRADIENT	gradients_2pt_conical_outside	84.41075080338885	0.0	pass	577876	684600	106724
+Z	BLUR	bigblurs	35.28076171875	31.0	pass	57804	163840	106036
+Z	TEXT	lcdoverlap	81.55893333333334	0.0	pass	458769	562500	103731
+Z	TEXT	textblob_intercepts	86.27393617021276	85.0	pass	648780	752000	103220
+Z	GRADIENT	gradients_degenerate_2pt	0.0	0.0	pass	0	102400	102400
+B	COMPOSITE	imagefilters_xfermodes	56.76953125000001	0.0	pass	130797	230400	99603
+B	COMPOSITE	imagefilterstransformed	2.9990079365079367	0.0	pass	3023	100800	97777
+B	COMPOSITE	rotate_imagefilter	61.842	0.0	pass	154605	250000	95395
+Z	GRADIENT	gradients_color_space	0.6207812915227212	0.0	pass	584	94075	93491
+Z	BLUR	fast_slow_blurimagefilter	42.01240694789082	0.0	pass	67724	161200	93476
+B	COMPOSITE	imagefiltersbase	73.33542857142858	0.0	pass	256674	350000	93326
+C	PATH	quadclosepath	81.04962779156327	0.0	pass	391956	483600	91644
+C	PATH	cubicclosepath	81.05355665839537	0.0	pass	391975	483600	91625
+C	PATH	linepath	81.07361455748553	0.0	pass	392072	483600	91528
+C	PATH	quadpath	81.10794044665013	0.0	pass	392238	483600	91362
+C	PATH	cubicpath	81.11145574855252	0.0	pass	392255	483600	91345
+B	COMPOSITE	draw_quad_set	85.74640624999999	0.0	pass	548777	640000	91223
+Z	TEXT	bigtext	71.416015625	65.0	pass	219390	307200	87810
+Z	GRADIENT	gradients_no_texture	78.927337398374	0.0	pass	310658	393600	82942
+Z	TEXT	typefacerendering_pfa	84.59877232142857	0.0	pass	454803	537600	82797
+Z	TEXT	typefacerendering_pfb	84.59877232142857	0.0	pass	454803	537600	82797
+Z	MESH	custommesh	84.3304110656536	84.0	pass	432868	513300	80432
+B	COMPOSITE	patch_alpha_test	41.78690909090909	0.0	pass	57457	137500	80043
+A	IMAGE	encode-alpha-jpeg	0.0	0.0	pass	0	80000	80000
+B	COMPOSITE	draw_image_set_alpha_only	0.0	0.0	pass	0	80000	80000
+C	PATH	dashing5_aa	0.0	0.0	pass	0	80000	80000
+B	COMPOSITE	recordopts	0.0	0.0	pass	0	78030	78030
+Z	TEXT	persptext	90.45270284016928	90.0	pass	711349	786432	75083
+Z	TEXT	user_typeface	80.64978695509669	0.0	pass	295275	366120	70845
+A	IMAGE	p3	87.95470085470085	0.0	pass	514535	585000	70465
+A	IMAGE	bitmapfilters	48.06296296296296	0.0	pass	64885	135000	70115
+B	COMPOSITE	overdrawcolorfilter	12.5	10.0	pass	10000	80000	70000
+B	COMPOSITE	perlinnoise	48.72287390029326	0.0	pass	66458	136400	69942
+A	IMAGE	colorwheel	31.499226888020832	0.0	pass	30965	98304	67339
+B	COMPOSITE	imagefilter_composed_transform	74.57275390625	0.0	pass	195488	262144	66656
+A	IMAGE	encode-color-types-webp-lossless	42.173549107142854	0.0	pass	48368	114688	66320
+B	COMPOSITE	imagefilter_matrix_localmatrix	74.76692199707031	0.0	pass	195997	262144	66147
+A	IMAGE	localmatriximageshader_filtering	0.0	0.0	pass	0	65536	65536
+B	COMPOSITE	crbug_918512	0.0	0.0	pass	0	65536	65536
+D	RUNTIME_EFFECT	runtime_shader	50.0	50.0	pass	65536	131072	65536
+D	RUNTIME_EFFECT	threshold_rt	0.006103515625	0.006103515625	pass	4	65536	65532
+C	CLIP	clip_region	3.814697265625	0.0	pass	2500	65536	63036
+B	COMPOSITE	clip_shader_nested	6.781005859375	0.0	pass	4444	65536	61092
+A	IMAGE	imagemasksubset	73.95833333333334	0.0	pass	170400	230400	60000
+A	IMAGE	bleed_downscale	30.561342592592595	0.0	pass	26405	86400	59995
+A	IMAGE	all_bitmap_configs	39.51416015625	0.0	pass	38844	98304	59460
+Z	TEXT	typefacerendering	88.97395833333334	0.0	pass	478324	537600	59276
+D	RUNTIME_EFFECT	runtimefunctions	10.21575927734375	10.25848388671875	fail	6695	65536	58841
+B	COMPOSITE	clip_shader_layer	58.080668604651166	0.0	pass	79919	137600	57681
+B	COMPOSITE	savelayer_initfromprev	12.26654052734375	0.0	pass	8039	65536	57497
+C	CLIP	crbug_892988	12.60223388671875	9.5	pass	8259	65536	57277
+Z	BLUR	rrect_blurs	52.27916666666667	0.0	pass	62735	120000	57265
+A	IMAGE	imageresizetiled	81.85221354166666	0.0	pass	251450	307200	55750
+Z	TEXT	gradtext	77.41333333333333	77.3	pass	185792	240000	54208
+C	PATH	strokedline_caps	94.80569498069498	92.0	pass	982187	1036000	53813
+Z	TEXT	gammatext_color_shader	34.80242424242424	0.0	pass	28712	82500	53788
+Z	TEXT	textblobblockreordering	3.314545454545455	0.0	pass	1823	55000	53177
+A	IMAGE	async_yuv_no_scale	56.666666666666664	0.0	pass	68000	120000	52000
+Z	TEXT	macaa_colors	87.18825	0.0	pass	348753	400000	51247
+Z	GRADIENT	persp_shaders_aa	33.352	0.0	pass	25014	75000	49986
+D	RUNTIME_EFFECT	AlternateLuma	0.0	0.0	pass	0	49152	49152
+B	COMPOSITE	colormatrix	38.585	0.0	pass	30868	80000	49132
+Z	TEXT	stroketext_native	82.1098901098901	0.0	pass	224160	273000	48840
+Z	BLUR	inverse_fill_filters	1.812744140625	0.0	pass	891	49152	48261
+B	COMPOSITE	shadermaskfilter_gradient	81.62384033203125	0.0	pass	213972	262144	48172
+Z	TEXT	textfilter_image	72.7836028874269	65.0	pass	127447	175104	47657
+Z	GRADIENT	gradients_hue_method	0.13582342954159593	0.0	pass	60	44175	44115
+B	COMPOSITE	sk3d_simple	52.285555555555554	0.0	pass	47057	90000	42943
+Z	TEXT	textblobshader	86.05859375	85.0	pass	264372	307200	42828
+A	IMAGE	surface_underdraw	35.31341552734375	0.0	pass	23143	65536	42393
+B	COMPOSITE	matriximagefilter	0.023809523809523808	0.0	pass	10	42000	41990
+C	CLIP	clipcubic	74.46585365853659	61.9	pass	122124	164000	41876
+B	COMPOSITE	displacement	86.134	0.0	pass	258402	300000	41598
+Z	BLUR	blur_image	83.3652	78.4	pass	208413	250000	41587
+Z	TEXT	typeface_styling	83.89593114241002	0.0	pass	214438	255600	41162
+D	RUNTIME_EFFECT	composeCF	0.0	0.0	pass	0	40000	40000
+Z	MESH	skbug_13047	0.0	0.0	pass	0	40000	40000
+C	PATH	stlouisarch	39.17083740234375	0.0	pass	25671	65536	39865
+Z	GRADIENT	bug6643	1.38	0.0	pass	552	40000	39448
+Z	TEXT	textblob	87.21354166666667	86.5	pass	267920	307200	39280
+B	COMPOSITE	imagefiltersstroked	91.03581395348837	0.0	pass	391454	430000	38546
+B	COMPOSITE	overdraw_canvas	84.9812	0.0	pass	212453	250000	37547
+C	CLIP	clip_sierpinski_region	46.28373982564444	0.0	pass	32014	69169	37155
+Z	TEXT	colrv1_gradient_stops_repeat	97.43625	90.0	pass	1403082	1440000	36918
+A	IMAGE	skbug_9819	43.9697265625	0.0	pass	28816	65536	36720
+Z	BLUR	blur_matrix_rect	91.77967434025828	87.0	pass	408649	445250	36601
+C	PATH	path-reverse	88.10221354166666	0.0	pass	270650	307200	36550
+Z	TEXT	fontmgr_match	94.68460083007812	0.0	pass	620525	655360	34835
+Z	TEXT	fontscalerdistortable	90.9638961038961	0.0	pass	350211	385000	34789
+Z	TEXT	textfilter_color	80.49045138888889	75.0	pass	140942	175104	34162
+A	IMAGE	image-shader	91.1686274509804	0.0	pass	348720	382500	33780
+C	PATH	preservefillrule_big	79.159375	47.7	pass	126655	160000	33345
+A	IMAGE	exoticformats	9.37225636523266	0.0	pass	3416	36448	33032
+Z	BLUR	imageblurrepeatunclipped	0.23193359375	0.0	pass	76	32768	32692
+Z	GRADIENT	linear_gradient_rt	14.603817235396182	0.0	pass	5555	38038	32483
+B	COMPOSITE	draw-atlas	89.66341145833333	0.0	pass	275446	307200	31754
+D	RUNTIME_EFFECT	workingspace	54.64285714285714	14.464285714285715	pass	38250	70000	31750
+C	CLIP	rrect_clip_draw_paint	52.325439453125	0.0	pass	34292	65536	31244
+C	CLIP	cliplargerect	52.734375	47.7	pass	34560	65536	30976
+B	COMPOSITE	color4shader	82.11805555555556	0.0	pass	141900	172800	30900
+Z	BLUR	emboss	58.55555555555556	55.5	pass	42160	72000	29840
+Z	GRADIENT	gradient_dirty_laundry	92.89989837398373	0.0	pass	365654	393600	27946
+C	PATH	mandoline	89.77142857142857	84.8	pass	238792	266000	27208
+Z	TEXT	blob_rsxform	46.482	20.0	pass	23241	50000	26759
+Z	BLUR	tablemaskfilter	83.443125	0.0	pass	133509	160000	26491
+A	IMAGE	imagefiltersgraph	70.64111111111112	0.0	pass	63577	90000	26423
+C	PATH	dashtextcaps	90.09742736816406	0.0	pass	236185	262144	25959
+A	IMAGE	unpremul	40.12	0.0	pass	16048	40000	23952
+Z	GRADIENT	fillrect_gradient	64.00925925925925	28.6	pass	41478	64800	23322
+A	IMAGE	mirror_tile	55.521235521235525	0.0	pass	28760	51800	23040
+A	IMAGE	colorwheel_alphatypes	29.9102783203125	0.0	pass	9801	32768	22967
+B	COMPOSITE	perlinnoise_rotated	68.109375	0.0	pass	47949	70400	22451
+Z	TEXT	gammagradienttext	75.84666666666666	75.3	pass	68262	90000	21738
+Z	TEXT	getpostextpath	94.19978632478633	90.0	pass	352684	374400	21716
+Z	BLUR	crbug_899512	92.14275147928994	87.7	pass	249154	270400	21246
+A	IMAGE	bitmap_subset_shader	67.61322021484375	0.0	pass	44311	65536	21225
+A	IMAGE	stoplight_animated_image	77.31886253462605	0.0	pass	71455	92416	20961
+A	IMAGE	pictureshader_persp	12.076109936575053	0.0	pass	2856	23650	20794
+C	CLIP	skbug_9319	84.23309326171875	0.0	pass	110406	131072	20666
+Z	MESH	custommesh_cs	83.27039024713443	83.0	pass	100544	120744	20200
+B	COMPOSITE	PlusMergesAA	69.482421875	0.0	pass	45536	65536	20000
+Z	GRADIENT	clamped_gradients	93.89522058823529	0.0	pass	306474	326400	19926
+B	COMPOSITE	simple-offsetimagefilter	84.6015625	0.0	pass	108290	128000	19710
+B	COMPOSITE	imagefilter_convolve_subset	32.177083333333336	0.0	pass	9267	28800	19533
+Z	BLUR	BlurDrawImage	70.751953125	0.0	pass	46368	65536	19168
+A	IMAGE	bicubic	80.75	0.0	pass	77520	96000	18480
+Z	TEXT	crbug_1073670	70.6528	0.0	pass	44158	62500	18342
+Z	BLUR	blurquickreject	79.77888888888889	70.5	pass	71801	90000	18199
+A	GRADIENT	gradients_color_space_tilemode	51.90476190476191	0.0	pass	19620	37800	18180
+Z	GRADIENT	crbug_938592	88.0	83.0	pass	132000	150000	18000
+C	CLIP	skbug1719	40.61	0.0	pass	12183	30000	17817
+Z	BLUR	BlurSmallSigma	86.71875	82.9	pass	113664	131072	17408
+B	COMPOSITE	compositor_quads_color	92.20325921896602	0.0	pass	203405	220605	17200
+A	IMAGE	imagefilter_transformed_image	73.78692626953125	0.0	pass	48357	65536	17179
+Z	COLOR	p3_ovals	88.24722222222222	0.0	pass	127076	144000	16924
+Z	MESH	vertices_batching	66.208	0.0	pass	33104	50000	16896
+Z	BLUR	blur2rectsnonninepatch	95.24971428571428	90.5	pass	333374	350000	16626
+A	IMAGE	compressed_textures	49.54617446393762	0.0	pass	16267	32832	16565
+A	IMAGE	grayscalejpg	0.0	0.0	pass	0	16384	16384
+A	IMAGE	nearest_half_pixel_image	73.59123146357189	0.0	pass	45656	62040	16384
+B	COMPOSITE	fadefilter	75.0	70.0	pass	49152	65536	16384
+C	PATH	thinstrokedrects	79.02994791666667	75.2	pass	60695	76800	16105
+B	COMPOSITE	colorfilterimagefilter	69.79693486590038	44.8	pass	36434	52200	15766
+B	COMPOSITE	clipshadermatrix	17.106681034482758	0.0	pass	3175	18560	15385
+Z	TEXT	typefacestyles_kerning	95.103515625	0.0	pass	292158	307200	15042
+Z	GRADIENT	small_color_stop	0.0	0.0	pass	0	15000	15000
+B	COMPOSITE	offsetimagefilter	76.57833333333333	0.0	pass	45947	60000	14053
+C	PATH	concavepaths	95.392	93.0	pass	286176	300000	13824
+Z	BLUR	blur2rects	96.10885714285715	91.4	pass	336381	350000	13619
+Z	BLUR	inverse_windingmode_filters	48.35546875	0.0	pass	12379	25600	13221
+B	COMPOSITE	hsl	78.68333333333334	0.0	pass	47210	60000	12790
+A	IMAGE	bitmapshaders	16.786666666666665	0.0	pass	2518	15000	12482
+Z	TEXT	blob_rsxform_distortable	78.00200000000001	45.0	pass	39001	50000	10999
+A	IMAGE	imagemagnifier_cropped	83.831787109375	0.0	pass	54940	65536	10596
+A	IMAGE	localmatriximageshader	83.8688	0.0	pass	52418	62500	10082
+A	IMAGE	tinybitmap	0.0	0.0	pass	0	10000	10000
+B	COMPOSITE	composeshader	30.555555555555557	25.6	pass	4400	14400	10000
+B	COMPOSITE	discard	0.0	0.0	pass	0	10000	10000
+Z	TEXT	typefacestyles	96.7705078125	0.0	pass	297279	307200	9921
+Z	GRADIENT	radial_gradient_precision	76.725	0.0	pass	30690	40000	9310
+C	CLIP	clip_strokerect	89.17	71.8	pass	71336	80000	8664
+C	PATH	trickycubicstrokes_largeradius	73.9288330078125	68.9	pass	24225	32768	8543
+Z	GRADIENT	testgradient	98.68515624999999	0.0	pass	631585	640000	8415
+A	IMAGE	shaderpath	98.89732494099135	0.0	pass	754191	762600	8409
+C	PATH	zeroPath	97.4003125	92.4	pass	311681	320000	8319
+Z	GRADIENT	gradients_alpha_many_stops	18.0	0.0	pass	1800	10000	8200
+B	COMPOSITE	dropshadow_pseudopersp	67.10926118626432	0.0	pass	16123	24025	7902
+A	IMAGE	hugebitmapshader	21.15	0.0	pass	2115	10000	7885
+A	IMAGE	drawimagerect_filter	29.666666666666668	0.0	pass	3204	10800	7596
+A	IMAGE	alpha_image_alpha_tint	38.94736842105263	0.0	pass	4736	12160	7424
+C	PATH	dashing	96.63051470588235	84.8	pass	210268	217600	7332
+C	PATH	thin_aa_dash_lines	79.86776859504133	75.6	pass	28992	36300	7308
+C	PATH	convexpaths	99.45257575757576	0.0	pass	1312774	1320000	7226
+C	PATH	zero_control_stroke	97.860625	0.0	pass	313154	320000	6846
+C	PATH	zero_control_stroke	97.860625	0.0	pass	313154	320000	6846
+C	PATH	thinroundrects	91.1328125	84.5	pass	69990	76800	6810
+C	PATH	thinconcavepaths	96.93136363636363	94.0	pass	213249	220000	6751
+Z	TEXT	chrome_gradtext2	97.30541666666667	95.0	pass	233533	240000	6467
+B	COMPOSITE	badpaint	36.0	31.0	pass	3600	10000	6400
+C	PATH	thinrects	91.82161458333333	85.1	pass	70519	76800	6281
+Z	BLUR	check_small_sigma_offset	97.42041666666667	91.7	pass	233809	240000	6191
+A	IMAGE	imagesource	91.81866666666667	0.0	pass	68864	75000	6136
+Z	TEXT	text_scale_skew	81.585693359375	80.0	pass	26734	32768	6034
+A	IMAGE	image_subset	94.10640495867769	0.0	pass	91095	96800	5705
+C	PATH	teenyStrokes	98.22375	93.2	pass	314316	320000	5684
+A	COMPOSITE	composeshader_bitmap	37.142857142857146	0.0	pass	3250	8750	5500
+A	IMAGE	filterbug	77.77777777777779	0.0	pass	17500	22500	5000
+A	IMAGE	pictureshadercache	53.72	0.0	pass	5372	10000	4628
+B	COMPOSITE	imagefiltersunpremul	0.0	0.0	pass	0	4096	4096
+A	IMAGE	not_native32_bitmap_config	75.738525390625	0.0	pass	12409	16384	3975
+A	IMAGE	makeRasterImage	78.717041015625	0.0	pass	12897	16384	3487
+Z	GRADIENT	emptyshader	69.10511363636364	0.0	pass	7784	11264	3480
+Z	TEXT	textblobgeometrychange	91.9975	90.0	pass	36799	40000	3201
+A	IMAGE	image_out_of_gamut	0.0	0.0	pass	0	3157	3157
+A	IMAGE	filterindiabox	96.47285067873304	0.0	pass	85282	88400	3118
+C	PATH	zerolinestroke	74.05555555555556	69.1	pass	7998	10800	2802
+Z	TEXT	palette	97.9888916015625	0.0	pass	128436	131072	2636
+B	COMPOSITE	gpusamplerstress	99.14713541666667	0.0	pass	304580	307200	2620
+B	COMPOSITE	internal_links	99.27228571428572	0.0	pass	347453	350000	2547
+C	CLIP	aaclip	91.18402777777777	88.2	pass	26261	28800	2539
+Z	TEXT	textblobuseaftergpufree	93.7775	90.0	pass	37511	40000	2489
+B	COMPOSITE	crbug_1167277	96.80978260869566	0.0	pass	71252	73600	2348
+A	IMAGE	bigmatrix	7.960000000000001	0.0	pass	199	2500	2301
+A	IMAGE	draw_bitmap_rect_skbug4734	45.3125	0.0	pass	1856	4096	2240
+C	PATH	ctmpatheffect	99.54020833333334	0.0	pass	477793	480000	2207
+C	CLIP	inverseclip	98.73125	52.1	pass	157970	160000	2030
+B	COMPOSITE	crbug_1162942	98.64112903225806	0.0	pass	122315	124000	1685
+Z	MESH	vertices_collapsed	36.0	0.0	pass	900	2500	1600
+C	PATH	circle_sizes	92.071533203125	87.3	pass	15085	16384	1299
+B	COMPOSITE	colorfilterimagefilter_layer	0.0	0.0	pass	0	1024	1024
+Z	TEXT	skbug_5321	94.9462890625	0.0	pass	15556	16384	828
+C	PATH	preservefillrule_little	66.8125	40.4	pass	1069	1600	531
+A	IMAGE	bitmaprect_rounding	99.869140625	0.0	pass	306798	307200	402
+Z	BLUR	smallemboss	84.0	0.0	pass	2100	2500	400
+C	PATH	tinyanglearcs	99.84506353861192	94.9	pass	204283	204600	317
+A	IMAGE	bc1_transparency	56.547619047619044	0.0	pass	380	672	292
+B	COMPOSITE	luminosity_overflow	99.62158203125	0.0	pass	65288	65536	248
+B	COMPOSITE	crbug_1177833	99.84625	0.0	pass	159754	160000	246
+Z	TEXT	skbug_8955	97.69	0.0	pass	9769	10000	231
+B	COMPOSITE	crbug_1174186	99.99729166666667	0.0	pass	1439961	1440000	39
+C	PATH	zerolinedash	99.98626708984375	80.0	pass	65527	65536	9
+A	IMAGE	all		0.0	no-reference			0
+A	IMAGE	alpha_bitmap_is_coverage_android		0.0	no-reference			0
+A	IMAGE	alpha_image_shader_rt		0.0	render-failed			0
+A	IMAGE	anisotropic_image_scale		0.0	no-reference			0
+A	IMAGE	async_rescale_and_read_no_bleed		0.0	size-mismatch			0
+A	IMAGE	attributes		0.0	no-reference			0
+A	IMAGE	bitmap-image-srgb-legacy		0.0	render-failed			0
+A	IMAGE	bitmap_premul	100.0	0.0	pass	262144	262144	0
+A	IMAGE	bitmapcopy		0.0	render-failed			0
+A	IMAGE	bitmaprect_i		0.0	render-failed			0
+A	IMAGE	bitmaprect_s		0.0	render-failed			0
+A	IMAGE	cgimage		0.0	render-failed			0
+A	IMAGE	child_sampling_rt		0.0	render-failed			0
+A	IMAGE	clippedbitmapshaders		0.0	no-reference			0
+A	IMAGE	color_cube_cf_rt		0.0	render-failed			0
+A	COMPOSITE	composeshader_bitmap_lm		0.0	render-failed			0
+A	IMAGE	copyTo4444		0.0	render-failed			0
+A	IMAGE	crbug_404394639		0.0	render-failed			0
+A	IMAGE	deferred_shader_rt		0.0	render-failed			0
+A	IMAGE	drawbitmaprect4		0.0	no-reference			0
+A	IMAGE	drawimage_sampling		0.0	render-failed			0
+A	IMAGE	encode-alpha-jpeg-opts		0.0	no-reference			0
+A	IMAGE	flight_animated_image		0.0	size-mismatch			0
+A	IMAGE	format4444		0.0	render-failed			0
+A	IMAGE	giantbitmap_clamp_bilerp_rotate		0.0	render-failed			0
+A	IMAGE	giantbitmap_clamp_bilerp_scale		0.0	render-failed			0
+A	IMAGE	giantbitmap_clamp_point_rotate		0.0	render-failed			0
+A	IMAGE	giantbitmap_clamp_point_scale		0.0	render-failed			0
+A	IMAGE	giantbitmap_mirror_bilerp_rotate		0.0	render-failed			0
+A	IMAGE	giantbitmap_mirror_bilerp_scale		0.0	render-failed			0
+A	IMAGE	giantbitmap_mirror_point_rotate		0.0	render-failed			0
+A	IMAGE	giantbitmap_mirror_point_scale		0.0	render-failed			0
+A	IMAGE	giantbitmap_repeat_bilerp_rotate		0.0	render-failed			0
+A	IMAGE	giantbitmap_repeat_bilerp_scale		0.0	render-failed			0
+A	IMAGE	giantbitmap_repeat_point_rotate		0.0	render-failed			0
+A	IMAGE	giantbitmap_repeat_point_scale		0.0	render-failed			0
+A	IMAGE	image_dither		0.0	render-failed			0
+A	IMAGE	jpeg_orientation		0.0	no-reference			0
+A	IMAGE	lazytiling		0.0	no-reference			0
+A	IMAGE	lit_shader_linear_rt		0.0	render-failed			0
+A	IMAGE	local_matrix_shader_rt		0.0	render-failed			0
+A	IMAGE	localmatrix_order		0.0	render-failed			0
+A	IMAGE	localmatrixshader_nested		0.0	render-failed			0
+A	IMAGE	localmatrixshader_persp		0.0	render-failed			0
+A	IMAGE	makecolorspace		0.0	render-failed			0
+A	IMAGE	makecolortypeandspace		0.0	render-failed			0
+A	IMAGE	mipmap_gray8_srgb		0.0	render-failed			0
+A	IMAGE	mipmap_srgb		0.0	render-failed			0
+A	IMAGE	new_texture_image		0.0	no-reference			0
+A	IMAGE	ninepatch-stretch		0.0	render-failed			0
+A	IMAGE	null_child_rt		0.0	render-failed			0
+A	IMAGE	path_huge_aa		0.0	render-failed			0
+A	IMAGE	persp_images		0.0	render-failed			0
+A	IMAGE	picture		0.0	no-reference			0
+A	IMAGE	pictureimagegenerator		0.0	render-failed			0
+A	IMAGE	pictureimagegenerator		0.0	render-failed			0
+A	IMAGE	raw_image_shader_normals_rt		0.0	render-failed			0
+A	IMAGE	readpixelscodec		0.0	render-failed			0
+A	IMAGE	rectangle_texture		0.0	no-reference			0
+A	IMAGE	reinterpretcolorspace		0.0	render-failed			0
+A	IMAGE	repeated_bitmap		0.0	render-failed			0
+A	IMAGE	repeated_bitmap_jpg		0.0	render-failed			0
+A	IMAGE	scale-pixels		0.0	render-failed			0
+A	IMAGE	scaled_tilemode_bitmap		0.0	render-failed			0
+A	IMAGE	scaledtiling		0.0	no-reference			0
+A	IMAGE	scalepixels_unpremul		0.0	render-failed			0
+A	IMAGE	showmiplevels_explicit		0.0	render-failed			0
+A	IMAGE	srcrectconstraint		0.0	no-reference			0
+A	IMAGE	texelsubset		0.0	no-reference			0
+A	IMAGE	texture		0.0	no-reference			0
+A	IMAGE	textureimage_and_shader		0.0	render-failed			0
+A	IMAGE	tiling		0.0	no-reference			0
+A	IMAGE	verylarge_picture_image		80.0	render-failed			0
+A	IMAGE	verylargebitmap		0.0	render-failed			0
+A	IMAGE	videodecoder		0.0	no-reference			0
+A	IMAGE	wacky_yuv_formats		0.0	no-reference			0
+A	IMAGE	ycbcrimage		0.0	no-reference			0
+A	IMAGE	yuv420_odd_dim		0.0	no-reference			0
+A	IMAGE	yuv420_odd_dim_repeat		0.0	no-reference			0
+B	COMPOSITE	colorcomposefilter_alpha		0.0	render-failed			0
+B	COMPOSITE	colorcomposefilter_wacky		0.0	render-failed			0
+B	RUNTIME_EFFECT	colorcubecolorfilterrt		0.0	no-reference			0
+B	TEXT	coloremoji_blendmodes		0.0	no-reference			0
+B	COMPOSITE	composeCFIF		0.0	render-failed			0
+B	COMPOSITE	destcolor		0.0	render-failed			0
+B	COMPOSITE	extractalpha		0.0	render-failed			0
+B	COMPOSITE	graphitestart		0.0	no-reference			0
+B	COMPOSITE	mixerCF		0.0	render-failed			0
+B	COMPOSITE	patch_image		0.0	render-failed			0
+B	PATH	pathops_blend		0.0	render-failed			0
+B	COMPOSITE	runtimecolorfilter_vertices_atlas_and_patch		0.0	render-failed			0
+B	COMPOSITE	shadow_utils_gray		0.0	render-failed			0
+B	COMPOSITE	shadow_utils_occl		0.0	render-failed			0
+B	COMPOSITE	tileimagefilter		0.0	render-failed			0
+B	COMPOSITE	xfermodes3		0.0	render-failed			0
+C	PATH	OverStroke		0.0	render-failed			0
+C	PATH	PathMeasure_explosion		0.0	no-reference			0
+C	PATH	aa_rect_effect		0.0	no-reference			0
+C	PATH	bezier_conic_effects		0.0	no-reference			0
+C	PATH	bezier_quad_effects		0.0	no-reference			0
+C	PATH	big_rrect_circle_aa_effect		0.0	no-reference			0
+C	CLIP	bug339297_as_clip		80.0	render-failed			0
+C	PATH	bug41422450	100.0	0.0	pass	408199	408199	0
+C	PATH	circle		0.0	no-reference			0
+C	PATH	circular_arcs		0.0	no-reference			0
+C	PATH	circular_corner		0.0	no-reference			0
+C	CLIP	clipsuperrrect		0.0	no-reference			0
+C	PATH	clockwise		0.0	no-reference			0
+C	CLIP	complexclip3_complex		0.0	render-failed			0
+C	CLIP	complexclip3_simple		0.0	render-failed			0
+C	PATH	conicpaths		0.0	render-failed			0
+C	PATH	convex-polygon-inset		0.0	render-failed			0
+C	PATH	convex_lineonly_paths		0.0	no-reference			0
+C	PATH	convex_lineonly_paths_stroke_and_fill		0.0	no-reference			0
+C	PATH	convex_poly_effect		0.0	no-reference			0
+C	PATH	crbug_640176		0.0	render-failed			0
+C	PATH	crbug_691386		0.0	render-failed			0
+C	PATH	cubicpath_shader		0.0	render-failed			0
+C	CLIP	distantclip	100.0	0.0	pass	10000	10000	0
+C	PATH	drawregion		0.0	render-failed			0
+C	PATH	drawregionmodes		0.0	render-failed			0
+C	PATH	ellipse		0.0	no-reference			0
+C	PATH	elliptical_corner		0.0	no-reference			0
+C	PATH	fancy_gradients		0.0	render-failed			0
+C	CLIP	fast_constraint_red_is_allowed		80.0	render-failed			0
+C	CLIP	fast_constraint_red_is_allowed_manual		0.0	render-failed			0
+C	PATH	fatpathfill		0.0	render-failed			0
+C	PATH	inner_join_geometry		0.0	render-failed			0
+C	PATH	lattice2		0.0	render-failed			0
+C	PATH	lineclosepath		0.0	render-failed			0
+C	PATH	longrect_dash		0.0	no-reference			0
+C	PATH	macaatest		0.0	render-failed			0
+C	PATH	manypathatlases		0.0	no-reference			0
+C	CLIP	manypathatlases_128		0.0	render-failed			0
+C	CLIP	manypathatlases_2048		0.0	render-failed			0
+C	PATH	nested		0.0	no-reference			0
+C	PATH	nested		0.0	no-reference			0
+C	PATH	parsedpaths		0.0	render-failed			0
+C	PATH	path_huge_aa_manual		0.0	render-failed			0
+C	PATH	path_mask_cache		0.0	render-failed			0
+C	PATH	path_stroke_clip_crbug1070835		80.0	render-failed			0
+C	PATH	pathops_skbug_10155		0.0	render-failed			0
+C	PATH	pathopsinverse		0.0	render-failed			0
+C	PATH	poly2poly		0.0	render-failed			0
+C	PATH	preservefillrule		0.0	no-reference			0
+C	PATH	roundrects		0.0	render-failed			0
+C	PATH	shadow_utils_directional		0.0	render-failed			0
+C	PATH	sharedcorners		0.0	render-failed			0
+C	CLIP	simpleclip		0.0	no-reference			0
+C	PATH	simpleshapes		0.0	render-failed			0
+C	PATH	simpleshapes_bw		80.0	render-failed			0
+C	CLIP	strict_constraint_batch_no_red_allowed		80.0	render-failed			0
+C	CLIP	strict_constraint_batch_no_red_allowed_manual		0.0	render-failed			0
+C	CLIP	strict_constraint_no_red_allowed		80.0	render-failed			0
+C	CLIP	strict_constraint_no_red_allowed_manual		0.0	render-failed			0
+C	PATH	strokes3		0.0	render-failed			0
+C	PATH	zero_length_paths_aa		80.0	render-failed			0
+C	PATH	zero_length_paths_bw		80.0	render-failed			0
+C	PATH	zero_length_paths_dbl_aa		80.0	render-failed			0
+C	PATH	zero_length_paths_dbl_bw		80.0	render-failed			0
+D	RUNTIME_EFFECT	arithmode		0.0	size-mismatch			0
+D	RUNTIME_EFFECT	lineargradientrt		0.0	no-reference			0
+D	RUNTIME_EFFECT	lumafilter		0.0	size-mismatch			0
+D	RUNTIME_EFFECT	runtime_intrinsics_common		0.0	size-mismatch			0
+D	RUNTIME_EFFECT	runtime_intrinsics_exponential		0.0	size-mismatch			0
+D	RUNTIME_EFFECT	runtime_intrinsics_geometric		0.0	size-mismatch			0
+D	RUNTIME_EFFECT	runtime_intrinsics_matrix		0.0	size-mismatch			0
+D	RUNTIME_EFFECT	runtime_intrinsics_relational		0.0	size-mismatch			0
+D	RUNTIME_EFFECT	runtime_intrinsics_trig		0.0	size-mismatch			0
+D	RUNTIME_EFFECT	simplert		0.0	no-reference			0
+Z	BLUR	animatedbackdropblur		0.0	no-reference			0
+Z	BLUR	blur_ignore_xform_circle		0.0	render-failed			0
+Z	BLUR	blur_ignore_xform_rect		0.0	render-failed			0
+Z	BLUR	blur_ignore_xform_rrect		0.0	render-failed			0
+Z	TEXT	cliperror		0.0	render-failed			0
+Z	COLOR	color		0.0	no-reference			0
+Z	TEXT	coloremoji		0.0	no-reference			0
+Z	TEXT	colorwheelnative		0.0	render-failed			0
+Z	GRADIENT	conicalgradients		0.0	no-reference			0
+Z	COLOR	const_color_processor		0.0	no-reference			0
+Z	TEXT	crbug_478659067		0.0	no-reference			0
+Z	MESH	custommesh_cs_uniforms		0.0	no-reference			0
+Z	MESH	custommesh_uniforms	100.0	99.0	pass	35000	35000	0
+Z	COLOR	dark		0.0	no-reference			0
+Z	COLOR	debug		0.0	no-reference			0
+Z	COLOR	default		0.0	no-reference			0
+Z	TEXT	dftext_blob_persp		0.0	render-failed			0
+Z	TEXT	drawTextRSXform		0.0	render-failed			0
+Z	COLOR	encodesrgb		0.0	no-reference			0
+Z	COLOR	filter		0.0	no-reference			0
+Z	TEXT	fontcache		0.0	render-failed			0
+Z	TEXT	fontregen		0.0	render-failed			0
+Z	GRADIENT	gradients_powerless_hue		0.0	no-reference			0
+Z	GRADIENT	gradients_view_perspective		0.0	render-failed			0
+Z	COLOR	high		0.0	no-reference			0
+Z	BLUR	imagefilterstext_cf		0.0	no-reference			0
+Z	BLUR	imagefilterstext_if		0.0	no-reference			0
+Z	COLOR	light		0.0	no-reference			0
+Z	COLOR	low		0.0	no-reference			0
+Z	BLUR	matrixconvolution		0.0	render-failed			0
+Z	BLUR	matrixconvolution_big		0.0	render-failed			0
+Z	BLUR	matrixconvolution_big_color		0.0	render-failed			0
+Z	BLUR	matrixconvolution_bigger		0.0	render-failed			0
+Z	BLUR	matrixconvolution_biggest		0.0	render-failed			0
+Z	BLUR	matrixconvolution_color		0.0	render-failed			0
+Z	COLOR	med		0.0	no-reference			0
+Z	MESH	mesh_with_effects		0.0	render-failed			0
+Z	MESH	mesh_with_image		0.0	render-failed			0
+Z	MESH	mesh_with_paint_color		0.0	render-failed			0
+Z	MESH	mesh_with_paint_image		0.0	render-failed			0
+Z	MESH	mesh_zero_init		0.0	render-failed			0
+Z	COLOR	name		0.0	no-reference			0
+Z	COLOR	none		0.0	no-reference			0
+Z	COLOR	one		0.0	no-reference			0
+Z	COLOR	orientation		0.0	no-reference			0
+Z	COLOR	paint_alpha_normals_rt		0.0	render-failed			0
+Z	TEXT	pdf_never_embed		0.0	render-failed			0
+Z	TEXT	pdf_table_based_subset		0.0	render-failed			0
+Z	GRADIENT	persp_shaders_bw		0.0	render-failed			0
+Z	TEXT	persptext_minimal		80.0	render-failed			0
+Z	MESH	picture_mesh	100.0	99.0	pass	35100	35100	0
+Z	GRADIENT	radial_gradient3	100.0	9.8	pass	250000	250000	0
+Z	GRADIENT	radial_gradient3_nodither	100.0	9.8	pass	250000	250000	0
+Z	GRADIENT	radial_gradient4	100.0	32.7	pass	250000	250000	0
+Z	GRADIENT	radial_gradient4_nodither	100.0	32.7	pass	250000	250000	0
+Z	COLOR	raster		0.0	no-reference			0
+Z	COLOR	rect		0.0	no-reference			0
+Z	TEXT	rsx_blob_shader		0.0	size-mismatch			0
+Z	COLOR	shader		0.0	no-reference			0
+Z	GRADIENT	shallow_gradient_linear	100.0	0.0	pass	640000	640000	0
+Z	GRADIENT	shallow_gradient_linear_nodither	100.0	0.0	pass	640000	640000	0
+Z	GRADIENT	shallow_gradient_radial	100.0	0.0	pass	640000	640000	0
+Z	GRADIENT	shallow_gradient_radial_nodither	100.0	0.0	pass	640000	640000	0
+Z	GRADIENT	shallow_gradient_sweep	100.0	0.0	pass	640000	640000	0
+Z	GRADIENT	shallow_gradient_sweep_nodither	100.0	0.0	pass	640000	640000	0
+Z	GRADIENT	shallowgradient		0.0	no-reference			0
+Z	TEXT	slug		0.0	render-failed			0
+Z	TEXT	textblobrandomfont		0.0	no-reference			0
+Z	TEXT	variedtext		0.0	no-reference			0
+Z	MESH	vertices_perspective		0.0	render-failed			0

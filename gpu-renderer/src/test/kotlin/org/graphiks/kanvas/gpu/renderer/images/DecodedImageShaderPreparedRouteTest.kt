@@ -69,6 +69,34 @@ class DecodedImageShaderPreparedRouteTest {
     }
 
     @Test
+    fun `bounded non clamp tile modes route into bitmap shader material source`() {
+        val cases = listOf(
+            "repeat" to "repeat",
+            "mirror" to "mirror-repeat",
+            "decal" to "clamp-to-edge",
+        )
+        val materialKeys = mutableSetOf<String>()
+
+        for ((tileMode, expectedAddressMode) in cases) {
+            val plan = GPUDecodedImageShaderPreparedPlanner().plan(
+                source = checkerPixels,
+                sampling = linearClampSampling.copy(tileModeX = tileMode),
+            )
+            val imageSource = assertIs<GPUMaterialSourceDescriptor.Image>(plan.materialSource)
+
+            assertEquals("CPUPreparedGPU", plan.routeKind)
+            assertEquals(expectedAddressMode, plan.samplerDescriptor.addressModeU)
+            assertEquals("clamp-to-edge", plan.samplerDescriptor.addressModeV)
+            assertEquals(tileMode, imageSource.plan.sampling.tileModeX.name.lowercase())
+            assertEquals("clamp", imageSource.plan.sampling.tileModeY.name.lowercase())
+            assertEquals("image.shader.decoded-pixels.v1", plan.materialKey.value.substringBeforeLast(':'))
+            materialKeys += plan.materialKey.value
+        }
+
+        assertEquals(cases.size, materialKeys.size)
+    }
+
+    @Test
     fun `upload artifact key includes decoded pixel preparation facts`() {
         val base = GPUDecodedImageShaderPreparedPlanner().plan(
             source = checkerPixels,
@@ -109,7 +137,7 @@ class DecodedImageShaderPreparedRouteTest {
             RefusalCase("unsupported.image.upload.budget_exceeded", source = checkerPixels.copy(width = 2048, height = 2048, rowBytes = 8192)),
             RefusalCase(
                 "unsupported.image.tile_mode",
-                sampling = linearClampSampling.copy(tileModeX = "repeat"),
+                sampling = linearClampSampling.copy(tileModeX = "unsupported-wrap"),
             ),
             RefusalCase(
                 "unsupported.image.mip_required",

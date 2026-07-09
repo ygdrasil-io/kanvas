@@ -1,7 +1,12 @@
 package org.graphiks.kanvas.gpu.renderer.materials
 
 import org.graphiks.kanvas.gpu.renderer.wgsl.BitmapShaderClampEntryPoint
+import org.graphiks.kanvas.gpu.renderer.wgsl.BitmapShaderDecalEntryPoint
+import org.graphiks.kanvas.gpu.renderer.wgsl.BitmapShaderMirrorEntryPoint
+import org.graphiks.kanvas.gpu.renderer.wgsl.BitmapShaderRepeatEntryPoint
 import org.graphiks.kanvas.gpu.renderer.wgsl.BitmapShaderSnippetSourceHash
+import org.graphiks.kanvas.gpu.renderer.wgsl.BitmapShaderSourceEntryPoint
+import org.graphiks.kanvas.gpu.renderer.wgsl.bitmapShaderWgslForEntryPoint
 import java.security.MessageDigest
 
 object GPUBitmapShaderMaterialDictionary {
@@ -31,19 +36,40 @@ object GPUBitmapShaderMaterialDictionary {
             return GPUMaterialAssemblyResult.Refused(diagnostic)
         }
 
-        return GPUMaterialAssemblyResult.Accepted(
-            GPUMaterialAssemblyPlan(
-                programId = GPUMaterialProgramID("program:${materialKey.value}"),
-                rootSet = dictionary.rootSets.single { BitmapShaderSnippetID in it.snippetIds },
-                snippetGraph = listOf(
-                    WGSLSnippetNode(
-                        snippetId = BitmapShaderSnippetID,
-                        children = emptyList(),
-                        evaluationOrder = 0,
-                    ),
+        return expandBitmapShaderMaterial(
+            materialKey = materialKey,
+            dictionary = dictionary,
+            selectedEntryPoint = BitmapShaderClampEntryPoint,
+        )
+    }
+
+    /** Expands an accepted bitmap shader source plan into the WGSL source variant it selected. */
+    fun expandBitmapShaderMaterialOrRefuse(
+        materialKey: MaterialKey,
+        dictionary: GPUMaterialDictionary,
+        sourcePlan: GPUMaterialSourcePlan.Accepted,
+    ): GPUMaterialAssemblyResult {
+        val diagnostic = validateBitmapShaderDictionary(dictionary)
+        if (diagnostic != null) {
+            return GPUMaterialAssemblyResult.Refused(diagnostic)
+        }
+        if (sourcePlan.snippetId != BitmapShaderSnippetID ||
+            sourcePlan.source !is GPUMaterialSourceDescriptor.Image
+        ) {
+            return GPUMaterialAssemblyResult.Refused(
+                GPUMaterialSourceDiagnostic(
+                    code = "unsupported.material.bitmap_source_plan_mismatch",
+                    sourceKind = sourcePlan.source.kind,
+                    message = "Bitmap shader material expansion requires an accepted bitmap image source plan",
+                    terminal = true,
                 ),
-                moduleSalt = BitmapShaderMaterialModuleSalt,
-            ),
+            )
+        }
+
+        return expandBitmapShaderMaterial(
+            materialKey = materialKey,
+            dictionary = dictionary,
+            selectedEntryPoint = sourcePlan.entryPoint,
         )
     }
 
@@ -82,7 +108,7 @@ object GPUBitmapShaderMaterialDictionary {
         WGSLSnippet(
             snippetId = BitmapShaderSnippetID,
             sourceHash = BitmapShaderSnippetSourceHash,
-            entryPoint = BitmapShaderClampEntryPoint,
+            entryPoint = BitmapShaderSourceEntryPoint,
             requiredBindings = listOf("group1.binding1.texture_2d_rgba8_unorm", "group1.binding2.sampler"),
             category = "material-source",
             version = "v1",
@@ -96,9 +122,38 @@ object GPUBitmapShaderMaterialDictionary {
             snippetIds = listOf(BitmapShaderSnippetID),
             payloadShapeHash = "payload:BitmapShaderMaterialBlock.textureSampled@group1.binding1+sampler@group1.binding2",
         )
+
+    private fun expandBitmapShaderMaterial(
+        materialKey: MaterialKey,
+        dictionary: GPUMaterialDictionary,
+        selectedEntryPoint: String,
+    ): GPUMaterialAssemblyResult =
+        GPUMaterialAssemblyResult.Accepted(
+            GPUMaterialAssemblyPlan(
+                programId = GPUMaterialProgramID("program:${materialKey.value}"),
+                rootSet = dictionary.rootSets.single { BitmapShaderSnippetID in it.snippetIds },
+                snippetGraph = listOf(
+                    WGSLSnippetNode(
+                        snippetId = BitmapShaderSnippetID,
+                        children = emptyList(),
+                        evaluationOrder = 0,
+                    ),
+                ),
+                moduleSalt = BitmapShaderMaterialModuleSalt,
+                sourceEntryPoint = BitmapShaderSourceEntryPoint,
+                sourceWgsl = bitmapShaderWgslForEntryPoint(selectedEntryPoint),
+            ),
+        )
 }
 
 object GPUBitmapShaderMaterialLowering {
+    private val supportedBitmapTileModes = setOf(
+        GPUMaterialTileMode.Clamp,
+        GPUMaterialTileMode.Repeat,
+        GPUMaterialTileMode.Mirror,
+        GPUMaterialTileMode.Decal,
+    )
+
     /** Plans a paint descriptor into a bitmap shader pipeline. */
     fun planPaint(
         descriptor: GPUPaintDescriptor,
@@ -143,7 +198,7 @@ object GPUBitmapShaderMaterialLowering {
     ): MaterialKey {
         val source = accepted.source as? GPUMaterialSourceDescriptor.Image
             ?: error("M17 MaterialKey derivation only accepts image shader source plans")
-        val preimage = bitmapShaderMaterialKeyPreimage(context = context)
+        val preimage = bitmapShaderMaterialKeyPreimage(source = source, context = context)
 
         return MaterialKey("material:bitmap_shader:${preimage.dump().stableHash()}")
     }
@@ -162,14 +217,15 @@ object GPUBitmapShaderMaterialLowering {
             )
         }
 
-        if (plan.sampling.tileModeX != GPUMaterialTileMode.Clamp ||
-            plan.sampling.tileModeY != GPUMaterialTileMode.Clamp
+        if (plan.sampling.tileModeX !in supportedBitmapTileModes ||
+            plan.sampling.tileModeY !in supportedBitmapTileModes
         ) {
             return GPUMaterialSourcePlan.Refused(
                 GPUMaterialSourceDiagnostic(
-                    code = "unsupported.material.bitmap_tile_mode_unimplemented",
+                    code = "unsupported.material.bitmap_tile_mode_unknown",
                     sourceKind = GPUMaterialSourceKind.ImageShader,
-                    message = "M17 bitmap shader only supports Clamp tile mode (got ${plan.sampling.tileModeX}/${plan.sampling.tileModeY})",
+                    message = "Bitmap shader tile mode must be one of ${supportedBitmapTileModes.joinToString { it.name }} " +
+                        "(got ${plan.sampling.tileModeX}/${plan.sampling.tileModeY})",
                     terminal = true,
                 ),
             )
@@ -190,7 +246,7 @@ object GPUBitmapShaderMaterialLowering {
             source = this,
             snippetId = GPUBitmapShaderMaterialDictionary.BitmapShaderSnippetID,
             payloadPlanHash = "payload:BitmapShaderMaterialBlock.textureSampled@group1.binding1+sampler@group1.binding2",
-            entryPoint = BitmapShaderClampEntryPoint,
+            entryPoint = bitmapShaderEntryPoint(plan.sampling.tileModeX, plan.sampling.tileModeY),
             diagnostics = listOf(
                 GPUMaterialSourceDiagnostic(
                     code = "accepted.material_source.bitmap_shader",
@@ -201,9 +257,36 @@ object GPUBitmapShaderMaterialLowering {
             ),
         )
     }
+
+    private fun bitmapShaderEntryPoint(
+        tileModeX: GPUMaterialTileMode,
+        tileModeY: GPUMaterialTileMode,
+    ): String {
+        val tokenX = tileModeX.bitmapShaderEntryPointToken()
+        val tokenY = tileModeY.bitmapShaderEntryPointToken()
+        return if (tileModeX == tileModeY) {
+            when (tileModeX) {
+                GPUMaterialTileMode.Clamp -> BitmapShaderClampEntryPoint
+                GPUMaterialTileMode.Repeat -> BitmapShaderRepeatEntryPoint
+                GPUMaterialTileMode.Mirror -> BitmapShaderMirrorEntryPoint
+                GPUMaterialTileMode.Decal -> BitmapShaderDecalEntryPoint
+            }
+        } else {
+            "bitmap_shader_${tokenX}_${tokenY}"
+        }
+    }
+
+    private fun GPUMaterialTileMode.bitmapShaderEntryPointToken(): String =
+        when (this) {
+            GPUMaterialTileMode.Clamp -> "clamp"
+            GPUMaterialTileMode.Repeat -> "repeat"
+            GPUMaterialTileMode.Mirror -> "mirror"
+            GPUMaterialTileMode.Decal -> "decal"
+        }
 }
 
 private fun bitmapShaderMaterialKeyPreimage(
+    source: GPUMaterialSourceDescriptor.Image,
     context: GPUMaterialLoweringContext,
 ): MaterialKeyPreimage =
     MaterialKeyPreimage(
@@ -216,6 +299,10 @@ private fun bitmapShaderMaterialKeyPreimage(
         codeShapeFacts = listOf(
             "sourceFunction=bitmap_shader_source",
             "payloadBlock=BitmapShaderMaterialBlock",
+            "tileModeX=${source.plan.sampling.tileModeX.name}",
+            "tileModeY=${source.plan.sampling.tileModeY.name}",
+            "filterMode=${source.plan.sampling.filterMode}",
+            "mipmapMode=${source.plan.sampling.mipmapMode}",
         ),
         featureFlags = listOf("bitmap-shader-material-abi-v1"),
     )

@@ -60,8 +60,37 @@ class ImageSamplerBoundaryGateTest {
     }
 
     @Test
+    fun `sampler boundary accepts bounded non clamp tile modes and keys them separately`() {
+        val cases = listOf(
+            "repeat" to "repeat",
+            "mirror" to "mirror-repeat",
+            "decal" to "clamp-to-edge",
+        )
+        val samplerKeys = mutableSetOf<String>()
+
+        for ((tileMode, expectedAddressMode) in cases) {
+            val plan = GPUImageSamplerBoundaryPlanner().plan(
+                source = checkerPixels,
+                sampling = linearClampSampling.copy(tileModeX = tileMode),
+            )
+
+            assertEquals("GPUNative", plan.routeKind)
+            assertEquals(expectedAddressMode, plan.samplerDescriptor.addressModeU)
+            assertEquals("clamp-to-edge", plan.samplerDescriptor.addressModeV)
+            assertContains(plan.dumpLines()[2], "tile x=$tileMode y=clamp")
+            samplerKeys += plan.samplerBehaviorKey
+        }
+
+        assertEquals(cases.size, samplerKeys.size)
+    }
+
+    @Test
     fun `unsupported sampler boundary variants refuse with stable diagnostics`() {
         val cases = listOf(
+            BoundaryRefusalCase(
+                expectedCode = "unsupported.image.tile_mode",
+                sampling = linearClampSampling.copy(tileModeX = "unsupported-wrap"),
+            ),
             BoundaryRefusalCase(
                 expectedCode = "unsupported.texture.mipmap_unavailable",
                 sampling = linearClampSampling.copy(mipmapMode = "linear"),

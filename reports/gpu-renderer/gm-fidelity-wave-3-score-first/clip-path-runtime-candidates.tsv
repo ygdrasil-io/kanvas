@@ -1,0 +1,164 @@
+group	family	name	similarity	threshold	status	matchingPixels	totalPixels	unmatchedPixels
+C	PATH	nonclosedpaths	64.8406762295082	59.8	pass	1518828	2342400	823572
+C	CLIP	complexclip4_aa	15.907877346021676	0.0	pass	120359	756600	636241
+C	CLIP	complexclip4_bw	15.948321438012158	0.0	pass	120665	756600	635935
+C	PATH	filltypespersp	11.96036498431708	0.0	pass	83890	701400	617510
+C	CLIP	convex_poly_clip	0.04555129842486164	0.0	pass	214	469800	469586
+C	PATH	manycircles	20.5175	0.0	pass	98484	480000	381516
+D	RUNTIME_EFFECT	rtif_distort	0.0	0.0	pass	0	375000	375000
+C	PATH	trimpatheffect	79.099	74.1	pass	1107386	1400000	292614
+D	RUNTIME_EFFECT	color_cube_rt	0.0	0.0	pass	0	262144	262144
+D	RUNTIME_EFFECT	rippleshader	0.0	0.0	pass	0	262144	262144
+D	RUNTIME_EFFECT	spiral_rt	0.0	0.0	pass	0	262144	262144
+C	CLIP	complexclip_blur_tiled	0.3963470458984375	0.0	pass	1039	262144	261105
+C	PATH	polygons	73.89327485380117	69.0	pass	707602	957600	249998
+D	RUNTIME_EFFECT	kawase_blur_rt	76.66666666666667	76.66666666666667	pass	753664	983040	229376
+C	CLIP	complexclip_aa_layer_invert	28.17472905101771	0.0	pass	85268	302640	217372
+C	CLIP	complexclip_bw_layer_invert	28.31086439333862	0.0	pass	85680	302640	216960
+C	CLIP	complexclip_aa_layer	30.39551942902458	0.0	pass	91989	302640	210651
+C	CLIP	complexclip_bw_layer	30.668781390430876	0.0	pass	92816	302640	209824
+C	CLIP	perspective_clip	67.21953125	0.0	pass	430205	640000	209795
+C	CLIP	windowrectangles	42.43666666666667	0.0	pass	152772	360000	207228
+C	PATH	dashcircle	81.56722222222223	36.5	pass	880926	1080000	199074
+C	CLIP	croppedrects	22.2144	0.0	pass	55536	250000	194464
+C	CLIP	clipdrawdraw	29.035568237304688	24.0	pass	76115	262144	186029
+C	CLIP	complexclip_aa_invert	40.202550885540575	0.0	pass	121669	302640	180971
+C	CLIP	complexclip_bw_invert	40.356529209621996	0.0	pass	122135	302640	180505
+C	CLIP	pdf_crbug_772685	63.34587707136726	0.0	pass	307040	484704	177664
+C	CLIP	complexclip_aa	48.370671424795134	0.0	pass	146389	302640	156251
+C	CLIP	complexclip_bw	48.916864922019556	0.0	pass	148042	302640	154598
+C	PATH	points	52.719068877551024	0.0	pass	165327	313600	148273
+C	PATH	widebuttcaps	40.3775	26.3	pass	96906	240000	143094
+C	CLIP	circular-clips	11.87125	0.0	pass	18994	160000	141006
+C	CLIP	rrect_clip_aa	56.81738281249999	0.0	pass	174543	307200	132657
+C	CLIP	rrect_clip_bw	56.96126302083333	0.0	pass	174985	307200	132215
+D	RUNTIME_EFFECT	rtif_unsharp	7.62939453125E-4	0.00152587890625	fail	1	131072	131071
+D	RUNTIME_EFFECT	unsharp_rt	1.007080078125	1.0223388671875	fail	1320	131072	129752
+C	CLIP	simpleaaclip_path	2.2508333333333335	0.0	pass	2701	120000	117299
+C	CLIP	simpleaaclip_rect	2.2666666666666666	0.0	pass	2720	120000	117280
+C	PATH	stroke_rect_shader	43.38937198067633	42.8	pass	89816	207000	117184
+C	PATH	drawlines_with_local_matrix	54.901199999999996	0.0	pass	137253	250000	112747
+C	PATH	strokes_round	64.7728125	17.3	pass	207273	320000	112727
+C	PATH	quadclosepath	81.04962779156327	0.0	pass	391956	483600	91644
+C	PATH	cubicclosepath	81.05355665839537	0.0	pass	391975	483600	91625
+C	PATH	linepath	81.07361455748553	0.0	pass	392072	483600	91528
+C	PATH	quadpath	81.10794044665013	0.0	pass	392238	483600	91362
+C	PATH	cubicpath	81.11145574855252	0.0	pass	392255	483600	91345
+C	PATH	dashing5_aa	0.0	0.0	pass	0	80000	80000
+D	RUNTIME_EFFECT	runtime_shader	50.0	50.0	pass	65536	131072	65536
+D	RUNTIME_EFFECT	threshold_rt	0.006103515625	0.006103515625	pass	4	65536	65532
+C	CLIP	clip_region	3.814697265625	0.0	pass	2500	65536	63036
+D	RUNTIME_EFFECT	runtimefunctions	10.21575927734375	10.25848388671875	fail	6695	65536	58841
+C	CLIP	crbug_892988	12.60223388671875	9.5	pass	8259	65536	57277
+C	PATH	strokedline_caps	94.80569498069498	92.0	pass	982187	1036000	53813
+D	RUNTIME_EFFECT	AlternateLuma	0.0	0.0	pass	0	49152	49152
+C	CLIP	clipcubic	74.46585365853659	61.9	pass	122124	164000	41876
+D	RUNTIME_EFFECT	composeCF	0.0	0.0	pass	0	40000	40000
+C	PATH	stlouisarch	39.17083740234375	0.0	pass	25671	65536	39865
+C	CLIP	clip_sierpinski_region	46.28373982564444	0.0	pass	32014	69169	37155
+C	PATH	path-reverse	88.10221354166666	0.0	pass	270650	307200	36550
+C	PATH	preservefillrule_big	79.159375	47.7	pass	126655	160000	33345
+D	RUNTIME_EFFECT	workingspace	54.64285714285714	14.464285714285715	pass	38250	70000	31750
+C	CLIP	rrect_clip_draw_paint	52.325439453125	0.0	pass	34292	65536	31244
+C	CLIP	cliplargerect	52.734375	47.7	pass	34560	65536	30976
+C	PATH	mandoline	89.77142857142857	84.8	pass	238792	266000	27208
+C	PATH	dashtextcaps	90.09742736816406	0.0	pass	236185	262144	25959
+C	CLIP	skbug_9319	84.23309326171875	0.0	pass	110406	131072	20666
+C	CLIP	skbug1719	40.61	0.0	pass	12183	30000	17817
+C	PATH	thinstrokedrects	79.02994791666667	75.2	pass	60695	76800	16105
+C	PATH	concavepaths	95.392	93.0	pass	286176	300000	13824
+C	CLIP	clip_strokerect	89.17	71.8	pass	71336	80000	8664
+C	PATH	trickycubicstrokes_largeradius	73.9288330078125	68.9	pass	24225	32768	8543
+C	PATH	zeroPath	97.4003125	92.4	pass	311681	320000	8319
+C	PATH	dashing	96.63051470588235	84.8	pass	210268	217600	7332
+C	PATH	thin_aa_dash_lines	79.86776859504133	75.6	pass	28992	36300	7308
+C	PATH	convexpaths	99.45257575757576	0.0	pass	1312774	1320000	7226
+C	PATH	zero_control_stroke	97.860625	0.0	pass	313154	320000	6846
+C	PATH	zero_control_stroke	97.860625	0.0	pass	313154	320000	6846
+C	PATH	thinroundrects	91.1328125	84.5	pass	69990	76800	6810
+C	PATH	thinconcavepaths	96.93136363636363	94.0	pass	213249	220000	6751
+C	PATH	thinrects	91.82161458333333	85.1	pass	70519	76800	6281
+C	PATH	teenyStrokes	98.22375	93.2	pass	314316	320000	5684
+C	PATH	zerolinestroke	74.05555555555556	69.1	pass	7998	10800	2802
+C	CLIP	aaclip	91.18402777777777	88.2	pass	26261	28800	2539
+C	PATH	ctmpatheffect	99.54020833333334	0.0	pass	477793	480000	2207
+C	CLIP	inverseclip	98.73125	52.1	pass	157970	160000	2030
+C	PATH	circle_sizes	92.071533203125	87.3	pass	15085	16384	1299
+C	PATH	preservefillrule_little	66.8125	40.4	pass	1069	1600	531
+C	PATH	tinyanglearcs	99.84506353861192	94.9	pass	204283	204600	317
+C	PATH	zerolinedash	99.98626708984375	80.0	pass	65527	65536	9
+C	PATH	OverStroke		0.0	render-failed			0
+C	PATH	PathMeasure_explosion		0.0	no-reference			0
+C	PATH	aa_rect_effect		0.0	no-reference			0
+C	PATH	bezier_conic_effects		0.0	no-reference			0
+C	PATH	bezier_quad_effects		0.0	no-reference			0
+C	PATH	big_rrect_circle_aa_effect		0.0	no-reference			0
+C	CLIP	bug339297_as_clip		80.0	render-failed			0
+C	PATH	bug41422450	100.0	0.0	pass	408199	408199	0
+C	PATH	circle		0.0	no-reference			0
+C	PATH	circular_arcs		0.0	no-reference			0
+C	PATH	circular_corner		0.0	no-reference			0
+C	CLIP	clipsuperrrect		0.0	no-reference			0
+C	PATH	clockwise		0.0	no-reference			0
+C	CLIP	complexclip3_complex		0.0	render-failed			0
+C	CLIP	complexclip3_simple		0.0	render-failed			0
+C	PATH	conicpaths		0.0	render-failed			0
+C	PATH	convex-polygon-inset		0.0	render-failed			0
+C	PATH	convex_lineonly_paths		0.0	no-reference			0
+C	PATH	convex_lineonly_paths_stroke_and_fill		0.0	no-reference			0
+C	PATH	convex_poly_effect		0.0	no-reference			0
+C	PATH	crbug_640176		0.0	render-failed			0
+C	PATH	crbug_691386		0.0	render-failed			0
+C	PATH	cubicpath_shader		0.0	render-failed			0
+C	CLIP	distantclip	100.0	0.0	pass	10000	10000	0
+C	PATH	drawregion		0.0	render-failed			0
+C	PATH	drawregionmodes		0.0	render-failed			0
+C	PATH	ellipse		0.0	no-reference			0
+C	PATH	elliptical_corner		0.0	no-reference			0
+C	PATH	fancy_gradients		0.0	render-failed			0
+C	CLIP	fast_constraint_red_is_allowed		80.0	render-failed			0
+C	CLIP	fast_constraint_red_is_allowed_manual		0.0	render-failed			0
+C	PATH	fatpathfill		0.0	render-failed			0
+C	PATH	inner_join_geometry		0.0	render-failed			0
+C	PATH	lattice2		0.0	render-failed			0
+C	PATH	lineclosepath		0.0	render-failed			0
+C	PATH	longrect_dash		0.0	no-reference			0
+C	PATH	macaatest		0.0	render-failed			0
+C	PATH	manypathatlases		0.0	no-reference			0
+C	CLIP	manypathatlases_128		0.0	render-failed			0
+C	CLIP	manypathatlases_2048		0.0	render-failed			0
+C	PATH	nested		0.0	no-reference			0
+C	PATH	nested		0.0	no-reference			0
+C	PATH	parsedpaths		0.0	render-failed			0
+C	PATH	path_huge_aa_manual		0.0	render-failed			0
+C	PATH	path_mask_cache		0.0	render-failed			0
+C	PATH	path_stroke_clip_crbug1070835		80.0	render-failed			0
+C	PATH	pathops_skbug_10155		0.0	render-failed			0
+C	PATH	pathopsinverse		0.0	render-failed			0
+C	PATH	poly2poly		0.0	render-failed			0
+C	PATH	preservefillrule		0.0	no-reference			0
+C	PATH	roundrects		0.0	render-failed			0
+C	PATH	shadow_utils_directional		0.0	render-failed			0
+C	PATH	sharedcorners		0.0	render-failed			0
+C	CLIP	simpleclip		0.0	no-reference			0
+C	PATH	simpleshapes		0.0	render-failed			0
+C	PATH	simpleshapes_bw		80.0	render-failed			0
+C	CLIP	strict_constraint_batch_no_red_allowed		80.0	render-failed			0
+C	CLIP	strict_constraint_batch_no_red_allowed_manual		0.0	render-failed			0
+C	CLIP	strict_constraint_no_red_allowed		80.0	render-failed			0
+C	CLIP	strict_constraint_no_red_allowed_manual		0.0	render-failed			0
+C	PATH	strokes3		0.0	render-failed			0
+C	PATH	zero_length_paths_aa		80.0	render-failed			0
+C	PATH	zero_length_paths_bw		80.0	render-failed			0
+C	PATH	zero_length_paths_dbl_aa		80.0	render-failed			0
+C	PATH	zero_length_paths_dbl_bw		80.0	render-failed			0
+D	RUNTIME_EFFECT	arithmode		0.0	size-mismatch			0
+D	RUNTIME_EFFECT	lineargradientrt		0.0	no-reference			0
+D	RUNTIME_EFFECT	lumafilter		0.0	size-mismatch			0
+D	RUNTIME_EFFECT	runtime_intrinsics_common		0.0	size-mismatch			0
+D	RUNTIME_EFFECT	runtime_intrinsics_exponential		0.0	size-mismatch			0
+D	RUNTIME_EFFECT	runtime_intrinsics_geometric		0.0	size-mismatch			0
+D	RUNTIME_EFFECT	runtime_intrinsics_matrix		0.0	size-mismatch			0
+D	RUNTIME_EFFECT	runtime_intrinsics_relational		0.0	size-mismatch			0
+D	RUNTIME_EFFECT	runtime_intrinsics_trig		0.0	size-mismatch			0
+D	RUNTIME_EFFECT	simplert		0.0	no-reference			0

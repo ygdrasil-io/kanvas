@@ -50,8 +50,8 @@ class M25ExecutorWiringTest {
         // The M25 snippet+entry+pipeline wiring evidence stays; the deferral line is
         // replaced by real-texture-uploaded evidence.
         val lines = bitmapShaderWiringDiagnostics()
-        assertTrue(lines.any { it.contains("snippetSourceHash=fragment:bitmap_shader:v1") }, lines.toString())
-        assertTrue(lines.any { it.contains("entryPoint=bitmap_shader_clamp") }, lines.toString())
+        assertTrue(lines.any { it.contains("snippetSourceHash=fragment:bitmap_shader:v2") }, lines.toString())
+        assertTrue(lines.any { it.contains("entryPoint=bitmap_shader_source") }, lines.toString())
         assertTrue(lines.any { it.contains("uniformPacker=UniformPacker.bitmapTextureBytes") }, lines.toString())
         assertTrue(lines.any { it.contains("realTextureUploaded=true") }, lines.toString())
     }
@@ -610,6 +610,7 @@ class M25ExecutorWiringTest {
             textureFormat: String,
             draws: List<GPUBackendRawUniformDraw>,
             blendMode: GPUBlendMode?,
+            stencilMode: GPUBackendStencilMode?,
         ) = Unit
 
         override fun drawFullscreenStencilPass(

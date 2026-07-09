@@ -276,6 +276,8 @@ data class GPUMaterialAssemblyPlan(
     val rootSet: GPUMaterialRootSet,
     val snippetGraph: List<WGSLSnippetNode>,
     val moduleSalt: String,
+    val sourceEntryPoint: String = "",
+    val sourceWgsl: String = "",
 )
 
 /** Result of expanding a material dictionary entry into a module assembly plan. */
