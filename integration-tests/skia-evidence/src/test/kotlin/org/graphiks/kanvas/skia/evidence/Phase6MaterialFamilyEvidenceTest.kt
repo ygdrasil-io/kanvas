@@ -31,6 +31,15 @@ class Phase6MaterialFamilyEvidenceTest {
     }
 
     @Test
+    fun `classifies passing gated gradient rows as expected-unsupported`() {
+        val perspective = classify("gradients_view_perspective", "GRADIENT", similarity = 100.0, isPassing = true)
+
+        assertEquals("gradient-perspective-gated", perspective.subfamily)
+        assertEquals("expected-unsupported", perspective.classification)
+        assertEquals("unsupported.material.perspective_shader", perspective.fallbackReason)
+    }
+
+    @Test
     fun `classifies runtime effects and refusals`() {
         val registered = classify("linear_gradient_rt", "RUNTIME_EFFECT")
         val missing = classify("spiral_rt", "RUNTIME_EFFECT", similarity = 10.0, isPassing = false)

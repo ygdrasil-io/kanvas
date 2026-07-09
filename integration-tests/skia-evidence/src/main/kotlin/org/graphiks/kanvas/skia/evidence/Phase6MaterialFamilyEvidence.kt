@@ -75,17 +75,17 @@ object Phase6MaterialFamilyClassifier {
                 noScoreCause = noScoreCause(row)
                 nonClaim = "No score is not counted as fail or support; material evidence is incomplete."
             }
-            row.isPassing == true -> {
-                classification = "instrumented-existing"
-                fallback = "none"
-                noScoreCause = null
-                nonClaim = "${row.family} row remains instrumented until route and material diagnostics are attached."
-            }
             gatedReason != null -> {
                 classification = "expected-unsupported"
                 fallback = gatedReason
                 noScoreCause = null
                 nonClaim = "$subfamily remains outside Phase 6 material-family migration scope."
+            }
+            row.isPassing == true -> {
+                classification = "instrumented-existing"
+                fallback = "none"
+                noScoreCause = null
+                nonClaim = "${row.family} row remains instrumented until route and material diagnostics are attached."
             }
             else -> {
                 classification = "unexpected-fail"

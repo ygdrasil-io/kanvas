@@ -56,3 +56,15 @@
 - Focused test run (after fix):
   - Command: `rtk ./gradlew :integration-tests:skia-evidence:test --tests "org.graphiks.kanvas.skia.evidence.Phase6MaterialFamilyEvidenceTest" --rerun-tasks`
   - Result: `BUILD SUCCESSFUL` (all `Phase6MaterialFamilyEvidenceTest` cases passed).
+
+## Task 1 post-review fix (gated override priority)
+- Updated `Phase6MaterialFamilyClassifier.classify(...)` to evaluate `gatedReason` before `row.isPassing == true`, while preserving `no-score` as highest priority.
+- Kept `GRADIENT`, `RUNTIME_EFFECT`, `COLOR` filtering and existing mappings unchanged.
+- Added targeted test `classifies passing gated gradient rows as expected-unsupported` in `Phase6MaterialFamilyEvidenceTest.kt`.
+- Test scenario: `gradients_view_perspective`, family `GRADIENT`, default passing evidence (`isPassing=true`) now yields:
+  - `subfamily = gradient-perspective-gated`
+  - `classification = expected-unsupported`
+  - `fallbackReason = unsupported.material.perspective_shader`
+- Re-ran:
+  - `rtk ./gradlew :integration-tests:skia-evidence:test --tests "org.graphiks.kanvas.skia.evidence.Phase6MaterialFamilyEvidenceTest" --rerun-tasks`
+  - Result: `BUILD SUCCESSFUL`.
