@@ -278,7 +278,7 @@ private fun ColorFilter.applyTo(input: GPUMaterialDescriptor.SolidColor): Rgba? 
 
 private fun ColorFilter.applyTo(input: Rgba): Rgba? = when (this) {
     is ColorFilter.Matrix -> values.applyColorMatrix(input)
-    is ColorFilter.HSLAMatrix -> values.applyColorMatrix(input)
+    is ColorFilter.HSLAMatrix -> null
     is ColorFilter.Table -> table.applyTable(input)
     is ColorFilter.Lighting -> Rgba(
         r = input.r * mul.r + add.r,
