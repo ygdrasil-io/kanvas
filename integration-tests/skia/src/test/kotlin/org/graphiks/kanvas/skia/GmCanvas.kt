@@ -34,20 +34,18 @@ class GmCanvas(
 ) {
     private val transformStack = mutableListOf<Matrix33>()
     private val clipStack = mutableListOf<Rect?>()
-    private val layerStack = mutableListOf<Boolean>()
     private var currentTransform = Matrix33.identity()
     private var currentClip: Rect? = null
 
     fun save() {
         transformStack.add(currentTransform)
         clipStack.add(currentClip)
-        layerStack.add(false)
+        inner.save()
     }
 
     fun saveLayer(bounds: Rect? = null, paint: Paint? = null) {
         transformStack.add(currentTransform)
         clipStack.add(currentClip)
-        layerStack.add(true)
         inner.saveLayer(bounds, paint)
     }
 
@@ -58,9 +56,7 @@ class GmCanvas(
     fun restore() {
         currentTransform = transformStack.removeLast()
         currentClip = clipStack.removeLast()
-        if (layerStack.removeLast()) {
-            inner.restore()
-        }
+        inner.restore()
     }
 
     fun translate(dx: Float, dy: Float) {
@@ -100,7 +96,8 @@ class GmCanvas(
     }
 
     fun clipPath(path: Path, op: ClipOp = ClipOp.INTERSECT, antiAlias: Boolean = true) {
-        inner.clipPath(path, op, antiAlias)
+        val transformedPath = if (currentTransform.isIdentity()) path else path.transform(currentTransform)
+        inner.clipPath(transformedPath, op, antiAlias)
     }
 
     fun clipRRect(rrect: RRect, op: ClipOp = ClipOp.INTERSECT, antiAlias: Boolean = true) {

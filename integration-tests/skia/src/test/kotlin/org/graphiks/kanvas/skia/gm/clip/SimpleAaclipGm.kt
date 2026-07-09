@@ -34,8 +34,9 @@ sealed class SimpleAaclipBaseGm(
     override val width = 500
     override val height = 240
 
+    private val referenceBackground = 0xDD / 255f
     private val fBase = Rect.fromLTRB(100.65f, 100.65f, 150.65f, 150.65f)
-    private val fRect = Rect.fromLTRB(105.65f, 105.65f, 180.65f, 180.65f)
+    private val fRect = Rect.fromLTRB(130.65f, 130.65f, 170.65f, 170.65f)
     private val fBasePath = Path { }.apply { addRRect(RRect(fBase, 5f)) }
     private val fRectPath = Path { }.apply { addRRect(RRect(fRect, 5f)) }
     private val fBaseRectPath = Path { }.apply { addRect(fBase) }
@@ -63,6 +64,8 @@ sealed class SimpleAaclipBaseGm(
     }
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
+        canvas.drawColor(referenceBackground, referenceBackground, referenceBackground, 1f)
+
         val gOps = listOf(
             Triple("Difference", ClipOp.DIFFERENCE, Color.BLACK),
             Triple("Intersect", ClipOp.INTERSECT, Color.RED),
