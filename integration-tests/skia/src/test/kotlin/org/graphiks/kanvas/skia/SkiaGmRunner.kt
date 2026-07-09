@@ -62,6 +62,14 @@ class SkiaGmRunner {
         val elapsedMs = (System.nanoTime() - t0) / 1_000_000
 
         val refPath = "/reference/${gm.name}.png"
+        val refStatus = gm.referenceStatus
+
+        if (refStatus.untrustable) {
+            throw TestAbortedException(
+                "Reference PNG for GM '${gm.name}' is marked untrustable" +
+                    refStatus.reason?.let { ": $it" }.orEmpty(),
+            )
+        }
 
         if (!ReferenceManager.hasReference(refPath)) {
             error("Reference PNG not found at $refPath. Run: cp <skia-native-reference> src/test/resources/reference/${gm.name}.png")

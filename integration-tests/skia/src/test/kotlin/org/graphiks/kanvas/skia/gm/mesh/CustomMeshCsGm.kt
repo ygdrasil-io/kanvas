@@ -5,6 +5,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.skia.GmCanvas
+import org.graphiks.kanvas.skia.ReferenceStatusEntry
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
@@ -25,6 +26,10 @@ class CustomMeshCsGm : SkiaGm {
     override val renderFamily = RenderFamily.MESH
     override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 83.0
+    override val referenceStatus = ReferenceStatusEntry(
+        status = "untrustable",
+        reason = "white placeholder reference does not represent Skia custommesh_cs mesh output",
+    )
     override val width = 468
     override val height = 258
 
