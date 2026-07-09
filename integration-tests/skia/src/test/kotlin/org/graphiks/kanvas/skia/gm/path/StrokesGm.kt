@@ -13,11 +13,11 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
+import org.graphiks.kanvas.skia.SkiaRandom
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.CornerRadii
 import org.graphiks.kanvas.types.RRect
 import org.graphiks.kanvas.types.Rect
-import kotlin.random.Random
 
 class StrokesGm : SkiaGm {
     override val name = "strokes_round"
@@ -34,7 +34,7 @@ class StrokesGm : SkiaGm {
             canvas.translate(0f, SH * y)
             canvas.clipRect(Rect.fromLTRB(2f, 2f, SW - 2f, SH - 2f))
 
-            val rand = Random(0)
+            val rand = SkiaRandom(0u)
             for (i in 0 until N) {
                 val (r1, c1) = rndRect(rand)
                 canvas.drawOval(r1, Paint(
@@ -62,19 +62,19 @@ class StrokesGm : SkiaGm {
         }
     }
 
-    private fun rndRect(rand: Random): Pair<Rect, Color> {
-        val x = rand.nextFloat() * W
-        val y = rand.nextFloat() * H
-        val w = rand.nextFloat() * (W shr 2)
-        val h = rand.nextFloat() * (H shr 2)
-        val hoffset = rand.nextFloat() * 2f - 1f
-        val woffset = rand.nextFloat() * 2f - 1f
+    private fun rndRect(rand: SkiaRandom): Pair<Rect, Color> {
+        val x = rand.nextF() * W
+        val y = rand.nextF() * H
+        val w = rand.nextF() * (W shr 2)
+        val h = rand.nextF() * (H shr 2)
+        val hoffset = rand.nextF() * 2f - 1f
+        val woffset = rand.nextF() * 2f - 1f
 
         val dx = -w / 2f + woffset
         val dy = -h / 2f + hoffset
         val r = Rect.fromLTRB(x + dx, y + dy, x + w + dx, y + h + dy)
 
-        val c32 = rand.nextInt()
+        val c32 = rand.nextS()
         val color = Color.fromRGBA(
             ((c32 ushr 16) and 0xFF) / 255f,
             ((c32 ushr 8) and 0xFF) / 255f,

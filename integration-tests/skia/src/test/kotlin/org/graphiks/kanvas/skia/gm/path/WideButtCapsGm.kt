@@ -14,8 +14,8 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
+import org.graphiks.kanvas.skia.SkiaRandom
 import org.graphiks.kanvas.types.Color
-import kotlin.random.Random
 
 class WideButtCapsGm : SkiaGm {
     override val name = "widebuttcaps"
@@ -31,7 +31,7 @@ class WideButtCapsGm : SkiaGm {
     }
 
     private fun drawTest(canvas: GmCanvas) {
-        val rand = Random(0)
+        val rand = SkiaRandom(0u)
         canvas.drawColor(0f, 0f, 0f, 1f)
 
         canvas.save()
@@ -64,7 +64,7 @@ class WideButtCapsGm : SkiaGm {
         canvas.restore()
     }
 
-    private fun drawStrokes(canvas: GmCanvas, rand: Random, path: Path, cubic: Path) {
+    private fun drawStrokes(canvas: GmCanvas, rand: SkiaRandom, path: Path, cubic: Path) {
         val strokePaint = Paint(
             antiAlias = true,
             strokeWidth = kStrokeWidth,
@@ -85,8 +85,8 @@ class WideButtCapsGm : SkiaGm {
         canvas.restore()
     }
 
-    private fun nextColor(rand: Random): Color {
-        val raw = rand.nextInt() or 0xFF808080.toInt()
+    private fun nextColor(rand: SkiaRandom): Color {
+        val raw = rand.nextS() or 0xFF808080.toInt()
         val r = ((raw ushr 16) and 0xFF) / 255f
         val g = ((raw ushr 8) and 0xFF) / 255f
         val b = (raw and 0xFF) / 255f

@@ -6,11 +6,11 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
+import org.graphiks.kanvas.skia.SkiaRandom
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.CornerRadii
 import org.graphiks.kanvas.types.RRect
 import org.graphiks.kanvas.types.Rect
-import kotlin.random.Random
 
 /**
  * Port of Skia's `gm/convexpaths.cpp`.
@@ -28,14 +28,14 @@ class ConvexPathsGm : SkiaGm {
     private val paths by lazy { makePaths() }
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        val rand = Random(0)
+        val rand = SkiaRandom(0u)
         canvas.drawColor(0f, 0f, 0f, 1f)
         canvas.translate(20f, 20f)
         canvas.scale(2f / 3, 2f / 3)
         for (i in paths.indices) {
             canvas.save()
             canvas.translate(200f * (i % 5) + 1f / 10, 200f * (i / 5) + 9f / 10)
-            val raw = rand.nextInt()
+            val raw = rand.nextS()
             val ci = raw or (0xFF000000.toInt())
             val a = ((ci ushr 24) and 0xFF) / 255f
             val r = ((ci ushr 16) and 0xFF) / 255f
