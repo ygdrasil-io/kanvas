@@ -33,6 +33,20 @@ tasks.register<JavaExec>("generateGpuPhase6ImageFamilyEvidence") {
     outputs.file(rootProject.layout.projectDirectory.file("reports/gpu-renderer/2026-07-08-gpu-phase-6-image-family.md"))
 }
 
+tasks.register<JavaExec>("generateGmFidelityWave3ScoreFirstEvidence") {
+    group = "verification"
+    description = "Generates score-first GM Fidelity Wave 3 candidate evidence from the Skia dashboard."
+    dependsOn(
+        ":integration-tests:skia:generateSkiaDashboard",
+        tasks.named("classes"),
+    )
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("org.graphiks.kanvas.skia.evidence.ScoreFirstGmFidelityWave3CliKt")
+    args(rootProject.layout.projectDirectory.asFile.absolutePath)
+    inputs.file(rootProject.layout.projectDirectory.file("integration-tests/skia/build/reports/skia-gm-dashboard/data/gms.json"))
+    outputs.dir(rootProject.layout.projectDirectory.dir("reports/gpu-renderer/gm-fidelity-wave-3-score-first"))
+}
+
 tasks.register<JavaExec>("generateGpuPhase6CoverageFamiliesEvidence") {
     group = "verification"
     description = "Generates the GPU Phase 6 PATH + CLIP coverage family classification and evidence report."
