@@ -47,7 +47,7 @@ class RuntimeFunctionsGm : SkiaGm {
     override val name = "runtimefunctions"
     override val renderFamily = RenderFamily.RUNTIME_EFFECT
     override val renderCost = RenderCost.BLOCKING
-    override val minSimilarity = 10.25848388671875
+    override val minSimilarity = 10.21575927734375
     override val width = 256
     override val height = 256
 

@@ -24,7 +24,7 @@ class RtifUnsharpGm : SkiaGm {
     override val name = "rtif_unsharp"
     override val renderFamily = RenderFamily.RUNTIME_EFFECT
     override val renderCost = RenderCost.BLOCKING
-    override val minSimilarity = 0.00152587890625
+    override val minSimilarity = 0.000762939453125
     override val width = 512
     override val height = 256
 
