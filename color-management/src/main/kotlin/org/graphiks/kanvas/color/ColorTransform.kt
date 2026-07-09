@@ -53,11 +53,19 @@ public object ColorTransform {
     ): ColorTransformCompileResult = compile(ColorTransformRequest(source, destination, alphaType))
 
     public fun compile(request: ColorTransformRequest): ColorTransformCompileResult {
-        request.source.unsupportedCode?.let { return ColorTransformCompileResult.Failure(it) }
-        request.destination.unsupportedCode?.let { return ColorTransformCompileResult.Failure(it) }
+        unsupportedProfileFailure(request.source)?.let { return it }
+        unsupportedProfileFailure(request.destination)?.let { return it }
         if (request.source != request.destination) {
             return ColorTransformCompileResult.Failure("color.transform.unsupported")
         }
         return ColorTransformCompileResult.Success(CompiledColorTransform(request))
+    }
+
+    private fun unsupportedProfileFailure(profile: ColorProfile): ColorTransformCompileResult.Failure? {
+        profile.unsupportedCode?.let { return ColorTransformCompileResult.Failure(it) }
+        if (!profile.isSupportedByTask1) {
+            return ColorTransformCompileResult.Failure("color.profile.unsupported")
+        }
+        return null
     }
 }
