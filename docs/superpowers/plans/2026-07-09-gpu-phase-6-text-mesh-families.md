@@ -516,6 +516,7 @@ Map gated subfamilies exactly:
 "text-emoji-gated" -> "unsupported.text.emoji"
 "text-color-palette-gated" -> "unsupported.text.palette"
 "text-blob-gated" -> "unsupported.text.glyph_cache"
+"text-annotation-gated" -> "unsupported.text.annotation"
 "text-shader-or-gradient-gated" -> "unsupported.text.shader_or_gradient"
 "text-filter-or-blur-gated" -> "unsupported.text.filter_or_blur"
 "text-clip-interaction-gated" -> "unsupported.text.clip_interaction"
