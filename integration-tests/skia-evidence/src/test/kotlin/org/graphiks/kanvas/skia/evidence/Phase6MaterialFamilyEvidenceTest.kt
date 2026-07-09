@@ -3,6 +3,7 @@ package org.graphiks.kanvas.skia.evidence
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertContains
 
 class Phase6MaterialFamilyEvidenceTest {
     @Test
@@ -176,6 +177,123 @@ class Phase6MaterialFamilyEvidenceTest {
         assertFalse(claimsText.contains("IMAGE_FILTERS"))
         assertFalse(claimsText.contains("MESH"))
         assertFalse(claimsText.contains("TEXT"))
+    }
+
+    @Test
+    fun `duplicate material rows receive stable row ids and surface them in csv and markdown`() {
+        val evidence = Phase6MaterialFamilyClassifier.buildEvidence(
+            GmDashboard(
+                generatedAt = "2026-07-09T09:00:00",
+                rows = listOf(
+                    row("linear_gradient", family = "GRADIENT"),
+                    row("linear_gradient", family = "GRADIENT", similarity = 20.0, isPassing = false),
+                ),
+            ),
+        )
+
+        assertEquals(listOf("linear_gradient", "linear_gradient#2"), evidence.rows.map { it.rowId })
+        assertContains(evidence.toCsv(), "linear_gradient,linear_gradient,GRADIENT,gradient-linear,instrumented-existing")
+        assertContains(evidence.toCsv(), "linear_gradient#2,linear_gradient,GRADIENT,gradient-linear,unexpected-fail")
+        assertContains(evidence.toMarkdown(), "| `linear_gradient` | `linear_gradient` | `GRADIENT` | `gradient-linear` | `instrumented-existing` |")
+        assertContains(evidence.toMarkdown(), "| `linear_gradient#2` | `linear_gradient` | `GRADIENT` | `gradient-linear` | `unexpected-fail` |")
+    }
+
+    @Test
+    fun `markdown report includes separate material family deltas`() {
+        val evidence = Phase6MaterialFamilyClassifier.buildEvidence(
+            GmDashboard(
+                generatedAt = "2026-07-09T09:00:00",
+                rows = buildList {
+                    repeat(56) { add(row("gradient_$it", family = "GRADIENT")) }
+                    repeat(25) { add(row("runtime_$it", family = "RUNTIME_EFFECT")) }
+                    repeat(20) { add(row("color_$it", family = "COLOR")) }
+                },
+            ),
+        )
+
+        val markdown = evidence.toMarkdown()
+
+        assertContains(markdown, "## Family Deltas")
+        assertContains(markdown, "2026-07-09 local dashboard before material-family wave")
+        assertContains(markdown, "| `COLOR` | 20 | 20 | +0 |")
+        assertContains(markdown, "| `GRADIENT` | 56 | 56 | +0 |")
+        assertContains(markdown, "| `RUNTIME_EFFECT` | 25 | 25 | +0 |")
+    }
+
+    @Test
+    fun `material evidence json includes diff stats and no score cause`() {
+        val evidence = Phase6MaterialFamilyClassifier.buildEvidence(
+            GmDashboard(
+                generatedAt = "2026-07-09T09:00:00",
+                rows = listOf(
+                    row(
+                        "linear_gradient",
+                        family = "GRADIENT",
+                        hasDiff = true,
+                        width = 320,
+                        height = 240,
+                        matchingPixels = 70000,
+                        totalPixels = 76800,
+                        maxDiff = GmRgbaInt(r = 1, g = 2, b = 3, a = 4),
+                        meanDiff = GmRgbaDouble(r = 1.25, g = 2.5, b = 3.75, a = 4.0),
+                    ),
+                    row("missing_runtime", family = "RUNTIME_EFFECT", similarity = null, isPassing = null, noReference = true),
+                ),
+            ),
+        )
+
+        val json = evidence.toJsonObject().toString()
+
+        assertContains(json, "\"schemaVersion\":\"phase6-material-families-v1\"")
+        assertContains(json, "\"width\":320")
+        assertContains(json, "\"height\":240")
+        assertContains(json, "\"matchingPixels\":70000")
+        assertContains(json, "\"totalPixels\":76800")
+        assertContains(json, "\"maxDiff\":{\"r\":1,\"g\":2,\"b\":3,\"a\":4}")
+        assertContains(json, "\"meanDiff\":{\"r\":1.25,\"g\":2.5,\"b\":3.75,\"a\":4.0}")
+        assertContains(json, "\"noScoreCause\":\"reference-missing\"")
+    }
+
+    @Test
+    fun `material writer creates json markdown and csv outputs and preserves validation section`() {
+        val evidence = Phase6MaterialFamilyClassifier.buildEvidence(
+            GmDashboard(
+                generatedAt = "2026-07-09T09:00:00",
+                rows = listOf(row("linear_gradient", family = "GRADIENT"), row("color", family = "COLOR")),
+            ),
+        )
+
+        val root = kotlin.io.path.createTempDirectory("phase6-material-evidence")
+        Phase6MaterialFamilyEvidenceWriter.writeOutputs(root, evidence)
+
+        val evidencePath = root.resolve("reports/gpu-renderer/phase-6-material-families/evidence.json")
+        val markdownPath = root.resolve("reports/gpu-renderer/2026-07-09-gpu-phase-6-material-families.md")
+        val csvPath = root.resolve("reports/gpu-renderer/phase-6-material-families/classification.csv")
+
+        assertEquals(true, java.nio.file.Files.isRegularFile(evidencePath))
+        assertEquals(true, java.nio.file.Files.isRegularFile(markdownPath))
+        assertEquals(true, java.nio.file.Files.isRegularFile(csvPath))
+        assertContains(java.nio.file.Files.readString(evidencePath), "\"schemaVersion\": \"phase6-material-families-v1\"")
+        assertContains(java.nio.file.Files.readString(markdownPath), "No broad shader support is claimed")
+        assertContains(java.nio.file.Files.readString(csvPath), "linear_gradient,linear_gradient,GRADIENT,gradient-linear,instrumented-existing")
+
+        java.nio.file.Files.writeString(
+            markdownPath,
+            java.nio.file.Files.readString(markdownPath) +
+                """
+
+                ## Validation
+
+                - `:integration-tests:skia-evidence:test` passed.
+                - `generateGpuPhase6MaterialFamiliesEvidence` regenerated evidence.
+                """.trimIndent() +
+                "\n",
+        )
+
+        Phase6MaterialFamilyEvidenceWriter.writeOutputs(root, evidence)
+        val regenerated = java.nio.file.Files.readString(markdownPath)
+        assertContains(regenerated, "## Validation")
+        assertContains(regenerated, "- `:integration-tests:skia-evidence:test` passed.")
     }
 
     private fun classify(

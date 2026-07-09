@@ -1,5 +1,18 @@
 package org.graphiks.kanvas.skia.evidence
 
+import java.nio.file.Files
+import java.nio.file.Path
+import java.util.Locale
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonObjectBuilder
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+
 data class Phase6MaterialFamiliesEvidence(
     val schemaVersion: String,
     val generatedBy: String,
@@ -246,3 +259,239 @@ private fun String.materialKey(): String =
 
 private fun String.containsAnyMaterial(vararg tokens: String): Boolean =
     tokens.any(this::contains)
+
+object Phase6MaterialFamilyEvidenceWriter {
+    private val prettyJson = Json { prettyPrint = true }
+
+    fun writeOutputs(root: Path, evidence: Phase6MaterialFamiliesEvidence) {
+        val evidencePath = root.resolve("reports/gpu-renderer/phase-6-material-families/evidence.json")
+        val csvPath = root.resolve("reports/gpu-renderer/phase-6-material-families/classification.csv")
+        val markdownPath = root.resolve("reports/gpu-renderer/2026-07-09-gpu-phase-6-material-families.md")
+        Files.createDirectories(evidencePath.parent)
+        Files.createDirectories(markdownPath.parent)
+        Files.writeString(evidencePath, prettyJson.encodeToString(JsonObject.serializer(), evidence.toJsonObject()) + "\n")
+        Files.writeString(csvPath, evidence.toCsv())
+        val preservedValidation = readValidationSection(markdownPath)
+        val markdown = buildString {
+            append(evidence.toMarkdown().trimEnd())
+            if (preservedValidation != null) {
+                appendLine()
+                appendLine()
+                append(preservedValidation.trim())
+            }
+            appendLine()
+        }
+        Files.writeString(markdownPath, markdown)
+    }
+
+    private fun readValidationSection(markdownPath: Path): String? {
+        if (!Files.isRegularFile(markdownPath)) return null
+        val existing = Files.readString(markdownPath)
+        val heading = "## Validation"
+        val start = existing.indexOf(heading)
+        if (start < 0) return null
+        return existing.substring(start).trim()
+    }
+}
+
+fun Phase6MaterialFamiliesEvidence.toJsonObject(): JsonObject =
+    buildJsonObject {
+        put("schemaVersion", schemaVersion)
+        put("generatedBy", generatedBy)
+        put("dashboardSource", dashboardSource)
+        if (sourceGeneratedAt == null) put("sourceGeneratedAt", JsonNull) else put("sourceGeneratedAt", sourceGeneratedAt)
+        put("summary", summary.toJsonObject())
+        put("nonClaims", buildJsonArray { nonClaims.forEach { add(it) } })
+        put("rows", buildJsonArray { rows.forEach { add(it.toJsonObject()) } })
+    }
+
+private fun Phase6MaterialSummary.toJsonObject(): JsonObject =
+    buildJsonObject {
+        put("totalRows", totalRows)
+        put("families", families.toMaterialCountJsonObject())
+        put("familyDeltas", familyDeltas.toMaterialFamilyDeltaJsonObject())
+        put("classifications", classifications.toMaterialCountJsonObject())
+        put("subfamilies", subfamilies.toMaterialCountJsonObject())
+        put("promotedRows", promotedRows)
+        put("unexpectedFails", unexpectedFails)
+        put("noScore", noScore)
+    }
+
+private fun Phase6MaterialRowEvidence.toJsonObject(): JsonObject =
+    buildJsonObject {
+        put("rowId", rowId)
+        put("name", name)
+        put("family", family)
+        put("subfamily", subfamily)
+        put("classification", classification)
+        putNullableMaterialDouble("similarity", similarity)
+        putNullableMaterialDouble("minSimilarity", minSimilarity)
+        if (isPassing == null) put("isPassing", JsonNull) else put("isPassing", isPassing)
+        putNullableMaterialInt("width", width)
+        putNullableMaterialInt("height", height)
+        putNullableMaterialLong("matchingPixels", matchingPixels)
+        putNullableMaterialLong("totalPixels", totalPixels)
+        putNullableMaterialRgbaInt("maxDiff", maxDiff)
+        putNullableMaterialRgbaDouble("meanDiff", meanDiff)
+        put("fallbackReason", fallbackReason)
+        putNullableMaterialString("referencePath", referencePath)
+        putNullableMaterialString("generatedPath", generatedPath)
+        putNullableMaterialString("diffPath", diffPath)
+        putNullableMaterialString("noScoreCause", noScoreCause)
+        put("nonClaim", nonClaim)
+    }
+
+private fun Map<String, Phase6MaterialFamilyDelta>.toMaterialFamilyDeltaJsonObject(): JsonObject =
+    buildJsonObject {
+        entries.sortedBy { it.key }.forEach { (family, delta) ->
+            put(family, delta.toJsonObject())
+        }
+    }
+
+private fun Phase6MaterialFamilyDelta.toJsonObject(): JsonObject =
+    buildJsonObject {
+        put("baselineSource", baselineSource)
+        put("currentSource", currentSource)
+        if (currentGeneratedAt == null) put("currentGeneratedAt", JsonNull) else put("currentGeneratedAt", currentGeneratedAt)
+        put("baselineCount", baselineCount)
+        put("currentCount", currentCount)
+        put("delta", delta)
+    }
+
+private fun Map<String, Int>.toMaterialCountJsonObject(): JsonObject =
+    buildJsonObject {
+        entries.sortedBy { it.key }.forEach { (key, value) -> put(key, value) }
+    }
+
+private fun JsonObjectBuilder.putNullableMaterialString(key: String, value: String?) {
+    if (value == null) put(key, JsonNull) else put(key, value)
+}
+
+private fun JsonObjectBuilder.putNullableMaterialDouble(key: String, value: Double?) {
+    if (value == null) put(key, JsonNull) else put(key, value)
+}
+
+private fun JsonObjectBuilder.putNullableMaterialInt(key: String, value: Int?) {
+    if (value == null) put(key, JsonNull) else put(key, value)
+}
+
+private fun JsonObjectBuilder.putNullableMaterialLong(key: String, value: Long?) {
+    if (value == null) put(key, JsonNull) else put(key, value)
+}
+
+private fun JsonObjectBuilder.putNullableMaterialRgbaInt(key: String, value: GmRgbaInt?) {
+    if (value == null) {
+        put(key, JsonNull)
+    } else {
+        put(
+            key,
+            buildJsonObject {
+                put("r", value.r)
+                put("g", value.g)
+                put("b", value.b)
+                put("a", value.a)
+            },
+        )
+    }
+}
+
+private fun JsonObjectBuilder.putNullableMaterialRgbaDouble(key: String, value: GmRgbaDouble?) {
+    if (value == null) {
+        put(key, JsonNull)
+    } else {
+        put(
+            key,
+            buildJsonObject {
+                put("r", value.r)
+                put("g", value.g)
+                put("b", value.b)
+                put("a", value.a)
+            },
+        )
+    }
+}
+
+fun Phase6MaterialFamiliesEvidence.toCsv(): String =
+    buildString {
+        appendLine("rowId,name,family,subfamily,classification,similarity,minSimilarity,isPassing,width,height,matchingPixels,totalPixels,maxDiff,meanDiff,fallbackReason,referencePath,generatedPath,diffPath,noScoreCause")
+        rows.forEach { row ->
+            appendLine(
+                listOf(
+                    row.rowId,
+                    row.name,
+                    row.family,
+                    row.subfamily,
+                    row.classification,
+                    row.similarity?.toString().orEmpty(),
+                    row.minSimilarity?.toString().orEmpty(),
+                    row.isPassing?.toString().orEmpty(),
+                    row.width?.toString().orEmpty(),
+                    row.height?.toString().orEmpty(),
+                    row.matchingPixels?.toString().orEmpty(),
+                    row.totalPixels?.toString().orEmpty(),
+                    row.maxDiff?.let { "${it.r}/${it.g}/${it.b}/${it.a}" }.orEmpty(),
+                    row.meanDiff?.let { "${it.r}/${it.g}/${it.b}/${it.a}" }.orEmpty(),
+                    row.fallbackReason,
+                    row.referencePath.orEmpty(),
+                    row.generatedPath.orEmpty(),
+                    row.diffPath.orEmpty(),
+                    row.noScoreCause.orEmpty(),
+                ).joinToString(",") { it.materialCsvCell() },
+            )
+        }
+    }
+
+fun Phase6MaterialFamiliesEvidence.toMarkdown(): String =
+    buildString {
+        appendLine("# GPU Phase 6 Material Families Evidence")
+        appendLine()
+        appendLine("## Summary")
+        appendLine()
+        appendLine("- Total GRADIENT + RUNTIME_EFFECT + COLOR rows: ${summary.totalRows}")
+        appendLine("- Families: ${summary.families}")
+        appendLine("- Classifications: ${summary.classifications}")
+        appendLine("- Subfamilies: ${summary.subfamilies}")
+        appendLine()
+        appendLine("## Family Deltas")
+        appendLine()
+        appendLine("- Baseline source: `${summary.familyDeltas.values.firstOrNull()?.baselineSource ?: "2026-07-09 local dashboard before material-family wave"}`")
+        appendLine("- Current dashboard: `${dashboardSource}` (${sourceGeneratedAt ?: "generatedAt unavailable"})")
+        appendLine()
+        appendLine("| Family | Baseline | Current | Delta |")
+        appendLine("|---|---:|---:|---:|")
+        summary.familyDeltas.entries.sortedBy { it.key }.forEach { (family, delta) ->
+            appendLine("| `$family` | ${delta.baselineCount} | ${delta.currentCount} | ${delta.delta.toSignedMaterialDelta()} |")
+        }
+        appendLine()
+        appendLine("## Non-Claims")
+        appendLine()
+        nonClaims.forEach { appendLine("- $it") }
+        appendLine()
+        appendLine("## Reason Code Taxonomy")
+        appendLine()
+        appendLine("- Material `unsupported.material.*` and `unsupported.runtime_effect.*` reason codes in this report are evidence refusal taxonomy only, not renderer route diagnostics unless separately attached.")
+        appendLine()
+        appendLine("## Rows")
+        appendLine()
+        appendLine("| Row ID | Row | Family | Subfamily | Classification | Fallback | Similarity | No Score Cause |")
+        appendLine("|---|---|---|---|---|---|---:|---|")
+        rows.forEach { row ->
+            val similarity = row.similarity?.let { "%.2f".format(Locale.US, it) } ?: "n/a"
+            appendLine("| `${row.rowId}` | `${row.name}` | `${row.family}` | `${row.subfamily}` | `${row.classification}` | `${row.fallbackReason}` | $similarity | `${row.noScoreCause ?: ""}` |")
+        }
+        appendLine()
+        appendLine("## Regeneration Notes")
+        appendLine()
+        appendLine("- Run `:integration-tests:skia:generateSkiaDashboard` before generating material-family evidence.")
+        appendLine("- Dashboard data is read from `integration-tests/skia/build/reports/skia-gm-dashboard/data/gms.json`.")
+        appendLine("- `COMPOSITE` rows are intentionally excluded from this material-family wave.")
+    }
+
+private fun String.materialCsvCell(): String =
+    if (any { it == ',' || it == '"' || it == '\n' || it == '\r' }) {
+        "\"" + replace("\"", "\"\"") + "\""
+    } else {
+        this
+    }
+
+private fun Int.toSignedMaterialDelta(): String = if (this >= 0) "+$this" else toString()
