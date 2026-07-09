@@ -460,7 +460,7 @@ private fun GPUPathDescriptor.strokeAndFillRefusalCode(
     descriptor.boundsLabel.isBlank() -> "unsupported.bounds.stroke_and_fill"
     !pathKey.isStableEvidenceKey() -> "unsupported.geometry.path_key_nondeterministic"
     verbCount <= 0 || pointCount <= 0 -> "unsupported.geometry.descriptor_invalid"
-    fillRule !in setOf("NonZero", "EvenOdd", "InverseNonZero", "InverseEvenOdd") -> "unsupported.path.fill_rule"
+    fillRule !in setOf("NonZero", "EvenOdd", "InverseWinding", "InverseEvenOdd") -> "unsupported.path.fill_rule"
     finiteProof != "finite" -> "unsupported.geometry.path_nonfinite"
     volatility != "immutable" -> "unsupported.path.volatile"
     transformClass !in setOf("identity", "translate", "scale", "affine") -> "unsupported.stroke_and_fill.transform"
@@ -682,8 +682,8 @@ Append to `BasicPathFillPreparedRouteTest.kt`:
 
 ```kotlin
 @Test
-fun `all Skia fill rule names are accepted by prepared fill evidence`() {
-    val fillRules = listOf("NonZero", "EvenOdd", "InverseNonZero", "InverseEvenOdd")
+fun `all Kanvas fill rule names are accepted by prepared fill evidence`() {
+    val fillRules = listOf("NonZero", "EvenOdd", "InverseWinding", "InverseEvenOdd")
 
     for (fillRule in fillRules) {
         val plan = GPUBasicPathFillPreparedPlanner().plan(
@@ -727,7 +727,7 @@ Expected: either FAIL on fill-rule naming gaps or PASS if existing code already 
 If the test failed because existing code expects legacy names, update `GPUBasicPathFillPreparedPlanner` fill-rule validation in `GeometryContracts.kt` so the accepted set is exactly:
 
 ```kotlin
-setOf("NonZero", "EvenOdd", "InverseNonZero", "InverseEvenOdd")
+setOf("NonZero", "EvenOdd", "InverseWinding", "InverseEvenOdd")
 ```
 
 Update dump lines so they print the path descriptor fill rule without rewriting it:

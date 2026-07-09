@@ -65,8 +65,8 @@ class BasicPathFillPreparedRouteTest {
     }
 
     @Test
-    fun `all Skia fill rule names are accepted by prepared fill evidence`() {
-        val fillRules = listOf("NonZero", "EvenOdd", "InverseNonZero", "InverseEvenOdd")
+    fun `all Kanvas fill rule names are accepted by prepared fill evidence`() {
+        val fillRules = listOf("NonZero", "EvenOdd", "InverseWinding", "InverseEvenOdd")
 
         for (fillRule in fillRules) {
             val plan = GPUBasicPathFillPreparedPlanner().plan(
