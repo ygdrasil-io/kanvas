@@ -8,11 +8,11 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
+import org.graphiks.kanvas.skia.SkiaRandom
 import org.graphiks.kanvas.types.Color
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
-import kotlin.random.Random
 
 /**
  * Port of Skia's `gm/polygons.cpp::PolygonsGM` (840 x 1140).
@@ -39,7 +39,7 @@ class PolygonsGm : SkiaGm {
     private val polygons: List<Path> = buildPolygons()
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
-        val rand = Random(42)
+        val rand = SkiaRandom(42u)
         var counter = 0
 
         // Stroke section: 3 joins x 3 widths x 8 polygons
@@ -75,8 +75,8 @@ class PolygonsGm : SkiaGm {
         canvas.translate(x, y)
     }
 
-    private fun makePaint(rand: Random, join: StrokeJoin, width: Float, style: PaintStyle): Paint {
-        val raw = rand.nextInt() or 0xFF000000.toInt()
+    private fun makePaint(rand: SkiaRandom, join: StrokeJoin, width: Float, style: PaintStyle): Paint {
+        val raw = rand.nextS() or 0xFF000000.toInt()
         val alpha = if (width == 40f) 0xA0 else 0xFF
         val adjusted = (raw and 0x00FFFFFF) or (alpha shl 24)
         return Paint(
