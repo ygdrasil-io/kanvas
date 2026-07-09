@@ -208,6 +208,9 @@ At milestones:
 
 - Do not lower thresholds to claim progress.
 - Do not hide `noReference`, `renderFailed`, or unsupported rows.
+- Do not modify upstream/reference PNGs to make scores pass. Reference images
+  are fixed evidence; fixes must change Kanvas rendering, GM port code, or
+  generated renders/scores only when justified by real output changes.
 - Do not claim broad Skia path parity from selected GM improvements.
 - Do not add unrelated renderer refactors outside the current root cause.
 - Do not port Ganesh, Graphite, or SkSL compiler behavior.
