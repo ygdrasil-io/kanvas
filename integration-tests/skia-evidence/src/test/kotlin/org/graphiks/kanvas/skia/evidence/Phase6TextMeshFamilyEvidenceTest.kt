@@ -38,6 +38,8 @@ class Phase6TextMeshFamilyEvidenceTest {
         val shader = classify("chrome_gradtext2", "TEXT")
         val filter = classify("textfilter_image", "TEXT")
         val clip = classify("cliperror", "TEXT", similarity = null, isPassing = null, renderFailed = true)
+        val fontFallbackAndLarge = classify("fontregen_bigtext", "TEXT")
+        val annotationAndLarge = classify("annotation_bigtext", "TEXT")
 
         assertEquals("text-large-or-cache", largeOrCache.subfamily)
         assertEquals("instrumented-existing", largeOrCache.classification)
@@ -64,6 +66,12 @@ class Phase6TextMeshFamilyEvidenceTest {
         assertEquals("unsupported.text.clip_interaction", clip.fallbackReason)
         assertEquals("no-score", clip.classification)
         assertEquals("generated-render-missing", clip.noScoreCause)
+        assertEquals("text-font-fallback-gated", fontFallbackAndLarge.subfamily)
+        assertEquals("unsupported.text.font_fallback", fontFallbackAndLarge.fallbackReason)
+        assertEquals("expected-unsupported", fontFallbackAndLarge.classification)
+        assertEquals("text-annotation-gated", annotationAndLarge.subfamily)
+        assertEquals("unsupported.text.annotation", annotationAndLarge.fallbackReason)
+        assertEquals("expected-unsupported", annotationAndLarge.classification)
     }
 
     @Test

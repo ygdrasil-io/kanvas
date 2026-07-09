@@ -206,7 +206,6 @@ object Phase6TextMeshFamilyClassifier {
             name.containsAnyTextMesh("rsxform") -> "text-rsxform-gated"
             name.containsAnyTextMesh("persp", "perspective", "dftextblobpersp") -> "text-perspective-or-transform-gated"
             name.containsAnyTextMesh("fontmgr", "fontmanager") -> "text-font-manager-gated"
-            name.containsAnyTextMesh("bigtext") -> "text-large-or-cache"
             name.containsAnyTextMesh("fontcache", "glyphcache") -> "text-large-or-cache"
             name.containsAnyTextMesh("fontregen", "fallback") -> "text-font-fallback-gated"
             name.containsAnyTextMesh("coloremoji", "emoji") -> "text-emoji-gated"
@@ -214,7 +213,7 @@ object Phase6TextMeshFamilyClassifier {
             name.containsAnyTextMesh("palette") -> "text-color-palette-gated"
             name.containsAnyTextMesh("textblob", "blob") -> "text-blob-gated"
             name.containsAnyTextMesh("annotated", "annotation") -> "text-annotation-gated"
-            name.containsAnyTextMesh("largeglyph") -> "text-large-or-cache"
+            name.containsAnyTextMesh("bigtext", "largeglyph") -> "text-large-or-cache"
             else -> "text-basic-latin"
         }
 
@@ -240,6 +239,7 @@ object Phase6TextMeshFamilyClassifier {
             "text-perspective-or-transform-gated" -> "unsupported.text.perspective"
             "text-font-manager-gated" -> "unsupported.text.font_manager"
             "text-font-fallback-gated" -> "unsupported.text.font_fallback"
+            "text-annotation-gated" -> "unsupported.text.annotation"
             "text-color-font-gated" -> "unsupported.text.color_font"
             "text-emoji-gated" -> "unsupported.text.emoji"
             "text-color-palette-gated" -> "unsupported.text.palette"
