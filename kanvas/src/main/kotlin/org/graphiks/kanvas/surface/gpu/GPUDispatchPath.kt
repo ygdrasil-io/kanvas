@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.surface.gpu
 
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
+import org.graphiks.kanvas.gpu.renderer.commands.GPUClipKind
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRawUniformDraw
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRenderRecorder
@@ -57,8 +58,18 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
     val blendMode = cmd.blend.blendMode
     val tessVertices = cmd.tessellatedVertices
     val vertexCount = cmd.totalVertexCount
-    val minVertices = if (cmd.stroke) 2 else 3
-    val minFloats = if (cmd.stroke) 4 else 6
+    val allowsDegenerateRoundStroke = cmd.stroke &&
+        cmd.strokeCap == "round"
+    val minVertices = if (cmd.stroke) {
+        if (allowsDegenerateRoundStroke) 1 else 2
+    } else {
+        3
+    }
+    val minFloats = if (cmd.stroke) {
+        if (allowsDegenerateRoundStroke) 2 else 4
+    } else {
+        6
+    }
     if (vertexCount < minVertices || tessVertices.size < minFloats) {
         refuse("insufficient_vertices:count=$vertexCount")
         return
@@ -100,8 +111,12 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
         indices = indices.toIntArray(),
     )
 
-    val clipBounds = cmd.clip.bounds
-    val pathBounds = cmd.bounds
+    val pathBounds = if (cmd.stroke) computeBounds(finalVertices) else cmd.bounds
+    val clipBounds = if (cmd.stroke && cmd.clip.kind == GPUClipKind.WideOpen) {
+        pathBounds
+    } else {
+        cmd.clip.bounds
+    }
     val sx = maxOf(pathBounds.left, clipBounds.left).toInt().coerceIn(0, surfaceWidth - 1)
     val sy = maxOf(pathBounds.top, clipBounds.top).toInt().coerceIn(0, surfaceHeight - 1)
     val sw = (minOf(pathBounds.right, clipBounds.right).toInt() - sx).coerceIn(1, surfaceWidth - sx)

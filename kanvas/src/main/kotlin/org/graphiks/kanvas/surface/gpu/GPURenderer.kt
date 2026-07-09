@@ -509,7 +509,12 @@ internal fun renderViaGpu(
                             maxVertices = config.maxPathVertices.toInt(),
                         )
                         val flat = tessellator.flatten(pathData)
-                        val minVertices = if (isStroke) 2 else 3
+                        val allowsDegenerateRoundStroke = isStroke && paint.strokeCap.name.lowercase() == "round"
+                        val minVertices = if (isStroke) {
+                            if (allowsDegenerateRoundStroke) 1 else 2
+                        } else {
+                            3
+                        }
                         if (flat.size < minVertices) {
                             diagnostics.fatal("refuse:${op.hashCode()}", "drawPath", "insufficient_vertices:${flat.size}")
                             continue
@@ -782,12 +787,23 @@ internal fun renderViaGpu(
                                     }
                                 }
                                 is DisplayOp.DrawPath -> {
+                                    val paint = nestedOp.paint
+                                    val isStroke = paint.isStroke()
                                     val pd = nestedOp.path.toPathTessellatorData()
                                     val tess = PathTessellator(config.curveTolerance, config.maxPathVertices.toInt())
                                     val fl = tess.flatten(pd)
-                                    if (fl.size >= 3) {
-                                        val tri = tess.triangulate(fl)
-                                        val verts = tri.vertices.flatMap { listOf(it.x, it.y) }
+                                    val allowsDegenerateRoundStroke = isStroke && paint.strokeCap.name.lowercase() == "round"
+                                    val minVertices = if (isStroke) {
+                                        if (allowsDegenerateRoundStroke) 1 else 2
+                                    } else {
+                                        3
+                                    }
+                                    if (fl.size >= minVertices) {
+                                        val verts = selectPathVerticesForCommand(
+                                            isStroke = isStroke,
+                                            flattened = fl,
+                                            triangulated = if (isStroke) emptyList() else tess.triangulate(fl).vertices,
+                                        ).flatMap { listOf(it.x, it.y) }
                                         val cmd = nestedOp.toNormalizedCommand(nestedCmdId, targets, verts, listOf(0), fl.size)
                                         t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
                                             dispatchFillPath(cmd, dispatched, diagnostics, width, height, config)
