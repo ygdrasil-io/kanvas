@@ -1734,9 +1734,18 @@ private const val strokeNonClaimLine =
 
 private fun String.isStableDrawPointsEvidenceKey(): Boolean =
     isNotBlank() &&
-        !contains("handle", ignoreCase = true) &&
-        !contains("pointer", ignoreCase = true) &&
-        !contains("0x", ignoreCase = true)
+        length <= maxDrawPointsEvidenceKeyLength &&
+        all { char ->
+            char.isAsciiLetterOrDigit() ||
+                char == '.' ||
+                char == '_' ||
+                char == '-'
+        }
+
+private fun Char.isAsciiLetterOrDigit(): Boolean =
+    this in 'a'..'z' || this in 'A'..'Z' || this in '0'..'9'
+
+private const val maxDrawPointsEvidenceKeyLength = 64
 
 private const val drawPointsNonClaimLine =
     "nonclaim:no-product-activation no-adapter-backed-execution no-hidden-cpu-texture-fallback " +
