@@ -3,6 +3,7 @@ package org.graphiks.kanvas.test
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import java.io.File
 
 class ComparisonUtilsTest {
     @Test
@@ -28,5 +29,17 @@ class ComparisonUtilsTest {
         val buf = ByteArray(w * h * 4) { 100.toByte() }
         val blocks = ComparisonUtils.computeSSIMBlocks(buf, buf, w, h, blockSize = 16)
         assertEquals(4, blocks.size)
+    }
+
+    @Test
+    fun `png loader converts embedded color profile to srgb rgba`() {
+        val reference = File("../skia/src/test/resources/reference/alpha_image_alpha_tint.png")
+
+        val rgba = ComparisonUtils.loadPngAsSrgbRgba(reference)
+
+        assertEquals(136, rgba[0].toInt() and 0xFF)
+        assertEquals(136, rgba[1].toInt() and 0xFF)
+        assertEquals(136, rgba[2].toInt() and 0xFF)
+        assertEquals(255, rgba[3].toInt() and 0xFF)
     }
 }
