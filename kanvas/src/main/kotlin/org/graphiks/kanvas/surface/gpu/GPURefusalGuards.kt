@@ -7,6 +7,19 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialKind
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRenderRecorder
+
+internal fun GPUBackendRenderRecorder.textureDimensionsRefusalReasonOrNull(
+    width: Int,
+    height: Int,
+): String? {
+    val limit = maxTextureDimension2D
+    return if (width > limit || height > limit) {
+        "texture_dimensions_exceed_max_texture_dimension:${width}x${height}>$limit"
+    } else {
+        null
+    }
+}
 
 internal fun NormalizedDrawCommand.strokeRefusalReasonOrNull(): String? {
     return null // stroke is now handled via geometry conversion

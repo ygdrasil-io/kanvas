@@ -314,6 +314,10 @@ data class GPUBackendVertexPositionUVData(
 
 /** Records draw inputs for the backend runtime's fullscreen pass helper. */
 interface GPUBackendRenderRecorder {
+    /** Largest 2D texture accepted by this recorder, or [Int.MAX_VALUE] when unbounded. */
+    val maxTextureDimension2D: Int
+        get() = Int.MAX_VALUE
+
     /** Draws a fullscreen pass parameterized by WGSL source and per-draw rect payloads. */
     fun drawFullscreenPass(
         wgsl: String,

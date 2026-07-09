@@ -27,6 +27,10 @@ internal fun GPUBackendRenderRecorder.dispatchImageRect(
         refuse("texture_not_found:${cmd.imageSourceId}")
         return
     }
+    textureDimensionsRefusalReasonOrNull(cmd.pixelsWidth, cmd.pixelsHeight)?.let { reason ->
+        refuse(reason)
+        return
+    }
 
     if (cmd.transform.type != GPUTransformType.Identity) {
         refuse("unsupported_transform:${cmd.transform.type.name}")

@@ -345,6 +345,10 @@ internal fun GPUBackendRenderRecorder.dispatchFillRect(
                 refuse("unsupported_material:image_draw_missing_pixels")
                 return
             }
+            textureDimensionsRefusalReasonOrNull(material.imageWidth, material.imageHeight)?.let { reason ->
+                refuse(reason)
+                return
+            }
             val iw = material.imageWidth.toFloat().coerceAtLeast(1f)
             val ih = material.imageHeight.toFloat().coerceAtLeast(1f)
             val uvScaleX = (rect.right - rect.left) / iw
@@ -384,6 +388,10 @@ internal fun GPUBackendRenderRecorder.dispatchFillRect(
                     else -> null
                 }
                 if (imageChild != null && imageChild.rgbaPixels.isNotEmpty()) {
+                    textureDimensionsRefusalReasonOrNull(imageChild.imageWidth, imageChild.imageHeight)?.let { reason ->
+                        refuse(reason)
+                        return
+                    }
                     drawFullscreenTextureUniformPass(
                         wgsl = material.wgslCombined,
                         colorFormat = config.gpuColorFormat.gpuLabel,
