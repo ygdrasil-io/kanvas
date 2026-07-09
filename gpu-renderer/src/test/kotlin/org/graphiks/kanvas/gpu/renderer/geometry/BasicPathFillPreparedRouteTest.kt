@@ -8,6 +8,25 @@ import kotlin.test.assertIs
 
 class BasicPathFillPreparedRouteTest {
     @Test
+    fun `inverse fill remains visible in stroke and fill planning`() {
+        val plan = GPUStrokeAndFillPreparedPlanner().plan(
+            descriptor = triangleShape.copy(shapeKind = "path-stroke-and-fill"),
+            path = trianglePath.copy(fillRule = "InverseEvenOdd", inverseFill = true),
+            stroke = GPUStrokeDescriptor(
+                width = 3f,
+                cap = "Square",
+                join = "Miter",
+                miter = 4f,
+                edgeCount = 6,
+            ),
+        )
+
+        val route = assertIs<GPUGeometryRoute.Prepared>(plan.route)
+        assertEquals("stroke-and-fill.coverage-composite", route.plan.consumerKind)
+        assertContains(plan.dumpLines().joinToString("\n"), "inverse=true")
+    }
+
+    @Test
     fun `bounded path fill builds CPU prepared GPU artifact evidence`() {
         val plan = GPUBasicPathFillPreparedPlanner().plan(
             descriptor = triangleShape,

@@ -9,6 +9,22 @@ import kotlin.test.assertNotEquals
 
 class SimpleStrokePreparedRouteTest {
     @Test
+    fun `stroke and fill emits combined coverage evidence`() {
+        val plan = GPUStrokeAndFillPreparedPlanner().plan(
+            descriptor = strokeShape.copy(shapeKind = "path-stroke-and-fill"),
+            path = strokePath.copy(fillRule = "EvenOdd", edgeCount = 3),
+            stroke = simpleStroke.copy(width = 10f, cap = "Round", join = "Round", edgeCount = 8),
+        )
+
+        val route = assertIs<GPUGeometryRoute.Prepared>(plan.route)
+        assertEquals("stroke-and-fill.coverage-composite", route.plan.consumerKind)
+        assertContains(plan.dumpLines().joinToString("\n"), "fillRule=EvenOdd")
+        assertContains(plan.dumpLines().joinToString("\n"), "strokeWidth=10.0")
+        assertContains(plan.dumpLines().joinToString("\n"), "cap=Round")
+        assertContains(plan.dumpLines().joinToString("\n"), "join=Round")
+    }
+
+    @Test
     fun `simple bounded stroke builds CPU prepared GPU artifact evidence`() {
         val plan = GPUSimpleStrokePreparedPlanner().plan(
             descriptor = strokeShape,
