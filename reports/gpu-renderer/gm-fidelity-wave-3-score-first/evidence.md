@@ -218,6 +218,18 @@ Source: `integration-tests/skia/build/reports/skia-gm-dashboard/data/gms.json`
 | Z | GRADIENT | linear_gradient_tiny | 60.0 | 55.0 | pass | 120000 |
 | B | COMPOSITE | hairmodes | 61.368815104166664 | 41.5 | pass | 118675 |
 | C | CLIP | simpleaaclip_path | 2.2508333333333335 | 0.0 | pass | 117299 |
+
+## Group B Next Slice
+
+The first composite slice is limited to the top three present Group B rows from
+`composite-candidates.tsv`. The implementation worker must choose tests from
+the specific mechanism visible in the source row:
+
+- `transparency_check`: premul/alpha compositing boundary.
+- `draw_image_set_rect_to_rect`: image-set rect mapping and clipping boundary.
+- `tablecolorfilter` or `hslcolorfilter`: color-filter math boundary.
+
+No global blend or color-filter behavior may change without focused unit tests.
 | C | CLIP | simpleaaclip_rect | 2.2666666666666666 | 0.0 | pass | 117280 |
 | C | PATH | stroke_rect_shader | 43.38937198067633 | 42.8 | pass | 117184 |
 | B | COMPOSITE | imagefiltersclipped | 73.14093023255815 | 0.0 | pass | 115494 |
