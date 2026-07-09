@@ -114,10 +114,12 @@ fun GPUGeometryPlan.toDrawPointsAnalysisTouchpoint(recordId: String): GPUDrawPoi
                 renderStepCandidates = listOf(selectedRoute.plan.consumerKind),
                 resourceDeclarations = listOf("prepared_draw_points:${selectedRoute.plan.artifact.artifactKey}"),
                 diagnostics = baseDiagnostics + GPUAnalysisDiagnostic(
-                    code = "draw_points:consumer=${selectedRoute.plan.consumerKind}",
+                    code = "draw_points.consumer",
                     recordId = recordId,
                     decisionId = routeDecisionLabel,
                     terminal = false,
+                    message = "drawPoints consumer=${selectedRoute.plan.consumerKind}",
+                    facts = mapOf("consumerKind" to selectedRoute.plan.consumerKind),
                 ),
             )
         }
@@ -172,6 +174,8 @@ data class GPUAnalysisDiagnostic(
     val recordId: String? = null,
     val decisionId: String? = null,
     val terminal: Boolean,
+    val message: String? = null,
+    val facts: Map<String, String> = emptyMap(),
 )
 
 /** Immutable first-route planning product before resource, pipeline, or backend materialization. */
@@ -1905,21 +1909,43 @@ private fun String.sanitizeForAnalysisKey(): String =
 private fun GPUDrawPointsDescriptor.analysisDiagnostics(recordId: String): List<GPUAnalysisDiagnostic> =
     listOf(
         GPUAnalysisDiagnostic(
-            code = "draw_points:point_mode=$pointMode",
+            code = "draw_points.point_mode",
             recordId = recordId,
             terminal = false,
+            message = "drawPoints pointMode=$pointMode",
+            facts = mapOf("pointMode" to pointMode),
         ),
         GPUAnalysisDiagnostic(
-            code = "draw_points:stroke_cap=$strokeCap",
+            code = "draw_points.stroke_cap",
             recordId = recordId,
             terminal = false,
+            message = "drawPoints strokeCap=$strokeCap",
+            facts = mapOf("strokeCap" to strokeCap),
         ),
         GPUAnalysisDiagnostic(
-            code = "draw_points:local_matrix=${localMatrixHash ?: "none"}",
+            code = "draw_points.local_matrix",
             recordId = recordId,
             terminal = false,
+            message = "drawPoints local matrix=${stableLocalMatrixEvidenceLabel()}",
+            facts = mapOf("localMatrix" to stableLocalMatrixEvidenceLabel()),
         ),
     )
+
+private fun GPUDrawPointsDescriptor.stableLocalMatrixEvidenceLabel(): String =
+    when {
+        localMatrixHash == null -> "none"
+        localMatrixHash.allowsStableAnalysisLocalMatrix() -> localMatrixHash
+        else -> "invalid"
+    }
+
+private fun String.allowsStableAnalysisLocalMatrix(): Boolean =
+    isNotBlank() &&
+        length <= maxStableAnalysisLocalMatrixLength &&
+        all { char ->
+            char in 'a'..'z' || char in 'A'..'Z' || char in '0'..'9' || char == '.' || char == '_' || char == '-'
+        }
+
+private const val maxStableAnalysisLocalMatrixLength = 64
 
 /** Returns true when any rectangle coordinate is NaN. */
 private fun GPURect.hasNaN(): Boolean =

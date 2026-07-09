@@ -2,6 +2,8 @@ package org.graphiks.kanvas.gpu.renderer.analysis
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.geometry.GPUDrawPointsDescriptor
 import org.graphiks.kanvas.gpu.renderer.geometry.GPUDrawPointsPreparedPlanner
 import org.graphiks.kanvas.gpu.renderer.geometry.GPUShapeDescriptor
@@ -30,12 +32,28 @@ class DrawPointsAnalysisContractsTest {
         )
         assertEquals(
             listOf(
-                "draw_points:point_mode=Lines",
-                "draw_points:stroke_cap=Butt",
-                "draw_points:local_matrix=lm.rotate20.scale",
-                "draw_points:consumer=draw-points-line-strip.render-step",
+                "draw_points.point_mode",
+                "draw_points.stroke_cap",
+                "draw_points.local_matrix",
+                "draw_points.consumer",
             ),
             touchpoint.diagnostics.map { it.code },
+        )
+        assertEquals(
+            mapOf("pointMode" to "Lines"),
+            touchpoint.diagnostics[0].facts,
+        )
+        assertEquals(
+            mapOf("strokeCap" to "Butt"),
+            touchpoint.diagnostics[1].facts,
+        )
+        assertEquals(
+            mapOf("localMatrix" to "lm.rotate20.scale"),
+            touchpoint.diagnostics[2].facts,
+        )
+        assertEquals(
+            mapOf("consumerKind" to "draw-points-line-strip.render-step"),
+            touchpoint.diagnostics[3].facts,
         )
     }
 
@@ -60,11 +78,23 @@ class DrawPointsAnalysisContractsTest {
         assertEquals(
             listOf(
                 "unsupported.draw_points.local_matrix_key",
-                "draw_points:point_mode=Lines",
-                "draw_points:stroke_cap=Butt",
-                "draw_points:local_matrix=handle:0xdeadbeef",
+                "draw_points.point_mode",
+                "draw_points.stroke_cap",
+                "draw_points.local_matrix",
             ),
             touchpoint.diagnostics.map { it.code },
+        )
+        assertNull(touchpoint.diagnostics[0].message)
+        assertEquals(mapOf("pointMode" to "Lines"), touchpoint.diagnostics[1].facts)
+        assertEquals(mapOf("strokeCap" to "Butt"), touchpoint.diagnostics[2].facts)
+        assertEquals(mapOf("localMatrix" to "invalid"), touchpoint.diagnostics[3].facts)
+        assertEquals("drawPoints local matrix=invalid", touchpoint.diagnostics[3].message)
+        assertTrue(
+            touchpoint.diagnostics.none { diagnostic ->
+                diagnostic.code.contains("handle:0xdeadbeef") ||
+                    diagnostic.message?.contains("handle:0xdeadbeef") == true ||
+                    diagnostic.facts.values.any { it.contains("handle:0xdeadbeef") }
+            },
         )
     }
 }

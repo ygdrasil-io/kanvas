@@ -5,6 +5,7 @@ import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertTrue
 
 class DrawPointsPreparedRouteTest {
     @Test
@@ -68,13 +69,13 @@ class DrawPointsPreparedRouteTest {
 
         val route = assertIs<GPUGeometryRoute.Refused>(plan.route)
         assertEquals("unsupported.draw_points.local_matrix_key", route.diagnostic.code)
-        assertEquals(
-            listOf(
-                "geometry:draw-points.refused reason=unsupported.draw_points.local_matrix_key",
-                "nonclaim:no-product-activation no-adapter-backed-execution no-hidden-cpu-texture-fallback no-broad-draw-points-parity no-local-matrix-runtime-compilation",
-            ),
-            plan.dumpLines(),
+        val dump = plan.dumpLines()
+        assertEquals("geometry:draw-points.refused reason=unsupported.draw_points.local_matrix_key", dump.first())
+        assertContains(
+            dump,
+            "draw-points:descriptor mode=Lines count=2 width=1 cap=Butt transform=identity finite=finite localMatrix=invalid",
         )
+        assertTrue(dump.none { it.contains("handle:0xdeadbeef") })
     }
 
     @Test

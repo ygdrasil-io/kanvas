@@ -678,6 +678,7 @@ class GPUDrawPointsPreparedPlanner {
                 geometryLabel = descriptor.shapeKind.ifBlank { "draw-points" },
                 message = "Prepared drawPoints refused: $refusalCode",
                 terminal = true,
+                facts = points.stableFacts(),
             )
             return GPUGeometryPlan(
                 descriptor = descriptor,
@@ -823,7 +824,7 @@ fun GPUGeometryPlan.dumpLines(): List<String> =
                     "draw-points:descriptor mode=${points.pointMode} count=${points.pointCount} " +
                         "width=${points.strokeWidth} cap=${points.strokeCap} " +
                         "transform=${points.transformClass} finite=${points.finiteProof} " +
-                        "localMatrix=${points.localMatrixHash ?: "none"}",
+                        "localMatrix=${points.stableLocalMatrixEvidenceLabel()}",
                     "artifact:key=${selectedRoute.plan.artifact.artifactKey} " +
                         "lifetime=${selectedRoute.plan.artifact.lifetimeClass} " +
                         "budget=${selectedRoute.plan.artifact.budgetClass} " +
@@ -883,6 +884,10 @@ fun GPUGeometryPlan.dumpLines(): List<String> =
             } else if (points != null) {
                 listOf(
                     "geometry:draw-points.refused reason=${selectedRoute.diagnostic.code}",
+                    "draw-points:descriptor mode=${points.pointMode} count=${points.pointCount} " +
+                        "width=${points.strokeWidth.stableLabel()} cap=${points.strokeCap} " +
+                        "transform=${points.transformClass} finite=${points.finiteProof} " +
+                        "localMatrix=${points.stableLocalMatrixEvidenceLabel()}",
                     drawPointsNonClaimLine,
                 )
             } else if (stroke != null) {
@@ -1719,6 +1724,24 @@ private fun GPUDrawPointsDescriptor.consumerKind(): String =
         "Lines" -> "draw-points-line-strip.render-step"
         "Polygon" -> "draw-points-polyline.render-step"
         else -> "draw-points-sprites.render-step"
+    }
+
+private fun GPUDrawPointsDescriptor.stableFacts(): Map<String, String> =
+    mapOf(
+        "pointMode" to pointMode,
+        "pointCount" to pointCount.toString(),
+        "strokeWidth" to strokeWidth.stableLabel(),
+        "strokeCap" to strokeCap,
+        "transformClass" to transformClass,
+        "finiteProof" to finiteProof,
+        "localMatrix" to stableLocalMatrixEvidenceLabel(),
+    )
+
+private fun GPUDrawPointsDescriptor.stableLocalMatrixEvidenceLabel(): String =
+    when {
+        localMatrixHash == null -> "none"
+        localMatrixHash.isStableDrawPointsEvidenceKey() -> localMatrixHash
+        else -> "invalid"
     }
 
 private fun Float.stableLabel(): String =
