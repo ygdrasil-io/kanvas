@@ -1792,6 +1792,7 @@ private fun GPUPathDescriptor.strokeAndFillRefusalCode(
         stroke.transformClass !in strokeAndFillSupportedTransforms -> "unsupported.stroke_and_fill.stroke_transform"
         transformClass != stroke.transformClass -> "unsupported.stroke_and_fill.transform_mismatch"
         !stroke.finiteWidth || !stroke.width.isFinite() || stroke.width <= 0f -> "unsupported.stroke.width_invalid"
+        stroke.hairline -> "unsupported.stroke.hairline_policy"
         stroke.cap !in setOf("Butt", "Round", "Square") -> "unsupported.stroke.cap"
         stroke.join !in setOf("Miter", "Round", "Bevel") -> "unsupported.stroke.join"
         stroke.miter < 1f -> "unsupported.stroke.miter_limit"

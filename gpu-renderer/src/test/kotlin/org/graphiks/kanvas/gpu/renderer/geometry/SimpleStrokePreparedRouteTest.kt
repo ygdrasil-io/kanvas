@@ -133,6 +133,37 @@ class SimpleStrokePreparedRouteTest {
     }
 
     @Test
+    fun `stroke and fill refuses hairline with stable diagnostics before artifact planning`() {
+        val accepted = GPUStrokeAndFillPreparedPlanner().plan(
+            descriptor = strokeShape.copy(shapeKind = "path-stroke-and-fill"),
+            path = strokePath.copy(fillRule = "EvenOdd"),
+            stroke = simpleStroke.copy(cap = "Square", join = "Bevel"),
+        )
+        val acceptedRoute = assertIs<GPUGeometryRoute.Prepared>(accepted.route)
+
+        val refused = GPUStrokeAndFillPreparedPlanner().plan(
+            descriptor = strokeShape.copy(shapeKind = "path-stroke-and-fill"),
+            path = strokePath.copy(fillRule = "EvenOdd"),
+            stroke = simpleStroke.copy(cap = "Square", join = "Bevel", hairline = true),
+        )
+        val refusedRoute = assertIs<GPUGeometryRoute.Refused>(refused.route)
+
+        assertEquals(
+            "prepared.stroke-and-fill.path_segment_v1.evenodd.width2.square.bevel.miter4.identity.edges1_4",
+            acceptedRoute.plan.artifact.artifactKey,
+        )
+        assertEquals("unsupported.stroke.hairline_policy", refusedRoute.diagnostic.code)
+        assertContains(refused.diagnostics.map { it.code }, "unsupported.stroke.hairline_policy")
+        assertEquals(
+            listOf(
+                "geometry:stroke-and-fill.refused reason=unsupported.stroke.hairline_policy",
+                "nonclaim:no-product-activation no-adapter-backed-execution no-hidden-cpu-texture-fallback no-broad-stroke-and-fill-parity",
+            ),
+            refused.dumpLines(),
+        )
+    }
+
+    @Test
     fun `unsupported stroke variants refuse with stable diagnostics`() {
         val cases = listOf(
             StrokeRefusalCase("unsupported.stroke.width_invalid", stroke = simpleStroke.copy(width = 0f)),
