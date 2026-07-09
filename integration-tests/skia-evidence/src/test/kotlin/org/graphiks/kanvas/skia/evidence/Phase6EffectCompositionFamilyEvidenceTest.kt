@@ -126,12 +126,27 @@ class Phase6EffectCompositionFamilyEvidenceTest {
             ),
         )
 
-        assertEquals(113, evidence.summary.familyDeltas.getValue("COMPOSITE").baselineCount)
-        assertEquals(2, evidence.summary.familyDeltas.getValue("COMPOSITE").currentCount)
-        assertEquals(-111, evidence.summary.familyDeltas.getValue("COMPOSITE").delta)
-        assertEquals(45, evidence.summary.familyDeltas.getValue("BLUR").baselineCount)
-        assertEquals(1, evidence.summary.familyDeltas.getValue("BLUR").currentCount)
-        assertEquals(-44, evidence.summary.familyDeltas.getValue("BLUR").delta)
+        assertEquals(
+            mapOf(
+                "BLUR" to Phase6EffectCompositionFamilyDelta(
+                    baselineSource = "2026-07-09 local dashboard before effect-composition-family wave",
+                    currentSource = "integration-tests/skia/build/reports/skia-gm-dashboard/data/gms.json",
+                    currentGeneratedAt = "2026-07-09T10:00:00",
+                    baselineCount = 45,
+                    currentCount = 1,
+                    delta = -44,
+                ),
+                "COMPOSITE" to Phase6EffectCompositionFamilyDelta(
+                    baselineSource = "2026-07-09 local dashboard before effect-composition-family wave",
+                    currentSource = "integration-tests/skia/build/reports/skia-gm-dashboard/data/gms.json",
+                    currentGeneratedAt = "2026-07-09T10:00:00",
+                    baselineCount = 113,
+                    currentCount = 2,
+                    delta = -111,
+                ),
+            ),
+            evidence.summary.familyDeltas,
+        )
     }
 
     @Test
@@ -147,8 +162,11 @@ class Phase6EffectCompositionFamilyEvidenceTest {
         )
 
         assertEquals(listOf("modecolorfilters", "modecolorfilters#2"), evidence.rows.map { it.rowId })
+        assertEquals(listOf("modecolorfilters", "modecolorfilters"), evidence.rows.map { it.name })
+        assertContains(evidence.toCsv(), "modecolorfilters,modecolorfilters,COMPOSITE")
         assertContains(evidence.toCsv(), "modecolorfilters#2,modecolorfilters,COMPOSITE")
-        assertContains(evidence.toMarkdown(), "`modecolorfilters#2`")
+        assertContains(evidence.toMarkdown(), "| `modecolorfilters` | `modecolorfilters` | `COMPOSITE` |")
+        assertContains(evidence.toMarkdown(), "| `modecolorfilters#2` | `modecolorfilters` | `COMPOSITE` |")
     }
 
     @Test
@@ -174,8 +192,6 @@ class Phase6EffectCompositionFamilyEvidenceTest {
     fun `writer creates json markdown and csv outputs and preserves validation section`() {
         val root = Files.createTempDirectory("phase6-effect-composition-evidence-test")
         val markdown = root.resolve("reports/gpu-renderer/2026-07-09-gpu-phase-6-effect-composition-families.md")
-        Files.createDirectories(markdown.parent)
-        Files.writeString(markdown, "# Existing\n\n## Validation\n\n- keep this validation note\n")
         val evidence = Phase6EffectCompositionFamilyClassifier.buildEvidence(
             GmDashboard(
                 generatedAt = "2026-07-09T10:00:00",
@@ -185,10 +201,32 @@ class Phase6EffectCompositionFamilyEvidenceTest {
 
         Phase6EffectCompositionFamilyEvidenceWriter.writeOutputs(root, evidence)
 
-        assertContains(Files.readString(root.resolve("reports/gpu-renderer/phase-6-effect-composition-families/evidence.json")), "phase6-effect-composition-families-v1")
-        assertContains(Files.readString(root.resolve("reports/gpu-renderer/phase-6-effect-composition-families/classification.csv")), "rowId,name,family,subfamily,classification")
-        assertContains(Files.readString(markdown), "## Validation")
-        assertContains(Files.readString(markdown), "keep this validation note")
+        val evidencePath = root.resolve("reports/gpu-renderer/phase-6-effect-composition-families/evidence.json")
+        val csvPath = root.resolve("reports/gpu-renderer/phase-6-effect-composition-families/classification.csv")
+
+        assertContains(Files.readString(evidencePath), "phase6-effect-composition-families-v1")
+        assertContains(Files.readString(markdown), "No broad COMPOSITE or BLUR support is claimed")
+        assertContains(Files.readString(csvPath), "rowId,name,family,subfamily,classification")
+
+        Files.writeString(
+            markdown,
+            Files.readString(markdown) +
+                """
+
+                ## Validation
+
+                - `:integration-tests:skia-evidence:test` passed.
+                - `generateGpuPhase6EffectCompositionFamiliesEvidence` regenerated evidence.
+                """.trimIndent() +
+                "\n",
+        )
+
+        Phase6EffectCompositionFamilyEvidenceWriter.writeOutputs(root, evidence)
+
+        val regenerated = Files.readString(markdown)
+        assertContains(regenerated, "## Validation")
+        assertContains(regenerated, "- `:integration-tests:skia-evidence:test` passed.")
+        assertContains(regenerated, "- `generateGpuPhase6EffectCompositionFamiliesEvidence` regenerated evidence.")
     }
 
     @Test
@@ -210,7 +248,7 @@ class Phase6EffectCompositionFamilyEvidenceTest {
         name: String,
         family: String,
         similarity: Double? = 100.0,
-        minSimilarity: Double? = 0.0,
+        minSimilarity: Double? = 99.0,
         isPassing: Boolean? = true,
         noReference: Boolean = false,
         renderFailed: Boolean = false,
@@ -237,13 +275,18 @@ class Phase6EffectCompositionFamilyEvidenceTest {
         name: String,
         family: String,
         similarity: Double? = 100.0,
-        minSimilarity: Double? = 0.0,
+        minSimilarity: Double? = 99.0,
         isPassing: Boolean? = true,
+        width: Int? = null,
+        height: Int? = null,
+        matchingPixels: Long? = null,
+        totalPixels: Long? = null,
+        maxDiff: GmRgbaInt? = null,
+        meanDiff: GmRgbaDouble? = null,
         noReference: Boolean = false,
         renderFailed: Boolean = false,
         sizeMismatch: Boolean = false,
-        maxDiff: GmRgbaInt? = null,
-        meanDiff: GmRgbaDouble? = null,
+        hasDiff: Boolean = false,
     ): GmDashboardRow =
         GmDashboardRow(
             name = name,
@@ -251,15 +294,15 @@ class Phase6EffectCompositionFamilyEvidenceTest {
             similarity = similarity,
             minSimilarity = minSimilarity,
             isPassing = isPassing,
-            width = 256,
-            height = 256,
-            matchingPixels = if (similarity == null) null else 65536,
-            totalPixels = if (similarity == null) null else 65536,
+            width = width,
+            height = height,
+            matchingPixels = matchingPixels,
+            totalPixels = totalPixels,
             maxDiff = maxDiff,
             meanDiff = meanDiff,
             noReference = noReference,
             renderFailed = renderFailed,
             sizeMismatch = sizeMismatch,
-            hasDiff = similarity != null && !renderFailed && !noReference && !sizeMismatch,
+            hasDiff = hasDiff,
         )
 }
