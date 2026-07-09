@@ -57,8 +57,18 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
     val blendMode = cmd.blend.blendMode
     val tessVertices = cmd.tessellatedVertices
     val vertexCount = cmd.totalVertexCount
-    val minVertices = if (cmd.stroke) 2 else 3
-    val minFloats = if (cmd.stroke) 4 else 6
+    val allowsDegenerateRoundStroke = cmd.stroke &&
+        cmd.strokeCap == "round"
+    val minVertices = if (cmd.stroke) {
+        if (allowsDegenerateRoundStroke) 1 else 2
+    } else {
+        3
+    }
+    val minFloats = if (cmd.stroke) {
+        if (allowsDegenerateRoundStroke) 2 else 4
+    } else {
+        6
+    }
     if (vertexCount < minVertices || tessVertices.size < minFloats) {
         refuse("insufficient_vertices:count=$vertexCount")
         return

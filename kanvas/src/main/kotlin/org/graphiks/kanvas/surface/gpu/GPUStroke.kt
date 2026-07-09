@@ -101,6 +101,18 @@ internal fun generateRoundJoin(
     return result
 }
 
+private fun dashStartsOnInterval(intervals: List<Float>, phase: Float): Boolean {
+    var dashIdx = 0
+    val totalDashLen = intervals.sum().coerceAtLeast(1f)
+    var intervalOffset = phase % totalDashLen
+    if (intervalOffset < 0f) intervalOffset += totalDashLen
+    while (intervalOffset >= intervals[dashIdx % intervals.size]) {
+        intervalOffset -= intervals[dashIdx % intervals.size]
+        dashIdx++
+    }
+    return dashIdx % 2 == 0
+}
+
 internal fun strokeToFillGeometry(
     contourVertices: List<Float>,
     contourStarts: List<Int>,
@@ -110,7 +122,7 @@ internal fun strokeToFillGeometry(
     capStyle: StrokeCap = StrokeCap.BUTT,
     joinStyle: StrokeJoin = StrokeJoin.MITER,
 ): StrokeGeometry {
-    if (contourVertices.size < 4 || strokeWidth < 0f) {
+    if (contourVertices.size < 2 || strokeWidth < 0f) {
         return StrokeGeometry(emptyList(), listOf(0))
     }
 
@@ -137,15 +149,41 @@ internal fun strokeToFillGeometry(
         return Pair(-dy / len, dx / len)
     }
 
+    fun addRoundDot(center: Pair<Float, Float>) {
+        var previousX = center.first + halfWidth
+        var previousY = center.second
+        for (i in 1..segments * 2) {
+            val angle = (i.toFloat() / (segments * 2).toFloat()) * Math.PI.toFloat() * 2f
+            val x = center.first + cos(angle) * halfWidth
+            val y = center.second + sin(angle) * halfWidth
+            addTriangle(center.first, center.second, previousX, previousY, x, y)
+            previousX = x
+            previousY = y
+        }
+    }
+
     for (ci in contourStarts.indices) {
         val start = contourStarts[ci]
         val end = if (ci + 1 < contourStarts.size) contourStarts[ci + 1] else contourVertices.size / 2
         val n = end - start
-        if (n < 2) continue
 
         val points = List(n) { idx ->
             val i = (start + idx) * 2
             Pair(contourVertices[i], contourVertices[i + 1])
+        }
+
+        if (n < 2) {
+            val shouldDrawSinglePointRoundCap = dashArray == null ||
+                dashArray.isEmpty() ||
+                dashStartsOnInterval(dashArray.map { it.coerceAtLeast(0.1f) }, dashPhase)
+            if (
+                n == 1 &&
+                capStyle == StrokeCap.ROUND &&
+                shouldDrawSinglePointRoundCap
+            ) {
+                addRoundDot(points.first())
+            }
+            continue
         }
 
         val isClosed = n >= 3 &&
@@ -168,16 +206,21 @@ internal fun strokeToFillGeometry(
                 val nuy = dx / len
                 val nx = nux * halfWidth
                 val ny = nuy * halfWidth
+                val tangentExtension = if (capStyle == StrokeCap.SQUARE) halfWidth else 0f
+                val tx = dx / len * tangentExtension
+                val ty = dy / len * tangentExtension
+                val startPoint = Pair(p0.first - tx, p0.second - ty)
+                val endPoint = Pair(p1.first + tx, p1.second + ty)
 
                 addTriangle(
-                    p0.first - nx, p0.second - ny,
-                    p0.first + nx, p0.second + ny,
-                    p1.first + nx, p1.second + ny,
+                    startPoint.first - nx, startPoint.second - ny,
+                    startPoint.first + nx, startPoint.second + ny,
+                    endPoint.first + nx, endPoint.second + ny,
                 )
                 addTriangle(
-                    p0.first - nx, p0.second - ny,
-                    p1.first + nx, p1.second + ny,
-                    p1.first - nx, p1.second - ny,
+                    startPoint.first - nx, startPoint.second - ny,
+                    endPoint.first + nx, endPoint.second + ny,
+                    endPoint.first - nx, endPoint.second - ny,
                 )
 
                 if (capStyle == StrokeCap.ROUND) {
@@ -198,6 +241,20 @@ internal fun strokeToFillGeometry(
                         )
                     }
                 }
+            }
+        } else if (
+            dashArray != null &&
+            dashArray.isNotEmpty() &&
+            capStyle == StrokeCap.ROUND &&
+            dashStartsOnInterval(dashArray.map { it.coerceAtLeast(0.1f) }, dashPhase)
+        ) {
+            val center = points.first()
+            val allSamePoint = points.all { point ->
+                kotlin.math.abs(point.first - center.first) < 1e-6f &&
+                    kotlin.math.abs(point.second - center.second) < 1e-6f
+            }
+            if (allSamePoint) {
+                addRoundDot(center)
             }
         } else if (!isClosed || n == 2) {
             for (ei in 0 until n - 1) {

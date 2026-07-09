@@ -509,7 +509,12 @@ internal fun renderViaGpu(
                             maxVertices = config.maxPathVertices.toInt(),
                         )
                         val flat = tessellator.flatten(pathData)
-                        val minVertices = if (isStroke) 2 else 3
+                        val allowsDegenerateRoundStroke = isStroke && paint.strokeCap.name.lowercase() == "round"
+                        val minVertices = if (isStroke) {
+                            if (allowsDegenerateRoundStroke) 1 else 2
+                        } else {
+                            3
+                        }
                         if (flat.size < minVertices) {
                             diagnostics.fatal("refuse:${op.hashCode()}", "drawPath", "insufficient_vertices:${flat.size}")
                             continue

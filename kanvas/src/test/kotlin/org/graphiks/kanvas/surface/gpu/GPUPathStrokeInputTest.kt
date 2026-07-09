@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.surface.gpu
 
 import org.graphiks.kanvas.gpu.renderer.geometry.Point
+import org.graphiks.kanvas.paint.StrokeCap
 import org.graphiks.kanvas.paint.StrokeJoin
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -102,6 +103,52 @@ class GPUPathStrokeInputTest {
         val vertexCount = stroke.vertices.size / 2
         assertTrue(vertexCount > 3)
         assertEquals(vertexCount, stroke.contourStarts.last())
+        assertTrue(stroke.contourStarts.zipWithNext().all { (start, end) -> end - start == 3 })
+    }
+
+    @Test
+    fun `dashed square caps extend each dash segment along tangent`() {
+        val stroke = strokeToFillGeometry(
+            contourVertices = listOf(0f, 0f, 10f, 0f),
+            contourStarts = listOf(0),
+            strokeWidth = 2f,
+            dashArray = floatArrayOf(4f, 4f),
+            capStyle = StrokeCap.SQUARE,
+        )
+
+        val xs = stroke.vertices.filterIndexed { index, _ -> index % 2 == 0 }
+        assertTrue(xs.min() < 0f)
+        assertTrue(xs.max() > 8f)
+        assertTrue(stroke.contourStarts.zipWithNext().all { (start, end) -> end - start == 3 })
+    }
+
+    @Test
+    fun `dashed zero length round stroke emits cap geometry`() {
+        val stroke = strokeToFillGeometry(
+            contourVertices = listOf(10f, 10f, 10f, 10f),
+            contourStarts = listOf(0),
+            strokeWidth = 4f,
+            dashArray = floatArrayOf(1f, 5f),
+            capStyle = StrokeCap.ROUND,
+        )
+
+        assertTrue(stroke.vertices.isNotEmpty())
+        assertEquals(stroke.vertices.size / 2, stroke.contourStarts.last())
+        assertTrue(stroke.contourStarts.zipWithNext().all { (start, end) -> end - start == 3 })
+    }
+
+    @Test
+    fun `dashed single point round stroke emits cap geometry`() {
+        val stroke = strokeToFillGeometry(
+            contourVertices = listOf(10f, 10f),
+            contourStarts = listOf(0),
+            strokeWidth = 4f,
+            dashArray = floatArrayOf(1f, 5f),
+            capStyle = StrokeCap.ROUND,
+        )
+
+        assertTrue(stroke.vertices.isNotEmpty())
+        assertEquals(stroke.vertices.size / 2, stroke.contourStarts.last())
         assertTrue(stroke.contourStarts.zipWithNext().all { (start, end) -> end - start == 3 })
     }
 }
