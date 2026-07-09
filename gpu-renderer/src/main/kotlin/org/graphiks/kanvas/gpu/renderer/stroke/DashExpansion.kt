@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.gpu.renderer.stroke
 
+import kotlin.math.abs
 import kotlin.math.sqrt
 
 data class DashInterval(val length: Float, val isOn: Boolean)
@@ -39,6 +40,9 @@ data class DashVertexExpansion(
             if (tessellatedVertices.size < 4 || dashIntervals.isEmpty()) {
                 return DashVertexExpansion(tessellatedVertices, listOf(0), 0)
             }
+            if (dashIntervals.sum() <= 0f) {
+                return DashVertexExpansion(emptyList(), emptyList(), 0)
+            }
 
             val cumulative = cumulativeArcLengths(tessellatedVertices)
             val pathLength = cumulative.last()
@@ -46,25 +50,54 @@ data class DashVertexExpansion(
 
             val resultVerts = mutableListOf<Float>()
             val resultContours = mutableListOf<Int>()
-            var currentPos = -dashPhase
+            val normalizedPhase = normalizedDashOffset(dashPhase, dashIntervals.sum())
+            var currentPos = -normalizedPhase
             var dashIdx = 0
             var isOn = true
+            var zeroIntervalSteps = 0
+            var lastOnSegmentEnd: Float? = null
 
             while (currentPos < pathLength) {
                 val dashLen = dashIntervals[dashIdx % dashIntervals.size]
+                if (dashLen == 0f) {
+                    dashIdx++
+                    isOn = !isOn
+                    zeroIntervalSteps++
+                    if (zeroIntervalSteps >= dashIntervals.size) break
+                    continue
+                }
+                zeroIntervalSteps = 0
+
                 val segStart = maxOf(currentPos, 0f)
                 val segEnd = minOf(currentPos + dashLen, pathLength)
 
                 if (isOn && segStart < segEnd) {
                     val startVertexIdx = findVertexAtLength(cumulative, segStart)
                     val endVertexIdx = findVertexAtLength(cumulative, segEnd)
+                    val continuePreviousContour = lastOnSegmentEnd?.let { abs(it - segStart) <= 1e-6f } == true
 
-                    resultContours.add(resultVerts.size / 2)
+                    if (!continuePreviousContour) {
+                        resultContours.add(resultVerts.size / 2)
+                    }
 
-                    for (vi in startVertexIdx..endVertexIdx) {
+                    val firstVertexIdx = if (
+                        continuePreviousContour &&
+                        resultVerts.size >= 2 &&
+                        tessellatedVertices[startVertexIdx * 2] == resultVerts[resultVerts.size - 2] &&
+                        tessellatedVertices[startVertexIdx * 2 + 1] == resultVerts[resultVerts.size - 1]
+                    ) {
+                        startVertexIdx + 1
+                    } else {
+                        startVertexIdx
+                    }
+
+                    for (vi in firstVertexIdx..endVertexIdx) {
                         resultVerts.add(tessellatedVertices[vi * 2])
                         resultVerts.add(tessellatedVertices[vi * 2 + 1])
                     }
+                    lastOnSegmentEnd = segEnd
+                } else if (!isOn && segStart < segEnd) {
+                    lastOnSegmentEnd = null
                 }
 
                 currentPos += dashLen
@@ -109,17 +142,30 @@ data class DashExpansion(val intervals: List<DashInterval>) {
     companion object {
         fun expand(dashes: FloatArray, dashOffset: Float, pathLength: Float): DashExpansion {
             if (dashes.isEmpty() || pathLength <= 0f) return DashExpansion(emptyList())
+            if (dashes.sum() <= 0f) return DashExpansion(emptyList())
+
             val intervals = mutableListOf<DashInterval>()
-            var currentPos = -dashOffset
+            val normalizedOffset = normalizedDashOffset(dashOffset, dashes.sum())
+            var currentPos = -normalizedOffset
             var dashIdx = 0
             var isOn = true
+            var zeroIntervalSteps = 0
             while (currentPos < pathLength) {
                 val dashLen = dashes[dashIdx % dashes.size]
+                if (dashLen == 0f) {
+                    dashIdx++
+                    isOn = !isOn
+                    zeroIntervalSteps++
+                    if (zeroIntervalSteps >= dashes.size) break
+                    continue
+                }
+                zeroIntervalSteps = 0
+
                 val segmentStart = maxOf(currentPos, 0f)
                 val segmentEnd = minOf(currentPos + dashLen, pathLength)
                 val visibleLen = if (segmentEnd > segmentStart) segmentEnd - segmentStart else 0f
                 if (visibleLen > 0f) {
-                    intervals.add(DashInterval(length = visibleLen, isOn = isOn))
+                    intervals.addMerged(DashInterval(length = visibleLen, isOn = isOn))
                 }
                 currentPos += dashLen
                 isOn = !isOn
@@ -154,6 +200,7 @@ data class GPUComplexDashPlan(
 
         fun plan(dashArray: FloatArray, dashPhase: Float = 0f): GPUComplexDashPlan {
             require(!dashArray.containsNegative()) { "Dash array must not contain negative values" }
+            require(dashArray.any { it > 0f }) { "Dash array must contain a positive interval" }
             return GPUComplexDashPlan(
                 dashArray = dashArray,
                 dashPhase = dashPhase,
@@ -181,5 +228,20 @@ data class GPUComplexDashPlan(
 
     override fun toString(): String {
         return "GPUComplexDashPlan(dashArray=${dashArray.contentToString()}, dashPhase=$dashPhase, classification=$classification)"
+    }
+}
+
+private fun normalizedDashOffset(offset: Float, patternLength: Float): Float {
+    if (patternLength <= 0f) return 0f
+    val mod = offset % patternLength
+    return if (mod < 0f) mod + patternLength else mod
+}
+
+private fun MutableList<DashInterval>.addMerged(interval: DashInterval) {
+    val previous = lastOrNull()
+    if (previous != null && previous.isOn == interval.isOn) {
+        this[lastIndex] = previous.copy(length = previous.length + interval.length)
+    } else {
+        add(interval)
     }
 }
