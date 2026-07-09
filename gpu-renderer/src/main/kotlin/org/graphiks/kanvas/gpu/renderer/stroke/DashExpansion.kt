@@ -72,29 +72,21 @@ data class DashVertexExpansion(
                 val segEnd = minOf(currentPos + dashLen, pathLength)
 
                 if (isOn && segStart < segEnd) {
-                    val startVertexIdx = findVertexAtLength(cumulative, segStart)
-                    val endVertexIdx = findVertexAtLength(cumulative, segEnd)
                     val continuePreviousContour = lastOnSegmentEnd?.let { abs(it - segStart) <= 1e-6f } == true
 
                     if (!continuePreviousContour) {
                         resultContours.add(resultVerts.size / 2)
+                        appendVertexAtLength(resultVerts, tessellatedVertices, cumulative, segStart)
                     }
 
-                    val firstVertexIdx = if (
-                        continuePreviousContour &&
-                        resultVerts.size >= 2 &&
-                        tessellatedVertices[startVertexIdx * 2] == resultVerts[resultVerts.size - 2] &&
-                        tessellatedVertices[startVertexIdx * 2 + 1] == resultVerts[resultVerts.size - 1]
-                    ) {
-                        startVertexIdx + 1
-                    } else {
-                        startVertexIdx
-                    }
-
-                    for (vi in firstVertexIdx..endVertexIdx) {
+                    var vi = findVertexAtLength(cumulative, segStart)
+                    while (vi < cumulative.size && cumulative[vi] <= segStart) vi++
+                    while (vi < cumulative.size && cumulative[vi] < segEnd) {
                         resultVerts.add(tessellatedVertices[vi * 2])
                         resultVerts.add(tessellatedVertices[vi * 2 + 1])
+                        vi++
                     }
+                    appendVertexAtLength(resultVerts, tessellatedVertices, cumulative, segEnd)
                     lastOnSegmentEnd = segEnd
                 } else if (!isOn && segStart < segEnd) {
                     lastOnSegmentEnd = null
@@ -105,7 +97,13 @@ data class DashVertexExpansion(
                 dashIdx++
             }
 
-            val edgeCount = maxOf(0, (resultVerts.size / 2) - 1)
+            val vertexCount = resultVerts.size / 2
+            var edgeCount = 0
+            for (ci in resultContours.indices) {
+                val contourStart = resultContours[ci]
+                val contourEnd = resultContours.getOrNull(ci + 1) ?: vertexCount
+                edgeCount += maxOf(0, contourEnd - contourStart - 1)
+            }
             return DashVertexExpansion(
                 vertices = resultVerts,
                 contourStarts = resultContours,
@@ -123,6 +121,29 @@ data class DashVertexExpansion(
                 i += 2
             }
             return cumulative
+        }
+
+        private fun appendVertexAtLength(
+            result: MutableList<Float>,
+            vertices: List<Float>,
+            cumulative: List<Float>,
+            target: Float,
+        ) {
+            val endVertexIdx = findVertexAtLength(cumulative, target)
+            if (cumulative[endVertexIdx] == target || endVertexIdx == 0) {
+                result.add(vertices[endVertexIdx * 2])
+                result.add(vertices[endVertexIdx * 2 + 1])
+                return
+            }
+
+            val startVertexIdx = endVertexIdx - 1
+            val edgeStart = cumulative[startVertexIdx]
+            val edgeLength = cumulative[endVertexIdx] - edgeStart
+            val t = (target - edgeStart) / edgeLength
+            val startOffset = startVertexIdx * 2
+            val endOffset = endVertexIdx * 2
+            result.add(vertices[startOffset] + (vertices[endOffset] - vertices[startOffset]) * t)
+            result.add(vertices[startOffset + 1] + (vertices[endOffset + 1] - vertices[startOffset + 1]) * t)
         }
 
         private fun findVertexAtLength(cumulative: List<Float>, target: Float): Int {
