@@ -896,7 +896,9 @@ fun GPUGeometryPlan.dumpLines(): List<String> =
                     "stroke-and-fill:path=${pathDescriptor.pathKey} fillRule=${pathDescriptor.fillRule} " +
                         "inverse=${pathDescriptor.inverseFill} strokeWidth=${strokeDescriptor.width} " +
                         "cap=${strokeDescriptor.cap} join=${strokeDescriptor.join} " +
-                        "transform=${pathDescriptor.transformClass}",
+                        "miter=${strokeDescriptor.miter} " +
+                        "pathTransform=${pathDescriptor.transformClass} " +
+                        "strokeTransform=${strokeDescriptor.transformClass}",
                     "artifact:key=${selectedRoute.plan.artifact.artifactKey} " +
                         "lifetime=${selectedRoute.plan.artifact.lifetimeClass} " +
                         "budget=${selectedRoute.plan.artifact.budgetClass} " +
@@ -1786,7 +1788,9 @@ private fun GPUPathDescriptor.strokeAndFillRefusalCode(
             "unsupported.path.fill_rule"
         finiteProof != "finite" -> "unsupported.geometry.path_nonfinite"
         volatility != "immutable" -> "unsupported.path.volatile"
-        transformClass !in setOf("identity", "translate", "scale", "affine") -> "unsupported.stroke_and_fill.transform"
+        transformClass !in strokeAndFillSupportedTransforms -> "unsupported.stroke_and_fill.path_transform"
+        stroke.transformClass !in strokeAndFillSupportedTransforms -> "unsupported.stroke_and_fill.stroke_transform"
+        transformClass != stroke.transformClass -> "unsupported.stroke_and_fill.transform_mismatch"
         !stroke.finiteWidth || !stroke.width.isFinite() || stroke.width <= 0f -> "unsupported.stroke.width_invalid"
         stroke.cap !in setOf("Butt", "Round", "Square") -> "unsupported.stroke.cap"
         stroke.join !in setOf("Miter", "Round", "Bevel") -> "unsupported.stroke.join"
@@ -1825,7 +1829,8 @@ private fun GPUStrokeDescriptor.preparedStrokeDescriptorHash(path: GPUPathDescri
 private fun GPUStrokeDescriptor.preparedStrokeAndFillArtifactKey(path: GPUPathDescriptor): String =
     "prepared.stroke-and-fill.${path.pathKey.sanitizeForArtifactKey()}." +
         "${path.fillRule.lowercase()}.width${width.stableLabel()}." +
-        "${cap.lowercase()}.${join.lowercase()}.${path.transformClass}.edges${path.edgeCount}_$edgeCount"
+        "${cap.lowercase()}.${join.lowercase()}.miter${miter.stableLabel()}.$transformClass." +
+        "edges${path.edgeCount}_$edgeCount"
 
 private fun GPUDrawPointsDescriptor.refusalCode(): String? =
     when {
@@ -1883,6 +1888,8 @@ private const val strokeNonClaimLine =
 private const val strokeAndFillNonClaimLine =
     "nonclaim:no-product-activation no-adapter-backed-execution no-hidden-cpu-texture-fallback " +
         "no-broad-stroke-and-fill-parity"
+
+private val strokeAndFillSupportedTransforms = setOf("identity", "translate", "scale", "affine")
 
 private fun String.isStableDrawPointsEvidenceKey(): Boolean =
     isNotBlank() &&
