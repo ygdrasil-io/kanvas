@@ -29,6 +29,7 @@ class ConvexPathsGm : SkiaGm {
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val rand = Random(0)
+        canvas.drawColor(0f, 0f, 0f, 1f)
         canvas.translate(20f, 20f)
         canvas.scale(2f / 3, 2f / 3)
         for (i in paths.indices) {
