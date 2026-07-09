@@ -16,11 +16,20 @@ enum class RenderFamily {
     COLOR,
 }
 
+data class ReferenceStatusEntry(
+    val status: String = "trusted",
+    val reason: String? = null,
+) {
+    val untrustable: Boolean
+        get() = status == "untrustable"
+}
+
 interface SkiaGm {
     val name: String
     val renderFamily: RenderFamily
     val renderCost: RenderCost
     val minSimilarity: Double
+    val referenceStatus: ReferenceStatusEntry get() = ReferenceStatusEntry()
     val tolerance: Int get() = 2
     val width: Int get() = 800
     val height: Int get() = 600

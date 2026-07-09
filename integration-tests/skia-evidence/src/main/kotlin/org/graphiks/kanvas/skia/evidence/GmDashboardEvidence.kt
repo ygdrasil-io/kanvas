@@ -49,6 +49,8 @@ data class GmDashboardRow(
     val renderFailed: Boolean,
     val sizeMismatch: Boolean,
     val hasDiff: Boolean,
+    val referenceUntrustable: Boolean = false,
+    val noScoreCause: String? = null,
 )
 
 object GmDashboardJsonReader {
@@ -80,6 +82,8 @@ object GmDashboardJsonReader {
             renderFailed = row.boolean("renderFailed") ?: false,
             sizeMismatch = row.boolean("sizeMismatch") ?: false,
             hasDiff = row.boolean("hasDiff") ?: false,
+            referenceUntrustable = row.boolean("referenceUntrustable") ?: false,
+            noScoreCause = row.string("noScoreCause"),
         )
 }
 

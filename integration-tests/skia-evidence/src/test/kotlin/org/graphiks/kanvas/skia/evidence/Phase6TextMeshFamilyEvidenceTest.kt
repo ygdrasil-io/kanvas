@@ -147,6 +147,22 @@ class Phase6TextMeshFamilyEvidenceTest {
     }
 
     @Test
+    fun `classifies untrustable references as no score`() {
+        val row = classify(
+            "custommesh",
+            "MESH",
+            similarity = null,
+            isPassing = null,
+            referenceUntrustable = true,
+        )
+
+        assertEquals("mesh-custom-basic", row.subfamily)
+        assertEquals("no-score", row.classification)
+        assertEquals("reference-untrustable", row.noScoreCause)
+        assertEquals("none", row.fallbackReason)
+    }
+
+    @Test
     fun `passing gated rows remain expected unsupported`() {
         val text = classify("fontmgr_match", "TEXT", similarity = 100.0, isPassing = true)
         val mesh = classify("mesh_updates", "MESH", similarity = 100.0, isPassing = true)
@@ -358,6 +374,7 @@ class Phase6TextMeshFamilyEvidenceTest {
         sizeMismatch: Boolean = false,
         maxDiff: GmRgbaInt? = null,
         meanDiff: GmRgbaDouble? = null,
+        referenceUntrustable: Boolean = false,
     ): Phase6TextMeshRowEvidence =
         Phase6TextMeshFamilyClassifier.classify(
             row(
@@ -371,6 +388,7 @@ class Phase6TextMeshFamilyEvidenceTest {
                 sizeMismatch = sizeMismatch,
                 maxDiff = maxDiff,
                 meanDiff = meanDiff,
+                referenceUntrustable = referenceUntrustable,
             ),
         )
 
@@ -390,6 +408,7 @@ class Phase6TextMeshFamilyEvidenceTest {
         renderFailed: Boolean = false,
         sizeMismatch: Boolean = false,
         hasDiff: Boolean = false,
+        referenceUntrustable: Boolean = false,
     ): GmDashboardRow =
         GmDashboardRow(
             name = name,
@@ -407,5 +426,6 @@ class Phase6TextMeshFamilyEvidenceTest {
             renderFailed = renderFailed,
             sizeMismatch = sizeMismatch,
             hasDiff = hasDiff,
+            referenceUntrustable = referenceUntrustable,
         )
 }

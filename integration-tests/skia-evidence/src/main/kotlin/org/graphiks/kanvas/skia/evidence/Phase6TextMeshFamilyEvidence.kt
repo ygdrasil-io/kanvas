@@ -86,7 +86,11 @@ object Phase6TextMeshFamilyClassifier {
         require(row.family in textMeshFamilies) { "Expected TEXT or MESH row, got ${row.family}" }
         val subfamily = textMeshSubfamily(row)
         val gatedReason = gatedReason(subfamily)
-        val noScore = row.similarity == null || row.noReference || row.renderFailed || row.sizeMismatch
+        val noScore = row.similarity == null ||
+            row.noReference ||
+            row.renderFailed ||
+            row.sizeMismatch ||
+            row.referenceUntrustable
 
         val classification: String
         val fallback: String
@@ -265,6 +269,8 @@ object Phase6TextMeshFamilyClassifier {
             row.noReference -> "reference-missing"
             row.renderFailed -> "generated-render-missing"
             row.sizeMismatch -> "size-mismatch"
+            row.referenceUntrustable -> "reference-untrustable"
+            row.noScoreCause != null -> row.noScoreCause
             row.similarity == null -> "comparison-unavailable"
             else -> "none"
         }

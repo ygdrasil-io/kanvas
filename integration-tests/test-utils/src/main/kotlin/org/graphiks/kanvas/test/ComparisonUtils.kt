@@ -34,6 +34,9 @@ object ComparisonUtils {
 
     data class ComparisonResult(
         val similarity: Double,
+        val pixelMatch: Double,
+        val ssim: Double,
+        val meanChannelError: Double,
         val totalPixels: Int,
         val matchingPixels: Int,
         val maxDiff: IntArray,
@@ -108,10 +111,18 @@ object ComparisonUtils {
 
         val similarity = if (totalPixels > 0) (matchingPixels.toDouble() / totalPixels) * 100.0 else 100.0
         val meanDiff = sumDiff.map { if (mismatchCount > 0) it.toDouble() / mismatchCount else 0.0 }.toDoubleArray()
+        val meanChannelError = if (totalPixels > 0) {
+            sumDiff.sum().toDouble() / (totalPixels.toDouble() * BYTES_PER_PIXEL * 255.0)
+        } else {
+            0.0
+        }
         val isPassing = similarity >= minSimilarity
 
         return ComparisonResult(
             similarity = similarity,
+            pixelMatch = similarity,
+            ssim = computeSSIM(actual, reference, width, height),
+            meanChannelError = meanChannelError,
             totalPixels = totalPixels,
             matchingPixels = matchingPixels,
             maxDiff = maxDiff,

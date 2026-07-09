@@ -2,6 +2,7 @@ package org.graphiks.kanvas.skia.gm.mesh
 
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.skia.GmCanvas
+import org.graphiks.kanvas.skia.ReferenceStatusEntry
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
@@ -21,6 +22,10 @@ class CustomMeshUniformsGm : SkiaGm {
     override val renderFamily = RenderFamily.MESH
     override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 99.0
+    override val referenceStatus = ReferenceStatusEntry(
+        status = "untrustable",
+        reason = "white placeholder reference does not represent Skia custommesh_uniforms mesh output",
+    )
     override val width = 140
     override val height = 250
 

@@ -11,6 +11,9 @@ data class GmEntry(
     val name: String,
     val family: String,
     val similarity: Double?,
+    val pixelMatch: Double?,
+    val ssim: Double?,
+    val meanChannelError: Double?,
     val minSimilarity: Double,
     val isPassing: Boolean?,
     val width: Int,
@@ -23,6 +26,8 @@ data class GmEntry(
     val renderFailed: Boolean,
     val noReference: Boolean,
     val sizeMismatch: Boolean,
+    val referenceUntrustable: Boolean,
+    val noScoreCause: String?,
 )
 
 fun main(args: Array<String>) {
@@ -41,25 +46,26 @@ internal fun generateSkiaDashboard(args: Array<String>, gms: List<SkiaGm> = Skia
 
     val entries = mutableListOf<GmEntry>()
     var passed = 0; var failed = 0; var noScore = 0; var sumSim = 0.0; var simCount = 0
+    val dashboardGms = gms.filter { gm -> gm.renderCost != RenderCost.BLOCKING }
 
     outputDir.resolve("images/reference").mkdirs()
     outputDir.resolve("images/generated").mkdirs()
     outputDir.resolve("images/diff").mkdirs()
     outputDir.resolve("data").mkdirs()
-
-    for (gm in gms) {
+    for (gm in dashboardGms) {
         val refFile = refDir.resolve("${gm.name}.png")
         val genFile = genDir.resolve("${gm.renderFamily.name.lowercase()}/${gm.name}.png")
         val fam = gm.renderFamily.name
+        val refStatus = gm.referenceStatus
 
         if (!refFile.exists()) {
-            entries.add(GmEntry(gm.name, fam, null, gm.minSimilarity, null, gm.width, gm.height, 0,0,0,0, 0.0,0.0,0.0,0.0, null, null, false, false, true, false))
+            entries.add(GmEntry(gm.name, fam, null, null, null, null, gm.minSimilarity, null, gm.width, gm.height, 0,0,0,0, 0.0,0.0,0.0,0.0, null, null, false, false, true, false, false, "reference-missing"))
             noScore++
             continue
         }
 
         if (!genFile.exists()) {
-            entries.add(GmEntry(gm.name, fam, null, gm.minSimilarity, null, gm.width, gm.height, 0,0,0,0, 0.0,0.0,0.0,0.0, null, null, false, true, false, false))
+            entries.add(GmEntry(gm.name, fam, null, null, null, null, gm.minSimilarity, null, gm.width, gm.height, 0,0,0,0, 0.0,0.0,0.0,0.0, null, null, false, true, false, false, false, "generated-render-missing"))
             noScore++
             continue
         }
@@ -81,13 +87,22 @@ internal fun generateSkiaDashboard(args: Array<String>, gms: List<SkiaGm> = Skia
                 genImg.height,
                 outputDir.resolve("images/generated/${gm.name}.png"),
             )
-            entries.add(GmEntry(gm.name, fam, null, gm.minSimilarity, null, refImg.width, refImg.height, 0,0,0,0, 0.0,0.0,0.0,0.0, null, null, false, false, false, true))
+            entries.add(GmEntry(gm.name, fam, null, null, null, null, gm.minSimilarity, null, refImg.width, refImg.height, 0,0,0,0, 0.0,0.0,0.0,0.0, null, null, false, false, false, true, false, "size-mismatch"))
             noScore++
             continue
         }
 
         val refRgba = ComparisonUtils.bufferedImageToRgba(refImg)
         val genRgba = ComparisonUtils.bufferedImageToRgba(genImg)
+
+        if (refStatus.untrustable) {
+            ComparisonUtils.saveRgbaAsPng(refRgba, refImg.width, refImg.height, outputDir.resolve("images/reference/${gm.name}.png"))
+            ComparisonUtils.saveRgbaAsPng(genRgba, genImg.width, genImg.height, outputDir.resolve("images/generated/${gm.name}.png"))
+            entries.add(GmEntry(gm.name, fam, null, null, null, null, gm.minSimilarity, null, refImg.width, refImg.height, 0,0,0,0, 0.0,0.0,0.0,0.0, null, null, false, false, false, false, true, "reference-untrustable"))
+            noScore++
+            println("[SKIP] ${gm.name}: reference untrustable (${refStatus.reason ?: "no reason provided"})")
+            continue
+        }
 
         val result = try {
             ComparisonUtils.compareRgba(
@@ -102,7 +117,7 @@ internal fun generateSkiaDashboard(args: Array<String>, gms: List<SkiaGm> = Skia
             println("[SKIP] ${gm.name}: comparison failed (${e.message})")
             ComparisonUtils.saveRgbaAsPng(refRgba, refImg.width, refImg.height, outputDir.resolve("images/reference/${gm.name}.png"))
             ComparisonUtils.saveRgbaAsPng(genRgba, genImg.width, genImg.height, outputDir.resolve("images/generated/${gm.name}.png"))
-            entries.add(GmEntry(gm.name, fam, null, gm.minSimilarity, null, refImg.width, refImg.height, 0,0,0,0, 0.0,0.0,0.0,0.0, null, null, false, false, false, false))
+            entries.add(GmEntry(gm.name, fam, null, null, null, null, gm.minSimilarity, null, refImg.width, refImg.height, 0,0,0,0, 0.0,0.0,0.0,0.0, null, null, false, false, false, false, false, "comparison-unavailable"))
             noScore++
             continue
         }
@@ -119,6 +134,9 @@ internal fun generateSkiaDashboard(args: Array<String>, gms: List<SkiaGm> = Skia
             name = gm.name,
             family = fam,
             similarity = result.similarity,
+            pixelMatch = result.pixelMatch,
+            ssim = result.ssim,
+            meanChannelError = result.meanChannelError,
             minSimilarity = gm.minSimilarity,
             isPassing = result.isPassing,
             width = refImg.width,
@@ -133,6 +151,8 @@ internal fun generateSkiaDashboard(args: Array<String>, gms: List<SkiaGm> = Skia
             renderFailed = false,
             noReference = false,
             sizeMismatch = false,
+            referenceUntrustable = false,
+            noScoreCause = null,
         ))
 
         if (result.isPassing) passed++ else failed++
@@ -143,10 +163,10 @@ internal fun generateSkiaDashboard(args: Array<String>, gms: List<SkiaGm> = Skia
     }
 
     val avgSim = if (simCount > 0) sumSim / simCount else 0.0
-    val families = gms.map { it.renderFamily.name }.distinct().sorted()
+    val families = dashboardGms.map { it.renderFamily.name }.distinct().sorted()
     val now = LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME)
 
-    val json = buildJson(entries, passed, failed, noScore, gms.size, avgSim, now, families)
+    val json = buildJson(entries, passed, failed, noScore, dashboardGms.size, avgSim, now, families)
     outputDir.resolve("data/gms.json").writeText(json)
     copyHtml(outputDir, json)
 
@@ -191,6 +211,9 @@ private fun buildJson(
         sb.appendLine("      \"name\": \"${jsonEsc(e.name)}\",")
         sb.appendLine("      \"family\": \"${jsonEsc(e.family)}\",")
         sb.appendLine("      \"similarity\": ${e.similarity ?: "null"},")
+        sb.appendLine("      \"pixelMatch\": ${e.pixelMatch ?: "null"},")
+        sb.appendLine("      \"ssim\": ${e.ssim?.let { fmt4(it) } ?: "null"},")
+        sb.appendLine("      \"meanChannelError\": ${e.meanChannelError?.let { fmt4(it) } ?: "null"},")
         sb.appendLine("      \"minSimilarity\": ${e.minSimilarity},")
         sb.appendLine("      \"isPassing\": ${e.isPassing ?: "null"},")
         sb.appendLine("      \"width\": ${e.width},")
@@ -202,7 +225,9 @@ private fun buildJson(
         sb.appendLine("      \"hasDiff\": ${e.hasDiff},")
         sb.appendLine("      \"renderFailed\": ${e.renderFailed},")
         sb.appendLine("      \"noReference\": ${e.noReference},")
-        sb.appendLine("      \"sizeMismatch\": ${e.sizeMismatch}")
+        sb.appendLine("      \"sizeMismatch\": ${e.sizeMismatch},")
+        sb.appendLine("      \"referenceUntrustable\": ${e.referenceUntrustable},")
+        sb.appendLine("      \"noScoreCause\": ${e.noScoreCause?.let { "\"${jsonEsc(it)}\"" } ?: "null"}")
         sb.append("    }$comma\n")
     }
     sb.appendLine("  ]")
@@ -211,6 +236,8 @@ private fun buildJson(
 }
 
 private fun fmt2(v: Double): String = String.format(Locale.US, "%.2f", v)
+
+private fun fmt4(v: Double): String = String.format(Locale.US, "%.4f", v)
 
 private fun jsonEsc(s: String): String = buildString {
     for (c in s) {
@@ -236,7 +263,7 @@ private fun copyHtml(outputDir: File, json: String) {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Skia GM Dashboard</title>
 <style>
-:root{color-scheme:dark;--bg:#0d0d1a;--panel:#141428;--card:#1a1a30;--border:#2a2a44;--text:#e0e0e8;--muted:#7878a0;--green:#2ecc71;--orange:#f39c12;--red:#e74c3c;--blue:#3498db}
+:root{color-scheme:dark;--bg:#0d0d1a;--panel:#141428;--card:#1a1a30;--border:#2a2a44;--text:#e0e0e8;--muted:#8f8fb0;--secondary:#b8b8d4;--green:#2ecc71;--orange:#f39c12;--red:#e74c3c;--blue:#3498db}
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;padding:2rem 1rem}
 main{max-width:1400px;margin:0 auto}
@@ -268,7 +295,7 @@ h1{font-size:1.5rem;margin-bottom:0.25rem}
 .img-wrap{background:var(--panel);border:1px solid var(--border);border-radius:6px;overflow:hidden;position:relative;cursor:pointer}
 .img-wrap img{width:100%;height:auto;display:block}
 .img-wrap .placeholder{aspect-ratio:4/3;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:0.75rem;min-height:100px}
-.card-footer{display:flex;gap:1rem;margin-top:0.5rem;font-size:0.72rem;color:var(--muted);flex-wrap:wrap}
+.card-footer{display:flex;gap:1rem;margin-top:0.65rem;font-size:0.76rem;color:var(--secondary);flex-wrap:wrap}
 .modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:100;align-items:center;justify-content:center;cursor:pointer}
 .modal.open{display:flex}
 .modal img{max-width:95vw;max-height:95vh;border-radius:4px}
@@ -313,24 +340,24 @@ document.getElementById('summary').innerHTML=
 '<div class="stat"><div class="num" style="color:var(--green)">'+s.passing+'</div><div class="lbl">Pass</div></div>'+
 '<div class="stat"><div class="num" style="color:var(--red)">'+s.failing+'</div><div class="lbl">Fail</div></div>'+
 '<div class="stat"><div class="num" style="color:var(--muted)">'+s.noScore+'</div><div class="lbl">No Score</div></div>'+
-'<div class="stat"><div class="num" style="color:'+(s.avgSimilarity>=90?'var(--green)':s.avgSimilarity>=75?'var(--orange)':'var(--red)')+'">'+s.avgSimilarity+'%</div><div class="lbl">Avg Similarity</div></div>';
+'<div class="stat"><div class="num" style="color:'+(s.avgSimilarity>=90?'var(--green)':s.avgSimilarity>=75?'var(--orange)':'var(--red)')+'">'+s.avgSimilarity+'%</div><div class="lbl">Avg Pixel Match</div></div>';
 document.getElementById('count').textContent='Showing '+filtered.length+' of '+DATA.gms.length+' GMs';
 document.getElementById('grid').innerHTML=filtered.map(g=>{
-const sc=g.similarity;const pass=g.isPassing;
+const sc=g.pixelMatch!==undefined?g.pixelMatch:g.similarity;const pass=g.isPassing;
 const scCls=sc===null?'none':sc>=95?'pass':pass?'warn':'fail';
 const badgeCls=pass===true?'pass':pass===false?'fail':g.sizeMismatch?'none':'none';
-const badgeTxt=pass===true?'Pass':pass===false?'Fail':g.sizeMismatch?'Size mismatch':'No Score';
+const badgeTxt=pass===true?'Pass':pass===false?'Fail':g.referenceUntrustable?'Untrustable reference':g.sizeMismatch?'Size mismatch':'No Score';
 const borderCls=pass===true?'pass':pass===false?'fail':g.sizeMismatch?'fail':'';
 const diffPct=sc!==null?(100-sc).toFixed(1):'?';
 return '<div class="card '+borderCls+'">'+
 '<div class="card-header"><div><span class="name">'+g.name+'</span> <span class="badge '+badgeCls+'">'+badgeTxt+'</span></div>'+
-'<div><span class="score '+scCls+'">'+(sc!==null?sc.toFixed(1)+'%':'N/A')+'</span> <span style="color:var(--muted);font-size:0.75rem">threshold: '+g.minSimilarity+'%</span></div></div>'+
+'<div><span class="score '+scCls+'">'+(sc!==null?sc.toFixed(1)+'%':'N/A')+'</span> <span style="color:var(--muted);font-size:0.75rem">pixel match, threshold: '+g.minSimilarity+'%</span></div></div>'+
 '<div class="images">'+
 '<div class="col"><div class="label"><span>Reference</span><span>'+g.width+'×'+g.height+'</span></div>'+(g.noReference?'<div class="img-wrap"><div class="placeholder">No reference</div></div>':'<div class="img-wrap" onclick="openModal(\'images/reference/'+g.name+'.png\')"><img src="images/reference/'+g.name+'.png" loading="lazy"></div>')+'</div>'+
 '<div class="col"><div class="label"><span>Generated</span><span>'+g.width+'×'+g.height+'</span></div>'+(g.renderFailed?'<div class="img-wrap"><div class="placeholder">Render failed</div></div>':'<div class="img-wrap" onclick="openModal(\'images/generated/'+g.name+'.png\')"><img src="images/generated/'+g.name+'.png" loading="lazy"></div>')+'</div>'+
-'<div class="col"><div class="label"><span>Diff</span>'+(g.hasDiff?'<span>'+diffPct+'% diff</span>':'')+'</div>'+(g.hasDiff?'<div class="img-wrap" onclick="openModal(\'images/diff/'+g.name+'.png\')"><img src="images/diff/'+g.name+'.png" loading="lazy"></div>':'<div class="img-wrap"><div class="placeholder">'+(g.noReference||g.renderFailed||g.sizeMismatch?'N/A':'Identical')+'</div></div>')+'</div>'+
+'<div class="col"><div class="label"><span>Diff</span>'+(g.hasDiff?'<span>'+diffPct+'% diff</span>':'')+'</div>'+(g.hasDiff?'<div class="img-wrap" onclick="openModal(\'images/diff/'+g.name+'.png\')"><img src="images/diff/'+g.name+'.png" loading="lazy"></div>':'<div class="img-wrap"><div class="placeholder">'+(g.noReference||g.renderFailed||g.sizeMismatch||g.referenceUntrustable?'N/A':'Identical')+'</div></div>')+'</div>'+
 '</div>'+
-'<div class="card-footer"><span>Family: '+g.family+'</span><span>Max diff: R='+g.maxDiff.r+' G='+g.maxDiff.g+' B='+g.maxDiff.b+' A='+g.maxDiff.a+'</span><span>Mean miss: R='+g.meanDiff.r.toFixed(1)+' G='+g.meanDiff.g.toFixed(1)+' B='+g.meanDiff.b.toFixed(1)+' A='+g.meanDiff.a.toFixed(1)+'</span></div>'+
+'<div class="card-footer"><span>Family: '+g.family+'</span><span>SSIM: '+(g.ssim!==null&&g.ssim!==undefined?g.ssim.toFixed(4):'N/A')+'</span><span>Mean channel error: '+(g.meanChannelError!==null&&g.meanChannelError!==undefined?g.meanChannelError.toFixed(4):'N/A')+'</span><span>Max diff: R='+g.maxDiff.r+' G='+g.maxDiff.g+' B='+g.maxDiff.b+' A='+g.maxDiff.a+'</span><span>Mean miss: R='+g.meanDiff.r.toFixed(1)+' G='+g.meanDiff.g.toFixed(1)+' B='+g.meanDiff.b.toFixed(1)+' A='+g.meanDiff.a.toFixed(1)+'</span></div>'+
 '</div>';
 }).join('');
 }
