@@ -102,6 +102,44 @@ class Phase6ImageFamilyEvidenceTest {
     }
 
     @Test
+    fun `build evidence preserves previous image inventory while refreshing current dashboard rows`() {
+        val previousRows = listOf(
+            previousImageRow(
+                rowId = "bitmapcopy",
+                name = "bitmapcopy",
+                classification = "no-score",
+                similarity = null,
+                isPassing = null,
+                noScoreCause = "generated-render-missing",
+            ),
+            previousImageRow(
+                rowId = "blocking_only",
+                name = "blocking_only",
+                classification = "no-score",
+                similarity = null,
+                isPassing = null,
+                noScoreCause = "generated-render-missing",
+            ),
+        )
+        val dashboard = GmDashboard(
+            generatedAt = "2026-07-08T21:00:00",
+            rows = listOf(row("bitmapcopy", similarity = 95.0, isPassing = true)),
+        )
+
+        val evidence = Phase6ImageFamilyClassifier.buildEvidence(
+            dashboard = dashboard,
+            previousRows = previousRows,
+        )
+
+        assertEquals(2, evidence.summary.totalImageRows)
+        assertEquals(1, evidence.summary.classifications["instrumented-existing"])
+        assertEquals(1, evidence.summary.classifications["no-score"])
+        assertEquals("instrumented-existing", evidence.rows.first { it.rowId == "bitmapcopy" }.classification)
+        assertEquals(95.0, evidence.rows.first { it.rowId == "bitmapcopy" }.similarity)
+        assertEquals("no-score", evidence.rows.first { it.rowId == "blocking_only" }.classification)
+    }
+
+    @Test
     fun `dashboard reader keeps path clip flags and diff stats for shared evidence`() {
         val root = kotlin.io.path.createTempDirectory("phase6-shared-dashboard")
         val dashboard = root.resolve("gms.json")
@@ -264,4 +302,29 @@ private fun row(
         renderFailed = renderFailed,
         sizeMismatch = sizeMismatch,
         hasDiff = hasDiff,
+    )
+
+private fun previousImageRow(
+    rowId: String,
+    name: String,
+    classification: String,
+    similarity: Double?,
+    isPassing: Boolean?,
+    noScoreCause: String?,
+): Phase6ImageRowEvidence =
+    Phase6ImageRowEvidence(
+        rowId = rowId,
+        name = name,
+        family = "IMAGE",
+        subfamily = "texture-cache-candidate",
+        classification = classification,
+        similarity = similarity,
+        minSimilarity = 0.0,
+        isPassing = isPassing,
+        fallbackReason = "none",
+        referencePath = "images/reference/$name.png",
+        generatedPath = if (noScoreCause == "generated-render-missing") null else "images/generated/$name.png",
+        diffPath = null,
+        noScoreCause = noScoreCause,
+        nonClaim = "previous row",
     )

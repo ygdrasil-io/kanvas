@@ -12,9 +12,11 @@ fun main(args: Array<String>) {
 
     val dashboard = GmDashboardJsonReader.read(dashboardPath)
     val resourceEvidence = ResourceEvidenceReader.readIfPresent(root)
+    val previousRows = Phase6ImagePreviousEvidenceReader.readRowsIfPresent(root)
     val evidence = Phase6ImageFamilyClassifier.buildEvidence(
         dashboard = dashboard,
         resourceEvidence = resourceEvidence,
+        previousRows = previousRows,
     )
     Phase6ImageFamilyEvidenceWriter.writeOutputs(root, evidence)
     println("Wrote ${root.resolve("reports/gpu-renderer/phase-6-image-family/evidence.json")}")

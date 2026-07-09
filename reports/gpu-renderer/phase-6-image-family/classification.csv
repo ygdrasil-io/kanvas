@@ -20,7 +20,7 @@ async_yuv_no_scale,async_yuv_no_scale,yuv-gated,expected-unsupported,56.66666666
 bc1_transparency,bc1_transparency,texture-cache-candidate,instrumented-existing,56.547619047619044,0.0,none,
 bicubic,bicubic,texture-cache-candidate,instrumented-existing,80.75,0.0,none,
 bigmatrix,bigmatrix,texture-cache-candidate,instrumented-existing,7.960000000000001,0.0,none,
-bitmapcopy,bitmapcopy,texture-cache-candidate,no-score,,0.0,none,generated-render-missing
+bitmapcopy,bitmapcopy,texture-cache-candidate,instrumented-existing,95.47474747474747,0.0,none,
 bitmapfilters,bitmapfilters,image-filter-gated,expected-unsupported,48.06296296296296,0.0,unsupported.filter.node_unimplemented,
 bitmap-image-srgb-legacy,bitmap-image-srgb-legacy,texture-cache-candidate,no-score,,0.0,none,generated-render-missing
 bitmap_premul,bitmap_premul,texture-cache-candidate,instrumented-existing,100.0,0.0,none,
@@ -42,7 +42,7 @@ colorspace,colorspace,color-management-gated,expected-unsupported,0.724400111607
 compositor_quads_image,compositor_quads_image,texture-cache-candidate,instrumented-existing,70.00516819090848,0.0,none,
 compressed_textures,compressed_textures,texture-cache-candidate,instrumented-existing,49.54617446393762,0.0,none,
 coordclampshader,coordclampshader,bitmap-shader-affine,instrumented-existing,38.83559959242472,0.0,none,
-copyTo4444,copyTo4444,texture-cache-candidate,no-score,,0.0,none,generated-render-missing
+copyTo4444,copyTo4444,texture-cache-candidate,instrumented-existing,0.07098765432098765,0.0,none,
 crbug_224618,crbug_224618,texture-cache-candidate,instrumented-existing,0.23171874999999997,0.0,none,
 crbug_404394639,crbug_404394639,texture-cache-candidate,no-score,,0.0,none,generated-render-missing
 deferred_shader_rt,deferred_shader_rt,bitmap-shader-affine,no-score,,0.0,none,generated-render-missing
@@ -64,7 +64,7 @@ filterbug,filterbug,image-filter-gated,expected-unsupported,77.77777777777779,0.
 filterindiabox,filterindiabox,image-filter-gated,expected-unsupported,96.47285067873304,0.0,unsupported.filter.node_unimplemented,
 flight_animated_image,flight_animated_image,animation-gated,no-score,,0.0,dependency.image.codec.unregistered,size-mismatch
 flippity,flippity,texture-cache-candidate,instrumented-existing,44.158822518807874,0.0,none,
-format4444,format4444,texture-cache-candidate,no-score,,0.0,none,generated-render-missing
+format4444,format4444,texture-cache-candidate,instrumented-existing,87.5,0.0,none,
 giantbitmap_clamp_bilerp_rotate,giantbitmap_clamp_bilerp_rotate,texture-cache-candidate,no-score,,0.0,none,generated-render-missing
 giantbitmap_clamp_bilerp_scale,giantbitmap_clamp_bilerp_scale,texture-cache-candidate,no-score,,0.0,none,generated-render-missing
 giantbitmap_clamp_point_rotate,giantbitmap_clamp_point_rotate,texture-cache-candidate,no-score,,0.0,none,generated-render-missing
@@ -80,7 +80,7 @@ giantbitmap_repeat_point_scale,giantbitmap_repeat_point_scale,sampler-policy-can
 grayscalejpg,grayscalejpg,texture-cache-candidate,instrumented-existing,0.0,0.0,none,
 hugebitmapshader,hugebitmapshader,bitmap-shader-affine,instrumented-existing,21.15,0.0,none,
 image-cacherator-from-picture,image-cacherator-from-picture,texture-cache-candidate,instrumented-existing,59.645138888888894,0.0,none,
-image_dither,image_dither,texture-cache-candidate,no-score,,0.0,none,generated-render-missing
+image_dither,image_dither,texture-cache-candidate,instrumented-existing,18.26096256684492,0.0,none,
 imagefilter_transformed_image,imagefilter_transformed_image,image-filter-gated,expected-unsupported,73.78692626953125,0.0,unsupported.filter.node_unimplemented,
 imagefilterscropexpand,imagefilterscropexpand,image-filter-gated,expected-unsupported,34.5940990516333,0.0,unsupported.filter.node_unimplemented,
 imagefiltersgraph,imagefiltersgraph,image-filter-gated,expected-unsupported,70.64111111111112,0.0,unsupported.filter.node_unimplemented,
@@ -115,7 +115,7 @@ mipmap_srgb,mipmap_srgb,mipmap-gated,no-score,,0.0,unsupported.image.mipmap_budg
 mirror_tile,mirror_tile,sampler-policy-candidate,instrumented-existing,55.521235521235525,0.0,none,
 nearest_half_pixel_image,nearest_half_pixel_image,strict-nearest-linear,instrumented-existing,73.59123146357189,0.0,none,
 new_texture_image,new_texture_image,texture-cache-candidate,no-score,,0.0,none,reference-missing
-ninepatch-stretch,ninepatch-stretch,texture-cache-candidate,no-score,,0.0,none,generated-render-missing
+ninepatch-stretch,ninepatch-stretch,texture-cache-candidate,instrumented-existing,78.48305921052632,0.0,none,
 not_native32_bitmap_config,not_native32_bitmap_config,texture-cache-candidate,instrumented-existing,75.738525390625,0.0,none,
 null_child_rt,null_child_rt,texture-cache-candidate,no-score,,0.0,none,generated-render-missing
 p3,p3,color-management-gated,expected-unsupported,87.95470085470085,0.0,unsupported.color.image_profile_conversion,

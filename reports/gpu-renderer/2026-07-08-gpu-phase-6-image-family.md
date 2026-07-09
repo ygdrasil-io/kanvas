@@ -3,7 +3,7 @@
 ## Summary
 
 - Total IMAGE rows: 173
-- Classifications: {expected-unsupported=29, instrumented-existing=68, no-score=76}
+- Classifications: {expected-unsupported=29, instrumented-existing=73, no-score=71}
 - Subfamilies: {animation-gated=11, bitmap-shader-affine=16, color-management-gated=6, image-filter-gated=11, local-matrix-affine=5, mipmap-gated=5, perspective-gated=3, readpixels-or-snapshot-gated=3, sampler-policy-candidate=20, simple-image-rect=7, strict-nearest-linear=6, texture-cache-candidate=76, yuv-gated=4}
 
 ## Non-Claims
@@ -52,7 +52,7 @@
 | `bc1_transparency` | `bc1_transparency` | `texture-cache-candidate` | `instrumented-existing` | 56.55 | `none` |
 | `bicubic` | `bicubic` | `texture-cache-candidate` | `instrumented-existing` | 80.75 | `none` |
 | `bigmatrix` | `bigmatrix` | `texture-cache-candidate` | `instrumented-existing` | 7.96 | `none` |
-| `bitmapcopy` | `bitmapcopy` | `texture-cache-candidate` | `no-score` | n/a | `none` |
+| `bitmapcopy` | `bitmapcopy` | `texture-cache-candidate` | `instrumented-existing` | 95.47 | `none` |
 | `bitmapfilters` | `bitmapfilters` | `image-filter-gated` | `expected-unsupported` | 48.06 | `unsupported.filter.node_unimplemented` |
 | `bitmap-image-srgb-legacy` | `bitmap-image-srgb-legacy` | `texture-cache-candidate` | `no-score` | n/a | `none` |
 | `bitmap_premul` | `bitmap_premul` | `texture-cache-candidate` | `instrumented-existing` | 100.00 | `none` |
@@ -74,7 +74,7 @@
 | `compositor_quads_image` | `compositor_quads_image` | `texture-cache-candidate` | `instrumented-existing` | 70.01 | `none` |
 | `compressed_textures` | `compressed_textures` | `texture-cache-candidate` | `instrumented-existing` | 49.55 | `none` |
 | `coordclampshader` | `coordclampshader` | `bitmap-shader-affine` | `instrumented-existing` | 38.84 | `none` |
-| `copyTo4444` | `copyTo4444` | `texture-cache-candidate` | `no-score` | n/a | `none` |
+| `copyTo4444` | `copyTo4444` | `texture-cache-candidate` | `instrumented-existing` | 0.07 | `none` |
 | `crbug_224618` | `crbug_224618` | `texture-cache-candidate` | `instrumented-existing` | 0.23 | `none` |
 | `crbug_404394639` | `crbug_404394639` | `texture-cache-candidate` | `no-score` | n/a | `none` |
 | `deferred_shader_rt` | `deferred_shader_rt` | `bitmap-shader-affine` | `no-score` | n/a | `none` |
@@ -96,7 +96,7 @@
 | `filterindiabox` | `filterindiabox` | `image-filter-gated` | `expected-unsupported` | 96.47 | `unsupported.filter.node_unimplemented` |
 | `flight_animated_image` | `flight_animated_image` | `animation-gated` | `no-score` | n/a | `dependency.image.codec.unregistered` |
 | `flippity` | `flippity` | `texture-cache-candidate` | `instrumented-existing` | 44.16 | `none` |
-| `format4444` | `format4444` | `texture-cache-candidate` | `no-score` | n/a | `none` |
+| `format4444` | `format4444` | `texture-cache-candidate` | `instrumented-existing` | 87.50 | `none` |
 | `giantbitmap_clamp_bilerp_rotate` | `giantbitmap_clamp_bilerp_rotate` | `texture-cache-candidate` | `no-score` | n/a | `none` |
 | `giantbitmap_clamp_bilerp_scale` | `giantbitmap_clamp_bilerp_scale` | `texture-cache-candidate` | `no-score` | n/a | `none` |
 | `giantbitmap_clamp_point_rotate` | `giantbitmap_clamp_point_rotate` | `texture-cache-candidate` | `no-score` | n/a | `none` |
@@ -112,7 +112,7 @@
 | `grayscalejpg` | `grayscalejpg` | `texture-cache-candidate` | `instrumented-existing` | 0.00 | `none` |
 | `hugebitmapshader` | `hugebitmapshader` | `bitmap-shader-affine` | `instrumented-existing` | 21.15 | `none` |
 | `image-cacherator-from-picture` | `image-cacherator-from-picture` | `texture-cache-candidate` | `instrumented-existing` | 59.65 | `none` |
-| `image_dither` | `image_dither` | `texture-cache-candidate` | `no-score` | n/a | `none` |
+| `image_dither` | `image_dither` | `texture-cache-candidate` | `instrumented-existing` | 18.26 | `none` |
 | `imagefilter_transformed_image` | `imagefilter_transformed_image` | `image-filter-gated` | `expected-unsupported` | 73.79 | `unsupported.filter.node_unimplemented` |
 | `imagefilterscropexpand` | `imagefilterscropexpand` | `image-filter-gated` | `expected-unsupported` | 34.59 | `unsupported.filter.node_unimplemented` |
 | `imagefiltersgraph` | `imagefiltersgraph` | `image-filter-gated` | `expected-unsupported` | 70.64 | `unsupported.filter.node_unimplemented` |
@@ -147,7 +147,7 @@
 | `mirror_tile` | `mirror_tile` | `sampler-policy-candidate` | `instrumented-existing` | 55.52 | `none` |
 | `nearest_half_pixel_image` | `nearest_half_pixel_image` | `strict-nearest-linear` | `instrumented-existing` | 73.59 | `none` |
 | `new_texture_image` | `new_texture_image` | `texture-cache-candidate` | `no-score` | n/a | `none` |
-| `ninepatch-stretch` | `ninepatch-stretch` | `texture-cache-candidate` | `no-score` | n/a | `none` |
+| `ninepatch-stretch` | `ninepatch-stretch` | `texture-cache-candidate` | `instrumented-existing` | 78.48 | `none` |
 | `not_native32_bitmap_config` | `not_native32_bitmap_config` | `texture-cache-candidate` | `instrumented-existing` | 75.74 | `none` |
 | `null_child_rt` | `null_child_rt` | `texture-cache-candidate` | `no-score` | n/a | `none` |
 | `p3` | `p3` | `color-management-gated` | `expected-unsupported` | 87.95 | `unsupported.color.image_profile_conversion` |
