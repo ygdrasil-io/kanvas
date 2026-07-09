@@ -52,6 +52,13 @@ internal fun productIntermediatePlannerScopeDiagnostics(): List<String> =
             "scenePlannerActivation=out-of-scope",
     )
 
+internal fun selectPathVerticesForCommand(
+    isStroke: Boolean,
+    flattened: List<Point>,
+    triangulated: List<Point>,
+): List<Point> =
+    if (isStroke) flattened else triangulated
+
 internal fun renderViaGpu(
     buffer: DisplayListBuffer,
     width: Int,
@@ -508,11 +515,11 @@ internal fun renderViaGpu(
                             continue
                         }
                         val tri = tessellator.triangulate(flat)
-                        val vertices = if (isStroke && tri.vertices.isEmpty() && flat.size >= 2) {
-                            flat.flatMap { listOf(it.x, it.y) }
-                        } else {
-                            tri.vertices.flatMap { listOf(it.x, it.y) }
-                        }
+                        val vertices = selectPathVerticesForCommand(
+                            isStroke = isStroke,
+                            flattened = flat,
+                            triangulated = tri.vertices,
+                        ).flatMap { listOf(it.x, it.y) }
                         val contourStarts = listOf(0)
                         val cmd = op.toNormalizedCommand(cmdId, targets, vertices, contourStarts, flat.size)
                         if (cmd.blend.requiresDestinationRead) {
