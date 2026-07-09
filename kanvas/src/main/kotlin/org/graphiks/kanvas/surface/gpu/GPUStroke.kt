@@ -19,12 +19,13 @@ internal fun applyDash(
 ): List<Pair<Float, Float>> {
     if (dashArray.isEmpty()) return emptyList()
     val result = mutableListOf<Pair<Float, Float>>()
+    val intervals = dashArray.map { it.coerceAtLeast(0.1f) }
     var dashIdx = 0
-    val totalDashLen = dashArray.sum().coerceAtLeast(1f)
-    var remaining = phase % totalDashLen
-    while (remaining > 0 && dashIdx < dashArray.size) {
-        if (remaining <= dashArray[dashIdx]) break
-        remaining -= dashArray[dashIdx]
+    val totalDashLen = intervals.sum().coerceAtLeast(1f)
+    var intervalOffset = phase % totalDashLen
+    if (intervalOffset < 0f) intervalOffset += totalDashLen
+    while (intervalOffset >= intervals[dashIdx % intervals.size]) {
+        intervalOffset -= intervals[dashIdx % intervals.size]
         dashIdx++
     }
     for (i in 0 until points.size - 1) {
@@ -36,22 +37,24 @@ internal fun applyDash(
         val nx = dx / segLen; val ny = dy / segLen
 
         while (pos < segLen) {
-            val idx = dashIdx % dashArray.size
-            val dashLen = dashArray[idx].coerceAtLeast(0.1f)
-            val startOff = remaining
-            val effectiveLen = minOf(dashLen - startOff, segLen - pos)
+            val idx = dashIdx % intervals.size
+            val dashLen = intervals[idx]
+            val effectiveLen = minOf(dashLen - intervalOffset, segLen - pos)
             val endPos = pos + effectiveLen
-            remaining = 0f
 
-            if (dashIdx % 2 == 0) {
+            if (idx % 2 == 0) {
                 result.add(Pair(p0.first + pos * nx, p0.second + pos * ny))
                 result.add(Pair(p0.first + endPos * nx, p0.second + endPos * ny))
             }
 
             pos = endPos
-            if (pos >= segLen - 1e-6f) break
-
-            dashIdx++
+            intervalOffset += effectiveLen
+            if (intervalOffset >= dashLen - 1e-6f) {
+                dashIdx++
+                intervalOffset = 0f
+            } else if (pos >= segLen - 1e-6f) {
+                break
+            }
         }
     }
     return result
@@ -166,37 +169,36 @@ internal fun strokeToFillGeometry(
                 val nx = nux * halfWidth
                 val ny = nuy * halfWidth
 
-                result.addAll(listOf(
+                addTriangle(
                     p0.first - nx, p0.second - ny,
                     p0.first + nx, p0.second + ny,
                     p1.first + nx, p1.second + ny,
-                ))
-                result.addAll(listOf(
+                )
+                addTriangle(
                     p0.first - nx, p0.second - ny,
                     p1.first + nx, p1.second + ny,
                     p1.first - nx, p1.second - ny,
-                ))
+                )
 
                 if (capStyle == StrokeCap.ROUND) {
                     val capStart = generateRoundCap(p0, Pair(nux, nuy), halfWidth, segments)
                     for (vi in 0 until capStart.size - 2 step 2) {
-                        result.addAll(listOf(
+                        addTriangle(
                             p0.first, p0.second,
                             capStart[vi], capStart[vi + 1],
                             capStart[vi + 2], capStart[vi + 3],
-                        ))
+                        )
                     }
                     val capEnd = generateRoundCap(p1, Pair(-nux, -nuy), halfWidth, segments)
                     for (vi in 0 until capEnd.size - 2 step 2) {
-                        result.addAll(listOf(
+                        addTriangle(
                             p1.first, p1.second,
                             capEnd[vi], capEnd[vi + 1],
                             capEnd[vi + 2], capEnd[vi + 3],
-                        ))
+                        )
                     }
                 }
             }
-            contourResult.add(result.size / 2)
         } else if (!isClosed || n == 2) {
             for (ei in 0 until n - 1) {
                 val p0 = points[ei]
