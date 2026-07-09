@@ -30,8 +30,8 @@ class IntrinsicsRelationalGm : SkiaGm {
     override val renderFamily = RenderFamily.RUNTIME_EFFECT
     override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
-    override val width = 512
-    override val height = 256
+    override val width = 425
+    override val height = 725
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val effect = RuntimeEffect.compile(IntrinsicsRelationalWgsl).getOrThrow()

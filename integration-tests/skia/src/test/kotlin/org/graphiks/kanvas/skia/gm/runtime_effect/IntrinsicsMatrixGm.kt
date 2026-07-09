@@ -28,8 +28,8 @@ class IntrinsicsMatrixGm : SkiaGm {
     override val renderFamily = RenderFamily.RUNTIME_EFFECT
     override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
-    override val width = 512
-    override val height = 128
+    override val width = 320
+    override val height = 245
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         val effect = RuntimeEffect.compile(IntrinsicsMatrixWgsl).getOrThrow()
