@@ -43,8 +43,12 @@ class Phase6TextMeshFamilyEvidenceTest {
         assertEquals("instrumented-existing", basic.classification)
         assertEquals("text-rsxform-gated", rsxform.subfamily)
         assertEquals("unsupported.text.rsxform", rsxform.fallbackReason)
+        assertEquals("no-score", rsxform.classification)
+        assertEquals("generated-render-missing", rsxform.noScoreCause)
         assertEquals("text-perspective-or-transform-gated", perspective.subfamily)
         assertEquals("unsupported.text.perspective", perspective.fallbackReason)
+        assertEquals("no-score", perspective.classification)
+        assertEquals("generated-render-missing", perspective.noScoreCause)
         assertEquals("text-font-manager-gated", fontManager.subfamily)
         assertEquals("unsupported.text.font_manager", fontManager.fallbackReason)
         assertEquals("expected-unsupported", fontManager.classification)
@@ -58,6 +62,8 @@ class Phase6TextMeshFamilyEvidenceTest {
         assertEquals("unsupported.text.filter_or_blur", filter.fallbackReason)
         assertEquals("text-clip-interaction-gated", clip.subfamily)
         assertEquals("unsupported.text.clip_interaction", clip.fallbackReason)
+        assertEquals("no-score", clip.classification)
+        assertEquals("generated-render-missing", clip.noScoreCause)
     }
 
     @Test
@@ -80,20 +86,34 @@ class Phase6TextMeshFamilyEvidenceTest {
         assertEquals("instrumented-existing", custom.classification)
         assertEquals("mesh-custom-uniforms-gated", customUniforms.subfamily)
         assertEquals("unsupported.mesh.custom_uniforms", customUniforms.fallbackReason)
+        assertEquals("no-score", customUniforms.classification)
+        assertEquals("generated-render-missing", customUniforms.noScoreCause)
         assertEquals("mesh-effect-dependency-gated", effects.subfamily)
         assertEquals("unsupported.mesh.effect_dependency", effects.fallbackReason)
+        assertEquals("no-score", effects.classification)
+        assertEquals("generated-render-missing", effects.noScoreCause)
         assertEquals("mesh-image-dependency-gated", image.subfamily)
         assertEquals("unsupported.mesh.image_dependency", image.fallbackReason)
+        assertEquals("no-score", image.classification)
+        assertEquals("generated-render-missing", image.noScoreCause)
         assertEquals("mesh-paint-color-dependency-gated", paintColor.subfamily)
         assertEquals("unsupported.mesh.paint_color_dependency", paintColor.fallbackReason)
+        assertEquals("no-score", paintColor.classification)
+        assertEquals("generated-render-missing", paintColor.noScoreCause)
         assertEquals("mesh-paint-image-dependency-gated", paintImage.subfamily)
         assertEquals("unsupported.mesh.paint_image_dependency", paintImage.fallbackReason)
+        assertEquals("no-score", paintImage.classification)
+        assertEquals("generated-render-missing", paintImage.noScoreCause)
         assertEquals("mesh-perspective-gated", perspective.subfamily)
         assertEquals("unsupported.mesh.perspective", perspective.fallbackReason)
+        assertEquals("no-score", perspective.classification)
+        assertEquals("generated-render-missing", perspective.noScoreCause)
         assertEquals("mesh-update-or-dynamic-gated", updates.subfamily)
         assertEquals("unsupported.mesh.dynamic_updates", updates.fallbackReason)
         assertEquals("mesh-zero-init-gated", zeroInit.subfamily)
         assertEquals("unsupported.mesh.zero_init", zeroInit.fallbackReason)
+        assertEquals("no-score", zeroInit.classification)
+        assertEquals("generated-render-missing", zeroInit.noScoreCause)
         assertEquals("mesh-picture-dependency-gated", picture.subfamily)
         assertEquals("unsupported.mesh.picture_dependency", picture.fallbackReason)
     }
@@ -185,20 +205,44 @@ class Phase6TextMeshFamilyEvidenceTest {
         val root = Files.createTempDirectory("phase6-text-mesh-evidence-test")
         val markdown = root.resolve("reports/gpu-renderer/2026-07-09-gpu-phase-6-text-mesh-families.md")
         Files.createDirectories(markdown.parent)
-        Files.writeString(markdown, "# Existing\n\n## Validation\n\n- keep this validation note\n")
+        Files.writeString(markdown, "# Existing\n")
         val evidence = Phase6TextMeshFamilyClassifier.buildEvidence(
             GmDashboard(
                 generatedAt = "2026-07-09T12:00:00",
                 rows = listOf(row("bigtext", family = "TEXT")),
             ),
         )
+        val evidencePath = root.resolve("reports/gpu-renderer/phase-6-text-mesh-families/evidence.json")
+        val csvPath = root.resolve("reports/gpu-renderer/phase-6-text-mesh-families/classification.csv")
+        val sentinel = "SENTINEL BODY MUTATION"
 
         Phase6TextMeshFamilyEvidenceWriter.writeOutputs(root, evidence)
 
-        assertContains(Files.readString(root.resolve("reports/gpu-renderer/phase-6-text-mesh-families/evidence.json")), "phase6-text-mesh-families-v1")
-        assertContains(Files.readString(root.resolve("reports/gpu-renderer/phase-6-text-mesh-families/classification.csv")), "rowId,name,family,subfamily,classification")
-        assertContains(Files.readString(markdown), "## Validation")
-        assertContains(Files.readString(markdown), "keep this validation note")
+        assertContains(Files.readString(evidencePath), "phase6-text-mesh-families-v1")
+        assertContains(Files.readString(csvPath), "rowId,name,family,subfamily,classification")
+        assertContains(Files.readString(markdown), "No broad TEXT or MESH support is claimed from classification alone.")
+
+        Files.writeString(
+            markdown,
+            Files.readString(markdown) +
+                "\n$sentinel\n" +
+                """
+
+                ## Validation
+
+                - `:integration-tests:skia-evidence:test` passed.
+                - `generateGpuPhase6TextMeshFamiliesEvidence` regenerated evidence.
+                """.trimIndent() +
+                "\n",
+        )
+
+        Phase6TextMeshFamilyEvidenceWriter.writeOutputs(root, evidence)
+
+        val regenerated = Files.readString(markdown)
+        assertFalse(regenerated.contains(sentinel))
+        assertContains(regenerated, "## Validation")
+        assertContains(regenerated, "- `:integration-tests:skia-evidence:test` passed.")
+        assertContains(regenerated, "- `generateGpuPhase6TextMeshFamiliesEvidence` regenerated evidence.")
     }
 
     @Test
@@ -212,7 +256,7 @@ class Phase6TextMeshFamilyEvidenceTest {
 
         val nonClaims = evidence.nonClaims.joinToString("\n")
         assertContains(nonClaims, "No broad TEXT or MESH support is claimed from classification alone.")
-        assertContains(nonClaims, "shaping, font fallback, glyph cache, color fonts, emoji, palettes, transformed text, text filters, and clip/text interactions remain outside this evidence wave unless row diagnostics prove a bounded route.")
+        assertContains(nonClaims, "shaping, font fallback, glyph atlas, glyph cache, color fonts, emoji, palettes, transformed text, text filters, and clip/text interactions remain outside this evidence wave unless row diagnostics prove a bounded route.")
         assertContains(nonClaims, "custom mesh, dynamic mesh updates, perspective mesh, picture mesh, image dependencies, paint-image dependencies, mesh effects, and arbitrary vertices remain outside this evidence wave unless row diagnostics prove a bounded route.")
         assertFalse(nonClaims.contains("complete support", ignoreCase = true))
     }
