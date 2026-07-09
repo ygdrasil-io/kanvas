@@ -202,11 +202,11 @@ object Phase6TextMeshFamilyClassifier {
         when {
             name.containsAnyTextMesh("clip") -> "text-clip-interaction-gated"
             name.containsAnyTextMesh("textfilter", "blur") -> "text-filter-or-blur-gated"
-            name.containsAnyTextMesh("gradtext", "shader") -> "text-shader-or-gradient-gated"
+            name.containsAnyTextMesh("gradtext", "gradienttext", "shader") -> "text-shader-or-gradient-gated"
             name.containsAnyTextMesh("rsxform") -> "text-rsxform-gated"
             name.containsAnyTextMesh("persp", "perspective", "dftextblobpersp") -> "text-perspective-or-transform-gated"
             name.containsAnyTextMesh("fontmgr", "fontmanager") -> "text-font-manager-gated"
-            name.containsAnyTextMesh("fontcache", "glyphcache") -> "text-large-or-cache"
+            name.containsAnyTextMesh("fontcache", "glyphcache") -> "text-blob-gated"
             name.containsAnyTextMesh("fontregen", "fallback") -> "text-font-fallback-gated"
             name.containsAnyTextMesh("coloremoji", "emoji") -> "text-emoji-gated"
             name.containsAnyTextMesh("colrv1", "colrv0", "colorfont") -> "text-color-font-gated"

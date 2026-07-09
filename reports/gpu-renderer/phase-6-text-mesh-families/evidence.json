@@ -2,7 +2,7 @@
     "schemaVersion": "phase6-text-mesh-families-v1",
     "generatedBy": ":integration-tests:skia-evidence:generateGpuPhase6TextMeshFamiliesEvidence",
     "dashboardSource": "integration-tests/skia/build/reports/skia-gm-dashboard/data/gms.json",
-    "sourceGeneratedAt": "2026-07-09T14:21:53.369111",
+    "sourceGeneratedAt": "2026-07-09T16:19:07.650942",
     "summary": {
         "totalRows": 93,
         "families": {
@@ -13,7 +13,7 @@
             "MESH": {
                 "baselineSource": "2026-07-09 local dashboard before text-mesh-family wave",
                 "currentSource": "integration-tests/skia/build/reports/skia-gm-dashboard/data/gms.json",
-                "currentGeneratedAt": "2026-07-09T14:21:53.369111",
+                "currentGeneratedAt": "2026-07-09T16:19:07.650942",
                 "baselineCount": 16,
                 "currentCount": 16,
                 "delta": 0
@@ -21,15 +21,15 @@
             "TEXT": {
                 "baselineSource": "2026-07-09 local dashboard before text-mesh-family wave",
                 "currentSource": "integration-tests/skia/build/reports/skia-gm-dashboard/data/gms.json",
-                "currentGeneratedAt": "2026-07-09T14:21:53.369111",
+                "currentGeneratedAt": "2026-07-09T16:19:07.650942",
                 "baselineCount": 77,
                 "currentCount": 77,
                 "delta": 0
             }
         },
         "classifications": {
-            "expected-unsupported": 38,
-            "instrumented-existing": 32,
+            "expected-unsupported": 39,
+            "instrumented-existing": 31,
             "no-score": 23
         },
         "subfamilies": {
@@ -46,8 +46,8 @@
             "mesh-update-or-dynamic-gated": 1,
             "mesh-zero-init-gated": 1,
             "text-annotation-gated": 1,
-            "text-basic-latin": 31,
-            "text-blob-gated": 11,
+            "text-basic-latin": 30,
+            "text-blob-gated": 12,
             "text-clip-interaction-gated": 1,
             "text-color-font-gated": 1,
             "text-color-palette-gated": 2,
@@ -55,10 +55,10 @@
             "text-filter-or-blur-gated": 3,
             "text-font-fallback-gated": 1,
             "text-font-manager-gated": 3,
-            "text-large-or-cache": 3,
+            "text-large-or-cache": 2,
             "text-perspective-or-transform-gated": 4,
             "text-rsxform-gated": 3,
-            "text-shader-or-gradient-gated": 6
+            "text-shader-or-gradient-gated": 7
         },
         "promotedRows": 0,
         "unexpectedFails": 0,
@@ -225,13 +225,13 @@
         {
             "rootCause": "unsupported.text.shader_or_gradient",
             "classification": "expected-unsupported",
-            "rowCount": 5,
+            "rowCount": 6,
             "sampleRows": [
                 "chrome_gradtext2",
+                "gammagradienttext",
                 "gammatext_color_shader",
                 "gradtext",
-                "shadertext3",
-                "textblobshader"
+                "shadertext3"
             ]
         }
     ],
@@ -1328,7 +1328,7 @@
             "rowId": "fontcache",
             "name": "fontcache",
             "family": "TEXT",
-            "subfamily": "text-large-or-cache",
+            "subfamily": "text-blob-gated",
             "classification": "no-score",
             "similarity": null,
             "minSimilarity": 0.0,
@@ -1349,7 +1349,7 @@
                 "b": 0.0,
                 "a": 0.0
             },
-            "fallbackReason": "none",
+            "fallbackReason": "unsupported.text.glyph_cache",
             "referencePath": "images/reference/fontcache.png",
             "generatedPath": null,
             "diffPath": null,
@@ -1584,8 +1584,8 @@
             "rowId": "gammagradienttext",
             "name": "gammagradienttext",
             "family": "TEXT",
-            "subfamily": "text-basic-latin",
-            "classification": "instrumented-existing",
+            "subfamily": "text-shader-or-gradient-gated",
+            "classification": "expected-unsupported",
             "similarity": 75.84666666666666,
             "minSimilarity": 75.3,
             "isPassing": true,
@@ -1605,12 +1605,12 @@
                 "b": 90.96,
                 "a": 0.0
             },
-            "fallbackReason": "none",
+            "fallbackReason": "unsupported.text.shader_or_gradient",
             "referencePath": "images/reference/gammagradienttext.png",
             "generatedPath": "images/generated/gammagradienttext.png",
             "diffPath": "images/diff/gammagradienttext.png",
             "noScoreCause": null,
-            "nonClaim": "TEXT row remains instrumented until route and text/mesh diagnostics are attached."
+            "nonClaim": "text-shader-or-gradient-gated remains outside Phase 6 text/mesh-family migration scope."
         },
         {
             "rowId": "gammatext_color_shader",

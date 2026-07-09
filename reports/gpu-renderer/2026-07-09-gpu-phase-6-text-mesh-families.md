@@ -4,8 +4,8 @@
 
 - Total TEXT + MESH rows: 93
 - Families: {MESH=16, TEXT=77}
-- Classifications: {expected-unsupported=38, instrumented-existing=32, no-score=23}
-- Subfamilies: {mesh-basic-vertices=4, mesh-color-space-gated=1, mesh-custom-basic=1, mesh-custom-uniforms-gated=2, mesh-effect-dependency-gated=1, mesh-image-dependency-gated=1, mesh-paint-color-dependency-gated=1, mesh-paint-image-dependency-gated=1, mesh-perspective-gated=1, mesh-picture-dependency-gated=1, mesh-update-or-dynamic-gated=1, mesh-zero-init-gated=1, text-annotation-gated=1, text-basic-latin=31, text-blob-gated=11, text-clip-interaction-gated=1, text-color-font-gated=1, text-color-palette-gated=2, text-emoji-gated=7, text-filter-or-blur-gated=3, text-font-fallback-gated=1, text-font-manager-gated=3, text-large-or-cache=3, text-perspective-or-transform-gated=4, text-rsxform-gated=3, text-shader-or-gradient-gated=6}
+- Classifications: {expected-unsupported=39, instrumented-existing=31, no-score=23}
+- Subfamilies: {mesh-basic-vertices=4, mesh-color-space-gated=1, mesh-custom-basic=1, mesh-custom-uniforms-gated=2, mesh-effect-dependency-gated=1, mesh-image-dependency-gated=1, mesh-paint-color-dependency-gated=1, mesh-paint-image-dependency-gated=1, mesh-perspective-gated=1, mesh-picture-dependency-gated=1, mesh-update-or-dynamic-gated=1, mesh-zero-init-gated=1, text-annotation-gated=1, text-basic-latin=30, text-blob-gated=12, text-clip-interaction-gated=1, text-color-font-gated=1, text-color-palette-gated=2, text-emoji-gated=7, text-filter-or-blur-gated=3, text-font-fallback-gated=1, text-font-manager-gated=3, text-large-or-cache=2, text-perspective-or-transform-gated=4, text-rsxform-gated=3, text-shader-or-gradient-gated=7}
 - Promoted rows: 0
 - Unexpected fails: 0
 - No score: 23
@@ -13,7 +13,7 @@
 ## Family Deltas
 
 - Baseline source: `2026-07-09 local dashboard before text-mesh-family wave`
-- Current dashboard: `integration-tests/skia/build/reports/skia-gm-dashboard/data/gms.json` (2026-07-09T14:21:53.369111)
+- Current dashboard: `integration-tests/skia/build/reports/skia-gm-dashboard/data/gms.json` (2026-07-09T16:19:07.650942)
 
 | Family | Baseline | Current | Delta |
 |---|---:|---:|---:|
@@ -51,7 +51,7 @@
 | `unsupported.text.palette` | `expected-unsupported` | 2 | `font_palette_default`, `palette` |
 | `unsupported.text.perspective` | `expected-unsupported` | 2 | `persptext`, `scaledemojiperspective_colrv0` |
 | `unsupported.text.rsxform` | `expected-unsupported` | 2 | `blob_rsxform`, `blob_rsxform_distortable` |
-| `unsupported.text.shader_or_gradient` | `expected-unsupported` | 5 | `chrome_gradtext2`, `gammatext_color_shader`, `gradtext`, `shadertext3`, `textblobshader` |
+| `unsupported.text.shader_or_gradient` | `expected-unsupported` | 6 | `chrome_gradtext2`, `gammagradienttext`, `gammatext_color_shader`, `gradtext`, `shadertext3` |
 
 ## Rows
 
@@ -91,7 +91,7 @@
 | `dftext_blob_persp` | `dftext_blob_persp` | `TEXT` | `text-perspective-or-transform-gated` | `no-score` | n/a | `unsupported.text.perspective` | `generated-render-missing` |
 | `dftext` | `dftext` | `TEXT` | `text-basic-latin` | `instrumented-existing` | 74.46 | `none` | `n/a` |
 | `drawTextRSXform` | `drawTextRSXform` | `TEXT` | `text-rsxform-gated` | `no-score` | n/a | `unsupported.text.rsxform` | `generated-render-missing` |
-| `fontcache` | `fontcache` | `TEXT` | `text-large-or-cache` | `no-score` | n/a | `none` | `generated-render-missing` |
+| `fontcache` | `fontcache` | `TEXT` | `text-blob-gated` | `no-score` | n/a | `unsupported.text.glyph_cache` | `generated-render-missing` |
 | `fontmgr_bounds` | `fontmgr_bounds` | `TEXT` | `text-font-manager-gated` | `expected-unsupported` | 82.23 | `unsupported.text.font_manager` | `n/a` |
 | `fontmgr_iter` | `fontmgr_iter` | `TEXT` | `text-font-manager-gated` | `expected-unsupported` | 87.66 | `unsupported.text.font_manager` | `n/a` |
 | `fontmgr_match` | `fontmgr_match` | `TEXT` | `text-font-manager-gated` | `expected-unsupported` | 94.68 | `unsupported.text.font_manager` | `n/a` |
@@ -99,7 +99,7 @@
 | `fontregen` | `fontregen` | `TEXT` | `text-font-fallback-gated` | `no-score` | n/a | `unsupported.text.font_fallback` | `generated-render-missing` |
 | `fontscalerdistortable` | `fontscalerdistortable` | `TEXT` | `text-basic-latin` | `instrumented-existing` | 90.96 | `none` | `n/a` |
 | `fontscaler` | `fontscaler` | `TEXT` | `text-basic-latin` | `instrumented-existing` | 77.51 | `none` | `n/a` |
-| `gammagradienttext` | `gammagradienttext` | `TEXT` | `text-basic-latin` | `instrumented-existing` | 75.85 | `none` | `n/a` |
+| `gammagradienttext` | `gammagradienttext` | `TEXT` | `text-shader-or-gradient-gated` | `expected-unsupported` | 75.85 | `unsupported.text.shader_or_gradient` | `n/a` |
 | `gammatext_color_shader` | `gammatext_color_shader` | `TEXT` | `text-shader-or-gradient-gated` | `expected-unsupported` | 34.80 | `unsupported.text.shader_or_gradient` | `n/a` |
 | `gammatext` | `gammatext` | `TEXT` | `text-basic-latin` | `instrumented-existing` | 45.06 | `none` | `n/a` |
 | `getpostextpath` | `getpostextpath` | `TEXT` | `text-basic-latin` | `instrumented-existing` | 94.20 | `none` | `n/a` |

@@ -36,8 +36,10 @@ class Phase6TextMeshFamilyEvidenceTest {
         val emoji = classify("coloremoji", "TEXT", similarity = null, isPassing = null, noReference = true)
         val colorFont = classify("colrv1_gradient_stops_repeat", "TEXT")
         val shader = classify("chrome_gradtext2", "TEXT")
+        val gammaGradientText = classify("gammagradienttext", "TEXT")
         val filter = classify("textfilter_image", "TEXT")
         val clip = classify("cliperror", "TEXT", similarity = null, isPassing = null, renderFailed = true)
+        val fontCache = classify("fontcache", "TEXT", similarity = null, isPassing = null, renderFailed = true)
         val fontFallbackAndLarge = classify("fontregen_bigtext", "TEXT")
         val annotationAndLarge = classify("annotation_bigtext", "TEXT")
 
@@ -60,12 +62,18 @@ class Phase6TextMeshFamilyEvidenceTest {
         assertEquals("unsupported.text.color_font", colorFont.fallbackReason)
         assertEquals("text-shader-or-gradient-gated", shader.subfamily)
         assertEquals("unsupported.text.shader_or_gradient", shader.fallbackReason)
+        assertEquals("text-shader-or-gradient-gated", gammaGradientText.subfamily)
+        assertEquals("unsupported.text.shader_or_gradient", gammaGradientText.fallbackReason)
         assertEquals("text-filter-or-blur-gated", filter.subfamily)
         assertEquals("unsupported.text.filter_or_blur", filter.fallbackReason)
         assertEquals("text-clip-interaction-gated", clip.subfamily)
         assertEquals("unsupported.text.clip_interaction", clip.fallbackReason)
         assertEquals("no-score", clip.classification)
         assertEquals("generated-render-missing", clip.noScoreCause)
+        assertEquals("text-blob-gated", fontCache.subfamily)
+        assertEquals("unsupported.text.glyph_cache", fontCache.fallbackReason)
+        assertEquals("no-score", fontCache.classification)
+        assertEquals("generated-render-missing", fontCache.noScoreCause)
         assertEquals("text-font-fallback-gated", fontFallbackAndLarge.subfamily)
         assertEquals("unsupported.text.font_fallback", fontFallbackAndLarge.fallbackReason)
         assertEquals("expected-unsupported", fontFallbackAndLarge.classification)
@@ -184,7 +192,11 @@ class Phase6TextMeshFamilyEvidenceTest {
 
         assertEquals(listOf("vertices", "vertices#2"), evidence.rows.map { it.rowId })
         assertContains(evidence.toCsv(), "vertices#2,vertices,MESH")
-        assertContains(evidence.toMarkdown(), "`vertices#2`")
+        val markdown = evidence.toMarkdown()
+        assertContains(markdown, "`vertices#2`")
+        assertContains(markdown, "Promoted rows: 0")
+        assertContains(markdown, "Unexpected fails: 0")
+        assertContains(markdown, "No score: 0")
     }
 
     @Test
