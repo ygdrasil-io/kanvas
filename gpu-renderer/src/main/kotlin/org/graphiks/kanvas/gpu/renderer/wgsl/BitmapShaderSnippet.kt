@@ -143,6 +143,7 @@ fn bitmap_shader_source(uv: vec2<f32>) -> vec4<f32> {
 """
 
 const val BitmapShaderSnippetSourceHash: String = "fragment:bitmap_shader:v2"
+const val BitmapShaderSourceEntryPoint: String = "bitmap_shader_source"
 const val BitmapShaderClampEntryPoint: String = "bitmap_shader_clamp"
 const val BitmapShaderRepeatEntryPoint: String = "bitmap_shader_repeat"
 const val BitmapShaderMirrorEntryPoint: String = "bitmap_shader_mirror"
@@ -159,3 +160,13 @@ const val BitmapShaderMirrorDecalEntryPoint: String = "bitmap_shader_mirror_deca
 const val BitmapShaderDecalClampEntryPoint: String = "bitmap_shader_decal_clamp"
 const val BitmapShaderDecalRepeatEntryPoint: String = "bitmap_shader_decal_repeat"
 const val BitmapShaderDecalMirrorEntryPoint: String = "bitmap_shader_decal_mirror"
+
+fun bitmapShaderWgslForEntryPoint(entryPoint: String): String {
+    require(BitmapShaderWgsl.contains("fn $entryPoint(")) {
+        "Unknown bitmap shader WGSL entry point: $entryPoint"
+    }
+    return BitmapShaderWgsl.replace(
+        oldValue = "    return $BitmapShaderClampEntryPoint(uv);",
+        newValue = "    return $entryPoint(uv);",
+    )
+}

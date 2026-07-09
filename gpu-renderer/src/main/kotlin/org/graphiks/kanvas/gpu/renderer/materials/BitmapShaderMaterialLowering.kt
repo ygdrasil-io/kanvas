@@ -5,6 +5,8 @@ import org.graphiks.kanvas.gpu.renderer.wgsl.BitmapShaderDecalEntryPoint
 import org.graphiks.kanvas.gpu.renderer.wgsl.BitmapShaderMirrorEntryPoint
 import org.graphiks.kanvas.gpu.renderer.wgsl.BitmapShaderRepeatEntryPoint
 import org.graphiks.kanvas.gpu.renderer.wgsl.BitmapShaderSnippetSourceHash
+import org.graphiks.kanvas.gpu.renderer.wgsl.BitmapShaderSourceEntryPoint
+import org.graphiks.kanvas.gpu.renderer.wgsl.bitmapShaderWgslForEntryPoint
 import java.security.MessageDigest
 
 object GPUBitmapShaderMaterialDictionary {
@@ -34,19 +36,40 @@ object GPUBitmapShaderMaterialDictionary {
             return GPUMaterialAssemblyResult.Refused(diagnostic)
         }
 
-        return GPUMaterialAssemblyResult.Accepted(
-            GPUMaterialAssemblyPlan(
-                programId = GPUMaterialProgramID("program:${materialKey.value}"),
-                rootSet = dictionary.rootSets.single { BitmapShaderSnippetID in it.snippetIds },
-                snippetGraph = listOf(
-                    WGSLSnippetNode(
-                        snippetId = BitmapShaderSnippetID,
-                        children = emptyList(),
-                        evaluationOrder = 0,
-                    ),
+        return expandBitmapShaderMaterial(
+            materialKey = materialKey,
+            dictionary = dictionary,
+            selectedEntryPoint = BitmapShaderClampEntryPoint,
+        )
+    }
+
+    /** Expands an accepted bitmap shader source plan into the WGSL source variant it selected. */
+    fun expandBitmapShaderMaterialOrRefuse(
+        materialKey: MaterialKey,
+        dictionary: GPUMaterialDictionary,
+        sourcePlan: GPUMaterialSourcePlan.Accepted,
+    ): GPUMaterialAssemblyResult {
+        val diagnostic = validateBitmapShaderDictionary(dictionary)
+        if (diagnostic != null) {
+            return GPUMaterialAssemblyResult.Refused(diagnostic)
+        }
+        if (sourcePlan.snippetId != BitmapShaderSnippetID ||
+            sourcePlan.source !is GPUMaterialSourceDescriptor.Image
+        ) {
+            return GPUMaterialAssemblyResult.Refused(
+                GPUMaterialSourceDiagnostic(
+                    code = "unsupported.material.bitmap_source_plan_mismatch",
+                    sourceKind = sourcePlan.source.kind,
+                    message = "Bitmap shader material expansion requires an accepted bitmap image source plan",
+                    terminal = true,
                 ),
-                moduleSalt = BitmapShaderMaterialModuleSalt,
-            ),
+            )
+        }
+
+        return expandBitmapShaderMaterial(
+            materialKey = materialKey,
+            dictionary = dictionary,
+            selectedEntryPoint = sourcePlan.entryPoint,
         )
     }
 
@@ -85,7 +108,7 @@ object GPUBitmapShaderMaterialDictionary {
         WGSLSnippet(
             snippetId = BitmapShaderSnippetID,
             sourceHash = BitmapShaderSnippetSourceHash,
-            entryPoint = BitmapShaderClampEntryPoint,
+            entryPoint = BitmapShaderSourceEntryPoint,
             requiredBindings = listOf("group1.binding1.texture_2d_rgba8_unorm", "group1.binding2.sampler"),
             category = "material-source",
             version = "v1",
@@ -98,6 +121,28 @@ object GPUBitmapShaderMaterialDictionary {
             rootSetId = "sourceRoot:bitmap-shader",
             snippetIds = listOf(BitmapShaderSnippetID),
             payloadShapeHash = "payload:BitmapShaderMaterialBlock.textureSampled@group1.binding1+sampler@group1.binding2",
+        )
+
+    private fun expandBitmapShaderMaterial(
+        materialKey: MaterialKey,
+        dictionary: GPUMaterialDictionary,
+        selectedEntryPoint: String,
+    ): GPUMaterialAssemblyResult =
+        GPUMaterialAssemblyResult.Accepted(
+            GPUMaterialAssemblyPlan(
+                programId = GPUMaterialProgramID("program:${materialKey.value}"),
+                rootSet = dictionary.rootSets.single { BitmapShaderSnippetID in it.snippetIds },
+                snippetGraph = listOf(
+                    WGSLSnippetNode(
+                        snippetId = BitmapShaderSnippetID,
+                        children = emptyList(),
+                        evaluationOrder = 0,
+                    ),
+                ),
+                moduleSalt = BitmapShaderMaterialModuleSalt,
+                sourceEntryPoint = BitmapShaderSourceEntryPoint,
+                sourceWgsl = bitmapShaderWgslForEntryPoint(selectedEntryPoint),
+            ),
         )
 }
 

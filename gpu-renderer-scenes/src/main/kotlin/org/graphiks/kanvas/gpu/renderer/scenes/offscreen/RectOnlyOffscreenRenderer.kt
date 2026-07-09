@@ -21,8 +21,8 @@ import org.graphiks.kanvas.gpu.renderer.wgsl.SweepGradientEntryPoint
 import org.graphiks.kanvas.gpu.renderer.wgsl.BlurWgsl
 import org.graphiks.kanvas.gpu.renderer.wgsl.ColorMatrixWgsl
 import org.graphiks.kanvas.gpu.renderer.wgsl.StrokeWgsl
-import org.graphiks.kanvas.gpu.renderer.wgsl.BitmapShaderClampEntryPoint
 import org.graphiks.kanvas.gpu.renderer.wgsl.BitmapShaderSnippetSourceHash
+import org.graphiks.kanvas.gpu.renderer.wgsl.BitmapShaderSourceEntryPoint
 import org.graphiks.kanvas.gpu.renderer.wgsl.BitmapShaderWgsl
 import org.graphiks.kanvas.gpu.renderer.wgsl.TextAtlasA8Wgsl
 import org.graphiks.kanvas.gpu.renderer.wgsl.TextAtlasA8EntryPoint
@@ -924,7 +924,9 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
 }
 """
 
-        fun composeBitmapTextureWgsl(): String = """
+        fun composeBitmapTextureWgsl(
+            sourceEntryPoint: String = BitmapShaderSourceEntryPoint,
+        ): String = """
 struct Uniforms { color: vec4f, texRect: vec4f }
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
 
@@ -940,7 +942,7 @@ fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
 @fragment
 fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     let uv = (pos.xy - uniforms.texRect.xy) / uniforms.texRect.zw;
-    let c = bitmap_shader_clamp(uv) * uniforms.color;
+    let c = $sourceEntryPoint(uv) * uniforms.color;
     return vec4f(c.rgb * c.a, c.a);
 }
 """
@@ -1443,7 +1445,7 @@ internal fun prepareRectOnlyDrawPlan(
  */
 internal fun bitmapShaderWiringDiagnostics(): List<String> = listOf(
     "bitmapShader:snippetSourceHash=$BitmapShaderSnippetSourceHash",
-    "bitmapShader:entryPoint=$BitmapShaderClampEntryPoint",
+    "bitmapShader:entryPoint=$BitmapShaderSourceEntryPoint",
     "bitmapShader:uniformPacker=UniformPacker.bitmapTextureBytes",
     "bitmapShader:catalogWired=true realTextureUploaded=true bitmapDecodedSource=bitmap-test-32x32 productActivation=true",
 )

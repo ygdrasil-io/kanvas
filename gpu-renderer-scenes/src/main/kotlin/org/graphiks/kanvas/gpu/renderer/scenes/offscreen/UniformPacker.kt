@@ -1,8 +1,8 @@
 package org.graphiks.kanvas.gpu.renderer.scenes.offscreen
 
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneColor
-import org.graphiks.kanvas.gpu.renderer.wgsl.BitmapShaderClampEntryPoint
 import org.graphiks.kanvas.gpu.renderer.wgsl.BitmapShaderSnippetSourceHash
+import org.graphiks.kanvas.gpu.renderer.wgsl.BitmapShaderSourceEntryPoint
 import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTEntryPoint
 import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTSourceHash
 import java.nio.ByteBuffer
@@ -12,7 +12,7 @@ object UniformPacker {
 
     /** Snippet identity wired into the bitmap uniform ABI (BitmapShaderSnippet, M17). */
     const val bitmapSnippetSourceHash: String = BitmapShaderSnippetSourceHash
-    const val bitmapSnippetEntryPoint: String = BitmapShaderClampEntryPoint
+    const val bitmapSnippetEntryPoint: String = BitmapShaderSourceEntryPoint
 
     /** Snippet identity wired into the runtime-effect uniform ABI (SimpleRTWgsl, M21). */
     const val simpleRtSnippetSourceHash: String = SimpleRTSourceHash
@@ -28,7 +28,7 @@ object UniformPacker {
     }
 
     /**
-     * Packs the bitmap sampling uniform for the [BitmapShaderClampEntryPoint] ABI of
+     * Packs the bitmap sampling uniform for the [BitmapShaderSourceEntryPoint] ABI of
      * [BitmapShaderSnippetSourceHash]. Procedural texture data stays in the renderer wrapper
      * until M26 delivers real decoded textures; this packs the color/tint uniform only.
      */

@@ -3,9 +3,12 @@ package org.graphiks.kanvas.gpu.renderer.materials
 import org.graphiks.kanvas.gpu.renderer.wgsl.BitmapShaderDecalClampEntryPoint
 import org.graphiks.kanvas.gpu.renderer.wgsl.BitmapShaderMirrorClampEntryPoint
 import org.graphiks.kanvas.gpu.renderer.wgsl.BitmapShaderRepeatClampEntryPoint
+import org.graphiks.kanvas.gpu.renderer.wgsl.BitmapShaderSourceEntryPoint
 import org.graphiks.kanvas.gpu.renderer.wgsl.BitmapShaderWgsl
 import kotlin.test.Test
+import kotlin.test.assertContains
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
@@ -234,6 +237,7 @@ class BitmapShaderMaterialLoweringTest {
             GPUBitmapShaderMaterialDictionary.BitmapShaderSnippetID,
             dictionary.snippets.single().snippetId,
         )
+        assertEquals(BitmapShaderSourceEntryPoint, dictionary.snippets.single().entryPoint)
         assertEquals(1, dictionary.rootSets.size)
         assertTrue(
             GPUBitmapShaderMaterialDictionary.BitmapShaderSnippetID in dictionary.rootSets.single().snippetIds,
@@ -256,6 +260,49 @@ class BitmapShaderMaterialLoweringTest {
             GPUBitmapShaderMaterialDictionary.BitmapShaderMaterialModuleSalt,
             accepted.plan.moduleSalt,
         )
+    }
+
+    @Test
+    fun `bitmap shader material expansion wires accepted repeat mirror and decal entry points into consumed WGSL source`() {
+        val dictionary = GPUBitmapShaderMaterialDictionary.create()
+        val context = GPUMaterialLoweringContext(
+            capabilityClass = "test-capability",
+            targetFormatClass = "rgba8unorm",
+            dictionaryVersion = GPUBitmapShaderMaterialDictionary.DictionaryVersion,
+        )
+        val cases = listOf(
+            GPUMaterialTileMode.Repeat to BitmapShaderRepeatClampEntryPoint,
+            GPUMaterialTileMode.Mirror to BitmapShaderMirrorClampEntryPoint,
+            GPUMaterialTileMode.Decal to BitmapShaderDecalClampEntryPoint,
+        )
+
+        for ((tileModeX, expectedEntryPoint) in cases) {
+            val source = imageSource(
+                imageSourceKey = "image-key",
+                tileModeX = tileModeX,
+                tileModeY = GPUMaterialTileMode.Clamp,
+                filterMode = "linear",
+            )
+            val sourcePlan = assertIs<GPUMaterialSourcePlan.Accepted>(
+                GPUBitmapShaderMaterialLowering.planSource(source, context),
+            )
+            val materialKey = GPUBitmapShaderMaterialLowering.deriveMaterialKey(sourcePlan, context)
+
+            val result = GPUBitmapShaderMaterialDictionary.expandBitmapShaderMaterialOrRefuse(
+                materialKey = materialKey,
+                dictionary = dictionary,
+                sourcePlan = sourcePlan,
+            )
+
+            val accepted = assertIs<GPUMaterialAssemblyResult.Accepted>(result)
+            assertEquals(BitmapShaderSourceEntryPoint, accepted.plan.sourceEntryPoint)
+            assertContains(accepted.plan.sourceWgsl, "fn bitmap_shader_source(uv: vec2<f32>) -> vec4<f32>")
+            assertContains(accepted.plan.sourceWgsl, "return $expectedEntryPoint(uv);")
+            assertFalse(
+                accepted.plan.sourceWgsl.contains("return bitmap_shader_clamp(uv);"),
+                "Consumed bitmap shader source must not silently fall back to clamp for $tileModeX",
+            )
+        }
     }
 
     @Test
