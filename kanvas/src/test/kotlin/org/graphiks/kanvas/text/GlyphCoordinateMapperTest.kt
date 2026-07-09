@@ -89,6 +89,19 @@ class GlyphCoordinateMapperTest {
         assertEquals(MappedGlyph.Empty, GlyphCoordinateMapper.map(glyph))
     }
 
+    @Test
+    fun `returns empty for glyph with only move and close commands`() {
+        val glyph = fixtureGlyph(
+            commands = listOf(
+                OutlineCommand.MoveTo(2.0, 3.0),
+                OutlineCommand.Close,
+            ),
+            bounds = GlyphBounds(2.0, 3.0, 12.0, 20.0),
+        )
+
+        assertEquals(MappedGlyph.Empty, GlyphCoordinateMapper.map(glyph))
+    }
+
     private fun fixtureGlyph(
         commands: List<OutlineCommand>,
         bounds: GlyphBounds,

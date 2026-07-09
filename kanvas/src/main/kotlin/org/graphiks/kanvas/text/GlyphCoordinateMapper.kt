@@ -20,14 +20,18 @@ sealed interface MappedGlyph {
 
 object GlyphCoordinateMapper {
     fun map(glyph: ScaledGlyph): MappedGlyph {
-        if (glyph.commands.isEmpty()) return MappedGlyph.Empty
+        val hasDrawableCommand = glyph.commands.any { command ->
+            command is OutlineCommand.LineTo ||
+                command is OutlineCommand.QuadraticTo ||
+                command is OutlineCommand.CubicTo
+        }
+        if (!hasDrawableCommand) return MappedGlyph.Empty
 
         val minX = floor(glyph.bounds.left).toFloat()
-        val minY = floor(glyph.bounds.top).toFloat()
         val maxX = ceil(glyph.bounds.right).toFloat()
         val maxY = ceil(glyph.bounds.bottom).toFloat()
         val width = maxX - minX
-        val height = maxY - minY
+        val height = maxY - floor(glyph.bounds.top).toFloat()
         if (width <= 0f || height <= 0f) return MappedGlyph.Empty
 
         val outlineCommands = glyph.commands.map { command ->
