@@ -477,14 +477,15 @@ fun Phase6MaterialFamiliesEvidence.toMarkdown(): String =
         appendLine("|---|---|---|---|---|---:|---|---|")
         rows.forEach { row ->
             val similarity = row.similarity?.let { "%.2f".format(Locale.US, it) } ?: "n/a"
-            appendLine("| `${row.rowId}` | `${row.name}` | `${row.family}` | `${row.subfamily}` | `${row.classification}` | $similarity | `${row.fallbackReason}` | `${row.noScoreCause ?: ""}` |")
+            val noScoreCause = row.noScoreCause?.takeIf { it.isNotBlank() } ?: "n/a"
+            appendLine("| `${row.rowId}` | `${row.name}` | `${row.family}` | `${row.subfamily}` | `${row.classification}` | $similarity | `${row.fallbackReason}` | `$noScoreCause` |")
         }
         appendLine()
         appendLine("## Regeneration Notes")
         appendLine()
         appendLine("- Run `:integration-tests:skia:generateSkiaDashboard` before generating material-family evidence.")
         appendLine("- Dashboard data is read from `integration-tests/skia/build/reports/skia-gm-dashboard/data/gms.json`.")
-        appendLine("- `COMPOSITE` rows are intentionally excluded from this material-family wave.")
+        appendLine("- Non-material and composition/filter families are intentionally out of this material-family wave.")
     }
 
 private fun String.materialCsvCell(): String =
