@@ -203,6 +203,7 @@ class Phase6EffectCompositionFamilyEvidenceTest {
 
         val evidencePath = root.resolve("reports/gpu-renderer/phase-6-effect-composition-families/evidence.json")
         val csvPath = root.resolve("reports/gpu-renderer/phase-6-effect-composition-families/classification.csv")
+        val sentinel = "SENTINEL BODY MUTATION"
 
         assertContains(Files.readString(evidencePath), "phase6-effect-composition-families-v1")
         assertContains(Files.readString(markdown), "No broad COMPOSITE or BLUR support is claimed")
@@ -211,6 +212,7 @@ class Phase6EffectCompositionFamilyEvidenceTest {
         Files.writeString(
             markdown,
             Files.readString(markdown) +
+                "\n$sentinel\n" +
                 """
 
                 ## Validation
@@ -224,6 +226,7 @@ class Phase6EffectCompositionFamilyEvidenceTest {
         Phase6EffectCompositionFamilyEvidenceWriter.writeOutputs(root, evidence)
 
         val regenerated = Files.readString(markdown)
+        assertFalse(regenerated.contains(sentinel))
         assertContains(regenerated, "## Validation")
         assertContains(regenerated, "- `:integration-tests:skia-evidence:test` passed.")
         assertContains(regenerated, "- `generateGpuPhase6EffectCompositionFamiliesEvidence` regenerated evidence.")
