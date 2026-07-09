@@ -38,4 +38,49 @@ class ImageTest {
             ImageDecoderRegistry.unregister(decoder.name)
         }
     }
+
+    @Test
+    fun `registered decoder overrides existing decoder with same name`() {
+        val firstBytes = byteArrayOf(0x10, 0x20, 0x30)
+        val secondBytes = byteArrayOf(0x10, 0x20, 0x30)
+        val first = object : ImageDecoder {
+            override val name: String = "override-test"
+            override fun matches(data: ByteArray): Boolean = data.contentEquals(firstBytes)
+            override fun decode(data: ByteArray): ImageDecodeResult = ImageDecodeResult.Success(
+                Image.fromPixels(1, 1, byteArrayOf(0x01, 0x02, 0x03, 0x04), sourceId = "first"),
+            )
+        }
+        val second = object : ImageDecoder {
+            override val name: String = "override-test"
+            override fun matches(data: ByteArray): Boolean = data.contentEquals(secondBytes)
+            override fun decode(data: ByteArray): ImageDecodeResult = ImageDecodeResult.Success(
+                Image.fromPixels(1, 1, byteArrayOf(0x05, 0x06, 0x07, 0x08), sourceId = "second"),
+            )
+        }
+        ImageDecoderRegistry.register(first)
+        try {
+            ImageDecoderRegistry.register(second)
+
+            val image = Image.decode(firstBytes)
+
+            assertEquals("second", image.sourceId)
+            assertArrayEquals(byteArrayOf(0x05, 0x06, 0x07, 0x08), image.pixels)
+        } finally {
+            ImageDecoderRegistry.unregister(first.name)
+        }
+    }
+
+    @Test
+    fun `concurrent registry reads are stable during first provider load`() {
+        val results = (0 until 32).map {
+            kotlin.concurrent.thread {
+                repeat(32) {
+                    ImageDecoderRegistry.all()
+                    Image.decode(ByteArray(8), "image/png")
+                }
+            }
+        }
+
+        results.forEach { it.join() }
+    }
 }

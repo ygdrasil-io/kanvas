@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.image
 
+import java.util.ServiceLoader
+
 interface ImageDecoder {
     val name: String
     fun matches(data: ByteArray): Boolean
@@ -12,21 +14,42 @@ sealed interface ImageDecodeResult {
 }
 
 object ImageDecoderRegistry {
+    private val lock = Any()
     private val decoders = linkedMapOf<String, ImageDecoder>()
+    private var providersLoaded = false
 
-    fun all(): List<ImageDecoder> = decoders.values.toList()
+    fun all(): List<ImageDecoder> = synchronized(lock) {
+        ensureProvidersLoadedLocked()
+        return decoders.values.toList()
+    }
 
-    fun find(name: String): ImageDecoder? = decoders[name]
+    fun find(name: String): ImageDecoder? = synchronized(lock) {
+        ensureProvidersLoadedLocked()
+        return decoders[name]
+    }
 
-    fun register(decoder: ImageDecoder) {
+    fun register(decoder: ImageDecoder) = synchronized(lock) {
+        ensureProvidersLoadedLocked()
         decoders[decoder.name] = decoder
     }
 
-    fun unregister(name: String): Boolean = decoders.remove(name) != null
+    fun unregister(name: String): Boolean = synchronized(lock) {
+        ensureProvidersLoadedLocked()
+        return decoders.remove(name) != null
+    }
 
     fun decode(data: ByteArray, mimeType: String? = null): ImageDecodeResult {
-        val decoder = decoders.values.firstOrNull { it.matches(data) }
+        val snapshot = all()
+        val decoder = snapshot.firstOrNull { it.matches(data) }
             ?: return ImageDecodeResult.Failure("image.decoder-unavailable")
         return decoder.decode(data)
+    }
+
+    private fun ensureProvidersLoadedLocked() {
+        if (providersLoaded) return
+        ServiceLoader.load(ImageDecoder::class.java).forEach { decoder ->
+            decoders.putIfAbsent(decoder.name, decoder)
+        }
+        providersLoaded = true
     }
 }
