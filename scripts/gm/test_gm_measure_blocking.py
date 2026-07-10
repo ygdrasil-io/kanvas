@@ -74,8 +74,26 @@ class DeterministicReportTest(unittest.TestCase):
         encoded = gm_measure_blocking.to_sorted_json(report)
         self.assertEqual(encoded, json.dumps(json.loads(encoded), indent=2, sort_keys=True) + "\n")
         markdown = gm_measure_blocking.to_markdown(report)
+        self.assertIn("- schemaVersion: `1`", markdown)
         self.assertIn("## Provenance", markdown)
-        self.assertIn("`PASS|0|alpha|10`", markdown)
+        self.assertIn(r"`PASS\|0\|alpha\|10`", markdown)
+
+    def test_markdown_escapes_pipes_in_raw_attempt_samples(self):
+        report = gm_measure_blocking.build_report(
+            {
+                "alpha": [
+                    {"record": "FAIL|0|alpha|device|lost"},
+                    {"record": "FAIL|1|alpha|device|lost"},
+                    {"record": "FAIL|2|alpha|device|lost"},
+                ],
+            },
+            timed_out_batches=[],
+            provenance={"backend": "webgpu", "gitHead": "abc", "jdk": "21", "os": "test-os"},
+        )
+
+        markdown = gm_measure_blocking.to_markdown(report)
+        self.assertIn(r"`FAIL\|0\|alpha\|device\|lost`", markdown)
+        self.assertNotIn("`FAIL|0|alpha|device|lost`", markdown)
 
 
 if __name__ == "__main__":

@@ -115,17 +115,28 @@ def to_sorted_json(report):
     return json.dumps(report, indent=2, sort_keys=True) + "\n"
 
 
+def _escape_markdown_table_cell(value):
+    return str(value).replace("|", r"\|")
+
+
 def to_markdown(report):
-    lines = ["# GM render-cost measurement", "", "## Provenance", ""]
+    lines = ["# GM render-cost measurement", "", "- schemaVersion: `%s`" % report["schemaVersion"], "", "## Provenance", ""]
     for key, value in report["provenance"].items():
         lines.append("- %s: `%s`" % (key, value))
     lines.extend(["", "## Results", "", "| Name | Tag | Median (ms) | Timeouts | Errors | Reason |", "| --- | --- | ---: | ---: | ---: | --- |"])
     for row in report["rows"]:
         median = "" if row["medianMs"] is None else str(row["medianMs"])
         lines.append("| `%s` | %s | %s | %s | %s | %s |" % (
-            row["name"], row["tag"], median, row["timeoutCount"], row["errorCount"], row["classificationReason"]
+            _escape_markdown_table_cell(row["name"]),
+            _escape_markdown_table_cell(row["tag"]),
+            median,
+            row["timeoutCount"],
+            row["errorCount"],
+            _escape_markdown_table_cell(row["classificationReason"]),
         ))
-        lines.append("|  |  |  |  |  | Raw samples: %s |" % ", ".join("`%s`" % sample for sample in row["rawSamples"]))
+        lines.append("|  |  |  |  |  | Raw samples: %s |" % ", ".join(
+            "`%s`" % _escape_markdown_table_cell(sample) for sample in row["rawSamples"]
+        ))
     lines.extend(["", "## Timed-out batches", ""])
     if report["timedOutBatches"]:
         lines.extend("- %s" % ", ".join("`%s`" % name for name in batch) for batch in report["timedOutBatches"])
