@@ -1,0 +1,405 @@
+package org.graphiks.kanvas.codec.png
+
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertInstanceOf
+import org.junit.jupiter.api.Assertions.assertThrows
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Test
+import java.io.ByteArrayOutputStream
+import java.util.zip.CRC32
+
+class PngContainerParserTest {
+
+    @Test
+    fun `retains chunk records as source ranges without payload copies`() {
+        val data = png(
+            "IHDR" to ihdr(width = 2, height = 3),
+            "vpAg" to byteArrayOf(0x11, 0x22, 0x33),
+            "IDAT" to byteArrayOf(0x44, 0x55),
+            "IEND" to ByteArray(0),
+        )
+
+        val container = success(data)
+
+        assertEquals(2, container.header.width)
+        assertEquals(3, container.header.height)
+        assertEquals(2L, container.totalIdatBytes)
+        assertEquals(listOf("IHDR", "vpAg", "IDAT", "IEND"), container.chunks.map(PngChunkRecord::type))
+
+        val header = container.chunks[0]
+        assertEquals(0, header.ordinal)
+        assertEquals(PngByteRange(8L, 33L), header.rawRange)
+        assertEquals(PngByteRange(16L, 29L), header.payloadRange)
+        assertTrue(header.isCritical)
+        assertFalse(header.isAncillary)
+        assertFalse(header.isSafeToCopy)
+
+        val unknown = container.chunks[1]
+        assertEquals(1, unknown.ordinal)
+        assertEquals(PngByteRange(33L, 48L), unknown.rawRange)
+        assertEquals(PngByteRange(41L, 44L), unknown.payloadRange)
+        assertFalse(unknown.isCritical)
+        assertTrue(unknown.isAncillary)
+        assertTrue(unknown.isSafeToCopy)
+    }
+
+    @Test
+    fun `marks unknown ancillary chunks with uppercase fourth byte unsafe to copy`() {
+        val container = success(
+            png(
+                "IHDR" to ihdr(),
+                "vpAG" to byteArrayOf(1),
+                "IDAT" to byteArrayOf(2),
+                "IEND" to ByteArray(0),
+            ),
+        )
+
+        val unknown = container.chunks.single { it.type == "vpAG" }
+        assertTrue(unknown.isAncillary)
+        assertFalse(unknown.isSafeToCopy)
+    }
+
+    @Test
+    fun `exposes an immutable chunk record list`() {
+        val container = success(
+            png(
+                "IHDR" to ihdr(),
+                "IDAT" to byteArrayOf(1),
+                "IEND" to ByteArray(0),
+            ),
+        )
+
+        @Suppress("UNCHECKED_CAST")
+        val mutableView = container.chunks as MutableList<PngChunkRecord>
+        assertThrows(UnsupportedOperationException::class.java) {
+            mutableView.clear()
+        }
+        assertEquals(3, container.chunks.size)
+    }
+
+    @Test
+    fun `rejects invalid signature and truncated chunk ranges`() {
+        assertFailure(ByteArray(0), "png.signature.invalid")
+        assertFailure(PNG_SIGNATURE + byteArrayOf(0, 0, 0, 1), "png.chunk.truncated")
+        assertFailure(
+            PNG_SIGNATURE + byteArrayOf(
+                0x7F, 0xFF.toByte(), 0xFF.toByte(), 0xFF.toByte(),
+                'I'.code.toByte(), 'D'.code.toByte(), 'A'.code.toByte(), 'T'.code.toByte(),
+            ),
+            "png.chunk.truncated",
+        )
+        assertFailure(
+            PNG_SIGNATURE + byteArrayOf(
+                0x80.toByte(), 0, 0, 0,
+                'I'.code.toByte(), 'D'.code.toByte(), 'A'.code.toByte(), 'T'.code.toByte(),
+                0, 0, 0, 0,
+            ),
+            "png.chunk.length.invalid",
+        )
+    }
+
+    @Test
+    fun `rejects non-letter and reserved lowercase chunk type bytes`() {
+        assertFailure(
+            png(
+                "IHDR" to ihdr(),
+                "vp1g" to ByteArray(0),
+                "IDAT" to byteArrayOf(1),
+                "IEND" to ByteArray(0),
+            ),
+            "png.chunk.type.invalid",
+            "vp1g",
+        )
+        assertFailure(
+            png(
+                "IHDR" to ihdr(),
+                "vpgg" to ByteArray(0),
+                "IDAT" to byteArrayOf(1),
+                "IEND" to ByteArray(0),
+            ),
+            "png.chunk.type.reserved",
+            "vpgg",
+        )
+    }
+
+    @Test
+    fun `rejects CRC mismatch with chunk location`() {
+        val data = png(
+            "IHDR" to ihdr(),
+            "IDAT" to byteArrayOf(1, 2, 3),
+            "IEND" to ByteArray(0),
+        )
+        data[41] = (data[41].toInt() xor 1).toByte()
+
+        val diagnostic = failure(data)
+
+        assertEquals("png.chunk.crc.invalid", diagnostic.code)
+        assertEquals("IDAT", diagnostic.chunkType)
+        assertEquals(33L, diagnostic.offset)
+        assertEquals(PngDiagnosticSeverity.ERROR, diagnostic.severity)
+    }
+
+    @Test
+    fun `rejects unknown critical chunks`() {
+        assertFailure(
+            png(
+                "IHDR" to ihdr(),
+                "ABCD" to byteArrayOf(1),
+                "IDAT" to byteArrayOf(2),
+                "IEND" to ByteArray(0),
+            ),
+            "png.critical.unsupported",
+            "ABCD",
+        )
+    }
+
+    @Test
+    fun `refuses every APNG chunk with typed diagnostic`() {
+        val apngChunks = listOf(
+            "acTL" to ByteArray(8),
+            "fcTL" to ByteArray(26),
+            "fdAT" to ByteArray(4),
+        )
+
+        for ((type, payload) in apngChunks) {
+            assertFailure(
+                png(
+                    "IHDR" to ihdr(),
+                    type to payload,
+                    "IDAT" to byteArrayOf(1),
+                    "IEND" to ByteArray(0),
+                ),
+                "png.apng.unsupported",
+                type,
+            )
+        }
+    }
+
+    @Test
+    fun `requires one first IHDR and one terminal IEND around IDAT`() {
+        assertFailure(
+            png(
+                "vpAg" to ByteArray(0),
+                "IHDR" to ihdr(),
+                "IDAT" to byteArrayOf(1),
+                "IEND" to ByteArray(0),
+            ),
+            "png.ihdr.order",
+        )
+        assertFailure(
+            png(
+                "IHDR" to ihdr(),
+                "IHDR" to ihdr(),
+                "IDAT" to byteArrayOf(1),
+                "IEND" to ByteArray(0),
+            ),
+            "png.ihdr.duplicate",
+        )
+        assertFailure(
+            png(
+                "IHDR" to ihdr(),
+                "IEND" to ByteArray(0),
+            ),
+            "png.idat.required",
+        )
+        assertFailure(
+            png(
+                "IHDR" to ihdr(),
+                "IDAT" to byteArrayOf(1),
+            ),
+            "png.iend.required",
+        )
+        assertFailure(
+            png(
+                "IHDR" to ihdr(),
+                "IDAT" to byteArrayOf(1),
+                "IEND" to byteArrayOf(0),
+            ),
+            "png.iend.length",
+        )
+    }
+
+    @Test
+    fun `rejects PLTE after IDAT and non-contiguous IDAT`() {
+        assertFailure(
+            png(
+                "IHDR" to ihdr(colorType = 3),
+                "IDAT" to byteArrayOf(1),
+                "PLTE" to byteArrayOf(0, 0, 0),
+                "IEND" to ByteArray(0),
+            ),
+            "png.plte.order",
+        )
+        assertFailure(
+            png(
+                "IHDR" to ihdr(),
+                "IDAT" to byteArrayOf(1),
+                "vpAg" to ByteArray(0),
+                "IDAT" to byteArrayOf(2),
+                "IEND" to ByteArray(0),
+            ),
+            "png.idat.noncontiguous",
+        )
+    }
+
+    @Test
+    fun `rejects bytes after IEND`() {
+        val data = png(
+            "IHDR" to ihdr(),
+            "IDAT" to byteArrayOf(1),
+            "IEND" to ByteArray(0),
+        ) + byteArrayOf(0)
+
+        assertFailure(data, "png.iend.trailing_data", "IEND")
+    }
+
+    @Test
+    fun `validates IHDR length encoding and configured dimension ranges`() {
+        assertFailure(
+            png(
+                "IHDR" to ByteArray(12),
+                "IDAT" to byteArrayOf(1),
+                "IEND" to ByteArray(0),
+            ),
+            "png.ihdr.length",
+        )
+        assertFailure(
+            png(
+                "IHDR" to ihdr(width = 0),
+                "IDAT" to byteArrayOf(1),
+                "IEND" to ByteArray(0),
+            ),
+            "png.ihdr.dimensions.invalid",
+        )
+        assertFailure(
+            png(
+                "IHDR" to ihdr(bitDepth = 4, colorType = 2),
+                "IDAT" to byteArrayOf(1),
+                "IEND" to ByteArray(0),
+            ),
+            "png.ihdr.encoding.invalid",
+        )
+        assertFailure(
+            png(
+                "IHDR" to ihdr(width = 3, height = 2),
+                "IDAT" to byteArrayOf(1),
+                "IEND" to ByteArray(0),
+            ),
+            "png.dimension.limit",
+            limits = PngContainerLimits.Default.copy(maxWidth = 2, maxHeight = 2),
+        )
+    }
+
+    @Test
+    fun `applies input chunk ancillary and IDAT limits`() {
+        val idat = byteArrayOf(1, 2, 3)
+        val data = png(
+            "IHDR" to ihdr(),
+            "vpAg" to byteArrayOf(4, 5, 6),
+            "IDAT" to idat,
+            "IEND" to ByteArray(0),
+        )
+
+        assertFailure(
+            data,
+            "png.input.limit",
+            limits = PngContainerLimits.Default.copy(maxInputBytes = data.size.toLong() - 1L),
+        )
+        assertFailure(
+            data,
+            "png.chunk.count.limit",
+            limits = PngContainerLimits.Default.copy(maxChunkCount = 3),
+        )
+        assertFailure(
+            data,
+            "png.ancillary.limit",
+            "vpAg",
+            limits = PngContainerLimits.Default.copy(maxAncillaryChunkBytes = 2L),
+        )
+        assertFailure(
+            data,
+            "png.idat.limit",
+            "IDAT",
+            limits = PngContainerLimits.Default.copy(maxTotalIdatBytes = 2L),
+        )
+    }
+
+    private fun success(
+        data: ByteArray,
+        limits: PngContainerLimits = PngContainerLimits.Default,
+    ): PngContainer {
+        val result = PngContainerParser.parse(data, limits)
+        assertInstanceOf(PngContainerParseResult.Success::class.java, result)
+        return (result as PngContainerParseResult.Success).container
+    }
+
+    private fun failure(
+        data: ByteArray,
+        limits: PngContainerLimits = PngContainerLimits.Default,
+    ): PngDiagnostic {
+        val result = PngContainerParser.parse(data, limits)
+        assertInstanceOf(PngContainerParseResult.Failure::class.java, result)
+        return (result as PngContainerParseResult.Failure).diagnostic
+    }
+
+    private fun assertFailure(
+        data: ByteArray,
+        code: String,
+        chunkType: String? = null,
+        limits: PngContainerLimits = PngContainerLimits.Default,
+    ) {
+        val diagnostic = failure(data, limits)
+        assertEquals(code, diagnostic.code)
+        if (chunkType != null) assertEquals(chunkType, diagnostic.chunkType)
+    }
+
+    private fun png(vararg chunks: Pair<String, ByteArray>): ByteArray =
+        ByteArrayOutputStream().apply {
+            write(PNG_SIGNATURE)
+            for ((type, payload) in chunks) writeChunk(type, payload)
+        }.toByteArray()
+
+    private fun ihdr(
+        width: Int = 1,
+        height: Int = 1,
+        bitDepth: Int = 8,
+        colorType: Int = 0,
+    ): ByteArray = ByteArray(13).also { bytes ->
+        writeI32BE(bytes, 0, width)
+        writeI32BE(bytes, 4, height)
+        bytes[8] = bitDepth.toByte()
+        bytes[9] = colorType.toByte()
+    }
+
+    private fun ByteArrayOutputStream.writeChunk(type: String, payload: ByteArray) {
+        val typeBytes = type.toByteArray(Charsets.US_ASCII)
+        writeI32BE(payload.size)
+        write(typeBytes)
+        write(payload)
+        val crc = CRC32()
+        crc.update(typeBytes)
+        crc.update(payload)
+        writeI32BE(crc.value.toInt())
+    }
+
+    private fun ByteArrayOutputStream.writeI32BE(value: Int) {
+        write((value ushr 24) and 0xFF)
+        write((value ushr 16) and 0xFF)
+        write((value ushr 8) and 0xFF)
+        write(value and 0xFF)
+    }
+
+    private fun writeI32BE(bytes: ByteArray, offset: Int, value: Int) {
+        bytes[offset] = (value ushr 24).toByte()
+        bytes[offset + 1] = (value ushr 16).toByte()
+        bytes[offset + 2] = (value ushr 8).toByte()
+        bytes[offset + 3] = value.toByte()
+    }
+
+    private companion object {
+        val PNG_SIGNATURE: ByteArray = byteArrayOf(
+            0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
+        )
+    }
+}

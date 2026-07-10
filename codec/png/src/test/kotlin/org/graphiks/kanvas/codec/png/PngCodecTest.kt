@@ -1088,6 +1088,37 @@ class PngCodecTest {
     }
 
     @Test
+    fun `decodes static PNG with retained unknown ancillary container record`() {
+        val data = pngFromChunks(
+            "IHDR" to ihdr(width = 1, height = 1, bitDepth = 8, colorType = 0),
+            "vpAg" to byteArrayOf(0x01, 0x02, 0x03),
+            "IDAT" to deflate(byteArrayOf(0x00, 0x40)),
+            "IEND" to ByteArray(0),
+        )
+
+        val codec = PngCodec.Decoder.make(data)
+        val container = (PngContainerParser.parse(data) as PngContainerParseResult.Success).container
+
+        assertNotNull(codec)
+        assertTrue(container.chunks.any { it.type == "vpAg" && it.isAncillary && it.isSafeToCopy })
+        val (bitmap, result) = codec!!.getImage()
+        assertEquals(Codec.Result.kSuccess, result)
+        assertEquals(argb(0xFF, 0x40, 0x40, 0x40), bitmap!!.getPixel(0, 0))
+    }
+
+    @Test
+    fun `rejects APNG instead of decoding its default image`() {
+        val data = pngFromChunks(
+            "IHDR" to ihdr(width = 1, height = 1, bitDepth = 8, colorType = 0),
+            "acTL" to ByteArray(8),
+            "IDAT" to deflate(byteArrayOf(0x00, 0x40)),
+            "IEND" to ByteArray(0),
+        )
+
+        assertNull(PngCodec.Decoder.make(data))
+    }
+
+    @Test
     fun `rejects PLTE on grayscale images`() {
         val data = pngFromChunks(
             "IHDR" to ihdr(width = 1, height = 1, bitDepth = 8, colorType = 0),

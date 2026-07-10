@@ -15,7 +15,6 @@ import org.skia.foundation.skcms.SkNamedTransferFn
 import org.skia.foundation.skcms.SkcmsICCProfile
 import org.skia.foundation.skcms.skcmsParse
 import java.io.ByteArrayOutputStream
-import java.util.zip.CRC32
 import java.util.zip.DataFormatException
 import java.util.zip.Inflater
 
@@ -274,14 +273,18 @@ public class PngCodec private constructor(
 
         override fun make(data: ByteArray): Codec? {
             if (!hasPngSignature(data)) return null
-            val png = parse(data) ?: return null
+            val container = when (val result = PngContainerParser.parse(data)) {
+                is PngContainerParseResult.Success -> result.container
+                is PngContainerParseResult.Failure -> return null
+            }
+            val png = parse(data, container) ?: return null
             return PngCodec(png)
         }
 
-        private fun parse(data: ByteArray): ParsedPng? {
-            var offset = PNG_SIGNATURE.size
-            var header: Header? = null
-            val idat = ByteArrayOutputStream()
+        private fun parse(data: ByteArray, container: PngContainer): ParsedPng? {
+            val header = decodeHeader(container.header) ?: return null
+            val idat = ByteArray(container.totalIdatBytes.toInt())
+            var idatOffset = 0
             var palette: IntArray? = null
             var transparency: Transparency? = null
             var iccProfile: SkcmsICCProfile? = null
@@ -290,37 +293,25 @@ public class PngCodec private constructor(
             var sawChrm = false
             var sawSrgb = false
             var sawIdat = false
-            var sawNonIdatAfterIdat = false
-            var sawIend = false
 
-            while (offset + CHUNK_OVERHEAD <= data.size) {
-                val length = readI32BE(data, offset)
-                if (length < 0) return null
-                val typeOffset = offset + 4
-                val dataOffset = typeOffset + 4
-                val crcOffset = dataOffset + length
-                if (crcOffset.toLong() + 4L > data.size.toLong()) return null
-
-                val type = readType(data, typeOffset)
-                if (!crcMatches(data, typeOffset, length + 4, crcOffset)) return null
-                when (type) {
-                    TYPE_IHDR -> {
-                        if (header != null || offset != PNG_SIGNATURE.size || length != 13) return null
-                        header = parseHeader(data, dataOffset) ?: return null
-                    }
-                    TYPE_IDAT -> {
-                        if (header == null || sawIend || sawNonIdatAfterIdat) return null
+            for (chunk in container.chunks) {
+                val dataOffset = chunk.payloadRange.startInclusive.toInt()
+                val length = chunk.payloadRange.size.toInt()
+                when (chunk.type) {
+                    "IHDR" -> Unit
+                    "IDAT" -> {
                         if (header.colorType == COLOR_PALETTE && palette == null) return null
-                        idat.write(data, dataOffset, length)
+                        data.copyInto(idat, idatOffset, dataOffset, dataOffset + length)
+                        idatOffset += length
                         sawIdat = true
                     }
-                    TYPE_PLTE -> {
-                        if (header == null || sawIdat || sawIend || palette != null) return null
+                    "PLTE" -> {
+                        if (sawIdat || palette != null) return null
                         if (header.colorType == COLOR_GRAYSCALE || header.colorType == COLOR_GRAYSCALE_ALPHA) return null
                         palette = parsePalette(data, dataOffset, length) ?: return null
                     }
-                    TYPE_TRNS -> {
-                        if (header == null || sawIdat || sawIend || transparency != null) return null
+                    "tRNS" -> {
+                        if (sawIdat || transparency != null) return null
                         transparency = parseTransparency(
                             data = data,
                             offset = dataOffset,
@@ -329,8 +320,8 @@ public class PngCodec private constructor(
                             palette = palette,
                         ) ?: return null
                     }
-                    TYPE_ICCP -> {
-                        if (header == null || sawIdat || sawIend || sawIccp) return null
+                    "iCCP" -> {
+                        if (sawIdat || sawIccp) return null
                         sawIccp = true
                         val profileBytes = parseIccp(data, dataOffset, length) ?: return null
                         iccProfile = skcmsParse(profileBytes)
@@ -340,39 +331,29 @@ public class PngCodec private constructor(
                             return null
                         }
                     }
-                    TYPE_GAMA -> {
-                        if (header == null || sawIdat || sawIend || sawGamma || palette != null) return null
+                    "gAMA" -> {
+                        if (sawIdat || sawGamma || palette != null) return null
                         if (length != 4) return null
                         sawGamma = true
                     }
-                    TYPE_CHRM -> {
-                        if (header == null || sawIdat || sawIend || sawChrm || palette != null) return null
+                    "cHRM" -> {
+                        if (sawIdat || sawChrm || palette != null) return null
                         if (length != 32) return null
                         sawChrm = true
                     }
-                    TYPE_SRGB -> {
-                        if (header == null || sawIdat || sawIend || sawSrgb || palette != null) return null
+                    "sRGB" -> {
+                        if (sawIdat || sawSrgb || palette != null) return null
                         if (length != 1) return null
                         val intent = data[dataOffset].toInt() and 0xFF
                         if (intent > 3) return null
                         sawSrgb = true
                     }
-                    TYPE_IEND -> {
-                        if (length != 0 || header == null) return null
-                        sawIend = true
-                        offset = crcOffset + 4
-                        break
-                    }
-                    else -> {
-                        if (isCritical(type)) return null
-                        if (sawIdat) sawNonIdatAfterIdat = true
-                    }
+                    "IEND" -> Unit
                 }
-                offset = crcOffset + 4
             }
 
-            val h = header ?: return null
-            if (!sawIdat || !sawIend || offset != data.size) return null
+            val h = header
+            if (!sawIdat || idatOffset != idat.size) return null
             val finalPalette = if (h.colorType == COLOR_PALETTE) {
                 paletteWithTransparency(palette, transparency as? Transparency.Palette) ?: return null
             } else {
@@ -390,24 +371,21 @@ public class PngCodec private constructor(
                 filterBytesPerPixel = h.filterBytesPerPixel,
                 inflatedBytes = h.inflatedBytes,
                 interlace = h.interlace,
-                idat = idat.toByteArray(),
+                idat = idat,
                 palette = finalPalette,
                 transparency = if (h.colorType == COLOR_GRAYSCALE || h.colorType == COLOR_RGB) transparency else null,
                 iccProfile = finalIcc,
             )
         }
 
-        private fun parseHeader(data: ByteArray, offset: Int): Header? {
-            val width = readI32BE(data, offset)
-            val height = readI32BE(data, offset + 4)
-            val bitDepth = data[offset + 8].toInt() and 0xFF
-            val colorType = data[offset + 9].toInt() and 0xFF
-            val compression = data[offset + 10].toInt() and 0xFF
-            val filter = data[offset + 11].toInt() and 0xFF
-            val interlace = data[offset + 12].toInt() and 0xFF
+        private fun decodeHeader(header: PngHeader): Header? {
+            val width = header.width
+            val height = header.height
+            val bitDepth = header.bitDepth
+            val colorType = header.colorType
+            val interlace = header.interlaceMethod
             if (width !in 1..MAX_DIMENSION || height !in 1..MAX_DIMENSION) return null
             if (!isSupportedColorDepth(colorType, bitDepth)) return null
-            if (compression != 0 || filter != 0 || interlace !in INTERLACE_NONE..INTERLACE_ADAM7) return null
             val bitsPerPixel = bitsPerPixel(colorType, bitDepth)
             val rowBytes = rowBytesFor(width, bitsPerPixel).toLong()
             if (rowBytes > Int.MAX_VALUE) return null
@@ -550,11 +528,6 @@ public class PngCodec private constructor(
             return true
         }
 
-        private fun crcMatches(data: ByteArray, offset: Int, length: Int, expectedOffset: Int): Boolean {
-            val crc = CRC32()
-            crc.update(data, offset, length)
-            return crc.value.toInt() == readI32BE(data, expectedOffset)
-        }
     }
 
     private data class Header(
@@ -593,7 +566,6 @@ public class PngKotlinDecoderProvider : CodecDecoderProvider {
 private val PNG_SIGNATURE = byteArrayOf(
     0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
 )
-private const val CHUNK_OVERHEAD: Int = 12
 private const val COLOR_GRAYSCALE: Int = 0
 private const val COLOR_RGB: Int = 2
 private const val COLOR_PALETTE: Int = 3
@@ -602,15 +574,6 @@ private const val COLOR_RGBA: Int = 6
 private const val INTERLACE_NONE: Int = 0
 private const val INTERLACE_ADAM7: Int = 1
 private const val MAX_DIMENSION: Int = 100_000
-private const val TYPE_IHDR: Int = 0x49484452
-private const val TYPE_IDAT: Int = 0x49444154
-private const val TYPE_IEND: Int = 0x49454E44
-private const val TYPE_CHRM: Int = 0x6348524D
-private const val TYPE_GAMA: Int = 0x67414D41
-private const val TYPE_ICCP: Int = 0x69434350
-private const val TYPE_PLTE: Int = 0x504C5445
-private const val TYPE_SRGB: Int = 0x73524742
-private const val TYPE_TRNS: Int = 0x74524E53
 private const val MAX_ICC_PROFILE_SIZE: Int = 16 * 1024 * 1024
 
 private data class Adam7Pass(
@@ -730,8 +693,6 @@ private fun readI32BE(bytes: ByteArray, offset: Int): Int =
         ((bytes[offset + 2].toInt() and 0xFF) shl 8) or
         (bytes[offset + 3].toInt() and 0xFF)
 
-private fun readType(bytes: ByteArray, offset: Int): Int = readI32BE(bytes, offset)
-
 private fun readU16BE(bytes: ByteArray, offset: Int): Int =
     ((bytes[offset].toInt() and 0xFF) shl 8) or
         (bytes[offset + 1].toInt() and 0xFF)
@@ -757,9 +718,6 @@ private sealed class Transparency {
     data class Rgb(val r: Int, val g: Int, val b: Int) : Transparency()
     data class Palette(val alpha: ByteArray) : Transparency()
 }
-
-private fun isCritical(type: Int): Boolean =
-    (((type ushr 24) and 0x20) == 0)
 
 private fun argb(a: Int, r: Int, g: Int, b: Int): Int =
     ((a and 0xFF) shl 24) or
