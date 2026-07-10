@@ -725,9 +725,13 @@ class IccProfileParserTest {
     }
 
     @Test
-    fun `parses fixture mft1 A2B and mft2 B2A routes`() {
-        val profile = parseResource("rgb-lut-a2b-b2a.icc")
+    fun `fixture is a display profile with mft2 A2B and B2A routes`() {
+        val bytes = resource("rgb-lut-a2b-b2a.icc")
+        val profile = IccProfileParser.parse(bytes, IccParseLimits()).getOrThrow()
 
+        assertEquals(IccSignature.DISPLAY_CLASS.value, readU32(bytes, 12))
+        assertEquals(IccSignature.LUT_16_TYPE.value, readU32(bytes, tagOffset(bytes, IccSignature.A_TO_B_0.value)))
+        assertEquals(IccSignature.LUT_16_TYPE.value, readU32(bytes, tagOffset(bytes, IccSignature.B_TO_A_0.value)))
         assertTrue(profile.hasLut)
         assertNotNull(profile.toPcs)
         assertNotNull(profile.fromPcs)
@@ -781,12 +785,112 @@ class IccProfileParserTest {
     }
 
     @Test
-    fun `rejects missing LUT direction without fallback`() {
+    fun `input LUT profile accepts A2B0 without B2A0`() {
         val fixture = resource("rgb-lut-a2b-b2a.icc")
         val aToB = tagPayload(fixture, IccSignature.A_TO_B_0.value)
-        val failure = IccProfileParser.parse(buildLutProfile(aToB, null), IccParseLimits()).failureOrNull()!!
+        val profile = IccProfileParser.parse(
+            buildLutProfile(aToB, null, IccSignature.INPUT_CLASS.value),
+            IccParseLimits(),
+        ).getOrThrow()
+
+        assertNotNull(profile.toPcs)
+        assertEquals(null, profile.fromPcs)
+    }
+
+    @Test
+    fun `display LUT profile requires both default directions`() {
+        val aToB = lut16Payload()
+        val failure = IccProfileParser.parse(
+            buildLutProfile(aToB, null, IccSignature.DISPLAY_CLASS.value),
+            IccParseLimits(),
+        ).failureOrNull()!!
 
         assertEquals("icc.lut.direction", failure.code)
+    }
+
+    @Test
+    fun `output LUT profile requires all intent routes and gamut`() {
+        val route = lut16Payload()
+        assertFailure(
+            "icc.lut.direction",
+            buildLutProfile(route, route, IccSignature.OUTPUT_CLASS.value),
+        )
+        assertFailure(
+            "icc.profile.tags",
+            buildLutProfile(
+                route,
+                route,
+                IccSignature.OUTPUT_CLASS.value,
+                includeOutputIntentRoutes = true,
+            ),
+        )
+
+        val complete = IccProfileParser.parse(
+            buildLutProfile(
+                route,
+                route,
+                IccSignature.OUTPUT_CLASS.value,
+                includeOutputIntentRoutes = true,
+                gamut = route,
+            ),
+            IccParseLimits(),
+        ).getOrThrow()
+        assertNotNull(complete.toPcs)
+        assertNotNull(complete.fromPcs)
+    }
+
+    @Test
+    fun `mft1 PCSXYZ behavior is implementation specific but remains supported`() {
+        val profile = IccProfileParser.parse(
+            buildLutProfile(lut8Payload(), null, IccSignature.INPUT_CLASS.value),
+            IccParseLimits(),
+        ).getOrThrow()
+        val values = floatArrayOf(0.25f, 0.5f, 0.75f)
+
+        profile.toPcs!!.apply(values, 0)
+
+        assertEquals(0.25f, values[0], 0.005f)
+        assertEquals(0.5f, values[1], 0.005f)
+        assertEquals(0.75f, values[2], 0.005f)
+    }
+
+    @Test
+    fun `LUT sampled stages evaluate nonmonotone tables forward`() {
+        val profile = IccProfileParser.parse(
+            buildLutProfile(
+                lut16Payload(outputSamples = intArrayOf(0, 0xffff, 0)),
+                null,
+                IccSignature.INPUT_CLASS.value,
+            ),
+            IccParseLimits(),
+        ).getOrThrow()
+        val values = floatArrayOf(0.5f, 0.5f, 0.5f)
+
+        profile.toPcs!!.apply(values, 0)
+
+        repeat(3) { assertEquals(65535f / 32768f, values[it], 1e-6f) }
+    }
+
+    @Test
+    fun `mAB sampled curves evaluate nonmonotone tables forward`() {
+        val sampled = sampledEmbeddedCurve(intArrayOf(0, 0xffff, 0))
+        val aToB = multiFunctionPayload(
+            type = IccSignature.LUT_A_TO_B_TYPE.value,
+            bCurves = curveSet(identityCurve()),
+            matrix = null,
+            mCurves = null,
+            clut = identityMultiFunctionClut(),
+            aCurves = curveSet(sampled),
+        )
+        val profile = IccProfileParser.parse(
+            buildLutProfile(aToB, null, IccSignature.INPUT_CLASS.value),
+            IccParseLimits(),
+        ).getOrThrow()
+        val values = floatArrayOf(0.5f, 0.5f, 0.5f)
+
+        profile.toPcs!!.apply(values, 0)
+
+        repeat(3) { assertEquals(65535f / 32768f, values[it], 1e-6f) }
     }
 
     @Test
@@ -853,6 +957,31 @@ class IccProfileParserTest {
         assertFailure("icc.lut.structure", buildLutProfile(incomplete, bToA))
     }
 
+    @Test
+    fun `multi function layouts only share compatible curve elements`() {
+        val route = lut16Payload()
+        val sharedCurves = aliasedMultiFunctionPayload(aliasMatrixWithCurves = false)
+        val profile = IccProfileParser.parse(
+            buildLutProfile(sharedCurves, route),
+            IccParseLimits(),
+        ).getOrThrow()
+
+        assertNotNull(profile.toPcs)
+        assertFailure(
+            "icc.lut.structure",
+            buildLutProfile(aliasedMultiFunctionPayload(aliasMatrixWithCurves = true), route),
+        )
+        val clutAlias = multiFunctionPayload(
+            type = IccSignature.LUT_A_TO_B_TYPE.value,
+            bCurves = curveSet(identityCurve()),
+            matrix = null,
+            mCurves = null,
+            clut = identityMultiFunctionClut(),
+            aCurves = curveSet(identityCurve()),
+        ).also { writeU32(it, 28, readU32(it, 24)) }
+        assertFailure("icc.lut.structure", buildLutProfile(clutAlias, route))
+    }
+
     private fun identityCubeValues(): FloatArray = FloatArray(2 * 2 * 2 * 3).also { values ->
         for (r in 0..1) for (g in 0..1) for (b in 0..1) {
             val base = (r * 4 + g * 2 + b) * 3
@@ -862,9 +991,9 @@ class IccProfileParserTest {
         }
     }
 
-    private fun lut16Payload(): ByteArray {
+    private fun lut16Payload(outputSamples: IntArray = intArrayOf(0, 0xffff)): ByteArray {
         val inputEntries = 2
-        val outputEntries = 2
+        val outputEntries = outputSamples.size
         val clutValues = 2 * 2 * 2 * 3
         val bytes = ByteArray(52 + 3 * inputEntries * 2 + clutValues * 2 + 3 * outputEntries * 2)
         writeU32(bytes, 0, IccSignature.LUT_16_TYPE.value)
@@ -885,9 +1014,29 @@ class IccProfileParserTest {
             offset += 2
         }
         repeat(3) {
-            writeU16(bytes, offset, 0)
-            writeU16(bytes, offset + 2, 0xffff)
-            offset += 4
+            outputSamples.forEach { sample ->
+                writeU16(bytes, offset, sample)
+                offset += 2
+            }
+        }
+        return bytes
+    }
+
+    private fun lut8Payload(): ByteArray {
+        val clutValues = 2 * 2 * 2 * 3
+        val bytes = ByteArray(48 + 3 * 256 + clutValues + 3 * 256)
+        writeU32(bytes, 0, IccSignature.LUT_8_TYPE.value)
+        bytes[8] = 3
+        bytes[9] = 3
+        bytes[10] = 2
+        repeat(3) { writeS15Fixed16(bytes, 12 + it * 16, 1f) }
+        var offset = 48
+        repeat(3) {
+            repeat(256) { sample -> bytes[offset++] = sample.toByte() }
+        }
+        identityCubeValues().forEach { value -> bytes[offset++] = (value * 255f).toInt().toByte() }
+        repeat(3) {
+            repeat(256) { sample -> bytes[offset++] = sample.toByte() }
         }
         return bytes
     }
@@ -900,6 +1049,13 @@ class IccProfileParserTest {
         writeU32(it, 0, IccSignature.PARAMETRIC_CURVE_TYPE.value)
         writeS15Fixed16(it, 12, gamma)
     }
+
+    private fun sampledEmbeddedCurve(samples: IntArray): ByteArray =
+        ByteArray((12 + samples.size * 2 + 3) and -4).also { curve ->
+            writeU32(curve, 0, IccSignature.CURVE_TYPE.value)
+            writeU32(curve, 8, samples.size)
+            samples.forEachIndexed { index, sample -> writeU16(curve, 12 + index * 2, sample) }
+        }
 
     private fun curveSet(curve: ByteArray): ByteArray = ByteArray(curve.size * 3).also { set ->
         repeat(3) { curve.copyInto(set, it * curve.size) }
@@ -948,7 +1104,35 @@ class IccProfileParserTest {
         return bytes
     }
 
-    private fun buildLutProfile(aToB: ByteArray?, bToA: ByteArray?): ByteArray {
+    private fun aliasedMultiFunctionPayload(aliasMatrixWithCurves: Boolean): ByteArray {
+        val curves = curveSet(gammaCurve(1f))
+        val bytes = ByteArray(32 + 48 + curves.size)
+        writeU32(bytes, 0, IccSignature.LUT_A_TO_B_TYPE.value)
+        bytes[8] = 3
+        bytes[9] = 3
+        if (aliasMatrixWithCurves) {
+            writeU32(bytes, 12, 80)
+            writeU32(bytes, 16, 32)
+            writeU32(bytes, 20, 32)
+            curves.copyInto(bytes, 32)
+            curves.copyInto(bytes, 80)
+        } else {
+            writeU32(bytes, 12, 80)
+            writeU32(bytes, 16, 32)
+            writeU32(bytes, 20, 80)
+            diagonalMatrixElement(1f).copyInto(bytes, 32)
+            curves.copyInto(bytes, 80)
+        }
+        return bytes
+    }
+
+    private fun buildLutProfile(
+        aToB: ByteArray?,
+        bToA: ByteArray?,
+        profileClass: Int = IccSignature.DISPLAY_CLASS.value,
+        includeOutputIntentRoutes: Boolean = false,
+        gamut: ByteArray? = null,
+    ): ByteArray {
         val base = resource("srgb-matrix-trc.icc")
         val tags = buildList {
             add(IccSignature.DESCRIPTION.value to tagPayload(base, IccSignature.DESCRIPTION.value))
@@ -956,13 +1140,20 @@ class IccProfileParserTest {
             add(IccSignature.WHITE_POINT.value to tagPayload(base, IccSignature.WHITE_POINT.value))
             if (aToB != null) add(IccSignature.A_TO_B_0.value to aToB)
             if (bToA != null) add(IccSignature.B_TO_A_0.value to bToA)
+            if (includeOutputIntentRoutes && aToB != null && bToA != null) {
+                add(IccSignature.A_TO_B_1.value to aToB)
+                add(IccSignature.B_TO_A_1.value to bToA)
+                add(IccSignature.A_TO_B_2.value to aToB)
+                add(IccSignature.B_TO_A_2.value to bToA)
+            }
+            if (gamut != null) add(signature("gamt") to gamut)
         }
         val tableEnd = 132 + tags.size * 12
         val profileSize = tableEnd + tags.sumOf { (_, payload) -> (payload.size + 3) and -4 }
         val bytes = ByteArray(profileSize)
         base.copyInto(bytes, endIndex = 128)
         writeU32(bytes, 0, profileSize)
-        writeU32(bytes, 12, IccSignature.OUTPUT_CLASS.value)
+        writeU32(bytes, 12, profileClass)
         repeat(16) { bytes[84 + it] = 0 }
         writeU32(bytes, 128, tags.size)
         var dataOffset = tableEnd

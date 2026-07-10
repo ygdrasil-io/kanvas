@@ -75,21 +75,24 @@ public data class ColorProfile private constructor(
         }
 
         internal fun lut(
-            toPcs: IccTransformPipeline,
-            fromPcs: IccTransformPipeline,
-        ): ColorProfile = ColorProfile(
-            colorModel = ColorModel.RGB,
-            matrix = null,
-            transferFunction = null,
-            unsupportedCode = null,
-            lut = LutProfileValue(toPcs, fromPcs),
-        )
+            toPcs: IccTransformPipeline?,
+            fromPcs: IccTransformPipeline?,
+        ): ColorProfile {
+            require(toPcs != null || fromPcs != null) { "A LUT profile requires at least one direction" }
+            return ColorProfile(
+                colorModel = ColorModel.RGB,
+                matrix = null,
+                transferFunction = null,
+                unsupportedCode = null,
+                lut = LutProfileValue(toPcs, fromPcs),
+            )
+        }
     }
 }
 
 private data class LutProfileValue(
-    val toPcs: IccTransformPipeline,
-    val fromPcs: IccTransformPipeline,
+    val toPcs: IccTransformPipeline?,
+    val fromPcs: IccTransformPipeline?,
 )
 
 private data class Matrix3x3Value(

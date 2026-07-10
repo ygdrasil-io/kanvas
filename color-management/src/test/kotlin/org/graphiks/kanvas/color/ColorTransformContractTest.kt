@@ -2,6 +2,7 @@ package org.graphiks.kanvas.color
 
 import org.graphiks.kanvas.color.icc.IccParseLimits
 import org.graphiks.kanvas.color.icc.IccProfileParser
+import org.graphiks.kanvas.color.icc.IccSignature
 import org.graphiks.math.SkcmsMatrix3x3
 import org.graphiks.math.SkcmsTransferFunction
 import kotlin.test.Test
@@ -104,7 +105,7 @@ class ColorTransformContractTest {
     }
 
     @Test
-    fun `mft1 LUT source transforms through PCS into matrix destination`() {
+    fun `mft2 LUT source transforms through PCS into matrix destination`() {
         val lut = parseResource("rgb-lut-a2b-b2a.icc")
         val transform = ColorTransform.compile(
             source = lut,
@@ -115,10 +116,22 @@ class ColorTransformContractTest {
 
         transform.apply(pixel, 1)
 
-        assertEquals(0.75f, pixel[0], 0.025f)
-        assertEquals(0.5f, pixel[1], 0.025f)
-        assertEquals(0.25f, pixel[2], 0.025f)
+        assertEquals(0.75f, pixel[0], 0.002f)
+        assertEquals(0.5f, pixel[1], 0.002f)
+        assertEquals(0.25f, pixel[2], 0.002f)
         assertEquals(0.6f, pixel[3], 0f)
+    }
+
+    @Test
+    fun `mft2 A2B matches LittleCMS relative colorimetric PCS golden`() {
+        val lut = parseResource("rgb-lut-a2b-b2a.icc")
+        val pcs = floatArrayOf(0.25f, 0.5f, 0.75f)
+
+        lut.toPcs!!.apply(pcs, 0)
+
+        assertEquals(0.317566f, pcs[0], 3e-5f)
+        assertEquals(0.272797f, pcs[1], 3e-5f)
+        assertEquals(0.064392f, pcs[2], 3e-5f)
     }
 
     @Test
@@ -164,6 +177,34 @@ class ColorTransformContractTest {
     }
 
     @Test
+    fun `one way input LUT compiles as source and refuses destination use`() {
+        val input = parseOneWayInputResource("rgb-lut-a2b-b2a.icc")
+        val transform = ColorTransform.compile(
+            source = input,
+            destination = ColorProfiles.sRGB(),
+            alphaType = AlphaType.UNPREMULTIPLIED,
+        ).getOrThrow()
+        val pixel = floatArrayOf(0.25f, 0.5f, 0.75f, 1f)
+
+        transform.apply(pixel, 1)
+
+        assertEquals(0.75f, pixel[0], 0.002f)
+        assertEquals(0.5f, pixel[1], 0.002f)
+        assertEquals(0.25f, pixel[2], 0.002f)
+        val failure = ColorTransform.compile(
+            source = ColorProfiles.sRGB(),
+            destination = input,
+            alphaType = AlphaType.UNPREMULTIPLIED,
+        ).failureOrNull()
+        assertEquals("icc.lut.b2a.missing", assertNotNull(failure).code)
+
+        val noOp = ColorTransform.compile(input, input, AlphaType.UNPREMULTIPLIED).getOrThrow()
+        val unchanged = floatArrayOf(0.1f, 0.2f, 0.3f, 0.4f)
+        noOp.apply(unchanged, 1)
+        assertContentEquals(floatArrayOf(0.1f, 0.2f, 0.3f, 0.4f), unchanged)
+    }
+
+    @Test
     fun `compile rejects direct profiles with nonmonotonic transfer functions`() {
         val source = ColorProfile(
             colorModel = ColorModel.RGB,
@@ -191,5 +232,30 @@ class ColorTransformContractTest {
     private fun parseResource(name: String): ColorProfile {
         val stream = assertNotNull(javaClass.classLoader.getResourceAsStream("icc/$name"), "missing icc/$name")
         return stream.use { IccProfileParser.parse(it.readBytes(), IccParseLimits()).getOrThrow() }
+    }
+
+    private fun parseOneWayInputResource(name: String): ColorProfile {
+        val stream = assertNotNull(javaClass.classLoader.getResourceAsStream("icc/$name"), "missing icc/$name")
+        val bytes = stream.use { it.readBytes() }
+        writeU32(bytes, 12, IccSignature.INPUT_CLASS.value)
+        repeat(readU32(bytes, 128)) { index ->
+            val entry = 132 + index * 12
+            if (readU32(bytes, entry) == IccSignature.B_TO_A_0.value) writeU32(bytes, entry, 0x7a7a7a7a)
+        }
+        repeat(16) { bytes[84 + it] = 0 }
+        return IccProfileParser.parse(bytes, IccParseLimits()).getOrThrow()
+    }
+
+    private fun readU32(bytes: ByteArray, offset: Int): Int =
+        ((bytes[offset].toInt() and 0xff) shl 24) or
+            ((bytes[offset + 1].toInt() and 0xff) shl 16) or
+            ((bytes[offset + 2].toInt() and 0xff) shl 8) or
+            (bytes[offset + 3].toInt() and 0xff)
+
+    private fun writeU32(bytes: ByteArray, offset: Int, value: Int) {
+        bytes[offset] = (value ushr 24).toByte()
+        bytes[offset + 1] = (value ushr 16).toByte()
+        bytes[offset + 2] = (value ushr 8).toByte()
+        bytes[offset + 3] = value.toByte()
     }
 }

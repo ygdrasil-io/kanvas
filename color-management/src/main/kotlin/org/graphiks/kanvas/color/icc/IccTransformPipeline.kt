@@ -61,8 +61,36 @@ internal sealed interface IccTransformStage {
     fun apply(input: FloatArray, output: FloatArray)
 }
 
-internal class IccCurveStage(curves: List<IccCurve>) : IccTransformStage {
-    private val curves: List<IccCurve> = curves.toList()
+internal interface IccPipelineCurve {
+    fun evaluate(value: Float): Float
+}
+
+internal class IccForwardCurveAdapter(
+    private val curve: IccCurve,
+) : IccPipelineCurve {
+    override fun evaluate(value: Float): Float = curve.evaluate(value)
+}
+
+internal class IccSampledForwardCurve(samples: FloatArray) : IccPipelineCurve {
+    private val values: FloatArray = samples.copyOf()
+
+    init {
+        require(values.size >= 2) { "A sampled ICC LUT curve requires at least two samples" }
+        require(values.all { it.isFinite() && it in 0f..1f }) { "ICC LUT curve samples must be normalized" }
+    }
+
+    override fun evaluate(value: Float): Float {
+        val normalized = if (value.isFinite()) value.coerceIn(0f, 1f) else 0f
+        val position = normalized * values.lastIndex
+        val lower = position.toInt().coerceAtMost(values.lastIndex)
+        val upper = (lower + 1).coerceAtMost(values.lastIndex)
+        val weight = position - lower
+        return values[lower] + (values[upper] - values[lower]) * weight
+    }
+}
+
+internal class IccCurveStage(curves: List<IccPipelineCurve>) : IccTransformStage {
+    private val curves: List<IccPipelineCurve> = curves.toList()
     override val inputChannels: Int = curves.size
     override val outputChannels: Int = curves.size
 

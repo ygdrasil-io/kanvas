@@ -63,11 +63,12 @@ public object ColorTransform {
         if (request.alphaType == AlphaType.PREMULTIPLIED) {
             return ColorTransformCompileResult.Failure("color.alpha.premultiplied.unsupported")
         }
-        unsupportedProfileFailure(request.source, source = true)?.let { return it }
-        unsupportedProfileFailure(request.destination, source = false)?.let { return it }
         if (request.source == request.destination) {
+            unsupportedProfileFailure(request.source, source = null)?.let { return it }
             return ColorTransformCompileResult.Success(CompiledColorTransform(request, NoOpRgbPlan))
         }
+        unsupportedProfileFailure(request.source, source = true)?.let { return it }
+        unsupportedProfileFailure(request.destination, source = false)?.let { return it }
 
         val sourceStage = request.source.toPcs?.let(::LutEndpointStage) ?: MatrixToPcsStage(
             matrixValues(assertNotNull(request.source.toXyzD50)),
@@ -84,15 +85,15 @@ public object ColorTransform {
 
     private fun unsupportedProfileFailure(
         profile: ColorProfile,
-        source: Boolean,
+        source: Boolean?,
     ): ColorTransformCompileResult.Failure? {
         profile.unsupportedCode?.let { return ColorTransformCompileResult.Failure(it) }
         if (!profile.isSupportedTransformEndpoint) {
             return ColorTransformCompileResult.Failure("color.profile.unsupported")
         }
         if (profile.hasLut) {
-            if (source && profile.toPcs == null) return ColorTransformCompileResult.Failure("icc.lut.a2b.missing")
-            if (!source && profile.fromPcs == null) return ColorTransformCompileResult.Failure("icc.lut.b2a.missing")
+            if (source == true && profile.toPcs == null) return ColorTransformCompileResult.Failure("icc.lut.a2b.missing")
+            if (source == false && profile.fromPcs == null) return ColorTransformCompileResult.Failure("icc.lut.b2a.missing")
             return null
         }
 

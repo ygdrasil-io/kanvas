@@ -44,6 +44,7 @@ public value class IccSignature(public val value: Int) {
         public val B_TO_A_0: IccSignature = IccSignature(0x42324130)
         public val B_TO_A_1: IccSignature = IccSignature(0x42324131)
         public val B_TO_A_2: IccSignature = IccSignature(0x42324132)
+        public val GAMUT: IccSignature = IccSignature(0x67616d74)
         public val DESCRIPTION: IccSignature = IccSignature(0x64657363)
         public val COPYRIGHT: IccSignature = IccSignature(0x63707274)
         public val WHITE_POINT: IccSignature = IccSignature(0x77747074)

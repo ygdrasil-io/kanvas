@@ -266,14 +266,32 @@ private class Parser(
     }
 
     private fun parseRgbLut(tags: Map<IccSignature, TagRecord>): ColorProfile {
-        val aToB = tags[IccSignature.A_TO_B_0]
-            ?: abort("icc.lut.direction", "RGB LUT profile is missing A2B0")
-        val bToA = tags[IccSignature.B_TO_A_0]
-            ?: abort("icc.lut.direction", "RGB LUT profile is missing B2A0")
+        validateRequiredLutRoutes(tags)
+        if (profileClass == IccSignature.OUTPUT_CLASS) {
+            OUTPUT_ADDITIONAL_ROUTES.forEach { signature ->
+                val direction = if (signature in A_TO_B_ROUTE_SIGNATURES) LutDirection.A_TO_B else LutDirection.B_TO_A
+                parseLutTransform(requiredTag(tags, signature), direction)
+            }
+        }
         return ColorProfile.lut(
-            toPcs = parseLutTransform(aToB, LutDirection.A_TO_B),
-            fromPcs = parseLutTransform(bToA, LutDirection.B_TO_A),
+            toPcs = tags[IccSignature.A_TO_B_0]?.let { parseLutTransform(it, LutDirection.A_TO_B) },
+            fromPcs = tags[IccSignature.B_TO_A_0]?.let { parseLutTransform(it, LutDirection.B_TO_A) },
         )
+    }
+
+    private fun validateRequiredLutRoutes(tags: Map<IccSignature, TagRecord>) {
+        val requiredRoutes = when (profileClass) {
+            IccSignature.INPUT_CLASS -> listOf(IccSignature.A_TO_B_0)
+            IccSignature.DISPLAY_CLASS -> listOf(IccSignature.A_TO_B_0, IccSignature.B_TO_A_0)
+            IccSignature.OUTPUT_CLASS -> OUTPUT_ROUTE_SIGNATURES
+            else -> emptyList()
+        }
+        requiredRoutes.forEach { signature ->
+            if (signature !in tags) abort("icc.lut.direction", "RGB LUT profile is missing $signature")
+        }
+        if (profileClass == IccSignature.OUTPUT_CLASS && IccSignature.GAMUT !in tags) {
+            abort("icc.profile.tags", "Required ICC tag ${IccSignature.GAMUT} is missing")
+        }
     }
 
     private fun parseLutTransform(tag: TagRecord, direction: LutDirection): IccTransformPipeline =
@@ -376,6 +394,15 @@ private class Parser(
         val bCount = if (direction == LutDirection.A_TO_B) outputChannels else inputChannels
         val mCount = if (direction == LutDirection.A_TO_B) outputChannels else inputChannels
         val aCount = if (direction == LutDirection.A_TO_B) inputChannels else outputChannels
+        validateEmbeddedElementAliases(
+            listOf(
+                EmbeddedElementAlias(bOffset, EmbeddedElementKind.CURVES, bCount),
+                EmbeddedElementAlias(matrixOffset, EmbeddedElementKind.MATRIX),
+                EmbeddedElementAlias(mOffset, EmbeddedElementKind.CURVES, mCount),
+                EmbeddedElementAlias(clutOffset, EmbeddedElementKind.CLUT),
+                EmbeddedElementAlias(aOffset, EmbeddedElementKind.CURVES, aCount),
+            ).filter { it.offset != 0 },
+        )
         val bCurves = parseEmbeddedCurveSet(tag, bOffset, bCount)
         val matrix = matrixOffset.takeIf { it != 0 }?.let { parseMatrixElement(tag, it) }
         val mCurves = mOffset.takeIf { it != 0 }?.let { parseEmbeddedCurveSet(tag, it, mCount) }
@@ -385,11 +412,15 @@ private class Parser(
         val aCurves = aOffset.takeIf { it != 0 }?.let { parseEmbeddedCurveSet(tag, it, aCount) }
 
         val elements = buildList {
-            add(EmbeddedElement(bOffset, bCurves.end))
-            if (matrix != null) add(EmbeddedElement(matrixOffset, matrix.end))
-            if (mCurves != null) add(EmbeddedElement(mOffset, mCurves.end))
-            if (clut != null) add(EmbeddedElement(clutOffset, clut.end))
-            if (aCurves != null) add(EmbeddedElement(aOffset, aCurves.end))
+            add(EmbeddedElement(bOffset, bCurves.end, EmbeddedElementKind.CURVES, bCount))
+            if (matrix != null) add(EmbeddedElement(matrixOffset, matrix.end, EmbeddedElementKind.MATRIX))
+            if (mCurves != null) {
+                add(EmbeddedElement(mOffset, mCurves.end, EmbeddedElementKind.CURVES, mCount))
+            }
+            if (clut != null) add(EmbeddedElement(clutOffset, clut.end, EmbeddedElementKind.CLUT))
+            if (aCurves != null) {
+                add(EmbeddedElement(aOffset, aCurves.end, EmbeddedElementKind.CURVES, aCount))
+            }
         }
         validateEmbeddedElementLayout(elements, tag.size)
 
@@ -450,7 +481,7 @@ private class Parser(
         channels: Int,
         entries: Int,
         bytesPerSample: Int,
-    ): List<IccCurve> = List(channels) { channel ->
+    ): List<IccPipelineCurve> = List(channels) { channel ->
         val tableOffset = offset + channel * entries * bytesPerSample
         val samples = FloatArray(entries) { index -> readNormalizedSample(tableOffset + index * bytesPerSample, bytesPerSample) }
         sampledLutCurve(samples)
@@ -468,12 +499,9 @@ private class Parser(
         return IccClut(inputChannels, outputChannels, gridPoints, values)
     }
 
-    private fun sampledLutCurve(samples: FloatArray): IccCurve {
-        if ((1 until samples.size).any { samples[it - 1] > samples[it] }) {
-            abort("icc.lut.curve", "ICC LUT one-dimensional table is not monotonic")
-        }
-        return SampledIccCurve(samples)
-    }
+    private fun sampledLutCurve(samples: FloatArray): IccPipelineCurve = IccSampledForwardCurve(samples)
+
+    private fun forwardLutCurve(curve: IccCurve): IccPipelineCurve = IccForwardCurveAdapter(curve)
 
     private fun readNormalizedSample(offset: Int, bytesPerSample: Int): Float =
         if (bytesPerSample == 1) reader.u8(offset) / 255f else reader.u16(offset) / 65535f
@@ -510,11 +538,11 @@ private class Parser(
                 val size = CURVE_HEADER_SIZE.toLong() + count * 2L
                 requireTagRelativeRange(tag, relativeOffset, size, "ICC embedded sampled curve is truncated")
                 val parsedCurve = when (count.toInt()) {
-                    0 -> ParametricIccCurve(0, floatArrayOf(1f))
+                    0 -> forwardLutCurve(ParametricIccCurve(0, floatArrayOf(1f)))
                     1 -> {
                         val gamma = reader.u16(absolute + CURVE_HEADER_SIZE) / 256f
                         if (gamma <= 0f) abort("icc.lut.curve", "ICC embedded gamma must be positive")
-                        ParametricIccCurve(0, floatArrayOf(gamma))
+                        forwardLutCurve(ParametricIccCurve(0, floatArrayOf(gamma)))
                     }
                     else -> {
                         val samples = FloatArray(count.toInt()) { index ->
@@ -541,7 +569,7 @@ private class Parser(
                 }
                 val validationError = parametricCurveValidationError(functionType, parameters)
                 if (validationError != null) abort("icc.lut.curve", "Invalid embedded ICC curve: $validationError")
-                ParametricIccCurve(functionType, parameters) to size
+                forwardLutCurve(ParametricIccCurve(functionType, parameters)) to size
             }
             else -> abort("icc.lut.curve", "Unsupported embedded ICC curve type")
         }
@@ -596,23 +624,37 @@ private class Parser(
     }
 
     private fun validateEmbeddedElementLayout(elements: List<EmbeddedElement>, tagSize: Int) {
-        val unique = LinkedHashMap<Int, Int>()
-        elements.forEach { element ->
-            val previousEnd = unique.putIfAbsent(element.offset, element.end)
-            if (previousEnd != null && previousEnd != element.end) {
+        val grouped = elements.groupBy(EmbeddedElement::offset)
+        grouped.values.forEach { aliases ->
+            if (aliases.map(EmbeddedElement::end).distinct().size != 1) {
                 abort("icc.lut.structure", "Shared ICC LUT elements have incompatible sizes")
             }
+            if (aliases.size > 1 && (aliases.any { it.kind != EmbeddedElementKind.CURVES } ||
+                    aliases.map(EmbeddedElement::curveCount).distinct().size != 1)
+            ) {
+                abort("icc.lut.structure", "Only compatible ICC LUT curve elements may share storage")
+            }
         }
-        val sorted = unique.entries.sortedBy { it.key }
-        if (sorted.isEmpty() || sorted.first().key != MULTI_FUNCTION_HEADER_SIZE) {
+        val sorted = grouped.values.map { it.first() }.sortedBy(EmbeddedElement::offset)
+        if (sorted.isEmpty() || sorted.first().offset != MULTI_FUNCTION_HEADER_SIZE) {
             abort("icc.lut.structure", "ICC LUT elements do not start after the header")
         }
         var expected = MULTI_FUNCTION_HEADER_SIZE
         sorted.forEach { element ->
-            if (element.key != expected) abort("icc.lut.structure", "ICC LUT elements overlap or contain gaps")
-            expected = element.value
+            if (element.offset != expected) abort("icc.lut.structure", "ICC LUT elements overlap or contain gaps")
+            expected = element.end
         }
         if (expected != tagSize) abort("icc.lut.structure", "ICC LUT has bytes outside its processing elements")
+    }
+
+    private fun validateEmbeddedElementAliases(elements: List<EmbeddedElementAlias>) {
+        elements.groupBy(EmbeddedElementAlias::offset).values.forEach { aliases ->
+            if (aliases.size > 1 && (aliases.any { it.kind != EmbeddedElementKind.CURVES } ||
+                    aliases.map(EmbeddedElementAlias::curveCount).distinct().size != 1)
+            ) {
+                abort("icc.lut.structure", "Only compatible ICC LUT curve elements may share storage")
+            }
+        }
     }
 
     private fun lutFingerprint(tag: TagRecord, direction: LutDirection): ByteArray = ByteArray(tag.size + 1).also {
@@ -767,11 +809,22 @@ private enum class LutDirection {
     B_TO_A,
 }
 
-private data class ParsedEmbeddedCurve(val curve: IccCurve, val end: Int)
-private data class ParsedCurveSet(val curves: List<IccCurve>, val end: Int)
+private data class ParsedEmbeddedCurve(val curve: IccPipelineCurve, val end: Int)
+private data class ParsedCurveSet(val curves: List<IccPipelineCurve>, val end: Int)
 private data class ParsedMatrix(val values: FloatArray, val end: Int)
 private data class ParsedClut(val clut: IccClut, val end: Int)
-private data class EmbeddedElement(val offset: Int, val end: Int)
+private data class EmbeddedElement(
+    val offset: Int,
+    val end: Int,
+    val kind: EmbeddedElementKind,
+    val curveCount: Int? = null,
+)
+private data class EmbeddedElementAlias(
+    val offset: Int,
+    val kind: EmbeddedElementKind,
+    val curveCount: Int? = null,
+)
+private enum class EmbeddedElementKind { CURVES, MATRIX, CLUT }
 private data class TagRecord(val offset: Int, val size: Int)
 
 private class IccParseAbort(
@@ -827,3 +880,17 @@ private val LUT_ROUTE_SIGNATURES: Set<IccSignature> = setOf(
     IccSignature.B_TO_A_1,
     IccSignature.B_TO_A_2,
 )
+private val A_TO_B_ROUTE_SIGNATURES: Set<IccSignature> = setOf(
+    IccSignature.A_TO_B_0,
+    IccSignature.A_TO_B_1,
+    IccSignature.A_TO_B_2,
+)
+private val OUTPUT_ROUTE_SIGNATURES: List<IccSignature> = listOf(
+    IccSignature.A_TO_B_0,
+    IccSignature.B_TO_A_0,
+    IccSignature.A_TO_B_1,
+    IccSignature.B_TO_A_1,
+    IccSignature.A_TO_B_2,
+    IccSignature.B_TO_A_2,
+)
+private val OUTPUT_ADDITIONAL_ROUTES: List<IccSignature> = OUTPUT_ROUTE_SIGNATURES.drop(2)
