@@ -32,6 +32,15 @@ public class JpegDocument internal constructor(
     /** Snapshot that rejects mutation even when callers cast it to [MutableList]. */
     public val segments: List<JpegSegment> = Collections.unmodifiableList(segments.toList())
 
+    internal val metadata: JpegMetadata
+    internal val metadataDiagnostics: List<JpegDiagnostic>
+
+    init {
+        val (parsedMetadata, diagnostics) = parseJpegMetadata(source, this.segments)
+        metadata = parsedMetadata
+        metadataDiagnostics = Collections.unmodifiableList(diagnostics)
+    }
+
     /** Returns a defensive copy of [segment]'s encoded payload. */
     public fun copyPayload(segment: JpegSegment): ByteArray {
         require(segments.any { it === segment }) { "JPEG segment does not belong to this document" }
@@ -45,7 +54,7 @@ public class JpegDocument internal constructor(
     public fun decode(request: JpegDecodeRequest): JpegDecodeResult =
         JpegCodec.Decoder.decode(source, request)
 
-    internal fun makeCodec(): JpegCodec? = JpegCodec.Decoder.makeFromDocumentSource(source)
+    internal fun makeCodec(): JpegCodec? = JpegCodec.Decoder.makeFromDocumentSource(source, metadata)
 
     public companion object {
         public fun open(
