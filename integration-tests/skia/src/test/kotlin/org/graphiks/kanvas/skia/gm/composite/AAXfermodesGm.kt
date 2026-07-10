@@ -7,13 +7,18 @@ import org.graphiks.kanvas.skia.GmCanvas
 import org.graphiks.kanvas.skia.RenderFamily
 import org.graphiks.kanvas.skia.RenderCost
 import org.graphiks.kanvas.skia.SkiaGm
+import org.graphiks.kanvas.skia.TextAlign
+import org.graphiks.kanvas.skia.portableFont
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.types.a
-import org.graphiks.kanvas.types.r
-import org.graphiks.kanvas.types.g
 import org.graphiks.kanvas.types.b
-import kotlin.math.max
+import org.graphiks.kanvas.types.blueByte
+import org.graphiks.kanvas.types.g
+import org.graphiks.kanvas.types.greenByte
+import org.graphiks.kanvas.types.r
+import org.graphiks.kanvas.types.redByte
+import org.graphiks.kanvas.types.alphaByte
 
 /**
  * Port of Skia's gm/aaxfermodes.cpp.
@@ -47,29 +52,42 @@ class AAXfermodesGm : SkiaGm {
         close()
     }
 
-    private val diamondPath = Path {
-        val s = kShapeSize / 2f
-        moveTo(0f, -s)
-        lineTo(s, 0f)
-        lineTo(0f, s)
-        lineTo(-s, 0f)
-        close()
-    }
+    private val labelFont = portableFont(5f * kShapeSize / 8f)
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {
         drawPass(canvas, Pass.Checkerboard)
 
-        canvas.save()
+        canvas.saveLayer(null, null)
         canvas.translate(kMargin.toFloat(), kMargin.toFloat())
         drawPass(canvas, Pass.Background)
+
+        val titleFont = portableFont(9f * labelFont.size / 8f, bold = true)
+        canvas.drawStringAligned(
+            "Porter Duff",
+            kLabelSpacing + 4f * kShapeTypeSpacing,
+            kTitleSpacing / 2f + titleFont.size / 3f,
+            titleFont,
+            Paint(),
+            TextAlign.CENTER,
+        )
+        canvas.drawStringAligned(
+            "Advanced",
+            kXfermodeTypeSpacing + kLabelSpacing + 4f * kShapeTypeSpacing,
+            kTitleSpacing / 2f + titleFont.size / 3f,
+            titleFont,
+            Paint(),
+            TextAlign.CENTER,
+        )
+
         drawPass(canvas, Pass.Shape)
         canvas.restore()
     }
 
     private fun drawPass(canvas: GmCanvas, pass: Pass) {
+        val clipExtent = (kShapeSize * 11 / 16).toFloat()
         val cellClip = Rect(
-            -kShapeSize * 11f / 16f, -kShapeSize * 11f / 16f,
-            kShapeSize * 11f / 16f, kShapeSize * 11f / 16f,
+            -clipExtent, -clipExtent,
+            clipExtent, clipExtent,
         )
 
         canvas.save()
@@ -79,18 +97,40 @@ class AAXfermodesGm : SkiaGm {
         canvas.translate(0f, kTitleSpacing.toFloat())
 
         for (xfermodeSet in 0..1) {
-            val firstMode = (BlendMode.entries.size - 1) * xfermodeSet
+            val firstMode = upstreamCoeffSplit * xfermodeSet
             canvas.save()
+
+            if (pass == Pass.Shape) {
+                canvas.drawStringAligned(
+                    "Src Unknown",
+                    kLabelSpacing + kShapeTypeSpacing * 1.5f + kShapeSpacing / 2f,
+                    kSubtitleSpacing / 2f + labelFont.size / 3f,
+                    labelFont,
+                    Paint(),
+                    TextAlign.CENTER,
+                )
+                canvas.drawStringAligned(
+                    "Src Opaque",
+                    kLabelSpacing + kShapeTypeSpacing * 1.5f + kShapeSpacing / 2f + kPaintSpacing,
+                    kSubtitleSpacing / 2f + labelFont.size / 3f,
+                    labelFont,
+                    Paint(),
+                    TextAlign.CENTER,
+                )
+            }
 
             canvas.translate(0f, kSubtitleSpacing + kShapeSpacing / 2f)
 
             var m = 0
-            while (m < BlendMode.entries.size) {
+            while (m < upstreamCoeffSplit) {
                 val modeIndex = firstMode + m
-                if (modeIndex >= BlendMode.entries.size) break
-                val mode = BlendMode.entries[modeIndex]
+                if (modeIndex >= upstreamBlendModes.size) break
+                val mode = upstreamBlendModes[modeIndex]
                 canvas.save()
 
+                if (pass == Pass.Shape) {
+                    drawModeName(canvas, mode)
+                }
                 canvas.translate(kLabelSpacing + kShapeSpacing / 2f, 0f)
 
                 for (colorIdx in kShapeColors.indices) {
@@ -104,11 +144,11 @@ class AAXfermodesGm : SkiaGm {
                             if (pass == Pass.Checkerboard) {
                                 drawCheckerboard(canvas, 0xFFFFFFFF.toInt(), 0xFFC6C3C6.toInt(), 10)
                             } else {
-                                canvas.drawColor(kBGColor.r, kBGColor.g, kBGColor.b, kBGColor.a)
+                                canvas.drawColor(kBGColor.r, kBGColor.g, kBGColor.b, kBGColor.a, BlendMode.SRC)
                             }
                             canvas.restore()
                         } else {
-                            drawShape(canvas, shapeIdx, paint, mode)
+                            drawShape(canvas, shapeIdx, paint, mode, modeIndex)
                         }
                         canvas.translate(kShapeTypeSpacing.toFloat(), 0f)
                     }
@@ -128,32 +168,43 @@ class AAXfermodesGm : SkiaGm {
         canvas.restore()
     }
 
+    private fun drawModeName(canvas: GmCanvas, mode: BlendMode) {
+        canvas.drawStringAligned(
+            mode.upstreamName,
+            kLabelSpacing - kShapeSize / 4f,
+            labelFont.size / 4f,
+            labelFont,
+            Paint(),
+            TextAlign.RIGHT,
+        )
+    }
+
     private fun setupShapePaint(canvas: GmCanvas, color: Color, mode: BlendMode): Paint {
         var paint = Paint(color = color)
         if (mode != BlendMode.PLUS) return paint
 
         // Detect overflow on any channel
         val maxSum = maxOf(
-            (kBGColor.a * 255).toInt() + (color.a * 255).toInt(),
-            (kBGColor.r * 255).toInt() + (color.r * 255).toInt(),
-            (kBGColor.g * 255).toInt() + (color.g * 255).toInt(),
-            (kBGColor.b * 255).toInt() + (color.b * 255).toInt(),
+            kBGColor.alphaByte + color.alphaByte,
+            kBGColor.redByte + color.redByte,
+            kBGColor.greenByte + color.greenByte,
+            kBGColor.blueByte + color.blueByte,
         )
         if (maxSum <= 255) return paint
 
-        if (color.a < 1f) {
+        if (color.alphaByte != 0xFF) {
             val dimPaint = Paint(
-                color = Color.fromRGBA(0f, 0f, 0f, 255f * 255f / maxSum / 255f),
+                color = Color.fromArgb(255 * 255 / maxSum, 0, 0, 0),
                 antiAlias = false,
                 blendMode = BlendMode.DST_IN,
             )
             paint = paint.copy(
-                color = Color.fromRGBA(
-                    color.r,
-                    color.g,
-                    color.b,
-                    255f * color.a / maxSum / 255f,
-                )
+                color = Color.fromArgb(
+                    255 * color.alphaByte / maxSum,
+                    color.redByte,
+                    color.greenByte,
+                    color.blueByte,
+                ),
             )
             canvas.drawRect(
                 Rect(
@@ -179,7 +230,7 @@ class AAXfermodesGm : SkiaGm {
         return paint
     }
 
-    private fun drawShape(canvas: GmCanvas, shapeIdx: Int, paint: Paint, mode: BlendMode) {
+    private fun drawShape(canvas: GmCanvas, shapeIdx: Int, paint: Paint, mode: BlendMode, modeIndex: Int) {
         val shapePaint = paint.copy(
             antiAlias = shapeIdx != kSquare_Shape,
             blendMode = mode,
@@ -188,8 +239,18 @@ class AAXfermodesGm : SkiaGm {
         val rect = Rect(-s, -s, s, s)
         when (shapeIdx) {
             kSquare_Shape -> canvas.drawRect(rect, shapePaint)
-            kDiamond_Shape -> canvas.drawPath(diamondPath, shapePaint)
-            kOval_Shape -> canvas.drawPath(ovalPath, shapePaint)
+            kDiamond_Shape -> {
+                canvas.save()
+                canvas.rotate(45f)
+                canvas.drawRect(rect, shapePaint)
+                canvas.restore()
+            }
+            kOval_Shape -> {
+                canvas.save()
+                canvas.rotate(((511 * modeIndex + 257) % 360).toFloat())
+                canvas.drawPath(ovalPath, shapePaint)
+                canvas.restore()
+            }
             kConcave_Shape -> canvas.drawPath(concavePath, shapePaint)
         }
     }
@@ -223,9 +284,38 @@ class AAXfermodesGm : SkiaGm {
     private enum class Pass { Checkerboard, Background, Shape }
 
     companion object {
-        internal val upstreamBlendModes: List<BlendMode> = BlendMode.entries.toList()
-        internal val upstreamCoeffSplit: Int
-            get() = BlendMode.entries.size - 1
+        internal val upstreamBlendModes: List<BlendMode> = listOf(
+            BlendMode.CLEAR,
+            BlendMode.SRC,
+            BlendMode.DST,
+            BlendMode.SRC_OVER,
+            BlendMode.DST_OVER,
+            BlendMode.SRC_IN,
+            BlendMode.DST_IN,
+            BlendMode.SRC_OUT,
+            BlendMode.DST_OUT,
+            BlendMode.SRC_ATOP,
+            BlendMode.DST_ATOP,
+            BlendMode.XOR,
+            BlendMode.PLUS,
+            BlendMode.MODULATE,
+            BlendMode.MULTIPLY,
+            BlendMode.SCREEN,
+            BlendMode.OVERLAY,
+            BlendMode.DARKEN,
+            BlendMode.LIGHTEN,
+            BlendMode.COLOR_DODGE,
+            BlendMode.COLOR_BURN,
+            BlendMode.HARD_LIGHT,
+            BlendMode.SOFT_LIGHT,
+            BlendMode.DIFFERENCE,
+            BlendMode.EXCLUSION,
+            BlendMode.HUE,
+            BlendMode.SATURATION,
+            BlendMode.COLOR,
+            BlendMode.LUMINOSITY,
+        )
+        internal val upstreamCoeffSplit: Int = BlendMode.SCREEN.ordinal + 1
 
         fun intToColor(value: Int): Color {
             val a = (value ushr 24) and 0xFF
@@ -260,3 +350,36 @@ class AAXfermodesGm : SkiaGm {
         internal const val kLast_Shape: Int = kConcave_Shape
     }
 }
+
+private val BlendMode.upstreamName: String
+    get() = when (this) {
+        BlendMode.CLEAR -> "Clear"
+        BlendMode.SRC -> "Src"
+        BlendMode.DST -> "Dst"
+        BlendMode.SRC_OVER -> "SrcOver"
+        BlendMode.DST_OVER -> "DstOver"
+        BlendMode.SRC_IN -> "SrcIn"
+        BlendMode.DST_IN -> "DstIn"
+        BlendMode.SRC_OUT -> "SrcOut"
+        BlendMode.DST_OUT -> "DstOut"
+        BlendMode.SRC_ATOP -> "SrcATop"
+        BlendMode.DST_ATOP -> "DstATop"
+        BlendMode.XOR -> "Xor"
+        BlendMode.PLUS -> "Plus"
+        BlendMode.MODULATE -> "Modulate"
+        BlendMode.MULTIPLY -> "Multiply"
+        BlendMode.SCREEN -> "Screen"
+        BlendMode.OVERLAY -> "Overlay"
+        BlendMode.DARKEN -> "Darken"
+        BlendMode.LIGHTEN -> "Lighten"
+        BlendMode.COLOR_DODGE -> "ColorDodge"
+        BlendMode.COLOR_BURN -> "ColorBurn"
+        BlendMode.HARD_LIGHT -> "HardLight"
+        BlendMode.SOFT_LIGHT -> "SoftLight"
+        BlendMode.DIFFERENCE -> "Difference"
+        BlendMode.EXCLUSION -> "Exclusion"
+        BlendMode.HUE -> "Hue"
+        BlendMode.SATURATION -> "Saturation"
+        BlendMode.COLOR -> "Color"
+        BlendMode.LUMINOSITY -> "Luminosity"
+    }
