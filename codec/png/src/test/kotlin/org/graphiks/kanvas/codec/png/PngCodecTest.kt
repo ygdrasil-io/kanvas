@@ -11,9 +11,14 @@ import org.graphiks.kanvas.codec.Codec
 import org.graphiks.kanvas.codec.test.CodecNegativeFixtures
 import org.skia.foundation.SkAlphaType
 import org.skia.foundation.SkBitmap
+import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkColorType
+import org.skia.foundation.SkColorSpaceProfileStatus
 import org.skia.foundation.SkEncodedImageFormat
+import org.skia.foundation.SkICC
 import org.skia.foundation.SkImageInfo
+import org.skia.foundation.skcms.SkNamedGamut
+import org.skia.foundation.skcms.SkNamedTransferFn
 import java.io.ByteArrayOutputStream
 import java.util.ServiceLoader
 import java.util.zip.CRC32
@@ -39,6 +44,32 @@ class PngCodecTest {
         val decoders = ServiceLoader.load(CodecDecoderProvider::class.java)
             .flatMap { it.decoders() }
         assertTrue(decoders.any { it.name == "png" })
+    }
+
+    @Test
+    fun `refuses dimensions whose bitmap allocation exceeds the Long bounded codec budget`() {
+        val data = pngFromChunks(
+            "IHDR" to ihdr(width = 100_000, height = 30_000, bitDepth = 1, colorType = 0),
+            "IDAT" to deflate(ByteArray(0)),
+            "IEND" to ByteArray(0),
+        )
+
+        assertNull(PngCodec.Decoder.make(data))
+    }
+
+    @Test
+    fun `returns incomplete input when IDAT ends before zlib reaches finished`() {
+        val compressed = deflate(byteArrayOf(0, 0x40))
+        val codec = PngCodec.Decoder.make(
+            pngFromChunks(
+                "IHDR" to ihdr(width = 1, height = 1, bitDepth = 8, colorType = 0),
+                "IDAT" to compressed.copyOf(compressed.size - 4),
+                "IEND" to ByteArray(0),
+            ),
+        )
+
+        assertNotNull(codec)
+        assertEquals(Codec.Result.kIncompleteInput, codec!!.getImage().second)
     }
 
     @Test
@@ -602,7 +633,7 @@ class PngCodecTest {
     }
 
     @Test
-    fun `converts 16-bit RGBA natural F16 decode into requested RGBA 8888`() {
+    fun `refuses 16-bit alpha conversion that it does not implement`() {
         val codec = PngCodec.Decoder.make(
             truecolor16Png(
                 width = 2,
@@ -623,13 +654,11 @@ class PngCodecTest {
         )
         val dst = SkBitmap(2, 1, requested.colorSpace, requested.colorType)
 
-        assertEquals(Codec.Result.kSuccess, codec.getPixels(requested, dst))
-        assertEquals(argb(0x80, 0xFF, 0x80, 0x00), dst.getPixel(0, 0))
-        assertEquals(argb(0xFF, 0x00, 0x40, 0xFF), dst.getPixel(1, 0))
+        assertEquals(Codec.Result.kInvalidConversion, codec.getPixels(requested, dst))
     }
 
     @Test
-    fun `converts 8-bit RGBA natural 8888 decode into requested F16`() {
+    fun `refuses 8-bit alpha conversion that it does not implement`() {
         val codec = PngCodec.Decoder.make(
             png(
                 width = 2,
@@ -648,13 +677,36 @@ class PngCodecTest {
         )
         val dst = SkBitmap(2, 1, requested.colorSpace, requested.colorType)
 
-        assertEquals(Codec.Result.kSuccess, codec.getPixels(requested, dst))
-        assertF16(dst, 0, 0, (0x40 / 255f) * (0x80 / 255f), (0x80 / 255f) * (0x80 / 255f), (0xC0 / 255f) * (0x80 / 255f), 0x80 / 255f)
-        assertF16(dst, 1, 0, 0f, 0f, 0f, 0f)
+        assertEquals(Codec.Result.kInvalidConversion, codec.getPixels(requested, dst))
     }
 
     @Test
-    fun `converts 8-bit PNG into additional bitmap backed color types`() {
+    fun `refuses 8-bit to F16 storage conversion even when alpha types match`() {
+        val codec = PngCodec.Decoder.make(
+            png(
+                width = 1,
+                height = 1,
+                colorType = 6,
+                rows = listOf(intArrayOf(argb(0x80, 0x40, 0x80, 0xC0))),
+                filters = intArrayOf(0),
+            ),
+        )!!
+        val requested = SkImageInfo.Make(
+            width = 1,
+            height = 1,
+            colorType = SkColorType.kRGBA_F16Norm,
+            alphaType = SkAlphaType.kUnpremul,
+            colorSpace = codec.getInfo().colorSpace,
+        )
+
+        assertEquals(
+            Codec.Result.kInvalidConversion,
+            codec.getPixels(requested, SkBitmap(1, 1, requested.colorSpace, requested.colorType)),
+        )
+    }
+
+    @Test
+    fun `converts 8-bit PNG only when alpha representation is unchanged`() {
         val codec = PngCodec.Decoder.make(
             png(
                 width = 1,
@@ -664,26 +716,95 @@ class PngCodecTest {
                 filters = intArrayOf(0),
             ),
         )!!
-        val cases = listOf(
-            Triple(SkColorType.kBGRA_8888, SkAlphaType.kUnpremul, argb(0xFF, 0xFF, 0x00, 0x00)),
-            Triple(SkColorType.kARGB_4444, SkAlphaType.kPremul, argb(0xFF, 0xFF, 0x00, 0x00)),
-            Triple(SkColorType.kAlpha_8, SkAlphaType.kPremul, argb(0xFF, 0x00, 0x00, 0x00)),
-            Triple(SkColorType.kRGB_565, SkAlphaType.kOpaque, argb(0xFF, 0xFF, 0x00, 0x00)),
-            Triple(SkColorType.kGray_8, SkAlphaType.kOpaque, argb(0xFF, 0x4C, 0x4C, 0x4C)),
+        val supported = Triple(SkColorType.kBGRA_8888, SkAlphaType.kUnpremul, argb(0xFF, 0xFF, 0x00, 0x00))
+        val unsupported = listOf(
+            SkColorType.kARGB_4444 to SkAlphaType.kPremul,
+            SkColorType.kAlpha_8 to SkAlphaType.kPremul,
+            SkColorType.kRGB_565 to SkAlphaType.kOpaque,
+            SkColorType.kGray_8 to SkAlphaType.kOpaque,
         )
 
-        for ((colorType, alphaType, expected) in cases) {
+        val (colorType, alphaType, expected) = supported
+        val requested = SkImageInfo.Make(
+            width = 1,
+            height = 1,
+            colorType = colorType,
+            alphaType = alphaType,
+            colorSpace = codec.getInfo().colorSpace,
+        )
+        val dst = SkBitmap(1, 1, requested.colorSpace, requested.colorType)
+
+        assertEquals(Codec.Result.kSuccess, codec.getPixels(requested, dst), colorType.name)
+        assertEquals(expected, dst.getPixel(0, 0), colorType.name)
+
+        for ((unsupportedColorType, unsupportedAlphaType) in unsupported) {
             val requested = SkImageInfo.Make(
                 width = 1,
                 height = 1,
-                colorType = colorType,
-                alphaType = alphaType,
+                colorType = unsupportedColorType,
+                alphaType = unsupportedAlphaType,
                 colorSpace = codec.getInfo().colorSpace,
             )
             val dst = SkBitmap(1, 1, requested.colorSpace, requested.colorType)
 
+            assertEquals(Codec.Result.kInvalidConversion, codec.getPixels(requested, dst), unsupportedColorType.name)
+        }
+    }
+
+    @Test
+    fun `refuses RGBA alpha loss when makeColorType requests RGB565`() {
+        val codec = PngCodec.Decoder.make(
+            png(
+                width = 1,
+                height = 1,
+                colorType = 6,
+                rows = listOf(intArrayOf(argb(0x80, 0x40, 0x80, 0xC0))),
+                filters = intArrayOf(0),
+            ),
+        )!!
+        val requested = codec.getInfo().makeColorType(SkColorType.kRGB_565)
+        val dst = SkBitmap(1, 1, requested.colorSpace, requested.colorType)
+
+        assertEquals(SkAlphaType.kUnpremul, requested.alphaType)
+        assertEquals(Codec.Result.kInvalidConversion, codec.getPixels(requested, dst))
+    }
+
+    @Test
+    fun `refuses RGBA alpha loss when makeColorType requests Gray8`() {
+        val codec = PngCodec.Decoder.make(
+            png(
+                width = 1,
+                height = 1,
+                colorType = 6,
+                rows = listOf(intArrayOf(argb(0x80, 0x40, 0x80, 0xC0))),
+                filters = intArrayOf(0),
+            ),
+        )!!
+        val requested = codec.getInfo().makeColorType(SkColorType.kGray_8)
+        val dst = SkBitmap(1, 1, requested.colorSpace, requested.colorType)
+
+        assertEquals(SkAlphaType.kUnpremul, requested.alphaType)
+        assertEquals(Codec.Result.kInvalidConversion, codec.getPixels(requested, dst))
+    }
+
+    @Test
+    fun `keeps opaque RGB conversions requested with makeColorType`() {
+        val codec = PngCodec.Decoder.make(
+            png(
+                width = 1,
+                height = 1,
+                colorType = 2,
+                rows = listOf(intArrayOf(argb(0xFF, 0x40, 0x80, 0xC0))),
+                filters = intArrayOf(0),
+            ),
+        )!!
+
+        for (colorType in listOf(SkColorType.kRGB_565, SkColorType.kGray_8)) {
+            val requested = codec.getInfo().makeColorType(colorType)
+            val dst = SkBitmap(1, 1, requested.colorSpace, requested.colorType)
+
             assertEquals(Codec.Result.kSuccess, codec.getPixels(requested, dst), colorType.name)
-            assertEquals(expected, dst.getPixel(0, 0), colorType.name)
+            assertEquals(0xFF, a(dst.getPixel(0, 0)), colorType.name)
         }
     }
 
@@ -734,7 +855,7 @@ class PngCodecTest {
     }
 
     @Test
-    fun `iCCP with unsupported synthetic profile falls back to sRGB`() {
+    fun `iCCP with non parseable profile retains default sRGB state`() {
         val codec = PngCodec.Decoder.make(
             grayscalePng(
                 width = 1,
@@ -753,14 +874,13 @@ class PngCodecTest {
 
     @Test
     fun `iCCP with valid RGB profile exposes parsed ICC profile`() {
+        val iccBytes = SkICC.WriteToICC(SkNamedTransferFn.kSRGB, SkNamedGamut.kDisplayP3)
         val codec = PngCodec.Decoder.make(
-            grayscalePng(
-                width = 1,
-                height = 1,
-                rows = listOf(byteArrayOf(0x40)),
-                filters = intArrayOf(0),
-                bitDepth = 8,
-                iccp = iccpChunkData("minimal-rgb", profileBytes = minimalRgbIccProfile()),
+            pngFromChunks(
+                "IHDR" to ihdr(width = 1, height = 1, bitDepth = 8, colorType = 2),
+                "iCCP" to iccpChunkData("display-p3", profileBytes = iccBytes),
+                "IDAT" to deflate(byteArrayOf(0, 0x10, 0x20, 0x30)),
+                "IEND" to ByteArray(0),
             ),
         )
 
@@ -769,15 +889,233 @@ class PngCodecTest {
         assertNotNull(profile)
         assertEquals(0x52474220, profile!!.dataColorSpace)
         assertEquals(0x58595A20, profile.pcs)
-        assertEquals(6, profile.tagCount)
+        assertEquals(9, profile.tagCount)
         assertTrue(profile.hasTrc)
         assertTrue(profile.hasToXYZD50)
         assertNotNull(profile.buffer)
         assertEquals(profile.size, profile.buffer!!.size)
+        assertEquals(iccBytes.size, profile.size)
+        assertFalse(codec.getInfo().colorSpace.isSRGB())
+        assertEquals(SkColorSpaceProfileStatus.kSupported, codec.getInfo().colorSpace.profileStatus)
+        for (row in 0 until 3) for (column in 0 until 3) {
+            assertEquals(
+                SkNamedGamut.kDisplayP3[row, column],
+                codec.getInfo().colorSpace.toXYZD50[row, column],
+                1f / 65_536f,
+            )
+        }
     }
 
     @Test
-    fun `sRGB and gAMA chunks synthesize ICC when sRGB is present`() {
+    fun `gray PNG carries a parsed gray profile as explicit unsupported state`() {
+        val codec = PngCodec.Decoder.make(
+            pngFromChunks(
+                "IHDR" to ihdr(width = 1, height = 1, bitDepth = 8, colorType = 0),
+                "iCCP" to iccpChunkData("gray", profileBytes = grayProfileBytes()),
+                "IDAT" to deflate(byteArrayOf(0, 0x40)),
+                "IEND" to ByteArray(0),
+            ),
+        )!!
+
+        assertNotNull(codec.getICCProfile())
+        assertFalse(codec.getInfo().colorSpace.isSRGB())
+        assertEquals(SkColorSpaceProfileStatus.kUnsupported, codec.getInfo().colorSpace.profileStatus)
+        assertEquals("icc.gray.unsupported", codec.getInfo().colorSpace.profileRefusalCode)
+    }
+
+    @Test
+    fun `ignores RGB ICC in grayscale PNG and gray ICC in truecolor PNG`() {
+        val rgbInGray = pngFromChunks(
+            "IHDR" to ihdr(width = 1, height = 1, bitDepth = 8, colorType = 0),
+            "iCCP" to iccpChunkData(
+                "display-p3",
+                profileBytes = SkICC.WriteToICC(SkNamedTransferFn.kSRGB, SkNamedGamut.kDisplayP3),
+            ),
+            "IDAT" to deflate(byteArrayOf(0, 0x40)),
+            "IEND" to ByteArray(0),
+        )
+        val grayInRgb = pngFromChunks(
+            "IHDR" to ihdr(width = 1, height = 1, bitDepth = 8, colorType = 2),
+            "iCCP" to iccpChunkData("gray", profileBytes = grayProfileBytes()),
+            "IDAT" to deflate(byteArrayOf(0, 0x10, 0x20, 0x30)),
+            "IEND" to ByteArray(0),
+        )
+
+        for (data in listOf(rgbInGray, grayInRgb)) {
+            val codec = PngCodec.Decoder.make(data)
+            assertNotNull(codec)
+            assertNull(codec!!.getICCProfile())
+            assertTrue((codec as PngCodec).diagnostics.any { it.code == "png.metadata.iCCP.color-model.mismatch" })
+        }
+    }
+
+    @Test
+    fun `does not apply ICC color-model mismatches retained as typed refusals`() {
+        val cases = listOf(
+            pngFromChunks(
+                "IHDR" to ihdr(width = 1, height = 1, bitDepth = 8, colorType = 0),
+                "iCCP" to iccpChunkData(
+                    "display-p3",
+                    profileBytes = SkICC.WriteToICC(SkNamedTransferFn.kSRGB, SkNamedGamut.kDisplayP3),
+                ),
+                "IDAT" to deflate(byteArrayOf(0, 0x40)),
+                "IEND" to ByteArray(0),
+            ),
+            pngFromChunks(
+                "IHDR" to ihdr(width = 1, height = 1, bitDepth = 8, colorType = 2),
+                "iCCP" to iccpChunkData("gray", profileBytes = grayProfileBytes()),
+                "IDAT" to deflate(byteArrayOf(0, 0x10, 0x20, 0x30)),
+                "IEND" to ByteArray(0),
+            ),
+        )
+
+        for (data in cases) {
+            val opened = PngCodec.Decoder.open(data)
+            assertTrue(opened is PngCodecOpenResult.Success)
+            val codec = (opened as PngCodecOpenResult.Success).codec
+            assertNull(codec.getICCProfile())
+            assertTrue(codec.getInfo().colorSpace.isSRGB())
+            assertTrue(codec.diagnostics.any { it.code == "png.metadata.iCCP.color-model.mismatch" })
+        }
+    }
+
+    @Test
+    fun `open exposes shared APNG refusal diagnostic`() {
+        val data = pngFromChunks(
+            "IHDR" to ihdr(width = 1, height = 1, bitDepth = 8, colorType = 0),
+            "acTL" to ByteArray(8),
+            "IDAT" to deflate(byteArrayOf(0, 0x40)),
+            "IEND" to ByteArray(0),
+        )
+
+        val opened = PngCodec.Decoder.open(data)
+
+        assertTrue(opened is PngCodecOpenResult.Failure)
+        val failure = opened as PngCodecOpenResult.Failure
+        assertEquals("png.apng.unsupported", failure.diagnostic.code)
+        assertNull(PngCodec.Decoder.make(data))
+    }
+
+    @Test
+    fun `cICP RGB profile on grayscale PNG preserves a mismatch diagnostic`() {
+        val data = pngFromChunks(
+            "IHDR" to ihdr(width = 1, height = 1, bitDepth = 8, colorType = 0),
+            "cICP" to byteArrayOf(1, 13, 0, 1),
+            "IDAT" to deflate(byteArrayOf(0, 0x40)),
+            "IEND" to ByteArray(0),
+        )
+
+        val opened = PngCodec.Decoder.open(data)
+
+        assertTrue(opened is PngCodecOpenResult.Success)
+        val codec = (opened as PngCodecOpenResult.Success).codec
+        assertNull(codec.getICCProfile())
+        assertTrue(codec.getInfo().colorSpace.isSRGB())
+        assertTrue(codec.diagnostics.any { it.code == "png.metadata.cICP.color-model.mismatch" })
+        val (bitmap, result) = codec.getImage()
+        assertEquals(Codec.Result.kSuccess, result)
+        assertEquals(argb(0xFF, 0x40, 0x40, 0x40), bitmap!!.getPixel(0, 0))
+    }
+
+    @Test
+    fun `cICP HDR profile is exposed as unsupported without transforming samples or fabricating ICC provenance`() {
+        val data = pngFromChunks(
+            "IHDR" to ihdr(width = 1, height = 1, bitDepth = 8, colorType = 2),
+            "cICP" to byteArrayOf(9, 16, 0, 1),
+            "IDAT" to deflate(byteArrayOf(0, 0x10, 0x20, 0x30)),
+            "IEND" to ByteArray(0),
+        )
+
+        val opened = PngCodec.Decoder.open(data)
+
+        assertTrue(opened is PngCodecOpenResult.Success)
+        val codec = (opened as PngCodecOpenResult.Success).codec
+        assertNull(codec.getICCProfile())
+        assertEquals(SkColorSpaceProfileStatus.kUnsupported, codec.getInfo().colorSpace.profileStatus)
+        assertEquals("color.hdr.unsupported", codec.getInfo().colorSpace.profileRefusalCode)
+        val (bitmap, result) = codec.getImage()
+        assertEquals(Codec.Result.kSuccess, result)
+        assertEquals(argb(0xFF, 0x10, 0x20, 0x30), bitmap!!.getPixel(0, 0))
+    }
+
+    @Test
+    fun `cICP resolves before embedded iCCP while ICC provenance remains embedded only`() {
+        val iccBytes = SkICC.WriteToICC(SkNamedTransferFn.kSRGB, SkNamedGamut.kDisplayP3)
+        val codec = PngCodec.Decoder.make(
+            pngFromChunks(
+                "IHDR" to ihdr(width = 1, height = 1, bitDepth = 8, colorType = 2),
+                "cICP" to byteArrayOf(9, 16, 0, 1),
+                "iCCP" to iccpChunkData("display-p3", profileBytes = iccBytes),
+                "IDAT" to deflate(byteArrayOf(0, 0x10, 0x20, 0x30)),
+                "IEND" to ByteArray(0),
+            ),
+        )
+
+        assertNotNull(codec)
+        assertTrue(codec!!.getInfo().colorSpace.colorProfile.isHdr)
+        assertEquals(SkColorSpaceProfileStatus.kUnsupported, codec.getInfo().colorSpace.profileStatus)
+        assertNotNull(codec.getICCProfile())
+        assertFalse(codec.getICCProfile()!!.colorProfile.isHdr)
+        assertEquals(iccBytes.size, codec.getICCProfile()!!.size)
+    }
+
+    @Test
+    fun `cICP remains active when lower priority iCCP is structurally refused`() {
+        val iccp = iccpChunkData(
+            "display-p3",
+            profileBytes = SkICC.WriteToICC(SkNamedTransferFn.kSRGB, SkNamedGamut.kDisplayP3),
+        )
+        val cases = listOf(
+            "png.metadata.iCCP.duplicate" to pngFromChunks(
+                "IHDR" to ihdr(width = 1, height = 1, bitDepth = 8, colorType = 2),
+                "cICP" to byteArrayOf(9, 16, 0, 1),
+                "iCCP" to iccp,
+                "iCCP" to iccp,
+                "IDAT" to deflate(byteArrayOf(0, 0x10, 0x20, 0x30)),
+                "IEND" to ByteArray(0),
+            ),
+            "png.metadata.iCCP.order" to pngFromChunks(
+                "IHDR" to ihdr(width = 1, height = 1, bitDepth = 8, colorType = 2),
+                "cICP" to byteArrayOf(9, 16, 0, 1),
+                "IDAT" to deflate(byteArrayOf(0, 0x10, 0x20, 0x30)),
+                "iCCP" to iccp,
+                "IEND" to ByteArray(0),
+            ),
+        )
+
+        for ((diagnosticCode, data) in cases) {
+            val opened = PngCodec.Decoder.open(data)
+
+            assertTrue(opened is PngCodecOpenResult.Success, diagnosticCode)
+            val codec = (opened as PngCodecOpenResult.Success).codec
+            assertTrue(codec.getInfo().colorSpace.colorProfile.isHdr, diagnosticCode)
+            assertNull(codec.getICCProfile(), diagnosticCode)
+            assertTrue(codec.diagnostics.any { it.code == diagnosticCode }, diagnosticCode)
+        }
+    }
+
+    @Test
+    fun `cICP narrow range is explicitly unsupported while samples remain untransformed`() {
+        val codec = PngCodec.Decoder.make(
+            pngFromChunks(
+                "IHDR" to ihdr(width = 1, height = 1, bitDepth = 8, colorType = 2),
+                "cICP" to byteArrayOf(1, 13, 0, 0),
+                "IDAT" to deflate(byteArrayOf(0, 0x10, 0x20, 0x30)),
+                "IEND" to ByteArray(0),
+            ),
+        )
+
+        assertNotNull(codec)
+        assertNull(codec!!.getICCProfile())
+        assertEquals(SkColorSpaceProfileStatus.kUnsupported, codec.getInfo().colorSpace.profileStatus)
+        assertEquals("png.cicp.narrow-range.unsupported", codec.getInfo().colorSpace.profileRefusalCode)
+        val (bitmap, result) = codec.getImage()
+        assertEquals(Codec.Result.kSuccess, result)
+        assertEquals(argb(0xFF, 0x10, 0x20, 0x30), bitmap!!.getPixel(0, 0))
+    }
+
+    @Test
+    fun `sRGB resolves color space without fabricating embedded ICC provenance`() {
         val data = pngFromChunks(
             "IHDR" to ihdr(width = 1, height = 1, bitDepth = 8, colorType = 0),
             "sRGB" to byteArrayOf(0),
@@ -788,8 +1126,7 @@ class PngCodecTest {
         val codec = PngCodec.Decoder.make(data)
 
         assertNotNull(codec)
-        val profile = codec!!.getICCProfile()
-        assertNotNull(profile, "sRGB chunk must synthesize ICC when no iCCP is present")
+        assertNull(codec!!.getICCProfile())
         assertTrue(codec.getInfo().colorSpace.isSRGB())
         val (bitmap, result) = codec.getImage()
         assertEquals(Codec.Result.kSuccess, result)
@@ -797,7 +1134,7 @@ class PngCodecTest {
     }
 
     @Test
-    fun `sRGB and gAMA chunks synthesize ICC when both are present`() {
+    fun `sRGB wins over gAMA while retaining no embedded ICC provenance`() {
         val data = pngFromChunks(
             "IHDR" to ihdr(width = 1, height = 1, bitDepth = 8, colorType = 0),
             "gAMA" to u32Chunk(45_455),
@@ -809,15 +1146,14 @@ class PngCodecTest {
         val codec = PngCodec.Decoder.make(data)
 
         assertNotNull(codec)
-        val profile = codec!!.getICCProfile()
-        assertNotNull(profile, "sRGB+gAMA must synthesize ICC when no iCCP is present")
+        assertNull(codec!!.getICCProfile())
         val (bitmap, result) = codec.getImage()
         assertEquals(Codec.Result.kSuccess, result)
         assertEquals(argb(0xFF, 0x40, 0x40, 0x40), bitmap!!.getPixel(0, 0))
     }
 
     @Test
-    fun `gAMA chunk alone synthesizes ICC profile`() {
+    fun `gAMA alone does not fabricate an sRGB ICC profile`() {
         val data = pngFromChunks(
             "IHDR" to ihdr(width = 1, height = 1, bitDepth = 8, colorType = 0),
             "gAMA" to u32Chunk(45_455),
@@ -828,11 +1164,36 @@ class PngCodecTest {
         val codec = PngCodec.Decoder.make(data)
 
         assertNotNull(codec)
-        val profile = codec!!.getICCProfile()
-        assertNotNull(profile, "gAMA chunk must synthesize ICC when no iCCP is present")
+        assertNull(codec!!.getICCProfile())
         val (bitmap, result) = codec.getImage()
         assertEquals(Codec.Result.kSuccess, result)
         assertEquals(argb(0xFF, 0x40, 0x40, 0x40), bitmap!!.getPixel(0, 0))
+    }
+
+    @Test
+    fun `cHRM and gAMA resolve a non sRGB color space without embedded ICC provenance`() {
+        val codec = PngCodec.Decoder.make(
+            pngFromChunks(
+                "IHDR" to ihdr(width = 1, height = 1, bitDepth = 8, colorType = 2),
+                "cHRM" to chrmChunk(
+                    whiteX = 31_270,
+                    whiteY = 32_900,
+                    redX = 64_000,
+                    redY = 33_000,
+                    greenX = 30_000,
+                    greenY = 60_000,
+                    blueX = 15_000,
+                    blueY = 6_000,
+                ),
+                "gAMA" to u32Chunk(100_000),
+                "IDAT" to deflate(byteArrayOf(0, 0x10, 0x20, 0x30)),
+                "IEND" to ByteArray(0),
+            ),
+        )
+
+        assertNotNull(codec)
+        assertNull(codec!!.getICCProfile())
+        assertFalse(codec.getInfo().colorSpace.isSRGB())
     }
 
     @Test
@@ -864,52 +1225,108 @@ class PngCodecTest {
     }
 
     @Test
-    fun `rejects malformed gAMA cHRM and sRGB chunks`() {
-        assertNull(
-            PngCodec.Decoder.make(
+    fun `does not apply refused color metadata`() {
+        val refusedGamma = PngCodec.Decoder.make(
+            pngFromChunks(
+                "IHDR" to ihdr(width = 1, height = 1, bitDepth = 8, colorType = 0),
+                "gAMA" to u32Chunk(0),
+                "IDAT" to deflate(byteArrayOf(0, 0x40)),
+                "IEND" to ByteArray(0),
+            ),
+        )
+        assertNotNull(refusedGamma)
+        assertNull(refusedGamma!!.getICCProfile())
+        assertTrue((refusedGamma as PngCodec).diagnostics.any { it.code == "png.metadata.gAMA.value.invalid" })
+
+        val refusedIccp = PngCodec.Decoder.make(
+            pngFromChunks(
+                "IHDR" to ihdr(width = 1, height = 1, bitDepth = 8, colorType = 2),
+                "iCCP" to iccpChunkData(
+                    " invalid",
+                    profileBytes = SkICC.WriteToICC(SkNamedTransferFn.kSRGB, SkNamedGamut.kDisplayP3),
+                ),
+                "sRGB" to byteArrayOf(0),
+                "IDAT" to deflate(byteArrayOf(0, 0x10, 0x20, 0x30)),
+                "IEND" to ByteArray(0),
+            ),
+        )
+        assertNotNull(refusedIccp)
+        assertNull(refusedIccp!!.getICCProfile())
+        assertTrue(refusedIccp.getInfo().colorSpace.isSRGB())
+        assertTrue((refusedIccp as PngCodec).diagnostics.any { it.code == "png.metadata.iCCP.keyword.invalid" })
+
+        for ((chunkType, payload, diagnosticCode) in listOf(
+            Triple("cHRM", ByteArray(31), "png.metadata.cHRM.length"),
+            Triple("sRGB", byteArrayOf(4), "png.metadata.sRGB.intent.invalid"),
+        )) {
+            val codec = PngCodec.Decoder.make(
                 pngFromChunks(
                     "IHDR" to ihdr(width = 1, height = 1, bitDepth = 8, colorType = 0),
-                    "gAMA" to byteArrayOf(0, 0, 0),
+                    chunkType to payload,
                     "IDAT" to deflate(byteArrayOf(0, 0x40)),
                     "IEND" to ByteArray(0),
                 ),
-            ),
-        )
-        assertNull(
-            PngCodec.Decoder.make(
-                pngFromChunks(
-                    "IHDR" to ihdr(width = 1, height = 1, bitDepth = 8, colorType = 0),
-                    "cHRM" to ByteArray(31),
-                    "IDAT" to deflate(byteArrayOf(0, 0x40)),
-                    "IEND" to ByteArray(0),
-                ),
-            ),
-        )
-        assertNull(
-            PngCodec.Decoder.make(
-                pngFromChunks(
-                    "IHDR" to ihdr(width = 1, height = 1, bitDepth = 8, colorType = 0),
-                    "sRGB" to byteArrayOf(4),
-                    "IDAT" to deflate(byteArrayOf(0, 0x40)),
-                    "IEND" to ByteArray(0),
-                ),
-            ),
-        )
+            )
+            assertNotNull(codec)
+            assertNull(codec!!.getICCProfile())
+            assertTrue((codec as PngCodec).diagnostics.any { it.code == diagnosticCode })
+        }
     }
 
     @Test
-    fun `rejects malformed iCCP chunk`() {
-        assertNull(
-            PngCodec.Decoder.make(
-                grayscalePng(
-                    width = 1,
-                    height = 1,
-                    rows = listOf(byteArrayOf(0x40)),
-                    filters = intArrayOf(0),
-                    bitDepth = 8,
-                    iccp = iccpChunkData("synthetic", compressionMethod = 1, profileBytes = byteArrayOf(1, 2, 3)),
-                ),
+    fun `does not apply malformed iCCP chunks`() {
+        val codec = PngCodec.Decoder.make(
+            grayscalePng(
+                width = 1,
+                height = 1,
+                rows = listOf(byteArrayOf(0x40)),
+                filters = intArrayOf(0),
+                bitDepth = 8,
+                iccp = iccpChunkData("synthetic", compressionMethod = 1, profileBytes = byteArrayOf(1, 2, 3)),
             ),
+        )
+        assertNotNull(codec)
+        assertNull(codec!!.getICCProfile())
+        assertTrue((codec as PngCodec).diagnostics.any { it.code == "png.metadata.iCCP.compression.method" })
+    }
+
+    @Test
+    fun `getPixels refuses geometry color space destination and alpha requests it cannot satisfy`() {
+        val codec = PngCodec.Decoder.make(
+            png(
+                width = 2,
+                height = 2,
+                colorType = 6,
+                rows = listOf(
+                    intArrayOf(argb(0x80, 0x10, 0x20, 0x30), argb(0xFF, 0x40, 0x50, 0x60)),
+                    intArrayOf(argb(0xFF, 0x70, 0x80, 0x90), argb(0xFF, 0xA0, 0xB0, 0xC0)),
+                ),
+                filters = intArrayOf(0, 0),
+            ),
+        )!!
+
+        val scaled = SkImageInfo.Make(1, 1, SkColorType.kRGBA_8888, SkAlphaType.kUnpremul, codec.getInfo().colorSpace)
+        assertEquals(Codec.Result.kInvalidScale, codec.getPixels(scaled, SkBitmap(1, 1, scaled.colorSpace, scaled.colorType)))
+
+        val sourceGeometry = codec.getInfo()
+        val sourceSpaceMismatch = sourceGeometry.makeColorSpace(SkColorSpace.makeSRGBLinear())
+        assertEquals(
+            Codec.Result.kInvalidConversion,
+            codec.getPixels(
+                sourceSpaceMismatch,
+                SkBitmap(2, 2, sourceSpaceMismatch.colorSpace, sourceSpaceMismatch.colorType),
+            ),
+        )
+
+        assertEquals(
+            Codec.Result.kInvalidParameters,
+            codec.getPixels(sourceGeometry, SkBitmap(2, 2, SkColorSpace.makeSRGBLinear(), sourceGeometry.colorType)),
+        )
+
+        val alphaMismatch = sourceGeometry.makeAlphaType(SkAlphaType.kPremul)
+        assertEquals(
+            Codec.Result.kInvalidConversion,
+            codec.getPixels(alphaMismatch, SkBitmap(2, 2, alphaMismatch.colorSpace, alphaMismatch.colorType)),
         )
     }
 
@@ -986,8 +1403,9 @@ class PngCodecTest {
         )
 
         assertNotNull(codec)
-        val (_, result) = codec!!.getImage()
-        assertEquals(Codec.Result.kErrorInInput, result)
+        val (bitmap, result) = codec!!.getImage()
+        assertEquals(Codec.Result.kSuccess, result)
+        assertEquals(argb(0xFF, 0x00, 0x00, 0x00), bitmap!!.getPixel(0, 0))
     }
 
     @Test
@@ -1033,6 +1451,37 @@ class PngCodecTest {
         )
 
         assertNull(PngCodec.Decoder.make(case.data), case.name)
+    }
+
+    @Test
+    fun `decodes static PNG with retained unknown ancillary container record`() {
+        val data = pngFromChunks(
+            "IHDR" to ihdr(width = 1, height = 1, bitDepth = 8, colorType = 0),
+            "vpAg" to byteArrayOf(0x01, 0x02, 0x03),
+            "IDAT" to deflate(byteArrayOf(0x00, 0x40)),
+            "IEND" to ByteArray(0),
+        )
+
+        val codec = PngCodec.Decoder.make(data)
+        val container = (PngContainerParser.parse(data) as PngContainerParseResult.Success).container
+
+        assertNotNull(codec)
+        assertTrue(container.chunks.any { it.type == "vpAg" && it.isAncillary && it.isSafeToCopy })
+        val (bitmap, result) = codec!!.getImage()
+        assertEquals(Codec.Result.kSuccess, result)
+        assertEquals(argb(0xFF, 0x40, 0x40, 0x40), bitmap!!.getPixel(0, 0))
+    }
+
+    @Test
+    fun `rejects APNG instead of decoding its default image`() {
+        val data = pngFromChunks(
+            "IHDR" to ihdr(width = 1, height = 1, bitDepth = 8, colorType = 0),
+            "acTL" to ByteArray(8),
+            "IDAT" to deflate(byteArrayOf(0x00, 0x40)),
+            "IEND" to ByteArray(0),
+        )
+
+        assertNull(PngCodec.Decoder.make(data))
     }
 
     @Test
@@ -1580,11 +2029,6 @@ class PngCodecTest {
         write(value and 0xFF)
     }
 
-    private fun ByteArrayOutputStream.writeU16BE(value: Int) {
-        write((value ushr 8) and 0xFF)
-        write(value and 0xFF)
-    }
-
     private fun deflate(data: ByteArray): ByteArray {
         val deflater = Deflater()
         deflater.setInput(data)
@@ -1609,104 +2053,40 @@ class PngCodecTest {
         write(deflate(profileBytes))
     }.toByteArray()
 
-    private fun minimalRgbIccProfile(): ByteArray {
-        data class Tag(val signature: String, val payload: ByteArray)
-
-        val trc = curvGammaTag(gamma256 = 0x0233)
-        val tags = listOf(
-            Tag("rTRC", trc),
-            Tag("gTRC", trc),
-            Tag("bTRC", trc),
-            Tag("rXYZ", xyzTag(0.43607f, 0.22250f, 0.01393f)),
-            Tag("gXYZ", xyzTag(0.38506f, 0.71688f, 0.09710f)),
-            Tag("bXYZ", xyzTag(0.14308f, 0.06062f, 0.71417f)),
-        )
-
-        val headerSize = 128
-        val tagTableSize = 4 + tags.size * 12
-        val dataOffset = headerSize + tagTableSize
-        val tagOffsets = IntArray(tags.size)
-        var nextOffset = dataOffset
-        tags.forEachIndexed { index, tag ->
-            tagOffsets[index] = nextOffset
-            nextOffset += tag.payload.size
-        }
-
-        return ByteArrayOutputStream().apply {
-            write(ByteArray(headerSize))
-            writeI32BEAt(0, nextOffset)
-            writeI32BEAt(8, 0x02000000)
-            writeAsciiAt(12, "mntr")
-            writeAsciiAt(16, "RGB ")
-            writeAsciiAt(20, "XYZ ")
-            writeAsciiAt(36, "acsp")
-            writeFixedAt(68, 0.9642f)
-            writeFixedAt(72, 1.0f)
-            writeFixedAt(76, 0.8249f)
-
-            writeI32BE(tags.size)
-            tags.forEachIndexed { index, tag ->
-                writeAscii(tag.signature)
-                writeI32BE(tagOffsets[index])
-                writeI32BE(tag.payload.size)
-            }
-            tags.forEach { write(it.payload) }
-        }.toByteArray()
-    }
-
-    private fun curvGammaTag(gamma256: Int): ByteArray =
-        ByteArrayOutputStream().apply {
-            writeAscii("curv")
-            writeI32BE(0)
-            writeI32BE(1)
-            writeU16BE(gamma256)
-            writeU16BE(0)
-        }.toByteArray()
-
-    private fun xyzTag(x: Float, y: Float, z: Float): ByteArray =
-        ByteArrayOutputStream().apply {
-            writeAscii("XYZ ")
-            writeI32BE(0)
-            writeFixed(x)
-            writeFixed(y)
-            writeFixed(z)
-        }.toByteArray()
-
-    private fun ByteArrayOutputStream.writeAscii(value: String) {
-        write(value.toByteArray(Charsets.US_ASCII))
-    }
-
-    private fun ByteArrayOutputStream.writeFixed(value: Float) {
-        writeI32BE((value * 65536f + 0.5f).toInt())
-    }
-
-    private fun ByteArrayOutputStream.writeI32BEAt(offset: Int, value: Int) {
-        val bytes = toByteArray()
-        reset()
-        bytes[offset] = ((value ushr 24) and 0xFF).toByte()
-        bytes[offset + 1] = ((value ushr 16) and 0xFF).toByte()
-        bytes[offset + 2] = ((value ushr 8) and 0xFF).toByte()
-        bytes[offset + 3] = (value and 0xFF).toByte()
-        write(bytes)
-    }
-
-    private fun ByteArrayOutputStream.writeAsciiAt(offset: Int, value: String) {
-        val bytes = toByteArray()
-        reset()
-        value.toByteArray(Charsets.US_ASCII).copyInto(bytes, destinationOffset = offset)
-        write(bytes)
-    }
-
-    private fun ByteArrayOutputStream.writeFixedAt(offset: Int, value: Float) {
-        writeI32BEAt(offset, (value * 65536f + 0.5f).toInt())
-    }
-
     private fun u16Row(vararg samples: Int): ByteArray = ByteArray(samples.size * 2).also { row ->
         var offset = 0
         for (sample in samples) {
             writeU16BE(row, offset, sample)
             offset += 2
         }
+    }
+
+    private fun grayProfileBytes(): ByteArray {
+        val bytes = SkICC.WriteToICC(SkNamedTransferFn.kSRGB, SkNamedGamut.kSRGB)
+        iccWriteU32(bytes, 16, iccSignature("GRAY"))
+        repeat(iccReadU32(bytes, 128)) { index ->
+            val entry = 132 + index * 12
+            if (iccReadU32(bytes, entry) == iccSignature("rTRC")) {
+                iccWriteU32(bytes, entry, iccSignature("kTRC"))
+            }
+        }
+        return bytes
+    }
+
+    private fun iccSignature(value: String): Int =
+        value.fold(0) { result, character -> (result shl 8) or character.code }
+
+    private fun iccReadU32(bytes: ByteArray, offset: Int): Int =
+        ((bytes[offset].toInt() and 0xff) shl 24) or
+            ((bytes[offset + 1].toInt() and 0xff) shl 16) or
+            ((bytes[offset + 2].toInt() and 0xff) shl 8) or
+            (bytes[offset + 3].toInt() and 0xff)
+
+    private fun iccWriteU32(bytes: ByteArray, offset: Int, value: Int) {
+        bytes[offset] = (value ushr 24).toByte()
+        bytes[offset + 1] = (value ushr 16).toByte()
+        bytes[offset + 2] = (value ushr 8).toByte()
+        bytes[offset + 3] = value.toByte()
     }
 
     private fun writeU16BE(row: ByteArray, offset: Int, value: Int) {

@@ -36,7 +36,7 @@ public class BmpCodec private constructor(
             height = header.height,
             colorType = SkColorType.kRGBA_8888,
             alphaType = SkAlphaType.kUnpremul,
-            colorSpace = SkColorSpace.makeSRGB(),
+            colorSpace = storedIccProfile?.let(SkColorSpace::makeProfileAware) ?: SkColorSpace.makeSRGB(),
         )
     }
 

@@ -32,7 +32,7 @@ public class WebpCodec internal constructor(
             height = metadata.height,
             colorType = SkColorType.kRGBA_8888,
             alphaType = if (metadata.hasAlpha) SkAlphaType.kUnpremul else SkAlphaType.kOpaque,
-            colorSpace = SkColorSpace.makeSRGB(),
+            colorSpace = metadata.iccProfile?.let(SkColorSpace::makeProfileAware) ?: SkColorSpace.makeSRGB(),
         )
     }
 

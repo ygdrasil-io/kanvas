@@ -4,7 +4,6 @@ import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.image.ImageDecodeResult
 import org.graphiks.kanvas.image.ImageDecoder
-import org.graphiks.kanvas.types.ColorSpace
 import org.graphiks.math.SkColorGetA
 import org.graphiks.math.SkColorGetB
 import org.graphiks.math.SkColorGetG
@@ -24,6 +23,11 @@ public class CodecImageDecoder : ImageDecoder {
         if (bitmap == null || result != Codec.Result.kSuccess) {
             return ImageDecodeResult.Failure("codec.decode-failed:$result")
         }
+        val colorSpace = try {
+            bitmap.colorSpace.toKanvasColorSpace()
+        } catch (failure: UnsupportedKanvasColorSpaceException) {
+            return ImageDecodeResult.Failure("codec.color-space-unsupported:${failure.reason}")
+        }
 
         val pixels = ByteArray(bitmap.width * bitmap.height * 4)
         for (index in bitmap.pixels8888.indices) {
@@ -42,7 +46,7 @@ public class CodecImageDecoder : ImageDecoder {
                 colorType = ColorType.RGBA_8888,
                 sourceId = "codec:${codec.getEncodedFormat().name}:${contentHash(data)}",
                 pixels = pixels,
-                colorSpace = ColorSpace.SRGB,
+                colorSpace = colorSpace,
             ),
         )
     }

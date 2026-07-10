@@ -1,6 +1,9 @@
 package org.graphiks.kanvas.codec.png
 
+import org.graphiks.kanvas.color.ColorModel
 import org.skia.foundation.SkBitmap
+import org.skia.foundation.SkColorSpaceProfileStatus
+import org.skia.foundation.SkColorType
 import org.skia.foundation.SkICC
 import org.skia.foundation.SkPixmap
 import org.skia.foundation.stream.SkWStream
@@ -45,7 +48,8 @@ public object PngEncoder {
     public fun encode(dst: OutputStream, src: SkBitmap, options: Options = defaultOptions): Boolean {
         return try {
             if (src.width <= 0 || src.height <= 0) return false
-            writePng(dst, src, options)
+            val prepared = prepareEncoding(src, options) ?: return false
+            writePng(dst, src, options, prepared)
             true
         } catch (_: Throwable) {
             false
@@ -67,19 +71,39 @@ public object PngEncoder {
         return stream.write(bytes, bytes.size)
     }
 
-    private fun writePng(dst: OutputStream, src: SkBitmap, options: Options) {
+    private data class PreparedEncoding(
+        val textChunks: List<ByteArray>,
+        val iccProfileData: ByteArray?,
+    )
+
+    private fun prepareEncoding(src: SkBitmap, options: Options): PreparedEncoding? {
+        val colorSpace = src.colorSpace
+        val profile = colorSpace.colorProfile
+        if (colorSpace.profileStatus != SkColorSpaceProfileStatus.kSupported ||
+            profile.colorModel != ColorModel.RGB ||
+            profile.isHdr ||
+            !profile.hasMatrixTrc
+        ) {
+            return null
+        }
+        val transferFn = profile.transferFunction ?: return null
+        val matrix = profile.toXyzD50 ?: return null
+        val iccProfileData = if (colorSpace.isSRGB()) null else SkICC.WriteToICC(transferFn, matrix)
+        val textChunks = options.comments.chunked(2).map { (keyword, text) -> textChunk(keyword, text) }
+        return PreparedEncoding(textChunks, iccProfileData)
+    }
+
+    private fun writePng(dst: OutputStream, src: SkBitmap, options: Options, prepared: PreparedEncoding) {
         dst.write(PNG_SIGNATURE)
         writeChunk(dst, TYPE_IHDR, ihdr(src.width, src.height, options))
-        options.comments.chunked(2).forEach { (keyword, text) ->
-            writeChunk(dst, TYPE_TEXT, textChunk(keyword, text))
-        }
+        prepared.textChunks.forEach { writeChunk(dst, TYPE_TEXT, it) }
         if (src.colorSpace.isSRGB()) {
             writeChunk(dst, TYPE_SRGB, byteArrayOf(0))
             val gammaBytes = ByteArray(4)
             writeU32BE(gammaBytes, 0, 45455)
             writeChunk(dst, TYPE_GAMA, gammaBytes)
         } else {
-            val iccProfileData = SkICC.WriteToICC(src.colorSpace.transferFn, src.colorSpace.toXYZD50)
+            val iccProfileData = checkNotNull(prepared.iccProfileData)
             val nameBytes = "sRGB".toByteArray()
             val deflater = Deflater()
             try {
@@ -120,11 +144,32 @@ public object PngEncoder {
 
     private fun textChunk(keyword: String, text: String): ByteArray {
         require(keyword.isNotEmpty()) { "PNG tEXt keyword must not be empty" }
-        require(keyword.length <= 79) { "PNG tEXt keyword must be at most 79 bytes" }
-        val keyBytes = keyword.encodeToByteArray()
-        val textBytes = text.encodeToByteArray()
+        val keyBytes = latin1Bytes(keyword, "keyword")
+        require(keyBytes.size <= 79) { "PNG tEXt keyword must be at most 79 bytes" }
+        require(keyBytes.all { byte ->
+            val value = byte.toInt() and 0xFF
+            value in 32..126 || value in 161..255
+        }) { "PNG tEXt keyword contains a non-printable character" }
+        require(keyBytes.first() != SPACE && keyBytes.last() != SPACE) {
+            "PNG tEXt keyword must not start or end with a space"
+        }
+        require(keyBytes.indices.drop(1).none { keyBytes[it] == SPACE && keyBytes[it - 1] == SPACE }) {
+            "PNG tEXt keyword must not contain consecutive spaces"
+        }
+        val textBytes = latin1Bytes(text, "text")
+        require(textBytes.all { byte ->
+            val value = byte.toInt() and 0xFF
+            value == '\n'.code || value in 0x20..0x7E || value in 0xA1..0xFF
+        }) { "PNG tEXt text contains a disallowed Latin-1 control character" }
         return keyBytes + byteArrayOf(0) + textBytes
     }
+
+    private fun latin1Bytes(value: String, field: String): ByteArray =
+        ByteArray(value.length) { index ->
+            val character = value[index]
+            require(character.code <= 0xFF) { "PNG tEXt $field must contain only Latin-1 characters" }
+            character.code.toByte()
+        }
 
     private fun filteredRgbaRows(src: SkBitmap, filterFlags: Int): ByteArray {
         val allowedFilters = allowedFilters(filterFlags)
@@ -351,7 +396,9 @@ public object PngEncoder {
     private object encoderSupport {
         fun pixmapToBitmap(src: SkPixmap): SkBitmap? {
             if (src.width() <= 0 || src.height() <= 0) return null
-            val bitmap = SkBitmap(src.width(), src.height())
+            if (src.colorType() == SkColorType.kUnknown) return null
+            val colorSpace = src.colorSpace() ?: return null
+            val bitmap = SkBitmap(src.width(), src.height(), colorSpace, SkColorType.kRGBA_8888)
             for (y in 0 until src.height()) {
                 for (x in 0 until src.width()) {
                     bitmap.pixels[y * src.width() + x] = src.getColor(x, y)
@@ -360,4 +407,7 @@ public object PngEncoder {
             return bitmap
         }
     }
+
+    private val SPACE: Byte = 0x20
+    private val NUL: Byte = 0x00
 }

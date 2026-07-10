@@ -6,6 +6,7 @@ plugins {
 dependencies {
     api(project(":gpu-renderer"))
     api(project(":font:gpu-api"))
+    api(project(":color-management"))
     implementation(kotlin("stdlib"))
     implementation(project(":math"))
     implementation(project(":font"))
@@ -16,6 +17,12 @@ dependencies {
     testImplementation("org.junit.jupiter:junit-jupiter-params:5.10.2")
     testImplementation("org.graphiks:wgsl-core-jvm:1.0.0-SNAPSHOT")
     testImplementation("org.graphiks:wgsl-parser-jvm:1.0.0-SNAPSHOT")
+}
+
+sourceSets {
+    test {
+        resources.srcDir("../color-management/src/test/resources")
+    }
 }
 
 tasks.withType<Test> {
