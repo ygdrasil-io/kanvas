@@ -150,6 +150,18 @@ class IccProfileParserTest {
     }
 
     @Test
+    fun `rejects negative byte and tag limits before malformed input parsing`() {
+        listOf(
+            IccParseLimits(maxBytes = -1),
+            IccParseLimits(maxTags = -1),
+        ).forEach { limits ->
+            val failure = IccProfileParser.parse(ByteArray(132), limits).failureOrNull()
+
+            assertEquals("icc.limit.invalid", assertNotNull(failure).code)
+        }
+    }
+
+    @Test
     fun `rejects malformed ICC signature`() {
         val bytes = resource("srgb-matrix-trc.icc")
         bytes[36] = 'X'.code.toByte()

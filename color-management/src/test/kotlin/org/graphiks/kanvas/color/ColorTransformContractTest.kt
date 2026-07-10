@@ -27,6 +27,17 @@ class ColorTransformContractTest {
     }
 
     @Test
+    fun `compile preserves an explicit destination refusal code`() {
+        val failure = ColorTransform.compile(
+            source = ColorProfiles.sRGB(),
+            destination = ColorProfile.unsupported("color.profile.unsupported"),
+            alphaType = AlphaType.UNPREMULTIPLIED,
+        ).failureOrNull()
+
+        assertEquals("color.profile.unsupported", assertNotNull(failure).code)
+    }
+
+    @Test
     fun `compile rejects gray profiles`() {
         val result = ColorTransform.compile(
             source = ColorProfile(colorModel = ColorModel.GRAY),
@@ -123,6 +134,27 @@ class ColorTransformContractTest {
         assertEquals(0.5f, pixel[1], 0.002f)
         assertEquals(0.25f, pixel[2], 0.002f)
         assertEquals(0.6f, pixel[3], 0f)
+    }
+
+    @Test
+    fun `compiled LUT transform is deterministic across repeated alpha batches`() {
+        val transform = ColorTransform.compile(
+            source = parseResource("rgb-lut-a2b-b2a.icc"),
+            destination = ColorProfiles.sRGB(),
+            alphaType = AlphaType.UNPREMULTIPLIED,
+        ).getOrThrow()
+        val first = floatArrayOf(
+            0.25f, 0.5f, 0.75f, 0.2f,
+            0.8f, 0.3f, 0.1f, 0.6f,
+        )
+        val second = first.copyOf()
+
+        transform.apply(first, pixelCount = 2)
+        transform.apply(second, pixelCount = 2)
+
+        assertContentEquals(first, second)
+        assertEquals(0.2f, first[3], 0f)
+        assertEquals(0.6f, first[7], 0f)
     }
 
     @Test
@@ -452,6 +484,24 @@ class ColorTransformContractTest {
         assertEquals(pixel[0], pixel[1], 2e-4f)
         assertEquals(pixel[1], pixel[2], 2e-4f)
         assertEquals(alpha, pixel[3], 0f)
+    }
+
+    @Test
+    fun `compiled HDR transform is deterministic across repeated premultiplied batches`() {
+        val pq = CicpColorInfo(9, 16, 0, true).toColorProfile().getOrThrow()
+        val transform = ColorTransform.compile(pq, ColorProfiles.sRGB(), AlphaType.PREMULTIPLIED).getOrThrow()
+        val first = floatArrayOf(
+            0.7518271f * 0.5f, 0.7518271f * 0.5f, 0.7518271f * 0.5f, 0.5f,
+            0.5080784f * 0.25f, 0.5080784f * 0.25f, 0.5080784f * 0.25f, 0.25f,
+        )
+        val second = first.copyOf()
+
+        transform.apply(first, pixelCount = 2)
+        transform.apply(second, pixelCount = 2)
+
+        assertContentEquals(first, second)
+        assertEquals(0.5f, first[3], 0f)
+        assertEquals(0.25f, first[7], 0f)
     }
 
     @Test

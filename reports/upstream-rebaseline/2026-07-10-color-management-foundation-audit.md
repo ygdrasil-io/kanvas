@@ -60,3 +60,11 @@ current compatibility facade does not satisfy the professional static PNG
 codec's mandatory ICC/CICP/HDR transformation capability. Historical SkCMS
 ports provide algorithms and test evidence to audit selectively, not files to
 revive.
+
+## Task 7 Validation
+
+- `rtk ./gradlew :color-management:test :kanvas:test checkProductionCodecImageClasspathNoJavaDesktop checkPureKotlinPngEncoderNoAwt --rerun-tasks`: passed (`BUILD SUCCESSFUL`; 44 executed tasks).
+- `:color-management:test` and `:kanvas:test` passed; the production codec classpath and pure-Kotlin PNG encoder guards passed.
+- Supported paths verified: bounded RGB matrix/TRC ICC, supported RGB ICC LUT routes, RGB CICP matrix profiles, PQ, and Rec.2020 HLG.
+- Typed refusals verified: malformed ICC and configured resource limits, unsupported ICC profile endpoints/LUT directions, unsupported CICP matrix/primaries/transfer values, premultiplied LUT composition, and HDR/LUT composition.
+- Repeated LUT and premultiplied HDR batch transforms produce identical RGBA output, including unchanged alpha storage.
