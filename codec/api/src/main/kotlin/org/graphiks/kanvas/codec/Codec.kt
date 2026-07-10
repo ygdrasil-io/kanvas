@@ -281,14 +281,17 @@ public abstract class Codec protected constructor() {
          * ownership of the [InputStream] (idiomatic Kotlin), unlike
          * upstream which takes a `unique_ptr` and consumes it.
          */
+        public fun MakeFromStream(stream: InputStream): Codec? =
+            MakeFromStream(stream, DEFAULT_MAX_STREAM_BYTES)
+
         public fun MakeFromStream(
             stream: InputStream,
-            maxEncodedBytes: Long = DEFAULT_MAX_STREAM_BYTES,
+            maxEncodedBytes: Long,
         ): Codec? = readStreamWithinLimit(stream, maxEncodedBytes)?.let(::MakeFromData)
 
         private fun readStreamWithinLimit(stream: InputStream, maxEncodedBytes: Long): ByteArray? {
-            if (maxEncodedBytes < 0) return null
-            val readLimit = if (maxEncodedBytes == Long.MAX_VALUE) Long.MAX_VALUE else maxEncodedBytes + 1
+            if (maxEncodedBytes !in 0..MAX_MATERIALIZABLE_STREAM_BYTES) return null
+            val readLimit = maxEncodedBytes + 1
             val output = ByteArrayOutputStream()
             val buffer = ByteArray(STREAM_READ_BUFFER_SIZE)
             var readBytes = 0L
@@ -312,6 +315,7 @@ public abstract class Codec protected constructor() {
         public const val DEFAULT_MAX_STREAM_BYTES: Long = 64L * 1024 * 1024
 
         private const val STREAM_READ_BUFFER_SIZE: Int = 8 * 1024
+        private const val MAX_MATERIALIZABLE_STREAM_BYTES: Long = Int.MAX_VALUE.toLong() - 8L
     }
 
     /**

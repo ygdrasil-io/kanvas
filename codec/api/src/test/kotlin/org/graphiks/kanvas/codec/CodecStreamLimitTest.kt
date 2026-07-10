@@ -2,8 +2,9 @@ package org.graphiks.kanvas.codec
 
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Test
-import java.io.ByteArrayInputStream
+import java.io.InputStream
 
 class CodecStreamLimitTest {
 
@@ -25,13 +26,53 @@ class CodecStreamLimitTest {
         try {
             assertNull(
                 Codec.MakeFromStream(
-                    ByteArrayInputStream(ByteArray(9)),
+                    FailsPastLimitStream(9),
                     maxEncodedBytes = 8,
                 ),
             )
             assertFalse(matchesCalled)
         } finally {
             Codec.Decoders.unregister(TEST_DECODER_NAME)
+        }
+    }
+
+    @Test
+    fun `legacy unary stream overload remains available to JVM callers`() {
+        assertNotNull(
+            Codec.Companion::class.java.getMethod("MakeFromStream", InputStream::class.java),
+        )
+    }
+
+    @Test
+    fun `unmaterializable stream budget is rejected before reading`() {
+        val stream = object : InputStream() {
+            override fun read(): Int = throw AssertionError("unmaterializable budget must not read")
+        }
+
+        assertNull(Codec.MakeFromStream(stream, Long.MAX_VALUE))
+    }
+
+    private class FailsPastLimitStream(
+        private val readableBytes: Int,
+    ) : InputStream() {
+        private var bytesServed: Int = 0
+
+        override fun read(): Int {
+            if (bytesServed >= readableBytes) {
+                throw AssertionError("stream read beyond maximum plus one bytes")
+            }
+            bytesServed++
+            return 0
+        }
+
+        override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+            if (bytesServed >= readableBytes) {
+                throw AssertionError("stream read beyond maximum plus one bytes")
+            }
+            val count = minOf(length, readableBytes - bytesServed)
+            buffer.fill(0, offset, offset + count)
+            bytesServed += count
+            return count
         }
     }
 

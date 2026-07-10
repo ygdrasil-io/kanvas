@@ -6,6 +6,7 @@ import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkColorType
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
+import java.util.Collections
 
 public data class JpegOpenResult(
     val document: JpegDocument?,
@@ -23,11 +24,28 @@ public data class JpegDecodeResult(
 )
 
 public class JpegDocument internal constructor(
-    internal val source: ByteArray,
-    public val segments: List<JpegSegment>,
+    source: ByteArray,
+    segments: List<JpegSegment>,
 ) {
+    private val source: ByteArray = source
+
+    /** Snapshot that rejects mutation even when callers cast it to [MutableList]. */
+    public val segments: List<JpegSegment> = Collections.unmodifiableList(segments.toList())
+
+    /** Returns a defensive copy of [segment]'s encoded payload. */
+    public fun copyPayload(segment: JpegSegment): ByteArray {
+        require(segments.any { it === segment }) { "JPEG segment does not belong to this document" }
+        if (segment.range.isEmpty()) return ByteArray(0)
+        val start = segment.range.first
+        val endExclusive = segment.range.last + 1
+        require(start >= 0 && endExclusive <= source.size) { "JPEG segment range is outside this document" }
+        return source.copyOfRange(start, endExclusive)
+    }
+
     public fun decode(request: JpegDecodeRequest): JpegDecodeResult =
-        JpegCodec.Decoder.decode(this, request)
+        JpegCodec.Decoder.decode(source, request)
+
+    internal fun makeCodec(): JpegCodec? = JpegCodec.Decoder.makeFromDocumentSource(source)
 
     public companion object {
         public fun open(
@@ -41,12 +59,19 @@ public class JpegDocument internal constructor(
         ): JpegOpenResult {
             validateLimits(limits)?.let { return it }
             val input = readAtMost(stream, limits.maxEncodedBytes) ?: return encodedBytesLimit(0)
-            return parseJpegDocument(input, limits)
+            return parseJpegDocument(input, limits, copySource = false)
         }
     }
 }
 
-internal fun parseJpegDocument(data: ByteArray, limits: JpegLimits): JpegOpenResult {
+internal fun parseJpegDocument(data: ByteArray, limits: JpegLimits): JpegOpenResult =
+    parseJpegDocument(data, limits, copySource = true)
+
+private fun parseJpegDocument(
+    data: ByteArray,
+    limits: JpegLimits,
+    copySource: Boolean,
+): JpegOpenResult {
     validateLimits(limits)?.let { return it }
     if (data.size.toLong() > limits.maxEncodedBytes) {
         return encodedBytesLimit(limits.maxEncodedBytes)
@@ -55,7 +80,7 @@ internal fun parseJpegDocument(data: ByteArray, limits: JpegLimits): JpegOpenRes
         return invalidJpeg(0)
     }
 
-    val source = data.copyOf()
+    val source = if (copySource) data.copyOf() else data
     val segments = ArrayList<JpegSegment>()
     var scanCount = 0
     var offset = 2
@@ -64,8 +89,8 @@ internal fun parseJpegDocument(data: ByteArray, limits: JpegLimits): JpegOpenRes
         if (segments.size >= limits.maxSegments) return segmentLimit(markerOffset.toLong())
         segments += JpegSegment(
             marker = marker,
-            payload = source.copyOfRange(payloadStart, payloadEnd),
             offset = markerOffset.toLong(),
+            range = payloadStart until payloadEnd,
         )
         return null
     }
@@ -94,7 +119,11 @@ internal fun parseJpegDocument(data: ByteArray, limits: JpegLimits): JpegOpenRes
 
             MARKER_SOS -> {
                 val payloadEnd = segmentPayloadEnd(source, offset) ?: return invalidJpeg(markerOffset.toLong())
-                appendSegment(marker, offset + 2, payloadEnd, markerOffset)?.let { return it }
+                val payloadStart = offset + 2
+                if (!isValidStartOfScan(source, payloadStart, payloadEnd)) {
+                    return invalidJpeg(markerOffset.toLong())
+                }
+                appendSegment(marker, payloadStart, payloadEnd, markerOffset)?.let { return it }
                 scanCount++
                 if (scanCount > limits.maxScans) return scanLimit(markerOffset.toLong())
                 offset = payloadEnd
@@ -128,10 +157,9 @@ internal fun parseJpegDocument(data: ByteArray, limits: JpegLimits): JpegOpenRes
                 val payloadEnd = segmentPayloadEnd(source, offset) ?: return invalidJpeg(markerOffset.toLong())
                 val payloadStart = offset + 2
                 if (isStartOfFrame(marker)) {
-                    if (payloadEnd - payloadStart < 5) return invalidJpeg(markerOffset.toLong())
-                    val height = readU16(source, payloadStart + 1)
-                    val width = readU16(source, payloadStart + 3)
-                    if (width == 0 || height == 0) return invalidJpeg(markerOffset.toLong())
+                    val dimensions = validStartOfFrameDimensions(source, payloadStart, payloadEnd)
+                        ?: return invalidJpeg(markerOffset.toLong())
+                    val (width, height) = dimensions
                     if (width.toLong() * height.toLong() > limits.maxPixels) {
                         return pixelLimit(markerOffset.toLong())
                     }
@@ -145,8 +173,8 @@ internal fun parseJpegDocument(data: ByteArray, limits: JpegLimits): JpegOpenRes
 }
 
 private fun readAtMost(stream: InputStream, maxEncodedBytes: Long): ByteArray? {
-    if (maxEncodedBytes < 0) return null
-    val readLimit = maxEncodedBytes.saturatedIncrement()
+    if (maxEncodedBytes !in 0..MAX_MATERIALIZABLE_ENCODED_BYTES) return null
+    val readLimit = maxEncodedBytes + 1
     val output = ByteArrayOutputStream()
     val buffer = ByteArray(DEFAULT_READ_BUFFER_SIZE)
     var readBytes = 0L
@@ -167,8 +195,6 @@ private fun readAtMost(stream: InputStream, maxEncodedBytes: Long): ByteArray? {
     return output.toByteArray()
 }
 
-private fun Long.saturatedIncrement(): Long = if (this == Long.MAX_VALUE) this else this + 1
-
 private fun segmentPayloadEnd(data: ByteArray, lengthOffset: Int): Int? {
     if (lengthOffset + 2 > data.size) return null
     val length = readU16(data, lengthOffset)
@@ -180,11 +206,54 @@ private fun segmentPayloadEnd(data: ByteArray, lengthOffset: Int): Int? {
 private fun isStartOfFrame(marker: Int): Boolean =
     marker in 0xC0..0xCF && marker != 0xC4 && marker != 0xC8 && marker != 0xCC
 
+private fun isValidStartOfScan(data: ByteArray, start: Int, end: Int): Boolean {
+    val payloadSize = end - start
+    if (payloadSize < MIN_SOS_PAYLOAD_BYTES) return false
+    val componentCount = data[start].toInt() and 0xFF
+    return componentCount > 0 && payloadSize == SOS_FIXED_PAYLOAD_BYTES + componentCount * 2
+}
+
+private fun validStartOfFrameDimensions(data: ByteArray, start: Int, end: Int): Pair<Int, Int>? {
+    val payloadSize = end - start
+    if (payloadSize < MIN_SOF_PAYLOAD_BYTES) return null
+    val precision = data[start].toInt() and 0xFF
+    val height = readU16(data, start + 1)
+    val width = readU16(data, start + 3)
+    val componentCount = data[start + SOF_COMPONENT_COUNT_OFFSET].toInt() and 0xFF
+    if (
+        precision !in MIN_SAMPLE_PRECISION..MAX_SAMPLE_PRECISION ||
+        width == 0 ||
+        height == 0 ||
+        componentCount == 0 ||
+        payloadSize != SOF_FIXED_PAYLOAD_BYTES + componentCount * SOF_COMPONENT_BYTES
+    ) {
+        return null
+    }
+
+    val componentIds = HashSet<Int>(componentCount)
+    var componentOffset = start + SOF_FIXED_PAYLOAD_BYTES
+    repeat(componentCount) {
+        val id = data[componentOffset].toInt() and 0xFF
+        val sampling = data[componentOffset + 1].toInt() and 0xFF
+        val quantizationTable = data[componentOffset + 2].toInt() and 0xFF
+        if (
+            !componentIds.add(id) ||
+            (sampling ushr 4) !in MIN_SAMPLING_FACTOR..MAX_SAMPLING_FACTOR ||
+            (sampling and 0x0F) !in MIN_SAMPLING_FACTOR..MAX_SAMPLING_FACTOR ||
+            quantizationTable !in 0..MAX_QUANTIZATION_TABLE
+        ) {
+            return null
+        }
+        componentOffset += SOF_COMPONENT_BYTES
+    }
+    return width to height
+}
+
 private fun readU16(data: ByteArray, offset: Int): Int =
     ((data[offset].toInt() and 0xFF) shl 8) or (data[offset + 1].toInt() and 0xFF)
 
 private fun validateLimits(limits: JpegLimits): JpegOpenResult? = when {
-    limits.maxEncodedBytes < 0 -> encodedBytesLimit(0)
+    limits.maxEncodedBytes !in 0..MAX_MATERIALIZABLE_ENCODED_BYTES -> encodedBytesLimit(0)
     limits.maxPixels < 0 -> pixelLimit(0)
     limits.maxScans < 0 -> scanLimit(0)
     limits.maxSegments < 0 -> segmentLimit(0)
@@ -214,3 +283,15 @@ private const val MARKER_TEM: Int = 0x01
 private const val MARKER_RST0: Int = 0xD0
 private const val MARKER_RST7: Int = 0xD7
 private const val DEFAULT_READ_BUFFER_SIZE: Int = 8 * 1024
+private const val MAX_MATERIALIZABLE_ENCODED_BYTES: Long = Int.MAX_VALUE.toLong() - 8L
+private const val MIN_SOS_PAYLOAD_BYTES: Int = 6
+private const val SOS_FIXED_PAYLOAD_BYTES: Int = 4
+private const val MIN_SOF_PAYLOAD_BYTES: Int = 9
+private const val SOF_FIXED_PAYLOAD_BYTES: Int = 6
+private const val SOF_COMPONENT_COUNT_OFFSET: Int = 5
+private const val SOF_COMPONENT_BYTES: Int = 3
+private const val MIN_SAMPLE_PRECISION: Int = 2
+private const val MAX_SAMPLE_PRECISION: Int = 16
+private const val MIN_SAMPLING_FACTOR: Int = 1
+private const val MAX_SAMPLING_FACTOR: Int = 4
+private const val MAX_QUANTIZATION_TABLE: Int = 3

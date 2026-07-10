@@ -114,15 +114,15 @@ public class JpegCodec private constructor(
         override fun make(data: ByteArray): Codec? {
             if (!matches(data)) return null
             val document = JpegDocument.open(data).document ?: return null
-            return make(document)
+            return document.makeCodec()
         }
 
-        internal fun decode(document: JpegDocument, request: JpegDecodeRequest): JpegDecodeResult {
-            val codec = make(document) ?: return JpegDecodeResult(
+        internal fun decode(data: ByteArray, request: JpegDecodeRequest): JpegDecodeResult {
+            val codec = makeFromDocumentSource(data) ?: return JpegDecodeResult(
                 bitmap = null,
                 diagnostic = JpegDiagnostic(
                     code = "jpeg.decode.unsupported",
-                    offset = document.source.size.toLong(),
+                    offset = data.size.toLong(),
                     result = Codec.Result.kUnimplemented,
                 ),
             )
@@ -148,16 +148,16 @@ public class JpegCodec private constructor(
                     bitmap = null,
                     diagnostic = JpegDiagnostic(
                         code = "jpeg.decode.${result.name}",
-                        offset = document.source.size.toLong(),
+                        offset = data.size.toLong(),
                         result = result,
                     ),
                 )
             }
         }
 
-        private fun make(document: JpegDocument): JpegCodec? {
+        internal fun makeFromDocumentSource(data: ByteArray): JpegCodec? {
             val parsed = try {
-                parseJpeg(document.source)
+                parseJpeg(data)
             } catch (_: IllegalArgumentException) {
                 null
             } ?: return null
