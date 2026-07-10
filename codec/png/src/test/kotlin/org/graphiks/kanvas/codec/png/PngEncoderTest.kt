@@ -8,14 +8,24 @@ import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.graphiks.kanvas.codec.Codec
+import org.graphiks.kanvas.color.ColorProfile
+import org.graphiks.kanvas.color.cicp.CicpColorInfo
+import org.graphiks.kanvas.color.cicp.toColorProfile
 import org.graphiks.math.SkcmsMatrix3x3
+import org.skia.foundation.SkAlphaType
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorSpace
+import org.skia.foundation.SkColorType
 import org.skia.foundation.SkICC
+import org.skia.foundation.SkImageInfo
+import org.skia.foundation.SkPixmap
 import org.skia.foundation.skcms.SkNamedGamut
 import org.skia.foundation.skcms.SkNamedTransferFn
+import org.skia.foundation.skcms.SkcmsICCProfile
 import org.skia.foundation.skcms.skcmsParse
 import java.io.ByteArrayOutputStream
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
 class PngEncoderTest {
 
@@ -173,6 +183,80 @@ class PngEncoderTest {
     }
 
     @Test
+    fun `HDR and unsupported color profiles are refused without OutputStream output`() {
+        val hdr = CicpColorInfo(primaries = 9, transfer = 16, matrix = 0, fullRange = true)
+            .toColorProfile()
+            .getOrThrow()
+        val refusedColorSpaces = listOf(
+            SkColorSpace.makeProfileAware(SkcmsICCProfile.fromColorProfile(hdr)),
+            SkColorSpace.makeProfileAware(
+                SkcmsICCProfile.fromColorProfile(ColorProfile.unsupported("icc.profile.unsupported")),
+            ),
+        )
+
+        refusedColorSpaces.forEach { colorSpace ->
+            val src = SkBitmap(1, 1, colorSpace).also { it.pixels[0] = 0xFF336699.toInt() }
+            val output = ByteArrayOutputStream()
+
+            assertNull(PngEncoder.encode(src))
+            assertFalse(PngEncoder.encode(output, src))
+            assertEquals(0, output.size())
+        }
+    }
+
+    @Test
+    fun `SkPixmap overload preserves serializable color space`() {
+        val colorSpace = SkColorSpace.makeRGB(SkNamedTransferFn.kSRGB, SkNamedGamut.kDisplayP3)!!
+        val info = SkImageInfo.Make(
+            width = 1,
+            height = 1,
+            colorType = SkColorType.kRGBA_8888,
+            alphaType = SkAlphaType.kUnpremul,
+            colorSpace = colorSpace,
+        )
+        val pixels = ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putInt(0, 0xFF336699.toInt())
+        val pixmap = SkPixmap(info, pixels, 4)
+
+        val bytes = PngEncoder.encode(pixmap)!!
+
+        assertTrue(findChunk(bytes, 0x69434350), "Display-P3 pixmap must write iCCP")
+        assertFalse(findChunk(bytes, 0x73524742), "Display-P3 pixmap must not be retagged sRGB")
+    }
+
+    @Test
+    fun `tEXt comments use exact Latin-1 wire bytes`() {
+        val src = SkBitmap(1, 1)
+        val bytes = PngEncoder.encode(
+            src,
+            PngEncoder.Options(comments = listOf("Résumé", "café")),
+        )!!
+
+        assertEquals(
+            "Résumé\u0000café".toByteArray(Charsets.ISO_8859_1).toList(),
+            chunkData(bytes, 0x74455874).toList(),
+        )
+    }
+
+    @Test
+    fun `tEXt rejects invalid keyword and non Latin-1 text without output`() {
+        val src = SkBitmap(1, 1)
+        val invalidComments = listOf(
+            listOf("a".repeat(80), "text"),
+            listOf(" leading", "text"),
+            listOf("trailing ", "text"),
+            listOf("two  spaces", "text"),
+            listOf("bad\u0080keyword", "text"),
+            listOf("keyword", "snowman \u2603"),
+        )
+
+        invalidComments.forEach { comments ->
+            val output = ByteArrayOutputStream()
+            assertFalse(PngEncoder.encode(output, src, PngEncoder.Options(comments = comments)), comments.toString())
+            assertEquals(0, output.size(), comments.toString())
+        }
+    }
+
+    @Test
     fun `adam7 interlace with filters round-trips correctly`() {
         val src = SkBitmap(16, 16)
         for (y in 0 until 16) for (x in 0 until 16) {
@@ -203,6 +287,23 @@ class PngEncoderTest {
             pos += 12 + len
         }
         return false
+    }
+
+    private fun chunkData(png: ByteArray, type: Int): ByteArray {
+        var pos = 8
+        while (pos + 12 <= png.size) {
+            val len = ((png[pos].toInt() and 0xFF) shl 24) or
+                ((png[pos + 1].toInt() and 0xFF) shl 16) or
+                ((png[pos + 2].toInt() and 0xFF) shl 8) or
+                (png[pos + 3].toInt() and 0xFF)
+            val chunkType = ((png[pos + 4].toInt() and 0xFF) shl 24) or
+                ((png[pos + 5].toInt() and 0xFF) shl 16) or
+                ((png[pos + 6].toInt() and 0xFF) shl 8) or
+                (png[pos + 7].toInt() and 0xFF)
+            if (chunkType == type) return png.copyOfRange(pos + 8, pos + 8 + len)
+            pos += 12 + len
+        }
+        error("chunk not found: ${type.toString(16)}")
     }
 
     private fun decodePng(bytes: ByteArray): SkBitmap {
