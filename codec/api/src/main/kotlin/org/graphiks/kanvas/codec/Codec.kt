@@ -93,9 +93,10 @@ public abstract class Codec protected constructor() {
 
     /**
      * The ICC profile parsed out of the encoded file, or `null` if it
-     * carried none. Mirrors `Codec::getICCProfile()`. The returned
-     * profile is the same object the codec used to populate
-     * [getInfo]'s colour space, so equality is identity-cheap.
+     * carried none. Mirrors `Codec::getICCProfile()`. This reports
+     * encoded ICC provenance only; a codec may resolve [getInfo]'s
+     * colour space from non-ICC container metadata without exposing a
+     * fabricated ICC profile here.
      */
     public abstract fun getICCProfile(): SkcmsICCProfile?
 
@@ -124,9 +125,11 @@ public abstract class Codec protected constructor() {
      * `(dst, rowBytes)` pair into a single [SkBitmap] since our bitmap
      * already carries its stride.
      *
-     * Returns [Result.kInvalidParameters] if the bitmap geometry
-     * disagrees with `info`, [Result.kInvalidConversion] if the
-     * concrete codec cannot satisfy the requested colour type, and
+     * A codec may additionally require `info` to match its source geometry,
+     * alpha representation, and colour space when it does not implement the
+     * requested scale or transforms. Returns [Result.kInvalidParameters] if
+     * the bitmap disagrees with `info`, [Result.kInvalidScale] or
+     * [Result.kInvalidConversion] for unsupported source requests, and
      * [Result.kSuccess] when the pixels were written.
      */
     public abstract fun getPixels(info: SkImageInfo, dst: SkBitmap): Result
