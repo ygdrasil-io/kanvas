@@ -102,7 +102,6 @@ internal fun GPUBackendOffscreenTarget.renderImageCommand(
         )
     }
     if (diagnostics.fatalCount != fatalBeforeSource) return GPUImageFilterDispatchResult(rendered = false)
-    dispatched.add(command.commandId.toString())
 
     val fullLocalDraw = GPUBackendRawUniformDraw(
         uniformBytes = ByteArray(16),
@@ -147,6 +146,8 @@ internal fun GPUBackendOffscreenTarget.renderImageCommand(
             blendMode = GPUBlendMode.SRC_OVER,
         )
     }
+    if (diagnostics.fatalCount != fatalBeforeSource) return GPUImageFilterDispatchResult(rendered = false)
+    dispatched.add(command.commandId.toString())
     return GPUImageFilterDispatchResult(rendered = true)
 }
 

@@ -1311,7 +1311,7 @@ internal fun renderViaGpu(
                 diagnostics = diagnostics,
                 stats = RenderStats(
                     opsDispatched = dispatched.size,
-                    opsRefused = diagnostics.entries.size - dispatched.size,
+                    opsRefused = diagnostics.fatalCount,
                     pipelineCount = 1,
                     drawCallCount = dispatched.size,
                     coverage = if (dispatched.isNotEmpty()) 1f else 0f,

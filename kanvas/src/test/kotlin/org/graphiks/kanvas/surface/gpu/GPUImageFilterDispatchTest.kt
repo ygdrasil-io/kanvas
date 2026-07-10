@@ -56,6 +56,25 @@ class GPUImageFilterDispatchTest {
         assertFloatUniforms(sourceDraw.uniformBytes, 6f, 9f, 10f, 13f)
     }
 
+    @Test
+    fun `accepted blur is dispatched after the scene composite`() {
+        val target = CapturingOffscreenTarget()
+        val dispatched = mutableListOf<String>()
+        target.onSceneComposite = { assertTrue(dispatched.isEmpty()) }
+        val command = blurCommand(sigmaX = 2f, sigmaY = 3f)
+
+        val result = target.renderImageCommand(
+            sceneTextureLabel = "scene",
+            command = command,
+            textureCache = mapOf("fixture" to fixtureRgba),
+            sceneClearColor = GPUClearColor(0.0, 0.0, 0.0, 0.0),
+            dispatched = dispatched,
+        )
+
+        assertTrue(result.rendered)
+        assertEquals(listOf(command.commandId.toString()), dispatched)
+    }
+
     private fun blurCommand(sigmaX: Float, sigmaY: Float) = DisplayOp.DrawImage(
         image = Image.fromPixels(
             width = 4,
@@ -86,6 +105,7 @@ class GPUImageFilterDispatchTest {
         val passKinds = mutableListOf<String>()
         val createdTextures = mutableListOf<GPUBackendOffscreenTexture>()
         var sourceDraw: GPUBackendRawUniformDraw? = null
+        var onSceneComposite: (() -> Unit)? = null
 
         override val target: GPUSurfaceTarget
             get() = error("target is not used by this pass-planning test")
@@ -139,7 +159,10 @@ class GPUImageFilterDispatchTest {
                 passKinds += when {
                     destinationLabel.contains("horizontal") -> "blur-h"
                     destinationLabel.contains("vertical") -> "blur-v"
-                    else -> "scene"
+                    else -> {
+                        onSceneComposite?.invoke()
+                        "scene"
+                    }
                 }
             }
 

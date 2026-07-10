@@ -12,6 +12,7 @@ import org.graphiks.kanvas.types.Rect
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Assertions.assertArrayEquals
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
@@ -105,6 +106,22 @@ class GPUImageFilterSurfaceTest {
         assertArrayEquals(plain, filtered)
     }
 
+    @Test
+    fun `refused filtered image increments refusal count without negative stats`() {
+        requireWebGpu()
+        val result = renderFixtureResult(
+            Paint(imageFilter = ImageFilter.Blur(2f, 2f, TileMode.REPEAT)),
+        )
+
+        assertEquals(1, result.stats.opsDispatched)
+        assertEquals(1, result.stats.opsRefused)
+        assertEquals(1, result.diagnostics.fatalCount)
+        assertEquals(
+            "unsupported.image-filter.blur.tile-mode",
+            result.diagnostics.entries.single().reason,
+        )
+    }
+
     private fun renderFixtureThroughSurface(
         image: Image,
         paint: Paint,
@@ -114,6 +131,22 @@ class GPUImageFilterSurfaceTest {
         val surface = Surface(surfaceSize, surfaceSize)
         surface.canvas { drawImage(image, dst, paint) }
         return surface.render().pixels.toByteArray()
+    }
+
+    private fun renderFixtureResult(paint: Paint) = Surface(32, 32).run {
+        canvas {
+            drawImage(
+                opaqueRedImpulse(width = 9, height = 9, centerX = 4, centerY = 4),
+                Rect.fromXYWH(0f, 0f, 9f, 9f),
+                Paint(),
+            )
+            drawImage(
+                opaqueRedImpulse(width = 9, height = 9, centerX = 4, centerY = 4),
+                Rect.fromXYWH(8f, 8f, 9f, 9f),
+                paint,
+            )
+        }
+        render()
     }
 
     private fun opaqueRedImpulse(width: Int, height: Int, centerX: Int, centerY: Int): Image {
