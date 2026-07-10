@@ -569,6 +569,38 @@ class PngContainerParserTest {
 
     @Test
     fun `conformance corpus enforces exact resource limit boundaries`() {
+        val dimensionLimits = PngContainerLimits.Default.copy(maxWidth = 2, maxHeight = 3)
+        val atDimensionLimit = success(
+            png(
+                "IHDR" to ihdr(width = 2, height = 3),
+                "IDAT" to byteArrayOf(1),
+                "IEND" to ByteArray(0),
+            ),
+            dimensionLimits,
+        )
+        assertEquals(2, atDimensionLimit.header.width)
+        assertEquals(3, atDimensionLimit.header.height)
+        assertFailure(
+            png(
+                "IHDR" to ihdr(width = 3, height = 3),
+                "IDAT" to byteArrayOf(1),
+                "IEND" to ByteArray(0),
+            ),
+            "png.dimension.limit",
+            "IHDR",
+            dimensionLimits,
+        )
+        assertFailure(
+            png(
+                "IHDR" to ihdr(width = 2, height = 4),
+                "IDAT" to byteArrayOf(1),
+                "IEND" to ByteArray(0),
+            ),
+            "png.dimension.limit",
+            "IHDR",
+            dimensionLimits,
+        )
+
         val source = png(
             "IHDR" to ihdr(),
             "vpAg" to byteArrayOf(4, 5, 6),

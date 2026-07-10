@@ -66,21 +66,37 @@ class PngDocumentTest {
             "IEND" to ByteArray(0),
         )
         val sourceRaw = rawChunks(source)
-        val metadataOnlyCorpus: List<Pair<String, (PngDocument) -> PngDocument>> = listOf(
-            "replace tEXt" to { document: PngDocument ->
-                document.withAncillaryChunk("tEXt", textChunk("Title", "Updated"))
-            },
-            "remove tEXt" to { document: PngDocument -> document.withoutChunks("tEXt") },
-            "insert pHYs" to { document: PngDocument ->
-                document.withAncillaryChunk("pHYs", u32(2_835) + u32(2_835) + byteArrayOf(1))
-            },
+        val updatedText = textChunk("Title", "Updated")
+        val physicalDimensions = u32(2_835) + u32(2_835) + byteArrayOf(1)
+        data class MetadataOnlyCase(
+            val name: String,
+            val edit: (PngDocument) -> PngDocument,
+            val assertApplied: (ByteArray) -> Unit,
+        )
+        val metadataOnlyCorpus = listOf(
+            MetadataOnlyCase(
+                "replace tEXt",
+                { document -> document.withAncillaryChunk("tEXt", updatedText) },
+                { bytes -> assertArrayEquals(updatedText, chunkPayloads(bytes, "tEXt").single()) },
+            ),
+            MetadataOnlyCase(
+                "remove tEXt",
+                { document -> document.withoutChunks("tEXt") },
+                { bytes -> assertTrue(chunkPayloads(bytes, "tEXt").isEmpty()) },
+            ),
+            MetadataOnlyCase(
+                "insert pHYs",
+                { document -> document.withAncillaryChunk("pHYs", physicalDimensions) },
+                { bytes -> assertArrayEquals(physicalDimensions, chunkPayloads(bytes, "pHYs").single()) },
+            ),
         )
 
-        for ((name, edit) in metadataOnlyCorpus) {
-            val saved = edit(open(source)).save()
-            val savedRaw = rawChunks(saved.bytes)
+        for (case in metadataOnlyCorpus) {
+            val saved = case.edit(open(source)).save()
 
-            assertEquals(PngDocumentSaveStatus.SAVED, saved.status, name)
+            assertEquals(PngDocumentSaveStatus.SAVED, saved.status, case.name)
+            case.assertApplied(saved.bytes)
+            val savedRaw = rawChunks(saved.bytes)
             assertRawChunkListsEqual(sourceRaw.getValue("vpAg"), savedRaw.getValue("vpAg"))
             assertRawChunkListsEqual(sourceRaw.getValue("vpAG"), savedRaw.getValue("vpAG"))
             assertRawChunkListsEqual(sourceRaw.getValue("IDAT"), savedRaw.getValue("IDAT"))
