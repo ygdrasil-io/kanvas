@@ -518,8 +518,27 @@ internal fun renderViaGpu(
                 }
             }
 
+            var suppressedBackdropLayerDepth = 0
             for (op in ops) {
                 val cmdId = GPUDrawCommandID(dispatched.size)
+                if (op is DisplayOp.BeginLayer) {
+                    if (suppressedBackdropLayerDepth > 0) {
+                        suppressedBackdropLayerDepth++
+                    } else if (op.rec.backdrop != null) {
+                        diagnostics.fatal(
+                            "refuse:saveLayer:${cmdId.value}",
+                            "saveLayer",
+                            "unsupported.layer.backdrop_filter",
+                        )
+                        suppressedBackdropLayerDepth = 1
+                    }
+                    continue
+                }
+                if (op is DisplayOp.EndLayer) {
+                    if (suppressedBackdropLayerDepth > 0) suppressedBackdropLayerDepth--
+                    continue
+                }
+                if (suppressedBackdropLayerDepth > 0) continue
                 when (op) {
                     is DisplayOp.DrawRect -> {
                         if (op.paint.isStroke()) {
@@ -661,9 +680,7 @@ internal fun renderViaGpu(
                         }
                     }
                     is DisplayOp.SetTransform,
-                    is DisplayOp.SetClip,
-                    is DisplayOp.BeginLayer,
-                    is DisplayOp.EndLayer -> { /* state ops */ }
+                    is DisplayOp.SetClip -> { /* state ops */ }
                     is DisplayOp.DrawColor -> {
                         val cmd = op.toNormalizedCommand(cmdId, targets)
                         if (cmd.blend.requiresDestinationRead) {

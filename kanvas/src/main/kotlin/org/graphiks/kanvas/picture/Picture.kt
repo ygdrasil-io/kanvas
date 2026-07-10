@@ -6,6 +6,7 @@ import org.graphiks.kanvas.canvas.Canvas
 import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.canvas.ClipStackOp
 import org.graphiks.kanvas.canvas.DisplayOp
+import org.graphiks.kanvas.canvas.SaveLayerRec
 import org.graphiks.kanvas.geometry.FillType
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.geometry.PathVerb
@@ -195,7 +196,7 @@ class Picture internal constructor(
                     is DisplayOp.Clear -> canvas.clear(op.color)
                     is DisplayOp.SetTransform -> canvas.setMatrix(op.matrix)
                     is DisplayOp.SetClip -> { /* clip is baked into draw ops; state tracked during recording */ }
-                    is DisplayOp.BeginLayer -> canvas.saveLayer(op.bounds, op.paint)
+                    is DisplayOp.BeginLayer -> canvas.saveLayer(op.rec)
                     is DisplayOp.EndLayer -> canvas.restore()
                     is DisplayOp.Annotation -> { /* no visual output */ }
                     is DisplayOp.FlushAndSnapshot -> { /* no visual output; readback is render-backend-specific */ }
@@ -243,7 +244,7 @@ class Picture internal constructor(
 // ---- Binary serialization helpers ------------------------------------------
 
 private val MAGIC = byteArrayOf(0x4B, 0x50, 0x49, 0x43)
-private const val FORMAT_VERSION = 1
+private const val FORMAT_VERSION = 2
 
 // type discriminators
 private const val OP_DRAW_RECT: Byte = 0
@@ -524,6 +525,7 @@ private class Writer {
         if (imageFilter == null) { byte(0xFF.toByte()); return }
         when (imageFilter) {
             is ImageFilter.Blur -> { byte(0); float(imageFilter.sigmaX); float(imageFilter.sigmaY); tileMode(imageFilter.tileMode); imageFilter(imageFilter.input) }
+            is ImageFilter.Crop -> { byte(21); rect(imageFilter.crop); tileMode(imageFilter.tileMode); imageFilter(imageFilter.input) }
             is ImageFilter.DropShadow -> { byte(1); float(imageFilter.dx); float(imageFilter.dy); float(imageFilter.sigmaX); float(imageFilter.sigmaY); color(imageFilter.color); imageFilter(imageFilter.input) }
             is ImageFilter.ColorFilter -> { byte(2); colorFilter(imageFilter.filter); imageFilter(imageFilter.input) }
             is ImageFilter.Compose -> { byte(3); imageFilter(imageFilter.outer); imageFilter(imageFilter.inner) }
@@ -731,8 +733,11 @@ private class Writer {
             is DisplayOp.SetClip -> { byte(OP_SET_CLIP); clipStack(op.clip) }
             is DisplayOp.BeginLayer -> {
                 byte(OP_BEGIN_LAYER)
-                if (op.bounds != null) { bool(true); rect(op.bounds) } else bool(false)
-                if (op.paint != null) { bool(true); paint(op.paint) } else bool(false)
+                val bounds = op.rec.bounds
+                val paint = op.rec.paint
+                if (bounds != null) { bool(true); rect(bounds) } else bool(false)
+                if (paint != null) { bool(true); paint(paint) } else bool(false)
+                imageFilter(op.rec.backdrop)
             }
             DisplayOp.EndLayer -> byte(OP_END_LAYER)
             is DisplayOp.Annotation -> { byte(OP_ANNOTATION); rect(op.rect); string(op.key); string(op.value) }
@@ -748,6 +753,7 @@ private class Writer {
 }
 
 private class Reader(private val data: ByteArray) {
+    var formatVersion: Int = 1
     private val bais = ByteArrayInputStream(data)
     val dis = DataInputStream(bais)
     var valid = true
@@ -994,6 +1000,7 @@ private class Reader(private val data: ByteArray) {
         if (disc == 0xFF.toByte()) return null
         return when (disc.toInt()) {
             0 -> ImageFilter.Blur(float(), float(), tileMode(), imageFilter())
+            21 -> ImageFilter.Crop(rect(), tileMode(), imageFilter())
             1 -> ImageFilter.DropShadow(float(), float(), float(), float(), color(), imageFilter())
             2 -> ImageFilter.ColorFilter(colorFilter()!!, imageFilter())
             3 -> ImageFilter.Compose(imageFilter()!!, imageFilter()!!)
@@ -1178,7 +1185,8 @@ private class Reader(private val data: ByteArray) {
             OP_BEGIN_LAYER.toInt() -> {
                 val bounds = if (bool()) rect() else null
                 val p = if (bool()) paint() else null
-                DisplayOp.BeginLayer(bounds, p)
+                val backdrop = if (formatVersion >= 2) imageFilter() else null
+                DisplayOp.BeginLayer(SaveLayerRec(bounds, p, backdrop))
             }
             OP_END_LAYER.toInt() -> DisplayOp.EndLayer
             OP_ANNOTATION.toInt() -> DisplayOp.Annotation(rect(), string(), string())
@@ -1205,7 +1213,8 @@ private fun decodePicture(data: ByteArray): Picture? {
     val r = Reader(data)
     r.bytes(4) // skip magic
     val version = r.int()
-    if (version != 1 || !r.valid) return null
+    if (version !in 1..FORMAT_VERSION || !r.valid) return null
+    r.formatVersion = version
     val cullRect = r.rect()
     val opCount = r.int()
     if (opCount < 0 || !r.valid) return null

@@ -161,6 +161,11 @@ inline fun Canvas.withSaveLayer(bounds: Rect? = null, paint: Paint? = null, bloc
     this.saveLayer(bounds, paint); try { block() } finally { this.restore() }
 }
 
+/** Begin a layer described by [rec], execute [block], then restore it. */
+inline fun Canvas.withSaveLayer(rec: SaveLayerRec, block: Canvas.() -> Unit) {
+    this.saveLayer(rec); try { block() } finally { this.restore() }
+}
+
 /** Push an axis-aligned rectangular clip, execute [block], then restore the previous clip. */
 inline fun Canvas.withClipRect(rect: Rect, block: Canvas.() -> Unit) {
     save(); clipRect(rect); try { block() } finally { restore() }

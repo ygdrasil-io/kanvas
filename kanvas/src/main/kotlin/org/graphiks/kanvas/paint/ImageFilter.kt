@@ -8,6 +8,12 @@ import org.graphiks.kanvas.types.Size
 enum class ColorChannel { R, G, B, A }
 
 sealed interface ImageFilter {
+    /** Crops [input] to [crop], sampling outside it with [tileMode]. */
+    data class Crop(
+        val crop: Rect,
+        val tileMode: TileMode = TileMode.CLAMP,
+        val input: ImageFilter? = null,
+    ) : ImageFilter
     data class Blur(
         val sigmaX: Float, val sigmaY: Float,
         val tileMode: TileMode = TileMode.CLAMP,
