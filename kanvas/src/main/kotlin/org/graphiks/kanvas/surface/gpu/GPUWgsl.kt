@@ -345,6 +345,67 @@ internal val COPY_WGSL: String = """
     }
 """.trimIndent()
 
+internal val MASK_BLUR_STYLE_WGSL: String = """
+    struct Uniforms {
+        style: u32,
+    };
+
+    @group(0) @binding(0) var<uniform> u: Uniforms;
+    @group(1) @binding(1) var srcTexture: texture_2d<f32>;
+    @group(1) @binding(2) var srcSampler: sampler;
+    @group(1) @binding(3) var dstTexture: texture_2d<f32>;
+    @group(1) @binding(4) var dstSampler: sampler;
+
+    @vertex
+    fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
+        let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
+        let y = f32(idx & 2u) * 2.0 - 1.0;
+        return vec4f(x, y, 0.0, 1.0);
+    }
+
+    @fragment
+    fn fs_main(@builtin(position) coord: vec4f) -> @location(0) vec4f {
+        let dims = textureDimensions(srcTexture);
+        let uv = vec2f(coord.x / f32(dims.x), coord.y / f32(dims.y));
+        let blurred = textureSample(srcTexture, srcSampler, uv).a;
+        let original = textureSample(dstTexture, dstSampler, uv).a;
+        var coverage = blurred;
+        switch (u.style) {
+            case 0u: { coverage = blurred; }
+            case 1u: { coverage = max(original, blurred); }
+            case 2u: { coverage = blurred * (1.0 - original); }
+            default: { coverage = blurred * original; }
+        }
+        return vec4f(coverage, coverage, coverage, coverage);
+    }
+""".trimIndent()
+
+internal val MASK_BLUR_SOLID_COMPOSITE_WGSL: String = """
+    struct Uniforms {
+        deviceBounds: vec4f,
+        color: vec4f,
+    };
+
+    @group(0) @binding(0) var<uniform> u: Uniforms;
+    @group(1) @binding(1) var maskTexture: texture_2d<f32>;
+    @group(1) @binding(2) var maskSampler: sampler;
+
+    @vertex
+    fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
+        let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
+        let y = f32(idx & 2u) * 2.0 - 1.0;
+        return vec4f(x, y, 0.0, 1.0);
+    }
+
+    @fragment
+    fn fs_main(@builtin(position) coord: vec4f) -> @location(0) vec4f {
+        let localSize = max(u.deviceBounds.zw - u.deviceBounds.xy, vec2f(1.0, 1.0));
+        let uv = (coord.xy - u.deviceBounds.xy) / localSize;
+        let coverage = textureSample(maskTexture, maskSampler, uv).a;
+        return u.color * coverage;
+    }
+""".trimIndent()
+
 internal val BLEND_FORMULA_WGSL: String = """
     struct Uniforms {
         blendMode: u32,

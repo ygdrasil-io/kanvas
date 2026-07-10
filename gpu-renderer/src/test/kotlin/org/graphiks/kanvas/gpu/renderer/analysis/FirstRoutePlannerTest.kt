@@ -4,6 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
@@ -197,6 +198,35 @@ class FirstRoutePlannerTest {
         )
     }
 
+    /** FillRect blur metadata identifies an unexecuted prepared mask-blur route. */
+    @Test
+    fun `fill rect with blur mask filter builds prepared mask blur route`() {
+        val command = GPUFillRectCommandBuilder.build(
+            commandId = GPUDrawCommandID(26),
+            rect = GPURect(left = 2f, top = 3f, right = 18f, bottom = 21f),
+            target = GPUTargetFacts(width = 64, height = 64, colorFormat = "rgba8unorm"),
+            material = GPUMaterialDescriptor.SolidColor(r = 1f, g = 0.25f, b = 0.5f, a = 1f),
+        ).copy(
+            maskFilter = NormalizedMaskFilter.Blur(
+                style = NormalizedBlurStyle.NORMAL,
+                sigma = 4f,
+            ),
+        )
+
+        val plan = GPUFirstRoutePlanner(capabilities = firstSliceCapabilities()).plan(command)
+        val routeDecision = assertIs<GPURouteDecision.Prepared>(plan.routeDecision)
+        val analysisDecision = assertIs<GPUDrawAnalysisDecision.Candidate>(plan.analysisDecision)
+
+        assertEquals("prepared.fill_rect.mask_blur", analysisDecision.routeDecisionLabel)
+        assertEquals("mask-blur.rect-fill", routeDecision.route.consumerKind)
+        assertEquals("rect.fill.mask_blur", plan.pass.invocations.single().renderStepId.value)
+        assertEquals(listOf("mask-blur.rect-fill.rgba8unorm.src_over"), plan.pass.pipelineKeys)
+        assertFalse(plan.pass.pipelineKeys.single().startsWith("pending."))
+        assertContains(routeDecision.route.invalidationFacts, "requested-sigma=4.0")
+        assertContains(routeDecision.route.invalidationFacts, "normalized-style=normal")
+        assertContains(routeDecision.route.invalidationFacts, "route-status=prepared")
+    }
+
     /** Accepted solid FillRRect produces pre-materialization rrect analysis, native route, and pass records only. */
     @Test
     fun `solid fill rrect builds native route and draw pass without materialized resources`() {
@@ -237,6 +267,39 @@ class FirstRoutePlannerTest {
         assertNull(invocation.scissorBoundsHash)
         assertNull(invocation.uniformSlot)
         assertNull(invocation.resourceSlot)
+    }
+
+    /** FillRRect blur metadata identifies an unexecuted prepared mask-blur route. */
+    @Test
+    fun `fill rrect with blur mask filter builds prepared mask blur route`() {
+        val command = GPUFillRRectCommandBuilder.build(
+            commandId = GPUDrawCommandID(28),
+            rrect = GPURRect(
+                rect = GPURect(left = 2f, top = 3f, right = 22f, bottom = 25f),
+                radiusX = 4f,
+                radiusY = 5f,
+            ),
+            target = GPUTargetFacts(width = 64, height = 64, colorFormat = "rgba8unorm"),
+            material = GPUMaterialDescriptor.SolidColor(r = 1f, g = 0.25f, b = 0.5f, a = 1f),
+        ).copy(
+            maskFilter = NormalizedMaskFilter.Blur(
+                style = NormalizedBlurStyle.OUTER,
+                sigma = 5f,
+            ),
+        )
+
+        val plan = GPUFirstRoutePlanner(capabilities = firstSliceRRectCapabilities()).plan(command)
+        val routeDecision = assertIs<GPURouteDecision.Prepared>(plan.routeDecision)
+        val analysisDecision = assertIs<GPUDrawAnalysisDecision.Candidate>(plan.analysisDecision)
+
+        assertEquals("prepared.fill_rrect.mask_blur", analysisDecision.routeDecisionLabel)
+        assertEquals("mask-blur.rrect-fill", routeDecision.route.consumerKind)
+        assertEquals("rrect.fill.mask_blur", plan.pass.invocations.single().renderStepId.value)
+        assertEquals(listOf("mask-blur.rrect-fill.rgba8unorm.src_over"), plan.pass.pipelineKeys)
+        assertFalse(plan.pass.pipelineKeys.single().startsWith("pending."))
+        assertContains(routeDecision.route.invalidationFacts, "requested-sigma=5.0")
+        assertContains(routeDecision.route.invalidationFacts, "normalized-style=outer")
+        assertContains(routeDecision.route.invalidationFacts, "route-status=prepared")
     }
 
     /** Accepted non-uniform rrect radii are captured deterministically before materialization. */
@@ -829,11 +892,12 @@ class FirstRoutePlannerTest {
 
         assertEquals("analysis.fill_path.27", plan.analysisRecord.recordId)
         assertEquals("FillPath", plan.analysisRecord.commandFamily)
-        assertEquals("prepared.path_fill.blur_mask", analysisDecision.routeDecisionLabel)
-        assertEquals("blur-mask.sample.path-fill", routeDecision.route.consumerKind)
-        assertEquals("path.fill.blur_mask", plan.pass.invocations.single().renderStepId.value)
-        assertEquals(listOf("pending.pipeline.fill_path.blur_mask.rgba8unorm.src_over"), plan.pass.pipelineKeys)
-        assertEquals("pending.pipeline.fill_path.blur_mask.rgba8unorm.src_over", plan.pass.invocations.single().pipelineKeyHash)
+        assertEquals("prepared.path_fill.mask_blur", analysisDecision.routeDecisionLabel)
+        assertEquals("mask-blur.path-fill", routeDecision.route.consumerKind)
+        assertEquals("path.fill.mask_blur", plan.pass.invocations.single().renderStepId.value)
+        assertEquals(listOf("mask-blur.path-fill.rgba8unorm.src_over"), plan.pass.pipelineKeys)
+        assertFalse(plan.pass.pipelineKeys.single().startsWith("pending."))
+        assertEquals("mask-blur.path-fill.rgba8unorm.src_over", plan.pass.invocations.single().pipelineKeyHash)
         assertEquals("analysis.fill_path.27", plan.pass.invocations.single().analysisRecordId)
         assertEquals(27, plan.pass.invocations.single().commandIdValue)
         assertEquals("path_fill", plan.pass.invocations.single().role)
@@ -842,6 +906,9 @@ class FirstRoutePlannerTest {
             "blur-mask.path-fill.path_triangle_v1.blur:normal_sigma=6.2735",
             routeDecision.route.artifactKey.value,
         )
+        assertContains(routeDecision.route.invalidationFacts, "requested-sigma=6.2735")
+        assertContains(routeDecision.route.invalidationFacts, "normalized-style=normal")
+        assertContains(routeDecision.route.invalidationFacts, "route-status=prepared")
     }
 
     /** Accepted FillPath with all blur style variants produces expected blur mask routes. */
@@ -879,8 +946,8 @@ class FirstRoutePlannerTest {
             val plan = GPUFirstRoutePlanner(capabilities = firstSlicePathFillCapabilities()).plan(command)
             val analysisDecision = assertIs<GPUDrawAnalysisDecision.Candidate>(plan.analysisDecision)
 
-            assertEquals("prepared.path_fill.blur_mask", analysisDecision.routeDecisionLabel)
-            assertContains(plan.pass.invocations.single().renderStepId.value, "blur_mask")
+            assertEquals("prepared.path_fill.mask_blur", analysisDecision.routeDecisionLabel)
+            assertContains(plan.pass.invocations.single().renderStepId.value, "mask_blur")
         }
     }
 

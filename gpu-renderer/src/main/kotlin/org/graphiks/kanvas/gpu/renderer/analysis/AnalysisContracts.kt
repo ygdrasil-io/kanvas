@@ -284,24 +284,34 @@ class GPUFirstRoutePlanner(
         )
     }
 
-    /** Builds a blur-mask FillRect prepared GPU route that signals offscreen blur processing. */
+    /** Builds a prepared, unexecuted blur-mask FillRect route contract. */
     private fun blurMaskFillRectRouteDecision(command: NormalizedDrawCommand.FillRect): GPUFirstRoutePlan {
         val recordId = "analysis.fill_rect.${command.commandId.value}"
-        val pipelineKey = "pending.pipeline.fill_rect.blur_mask.rgba8unorm.src_over"
-        val renderStep = blurMaskFilterRenderStep
-        val consumerKind = "blur-mask.sample.rect-fill"
+        val routeLabel = "prepared.fill_rect.mask_blur"
+        val pipelineKey = "mask-blur.rect-fill.rgba8unorm.src_over"
+        val renderStep = "rect.fill.mask_blur"
+        val consumerKind = "mask-blur.rect-fill"
         val mf = requireNotNull(command.maskFilter)
         val blurDesc = when (mf) {
             is NormalizedMaskFilter.Blur -> "blur:${mf.style.name.lowercase()}_sigma=${mf.sigma}"
         }
         val artifactKey = "blur-mask.rect-fill.rect${command.commandId.value}.${blurDesc}"
-        val invalidationFacts = listOf("rect-bounds", "blur-sigma", "blur-style", "material-kind", "transform-class")
+        val invalidationFacts = listOf(
+            "rect-bounds",
+            "blur-sigma",
+            "blur-style",
+            "material-kind",
+            "transform-class",
+            "requested-sigma=${mf.sigma}",
+            "normalized-style=${mf.style.name.lowercase()}",
+            "route-status=prepared",
+        )
         val analysisRecord = GPUDrawAnalysisRecord(
             recordId = recordId,
             commandIdValue = command.commandId.value,
             commandFamily = "FillRect",
             boundsHash = command.bounds.stableHash(),
-            routeDecisionLabel = "prepared.fill_rect.blur_mask",
+            routeDecisionLabel = routeLabel,
             materialKeyHash = "pending.material.${command.material.kind.name.lowercase()}",
             renderStepCandidates = listOf(renderStep),
             sortKey = SortKey(command.ordering.paintOrder.toLong()),
@@ -315,7 +325,7 @@ class GPUFirstRoutePlanner(
         )
         val analysisDecision = GPUDrawAnalysisDecision.Candidate(
             recordId = recordId,
-            routeDecisionLabel = "prepared.fill_rect.blur_mask",
+            routeDecisionLabel = routeLabel,
             resourceDeclarations = listOf("blur_mask_artifacts:blur_rect.${command.commandId.value}"),
             renderStepCandidates = listOf(renderStep),
         )
@@ -437,24 +447,34 @@ class GPUFirstRoutePlanner(
         )
     }
 
-    /** Builds a blur-mask FillRRect prepared GPU route that signals offscreen blur processing. */
+    /** Builds a prepared, unexecuted blur-mask FillRRect route contract. */
     private fun blurMaskFillRRectRouteDecision(command: NormalizedDrawCommand.FillRRect): GPUFirstRoutePlan {
         val recordId = "analysis.fill_rrect.${command.commandId.value}"
-        val pipelineKey = "pending.pipeline.fill_rrect.blur_mask.rgba8unorm.src_over"
-        val renderStep = blurMaskFilterRenderStep
-        val consumerKind = "blur-mask.sample.rrect-fill"
+        val routeLabel = "prepared.fill_rrect.mask_blur"
+        val pipelineKey = "mask-blur.rrect-fill.rgba8unorm.src_over"
+        val renderStep = "rrect.fill.mask_blur"
+        val consumerKind = "mask-blur.rrect-fill"
         val mf = requireNotNull(command.maskFilter)
         val blurDesc = when (mf) {
             is NormalizedMaskFilter.Blur -> "blur:${mf.style.name.lowercase()}_sigma=${mf.sigma}"
         }
         val artifactKey = "blur-mask.rrect-fill.rrect${command.commandId.value}.${blurDesc}"
-        val invalidationFacts = listOf("rrect-geometry", "blur-sigma", "blur-style", "material-kind", "transform-class")
+        val invalidationFacts = listOf(
+            "rrect-geometry",
+            "blur-sigma",
+            "blur-style",
+            "material-kind",
+            "transform-class",
+            "requested-sigma=${mf.sigma}",
+            "normalized-style=${mf.style.name.lowercase()}",
+            "route-status=prepared",
+        )
         val analysisRecord = GPUDrawAnalysisRecord(
             recordId = recordId,
             commandIdValue = command.commandId.value,
             commandFamily = "FillRRect",
             boundsHash = command.bounds.stableHash(),
-            routeDecisionLabel = "prepared.fill_rrect.blur_mask",
+            routeDecisionLabel = routeLabel,
             materialKeyHash = "pending.material.${command.material.kind.name.lowercase()}",
             renderStepCandidates = listOf(renderStep),
             sortKey = SortKey(command.ordering.paintOrder.toLong()),
@@ -469,7 +489,7 @@ class GPUFirstRoutePlanner(
         )
         val analysisDecision = GPUDrawAnalysisDecision.Candidate(
             recordId = recordId,
-            routeDecisionLabel = "prepared.fill_rrect.blur_mask",
+            routeDecisionLabel = routeLabel,
             resourceDeclarations = listOf("blur_mask_artifacts:blur_rrect.${command.commandId.value}"),
             renderStepCandidates = listOf(renderStep),
         )
@@ -634,24 +654,36 @@ class GPUFirstRoutePlanner(
         )
     }
 
-    /** Builds a blur-mask FillPath prepared GPU route that signals offscreen blur processing. */
+    /** Builds a prepared, unexecuted blur-mask FillPath route contract. */
     private fun blurMaskFillPathRouteDecision(command: NormalizedDrawCommand.FillPath): GPUFirstRoutePlan {
         val recordId = "analysis.fill_path.${command.commandId.value}"
-        val pipelineKey = "pending.pipeline.fill_path.blur_mask.rgba8unorm.src_over"
-        val renderStep = blurMaskFilterRenderStep
-        val consumerKind = "blur-mask.sample.path-fill"
+        val routeLabel = "prepared.path_fill.mask_blur"
+        val pipelineKey = "mask-blur.path-fill.rgba8unorm.src_over"
+        val renderStep = "path.fill.mask_blur"
+        val consumerKind = "mask-blur.path-fill"
         val mf = requireNotNull(command.maskFilter)
         val blurDesc = when (mf) {
             is NormalizedMaskFilter.Blur -> "blur:${mf.style.name.lowercase()}_sigma=${mf.sigma}"
         }
         val artifactKey = "blur-mask.path-fill.${command.pathKey.sanitizeForAnalysisKey()}.${blurDesc}"
-        val invalidationFacts = listOf("path-content-hash", "blur-sigma", "blur-style", "fill-rule", "transform-class", "bounds-proof", "tessellation-hash")
+        val invalidationFacts = listOf(
+            "path-content-hash",
+            "blur-sigma",
+            "blur-style",
+            "fill-rule",
+            "transform-class",
+            "bounds-proof",
+            "tessellation-hash",
+            "requested-sigma=${mf.sigma}",
+            "normalized-style=${mf.style.name.lowercase()}",
+            "route-status=prepared",
+        )
         val analysisRecord = GPUDrawAnalysisRecord(
             recordId = recordId,
             commandIdValue = command.commandId.value,
             commandFamily = "FillPath",
             boundsHash = command.bounds.stableHash(),
-            routeDecisionLabel = "prepared.path_fill.blur_mask",
+            routeDecisionLabel = routeLabel,
             materialKeyHash = "pending.material.${command.material.kind.name.lowercase()}",
             renderStepCandidates = listOf(renderStep),
             sortKey = SortKey(command.ordering.paintOrder.toLong()),
@@ -666,7 +698,7 @@ class GPUFirstRoutePlanner(
         )
         val analysisDecision = GPUDrawAnalysisDecision.Candidate(
             recordId = recordId,
-            routeDecisionLabel = "prepared.path_fill.blur_mask",
+            routeDecisionLabel = routeLabel,
             resourceDeclarations = listOf("blur_mask_artifacts:blur_path.${command.commandId.value}"),
             renderStepCandidates = listOf(renderStep),
         )
@@ -1737,9 +1769,7 @@ class GPUFirstRoutePlanner(
         /** Transform classes accepted by the ApplyFilter route. */
         val acceptedApplyFilterTransformTypes = setOf(GPUTransformType.Identity, GPUTransformType.Translate)
 
-        /** Render step identity for blur mask filter route. */
-        const val blurMaskFilterRenderStep = "path.fill.blur_mask"
-    }
+}
 }
 
 /** Returns a terminal refusal code for a blur mask filter, or null when blur is valid and may be accepted. */
