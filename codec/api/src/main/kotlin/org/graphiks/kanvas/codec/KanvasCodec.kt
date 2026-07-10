@@ -122,12 +122,8 @@ internal fun SkColorSpace.toKanvasColorSpace(): ColorSpace {
         throw UnsupportedKanvasColorSpaceException(profileRefusalCode ?: "profile")
     }
 
-    val gamut = when {
-        toXYZD50.isNear(SkNamedGamut.kSRGB) -> Gamut.SRGB
-        toXYZD50.isNear(SkNamedGamut.kDisplayP3) -> Gamut.DISPLAY_P3
-        toXYZD50.isNear(SkNamedGamut.kRec2020) -> Gamut.REC2020
-        else -> throw UnsupportedKanvasColorSpaceException("gamut")
-    }
+    val gamut = toXYZD50.classifyNamedGamut()
+        ?: throw UnsupportedKanvasColorSpaceException("gamut")
     val transferFunction = when {
         transferFn.isNear(SkNamedTransferFn.kSRGB) -> TransferFunction.SRGB
         transferFn.isNear(SkNamedTransferFn.kLinear) -> TransferFunction.LINEAR
@@ -176,9 +172,18 @@ private val Gamut.displayName: String
         Gamut.REC2020 -> "Rec.2020"
     }
 
-private fun SkcmsMatrix3x3.isNear(other: SkcmsMatrix3x3): Boolean {
+private val NAMED_GAMUTS: List<Pair<SkcmsMatrix3x3, Gamut>> = listOf(
+    SkNamedGamut.kSRGB to Gamut.SRGB,
+    SkNamedGamut.kDisplayP3 to Gamut.DISPLAY_P3,
+    SkNamedGamut.kRec2020 to Gamut.REC2020,
+)
+
+private fun SkcmsMatrix3x3.classifyNamedGamut(): Gamut? =
+    NAMED_GAMUTS.firstOrNull { (matrix, _) -> isNear(matrix, ICC_GAMUT_TOLERANCE) }?.second
+
+private fun SkcmsMatrix3x3.isNear(other: SkcmsMatrix3x3, tolerance: Float): Boolean {
     for (row in 0 until 3) for (column in 0 until 3) {
-        if (abs(this[row, column] - other[row, column]) > COLOR_SPACE_TOLERANCE) return false
+        if (abs(this[row, column] - other[row, column]) > tolerance) return false
     }
     return true
 }
@@ -191,6 +196,8 @@ private fun SkcmsTransferFunction.isNear(other: SkcmsTransferFunction): Boolean 
     d to other.d,
     e to other.e,
     f to other.f,
-).all { (left, right) -> abs(left - right) <= COLOR_SPACE_TOLERANCE }
+).all { (left, right) -> abs(left - right) <= TRANSFER_FUNCTION_TOLERANCE }
 
-private const val COLOR_SPACE_TOLERANCE: Float = 2f / 65_536f
+// Matrix/TRC ICC round-trips move supported Rec.2020 matrices by about 20 s15Fixed16 steps.
+private const val ICC_GAMUT_TOLERANCE: Float = 24f / 65_536f
+private const val TRANSFER_FUNCTION_TOLERANCE: Float = 2f / 65_536f

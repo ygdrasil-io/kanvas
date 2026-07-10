@@ -14,10 +14,12 @@ import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkEncodedImageFormat
+import org.skia.foundation.SkICC
 import org.skia.foundation.SkImageInfo
 import org.skia.foundation.skcms.SkNamedGamut
 import org.skia.foundation.skcms.SkNamedTransferFn
 import org.skia.foundation.skcms.SkcmsICCProfile
+import org.skia.foundation.skcms.skcmsParse
 
 class CodecImageDecoderColorSpaceTest {
     @Test
@@ -31,6 +33,21 @@ class CodecImageDecoderColorSpaceTest {
         assertTrue(result is ImageDecodeResult.Success)
         val image = (result as ImageDecodeResult.Success).image
         assertEquals(ColorSpace.DISPLAY_P3, image.colorSpace)
+        assertArrayEquals(byteArrayOf(0x12, 0x34, 0x56, 0x7F), image.pixels)
+    }
+
+    @Test
+    fun `decoder preserves serialized sRGB tag without transforming RGBA samples`() {
+        val profile = requireNotNull(
+            skcmsParse(SkICC.WriteToICC(SkNamedTransferFn.kSRGB, SkNamedGamut.kSRGB)),
+        )
+        val source = requireNotNull(SkColorSpace.make(profile))
+
+        val result = decodeWith(source)
+
+        assertTrue(result is ImageDecodeResult.Success)
+        val image = (result as ImageDecodeResult.Success).image
+        assertEquals(ColorSpace.SRGB, image.colorSpace)
         assertArrayEquals(byteArrayOf(0x12, 0x34, 0x56, 0x7F), image.pixels)
     }
 

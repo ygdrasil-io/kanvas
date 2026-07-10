@@ -58,14 +58,49 @@ class KanvasCodecColorSpaceTest {
 
     @Test
     fun `serialized Display P3 source tag is preserved`() {
-        val profile = requireNotNull(
-            skcmsParse(SkICC.WriteToICC(SkNamedTransferFn.kSRGB, SkNamedGamut.kDisplayP3)),
-        )
-        val source = requireNotNull(SkColorSpace.make(profile))
+        val source = serializedColorSpace(SkNamedTransferFn.kSRGB, SkNamedGamut.kDisplayP3)
 
         val result = imageInfo(source).toKanvasImageInfo()
 
         assertEquals(ColorSpace.DISPLAY_P3, result.colorSpace)
+    }
+
+    @Test
+    fun `serialized sRGB source tag is preserved`() {
+        val source = serializedColorSpace(SkNamedTransferFn.kSRGB, SkNamedGamut.kSRGB)
+
+        val result = imageInfo(source).toKanvasImageInfo()
+
+        assertEquals(ColorSpace.SRGB, result.colorSpace)
+    }
+
+    @Test
+    fun `serialized linear sRGB source tag is preserved`() {
+        val source = serializedColorSpace(SkNamedTransferFn.kLinear, SkNamedGamut.kSRGB)
+
+        val result = imageInfo(source).toKanvasImageInfo()
+
+        assertEquals(ColorSpace.LINEAR_SRGB, result.colorSpace)
+    }
+
+    @Test
+    fun `serialized Rec2020 source with sRGB transfer is preserved`() {
+        val source = serializedColorSpace(SkNamedTransferFn.kSRGB, SkNamedGamut.kRec2020)
+
+        val result = imageInfo(source).toKanvasImageInfo()
+
+        assertEquals(TransferFunction.SRGB, result.colorSpace.transferFunction)
+        assertEquals(Gamut.REC2020, result.colorSpace.gamut)
+    }
+
+    @Test
+    fun `serialized Rec2020 source with linear transfer is preserved`() {
+        val source = serializedColorSpace(SkNamedTransferFn.kLinear, SkNamedGamut.kRec2020)
+
+        val result = imageInfo(source).toKanvasImageInfo()
+
+        assertEquals(TransferFunction.LINEAR, result.colorSpace.transferFunction)
+        assertEquals(Gamut.REC2020, result.colorSpace.gamut)
     }
 
     @Test
@@ -158,6 +193,23 @@ class KanvasCodecColorSpaceTest {
         )
     }
 
+    @Test
+    fun `nearby unknown gamut is refused instead of retagged as sRGB`() {
+        val unknownGamut = SkNamedGamut.kSRGB.copy().also {
+            it.vals[0][0] += 64f / 65_536f
+        }
+        val source = requireNotNull(SkColorSpace.makeRGB(SkNamedTransferFn.kSRGB, unknownGamut))
+
+        val failure = assertThrows<IllegalArgumentException> {
+            imageInfo(source).toKanvasImageInfo()
+        }
+
+        assertEquals(
+            "Unsupported SkColorSpace for Kanvas conversion: gamut",
+            failure.message,
+        )
+    }
+
     private fun imageInfo(colorSpace: SkColorSpace): SkImageInfo = SkImageInfo.Make(
         width = 1,
         height = 1,
@@ -168,6 +220,15 @@ class KanvasCodecColorSpaceTest {
 
     private fun sdrColorSpace(gamut: SkcmsMatrix3x3): SkColorSpace =
         requireNotNull(SkColorSpace.makeRGB(SkNamedTransferFn.kSRGB, gamut))
+
+    private fun serializedColorSpace(
+        transferFunction: SkcmsTransferFunction,
+        gamut: SkcmsMatrix3x3,
+    ): SkColorSpace = requireNotNull(
+        SkColorSpace.make(
+            requireNotNull(skcmsParse(SkICC.WriteToICC(transferFunction, gamut))),
+        ),
+    )
 
     private fun hdrColorSpace(transfer: Int): SkColorSpace = SkColorSpace.makeProfileAware(
         SkcmsICCProfile.fromColorProfile(cicpProfile(transfer)),
