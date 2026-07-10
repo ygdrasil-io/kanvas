@@ -79,7 +79,7 @@ internal fun selectPathVerticesForCommand(
 ): List<Point> =
     if (isStroke) flattened else triangulated
 
-private data class LayerBounds(val x: Int, val y: Int, val width: Int, val height: Int)
+internal data class LayerBounds(val x: Int, val y: Int, val width: Int, val height: Int)
 
 private sealed interface LayerPlan {
     data class Supported(val bounds: LayerBounds?, val composite: LayerCompositePlan) : LayerPlan
@@ -104,7 +104,7 @@ private data class SceneTargetFrame(
     val plan: LayerPlan.Supported,
 )
 
-private class LayerScissorOffscreenTarget(
+internal class LayerScissorOffscreenTarget(
     private val delegate: GPUBackendOffscreenTarget,
     private val sceneLayerBounds: (String) -> LayerBounds?,
 ) : GPUBackendOffscreenTarget by delegate {
