@@ -7,6 +7,7 @@ import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.geometry.PathVerb
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
+import org.graphiks.kanvas.gpu.renderer.commands.GPUImageFilterPlan
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendOffscreenTexture
@@ -493,6 +494,30 @@ internal fun renderViaGpu(
             }
             scanImages(ops)
 
+            fun renderImageCommand(cmd: NormalizedDrawCommand.DrawImageRect) {
+                when (val plan = cmd.imageFilterPlan) {
+                    GPUImageFilterPlan.None, GPUImageFilterPlan.Identity -> {
+                        t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
+                            dispatchImageRect(cmd, textureCache, dispatched, diagnostics, width, height, config)
+                        }
+                    }
+                    is GPUImageFilterPlan.Refused -> {
+                        diagnostics.fatal("refuse:${cmd.diagnosticName}", cmd.diagnosticName, plan.code)
+                    }
+                    is GPUImageFilterPlan.Blur -> {
+                        t.renderImageCommand(
+                            sceneTextureLabel = sceneLabel,
+                            command = cmd,
+                            textureCache = textureCache,
+                            sceneClearColor = sceneClear(),
+                            dispatched = dispatched,
+                            diagnostics = diagnostics,
+                            colorFormat = texFormat,
+                        )
+                    }
+                }
+            }
+
             for (op in ops) {
                 val cmdId = GPUDrawCommandID(dispatched.size)
                 when (op) {
@@ -587,9 +612,7 @@ internal fun renderViaGpu(
                     }
                     is DisplayOp.DrawImage -> {
                         val cmd = op.toImageRectCommand(cmdId, targets)
-                        t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
-                            dispatchImageRect(cmd, textureCache, dispatched, diagnostics, width, height, config)
-                        }
+                        renderImageCommand(cmd)
                         sceneHasContent = true
                     }
                     is DisplayOp.DrawText -> {
@@ -761,9 +784,7 @@ internal fun renderViaGpu(
                                 clip = op.clip,
                             )
                             val cmd = subOp.toImageRectCommand(subCmdId, targets)
-                            t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
-                                dispatchImageRect(cmd, textureCache, dispatched, diagnostics, width, height, config)
-                            }
+                            renderImageCommand(cmd)
                             sceneHasContent = true
                         }
                     }
@@ -787,9 +808,7 @@ internal fun renderViaGpu(
                                 clip = op.clip,
                             )
                             val cmd = subOp.toImageRectCommand(subCmdId, targets)
-                            t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
-                                dispatchImageRect(cmd, textureCache, dispatched, diagnostics, width, height, config)
-                            }
+                            renderImageCommand(cmd)
                             sceneHasContent = true
                         }
                     }
@@ -919,9 +938,7 @@ internal fun renderViaGpu(
                                 }
                                 is DisplayOp.DrawImage -> {
                                     val imgCmd = nestedOp.toImageRectCommand(nestedCmdId, targets)
-                                    t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
-                                        dispatchImageRect(imgCmd, textureCache, dispatched, diagnostics, width, height, config)
-                                    }
+                                    renderImageCommand(imgCmd)
                                     sceneHasContent = true
                                 }
                                 is DisplayOp.DrawImageNine -> {
@@ -937,9 +954,7 @@ internal fun renderViaGpu(
                                             clip = nestedOp.clip,
                                         )
                                         val imgCmd = subOp.toImageRectCommand(subCmdId, targets)
-                                        t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
-                                            dispatchImageRect(imgCmd, textureCache, dispatched, diagnostics, width, height, config)
-                                        }
+                                        renderImageCommand(imgCmd)
                                         sceneHasContent = true
                                     }
                                 }
@@ -963,9 +978,7 @@ internal fun renderViaGpu(
                                             clip = nestedOp.clip,
                                         )
                                         val imgCmd = subOp.toImageRectCommand(subCmdId, targets)
-                                        t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
-                                            dispatchImageRect(imgCmd, textureCache, dispatched, diagnostics, width, height, config)
-                                        }
+                                        renderImageCommand(imgCmd)
                                         sceneHasContent = true
                                     }
                                 }
@@ -991,9 +1004,7 @@ internal fun renderViaGpu(
                                             clip = nestedOp.clip,
                                         )
                                         val imgCmd = subOp.toImageRectCommand(subCmdId, targets)
-                                        t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
-                                            dispatchImageRect(imgCmd, textureCache, dispatched, diagnostics, width, height, config)
-                                        }
+                                        renderImageCommand(imgCmd)
                                         sceneHasContent = true
                                     }
                                 }
@@ -1266,9 +1277,7 @@ internal fun renderViaGpu(
                                 clip = op.clip,
                             )
                             val cmd = subOp.toImageRectCommand(subCmdId, targets)
-                            t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
-                                dispatchImageRect(cmd, textureCache, dispatched, diagnostics, width, height, config)
-                            }
+                            renderImageCommand(cmd)
                             sceneHasContent = true
                         }
                     }
@@ -1302,7 +1311,7 @@ internal fun renderViaGpu(
                 diagnostics = diagnostics,
                 stats = RenderStats(
                     opsDispatched = dispatched.size,
-                    opsRefused = diagnostics.entries.size - dispatched.size,
+                    opsRefused = diagnostics.fatalCount,
                     pipelineCount = 1,
                     drawCallCount = dispatched.size,
                     coverage = if (dispatched.isNotEmpty()) 1f else 0f,

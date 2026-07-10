@@ -1121,6 +1121,7 @@ sealed interface NormalizedDrawCommand {
         val imageSourceId: String,
         val src: GPURect,
         val dst: GPURect,
+        val imageFilterPlan: GPUImageFilterPlan = GPUImageFilterPlan.None,
         val samplingTileModeX: String = "clamp",
         val samplingTileModeY: String = "clamp",
         val samplingFilterMode: String = "linear",
