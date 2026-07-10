@@ -111,6 +111,7 @@ tasks.register<JavaExec>("generateSkiaScan") {
     project.findProperty("kanvas.scan.to")?.let { args("--to", it.toString()) }
     project.findProperty("kanvas.scan.timeout")?.let { args("--timeout", it.toString()) }
     project.findProperty("kanvas.scan.output")?.let { args("--output", it.toString()) }
+    project.findProperty("kanvas.scan.names")?.let { args("--names", it.toString()) }
 }
 
 tasks.register<JavaExec>("generateSkiaDashboard") {
