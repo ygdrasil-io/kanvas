@@ -31,7 +31,30 @@ class GPUImageFilterPlanTest {
         assertEquals(GPURect(4f, 1f, 20f, 23f), plan.outputBounds)
     }
 
-    private fun imageOp(paint: Paint): DisplayOp.DrawImage = DisplayOp.DrawImage(
+    @Test
+    fun `draw image refuses blur sigma beyond the bounded route`() {
+        val command = imageOp(
+            paint = Paint(imageFilter = ImageFilter.Blur(13f, 3f, TileMode.CLAMP)),
+        ).toImageRectCommand(GPUDrawCommandID(2), target(64, 64))
+
+        assertIs<GPUImageFilterPlan.Refused>(command.imageFilterPlan)
+    }
+
+    @Test
+    fun `draw image clamps blur bounds to the device rect clip`() {
+        val command = imageOp(
+            paint = Paint(imageFilter = ImageFilter.Blur(2f, 3f, TileMode.CLAMP)),
+            clip = ClipStack.DeviceRect(Rect(8f, 6f, 16f, 18f)),
+        ).toImageRectCommand(GPUDrawCommandID(3), target(64, 64))
+
+        val plan = assertIs<GPUImageFilterPlan.Blur>(command.imageFilterPlan)
+        assertEquals(GPURect(8f, 6f, 16f, 18f), plan.outputBounds)
+    }
+
+    private fun imageOp(
+        paint: Paint,
+        clip: ClipStack = ClipStack.WideOpen,
+    ): DisplayOp.DrawImage = DisplayOp.DrawImage(
         image = Image.fromPixels(
             width = 4,
             height = 4,
@@ -42,7 +65,7 @@ class GPUImageFilterPlanTest {
         dst = Rect(10f, 10f, 14f, 14f),
         paint = paint,
         transform = Matrix33.identity(),
-        clip = ClipStack.WideOpen,
+        clip = clip,
     )
 
     private fun target(width: Int, height: Int): GPUTargetFacts =

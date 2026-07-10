@@ -257,7 +257,9 @@ internal fun BlendMode.toGpuBlendFacts(): GPUBlendFacts {
 
 internal fun ClipStack.toGPUClipFacts(bounds: GPUBounds): GPUClipFacts = when (this) {
     ClipStack.WideOpen -> GPUClipFacts.wideOpen(bounds)
-    is ClipStack.DeviceRect -> GPUClipFacts.deviceRect(bounds)
+    is ClipStack.DeviceRect -> GPUClipFacts.deviceRect(
+        GPUBounds(rect.left, rect.top, rect.right, rect.bottom),
+    )
     is ClipStack.Complex -> GPUClipFacts.complexStack(bounds)
 }
 
@@ -510,6 +512,8 @@ private fun DisplayOp.DrawImage.toImageFilterPlan(
         !blur.sigmaY.isFinite() ||
         blur.sigmaX < 0f ||
         blur.sigmaY < 0f ||
+        blur.sigmaX > 12f ||
+        blur.sigmaY > 12f ||
         clip.kind == GPUClipKind.ComplexStack
     ) {
         return GPUImageFilterPlan.Refused("unsupported")

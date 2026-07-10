@@ -217,9 +217,9 @@ class GPUAlphaImageMaterialTest {
         assertNull(pass.stencilMode)
 
         val draw = pass.draws.single()
-        assertEquals(4, draw.scissorX)
+        assertEquals(5, draw.scissorX)
         assertEquals(5, draw.scissorY)
-        assertEquals(4, draw.scissorWidth)
+        assertEquals(2, draw.scissorWidth)
         assertEquals(2, draw.scissorHeight)
         assertFloatUniforms(
             draw.uniformBytes,
