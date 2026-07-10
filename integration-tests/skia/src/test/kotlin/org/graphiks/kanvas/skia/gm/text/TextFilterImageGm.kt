@@ -19,7 +19,7 @@ import org.graphiks.kanvas.text.Typefaces
 class TextFilterImageGm : SkiaGm {
     override val name = "textfilter_image"
     override val renderFamily = RenderFamily.TEXT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 65.0
     override val width = 512
     override val height = 342

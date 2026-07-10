@@ -26,7 +26,7 @@ import kotlin.math.sin
 class TextBlobMixedSizesGm : SkiaGm {
     override val name = "textblobmixedsizes"
     override val renderFamily = RenderFamily.TEXT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 85.0
     override val width = 2100
     override val height = 1900

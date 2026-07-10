@@ -22,7 +22,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 class DashTextCapsGm : SkiaGm {
     override val name = "dashtextcaps"
     override val renderFamily = RenderFamily.PATH
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.MEDIUM
     override val minSimilarity = 0.0
     override val width = 512
     override val height = 512

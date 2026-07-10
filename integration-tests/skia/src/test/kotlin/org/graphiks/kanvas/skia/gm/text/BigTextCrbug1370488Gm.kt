@@ -18,7 +18,7 @@ import org.graphiks.kanvas.types.Color
 class BigTextCrbug1370488Gm : SkiaGm {
     override val name = "bigtext_crbug_1370488"
     override val renderFamily = RenderFamily.TEXT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 5.0
     override val width = 512
     override val height = 512

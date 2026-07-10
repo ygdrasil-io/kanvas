@@ -16,7 +16,7 @@ import org.graphiks.kanvas.types.Rect
 class ScalepixelsUnpremulGm : SkiaGm {
     override val name = "scalepixels_unpremul"
     override val renderFamily = RenderFamily.IMAGE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 1080
     override val height = 280

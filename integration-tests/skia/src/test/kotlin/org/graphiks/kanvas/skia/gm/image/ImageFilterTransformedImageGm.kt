@@ -19,7 +19,7 @@ import org.graphiks.kanvas.types.Rect
 class ImageFilterTransformedImageGm : SkiaGm {
     override val name = "imagefilter_transformed_image"
     override val renderFamily = RenderFamily.IMAGE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.MEDIUM
     override val minSimilarity = 0.0
     override val width = 256
     override val height = 256

@@ -19,7 +19,7 @@ import org.graphiks.kanvas.types.Rect
 class OverdrawTextXformGm : SkiaGm {
     override val name = "overdraw_text_xform"
     override val renderFamily = RenderFamily.TEXT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 41.9
     override val width = 512
     override val height = 512

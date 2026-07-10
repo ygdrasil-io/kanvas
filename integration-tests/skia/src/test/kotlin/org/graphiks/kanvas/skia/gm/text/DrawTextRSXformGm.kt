@@ -30,7 +30,7 @@ import kotlin.math.PI
 class DrawTextRSXformGm : SkiaGm {
     override val name = "drawTextRSXform"
     override val renderFamily = RenderFamily.TEXT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 430
     override val height = 860

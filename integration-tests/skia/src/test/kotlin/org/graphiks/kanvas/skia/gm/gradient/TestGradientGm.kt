@@ -22,7 +22,7 @@ import org.graphiks.kanvas.types.Rect
 class TestGradientGm : SkiaGm {
     override val name = "testgradient"
     override val renderFamily = RenderFamily.GRADIENT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 800
     override val height = 800

@@ -27,7 +27,7 @@ import org.graphiks.kanvas.types.Rect
 class UnpremulGm : SkiaGm {
     override val name = "unpremul"
     override val renderFamily = RenderFamily.IMAGE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val tolerance = 8
     override val width = 200

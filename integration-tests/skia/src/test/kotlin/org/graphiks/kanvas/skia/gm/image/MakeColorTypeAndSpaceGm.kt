@@ -20,7 +20,7 @@ import org.graphiks.kanvas.types.Rect
 class MakeColorTypeAndSpaceGm : SkiaGm {
     override val name = "makecolortypeandspace"
     override val renderFamily = RenderFamily.IMAGE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 128 * 3
     override val height = 128 * 4

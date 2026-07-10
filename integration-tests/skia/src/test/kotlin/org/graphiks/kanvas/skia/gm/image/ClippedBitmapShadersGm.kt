@@ -16,7 +16,7 @@ import org.graphiks.kanvas.types.Rect
 class ClippedBitmapShadersGm : SkiaGm {
     override val name = "clippedbitmapshaders"
     override val renderFamily = RenderFamily.IMAGE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 300
     override val height = 300

@@ -16,7 +16,7 @@ import org.graphiks.kanvas.text.Typefaces
 class FontCacheGm : SkiaGm {
     override val name = "fontcache"
     override val renderFamily = RenderFamily.TEXT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 1280
     override val height = 1280

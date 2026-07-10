@@ -22,7 +22,7 @@ import org.graphiks.kanvas.types.Rect
 class RadialGradientPrecisionGm : SkiaGm {
     override val name = "radial_gradient_precision"
     override val renderFamily = RenderFamily.GRADIENT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 200
     override val height = 200

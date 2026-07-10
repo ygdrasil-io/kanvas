@@ -23,7 +23,7 @@ import org.graphiks.kanvas.types.VertexMode
 class VerticesCollapsedGm : SkiaGm {
     override val name = "vertices_collapsed"
     override val renderFamily = RenderFamily.MESH
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 50
     override val height = 50

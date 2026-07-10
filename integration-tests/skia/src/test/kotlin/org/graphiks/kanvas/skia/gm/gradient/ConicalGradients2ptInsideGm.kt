@@ -22,7 +22,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 class ConicalGradients2ptInsideGm : SkiaGm {
     override val name = "gradients_2pt_conical_inside_nodither"
     override val renderFamily = RenderFamily.GRADIENT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 840
     override val height = 815

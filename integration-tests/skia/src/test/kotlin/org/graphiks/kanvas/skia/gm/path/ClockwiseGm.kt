@@ -17,7 +17,7 @@ import org.graphiks.kanvas.types.Rect
 class ClockwiseGm : SkiaGm {
     override val name = "clockwise"
     override val renderFamily = RenderFamily.PATH
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 300
     override val height = 200

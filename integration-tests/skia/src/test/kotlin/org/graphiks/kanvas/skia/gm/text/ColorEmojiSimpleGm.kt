@@ -12,7 +12,7 @@ import org.graphiks.kanvas.types.Rect
 class ColorEmojiSimpleGm : SkiaGm {
     override val name = "coloremoji"
     override val renderFamily = RenderFamily.TEXT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 400
     override val height = 200

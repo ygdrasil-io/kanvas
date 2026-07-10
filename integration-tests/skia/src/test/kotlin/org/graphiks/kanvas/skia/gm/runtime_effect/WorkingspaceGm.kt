@@ -19,7 +19,7 @@ import org.graphiks.kanvas.types.Rect
 class WorkingspaceGm : SkiaGm {
     override val name = "workingspace"
     override val renderFamily = RenderFamily.RUNTIME_EFFECT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 14.464285714285715
     override val width = 200
     override val height = 350

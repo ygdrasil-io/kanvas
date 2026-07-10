@@ -23,7 +23,7 @@ import org.graphiks.kanvas.types.Rect
 class GradientsHueMethodGm : SkiaGm {
     override val name = "gradients_hue_method"
     override val renderFamily = RenderFamily.GRADIENT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 285
     override val height = 155

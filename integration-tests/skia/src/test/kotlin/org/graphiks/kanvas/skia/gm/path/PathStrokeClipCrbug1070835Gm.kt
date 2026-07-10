@@ -21,7 +21,7 @@ import org.graphiks.kanvas.types.Rect
 class PathStrokeClipCrbug1070835Gm : SkiaGm {
     override val name = "path_stroke_clip_crbug1070835"
     override val renderFamily = RenderFamily.PATH
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 80.0
     override val width = 25
     override val height = 50

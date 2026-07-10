@@ -24,7 +24,7 @@ import kotlin.math.floor
 class MixedTextBlobsGm : SkiaGm {
     override val name = "mixedtextblobs"
     override val renderFamily = RenderFamily.TEXT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 1250
     override val height = 700

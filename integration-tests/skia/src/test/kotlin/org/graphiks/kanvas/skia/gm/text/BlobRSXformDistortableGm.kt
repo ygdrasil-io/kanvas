@@ -24,7 +24,7 @@ import kotlin.math.sin
 class BlobRSXformDistortableGm : SkiaGm {
     override val name = "blob_rsxform_distortable"
     override val renderFamily = RenderFamily.TEXT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 45.0
     override val width = 500
     override val height = 100

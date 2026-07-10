@@ -19,7 +19,7 @@ private val typeface = Typefaces.fromResource("fonts/LiberationSans-Regular.ttf"
 class TextBlobRandomFontGm : SkiaGm {
     override val name = "textblobrandomfont"
     override val renderFamily = RenderFamily.TEXT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 2000
     override val height = 1600

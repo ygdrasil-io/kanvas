@@ -18,7 +18,7 @@ import org.graphiks.kanvas.types.Color
 class InnerJoinGeometryGm : SkiaGm {
     override val name = "inner_join_geometry"
     override val renderFamily = RenderFamily.PATH
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.MEDIUM
     override val minSimilarity = 0.0
     override val width = 1000
     override val height = 700

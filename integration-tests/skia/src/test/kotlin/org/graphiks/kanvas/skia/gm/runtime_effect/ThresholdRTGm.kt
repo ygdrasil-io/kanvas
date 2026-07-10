@@ -25,7 +25,7 @@ import org.graphiks.kanvas.types.Rect
 class ThresholdRTGm : SkiaGm {
     override val name = "threshold_rt"
     override val renderFamily = RenderFamily.RUNTIME_EFFECT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.006103515625
     override val width = 256
     override val height = 256

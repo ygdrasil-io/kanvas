@@ -22,7 +22,7 @@ import org.graphiks.kanvas.types.Rect
 class LocalMatrixImageShaderGm : SkiaGm {
     override val name = "localmatriximageshader"
     override val renderFamily = RenderFamily.IMAGE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 250
     override val height = 250

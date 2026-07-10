@@ -25,7 +25,7 @@ import org.graphiks.kanvas.types.VertexMode
 class PictureMeshGm : SkiaGm {
     override val name = "picture_mesh"
     override val renderFamily = RenderFamily.MESH
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 99.0
     override val width = 390
     override val height = 90

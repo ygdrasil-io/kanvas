@@ -27,7 +27,7 @@ class TilemodesGm(
 ) : SkiaGm {
     override val name: String = if (powerOfTwoSize) "tilemodes" else "tilemodes_npot"
     override val renderFamily = RenderFamily.IMAGE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 880
     override val height = 560

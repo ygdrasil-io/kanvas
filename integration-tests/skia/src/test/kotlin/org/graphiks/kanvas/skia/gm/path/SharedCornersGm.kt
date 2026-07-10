@@ -24,7 +24,7 @@ import kotlin.random.Random
 class SharedCornersGm : SkiaGm {
     override val name = "sharedcorners"
     override val renderFamily = RenderFamily.PATH
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 720
     override val height = 740

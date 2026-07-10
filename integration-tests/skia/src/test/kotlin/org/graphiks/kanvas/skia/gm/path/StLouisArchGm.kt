@@ -18,7 +18,7 @@ import org.graphiks.kanvas.types.Point
 class StLouisArchGm : SkiaGm {
     override val name = "stlouisarch"
     override val renderFamily = RenderFamily.PATH
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = kWidth.toInt()
     override val height = kHeight.toInt()

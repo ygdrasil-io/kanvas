@@ -16,7 +16,7 @@ import org.graphiks.kanvas.types.Rect
 class LongRectDashGm : SkiaGm {
     override val name = "longrect_dash"
     override val renderFamily = RenderFamily.PATH
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 250
     override val height = 250

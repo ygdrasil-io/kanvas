@@ -14,7 +14,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 class StrokeTextNativeGm : SkiaGm {
     override val name = "stroketext_native"
     override val renderFamily = RenderFamily.TEXT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 650
     override val height = 420

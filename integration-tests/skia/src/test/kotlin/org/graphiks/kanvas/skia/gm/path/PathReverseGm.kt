@@ -23,7 +23,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 class PathReverseGm : SkiaGm {
     override val name = "path-reverse"
     override val renderFamily = RenderFamily.PATH
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 640
     override val height = 480

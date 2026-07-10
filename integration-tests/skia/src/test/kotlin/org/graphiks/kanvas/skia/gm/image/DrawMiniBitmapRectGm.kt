@@ -24,7 +24,7 @@ import kotlin.random.Random
 class DrawMiniBitmapRectGm : SkiaGm {
     override val name = "drawminibitmaprect"
     override val renderFamily = RenderFamily.IMAGE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = GSIZE
     override val height = GSIZE

@@ -16,7 +16,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 class TrickyCubicStrokesLargeRadiusGm : SkiaGm {
     override val name = "trickycubicstrokes_largeradius"
     override val renderFamily = RenderFamily.PATH
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 68.9
     override val width = 128
     override val height = 256

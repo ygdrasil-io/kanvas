@@ -21,7 +21,7 @@ import org.graphiks.kanvas.types.Rect
 class Skbug8664Gm : SkiaGm {
     override val name = "skbug_8664"
     override val renderFamily = RenderFamily.IMAGE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 830
     override val height = 550

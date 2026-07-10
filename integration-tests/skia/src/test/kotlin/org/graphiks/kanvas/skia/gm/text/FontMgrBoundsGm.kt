@@ -24,7 +24,7 @@ class FontMgrBoundsGm(
     override val name: String
         get() = if (fScaleX != 1f || fSkewX != 0f) "fontmgr_bounds_${fmtScalar(fScaleX)}_${fmtScalar(fSkewX)}" else "fontmgr_bounds"
     override val renderFamily = RenderFamily.TEXT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 1024
     override val height = 850

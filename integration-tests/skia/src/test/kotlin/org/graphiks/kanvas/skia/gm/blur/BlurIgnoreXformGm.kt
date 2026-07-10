@@ -89,7 +89,7 @@ private fun drawBlurIgnoreXform(canvas: GmCanvas, drawType: String) {
 class BlurIgnoreXformCircleGm : SkiaGm {
     override val name = "blur_ignore_xform_circle"
     override val renderFamily = RenderFamily.BLUR
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 375
     override val height = 475
@@ -107,7 +107,7 @@ class BlurIgnoreXformCircleGm : SkiaGm {
 class BlurIgnoreXformRectGm : SkiaGm {
     override val name = "blur_ignore_xform_rect"
     override val renderFamily = RenderFamily.BLUR
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 375
     override val height = 475
@@ -125,7 +125,7 @@ class BlurIgnoreXformRectGm : SkiaGm {
 class BlurIgnoreXformRRectGm : SkiaGm {
     override val name = "blur_ignore_xform_rrect"
     override val renderFamily = RenderFamily.BLUR
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 375
     override val height = 475

@@ -21,7 +21,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 class AlphaGradientsGm : SkiaGm {
     override val name = "alphagradients"
     override val renderFamily = RenderFamily.GRADIENT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 640
     override val height = 480

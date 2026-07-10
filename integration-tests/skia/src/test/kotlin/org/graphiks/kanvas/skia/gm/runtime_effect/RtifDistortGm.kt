@@ -27,7 +27,7 @@ import kotlin.random.Random
 class RtifDistortGm : SkiaGm {
     override val name = "rtif_distort"
     override val renderFamily = RenderFamily.RUNTIME_EFFECT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 500
     override val height = 750

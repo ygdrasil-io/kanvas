@@ -27,7 +27,7 @@ import kotlin.random.Random
 class RoundRectGm : SkiaGm {
     override val name = "roundrects"
     override val renderFamily = RenderFamily.PATH
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 1200
     override val height = 900

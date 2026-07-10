@@ -25,7 +25,7 @@ import org.graphiks.kanvas.types.Point
 class TextEffectsGm : SkiaGm {
     override val name = "fancyblobunderline"
     override val renderFamily = RenderFamily.TEXT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 85.0
     override val width = 1480
     override val height = 1380

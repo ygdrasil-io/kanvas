@@ -20,7 +20,7 @@ import org.graphiks.kanvas.types.Matrix33
 class PerspTextMinimalGm : SkiaGm {
     override val name = "persptext_minimal"
     override val renderFamily = RenderFamily.TEXT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 80.0
     override val width = 1024
     override val height = 768

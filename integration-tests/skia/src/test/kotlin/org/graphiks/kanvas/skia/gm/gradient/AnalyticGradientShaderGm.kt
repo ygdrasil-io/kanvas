@@ -22,7 +22,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 class AnalyticGradientShaderGm : SkiaGm {
     override val name = "analytic_gradients"
     override val renderFamily = RenderFamily.GRADIENT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 1024
     override val height = 512

@@ -33,7 +33,7 @@ class DrawBitmapRectGm(private val variant: Variant) : SkiaGm {
 
     override val name = "drawbitmaprect" + (variant.suffix ?: "")
     override val renderFamily = RenderFamily.IMAGE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = gSize
     override val height = gSize

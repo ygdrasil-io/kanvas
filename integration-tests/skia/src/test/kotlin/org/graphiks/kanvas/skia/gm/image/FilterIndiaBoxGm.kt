@@ -17,7 +17,7 @@ import org.graphiks.kanvas.types.Rect
 class FilterIndiaBoxGm : SkiaGm {
     override val name = "filterindiabox"
     override val renderFamily = RenderFamily.IMAGE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 680
     override val height = 130

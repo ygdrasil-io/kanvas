@@ -25,7 +25,7 @@ class SurfacePropsGm(
 ) : SkiaGm {
     override val name: String = if (useDistanceField) "surfaceprops_df" else "surfaceprops"
     override val renderFamily = RenderFamily.TEXT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = W
     override val height: Int = H * recs.size

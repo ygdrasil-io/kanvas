@@ -21,7 +21,7 @@ private val typeface = Typefaces.fromResource("fonts/LiberationSans-Regular.ttf"
 class MacaaColorsGm : SkiaGm {
     override val name = "macaa_colors"
     override val renderFamily = RenderFamily.TEXT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 800
     override val height = 500

@@ -19,7 +19,7 @@ import kotlin.random.Random
 class ReadPixelsCodecGm : SkiaGm {
     override val name = "readpixelscodec"
     override val renderFamily = RenderFamily.IMAGE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.MEDIUM
     override val minSimilarity = 0.0
     override val width = 3 * (kEncodedWidth + 1)
     override val height = 12 * (kEncodedHeight + 1)

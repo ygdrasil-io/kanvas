@@ -14,7 +14,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 class Lattice2Gm : SkiaGm {
     override val name = "lattice2"
     override val renderFamily = RenderFamily.PATH
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 800
     override val height = 800

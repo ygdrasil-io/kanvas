@@ -21,7 +21,7 @@ import org.graphiks.kanvas.types.Rect
 class NullChildRTGm : SkiaGm {
     override val name = "null_child_rt"
     override val renderFamily = RenderFamily.IMAGE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 150
     override val height = 100

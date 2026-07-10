@@ -19,7 +19,7 @@ import org.graphiks.kanvas.types.Rect
 class ClipErrorGm : SkiaGm {
     override val name = "cliperror"
     override val renderFamily = RenderFamily.TEXT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 800
     override val height = 800

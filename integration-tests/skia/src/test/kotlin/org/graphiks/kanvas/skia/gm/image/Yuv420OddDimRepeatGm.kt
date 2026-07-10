@@ -14,7 +14,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 class Yuv420OddDimRepeatGm : SkiaGm {
     override val name = "yuv420_odd_dim_repeat"
     override val renderFamily = RenderFamily.IMAGE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 1000
     override val height = 500

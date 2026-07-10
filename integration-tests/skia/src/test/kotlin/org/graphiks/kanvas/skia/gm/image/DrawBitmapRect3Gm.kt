@@ -17,7 +17,7 @@ import org.graphiks.kanvas.types.Rect
 class DrawBitmapRect3Gm : SkiaGm {
     override val name = "3x3bitmaprect"
     override val renderFamily = RenderFamily.IMAGE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.MEDIUM
     override val minSimilarity = 0.0
     override val width = 640
     override val height = 480

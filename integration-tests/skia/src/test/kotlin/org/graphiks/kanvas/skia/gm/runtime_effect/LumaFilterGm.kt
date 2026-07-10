@@ -35,7 +35,7 @@ import org.graphiks.kanvas.types.Color
 class LumaFilterGm : SkiaGm {
     override val name = "lumafilter"
     override val renderFamily = RenderFamily.RUNTIME_EFFECT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 600
     override val height = 420

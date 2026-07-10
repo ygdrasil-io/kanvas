@@ -27,7 +27,7 @@ import org.graphiks.kanvas.types.Rect
 class IntrinsicsExponentialGm : SkiaGm {
     override val name = "runtime_intrinsics_exponential"
     override val renderFamily = RenderFamily.RUNTIME_EFFECT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 215
     override val height = 605

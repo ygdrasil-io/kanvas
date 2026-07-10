@@ -20,7 +20,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 class GradientManyColorsGm : SkiaGm {
     override val name = "gradients_many"
     override val renderFamily = RenderFamily.GRADIENT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 880
     override val height = 400

@@ -25,7 +25,7 @@ import org.graphiks.kanvas.types.Rect
 class ShaderText3Gm : SkiaGm {
     override val name = "shadertext3"
     override val renderFamily = RenderFamily.TEXT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 820
     override val height = 930

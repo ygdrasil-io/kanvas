@@ -16,7 +16,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 class DashingGm : SkiaGm {
     override val name = "dashing"
     override val renderFamily = RenderFamily.PATH
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 84.8
     override val width = 640
     override val height = 340

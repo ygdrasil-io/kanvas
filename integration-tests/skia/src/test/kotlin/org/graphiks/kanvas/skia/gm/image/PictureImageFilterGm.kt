@@ -45,7 +45,7 @@ class PictureImageFilterGm : SkiaGm {
 
     override val name = "pictureimagefilter"
     override val renderFamily = RenderFamily.IMAGE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 600
     override val height = 300

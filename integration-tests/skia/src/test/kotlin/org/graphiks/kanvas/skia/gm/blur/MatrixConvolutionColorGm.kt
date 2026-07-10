@@ -11,7 +11,7 @@ import org.graphiks.kanvas.types.Color
 class MatrixConvolutionColorGm : SkiaGm {
     override val name = "matrixconvolution_color"
     override val renderFamily = RenderFamily.BLUR
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 500
     override val height = 300

@@ -22,7 +22,7 @@ import kotlin.math.sin
 class PreserveFillRuleBigGm : SkiaGm {
     override val name = "preservefillrule_big"
     override val renderFamily = RenderFamily.PATH
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 47.7
     override val width = 400
     override val height = 400

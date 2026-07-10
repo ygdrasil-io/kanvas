@@ -21,7 +21,7 @@ import org.graphiks.kanvas.types.Color
 class ZeroLengthPathsDblAaGm : SkiaGm {
     override val name = "zero_length_paths_dbl_aa"
     override val renderFamily = RenderFamily.PATH
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 80.0
     override val width = 1874
     override val height = 398

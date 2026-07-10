@@ -26,7 +26,7 @@ import org.graphiks.kanvas.types.Rect
 class UnsharpRTGm : SkiaGm {
     override val name = "unsharp_rt"
     override val renderFamily = RenderFamily.RUNTIME_EFFECT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 1.007080078125
     override val width = 512
     override val height = 256

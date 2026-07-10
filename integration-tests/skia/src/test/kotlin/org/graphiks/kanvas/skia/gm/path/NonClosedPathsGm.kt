@@ -18,7 +18,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 class NonClosedPathsGm : SkiaGm {
     override val name = "nonclosedpaths"
     override val renderFamily = RenderFamily.PATH
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 59.8
     override val width = 1220
     override val height = 1920

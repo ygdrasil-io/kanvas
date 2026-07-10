@@ -28,7 +28,7 @@ import org.graphiks.kanvas.types.Rect
 class IntrinsicsRelationalGm : SkiaGm {
     override val name = "runtime_intrinsics_relational"
     override val renderFamily = RenderFamily.RUNTIME_EFFECT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 425
     override val height = 725

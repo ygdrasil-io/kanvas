@@ -20,7 +20,7 @@ import org.graphiks.kanvas.types.Rect
 class ConvexPathsGm : SkiaGm {
     override val name = "convexpaths"
     override val renderFamily = RenderFamily.PATH
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 1200
     override val height = 1100

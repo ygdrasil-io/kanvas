@@ -22,7 +22,7 @@ import org.graphiks.kanvas.types.Point
 class ChromeGradText2Gm : SkiaGm {
     override val name = "chrome_gradtext2"
     override val renderFamily = RenderFamily.TEXT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 95.0
     override val width = 500
     override val height = 480

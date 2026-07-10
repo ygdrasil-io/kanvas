@@ -16,7 +16,7 @@ import org.graphiks.kanvas.types.Rect
 class PaintAlphaNormalsRtGm : SkiaGm {
     override val name = "paint_alpha_normals_rt"
     override val renderFamily = RenderFamily.COLOR
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 512
     override val height = 512

@@ -13,7 +13,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 class PaletteGm : SkiaGm {
     override val name = "palette"
     override val renderFamily = RenderFamily.TEXT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 512
     override val height = 256

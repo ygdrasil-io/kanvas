@@ -18,7 +18,7 @@ import org.graphiks.kanvas.types.Color
 class ColrV1Gm : SkiaGm {
     override val name = "colrv1_gradient_stops_repeat"
     override val renderFamily = RenderFamily.TEXT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 90.0
     override val width = 1200
     override val height = 1200

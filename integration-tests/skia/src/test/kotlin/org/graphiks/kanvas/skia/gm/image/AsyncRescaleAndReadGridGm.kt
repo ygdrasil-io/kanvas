@@ -20,7 +20,7 @@ import org.graphiks.kanvas.types.Rect
 class AsyncRescaleAndReadGridGm : SkiaGm {
     override val name = "async_rescale_and_read_rose"
     override val renderFamily = RenderFamily.IMAGE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 3 * 410
     override val height = 2 * 410

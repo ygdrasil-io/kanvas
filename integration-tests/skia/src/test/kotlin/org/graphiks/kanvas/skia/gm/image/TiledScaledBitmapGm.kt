@@ -21,7 +21,7 @@ import org.graphiks.kanvas.types.Rect
 class TiledScaledBitmapGm : SkiaGm {
     override val name = "tiledscaledbitmap"
     override val renderFamily = RenderFamily.IMAGE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 1016
     override val height = 616

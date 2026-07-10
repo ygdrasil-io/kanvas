@@ -21,7 +21,7 @@ import kotlin.math.sin
 class MeshWithPaintImageGm : SkiaGm {
     override val name = "mesh_with_paint_image"
     override val renderFamily = RenderFamily.MESH
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 320
     override val height = 320
