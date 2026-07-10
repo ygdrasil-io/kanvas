@@ -2,6 +2,9 @@ package org.graphiks.kanvas.codec.png
 
 import java.io.ByteArrayOutputStream
 import java.util.zip.CRC32
+import java.util.zip.Deflater
+import org.graphiks.kanvas.color.ColorProfiles
+import org.graphiks.kanvas.color.icc.IccProfileWriter
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -368,9 +371,7 @@ class PngDocumentTest {
             "IDAT" to byteArrayOf(0x20),
             "IEND" to ByteArray(0),
         )
-        assertEditFailure("png.ancillary.anchor.invalid") {
-            open(invalidSource).withAncillaryChunk("sBIT", byteArrayOf(7, 7, 7))
-        }
+        assertOpenFailure(invalidSource, "png.metadata.sBIT.order")
 
         val postIdatSource = png(
             "IHDR" to ihdr(),
@@ -378,9 +379,7 @@ class PngDocumentTest {
             "sBIT" to byteArrayOf(8, 8, 8),
             "IEND" to ByteArray(0),
         )
-        assertEditFailure("png.ancillary.anchor.invalid") {
-            open(postIdatSource).withAncillaryChunk("sBIT", byteArrayOf(7, 7, 7))
-        }
+        assertOpenFailure(postIdatSource, "png.metadata.sBIT.order")
     }
 
     @Test
@@ -393,10 +392,14 @@ class PngDocumentTest {
         )
 
         val hdrSaved = open(indexedSource)
+            .withAncillaryChunk("cICP", byteArrayOf(1, 13, 0, 1))
             .withAncillaryChunk("mDCV", ByteArray(24))
             .withAncillaryChunk("cLLI", ByteArray(8))
             .save()
-        assertEquals(listOf("IHDR", "mDCV", "cLLI", "PLTE", "IDAT", "IEND"), chunkTypes(hdrSaved.bytes))
+        assertEquals(
+            listOf("IHDR", "cICP", "mDCV", "cLLI", "PLTE", "IDAT", "IEND"),
+            chunkTypes(hdrSaved.bytes),
+        )
 
         val paletteSaved = open(indexedSource)
             .withAncillaryChunk("bKGD", byteArrayOf(0))
@@ -408,7 +411,10 @@ class PngDocumentTest {
             chunkTypes(paletteSaved.bytes),
         )
 
-        for (type in listOf("bKGD", "hIST", "tRNS")) {
+        for ((type, code) in listOf(
+            "bKGD" to "png.metadata.bKGD.order",
+            "hIST" to "png.metadata.hIST.plte.required",
+        )) {
             val malformed = png(
                 "IHDR" to ihdr(colorType = 3),
                 type to byteArrayOf(0),
@@ -416,9 +422,18 @@ class PngDocumentTest {
                 "IDAT" to byteArrayOf(0x20),
                 "IEND" to ByteArray(0),
             )
-            assertEditFailure("png.ancillary.anchor.invalid") {
-                open(malformed).withAncillaryChunk(type, byteArrayOf(1))
-            }
+            assertOpenFailure(malformed, code)
+        }
+
+        val malformedTransparency = png(
+            "IHDR" to ihdr(colorType = 3),
+            "tRNS" to byteArrayOf(0),
+            "PLTE" to byteArrayOf(0, 0, 0),
+            "IDAT" to byteArrayOf(0x20),
+            "IEND" to ByteArray(0),
+        )
+        assertEditFailure("png.ancillary.anchor.invalid") {
+            open(malformedTransparency).withAncillaryChunk("tRNS", byteArrayOf(1))
         }
 
         val noPalette = png(
@@ -435,9 +450,7 @@ class PngDocumentTest {
             "IDAT" to byteArrayOf(0x20),
             "IEND" to ByteArray(0),
         )
-        assertEditFailure("png.ancillary.anchor.requires-plte") {
-            open(existingWithoutPalette).withAncillaryChunk("hIST", byteArrayOf(0, 2))
-        }
+        assertOpenFailure(existingWithoutPalette, "png.metadata.hIST.plte.required")
     }
 
     @Test
@@ -592,6 +605,201 @@ class PngDocumentTest {
         assertFalse(snapshotCalled)
     }
 
+    @Test
+    fun `exposes resolved typed views for every supported static metadata chunk`() {
+        val iccProfile = IccProfileWriter.writeMatrixTrc(ColorProfiles.sRGB())
+        val source = png(
+            "IHDR" to ihdr(),
+            "cHRM" to chromaticities(),
+            "gAMA" to u32(45_455),
+            "iCCP" to iccp("sRGB", iccProfile),
+            "sRGB" to byteArrayOf(0),
+            "cICP" to byteArrayOf(1, 13, 0, 1),
+            "mDCV" to masteringDisplay(),
+            "cLLI" to u32(10_000_000) + u32(2_500_000),
+            "sBIT" to byteArrayOf(8, 8, 8),
+            "pHYs" to u32(3_780) + u32(3_780) + byteArrayOf(1),
+            "sPLT" to suggestedPalette("desktop"),
+            "bKGD" to byteArrayOf(0, 1, 0, 2, 0, 3),
+            "eXIf" to byteArrayOf('I'.code.toByte(), 'I'.code.toByte(), 42, 0, 8, 0, 0, 0),
+            "tIME" to byteArrayOf(0x07, 0xEA.toByte(), 7, 10, 12, 34, 56),
+            "tEXt" to textChunk("Title", "Kanvas"),
+            "zTXt" to compressedTextChunk("Copyright", "2026 Kanvas"),
+            "iTXt" to internationalTextChunk("Description", "fr", "Description", "Metadonnees"),
+            "IDAT" to byteArrayOf(0x10),
+            "IEND" to ByteArray(0),
+        )
+
+        val document = open(source)
+
+        assertEquals("sRGB", resolved(document.iCCP).profileName)
+        assertEquals(0, resolved(document.sRGB).renderingIntent)
+        assertEquals(45_455L, resolved(document.gAMA).encodedGamma)
+        assertEquals(31_270L, resolved(document.cHRM).whitePoint.x)
+        assertEquals(1, resolved(document.cICP).info.primaries)
+        assertEquals(10_000_000L, resolved(document.mDCV).maximumLuminance)
+        assertEquals(2_500_000L, resolved(document.cLLI).maximumFrameAverageLightLevel)
+        assertEquals(PngExifByteOrder.LITTLE_ENDIAN, resolved(document.eXIf).byteOrder)
+        assertEquals(8L, resolved(document.eXIf).firstIfdOffset)
+        assertEquals(3_780L, resolved(document.pHYs).pixelsPerUnitX)
+        assertEquals(2026, resolved(document.tIME).year)
+        assertEquals("Title", resolved(document.tEXt.single()).keyword)
+        assertEquals("2026 Kanvas", resolved(document.zTXt.single()).text)
+        assertEquals("Metadonnees", resolved(document.iTXt.single()).text)
+        assertEquals(listOf(8, 8, 8), resolved(document.sBIT).channelBits)
+        assertEquals(3, resolved(document.bKGD).blue)
+        assertEquals(1, resolved(document.sPLT.single()).entries.size)
+        assertTrue(document.metadata.diagnostics.isEmpty())
+        assertArrayEquals(source, document.save().bytes)
+    }
+
+    @Test
+    fun `malformed fixed metadata retains raw chunks and exposes typed refusals`() {
+        val malformedPayloads = linkedMapOf(
+            "iCCP" to byteArrayOf(0),
+            "sRGB" to byteArrayOf(4),
+            "gAMA" to ByteArray(3),
+            "cHRM" to ByteArray(31),
+            "cICP" to ByteArray(3),
+            "mDCV" to ByteArray(23),
+            "cLLI" to ByteArray(7),
+            "eXIf" to byteArrayOf(0, 1, 2, 3),
+            "pHYs" to ByteArray(8),
+            "tIME" to ByteArray(6),
+            "sBIT" to byteArrayOf(8, 8),
+            "bKGD" to ByteArray(5),
+            "hIST" to byteArrayOf(0),
+            "sPLT" to byteArrayOf('p'.code.toByte(), 0, 7),
+        )
+
+        for ((type, payload) in malformedPayloads) {
+            val source = malformedStaticMetadataPng(type, payload)
+            val document = open(source)
+            val metadata = metadataValueFor(document, type)
+
+            assertInstanceOf(PngMetadataValue.Refused::class.java, metadata, type)
+            val refusal = metadata as PngMetadataValue.Refused
+            assertEquals(type, refusal.record.type)
+            assertEquals(type, refusal.diagnostic.chunkType)
+            assertTrue(refusal.diagnostic.code.startsWith("png.metadata.$type."))
+            assertTrue(document.metadata.diagnostics.contains(refusal.diagnostic))
+            assertArrayEquals(source, document.save().bytes)
+        }
+    }
+
+    @Test
+    fun `bounded text decoding refuses compressed and direct text without losing source bytes`() {
+        val limits = PngContainerLimits.Default.copy(
+            metadata = PngMetadataLimits(
+                maxTextBytes = 8,
+                maxInflatedTextBytes = 8,
+                maxIccProfileBytes = PngMetadataLimits.Default.maxIccProfileBytes,
+                maxSuggestedPaletteEntries = PngMetadataLimits.Default.maxSuggestedPaletteEntries,
+            ),
+        )
+        val text = "0123456789"
+        val sources = listOf(
+            "tEXt" to png(
+                "IHDR" to ihdr(),
+                "tEXt" to textChunk("Title", text),
+                "IDAT" to byteArrayOf(0x10),
+                "IEND" to ByteArray(0),
+            ),
+            "zTXt" to png(
+                "IHDR" to ihdr(),
+                "zTXt" to compressedTextChunk("Title", text),
+                "IDAT" to byteArrayOf(0x10),
+                "IEND" to ByteArray(0),
+            ),
+            "iTXt" to png(
+                "IHDR" to ihdr(),
+                "iTXt" to internationalTextChunk("Title", "", "", text, compressed = true),
+                "IDAT" to byteArrayOf(0x10),
+                "IEND" to ByteArray(0),
+            ),
+        )
+
+        for ((type, source) in sources) {
+            val document = open(source, limits)
+            val metadata = metadataValueFor(document, type)
+
+            assertInstanceOf(PngMetadataValue.Refused::class.java, metadata, type)
+            assertEquals("png.metadata.$type.text.limit", (metadata as PngMetadataValue.Refused).diagnostic.code)
+            assertArrayEquals(source, document.save().bytes)
+        }
+    }
+
+    @Test
+    fun `refuses invalid typed metadata values without losing their raw chunks`() {
+        val semanticFixtures = listOf(
+            "cICP" to byteArrayOf(1, 13, 1, 1) to "png.metadata.cICP.matrix.unsupported",
+            "cICP" to byteArrayOf(1, 13, 0, 2) to "png.metadata.cICP.range.invalid",
+            "pHYs" to (ByteArray(8) + byteArrayOf(2)) to "png.metadata.pHYs.unit.invalid",
+            "tIME" to byteArrayOf(0x07, 0xEA.toByte(), 2, 30, 0, 0, 0) to "png.metadata.tIME.date.invalid",
+            "sBIT" to byteArrayOf(9, 8, 8) to "png.metadata.sBIT.value.invalid",
+            "bKGD" to byteArrayOf(1, 0, 0, 2, 0, 3) to "png.metadata.bKGD.value.invalid",
+            "sPLT" to byteArrayOf('p'.code.toByte(), 0, 8, 1) to "png.metadata.sPLT.layout",
+        )
+
+        for ((fixture, code) in semanticFixtures) {
+            val (type, payload) = fixture
+            val source = png(
+                "IHDR" to ihdr(),
+                type to payload,
+                "IDAT" to byteArrayOf(0x10),
+                "IEND" to ByteArray(0),
+            )
+            val document = open(source)
+            val metadata = metadataValueFor(document, type)
+
+            assertInstanceOf(PngMetadataValue.Refused::class.java, metadata, type)
+            assertEquals(code, (metadata as PngMetadataValue.Refused).diagnostic.code)
+            assertArrayEquals(source, document.save().bytes)
+        }
+
+        val invalidUtf8 = png(
+            "IHDR" to ihdr(),
+            "iTXt" to "Title".toByteArray(Charsets.ISO_8859_1) + byteArrayOf(0, 0, 0, 0, 0, 0xC3.toByte()),
+            "IDAT" to byteArrayOf(0x10),
+            "IEND" to ByteArray(0),
+        )
+        val invalidUtf8Document = open(invalidUtf8)
+        assertEquals(
+            "png.metadata.iTXt.utf8.invalid",
+            (metadataValueFor(invalidUtf8Document, "iTXt") as PngMetadataValue.Refused).diagnostic.code,
+        )
+
+        val trailingZlib = png(
+            "IHDR" to ihdr(),
+            "zTXt" to (compressedTextChunk("Title", "ok") + byteArrayOf(0)),
+            "IDAT" to byteArrayOf(0x10),
+            "IEND" to ByteArray(0),
+        )
+        val trailingZlibDocument = open(trailingZlib)
+        assertEquals(
+            "png.metadata.zTXt.compression.trailing",
+            (metadataValueFor(trailingZlibDocument, "zTXt") as PngMetadataValue.Refused).diagnostic.code,
+        )
+    }
+
+    @Test
+    fun `accepts bounded iTXt fields when the configured text limit reaches Int max`() {
+        val source = png(
+            "IHDR" to ihdr(),
+            "iTXt" to internationalTextChunk("Title", "en", "Title", "Kanvas"),
+            "IDAT" to byteArrayOf(0x10),
+            "IEND" to ByteArray(0),
+        )
+        val document = open(
+            source,
+            PngContainerLimits.Default.copy(
+                metadata = PngMetadataLimits.Default.copy(maxTextBytes = Int.MAX_VALUE),
+            ),
+        )
+
+        assertEquals("Kanvas", resolved(document.iTXt.single()).text)
+    }
+
     private fun open(bytes: ByteArray): PngDocument {
         return open(bytes, PngContainerLimits.Default)
     }
@@ -641,6 +849,128 @@ class PngDocumentTest {
         val exception = assertThrows(PngDocumentEditException::class.java, operation)
         assertEquals(code, exception.code)
     }
+
+    private fun assertOpenFailure(bytes: ByteArray, code: String) {
+        val result = PngDocument.open(bytes)
+        assertInstanceOf(PngDocumentOpenResult.Failure::class.java, result)
+        assertEquals(code, (result as PngDocumentOpenResult.Failure).diagnostic.code)
+    }
+
+    private fun malformedStaticMetadataPng(type: String, payload: ByteArray): ByteArray = when (type) {
+        "hIST" -> png(
+            "IHDR" to ihdr(colorType = 3),
+            "PLTE" to byteArrayOf(0, 0, 0),
+            type to payload,
+            "IDAT" to byteArrayOf(0x10),
+            "IEND" to ByteArray(0),
+        )
+
+        "mDCV" -> png(
+            "IHDR" to ihdr(),
+            "cICP" to byteArrayOf(1, 13, 0, 1),
+            type to payload,
+            "IDAT" to byteArrayOf(0x10),
+            "IEND" to ByteArray(0),
+        )
+
+        else -> png(
+            "IHDR" to ihdr(),
+            type to payload,
+            "IDAT" to byteArrayOf(0x10),
+            "IEND" to ByteArray(0),
+        )
+    }
+
+    private fun metadataValueFor(document: PngDocument, type: String): PngMetadataValue<*> = when (type) {
+        "iCCP" -> requireNotNull(document.iCCP)
+        "sRGB" -> requireNotNull(document.sRGB)
+        "gAMA" -> requireNotNull(document.gAMA)
+        "cHRM" -> requireNotNull(document.cHRM)
+        "cICP" -> requireNotNull(document.cICP)
+        "mDCV" -> requireNotNull(document.mDCV)
+        "cLLI" -> requireNotNull(document.cLLI)
+        "eXIf" -> requireNotNull(document.eXIf)
+        "pHYs" -> requireNotNull(document.pHYs)
+        "tIME" -> requireNotNull(document.tIME)
+        "tEXt" -> document.tEXt.single()
+        "zTXt" -> document.zTXt.single()
+        "iTXt" -> document.iTXt.single()
+        "sBIT" -> requireNotNull(document.sBIT)
+        "bKGD" -> requireNotNull(document.bKGD)
+        "hIST" -> requireNotNull(document.hIST)
+        "sPLT" -> document.sPLT.single()
+        else -> error("Unexpected metadata type $type")
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun <T> resolved(metadata: PngMetadataValue<T>?): T {
+        val present = requireNotNull(metadata)
+        assertInstanceOf(PngMetadataValue.Resolved::class.java, present)
+        return (present as PngMetadataValue.Resolved<T>).value
+    }
+
+    private fun chromaticities(): ByteArray = intArrayOf(
+        31_270,
+        32_900,
+        64_000,
+        33_000,
+        30_000,
+        60_000,
+        15_000,
+        6_000,
+    ).fold(ByteArray(0)) { bytes, value -> bytes + u32(value) }
+
+    private fun masteringDisplay(): ByteArray = byteArrayOf(
+        0x8A.toByte(), 0x48,
+        0x39, 0x08,
+        0x21, 0x34,
+        0x9B.toByte(), 0xAA.toByte(),
+        0x19, 0x96.toByte(),
+        0x08, 0xFC.toByte(),
+        0x3D, 0x13,
+        0x40, 0x42,
+    ) + u32(10_000_000) + u32(500)
+
+    private fun suggestedPalette(name: String): ByteArray =
+        name.toByteArray(Charsets.ISO_8859_1) + byteArrayOf(0, 8, 1, 2, 3, 4, 0, 1)
+
+    private fun iccp(name: String, profile: ByteArray): ByteArray =
+        name.toByteArray(Charsets.ISO_8859_1) + byteArrayOf(0, 0) + deflate(profile)
+
+    private fun textChunk(keyword: String, text: String): ByteArray =
+        keyword.toByteArray(Charsets.ISO_8859_1) + byteArrayOf(0) + text.toByteArray(Charsets.ISO_8859_1)
+
+    private fun compressedTextChunk(keyword: String, text: String): ByteArray =
+        keyword.toByteArray(Charsets.ISO_8859_1) + byteArrayOf(0, 0) + deflate(text.toByteArray(Charsets.ISO_8859_1))
+
+    private fun internationalTextChunk(
+        keyword: String,
+        languageTag: String,
+        translatedKeyword: String,
+        text: String,
+        compressed: Boolean = false,
+    ): ByteArray {
+        val textBytes = text.toByteArray(Charsets.UTF_8)
+        return keyword.toByteArray(Charsets.ISO_8859_1) + byteArrayOf(0, if (compressed) 1 else 0, 0) +
+            languageTag.toByteArray(Charsets.US_ASCII) + byteArrayOf(0) +
+            translatedKeyword.toByteArray(Charsets.UTF_8) + byteArrayOf(0) +
+            if (compressed) deflate(textBytes) else textBytes
+    }
+
+    private fun deflate(bytes: ByteArray): ByteArray = ByteArrayOutputStream().use { output ->
+        val deflater = Deflater()
+        deflater.setInput(bytes)
+        deflater.finish()
+        val buffer = ByteArray(256)
+        while (!deflater.finished()) {
+            val count = deflater.deflate(buffer)
+            output.write(buffer, 0, count)
+        }
+        deflater.end()
+        output.toByteArray()
+    }
+
+    private fun u32(value: Int): ByteArray = ByteArray(4).also { bytes -> writeI32BE(bytes, 0, value) }
 
     private fun png(vararg chunks: Pair<String, ByteArray>): ByteArray =
         ByteArrayOutputStream().apply {

@@ -431,6 +431,147 @@ class PngContainerParserTest {
         )
     }
 
+    @Test
+    fun `refuses duplicate singleton static metadata chunks`() {
+        val singletonTypes = listOf(
+            "iCCP",
+            "sRGB",
+            "gAMA",
+            "cHRM",
+            "cICP",
+            "mDCV",
+            "cLLI",
+            "eXIf",
+            "pHYs",
+            "tIME",
+            "sBIT",
+            "bKGD",
+            "hIST",
+        )
+
+        for (type in singletonTypes) {
+            val chunks = when (type) {
+                "hIST" -> arrayOf(
+                    "IHDR" to ihdr(colorType = 3),
+                    "PLTE" to byteArrayOf(0, 0, 0),
+                    type to staticMetadataPayload(type),
+                    type to staticMetadataPayload(type),
+                    "IDAT" to byteArrayOf(1),
+                    "IEND" to ByteArray(0),
+                )
+
+                "bKGD" -> arrayOf(
+                    "IHDR" to ihdr(colorType = 3),
+                    "PLTE" to byteArrayOf(0, 0, 0),
+                    type to staticMetadataPayload(type),
+                    type to staticMetadataPayload(type),
+                    "IDAT" to byteArrayOf(1),
+                    "IEND" to ByteArray(0),
+                )
+
+                "mDCV" -> arrayOf(
+                    "IHDR" to ihdr(),
+                    "cICP" to byteArrayOf(1, 13, 0, 1),
+                    type to staticMetadataPayload(type),
+                    type to staticMetadataPayload(type),
+                    "IDAT" to byteArrayOf(1),
+                    "IEND" to ByteArray(0),
+                )
+
+                else -> arrayOf(
+                    "IHDR" to ihdr(),
+                    type to staticMetadataPayload(type),
+                    type to staticMetadataPayload(type),
+                    "IDAT" to byteArrayOf(1),
+                    "IEND" to ByteArray(0),
+                )
+            }
+
+            assertFailure(png(*chunks), "png.metadata.$type.duplicate", type)
+        }
+    }
+
+    @Test
+    fun `refuses static metadata order palette and HDR dependencies`() {
+        for (type in listOf("iCCP", "sRGB", "gAMA", "cHRM", "cICP", "mDCV", "cLLI", "sBIT")) {
+            val prefix = if (type == "mDCV") {
+                arrayOf("IHDR" to ihdr(colorType = 3), "cICP" to byteArrayOf(1, 13, 0, 1))
+            } else {
+                arrayOf("IHDR" to ihdr(colorType = 3))
+            }
+            assertFailure(
+                png(
+                    *prefix,
+                    "PLTE" to byteArrayOf(0, 0, 0),
+                    type to staticMetadataPayload(type),
+                    "IDAT" to byteArrayOf(1),
+                    "IEND" to ByteArray(0),
+                ),
+                "png.metadata.$type.order",
+                type,
+            )
+        }
+        for (type in listOf("eXIf", "pHYs", "sPLT")) {
+            assertFailure(
+                png(
+                    "IHDR" to ihdr(),
+                    "IDAT" to byteArrayOf(1),
+                    type to staticMetadataPayload(type),
+                    "IEND" to ByteArray(0),
+                ),
+                "png.metadata.$type.order",
+                type,
+            )
+        }
+        assertFailure(
+            png(
+                "IHDR" to ihdr(colorType = 3),
+                "hIST" to byteArrayOf(0, 0),
+                "PLTE" to byteArrayOf(0, 0, 0),
+                "IDAT" to byteArrayOf(1),
+                "IEND" to ByteArray(0),
+            ),
+            "png.metadata.hIST.plte.required",
+            "hIST",
+        )
+        assertFailure(
+            png(
+                "IHDR" to ihdr(),
+                "mDCV" to ByteArray(24),
+                "IDAT" to byteArrayOf(1),
+                "IEND" to ByteArray(0),
+            ),
+            "png.metadata.mDCV.cicp.required",
+            "mDCV",
+        )
+    }
+
+    @Test
+    fun `permits repeated text but refuses duplicate suggested palette names`() {
+        val repeatedText = png(
+            "IHDR" to ihdr(),
+            "tEXt" to byteArrayOf('T'.code.toByte(), 0, '1'.code.toByte()),
+            "tEXt" to byteArrayOf('T'.code.toByte(), 0, '2'.code.toByte()),
+            "zTXt" to byteArrayOf('Z'.code.toByte(), 0, 0),
+            "iTXt" to byteArrayOf('I'.code.toByte(), 0, 0, 0, 0, 0),
+            "IDAT" to byteArrayOf(1),
+            "IEND" to ByteArray(0),
+        )
+        assertEquals(7, success(repeatedText).chunks.size)
+
+        assertFailure(
+            png(
+                "IHDR" to ihdr(),
+                "sPLT" to suggestedPalette("display"),
+                "sPLT" to suggestedPalette("display"),
+                "IDAT" to byteArrayOf(1),
+                "IEND" to ByteArray(0),
+            ),
+            "png.metadata.sPLT.name.duplicate",
+            "sPLT",
+        )
+    }
+
     private fun success(
         data: ByteArray,
         limits: PngContainerLimits = PngContainerLimits.Default,
@@ -459,6 +600,27 @@ class PngContainerParserTest {
         assertEquals(code, diagnostic.code)
         if (chunkType != null) assertEquals(chunkType, diagnostic.chunkType)
     }
+
+    private fun staticMetadataPayload(type: String): ByteArray = when (type) {
+        "iCCP" -> byteArrayOf('p'.code.toByte(), 0, 0)
+        "sRGB" -> byteArrayOf(0)
+        "gAMA" -> ByteArray(4)
+        "cHRM" -> ByteArray(32)
+        "cICP" -> byteArrayOf(1, 13, 0, 1)
+        "mDCV" -> ByteArray(24)
+        "cLLI" -> ByteArray(8)
+        "eXIf" -> byteArrayOf('I'.code.toByte(), 'I'.code.toByte(), 42, 0)
+        "pHYs" -> ByteArray(9)
+        "tIME" -> byteArrayOf(0x07, 0xEA.toByte(), 7, 10, 12, 34, 56)
+        "sBIT" -> byteArrayOf(8, 8, 8)
+        "bKGD" -> byteArrayOf(0)
+        "hIST" -> byteArrayOf(0, 0)
+        "sPLT" -> suggestedPalette("display")
+        else -> error("Unexpected static metadata type $type")
+    }
+
+    private fun suggestedPalette(name: String): ByteArray =
+        name.toByteArray(Charsets.ISO_8859_1) + byteArrayOf(0, 8, 1, 2, 3, 4, 0, 1)
 
     private fun png(vararg chunks: Pair<String, ByteArray>): ByteArray =
         ByteArrayOutputStream().apply {

@@ -7,6 +7,7 @@ public class PngDocument private constructor(
     private val sourceBytes: ByteArray,
     private val container: PngContainer,
     private val limits: PngContainerLimits,
+    public val metadata: PngMetadata,
     public val writePlan: PngWritePlan,
 ) {
     public val header: PngHeader = container.header
@@ -15,6 +16,57 @@ public class PngDocument private constructor(
 
     public val originalBytes: ByteArray
         get() = sourceBytes.copyOf()
+
+    public val iCCP: PngMetadataValue<PngIccProfileMetadata>?
+        get() = metadata.iCCP
+
+    public val sRGB: PngMetadataValue<PngSrgbMetadata>?
+        get() = metadata.sRGB
+
+    public val gAMA: PngMetadataValue<PngGammaMetadata>?
+        get() = metadata.gAMA
+
+    public val cHRM: PngMetadataValue<PngChromaticitiesMetadata>?
+        get() = metadata.cHRM
+
+    public val cICP: PngMetadataValue<PngCicpMetadata>?
+        get() = metadata.cICP
+
+    public val mDCV: PngMetadataValue<PngMasteringDisplayColorVolumeMetadata>?
+        get() = metadata.mDCV
+
+    public val cLLI: PngMetadataValue<PngContentLightLevelMetadata>?
+        get() = metadata.cLLI
+
+    public val eXIf: PngMetadataValue<PngExifMetadata>?
+        get() = metadata.eXIf
+
+    public val pHYs: PngMetadataValue<PngPhysicalPixelDimensions>?
+        get() = metadata.pHYs
+
+    public val tIME: PngMetadataValue<PngModificationTime>?
+        get() = metadata.tIME
+
+    public val tEXt: List<PngMetadataValue<PngTextMetadata>>
+        get() = metadata.tEXt
+
+    public val zTXt: List<PngMetadataValue<PngTextMetadata>>
+        get() = metadata.zTXt
+
+    public val iTXt: List<PngMetadataValue<PngInternationalTextMetadata>>
+        get() = metadata.iTXt
+
+    public val sBIT: PngMetadataValue<PngSignificantBitsMetadata>?
+        get() = metadata.sBIT
+
+    public val bKGD: PngMetadataValue<PngBackgroundColorMetadata>?
+        get() = metadata.bKGD
+
+    public val hIST: PngMetadataValue<PngHistogramMetadata>?
+        get() = metadata.hIST
+
+    public val sPLT: List<PngMetadataValue<PngSuggestedPaletteMetadata>>
+        get() = metadata.sPLT
 
     public fun withAncillaryChunk(type: String, payload: ByteArray): PngDocument {
         validateAncillaryType(type)
@@ -331,6 +383,7 @@ public class PngDocument private constructor(
         sourceBytes = sourceBytes,
         container = container,
         limits = limits,
+        metadata = metadata,
         writePlan = plan,
     )
 
@@ -381,7 +434,13 @@ public class PngDocument private constructor(
             val sourceBytes = snapshot(bytes)
             return when (val result = PngContainerParser.parse(sourceBytes, limits)) {
                 is PngContainerParseResult.Success -> PngDocumentOpenResult.Success(
-                    PngDocument(sourceBytes, result.container, limits, PngWritePlan.None),
+                    PngDocument(
+                        sourceBytes = sourceBytes,
+                        container = result.container,
+                        limits = limits,
+                        metadata = PngMetadataParser.parse(sourceBytes, result.container, limits.metadata),
+                        writePlan = PngWritePlan.None,
+                    ),
                 )
 
                 is PngContainerParseResult.Failure -> PngDocumentOpenResult.Failure(result.diagnostic)

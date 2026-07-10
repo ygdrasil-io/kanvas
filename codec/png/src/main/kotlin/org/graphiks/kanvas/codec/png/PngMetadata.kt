@@ -1,0 +1,720 @@
+package org.graphiks.kanvas.codec.png
+
+import java.nio.ByteBuffer
+import java.nio.charset.CharacterCodingException
+import java.nio.charset.CodingErrorAction
+import java.time.DateTimeException
+import java.time.LocalDate
+import java.util.Collections
+import java.util.zip.DataFormatException
+import java.util.zip.Inflater
+import org.graphiks.kanvas.color.ColorModel
+import org.graphiks.kanvas.color.ColorProfile
+import org.graphiks.kanvas.color.ColorProfileParseResult
+import org.graphiks.kanvas.color.cicp.CicpColorInfo
+import org.graphiks.kanvas.color.cicp.toColorProfile
+import org.graphiks.kanvas.color.icc.IccParseLimits
+import org.graphiks.kanvas.color.icc.IccProfileParser
+
+public data class PngMetadataLimits(
+    public val maxTextBytes: Int = 1024 * 1024,
+    public val maxInflatedTextBytes: Int = 1024 * 1024,
+    public val maxIccProfileBytes: Int = 16 * 1024 * 1024,
+    public val maxSuggestedPaletteEntries: Int = 65_536,
+) {
+    init {
+        require(maxTextBytes >= 0) { "maxTextBytes must be non-negative" }
+        require(maxInflatedTextBytes >= 0) { "maxInflatedTextBytes must be non-negative" }
+        require(maxIccProfileBytes >= 0) { "maxIccProfileBytes must be non-negative" }
+        require(maxSuggestedPaletteEntries >= 0) { "maxSuggestedPaletteEntries must be non-negative" }
+    }
+
+    public companion object {
+        public val Default: PngMetadataLimits = PngMetadataLimits()
+    }
+}
+
+/** A typed metadata result associated with the authoritative raw chunk record. */
+public sealed interface PngMetadataValue<out T> {
+    public val record: PngChunkRecord
+
+    public data class Resolved<out T>(
+        override val record: PngChunkRecord,
+        public val value: T,
+    ) : PngMetadataValue<T>
+
+    public data class Refused(
+        override val record: PngChunkRecord,
+        public val diagnostic: PngDiagnostic,
+    ) : PngMetadataValue<Nothing>
+}
+
+public class PngMetadata internal constructor(
+    public val iCCP: PngMetadataValue<PngIccProfileMetadata>?,
+    public val sRGB: PngMetadataValue<PngSrgbMetadata>?,
+    public val gAMA: PngMetadataValue<PngGammaMetadata>?,
+    public val cHRM: PngMetadataValue<PngChromaticitiesMetadata>?,
+    public val cICP: PngMetadataValue<PngCicpMetadata>?,
+    public val mDCV: PngMetadataValue<PngMasteringDisplayColorVolumeMetadata>?,
+    public val cLLI: PngMetadataValue<PngContentLightLevelMetadata>?,
+    public val eXIf: PngMetadataValue<PngExifMetadata>?,
+    public val pHYs: PngMetadataValue<PngPhysicalPixelDimensions>?,
+    public val tIME: PngMetadataValue<PngModificationTime>?,
+    tEXt: List<PngMetadataValue<PngTextMetadata>>,
+    zTXt: List<PngMetadataValue<PngTextMetadata>>,
+    iTXt: List<PngMetadataValue<PngInternationalTextMetadata>>,
+    public val sBIT: PngMetadataValue<PngSignificantBitsMetadata>?,
+    public val bKGD: PngMetadataValue<PngBackgroundColorMetadata>?,
+    public val hIST: PngMetadataValue<PngHistogramMetadata>?,
+    sPLT: List<PngMetadataValue<PngSuggestedPaletteMetadata>>,
+    diagnostics: List<PngDiagnostic>,
+) {
+    public val tEXt: List<PngMetadataValue<PngTextMetadata>> = immutableList(tEXt)
+    public val zTXt: List<PngMetadataValue<PngTextMetadata>> = immutableList(zTXt)
+    public val iTXt: List<PngMetadataValue<PngInternationalTextMetadata>> = immutableList(iTXt)
+    public val sPLT: List<PngMetadataValue<PngSuggestedPaletteMetadata>> = immutableList(sPLT)
+    public val diagnostics: List<PngDiagnostic> = immutableList(diagnostics)
+}
+
+public data class PngIccProfileMetadata(
+    public val profileName: String,
+    public val profile: ColorProfile,
+)
+
+public data class PngSrgbMetadata(public val renderingIntent: Int)
+
+public data class PngGammaMetadata(public val encodedGamma: Long)
+
+public data class PngChromaticity(
+    public val x: Long,
+    public val y: Long,
+)
+
+public data class PngChromaticitiesMetadata(
+    public val whitePoint: PngChromaticity,
+    public val red: PngChromaticity,
+    public val green: PngChromaticity,
+    public val blue: PngChromaticity,
+)
+
+public data class PngCicpMetadata(
+    public val info: CicpColorInfo,
+    public val profile: ColorProfile,
+)
+
+public data class PngMasteringDisplayColorVolumeMetadata(
+    public val primaries: List<PngChromaticity>,
+    public val whitePoint: PngChromaticity,
+    public val maximumLuminance: Long,
+    public val minimumLuminance: Long,
+)
+
+public data class PngContentLightLevelMetadata(
+    public val maximumContentLightLevel: Long,
+    public val maximumFrameAverageLightLevel: Long,
+)
+
+public enum class PngExifByteOrder {
+    LITTLE_ENDIAN,
+    BIG_ENDIAN,
+}
+
+public data class PngExifMetadata(
+    public val byteOrder: PngExifByteOrder,
+    public val firstIfdOffset: Long,
+)
+
+public data class PngPhysicalPixelDimensions(
+    public val pixelsPerUnitX: Long,
+    public val pixelsPerUnitY: Long,
+    public val unitSpecifier: Int,
+)
+
+public data class PngModificationTime(
+    public val year: Int,
+    public val month: Int,
+    public val day: Int,
+    public val hour: Int,
+    public val minute: Int,
+    public val second: Int,
+)
+
+public data class PngTextMetadata(
+    public val keyword: String,
+    public val text: String,
+)
+
+public data class PngInternationalTextMetadata(
+    public val keyword: String,
+    public val languageTag: String,
+    public val translatedKeyword: String,
+    public val text: String,
+    public val isCompressed: Boolean,
+)
+
+public data class PngSignificantBitsMetadata(public val channelBits: List<Int>)
+
+public data class PngBackgroundColorMetadata(
+    public val grayscale: Int? = null,
+    public val red: Int? = null,
+    public val green: Int? = null,
+    public val blue: Int? = null,
+    public val paletteIndex: Int? = null,
+)
+
+public data class PngHistogramMetadata(public val frequencies: List<Int>)
+
+public data class PngSuggestedPaletteEntry(
+    public val red: Int,
+    public val green: Int,
+    public val blue: Int,
+    public val alpha: Int,
+    public val frequency: Int,
+)
+
+public data class PngSuggestedPaletteMetadata(
+    public val name: String,
+    public val sampleDepth: Int,
+    public val entries: List<PngSuggestedPaletteEntry>,
+)
+
+internal object PngMetadataParser {
+    fun parse(
+        data: ByteArray,
+        container: PngContainer,
+        limits: PngMetadataLimits,
+    ): PngMetadata = PngMetadataBuilder(data, container, limits).parse()
+}
+
+private class PngMetadataBuilder(
+    private val data: ByteArray,
+    private val container: PngContainer,
+    private val limits: PngMetadataLimits,
+) {
+    private val diagnostics = ArrayList<PngDiagnostic>()
+    private val text = ArrayList<PngMetadataValue<PngTextMetadata>>()
+    private val compressedText = ArrayList<PngMetadataValue<PngTextMetadata>>()
+    private val internationalText = ArrayList<PngMetadataValue<PngInternationalTextMetadata>>()
+    private val suggestedPalettes = ArrayList<PngMetadataValue<PngSuggestedPaletteMetadata>>()
+    private val paletteEntries: Int? = container.chunks.singleOrNull { it.type == "PLTE" }
+        ?.payloadRange
+        ?.size
+        ?.let { size -> if (size % 3L == 0L) (size / 3L).toInt() else null }
+
+    private var iccp: PngMetadataValue<PngIccProfileMetadata>? = null
+    private var srgb: PngMetadataValue<PngSrgbMetadata>? = null
+    private var gamma: PngMetadataValue<PngGammaMetadata>? = null
+    private var chromaticities: PngMetadataValue<PngChromaticitiesMetadata>? = null
+    private var cicp: PngMetadataValue<PngCicpMetadata>? = null
+    private var masteringDisplay: PngMetadataValue<PngMasteringDisplayColorVolumeMetadata>? = null
+    private var contentLight: PngMetadataValue<PngContentLightLevelMetadata>? = null
+    private var exif: PngMetadataValue<PngExifMetadata>? = null
+    private var physicalDimensions: PngMetadataValue<PngPhysicalPixelDimensions>? = null
+    private var modificationTime: PngMetadataValue<PngModificationTime>? = null
+    private var significantBits: PngMetadataValue<PngSignificantBitsMetadata>? = null
+    private var background: PngMetadataValue<PngBackgroundColorMetadata>? = null
+    private var histogram: PngMetadataValue<PngHistogramMetadata>? = null
+
+    fun parse(): PngMetadata {
+        for (record in container.chunks) {
+            when (record.type) {
+                "iCCP" -> iccp = decode(record) { parseIccProfile(record) }
+                "sRGB" -> srgb = decode(record) { parseSrgb(record) }
+                "gAMA" -> gamma = decode(record) { parseGamma(record) }
+                "cHRM" -> chromaticities = decode(record) { parseChromaticities(record) }
+                "cICP" -> cicp = decode(record) { parseCicp(record) }
+                "mDCV" -> masteringDisplay = decode(record) { parseMasteringDisplay(record) }
+                "cLLI" -> contentLight = decode(record) { parseContentLight(record) }
+                "eXIf" -> exif = decode(record) { parseExif(record) }
+                "pHYs" -> physicalDimensions = decode(record) { parsePhysicalDimensions(record) }
+                "tIME" -> modificationTime = decode(record) { parseModificationTime(record) }
+                "tEXt" -> text += decode(record) { parseText(record) }
+                "zTXt" -> compressedText += decode(record) { parseCompressedText(record) }
+                "iTXt" -> internationalText += decode(record) { parseInternationalText(record) }
+                "sBIT" -> significantBits = decode(record) { parseSignificantBits(record) }
+                "bKGD" -> background = decode(record) { parseBackground(record) }
+                "hIST" -> histogram = decode(record) { parseHistogram(record) }
+                "sPLT" -> suggestedPalettes += decode(record) { parseSuggestedPalette(record) }
+            }
+        }
+        return PngMetadata(
+            iCCP = iccp,
+            sRGB = srgb,
+            gAMA = gamma,
+            cHRM = chromaticities,
+            cICP = cicp,
+            mDCV = masteringDisplay,
+            cLLI = contentLight,
+            eXIf = exif,
+            pHYs = physicalDimensions,
+            tIME = modificationTime,
+            tEXt = text,
+            zTXt = compressedText,
+            iTXt = internationalText,
+            sBIT = significantBits,
+            bKGD = background,
+            hIST = histogram,
+            sPLT = suggestedPalettes,
+            diagnostics = diagnostics,
+        )
+    }
+
+    private fun parseIccProfile(record: PngChunkRecord): PngIccProfileMetadata {
+        val payload = payload(record)
+        val separator = zeroSeparator(payload.start, payload.end, KEYWORD_MAX_BYTES, "layout")
+        val profileName = latin1Keyword(payload.start, separator)
+        if (separator + 1 >= payload.end) abort("layout", "iCCP has no compression method or profile")
+        if (u8(separator + 1) != 0) abort("compression.method", "iCCP compression method must be zero")
+        val profileBytes = inflate(
+            start = separator + 2,
+            end = payload.end,
+            maxBytes = limits.maxIccProfileBytes,
+            subject = "profile",
+        )
+        val profile = when (val result = IccProfileParser.parse(profileBytes, IccParseLimits(maxBytes = limits.maxIccProfileBytes))) {
+            is ColorProfileParseResult.Success -> result.profile
+            is ColorProfileParseResult.Failure -> abort("resolution.${result.code}", result.message)
+        }
+        val expectedModel = when (container.header.colorType) {
+            0, 4 -> ColorModel.GRAY
+            2, 3, 6 -> ColorModel.RGB
+            else -> abort("color-model.unsupported", "PNG color type is unsupported for iCCP resolution")
+        }
+        if (profile.colorModel != expectedModel) {
+            abort("color-model.mismatch", "iCCP profile color model does not match the PNG color type")
+        }
+        return PngIccProfileMetadata(profileName, profile)
+    }
+
+    private fun parseSrgb(record: PngChunkRecord): PngSrgbMetadata {
+        val payload = payload(record)
+        requireLength(payload, 1)
+        val intent = u8(payload.start)
+        if (intent !in 0..3) abort("intent.invalid", "sRGB rendering intent must be between zero and three")
+        return PngSrgbMetadata(intent)
+    }
+
+    private fun parseGamma(record: PngChunkRecord): PngGammaMetadata {
+        val payload = payload(record)
+        requireLength(payload, 4)
+        val encoded = u32(payload.start)
+        if (encoded == 0L) abort("value.invalid", "gAMA image gamma must be non-zero")
+        return PngGammaMetadata(encoded)
+    }
+
+    private fun parseChromaticities(record: PngChunkRecord): PngChromaticitiesMetadata {
+        val payload = payload(record)
+        requireLength(payload, 32)
+        fun chromaticity(offset: Int): PngChromaticity = PngChromaticity(u32(offset), u32(offset + 4))
+        return PngChromaticitiesMetadata(
+            whitePoint = chromaticity(payload.start),
+            red = chromaticity(payload.start + 8),
+            green = chromaticity(payload.start + 16),
+            blue = chromaticity(payload.start + 24),
+        )
+    }
+
+    private fun parseCicp(record: PngChunkRecord): PngCicpMetadata {
+        val payload = payload(record)
+        requireLength(payload, 4)
+        val matrix = u8(payload.start + 2)
+        val fullRange = u8(payload.start + 3)
+        if (matrix != 0) abort("matrix.unsupported", "PNG cICP matrix coefficients must be zero")
+        if (fullRange !in 0..1) abort("range.invalid", "PNG cICP full-range flag must be zero or one")
+        if (container.header.colorType !in setOf(2, 3, 6)) {
+            abort("color-model.unsupported", "PNG cICP resolution supports RGB PNG color types only")
+        }
+        val info = CicpColorInfo(
+            primaries = u8(payload.start),
+            transfer = u8(payload.start + 1),
+            matrix = matrix,
+            fullRange = fullRange == 1,
+        )
+        val profile = when (val result = info.toColorProfile()) {
+            is ColorProfileParseResult.Success -> result.profile
+            is ColorProfileParseResult.Failure -> abort("resolution.${result.code}", result.message)
+        }
+        return PngCicpMetadata(info, profile)
+    }
+
+    private fun parseMasteringDisplay(record: PngChunkRecord): PngMasteringDisplayColorVolumeMetadata {
+        val payload = payload(record)
+        requireLength(payload, 24)
+        val primaries = listOf(
+            PngChromaticity(u16(payload.start), u16(payload.start + 2)),
+            PngChromaticity(u16(payload.start + 4), u16(payload.start + 6)),
+            PngChromaticity(u16(payload.start + 8), u16(payload.start + 10)),
+        )
+        return PngMasteringDisplayColorVolumeMetadata(
+            primaries = immutableList(primaries),
+            whitePoint = PngChromaticity(u16(payload.start + 12), u16(payload.start + 14)),
+            maximumLuminance = u32(payload.start + 16),
+            minimumLuminance = u32(payload.start + 20),
+        )
+    }
+
+    private fun parseContentLight(record: PngChunkRecord): PngContentLightLevelMetadata {
+        val payload = payload(record)
+        requireLength(payload, 8)
+        return PngContentLightLevelMetadata(u32(payload.start), u32(payload.start + 4))
+    }
+
+    private fun parseExif(record: PngChunkRecord): PngExifMetadata {
+        val payload = payload(record)
+        if (payload.length < 8) abort("header.length", "eXIf TIFF header must contain at least eight bytes")
+        return when {
+            u8(payload.start) == 'I'.code && u8(payload.start + 1) == 'I'.code &&
+                u8(payload.start + 2) == 42 && u8(payload.start + 3) == 0 ->
+                PngExifMetadata(PngExifByteOrder.LITTLE_ENDIAN, u32LittleEndian(payload.start + 4))
+
+            u8(payload.start) == 'M'.code && u8(payload.start + 1) == 'M'.code &&
+                u8(payload.start + 2) == 0 && u8(payload.start + 3) == 42 ->
+                PngExifMetadata(PngExifByteOrder.BIG_ENDIAN, u32(payload.start + 4))
+
+            else -> abort("header.invalid", "eXIf must begin with a TIFF byte-order marker and version 42")
+        }
+    }
+
+    private fun parsePhysicalDimensions(record: PngChunkRecord): PngPhysicalPixelDimensions {
+        val payload = payload(record)
+        requireLength(payload, 9)
+        val unit = u8(payload.start + 8)
+        if (unit !in 0..1) abort("unit.invalid", "pHYs unit specifier must be zero or one")
+        return PngPhysicalPixelDimensions(u32(payload.start), u32(payload.start + 4), unit)
+    }
+
+    private fun parseModificationTime(record: PngChunkRecord): PngModificationTime {
+        val payload = payload(record)
+        requireLength(payload, 7)
+        val year = u16(payload.start).toInt()
+        val month = u8(payload.start + 2)
+        val day = u8(payload.start + 3)
+        val hour = u8(payload.start + 4)
+        val minute = u8(payload.start + 5)
+        val second = u8(payload.start + 6)
+        if (hour !in 0..23 || minute !in 0..59 || second !in 0..60) {
+            abort("value.invalid", "tIME contains an invalid clock value")
+        }
+        try {
+            LocalDate.of(year, month, day)
+        } catch (_: DateTimeException) {
+            abort("date.invalid", "tIME contains an invalid calendar date")
+        }
+        return PngModificationTime(year, month, day, hour, minute, second)
+    }
+
+    private fun parseText(record: PngChunkRecord): PngTextMetadata {
+        val payload = payload(record)
+        val separator = zeroSeparator(payload.start, payload.end, KEYWORD_MAX_BYTES, "layout")
+        return PngTextMetadata(latin1Keyword(payload.start, separator), latin1Text(separator + 1, payload.end))
+    }
+
+    private fun parseCompressedText(record: PngChunkRecord): PngTextMetadata {
+        val payload = payload(record)
+        val separator = zeroSeparator(payload.start, payload.end, KEYWORD_MAX_BYTES, "layout")
+        if (separator + 1 >= payload.end) abort("layout", "zTXt has no compression method or text")
+        if (u8(separator + 1) != 0) abort("compression.method", "zTXt compression method must be zero")
+        val inflated = inflate(separator + 2, payload.end, maximumInflatedTextBytes(), "text")
+        return PngTextMetadata(latin1Keyword(payload.start, separator), latin1Text(inflated, 0, inflated.size))
+    }
+
+    private fun parseInternationalText(record: PngChunkRecord): PngInternationalTextMetadata {
+        val payload = payload(record)
+        val keywordEnd = zeroSeparator(payload.start, payload.end, KEYWORD_MAX_BYTES, "layout")
+        if (keywordEnd + 2 >= payload.end) abort("layout", "iTXt lacks compression fields")
+        val compressionFlag = u8(keywordEnd + 1)
+        val compressionMethod = u8(keywordEnd + 2)
+        if (compressionFlag !in 0..1) abort("compression.flag", "iTXt compression flag must be zero or one")
+        if (compressionMethod != 0) abort("compression.method", "iTXt compression method must be zero")
+        val languageStart = keywordEnd + 3
+        val languageEnd = zeroSeparator(languageStart, payload.end, limits.maxTextBytes, "text.limit")
+        val translatedStart = languageEnd + 1
+        val translatedEnd = zeroSeparator(translatedStart, payload.end, limits.maxTextBytes, "text.limit")
+        val textStart = translatedEnd + 1
+        val textBytes = if (compressionFlag == 1) {
+            inflate(textStart, payload.end, maximumInflatedTextBytes(), "text")
+        } else {
+            boundedSlice(textStart, payload.end, limits.maxTextBytes, "text.limit")
+        }
+        return PngInternationalTextMetadata(
+            keyword = latin1Keyword(payload.start, keywordEnd),
+            languageTag = languageTag(languageStart, languageEnd),
+            translatedKeyword = utf8(translatedStart, translatedEnd),
+            text = utf8(textBytes, 0, textBytes.size),
+            isCompressed = compressionFlag == 1,
+        )
+    }
+
+    private fun parseSignificantBits(record: PngChunkRecord): PngSignificantBitsMetadata {
+        val payload = payload(record)
+        val channels = when (container.header.colorType) {
+            0 -> 1
+            2, 3 -> 3
+            4 -> 2
+            6 -> 4
+            else -> abort("color-type.unsupported", "sBIT has no layout for this PNG color type")
+        }
+        requireLength(payload, channels)
+        val maximum = if (container.header.colorType == 3) 8 else container.header.bitDepth
+        val values = (0 until channels).map { index -> u8(payload.start + index) }
+        if (values.any { it !in 1..maximum }) {
+            abort("value.invalid", "sBIT values must be between one and the sample depth")
+        }
+        return PngSignificantBitsMetadata(immutableList(values))
+    }
+
+    private fun parseBackground(record: PngChunkRecord): PngBackgroundColorMetadata {
+        val payload = payload(record)
+        val maximum = (1 shl container.header.bitDepth) - 1
+        return when (container.header.colorType) {
+            0, 4 -> {
+                requireLength(payload, 2)
+                val value = u16(payload.start).toInt()
+                if (value > maximum) abort("value.invalid", "bKGD grayscale sample exceeds the PNG bit depth")
+                PngBackgroundColorMetadata(grayscale = value)
+            }
+
+            2, 6 -> {
+                requireLength(payload, 6)
+                val red = u16(payload.start).toInt()
+                val green = u16(payload.start + 2).toInt()
+                val blue = u16(payload.start + 4).toInt()
+                if (red > maximum || green > maximum || blue > maximum) {
+                    abort("value.invalid", "bKGD RGB sample exceeds the PNG bit depth")
+                }
+                PngBackgroundColorMetadata(red = red, green = green, blue = blue)
+            }
+
+            3 -> {
+                requireLength(payload, 1)
+                val entries = paletteEntries ?: abort("palette.required", "bKGD indexed PNG requires a valid PLTE chunk")
+                val index = u8(payload.start)
+                if (index >= entries) abort("palette.index", "bKGD palette index is outside PLTE")
+                PngBackgroundColorMetadata(paletteIndex = index)
+            }
+
+            else -> abort("color-type.unsupported", "bKGD has no layout for this PNG color type")
+        }
+    }
+
+    private fun parseHistogram(record: PngChunkRecord): PngHistogramMetadata {
+        val payload = payload(record)
+        val entries = paletteEntries ?: abort("palette.required", "hIST requires a valid PLTE chunk")
+        if (payload.length != entries * 2) abort("length", "hIST must contain one 16-bit frequency per PLTE entry")
+        return PngHistogramMetadata(immutableList((0 until entries).map { index -> u16(payload.start + index * 2).toInt() }))
+    }
+
+    private fun parseSuggestedPalette(record: PngChunkRecord): PngSuggestedPaletteMetadata {
+        val payload = payload(record)
+        val nameEnd = zeroSeparator(payload.start, payload.end, KEYWORD_MAX_BYTES, "layout")
+        if (nameEnd + 1 >= payload.end) abort("layout", "sPLT has no sample depth")
+        val sampleDepth = u8(nameEnd + 1)
+        val entrySize = when (sampleDepth) {
+            8 -> 6
+            16 -> 10
+            else -> abort("sample-depth.invalid", "sPLT sample depth must be eight or sixteen")
+        }
+        val entriesStart = nameEnd + 2
+        val remaining = payload.end - entriesStart
+        if (remaining % entrySize != 0) abort("layout", "sPLT entries do not match the sample depth")
+        val entryCount = remaining / entrySize
+        if (entryCount > limits.maxSuggestedPaletteEntries) {
+            abort("entries.limit", "sPLT entry count exceeds the configured limit")
+        }
+        var previousFrequency = Int.MAX_VALUE
+        val entries = ArrayList<PngSuggestedPaletteEntry>(entryCount)
+        repeat(entryCount) { index ->
+            val offset = entriesStart + index * entrySize
+            val componentSize = if (sampleDepth == 8) 1 else 2
+            val red = component(offset, componentSize)
+            val green = component(offset + componentSize, componentSize)
+            val blue = component(offset + componentSize * 2, componentSize)
+            val alpha = component(offset + componentSize * 3, componentSize)
+            val frequency = u16(offset + componentSize * 4).toInt()
+            if (frequency > previousFrequency) abort("frequency.order", "sPLT frequencies must be non-increasing")
+            previousFrequency = frequency
+            entries += PngSuggestedPaletteEntry(red, green, blue, alpha, frequency)
+        }
+        return PngSuggestedPaletteMetadata(latin1Keyword(payload.start, nameEnd), sampleDepth, immutableList(entries))
+    }
+
+    private fun component(offset: Int, size: Int): Int = if (size == 1) u8(offset) else u16(offset).toInt()
+
+    private fun <T> decode(record: PngChunkRecord, block: () -> T): PngMetadataValue<T> = try {
+        PngMetadataValue.Resolved(record, block())
+    } catch (refusal: MetadataRefusal) {
+        val diagnostic = PngDiagnostic(
+            code = "png.metadata.${record.type}.${refusal.code}",
+            offset = record.rawRange.startInclusive,
+            chunkType = record.type,
+            message = refusal.message ?: "PNG metadata could not be resolved",
+            severity = PngDiagnosticSeverity.REFUSAL,
+        )
+        diagnostics += diagnostic
+        PngMetadataValue.Refused(record, diagnostic)
+    }
+
+    private fun payload(record: PngChunkRecord): PayloadRange {
+        val start = record.payloadRange.startInclusive.toInt()
+        val end = record.payloadRange.endExclusive.toInt()
+        return PayloadRange(start, end)
+    }
+
+    private fun requireLength(payload: PayloadRange, expected: Int) {
+        if (payload.length != expected) abort("length", "PNG metadata payload must contain $expected bytes")
+    }
+
+    private fun zeroSeparator(start: Int, end: Int, maximumBytes: Int, missingCode: String): Int {
+        val boundedEnd = minOf(end.toLong(), start.toLong() + maximumBytes.toLong() + 1L).toInt()
+        for (offset in start until boundedEnd) if (data[offset] == 0.toByte()) return offset
+        if (end - start > maximumBytes) abort(missingCode, "PNG metadata string exceeds the configured limit")
+        abort("layout", "PNG metadata string has no null separator")
+    }
+
+    private fun latin1Keyword(start: Int, end: Int): String {
+        val length = end - start
+        if (length !in 1..KEYWORD_MAX_BYTES) abort("keyword.invalid", "PNG metadata keyword must contain one to 79 bytes")
+        var previousWasSpace = false
+        for (offset in start until end) {
+            val value = u8(offset)
+            val isSpace = value == ' '.code
+            if ((value !in 0x20..0x7e && value !in 0xa1..0xff) ||
+                value == 0xa0 ||
+                (isSpace && (offset == start || offset == end - 1 || previousWasSpace))
+            ) {
+                abort("keyword.invalid", "PNG metadata keyword contains an invalid Latin-1 sequence")
+            }
+            previousWasSpace = isSpace
+        }
+        return String(data, start, length, Charsets.ISO_8859_1)
+    }
+
+    private fun latin1Text(start: Int, end: Int): String = latin1Text(data, start, end - start)
+
+    private fun latin1Text(bytes: ByteArray, start: Int, length: Int): String {
+        if (length > limits.maxTextBytes) abort("text.limit", "PNG text exceeds the configured limit")
+        for (offset in start until start + length) {
+            val value = bytes[offset].toInt() and 0xff
+            if (value != '\n'.code && value !in 0x20..0x7e && value !in 0xa1..0xff) {
+                abort("text.invalid", "PNG text contains a disallowed Latin-1 control character")
+            }
+        }
+        return String(bytes, start, length, Charsets.ISO_8859_1)
+    }
+
+    private fun languageTag(start: Int, end: Int): String {
+        if (end - start > limits.maxTextBytes) abort("text.limit", "iTXt language tag exceeds the configured limit")
+        for (offset in start until end) {
+            val value = u8(offset)
+            if (value !in 'A'.code..'Z'.code && value !in 'a'.code..'z'.code &&
+                value !in '0'.code..'9'.code && value != '-'.code
+            ) {
+                abort("language.invalid", "iTXt language tag must be ASCII alphanumeric subtags")
+            }
+        }
+        return String(data, start, end - start, Charsets.US_ASCII)
+    }
+
+    private fun utf8(start: Int, end: Int): String = utf8(boundedSlice(start, end, limits.maxTextBytes, "text.limit"), 0, end - start)
+
+    private fun utf8(bytes: ByteArray, start: Int, length: Int): String {
+        if (length > limits.maxTextBytes) abort("text.limit", "UTF-8 text exceeds the configured limit")
+        return try {
+            Charsets.UTF_8.newDecoder()
+                .onMalformedInput(CodingErrorAction.REPORT)
+                .onUnmappableCharacter(CodingErrorAction.REPORT)
+                .decode(ByteBuffer.wrap(bytes, start, length))
+                .toString()
+        } catch (_: CharacterCodingException) {
+            abort("utf8.invalid", "iTXt contains malformed UTF-8")
+        }
+    }
+
+    private fun boundedSlice(start: Int, end: Int, maximumBytes: Int, limitCode: String): ByteArray {
+        val length = end - start
+        if (length > maximumBytes) abort(limitCode, "PNG metadata field exceeds the configured limit")
+        return data.copyOfRange(start, end)
+    }
+
+    private fun maximumInflatedTextBytes(): Int = minOf(limits.maxInflatedTextBytes, limits.maxTextBytes)
+
+    private fun inflate(start: Int, end: Int, maxBytes: Int, subject: String): ByteArray {
+        val inflater = Inflater()
+        val output = BoundedBytes(maxBytes)
+        try {
+            inflater.setInput(data, start, end - start)
+            val buffer = ByteArray(INFLATE_BUFFER_BYTES)
+            while (!inflater.finished()) {
+                val count = try {
+                    inflater.inflate(buffer)
+                } catch (_: DataFormatException) {
+                    abort("compression.invalid", "PNG metadata has an invalid zlib stream")
+                }
+                when {
+                    count > 0 -> if (!output.append(buffer, count)) {
+                        abort("$subject.limit", "Inflated PNG metadata exceeds the configured limit")
+                    }
+
+                    inflater.needsDictionary() -> abort("compression.dictionary", "PNG metadata zlib stream requires a dictionary")
+                    inflater.needsInput() -> abort("compression.truncated", "PNG metadata zlib stream is truncated")
+                    else -> abort("compression.invalid", "PNG metadata zlib stream made no progress")
+                }
+            }
+            if (inflater.remaining != 0) abort("compression.trailing", "PNG metadata zlib stream has trailing bytes")
+            return output.toByteArray()
+        } finally {
+            inflater.end()
+        }
+    }
+
+    private fun u8(offset: Int): Int = data[offset].toInt() and 0xff
+
+    private fun u16(offset: Int): Long = ((u8(offset) shl 8) or u8(offset + 1)).toLong()
+
+    private fun u32(offset: Int): Long =
+        (u8(offset).toLong() shl 24) or
+            (u8(offset + 1).toLong() shl 16) or
+            (u8(offset + 2).toLong() shl 8) or
+            u8(offset + 3).toLong()
+
+    private fun u32LittleEndian(offset: Int): Long =
+        u8(offset).toLong() or
+            (u8(offset + 1).toLong() shl 8) or
+            (u8(offset + 2).toLong() shl 16) or
+            (u8(offset + 3).toLong() shl 24)
+
+    private fun abort(code: String, message: String): Nothing = throw MetadataRefusal(code, message)
+
+    private data class PayloadRange(val start: Int, val end: Int) {
+        val length: Int
+            get() = end - start
+    }
+
+    private class MetadataRefusal(val code: String, message: String) : RuntimeException(message)
+}
+
+private class BoundedBytes(private val maximumSize: Int) {
+    private var bytes: ByteArray = ByteArray(minOf(maximumSize, INFLATE_BUFFER_BYTES))
+    private var size: Int = 0
+
+    fun append(source: ByteArray, count: Int): Boolean {
+        if (count > maximumSize - size) return false
+        val required = size + count
+        if (required > bytes.size) grow(required)
+        source.copyInto(bytes, size, 0, count)
+        size = required
+        return true
+    }
+
+    fun toByteArray(): ByteArray = bytes.copyOf(size)
+
+    private fun grow(required: Int) {
+        val doubled = if (bytes.size > maximumSize / 2) maximumSize else bytes.size * 2
+        bytes = bytes.copyOf(maxOf(required, doubled))
+    }
+}
+
+private fun <T> immutableList(values: List<T>): List<T> = Collections.unmodifiableList(ArrayList(values))
+
+private const val KEYWORD_MAX_BYTES: Int = 79
+private const val INFLATE_BUFFER_BYTES: Int = 8192

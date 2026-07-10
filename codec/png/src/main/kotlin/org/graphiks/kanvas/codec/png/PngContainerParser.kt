@@ -72,6 +72,7 @@ public class PngContainer internal constructor(
 
 public enum class PngDiagnosticSeverity {
     ERROR,
+    REFUSAL,
 }
 
 public data class PngDiagnostic(
@@ -95,6 +96,7 @@ public data class PngContainerLimits(
     public val maxTotalIdatBytes: Long = 512L * 1024L * 1024L,
     public val maxAncillaryChunkBytes: Long = 64L * 1024L * 1024L,
     public val maxInputBytes: Long = 1024L * 1024L * 1024L,
+    public val metadata: PngMetadataLimits = PngMetadataLimits.Default,
 ) {
     init {
         require(maxWidth > 0) { "maxWidth must be positive" }
@@ -129,6 +131,11 @@ public object PngContainerParser {
         var sawIdat = false
         var idatClosed = false
         var totalIdatBytes = 0L
+        val staticMetadataCounts = HashMap<String, Int>()
+        val suggestedPaletteNames = HashSet<String>()
+        var sawBackgroundBeforePalette = false
+        var masteringDisplayOffset: Long? = null
+        var sawCicp = false
 
         while (offset < data.size.toLong()) {
             if (data.size.toLong() - offset < CHUNK_OVERHEAD_BYTES) {
@@ -253,6 +260,14 @@ public object PngContainerParser {
                     if (sawIdat) {
                         return failure("png.plte.order", chunkOffset, type, "PLTE must precede IDAT")
                     }
+                    if (sawBackgroundBeforePalette) {
+                        return failure(
+                            "png.metadata.bKGD.order",
+                            chunkOffset,
+                            type,
+                            "bKGD must follow PLTE when PLTE is present",
+                        )
+                    }
                     sawPalette = true
                 }
 
@@ -295,6 +310,79 @@ public object PngContainerParser {
                             "Unknown critical PNG chunk",
                         )
                     }
+                    if (type in STATIC_METADATA_SINGLETON_TYPES) {
+                        val count = (staticMetadataCounts[type] ?: 0) + 1
+                        staticMetadataCounts[type] = count
+                        if (count > 1) {
+                            return failure(
+                                "png.metadata.$type.duplicate",
+                                chunkOffset,
+                                type,
+                                "PNG static metadata chunk $type may occur only once",
+                            )
+                        }
+                    }
+                    if (type in PRE_PALETTE_AND_IDAT_METADATA_TYPES && (sawPalette || sawIdat)) {
+                        return failure(
+                            "png.metadata.$type.order",
+                            chunkOffset,
+                            type,
+                            "PNG metadata chunk $type must precede PLTE and IDAT",
+                        )
+                    }
+                    if (type in PRE_IDAT_METADATA_TYPES && sawIdat) {
+                        return failure(
+                            "png.metadata.$type.order",
+                            chunkOffset,
+                            type,
+                            "PNG metadata chunk $type must precede IDAT",
+                        )
+                    }
+                    when (type) {
+                        "bKGD" -> {
+                            if (sawIdat) {
+                                return failure(
+                                    "png.metadata.bKGD.order",
+                                    chunkOffset,
+                                    type,
+                                    "bKGD must precede IDAT",
+                                )
+                            }
+                            if (!sawPalette) sawBackgroundBeforePalette = true
+                        }
+
+                        "hIST" -> {
+                            if (!sawPalette) {
+                                return failure(
+                                    "png.metadata.hIST.plte.required",
+                                    chunkOffset,
+                                    type,
+                                    "hIST requires a preceding PLTE chunk",
+                                )
+                            }
+                            if (sawIdat) {
+                                return failure(
+                                    "png.metadata.hIST.order",
+                                    chunkOffset,
+                                    type,
+                                    "hIST must precede IDAT",
+                                )
+                            }
+                        }
+
+                        "mDCV" -> masteringDisplayOffset = chunkOffset
+                        "cICP" -> sawCicp = true
+                        "sPLT" -> parseSuggestedPaletteName(data, payloadOffset.toInt(), payloadLength.toInt())?.let { name ->
+                            if (!suggestedPaletteNames.add(name)) {
+                                return failure(
+                                    "png.metadata.sPLT.name.duplicate",
+                                    chunkOffset,
+                                    type,
+                                    "sPLT palette names must be distinct",
+                                )
+                            }
+                        }
+                    }
                 }
             }
 
@@ -310,6 +398,14 @@ public object PngContainerParser {
             if (type == TYPE_IEND) {
                 if (offset != data.size.toLong()) {
                     return failure("png.iend.trailing_data", chunkOffset, type, "Bytes follow the terminal IEND chunk")
+                }
+                if (masteringDisplayOffset != null && !sawCicp) {
+                    return failure(
+                        "png.metadata.mDCV.cicp.required",
+                        masteringDisplayOffset,
+                        "mDCV",
+                        "mDCV requires an accompanying cICP chunk",
+                    )
                 }
                 return PngContainerParseResult.Success(
                     PngContainer(
@@ -379,6 +475,28 @@ public object PngContainerParser {
         for (index in 0 until TYPE_BYTES) append((data[offset + index].toInt() and 0xFF).toChar())
     }
 
+    private fun parseSuggestedPaletteName(data: ByteArray, offset: Int, length: Int): String? {
+        val end = offset + length
+        val maximumNameEnd = minOf(end, offset + SUGGESTED_PALETTE_NAME_MAX_BYTES + 1)
+        var separator = offset
+        while (separator < maximumNameEnd && data[separator] != 0.toByte()) separator++
+        if (separator == maximumNameEnd || separator == offset) return null
+        if (separator - offset > SUGGESTED_PALETTE_NAME_MAX_BYTES) return null
+        var previousWasSpace = false
+        for (index in offset until separator) {
+            val value = data[index].toInt() and 0xFF
+            val isSpace = value == ' '.code
+            if ((value !in 0x20..0x7E && value !in 0xA1..0xFF) ||
+                value == 0xA0 ||
+                (isSpace && (index == offset || index == separator - 1 || previousWasSpace))
+            ) {
+                return null
+            }
+            previousWasSpace = isSpace
+        }
+        return String(data, offset, separator - offset, Charsets.ISO_8859_1)
+    }
+
     private fun crcMatches(data: ByteArray, typeOffset: Int, payloadLength: Int, crcOffset: Int): Boolean {
         val crc = CRC32()
         crc.update(data, typeOffset, TYPE_BYTES + payloadLength)
@@ -413,11 +531,38 @@ public object PngContainerParser {
     private const val CHUNK_PREFIX_BYTES: Long = 8L
     private const val CHUNK_OVERHEAD_BYTES: Long = 12L
     private const val IHDR_BYTES: Int = 13
+    private const val SUGGESTED_PALETTE_NAME_MAX_BYTES: Int = 79
     private const val TYPE_IHDR: String = "IHDR"
     private const val TYPE_PLTE: String = "PLTE"
     private const val TYPE_IDAT: String = "IDAT"
     private const val TYPE_IEND: String = "IEND"
     private val APNG_CHUNK_TYPES: Set<String> = setOf("acTL", "fcTL", "fdAT")
+    private val STATIC_METADATA_SINGLETON_TYPES: Set<String> = setOf(
+        "iCCP",
+        "sRGB",
+        "gAMA",
+        "cHRM",
+        "cICP",
+        "mDCV",
+        "cLLI",
+        "eXIf",
+        "pHYs",
+        "tIME",
+        "sBIT",
+        "bKGD",
+        "hIST",
+    )
+    private val PRE_PALETTE_AND_IDAT_METADATA_TYPES: Set<String> = setOf(
+        "iCCP",
+        "sRGB",
+        "gAMA",
+        "cHRM",
+        "cICP",
+        "mDCV",
+        "cLLI",
+        "sBIT",
+    )
+    private val PRE_IDAT_METADATA_TYPES: Set<String> = setOf("eXIf", "pHYs", "sPLT")
     private val PNG_SIGNATURE: ByteArray = byteArrayOf(
         0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
     )
