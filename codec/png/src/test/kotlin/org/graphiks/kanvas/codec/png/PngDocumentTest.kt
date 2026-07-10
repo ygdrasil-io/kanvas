@@ -54,6 +54,40 @@ class PngDocumentTest {
     }
 
     @Test
+    fun `metadata-only conformance corpus preserves raw unknown chunks and fragmented IDAT`() {
+        val source = png(
+            "IHDR" to ihdr(),
+            "vpAg" to byteArrayOf(0x10),
+            "vpAG" to byteArrayOf(0x20),
+            "tEXt" to textChunk("Title", "Original"),
+            "IDAT" to byteArrayOf(0x30),
+            "IDAT" to byteArrayOf(0x40, 0x50),
+            "IDAT" to byteArrayOf(0x60),
+            "IEND" to ByteArray(0),
+        )
+        val sourceRaw = rawChunks(source)
+        val metadataOnlyCorpus: List<Pair<String, (PngDocument) -> PngDocument>> = listOf(
+            "replace tEXt" to { document: PngDocument ->
+                document.withAncillaryChunk("tEXt", textChunk("Title", "Updated"))
+            },
+            "remove tEXt" to { document: PngDocument -> document.withoutChunks("tEXt") },
+            "insert pHYs" to { document: PngDocument ->
+                document.withAncillaryChunk("pHYs", u32(2_835) + u32(2_835) + byteArrayOf(1))
+            },
+        )
+
+        for ((name, edit) in metadataOnlyCorpus) {
+            val saved = edit(open(source)).save()
+            val savedRaw = rawChunks(saved.bytes)
+
+            assertEquals(PngDocumentSaveStatus.SAVED, saved.status, name)
+            assertRawChunkListsEqual(sourceRaw.getValue("vpAg"), savedRaw.getValue("vpAg"))
+            assertRawChunkListsEqual(sourceRaw.getValue("vpAG"), savedRaw.getValue("vpAG"))
+            assertRawChunkListsEqual(sourceRaw.getValue("IDAT"), savedRaw.getValue("IDAT"))
+        }
+    }
+
+    @Test
     fun `removes every matching ancillary chunk without rewriting retained chunks`() {
         val source = png(
             "IHDR" to ihdr(),
@@ -169,6 +203,29 @@ class PngDocumentTest {
             PngSaveEntryStatus.REFUSED,
             "png.pixel-edit.reencode.unsupported",
         )
+    }
+
+    @Test
+    fun `critical impact conformance corpus applies safe to copy from the fourth type byte`() {
+        val safeToCopyCorpus = listOf(
+            Triple("zaAa", PngSaveEntryStatus.PLANNED_PRESERVE, "png.ancillary.preserved.safe-to-copy"),
+            Triple("zaAA", PngSaveEntryStatus.PLANNED_DROP, "png.ancillary.dropped.unsafe-to-copy"),
+        )
+        val source = png(
+            "IHDR" to ihdr(),
+            *safeToCopyCorpus.map { (type) -> type to byteArrayOf(0x10) }.toTypedArray(),
+            "IDAT" to byteArrayOf(0x20),
+            "IEND" to ByteArray(0),
+        )
+
+        val edited = open(source).markPixelDataChanged()
+        val saved = edited.save()
+
+        assertEquals(PngWriteImpact.CRITICAL, edited.writePlan.impact)
+        assertEquals(PngDocumentSaveStatus.REFUSED, saved.status)
+        for ((type, status, reasonCode) in safeToCopyCorpus) {
+            assertReportEntry(saved.report, type, status, reasonCode)
+        }
     }
 
     @Test
@@ -508,21 +565,37 @@ class PngDocumentTest {
     }
 
     @Test
-    fun `saves pristine source bytes identically including unknown ancillary chunks and IDAT segmentation`() {
-        val source = png(
-            "IHDR" to ihdr(width = 2, height = 3),
-            "vpAg" to byteArrayOf(0x11, 0x22),
-            "IDAT" to byteArrayOf(0x33),
-            "IDAT" to byteArrayOf(0x44, 0x55),
-            "IEND" to ByteArray(0),
+    fun `pristine conformance corpus saves static PNG bytes identically`() {
+        val pristineCorpus = listOf(
+            png(
+                "IHDR" to ihdr(),
+                "IDAT" to byteArrayOf(0x10),
+                "IEND" to ByteArray(0),
+            ),
+            png(
+                "IHDR" to ihdr(width = 2, height = 3),
+                "vpAg" to byteArrayOf(0x11, 0x22),
+                "IDAT" to byteArrayOf(0x33),
+                "IDAT" to byteArrayOf(0x44, 0x55),
+                "IEND" to ByteArray(0),
+            ),
+            png(
+                "IHDR" to ihdr(),
+                "vpAG" to byteArrayOf(0x66),
+                "tEXt" to textChunk("Title", "Preserved"),
+                "IDAT" to byteArrayOf(0x77),
+                "IEND" to ByteArray(0),
+            ),
         )
 
-        val saved = open(source).save()
+        for (source in pristineCorpus) {
+            val saved = open(source).save()
 
-        assertArrayEquals(source, saved.bytes)
-        assertArrayEquals(source, saved.outputBytes)
-        assertNull(saved.sourceRecovery)
-        assertTrue(saved.report.isEmpty)
+            assertArrayEquals(source, saved.bytes)
+            assertArrayEquals(source, saved.outputBytes)
+            assertNull(saved.sourceRecovery)
+            assertTrue(saved.report.isEmpty)
+        }
     }
 
     @Test
@@ -566,21 +639,29 @@ class PngDocumentTest {
     }
 
     @Test
-    fun `propagates APNG parser diagnostics with chunk type and offset`() {
-        val result = PngDocument.open(
-            png(
-                "IHDR" to ihdr(),
-                "acTL" to ByteArray(8),
-                "IDAT" to byteArrayOf(0x11),
-                "IEND" to ByteArray(0),
-            ),
+    fun `propagates every APNG parser refusal with chunk type and offset`() {
+        val apngCorpus = linkedMapOf(
+            "acTL" to ByteArray(8),
+            "fcTL" to ByteArray(26),
+            "fdAT" to ByteArray(4),
         )
 
-        assertInstanceOf(PngDocumentOpenResult.Failure::class.java, result)
-        val diagnostic = (result as PngDocumentOpenResult.Failure).diagnostic
-        assertEquals("png.apng.unsupported", diagnostic.code)
-        assertEquals(33L, diagnostic.offset)
-        assertEquals("acTL", diagnostic.chunkType)
+        for ((type, payload) in apngCorpus) {
+            val result = PngDocument.open(
+                png(
+                    "IHDR" to ihdr(),
+                    type to payload,
+                    "IDAT" to byteArrayOf(0x11),
+                    "IEND" to ByteArray(0),
+                ),
+            )
+
+            assertInstanceOf(PngDocumentOpenResult.Failure::class.java, result, type)
+            val diagnostic = (result as PngDocumentOpenResult.Failure).diagnostic
+            assertEquals("png.apng.unsupported", diagnostic.code, type)
+            assertEquals(33L, diagnostic.offset, type)
+            assertEquals(type, diagnostic.chunkType, type)
+        }
     }
 
     @Test

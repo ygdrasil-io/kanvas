@@ -61,6 +61,61 @@ class PngContainerParserTest {
     }
 
     @Test
+    fun `conformance corpus retains legal ancillary placement and rejects ancillary gaps in IDAT`() {
+        val legalOrderCorpus = listOf(
+            png(
+                "IHDR" to ihdr(),
+                "vpAg" to byteArrayOf(1),
+                "IDAT" to byteArrayOf(2),
+                "IEND" to ByteArray(0),
+            ) to listOf("IHDR", "vpAg", "IDAT", "IEND"),
+            png(
+                "IHDR" to ihdr(),
+                "IDAT" to byteArrayOf(2),
+                "vpAg" to byteArrayOf(1),
+                "IEND" to ByteArray(0),
+            ) to listOf("IHDR", "IDAT", "vpAg", "IEND"),
+        )
+
+        for ((data, expectedTypes) in legalOrderCorpus) {
+            assertEquals(expectedTypes, success(data).chunks.map(PngChunkRecord::type))
+        }
+
+        assertFailure(
+            png(
+                "IHDR" to ihdr(),
+                "IDAT" to byteArrayOf(2),
+                "vpAg" to byteArrayOf(1),
+                "IDAT" to byteArrayOf(3),
+                "IEND" to ByteArray(0),
+            ),
+            "png.idat.noncontiguous",
+            "IDAT",
+        )
+    }
+
+    @Test
+    fun `conformance corpus detects CRC mutations in every chunk`() {
+        val source = png(
+            "IHDR" to ihdr(),
+            "vpAg" to byteArrayOf(1),
+            "IDAT" to byteArrayOf(2),
+            "IEND" to ByteArray(0),
+        )
+
+        for (record in success(source).chunks) {
+            val mutated = source.copyOf()
+            val mutationOffset = (record.rawRange.endExclusive - 1L).toInt()
+            mutated[mutationOffset] = (mutated[mutationOffset].toInt() xor 1).toByte()
+
+            val diagnostic = failure(mutated)
+            assertEquals("png.chunk.crc.invalid", diagnostic.code, record.type)
+            assertEquals(record.rawRange.startInclusive, diagnostic.offset, record.type)
+            assertEquals(record.type, diagnostic.chunkType, record.type)
+        }
+    }
+
+    @Test
     fun `public chunk record constructor and copy reject invalid type codes`() {
         val valid = PngChunkRecord(
             type = "vpAg",
@@ -510,6 +565,54 @@ class PngContainerParserTest {
             "IDAT",
             limits = PngContainerLimits.Default.copy(maxTotalIdatBytes = 2L),
         )
+    }
+
+    @Test
+    fun `conformance corpus enforces exact resource limit boundaries`() {
+        val source = png(
+            "IHDR" to ihdr(),
+            "vpAg" to byteArrayOf(4, 5, 6),
+            "IDAT" to byteArrayOf(1),
+            "IDAT" to byteArrayOf(2, 3),
+            "IEND" to ByteArray(0),
+        )
+        val exactLimits = PngContainerLimits.Default.copy(
+            maxInputBytes = source.size.toLong(),
+            maxChunkCount = 5,
+            maxAncillaryChunkBytes = 3L,
+            maxTotalIdatBytes = 3L,
+        )
+
+        assertEquals(5, success(source, exactLimits).chunks.size)
+
+        val limitCorpus: List<Triple<PngContainerLimits, String, String?>> = listOf(
+            Triple(
+                PngContainerLimits.Default.copy(maxInputBytes = source.size.toLong() - 1L),
+                "png.input.limit",
+                null,
+            ),
+            Triple(
+                PngContainerLimits.Default.copy(maxChunkCount = 4),
+                "png.chunk.count.limit",
+                null,
+            ),
+            Triple(
+                PngContainerLimits.Default.copy(maxAncillaryChunkBytes = 2L),
+                "png.ancillary.limit",
+                "vpAg",
+            ),
+            Triple(
+                PngContainerLimits.Default.copy(maxTotalIdatBytes = 2L),
+                "png.idat.limit",
+                "IDAT",
+            ),
+        )
+
+        for ((limits, code, chunkType) in limitCorpus) {
+            val diagnostic = failure(source, limits)
+            assertEquals(code, diagnostic.code)
+            assertEquals(chunkType, diagnostic.chunkType)
+        }
     }
 
     @Test
