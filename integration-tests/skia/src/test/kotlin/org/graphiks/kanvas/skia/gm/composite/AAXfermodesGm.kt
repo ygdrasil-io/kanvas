@@ -299,7 +299,6 @@ class AAXfermodesGm : SkiaGm {
             BlendMode.XOR,
             BlendMode.PLUS,
             BlendMode.MODULATE,
-            BlendMode.MULTIPLY,
             BlendMode.SCREEN,
             BlendMode.OVERLAY,
             BlendMode.DARKEN,
@@ -310,12 +309,13 @@ class AAXfermodesGm : SkiaGm {
             BlendMode.SOFT_LIGHT,
             BlendMode.DIFFERENCE,
             BlendMode.EXCLUSION,
+            BlendMode.MULTIPLY,
             BlendMode.HUE,
             BlendMode.SATURATION,
             BlendMode.COLOR,
             BlendMode.LUMINOSITY,
         )
-        internal val upstreamCoeffSplit: Int = BlendMode.SCREEN.ordinal + 1
+        internal val upstreamCoeffSplit: Int = upstreamBlendModes.indexOf(BlendMode.SCREEN) + 1
 
         fun intToColor(value: Int): Color {
             val a = (value ushr 24) and 0xFF
