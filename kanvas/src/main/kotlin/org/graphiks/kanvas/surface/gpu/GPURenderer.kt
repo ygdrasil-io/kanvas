@@ -196,12 +196,14 @@ private class LayerScissorRenderRecorder(
         draws: List<GPUBackendRawUniformDraw>,
         blendMode: GPUBlendMode?,
     ) {
+        val scopedDraws = draws.mapNotNull { it.intersectLayerScissor(layerBounds) }
+        if (stencilMode == GPUBackendStencilMode.Test && scopedDraws.isEmpty()) return
         delegate.drawFullscreenStencilPass(
             wgsl,
             colorFormat,
             stencilMode,
             triangleData,
-            draws.mapNotNull { it.intersectLayerScissor(layerBounds) },
+            scopedDraws,
             blendMode,
         )
     }

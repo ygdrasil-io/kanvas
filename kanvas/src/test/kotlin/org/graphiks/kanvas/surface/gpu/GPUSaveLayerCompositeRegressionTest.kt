@@ -4,6 +4,7 @@ import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendOffscreenTarget
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRawUniformDraw
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRenderRecorder
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendStencilMode
 import org.graphiks.kanvas.gpu.renderer.execution.GPUClearColor
 import org.graphiks.kanvas.gpu.renderer.execution.GPUSurfaceTarget
 import org.graphiks.kanvas.paint.BlendMode
@@ -306,6 +307,35 @@ class GPUSaveLayerCompositeRegressionTest {
     }
 
     @Test
+    fun `bounded child target skips a fully out of bounds stencil test pass`() {
+        val stencilPassCalls = mutableListOf<Unit>()
+        val childTarget = LayerScissorOffscreenTarget(
+            delegate = SpyOffscreenTarget(mutableListOf(), stencilPassCalls),
+            sceneLayerBounds = { label -> if (label == "bounded-child") LayerBounds(2, 3, 3, 2) else null },
+        )
+
+        childTarget.encodeOffscreenTexture("bounded-child", clearColor = null) {
+            drawFullscreenStencilPass(
+                wgsl = "test",
+                colorFormat = "rgba8unorm",
+                stencilMode = GPUBackendStencilMode.Test,
+                triangleData = null,
+                draws = listOf(
+                    GPUBackendRawUniformDraw(
+                        uniformBytes = ByteArray(16),
+                        scissorX = 0,
+                        scissorY = 0,
+                        scissorWidth = 1,
+                        scissorHeight = 1,
+                    ),
+                ),
+            )
+        }
+
+        assertTrue(stencilPassCalls.isEmpty())
+    }
+
+    @Test
     fun `empty bounded saveLayer leaves parent untouched`() {
         requireWebGpu()
 
@@ -459,6 +489,7 @@ class GPUSaveLayerCompositeRegressionTest {
 
     private inner class SpyOffscreenTarget(
         private val recordedDraws: MutableList<GPUBackendRawUniformDraw>,
+        private val stencilPassCalls: MutableList<Unit>? = null,
     ) : GPUBackendOffscreenTarget {
         override val target: GPUSurfaceTarget
             get() = error("target is not used by this spy")
@@ -479,14 +510,17 @@ class GPUSaveLayerCompositeRegressionTest {
             clearColor: GPUClearColor?,
             block: GPUBackendRenderRecorder.() -> Unit,
         ) {
-            block(rawDrawRecorder(recordedDraws))
+            block(rawDrawRecorder(recordedDraws, stencilPassCalls))
         }
 
         override fun close() = Unit
     }
 
     @Suppress("UNCHECKED_CAST")
-    private fun rawDrawRecorder(recordedDraws: MutableList<GPUBackendRawUniformDraw>): GPUBackendRenderRecorder =
+    private fun rawDrawRecorder(
+        recordedDraws: MutableList<GPUBackendRawUniformDraw>,
+        stencilPassCalls: MutableList<Unit>? = null,
+    ): GPUBackendRenderRecorder =
         Proxy.newProxyInstance(
             GPUBackendRenderRecorder::class.java.classLoader,
             arrayOf(GPUBackendRenderRecorder::class.java),
@@ -496,6 +530,10 @@ class GPUSaveLayerCompositeRegressionTest {
                 "drawFullscreenRawUniformPass" -> {
                     recordedDraws += args!![2] as List<GPUBackendRawUniformDraw>
                     null
+                }
+                "drawFullscreenStencilPass" -> {
+                    stencilPassCalls?.add(Unit)
+                    error("unexpected stencil pass")
                 }
                 else -> error("unexpected recorder call: ${method.name}")
             }
