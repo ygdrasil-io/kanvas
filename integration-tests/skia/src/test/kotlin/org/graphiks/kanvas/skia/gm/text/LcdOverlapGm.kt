@@ -20,7 +20,7 @@ private val typeface = Typefaces.fromResource("fonts/LiberationSans-Regular.ttf"
 class LcdOverlapGm : SkiaGm {
     override val name = "lcdoverlap"
     override val renderFamily = RenderFamily.TEXT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 750
     override val height = 750

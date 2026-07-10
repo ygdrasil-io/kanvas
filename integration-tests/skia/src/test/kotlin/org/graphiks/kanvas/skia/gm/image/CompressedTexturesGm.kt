@@ -35,7 +35,7 @@ import kotlin.math.sqrt
 class CompressedTexturesGm : SkiaGm {
     override val name = "compressed_textures"
     override val renderFamily = RenderFamily.IMAGE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 2 * kCellWidth + 3 * kPad
     override val height = 2 * kBaseTexHeight + 3 * kPad

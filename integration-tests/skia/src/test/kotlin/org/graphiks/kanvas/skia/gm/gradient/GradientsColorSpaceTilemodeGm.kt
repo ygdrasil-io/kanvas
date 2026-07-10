@@ -22,7 +22,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 class GradientsColorSpaceTilemodeGm : SkiaGm {
     override val name = "gradients_color_space_tilemode"
     override val renderFamily = RenderFamily.GRADIENT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 360
     override val height = 105

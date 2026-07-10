@@ -17,7 +17,7 @@ import org.graphiks.kanvas.types.Color
 class BigTextGm : SkiaGm {
     override val name = "bigtext"
     override val renderFamily = RenderFamily.TEXT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 65.0
     override val width = 640
     override val height = 480

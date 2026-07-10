@@ -16,7 +16,7 @@ import org.graphiks.kanvas.types.Rect
 class PerspShadersGm : SkiaGm {
     override val name = "perspshaders"
     override val renderFamily = RenderFamily.PATH
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 512
     override val height = 512

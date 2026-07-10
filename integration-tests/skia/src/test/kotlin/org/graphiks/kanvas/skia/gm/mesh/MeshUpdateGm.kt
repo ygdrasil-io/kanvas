@@ -20,7 +20,7 @@ import org.graphiks.kanvas.types.VertexMode
 class MeshUpdateGm : SkiaGm {
     override val name = "mesh_updates"
     override val renderFamily = RenderFamily.MESH
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 270
     override val height = 490

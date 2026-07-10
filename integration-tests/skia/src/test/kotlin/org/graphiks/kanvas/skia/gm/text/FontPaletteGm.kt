@@ -20,7 +20,7 @@ import org.graphiks.kanvas.types.b
 class FontPaletteGm : SkiaGm {
     override val name = "font_palette_default"
     override val renderFamily = RenderFamily.TEXT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 1000
     override val height = 400

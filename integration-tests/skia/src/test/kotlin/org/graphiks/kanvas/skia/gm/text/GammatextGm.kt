@@ -23,7 +23,7 @@ import org.graphiks.kanvas.types.Rect
 class GammatextGm : SkiaGm {
     override val name = "gammatext"
     override val renderFamily = RenderFamily.TEXT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 10.0
     override val width = 1024
     override val height = 480

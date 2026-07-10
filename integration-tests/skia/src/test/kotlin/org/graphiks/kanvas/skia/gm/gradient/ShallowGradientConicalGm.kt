@@ -20,7 +20,7 @@ import org.graphiks.kanvas.types.Rect
 class ShallowGradientConicalGm : SkiaGm {
     override val name = "shallow_gradient_conical"
     override val renderFamily = RenderFamily.GRADIENT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 800
     override val height = 800

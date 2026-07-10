@@ -37,7 +37,7 @@ import org.graphiks.kanvas.types.Rect
 class RuntimeShaderGm : SkiaGm {
     override val name = "runtime_shader"
     override val renderFamily = RenderFamily.RUNTIME_EFFECT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 50.0
     override val width = 512
     override val height = 256

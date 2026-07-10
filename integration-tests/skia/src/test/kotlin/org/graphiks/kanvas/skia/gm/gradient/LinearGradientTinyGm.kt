@@ -20,7 +20,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 class LinearGradientTinyGm : SkiaGm {
     override val name = "linear_gradient_tiny"
     override val renderFamily = RenderFamily.GRADIENT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 55.0
     override val width = 600
     override val height = 500

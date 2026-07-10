@@ -30,7 +30,7 @@ import org.graphiks.math.SkColor
 class ExoticFormatsGm : SkiaGm {
     override val name = "exoticformats"
     override val renderFamily = RenderFamily.IMAGE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 2 * IMG_WIDTH_HEIGHT + 3 * PAD
     override val height = IMG_WIDTH_HEIGHT + 2 * PAD

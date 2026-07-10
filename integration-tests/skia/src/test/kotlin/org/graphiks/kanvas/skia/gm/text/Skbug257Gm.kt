@@ -30,7 +30,7 @@ import org.graphiks.kanvas.types.Rect
 class Skbug257Gm : SkiaGm {
     override val name = "skbug_257"
     override val renderFamily = RenderFamily.TEXT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 512
     override val height = 512

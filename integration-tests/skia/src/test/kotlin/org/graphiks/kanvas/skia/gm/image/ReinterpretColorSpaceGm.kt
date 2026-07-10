@@ -27,7 +27,7 @@ import org.graphiks.kanvas.types.TransferFunction
 class ReinterpretColorSpaceGm : SkiaGm {
     override val name = "reinterpretcolorspace"
     override val renderFamily = RenderFamily.IMAGE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 384
     override val height = 384

@@ -13,7 +13,7 @@ import org.graphiks.kanvas.types.Rect
 class CircleBigGm : SkiaGm {
     override val name = "big_rrect_circle_aa_effect"
     override val renderFamily = RenderFamily.PATH
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 722
     override val height = 722

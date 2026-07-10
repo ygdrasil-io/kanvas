@@ -23,7 +23,7 @@ import org.graphiks.kanvas.types.Rect
 class QuadPathGm : SkiaGm {
     override val name = "quadpath"
     override val renderFamily = RenderFamily.PATH
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 1240
     override val height = 390

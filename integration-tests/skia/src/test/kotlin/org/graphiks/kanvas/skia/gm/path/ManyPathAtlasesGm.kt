@@ -16,7 +16,7 @@ import org.graphiks.kanvas.types.Color
 class ManyPathAtlasesGm : SkiaGm {
     override val name = "manypathatlases"
     override val renderFamily = RenderFamily.PATH
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 128
     override val height = 128

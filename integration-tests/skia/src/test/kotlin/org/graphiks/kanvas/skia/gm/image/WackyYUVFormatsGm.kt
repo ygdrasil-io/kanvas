@@ -14,7 +14,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 class WackyYUVFormatsGm : SkiaGm {
     override val name = "wacky_yuv_formats"
     override val renderFamily = RenderFamily.IMAGE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 1880
     override val height = 1430

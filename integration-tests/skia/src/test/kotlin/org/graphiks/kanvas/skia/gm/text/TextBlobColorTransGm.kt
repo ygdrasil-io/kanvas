@@ -22,7 +22,7 @@ import kotlin.math.floor
 class TextBlobColorTransGm : SkiaGm {
     override val name = "textblobcolortrans"
     override val renderFamily = RenderFamily.TEXT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 675
     override val height = 1600

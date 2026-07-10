@@ -23,7 +23,7 @@ import org.graphiks.kanvas.types.Rect
 class DrawLinesWithLocalMatrixGm : SkiaGm {
     override val name = "drawlines_with_local_matrix"
     override val renderFamily = RenderFamily.PATH
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 500
     override val height = 500

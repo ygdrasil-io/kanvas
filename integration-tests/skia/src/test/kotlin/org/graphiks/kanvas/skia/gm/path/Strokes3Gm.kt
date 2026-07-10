@@ -20,7 +20,7 @@ import org.graphiks.kanvas.types.Rect
 class Strokes3Gm : SkiaGm {
     override val name = "strokes3"
     override val renderFamily = RenderFamily.PATH
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 1500
     override val height = 1500

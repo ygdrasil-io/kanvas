@@ -26,7 +26,7 @@ import kotlin.random.Random
 class GetPosTextPathGm : SkiaGm {
     override val name = "getpostextpath"
     override val renderFamily = RenderFamily.TEXT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 90.0
     override val width = 480
     override val height = 780

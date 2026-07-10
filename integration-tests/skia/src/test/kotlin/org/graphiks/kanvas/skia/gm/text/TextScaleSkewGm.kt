@@ -19,7 +19,7 @@ import org.graphiks.kanvas.types.Color
 open class TextScaleSkewGm : SkiaGm {
     override val name = "text_scale_skew"
     override val renderFamily = RenderFamily.TEXT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 80.0
     override val width = 256
     override val height = 128
@@ -53,6 +53,7 @@ open class TextScaleSkewGm : SkiaGm {
  * Same grid rotated 30° around center (128, 64).
  */
 class TextScaleSkewRotateGm : TextScaleSkewGm() {
+    override val renderCost = RenderCost.FAST
     override val name = "text_scale_skew_rotate"
 
     override fun draw(canvas: GmCanvas, width: Int, height: Int) {

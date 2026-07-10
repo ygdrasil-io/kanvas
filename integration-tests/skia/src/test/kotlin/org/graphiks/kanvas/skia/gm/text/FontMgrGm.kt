@@ -17,7 +17,7 @@ import org.graphiks.kanvas.types.Color
 class FontMgrGm : SkiaGm {
     override val name = "fontmgr_iter"
     override val renderFamily = RenderFamily.TEXT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 1536
     override val height = 768

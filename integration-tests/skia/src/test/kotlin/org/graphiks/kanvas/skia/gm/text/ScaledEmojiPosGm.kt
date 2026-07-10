@@ -19,7 +19,7 @@ import org.graphiks.kanvas.types.Point
 class ScaledEmojiPosGm : SkiaGm {
     override val name = "scaledemojipos_colrv0"
     override val renderFamily = RenderFamily.TEXT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 1200
     override val height = 1200

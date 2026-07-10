@@ -19,7 +19,7 @@ import org.graphiks.kanvas.types.Rect
 class ImageshaderTinyscaleGm : SkiaGm {
     override val name = "imageshader_tinyscale"
     override val renderFamily = RenderFamily.IMAGE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 1000
     override val height = 1000

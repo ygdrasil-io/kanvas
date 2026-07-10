@@ -48,7 +48,7 @@ import org.graphiks.kanvas.types.Rect
 class RuntimeColorFilterGm : SkiaGm {
     override val name = "runtimecolorfilter"
     override val renderFamily = RenderFamily.RUNTIME_EFFECT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 768
     override val height = 512

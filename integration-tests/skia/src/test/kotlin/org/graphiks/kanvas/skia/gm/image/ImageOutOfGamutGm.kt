@@ -26,7 +26,7 @@ import org.graphiks.kanvas.types.Rect
 class ImageOutOfGamutGm : SkiaGm {
     override val name = "image_out_of_gamut"
     override val renderFamily = RenderFamily.IMAGE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val tolerance = 2
     override val width = 2 * K_BOX_SIZE + 3 * K_PADDING

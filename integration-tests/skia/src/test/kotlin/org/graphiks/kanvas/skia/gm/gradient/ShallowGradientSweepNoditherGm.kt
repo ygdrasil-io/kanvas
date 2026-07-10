@@ -20,7 +20,7 @@ import org.graphiks.kanvas.types.Rect
 class ShallowGradientSweepNoditherGm : SkiaGm {
     override val name = "shallow_gradient_sweep_nodither"
     override val renderFamily = RenderFamily.GRADIENT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 800
     override val height = 800

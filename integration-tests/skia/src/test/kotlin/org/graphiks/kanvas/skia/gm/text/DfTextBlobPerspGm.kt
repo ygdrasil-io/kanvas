@@ -19,7 +19,7 @@ import org.graphiks.kanvas.types.Color
 class DfTextBlobPerspGm : SkiaGm {
     override val name = "dftext_blob_persp"
     override val renderFamily = RenderFamily.TEXT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 900
     override val height = 350

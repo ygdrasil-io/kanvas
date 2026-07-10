@@ -25,7 +25,7 @@ import kotlin.math.PI
 class AnisotropicImageScaleMipGm : SkiaGm {
     override val name = "anisotropic_image_scale_mip"
     override val renderFamily = RenderFamily.IMAGE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 2 * kImageSize + 3 * kSpacer
     override val height = kNumVertImages * kImageSize + (kNumVertImages + 1) * kSpacer

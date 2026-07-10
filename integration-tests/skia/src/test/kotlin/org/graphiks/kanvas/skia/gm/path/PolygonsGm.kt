@@ -30,7 +30,7 @@ import kotlin.math.sin
 class PolygonsGm : SkiaGm {
     override val name = "polygons"
     override val renderFamily = RenderFamily.PATH
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 69.0
 
     override val width = kNumPolygons * kCellSize + 40

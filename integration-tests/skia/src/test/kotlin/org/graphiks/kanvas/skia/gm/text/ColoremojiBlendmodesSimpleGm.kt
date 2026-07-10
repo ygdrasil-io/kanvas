@@ -11,7 +11,7 @@ import org.graphiks.kanvas.types.Color
 class ColoremojiBlendmodesSimpleGm : SkiaGm {
     override val name = "coloremoji_blendmodes"
     override val renderFamily = RenderFamily.TEXT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 300
     override val height = 300

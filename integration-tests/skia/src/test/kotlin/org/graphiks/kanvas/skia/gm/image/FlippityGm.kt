@@ -23,7 +23,7 @@ import org.graphiks.kanvas.types.Rect
 class FlippityGm : SkiaGm {
     override val name = "flippity"
     override val renderFamily = RenderFamily.IMAGE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = kGMWidth
     override val height = kGMHeight

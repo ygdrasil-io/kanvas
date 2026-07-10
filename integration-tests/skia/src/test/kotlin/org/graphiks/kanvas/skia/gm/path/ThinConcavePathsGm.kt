@@ -26,7 +26,7 @@ import org.graphiks.kanvas.types.Color
 class ThinConcavePathsGm : SkiaGm {
     override val name = "thinconcavepaths"
     override val renderFamily = RenderFamily.PATH
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 94.0
     override val width = 550
     override val height = 400

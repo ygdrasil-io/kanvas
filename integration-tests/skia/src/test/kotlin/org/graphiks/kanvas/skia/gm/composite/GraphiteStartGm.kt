@@ -28,7 +28,7 @@ import org.graphiks.kanvas.types.Rect
 class GraphiteStartGm : SkiaGm {
     override val name = "graphitestart"
     override val renderFamily = RenderFamily.COMPOSITE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 384
     override val height = 384

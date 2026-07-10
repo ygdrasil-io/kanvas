@@ -13,7 +13,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 class RsxBlobShaderGm : SkiaGm {
     override val name = "rsx_blob_shader"
     override val renderFamily = RenderFamily.TEXT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 881
     override val height = 881

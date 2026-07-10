@@ -28,7 +28,7 @@ import org.graphiks.kanvas.types.Rect
 class ImageShaderGm : SkiaGm {
     override val name = "image-shader"
     override val renderFamily = RenderFamily.IMAGE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 850
     override val height = 450

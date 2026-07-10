@@ -15,7 +15,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 class NewTextureImageGm : SkiaGm {
     override val name = "new_texture_image"
     override val renderFamily = RenderFamily.IMAGE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 280
     override val height = 115

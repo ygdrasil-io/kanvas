@@ -19,7 +19,7 @@ import org.graphiks.kanvas.types.Color
 class TrimGm : SkiaGm {
     override val name = "trimpatheffect"
     override val renderFamily = RenderFamily.PATH
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 74.1
     override val width = 1400
     override val height = 1000

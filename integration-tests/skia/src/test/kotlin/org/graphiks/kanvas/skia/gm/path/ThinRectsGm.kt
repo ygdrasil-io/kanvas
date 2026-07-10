@@ -17,7 +17,7 @@ import org.graphiks.kanvas.types.Rect
 class ThinRectsGm : SkiaGm {
     override val name = "thinrects"
     override val renderFamily = RenderFamily.PATH
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 85.1
     override val width = 240
     override val height = 320

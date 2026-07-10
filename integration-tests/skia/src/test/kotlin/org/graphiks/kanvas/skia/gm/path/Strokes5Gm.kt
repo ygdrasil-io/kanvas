@@ -18,7 +18,7 @@ import org.graphiks.kanvas.types.Color
 class Strokes5Gm : SkiaGm {
     override val name = "zero_control_stroke"
     override val renderFamily = RenderFamily.PATH
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 400
     override val height = 800

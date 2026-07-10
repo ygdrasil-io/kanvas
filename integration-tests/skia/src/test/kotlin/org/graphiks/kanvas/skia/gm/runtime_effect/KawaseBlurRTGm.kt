@@ -27,7 +27,7 @@ import org.graphiks.kanvas.types.Rect
 class KawaseBlurRTGm : SkiaGm {
     override val name = "kawase_blur_rt"
     override val renderFamily = RenderFamily.RUNTIME_EFFECT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 76.66666666666667
     override val width = 1280
     override val height = 768

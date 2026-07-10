@@ -21,7 +21,7 @@ import kotlin.math.max
 class ShadowUtilsOcclGm : SkiaGm {
     override val name = "shadow_utils_occl"
     override val renderFamily = RenderFamily.COMPOSITE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 800
     override val height = 960

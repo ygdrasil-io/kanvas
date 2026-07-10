@@ -13,7 +13,7 @@ import kotlin.random.Random
 class VariedTextGm : SkiaGm {
     override val name = "variedtext"
     override val renderFamily = RenderFamily.TEXT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 640
     override val height = 480

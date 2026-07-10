@@ -22,7 +22,7 @@ import org.graphiks.kanvas.types.Rect
 class StrokesGm : SkiaGm {
     override val name = "strokes_round"
     override val renderFamily = RenderFamily.PATH
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 17.3
     override val width = W
     override val height = H * 2

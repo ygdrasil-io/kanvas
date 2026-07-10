@@ -23,7 +23,7 @@ import org.graphiks.kanvas.types.Point
 class StrokeTextGm : SkiaGm {
     override val name = "stroketext"
     override val renderFamily = RenderFamily.TEXT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 75.0
     override val width = 1200
     override val height = 480

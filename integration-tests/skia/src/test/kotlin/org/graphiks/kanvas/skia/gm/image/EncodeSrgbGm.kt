@@ -26,7 +26,7 @@ open class EncodeSrgbGm(
 
     override val name: String get() = "encode-srgb-$variantName"
     override val renderFamily = RenderFamily.IMAGE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width: Int get() = imageWidth * 2
     override val height: Int get() = imageHeight * 15

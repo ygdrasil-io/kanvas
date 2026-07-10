@@ -15,7 +15,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 class AnimatedBackdropBlurGm : SkiaGm {
     override val name = "animatedbackdropblur"
     override val renderFamily = RenderFamily.BLUR
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 512
     override val height = 1024

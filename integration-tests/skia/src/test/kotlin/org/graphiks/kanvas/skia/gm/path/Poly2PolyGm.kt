@@ -23,7 +23,7 @@ import org.graphiks.kanvas.types.Rect
 class Poly2PolyGm : SkiaGm {
     override val name = "poly2poly"
     override val renderFamily = RenderFamily.PATH
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 835
     override val height = 840

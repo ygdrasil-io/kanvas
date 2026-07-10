@@ -18,7 +18,7 @@ import org.graphiks.kanvas.types.Matrix33
 class ScaledEmojiPerspectiveGm : SkiaGm {
     override val name = "scaledemojiperspective_colrv0"
     override val renderFamily = RenderFamily.TEXT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 1200
     override val height = 1200

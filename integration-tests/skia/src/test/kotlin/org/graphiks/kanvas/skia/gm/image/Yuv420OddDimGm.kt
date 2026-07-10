@@ -14,7 +14,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 class Yuv420OddDimGm : SkiaGm {
     override val name = "yuv420_odd_dim"
     override val renderFamily = RenderFamily.IMAGE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 50
     override val height = 50

@@ -22,7 +22,7 @@ import kotlin.math.sin
 class TinyAngleArcsGm : SkiaGm {
     override val name = "tinyanglearcs"
     override val renderFamily = RenderFamily.PATH
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 94.9
     override val width = 620
     override val height = 330

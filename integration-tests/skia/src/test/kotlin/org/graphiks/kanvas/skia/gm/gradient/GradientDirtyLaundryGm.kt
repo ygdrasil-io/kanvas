@@ -20,7 +20,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 class GradientDirtyLaundryGm : SkiaGm {
     override val name = "gradient_dirty_laundry"
     override val renderFamily = RenderFamily.GRADIENT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 640
     override val height = 615

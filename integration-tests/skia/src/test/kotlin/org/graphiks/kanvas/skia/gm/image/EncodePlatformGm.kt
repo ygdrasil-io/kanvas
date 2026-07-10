@@ -17,7 +17,7 @@ import org.graphiks.kanvas.types.Rect
 class EncodePlatformGm : SkiaGm {
     override val name = "encode-platform"
     override val renderFamily = RenderFamily.IMAGE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 256 * 5
     override val height = 256 * 3

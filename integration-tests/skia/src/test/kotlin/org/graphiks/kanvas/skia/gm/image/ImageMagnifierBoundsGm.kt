@@ -22,7 +22,7 @@ import kotlin.random.Random
 class ImageMagnifierBoundsGm : SkiaGm {
     override val name = "imagemagnifier_bounds"
     override val renderFamily = RenderFamily.IMAGE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.MEDIUM
     override val minSimilarity = 0.0
     override val width = 768
     override val height = 512

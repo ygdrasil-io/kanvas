@@ -16,7 +16,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 class ScalePixelsGm : SkiaGm {
     override val name = "scale-pixels"
     override val renderFamily = RenderFamily.IMAGE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 960
     override val height = 720

@@ -31,7 +31,7 @@ import org.graphiks.math.SK_ColorWHITE
 class Bc1TransparencyGm : SkiaGm {
     override val name = "bc1_transparency"
     override val renderFamily = RenderFamily.IMAGE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = kImgWidth + 2 * kPad
     override val height = 2 * kImgHeight + 3 * kPad

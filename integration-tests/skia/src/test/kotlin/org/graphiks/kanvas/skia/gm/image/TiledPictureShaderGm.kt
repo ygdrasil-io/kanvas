@@ -41,7 +41,7 @@ class TiledPictureShaderGm : SkiaGm {
 
     override val name = "tiled_picture_shader"
     override val renderFamily = RenderFamily.IMAGE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 400
     override val height = 400

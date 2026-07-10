@@ -16,7 +16,7 @@ import org.graphiks.kanvas.types.Rect
 class ConstColorProcessorGm : SkiaGm {
     override val name = "const_color_processor"
     override val renderFamily = RenderFamily.COLOR
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 820
     override val height = 500

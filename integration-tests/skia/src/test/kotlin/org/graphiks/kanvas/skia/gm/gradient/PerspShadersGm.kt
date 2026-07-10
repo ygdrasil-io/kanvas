@@ -24,7 +24,7 @@ import org.graphiks.kanvas.types.Rect
 open class PerspShadersGm(private val doAA: Boolean = true) : SkiaGm {
     override val name = if (doAA) "persp_shaders_aa" else "persp_shaders_bw"
     override val renderFamily = RenderFamily.GRADIENT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = kCellSize * kNumCols
     override val height = kCellSize * kNumRows
@@ -146,4 +146,6 @@ open class PerspShadersGm(private val doAA: Boolean = true) : SkiaGm {
     }
 }
 
-class PerspShadersBwGm : PerspShadersGm(false)
+class PerspShadersBwGm : PerspShadersGm(false) {
+    override val renderCost = RenderCost.FAST
+}

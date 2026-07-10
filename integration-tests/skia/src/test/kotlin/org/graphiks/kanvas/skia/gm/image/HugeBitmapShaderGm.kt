@@ -19,7 +19,7 @@ import org.graphiks.kanvas.types.Color
 class HugeBitmapShaderGm : SkiaGm {
     override val name = "hugebitmapshader"
     override val renderFamily = RenderFamily.IMAGE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 100
     override val height = 100

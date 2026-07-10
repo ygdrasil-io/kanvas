@@ -17,7 +17,7 @@ import org.graphiks.kanvas.types.Rect
 class RawImageShaderNormalsRTGm : SkiaGm {
     override val name = "raw_image_shader_normals_rt"
     override val renderFamily = RenderFamily.IMAGE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 768
     override val height = 512

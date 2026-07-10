@@ -188,11 +188,27 @@ abstract class ComplexClipGm(
     }
 }
 
-class ComplexClipBwGm : ComplexClipGm("complexclip_bw", false, false, false)
-class ComplexClipBwInvertGm : ComplexClipGm("complexclip_bw_invert", false, false, true)
-class ComplexClipBwLayerGm : ComplexClipGm("complexclip_bw_layer", false, true, false)
-class ComplexClipBwLayerInvertGm : ComplexClipGm("complexclip_bw_layer_invert", false, true, true)
-class ComplexClipAaGm : ComplexClipGm("complexclip_aa", true, false, false)
-class ComplexClipAaInvertGm : ComplexClipGm("complexclip_aa_invert", true, false, true)
-class ComplexClipAaLayerGm : ComplexClipGm("complexclip_aa_layer", true, true, false)
-class ComplexClipAaLayerInvertGm : ComplexClipGm("complexclip_aa_layer_invert", true, true, true)
+class ComplexClipBwGm : ComplexClipGm("complexclip_bw", false, false, false) {
+    override val renderCost = RenderCost.FAST
+}
+class ComplexClipBwInvertGm : ComplexClipGm("complexclip_bw_invert", false, false, true) {
+    override val renderCost = RenderCost.FAST
+}
+class ComplexClipBwLayerGm : ComplexClipGm("complexclip_bw_layer", false, true, false) {
+    override val renderCost = RenderCost.FAST
+}
+class ComplexClipBwLayerInvertGm : ComplexClipGm("complexclip_bw_layer_invert", false, true, true) {
+    override val renderCost = RenderCost.FAST
+}
+class ComplexClipAaGm : ComplexClipGm("complexclip_aa", true, false, false) {
+    override val renderCost = RenderCost.FAST
+}
+class ComplexClipAaInvertGm : ComplexClipGm("complexclip_aa_invert", true, false, true) {
+    override val renderCost = RenderCost.FAST
+}
+class ComplexClipAaLayerGm : ComplexClipGm("complexclip_aa_layer", true, true, false) {
+    override val renderCost = RenderCost.FAST
+}
+class ComplexClipAaLayerInvertGm : ComplexClipGm("complexclip_aa_layer_invert", true, true, true) {
+    override val renderCost = RenderCost.FAST
+}

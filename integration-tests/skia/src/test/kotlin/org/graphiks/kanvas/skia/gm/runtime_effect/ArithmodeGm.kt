@@ -39,7 +39,7 @@ import org.graphiks.kanvas.types.Rect
 class ArithmodeGm : SkiaGm {
     override val name = "arithmode"
     override val renderFamily = RenderFamily.RUNTIME_EFFECT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 640
     override val height = 572

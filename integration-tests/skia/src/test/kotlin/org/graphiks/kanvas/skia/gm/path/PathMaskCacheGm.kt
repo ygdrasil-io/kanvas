@@ -24,7 +24,7 @@ import kotlin.math.floor
 class PathMaskCacheGm : SkiaGm {
     override val name = "path_mask_cache"
     override val renderFamily = RenderFamily.PATH
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 650
     override val height = 950

@@ -23,7 +23,7 @@ import org.graphiks.kanvas.types.Rect
 class GradTextGm : SkiaGm {
     override val name = "gradtext"
     override val renderFamily = RenderFamily.TEXT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 77.3
     override val width = 500
     override val height = 480

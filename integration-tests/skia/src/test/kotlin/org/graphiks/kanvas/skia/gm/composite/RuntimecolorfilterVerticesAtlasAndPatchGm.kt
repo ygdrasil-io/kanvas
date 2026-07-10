@@ -25,7 +25,7 @@ import org.graphiks.kanvas.types.VertexMode
 class RuntimecolorfilterVerticesAtlasAndPatchGm : SkiaGm {
     override val name = "runtimecolorfilter_vertices_atlas_and_patch"
     override val renderFamily = RenderFamily.COMPOSITE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 404
     override val height = 404

@@ -24,7 +24,7 @@ import org.graphiks.kanvas.types.Rect
 class PathOpsSkbug10155Gm : SkiaGm {
     override val name = "pathops_skbug_10155"
     override val renderFamily = RenderFamily.PATH
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 256
     override val height = 256

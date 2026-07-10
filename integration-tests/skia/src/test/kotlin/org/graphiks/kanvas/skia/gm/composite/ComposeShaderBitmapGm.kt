@@ -26,7 +26,7 @@ open class ComposeShaderBitmapGm(private val useLm: Boolean) : SkiaGm {
 
     override val name = "composeshader_bitmap${if (useLm) "_lm" else ""}"
     override val renderFamily = RenderFamily.COMPOSITE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 7 * (SQUARE_LENGTH + 5)
     override val height = 2 * (SQUARE_LENGTH + 5)
@@ -120,4 +120,6 @@ open class ComposeShaderBitmapGm(private val useLm: Boolean) : SkiaGm {
     }
 }
 
-class ComposeShaderBitmapLmGm : ComposeShaderBitmapGm(true)
+class ComposeShaderBitmapLmGm : ComposeShaderBitmapGm(true) {
+    override val renderCost = RenderCost.FAST
+}

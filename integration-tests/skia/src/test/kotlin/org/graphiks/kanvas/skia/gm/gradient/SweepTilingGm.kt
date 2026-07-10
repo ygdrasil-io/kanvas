@@ -22,7 +22,7 @@ import org.graphiks.kanvas.types.Rect
 class SweepTilingGm : SkiaGm {
     override val name = "sweep_tiling"
     override val renderFamily = RenderFamily.GRADIENT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 10.4
     override val width = 690
     override val height = 512

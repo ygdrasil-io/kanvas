@@ -21,7 +21,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 class ScaledTiling2Gm : SkiaGm {
     override val name = "scaled_tilemode_gradient"
     override val renderFamily = RenderFamily.GRADIENT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 650
     override val height = 610

@@ -22,7 +22,7 @@ import org.graphiks.kanvas.types.Rect
 class FontScalerDistortableGm : SkiaGm {
     override val name = "fontscalerdistortable"
     override val renderFamily = RenderFamily.TEXT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 550
     override val height = 700

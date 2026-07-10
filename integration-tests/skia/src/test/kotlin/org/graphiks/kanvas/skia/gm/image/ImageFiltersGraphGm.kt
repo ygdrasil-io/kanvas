@@ -24,7 +24,7 @@ import org.graphiks.kanvas.types.Size
 class ImageFiltersGraphGm : SkiaGm {
     override val name = "imagefiltersgraph"
     override val renderFamily = RenderFamily.IMAGE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 600
     override val height = 150

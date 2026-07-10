@@ -24,7 +24,7 @@ import org.graphiks.kanvas.types.Rect
 class TextBlobInterceptsGm : SkiaGm {
     override val name = "textblob_intercepts"
     override val renderFamily = RenderFamily.TEXT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 85.0
     override val width = 940
     override val height = 800

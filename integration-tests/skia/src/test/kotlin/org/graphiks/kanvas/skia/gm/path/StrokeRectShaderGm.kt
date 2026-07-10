@@ -22,7 +22,7 @@ import org.graphiks.kanvas.types.Rect
 class StrokeRectShaderGm : SkiaGm {
     override val name = "stroke_rect_shader"
     override val renderFamily = RenderFamily.PATH
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 42.8
     override val width = 690
     override val height = 300

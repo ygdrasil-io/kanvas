@@ -28,7 +28,7 @@ import org.graphiks.kanvas.types.Rect
 class DrawRegionModesGm : SkiaGm {
     override val name = "drawregionmodes"
     override val renderFamily = RenderFamily.PATH
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 375
     override val height = 500

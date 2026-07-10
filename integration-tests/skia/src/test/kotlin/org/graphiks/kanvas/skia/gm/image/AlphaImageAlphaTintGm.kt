@@ -20,7 +20,7 @@ import org.graphiks.math.SK_ColorGRAY
 class AlphaImageAlphaTintGm : SkiaGm {
     override val name = "alpha_image_alpha_tint"
     override val renderFamily = RenderFamily.IMAGE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 152
     override val height = 80

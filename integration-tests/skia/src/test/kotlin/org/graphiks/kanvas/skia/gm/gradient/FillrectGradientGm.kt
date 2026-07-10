@@ -20,7 +20,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 class FillrectGradientGm : SkiaGm {
     override val name = "fillrect_gradient"
     override val renderFamily = RenderFamily.GRADIENT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 28.6
     override val width = kNumColumns * (kCellSize + kPadSize)
     override val height = kNumRows * (kCellSize + kPadSize)

@@ -19,7 +19,7 @@ import org.graphiks.kanvas.types.Rect
 class FatPathFillGm : SkiaGm {
     override val name = "fatpathfill"
     override val renderFamily = RenderFamily.PATH
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 288
     override val height = 480

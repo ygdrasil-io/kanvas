@@ -21,7 +21,7 @@ import kotlin.math.PI
 class Bug41422450Gm : SkiaGm {
     override val name = "bug41422450"
     override val renderFamily = RenderFamily.PATH
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 863
     override val height = 473

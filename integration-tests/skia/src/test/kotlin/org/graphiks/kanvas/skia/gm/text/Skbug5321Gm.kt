@@ -19,7 +19,7 @@ import org.graphiks.kanvas.types.Point
 class Skbug5321Gm : SkiaGm {
     override val name = "skbug_5321"
     override val renderFamily = RenderFamily.TEXT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 128
     override val height = 128
