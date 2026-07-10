@@ -3,6 +3,8 @@ package org.graphiks.kanvas.color
 import org.graphiks.kanvas.color.icc.IccParseLimits
 import org.graphiks.kanvas.color.icc.IccProfileParser
 import org.graphiks.kanvas.color.icc.IccSignature
+import org.graphiks.kanvas.color.cicp.CicpColorInfo
+import org.graphiks.kanvas.color.cicp.toColorProfile
 import org.graphiks.math.SkcmsMatrix3x3
 import org.graphiks.math.SkcmsTransferFunction
 import kotlin.test.Test
@@ -356,6 +358,68 @@ class ColorTransformContractTest {
         ).failureOrNull()
 
         assertEquals("color.profile.transfer", assertNotNull(failure).code)
+    }
+
+    @Test
+    fun `pq rec2020 to srgb compiles bt2390 tone mapping to 100 nit sdr`() {
+        val source = CicpColorInfo(9, 16, 0, true).toColorProfile().getOrThrow()
+        val transform = ColorTransform.compile(
+            source,
+            ColorProfiles.sRGB(),
+            AlphaType.UNPREMULTIPLIED,
+        ).getOrThrow()
+        val pq1000Nits = 0.7518271f
+        val pixel = floatArrayOf(pq1000Nits, pq1000Nits, pq1000Nits, 0.37f)
+
+        transform.apply(pixel, 1)
+
+        assertEquals(0.9596758f, pixel[0], 3e-4f)
+        assertEquals(pixel[0], pixel[1], 3e-4f)
+        assertEquals(pixel[1], pixel[2], 3e-4f)
+        assertEquals(0.37f, pixel[3], 0f)
+    }
+
+    @Test
+    fun `hdr to hdr profile conversion does not tone map`() {
+        val pq = CicpColorInfo(9, 16, 0, true).toColorProfile().getOrThrow()
+        val hlg = CicpColorInfo(9, 18, 0, true).toColorProfile().getOrThrow()
+        val toHlg = ColorTransform.compile(pq, hlg, AlphaType.UNPREMULTIPLIED).getOrThrow()
+        val backToPq = ColorTransform.compile(hlg, pq, AlphaType.UNPREMULTIPLIED).getOrThrow()
+        val pixel = floatArrayOf(0.7518271f, 0.7518271f, 0.7518271f, 1f)
+
+        toHlg.apply(pixel, 1)
+        backToPq.apply(pixel, 1)
+
+        assertEquals(0.7518271f, pixel[0], 4e-5f)
+        assertEquals(pixel[0], pixel[1], 2e-5f)
+        assertEquals(pixel[1], pixel[2], 2e-5f)
+    }
+
+    @Test
+    fun `premultiplied hdr to sdr conversion preserves alpha convention`() {
+        val pq = CicpColorInfo(9, 16, 0, true).toColorProfile().getOrThrow()
+        val transform = ColorTransform.compile(pq, ColorProfiles.sRGB(), AlphaType.PREMULTIPLIED).getOrThrow()
+        val alpha = 0.5f
+        val pixel = floatArrayOf(0.7518271f * alpha, 0.7518271f * alpha, 0.7518271f * alpha, alpha)
+
+        transform.apply(pixel, 1)
+
+        assertEquals(0.9596758f * alpha, pixel[0], 3e-4f)
+        assertEquals(pixel[0], pixel[1], 2e-4f)
+        assertEquals(pixel[1], pixel[2], 2e-4f)
+        assertEquals(alpha, pixel[3], 0f)
+    }
+
+    @Test
+    fun `hdr and lut composition remains a typed refusal`() {
+        val pq = CicpColorInfo(9, 16, 0, true).toColorProfile().getOrThrow()
+        val failure = ColorTransform.compile(
+            pq,
+            parseResource("rgb-lut-a2b-b2a.icc"),
+            AlphaType.UNPREMULTIPLIED,
+        ).failureOrNull()
+
+        assertEquals("color.hdr.lut.unsupported", assertNotNull(failure).code)
     }
 
     private fun parseResource(name: String): ColorProfile {

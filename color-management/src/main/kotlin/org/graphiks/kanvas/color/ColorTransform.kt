@@ -1,6 +1,8 @@
 package org.graphiks.kanvas.color
 
 import org.graphiks.kanvas.color.icc.IccTransformPipeline
+import org.graphiks.kanvas.color.hdr.Bt2390ToneMapper
+import org.graphiks.kanvas.color.hdr.ToneMapper
 import org.graphiks.math.SkcmsTransferFunction
 import kotlin.math.pow
 
@@ -68,16 +70,44 @@ public object ColorTransform {
         if (request.alphaType == AlphaType.PREMULTIPLIED && (request.source.hasLut || request.destination.hasLut)) {
             return ColorTransformCompileResult.Failure("color.alpha.premultiplied.unsupported")
         }
+        if ((request.source.isHdr || request.destination.isHdr) &&
+            (request.source.hasLut || request.destination.hasLut)
+        ) {
+            return ColorTransformCompileResult.Failure("color.hdr.lut.unsupported")
+        }
 
         val sourceMatrix = request.source.toXyzD50
         val destinationMatrix = request.destination.toXyzD50
         if (sourceMatrix != null && destinationMatrix != null) {
+            val sourceValues = matrixValues(sourceMatrix)
+            val destinationInverse = checkNotNull(invert3x3(matrixValues(destinationMatrix)))
+            if (request.source.isHdr || request.destination.isHdr) {
+                return ColorTransformCompileResult.Success(
+                    CompiledColorTransform(
+                        request,
+                        HdrMatrixColorTransform(
+                            sourceToXyzD50 = sourceValues,
+                            destinationFromXyzD50 = destinationInverse,
+                            sourceTransferFunction = request.source.transferFunction,
+                            sourceHdrTransferFunction = request.source.hdrTransferFunction,
+                            destinationTransferFunction = request.destination.transferFunction,
+                            destinationHdrTransferFunction = request.destination.hdrTransferFunction,
+                            alphaType = request.alphaType,
+                            toneMapper = if (request.source.isHdr && !request.destination.isHdr) {
+                                Bt2390ToneMapper(targetPeakNits = SDR_REFERENCE_WHITE_NITS.toDouble())
+                            } else {
+                                null
+                            },
+                        ),
+                    ),
+                )
+            }
             return ColorTransformCompileResult.Success(
                 CompiledColorTransform(
                     request,
                     MatrixColorTransform(
-                        sourceToXyzD50 = matrixValues(sourceMatrix),
-                        destinationFromXyzD50 = checkNotNull(invert3x3(matrixValues(destinationMatrix))),
+                        sourceToXyzD50 = sourceValues,
+                        destinationFromXyzD50 = destinationInverse,
                         sourceTransferFunction = assertNotNull(request.source.transferFunction),
                         destinationTransferFunction = assertNotNull(request.destination.transferFunction),
                         alphaType = request.alphaType,
@@ -119,11 +149,83 @@ public object ColorTransform {
             return ColorTransformCompileResult.Failure("color.profile.matrix")
         }
         val transferFunction = profile.transferFunction
-            ?: return ColorTransformCompileResult.Failure("color.profile.unsupported")
+        if (profile.hdrTransferFunction != null) return null
+        if (transferFunction == null) return ColorTransformCompileResult.Failure("color.profile.unsupported")
         if (!validTransferFunction(transferFunction)) {
             return ColorTransformCompileResult.Failure("color.profile.transfer")
         }
         return null
+    }
+}
+
+private class HdrMatrixColorTransform(
+    sourceToXyzD50: FloatArray,
+    destinationFromXyzD50: FloatArray,
+    private val sourceTransferFunction: SkcmsTransferFunction?,
+    private val sourceHdrTransferFunction: HdrTransferFunction?,
+    private val destinationTransferFunction: SkcmsTransferFunction?,
+    private val destinationHdrTransferFunction: HdrTransferFunction?,
+    private val alphaType: AlphaType,
+    private val toneMapper: ToneMapper?,
+) : CompiledRgbPlan {
+    private val sourceToXyzD50: FloatArray = sourceToXyzD50.copyOf()
+    private val destinationFromXyzD50: FloatArray = destinationFromXyzD50.copyOf()
+
+    init {
+        require(this.sourceToXyzD50.size == MATRIX_COMPONENTS) { "source matrix must be 3x3" }
+        require(this.destinationFromXyzD50.size == MATRIX_COMPONENTS) { "destination matrix must be 3x3" }
+        require((sourceTransferFunction == null) != (sourceHdrTransferFunction == null)) {
+            "source must have exactly one transfer function"
+        }
+        require((destinationTransferFunction == null) != (destinationHdrTransferFunction == null)) {
+            "destination must have exactly one transfer function"
+        }
+    }
+
+    override fun apply(pixels: FloatArray, offset: Int) {
+        val alpha = pixels[offset + ALPHA_OFFSET]
+        if (alphaType == AlphaType.PREMULTIPLIED && (!alpha.isFinite() || alpha == 0f)) {
+            pixels.fill(0f, offset, offset + RGB_CHANNELS)
+            return
+        }
+        val unpremultiplied = FloatArray(RGB_CHANNELS) { channel ->
+            if (alphaType == AlphaType.PREMULTIPLIED) pixels[offset + channel] / alpha else pixels[offset + channel]
+        }
+        val sourceLinearNits = FloatArray(RGB_CHANNELS)
+        if (sourceHdrTransferFunction != null) {
+            sourceHdrTransferFunction.decode(unpremultiplied, 0, sourceLinearNits)
+        } else {
+            repeat(RGB_CHANNELS) { channel ->
+                sourceLinearNits[channel] = decode(checkNotNull(sourceTransferFunction), unpremultiplied[channel]) *
+                    SDR_REFERENCE_WHITE_NITS
+            }
+        }
+
+        val pcsNits = FloatArray(RGB_CHANNELS)
+        val destinationLinear = FloatArray(RGB_CHANNELS)
+        multiply3x3(sourceToXyzD50, sourceLinearNits, pcsNits)
+        multiply3x3(destinationFromXyzD50, pcsNits, destinationLinear)
+        toneMapper?.map(destinationLinear, 0)
+
+        val encoded = FloatArray(RGB_CHANNELS)
+        if (destinationHdrTransferFunction != null) {
+            destinationHdrTransferFunction.encode(destinationLinear, encoded)
+        } else {
+            repeat(RGB_CHANNELS) { channel ->
+                encoded[channel] = encode(checkNotNull(destinationTransferFunction), destinationLinear[channel])
+            }
+        }
+        val premultiply = if (alphaType == AlphaType.PREMULTIPLIED) alpha else 1f
+        repeat(RGB_CHANNELS) { channel ->
+            val value = encoded[channel]
+            pixels[offset + channel] = (if (value.isFinite()) value.coerceIn(0f, 1f) else 0f) * premultiply
+        }
+    }
+
+    private companion object {
+        const val RGB_CHANNELS: Int = 3
+        const val ALPHA_OFFSET: Int = 3
+        const val MATRIX_COMPONENTS: Int = 9
     }
 }
 
@@ -221,3 +323,5 @@ private fun multiply3x3(matrix: FloatArray, input: FloatArray, output: FloatArra
 }
 
 private fun <T : Any> assertNotNull(value: T?): T = checkNotNull(value)
+
+private const val SDR_REFERENCE_WHITE_NITS: Float = 100f
