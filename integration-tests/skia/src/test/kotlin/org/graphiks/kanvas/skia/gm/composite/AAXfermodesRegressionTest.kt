@@ -27,6 +27,40 @@ class AAXfermodesRegressionTest {
         )
     }
 
+    @Test
+    fun `first translucent background cell retains checkerboard through saveLayer`() {
+        GpuAvailability.requireWebGpu()
+
+        val gm = AAXfermodesGm()
+        val actual = SkiaGmRenderer.render(gm).rgba
+        val reference = ReferenceManager.loadReference("/reference/${gm.name}.png")
+
+        // (89,72) is in the first Clear-mode/first-colour background cell: it is inside the
+        // clipped 30px cell but outside the 22px square, text, AA edge, and 10px checker edge.
+        // Four byte values accommodates deterministic WGSL quantisation while still detecting
+        // the missing saveLayer composite (the current renderer differs by 14 in blue here).
+        assertPixelNearReference(actual, reference, x = 89, y = 72, width = gm.width, tolerance = 4)
+    }
+
+    private fun assertPixelNearReference(
+        actual: ByteArray,
+        reference: ByteArray,
+        x: Int,
+        y: Int,
+        width: Int,
+        tolerance: Int,
+    ) {
+        val offset = (y * width + x) * 4
+        (0 until 4).forEach { channel ->
+            val actualByte = actual[offset + channel].toInt() and 0xff
+            val referenceByte = reference[offset + channel].toInt() and 0xff
+            assertTrue(
+                kotlin.math.abs(actualByte - referenceByte) <= tolerance,
+                "channel=$channel at ($x,$y): reference=$referenceByte +/- $tolerance, actual=$actualByte",
+            )
+        }
+    }
+
     companion object {
         @AfterAll
         @JvmStatic
