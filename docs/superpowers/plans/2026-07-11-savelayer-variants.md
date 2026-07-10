@@ -28,7 +28,7 @@
 - Modify: `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUSaveLayerCompositeRegressionTest.kt`
 
 **Interfaces:**
-- Produces: `LayerPlan`, `LayerBounds`, and `SceneTargetFrame(label, hasContent, plan)` local to `renderViaGpu`.
+- Produces: private file-level `LayerPlan`, `LayerBounds`, `BackdropPlan`, and `SceneTargetFrame(label, hasContent, plan)` data types; their only behavioral use remains in `renderViaGpu`.
 - Produces: `classifyLayerRequest(rec: SaveLayerRec): LayerPlan` local to `renderViaGpu`.
 - Consumes: `GPUBackendRawUniformDraw.scissorX/scissorY/scissorWidth/scissorHeight` and `drawCompositePass`.
 
@@ -73,7 +73,7 @@ Expected: the bounded case fails because current `BeginLayer` returns `unsupport
 
 - [ ] **Step 3: Implement a single classification and scissor route**
 
-Add the following local model next to the current `SceneTargetFrame`:
+Add the following private file-level model next to the renderer helpers:
 
 ```kotlin
 data class LayerBounds(val x: Int, val y: Int, val width: Int, val height: Int)
