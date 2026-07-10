@@ -258,15 +258,19 @@ class PngEncoderTest {
     @Test
     fun `tEXt comments use exact Latin-1 wire bytes`() {
         val src = SkBitmap(1, 1)
+        val text = "line one\n\u00a1\u00ff"
         val bytes = PngEncoder.encode(
             src,
-            PngEncoder.Options(comments = listOf("Résumé", "café")),
+            PngEncoder.Options(comments = listOf("Résumé", text)),
         )!!
 
         assertEquals(
-            "Résumé\u0000café".toByteArray(Charsets.ISO_8859_1).toList(),
+            "Résumé\u0000$text".toByteArray(Charsets.ISO_8859_1).toList(),
             chunkData(bytes, 0x74455874).toList(),
         )
+        val document = (PngDocument.open(bytes) as PngDocumentOpenResult.Success).document
+        val metadata = document.tEXt.single() as PngMetadataValue.Resolved
+        assertEquals(text, metadata.value.text)
     }
 
     @Test
@@ -297,6 +301,20 @@ class PngEncoderTest {
             val output = ByteArrayOutputStream()
             assertFalse(PngEncoder.encode(output, src, PngEncoder.Options(comments = comments)), comments.toString())
             assertEquals(0, output.size(), comments.toString())
+        }
+    }
+
+    @Test
+    fun `tEXt rejects TAB and C1 controls without output`() {
+        val src = SkBitmap(1, 1)
+
+        listOf("tab\ttext", "C1\u0085text").forEach { text ->
+            val output = ByteArrayOutputStream()
+            assertFalse(
+                PngEncoder.encode(output, src, PngEncoder.Options(comments = listOf("Comment", text))),
+                text,
+            )
+            assertEquals(0, output.size(), text)
         }
     }
 
