@@ -24,12 +24,21 @@ public data class PngChunkRecord(
 ) {
     init {
         require(type.length == 4) { "PNG chunk types must contain four characters" }
+        require(type.all(::isAsciiLetter)) { "PNG chunk types must contain only ASCII letters" }
+        require(type[2] in 'A'..'Z') { "PNG chunk type reserved bit must be uppercase" }
         require(ordinal >= 0) { "ordinal must be non-negative" }
-        require(payloadRange.startInclusive >= rawRange.startInclusive + CHUNK_PREFIX_BYTES) {
-            "payloadRange must follow the chunk length and type"
+        require(rawRange.startInclusive < rawRange.endExclusive) { "rawRange must not be empty" }
+        require(payloadRange.startInclusive >= rawRange.startInclusive) {
+            "payloadRange must not start before rawRange"
         }
-        require(payloadRange.endExclusive + CRC_BYTES == rawRange.endExclusive) {
-            "rawRange must include the payload CRC"
+        require(payloadRange.startInclusive - rawRange.startInclusive == CHUNK_PREFIX_BYTES) {
+            "payloadRange must start exactly after the chunk length and type"
+        }
+        require(rawRange.endExclusive >= payloadRange.endExclusive) {
+            "payloadRange must not end after rawRange"
+        }
+        require(rawRange.endExclusive - payloadRange.endExclusive == CRC_BYTES) {
+            "rawRange must end exactly after the payload CRC"
         }
     }
 
@@ -416,3 +425,6 @@ public object PngContainerParser {
 
 private const val CHUNK_PREFIX_BYTES: Long = 8L
 private const val CRC_BYTES: Long = 4L
+
+private fun isAsciiLetter(character: Char): Boolean =
+    character in 'A'..'Z' || character in 'a'..'z'

@@ -61,6 +61,112 @@ class PngContainerParserTest {
     }
 
     @Test
+    fun `public chunk record constructor and copy reject invalid type codes`() {
+        val valid = PngChunkRecord(
+            type = "vpAg",
+            ordinal = 0,
+            rawRange = PngByteRange(0L, 13L),
+            payloadRange = PngByteRange(8L, 9L),
+        )
+
+        for (type in listOf("vp1g", "vpgg", "\u00c9pAg", "vpA\u0101")) {
+            assertThrows(IllegalArgumentException::class.java) {
+                PngChunkRecord(
+                    type = type,
+                    ordinal = 0,
+                    rawRange = PngByteRange(0L, 13L),
+                    payloadRange = PngByteRange(8L, 9L),
+                )
+            }
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            valid.copy(type = "vpgg")
+        }
+    }
+
+    @Test
+    fun `public chunk record constructor and copy require exact framing ranges`() {
+        val valid = PngChunkRecord(
+            type = "vpAg",
+            ordinal = 0,
+            rawRange = PngByteRange(0L, 13L),
+            payloadRange = PngByteRange(8L, 9L),
+        )
+
+        assertThrows(IllegalArgumentException::class.java) {
+            PngChunkRecord(
+                type = "vpAg",
+                ordinal = 0,
+                rawRange = PngByteRange(0L, 14L),
+                payloadRange = PngByteRange(9L, 10L),
+            )
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            PngChunkRecord(
+                type = "vpAg",
+                ordinal = 0,
+                rawRange = PngByteRange(0L, 14L),
+                payloadRange = PngByteRange(8L, 9L),
+            )
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            valid.copy(
+                rawRange = PngByteRange(0L, 14L),
+                payloadRange = PngByteRange(9L, 10L),
+            )
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            PngChunkRecord(
+                type = "IEND",
+                ordinal = 0,
+                rawRange = PngByteRange(0L, 0L),
+                payloadRange = PngByteRange(0L, 0L),
+            )
+        }
+        assertThrows(IllegalArgumentException::class.java) { PngByteRange(-1L, 0L) }
+        assertThrows(IllegalArgumentException::class.java) { PngByteRange(1L, 0L) }
+    }
+
+    @Test
+    fun `public chunk record rejects overflow-shaped ranges at Long bounds`() {
+        val overflowRaw = PngByteRange(Long.MAX_VALUE - 4L, Long.MAX_VALUE)
+        val overflowPayload = PngByteRange(0L, Long.MAX_VALUE - 4L)
+
+        assertThrows(IllegalArgumentException::class.java) {
+            PngChunkRecord(
+                type = "vpAg",
+                ordinal = 0,
+                rawRange = overflowRaw,
+                payloadRange = overflowPayload,
+            )
+        }
+
+        val valid = PngChunkRecord(
+            type = "vpAg",
+            ordinal = 0,
+            rawRange = PngByteRange(0L, 13L),
+            payloadRange = PngByteRange(8L, 9L),
+        )
+        assertThrows(IllegalArgumentException::class.java) {
+            valid.copy(rawRange = overflowRaw, payloadRange = overflowPayload)
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            valid.copy(
+                rawRange = PngByteRange(Long.MAX_VALUE - 12L, Long.MAX_VALUE),
+                payloadRange = PngByteRange(Long.MAX_VALUE - 4L, Long.MAX_VALUE),
+            )
+        }
+
+        val upperBound = PngChunkRecord(
+            type = "vpAg",
+            ordinal = 0,
+            rawRange = PngByteRange(Long.MAX_VALUE - 13L, Long.MAX_VALUE),
+            payloadRange = PngByteRange(Long.MAX_VALUE - 5L, Long.MAX_VALUE - 4L),
+        )
+        assertEquals(1L, upperBound.payloadRange.size)
+    }
+
+    @Test
     fun `exposes an immutable chunk record list`() {
         val container = success(
             png(
