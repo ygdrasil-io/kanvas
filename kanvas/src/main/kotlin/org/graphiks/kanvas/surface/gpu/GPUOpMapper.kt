@@ -68,6 +68,7 @@ internal fun DisplayOp.DrawRect.toNormalizedCommand(
         stroke = paint.isStroke(),
         antiAlias = paint.antiAlias,
         blend = paint.blendMode.toGpuBlendFacts(),
+        maskFilter = paint.maskFilter.toNormalizedMaskFilter(),
     )
 }
 
@@ -221,6 +222,7 @@ internal fun DisplayOp.DrawRRect.toNormalizedCommand(
         stroke = paint.isStroke(),
         antiAlias = paint.antiAlias,
         blend = paint.blendMode.toGpuBlendFacts(),
+        maskFilter = paint.maskFilter.toNormalizedMaskFilter(),
     )
 }
 
