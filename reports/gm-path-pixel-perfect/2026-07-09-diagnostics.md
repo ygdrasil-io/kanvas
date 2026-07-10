@@ -1,6 +1,6 @@
 # Diagnostic GM PATH Pixel-Perfect
 
-Date: 2026-07-09  
+Date: 2026-07-09
 Branche: `codex/gm-path-pixel-perfect-sprint`
 
 Le dashboard ne contient actuellement **aucune ligne pour les 15 GM cibles**. Il
