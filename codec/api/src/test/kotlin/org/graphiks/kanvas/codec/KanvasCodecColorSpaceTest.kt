@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.skia.foundation.SkAlphaType
+import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkICC
@@ -24,6 +25,30 @@ import org.skia.foundation.skcms.SkcmsICCProfile
 import org.skia.foundation.skcms.skcmsParse
 
 class KanvasCodecColorSpaceTest {
+    @Test
+    fun `sRGB source tag is preserved`() {
+        val result = imageInfo(SkColorSpace.makeSRGB()).toKanvasImageInfo()
+
+        assertEquals(ColorSpace.SRGB, result.colorSpace)
+    }
+
+    @Test
+    fun `sRGB bitmap tag and samples are preserved`() {
+        assertBitmapTagAndSamples(SkColorSpace.makeSRGB(), ColorSpace.SRGB)
+    }
+
+    @Test
+    fun `linear sRGB source tag is preserved`() {
+        val result = imageInfo(SkColorSpace.makeSRGBLinear()).toKanvasImageInfo()
+
+        assertEquals(ColorSpace.LINEAR_SRGB, result.colorSpace)
+    }
+
+    @Test
+    fun `linear sRGB bitmap tag and samples are preserved`() {
+        assertBitmapTagAndSamples(SkColorSpace.makeSRGBLinear(), ColorSpace.LINEAR_SRGB)
+    }
+
     @Test
     fun `Display P3 source tag is preserved`() {
         val result = imageInfo(sdrColorSpace(SkNamedGamut.kDisplayP3)).toKanvasImageInfo()
@@ -41,6 +66,11 @@ class KanvasCodecColorSpaceTest {
         val result = imageInfo(source).toKanvasImageInfo()
 
         assertEquals(ColorSpace.DISPLAY_P3, result.colorSpace)
+    }
+
+    @Test
+    fun `Display P3 bitmap tag and samples are preserved`() {
+        assertBitmapTagAndSamples(sdrColorSpace(SkNamedGamut.kDisplayP3), ColorSpace.DISPLAY_P3)
     }
 
     @Test
@@ -143,6 +173,16 @@ class KanvasCodecColorSpaceTest {
         SkcmsICCProfile.fromColorProfile(cicpProfile(transfer)),
     )
 
+    private fun assertBitmapTagAndSamples(sourceColorSpace: SkColorSpace, expectedColorSpace: ColorSpace) {
+        val source = SkBitmap(width = 1, height = 1, colorSpace = sourceColorSpace)
+        source.pixels8888[0] = SAMPLE_ARGB
+
+        val result = source.toKanvasBitmap()
+
+        assertEquals(expectedColorSpace, result.colorSpace)
+        assertEquals(SAMPLE_ARGB, result.getArgb(0, 0))
+    }
+
     private fun cicpProfile(transfer: Int): ColorProfile = when (
         val result = CicpColorInfo(
             primaries = 9,
@@ -153,5 +193,9 @@ class KanvasCodecColorSpaceTest {
     ) {
         is ColorProfileParseResult.Success -> result.profile
         is ColorProfileParseResult.Failure -> error(result.code)
+    }
+
+    private companion object {
+        const val SAMPLE_ARGB: Int = 0x7F123456
     }
 }
