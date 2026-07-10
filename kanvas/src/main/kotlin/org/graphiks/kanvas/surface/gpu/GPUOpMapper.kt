@@ -5,6 +5,8 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.commands.GPUClipFacts
+import org.graphiks.kanvas.gpu.renderer.commands.GPUClipKind
+import org.graphiks.kanvas.gpu.renderer.commands.GPUImageFilterPlan
 import org.graphiks.kanvas.gpu.renderer.filters.NormalizedBlurStyle
 import org.graphiks.kanvas.gpu.renderer.filters.NormalizedMaskFilter
 import org.graphiks.kanvas.paint.MaskFilter
@@ -22,9 +24,12 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPURRect
 import org.graphiks.kanvas.gpu.renderer.commands.GPURRectCornerRadii
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
+import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.paint.BlendMode
+import org.graphiks.kanvas.paint.ImageFilter
+import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.types.PointMode
@@ -467,6 +472,7 @@ internal fun DisplayOp.DrawImage.toImageRectCommand(
         imageSourceId = image.sourceId,
         src = src,
         dst = dst,
+        imageFilterPlan = toImageFilterPlan(transform, clip, target, dst),
         transform = transform,
         clip = clip,
         layer = GPULayerFacts.root(target),
@@ -484,6 +490,69 @@ internal fun DisplayOp.DrawImage.toImageRectCommand(
         pixelsAlphaType = "Premul",
     )
 }
+
+private fun DisplayOp.DrawImage.toImageFilterPlan(
+    transform: GPUTransformFacts,
+    clip: GPUClipFacts,
+    target: GPUTargetFacts,
+    dst: GPURect,
+): GPUImageFilterPlan {
+    val paint = paint ?: return GPUImageFilterPlan.None
+    if (paint.maskFilter != null) return GPUImageFilterPlan.Refused("unsupported")
+    val imageFilter = paint.imageFilter ?: return GPUImageFilterPlan.None
+
+    val blur = imageFilter as? ImageFilter.Blur ?: return GPUImageFilterPlan.Refused("unsupported")
+    if (
+        blur.input != null ||
+        blur.tileMode != TileMode.CLAMP ||
+        transform.type != GPUTransformType.Identity ||
+        !blur.sigmaX.isFinite() ||
+        !blur.sigmaY.isFinite() ||
+        blur.sigmaX < 0f ||
+        blur.sigmaY < 0f ||
+        clip.kind == GPUClipKind.ComplexStack
+    ) {
+        return GPUImageFilterPlan.Refused("unsupported")
+    }
+    if (blur.sigmaX == 0f && blur.sigmaY == 0f) return GPUImageFilterPlan.Identity
+
+    val haloX = kotlin.math.ceil(3f * blur.sigmaX).toInt()
+    val haloY = kotlin.math.ceil(3f * blur.sigmaY).toInt()
+    val targetBounds = GPURect(0f, 0f, target.width.toFloat(), target.height.toFloat())
+    val clipBounds = when (clip.kind) {
+        GPUClipKind.WideOpen -> targetBounds
+        GPUClipKind.DeviceRect -> intersect(clip.bounds.toRect(), targetBounds)
+        GPUClipKind.ComplexStack -> error("checked above")
+    }
+    val outputBounds = intersect(
+        GPURect(
+            left = dst.left - haloX,
+            top = dst.top - haloY,
+            right = dst.right + haloX,
+            bottom = dst.bottom + haloY,
+        ),
+        clipBounds,
+    )
+    if (outputBounds.left >= outputBounds.right || outputBounds.top >= outputBounds.bottom) {
+        return GPUImageFilterPlan.Refused("unsupported")
+    }
+    return GPUImageFilterPlan.Blur(
+        sigmaX = blur.sigmaX,
+        sigmaY = blur.sigmaY,
+        haloX = haloX,
+        haloY = haloY,
+        outputBounds = outputBounds,
+    )
+}
+
+private fun GPUBounds.toRect(): GPURect = GPURect(left, top, right, bottom)
+
+private fun intersect(first: GPURect, second: GPURect): GPURect = GPURect(
+    left = maxOf(first.left, second.left),
+    top = maxOf(first.top, second.top),
+    right = minOf(first.right, second.right),
+    bottom = minOf(first.bottom, second.bottom),
+)
 
 // ────────────────────────────────────────────────────────────────────────────
 // DrawImageNine — decompose into 9 cells (src / dst pairs)
