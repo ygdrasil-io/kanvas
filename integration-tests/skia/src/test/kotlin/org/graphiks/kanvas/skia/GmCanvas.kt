@@ -230,7 +230,19 @@ class GmCanvas(
         g: Float,
         b: Float,
         a: Float = 1f,
-        mode: BlendMode = BlendMode.SRC_OVER,
+    ) {
+        drawRect(
+            Rect(0f, 0f, width.toFloat(), height.toFloat()),
+            Paint(color = Color.fromRGBA(r, g, b, a)),
+        )
+    }
+
+    fun drawColor(
+        r: Float,
+        g: Float,
+        b: Float,
+        a: Float,
+        mode: BlendMode,
     ) {
         withClip {
             inner.drawColor(Color.fromRGBA(r, g, b, a), mode)
