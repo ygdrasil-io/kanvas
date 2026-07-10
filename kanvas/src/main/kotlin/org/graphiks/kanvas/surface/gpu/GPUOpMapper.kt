@@ -500,23 +500,22 @@ private fun DisplayOp.DrawImage.toImageFilterPlan(
     dst: GPURect,
 ): GPUImageFilterPlan {
     val paint = paint ?: return GPUImageFilterPlan.None
-    if (paint.maskFilter != null) return GPUImageFilterPlan.Refused("unsupported")
+    if (paint.maskFilter != null) return GPUImageFilterPlan.Refused("unsupported.mask-filter.image")
     val imageFilter = paint.imageFilter ?: return GPUImageFilterPlan.None
 
-    val blur = imageFilter as? ImageFilter.Blur ?: return GPUImageFilterPlan.Refused("unsupported")
+    val blur = imageFilter as? ImageFilter.Blur
+        ?: return GPUImageFilterPlan.Refused("unsupported.image-filter.image.kind")
+    if (blur.input != null) return GPUImageFilterPlan.Refused("unsupported.image-filter.blur.input")
+    if (blur.tileMode != TileMode.CLAMP) return GPUImageFilterPlan.Refused("unsupported.image-filter.blur.tile-mode")
     if (
-        blur.input != null ||
-        blur.tileMode != TileMode.CLAMP ||
-        transform.type != GPUTransformType.Identity ||
         !blur.sigmaX.isFinite() ||
         !blur.sigmaY.isFinite() ||
         blur.sigmaX < 0f ||
         blur.sigmaY < 0f ||
         blur.sigmaX > 12f ||
-        blur.sigmaY > 12f ||
-        clip.kind == GPUClipKind.ComplexStack
+        blur.sigmaY > 12f
     ) {
-        return GPUImageFilterPlan.Refused("unsupported")
+        return GPUImageFilterPlan.Refused("unsupported.image-filter.blur.sigma")
     }
     if (blur.sigmaX == 0f && blur.sigmaY == 0f) return GPUImageFilterPlan.Identity
 
@@ -526,7 +525,7 @@ private fun DisplayOp.DrawImage.toImageFilterPlan(
     val clipBounds = when (clip.kind) {
         GPUClipKind.WideOpen -> targetBounds
         GPUClipKind.DeviceRect -> intersect(clip.bounds.toRect(), targetBounds)
-        GPUClipKind.ComplexStack -> error("checked above")
+        GPUClipKind.ComplexStack -> return GPUImageFilterPlan.Refused("unsupported.image-filter.blur.clip")
     }
     val outputBounds = intersect(
         GPURect(
@@ -537,8 +536,16 @@ private fun DisplayOp.DrawImage.toImageFilterPlan(
         ),
         clipBounds,
     )
-    if (outputBounds.left >= outputBounds.right || outputBounds.top >= outputBounds.bottom) {
-        return GPUImageFilterPlan.Refused("unsupported")
+    val outputWidth = outputBounds.right - outputBounds.left
+    val outputHeight = outputBounds.bottom - outputBounds.top
+    if (
+        outputWidth <= 0f || outputHeight <= 0f ||
+        outputWidth > 2048f || outputHeight > 2048f
+    ) {
+        return GPUImageFilterPlan.Refused("unsupported.image-filter.blur.intermediate-size")
+    }
+    if (transform.type != GPUTransformType.Identity) {
+        return GPUImageFilterPlan.Refused("unsupported.image-filter.blur.transform")
     }
     return GPUImageFilterPlan.Blur(
         sigmaX = blur.sigmaX,

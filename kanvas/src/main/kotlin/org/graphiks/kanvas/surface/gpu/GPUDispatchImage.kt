@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.surface.gpu
 
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
+import org.graphiks.kanvas.gpu.renderer.commands.GPUImageFilterPlan
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRawUniformDraw
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRenderRecorder
@@ -20,6 +21,18 @@ internal fun GPUBackendRenderRecorder.dispatchImageRect(
 ) {
     fun refuse(reason: String) {
         diagnostics.fatal("refuse:${cmd.diagnosticName}", cmd.diagnosticName, reason)
+    }
+
+    when (val plan = cmd.imageFilterPlan) {
+        GPUImageFilterPlan.None, GPUImageFilterPlan.Identity -> Unit
+        is GPUImageFilterPlan.Refused -> {
+            refuse(plan.code)
+            return
+        }
+        is GPUImageFilterPlan.Blur -> {
+            refuse("unsupported.image-filter.blur.route-bypass")
+            return
+        }
     }
 
     val pixels = textureCache[cmd.imageSourceId]
