@@ -222,7 +222,11 @@ class AAXfermodesGm : SkiaGm {
 
     private enum class Pass { Checkerboard, Background, Shape }
 
-    private companion object {
+    companion object {
+        internal val upstreamBlendModes: List<BlendMode> = BlendMode.entries.toList()
+        internal val upstreamCoeffSplit: Int
+            get() = BlendMode.entries.size - 1
+
         fun intToColor(value: Int): Color {
             val a = (value ushr 24) and 0xFF
             val r = (value ushr 16) and 0xFF
@@ -231,28 +235,28 @@ class AAXfermodesGm : SkiaGm {
             return Color.fromRGBA(r / 255f, g / 255f, b / 255f, a / 255f)
         }
 
-        const val kShapeSize: Int = 22
-        const val kShapeSpacing: Int = 36
-        const val kShapeTypeSpacing: Int = 4 * kShapeSpacing / 3
-        const val kPaintSpacing: Int = 4 * kShapeTypeSpacing
-        const val kLabelSpacing: Int = 3 * kShapeSize
-        const val kMargin: Int = kShapeSpacing / 2
-        const val kXfermodeTypeSpacing: Int =
+        internal const val kShapeSize: Int = 22
+        internal const val kShapeSpacing: Int = 36
+        internal const val kShapeTypeSpacing: Int = 4 * kShapeSpacing / 3
+        internal const val kPaintSpacing: Int = 4 * kShapeTypeSpacing
+        internal const val kLabelSpacing: Int = 3 * kShapeSize
+        internal const val kMargin: Int = kShapeSpacing / 2
+        internal const val kXfermodeTypeSpacing: Int =
             kLabelSpacing + 2 * kPaintSpacing + kShapeTypeSpacing
-        const val kTitleSpacing: Int = 3 * kShapeSpacing / 4
-        const val kSubtitleSpacing: Int = 5 * kShapeSpacing / 8
+        internal const val kTitleSpacing: Int = 3 * kShapeSpacing / 4
+        internal const val kSubtitleSpacing: Int = 5 * kShapeSpacing / 8
 
-        val kBGColor = intToColor(0xC8D2B887.toInt())
+        internal val kBGColor = intToColor(0xC8D2B887.toInt())
 
-        val kShapeColors = listOf(
+        internal val kShapeColors = listOf(
             intToColor(0x82FF0080.toInt()),
             intToColor(0xFF00FFFF.toInt()),
         )
 
-        const val kSquare_Shape: Int = 0
-        const val kDiamond_Shape: Int = 1
-        const val kOval_Shape: Int = 2
-        const val kConcave_Shape: Int = 3
-        const val kLast_Shape: Int = kConcave_Shape
+        internal const val kSquare_Shape: Int = 0
+        internal const val kDiamond_Shape: Int = 1
+        internal const val kOval_Shape: Int = 2
+        internal const val kConcave_Shape: Int = 3
+        internal const val kLast_Shape: Int = kConcave_Shape
     }
 }
