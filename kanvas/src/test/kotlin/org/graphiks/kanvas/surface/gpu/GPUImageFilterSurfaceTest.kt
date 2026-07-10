@@ -90,6 +90,26 @@ class GPUImageFilterSurfaceTest {
     }
 
     @Test
+    fun `partial src blur clamps its halo to crop bounds rather than texture bounds`() {
+        requireWebGpu()
+        val surfaceSize = 32
+        val dst = Rect.fromXYWH(10f, 10f, 2f, 2f)
+        val actual = renderImageRectThroughSurface(
+            image = blueImageWithOpaqueRedCenterCrop(),
+            src = Rect(1f, 1f, 3f, 3f),
+            dst = dst,
+            paint = Paint(imageFilter = ImageFilter.Blur(1f, 1f, TileMode.CLAMP)),
+            surfaceSize = surfaceSize,
+        )
+        val expected = opaqueRedCropClampOracle(surfaceSize, dst, halo = 3)
+
+        assertRgbaWithin(expected, actual, tolerance = 2)
+        val haloPixel = (7 * surfaceSize + 7) * 4
+        assertEquals(255, actual[haloPixel].toInt() and 0xff)
+        assertEquals(0, actual[haloPixel + 2].toInt() and 0xff)
+    }
+
+    @Test
     fun `zero sigma image filter is byte identical to unfiltered image`() {
         requireWebGpu()
         val image = opaqueRedImpulse(9, 9, 4, 4)
@@ -149,6 +169,18 @@ class GPUImageFilterSurfaceTest {
         return surface.render().pixels.toByteArray()
     }
 
+    private fun renderImageRectThroughSurface(
+        image: Image,
+        src: Rect,
+        dst: Rect,
+        paint: Paint,
+        surfaceSize: Int,
+    ): ByteArray {
+        val surface = Surface(surfaceSize, surfaceSize)
+        surface.canvas { drawImageRect(image, src, dst, paint) }
+        return surface.render().pixels.toByteArray()
+    }
+
     private fun renderFixtureResult(paint: Paint) = Surface(32, 32).run {
         canvas {
             drawImage(
@@ -192,6 +224,38 @@ class GPUImageFilterSurfaceTest {
             pixels[offset + 3] = 0xff.toByte()
         }
         return Image.fromPixels(width, height, pixels, ColorType.RGBA_8888, "red-left-edge")
+    }
+
+    private fun blueImageWithOpaqueRedCenterCrop(): Image {
+        val pixels = ByteArray(4 * 4 * 4)
+        for (y in 0 until 4) {
+            for (x in 0 until 4) {
+                val offset = (y * 4 + x) * 4
+                pixels[offset + 2] = 0xff.toByte()
+                pixels[offset + 3] = 0xff.toByte()
+                if (x in 1..2 && y in 1..2) {
+                    pixels[offset] = 0xff.toByte()
+                    pixels[offset + 2] = 0
+                }
+            }
+        }
+        return Image.fromPixels(4, 4, pixels, ColorType.RGBA_8888, "blue-red-crop")
+    }
+
+    private fun opaqueRedCropClampOracle(surfaceSize: Int, dst: Rect, halo: Int): ByteArray {
+        val pixels = ByteArray(surfaceSize * surfaceSize * 4)
+        val left = dst.left.toInt() - halo
+        val top = dst.top.toInt() - halo
+        val right = dst.right.toInt() + halo
+        val bottom = dst.bottom.toInt() + halo
+        for (y in top until bottom) {
+            for (x in left until right) {
+                val offset = (y * surfaceSize + x) * 4
+                pixels[offset] = 0xff.toByte()
+                pixels[offset + 3] = 0xff.toByte()
+            }
+        }
+        return pixels
     }
 
     private fun requireWebGpu() {

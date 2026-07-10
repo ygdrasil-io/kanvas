@@ -444,6 +444,41 @@ internal val IMAGE_TEXTURE_WGSL: String = """
     }
 """.trimIndent()
 
+/** Image-filter source pass: samples outside [dstRect] clamp to the command crop. */
+internal val FILTERED_IMAGE_SOURCE_WGSL: String = """
+    struct Uniforms {
+        dstRect: vec4f,
+        uvScale: vec2f,
+        uvOffset: vec2f,
+        tintColor: vec4f,
+    };
+
+    @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+    @group(1) @binding(1) var imageTex: texture_2d<f32>;
+    @group(1) @binding(2) var imageSam: sampler;
+
+    @vertex
+    fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
+        let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
+        let y = f32(idx & 2u) * 2.0 - 1.0;
+        return vec4f(x, y, 0.0, 1.0);
+    }
+
+    @fragment
+    fn fs_main(@builtin(position) coord: vec4f) -> @location(0) vec4f {
+        let dstSize = max(uniforms.dstRect.zw - uniforms.dstRect.xy, vec2f(1.0, 1.0));
+        let unclampedUv = uniforms.uvOffset +
+            (coord.xy - uniforms.dstRect.xy) / dstSize * uniforms.uvScale;
+        let cropEnd = uniforms.uvOffset + uniforms.uvScale;
+        let halfTexel = 0.5 / vec2f(textureDimensions(imageTex));
+        let cropMin = min(uniforms.uvOffset, cropEnd) + halfTexel;
+        let cropMax = max(uniforms.uvOffset, cropEnd) - halfTexel;
+        let uv = clamp(unclampedUv, cropMin, cropMax);
+        let color = textureSample(imageTex, imageSam, uv);
+        return vec4f(color.rgb * uniforms.tintColor.rgb * uniforms.tintColor.a, color.a * uniforms.tintColor.a);
+    }
+""".trimIndent()
+
 internal val FILTERED_IMAGE_COMPOSITE_WGSL: String = """
     struct Uniforms {
         dstRect: vec4f,

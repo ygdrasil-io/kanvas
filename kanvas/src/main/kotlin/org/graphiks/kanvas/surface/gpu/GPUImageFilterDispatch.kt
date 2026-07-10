@@ -80,11 +80,10 @@ internal fun GPUBackendOffscreenTarget.renderImageCommand(
             diagnostics.fatal("refuse:${command.diagnosticName}", command.diagnosticName, reason)
             return@encodeOffscreenTexture
         }
-        // IMAGE_TEXTURE_WGSL computes UV from localDst. Covering the whole local
-        // target deliberately sends the halo outside [0, 1]; the native image
-        // sampler is ClampToEdge, so the source edge pixels fill that halo.
+        // The dedicated filtered source shader clamps the generated UV to the
+        // command crop, not the full decoded texture, before sampling its halo.
         drawFullscreenTextureUniformPass(
-            wgsl = IMAGE_TEXTURE_WGSL,
+            wgsl = FILTERED_IMAGE_SOURCE_WGSL,
             colorFormat = colorFormat,
             textureRgba = pixels,
             textureWidth = command.pixelsWidth,
