@@ -12,6 +12,8 @@ public enum class PngSaveEntryStatus {
     PRESERVED,
     REPLACED,
     DROPPED,
+    PLANNED_PRESERVE,
+    PLANNED_DROP,
     REFUSED,
 }
 
@@ -32,6 +34,9 @@ public object PngSaveReason {
     public const val IMAGE_DEPENDENT_DROPPED: String = "png.ancillary.dropped.image-dependent"
     public const val STALE_DROPPED: String = "png.ancillary.dropped.stale"
     public const val PIXEL_REENCODE_UNSUPPORTED: String = "png.pixel-edit.reencode.unsupported"
+    public const val OUTPUT_UNAVAILABLE: String = "png.save.output.unavailable"
+    public const val OUTPUT_LIMIT: String = "png.output.limit"
+    public const val OUTPUT_CHUNK_COUNT_LIMIT: String = "png.output.chunk-count.limit"
 }
 
 public class PngDocumentEditException(
@@ -85,6 +90,9 @@ internal sealed interface PngChunkEdit {
     ) : PngChunkEdit {
         private val savedPayload: ByteArray = payload.copyOf()
 
+        val payloadSize: Int
+            get() = savedPayload.size
+
         fun payloadCopy(): ByteArray = savedPayload.copyOf()
     }
 
@@ -102,6 +110,7 @@ internal object PngAncillaryCriticalPolicy {
         "iCCP",
         "mDCV",
         "sBIT",
+        "sPLT",
         "sRGB",
         "tRNS",
     )
@@ -110,22 +119,24 @@ internal object PngAncillaryCriticalPolicy {
         "eXIf",
         "iTXt",
         "pHYs",
-        "sPLT",
         "tEXt",
         "zTXt",
     )
 
     fun decision(type: String): Pair<PngSaveEntryStatus, String> = when {
         type in imageDependentTypes ->
-            PngSaveEntryStatus.DROPPED to PngSaveReason.IMAGE_DEPENDENT_DROPPED
+            PngSaveEntryStatus.PLANNED_DROP to PngSaveReason.IMAGE_DEPENDENT_DROPPED
 
-        type == "tIME" -> PngSaveEntryStatus.DROPPED to PngSaveReason.STALE_DROPPED
+        type == "tIME" -> PngSaveEntryStatus.PLANNED_DROP to PngSaveReason.STALE_DROPPED
         type in knownIndependentTypes ->
-            PngSaveEntryStatus.PRESERVED to PngSaveReason.KNOWN_INDEPENDENT_PRESERVED
+            PngSaveEntryStatus.PLANNED_PRESERVE to PngSaveReason.KNOWN_INDEPENDENT_PRESERVED
 
         type[3] in 'a'..'z' ->
-            PngSaveEntryStatus.PRESERVED to PngSaveReason.SAFE_TO_COPY_PRESERVED
+            PngSaveEntryStatus.PLANNED_PRESERVE to PngSaveReason.SAFE_TO_COPY_PRESERVED
 
-        else -> PngSaveEntryStatus.DROPPED to PngSaveReason.UNSAFE_TO_COPY_DROPPED
+        else -> PngSaveEntryStatus.PLANNED_DROP to PngSaveReason.UNSAFE_TO_COPY_DROPPED
     }
+
+    fun isKnown(type: String): Boolean =
+        type in imageDependentTypes || type in knownIndependentTypes || type == "tIME"
 }

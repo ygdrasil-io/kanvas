@@ -9,24 +9,45 @@ public sealed interface PngDocumentOpenResult {
 }
 
 public class PngDocumentSaveResult internal constructor(
-    bytes: ByteArray,
+    bytes: ByteArray?,
     public val report: PngSaveReport,
     public val status: PngDocumentSaveStatus = PngDocumentSaveStatus.SAVED,
     public val diagnostic: PngDiagnostic? = null,
+    sourceRecovery: ByteArray? = null,
 ) {
-    private val savedBytes: ByteArray = bytes.copyOf()
+    private val savedOutputBytes: ByteArray? = bytes?.copyOf()
+    private val savedSourceRecovery: ByteArray? = sourceRecovery?.copyOf()
 
     init {
-        require((status == PngDocumentSaveStatus.SAVED) == (diagnostic == null)) {
-            "A saved PNG must not have a diagnostic and a refused PNG must have one"
+        require(
+            when (status) {
+                PngDocumentSaveStatus.SAVED ->
+                    savedOutputBytes != null && savedSourceRecovery == null && diagnostic == null
+
+                PngDocumentSaveStatus.REFUSED -> savedOutputBytes == null && diagnostic != null
+            },
+        ) {
+            "Saved PNG results own output bytes; refused results own no output and require a diagnostic"
         }
     }
 
     public val bytes: ByteArray
-        get() = savedBytes.copyOf()
+        get() = outputBytes ?: throw PngSaveOutputUnavailableException()
+
+    public val outputBytes: ByteArray?
+        get() = savedOutputBytes?.copyOf()
+
+    public val sourceRecovery: ByteArray?
+        get() = savedSourceRecovery?.copyOf()
 
     public val isSuccess: Boolean
         get() = status == PngDocumentSaveStatus.SAVED
+}
+
+public class PngSaveOutputUnavailableException internal constructor() : IllegalStateException(
+    "A refused PNG save has no publishable output bytes; inspect sourceRecovery explicitly",
+) {
+    public val code: String = PngSaveReason.OUTPUT_UNAVAILABLE
 }
 
 public enum class PngDocumentSaveStatus {

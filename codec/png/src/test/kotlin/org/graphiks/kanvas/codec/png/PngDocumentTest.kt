@@ -66,6 +66,7 @@ class PngDocumentTest {
         assertTrue(chunkPayloads(saved.bytes, "tEXt").isEmpty())
         assertRawChunkListsEqual(sourceIdat, rawChunks(saved.bytes).getValue("IDAT"))
         assertEquals(2, saved.report.entries.count { it.reasonCode == "png.ancillary.removed" })
+        assertEquals(setOf(1, 2), saved.report.entries.filter { it.chunkType == "tEXt" }.mapNotNull { it.ordinal }.toSet())
         assertTrue(saved.report.entries.filter { it.chunkType == "tEXt" }.all {
             it.status == PngSaveEntryStatus.DROPPED
         })
@@ -104,6 +105,7 @@ class PngDocumentTest {
             "vpAG" to byteArrayOf(0x20),
             "sBIT" to byteArrayOf(8, 8, 8),
             "pHYs" to ByteArray(9),
+            "sPLT" to byteArrayOf(0x21),
             "tIME" to ByteArray(7),
             "IDAT" to byteArrayOf(0x30),
             "IEND" to ByteArray(0),
@@ -115,35 +117,47 @@ class PngDocumentTest {
         assertEquals(PngWriteImpact.CRITICAL, edited.writePlan.impact)
         assertEquals(PngDocumentSaveStatus.REFUSED, saved.status)
         assertEquals("png.pixel-edit.reencode.unsupported", saved.diagnostic?.code)
-        assertArrayEquals(source, saved.bytes)
+        assertNull(saved.outputBytes)
+        assertArrayEquals(source, saved.sourceRecovery)
+        val exposedRecovery = requireNotNull(saved.sourceRecovery)
+        exposedRecovery[0] = 0
+        assertArrayEquals(source, saved.sourceRecovery)
+        val exception = assertThrows(PngSaveOutputUnavailableException::class.java) { saved.bytes }
+        assertEquals("png.save.output.unavailable", exception.code)
         assertReportEntry(
             saved.report,
             "vpAg",
-            PngSaveEntryStatus.PRESERVED,
+            PngSaveEntryStatus.PLANNED_PRESERVE,
             "png.ancillary.preserved.safe-to-copy",
         )
         assertReportEntry(
             saved.report,
             "vpAG",
-            PngSaveEntryStatus.DROPPED,
+            PngSaveEntryStatus.PLANNED_DROP,
             "png.ancillary.dropped.unsafe-to-copy",
         )
         assertReportEntry(
             saved.report,
             "sBIT",
-            PngSaveEntryStatus.DROPPED,
+            PngSaveEntryStatus.PLANNED_DROP,
             "png.ancillary.dropped.image-dependent",
         )
         assertReportEntry(
             saved.report,
             "pHYs",
-            PngSaveEntryStatus.PRESERVED,
+            PngSaveEntryStatus.PLANNED_PRESERVE,
             "png.ancillary.preserved.known-independent",
         )
         assertReportEntry(
             saved.report,
+            "sPLT",
+            PngSaveEntryStatus.PLANNED_DROP,
+            "png.ancillary.dropped.image-dependent",
+        )
+        assertReportEntry(
+            saved.report,
             "tIME",
-            PngSaveEntryStatus.DROPPED,
+            PngSaveEntryStatus.PLANNED_DROP,
             "png.ancillary.dropped.stale",
         )
         assertReportEntry(
@@ -170,6 +184,71 @@ class PngDocumentTest {
 
         assertEquals(PngWriteImpact.CRITICAL, edited.writePlan.impact)
         assertEquals(PngDocumentSaveStatus.REFUSED, edited.save().status)
+        assertNull(edited.save().outputBytes)
+    }
+
+    @Test
+    fun `preflights exact output byte and chunk limits before metadata emission`() {
+        val source = png(
+            "IHDR" to ihdr(),
+            "IDAT" to byteArrayOf(0x20),
+            "IEND" to ByteArray(0),
+        )
+        val byteLimited = open(
+            source,
+            PngContainerLimits.Default.copy(maxInputBytes = source.size.toLong() + 11L),
+        ).withAncillaryChunk("vpAg", ByteArray(0)).save()
+
+        assertEquals(PngDocumentSaveStatus.REFUSED, byteLimited.status)
+        assertEquals("png.output.limit", byteLimited.diagnostic?.code)
+        assertNull(byteLimited.outputBytes)
+        assertArrayEquals(source, byteLimited.sourceRecovery)
+        assertThrows(PngSaveOutputUnavailableException::class.java) { byteLimited.bytes }
+        assertReportEntry(
+            byteLimited.report,
+            null,
+            PngSaveEntryStatus.REFUSED,
+            "png.output.limit",
+        )
+        val exactByteLimit = open(
+            source,
+            PngContainerLimits.Default.copy(maxInputBytes = source.size.toLong() + 12L),
+        ).withAncillaryChunk("vpAg", ByteArray(0)).save()
+        assertEquals(PngDocumentSaveStatus.SAVED, exactByteLimit.status)
+        assertEquals(source.size + 12, exactByteLimit.bytes.size)
+
+        val chunkLimited = open(
+            source,
+            PngContainerLimits.Default.copy(maxChunkCount = 3),
+        ).withAncillaryChunk("vpAg", ByteArray(0)).save()
+
+        assertEquals(PngDocumentSaveStatus.REFUSED, chunkLimited.status)
+        assertEquals("png.output.chunk-count.limit", chunkLimited.diagnostic?.code)
+        assertNull(chunkLimited.outputBytes)
+        assertArrayEquals(source, chunkLimited.sourceRecovery)
+        assertReportEntry(
+            chunkLimited.report,
+            null,
+            PngSaveEntryStatus.REFUSED,
+            "png.output.chunk-count.limit",
+        )
+        val exactChunkLimit = open(
+            source,
+            PngContainerLimits.Default.copy(maxChunkCount = 4),
+        ).withAncillaryChunk("vpAg", ByteArray(0)).save()
+        assertEquals(PngDocumentSaveStatus.SAVED, exactChunkLimit.status)
+        assertEquals(4, chunkTypes(exactChunkLimit.bytes).size)
+
+        val replacementAtLimit = open(
+            png(
+                "IHDR" to ihdr(),
+                "vpAg" to byteArrayOf(0x10),
+                "IDAT" to byteArrayOf(0x20),
+                "IEND" to ByteArray(0),
+            ),
+            PngContainerLimits.Default.copy(maxChunkCount = 4),
+        ).withAncillaryChunk("vpAg", byteArrayOf(0x30)).save()
+        assertEquals(PngDocumentSaveStatus.SAVED, replacementAtLimit.status)
     }
 
     @Test
@@ -260,19 +339,97 @@ class PngDocumentTest {
     }
 
     @Test
-    fun `rejects replacement when matching chunks span insertion anchors`() {
-        val source = png(
+    fun `enforces HDR and palette-dependent known chunk anchors`() {
+        val indexedSource = png(
             "IHDR" to ihdr(colorType = 3),
-            "vpAg" to byteArrayOf(0x10),
             "PLTE" to byteArrayOf(0, 0, 0),
+            "IDAT" to byteArrayOf(0x20),
+            "IEND" to ByteArray(0),
+        )
+
+        val hdrSaved = open(indexedSource)
+            .withAncillaryChunk("mDCV", ByteArray(24))
+            .withAncillaryChunk("cLLI", ByteArray(8))
+            .save()
+        assertEquals(listOf("IHDR", "mDCV", "cLLI", "PLTE", "IDAT", "IEND"), chunkTypes(hdrSaved.bytes))
+
+        val paletteSaved = open(indexedSource)
+            .withAncillaryChunk("bKGD", byteArrayOf(0))
+            .withAncillaryChunk("hIST", byteArrayOf(0, 1))
+            .withAncillaryChunk("tRNS", byteArrayOf(0x7F))
+            .save()
+        assertEquals(
+            listOf("IHDR", "PLTE", "bKGD", "hIST", "tRNS", "IDAT", "IEND"),
+            chunkTypes(paletteSaved.bytes),
+        )
+
+        for (type in listOf("bKGD", "hIST", "tRNS")) {
+            val malformed = png(
+                "IHDR" to ihdr(colorType = 3),
+                type to byteArrayOf(0),
+                "PLTE" to byteArrayOf(0, 0, 0),
+                "IDAT" to byteArrayOf(0x20),
+                "IEND" to ByteArray(0),
+            )
+            assertEditFailure("png.ancillary.anchor.invalid") {
+                open(malformed).withAncillaryChunk(type, byteArrayOf(1))
+            }
+        }
+
+        val noPalette = png(
+            "IHDR" to ihdr(),
+            "IDAT" to byteArrayOf(0x20),
+            "IEND" to ByteArray(0),
+        )
+        assertEditFailure("png.ancillary.anchor.requires-plte") {
+            open(noPalette).withAncillaryChunk("hIST", byteArrayOf(0, 1))
+        }
+        val existingWithoutPalette = png(
+            "IHDR" to ihdr(),
+            "hIST" to byteArrayOf(0, 1),
+            "IDAT" to byteArrayOf(0x20),
+            "IEND" to ByteArray(0),
+        )
+        assertEditFailure("png.ancillary.anchor.requires-plte") {
+            open(existingWithoutPalette).withAncillaryChunk("hIST", byteArrayOf(0, 2))
+        }
+    }
+
+    @Test
+    fun `rejects every ambiguous duplicate replacement`() {
+        val source = png(
+            "IHDR" to ihdr(),
+            "vpAg" to byteArrayOf(0x10),
             "vpAg" to byteArrayOf(0x20),
             "IDAT" to byteArrayOf(0x30),
             "IEND" to ByteArray(0),
         )
 
-        assertEditFailure("png.ancillary.anchor.ambiguous") {
+        assertEditFailure("png.ancillary.replacement.ambiguous") {
             open(source).withAncillaryChunk("vpAg", byteArrayOf(0x40))
         }
+    }
+
+    @Test
+    fun `requires an existing anchor for absent unknown unsafe chunks`() {
+        val source = png(
+            "IHDR" to ihdr(),
+            "IDAT" to byteArrayOf(0x20),
+            "IEND" to ByteArray(0),
+        )
+
+        assertEditFailure("png.ancillary.unsafe.anchor.required") {
+            open(source).withAncillaryChunk("vpAG", byteArrayOf(0x30))
+        }
+
+        val existingUnsafe = png(
+            "IHDR" to ihdr(),
+            "vpAG" to byteArrayOf(0x10),
+            "IDAT" to byteArrayOf(0x20),
+            "IEND" to ByteArray(0),
+        )
+        val saved = open(existingUnsafe).withAncillaryChunk("vpAG", byteArrayOf(0x30)).save()
+        assertEquals(0x30.toByte(), chunkPayloads(saved.bytes, "vpAG").single().single())
     }
 
     @Test
@@ -288,6 +445,8 @@ class PngDocumentTest {
         val saved = open(source).save()
 
         assertArrayEquals(source, saved.bytes)
+        assertArrayEquals(source, saved.outputBytes)
+        assertNull(saved.sourceRecovery)
         assertTrue(saved.report.isEmpty)
     }
 

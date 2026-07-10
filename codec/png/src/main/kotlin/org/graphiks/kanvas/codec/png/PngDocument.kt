@@ -24,7 +24,20 @@ public class PngDocument private constructor(
                 "PNG ancillary payload exceeds the document limit",
             )
         }
-        val anchor = insertionAnchor(type)
+        val records = chunks.filter { it.type == type }
+        if (records.size > 1) {
+            throw PngDocumentEditException(
+                "png.ancillary.replacement.ambiguous",
+                "Raw replacement requires zero or one matching PNG chunk",
+            )
+        }
+        if (records.isEmpty() && type[3] !in 'a'..'z' && !PngAncillaryCriticalPolicy.isKnown(type)) {
+            throw PngDocumentEditException(
+                "png.ancillary.unsafe.anchor.required",
+                "An absent unknown unsafe-to-copy PNG chunk requires an explicit insertion anchor",
+            )
+        }
+        val anchor = insertionAnchor(type, records)
         return copyWith(writePlan.withEdit(type, PngChunkEdit.Replacement(payload, anchor)))
     }
 
@@ -57,7 +70,12 @@ public class PngDocument private constructor(
     }
 
     private fun saveAncillaryEdits(): PngDocumentSaveResult {
-        val output = ByteArrayOutputStream(sourceBytes.size)
+        val preflight = preflightAncillaryOutput()
+        if (preflight is PngOutputPreflight.Failure) {
+            return refuseSave(preflight.diagnostic)
+        }
+        preflight as PngOutputPreflight.Success
+        val output = ByteArrayOutputStream(preflight.outputSize)
         output.write(sourceBytes, 0, PNG_SIGNATURE_BYTES)
         val emittedReplacements = HashSet<String>()
         val reportEntries = ArrayList<PngSaveReportEntry>()
@@ -146,17 +164,68 @@ public class PngDocument private constructor(
             status = PngSaveEntryStatus.REFUSED,
             reasonCode = PngSaveReason.PIXEL_REENCODE_UNSUPPORTED,
         )
-        return PngDocumentSaveResult(
-            bytes = sourceBytes,
-            report = PngSaveReport(reportEntries),
-            status = PngDocumentSaveStatus.REFUSED,
+        return refuseSave(
             diagnostic = PngDiagnostic(
                 code = PngSaveReason.PIXEL_REENCODE_UNSUPPORTED,
                 offset = 0L,
                 message = "PngDocument cannot re-encode pixel or critical chunk edits",
             ),
+            reportEntries = reportEntries,
         )
     }
+
+    private fun preflightAncillaryOutput(): PngOutputPreflight {
+        val recordsByType = chunks.groupBy(PngChunkRecord::type)
+        var outputSize = sourceBytes.size.toLong()
+        var outputChunkCount = chunks.size.toLong()
+        for ((type, edit) in writePlan.edits) {
+            val records = recordsByType[type].orEmpty()
+            val originalBytes = records.sumOf { it.rawRange.size }
+            outputSize -= originalBytes
+            outputChunkCount -= records.size.toLong()
+            if (edit is PngChunkEdit.Replacement) {
+                outputSize += PNG_CHUNK_OVERHEAD_BYTES + edit.payloadSize.toLong()
+                outputChunkCount += 1L
+            }
+        }
+        if (outputChunkCount > limits.maxChunkCount.toLong()) {
+            return PngOutputPreflight.Failure(
+                PngDiagnostic(
+                    code = PngSaveReason.OUTPUT_CHUNK_COUNT_LIMIT,
+                    offset = 0L,
+                    message = "Edited PNG chunk count exceeds the configured limit",
+                ),
+            )
+        }
+        if (outputSize > limits.maxInputBytes || outputSize > Int.MAX_VALUE.toLong()) {
+            return PngOutputPreflight.Failure(
+                PngDiagnostic(
+                    code = PngSaveReason.OUTPUT_LIMIT,
+                    offset = 0L,
+                    message = "Edited PNG output exceeds the configured byte limit",
+                ),
+            )
+        }
+        return PngOutputPreflight.Success(outputSize.toInt())
+    }
+
+    private fun refuseSave(
+        diagnostic: PngDiagnostic,
+        reportEntries: List<PngSaveReportEntry> = listOf(
+            PngSaveReportEntry(
+                chunkType = null,
+                ordinal = null,
+                status = PngSaveEntryStatus.REFUSED,
+                reasonCode = diagnostic.code,
+            ),
+        ),
+    ): PngDocumentSaveResult = PngDocumentSaveResult(
+        bytes = null,
+        report = PngSaveReport(reportEntries),
+        status = PngDocumentSaveStatus.REFUSED,
+        diagnostic = diagnostic,
+        sourceRecovery = sourceBytes,
+    )
 
     private fun logicalAncillaryChunks(): List<Pair<String, Int?>> {
         val logical = ArrayList<Pair<String, Int?>>()
@@ -177,9 +246,17 @@ public class PngDocument private constructor(
         return logical
     }
 
-    private fun insertionAnchor(type: String): PngChunkInsertionAnchor {
-        val records = chunks.filter { it.type == type }
+    private fun insertionAnchor(
+        type: String,
+        records: List<PngChunkRecord>,
+    ): PngChunkInsertionAnchor {
         val paletteOrdinal = chunks.firstOrNull { it.type == "PLTE" }?.ordinal
+        if (type == "hIST" && paletteOrdinal == null) {
+            throw PngDocumentEditException(
+                "png.ancillary.anchor.requires-plte",
+                "PNG hIST requires a preceding PLTE chunk",
+            )
+        }
         if (records.isEmpty()) {
             return if (paletteOrdinal != null && type in PRE_PALETTE_TYPES) {
                 PngChunkInsertionAnchor.BEFORE_PLTE
@@ -204,6 +281,7 @@ public class PngDocument private constructor(
         val anchor = anchors.single()
         val invalidKnownAnchor =
             (paletteOrdinal != null && type in PRE_PALETTE_TYPES && anchor != PngChunkInsertionAnchor.BEFORE_PLTE) ||
+                (paletteOrdinal != null && type in POST_PALETTE_TYPES && anchor != PngChunkInsertionAnchor.BEFORE_IDAT) ||
                 ((type in PRE_PALETTE_TYPES || type in PRE_IDAT_TYPES) &&
                     anchor == PngChunkInsertionAnchor.AFTER_IDAT)
         if (invalidKnownAnchor) {
@@ -301,18 +379,33 @@ public class PngDocument private constructor(
         }
 
         private const val PNG_SIGNATURE_BYTES: Int = 8
+        private const val PNG_CHUNK_OVERHEAD_BYTES: Long = 12L
         private val APNG_CHUNK_TYPES: Set<String> = setOf("acTL", "fcTL", "fdAT")
         private val INSERTION_BOUNDARY_TYPES: Set<String> = setOf("PLTE", "IDAT", "IEND")
-        private val PRE_PALETTE_TYPES: Set<String> = setOf("cHRM", "cICP", "gAMA", "iCCP", "sBIT", "sRGB")
+        private val PRE_PALETTE_TYPES: Set<String> = setOf(
+            "cHRM",
+            "cICP",
+            "cLLI",
+            "gAMA",
+            "iCCP",
+            "mDCV",
+            "sBIT",
+            "sRGB",
+        )
+        private val POST_PALETTE_TYPES: Set<String> = setOf("bKGD", "hIST", "tRNS")
         private val PRE_IDAT_TYPES: Set<String> = setOf(
             "bKGD",
-            "cLLI",
             "eXIf",
             "hIST",
-            "mDCV",
             "pHYs",
             "sPLT",
             "tRNS",
         )
+    }
+
+    private sealed interface PngOutputPreflight {
+        data class Success(val outputSize: Int) : PngOutputPreflight
+
+        data class Failure(val diagnostic: PngDiagnostic) : PngOutputPreflight
     }
 }
