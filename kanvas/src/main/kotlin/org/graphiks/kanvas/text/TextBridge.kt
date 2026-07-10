@@ -114,6 +114,7 @@ object TextBridge {
         val planner = GlyphAtlasUploadPlanner()
 
         val entries = mutableListOf<Pair<GlyphStrikeKey, A8Bitmap>>()
+        val entryBaselineRects = mutableListOf<Rect>()
         val glyphIndexToEntry = mutableMapOf<Int, Int>()
         val totalGlyphCount = blob.glyphRuns.sumOf { it.glyphs.size }
 
@@ -122,11 +123,15 @@ object TextBridge {
             for (glyphId in run.glyphs) {
                 try {
                     val scaled = scaler.scaleGlyph(glyphId.toInt(), run.fontSize)
-                    val bitmap = rasterizer.rasterize(scaled)
-                    if (bitmap != null) {
-                        val key = GlyphStrikeKey(glyphId.toInt(), run.fontSize, 0, 0)
-                        glyphIndexToEntry[globalIdx] = entries.size
-                        entries.add(key to bitmap)
+                    val mapped = GlyphCoordinateMapper.map(scaled)
+                    if (mapped is MappedGlyph.Drawn) {
+                        val bitmap = rasterizer.rasterize(mapped.maskGlyph)
+                        if (bitmap != null) {
+                            val key = GlyphStrikeKey(glyphId.toInt(), run.fontSize, 0, 0)
+                            glyphIndexToEntry[globalIdx] = entries.size
+                            entries.add(key to bitmap)
+                            entryBaselineRects.add(mapped.baselineRect)
+                        }
                     }
                 } catch (_: Exception) {
                 }
@@ -148,7 +153,13 @@ object TextBridge {
             val u2 = (r.x + r.width).toFloat() / plan.atlasWidth
             val v2 = (r.y + r.height).toFloat() / plan.atlasHeight
             val uv = Rect.fromLTRB(u, v, u2, v2)
-            val rect = Rect(0f, 0f, r.width.toFloat(), r.height.toFloat())
+            val baselineRect = entryBaselineRects[entryIdx]
+            val rect = Rect.fromLTRB(
+                baselineRect.left,
+                baselineRect.top,
+                baselineRect.left + r.width.toFloat(),
+                baselineRect.top + r.height.toFloat(),
+            )
 
             for ((globalIdx, entryIdx2) in glyphIndexToEntry) {
                 if (entryIdx2 == entryIdx) {
@@ -159,7 +170,7 @@ object TextBridge {
         }
 
         val finalUvs = uvs.map { it ?: Rect.fromLTRB(0f, 0f, 0f, 0f) }
-        val finalRects = glyphRects.map { it ?: Rect(0f, 0f, 10f, 10f) }
+        val finalRects = glyphRects.map { it ?: Rect.fromLTRB(0f, 0f, 0f, 0f) }
 
         return GpuTextBlob(blob, plan.atlasBytes, plan.atlasWidth, plan.atlasHeight, finalUvs, glyphRects = finalRects)
     }
