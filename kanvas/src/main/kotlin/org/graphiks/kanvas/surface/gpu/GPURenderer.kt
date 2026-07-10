@@ -512,7 +512,6 @@ internal fun renderViaGpu(
                             sceneClearColor = sceneClear(),
                             dispatched = dispatched,
                             diagnostics = diagnostics,
-                            config = config,
                             colorFormat = texFormat,
                         )
                     }

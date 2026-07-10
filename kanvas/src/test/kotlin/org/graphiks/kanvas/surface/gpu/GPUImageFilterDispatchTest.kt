@@ -28,6 +28,8 @@ import org.graphiks.kanvas.types.Rect
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
 class GPUImageFilterDispatchTest {
     @Test
@@ -46,6 +48,12 @@ class GPUImageFilterDispatchTest {
         assertEquals(3, target.createdTextures.size)
         assertEquals(16, target.createdTextures.single { it.label.contains("source") }.width)
         assertEquals(22, target.createdTextures.single { it.label.contains("source") }.height)
+        val sourceDraw = requireNotNull(target.sourceDraw)
+        assertEquals(0, sourceDraw.scissorX)
+        assertEquals(0, sourceDraw.scissorY)
+        assertEquals(16, sourceDraw.scissorWidth)
+        assertEquals(22, sourceDraw.scissorHeight)
+        assertFloatUniforms(sourceDraw.uniformBytes, 6f, 9f, 10f, 13f)
     }
 
     private fun blurCommand(sigmaX: Float, sigmaY: Float) = DisplayOp.DrawImage(
@@ -77,6 +85,7 @@ class GPUImageFilterDispatchTest {
     private class CapturingOffscreenTarget : GPUBackendOffscreenTarget {
         val passKinds = mutableListOf<String>()
         val createdTextures = mutableListOf<GPUBackendOffscreenTexture>()
+        var sourceDraw: GPUBackendRawUniformDraw? = null
 
         override val target: GPUSurfaceTarget
             get() = error("target is not used by this pass-planning test")
@@ -117,6 +126,7 @@ class GPUImageFilterDispatchTest {
                 stencilMode: GPUBackendStencilMode?,
             ) {
                 passKinds += "source"
+                sourceDraw = draws.single()
             }
 
             override fun drawCompositePass(
@@ -154,5 +164,12 @@ class GPUImageFilterDispatchTest {
 
     private companion object {
         val fixtureRgba = ByteArray(4 * 4 * 4) { 0x7f.toByte() }
+    }
+
+    private fun assertFloatUniforms(bytes: ByteArray, vararg expected: Float) {
+        val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
+        expected.forEachIndexed { index, value ->
+            assertEquals(value, buffer.getFloat(index * 4), 0.001f, "uniform[$index]")
+        }
     }
 }

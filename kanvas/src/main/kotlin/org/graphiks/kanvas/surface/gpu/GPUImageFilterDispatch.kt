@@ -3,11 +3,10 @@ package org.graphiks.kanvas.surface.gpu
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.math.ceil
-import org.graphiks.kanvas.gpu.renderer.commands.GPUBlendFacts
-import org.graphiks.kanvas.gpu.renderer.commands.GPUClipFacts
-import org.graphiks.kanvas.gpu.renderer.commands.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.commands.GPUImageFilterPlan
+import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.GPURect
+import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendOffscreenTarget
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendOffscreenTexture
@@ -17,7 +16,6 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.filters.BlurAxis
 import org.graphiks.kanvas.gpu.renderer.filters.generateBlurPassWgsl
 import org.graphiks.kanvas.surface.Diagnostics
-import org.graphiks.kanvas.surface.RenderConfig
 
 internal data class GPUImageFilterDispatchResult(
     val rendered: Boolean,
@@ -38,7 +36,6 @@ internal fun GPUBackendOffscreenTarget.renderImageCommand(
     sceneClearColor: GPUClearColor?,
     dispatched: MutableList<String> = mutableListOf(),
     diagnostics: Diagnostics = Diagnostics(),
-    config: RenderConfig = RenderConfig.DEFAULT,
     colorFormat: String = "rgba8unorm",
 ): GPUImageFilterDispatchResult {
     val plan = command.imageFilterPlan as? GPUImageFilterPlan.Blur
@@ -58,30 +55,54 @@ internal fun GPUBackendOffscreenTarget.renderImageCommand(
         GPUBackendOffscreenTexture("$labelPrefix:vertical", outputWidth, outputHeight, colorFormat),
     )
     val transparent = GPUClearColor(0.0, 0.0, 0.0, 0.0)
-    val localSourceCommand = command.copy(
-        dst = GPURect(
-            left = command.dst.left - plan.outputBounds.left,
-            top = command.dst.top - plan.outputBounds.top,
-            right = command.dst.right - plan.outputBounds.left,
-            bottom = command.dst.bottom - plan.outputBounds.top,
-        ),
-        imageFilterPlan = GPUImageFilterPlan.Identity,
-        clip = GPUClipFacts.wideOpen(GPUBounds(0f, 0f, outputWidth.toFloat(), outputHeight.toFloat())),
-        blend = GPUBlendFacts.srcOver(),
+    val pixels = textureCache[command.imageSourceId]
+    if (pixels == null) {
+        diagnostics.fatal("refuse:${command.diagnosticName}", command.diagnosticName, "texture_not_found:${command.imageSourceId}")
+        return GPUImageFilterDispatchResult(rendered = false)
+    }
+    if (command.transform.type != GPUTransformType.Identity) {
+        diagnostics.fatal(
+            "refuse:${command.diagnosticName}",
+            command.diagnosticName,
+            "unsupported_transform:${command.transform.type.name}",
+        )
+        return GPUImageFilterDispatchResult(rendered = false)
+    }
+    val localDst = GPURect(
+        left = command.dst.left - plan.outputBounds.left,
+        top = command.dst.top - plan.outputBounds.top,
+        right = command.dst.right - plan.outputBounds.left,
+        bottom = command.dst.bottom - plan.outputBounds.top,
     )
     val fatalBeforeSource = diagnostics.fatalCount
     encodeOffscreenTexture(sourceLabel, transparent) {
-        dispatchImageRect(
-            cmd = localSourceCommand,
-            textureCache = textureCache,
-            dispatched = dispatched,
-            diagnostics = diagnostics,
-            surfaceWidth = outputWidth,
-            surfaceHeight = outputHeight,
-            config = config,
+        textureDimensionsRefusalReasonOrNull(command.pixelsWidth, command.pixelsHeight)?.let { reason ->
+            diagnostics.fatal("refuse:${command.diagnosticName}", command.diagnosticName, reason)
+            return@encodeOffscreenTexture
+        }
+        // IMAGE_TEXTURE_WGSL computes UV from localDst. Covering the whole local
+        // target deliberately sends the halo outside [0, 1]; the native image
+        // sampler is ClampToEdge, so the source edge pixels fill that halo.
+        drawFullscreenTextureUniformPass(
+            wgsl = IMAGE_TEXTURE_WGSL,
+            colorFormat = colorFormat,
+            textureRgba = pixels,
+            textureWidth = command.pixelsWidth,
+            textureHeight = command.pixelsHeight,
+            textureFormat = "rgba8unorm",
+            draws = listOf(
+                GPUBackendRawUniformDraw(
+                    uniformBytes = imageTextureUniformBytes(command, localDst),
+                    scissorX = 0,
+                    scissorY = 0,
+                    scissorWidth = outputWidth,
+                    scissorHeight = outputHeight,
+                ),
+            ),
         )
     }
     if (diagnostics.fatalCount != fatalBeforeSource) return GPUImageFilterDispatchResult(rendered = false)
+    dispatched.add(command.commandId.toString())
 
     val fullLocalDraw = GPUBackendRawUniformDraw(
         uniformBytes = ByteArray(16),
@@ -143,3 +164,25 @@ private fun filteredImageCompositeUniformBytes(
     putFloat(0f)
     putFloat(0f)
 }.array()
+
+private fun imageTextureUniformBytes(
+    command: NormalizedDrawCommand.DrawImageRect,
+    dst: GPURect,
+): ByteArray {
+    val imageWidth = command.pixelsWidth.toFloat().coerceAtLeast(1f)
+    val imageHeight = command.pixelsHeight.toFloat().coerceAtLeast(1f)
+    val uvScaleX = (command.src.right - command.src.left) / imageWidth
+    val uvScaleY = (command.src.bottom - command.src.top) / imageHeight
+    val uvOffsetX = command.src.left / imageWidth
+    val uvOffsetY = command.src.top / imageHeight
+    val material = command.material as? GPUMaterialDescriptor.ImageDraw
+    return ByteBuffer.allocate(48).order(ByteOrder.LITTLE_ENDIAN).apply {
+        putFloat(dst.left).putFloat(dst.top).putFloat(dst.right).putFloat(dst.bottom)
+        putFloat(uvScaleX).putFloat(uvScaleY)
+        putFloat(uvOffsetX).putFloat(uvOffsetY)
+        putFloat(material?.tintR ?: 1f)
+        putFloat(material?.tintG ?: 1f)
+        putFloat(material?.tintB ?: 1f)
+        putFloat(material?.tintA ?: 1f)
+    }.array()
+}
