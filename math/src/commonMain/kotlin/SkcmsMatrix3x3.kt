@@ -17,6 +17,12 @@ public class SkcmsMatrix3x3(public val vals: Array<FloatArray>) {
 
     public operator fun get(row: Int, col: Int): Float = vals[row][col]
 
+    public fun copy(): SkcmsMatrix3x3 = of(
+        vals[0][0], vals[0][1], vals[0][2],
+        vals[1][0], vals[1][1], vals[1][2],
+        vals[2][0], vals[2][1], vals[2][2],
+    )
+
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other !is SkcmsMatrix3x3) return false

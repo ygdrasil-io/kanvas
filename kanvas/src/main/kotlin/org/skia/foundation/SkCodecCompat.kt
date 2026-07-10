@@ -127,7 +127,7 @@ public enum class SkColorSpaceProfileStatus {
 
 public class SkColorSpace private constructor(
     public val transferFn: SkcmsTransferFunction,
-    public val toXYZD50: SkcmsMatrix3x3,
+    toXYZD50: SkcmsMatrix3x3,
     public val colorProfile: ColorProfile,
     originalIccBytes: ByteArray?,
     private val srgb: Boolean,
@@ -137,8 +137,10 @@ public class SkColorSpace private constructor(
     public val profileRefusalCode: String?,
 ) {
     private val originalIccBytes: ByteArray? = originalIccBytes?.copyOf()
+    private val toXYZD50Snapshot: SkcmsMatrix3x3 = toXYZD50.copy()
 
     public val iccProfileBytes: ByteArray? get() = originalIccBytes?.copyOf()
+    public val toXYZD50: SkcmsMatrix3x3 get() = toXYZD50Snapshot.copy()
     public fun isSRGB(): Boolean = srgb
     public fun gammaIsLinear(): Boolean = linear
     public fun gammaCloseToSRGB(): Boolean = srgbTransfer
