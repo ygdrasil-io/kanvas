@@ -196,9 +196,12 @@ class KanvasCodecColorSpaceTest {
     @Test
     fun `nearby unknown gamut is refused instead of retagged as sRGB`() {
         val unknownGamut = SkNamedGamut.kSRGB.copy().also {
-            it.vals[0][0] += 64f / 65_536f
+            for (row in 0 until 3) {
+                it.vals[row][0] += 3f / 65_536f
+                it.vals[row][1] -= 3f / 65_536f
+            }
         }
-        val source = requireNotNull(SkColorSpace.makeRGB(SkNamedTransferFn.kSRGB, unknownGamut))
+        val source = serializedColorSpace(SkNamedTransferFn.kSRGB, unknownGamut)
 
         val failure = assertThrows<IllegalArgumentException> {
             imageInfo(source).toKanvasImageInfo()

@@ -21,9 +21,11 @@ import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkEncodedImageFormat
 import org.skia.foundation.SkEncodedOrigin
+import org.skia.foundation.SkICC
 import org.skia.foundation.SkImageInfo
 import org.skia.foundation.skcms.SkNamedGamut
 import org.skia.foundation.skcms.SkNamedTransferFn
+import org.skia.foundation.skcms.skcmsParse
 import kotlin.math.abs
 
 public fun Codec.getKanvasInfo(): ImageInfo = getInfo().toKanvasImageInfo()
@@ -172,14 +174,31 @@ private val Gamut.displayName: String
         Gamut.REC2020 -> "Rec.2020"
     }
 
-private val NAMED_GAMUTS: List<Pair<SkcmsMatrix3x3, Gamut>> = listOf(
-    SkNamedGamut.kSRGB to Gamut.SRGB,
-    SkNamedGamut.kDisplayP3 to Gamut.DISPLAY_P3,
-    SkNamedGamut.kRec2020 to Gamut.REC2020,
-)
+private val NAMED_GAMUTS: List<Pair<List<SkcmsMatrix3x3>, Gamut>> by lazy {
+    listOf(
+        allowedGamutMatrices(SkNamedGamut.kSRGB) to Gamut.SRGB,
+        allowedGamutMatrices(SkNamedGamut.kDisplayP3) to Gamut.DISPLAY_P3,
+        allowedGamutMatrices(SkNamedGamut.kRec2020) to Gamut.REC2020,
+    )
+}
 
 private fun SkcmsMatrix3x3.classifyNamedGamut(): Gamut? =
-    NAMED_GAMUTS.firstOrNull { (matrix, _) -> isNear(matrix, ICC_GAMUT_TOLERANCE) }?.second
+    NAMED_GAMUTS.firstOrNull { (matrices, _) ->
+        matrices.any { matrix -> isNear(matrix, GAMUT_CLASSIFICATION_TOLERANCE) }
+    }?.second
+
+private fun allowedGamutMatrices(canonical: SkcmsMatrix3x3): List<SkcmsMatrix3x3> = listOf(
+    canonical,
+    serializedGamutMatrix(SkNamedTransferFn.kSRGB, canonical),
+    serializedGamutMatrix(SkNamedTransferFn.kLinear, canonical),
+)
+
+private fun serializedGamutMatrix(
+    transferFunction: SkcmsTransferFunction,
+    gamut: SkcmsMatrix3x3,
+): SkcmsMatrix3x3 = requireNotNull(
+    SkColorSpace.make(requireNotNull(skcmsParse(SkICC.WriteToICC(transferFunction, gamut)))),
+).toXYZD50
 
 private fun SkcmsMatrix3x3.isNear(other: SkcmsMatrix3x3, tolerance: Float): Boolean {
     for (row in 0 until 3) for (column in 0 until 3) {
@@ -198,6 +217,5 @@ private fun SkcmsTransferFunction.isNear(other: SkcmsTransferFunction): Boolean 
     f to other.f,
 ).all { (left, right) -> abs(left - right) <= TRANSFER_FUNCTION_TOLERANCE }
 
-// Matrix/TRC ICC round-trips move supported Rec.2020 matrices by about 20 s15Fixed16 steps.
-private const val ICC_GAMUT_TOLERANCE: Float = 24f / 65_536f
+private const val GAMUT_CLASSIFICATION_TOLERANCE: Float = 2f / 65_536f
 private const val TRANSFER_FUNCTION_TOLERANCE: Float = 2f / 65_536f
