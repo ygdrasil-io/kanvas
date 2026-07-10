@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.surface.gpu
 
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRawUniformDraw
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.picture.PictureRecorder
@@ -242,6 +243,30 @@ class GPUSaveLayerCompositeRegressionTest {
         assertPixelNear(result.pixels, x = 1, y = 1, expected = white, tolerance = 0)
         assertPixelNear(result.pixels, x = 3, y = 3, expected = sourceOverSrgb(translucentRed, white), tolerance = 2)
         assertEquals(0, result.diagnostics.fatalCount)
+    }
+
+    @Test
+    fun `bounded saveLayer intersects every child raw draw scissor before encoding`() {
+        val childDraw = GPUBackendRawUniformDraw(
+            uniformBytes = ByteArray(16),
+            scissorX = 1,
+            scissorY = 1,
+            scissorWidth = 6,
+            scissorHeight = 6,
+        )
+
+        val clipped = childDraw.intersectLayerScissor(
+            layerX = 2,
+            layerY = 3,
+            layerWidth = 3,
+            layerHeight = 2,
+        )
+
+        requireNotNull(clipped)
+        assertEquals(2, clipped.scissorX)
+        assertEquals(3, clipped.scissorY)
+        assertEquals(3, clipped.scissorWidth)
+        assertEquals(2, clipped.scissorHeight)
     }
 
     @Test
