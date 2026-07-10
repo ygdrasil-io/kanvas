@@ -5,6 +5,7 @@ import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.geometry.FillType
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.geometry.PathVerb
+import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
 import org.graphiks.kanvas.gpu.renderer.commands.GPUImageFilterPlan
@@ -95,7 +96,7 @@ internal fun renderViaGpu(
         )
         target.use { t ->
             val texFormat = config.gpuColorFormat.gpuLabel
-            val sceneLabel = t.createOffscreenTexture(
+            var sceneLabel = t.createOffscreenTexture(
                 GPUBackendOffscreenTexture(label = "kanvas:scene", width = width, height = height, format = texFormat),
             )
             val srcLabel = t.createOffscreenTexture(
@@ -105,7 +106,11 @@ internal fun renderViaGpu(
                 GPUBackendOffscreenTexture(label = "kanvas:snap", width = width, height = height, format = texFormat),
             )
 
+            data class SceneTargetFrame(val label: String, val hasContent: Boolean)
+
             var sceneHasContent = false
+            val layerStack = java.util.ArrayDeque<SceneTargetFrame>()
+            var layerOrdinal = 0
             val clearTransparent = GPUClearColor(0.0, 0.0, 0.0, 0.0)
             fun sceneClear() = if (sceneHasContent) null else clearTransparent
 
@@ -130,7 +135,7 @@ internal fun renderViaGpu(
                 }
                 if (sceneHasContent) {
                     // 1a. Snapshot existing scene -> snap
-                    t.encodeOffscreenTexture(snapLabel, null) {
+                    t.encodeOffscreenTexture(snapLabel, clearTransparent) {
                         drawCompositePass(
                             wgsl = COPY_WGSL,
                             colorFormat = texFormat,
@@ -157,7 +162,10 @@ internal fun renderViaGpu(
                 val blendIdx = if (blendMode != null) blendModeIndex(blendMode) else 0
                 val bb = java.nio.ByteBuffer.allocate(16).order(java.nio.ByteOrder.nativeOrder())
                 bb.putInt(blendIdx)
-                t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
+                // The shader already returns the complete source/destination result. Start from
+                // transparent so the fixed-function SrcOver state does not compose that result a
+                // second time with the pre-blend scene.
+                t.encodeOffscreenTexture(sceneLabel, clearTransparent) {
                     drawBlendPass(
                         wgsl = BLEND_FORMULA_WGSL,
                         colorFormat = texFormat,
@@ -518,27 +526,79 @@ internal fun renderViaGpu(
                 }
             }
 
-            var suppressedBackdropLayerDepth = 0
+            var suppressedLayerDepth = 0
+            val trivialLayerPaint = Paint()
             for (op in ops) {
                 val cmdId = GPUDrawCommandID(dispatched.size)
                 if (op is DisplayOp.BeginLayer) {
-                    if (suppressedBackdropLayerDepth > 0) {
-                        suppressedBackdropLayerDepth++
-                    } else if (op.rec.backdrop != null) {
+                    if (suppressedLayerDepth > 0) {
+                        suppressedLayerDepth++
+                        continue
+                    }
+                    val refusalReason = when {
+                        op.rec.backdrop != null -> "unsupported.layer.backdrop_filter"
+                        op.rec.bounds != null -> "unsupported.layer.bounds"
+                        op.rec.paint != null && op.rec.paint != trivialLayerPaint -> "unsupported.layer.paint"
+                        else -> null
+                    }
+                    if (refusalReason != null) {
                         diagnostics.fatal(
                             "refuse:saveLayer:${cmdId.value}",
                             "saveLayer",
-                            "unsupported.layer.backdrop_filter",
+                            refusalReason,
                         )
-                        suppressedBackdropLayerDepth = 1
+                        suppressedLayerDepth = 1
+                    } else {
+                        layerStack.addLast(SceneTargetFrame(sceneLabel, sceneHasContent))
+                        sceneLabel = t.createOffscreenTexture(
+                            GPUBackendOffscreenTexture(
+                                label = "kanvas:saveLayer:${layerOrdinal++}",
+                                width = width,
+                                height = height,
+                                format = texFormat,
+                            ),
+                        )
+                        sceneHasContent = false
                     }
                     continue
                 }
                 if (op is DisplayOp.EndLayer) {
-                    if (suppressedBackdropLayerDepth > 0) suppressedBackdropLayerDepth--
+                    if (suppressedLayerDepth > 0) {
+                        suppressedLayerDepth--
+                    } else if (layerStack.isEmpty()) {
+                        diagnostics.fatal(
+                            "refuse:saveLayer:${cmdId.value}",
+                            "saveLayer",
+                            "unsupported.layer.unbalanced_end",
+                        )
+                    } else {
+                        val childLabel = sceneLabel
+                        val childHasContent = sceneHasContent
+                        val parent = layerStack.removeLast()
+                        sceneLabel = parent.label
+                        sceneHasContent = parent.hasContent
+                        if (childHasContent) {
+                            t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
+                                drawCompositePass(
+                                    wgsl = COPY_WGSL,
+                                    colorFormat = texFormat,
+                                    textureLabel = childLabel,
+                                    draws = listOf(
+                                        GPUBackendRawUniformDraw(
+                                            uniformBytes = ByteArray(16),
+                                            scissorX = 0, scissorY = 0,
+                                            scissorWidth = width, scissorHeight = height,
+                                        ),
+                                    ),
+                                    blendMode = GPUBlendMode.SRC_OVER,
+                                )
+                            }
+                            sceneHasContent = true
+                        }
+                    }
                     continue
                 }
-                if (suppressedBackdropLayerDepth > 0) continue
+                if (suppressedLayerDepth > 0) continue
                 when (op) {
                     is DisplayOp.DrawRect -> {
                         if (op.paint.isStroke()) {
@@ -844,6 +904,14 @@ internal fun renderViaGpu(
                             }
                         }
                         expand(op.picture, op.transform)
+                        if (expanded.any { it is DisplayOp.BeginLayer || it is DisplayOp.EndLayer }) {
+                            diagnostics.fatal(
+                                "refuse:drawPicture:${cmdId.value}",
+                                "drawPicture",
+                                "unsupported.picture.save_layer",
+                            )
+                            continue
+                        }
                         for (nestedOp in expanded) {
                             val nestedCmdId = GPUDrawCommandID(dispatched.size)
                             when (nestedOp) {
@@ -1301,6 +1369,24 @@ internal fun renderViaGpu(
                     is DisplayOp.Annotation -> { /* no visual output */ }
                     is DisplayOp.FlushAndSnapshot -> { /* deferred to render-backend; no-op in CPU path */ }
                 }
+            }
+
+            if (suppressedLayerDepth > 0) {
+                diagnostics.fatal(
+                    "refuse:saveLayer:suppressed-unbalanced",
+                    "saveLayer",
+                    "unsupported.layer.unbalanced_begin",
+                )
+            }
+            while (layerStack.isNotEmpty()) {
+                diagnostics.fatal(
+                    "refuse:saveLayer:unbalanced:${layerStack.size}",
+                    "saveLayer",
+                    "unsupported.layer.unbalanced_begin",
+                )
+                val parent = layerStack.removeLast()
+                sceneLabel = parent.label
+                sceneHasContent = parent.hasContent
             }
 
             // Composite final: scene -> main target for readback
