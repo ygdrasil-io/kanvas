@@ -296,12 +296,23 @@ public class PngCodec private constructor(
                 is PngContainerParseResult.Success -> result.container
                 is PngContainerParseResult.Failure -> return PngCodecOpenResult.Failure(result.diagnostic)
             }
-            container.metadataDiagnostics.firstOrNull()?.let { diagnostic ->
-                return PngCodecOpenResult.Failure(diagnostic)
-            }
-
             val metadata = PngMetadataParser.parse(data, container, PngMetadataLimits.Default)
-            val colors = resolveColorProfiles(data, metadata)
+            val activeColorSignals = when {
+                metadata.cICP is PngMetadataValue.Resolved<PngCicpMetadata> -> setOf("cICP")
+                metadata.iCCP is PngMetadataValue.Resolved<PngIccProfileMetadata> -> setOf("iCCP")
+                metadata.sRGB is PngMetadataValue.Resolved<PngSrgbMetadata> -> setOf("sRGB")
+                metadata.cHRM is PngMetadataValue.Resolved<PngChromaticitiesMetadata> &&
+                    metadata.gAMA is PngMetadataValue.Resolved<PngGammaMetadata> -> setOf("cHRM", "gAMA")
+                else -> emptySet()
+            }
+            container.metadataDiagnostics.firstOrNull { diagnostic ->
+                diagnostic.chunkType == "tRNS" || diagnostic.chunkType in activeColorSignals
+            }?.let { diagnostic -> return PngCodecOpenResult.Failure(diagnostic) }
+
+            val structurallyRefusedColorSignals = container.metadataDiagnostics
+                .mapNotNull(PngDiagnostic::chunkType)
+                .filterTo(HashSet()) { it in COLOR_PROFILE_CHUNK_TYPES }
+            val colors = resolveColorProfiles(data, metadata, structurallyRefusedColorSignals)
             val png = parse(data, container, colors) ?: return PngCodecOpenResult.Failure(
                 diagnostic = metadata.diagnostics.firstOrNull() ?: PngDiagnostic(
                     code = "png.codec.decode.unsupported",
@@ -515,9 +526,17 @@ public class PngCodec private constructor(
             }
         }
 
-        private fun resolveColorProfiles(data: ByteArray, metadata: PngMetadata): ColorResolution {
-            val embeddedIcc = (metadata.iCCP as? PngMetadataValue.Resolved<PngIccProfileMetadata>)
-                ?.let { parseEmbeddedIccp(data, it.record) }
+        private fun resolveColorProfiles(
+            data: ByteArray,
+            metadata: PngMetadata,
+            structurallyRefusedColorSignals: Set<String>,
+        ): ColorResolution {
+            val embeddedIcc = if ("iCCP" in structurallyRefusedColorSignals) {
+                null
+            } else {
+                (metadata.iCCP as? PngMetadataValue.Resolved<PngIccProfileMetadata>)
+                    ?.let { parseEmbeddedIccp(data, it.record) }
+            }
             val cicp = metadata.cICP as? PngMetadataValue.Resolved<PngCicpMetadata>
             if (cicp != null) return resolveCicpProfile(cicp, embeddedIcc)
 
@@ -742,6 +761,7 @@ public class PngKotlinDecoderProvider : CodecDecoderProvider {
 private val PNG_SIGNATURE = byteArrayOf(
     0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
 )
+private val COLOR_PROFILE_CHUNK_TYPES: Set<String> = setOf("cICP", "iCCP", "sRGB", "cHRM", "gAMA")
 private const val COLOR_GRAYSCALE: Int = 0
 private const val COLOR_RGB: Int = 2
 private const val COLOR_PALETTE: Int = 3

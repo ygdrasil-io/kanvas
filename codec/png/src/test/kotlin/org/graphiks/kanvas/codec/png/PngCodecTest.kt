@@ -1003,6 +1003,41 @@ class PngCodecTest {
     }
 
     @Test
+    fun `cICP remains active when lower priority iCCP is structurally refused`() {
+        val iccp = iccpChunkData(
+            "display-p3",
+            profileBytes = SkICC.WriteToICC(SkNamedTransferFn.kSRGB, SkNamedGamut.kDisplayP3),
+        )
+        val cases = listOf(
+            "png.metadata.iCCP.duplicate" to pngFromChunks(
+                "IHDR" to ihdr(width = 1, height = 1, bitDepth = 8, colorType = 2),
+                "cICP" to byteArrayOf(9, 16, 0, 1),
+                "iCCP" to iccp,
+                "iCCP" to iccp,
+                "IDAT" to deflate(byteArrayOf(0, 0x10, 0x20, 0x30)),
+                "IEND" to ByteArray(0),
+            ),
+            "png.metadata.iCCP.order" to pngFromChunks(
+                "IHDR" to ihdr(width = 1, height = 1, bitDepth = 8, colorType = 2),
+                "cICP" to byteArrayOf(9, 16, 0, 1),
+                "IDAT" to deflate(byteArrayOf(0, 0x10, 0x20, 0x30)),
+                "iCCP" to iccp,
+                "IEND" to ByteArray(0),
+            ),
+        )
+
+        for ((diagnosticCode, data) in cases) {
+            val opened = PngCodec.Decoder.open(data)
+
+            assertTrue(opened is PngCodecOpenResult.Success, diagnosticCode)
+            val codec = (opened as PngCodecOpenResult.Success).codec
+            assertTrue(codec.getInfo().colorSpace.colorProfile.isHdr, diagnosticCode)
+            assertNull(codec.getICCProfile(), diagnosticCode)
+            assertTrue(codec.diagnostics.any { it.code == diagnosticCode }, diagnosticCode)
+        }
+    }
+
+    @Test
     fun `cICP narrow range is explicitly unsupported while samples remain untransformed`() {
         val codec = PngCodec.Decoder.make(
             pngFromChunks(
