@@ -225,25 +225,40 @@ class GPUSaveLayerCompositeRegressionTest {
     }
 
     @Test
-    fun `bounded saveLayer reports a stable refusal instead of flattening its children`() {
+    fun `bounded saveLayer clips child and composite to device bounds`() {
         requireWebGpu()
 
         val surface = Surface(width = 8, height = 8)
         surface.canvas {
             drawRect(Rect(0f, 0f, 8f, 8f), Paint(color = white.toColor(), antiAlias = false))
-            saveLayer(Rect(1f, 1f, 7f, 7f))
-            drawRect(Rect(1f, 1f, 7f, 7f), Paint(color = translucentRed.toColor(), antiAlias = false))
+            saveLayer(Rect(2f, 2f, 6f, 6f))
+            drawRect(Rect(0f, 0f, 8f, 8f), Paint(color = translucentRed.toColor(), antiAlias = false))
             restore()
         }
 
         val result = surface.render()
 
-        assertPixelNear(result.pixels, x = 2, y = 2, expected = white, tolerance = 0)
-        assertEquals(1, result.diagnostics.fatalCount)
-        assertEquals(
-            "unsupported.layer.bounds",
-            result.diagnostics.entries.single { it.level == DiagnosticLevel.FATAL }.reason,
-        )
+        assertPixelNear(result.pixels, x = 1, y = 1, expected = white, tolerance = 0)
+        assertPixelNear(result.pixels, x = 3, y = 3, expected = sourceOverSrgb(translucentRed, white), tolerance = 2)
+        assertEquals(0, result.diagnostics.fatalCount)
+    }
+
+    @Test
+    fun `empty bounded saveLayer leaves parent untouched`() {
+        requireWebGpu()
+
+        val surface = Surface(width = 8, height = 8)
+        surface.canvas {
+            drawCheckerboardRoot()
+            saveLayer(Rect(20f, 20f, 21f, 21f))
+            drawRect(Rect(0f, 0f, 8f, 8f), Paint(color = translucentRed.toColor(), antiAlias = false))
+            restore()
+        }
+
+        val result = surface.render()
+
+        assertCheckerboard(result.pixels)
+        assertEquals(0, result.diagnostics.fatalCount)
     }
 
     private fun org.graphiks.kanvas.canvas.Canvas.drawCheckerboardRoot() {
@@ -257,6 +272,13 @@ class GPUSaveLayerCompositeRegressionTest {
             Paint(color = checkerGray.toColor(), antiAlias = false),
         )
         drawRect(Rect(4f, 4f, 8f, 8f), Paint(color = white.toColor(), antiAlias = false))
+    }
+
+    private fun assertCheckerboard(pixels: UByteArray) {
+        assertPixelNear(pixels, x = 0, y = 0, expected = white, tolerance = 0)
+        assertPixelNear(pixels, x = 6, y = 0, expected = checkerGray, tolerance = 0)
+        assertPixelNear(pixels, x = 0, y = 6, expected = checkerGray, tolerance = 0)
+        assertPixelNear(pixels, x = 6, y = 6, expected = white, tolerance = 0)
     }
 
     private fun requireWebGpu() {

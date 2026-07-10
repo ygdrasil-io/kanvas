@@ -2,6 +2,7 @@ package org.graphiks.kanvas.surface.gpu
 
 import org.graphiks.kanvas.canvas.DisplayListBuffer
 import org.graphiks.kanvas.canvas.DisplayOp
+import org.graphiks.kanvas.canvas.SaveLayerRec
 import org.graphiks.kanvas.geometry.FillType
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.geometry.PathVerb
@@ -53,6 +54,7 @@ import kotlin.math.acos
 import kotlin.math.atan2
 import kotlin.math.ceil
 import kotlin.math.cos
+import kotlin.math.floor
 import kotlin.math.sin
 import kotlin.math.sqrt
 
@@ -70,6 +72,31 @@ internal fun selectPathVerticesForCommand(
     triangulated: List<Point>,
 ): List<Point> =
     if (isStroke) flattened else triangulated
+
+private data class LayerBounds(val x: Int, val y: Int, val width: Int, val height: Int)
+
+private sealed interface LayerPlan {
+    data class Supported(val bounds: LayerBounds?, val composite: LayerCompositePlan) : LayerPlan
+    data class Refused(val reason: String) : LayerPlan
+}
+
+private data class LayerCompositePlan(
+    val opacity: Float = 1f,
+    val blendMode: GPUBlendMode = GPUBlendMode.SRC_OVER,
+    val backdrop: BackdropPlan? = null,
+)
+
+private data class BackdropPlan(
+    val sourceLabel: String,
+    val filteredLabel: String,
+    val bounds: LayerBounds,
+)
+
+private data class SceneTargetFrame(
+    val label: String,
+    val hasContent: Boolean,
+    val plan: LayerPlan.Supported,
+)
 
 internal fun renderViaGpu(
     buffer: DisplayListBuffer,
@@ -106,13 +133,38 @@ internal fun renderViaGpu(
                 GPUBackendOffscreenTexture(label = "kanvas:snap", width = width, height = height, format = texFormat),
             )
 
-            data class SceneTargetFrame(val label: String, val hasContent: Boolean)
-
             var sceneHasContent = false
+            val rootLayerPlan = LayerPlan.Supported(bounds = null, composite = LayerCompositePlan())
+            var scenePlan = rootLayerPlan
             val layerStack = java.util.ArrayDeque<SceneTargetFrame>()
             var layerOrdinal = 0
             val clearTransparent = GPUClearColor(0.0, 0.0, 0.0, 0.0)
+            val trivialLayerPaint = Paint()
             fun sceneClear() = if (sceneHasContent) null else clearTransparent
+
+            fun classifyLayerRequest(rec: SaveLayerRec): LayerPlan {
+                if (rec.backdrop != null) return LayerPlan.Refused("unsupported.layer.backdrop_filter")
+                if (rec.paint != null && rec.paint != trivialLayerPaint) return LayerPlan.Refused("unsupported.layer.paint")
+
+                val bounds = rec.bounds ?: return LayerPlan.Supported(null, LayerCompositePlan())
+                if (!bounds.left.isFinite() || !bounds.top.isFinite() ||
+                    !bounds.right.isFinite() || !bounds.bottom.isFinite()
+                ) {
+                    return LayerPlan.Refused("unsupported.layer.bounds.non_finite")
+                }
+
+                val x = floor(bounds.left).toInt().coerceIn(0, width)
+                val y = floor(bounds.top).toInt().coerceIn(0, height)
+                val endX = ceil(bounds.right).toInt().coerceIn(x, width)
+                val endY = ceil(bounds.bottom).toInt().coerceIn(y, height)
+                return LayerPlan.Supported(
+                    bounds = LayerBounds(x, y, endX - x, endY - y),
+                    composite = LayerCompositePlan(),
+                )
+            }
+
+            fun layerScissor(plan: LayerPlan.Supported): LayerBounds =
+                plan.bounds ?: LayerBounds(x = 0, y = 0, width = width, height = height)
 
             fun blendModeIndex(mode: GPUBlendMode): Int = when (mode) {
                 GPUBlendMode.MULTIPLY -> 0
@@ -527,7 +579,6 @@ internal fun renderViaGpu(
             }
 
             var suppressedLayerDepth = 0
-            val trivialLayerPaint = Paint()
             for (op in ops) {
                 val cmdId = GPUDrawCommandID(dispatched.size)
                 if (op is DisplayOp.BeginLayer) {
@@ -535,30 +586,28 @@ internal fun renderViaGpu(
                         suppressedLayerDepth++
                         continue
                     }
-                    val refusalReason = when {
-                        op.rec.backdrop != null -> "unsupported.layer.backdrop_filter"
-                        op.rec.bounds != null -> "unsupported.layer.bounds"
-                        op.rec.paint != null && op.rec.paint != trivialLayerPaint -> "unsupported.layer.paint"
-                        else -> null
-                    }
-                    if (refusalReason != null) {
-                        diagnostics.fatal(
-                            "refuse:saveLayer:${cmdId.value}",
-                            "saveLayer",
-                            refusalReason,
-                        )
-                        suppressedLayerDepth = 1
-                    } else {
-                        layerStack.addLast(SceneTargetFrame(sceneLabel, sceneHasContent))
-                        sceneLabel = t.createOffscreenTexture(
-                            GPUBackendOffscreenTexture(
-                                label = "kanvas:saveLayer:${layerOrdinal++}",
-                                width = width,
-                                height = height,
-                                format = texFormat,
-                            ),
-                        )
-                        sceneHasContent = false
+                    when (val plan = classifyLayerRequest(op.rec)) {
+                        is LayerPlan.Refused -> {
+                            diagnostics.fatal(
+                                "refuse:saveLayer:${cmdId.value}",
+                                "saveLayer",
+                                plan.reason,
+                            )
+                            suppressedLayerDepth = 1
+                        }
+                        is LayerPlan.Supported -> {
+                            layerStack.addLast(SceneTargetFrame(sceneLabel, sceneHasContent, scenePlan))
+                            sceneLabel = t.createOffscreenTexture(
+                                GPUBackendOffscreenTexture(
+                                    label = "kanvas:saveLayer:${layerOrdinal++}",
+                                    width = width,
+                                    height = height,
+                                    format = texFormat,
+                                ),
+                            )
+                            sceneHasContent = false
+                            scenePlan = plan
+                        }
                     }
                     continue
                 }
@@ -574,10 +623,13 @@ internal fun renderViaGpu(
                     } else {
                         val childLabel = sceneLabel
                         val childHasContent = sceneHasContent
+                        val childPlan = scenePlan
                         val parent = layerStack.removeLast()
                         sceneLabel = parent.label
                         sceneHasContent = parent.hasContent
-                        if (childHasContent) {
+                        scenePlan = parent.plan
+                        val scissor = layerScissor(childPlan)
+                        if (childHasContent && scissor.width > 0 && scissor.height > 0) {
                             t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
                                 drawCompositePass(
                                     wgsl = COPY_WGSL,
@@ -586,11 +638,11 @@ internal fun renderViaGpu(
                                     draws = listOf(
                                         GPUBackendRawUniformDraw(
                                             uniformBytes = ByteArray(16),
-                                            scissorX = 0, scissorY = 0,
-                                            scissorWidth = width, scissorHeight = height,
+                                            scissorX = scissor.x, scissorY = scissor.y,
+                                            scissorWidth = scissor.width, scissorHeight = scissor.height,
                                         ),
                                     ),
-                                    blendMode = GPUBlendMode.SRC_OVER,
+                                    blendMode = childPlan.composite.blendMode,
                                 )
                             }
                             sceneHasContent = true
