@@ -9,6 +9,7 @@ import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 
 class ColorTransformContractTest {
 
@@ -210,6 +211,73 @@ class ColorTransformContractTest {
         transform.apply(pixel, 1)
 
         assertContentEquals(floatArrayOf(0f, 0f, 0f, 0f), pixel)
+    }
+
+    @Test
+    fun `premultiplied matrix pixels retain subnormal alpha colors`() {
+        val transform = ColorTransform.compile(
+            source = ColorProfiles.displayP3(),
+            destination = ColorProfiles.sRGB(),
+            alphaType = AlphaType.PREMULTIPLIED,
+        ).getOrThrow()
+        val alpha = Float.MIN_VALUE
+        val pixel = floatArrayOf(alpha, alpha, alpha, alpha)
+
+        transform.apply(pixel, 1)
+
+        assertContentEquals(floatArrayOf(alpha, alpha, alpha, alpha), pixel)
+    }
+
+    @Test
+    fun `premultiplied matrix pixels with nonfinite alpha store transparent black`() {
+        val transform = ColorTransform.compile(
+            source = ColorProfiles.displayP3(),
+            destination = ColorProfiles.sRGB(),
+            alphaType = AlphaType.PREMULTIPLIED,
+        ).getOrThrow()
+        listOf(
+            Float.fromBits(0x7fc00042),
+            Float.POSITIVE_INFINITY,
+            Float.NEGATIVE_INFINITY,
+        ).forEach { alpha ->
+            val pixel = floatArrayOf(0.25f, 0.1f, 0.05f, alpha)
+
+            transform.apply(pixel, 1)
+
+            assertContentEquals(floatArrayOf(0f, 0f, 0f), pixel.copyOfRange(0, 3))
+            assertEquals(alpha.toRawBits(), pixel[3].toRawBits())
+        }
+    }
+
+    @Test
+    fun `matrix plan retains copies of nonidentity matrices`() {
+        val sourceToXyzD50 = floatArrayOf(
+            0.5f, 0f, 0f,
+            0f, 0.5f, 0f,
+            0f, 0f, 0.5f,
+        )
+        val destinationFromXyzD50 = floatArrayOf(
+            1f, 0f, 0f,
+            0f, 1f, 0f,
+            0f, 0f, 1f,
+        )
+        val plan = MatrixColorTransform(
+            sourceToXyzD50,
+            destinationFromXyzD50,
+            ColorProfiles.sRGB().transferFunction!!,
+            ColorProfiles.sRGB().transferFunction!!,
+            AlphaType.UNPREMULTIPLIED,
+        )
+        sourceToXyzD50.fill(0f)
+        destinationFromXyzD50.fill(0f)
+        val pixel = floatArrayOf(0.5f, 0.2f, 0.1f, 0.7f)
+
+        plan.apply(pixel, 0)
+
+        assertTrue(pixel[0] > 0f)
+        assertTrue(pixel[1] > 0f)
+        assertTrue(pixel[2] > 0f)
+        assertEquals(0.7f, pixel[3], 0f)
     }
 
     @Test

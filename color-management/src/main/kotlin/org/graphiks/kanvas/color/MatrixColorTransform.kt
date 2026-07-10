@@ -24,17 +24,25 @@ internal class MatrixColorTransform(
 
     override fun apply(pixels: FloatArray, offset: Int) {
         val alpha = pixels[offset + ALPHA_OFFSET]
-        if (alphaType == AlphaType.PREMULTIPLIED && alpha == 0f) {
+        if (alphaType == AlphaType.PREMULTIPLIED && (!alpha.isFinite() || alpha == 0f)) {
             pixels[offset] = 0f
             pixels[offset + 1] = 0f
             pixels[offset + 2] = 0f
             return
         }
 
-        val unpremultiply = if (alphaType == AlphaType.PREMULTIPLIED) 1f / alpha else 1f
-        val sourceRed = decode(sourceTransferFunction, pixels[offset] * unpremultiply)
-        val sourceGreen = decode(sourceTransferFunction, pixels[offset + 1] * unpremultiply)
-        val sourceBlue = decode(sourceTransferFunction, pixels[offset + 2] * unpremultiply)
+        val sourceRed = decode(
+            sourceTransferFunction,
+            if (alphaType == AlphaType.PREMULTIPLIED) pixels[offset] / alpha else pixels[offset],
+        )
+        val sourceGreen = decode(
+            sourceTransferFunction,
+            if (alphaType == AlphaType.PREMULTIPLIED) pixels[offset + 1] / alpha else pixels[offset + 1],
+        )
+        val sourceBlue = decode(
+            sourceTransferFunction,
+            if (alphaType == AlphaType.PREMULTIPLIED) pixels[offset + 2] / alpha else pixels[offset + 2],
+        )
 
         val xyzX = sourceToXyzD50[0] * sourceRed + sourceToXyzD50[1] * sourceGreen + sourceToXyzD50[2] * sourceBlue
         val xyzY = sourceToXyzD50[3] * sourceRed + sourceToXyzD50[4] * sourceGreen + sourceToXyzD50[5] * sourceBlue
