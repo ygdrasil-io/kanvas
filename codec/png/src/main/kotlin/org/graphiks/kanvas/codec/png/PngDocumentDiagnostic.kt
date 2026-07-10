@@ -8,23 +8,21 @@ public sealed interface PngDocumentOpenResult {
     public data class Failure(public val diagnostic: PngDiagnostic) : PngDocumentOpenResult
 }
 
-public class PngDocumentSaveResult internal constructor(
-    bytes: ByteArray?,
+public class PngDocumentSaveResult private constructor(
+    private val savedOutputBytes: ByteArray?,
+    private val savedSourceRecovery: ByteArray?,
     public val report: PngSaveReport,
-    public val status: PngDocumentSaveStatus = PngDocumentSaveStatus.SAVED,
-    public val diagnostic: PngDiagnostic? = null,
-    sourceRecovery: ByteArray? = null,
+    public val status: PngDocumentSaveStatus,
+    public val diagnostic: PngDiagnostic?,
 ) {
-    private val savedOutputBytes: ByteArray? = bytes?.copyOf()
-    private val savedSourceRecovery: ByteArray? = sourceRecovery?.copyOf()
-
     init {
         require(
             when (status) {
                 PngDocumentSaveStatus.SAVED ->
                     savedOutputBytes != null && savedSourceRecovery == null && diagnostic == null
 
-                PngDocumentSaveStatus.REFUSED -> savedOutputBytes == null && diagnostic != null
+                PngDocumentSaveStatus.REFUSED ->
+                    savedOutputBytes == null && savedSourceRecovery != null && diagnostic != null
             },
         ) {
             "Saved PNG results own output bytes; refused results own no output and require a diagnostic"
@@ -42,6 +40,31 @@ public class PngDocumentSaveResult internal constructor(
 
     public val isSuccess: Boolean
         get() = status == PngDocumentSaveStatus.SAVED
+
+    internal fun referencesSourceRecoverySnapshot(snapshot: ByteArray): Boolean =
+        savedSourceRecovery === snapshot
+
+    internal companion object {
+        fun saved(bytes: ByteArray, report: PngSaveReport): PngDocumentSaveResult = PngDocumentSaveResult(
+            savedOutputBytes = bytes.copyOf(),
+            savedSourceRecovery = null,
+            report = report,
+            status = PngDocumentSaveStatus.SAVED,
+            diagnostic = null,
+        )
+
+        fun refused(
+            ownedSourceSnapshot: ByteArray,
+            report: PngSaveReport,
+            diagnostic: PngDiagnostic,
+        ): PngDocumentSaveResult = PngDocumentSaveResult(
+            savedOutputBytes = null,
+            savedSourceRecovery = ownedSourceSnapshot,
+            report = report,
+            status = PngDocumentSaveStatus.REFUSED,
+            diagnostic = diagnostic,
+        )
+    }
 }
 
 public class PngSaveOutputUnavailableException internal constructor() : IllegalStateException(

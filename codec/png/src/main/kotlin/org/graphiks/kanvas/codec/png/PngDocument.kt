@@ -60,7 +60,7 @@ public class PngDocument private constructor(
     }
 
     public fun save(): PngDocumentSaveResult = when (writePlan.impact) {
-        PngWriteImpact.NONE -> PngDocumentSaveResult(
+        PngWriteImpact.NONE -> PngDocumentSaveResult.saved(
             bytes = sourceBytes,
             report = PngSaveReport(),
         )
@@ -120,7 +120,7 @@ public class PngDocument private constructor(
         check(emittedReplacements.containsAll(writePlan.edits.filterValues { it is PngChunkEdit.Replacement }.keys)) {
             "Every PNG replacement must have a valid insertion anchor"
         }
-        return PngDocumentSaveResult(
+        return PngDocumentSaveResult.saved(
             bytes = output.toByteArray(),
             report = PngSaveReport(reportEntries),
         )
@@ -154,10 +154,7 @@ public class PngDocument private constructor(
     }
 
     private fun refuseCriticalSave(): PngDocumentSaveResult {
-        val reportEntries = logicalAncillaryChunks().map { (type, ordinal) ->
-            val (status, reason) = PngAncillaryCriticalPolicy.decision(type)
-            PngSaveReportEntry(type, ordinal, status, reason)
-        }.toMutableList()
+        val reportEntries = criticalAncillaryReportEntries()
         reportEntries += PngSaveReportEntry(
             chunkType = null,
             ordinal = null,
@@ -219,31 +216,44 @@ public class PngDocument private constructor(
                 reasonCode = diagnostic.code,
             ),
         ),
-    ): PngDocumentSaveResult = PngDocumentSaveResult(
-        bytes = null,
+    ): PngDocumentSaveResult = PngDocumentSaveResult.refused(
+        ownedSourceSnapshot = sourceBytes,
         report = PngSaveReport(reportEntries),
-        status = PngDocumentSaveStatus.REFUSED,
         diagnostic = diagnostic,
-        sourceRecovery = sourceBytes,
     )
 
-    private fun logicalAncillaryChunks(): List<Pair<String, Int?>> {
-        val logical = ArrayList<Pair<String, Int?>>()
+    private fun criticalAncillaryReportEntries(): MutableList<PngSaveReportEntry> {
+        val reportEntries = ArrayList<PngSaveReportEntry>()
         val emitted = HashSet<String>()
         for (record in chunks) {
             when (val edit = writePlan.edits[record.type]) {
                 is PngChunkEdit.Replacement -> if (emitted.add(record.type)) {
-                    logical += record.type to record.ordinal
+                    reportEntries += criticalPolicyEntry(record.type, record.ordinal)
                 }
 
-                PngChunkEdit.Removed -> Unit
-                null -> if (record.isAncillary) logical += record.type to record.ordinal
+                PngChunkEdit.Removed -> reportEntries += PngSaveReportEntry(
+                    chunkType = record.type,
+                    ordinal = record.ordinal,
+                    status = PngSaveEntryStatus.PLANNED_DROP,
+                    reasonCode = PngSaveReason.ANCILLARY_REMOVED,
+                )
+
+                null -> if (record.isAncillary) {
+                    reportEntries += criticalPolicyEntry(record.type, record.ordinal)
+                }
             }
         }
         for ((type, edit) in writePlan.edits) {
-            if (edit is PngChunkEdit.Replacement && emitted.add(type)) logical += type to null
+            if (edit is PngChunkEdit.Replacement && emitted.add(type)) {
+                reportEntries += criticalPolicyEntry(type, null)
+            }
         }
-        return logical
+        return reportEntries
+    }
+
+    private fun criticalPolicyEntry(type: String, ordinal: Int?): PngSaveReportEntry {
+        val (status, reason) = PngAncillaryCriticalPolicy.decision(type)
+        return PngSaveReportEntry(type, ordinal, status, reason)
     }
 
     private fun insertionAnchor(

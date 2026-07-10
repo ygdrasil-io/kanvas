@@ -188,6 +188,28 @@ class PngDocumentTest {
     }
 
     @Test
+    fun `critical refusal reports every explicitly planned removal ordinal`() {
+        val source = png(
+            "IHDR" to ihdr(),
+            "tEXt" to byteArrayOf(0x10),
+            "tEXt" to byteArrayOf(0x20),
+            "IDAT" to byteArrayOf(0x30),
+            "IEND" to ByteArray(0),
+        )
+
+        val saved = open(source)
+            .withoutChunks("tEXt")
+            .markPixelDataChanged()
+            .save()
+
+        val removals = saved.report.entries.filter { it.reasonCode == "png.ancillary.removed" }
+        assertEquals(setOf(1, 2), removals.mapNotNull { it.ordinal }.toSet())
+        assertTrue(removals.all { it.chunkType == "tEXt" && it.status == PngSaveEntryStatus.PLANNED_DROP })
+        assertEquals(PngDocumentSaveStatus.REFUSED, saved.status)
+        assertNull(saved.outputBytes)
+    }
+
+    @Test
     fun `preflights exact output byte and chunk limits before metadata emission`() {
         val source = png(
             "IHDR" to ihdr(),
@@ -249,6 +271,29 @@ class PngDocumentTest {
             PngContainerLimits.Default.copy(maxChunkCount = 4),
         ).withAncillaryChunk("vpAg", byteArrayOf(0x30)).save()
         assertEquals(PngDocumentSaveStatus.SAVED, replacementAtLimit.status)
+    }
+
+    @Test
+    fun `preflight refusal retains the owned source snapshot without an eager copy`() {
+        val source = png(
+            "IHDR" to ihdr(),
+            "IDAT" to byteArrayOf(0x20),
+            "IEND" to ByteArray(0),
+        )
+        val ownedSnapshot = source.copyOf()
+        val limits = PngContainerLimits.Default.copy(maxInputBytes = source.size.toLong() + 11L)
+        val opened = PngDocument.open(source, limits) { ownedSnapshot }
+        assertInstanceOf(PngDocumentOpenResult.Success::class.java, opened)
+        val document = (opened as PngDocumentOpenResult.Success).document
+
+        val refused = document.withAncillaryChunk("vpAg", ByteArray(0)).save()
+
+        assertEquals("png.output.limit", refused.diagnostic?.code)
+        assertTrue(refused.referencesSourceRecoverySnapshot(ownedSnapshot))
+        val publicRecovery = requireNotNull(refused.sourceRecovery)
+        assertFalse(publicRecovery === ownedSnapshot)
+        publicRecovery[0] = 0
+        assertArrayEquals(source, refused.sourceRecovery)
     }
 
     @Test
