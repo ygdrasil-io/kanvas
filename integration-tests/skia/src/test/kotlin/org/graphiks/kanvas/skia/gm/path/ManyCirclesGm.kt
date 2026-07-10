@@ -18,7 +18,7 @@ import org.graphiks.kanvas.types.Rect
 class ManyCirclesGm : SkiaGm {
     override val name = "manycircles"
     override val renderFamily = RenderFamily.PATH
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 800
     override val height = 600

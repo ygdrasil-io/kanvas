@@ -5,5 +5,6 @@ import org.graphiks.kanvas.skia.SkiaGm
 
 /** Non-anti-aliased variant of SimpleShapesGm for black-and-white shape rendering. */
 class SimpleShapesBwGm : SimpleShapesGm(antialias = false) {
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 80.0
 }

@@ -25,7 +25,7 @@ import org.graphiks.kanvas.types.Color
 class Skbug1719Gm : SkiaGm {
     override val name = "skbug1719"
     override val renderFamily = RenderFamily.CLIP
-    override val renderCost = RenderCost.TRIVIAL
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 300
     override val height = 100

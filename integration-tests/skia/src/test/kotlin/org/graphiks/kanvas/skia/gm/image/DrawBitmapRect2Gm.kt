@@ -89,5 +89,9 @@ open class DrawBitmapRect2Gm(private val variant: Variant) : SkiaGm {
     }
 }
 
-class DrawBitmapRect2FloatGm : DrawBitmapRect2Gm(DrawBitmapRect2Gm.Variant.FLOAT)
-class DrawBitmapRect2IntGm : DrawBitmapRect2Gm(DrawBitmapRect2Gm.Variant.INT)
+class DrawBitmapRect2FloatGm : DrawBitmapRect2Gm(DrawBitmapRect2Gm.Variant.FLOAT) {
+    override val renderCost = RenderCost.FAST
+}
+class DrawBitmapRect2IntGm : DrawBitmapRect2Gm(DrawBitmapRect2Gm.Variant.INT) {
+    override val renderCost = RenderCost.FAST
+}

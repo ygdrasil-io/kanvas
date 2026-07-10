@@ -250,7 +250,7 @@ class ConvexLineOnlyPathsGm : SkiaGm {
 class ConvexLineOnlyPathsStrokeAndFillGm : SkiaGm {
     override val name = "convex_lineonly_paths_stroke_and_fill"
     override val renderFamily = RenderFamily.PATH
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 512
     override val height = 512

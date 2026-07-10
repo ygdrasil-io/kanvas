@@ -22,7 +22,7 @@ import kotlin.random.Random
 open class SimpleShapesGm(private val antialias: Boolean = true) : SkiaGm {
     override val name: String get() = if (antialias) "simpleshapes" else "simpleshapes_bw"
     override val renderFamily = RenderFamily.PATH
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 500
     override val height = 500

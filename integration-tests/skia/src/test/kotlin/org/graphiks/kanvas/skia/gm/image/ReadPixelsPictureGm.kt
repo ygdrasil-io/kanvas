@@ -24,7 +24,7 @@ import org.graphiks.kanvas.types.Rect
 class ReadPixelsPictureGm : SkiaGm {
     override val name = "readpixelspicture"
     override val renderFamily = RenderFamily.IMAGE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.MEDIUM
     override val minSimilarity = 0.0
     override val width = 3 * kCellWidth
     override val height = 12 * kCellHeight

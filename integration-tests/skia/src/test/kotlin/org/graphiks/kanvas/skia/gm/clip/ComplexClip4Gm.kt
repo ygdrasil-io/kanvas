@@ -99,5 +99,9 @@ open class ComplexClip4Gm(
     }
 }
 
-class ComplexClip4BwGm : ComplexClip4Gm("complexclip4_bw", false)
-class ComplexClip4AaGm : ComplexClip4Gm("complexclip4_aa", true)
+class ComplexClip4BwGm : ComplexClip4Gm("complexclip4_bw", false) {
+    override val renderCost = RenderCost.FAST
+}
+class ComplexClip4AaGm : ComplexClip4Gm("complexclip4_aa", true) {
+    override val renderCost = RenderCost.FAST
+}

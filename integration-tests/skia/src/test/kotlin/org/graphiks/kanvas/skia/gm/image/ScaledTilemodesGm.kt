@@ -16,7 +16,7 @@ open class ScaledTilemodesGm(
 ) : SkiaGm {
     override val name = if (powerOfTwoSize) "scaled_tilemodes" else "scaled_tilemodes_npot"
     override val renderFamily = RenderFamily.IMAGE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 880
     override val height = 880
@@ -25,4 +25,6 @@ open class ScaledTilemodesGm(
     }
 }
 
-class ScaledTilemodesNpotGm : ScaledTilemodesGm(powerOfTwoSize = false)
+class ScaledTilemodesNpotGm : ScaledTilemodesGm(powerOfTwoSize = false) {
+    override val renderCost = RenderCost.FAST
+}

@@ -21,7 +21,7 @@ import org.graphiks.kanvas.types.Rect
 class ZeroLenStrokesGm : SkiaGm {
     override val name = "zeroPath"
     override val renderFamily = RenderFamily.PATH
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 92.4
     override val width = 400
     override val height = 800

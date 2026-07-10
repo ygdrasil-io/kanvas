@@ -32,7 +32,7 @@ abstract class ComplexClip2Gm(
     private val antiAlias: Boolean,
 ) : SkiaGm {
     override val renderFamily = RenderFamily.CLIP
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = kWidth
     override val height = kHeight

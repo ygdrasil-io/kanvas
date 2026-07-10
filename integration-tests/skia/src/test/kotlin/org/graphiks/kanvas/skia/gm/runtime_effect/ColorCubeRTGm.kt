@@ -26,7 +26,7 @@ import org.graphiks.kanvas.types.Rect
 class ColorCubeRTGm : SkiaGm {
     override val name = "color_cube_rt"
     override val renderFamily = RenderFamily.RUNTIME_EFFECT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 512
     override val height = 512

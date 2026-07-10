@@ -22,7 +22,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 class ShaderMaskFilterGm : SkiaGm {
     override val name = "shadermaskfilter_gradient"
     override val renderFamily = RenderFamily.COMPOSITE
-    override val renderCost = RenderCost.TRIVIAL
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 512
     override val height = 512

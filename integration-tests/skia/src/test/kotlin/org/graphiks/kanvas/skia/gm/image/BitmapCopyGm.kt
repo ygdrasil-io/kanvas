@@ -20,7 +20,7 @@ import org.graphiks.kanvas.types.Rect
 class BitmapCopyGm : SkiaGm {
     override val name = "bitmapcopy"
     override val renderFamily = RenderFamily.IMAGE
-    override val renderCost = RenderCost.SLOW
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 540
     override val height = 330

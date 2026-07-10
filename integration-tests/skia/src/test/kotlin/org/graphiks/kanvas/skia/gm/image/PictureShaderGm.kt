@@ -161,13 +161,16 @@ abstract class PictureShaderBaseGm(
 }
 
 class PictureShaderGm : PictureShaderBaseGm(50f, 100f, false, 1f) {
+    override val renderCost = RenderCost.FAST
     override val name = "pictureshader"
 }
 
 class PictureShaderLocalWrapperGm : PictureShaderBaseGm(50f, 100f, true, 1f) {
+    override val renderCost = RenderCost.FAST
     override val name = "pictureshader_localwrapper"
 }
 
 class PictureShaderAlphaGm : PictureShaderBaseGm(50f, 100f, false, 0.25f) {
+    override val renderCost = RenderCost.FAST
     override val name = "pictureshader_alpha"
 }

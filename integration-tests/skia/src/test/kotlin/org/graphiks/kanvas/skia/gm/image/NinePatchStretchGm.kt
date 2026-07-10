@@ -23,7 +23,7 @@ import org.graphiks.kanvas.types.Rect
 class NinePatchStretchGm : SkiaGm {
     override val name = "ninepatch-stretch"
     override val renderFamily = RenderFamily.IMAGE
-    override val renderCost = RenderCost.SLOW
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 760
     override val height = 800

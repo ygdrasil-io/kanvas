@@ -19,7 +19,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 class ZeroLineDashGm : SkiaGm {
     override val name = "zerolinedash"
     override val renderFamily = RenderFamily.PATH
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 80.0
     override val width = 256
     override val height = 256

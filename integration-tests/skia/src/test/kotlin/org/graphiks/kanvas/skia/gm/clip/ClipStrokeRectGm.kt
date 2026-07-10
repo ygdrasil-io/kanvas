@@ -24,7 +24,7 @@ import org.graphiks.kanvas.types.Rect
 class ClipStrokeRectGm : SkiaGm {
     override val name = "clip_strokerect"
     override val renderFamily = RenderFamily.CLIP
-    override val renderCost = RenderCost.TRIVIAL
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 71.8
     override val width = 200
     override val height = 400

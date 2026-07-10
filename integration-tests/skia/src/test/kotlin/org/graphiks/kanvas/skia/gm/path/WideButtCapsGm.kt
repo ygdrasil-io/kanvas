@@ -20,7 +20,7 @@ import org.graphiks.kanvas.types.Color
 class WideButtCapsGm : SkiaGm {
     override val name = "widebuttcaps"
     override val renderFamily = RenderFamily.PATH
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.MEDIUM
     override val minSimilarity = 26.3
     override val width = 120 * 4
     override val height = 120 * 3 + 140

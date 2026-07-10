@@ -20,7 +20,7 @@ import org.graphiks.kanvas.types.Rect
 class ThinRoundRectsGm : SkiaGm {
     override val name = "thinroundrects"
     override val renderFamily = RenderFamily.PATH
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 84.5
     override val width = 240
     override val height = 320

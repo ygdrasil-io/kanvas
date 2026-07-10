@@ -82,15 +82,37 @@ open class GiantBitmapGm(
     }
 }
 
-class GiantBitmapClampPointScale : GiantBitmapGm(TileMode.CLAMP, false, false)
+class GiantBitmapClampPointScale : GiantBitmapGm(TileMode.CLAMP, false, false) {
+    override val renderCost = RenderCost.FAST
+}
 class GiantBitmapRepeatPointScale : GiantBitmapGm(TileMode.REPEAT, false, false)
-class GiantBitmapMirrorPointScale : GiantBitmapGm(TileMode.MIRROR, false, false)
-class GiantBitmapClampBilerpScale : GiantBitmapGm(TileMode.CLAMP, true, false)
-class GiantBitmapRepeatBilerpScale : GiantBitmapGm(TileMode.REPEAT, true, false)
-class GiantBitmapMirrorBilerpScale : GiantBitmapGm(TileMode.MIRROR, true, false)
-class GiantBitmapClampPointRotate : GiantBitmapGm(TileMode.CLAMP, false, true)
-class GiantBitmapRepeatPointRotate : GiantBitmapGm(TileMode.REPEAT, false, true)
-class GiantBitmapMirrorPointRotate : GiantBitmapGm(TileMode.MIRROR, false, true)
-class GiantBitmapClampBilerpRotate : GiantBitmapGm(TileMode.CLAMP, true, true)
-class GiantBitmapRepeatBilerpRotate : GiantBitmapGm(TileMode.REPEAT, true, true)
-class GiantBitmapMirrorBilerpRotate : GiantBitmapGm(TileMode.MIRROR, true, true)
+class GiantBitmapMirrorPointScale : GiantBitmapGm(TileMode.MIRROR, false, false) {
+    override val renderCost = RenderCost.FAST
+}
+class GiantBitmapClampBilerpScale : GiantBitmapGm(TileMode.CLAMP, true, false) {
+    override val renderCost = RenderCost.FAST
+}
+class GiantBitmapRepeatBilerpScale : GiantBitmapGm(TileMode.REPEAT, true, false) {
+    override val renderCost = RenderCost.FAST
+}
+class GiantBitmapMirrorBilerpScale : GiantBitmapGm(TileMode.MIRROR, true, false) {
+    override val renderCost = RenderCost.FAST
+}
+class GiantBitmapClampPointRotate : GiantBitmapGm(TileMode.CLAMP, false, true) {
+    override val renderCost = RenderCost.FAST
+}
+class GiantBitmapRepeatPointRotate : GiantBitmapGm(TileMode.REPEAT, false, true) {
+    override val renderCost = RenderCost.FAST
+}
+class GiantBitmapMirrorPointRotate : GiantBitmapGm(TileMode.MIRROR, false, true) {
+    override val renderCost = RenderCost.FAST
+}
+class GiantBitmapClampBilerpRotate : GiantBitmapGm(TileMode.CLAMP, true, true) {
+    override val renderCost = RenderCost.FAST
+}
+class GiantBitmapRepeatBilerpRotate : GiantBitmapGm(TileMode.REPEAT, true, true) {
+    override val renderCost = RenderCost.FAST
+}
+class GiantBitmapMirrorBilerpRotate : GiantBitmapGm(TileMode.MIRROR, true, true) {
+    override val renderCost = RenderCost.FAST
+}
