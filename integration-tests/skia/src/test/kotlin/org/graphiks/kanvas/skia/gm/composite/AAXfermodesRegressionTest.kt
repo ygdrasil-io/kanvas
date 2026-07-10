@@ -1,19 +1,13 @@
 package org.graphiks.kanvas.skia.gm.composite
 
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
-import org.graphiks.kanvas.paint.BlendMode
-import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.skia.SkiaGmRenderer
-import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.test.GpuAvailability
 import org.graphiks.kanvas.test.ReferenceManager
-import org.graphiks.kanvas.types.Color
-import org.graphiks.kanvas.types.Rect
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
-@OptIn(ExperimentalUnsignedTypes::class)
 class AAXfermodesRegressionTest {
     @Test
     fun `clipped AA blend mode grid retains visible pixels`() {
@@ -37,26 +31,32 @@ class AAXfermodesRegressionTest {
     fun `first translucent background cell retains checkerboard through saveLayer`() {
         GpuAvailability.requireWebGpu()
 
-        val checkerboard = Color.fromRGBA(198f / 255f, 195f / 255f, 198f / 255f, 1f)
-        val surface = Surface(width = 32, height = 32)
-        surface.canvas {
-            drawRect(Rect(0f, 0f, 32f, 32f), Paint(color = checkerboard, antiAlias = false))
-            saveLayer()
-            save()
-            clipRect(Rect(1f, 1f, 31f, 31f))
-            drawColor(AAXfermodesGm.kBGColor, BlendMode.SRC)
-            restore()
-            restore()
-        }
+        val gm = AAXfermodesGm()
+        val actual = SkiaGmRenderer.render(gm).rgba
+        val reference = ReferenceManager.loadReference("/reference/${gm.name}.png")
 
-        val pixels = surface.render().pixels
-        val expected = intArrayOf(208, 186, 149, 255)
-        val offset = (8 * 32 + 8) * 4
-        expected.forEachIndexed { channel, expectedByte ->
-            val actualByte = pixels[offset + channel].toInt() and 0xff
+        // (89,72) is in the first Clear-mode/first-colour background cell: it is inside the
+        // clipped 30px cell but outside the 22px square, text, AA edge, and 10px checker edge.
+        // Four byte values accommodates deterministic WGSL quantisation while still detecting
+        // loss of the checkerboard from an incorrect saveLayer composite.
+        assertPixelNearReference(actual, reference, x = 89, y = 72, width = gm.width, tolerance = 4)
+    }
+
+    private fun assertPixelNearReference(
+        actual: ByteArray,
+        reference: ByteArray,
+        x: Int,
+        y: Int,
+        width: Int,
+        tolerance: Int,
+    ) {
+        val offset = (y * width + x) * 4
+        (0 until 4).forEach { channel ->
+            val actualByte = actual[offset + channel].toInt() and 0xff
+            val referenceByte = reference[offset + channel].toInt() and 0xff
             assertTrue(
-                kotlin.math.abs(actualByte - expectedByte) <= 4,
-                "channel=$channel: expected=$expectedByte +/- 4, actual=$actualByte",
+                kotlin.math.abs(actualByte - referenceByte) <= tolerance,
+                "channel=$channel at ($x,$y): reference=$referenceByte +/- $tolerance, actual=$actualByte",
             )
         }
     }

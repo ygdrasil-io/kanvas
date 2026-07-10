@@ -135,7 +135,7 @@ internal fun renderViaGpu(
                 }
                 if (sceneHasContent) {
                     // 1a. Snapshot existing scene -> snap
-                    t.encodeOffscreenTexture(snapLabel, null) {
+                    t.encodeOffscreenTexture(snapLabel, clearTransparent) {
                         drawCompositePass(
                             wgsl = COPY_WGSL,
                             colorFormat = texFormat,
@@ -904,6 +904,14 @@ internal fun renderViaGpu(
                             }
                         }
                         expand(op.picture, op.transform)
+                        if (expanded.any { it is DisplayOp.BeginLayer || it is DisplayOp.EndLayer }) {
+                            diagnostics.fatal(
+                                "refuse:drawPicture:${cmdId.value}",
+                                "drawPicture",
+                                "unsupported.picture.save_layer",
+                            )
+                            continue
+                        }
                         for (nestedOp in expanded) {
                             val nestedCmdId = GPUDrawCommandID(dispatched.size)
                             when (nestedOp) {

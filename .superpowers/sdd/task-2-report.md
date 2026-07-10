@@ -42,6 +42,15 @@ rtk ./gradlew :integration-tests:skia:test --tests org.graphiks.kanvas.skia.gm.c
 
 Résultat : 8/8 verts.
 
+## Correctifs de revue Task 2
+
+- Le snapshot `snap` est maintenant clear transparent avant la passe `COPY`. Le contrat root → layer avec draw normal puis blend avancé échoue lorsque ce clear est retiré (`1 test completed, 1 failed`) et passe avec le correctif.
+- Un `DrawPicture` dont le contenu aplati contient `BeginLayer` ou `EndLayer` est refusé avant toute restitution de ses enfants : `unsupported.picture.save_layer`.
+- La sonde réelle AAX a été rétablie contre la référence Skia au pixel `(89,72)` ; elle passe avec la tolérance de quatre octets après le clear de `snap`.
+- Les tests couvrent aussi un layer vide, ainsi qu'un layer borné refusé dont les enfants ne modifient pas le parent.
+
+Validation finale ciblée : 8/8 verts pour `GPUSaveLayerCompositeRegressionTest` et 8/8 verts pour la sélection AAX/GmCanvas.
+
 ## Limites assumées
 
 - Seuls `saveLayer(null, null)` et `saveLayer(null, Paint())` sont supportés.

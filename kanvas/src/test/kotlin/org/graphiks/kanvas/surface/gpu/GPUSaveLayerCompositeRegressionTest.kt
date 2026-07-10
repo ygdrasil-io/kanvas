@@ -3,6 +3,7 @@ package org.graphiks.kanvas.surface.gpu
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.picture.PictureRecorder
 import org.graphiks.kanvas.surface.DiagnosticLevel
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
@@ -143,6 +144,87 @@ class GPUSaveLayerCompositeRegressionTest {
     }
 
     @Test
+    fun `advanced blend snapshot does not retain root content behind an active layer`() {
+        requireWebGpu()
+
+        val baseline = Surface(width = 8, height = 8)
+        baseline.canvas {
+            drawRect(Rect(0f, 0f, 8f, 8f), Paint(color = translucentRed.toColor(), antiAlias = false))
+            drawRect(
+                Rect(6f, 6f, 7f, 7f),
+                Paint(color = translucentBlue.toColor(), antiAlias = false, blendMode = BlendMode.SCREEN),
+            )
+            saveLayer()
+            drawRect(Rect(0f, 0f, 8f, 8f), Paint(color = translucentBlue.toColor(), antiAlias = false))
+            restore()
+        }
+
+        val surface = Surface(width = 8, height = 8)
+        surface.canvas {
+            drawRect(Rect(0f, 0f, 8f, 8f), Paint(color = translucentRed.toColor(), antiAlias = false))
+            drawRect(
+                Rect(6f, 6f, 7f, 7f),
+                Paint(color = translucentBlue.toColor(), antiAlias = false, blendMode = BlendMode.SCREEN),
+            )
+            saveLayer()
+            drawRect(Rect(0f, 0f, 8f, 8f), Paint(color = translucentBlue.toColor(), antiAlias = false))
+            drawRect(
+                Rect(6f, 6f, 7f, 7f),
+                Paint(color = translucentRed.toColor(), antiAlias = false, blendMode = BlendMode.SCREEN),
+            )
+            restore()
+        }
+
+        assertPixelNearPixels(surface.render().pixels, baseline.render().pixels, x = 2, y = 2, tolerance = 2)
+    }
+
+    @Test
+    fun `DrawPicture containing saveLayer is refused before any child reaches its parent`() {
+        requireWebGpu()
+
+        val recorder = PictureRecorder()
+        val pictureCanvas = recorder.beginRecording(Rect(0f, 0f, 8f, 8f))
+        pictureCanvas.drawRect(Rect(0f, 0f, 8f, 8f), Paint(color = translucentRed.toColor(), antiAlias = false))
+        pictureCanvas.saveLayer()
+        pictureCanvas.drawRect(Rect(0f, 0f, 8f, 8f), Paint(color = translucentBlue.toColor(), antiAlias = false))
+        pictureCanvas.restore()
+        val picture = recorder.finishRecordingAsPicture()
+
+        val surface = Surface(width = 8, height = 8)
+        surface.canvas {
+            drawRect(Rect(0f, 0f, 8f, 8f), Paint(color = white.toColor(), antiAlias = false))
+            drawPicture(picture)
+        }
+
+        val result = surface.render()
+
+        assertPixelNear(result.pixels, x = 2, y = 2, expected = white, tolerance = 0)
+        assertEquals(1, result.diagnostics.fatalCount)
+        assertEquals(
+            "unsupported.picture.save_layer",
+            result.diagnostics.entries.single { it.level == DiagnosticLevel.FATAL }.reason,
+        )
+    }
+
+    @Test
+    fun `empty ordinary saveLayer leaves its parent untouched`() {
+        requireWebGpu()
+
+        val surface = Surface(width = 8, height = 8)
+        surface.canvas {
+            drawCheckerboardRoot()
+            saveLayer()
+            restore()
+        }
+
+        val result = surface.render()
+
+        assertPixelNear(result.pixels, x = 0, y = 0, expected = white, tolerance = 0)
+        assertPixelNear(result.pixels, x = 2, y = 6, expected = checkerGray, tolerance = 0)
+        assertEquals(0, result.diagnostics.fatalCount)
+    }
+
+    @Test
     fun `bounded saveLayer reports a stable refusal instead of flattening its children`() {
         requireWebGpu()
 
@@ -156,6 +238,7 @@ class GPUSaveLayerCompositeRegressionTest {
 
         val result = surface.render()
 
+        assertPixelNear(result.pixels, x = 2, y = 2, expected = white, tolerance = 0)
         assertEquals(1, result.diagnostics.fatalCount)
         assertEquals(
             "unsupported.layer.bounds",
@@ -192,6 +275,24 @@ class GPUSaveLayerCompositeRegressionTest {
         val offset = (y * 8 + x) * 4
         val actual = IntArray(4) { channel -> pixels[offset + channel].toInt() and 0xff }
         actual.zip(expected.toIntArray()).forEachIndexed { channel, (actualByte, expectedByte) ->
+            assertTrue(
+                kotlin.math.abs(actualByte - expectedByte) <= tolerance,
+                "channel=$channel at ($x,$y): expected=$expectedByte +/- $tolerance, actual=$actualByte",
+            )
+        }
+    }
+
+    private fun assertPixelNearPixels(
+        actual: UByteArray,
+        expected: UByteArray,
+        x: Int,
+        y: Int,
+        tolerance: Int,
+    ) {
+        val offset = (y * 8 + x) * 4
+        (0 until 4).forEach { channel ->
+            val actualByte = actual[offset + channel].toInt() and 0xff
+            val expectedByte = expected[offset + channel].toInt() and 0xff
             assertTrue(
                 kotlin.math.abs(actualByte - expectedByte) <= tolerance,
                 "channel=$channel at ($x,$y): expected=$expectedByte +/- $tolerance, actual=$actualByte",
