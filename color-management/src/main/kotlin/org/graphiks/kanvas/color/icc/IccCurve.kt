@@ -32,22 +32,30 @@ internal class ParametricIccCurve(functionType: Int, parameters: FloatArray) : I
             0 -> y.pow(1f / g)
             1 -> inverseParametricTypeOne(y, g)
             2 -> inverseParametricTypeTwo(y, g)
-            3 -> {
-                val lowerLimit = values[3] * values[4]
-                val upperLimit = (values[1] * values[4] + values[2]).pow(g)
-                when {
-                    y < lowerLimit && values[3] != 0f -> y / values[3]
-                    y < upperLimit -> values[4]
-                    else -> max(values[4], (y.pow(1f / g) - values[2]) / values[1])
+            3 -> when {
+                values[4] <= 0f -> inverseUpperSegment(y, g, 0f)
+                values[4] > 1f -> inverseLowerSegment(y, values[3], 0f)
+                else -> {
+                    val lowerLimit = values[3] * values[4]
+                    val upperLimit = (values[1] * values[4] + values[2]).pow(g)
+                    when {
+                        y < lowerLimit && values[3] != 0f -> y / values[3]
+                        y < upperLimit -> values[4]
+                        else -> max(values[4], (y.pow(1f / g) - values[2]) / values[1])
+                    }
                 }
             }
-            else -> {
-                val lowerLimit = values[3] * values[4] + values[6]
-                val upperLimit = (values[1] * values[4] + values[2]).pow(g) + values[5]
-                when {
-                    y < lowerLimit && values[3] != 0f -> (y - values[6]) / values[3]
-                    y < upperLimit -> values[4]
-                    else -> max(values[4], ((y - values[5]).pow(1f / g) - values[2]) / values[1])
+            else -> when {
+                values[4] <= 0f -> inverseUpperSegment(y, g, values[5])
+                values[4] > 1f -> inverseLowerSegment(y, values[3], values[6])
+                else -> {
+                    val lowerLimit = values[3] * values[4] + values[6]
+                    val upperLimit = (values[1] * values[4] + values[2]).pow(g) + values[5]
+                    when {
+                        y < lowerLimit && values[3] != 0f -> (y - values[6]) / values[3]
+                        y < upperLimit -> values[4]
+                        else -> max(values[4], ((y - values[5]).pow(1f / g) - values[2]) / values[1])
+                    }
                 }
             }
         }
@@ -69,6 +77,12 @@ internal class ParametricIccCurve(functionType: Int, parameters: FloatArray) : I
             max(threshold, ((y - values[3]).pow(1f / g) - values[2]) / values[1])
         }
     }
+
+    private fun inverseUpperSegment(y: Float, g: Float, offset: Float): Float =
+        ((y - offset).pow(1f / g) - values[2]) / values[1]
+
+    private fun inverseLowerSegment(y: Float, slope: Float, offset: Float): Float =
+        (y - offset) / slope
 
     fun toTransferFunction(): SkcmsTransferFunction = when (type) {
         0 -> SkcmsTransferFunction(values[0], 1f, 0f, 0f, 0f, 0f, 0f)
@@ -131,26 +145,28 @@ internal fun parametricCurveValidationError(type: Int, values: FloatArray): Stri
     if (type !in PARAMETRIC_PARAMETER_COUNTS.indices) return "function type"
     if (values.size != PARAMETRIC_PARAMETER_COUNTS[type]) return "parameter count"
     if (!values.all(Float::isFinite)) return "non-finite parameter"
-    if (values[0] <= 0f) return "gamma"
-    if (type >= 1 && values[1] <= 0f) return "nonlinear scale"
-
     val threshold = when (type) {
         0 -> 0f
         1, 2 -> -values[2] / values[1]
         else -> values[4]
     }
     if (!threshold.isFinite()) return "threshold"
-    if (type >= 3 && threshold !in 0f..1f) return "threshold range"
-    if (type >= 3 && values[3] < 0f) return "lower slope"
+    val lowerSelected = type != 0 && threshold > 0f
+    val nonlinearSelected = type != 0 && threshold <= 1f
+    if (type == 0 && values[0] <= 0f) return "gamma"
+    if (type in 1..2 && (values[0] <= 0f || values[1] <= 0f)) return "nonlinear scale"
+    if (type >= 3 && nonlinearSelected && values[0] <= 0f) return "gamma"
+    if (type >= 3 && nonlinearSelected && values[1] <= 0f) return "nonlinear scale"
+    if (type >= 3 && lowerSelected && values[3] < 0f) return "lower slope"
 
-    if (type >= 1) {
+    if (nonlinearSelected) {
         val nonlinearStart = max(0f, threshold)
-        if (nonlinearStart <= 1f && values[1] * nonlinearStart + values[2] < 0f) {
+        if (values[1] * nonlinearStart + values[2] < 0f) {
             return "undefined nonlinear branch"
         }
     }
 
-    if (threshold in 0f..1f && type != 0) {
+    if (lowerSelected && nonlinearSelected) {
         val lower = when (type) {
             1 -> 0f
             2 -> values[3]
@@ -163,16 +179,19 @@ internal fun parametricCurveValidationError(type: Int, values: FloatArray): Stri
             3 -> (values[1] * threshold + values[2]).pow(values[0])
             else -> (values[1] * threshold + values[2]).pow(values[0]) + values[5]
         }
-        if (!lower.isFinite() || !upper.isFinite()) return "non-finite branch"
-        if (upper < lower) {
+        val clippedLower = lower.coerceIn(0f, 1f)
+        val clippedUpper = upper.coerceIn(0f, 1f)
+        if (!clippedLower.isFinite() || !clippedUpper.isFinite()) return "non-finite branch"
+        if (clippedUpper < clippedLower) {
             return "downward jump"
         }
     }
 
-    val start = rawParametricEvaluation(type, values, 0f)
-    val end = rawParametricEvaluation(type, values, 1f)
-    if (!start.isFinite() || !end.isFinite()) return "non-finite evaluation"
-    if (start < 0f || end > 1f || end <= start) {
+    val rawStart = rawParametricEvaluation(type, values, 0f)
+    val rawEnd = rawParametricEvaluation(type, values, 1f)
+    val start = rawStart.coerceIn(0f, 1f)
+    val end = rawEnd.coerceIn(0f, 1f)
+    if (!start.isFinite() || !end.isFinite() || end <= start) {
         return "non-monotonic range"
     }
     return null

@@ -196,7 +196,14 @@ private class Parser(
     private fun validateCommonRequiredTags(tags: Map<IccSignature, TagRecord>) {
         val description = requiredTag(tags, IccSignature.DESCRIPTION)
         val copyright = requiredTag(tags, IccSignature.COPYRIGHT)
-        parseXyzTag(requiredTag(tags, IccSignature.WHITE_POINT))
+        val mediaWhitePoint = parseXyzTag(requiredTag(tags, IccSignature.WHITE_POINT))
+        if (profileClass == IccSignature.DISPLAY_CLASS &&
+            (!roundsToD50(mediaWhitePoint[0], D50_X) ||
+                !roundsToD50(mediaWhitePoint[1], D50_Y) ||
+                !roundsToD50(mediaWhitePoint[2], D50_Z))
+        ) {
+            abort("icc.tag.white-point", "Display ICC media white point must be D50")
+        }
         val expectedDescriptionType = if (majorVersion == 2) {
             IccSignature.DESCRIPTION_TYPE
         } else {

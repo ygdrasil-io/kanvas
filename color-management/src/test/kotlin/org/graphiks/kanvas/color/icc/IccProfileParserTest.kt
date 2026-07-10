@@ -290,6 +290,22 @@ class IccProfileParserTest {
     }
 
     @Test
+    fun `accepts clipped and single branch parametric curves`() {
+        val clippedTypeFour = floatArrayOf(1f, 1f, 0f, 1f, 0.5f, 0.25f, 0f)
+        val lowerOnlyTypeThree = floatArrayOf(1f, 1f, 0f, 0.5f, 2f)
+        val overflowingButClippedTypeThree = floatArrayOf(32767f, 1f, 1f, 0.5f, 0.5f)
+        val typeFourCurve = ParametricIccCurve(4, clippedTypeFour)
+
+        IccProfileParser.parse(rewriteSharedParametricCurve(4, clippedTypeFour), IccParseLimits()).getOrThrow()
+        IccProfileParser.parse(rewriteSharedParametricCurve(3, lowerOnlyTypeThree), IccParseLimits()).getOrThrow()
+        IccProfileParser.parse(rewriteSharedParametricCurve(3, overflowingButClippedTypeThree), IccParseLimits()).getOrThrow()
+        assertEquals(1f, typeFourCurve.evaluate(1f), 0f)
+        assertEquals(0.75f, typeFourCurve.inverse(1f), 0f)
+        assertEquals(1f, ParametricIccCurve(3, lowerOnlyTypeThree).inverse(1f), 0f)
+        assertEquals(1f, ParametricIccCurve(3, overflowingButClippedTypeThree).evaluate(1f), 0f)
+    }
+
+    @Test
     fun `rejects para with a quantized downward jump at threshold`() {
         val bytes = rewriteSharedParametricCurve(3, floatArrayOf(2f, 1f, -0.25f, 0.002f, 0.25f))
 
@@ -547,6 +563,18 @@ class IccProfileParserTest {
 
         assertFailure("icc.tag.type", whitePoint)
         assertFailure("icc.tag.type", redColumn)
+    }
+
+    @Test
+    fun `display media white point must round to D50 while input keeps its own policy`() {
+        val display = resource("srgb-matrix-trc.icc")
+        writeS15Fixed16(display, tagOffset(display, IccSignature.WHITE_POINT.value) + 8, 0.955f)
+        val input = resource("srgb-matrix-trc.icc")
+        writeU32(input, 12, IccSignature.INPUT_CLASS.value)
+        writeS15Fixed16(input, tagOffset(input, IccSignature.WHITE_POINT.value) + 8, 0.955f)
+
+        assertFailure("icc.tag.white-point", display)
+        IccProfileParser.parse(input, IccParseLimits()).getOrThrow()
     }
 
     @Test
