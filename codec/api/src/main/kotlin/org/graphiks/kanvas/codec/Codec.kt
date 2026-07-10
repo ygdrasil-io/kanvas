@@ -290,7 +290,7 @@ public abstract class Codec protected constructor() {
         ): Codec? = readStreamWithinLimit(stream, maxEncodedBytes)?.let(::MakeFromData)
 
         private fun readStreamWithinLimit(stream: InputStream, maxEncodedBytes: Long): ByteArray? {
-            if (maxEncodedBytes !in 0..MAX_MATERIALIZABLE_STREAM_BYTES) return null
+            if (maxEncodedBytes !in 0..MAX_STREAM_BYTES_WITH_SENTINEL) return null
             val readLimit = maxEncodedBytes + 1
             val output = ByteArrayOutputStream()
             val buffer = ByteArray(STREAM_READ_BUFFER_SIZE)
@@ -316,6 +316,7 @@ public abstract class Codec protected constructor() {
 
         private const val STREAM_READ_BUFFER_SIZE: Int = 8 * 1024
         private const val MAX_MATERIALIZABLE_STREAM_BYTES: Long = Int.MAX_VALUE.toLong() - 8L
+        private const val MAX_STREAM_BYTES_WITH_SENTINEL: Long = MAX_MATERIALIZABLE_STREAM_BYTES - 1L
     }
 
     /**

@@ -100,6 +100,19 @@ class JpegDocumentTest {
         assertEquals(maximum + 1, stream.bytesServed)
     }
 
+    @Test
+    fun `stream open rejects a budget requiring an unmaterializable sentinel before reading`() {
+        val stream = object : InputStream() {
+            override fun read(): Int = throw AssertionError("unmaterializable sentinel budget must not read")
+        }
+        val maxMaterializableBytes = Int.MAX_VALUE.toLong() - 8L
+
+        assertEquals(
+            "jpeg.limit.encoded-bytes",
+            JpegDocument.open(stream, JpegLimits(maxMaterializableBytes, 64, 8, 8)).diagnostic!!.code,
+        )
+    }
+
     private fun assertInvalid(data: ByteArray) {
         val diagnostic = JpegDocument.open(data).diagnostic!!
         assertEquals("jpeg.input.invalid", diagnostic.code)

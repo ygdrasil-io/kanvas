@@ -52,6 +52,16 @@ class CodecStreamLimitTest {
         assertNull(Codec.MakeFromStream(stream, Long.MAX_VALUE))
     }
 
+    @Test
+    fun `stream budget requiring an unmaterializable sentinel is rejected before reading`() {
+        val stream = object : InputStream() {
+            override fun read(): Int = throw AssertionError("unmaterializable sentinel budget must not read")
+        }
+        val maxMaterializableBytes = Int.MAX_VALUE.toLong() - 8L
+
+        assertNull(Codec.MakeFromStream(stream, maxMaterializableBytes))
+    }
+
     private class FailsPastLimitStream(
         private val readableBytes: Int,
     ) : InputStream() {

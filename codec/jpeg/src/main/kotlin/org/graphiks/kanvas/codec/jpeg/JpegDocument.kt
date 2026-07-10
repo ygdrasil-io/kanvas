@@ -173,7 +173,7 @@ private fun parseJpegDocument(
 }
 
 private fun readAtMost(stream: InputStream, maxEncodedBytes: Long): ByteArray? {
-    if (maxEncodedBytes !in 0..MAX_MATERIALIZABLE_ENCODED_BYTES) return null
+    if (maxEncodedBytes !in 0..MAX_ENCODED_BYTES_WITH_SENTINEL) return null
     val readLimit = maxEncodedBytes + 1
     val output = ByteArrayOutputStream()
     val buffer = ByteArray(DEFAULT_READ_BUFFER_SIZE)
@@ -284,6 +284,7 @@ private const val MARKER_RST0: Int = 0xD0
 private const val MARKER_RST7: Int = 0xD7
 private const val DEFAULT_READ_BUFFER_SIZE: Int = 8 * 1024
 private const val MAX_MATERIALIZABLE_ENCODED_BYTES: Long = Int.MAX_VALUE.toLong() - 8L
+private const val MAX_ENCODED_BYTES_WITH_SENTINEL: Long = MAX_MATERIALIZABLE_ENCODED_BYTES - 1L
 private const val MIN_SOS_PAYLOAD_BYTES: Int = 6
 private const val SOS_FIXED_PAYLOAD_BYTES: Int = 4
 private const val MIN_SOF_PAYLOAD_BYTES: Int = 9
