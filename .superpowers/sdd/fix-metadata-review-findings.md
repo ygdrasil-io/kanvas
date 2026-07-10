@@ -64,5 +64,5 @@ reviewed, versioned registry source plus update policy and tests.
 ## Verification
 
 - Focused `PngDocumentTest`: pass, 42/42.
-- Full `:codec:png:test`: pass.
-- `git diff --check`: pending final scope check.
+- Fresh `:codec:png:check --rerun-tasks`: pass, 138/138 tests.
+- `git diff --check` on the three owned source/test files: pass.
