@@ -1,8 +1,6 @@
 package org.graphiks.kanvas.color
 
 import org.graphiks.kanvas.color.icc.IccTransformPipeline
-import org.graphiks.kanvas.color.icc.parametricCurveValidationError
-import org.graphiks.math.SkcmsMatrix3x3
 import org.graphiks.math.SkcmsTransferFunction
 import kotlin.math.pow
 
@@ -60,9 +58,6 @@ public object ColorTransform {
     ): ColorTransformCompileResult = compile(ColorTransformRequest(source, destination, alphaType))
 
     public fun compile(request: ColorTransformRequest): ColorTransformCompileResult {
-        if (request.alphaType == AlphaType.PREMULTIPLIED) {
-            return ColorTransformCompileResult.Failure("color.alpha.premultiplied.unsupported")
-        }
         if (request.source == request.destination) {
             unsupportedProfileFailure(request.source, source = null)?.let { return it }
             return ColorTransformCompileResult.Success(CompiledColorTransform(request, NoOpRgbPlan))
@@ -70,12 +65,33 @@ public object ColorTransform {
         unsupportedProfileFailure(request.source, source = true)?.let { return it }
         unsupportedProfileFailure(request.destination, source = false)?.let { return it }
 
+        if (request.alphaType == AlphaType.PREMULTIPLIED && (request.source.hasLut || request.destination.hasLut)) {
+            return ColorTransformCompileResult.Failure("color.alpha.premultiplied.unsupported")
+        }
+
+        val sourceMatrix = request.source.toXyzD50
+        val destinationMatrix = request.destination.toXyzD50
+        if (sourceMatrix != null && destinationMatrix != null) {
+            return ColorTransformCompileResult.Success(
+                CompiledColorTransform(
+                    request,
+                    MatrixColorTransform(
+                        sourceToXyzD50 = matrixValues(sourceMatrix),
+                        destinationFromXyzD50 = checkNotNull(invert3x3(matrixValues(destinationMatrix))),
+                        sourceTransferFunction = assertNotNull(request.source.transferFunction),
+                        destinationTransferFunction = assertNotNull(request.destination.transferFunction),
+                        alphaType = request.alphaType,
+                    ),
+                ),
+            )
+        }
+
         val sourceStage = request.source.toPcs?.let(::LutEndpointStage) ?: MatrixToPcsStage(
-            matrixValues(assertNotNull(request.source.toXyzD50)),
+            matrixValues(assertNotNull(sourceMatrix)),
             assertNotNull(request.source.transferFunction),
         )
         val destinationStage = request.destination.fromPcs?.let(::LutEndpointStage) ?: PcsToMatrixStage(
-            invert3x3(matrixValues(assertNotNull(request.destination.toXyzD50)))!!,
+            checkNotNull(invert3x3(matrixValues(assertNotNull(destinationMatrix)))),
             assertNotNull(request.destination.transferFunction),
         )
         return ColorTransformCompileResult.Success(
@@ -197,56 +213,11 @@ private fun encode(transferFunction: SkcmsTransferFunction, linear: Float): Floa
     return if (value.isFinite()) value.coerceIn(0f, 1f) else 0f
 }
 
-private fun validTransferFunction(transferFunction: SkcmsTransferFunction): Boolean {
-    val parameters = floatArrayOf(
-        transferFunction.g,
-        transferFunction.a,
-        transferFunction.b,
-        transferFunction.c,
-        transferFunction.d,
-        transferFunction.e,
-        transferFunction.f,
-    )
-    return parametricCurveValidationError(4, parameters) == null
-}
-
-private fun matrixValues(matrix: SkcmsMatrix3x3): FloatArray = FloatArray(9) { index ->
-    matrix[index / 3, index % 3]
-}
-
 private fun multiply3x3(matrix: FloatArray, input: FloatArray, output: FloatArray) {
     repeat(3) { row ->
         val base = row * 3
         output[row] = matrix[base] * input[0] + matrix[base + 1] * input[1] + matrix[base + 2] * input[2]
     }
-}
-
-private fun invert3x3(matrix: FloatArray): FloatArray? {
-    val a = matrix[0].toDouble()
-    val b = matrix[1].toDouble()
-    val c = matrix[2].toDouble()
-    val d = matrix[3].toDouble()
-    val e = matrix[4].toDouble()
-    val f = matrix[5].toDouble()
-    val g = matrix[6].toDouble()
-    val h = matrix[7].toDouble()
-    val i = matrix[8].toDouble()
-    val determinant = a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g)
-    if (!determinant.isFinite() || determinant == 0.0) return null
-    val inverseDeterminant = 1.0 / determinant
-    val values = doubleArrayOf(
-        (e * i - f * h) * inverseDeterminant,
-        (c * h - b * i) * inverseDeterminant,
-        (b * f - c * e) * inverseDeterminant,
-        (f * g - d * i) * inverseDeterminant,
-        (a * i - c * g) * inverseDeterminant,
-        (c * d - a * f) * inverseDeterminant,
-        (d * h - e * g) * inverseDeterminant,
-        (b * g - a * h) * inverseDeterminant,
-        (a * e - b * d) * inverseDeterminant,
-    )
-    if (values.any { !it.isFinite() || kotlin.math.abs(it) > Float.MAX_VALUE.toDouble() }) return null
-    return FloatArray(9) { values[it].toFloat() }
 }
 
 private fun <T : Any> assertNotNull(value: T?): T = checkNotNull(value)

@@ -153,7 +153,7 @@ class ColorTransformContractTest {
     }
 
     @Test
-    fun `opaque and unpremultiplied transforms preserve alpha storage`() {
+    fun `opaque and unpremultiplied LUT transforms preserve alpha storage`() {
         val lut = parseResource("rgb-lut-a2b-b2a.icc")
         listOf(AlphaType.OPAQUE, AlphaType.UNPREMULTIPLIED).forEach { alphaType ->
             val transform = ColorTransform.compile(lut, ColorProfiles.sRGB(), alphaType).getOrThrow()
@@ -166,9 +166,70 @@ class ColorTransformContractTest {
     }
 
     @Test
-    fun `premultiplied transforms are typed refusals even for identical profiles`() {
-        val failure = ColorTransform.compile(
+    fun `opaque and unpremultiplied matrix transforms preserve alpha storage`() {
+        listOf(AlphaType.OPAQUE, AlphaType.UNPREMULTIPLIED).forEach { alphaType ->
+            val transform = ColorTransform.compile(
+                ColorProfiles.displayP3(),
+                ColorProfiles.sRGB(),
+                alphaType,
+            ).getOrThrow()
+            val pixel = floatArrayOf(0.5f, 0.2f, 0.1f, 0.37f)
+
+            transform.apply(pixel, 1)
+
+            assertEquals(0.37f, pixel[3], 0f, alphaType.name)
+        }
+    }
+
+    @Test
+    fun `premultiplied matrix pixels transform in unpremultiplied color space`() {
+        val transform = ColorTransform.compile(
+            source = ColorProfiles.displayP3(),
+            destination = ColorProfiles.sRGB(),
+            alphaType = AlphaType.PREMULTIPLIED,
+        ).getOrThrow()
+        val pixel = floatArrayOf(0.25f, 0.1f, 0.05f, 0.5f)
+
+        transform.apply(pixel, 1)
+
+        assertEquals(0.27086473f, pixel[0], 2e-5f)
+        assertEquals(0.086869605f, pixel[1], 2e-5f)
+        assertEquals(0.026441f, pixel[2], 2e-5f)
+        assertEquals(0.5f, pixel[3], 0f)
+    }
+
+    @Test
+    fun `premultiplied matrix pixels with zero alpha do not divide by zero`() {
+        val transform = ColorTransform.compile(
+            source = ColorProfiles.displayP3(),
+            destination = ColorProfiles.sRGB(),
+            alphaType = AlphaType.PREMULTIPLIED,
+        ).getOrThrow()
+        val pixel = floatArrayOf(0f, 0f, 0f, 0f)
+
+        transform.apply(pixel, 1)
+
+        assertContentEquals(floatArrayOf(0f, 0f, 0f, 0f), pixel)
+    }
+
+    @Test
+    fun `identical premultiplied matrix profiles use no op transform`() {
+        val transform = ColorTransform.compile(
             source = ColorProfiles.sRGB(),
+            destination = ColorProfiles.sRGB(),
+            alphaType = AlphaType.PREMULTIPLIED,
+        ).getOrThrow()
+        val pixel = floatArrayOf(0.125f, 0.25f, 0.375f, 0.5f)
+
+        transform.apply(pixel, 1)
+
+        assertContentEquals(floatArrayOf(0.125f, 0.25f, 0.375f, 0.5f), pixel)
+    }
+
+    @Test
+    fun `premultiplied LUT composition remains a typed refusal`() {
+        val failure = ColorTransform.compile(
+            source = parseResource("rgb-lut-a2b-b2a.icc"),
             destination = ColorProfiles.sRGB(),
             alphaType = AlphaType.PREMULTIPLIED,
         ).failureOrNull()
