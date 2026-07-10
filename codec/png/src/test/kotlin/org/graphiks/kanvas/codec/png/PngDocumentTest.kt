@@ -1132,6 +1132,44 @@ class PngDocumentTest {
     }
 
     @Test
+    fun `metadata records after ancillary edits locate planned output chunks`() {
+        val replacement = textChunk("Title", "Updated")
+        val physicalDimensions = u32(2_835) + u32(2_835) + byteArrayOf(1)
+        val exif = byteArrayOf('I'.code.toByte(), 'I'.code.toByte(), 42, 0, 8, 0, 0, 0)
+        val source = open(
+            png(
+                "IHDR" to ihdr(),
+                "tEXt" to textChunk("Title", "Original"),
+                "pHYs" to physicalDimensions,
+                "IDAT" to byteArrayOf(0x10),
+                "IEND" to ByteArray(0),
+            ),
+        )
+        val edited = source.withAncillaryChunk("tEXt", replacement)
+            .withAncillaryChunk("eXIf", exif)
+
+        val output = edited.save().bytes
+        val records = listOf(
+            edited.tEXt.single().record to ("tEXt" to replacement),
+            requireNotNull(edited.pHYs).record to ("pHYs" to physicalDimensions),
+            requireNotNull(edited.eXIf).record to ("eXIf" to exif),
+        )
+        val outputRecords = open(output).chunks
+
+        for ((record, expected) in records) {
+            val (type, payload) = expected
+            assertRecordMatchesOutput(output, record, type, payload)
+            assertEquals(outputRecords.single { it.type == type }, record)
+        }
+
+        assertTrue(
+            requireNotNull(source.pHYs).record.rawRange.startInclusive !=
+                requireNotNull(edited.pHYs).record.rawRange.startInclusive,
+        )
+        assertEquals(0L, edited.metadataProjectionStats.serializedPngBytes)
+    }
+
+    @Test
     fun `does not release decoded budget after late metadata refusals`() {
         val textLimits = PngContainerLimits.Default.copy(
             metadata = PngMetadataLimits.Default.copy(
@@ -1297,6 +1335,26 @@ class PngDocumentTest {
         .map { record ->
             bytes.copyOfRange(record.payloadRange.startInclusive.toInt(), record.payloadRange.endExclusive.toInt())
         }
+
+    private fun assertRecordMatchesOutput(
+        bytes: ByteArray,
+        record: PngChunkRecord,
+        type: String,
+        payload: ByteArray,
+    ) {
+        assertTrue(record.rawRange.startInclusive >= PNG_SIGNATURE.size.toLong())
+        assertTrue(record.rawRange.endExclusive <= bytes.size.toLong())
+        assertEquals(record.rawRange.startInclusive + 8L, record.payloadRange.startInclusive)
+        assertEquals(record.payloadRange.endExclusive + 4L, record.rawRange.endExclusive)
+
+        val rawStart = record.rawRange.startInclusive.toInt()
+        assertEquals(payload.size.toLong(), readU32BE(bytes, rawStart))
+        assertEquals(type, String(bytes, rawStart + 4, 4, Charsets.US_ASCII))
+        assertArrayEquals(
+            payload,
+            bytes.copyOfRange(record.payloadRange.startInclusive.toInt(), record.payloadRange.endExclusive.toInt()),
+        )
+    }
 
     private fun chunkTypes(bytes: ByteArray): List<String> = open(bytes).chunks.map(PngChunkRecord::type)
 
@@ -1503,6 +1561,12 @@ class PngDocumentTest {
         bytes[offset + 2] = (value ushr 8).toByte()
         bytes[offset + 3] = value.toByte()
     }
+
+    private fun readU32BE(bytes: ByteArray, offset: Int): Long =
+        ((bytes[offset].toInt() and 0xFF).toLong() shl 24) or
+            ((bytes[offset + 1].toInt() and 0xFF).toLong() shl 16) or
+            ((bytes[offset + 2].toInt() and 0xFF).toLong() shl 8) or
+            (bytes[offset + 3].toInt() and 0xFF).toLong()
 
     private companion object {
         val PNG_SIGNATURE: ByteArray = byteArrayOf(

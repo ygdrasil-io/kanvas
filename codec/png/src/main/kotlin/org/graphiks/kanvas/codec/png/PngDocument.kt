@@ -16,13 +16,19 @@ public class PngDocument private constructor(
     private val sourceBytes: ByteArray,
     private val container: PngContainer,
     private val limits: PngContainerLimits,
-    /** Typed metadata for the bytes that [save] will emit for the current write plan. */
+    /**
+     * Typed metadata for the bytes that [save] will emit for the current write plan.
+     *
+     * With an ancillary write plan, metadata records and diagnostics reference
+     * the planned output rather than [originalBytes].
+     */
     public val metadata: PngMetadata,
     public val writePlan: PngWritePlan,
     internal val metadataProjectionStats: PngMetadataProjectionStats,
 ) {
     public val header: PngHeader = container.header
 
+    /** Authoritative raw chunk records from [originalBytes]. */
     public val chunks: List<PngChunkRecord> = container.chunks
 
     public val originalBytes: ByteArray
@@ -412,38 +418,54 @@ public class PngDocument private constructor(
                 stats = PngMetadataProjectionStats.None,
             )
         }
-        if (plan.impact != PngWriteImpact.ANCILLARY || preflightAncillaryOutput(plan) is PngOutputPreflight.Failure) {
+        if (plan.impact != PngWriteImpact.ANCILLARY) {
             return PngMetadataProjectionResult(metadata, metadataProjectionStats)
         }
-        val projection = metadataProjection(plan)
+        val preflight = preflightAncillaryOutput(plan)
+        if (preflight is PngOutputPreflight.Failure) return PngMetadataProjectionResult(metadata, metadataProjectionStats)
+        val projection = metadataProjection(plan, (preflight as PngOutputPreflight.Success).outputSize)
         return PngMetadataProjectionResult(
             metadata = PngMetadataParser.parse(
                 data = sourceBytes,
                 container = projection.container,
                 limits = limits.metadata,
-                payloadOverrides = projection.payloadOverrides,
+                payloadSources = projection.payloadSources,
                 recomputeStructuralDiagnostics = true,
             ),
             stats = projection.stats,
         )
     }
 
-    private fun metadataProjection(plan: PngWritePlan): PngMetadataProjection {
+    private fun metadataProjection(plan: PngWritePlan, expectedOutputSize: Int): PngMetadataProjection {
         val projectedRecords = ArrayList<PngChunkRecord>(chunks.size + plan.edits.size)
-        val payloadOverrides = HashMap<Int, ByteArray>()
+        val payloadSources = HashMap<Int, PngMetadataPayloadSource>(chunks.size + plan.edits.size)
         val originalTypes = chunks.mapTo(HashSet(), PngChunkRecord::type)
         val emittedReplacements = HashSet<String>()
-        var nextSyntheticOrdinal = chunks.size
-        var nextVirtualOffset = Long.MAX_VALUE / 2L
+        var nextOutputOrdinal = 0
+        var nextOutputOffset = PNG_SIGNATURE_BYTES.toLong()
         var copiedPayloadBytes = 0L
 
-        fun addReplacement(type: String, ordinal: Int, edit: PngChunkEdit.Replacement) {
-            val payload = edit.payloadCopy()
-            val record = projectedRecord(type, ordinal, payload.size, nextVirtualOffset)
-            nextVirtualOffset -= PNG_CHUNK_OVERHEAD_BYTES + payload.size.toLong()
+        fun addProjectedRecord(type: String, payloadSize: Int, source: PngMetadataPayloadSource) {
+            val record = projectedRecord(type, nextOutputOrdinal++, payloadSize, nextOutputOffset)
+            nextOutputOffset = record.rawRange.endExclusive
             projectedRecords += record
-            payloadOverrides[record.ordinal] = payload
+            payloadSources[record.ordinal] = source
+        }
+
+        fun addReplacement(type: String, edit: PngChunkEdit.Replacement) {
+            val payload = edit.payloadCopy()
+            addProjectedRecord(type, payload.size, PngMetadataPayloadSource(payload, 0, payload.size))
             copiedPayloadBytes += payload.size.toLong()
+        }
+
+        fun addSourceRecord(record: PngChunkRecord) {
+            val payloadStart = Math.toIntExact(record.payloadRange.startInclusive)
+            val payloadSize = Math.toIntExact(record.payloadRange.size)
+            addProjectedRecord(
+                record.type,
+                payloadSize,
+                PngMetadataPayloadSource(sourceBytes, payloadStart, payloadSize),
+            )
         }
 
         fun emitAbsentReplacementsBefore(record: PngChunkRecord) {
@@ -456,7 +478,7 @@ public class PngDocument private constructor(
                     PngChunkInsertionAnchor.AFTER_IDAT -> "IEND"
                 }
                 if (record.type != boundary) continue
-                addReplacement(type, nextSyntheticOrdinal++, edit)
+                addReplacement(type, edit)
                 emittedReplacements += type
             }
         }
@@ -465,16 +487,19 @@ public class PngDocument private constructor(
             emitAbsentReplacementsBefore(record)
             when (val edit = plan.edits[record.type]) {
                 is PngChunkEdit.Replacement -> if (emittedReplacements.add(record.type)) {
-                    addReplacement(record.type, record.ordinal, edit)
+                    addReplacement(record.type, edit)
                 }
 
                 PngChunkEdit.Removed -> Unit
-                null -> projectedRecords += record
+                null -> addSourceRecord(record)
             }
         }
 
         check(emittedReplacements.containsAll(plan.edits.filterValues { it is PngChunkEdit.Replacement }.keys)) {
             "Every PNG replacement must have a valid insertion anchor"
+        }
+        check(nextOutputOffset == expectedOutputSize.toLong()) {
+            "Projected PNG record ranges must match the planned output size"
         }
         return PngMetadataProjection(
             container = PngContainer(
@@ -483,7 +508,7 @@ public class PngDocument private constructor(
                 totalIdatBytes = container.totalIdatBytes,
                 metadataDiagnostics = emptyList(),
             ),
-            payloadOverrides = payloadOverrides,
+            payloadSources = payloadSources,
             stats = PngMetadataProjectionStats(
                 serializedPngBytes = 0L,
                 copiedPayloadBytes = copiedPayloadBytes,
@@ -497,12 +522,13 @@ public class PngDocument private constructor(
         payloadSize: Int,
         rawStart: Long,
     ): PngChunkRecord {
-        val payloadStart = rawStart + PNG_CHUNK_PREFIX_BYTES
-        val payloadEnd = payloadStart + payloadSize.toLong()
+        val payloadStart = Math.addExact(rawStart, PNG_CHUNK_PREFIX_BYTES)
+        val payloadEnd = Math.addExact(payloadStart, payloadSize.toLong())
+        val rawEnd = Math.addExact(payloadEnd, PNG_CRC_BYTES)
         return PngChunkRecord(
             type = type,
             ordinal = ordinal,
-            rawRange = PngByteRange(rawStart, payloadEnd + PNG_CRC_BYTES),
+            rawRange = PngByteRange(rawStart, rawEnd),
             payloadRange = PngByteRange(payloadStart, payloadEnd),
         )
     }
@@ -608,7 +634,7 @@ public class PngDocument private constructor(
 
     private data class PngMetadataProjection(
         val container: PngContainer,
-        val payloadOverrides: Map<Int, ByteArray>,
+        val payloadSources: Map<Int, PngMetadataPayloadSource>,
         val stats: PngMetadataProjectionStats,
     )
 }

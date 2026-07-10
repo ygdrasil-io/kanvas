@@ -46,7 +46,12 @@ public data class PngMetadataLimits(
     }
 }
 
-/** A typed metadata result associated with the authoritative raw chunk record. */
+/**
+ * A typed metadata result associated with its authoritative raw chunk record.
+ *
+ * For an ancillary-edited [PngDocument], this record and any diagnostic offset
+ * locate the bytes that its planned [PngDocument.save] output will contain.
+ */
 public sealed interface PngMetadataValue<out T> {
     public val record: PngChunkRecord
 
@@ -212,22 +217,35 @@ internal object PngMetadataParser {
         data: ByteArray,
         container: PngContainer,
         limits: PngMetadataLimits,
-        payloadOverrides: Map<Int, ByteArray> = emptyMap(),
+        payloadSources: Map<Int, PngMetadataPayloadSource> = emptyMap(),
         recomputeStructuralDiagnostics: Boolean = false,
     ): PngMetadata = PngMetadataBuilder(
         data = data,
         container = container,
         limits = limits,
-        payloadOverrides = payloadOverrides,
+        payloadSources = payloadSources,
         recomputeStructuralDiagnostics = recomputeStructuralDiagnostics,
     ).parse()
+}
+
+/** A zero-copy payload backing used while metadata records project planned output ranges. */
+internal class PngMetadataPayloadSource(
+    val bytes: ByteArray,
+    val offset: Int,
+    val length: Int,
+) {
+    init {
+        require(offset >= 0 && length >= 0 && offset <= bytes.size - length) {
+            "PNG metadata payload source must be within its backing byte array"
+        }
+    }
 }
 
 private class PngMetadataBuilder(
     private val data: ByteArray,
     private val container: PngContainer,
     private val limits: PngMetadataLimits,
-    private val payloadOverrides: Map<Int, ByteArray>,
+    private val payloadSources: Map<Int, PngMetadataPayloadSource>,
     recomputeStructuralDiagnostics: Boolean,
 ) {
     private var activePayload: MetadataPayload? = null
@@ -815,9 +833,9 @@ private class PngMetadataBuilder(
     }
 
     private fun payload(record: PngChunkRecord): PayloadRange {
-        val replacement = payloadOverrides[record.ordinal]
-        val payload = if (replacement != null) {
-            MetadataPayload(replacement, 0, replacement.size)
+        val source = payloadSources[record.ordinal]
+        val payload = if (source != null) {
+            MetadataPayload(source.bytes, source.offset, source.length)
         } else {
             val start = record.payloadRange.startInclusive.toInt()
             MetadataPayload(data, start, record.payloadRange.size.toInt())
