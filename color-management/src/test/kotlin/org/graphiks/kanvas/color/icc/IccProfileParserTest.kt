@@ -290,6 +290,22 @@ class IccProfileParserTest {
     }
 
     @Test
+    fun `parametric gap inverse chooses the closest boundary with upper tie rule`() {
+        val typeThree = ParametricIccCurve(3, floatArrayOf(2f, 1f, 0f, 0.1f, 0.5f))
+        val typeFour = ParametricIccCurve(4, floatArrayOf(2f, 1f, 0f, 0.1f, 0.5f, 0f, 0f))
+        val typeThreeTie = ParametricIccCurve(3, floatArrayOf(2f, 1f, 0f, 0f, 0.5f))
+        val typeFourTie = ParametricIccCurve(4, floatArrayOf(2f, 1f, 0f, 0f, 0.5f, 0f, 0f))
+        val lowerBoundary = Math.nextDown(0.5f)
+
+        assertEquals(lowerBoundary, typeThree.inverse(0.06f), 0f)
+        assertEquals(lowerBoundary, typeFour.inverse(0.06f), 0f)
+        assertEquals(0.5f, typeThree.inverse(0.15f), 0f)
+        assertEquals(0.5f, typeFour.inverse(0.15f), 0f)
+        assertEquals(0.5f, typeThreeTie.inverse(0.125f), 0f)
+        assertEquals(0.5f, typeFourTie.inverse(0.125f), 0f)
+    }
+
+    @Test
     fun `accepts clipped and single branch parametric curves`() {
         val clippedTypeFour = floatArrayOf(1f, 1f, 0f, 1f, 0.5f, 0.25f, 0f)
         val lowerOnlyTypeThree = floatArrayOf(1f, 1f, 0f, 0.5f, 2f)

@@ -36,11 +36,12 @@ internal class ParametricIccCurve(functionType: Int, parameters: FloatArray) : I
                 values[4] <= 0f -> inverseUpperSegment(y, g, 0f)
                 values[4] > 1f -> inverseLowerSegment(y, values[3], 0f)
                 else -> {
-                    val lowerLimit = values[3] * values[4]
-                    val upperLimit = (values[1] * values[4] + values[2]).pow(g)
+                    val lowerBoundary = Math.nextDown(values[4])
+                    val lowerLimit = rawParametricEvaluation(type, values, lowerBoundary).coerceIn(0f, 1f)
+                    val upperLimit = rawParametricEvaluation(type, values, values[4]).coerceIn(0f, 1f)
                     when {
-                        y < lowerLimit && values[3] != 0f -> y / values[3]
-                        y < upperLimit -> values[4]
+                        y < lowerLimit -> if (values[3] != 0f) y / values[3] else lowerBoundary
+                        y < upperLimit -> closestGapBoundary(y, lowerBoundary, lowerLimit, values[4], upperLimit)
                         else -> max(values[4], (y.pow(1f / g) - values[2]) / values[1])
                     }
                 }
@@ -49,11 +50,12 @@ internal class ParametricIccCurve(functionType: Int, parameters: FloatArray) : I
                 values[4] <= 0f -> inverseUpperSegment(y, g, values[5])
                 values[4] > 1f -> inverseLowerSegment(y, values[3], values[6])
                 else -> {
-                    val lowerLimit = values[3] * values[4] + values[6]
-                    val upperLimit = (values[1] * values[4] + values[2]).pow(g) + values[5]
+                    val lowerBoundary = Math.nextDown(values[4])
+                    val lowerLimit = rawParametricEvaluation(type, values, lowerBoundary).coerceIn(0f, 1f)
+                    val upperLimit = rawParametricEvaluation(type, values, values[4]).coerceIn(0f, 1f)
                     when {
-                        y < lowerLimit && values[3] != 0f -> (y - values[6]) / values[3]
-                        y < upperLimit -> values[4]
+                        y < lowerLimit -> if (values[3] != 0f) (y - values[6]) / values[3] else lowerBoundary
+                        y < upperLimit -> closestGapBoundary(y, lowerBoundary, lowerLimit, values[4], upperLimit)
                         else -> max(values[4], ((y - values[5]).pow(1f / g) - values[2]) / values[1])
                     }
                 }
@@ -83,6 +85,19 @@ internal class ParametricIccCurve(functionType: Int, parameters: FloatArray) : I
 
     private fun inverseLowerSegment(y: Float, slope: Float, offset: Float): Float =
         (y - offset) / slope
+
+    private fun closestGapBoundary(
+        y: Float,
+        lowerBoundary: Float,
+        lowerValue: Float,
+        upperBoundary: Float,
+        upperValue: Float,
+    ): Float = if (y - lowerValue < upperValue - y) {
+        lowerBoundary
+    } else {
+        // Annex F.1 permits either closest endpoint on a tie; choose the upper boundary deterministically.
+        upperBoundary
+    }
 
     fun toTransferFunction(): SkcmsTransferFunction = when (type) {
         0 -> SkcmsTransferFunction(values[0], 1f, 0f, 0f, 0f, 0f, 0f)
