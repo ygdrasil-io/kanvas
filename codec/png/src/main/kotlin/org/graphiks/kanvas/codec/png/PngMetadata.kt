@@ -212,15 +212,31 @@ internal object PngMetadataParser {
         data: ByteArray,
         container: PngContainer,
         limits: PngMetadataLimits,
-    ): PngMetadata = PngMetadataBuilder(data, container, limits).parse()
+        payloadOverrides: Map<Int, ByteArray> = emptyMap(),
+        recomputeStructuralDiagnostics: Boolean = false,
+    ): PngMetadata = PngMetadataBuilder(
+        data = data,
+        container = container,
+        limits = limits,
+        payloadOverrides = payloadOverrides,
+        recomputeStructuralDiagnostics = recomputeStructuralDiagnostics,
+    ).parse()
 }
 
 private class PngMetadataBuilder(
     private val data: ByteArray,
     private val container: PngContainer,
     private val limits: PngMetadataLimits,
+    private val payloadOverrides: Map<Int, ByteArray>,
+    recomputeStructuralDiagnostics: Boolean,
 ) {
-    private val diagnostics = ArrayList<PngDiagnostic>(container.metadataDiagnostics)
+    private var activePayload: MetadataPayload? = null
+    private val structuralDiagnostics: List<PngDiagnostic> = if (recomputeStructuralDiagnostics) {
+        collectStructuralDiagnostics()
+    } else {
+        container.metadataDiagnostics
+    }
+    private val diagnostics = ArrayList<PngDiagnostic>(structuralDiagnostics)
     private val decodedMetadataBudget = MetadataBudget(limits.maxDecodedMetadataBytes)
     private val text = ArrayList<PngMetadataValue<PngTextMetadata>>()
     private val compressedText = ArrayList<PngMetadataValue<PngTextMetadata>>()
@@ -595,23 +611,20 @@ private class PngMetadataBuilder(
     private fun parseTransparency(record: PngChunkRecord): PngTransparencyMetadata {
         val payload = payload(record)
         val maximumSample = (1 shl container.header.bitDepth) - 1
+        fun normalizedSample(offset: Int): Int = u16(offset).toInt() and maximumSample
         return when (container.header.colorType) {
             0 -> {
                 requireLength(payload, 2)
-                val sample = u16(payload.start).toInt()
-                if (sample > maximumSample) abort("value.invalid", "tRNS grayscale sample exceeds the PNG bit depth")
-                PngTransparencyMetadata(grayscaleSample = sample)
+                PngTransparencyMetadata(grayscaleSample = normalizedSample(payload.start))
             }
 
             2 -> {
                 requireLength(payload, 6)
-                val red = u16(payload.start).toInt()
-                val green = u16(payload.start + 2).toInt()
-                val blue = u16(payload.start + 4).toInt()
-                if (red > maximumSample || green > maximumSample || blue > maximumSample) {
-                    abort("value.invalid", "tRNS RGB sample exceeds the PNG bit depth")
-                }
-                PngTransparencyMetadata(redSample = red, greenSample = green, blueSample = blue)
+                PngTransparencyMetadata(
+                    redSample = normalizedSample(payload.start),
+                    greenSample = normalizedSample(payload.start + 2),
+                    blueSample = normalizedSample(payload.start + 4),
+                )
             }
 
             3 -> {
@@ -629,25 +642,140 @@ private class PngMetadataBuilder(
         }
     }
 
+    private fun collectStructuralDiagnostics(): List<PngDiagnostic> {
+        val collected = ArrayList<PngDiagnostic>()
+        val counts = HashMap<String, Int>()
+        val suggestedPaletteNames = HashSet<String>()
+        val backgroundBeforePalette = ArrayList<PngChunkRecord>()
+        val transparencyBeforePalette = ArrayList<PngChunkRecord>()
+        val masteringDisplay = ArrayList<PngChunkRecord>()
+        var sawPalette = false
+        var sawIdat = false
+        var sawCicp = false
+
+        fun refusal(record: PngChunkRecord, code: String, message: String) {
+            collected += PngDiagnostic(
+                code = code,
+                offset = record.rawRange.startInclusive,
+                chunkType = record.type,
+                message = message,
+                severity = PngDiagnosticSeverity.REFUSAL,
+            )
+        }
+
+        for (record in container.chunks) {
+            when (record.type) {
+                "PLTE" -> {
+                    for (background in backgroundBeforePalette) {
+                        refusal(background, "png.metadata.bKGD.order", "bKGD must follow PLTE when PLTE is present")
+                    }
+                    for (transparency in transparencyBeforePalette) {
+                        refusal(transparency, "png.metadata.tRNS.order", "tRNS must follow PLTE when PLTE is present")
+                    }
+                    sawPalette = true
+                }
+
+                "IDAT" -> sawIdat = true
+
+                else -> if (record.isAncillary) {
+                    if (record.type in STRUCTURAL_SINGLETON_TYPES) {
+                        val count = (counts[record.type] ?: 0) + 1
+                        counts[record.type] = count
+                        if (count > 1) {
+                            refusal(
+                                record,
+                                "png.metadata.${record.type}.duplicate",
+                                "PNG static metadata chunk ${record.type} may occur only once",
+                            )
+                        }
+                    }
+                    if (record.type in STRUCTURAL_PRE_PALETTE_AND_IDAT_TYPES && (sawPalette || sawIdat)) {
+                        refusal(
+                            record,
+                            "png.metadata.${record.type}.order",
+                            "PNG metadata chunk ${record.type} must precede PLTE and IDAT",
+                        )
+                    }
+                    if (record.type in STRUCTURAL_PRE_IDAT_TYPES && sawIdat) {
+                        refusal(
+                            record,
+                            "png.metadata.${record.type}.order",
+                            "PNG metadata chunk ${record.type} must precede IDAT",
+                        )
+                    }
+                    when (record.type) {
+                        "bKGD" -> if (!sawPalette) {
+                            if (container.header.colorType == INDEXED_COLOR_TYPE) {
+                                refusal(record, "png.metadata.bKGD.order", "bKGD must follow PLTE for indexed PNG")
+                            } else {
+                                backgroundBeforePalette += record
+                            }
+                        }
+
+                        "hIST" -> if (!sawPalette) {
+                            refusal(record, "png.metadata.hIST.plte.required", "hIST requires a preceding PLTE chunk")
+                        }
+
+                        "mDCV" -> masteringDisplay += record
+                        "cICP" -> sawCicp = true
+                        "sPLT" -> structuralSuggestedPaletteName(record)?.let { name ->
+                            if (!suggestedPaletteNames.add(name)) {
+                                refusal(record, "png.metadata.sPLT.name.duplicate", "sPLT palette names must be distinct")
+                            }
+                        }
+
+                        "tRNS" -> if (!sawPalette) {
+                            if (container.header.colorType == INDEXED_COLOR_TYPE) {
+                                refusal(record, "png.metadata.tRNS.order", "tRNS must follow PLTE for indexed PNG")
+                            } else {
+                                transparencyBeforePalette += record
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if (!sawCicp) {
+            for (record in masteringDisplay) {
+                refusal(record, "png.metadata.mDCV.cicp.required", "mDCV requires an accompanying cICP chunk")
+            }
+        }
+        return immutableList(collected)
+    }
+
+    private fun structuralSuggestedPaletteName(record: PngChunkRecord): String? {
+        val payload = payload(record)
+        val maximumEnd = minOf(payload.end, KEYWORD_MAX_BYTES + 1)
+        var separator = payload.start
+        while (separator < maximumEnd && u8(separator) != 0) separator++
+        if (separator == payload.start || separator == maximumEnd) return null
+
+        var previousWasSpace = false
+        for (offset in payload.start until separator) {
+            val value = u8(offset)
+            val isSpace = value == ' '.code
+            if ((value !in 0x20..0x7e && value !in 0xa1..0xff) ||
+                value == 0xa0 ||
+                (isSpace && (offset == payload.start || offset == separator - 1 || previousWasSpace))
+            ) {
+                return null
+            }
+            previousWasSpace = isSpace
+        }
+        return requireActivePayload().latin1String(payload.start, separator - payload.start)
+    }
+
     private fun component(offset: Int, size: Int): Int = if (size == 1) u8(offset) else u16(offset).toInt()
 
     private fun <T> decode(record: PngChunkRecord, block: () -> T): PngMetadataValue<T> {
-        val structuralDiagnostic = container.metadataDiagnostics.firstOrNull {
+        val structuralDiagnostic = structuralDiagnostics.firstOrNull {
             it.offset == record.rawRange.startInclusive && it.chunkType == record.type
         }
         if (structuralDiagnostic != null) return PngMetadataValue.Refused(record, structuralDiagnostic)
 
-        val budgetCheckpoint = decodedMetadataBudget.checkpoint()
-        val textChunkCheckpoint = textChunkCount
-        val suggestedPaletteCountCheckpoint = suggestedPaletteCount
-        val suggestedPaletteEntriesCheckpoint = suggestedPaletteEntriesTotal
         return try {
             PngMetadataValue.Resolved(record, block())
         } catch (refusal: MetadataRefusal) {
-            decodedMetadataBudget.restore(budgetCheckpoint)
-            textChunkCount = textChunkCheckpoint
-            suggestedPaletteCount = suggestedPaletteCountCheckpoint
-            suggestedPaletteEntriesTotal = suggestedPaletteEntriesCheckpoint
             val diagnostic = PngDiagnostic(
                 code = "png.metadata.${record.type}.${refusal.code}",
                 offset = record.rawRange.startInclusive,
@@ -687,9 +815,15 @@ private class PngMetadataBuilder(
     }
 
     private fun payload(record: PngChunkRecord): PayloadRange {
-        val start = record.payloadRange.startInclusive.toInt()
-        val end = record.payloadRange.endExclusive.toInt()
-        return PayloadRange(start, end)
+        val replacement = payloadOverrides[record.ordinal]
+        val payload = if (replacement != null) {
+            MetadataPayload(replacement, 0, replacement.size)
+        } else {
+            val start = record.payloadRange.startInclusive.toInt()
+            MetadataPayload(data, start, record.payloadRange.size.toInt())
+        }
+        activePayload = payload
+        return PayloadRange(0, payload.size)
     }
 
     private fun requireLength(payload: PayloadRange, expected: Int) {
@@ -698,7 +832,7 @@ private class PngMetadataBuilder(
 
     private fun zeroSeparator(start: Int, end: Int, maximumBytes: Int, missingCode: String): Int {
         val boundedEnd = minOf(end.toLong(), start.toLong() + maximumBytes.toLong() + 1L).toInt()
-        for (offset in start until boundedEnd) if (data[offset] == 0.toByte()) return offset
+        for (offset in start until boundedEnd) if (u8(offset) == 0) return offset
         if (end - start > maximumBytes) abort(missingCode, "PNG metadata string exceeds the configured limit")
         abort("layout", "PNG metadata string has no null separator")
     }
@@ -719,10 +853,21 @@ private class PngMetadataBuilder(
             previousWasSpace = isSpace
         }
         reserveDecoded(length.toLong())
-        return String(data, start, length, Charsets.ISO_8859_1)
+        return requireActivePayload().latin1String(start, length)
     }
 
-    private fun latin1Text(start: Int, end: Int): String = latin1Text(data, start, end - start)
+    private fun latin1Text(start: Int, end: Int): String {
+        val length = end - start
+        if (length > limits.maxTextBytes) abort("text.limit", "PNG text exceeds the configured limit")
+        reserveDecoded(length.toLong())
+        for (offset in start until end) {
+            val value = u8(offset)
+            if (value != '\n'.code && value !in 0x20..0x7e && value !in 0xa1..0xff) {
+                abort("text.invalid", "PNG text contains a disallowed Latin-1 control character")
+            }
+        }
+        return requireActivePayload().latin1String(start, length)
+    }
 
     private fun latin1Text(
         bytes: ByteArray,
@@ -752,13 +897,17 @@ private class PngMetadataBuilder(
             }
         }
         reserveDecoded((end - start).toLong())
-        return String(data, start, end - start, Charsets.US_ASCII)
+        return requireActivePayload().asciiString(start, end - start)
     }
 
     private fun utf8(start: Int, end: Int): String {
         val length = end - start
         if (length > limits.maxTextBytes) abort("text.limit", "UTF-8 text exceeds the configured limit")
-        return utf8(data, start, length)
+        reserveDecoded(length.toLong())
+        for (offset in start until end) {
+            if (u8(offset) == 0) abort("text.nul", "iTXt text must not contain null bytes")
+        }
+        return decodeUtf8(requireActivePayload().byteBuffer(start, length))
     }
 
     private fun utf8(
@@ -772,15 +921,7 @@ private class PngMetadataBuilder(
         for (offset in start until start + length) {
             if (bytes[offset] == 0.toByte()) abort("text.nul", "iTXt text must not contain null bytes")
         }
-        return try {
-            Charsets.UTF_8.newDecoder()
-                .onMalformedInput(CodingErrorAction.REPORT)
-                .onUnmappableCharacter(CodingErrorAction.REPORT)
-                .decode(ByteBuffer.wrap(bytes, start, length))
-                .toString()
-        } catch (_: CharacterCodingException) {
-            abort("utf8.invalid", "iTXt contains malformed UTF-8")
-        }
+        return decodeUtf8(ByteBuffer.wrap(bytes, start, length))
     }
 
     private fun maximumInflatedTextBytes(): Int = minOf(limits.maxInflatedTextBytes, limits.maxTextBytes)
@@ -789,7 +930,8 @@ private class PngMetadataBuilder(
         val inflater = Inflater()
         val output = BoundedBytes(maxBytes)
         try {
-            inflater.setInput(data, start, end - start)
+            val input = requireActivePayload().input(start, end - start)
+            inflater.setInput(input.bytes, input.offset, input.length)
             val buffer = ByteArray(INFLATE_BUFFER_BYTES)
             while (!inflater.finished()) {
                 val count = try {
@@ -817,7 +959,7 @@ private class PngMetadataBuilder(
         }
     }
 
-    private fun u8(offset: Int): Int = data[offset].toInt() and 0xff
+    private fun u8(offset: Int): Int = requireActivePayload().u8(offset)
 
     private fun u16(offset: Int): Long = ((u8(offset) shl 8) or u8(offset + 1)).toLong()
 
@@ -835,6 +977,20 @@ private class PngMetadataBuilder(
 
     private fun abort(code: String, message: String): Nothing = throw MetadataRefusal(code, message)
 
+    private fun requireActivePayload(): MetadataPayload = checkNotNull(activePayload) {
+        "PNG metadata byte access requires an active chunk payload"
+    }
+
+    private fun decodeUtf8(buffer: ByteBuffer): String = try {
+        Charsets.UTF_8.newDecoder()
+            .onMalformedInput(CodingErrorAction.REPORT)
+            .onUnmappableCharacter(CodingErrorAction.REPORT)
+            .decode(buffer)
+            .toString()
+    } catch (_: CharacterCodingException) {
+        abort("utf8.invalid", "iTXt contains malformed UTF-8")
+    }
+
     private data class PayloadRange(val start: Int, val end: Int) {
         val length: Int
             get() = end - start
@@ -843,8 +999,36 @@ private class PngMetadataBuilder(
     private class MetadataRefusal(val code: String, message: String) : RuntimeException(message)
 }
 
+private class MetadataPayload(
+    private val bytes: ByteArray,
+    private val start: Int,
+    val size: Int,
+) {
+    init {
+        require(start >= 0 && size >= 0 && start <= bytes.size - size) {
+            "PNG metadata payload must be within its backing byte array"
+        }
+    }
+
+    fun u8(offset: Int): Int = bytes[start + offset].toInt() and 0xFF
+
+    fun latin1String(offset: Int, length: Int): String = String(bytes, start + offset, length, Charsets.ISO_8859_1)
+
+    fun asciiString(offset: Int, length: Int): String = String(bytes, start + offset, length, Charsets.US_ASCII)
+
+    fun byteBuffer(offset: Int, length: Int): ByteBuffer = ByteBuffer.wrap(bytes, start + offset, length)
+
+    fun input(offset: Int, length: Int): MetadataPayloadInput = MetadataPayloadInput(bytes, start + offset, length)
+}
+
+private data class MetadataPayloadInput(
+    val bytes: ByteArray,
+    val offset: Int,
+    val length: Int,
+)
+
 private class BoundedBytes(private val maximumSize: Int) {
-    private var bytes: ByteArray = ByteArray(minOf(maximumSize, INFLATE_BUFFER_BYTES))
+    private var bytes: ByteArray = ByteArray(0)
     private var size: Int = 0
 
     fun append(source: ByteArray, count: Int): Boolean {
@@ -859,7 +1043,11 @@ private class BoundedBytes(private val maximumSize: Int) {
     fun toByteArray(): ByteArray = bytes.copyOf(size)
 
     private fun grow(required: Int) {
-        val doubled = if (bytes.size > maximumSize / 2) maximumSize else bytes.size * 2
+        val doubled = when {
+            bytes.isEmpty() -> required
+            bytes.size > maximumSize / 2 -> maximumSize
+            else -> bytes.size * 2
+        }
         bytes = bytes.copyOf(maxOf(required, doubled))
     }
 }
@@ -868,14 +1056,11 @@ private class MetadataBudget(maximumBytes: Int) {
     private val maximumBytes: Long = maximumBytes.toLong()
     private var usedBytes: Long = 0L
 
-    fun checkpoint(): Long = usedBytes
-
-    fun restore(checkpoint: Long) {
-        usedBytes = checkpoint
-    }
-
     fun reserve(bytes: Long): Boolean {
-        if (bytes < 0L || bytes > maximumBytes - usedBytes) return false
+        if (bytes < 0L || bytes > maximumBytes - usedBytes) {
+            usedBytes = maximumBytes
+            return false
+        }
         usedBytes += bytes
         return true
     }
@@ -888,3 +1073,31 @@ private const val INFLATE_BUFFER_BYTES: Int = 8192
 private const val HISTOGRAM_ENTRY_BUDGET_BYTES: Long = 16L
 private const val SUGGESTED_PALETTE_ENTRY_BUDGET_BYTES: Long = 48L
 private const val TRANSPARENCY_ENTRY_BUDGET_BYTES: Long = 16L
+private const val INDEXED_COLOR_TYPE: Int = 3
+private val STRUCTURAL_SINGLETON_TYPES: Set<String> = setOf(
+    "iCCP",
+    "sRGB",
+    "gAMA",
+    "cHRM",
+    "cICP",
+    "mDCV",
+    "cLLI",
+    "eXIf",
+    "pHYs",
+    "tIME",
+    "sBIT",
+    "bKGD",
+    "hIST",
+    "tRNS",
+)
+private val STRUCTURAL_PRE_PALETTE_AND_IDAT_TYPES: Set<String> = setOf(
+    "iCCP",
+    "sRGB",
+    "gAMA",
+    "cHRM",
+    "cICP",
+    "mDCV",
+    "cLLI",
+    "sBIT",
+)
+private val STRUCTURAL_PRE_IDAT_TYPES: Set<String> = setOf("bKGD", "eXIf", "hIST", "pHYs", "sPLT", "tRNS")

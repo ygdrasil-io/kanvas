@@ -406,6 +406,31 @@ class PngContainerParserTest {
     }
 
     @Test
+    fun `rejects critical PLTE color type violations`() {
+        for (colorType in listOf(0, 4)) {
+            assertFailure(
+                png(
+                    "IHDR" to ihdr(colorType = colorType),
+                    "PLTE" to byteArrayOf(0, 0, 0),
+                    "IDAT" to byteArrayOf(1),
+                    "IEND" to ByteArray(0),
+                ),
+                "png.plte.color-type.forbidden",
+                "PLTE",
+            )
+        }
+        assertFailure(
+            png(
+                "IHDR" to ihdr(colorType = 3),
+                "IDAT" to byteArrayOf(1),
+                "IEND" to ByteArray(0),
+            ),
+            "png.plte.required",
+            "IEND",
+        )
+    }
+
+    @Test
     fun `rejects bytes after IEND`() {
         val data = png(
             "IHDR" to ihdr(),

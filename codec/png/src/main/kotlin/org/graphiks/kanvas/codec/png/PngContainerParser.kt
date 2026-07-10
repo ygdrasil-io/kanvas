@@ -282,6 +282,15 @@ public object PngContainerParser {
                     if (sawIdat) {
                         return failure("png.plte.order", chunkOffset, type, "PLTE must precede IDAT")
                     }
+                    val parsedHeader = requireNotNull(header)
+                    if (parsedHeader.colorType !in PLTE_COLOR_TYPES) {
+                        return failure(
+                            "png.plte.color-type.forbidden",
+                            chunkOffset,
+                            type,
+                            "PLTE is permitted only for PNG color types two, three, and six",
+                        )
+                    }
                     if (payloadLength == 0L || payloadLength % 3L != 0L) {
                         return failure(
                             "png.plte.length",
@@ -299,7 +308,6 @@ public object PngContainerParser {
                             "PLTE contains more than 256 entries",
                         )
                     }
-                    val parsedHeader = requireNotNull(header)
                     if (
                         parsedHeader.colorType == INDEXED_COLOR_TYPE &&
                         paletteEntries > (1L shl parsedHeader.bitDepth)
@@ -354,6 +362,14 @@ public object PngContainerParser {
                     }
                     if (!sawIdat) {
                         return failure("png.idat.required", chunkOffset, type, "PNG requires at least one IDAT chunk")
+                    }
+                    if (requireNotNull(header).colorType == INDEXED_COLOR_TYPE && !sawPalette) {
+                        return failure(
+                            "png.plte.required",
+                            chunkOffset,
+                            type,
+                            "Indexed PNG requires a PLTE chunk before IEND",
+                        )
                     }
                 }
 
@@ -604,6 +620,7 @@ public object PngContainerParser {
     private const val SUGGESTED_PALETTE_NAME_MAX_BYTES: Int = 79
     private const val MAX_PLTE_ENTRIES: Int = 256
     private const val INDEXED_COLOR_TYPE: Int = 3
+    private val PLTE_COLOR_TYPES: Set<Int> = setOf(2, INDEXED_COLOR_TYPE, 6)
     private const val TYPE_IHDR: String = "IHDR"
     private const val TYPE_PLTE: String = "PLTE"
     private const val TYPE_IDAT: String = "IDAT"
