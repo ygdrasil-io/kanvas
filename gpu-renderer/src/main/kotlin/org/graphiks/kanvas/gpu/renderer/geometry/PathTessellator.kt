@@ -78,6 +78,7 @@ class PathTessellator(
                     current = verb.p
                     contour.start = verb.p
                     contour.isOpen = false
+                    contour.hasExplicitStart = true
                 }
                 is PathVerb.LineTo -> {
                     beginContourIfNeeded(contour, current, result, contourStarts)
@@ -103,8 +104,13 @@ class PathTessellator(
                     }
                     if (contour.isOpen) {
                         current = contour.start
+                    } else if (contour.hasExplicitStart) {
+                        contourStarts.add(result.size)
+                        appendPoint(result, contour.start)
+                        current = contour.start
                     }
                     contour.isOpen = false
+                    contour.hasExplicitStart = false
                 }
             }
         }
@@ -124,6 +130,7 @@ class PathTessellator(
         contourStarts.add(result.size)
         appendPoint(result, current)
         contour.isOpen = true
+        contour.hasExplicitStart = false
     }
 
     private fun appendPoint(result: MutableList<Point>, point: Point) {
@@ -207,5 +214,6 @@ class PathTessellator(
     private data class ContourState(
         var start: Point,
         var isOpen: Boolean = false,
+        var hasExplicitStart: Boolean = false,
     )
 }

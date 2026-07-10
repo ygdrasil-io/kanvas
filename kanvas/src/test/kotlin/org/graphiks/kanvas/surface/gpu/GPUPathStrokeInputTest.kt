@@ -103,6 +103,28 @@ class GPUPathStrokeInputTest {
     }
 
     @Test
+    fun `move close round stroke emits cap geometry through path flattening`() {
+        val path = Path().apply {
+            moveTo(10f, 10f)
+            close()
+        }
+        val flattened = PathTessellator().flattenWithContours(path.toPathTessellatorData())
+
+        val stroke = strokeToFillGeometry(
+            contourVertices = flattened.points.flatMap { listOf(it.x, it.y) },
+            contourStarts = flattened.contourStarts,
+            strokeWidth = 10f,
+            capStyle = StrokeCap.ROUND,
+        )
+
+        assertEquals(listOf(Point(10f, 10f)), flattened.points)
+        assertEquals(listOf(0), flattened.contourStarts)
+        assertTrue(stroke.vertices.isNotEmpty())
+        assertEquals(stroke.vertices.size / 2, stroke.contourStarts.last())
+        assertTrue(stroke.contourStarts.zipWithNext().all { (start, end) -> end - start == 3 })
+    }
+
+    @Test
     fun `large sweep arc stays inside its ellipse bounds`() {
         val radius = 45f
         val sweepRad = 355.0 * PI / 180.0

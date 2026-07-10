@@ -47,7 +47,7 @@ class PathTessellatorTest {
     }
 
     @Test
-    fun `empty move contours do not emit ghost points`() {
+    fun `move only contours stay empty but move close emits a strokeable point`() {
         val tessellator = PathTessellator()
         val moveOnlyPath = PathData(
             verbs = listOf(PathVerb.MoveTo(Point(1f, 1f))),
@@ -97,7 +97,13 @@ class PathTessellatorTest {
             ),
             trailingMove,
         )
-        assertEquals(FlattenedPath(emptyList(), emptyList()), moveThenClose)
+        assertEquals(
+            FlattenedPath(
+                points = listOf(Point(1f, 1f)),
+                contourStarts = listOf(0),
+            ),
+            moveThenClose,
+        )
     }
 
     @Test
