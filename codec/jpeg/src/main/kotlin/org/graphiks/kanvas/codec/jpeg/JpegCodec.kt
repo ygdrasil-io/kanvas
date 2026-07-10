@@ -324,11 +324,16 @@ private fun parseJpeg(data: ByteArray): ParsedJpeg? {
                     }
                     MARKER_SOF0, MARKER_SOF2 -> {
                         if (coding != null) return null
+                        val frameSpec = JpegFrameSpec.fromSof(marker) ?: return null
                         val frame = parseSof(data, payloadStart, payloadEnd) ?: return null
                         width = frame.width
                         height = frame.height
                         frameComponents = frame.components
-                        coding = if (marker == MARKER_SOF0) JpegCoding.kBaseline else JpegCoding.kProgressive
+                        coding = when (frameSpec.sampleCoding) {
+                            JpegSampleCoding.DCT_SEQUENTIAL -> JpegCoding.kBaseline
+                            JpegSampleCoding.DCT_PROGRESSIVE -> JpegCoding.kProgressive
+                            JpegSampleCoding.LOSSLESS -> return null
+                        }
                     }
                     MARKER_DRI -> {
                         if (payloadEnd - payloadStart != 2) return null
