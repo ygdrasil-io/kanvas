@@ -7,6 +7,7 @@ public class PngDocument private constructor(
     private val sourceBytes: ByteArray,
     private val container: PngContainer,
     private val limits: PngContainerLimits,
+    /** Typed metadata for the bytes that [save] will emit for the current write plan. */
     public val metadata: PngMetadata,
     public val writePlan: PngWritePlan,
 ) {
@@ -67,6 +68,9 @@ public class PngDocument private constructor(
 
     public val sPLT: List<PngMetadataValue<PngSuggestedPaletteMetadata>>
         get() = metadata.sPLT
+
+    public val tRNS: PngMetadataValue<PngTransparencyMetadata>?
+        get() = metadata.tRNS
 
     public fun withAncillaryChunk(type: String, payload: ByteArray): PngDocument {
         validateAncillaryType(type)
@@ -383,9 +387,26 @@ public class PngDocument private constructor(
         sourceBytes = sourceBytes,
         container = container,
         limits = limits,
-        metadata = metadata,
+        metadata = metadataFor(plan),
         writePlan = plan,
     )
+
+    private fun metadataFor(plan: PngWritePlan): PngMetadata {
+        if (plan.impact != PngWriteImpact.ANCILLARY) return metadata
+        val projected = PngDocument(
+            sourceBytes = sourceBytes,
+            container = container,
+            limits = limits,
+            metadata = metadata,
+            writePlan = plan,
+        ).save()
+        if (projected.status != PngDocumentSaveStatus.SAVED) return metadata
+        val outputBytes = projected.bytes
+        return when (val parsed = PngContainerParser.parse(outputBytes, limits)) {
+            is PngContainerParseResult.Success -> PngMetadataParser.parse(outputBytes, parsed.container, limits.metadata)
+            is PngContainerParseResult.Failure -> metadata
+        }
+    }
 
     private fun ByteArrayOutputStream.writeRaw(record: PngChunkRecord) {
         val start = record.rawRange.startInclusive.toInt()

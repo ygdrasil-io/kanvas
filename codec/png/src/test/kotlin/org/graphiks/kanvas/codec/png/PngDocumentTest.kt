@@ -371,7 +371,12 @@ class PngDocumentTest {
             "IDAT" to byteArrayOf(0x20),
             "IEND" to ByteArray(0),
         )
-        assertOpenFailure(invalidSource, "png.metadata.sBIT.order")
+        val invalidDocument = open(invalidSource)
+        assertEquals(
+            "png.metadata.sBIT.order",
+            (invalidDocument.sBIT as PngMetadataValue.Refused).diagnostic.code,
+        )
+        assertArrayEquals(invalidSource, invalidDocument.save().bytes)
 
         val postIdatSource = png(
             "IHDR" to ihdr(),
@@ -379,7 +384,12 @@ class PngDocumentTest {
             "sBIT" to byteArrayOf(8, 8, 8),
             "IEND" to ByteArray(0),
         )
-        assertOpenFailure(postIdatSource, "png.metadata.sBIT.order")
+        val postIdatDocument = open(postIdatSource)
+        assertEquals(
+            "png.metadata.sBIT.order",
+            (postIdatDocument.sBIT as PngMetadataValue.Refused).diagnostic.code,
+        )
+        assertArrayEquals(postIdatSource, postIdatDocument.save().bytes)
     }
 
     @Test
@@ -422,7 +432,9 @@ class PngDocumentTest {
                 "IDAT" to byteArrayOf(0x20),
                 "IEND" to ByteArray(0),
             )
-            assertOpenFailure(malformed, code)
+            val document = open(malformed)
+            assertEquals(code, (metadataValueFor(document, type) as PngMetadataValue.Refused).diagnostic.code)
+            assertArrayEquals(malformed, document.save().bytes)
         }
 
         val malformedTransparency = png(
@@ -450,7 +462,12 @@ class PngDocumentTest {
             "IDAT" to byteArrayOf(0x20),
             "IEND" to ByteArray(0),
         )
-        assertOpenFailure(existingWithoutPalette, "png.metadata.hIST.plte.required")
+        val existingWithoutPaletteDocument = open(existingWithoutPalette)
+        assertEquals(
+            "png.metadata.hIST.plte.required",
+            (existingWithoutPaletteDocument.hIST as PngMetadataValue.Refused).diagnostic.code,
+        )
+        assertArrayEquals(existingWithoutPalette, existingWithoutPaletteDocument.save().bytes)
     }
 
     @Test
@@ -621,6 +638,7 @@ class PngDocumentTest {
             "pHYs" to u32(3_780) + u32(3_780) + byteArrayOf(1),
             "sPLT" to suggestedPalette("desktop"),
             "bKGD" to byteArrayOf(0, 1, 0, 2, 0, 3),
+            "tRNS" to u16(1) + u16(2) + u16(3),
             "eXIf" to byteArrayOf('I'.code.toByte(), 'I'.code.toByte(), 42, 0, 8, 0, 0, 0),
             "tIME" to byteArrayOf(0x07, 0xEA.toByte(), 7, 10, 12, 34, 56),
             "tEXt" to textChunk("Title", "Kanvas"),
@@ -648,6 +666,7 @@ class PngDocumentTest {
         assertEquals("Metadonnees", resolved(document.iTXt.single()).text)
         assertEquals(listOf(8, 8, 8), resolved(document.sBIT).channelBits)
         assertEquals(3, resolved(document.bKGD).blue)
+        assertEquals(1, resolved(document.tRNS).redSample)
         assertEquals(1, resolved(document.sPLT.single()).entries.size)
         assertTrue(document.metadata.diagnostics.isEmpty())
         assertArrayEquals(source, document.save().bytes)
@@ -730,6 +749,309 @@ class PngDocumentTest {
     }
 
     @Test
+    fun `retains ancillary structural violations as typed refusals`() {
+        val fixtures = listOf(
+            "gAMA" to png(
+                "IHDR" to ihdr(),
+                "gAMA" to u32(45_455),
+                "gAMA" to u32(45_455),
+                "IDAT" to byteArrayOf(0x10),
+                "IEND" to ByteArray(0),
+            ) to "png.metadata.gAMA.duplicate",
+            "hIST" to png(
+                "IHDR" to ihdr(colorType = 3),
+                "hIST" to byteArrayOf(0, 1),
+                "IDAT" to byteArrayOf(0x10),
+                "IEND" to ByteArray(0),
+            ) to "png.metadata.hIST.plte.required",
+            "mDCV" to png(
+                "IHDR" to ihdr(),
+                "mDCV" to masteringDisplay(),
+                "IDAT" to byteArrayOf(0x10),
+                "IEND" to ByteArray(0),
+            ) to "png.metadata.mDCV.cicp.required",
+            "tRNS" to png(
+                "IHDR" to ihdr(colorType = 3),
+                "tRNS" to byteArrayOf(0x7F),
+                "PLTE" to byteArrayOf(0, 0, 0),
+                "IDAT" to byteArrayOf(0x10),
+                "IEND" to ByteArray(0),
+            ) to "png.metadata.tRNS.order",
+        )
+
+        for ((fixture, code) in fixtures) {
+            val (type, source) = fixture
+            val document = open(source)
+            val metadata = metadataValueFor(document, type)
+
+            assertInstanceOf(PngMetadataValue.Refused::class.java, metadata, type)
+            assertEquals(code, (metadata as PngMetadataValue.Refused).diagnostic.code)
+            assertTrue(document.metadata.diagnostics.contains(metadata.diagnostic))
+            assertArrayEquals(source, document.originalBytes)
+            assertArrayEquals(source, document.save().bytes)
+        }
+
+        val duplicateSuggestedPalette = png(
+            "IHDR" to ihdr(),
+            "sPLT" to suggestedPalette("display"),
+            "sPLT" to suggestedPalette("display"),
+            "IDAT" to byteArrayOf(0x10),
+            "IEND" to ByteArray(0),
+        )
+        val suggestedPaletteDocument = open(duplicateSuggestedPalette)
+        assertInstanceOf(PngMetadataValue.Resolved::class.java, suggestedPaletteDocument.sPLT.first())
+        assertEquals(
+            "png.metadata.sPLT.name.duplicate",
+            (suggestedPaletteDocument.sPLT.last() as PngMetadataValue.Refused).diagnostic.code,
+        )
+        assertArrayEquals(duplicateSuggestedPalette, suggestedPaletteDocument.save().bytes)
+    }
+
+    @Test
+    fun `iTXt ignores uncompressed method and rejects null text bytes`() {
+        val uncompressedUnknownMethod = png(
+            "IHDR" to ihdr(),
+            "iTXt" to "Title".toByteArray(Charsets.ISO_8859_1) + byteArrayOf(0, 0, 7, 0, 0, 'o'.code.toByte(), 'k'.code.toByte()),
+            "IDAT" to byteArrayOf(0x10),
+            "IEND" to ByteArray(0),
+        )
+        assertEquals("ok", resolved(open(uncompressedUnknownMethod).iTXt.single()).text)
+
+        val directNull = png(
+            "IHDR" to ihdr(),
+            "iTXt" to "Title".toByteArray(Charsets.ISO_8859_1) + byteArrayOf(0, 0, 0, 0, 0, 'a'.code.toByte(), 0, 'b'.code.toByte()),
+            "IDAT" to byteArrayOf(0x10),
+            "IEND" to ByteArray(0),
+        )
+        val compressedNull = png(
+            "IHDR" to ihdr(),
+            "iTXt" to "Title".toByteArray(Charsets.ISO_8859_1) + byteArrayOf(0, 1, 0, 0, 0) +
+                deflate(byteArrayOf('a'.code.toByte(), 0, 'b'.code.toByte())),
+            "IDAT" to byteArrayOf(0x10),
+            "IEND" to ByteArray(0),
+        )
+
+        for (source in listOf(directNull, compressedNull)) {
+            val document = open(source)
+            assertEquals(
+                "png.metadata.iTXt.text.nul",
+                (document.iTXt.single() as PngMetadataValue.Refused).diagnostic.code,
+            )
+            assertArrayEquals(source, document.save().bytes)
+        }
+    }
+
+    @Test
+    fun `enforces document wide decoded text and repeatable text count budgets`() {
+        val countLimited = png(
+            "IHDR" to ihdr(),
+            "tEXt" to textChunk("One", "a"),
+            "tEXt" to textChunk("Two", "b"),
+            "IDAT" to byteArrayOf(0x10),
+            "IEND" to ByteArray(0),
+        )
+        val countDocument = open(
+            countLimited,
+            PngContainerLimits.Default.copy(
+                metadata = PngMetadataLimits.Default.copy(maxTextChunkCount = 1),
+            ),
+        )
+        assertInstanceOf(PngMetadataValue.Resolved::class.java, countDocument.tEXt.first())
+        assertEquals(
+            "png.metadata.tEXt.count.limit",
+            (countDocument.tEXt.last() as PngMetadataValue.Refused).diagnostic.code,
+        )
+        assertArrayEquals(countLimited, countDocument.save().bytes)
+
+        val compressed = png(
+            "IHDR" to ihdr(),
+            "zTXt" to compressedTextChunk("One", "abc"),
+            "zTXt" to compressedTextChunk("Two", "def"),
+            "IDAT" to byteArrayOf(0x10),
+            "IEND" to ByteArray(0),
+        )
+        val compressedDocument = open(
+            compressed,
+            PngContainerLimits.Default.copy(
+                metadata = PngMetadataLimits.Default.copy(maxDecodedMetadataBytes = 8),
+            ),
+        )
+        assertInstanceOf(PngMetadataValue.Resolved::class.java, compressedDocument.zTXt.first())
+        assertEquals(
+            "png.metadata.zTXt.decoded.limit",
+            (compressedDocument.zTXt.last() as PngMetadataValue.Refused).diagnostic.code,
+        )
+        assertArrayEquals(compressed, compressedDocument.save().bytes)
+    }
+
+    @Test
+    fun `bounds histogram and aggregate suggested palette materialization`() {
+        val palette256 = ByteArray(256 * 3)
+        val histogram256 = ByteArray(256 * 2)
+        val maximum = png(
+            "IHDR" to ihdr(colorType = 3),
+            "PLTE" to palette256,
+            "hIST" to histogram256,
+            "IDAT" to byteArrayOf(0x10),
+            "IEND" to ByteArray(0),
+        )
+        assertEquals(256, resolved(open(maximum).hIST).frequencies.size)
+        val histogramLimited = open(
+            maximum,
+            PngContainerLimits.Default.copy(
+                metadata = PngMetadataLimits.Default.copy(maxHistogramEntries = 255),
+            ),
+        )
+        assertEquals(
+            "png.metadata.hIST.entries.limit",
+            (histogramLimited.hIST as PngMetadataValue.Refused).diagnostic.code,
+        )
+        assertArrayEquals(maximum, histogramLimited.save().bytes)
+
+        val oversizedPalette = png(
+            "IHDR" to ihdr(colorType = 3),
+            "PLTE" to ByteArray(257 * 3),
+            "hIST" to ByteArray(257 * 2),
+            "IDAT" to byteArrayOf(0x10),
+            "IEND" to ByteArray(0),
+        )
+        assertOpenFailure(oversizedPalette, "png.plte.entries.limit")
+
+        val suggestedPalettes = png(
+            "IHDR" to ihdr(),
+            "sPLT" to suggestedPalette("one"),
+            "sPLT" to suggestedPalette("two"),
+            "IDAT" to byteArrayOf(0x10),
+            "IEND" to ByteArray(0),
+        )
+        val countLimited = open(
+            suggestedPalettes,
+            PngContainerLimits.Default.copy(
+                metadata = PngMetadataLimits.Default.copy(maxSuggestedPaletteCount = 1),
+            ),
+        )
+        assertEquals(
+            "png.metadata.sPLT.count.limit",
+            (countLimited.sPLT.last() as PngMetadataValue.Refused).diagnostic.code,
+        )
+        val entryLimited = open(
+            suggestedPalettes,
+            PngContainerLimits.Default.copy(
+                metadata = PngMetadataLimits.Default.copy(maxSuggestedPaletteEntriesTotal = 1),
+            ),
+        )
+        assertEquals(
+            "png.metadata.sPLT.entries.total.limit",
+            (entryLimited.sPLT.last() as PngMetadataValue.Refused).diagnostic.code,
+        )
+        assertArrayEquals(suggestedPalettes, entryLimited.save().bytes)
+        val budgetLimited = open(
+            suggestedPalettes,
+            PngContainerLimits.Default.copy(
+                metadata = PngMetadataLimits.Default.copy(maxDecodedMetadataBytes = 75),
+            ),
+        )
+        assertEquals(
+            "png.metadata.sPLT.decoded.limit",
+            (budgetLimited.sPLT.last() as PngMetadataValue.Refused).diagnostic.code,
+        )
+        assertArrayEquals(suggestedPalettes, budgetLimited.save().bytes)
+    }
+
+    @Test
+    fun `masks low bit background samples and keeps grayscale cICP resolved`() {
+        for (bitDepth in listOf(1, 2, 4, 8)) {
+            val source = png(
+                "IHDR" to ihdr(bitDepth = bitDepth, colorType = 0),
+                "bKGD" to u16(0xFFFF),
+                "IDAT" to byteArrayOf(0x10),
+                "IEND" to ByteArray(0),
+            )
+            assertEquals((1 shl bitDepth) - 1, resolved(open(source).bKGD).grayscale)
+        }
+        val rgb = png(
+            "IHDR" to ihdr(bitDepth = 8, colorType = 2),
+            "bKGD" to u16(0xFF01) + u16(0xFF02) + u16(0xFF03),
+            "IDAT" to byteArrayOf(0x10),
+            "IEND" to ByteArray(0),
+        )
+        val background = resolved(open(rgb).bKGD)
+        assertEquals(1, background.red)
+        assertEquals(2, background.green)
+        assertEquals(3, background.blue)
+
+        for (colorType in listOf(0, 4)) {
+            val grayscaleCicp = png(
+                "IHDR" to ihdr(colorType = colorType),
+                "cICP" to byteArrayOf(1, 13, 0, 0),
+                "IDAT" to byteArrayOf(0x10),
+                "IEND" to ByteArray(0),
+            )
+            val cicp = resolved(open(grayscaleCicp).cICP)
+            assertEquals(1, cicp.info.primaries)
+            assertFalse(cicp.info.fullRange)
+            assertEquals(PngCicpProfileResolution.GRAYSCALE_INFO_ONLY, cicp.profileResolution)
+            assertNull(cicp.profile)
+        }
+    }
+
+    @Test
+    fun `exposes typed transparency layouts and keeps metadata current after ancillary edits`() {
+        val paletteTransparency = png(
+            "IHDR" to ihdr(colorType = 3),
+            "PLTE" to byteArrayOf(0, 0, 0, 1, 1, 1),
+            "tRNS" to byteArrayOf(0x7F),
+            "IDAT" to byteArrayOf(0x10),
+            "IEND" to ByteArray(0),
+        )
+        assertEquals(listOf(127), resolved(open(paletteTransparency).tRNS).paletteAlpha)
+
+        val invalidTransparency = png(
+            "IHDR" to ihdr(colorType = 4),
+            "tRNS" to byteArrayOf(0, 1),
+            "IDAT" to byteArrayOf(0x10),
+            "IEND" to ByteArray(0),
+        )
+        assertEquals(
+            "png.metadata.tRNS.color-type.invalid",
+            (open(invalidTransparency).tRNS as PngMetadataValue.Refused).diagnostic.code,
+        )
+        val invalidGrayTransparency = png(
+            "IHDR" to ihdr(bitDepth = 1, colorType = 0),
+            "tRNS" to u16(2),
+            "IDAT" to byteArrayOf(0x10),
+            "IEND" to ByteArray(0),
+        )
+        assertEquals(
+            "png.metadata.tRNS.value.invalid",
+            (open(invalidGrayTransparency).tRNS as PngMetadataValue.Refused).diagnostic.code,
+        )
+        val invalidPaletteTransparency = png(
+            "IHDR" to ihdr(colorType = 3),
+            "PLTE" to byteArrayOf(0, 0, 0),
+            "tRNS" to byteArrayOf(0x7F, 0x7E),
+            "IDAT" to byteArrayOf(0x10),
+            "IEND" to ByteArray(0),
+        )
+        assertEquals(
+            "png.metadata.tRNS.palette.length",
+            (open(invalidPaletteTransparency).tRNS as PngMetadataValue.Refused).diagnostic.code,
+        )
+
+        val source = png(
+            "IHDR" to ihdr(),
+            "tEXt" to textChunk("Title", "Original"),
+            "IDAT" to byteArrayOf(0x10),
+            "IEND" to ByteArray(0),
+        )
+        val replaced = open(source).withAncillaryChunk("tEXt", textChunk("Title", "Updated"))
+        assertEquals("Updated", resolved(replaced.tEXt.single()).text)
+        val removed = replaced.withoutChunks("tEXt")
+        assertTrue(removed.tEXt.isEmpty())
+        assertTrue(chunkPayloads(removed.save().bytes, "tEXt").isEmpty())
+    }
+
+    @Test
     fun `refuses invalid typed metadata values without losing their raw chunks`() {
         val semanticFixtures = listOf(
             "cICP" to byteArrayOf(1, 13, 1, 1) to "png.metadata.cICP.matrix.unsupported",
@@ -737,7 +1059,6 @@ class PngDocumentTest {
             "pHYs" to (ByteArray(8) + byteArrayOf(2)) to "png.metadata.pHYs.unit.invalid",
             "tIME" to byteArrayOf(0x07, 0xEA.toByte(), 2, 30, 0, 0, 0) to "png.metadata.tIME.date.invalid",
             "sBIT" to byteArrayOf(9, 8, 8) to "png.metadata.sBIT.value.invalid",
-            "bKGD" to byteArrayOf(1, 0, 0, 2, 0, 3) to "png.metadata.bKGD.value.invalid",
             "sPLT" to byteArrayOf('p'.code.toByte(), 0, 8, 1) to "png.metadata.sPLT.layout",
         )
 
@@ -899,6 +1220,7 @@ class PngDocumentTest {
         "bKGD" -> requireNotNull(document.bKGD)
         "hIST" -> requireNotNull(document.hIST)
         "sPLT" -> document.sPLT.single()
+        "tRNS" -> requireNotNull(document.tRNS)
         else -> error("Unexpected metadata type $type")
     }
 
@@ -970,6 +1292,8 @@ class PngDocumentTest {
         output.toByteArray()
     }
 
+    private fun u16(value: Int): ByteArray = byteArrayOf((value ushr 8).toByte(), value.toByte())
+
     private fun u32(value: Int): ByteArray = ByteArray(4).also { bytes -> writeI32BE(bytes, 0, value) }
 
     private fun png(vararg chunks: Pair<String, ByteArray>): ByteArray =
@@ -981,11 +1305,12 @@ class PngDocumentTest {
     private fun ihdr(
         width: Int = 1,
         height: Int = 1,
+        bitDepth: Int = 8,
         colorType: Int = 2,
     ): ByteArray = ByteArray(13).also { bytes ->
         writeI32BE(bytes, 0, width)
         writeI32BE(bytes, 4, height)
-        bytes[8] = 8
+        bytes[8] = bitDepth.toByte()
         bytes[9] = colorType.toByte()
     }
 

@@ -350,6 +350,62 @@ class PngContainerParserTest {
     }
 
     @Test
+    fun `validates PLTE cardinality before exposing the container`() {
+        assertFailure(
+            png(
+                "IHDR" to ihdr(colorType = 3),
+                "PLTE" to ByteArray(0),
+                "IDAT" to byteArrayOf(1),
+                "IEND" to ByteArray(0),
+            ),
+            "png.plte.length",
+            "PLTE",
+        )
+        assertFailure(
+            png(
+                "IHDR" to ihdr(colorType = 3),
+                "PLTE" to ByteArray(2),
+                "IDAT" to byteArrayOf(1),
+                "IEND" to ByteArray(0),
+            ),
+            "png.plte.length",
+            "PLTE",
+        )
+        assertFailure(
+            png(
+                "IHDR" to ihdr(colorType = 3),
+                "PLTE" to ByteArray(257 * 3),
+                "IDAT" to byteArrayOf(1),
+                "IEND" to ByteArray(0),
+            ),
+            "png.plte.entries.limit",
+            "PLTE",
+        )
+        assertFailure(
+            png(
+                "IHDR" to ihdr(bitDepth = 1, colorType = 3),
+                "PLTE" to ByteArray(3 * 3),
+                "IDAT" to byteArrayOf(1),
+                "IEND" to ByteArray(0),
+            ),
+            "png.plte.entries.indexed.limit",
+            "PLTE",
+        )
+
+        assertEquals(
+            256L,
+            success(
+                png(
+                    "IHDR" to ihdr(bitDepth = 8, colorType = 3),
+                    "PLTE" to ByteArray(256 * 3),
+                    "IDAT" to byteArrayOf(1),
+                    "IEND" to ByteArray(0),
+                ),
+            ).chunks.single { it.type == "PLTE" }.payloadRange.size / 3L,
+        )
+    }
+
+    @Test
     fun `rejects bytes after IEND`() {
         val data = png(
             "IHDR" to ihdr(),
@@ -432,7 +488,7 @@ class PngContainerParserTest {
     }
 
     @Test
-    fun `refuses duplicate singleton static metadata chunks`() {
+    fun `retains duplicate singleton static metadata chunks as diagnostics`() {
         val singletonTypes = listOf(
             "iCCP",
             "sRGB",
@@ -447,6 +503,7 @@ class PngContainerParserTest {
             "sBIT",
             "bKGD",
             "hIST",
+            "tRNS",
         )
 
         for (type in singletonTypes) {
@@ -461,6 +518,15 @@ class PngContainerParserTest {
                 )
 
                 "bKGD" -> arrayOf(
+                    "IHDR" to ihdr(colorType = 3),
+                    "PLTE" to byteArrayOf(0, 0, 0),
+                    type to staticMetadataPayload(type),
+                    type to staticMetadataPayload(type),
+                    "IDAT" to byteArrayOf(1),
+                    "IEND" to ByteArray(0),
+                )
+
+                "tRNS" -> arrayOf(
                     "IHDR" to ihdr(colorType = 3),
                     "PLTE" to byteArrayOf(0, 0, 0),
                     type to staticMetadataPayload(type),
@@ -487,19 +553,19 @@ class PngContainerParserTest {
                 )
             }
 
-            assertFailure(png(*chunks), "png.metadata.$type.duplicate", type)
+            assertMetadataDiagnostic(png(*chunks), "png.metadata.$type.duplicate", type)
         }
     }
 
     @Test
-    fun `refuses static metadata order palette and HDR dependencies`() {
+    fun `retains static metadata order palette and HDR dependency violations as diagnostics`() {
         for (type in listOf("iCCP", "sRGB", "gAMA", "cHRM", "cICP", "mDCV", "cLLI", "sBIT")) {
             val prefix = if (type == "mDCV") {
                 arrayOf("IHDR" to ihdr(colorType = 3), "cICP" to byteArrayOf(1, 13, 0, 1))
             } else {
                 arrayOf("IHDR" to ihdr(colorType = 3))
             }
-            assertFailure(
+            assertMetadataDiagnostic(
                 png(
                     *prefix,
                     "PLTE" to byteArrayOf(0, 0, 0),
@@ -512,7 +578,7 @@ class PngContainerParserTest {
             )
         }
         for (type in listOf("eXIf", "pHYs", "sPLT")) {
-            assertFailure(
+            assertMetadataDiagnostic(
                 png(
                     "IHDR" to ihdr(),
                     "IDAT" to byteArrayOf(1),
@@ -523,7 +589,7 @@ class PngContainerParserTest {
                 type,
             )
         }
-        assertFailure(
+        assertMetadataDiagnostic(
             png(
                 "IHDR" to ihdr(colorType = 3),
                 "hIST" to byteArrayOf(0, 0),
@@ -534,7 +600,7 @@ class PngContainerParserTest {
             "png.metadata.hIST.plte.required",
             "hIST",
         )
-        assertFailure(
+        assertMetadataDiagnostic(
             png(
                 "IHDR" to ihdr(),
                 "mDCV" to ByteArray(24),
@@ -547,7 +613,7 @@ class PngContainerParserTest {
     }
 
     @Test
-    fun `permits repeated text but refuses duplicate suggested palette names`() {
+    fun `permits repeated text and retains duplicate suggested palette names as diagnostics`() {
         val repeatedText = png(
             "IHDR" to ihdr(),
             "tEXt" to byteArrayOf('T'.code.toByte(), 0, '1'.code.toByte()),
@@ -559,7 +625,7 @@ class PngContainerParserTest {
         )
         assertEquals(7, success(repeatedText).chunks.size)
 
-        assertFailure(
+        assertMetadataDiagnostic(
             png(
                 "IHDR" to ihdr(),
                 "sPLT" to suggestedPalette("display"),
@@ -601,6 +667,16 @@ class PngContainerParserTest {
         if (chunkType != null) assertEquals(chunkType, diagnostic.chunkType)
     }
 
+    private fun assertMetadataDiagnostic(
+        data: ByteArray,
+        code: String,
+        chunkType: String,
+    ) {
+        val diagnostics = success(data).metadataDiagnostics
+        val diagnostic = diagnostics.single { it.code == code && it.chunkType == chunkType }
+        assertEquals(PngDiagnosticSeverity.REFUSAL, diagnostic.severity)
+    }
+
     private fun staticMetadataPayload(type: String): ByteArray = when (type) {
         "iCCP" -> byteArrayOf('p'.code.toByte(), 0, 0)
         "sRGB" -> byteArrayOf(0)
@@ -615,6 +691,7 @@ class PngContainerParserTest {
         "sBIT" -> byteArrayOf(8, 8, 8)
         "bKGD" -> byteArrayOf(0)
         "hIST" -> byteArrayOf(0, 0)
+        "tRNS" -> byteArrayOf(0)
         "sPLT" -> suggestedPalette("display")
         else -> error("Unexpected static metadata type $type")
     }

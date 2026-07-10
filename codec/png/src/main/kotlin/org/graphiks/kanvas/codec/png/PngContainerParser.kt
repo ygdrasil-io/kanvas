@@ -66,8 +66,13 @@ public class PngContainer internal constructor(
     public val header: PngHeader,
     chunks: List<PngChunkRecord>,
     public val totalIdatBytes: Long,
+    metadataDiagnostics: List<PngDiagnostic>,
 ) {
     public val chunks: List<PngChunkRecord> = Collections.unmodifiableList(ArrayList(chunks))
+
+    /** Non-fatal static ancillary metadata violations associated with raw chunk records. */
+    public val metadataDiagnostics: List<PngDiagnostic> =
+        Collections.unmodifiableList(ArrayList(metadataDiagnostics))
 }
 
 public enum class PngDiagnosticSeverity {
@@ -133,9 +138,26 @@ public object PngContainerParser {
         var totalIdatBytes = 0L
         val staticMetadataCounts = HashMap<String, Int>()
         val suggestedPaletteNames = HashSet<String>()
-        var sawBackgroundBeforePalette = false
-        var masteringDisplayOffset: Long? = null
+        val metadataDiagnostics = ArrayList<PngDiagnostic>()
+        val backgroundBeforePaletteOffsets = ArrayList<Long>()
+        val transparencyBeforePaletteOffsets = ArrayList<Long>()
+        val masteringDisplayOffsets = ArrayList<Long>()
         var sawCicp = false
+
+        fun metadataRefusal(
+            code: String,
+            offset: Long,
+            type: String,
+            message: String,
+        ) {
+            metadataDiagnostics += PngDiagnostic(
+                code = code,
+                offset = offset,
+                chunkType = type,
+                message = message,
+                severity = PngDiagnosticSeverity.REFUSAL,
+            )
+        }
 
         while (offset < data.size.toLong()) {
             if (data.size.toLong() - offset < CHUNK_OVERHEAD_BYTES) {
@@ -260,12 +282,49 @@ public object PngContainerParser {
                     if (sawIdat) {
                         return failure("png.plte.order", chunkOffset, type, "PLTE must precede IDAT")
                     }
-                    if (sawBackgroundBeforePalette) {
+                    if (payloadLength == 0L || payloadLength % 3L != 0L) {
                         return failure(
-                            "png.metadata.bKGD.order",
+                            "png.plte.length",
                             chunkOffset,
                             type,
+                            "PLTE must contain one to 256 RGB entries",
+                        )
+                    }
+                    val paletteEntries = payloadLength / 3L
+                    if (paletteEntries > MAX_PLTE_ENTRIES.toLong()) {
+                        return failure(
+                            "png.plte.entries.limit",
+                            chunkOffset,
+                            type,
+                            "PLTE contains more than 256 entries",
+                        )
+                    }
+                    val parsedHeader = requireNotNull(header)
+                    if (
+                        parsedHeader.colorType == INDEXED_COLOR_TYPE &&
+                        paletteEntries > (1L shl parsedHeader.bitDepth)
+                    ) {
+                        return failure(
+                            "png.plte.entries.indexed.limit",
+                            chunkOffset,
+                            type,
+                            "PLTE exceeds the indexed PNG bit-depth capacity",
+                        )
+                    }
+                    for (backgroundOffset in backgroundBeforePaletteOffsets) {
+                        metadataRefusal(
+                            "png.metadata.bKGD.order",
+                            backgroundOffset,
+                            "bKGD",
                             "bKGD must follow PLTE when PLTE is present",
+                        )
+                    }
+                    for (transparencyOffset in transparencyBeforePaletteOffsets) {
+                        metadataRefusal(
+                            "png.metadata.tRNS.order",
+                            transparencyOffset,
+                            "tRNS",
+                            "tRNS must follow PLTE when PLTE is present",
                         )
                     }
                     sawPalette = true
@@ -314,7 +373,7 @@ public object PngContainerParser {
                         val count = (staticMetadataCounts[type] ?: 0) + 1
                         staticMetadataCounts[type] = count
                         if (count > 1) {
-                            return failure(
+                            metadataRefusal(
                                 "png.metadata.$type.duplicate",
                                 chunkOffset,
                                 type,
@@ -323,7 +382,7 @@ public object PngContainerParser {
                         }
                     }
                     if (type in PRE_PALETTE_AND_IDAT_METADATA_TYPES && (sawPalette || sawIdat)) {
-                        return failure(
+                        metadataRefusal(
                             "png.metadata.$type.order",
                             chunkOffset,
                             type,
@@ -331,7 +390,7 @@ public object PngContainerParser {
                         )
                     }
                     if (type in PRE_IDAT_METADATA_TYPES && sawIdat) {
-                        return failure(
+                        metadataRefusal(
                             "png.metadata.$type.order",
                             chunkOffset,
                             type,
@@ -340,46 +399,54 @@ public object PngContainerParser {
                     }
                     when (type) {
                         "bKGD" -> {
-                            if (sawIdat) {
-                                return failure(
-                                    "png.metadata.bKGD.order",
-                                    chunkOffset,
-                                    type,
-                                    "bKGD must precede IDAT",
-                                )
+                            if (!sawPalette) {
+                                if (requireNotNull(header).colorType == INDEXED_COLOR_TYPE) {
+                                    metadataRefusal(
+                                        "png.metadata.bKGD.order",
+                                        chunkOffset,
+                                        type,
+                                        "bKGD must follow PLTE for indexed PNG",
+                                    )
+                                } else {
+                                    backgroundBeforePaletteOffsets += chunkOffset
+                                }
                             }
-                            if (!sawPalette) sawBackgroundBeforePalette = true
                         }
 
                         "hIST" -> {
                             if (!sawPalette) {
-                                return failure(
+                                metadataRefusal(
                                     "png.metadata.hIST.plte.required",
                                     chunkOffset,
                                     type,
                                     "hIST requires a preceding PLTE chunk",
                                 )
                             }
-                            if (sawIdat) {
-                                return failure(
-                                    "png.metadata.hIST.order",
-                                    chunkOffset,
-                                    type,
-                                    "hIST must precede IDAT",
-                                )
-                            }
                         }
 
-                        "mDCV" -> masteringDisplayOffset = chunkOffset
+                        "mDCV" -> masteringDisplayOffsets += chunkOffset
                         "cICP" -> sawCicp = true
                         "sPLT" -> parseSuggestedPaletteName(data, payloadOffset.toInt(), payloadLength.toInt())?.let { name ->
                             if (!suggestedPaletteNames.add(name)) {
-                                return failure(
+                                metadataRefusal(
                                     "png.metadata.sPLT.name.duplicate",
                                     chunkOffset,
                                     type,
                                     "sPLT palette names must be distinct",
                                 )
+                            }
+                        }
+
+                        "tRNS" -> if (!sawPalette) {
+                            if (requireNotNull(header).colorType == INDEXED_COLOR_TYPE) {
+                                metadataRefusal(
+                                    "png.metadata.tRNS.order",
+                                    chunkOffset,
+                                    type,
+                                    "tRNS must follow PLTE for indexed PNG",
+                                )
+                            } else {
+                                transparencyBeforePaletteOffsets += chunkOffset
                             }
                         }
                     }
@@ -399,19 +466,22 @@ public object PngContainerParser {
                 if (offset != data.size.toLong()) {
                     return failure("png.iend.trailing_data", chunkOffset, type, "Bytes follow the terminal IEND chunk")
                 }
-                if (masteringDisplayOffset != null && !sawCicp) {
-                    return failure(
-                        "png.metadata.mDCV.cicp.required",
-                        masteringDisplayOffset,
-                        "mDCV",
-                        "mDCV requires an accompanying cICP chunk",
-                    )
+                if (!sawCicp) {
+                    for (masteringDisplayOffset in masteringDisplayOffsets) {
+                        metadataRefusal(
+                            "png.metadata.mDCV.cicp.required",
+                            masteringDisplayOffset,
+                            "mDCV",
+                            "mDCV requires an accompanying cICP chunk",
+                        )
+                    }
                 }
                 return PngContainerParseResult.Success(
                     PngContainer(
                         header = requireNotNull(header),
                         chunks = chunks,
                         totalIdatBytes = totalIdatBytes,
+                        metadataDiagnostics = metadataDiagnostics,
                     ),
                 )
             }
@@ -532,6 +602,8 @@ public object PngContainerParser {
     private const val CHUNK_OVERHEAD_BYTES: Long = 12L
     private const val IHDR_BYTES: Int = 13
     private const val SUGGESTED_PALETTE_NAME_MAX_BYTES: Int = 79
+    private const val MAX_PLTE_ENTRIES: Int = 256
+    private const val INDEXED_COLOR_TYPE: Int = 3
     private const val TYPE_IHDR: String = "IHDR"
     private const val TYPE_PLTE: String = "PLTE"
     private const val TYPE_IDAT: String = "IDAT"
@@ -551,6 +623,7 @@ public object PngContainerParser {
         "sBIT",
         "bKGD",
         "hIST",
+        "tRNS",
     )
     private val PRE_PALETTE_AND_IDAT_METADATA_TYPES: Set<String> = setOf(
         "iCCP",
@@ -562,7 +635,7 @@ public object PngContainerParser {
         "cLLI",
         "sBIT",
     )
-    private val PRE_IDAT_METADATA_TYPES: Set<String> = setOf("eXIf", "pHYs", "sPLT")
+    private val PRE_IDAT_METADATA_TYPES: Set<String> = setOf("bKGD", "eXIf", "hIST", "pHYs", "sPLT", "tRNS")
     private val PNG_SIGNATURE: ByteArray = byteArrayOf(
         0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
     )
