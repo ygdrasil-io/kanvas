@@ -36,7 +36,7 @@ public class JpegCodec private constructor(
             height = if (jpeg.origin.swapsWidthHeight()) jpeg.width else jpeg.height,
             colorType = SkColorType.kRGBA_8888,
             alphaType = SkAlphaType.kUnpremul,
-            colorSpace = jpeg.iccProfile?.let { SkColorSpace.make(it) } ?: SkColorSpace.makeSRGB(),
+            colorSpace = jpeg.iccProfile?.let(SkColorSpace::makeProfileAware) ?: SkColorSpace.makeSRGB(),
         )
     }
 

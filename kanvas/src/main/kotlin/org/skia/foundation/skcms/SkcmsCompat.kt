@@ -6,6 +6,7 @@ import org.graphiks.kanvas.color.ColorProfileParseResult
 import org.graphiks.kanvas.color.ColorProfiles
 import org.graphiks.kanvas.color.icc.IccParseLimits
 import org.graphiks.kanvas.color.icc.IccProfileParser
+import org.graphiks.kanvas.color.icc.IccProfileWriter
 import org.graphiks.math.SkcmsMatrix3x3
 import org.graphiks.math.SkcmsTransferFunction
 import java.nio.ByteBuffer
@@ -14,6 +15,10 @@ import java.nio.ByteOrder
 public class SkcmsICCProfile private constructor(
     public val colorProfile: ColorProfile,
     originalBytes: ByteArray,
+    /** Non-null legacy projection; use [colorProfile] to determine actual facade support. */
+    public val transferFn: SkcmsTransferFunction,
+    /** Non-null legacy projection; use [colorProfile] to determine actual facade support. */
+    public val toXYZD50: SkcmsMatrix3x3,
 ) {
     private val originalBytes: ByteArray = originalBytes.copyOf()
 
@@ -24,11 +29,11 @@ public class SkcmsICCProfile private constructor(
     ) : this(
         colorProfile = ColorProfile(ColorModel.RGB, toXYZD50, transferFn),
         originalBytes = bytes,
+        transferFn = transferFn,
+        toXYZD50 = toXYZD50,
     )
 
     public val bytes: ByteArray get() = originalBytes.copyOf()
-    public val transferFn: SkcmsTransferFunction? get() = colorProfile.transferFunction
-    public val toXYZD50: SkcmsMatrix3x3? get() = colorProfile.toXyzD50
     public val size: Int get() = originalBytes.size
     public val buffer: ByteArray? get() = originalBytes.copyOf()
     public val dataColorSpace: Int
@@ -41,24 +46,69 @@ public class SkcmsICCProfile private constructor(
     public val hasTrc: Boolean get() = colorProfile.transferFunction != null
     public val hasToXYZD50: Boolean get() = colorProfile.toXyzD50 != null
 
+    public operator fun component1(): ByteArray = bytes
+    public operator fun component2(): SkcmsTransferFunction = transferFn
+    public operator fun component3(): SkcmsMatrix3x3 = toXYZD50
+
+    public fun copy(
+        bytes: ByteArray = this.bytes,
+        transferFn: SkcmsTransferFunction = this.transferFn,
+        toXYZD50: SkcmsMatrix3x3 = this.toXYZD50,
+    ): SkcmsICCProfile = if (
+        bytes.contentEquals(originalBytes) && transferFn == this.transferFn && toXYZD50 == this.toXYZD50
+    ) {
+        SkcmsICCProfile(colorProfile, bytes, transferFn, toXYZD50)
+    } else {
+        SkcmsICCProfile(bytes, transferFn, toXYZD50)
+    }
+
     override fun equals(other: Any?): Boolean =
         this === other || (
             other is SkcmsICCProfile &&
                 originalBytes.contentEquals(other.originalBytes) &&
-                colorProfile == other.colorProfile
+                transferFn == other.transferFn &&
+                toXYZD50 == other.toXYZD50
             )
 
     override fun hashCode(): Int {
         var result = originalBytes.contentHashCode()
-        result = 31 * result + colorProfile.hashCode()
+        result = 31 * result + transferFn.hashCode()
+        result = 31 * result + toXYZD50.hashCode()
         return result
     }
 
+    override fun toString(): String =
+        "SkcmsICCProfile(bytes=${originalBytes.contentToString()}, transferFn=$transferFn, toXYZD50=$toXYZD50)"
+
     public companion object {
-        public fun fromColorProfile(
+        public fun fromColorProfile(colorProfile: ColorProfile): SkcmsICCProfile {
+            val bytes = if (isFacadeMatrixTrc(colorProfile)) {
+                IccProfileWriter.writeMatrixTrc(colorProfile)
+            } else {
+                ByteArray(0)
+            }
+            return create(colorProfile, bytes)
+        }
+
+        internal fun fromParsedColorProfile(
             colorProfile: ColorProfile,
-            originalBytes: ByteArray = ByteArray(0),
-        ): SkcmsICCProfile = SkcmsICCProfile(colorProfile, originalBytes)
+            originalBytes: ByteArray,
+        ): SkcmsICCProfile = create(colorProfile, originalBytes)
+
+        private fun create(colorProfile: ColorProfile, bytes: ByteArray): SkcmsICCProfile = SkcmsICCProfile(
+            colorProfile = colorProfile,
+            originalBytes = bytes,
+            transferFn = colorProfile.transferFunction ?: SkNamedTransferFn.kSRGB,
+            toXYZD50 = colorProfile.toXyzD50 ?: SkNamedGamut.kSRGB,
+        )
+
+        private fun isFacadeMatrixTrc(colorProfile: ColorProfile): Boolean =
+            colorProfile.colorModel == ColorModel.RGB &&
+                colorProfile.unsupportedCode == null &&
+                colorProfile.hasMatrixTrc &&
+                !colorProfile.isHdr &&
+                colorProfile.transferFunction != null &&
+                colorProfile.toXyzD50 != null
 
         private const val RGB_SIGNATURE: Int = 0x52474220
         private const val GRAY_SIGNATURE: Int = 0x47524159
@@ -95,8 +145,9 @@ public object SkNamedGamut {
 }
 
 public fun skcmsParse(bytes: ByteArray): SkcmsICCProfile? {
-    return when (val result = IccProfileParser.parse(bytes, IccParseLimits())) {
-        is ColorProfileParseResult.Success -> SkcmsICCProfile.fromColorProfile(result.profile, bytes)
+    val snapshot = bytes.copyOf()
+    return when (val result = IccProfileParser.parse(snapshot, IccParseLimits())) {
+        is ColorProfileParseResult.Success -> SkcmsICCProfile.fromParsedColorProfile(result.profile, snapshot)
         is ColorProfileParseResult.Failure -> null
     }
 }

@@ -12,6 +12,7 @@ import org.graphiks.kanvas.codec.test.CodecNegativeFixtures
 import org.skia.foundation.SkAlphaType
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorType
+import org.skia.foundation.SkColorSpaceProfileStatus
 import org.skia.foundation.SkEncodedImageFormat
 import org.skia.foundation.SkICC
 import org.skia.foundation.SkImageInfo
@@ -737,7 +738,7 @@ class PngCodecTest {
     }
 
     @Test
-    fun `iCCP with unsupported synthetic profile falls back to sRGB`() {
+    fun `iCCP with non parseable profile retains default sRGB state`() {
         val codec = PngCodec.Decoder.make(
             grayscalePng(
                 width = 1,
@@ -758,13 +759,11 @@ class PngCodecTest {
     fun `iCCP with valid RGB profile exposes parsed ICC profile`() {
         val iccBytes = SkICC.WriteToICC(SkNamedTransferFn.kSRGB, SkNamedGamut.kDisplayP3)
         val codec = PngCodec.Decoder.make(
-            grayscalePng(
-                width = 1,
-                height = 1,
-                rows = listOf(byteArrayOf(0x40)),
-                filters = intArrayOf(0),
-                bitDepth = 8,
-                iccp = iccpChunkData("display-p3", profileBytes = iccBytes),
+            pngFromChunks(
+                "IHDR" to ihdr(width = 1, height = 1, bitDepth = 8, colorType = 2),
+                "iCCP" to iccpChunkData("display-p3", profileBytes = iccBytes),
+                "IDAT" to deflate(byteArrayOf(0, 0x10, 0x20, 0x30)),
+                "IEND" to ByteArray(0),
             ),
         )
 
@@ -780,6 +779,7 @@ class PngCodecTest {
         assertEquals(profile.size, profile.buffer!!.size)
         assertEquals(iccBytes.size, profile.size)
         assertFalse(codec.getInfo().colorSpace.isSRGB())
+        assertEquals(SkColorSpaceProfileStatus.kSupported, codec.getInfo().colorSpace.profileStatus)
         for (row in 0 until 3) for (column in 0 until 3) {
             assertEquals(
                 SkNamedGamut.kDisplayP3[row, column],
@@ -787,6 +787,45 @@ class PngCodecTest {
                 1f / 65_536f,
             )
         }
+    }
+
+    @Test
+    fun `gray PNG carries a parsed gray profile as explicit unsupported state`() {
+        val codec = PngCodec.Decoder.make(
+            pngFromChunks(
+                "IHDR" to ihdr(width = 1, height = 1, bitDepth = 8, colorType = 0),
+                "iCCP" to iccpChunkData("gray", profileBytes = grayProfileBytes()),
+                "IDAT" to deflate(byteArrayOf(0, 0x40)),
+                "IEND" to ByteArray(0),
+            ),
+        )!!
+
+        assertNotNull(codec.getICCProfile())
+        assertFalse(codec.getInfo().colorSpace.isSRGB())
+        assertEquals(SkColorSpaceProfileStatus.kUnsupported, codec.getInfo().colorSpace.profileStatus)
+        assertEquals("icc.gray.unsupported", codec.getInfo().colorSpace.profileRefusalCode)
+    }
+
+    @Test
+    fun `rejects RGB ICC in grayscale PNG and gray ICC in truecolor PNG`() {
+        val rgbInGray = pngFromChunks(
+            "IHDR" to ihdr(width = 1, height = 1, bitDepth = 8, colorType = 0),
+            "iCCP" to iccpChunkData(
+                "display-p3",
+                profileBytes = SkICC.WriteToICC(SkNamedTransferFn.kSRGB, SkNamedGamut.kDisplayP3),
+            ),
+            "IDAT" to deflate(byteArrayOf(0, 0x40)),
+            "IEND" to ByteArray(0),
+        )
+        val grayInRgb = pngFromChunks(
+            "IHDR" to ihdr(width = 1, height = 1, bitDepth = 8, colorType = 2),
+            "iCCP" to iccpChunkData("gray", profileBytes = grayProfileBytes()),
+            "IDAT" to deflate(byteArrayOf(0, 0x10, 0x20, 0x30)),
+            "IEND" to ByteArray(0),
+        )
+
+        assertNull(PngCodec.Decoder.make(rgbInGray))
+        assertNull(PngCodec.Decoder.make(grayInRgb))
     }
 
     @Test
@@ -1623,6 +1662,34 @@ class PngCodecTest {
             writeU16BE(row, offset, sample)
             offset += 2
         }
+    }
+
+    private fun grayProfileBytes(): ByteArray {
+        val bytes = SkICC.WriteToICC(SkNamedTransferFn.kSRGB, SkNamedGamut.kSRGB)
+        iccWriteU32(bytes, 16, iccSignature("GRAY"))
+        repeat(iccReadU32(bytes, 128)) { index ->
+            val entry = 132 + index * 12
+            if (iccReadU32(bytes, entry) == iccSignature("rTRC")) {
+                iccWriteU32(bytes, entry, iccSignature("kTRC"))
+            }
+        }
+        return bytes
+    }
+
+    private fun iccSignature(value: String): Int =
+        value.fold(0) { result, character -> (result shl 8) or character.code }
+
+    private fun iccReadU32(bytes: ByteArray, offset: Int): Int =
+        ((bytes[offset].toInt() and 0xff) shl 24) or
+            ((bytes[offset + 1].toInt() and 0xff) shl 16) or
+            ((bytes[offset + 2].toInt() and 0xff) shl 8) or
+            (bytes[offset + 3].toInt() and 0xff)
+
+    private fun iccWriteU32(bytes: ByteArray, offset: Int, value: Int) {
+        bytes[offset] = (value ushr 24).toByte()
+        bytes[offset + 1] = (value ushr 16).toByte()
+        bytes[offset + 2] = (value ushr 8).toByte()
+        bytes[offset + 3] = value.toByte()
     }
 
     private fun writeU16BE(row: ByteArray, offset: Int, value: Int) {

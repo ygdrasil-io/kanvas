@@ -12,6 +12,7 @@ import org.graphiks.kanvas.codec.test.CodecNegativeFixtures
 import org.skia.foundation.SkAlphaType
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorType
+import org.skia.foundation.SkColorSpaceProfileStatus
 import org.skia.foundation.SkEncodedImageFormat
 import org.skia.foundation.SkEncodedOrigin
 import org.skia.foundation.SkICC
@@ -384,7 +385,7 @@ class JpegCodecTest {
 
     @Test
     fun `APP2 ICC chunks are reassembled and parsed`() {
-        val iccBytes = SkICC.WriteToICC(SkNamedTransferFn.kSRGB, SkNamedGamut.kSRGB)
+        val iccBytes = SkICC.WriteToICC(SkNamedTransferFn.kSRGB, SkNamedGamut.kDisplayP3)
         val splitAt = iccBytes.size / 2
         val codec = JpegCodec.Decoder.make(
             withAppSegments(
@@ -400,8 +401,27 @@ class JpegCodecTest {
         assertEquals(iccBytes.size, profile!!.size)
         assertTrue(profile.hasTrc)
         assertTrue(profile.hasToXYZD50)
+        assertFalse(codec.getInfo().colorSpace.isSRGB())
+        assertEquals(SkColorSpaceProfileStatus.kSupported, codec.getInfo().colorSpace.profileStatus)
+        assertEquals(SkNamedGamut.kDisplayP3[0, 0], codec.getInfo().colorSpace.toXYZD50[0, 0], 64f / 65_536f)
         val (_, result) = codec.getImage()
         assertEquals(Codec.Result.kSuccess, result)
+    }
+
+    @Test
+    fun `APP2 gray ICC carries explicit unsupported color state`() {
+        val iccBytes = grayProfileBytes()
+        val codec = JpegCodec.Decoder.make(
+            withAppSegments(
+                grayscaleJpeg(width = 8, height = 8),
+                iccSegment(index = 1, count = 1, payload = iccBytes),
+            ),
+        )!!
+
+        assertNotNull(codec.getICCProfile())
+        assertFalse(codec.getInfo().colorSpace.isSRGB())
+        assertEquals(SkColorSpaceProfileStatus.kUnsupported, codec.getInfo().colorSpace.profileStatus)
+        assertEquals("icc.gray.unsupported", codec.getInfo().colorSpace.profileRefusalCode)
     }
 
     @Test
@@ -1249,6 +1269,34 @@ class JpegCodecTest {
             write(count)
             write(payload)
         }
+    }
+
+    private fun grayProfileBytes(): ByteArray {
+        val bytes = SkICC.WriteToICC(SkNamedTransferFn.kSRGB, SkNamedGamut.kSRGB)
+        iccWriteU32(bytes, 16, iccSignature("GRAY"))
+        repeat(iccReadU32(bytes, 128)) { index ->
+            val entry = 132 + index * 12
+            if (iccReadU32(bytes, entry) == iccSignature("rTRC")) {
+                iccWriteU32(bytes, entry, iccSignature("kTRC"))
+            }
+        }
+        return bytes
+    }
+
+    private fun iccSignature(value: String): Int =
+        value.fold(0) { result, character -> (result shl 8) or character.code }
+
+    private fun iccReadU32(bytes: ByteArray, offset: Int): Int =
+        ((bytes[offset].toInt() and 0xff) shl 24) or
+            ((bytes[offset + 1].toInt() and 0xff) shl 16) or
+            ((bytes[offset + 2].toInt() and 0xff) shl 8) or
+            (bytes[offset + 3].toInt() and 0xff)
+
+    private fun iccWriteU32(bytes: ByteArray, offset: Int, value: Int) {
+        bytes[offset] = (value ushr 24).toByte()
+        bytes[offset + 1] = (value ushr 16).toByte()
+        bytes[offset + 2] = (value ushr 8).toByte()
+        bytes[offset + 3] = value.toByte()
     }
 
     private fun segmentBytes(marker: Int, writePayload: ByteArrayOutputStream.() -> Unit): ByteArray {

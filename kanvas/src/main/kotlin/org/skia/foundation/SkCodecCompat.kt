@@ -120,6 +120,11 @@ public enum class SkEncodedOrigin(public val exifValue: Int) {
     }
 }
 
+public enum class SkColorSpaceProfileStatus {
+    kSupported,
+    kUnsupported,
+}
+
 public class SkColorSpace private constructor(
     public val transferFn: SkcmsTransferFunction,
     public val toXYZD50: SkcmsMatrix3x3,
@@ -128,6 +133,8 @@ public class SkColorSpace private constructor(
     private val srgb: Boolean,
     private val srgbTransfer: Boolean,
     private val linear: Boolean,
+    public val profileStatus: SkColorSpaceProfileStatus,
+    public val profileRefusalCode: String?,
 ) {
     private val originalIccBytes: ByteArray? = originalIccBytes?.copyOf()
 
@@ -135,9 +142,15 @@ public class SkColorSpace private constructor(
     public fun isSRGB(): Boolean = srgb
     public fun gammaIsLinear(): Boolean = linear
     public fun gammaCloseToSRGB(): Boolean = srgbTransfer
+    public fun isProfileSupported(): Boolean = profileStatus == SkColorSpaceProfileStatus.kSupported
 
     override fun toString(): String =
-        if (srgb) "SkColorSpace(sRGB)" else "SkColorSpace(RGB)"
+        when {
+            srgb -> "SkColorSpace(sRGB)"
+            profileStatus == SkColorSpaceProfileStatus.kUnsupported ->
+                "SkColorSpace(unsupported=${profileRefusalCode ?: "unknown"})"
+            else -> "SkColorSpace(RGB)"
+        }
 
     public companion object {
         private val SRGB = SkColorSpace(
@@ -148,6 +161,8 @@ public class SkColorSpace private constructor(
             srgb = true,
             srgbTransfer = true,
             linear = false,
+            profileStatus = SkColorSpaceProfileStatus.kSupported,
+            profileRefusalCode = null,
         )
         private val LINEAR_SRGB = SkColorSpace(
             transferFn = SkNamedTransferFn.kLinear,
@@ -157,6 +172,8 @@ public class SkColorSpace private constructor(
             srgb = false,
             srgbTransfer = false,
             linear = true,
+            profileStatus = SkColorSpaceProfileStatus.kSupported,
+            profileRefusalCode = null,
         )
 
         public fun makeSRGB(): SkColorSpace = SRGB
@@ -178,6 +195,10 @@ public class SkColorSpace private constructor(
             val originalBytes = profile.bytes.takeIf { it.isNotEmpty() }
             return makeMatrixTrc(colorProfile, transferFunction, matrix, originalBytes)
         }
+
+        /** Retains parsed profile metadata and an explicit refusal when [make] cannot map it. */
+        public fun makeProfileAware(profile: SkcmsICCProfile): SkColorSpace =
+            make(profile) ?: makeUnsupportedProfile(profile)
 
         public fun makeRGB(
             transferFn: SkcmsTransferFunction,
@@ -205,12 +226,35 @@ public class SkColorSpace private constructor(
                 srgb = isSrgbGamut && isSrgbTransfer,
                 srgbTransfer = isSrgbTransfer,
                 linear = transferFunctionsNear(transferFn, SkNamedTransferFn.kLinear),
+                profileStatus = SkColorSpaceProfileStatus.kSupported,
+                profileRefusalCode = null,
+            )
+        }
+
+        private fun makeUnsupportedProfile(profile: SkcmsICCProfile): SkColorSpace {
+            val colorProfile = profile.colorProfile
+            val refusalCode = when {
+                colorProfile.unsupportedCode != null -> colorProfile.unsupportedCode
+                colorProfile.colorModel == ColorModel.GRAY -> "icc.gray.unsupported"
+                colorProfile.isHdr -> "color.hdr.unsupported"
+                else -> "icc.profile.shape.unsupported"
+            }
+            return SkColorSpace(
+                transferFn = profile.transferFn,
+                toXYZD50 = profile.toXYZD50,
+                colorProfile = colorProfile,
+                originalIccBytes = profile.bytes.takeIf { it.isNotEmpty() },
+                srgb = false,
+                srgbTransfer = false,
+                linear = false,
+                profileStatus = SkColorSpaceProfileStatus.kUnsupported,
+                profileRefusalCode = refusalCode,
             )
         }
 
         private fun matricesNear(left: SkcmsMatrix3x3, right: SkcmsMatrix3x3): Boolean {
             for (row in 0 until 3) for (column in 0 until 3) {
-                if (abs(left[row, column] - right[row, column]) > ICC_FIXED_TOLERANCE) return false
+                if (abs(left[row, column] - right[row, column]) > ICC_MATRIX_TOLERANCE) return false
             }
             return true
         }
@@ -226,9 +270,10 @@ public class SkColorSpace private constructor(
             left.d to right.d,
             left.e to right.e,
             left.f to right.f,
-        ).all { (leftValue, rightValue) -> abs(leftValue - rightValue) <= ICC_FIXED_TOLERANCE }
+        ).all { (leftValue, rightValue) -> abs(leftValue - rightValue) <= ICC_TRANSFER_TOLERANCE }
 
-        private const val ICC_FIXED_TOLERANCE: Float = 2f / 65_536f
+        private const val ICC_MATRIX_TOLERANCE: Float = 64f / 65_536f
+        private const val ICC_TRANSFER_TOLERANCE: Float = 2f / 65_536f
     }
 }
 

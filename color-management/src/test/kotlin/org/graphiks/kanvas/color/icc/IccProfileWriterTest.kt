@@ -31,12 +31,17 @@ class IccProfileWriterTest {
             val actual = IccProfileParser.parse(bytes, IccParseLimits()).getOrThrow()
 
             assertEquals(4, bytes[8].toInt() and 0xff)
+            val hasNegativePcsXyz = checkNotNull(expected.toXyzD50).let { matrix ->
+                (0 until 3).any { row -> (0 until 3).any { column -> matrix[row, column] < 0f } }
+            }
+            assertEquals(if (hasNegativePcsXyz) 4 else 3, bytes[9].toInt() ushr 4)
             assertEquals("acsp", ascii(bytes, 36))
             assertEquals("mntr", ascii(bytes, 12))
             assertEquals("RGB ", ascii(bytes, 16))
             assertEquals("XYZ ", ascii(bytes, 20))
             assertTrue(bytes.slice(100 until 128).all { it == 0.toByte() })
             assertMatrixNear(checkNotNull(expected.toXyzD50), checkNotNull(actual.toXyzD50))
+            assertQuantizedWhiteIsD50(bytes)
             assertTransferFunctionNear(
                 checkNotNull(expected.transferFunction),
                 checkNotNull(actual.transferFunction),
@@ -123,10 +128,51 @@ class IccProfileWriterTest {
         }
     }
 
+    @Test
+    fun `rejects an invertible RGB matrix whose white is not D50`() {
+        val identity = SkcmsMatrix3x3.of(
+            1f, 0f, 0f,
+            0f, 1f, 0f,
+            0f, 0f, 1f,
+        )
+
+        assertFailsWith<IllegalArgumentException> {
+            IccProfileWriter.writeMatrixTrc(
+                ColorProfile(
+                    colorModel = ColorModel.RGB,
+                    toXyzD50 = identity,
+                    transferFunction = checkNotNull(ColorProfiles.sRGB().transferFunction),
+                ),
+            )
+        }
+    }
+
     private fun assertMatrixNear(expected: SkcmsMatrix3x3, actual: SkcmsMatrix3x3) {
         for (row in 0 until 3) for (column in 0 until 3) {
-            assertEquals(expected[row, column], actual[row, column], FIXED_TOLERANCE)
+            assertEquals(expected[row, column], actual[row, column], WHITE_NORMALIZATION_TOLERANCE)
         }
+    }
+
+    private fun assertQuantizedWhiteIsD50(bytes: ByteArray) {
+        val matrix = Array(3) { IntArray(3) }
+        listOf("rXYZ", "gXYZ", "bXYZ").forEachIndexed { column, tag ->
+            val tagOffset = findTag(bytes, signature(tag))
+            repeat(3) { row -> matrix[row][column] = readU32(bytes, tagOffset + 8 + row * 4) }
+        }
+        val expected = intArrayOf(
+            readU32(bytes, 68),
+            readU32(bytes, 72),
+            readU32(bytes, 76),
+        )
+        repeat(3) { row -> assertEquals(expected[row], matrix[row].sum(), "D50 row $row") }
+    }
+
+    private fun findTag(bytes: ByteArray, wanted: Int): Int {
+        repeat(readU32(bytes, 128)) { index ->
+            val entry = 132 + index * 12
+            if (readU32(bytes, entry) == wanted) return readU32(bytes, entry + 4)
+        }
+        error("missing ICC tag ${IccSignature(wanted)}")
     }
 
     private fun assertTransferFunctionNear(expected: SkcmsTransferFunction, actual: SkcmsTransferFunction) {
@@ -159,6 +205,7 @@ class IccProfileWriterTest {
 
     private companion object {
         const val FIXED_TOLERANCE: Float = 1f / 65_536f
+        const val WHITE_NORMALIZATION_TOLERANCE: Float = 64f / 65_536f
         val LINEAR_TRANSFER: SkcmsTransferFunction = SkcmsTransferFunction(
             g = 1f,
             a = 1f,

@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.codec.bmp
 
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -9,6 +10,10 @@ import org.graphiks.kanvas.codec.Codec
 import org.skia.foundation.SkAlphaType
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkEncodedImageFormat
+import org.skia.foundation.SkColorSpaceProfileStatus
+import org.skia.foundation.SkICC
+import org.skia.foundation.skcms.SkNamedGamut
+import org.skia.foundation.skcms.SkNamedTransferFn
 
 class BmpCodecTest {
 
@@ -173,10 +178,7 @@ class BmpCodecTest {
 
     @Test
     fun `V5 BMP with embedded ICC profile exposes it via getICCProfile`() {
-        val iccBytes = org.skia.foundation.SkICC.WriteToICC(
-            org.skia.foundation.skcms.SkNamedTransferFn.kSRGB,
-            org.skia.foundation.skcms.SkNamedGamut.kSRGB,
-        )
+        val iccBytes = SkICC.WriteToICC(SkNamedTransferFn.kSRGB, SkNamedGamut.kDisplayP3)
         val codec = BmpCodec.Decoder.make(
             v4BitfieldsBmp(
                 width = 1,
@@ -193,6 +195,31 @@ class BmpCodecTest {
         val profile = codec.getICCProfile()
         assertNotNull(profile, "V5 BMP with embedded ICC must expose a profile")
         assertEquals(iccBytes.size, profile!!.size)
+        assertFalse(codec.getInfo().colorSpace.isSRGB())
+        assertEquals(SkColorSpaceProfileStatus.kSupported, codec.getInfo().colorSpace.profileStatus)
+        assertEquals(SkNamedGamut.kDisplayP3[0, 0], codec.getInfo().colorSpace.toXYZD50[0, 0], 64f / 65_536f)
+    }
+
+    @Test
+    fun `V5 BMP carries unsupported gray ICC state without claiming sRGB`() {
+        val codec = BmpCodec.Decoder.make(
+            v4BitfieldsBmp(
+                width = 1,
+                height = 1,
+                headerSize = 124,
+                redMask = 0x00FF0000,
+                greenMask = 0x0000FF00,
+                blueMask = 0x000000FF,
+                alphaMask = -0x1000000,
+                iccProfile = grayProfileBytes(),
+                rowsTopDown = listOf(listOf(argb(0xFF, 0x12, 0x34, 0x56))),
+            ),
+        )!!
+
+        assertNotNull(codec.getICCProfile())
+        assertFalse(codec.getInfo().colorSpace.isSRGB())
+        assertEquals(SkColorSpaceProfileStatus.kUnsupported, codec.getInfo().colorSpace.profileStatus)
+        assertEquals("icc.gray.unsupported", codec.getInfo().colorSpace.profileRefusalCode)
     }
 
     @Test
@@ -555,6 +582,34 @@ class BmpCodecTest {
             writeI32LE(out, 14 + 112, pixelOffset + rowBytes(width, bitsPerPixel) * height)
             writeI32LE(out, 14 + 116, iccProfile.size)
         }
+    }
+
+    private fun grayProfileBytes(): ByteArray {
+        val bytes = SkICC.WriteToICC(SkNamedTransferFn.kSRGB, SkNamedGamut.kSRGB)
+        iccWriteU32(bytes, 16, iccSignature("GRAY"))
+        repeat(iccReadU32(bytes, 128)) { index ->
+            val entry = 132 + index * 12
+            if (iccReadU32(bytes, entry) == iccSignature("rTRC")) {
+                iccWriteU32(bytes, entry, iccSignature("kTRC"))
+            }
+        }
+        return bytes
+    }
+
+    private fun iccSignature(value: String): Int =
+        value.fold(0) { result, character -> (result shl 8) or character.code }
+
+    private fun iccReadU32(bytes: ByteArray, offset: Int): Int =
+        ((bytes[offset].toInt() and 0xff) shl 24) or
+            ((bytes[offset + 1].toInt() and 0xff) shl 16) or
+            ((bytes[offset + 2].toInt() and 0xff) shl 8) or
+            (bytes[offset + 3].toInt() and 0xff)
+
+    private fun iccWriteU32(bytes: ByteArray, offset: Int, value: Int) {
+        bytes[offset] = (value ushr 24).toByte()
+        bytes[offset + 1] = (value ushr 16).toByte()
+        bytes[offset + 2] = (value ushr 8).toByte()
+        bytes[offset + 3] = value.toByte()
     }
 
     private fun rowBytes(width: Int, bitsPerPixel: Int): Int =

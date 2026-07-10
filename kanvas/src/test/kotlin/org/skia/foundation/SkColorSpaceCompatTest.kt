@@ -8,6 +8,7 @@ import org.graphiks.kanvas.color.icc.IccParseLimits
 import org.graphiks.kanvas.color.icc.IccProfileParser
 import org.skia.foundation.skcms.SkcmsICCProfile
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -19,6 +20,8 @@ class SkColorSpaceCompatTest {
         val colorSpace = assertNotNull(SkColorSpace.make(profile))
 
         assertFalse(colorSpace.isSRGB())
+        assertEquals(SkColorSpaceProfileStatus.kSupported, colorSpace.profileStatus)
+        assertNull(colorSpace.profileRefusalCode)
         assertMatrixNear(
             checkNotNull(ColorProfiles.displayP3().toXyzD50),
             colorSpace.toXYZD50,
@@ -37,11 +40,38 @@ class SkColorSpaceCompatTest {
         val unsupported = ColorProfile.unsupported("icc.profile.unsupported")
 
         listOf(
-            SkcmsICCProfile.fromColorProfile(lut, lutBytes),
+            SkcmsICCProfile.fromParsedColorProfile(lut, lutBytes),
             SkcmsICCProfile.fromColorProfile(hdr),
-            SkcmsICCProfile.fromColorProfile(gray, grayBytes),
+            SkcmsICCProfile.fromParsedColorProfile(gray, grayBytes),
             SkcmsICCProfile.fromColorProfile(unsupported),
         ).forEach { profile -> assertNull(SkColorSpace.make(profile)) }
+    }
+
+    @Test
+    fun `profile aware adapter exposes explicit LUT HDR gray and generic refusals without claiming sRGB`() {
+        val lutBytes = resource("icc/rgb-lut-a2b-b2a.icc")
+        val lut = IccProfileParser.parse(lutBytes, IccParseLimits()).getOrThrow()
+        val hdr = CicpColorInfo(primaries = 9, transfer = 16, matrix = 0, fullRange = true)
+            .toColorProfile()
+            .getOrThrow()
+        val grayBytes = grayProfileBytes()
+        val gray = IccProfileParser.parse(grayBytes, IccParseLimits()).getOrThrow()
+        val unsupported = ColorProfile.unsupported("icc.profile.unsupported")
+        val cases = listOf(
+            SkcmsICCProfile.fromParsedColorProfile(lut, lutBytes) to "icc.profile.shape.unsupported",
+            SkcmsICCProfile.fromColorProfile(hdr) to "color.hdr.unsupported",
+            SkcmsICCProfile.fromParsedColorProfile(gray, grayBytes) to "icc.gray.unsupported",
+            SkcmsICCProfile.fromColorProfile(unsupported) to "icc.profile.unsupported",
+        )
+
+        cases.forEach { (profile, expectedRefusal) ->
+            val colorSpace = SkColorSpace.makeProfileAware(profile)
+
+            assertFalse(colorSpace.isSRGB())
+            assertEquals(SkColorSpaceProfileStatus.kUnsupported, colorSpace.profileStatus)
+            assertEquals(expectedRefusal, colorSpace.profileRefusalCode)
+            assertEquals(profile.colorProfile, colorSpace.colorProfile)
+        }
     }
 
     private fun grayProfileBytes(): ByteArray {

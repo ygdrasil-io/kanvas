@@ -2,6 +2,7 @@ package org.graphiks.kanvas.codec.png
 
 import org.graphiks.kanvas.codec.CodecDecoderProvider
 import org.graphiks.kanvas.codec.Codec
+import org.graphiks.kanvas.color.ColorModel
 import org.skia.foundation.SkAlphaType
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorSpace
@@ -28,8 +29,8 @@ import java.util.zip.Inflater
  * 16-bit grayscale/RGB/grayscale+alpha/RGBA. It handles `tRNS` transparency
  * for grayscale, RGB, and indexed colour PNGs. It parses `iCCP` chunks
  * best-effort: malformed chunks reject the PNG, parseable profiles become the
- * image color space, and structurally-valid but unsupported profiles fall back
- * to sRGB. Colour metadata chunks `gAMA`, `cHRM`, and `sRGB` are recognized and
+ * image color space, and structurally-valid but unsupported profiles retain an
+ * explicit refusal state. Colour metadata chunks `gAMA`, `cHRM`, and `sRGB` are recognized and
  * structurally validated; `sRGB` and `gAMA` synthesize an ICC profile when no
  * `iCCP` chunk is present, `cHRM` is validated but does not synthesize a
  * profile.
@@ -45,7 +46,7 @@ public class PngCodec private constructor(
             height = png.height,
             colorType = if (isF16) SkColorType.kRGBA_F16Norm else SkColorType.kRGBA_8888,
             alphaType = if (isF16) SkAlphaType.kPremul else SkAlphaType.kUnpremul,
-            colorSpace = png.iccProfile?.let { SkColorSpace.make(it) } ?: SkColorSpace.makeSRGB(),
+            colorSpace = png.iccProfile?.let(SkColorSpace::makeProfileAware) ?: SkColorSpace.makeSRGB(),
         )
     }
 
@@ -333,6 +334,11 @@ public class PngCodec private constructor(
                         sawIccp = true
                         val profileBytes = parseIccp(data, dataOffset, length) ?: return null
                         iccProfile = skcmsParse(profileBytes)
+                        if (iccProfile != null &&
+                            !iccMatchesColorType(iccProfile.colorProfile.colorModel, header.colorType)
+                        ) {
+                            return null
+                        }
                     }
                     TYPE_GAMA -> {
                         if (header == null || sawIdat || sawIend || sawGamma || palette != null) return null
@@ -418,6 +424,12 @@ public class PngCodec private constructor(
                 inflatedBytes = expected.toInt(),
                 interlace = interlace,
             )
+        }
+
+        private fun iccMatchesColorType(colorModel: ColorModel, colorType: Int): Boolean = when (colorType) {
+            COLOR_GRAYSCALE, COLOR_GRAYSCALE_ALPHA -> colorModel == ColorModel.GRAY
+            COLOR_RGB, COLOR_PALETTE, COLOR_RGBA -> colorModel == ColorModel.RGB
+            else -> false
         }
 
         private fun isSupportedColorDepth(colorType: Int, bitDepth: Int): Boolean =

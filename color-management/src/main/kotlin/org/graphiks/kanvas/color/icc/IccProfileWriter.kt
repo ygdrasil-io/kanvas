@@ -6,7 +6,13 @@ import org.graphiks.math.SkcmsMatrix3x3
 import org.graphiks.math.SkcmsTransferFunction
 import kotlin.math.round
 
-/** Writes the RGB matrix/TRC subset represented by [ColorProfile]. */
+/**
+ * Writes the RGB matrix/TRC subset represented by [ColorProfile].
+ *
+ * Quantized primary matrices must sum to the fixed D50 media white. A discrepancy of at most
+ * 64 signed 15.16 units per row is normalized into the largest primary coefficient; larger
+ * discrepancies are refused.
+ */
 public object IccProfileWriter {
     public fun writeMatrixTrc(profile: ColorProfile): ByteArray {
         require(profile.colorModel == ColorModel.RGB) { "ICC matrix/TRC output requires an RGB profile" }
@@ -17,30 +23,31 @@ public object IccProfileWriter {
         val transferFunction = requireNotNull(profile.transferFunction) {
             "ICC matrix/TRC output requires a scalar transfer function"
         }
-        validateMatrix(matrix)
+        val quantizedMatrix = quantizeMatrix(matrix)
         val transferPayload = parametricCurveTag(transferFunction)
         val tags = listOf(
             Tag(IccSignature.DESCRIPTION, multiLocalizedUnicodeTag("Kanvas matrix/TRC RGB profile")),
             Tag(IccSignature.COPYRIGHT, multiLocalizedUnicodeTag("Copyright Kanvas contributors")),
             Tag(IccSignature.WHITE_POINT, xyzTag(D50_X, D50_Y, D50_Z)),
-            Tag(IccSignature.R_XYZ, xyzTag(matrix[0, 0], matrix[1, 0], matrix[2, 0])),
-            Tag(IccSignature.G_XYZ, xyzTag(matrix[0, 1], matrix[1, 1], matrix[2, 1])),
-            Tag(IccSignature.B_XYZ, xyzTag(matrix[0, 2], matrix[1, 2], matrix[2, 2])),
+            Tag(IccSignature.R_XYZ, xyzTag(quantizedMatrix[0], quantizedMatrix[3], quantizedMatrix[6])),
+            Tag(IccSignature.G_XYZ, xyzTag(quantizedMatrix[1], quantizedMatrix[4], quantizedMatrix[7])),
+            Tag(IccSignature.B_XYZ, xyzTag(quantizedMatrix[2], quantizedMatrix[5], quantizedMatrix[8])),
             Tag(IccSignature.R_TRC, transferPayload.copyOf()),
             Tag(IccSignature.G_TRC, transferPayload.copyOf()),
             Tag(IccSignature.B_TRC, transferPayload.copyOf()),
         )
-        return writeProfile(tags)
+        val version = if (quantizedMatrix.any { it < 0 }) ICC_VERSION_4_4 else ICC_VERSION_4_3
+        return writeProfile(tags, version)
     }
 
-    private fun writeProfile(tags: List<Tag>): ByteArray {
+    private fun writeProfile(tags: List<Tag>, version: Int): ByteArray {
         val tagTableEnd = HEADER_AND_COUNT_SIZE + tags.size * TAG_ENTRY_SIZE
         var profileSize = tagTableEnd
         tags.forEach { tag -> profileSize = align4(profileSize + tag.payload.size) }
         val bytes = ByteArray(profileSize)
 
         writeU32(bytes, PROFILE_SIZE_OFFSET, profileSize)
-        writeU32(bytes, VERSION_OFFSET, ICC_VERSION_4_3)
+        writeU32(bytes, VERSION_OFFSET, version)
         writeSignature(bytes, PROFILE_CLASS_OFFSET, IccSignature.DISPLAY_CLASS)
         writeSignature(bytes, DATA_COLOR_SPACE_OFFSET, IccSignature.RGB)
         writeSignature(bytes, PCS_OFFSET, IccSignature.XYZ)
@@ -85,6 +92,13 @@ public object IccProfileWriter {
         writeS15Fixed16(bytes, 16, z)
     }
 
+    private fun xyzTag(x: Int, y: Int, z: Int): ByteArray = ByteArray(XYZ_TAG_SIZE).also { bytes ->
+        writeSignature(bytes, 0, IccSignature.XYZ_TYPE)
+        writeU32(bytes, 8, x)
+        writeU32(bytes, 12, y)
+        writeU32(bytes, 16, z)
+    }
+
     private fun parametricCurveTag(transferFunction: SkcmsTransferFunction): ByteArray {
         val parameters = floatArrayOf(
             transferFunction.g,
@@ -124,11 +138,37 @@ public object IccProfileWriter {
         }
     }
 
-    private fun validateMatrix(matrix: SkcmsMatrix3x3) {
-        val values = DoubleArray(9)
+    private fun quantizeMatrix(matrix: SkcmsMatrix3x3): IntArray {
+        val fixed = IntArray(9)
         for (row in 0 until 3) for (column in 0 until 3) {
-            values[row * 3 + column] = quantizeS15Fixed16(matrix[row, column]) / FIXED_SCALE
+            fixed[row * 3 + column] = quantizeS15Fixed16(matrix[row, column])
         }
+        val d50 = intArrayOf(
+            quantizeS15Fixed16(D50_X),
+            quantizeS15Fixed16(D50_Y),
+            quantizeS15Fixed16(D50_Z),
+        )
+        repeat(3) { row ->
+            val rowOffset = row * 3
+            val sum = fixed[rowOffset].toLong() + fixed[rowOffset + 1] + fixed[rowOffset + 2]
+            val correction = d50[row].toLong() - sum
+            require(kotlin.math.abs(correction) <= MAX_WHITE_NORMALIZATION_FIXED) {
+                "ICC RGB matrix white must quantize to D50 (row $row differs by $correction signed 15.16 units)"
+            }
+            val targetColumn = (0 until 3).maxBy { kotlin.math.abs(fixed[rowOffset + it].toLong()) }
+            val target = rowOffset + targetColumn
+            val corrected = fixed[target].toLong() + correction
+            require(corrected in Int.MIN_VALUE.toLong()..Int.MAX_VALUE.toLong()) {
+                "ICC matrix normalization exceeds signed 15.16 range"
+            }
+            fixed[target] = corrected.toInt()
+        }
+        validateQuantizedMatrix(fixed)
+        return fixed
+    }
+
+    private fun validateQuantizedMatrix(fixed: IntArray) {
+        val values = DoubleArray(9) { fixed[it] / FIXED_SCALE }
         val determinant =
             values[0] * (values[4] * values[8] - values[5] * values[7]) -
                 values[1] * (values[3] * values[8] - values[5] * values[6]) +
@@ -194,11 +234,13 @@ public object IccProfileWriter {
     private const val MLUC_RECORD_SIZE: Int = 12
     private const val MLUC_TEXT_OFFSET: Int = 28
     private const val ICC_VERSION_4_3: Int = 0x04300000
+    private const val ICC_VERSION_4_4: Int = 0x04400000
     private const val LANGUAGE_ENGLISH: Int = 0x656e
     private const val COUNTRY_US: Int = 0x5553
     private const val PARAMETRIC_TYPE_4: Int = 4
     private const val LOWER_SLOPE_INDEX: Int = 3
     private const val MAX_LOWER_SLOPE_ADJUSTMENTS: Int = 8
+    private const val MAX_WHITE_NORMALIZATION_FIXED: Long = 64L
     private const val FIXED_SCALE: Double = 65_536.0
     private const val D50_X: Float = 0.9642f
     private const val D50_Y: Float = 1f
