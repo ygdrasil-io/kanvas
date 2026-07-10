@@ -213,6 +213,30 @@ class KanvasCodecColorSpaceTest {
         )
     }
 
+    @Test
+    fun `named gamut classification is isolated from public matrix mutation`() {
+        val publicGamut = SkNamedGamut.kSRGB
+        val originalGamut = publicGamut.copy()
+        val stableSource = sdrColorSpace(originalGamut)
+        assertEquals(ColorSpace.SRGB, imageInfo(stableSource).toKanvasImageInfo().colorSpace)
+
+        try {
+            publicGamut.vals[0][0] += 0.25f
+            val mutatedSource = sdrColorSpace(publicGamut.copy())
+
+            val failure = assertThrows<UnsupportedKanvasColorSpaceException> {
+                imageInfo(mutatedSource).toKanvasImageInfo()
+            }
+
+            assertEquals("gamut", failure.reason)
+            assertEquals(ColorSpace.SRGB, imageInfo(stableSource).toKanvasImageInfo().colorSpace)
+        } finally {
+            restoreMatrix(publicGamut, originalGamut)
+        }
+
+        assertEquals(ColorSpace.SRGB, imageInfo(stableSource).toKanvasImageInfo().colorSpace)
+    }
+
     private fun imageInfo(colorSpace: SkColorSpace): SkImageInfo = SkImageInfo.Make(
         width = 1,
         height = 1,
@@ -245,6 +269,12 @@ class KanvasCodecColorSpaceTest {
 
         assertEquals(expectedColorSpace, result.colorSpace)
         assertEquals(SAMPLE_ARGB, result.getArgb(0, 0))
+    }
+
+    private fun restoreMatrix(target: SkcmsMatrix3x3, source: SkcmsMatrix3x3) {
+        for (row in 0 until 3) for (column in 0 until 3) {
+            target.vals[row][column] = source[row, column]
+        }
     }
 
     private fun cicpProfile(transfer: Int): ColorProfile = when (

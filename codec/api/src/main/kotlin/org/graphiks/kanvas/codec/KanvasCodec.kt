@@ -187,11 +187,14 @@ private fun SkcmsMatrix3x3.classifyNamedGamut(): Gamut? =
         matrices.any { matrix -> isNear(matrix, GAMUT_CLASSIFICATION_TOLERANCE) }
     }?.second
 
-private fun allowedGamutMatrices(canonical: SkcmsMatrix3x3): List<SkcmsMatrix3x3> = listOf(
-    canonical,
-    serializedGamutMatrix(SkNamedTransferFn.kSRGB, canonical),
-    serializedGamutMatrix(SkNamedTransferFn.kLinear, canonical),
-)
+private fun allowedGamutMatrices(canonical: SkcmsMatrix3x3): List<SkcmsMatrix3x3> {
+    val canonicalSnapshot = canonical.copy()
+    return listOf(
+        canonicalSnapshot,
+        serializedGamutMatrix(SkNamedTransferFn.kSRGB, canonicalSnapshot),
+        serializedGamutMatrix(SkNamedTransferFn.kLinear, canonicalSnapshot),
+    )
+}
 
 private fun serializedGamutMatrix(
     transferFunction: SkcmsTransferFunction,
