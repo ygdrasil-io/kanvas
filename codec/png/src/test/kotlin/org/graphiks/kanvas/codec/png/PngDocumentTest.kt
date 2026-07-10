@@ -4,6 +4,7 @@ import java.io.ByteArrayOutputStream
 import java.util.zip.CRC32
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertInstanceOf
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -101,6 +102,27 @@ class PngDocumentTest {
         assertEquals("png.chunk.crc.invalid", diagnostic.code)
         assertEquals(33L, diagnostic.offset)
         assertEquals("IDAT", diagnostic.chunkType)
+    }
+
+    @Test
+    fun `rejects over-limit input before invoking the snapshot path`() {
+        val source = ByteArray(16)
+        var snapshotCalled = false
+
+        val result = PngDocument.open(
+            bytes = source,
+            limits = PngContainerLimits.Default.copy(maxInputBytes = source.size.toLong() - 1L),
+        ) {
+            snapshotCalled = true
+            error("The snapshot path must not run for over-limit input")
+        }
+
+        assertInstanceOf(PngDocumentOpenResult.Failure::class.java, result)
+        val diagnostic = (result as PngDocumentOpenResult.Failure).diagnostic
+        assertEquals("png.input.limit", diagnostic.code)
+        assertEquals(0L, diagnostic.offset)
+        assertEquals(null, diagnostic.chunkType)
+        assertFalse(snapshotCalled)
     }
 
     private fun open(bytes: ByteArray): PngDocument {

@@ -20,8 +20,24 @@ public class PngDocument private constructor(
         public fun open(
             bytes: ByteArray,
             limits: PngContainerLimits = PngContainerLimits.Default,
+        ): PngDocumentOpenResult = open(bytes, limits) { it.copyOf() }
+
+        internal fun open(
+            bytes: ByteArray,
+            limits: PngContainerLimits,
+            snapshot: (ByteArray) -> ByteArray,
         ): PngDocumentOpenResult {
-            val sourceBytes = bytes.copyOf()
+            if (bytes.size.toLong() > limits.maxInputBytes) {
+                return PngDocumentOpenResult.Failure(
+                    PngDiagnostic(
+                        code = "png.input.limit",
+                        offset = 0L,
+                        message = "PNG input exceeds the configured byte limit",
+                    ),
+                )
+            }
+
+            val sourceBytes = snapshot(bytes)
             return when (val result = PngContainerParser.parse(sourceBytes, limits)) {
                 is PngContainerParseResult.Success -> PngDocumentOpenResult.Success(
                     PngDocument(sourceBytes, result.container),
