@@ -2,6 +2,8 @@ package org.graphiks.kanvas.surface.gpu
 
 import kotlin.test.Test
 import kotlin.test.assertTrue
+import org.graphiks.wgsl.parser.Lowerer
+import org.graphiks.wgsl.parser.parseWgslResult
 
 class GPUMaskBlurWgslTest {
     @Test
@@ -20,5 +22,21 @@ class GPUMaskBlurWgslTest {
     @Test
     fun `solid final composite modulates premultiplied color`() {
         assertTrue(MASK_BLUR_SOLID_COMPOSITE_WGSL.contains("u.color * coverage"))
+    }
+
+    @Test
+    fun `style shader is parser backed and lowers`() {
+        val parsed = parseWgslResult(MASK_BLUR_STYLE_WGSL)
+
+        assertTrue(parsed.isSuccess)
+        assertTrue(Lowerer().lower(parsed.translationUnit).entryPoints.isNotEmpty())
+    }
+
+    @Test
+    fun `solid composite shader is parser backed and lowers`() {
+        val parsed = parseWgslResult(MASK_BLUR_SOLID_COMPOSITE_WGSL)
+
+        assertTrue(parsed.isSuccess)
+        assertTrue(Lowerer().lower(parsed.translationUnit).entryPoints.isNotEmpty())
     }
 }
