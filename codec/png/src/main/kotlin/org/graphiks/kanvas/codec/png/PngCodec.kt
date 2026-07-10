@@ -79,6 +79,9 @@ public class PngCodec private constructor(
         if (!canDecodeTo(info.colorType)) {
             return Result.kInvalidConversion
         }
+        if (isOpaqueColorType(info.colorType) && sourceMayContainAlpha()) {
+            return Result.kInvalidConversion
+        }
 
         val expected = png.inflatedBytes
         val inflated = try {
@@ -279,6 +282,20 @@ public class PngCodec private constructor(
                             colorType == SkColorType.kGray_8
                         )
                 )
+
+    private fun isOpaqueColorType(colorType: SkColorType): Boolean =
+        colorType == SkColorType.kRGB_565 || colorType == SkColorType.kGray_8
+
+    private fun sourceMayContainAlpha(): Boolean = when (png.colorType) {
+        COLOR_GRAYSCALE_ALPHA,
+        COLOR_RGBA,
+            -> true
+        COLOR_GRAYSCALE,
+        COLOR_RGB,
+            -> png.transparency != null
+        COLOR_PALETTE -> png.palette?.any { color -> (color ushr 24) != 0xFF } == true
+        else -> false
+    }
 
     public companion object Decoder : Codec.Decoder {
         override val name: String = "png"

@@ -752,6 +752,63 @@ class PngCodecTest {
     }
 
     @Test
+    fun `refuses RGBA alpha loss when makeColorType requests RGB565`() {
+        val codec = PngCodec.Decoder.make(
+            png(
+                width = 1,
+                height = 1,
+                colorType = 6,
+                rows = listOf(intArrayOf(argb(0x80, 0x40, 0x80, 0xC0))),
+                filters = intArrayOf(0),
+            ),
+        )!!
+        val requested = codec.getInfo().makeColorType(SkColorType.kRGB_565)
+        val dst = SkBitmap(1, 1, requested.colorSpace, requested.colorType)
+
+        assertEquals(SkAlphaType.kUnpremul, requested.alphaType)
+        assertEquals(Codec.Result.kInvalidConversion, codec.getPixels(requested, dst))
+    }
+
+    @Test
+    fun `refuses RGBA alpha loss when makeColorType requests Gray8`() {
+        val codec = PngCodec.Decoder.make(
+            png(
+                width = 1,
+                height = 1,
+                colorType = 6,
+                rows = listOf(intArrayOf(argb(0x80, 0x40, 0x80, 0xC0))),
+                filters = intArrayOf(0),
+            ),
+        )!!
+        val requested = codec.getInfo().makeColorType(SkColorType.kGray_8)
+        val dst = SkBitmap(1, 1, requested.colorSpace, requested.colorType)
+
+        assertEquals(SkAlphaType.kUnpremul, requested.alphaType)
+        assertEquals(Codec.Result.kInvalidConversion, codec.getPixels(requested, dst))
+    }
+
+    @Test
+    fun `keeps opaque RGB conversions requested with makeColorType`() {
+        val codec = PngCodec.Decoder.make(
+            png(
+                width = 1,
+                height = 1,
+                colorType = 2,
+                rows = listOf(intArrayOf(argb(0xFF, 0x40, 0x80, 0xC0))),
+                filters = intArrayOf(0),
+            ),
+        )!!
+
+        for (colorType in listOf(SkColorType.kRGB_565, SkColorType.kGray_8)) {
+            val requested = codec.getInfo().makeColorType(colorType)
+            val dst = SkBitmap(1, 1, requested.colorSpace, requested.colorType)
+
+            assertEquals(Codec.Result.kSuccess, codec.getPixels(requested, dst), colorType.name)
+            assertEquals(0xFF, a(dst.getPixel(0, 0)), colorType.name)
+        }
+    }
+
+    @Test
     fun `keeps 16-bit PNG extra color conversions unsupported`() {
         val codec = PngCodec.Decoder.make(
             truecolor16Png(
