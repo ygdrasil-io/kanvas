@@ -8,8 +8,8 @@ The following fixtures were authored for the Kanvas parser tests on
 based on the Task 1 `ColorProfiles` constants; no third-party ICC binary was
 used to generate them. The sRGB transfer parameters were quantized to signed
 15.16 values and adjusted within `7e-5` of the Task 1 coefficients so both
-branches meet exactly at `d`; this avoids representing a discontinuous transfer
-function after ICC quantization.
+branches meet exactly at `d`. This is a writer property of the synthetic
+fixtures; the parser also accepts valid monotone upward parametric gaps.
 
 | File | SHA-256 | Profile class | Color space / PCS | Provenance and purpose |
 | --- | --- | --- | --- | --- |
@@ -26,7 +26,8 @@ are encoded in ICC order `g,a,b,c,d,e,f` using signed 15.16 fixed point.
 | File | SHA-256 | Profile class | Color space / PCS | Provenance, license, and purpose |
 | --- | --- | --- | --- | --- |
 | `compact-dci-p3-v4.icc` | `58ac463ea778e9b70692971dd4ba9071363a03aba77043894162b1ad6c051da7` | ICC v4.2 display (`mntr`) | DCI-P3 / XYZ D50 | Unmodified `profiles/DCI-P3-v4.icc`, downloaded 2026-07-10 from the independent [saucecontrol/Compact-ICC-Profiles repository](https://github.com/saucecontrol/Compact-ICC-Profiles/blob/master/profiles/DCI-P3-v4.icc). The repository releases all included profiles under its [CC0 1.0 Universal license](https://github.com/saucecontrol/Compact-ICC-Profiles/blob/master/license) (`CC0-1.0`), permitting copying, modification, distribution, and use without permission. This fixture independently exercises v4 `mluc` metadata, an exact-size shared `para` type 0 TRC, required tags, and RGB matrix parsing. |
-| `icc-rec709-v2.icc` | `4d10744483b3448daceacc880566b004cd90aa0ca535f651c8c88ba61646c965` | ICC v2.0 display (`mntr`) | ITU-R BT.709 reference display / XYZ D50 | Unmodified `ITU-RBT709ReferenceDisplay.icc`, downloaded 2026-07-10 from the [ICC Profile Library](https://registry.color.org/profile-library/profiles/ITU-RBT709ReferenceDisplay.icc). Its embedded copyright is `Copyright International Color Consortium, 2011`. The ICC Profile Library terms permit ICC-owned profiles to be copied, distributed, embedded, made, used, and sold without restriction; altered versions must remove the original identification and copyright. The authentic profile is retained as interoperability evidence, but this strict subset deliberately returns `icc.curve.range`: its one-entry `curv` declares a 16-byte tag size that includes two alignment bytes, while the canonical element size excluding alignment padding is 14 bytes. |
+| `compact-display-p3-v4.icc` | `cb51de38e482ee974c0c76b9689e16aad04bad16e226fed2f30c842d15ff3a3d` | ICC v4.2 display (`mntr`) | Display P3 / XYZ D50 | Unmodified `profiles/DisplayP3-v4.icc`, downloaded 2026-07-10 from [saucecontrol/Compact-ICC-Profiles](https://github.com/saucecontrol/Compact-ICC-Profiles/blob/master/profiles/DisplayP3-v4.icc), under the repository's [CC0 1.0 Universal license](https://github.com/saucecontrol/Compact-ICC-Profiles/blob/master/license) (`CC0-1.0`). This fixture independently exercises v4 `mluc` metadata and a shared exact-size `para` type 3 TRC with a valid quantization-induced upward gap at its branch threshold. |
+| `icc-rec709-v2.icc` | `4d10744483b3448daceacc880566b004cd90aa0ca535f651c8c88ba61646c965` | ICC v2.0 display (`mntr`) | ITU-R BT.709 reference display / XYZ D50 | Unmodified `ITU-RBT709ReferenceDisplay.icc`, downloaded 2026-07-10 from the [ICC Profile Library](https://registry.color.org/profile-library/profiles/ITU-RBT709ReferenceDisplay.icc). Its embedded copyright is `Copyright International Color Consortium, 2011`. The ICC Profile Library terms permit ICC-owned profiles to be copied, distributed, embedded, made, used, and sold without restriction; altered versions must remove the original identification and copyright. It is a positive bounded-compatibility fixture: its non-conforming one-entry `curv` declares 16 bytes rather than the canonical 14, and is accepted only because the size is exactly `align4(14)` and its two surplus bytes are zero. Other surplus sizes or non-zero surplus bytes return `icc.curve.range`. |
 
-Both independent fixtures are checked in unchanged. Their SHA-256 values match
+All independent fixtures are checked in unchanged. Their SHA-256 values match
 the bytes served by their source URLs on the download date.

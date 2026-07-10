@@ -51,8 +51,40 @@ class IccProfileParserTest {
     }
 
     @Test
-    fun `strictly rejects authentic v2 curv whose size includes alignment padding`() {
-        assertFailure("icc.curve.range", resource("icc-rec709-v2.icc"))
+    fun `parses independent compact display p3 v4 matrix trc profile with upward gap`() {
+        val bytes = resource("compact-display-p3-v4.icc")
+        val profile = IccProfileParser.parse(bytes, IccParseLimits()).getOrThrow()
+
+        assertEquals(ColorModel.RGB, profile.colorModel)
+        assertTrue(profile.hasMatrixTrc)
+        val trc = tagOffset(bytes, IccSignature.R_TRC.value)
+        assertEquals(IccSignature.PARAMETRIC_CURVE_TYPE.value, readU32(bytes, trc))
+        assertEquals(3, readU16(bytes, trc + 8))
+        assertEquals(32, tagSize(bytes, IccSignature.R_TRC.value))
+    }
+
+    @Test
+    fun `parses authentic v2 curv with zero aligned legacy surplus`() {
+        val profile = parseResource("icc-rec709-v2.icc")
+
+        assertEquals(ColorModel.RGB, profile.colorModel)
+        assertTrue(profile.hasMatrixTrc)
+        assertMatrixNear(ColorProfiles.sRGB().toXyzD50!!, profile.toXyzD50!!)
+        assertEquals(0x0266 / 256f, profile.transferFunction!!.g, 0f)
+    }
+
+    @Test
+    fun `rejects nonzero or nonaligned legacy curv surplus`() {
+        val nonZeroSurplus = resource("icc-rec709-v2.icc")
+        nonZeroSurplus[tagOffset(nonZeroSurplus, IccSignature.R_TRC.value) + 14] = 1
+        val nonAlignedSurplus = resource("icc-rec709-v2.icc")
+        setSharedCurveTagSize(nonAlignedSurplus, 15)
+        val v4AlignedSurplus = rewriteSharedCurv(intArrayOf(0x0200))
+        setSharedCurveTagSize(v4AlignedSurplus, 16)
+
+        assertFailure("icc.curve.range", nonZeroSurplus)
+        assertFailure("icc.curve.range", nonAlignedSurplus)
+        assertFailure("icc.curve.range", v4AlignedSurplus)
     }
 
     @Test
@@ -158,7 +190,12 @@ class IccProfileParserTest {
 
     @Test
     fun `positive v4 fixtures contain required tags and zero reserved fields`() {
-        listOf("srgb-matrix-trc.icc", "display-p3-matrix-trc.icc", "compact-dci-p3-v4.icc").forEach { name ->
+        listOf(
+            "srgb-matrix-trc.icc",
+            "display-p3-matrix-trc.icc",
+            "compact-dci-p3-v4.icc",
+            "compact-display-p3-v4.icc",
+        ).forEach { name ->
             val bytes = resource(name)
             val signatures = tagSignatures(bytes)
 
@@ -244,10 +281,12 @@ class IccProfileParserTest {
     }
 
     @Test
-    fun `rejects para with upward discontinuity`() {
+    fun `accepts para with upward gap and returns the threshold for an inverse gap value`() {
         val bytes = rewriteSharedParametricCurve(3, floatArrayOf(2f, 1f, 0f, 0.1f, 0.5f))
+        val curve = ParametricIccCurve(3, floatArrayOf(2f, 1f, 0f, 0.1f, 0.5f))
 
-        assertFailure("icc.curve.values", bytes)
+        IccProfileParser.parse(bytes, IccParseLimits()).getOrThrow()
+        assertEquals(0.5f, curve.inverse(0.15f), 0f)
     }
 
     @Test
@@ -312,6 +351,21 @@ class IccProfileParserTest {
         assertEquals(0.125f, curve.evaluate(0.25f), 1e-6f)
         assertEquals(0.25f, curve.inverse(0.125f), 1e-6f)
         assertEquals(1f, curve.evaluate(2f), 0f)
+    }
+
+    @Test
+    fun `curve inverses follow Annex F plateau boundaries`() {
+        val typeOne = ParametricIccCurve(1, floatArrayOf(2f, 1f, -0.25f))
+        val typeTwo = ParametricIccCurve(2, floatArrayOf(2f, 1f, -0.25f, 0.1f))
+        val initial = SampledIccCurve(floatArrayOf(0f, 0f, 0.5f, 1f))
+        val internal = SampledIccCurve(floatArrayOf(0f, 0.25f, 0.25f, 1f))
+        val trailing = SampledIccCurve(floatArrayOf(0f, 0.5f, 1f, 1f))
+
+        assertEquals(0.25f, typeOne.inverse(0f), 0f)
+        assertEquals(0.25f, typeTwo.inverse(0.1f), 0f)
+        assertEquals(1f / 3f, initial.inverse(0f), 0f)
+        assertEquals(2f / 3f, internal.inverse(0.25f), 0f)
+        assertEquals(2f / 3f, trailing.inverse(1f), 0f)
     }
 
     @Test
@@ -469,6 +523,58 @@ class IccProfileParserTest {
     }
 
     @Test
+    fun `rejects nonzero external alignment padding`() {
+        val bytes = resource("srgb-matrix-trc.icc")
+        val descriptionOffset = tagOffset(bytes, IccSignature.DESCRIPTION.value)
+        bytes[descriptionOffset + tagSize(bytes, IccSignature.DESCRIPTION.value)] = 0x7f
+
+        assertFailure("icc.profile.padding", bytes)
+    }
+
+    @Test
+    fun `rejects missing final alignment padding with a typed failure`() {
+        val canonical = rewriteSharedCurv(intArrayOf(0x0200))
+        val bytes = canonical.copyOf(canonical.size - 2)
+        writeU32(bytes, 0, bytes.size)
+
+        assertFailure("icc.profile.envelope", bytes)
+    }
+
+    @Test
+    fun `rejects suffix data on required XYZ tags`() {
+        val whitePoint = appendTagSuffix(resource("srgb-matrix-trc.icc"), IccSignature.WHITE_POINT.value)
+        val redColumn = appendTagSuffix(resource("srgb-matrix-trc.icc"), IccSignature.R_XYZ.value)
+
+        assertFailure("icc.tag.type", whitePoint)
+        assertFailure("icc.tag.type", redColumn)
+    }
+
+    @Test
+    fun `accepts only illuminants that round to D50 at four decimals`() {
+        val inside = resource("srgb-matrix-trc.icc")
+        writeU32(inside, 68, readU32(inside, 68) + 3)
+        val outside = resource("srgb-matrix-trc.icc")
+        writeU32(outside, 68, readU32(outside, 68) + 4)
+
+        IccProfileParser.parse(inside, IccParseLimits()).getOrThrow()
+        assertFailure("icc.header.illuminant", outside)
+    }
+
+    @Test
+    fun `gray profiles retain canonical D50 rather than header rounding noise`() {
+        val bytes = resource("srgb-matrix-trc.icc")
+        writeU32(bytes, 16, IccSignature.GRAY.value)
+        writeU32(bytes, tagEntryOffset(bytes, IccSignature.R_TRC.value), IccSignature.K_TRC.value)
+        writeU32(bytes, 68, readU32(bytes, 68) + 3)
+
+        val profile = IccProfileParser.parse(bytes, IccParseLimits()).getOrThrow()
+
+        assertEquals(0.9642f, profile.toXyzD50!![0, 0], 0f)
+        assertEquals(1f, profile.toXyzD50!![1, 1], 0f)
+        assertEquals(0.8249f, profile.toXyzD50!![2, 2], 0f)
+    }
+
+    @Test
     fun `rejects partial tag overlap but allows exact sharing`() {
         val bytes = resource("srgb-matrix-trc.icc")
         val redEntry = tagEntryOffset(bytes, IccSignature.R_XYZ.value)
@@ -587,6 +693,34 @@ class IccProfileParserTest {
             writeU32(bytes, tagEntryOffset(bytes, signature.value) + 8, tagSize)
         }
         for (offset in curveOffset until profileSize) bytes[offset] = 0
+        return bytes
+    }
+
+    private fun setSharedCurveTagSize(bytes: ByteArray, tagSize: Int) {
+        listOf(IccSignature.R_TRC, IccSignature.G_TRC, IccSignature.B_TRC).forEach { signature ->
+            writeU32(bytes, tagEntryOffset(bytes, signature.value) + 8, tagSize)
+        }
+    }
+
+    private fun appendTagSuffix(original: ByteArray, signature: Int): ByteArray {
+        val entry = tagEntryOffset(original, signature)
+        val offset = readU32(original, entry + 4)
+        val size = readU32(original, entry + 8)
+        val insertion = offset + size
+        val bytes = ByteArray(original.size + 4)
+        original.copyInto(bytes, endIndex = insertion)
+        bytes[insertion] = 0x41
+        bytes[insertion + 1] = 0x42
+        bytes[insertion + 2] = 0x43
+        bytes[insertion + 3] = 0x44
+        original.copyInto(bytes, destinationOffset = insertion + 4, startIndex = insertion)
+        writeU32(bytes, 0, bytes.size)
+        repeat(readU32(bytes, 128)) { index ->
+            val tagEntry = 132 + index * 12
+            val tagOffset = readU32(bytes, tagEntry + 4)
+            if (tagOffset == offset) writeU32(bytes, tagEntry + 8, size + 4)
+            if (tagOffset >= insertion) writeU32(bytes, tagEntry + 4, tagOffset + 4)
+        }
         return bytes
     }
 

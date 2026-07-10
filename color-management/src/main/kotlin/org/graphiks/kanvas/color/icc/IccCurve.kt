@@ -30,24 +30,44 @@ internal class ParametricIccCurve(functionType: Int, parameters: FloatArray) : I
         val g = values[0]
         val result = when (type) {
             0 -> y.pow(1f / g)
-            1 -> if (y <= 0f) 0f else (y.pow(1f / g) - values[2]) / values[1]
-            2 -> if (y <= values[3]) 0f else {
-                ((y - values[3]).pow(1f / g) - values[2]) / values[1]
-            }
+            1 -> inverseParametricTypeOne(y, g)
+            2 -> inverseParametricTypeTwo(y, g)
             3 -> {
                 val lowerLimit = values[3] * values[4]
-                if (y < lowerLimit && values[3] != 0f) y / values[3] else {
-                    (y.pow(1f / g) - values[2]) / values[1]
+                val upperLimit = (values[1] * values[4] + values[2]).pow(g)
+                when {
+                    y < lowerLimit && values[3] != 0f -> y / values[3]
+                    y < upperLimit -> values[4]
+                    else -> max(values[4], (y.pow(1f / g) - values[2]) / values[1])
                 }
             }
             else -> {
                 val lowerLimit = values[3] * values[4] + values[6]
-                if (y < lowerLimit && values[3] != 0f) (y - values[6]) / values[3] else {
-                    ((y - values[5]).pow(1f / g) - values[2]) / values[1]
+                val upperLimit = (values[1] * values[4] + values[2]).pow(g) + values[5]
+                when {
+                    y < lowerLimit && values[3] != 0f -> (y - values[6]) / values[3]
+                    y < upperLimit -> values[4]
+                    else -> max(values[4], ((y - values[5]).pow(1f / g) - values[2]) / values[1])
                 }
             }
         }
         return if (result.isFinite()) result.coerceIn(0f, 1f) else 0f
+    }
+
+    private fun inverseParametricTypeOne(y: Float, g: Float): Float {
+        val threshold = -values[2] / values[1]
+        val upperLimit = (values[1] * threshold + values[2]).pow(g)
+        return if (y < upperLimit) threshold else {
+            max(threshold, (y.pow(1f / g) - values[2]) / values[1])
+        }
+    }
+
+    private fun inverseParametricTypeTwo(y: Float, g: Float): Float {
+        val threshold = -values[2] / values[1]
+        val upperLimit = (values[1] * threshold + values[2]).pow(g) + values[3]
+        return if (y < upperLimit) threshold else {
+            max(threshold, ((y - values[3]).pow(1f / g) - values[2]) / values[1])
+        }
     }
 
     fun toTransferFunction(): SkcmsTransferFunction = when (type) {
@@ -83,17 +103,21 @@ internal class SampledIccCurve(samples: FloatArray) : IccCurve {
     override fun inverse(linear: Float): Float {
         val finiteLinear = if (linear.isFinite()) linear else values.first()
         val y = finiteLinear.coerceIn(values.first(), values.last())
-        var low = 0
+        var first = 0
         var high = values.lastIndex
-        while (low < high) {
-            val middle = (low + high) ushr 1
-            if (values[middle] < y) low = middle + 1 else high = middle
+        while (first < high) {
+            val middle = (first + high) ushr 1
+            if (values[middle] < y) first = middle + 1 else high = middle
         }
-        val upper = low
-        if (upper == 0) return 0f
-        val lower = upper - 1
-        val span = values[upper] - values[lower]
-        val weight = if (span == 0f) 0f else (y - values[lower]) / span
+        if (values[first] == y) {
+            var last = first
+            while (last < values.lastIndex && values[last + 1] == y) last++
+            val plateauIndex = if (last == values.lastIndex) first else last
+            return plateauIndex.toFloat() / values.lastIndex
+        }
+        val lower = first - 1
+        val span = values[first] - values[lower]
+        val weight = (y - values[lower]) / span
         return (lower + weight) / (values.size - 1)
     }
 }
@@ -139,8 +163,9 @@ internal fun parametricCurveValidationError(type: Int, values: FloatArray): Stri
             3 -> (values[1] * threshold + values[2]).pow(values[0])
             else -> (values[1] * threshold + values[2]).pow(values[0]) + values[5]
         }
-        if (!lower.isFinite() || !upper.isFinite() || lower != upper) {
-            return "discontinuous branch"
+        if (!lower.isFinite() || !upper.isFinite()) return "non-finite branch"
+        if (upper < lower) {
+            return "downward jump"
         }
     }
 

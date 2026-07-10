@@ -120,9 +120,9 @@ private class Parser(
         val illuminantX = reader.s15Fixed16(ILLUMINANT_OFFSET)
         val illuminantY = reader.s15Fixed16(ILLUMINANT_OFFSET + 4)
         val illuminantZ = reader.s15Fixed16(ILLUMINANT_OFFSET + 8)
-        if (abs(illuminantX - D50_X) > D50_TOLERANCE ||
-            abs(illuminantY - D50_Y) > D50_TOLERANCE ||
-            abs(illuminantZ - D50_Z) > D50_TOLERANCE
+        if (!roundsToD50(illuminantX, D50_X) ||
+            !roundsToD50(illuminantY, D50_Y) ||
+            !roundsToD50(illuminantZ, D50_Z)
         ) {
             abort("icc.header.illuminant", "ICC illuminant is not D50")
         }
@@ -178,7 +178,15 @@ private class Parser(
             if (tag.offset.toLong() > expectedOffset) {
                 abort("icc.profile.envelope", "ICC profile contains unexplained bytes between tag elements")
             }
-            expectedOffset = align4(tag.offset.toLong() + tag.size.toLong())
+            val tagEnd = tag.offset.toLong() + tag.size.toLong()
+            val paddedEnd = align4(tagEnd)
+            if (paddedEnd > profileSize.toLong()) {
+                abort("icc.profile.envelope", "ICC profile is missing required tag alignment padding")
+            }
+            if (!reader.isZero(tagEnd.toInt(), (paddedEnd - tagEnd).toInt())) {
+                abort("icc.profile.padding", "ICC tag alignment padding must be zero")
+            }
+            expectedOffset = paddedEnd
         }
         if (expectedOffset != profileSize.toLong()) {
             abort("icc.profile.envelope", "ICC profile has bytes outside its tag data envelope")
@@ -240,13 +248,12 @@ private class Parser(
         val curve = parseCurve(requiredTag(tags, IccSignature.K_TRC))
         val transferFunction = (curve as? ParametricIccCurve)?.toTransferFunction()
             ?: abort("icc.curve.sampled", "Sampled TRCs cannot be represented by the current ColorProfile contract")
-        val illuminant = readXyz(ILLUMINANT_OFFSET)
         return ColorProfile(
             colorModel = ColorModel.GRAY,
             toXyzD50 = SkcmsMatrix3x3.of(
-                illuminant[0], 0f, 0f,
-                0f, illuminant[1], 0f,
-                0f, 0f, illuminant[2],
+                D50_X, 0f, 0f,
+                0f, D50_Y, 0f,
+                0f, 0f, D50_Z,
             ),
             transferFunction = transferFunction,
         )
@@ -256,7 +263,7 @@ private class Parser(
         tags[signature] ?: abort("icc.profile.tags", "Required ICC tag $signature is missing")
 
     private fun parseXyzTag(tag: TagRecord): FloatArray {
-        if (tag.size < XYZ_TAG_SIZE || reader.signature(tag.offset) != IccSignature.XYZ_TYPE) {
+        if (tag.size != XYZ_TAG_SIZE || reader.signature(tag.offset) != IccSignature.XYZ_TYPE) {
             abort("icc.tag.type", "ICC XYZ tag has the wrong type or size")
         }
         return readXyz(tag.offset + 8)
@@ -303,7 +310,7 @@ private class Parser(
         }
         val countLong = reader.u32(tag.offset + 8)
         val requiredSize = CURVE_HEADER_SIZE.toLong() + countLong * 2L
-        if (requiredSize != tag.size.toLong()) {
+        if (requiredSize != tag.size.toLong() && !isZeroPaddedV2SingleGamma(tag, countLong, requiredSize)) {
             abort("icc.curve.range", "Sampled ICC curve size does not match its count")
         }
         val count = countLong.toInt()
@@ -314,6 +321,13 @@ private class Parser(
             return ParametricIccCurve(0, floatArrayOf(gamma))
         }
         abort("icc.curve.sampled", "Sampled TRCs cannot be represented by the current ColorProfile contract")
+    }
+
+    private fun isZeroPaddedV2SingleGamma(tag: TagRecord, count: Long, semanticSize: Long): Boolean {
+        if (majorVersion != 2 || count != 1L) return false
+        val paddedSize = align4(semanticSize)
+        if (tag.size.toLong() != paddedSize || paddedSize <= semanticSize) return false
+        return reader.isZero(tag.offset + semanticSize.toInt(), (paddedSize - semanticSize).toInt())
     }
 
     private fun commonTransferFunction(vararg curves: IccCurve): SkcmsTransferFunction {
@@ -332,6 +346,9 @@ private class Parser(
         reader.s15Fixed16(offset + 4),
         reader.s15Fixed16(offset + 8),
     )
+
+    private fun roundsToD50(value: Float, expected: Float): Boolean =
+        abs(value - expected) < D50_ROUNDING_HALF_UNIT
 
     private fun isRepresentableMatrix(matrix: SkcmsMatrix3x3): Boolean {
         val a = matrix[0, 0].toDouble()
@@ -393,6 +410,6 @@ private const val PARAMETRIC_HEADER_SIZE: Int = 12
 private const val D50_X: Float = 0.9642f
 private const val D50_Y: Float = 1f
 private const val D50_Z: Float = 0.8249f
-private const val D50_TOLERANCE: Float = 0.01f
+private const val D50_ROUNDING_HALF_UNIT: Float = 0.00005f
 private const val DEVICE_ATTRIBUTES_RESERVED_MASK: Long = 0xfffffff0L
 private val PARAMETRIC_PARAMETER_COUNTS: IntArray = intArrayOf(1, 3, 4, 5, 7)
