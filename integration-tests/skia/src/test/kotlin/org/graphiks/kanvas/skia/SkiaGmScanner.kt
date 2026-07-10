@@ -11,6 +11,8 @@ data class SkiaGmScanOptions(
     val timeoutSeconds: Long = 30L,
     val outputPath: String? = null,
     val names: Set<String> = emptySet(),
+    val listBlocking: Boolean = false,
+    val indices: Set<Int> = emptySet(),
 )
 
 data class SkiaGmScanSelection(
@@ -29,6 +31,8 @@ fun parseSkiaGmScanOptions(args: Array<String>): SkiaGmScanOptions {
     var timeoutSeconds = 30L
     var outputPath: String? = null
     var names = emptySet<String>()
+    var listBlocking = false
+    var indices = emptySet<Int>()
 
     var i = 0
     while (i < args.size) {
@@ -36,26 +40,35 @@ fun parseSkiaGmScanOptions(args: Array<String>): SkiaGmScanOptions {
             "--from" -> from = args[++i].toInt()
             "--to" -> to = args[++i].toInt()
             "--timeout" -> timeoutSeconds = args[++i].toLong()
-            "--output" -> outputPath = args[++i]
+            "--output" -> outputPath = java.io.File(args[++i]).absolutePath
             "--names" -> names = args[++i].split(',').map(String::trim).filter(String::isNotEmpty).toSet()
+            "--list-blocking" -> listBlocking = true
+            "--indices" -> indices = args[++i].split(',').filter(String::isNotEmpty).map(String::toInt).toSet()
             else -> if (argument.startsWith("--names=")) {
                 names = argument.removePrefix("--names=").split(',').map(String::trim).filter(String::isNotEmpty).toSet()
+            } else if (argument.startsWith("--indices=")) {
+                indices = argument.removePrefix("--indices=").split(',').map(String::trim).filter(String::isNotEmpty).map(String::toInt).toSet()
             }
         }
         i++
     }
 
-    return SkiaGmScanOptions(from, to, timeoutSeconds, outputPath, names)
+    return SkiaGmScanOptions(from, to, timeoutSeconds, outputPath, names, listBlocking, indices)
 }
 
 fun resolveSkiaGmScanSelection(
     gms: List<SkiaGm>,
     options: SkiaGmScanOptions,
 ): SkiaGmScanSelection {
-    val namedGms = gms.withIndex().filter { options.names.isEmpty() || it.value.name in options.names }
+    val namedGms = gms.withIndex().filter {
+        (options.names.isEmpty() || it.value.name in options.names) &&
+            (options.indices.isEmpty() || it.index in options.indices)
+    }
     val foundNames = namedGms.map { it.value.name }.toSet()
     val missingNames = options.names - foundNames
     require(missingNames.isEmpty()) { "Unknown Skia GM names: ${missingNames.joinToString(", ")}" }
+    val missingIndices = options.indices - namedGms.map { it.index }.toSet()
+    require(missingIndices.isEmpty()) { "Unknown Skia GM indices: ${missingIndices.sorted().joinToString(", ")}" }
     val effectiveFrom = options.from.coerceIn(0, namedGms.size)
     val effectiveTo = options.to.coerceIn(effectiveFrom, namedGms.size)
     return SkiaGmScanSelection(
@@ -70,6 +83,9 @@ fun selectSkiaGmsForScan(
     gms: List<SkiaGm>,
     options: SkiaGmScanOptions,
 ): List<IndexedValue<SkiaGm>> = resolveSkiaGmScanSelection(gms, options).gms
+
+fun listBlockingSkiaGmEntries(gms: List<SkiaGm>): List<IndexedValue<SkiaGm>> =
+    gms.withIndex().filter { it.value.renderCost == RenderCost.BLOCKING }
 
 /**
  * Scans GMs individually with a per-GM watchdog timeout.  When a GM hangs
@@ -91,6 +107,11 @@ fun main(args: Array<String>) {
     RuntimeEffectWgsl4kWiring.install()
     val config = RenderConfig.fromEnvironment()
     val selection = resolveSkiaGmScanSelection(SkiaGmRegistry.all(), options)
+    if (options.listBlocking) {
+        listBlockingSkiaGmEntries(SkiaGmRegistry.all())
+            .forEach { println("GM_ENTRY|${it.index}|${it.value.name}") }
+        exitProcess(0)
+    }
     val selectedGms = selection.gms
 
     if (selectedGms.isEmpty()) {

@@ -3,6 +3,7 @@ package org.graphiks.kanvas.skia
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
+import java.io.File
 
 class SkiaGmScannerTest {
     @Test
@@ -10,6 +11,14 @@ class SkiaGmScannerTest {
         val options = parseSkiaGmScanOptions(arrayOf("--names= c, ,a, "))
 
         assertEquals(setOf("c", "a"), options.names)
+    }
+
+    @Test
+    fun `parser accepts registry indices and makes output path absolute`() {
+        val options = parseSkiaGmScanOptions(arrayOf("--indices= 7, ,2, ", "--output", "build/scan.ndjson"))
+
+        assertEquals(setOf(7, 2), options.indices)
+        assertEquals(File("build/scan.ndjson").absolutePath, options.outputPath)
     }
 
     @Test
@@ -36,6 +45,43 @@ class SkiaGmScannerTest {
     }
 
     @Test
+    fun `index selection keeps duplicate display names distinct`() {
+        val selected = selectSkiaGmsForScan(
+            listOf(ScannerStubGm("duplicate"), ScannerStubGm("other"), ScannerStubGm("duplicate")),
+            SkiaGmScanOptions(indices = setOf(0, 2)),
+        )
+
+        assertEquals(listOf(0, 2), selected.map { it.index })
+        assertEquals(listOf("duplicate", "duplicate"), selected.map { it.value.name })
+    }
+
+    @Test
+    fun `index selection rejects a missing registry index`() {
+        val error = assertThrows(IllegalArgumentException::class.java) {
+            selectSkiaGmsForScan(
+                listOf(ScannerStubGm("a"), ScannerStubGm("b")),
+                SkiaGmScanOptions(indices = setOf(1, 9)),
+            )
+        }
+
+        assertEquals("Unknown Skia GM indices: 9", error.message)
+    }
+
+    @Test
+    fun `blocking list retains original indexes for duplicate display names`() {
+        val entries = listBlockingSkiaGmEntries(
+            listOf(
+                ScannerStubGm("duplicate", RenderCost.BLOCKING),
+                ScannerStubGm("fast"),
+                ScannerStubGm("duplicate", RenderCost.BLOCKING),
+            ),
+        )
+
+        assertEquals(listOf(0, 2), entries.map { it.index })
+        assertEquals(listOf("duplicate", "duplicate"), entries.map { it.value.name })
+    }
+
+    @Test
     fun `named selection reports normalized effective range and empty diagnostic total`() {
         val options = SkiaGmScanOptions(from = 2, names = setOf("a", "c"))
 
@@ -54,9 +100,9 @@ class SkiaGmScannerTest {
 
 private class ScannerStubGm(
     override val name: String,
+    override val renderCost: RenderCost = RenderCost.FAST,
 ) : SkiaGm {
     override val renderFamily: RenderFamily = RenderFamily.IMAGE
-    override val renderCost: RenderCost = RenderCost.FAST
     override val minSimilarity: Double = 99.0
     override fun draw(canvas: GmCanvas, width: Int, height: Int) = Unit
 }

@@ -99,24 +99,48 @@ class DeterministicReportTest(unittest.TestCase):
 class BatchFallbackTest(unittest.TestCase):
     def test_batch_recording_only_a_falls_back_to_remaining_names(self):
         fallback = gm_measure_blocking.fallback_names(
-            ["a", "b", "c", "d", "e"],
+            ["1", "2", "3", "4", "5"],
             attempt=0,
-            records=[{"attempt": 0, "record": "PASS|7|a|12"}],
+            records=[{"attempt": 0, "record": "PASS|1|a|12"}],
         )
 
-        self.assertEqual(["b", "c", "d", "e"], fallback)
+        self.assertEqual([2, 3, 4, 5], fallback)
 
     def test_aggregate_retains_three_attempts_after_fallback(self):
         records = []
         for attempt in range(3):
-            records.append({"attempt": attempt, "record": "PASS|7|a|12"})
-            for name in ["b", "c", "d", "e"]:
-                records.append({"attempt": attempt, "record": "PASS|8|%s|12" % name})
+            records.append({"attempt": attempt, "record": "PASS|1|a|12"})
+            for index in [2, 3, 4, 5]:
+                records.append({"attempt": attempt, "record": "PASS|%s|name%s|12" % (index, index)})
 
-        attempts = gm_measure_blocking.aggregate_attempt_records(["a", "b", "c", "d", "e"], records)
+        attempts = gm_measure_blocking.aggregate_attempt_records(["1", "2", "3", "4", "5"], records)
 
-        self.assertEqual(["a", "b", "c", "d", "e"], sorted(attempts))
+        self.assertEqual([1, 2, 3, 4, 5], sorted(attempts))
         self.assertTrue(all(len(samples) == 3 for samples in attempts.values()))
+
+    def test_duplicate_display_names_are_grouped_by_registry_index(self):
+        entries = [(7, "duplicate"), (11, "duplicate")]
+        records = []
+        for attempt in range(3):
+            records.extend([
+                {"attempt": attempt, "record": "PASS|7|duplicate|12"},
+                {"attempt": attempt, "record": "PASS|11|duplicate|24"},
+            ])
+
+        attempts = gm_measure_blocking.aggregate_attempt_records(entries, records)
+
+        self.assertEqual([7, 11], sorted(attempts))
+        self.assertEqual("PASS|7|duplicate|12", attempts[7][0]["record"])
+        self.assertEqual("PASS|11|duplicate|24", attempts[11][0]["record"])
+
+    def test_fallback_returns_missing_registry_index_for_duplicate_display_name(self):
+        fallback = gm_measure_blocking.fallback_indices(
+            [(7, "duplicate"), (11, "duplicate")],
+            attempt=0,
+            records=[{"attempt": 0, "record": "PASS|7|duplicate|12"}],
+        )
+
+        self.assertEqual([11], fallback)
 
 
 if __name__ == "__main__":

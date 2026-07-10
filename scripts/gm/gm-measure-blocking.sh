@@ -10,11 +10,11 @@ PYTHON_HELPER="$HERE/gm_measure_blocking.py"
 if [[ "${GM_SCAN_FIXTURE:-}" == "1" ]]; then
     names="$1"
     output="$2"
-    if [[ "$names" == "a,b,c,d,e" ]]; then
-        printf 'PASS|0|a|12\n' >> "$output"
+    if [[ "$names" == "1,2,3,4,5" ]]; then
+        printf 'PASS|1|a|12\n' >> "$output"
         exit 124
     fi
-    printf 'PASS|0|%s|12\n' "$names" >> "$output"
+    printf 'PASS|%s|fixture-%s|12\n' "$names" "$names" >> "$output"
     exit 0
 fi
 
@@ -27,19 +27,10 @@ usage() {
 }
 
 discover_blocking_names() {
-    local file
-    while IFS= read -r file; do
-        awk '
-            /^[[:space:]]*(class|object) / { name = "" }
-            /override val name = "/ {
-                value = $0
-                sub(/^.*override val name = "/, "", value)
-                sub(/".*$/, "", value)
-                name = value
-            }
-            /override val renderCost = RenderCost\.BLOCKING/ && name != "" { print name }
-        ' "$file"
-    done < <(rg -l 'RenderCost\.BLOCKING' "$ROOT/integration-tests/skia/src/test/kotlin" -g '*.kt' -g '!*Test.kt') | LC_ALL=C sort -u
+    (
+        cd "$ROOT"
+        ./gradlew --no-daemon -q -Pkanvas.scan.listBlocking=true :integration-tests:skia:generateSkiaScan
+    ) | sed -n 's/^GM_ENTRY|\([0-9][0-9]*\)|.*$/\1/p'
 }
 
 run_scan() {
@@ -47,6 +38,7 @@ run_scan() {
     local output="$2"
     local rc
 
+    output="$(cd "$(dirname "$output")" && pwd)/$(basename "$output")"
     : > "$output"
     if [[ "${GM_MEASURE_SELF_TEST:-}" == "1" ]]; then
         GM_SCAN_FIXTURE=1 "$GM_SCAN_COMMAND" "$names" "$output" || rc=$?
@@ -55,7 +47,7 @@ run_scan() {
         (
             cd "$ROOT"
             ./gradlew --no-daemon -q \
-                "-Pkanvas.scan.names=$names" \
+                "-Pkanvas.scan.indices=$names" \
                 -Pkanvas.scan.timeout=10 \
                 "-Pkanvas.scan.output=$output" \
                 :integration-tests:skia:generateSkiaScan
@@ -121,12 +113,12 @@ self_test() {
     trap 'rm -rf "$temporary_dir"' RETURN
     GM_MEASURE_SELF_TEST=1 GM_SCAN_COMMAND="$HERE/gm-measure-blocking.sh" \
         "$HERE/gm-measure-blocking.sh" \
-        --names a,b,c,d,e \
+        --names 1,2,3,4,5 \
         --output "$temporary_dir" \
         --attempt-count 1 \
         --skip-reports
     [[ "$(wc -l < "$temporary_dir/attempts.ndjson" | tr -d ' ')" == "5" ]]
-    grep -Fx 'a,b,c,d,e' "$temporary_dir/timed-out-batches.txt" >/dev/null
+    grep -Fx '1,2,3,4,5' "$temporary_dir/timed-out-batches.txt" >/dev/null
     printf 'self-test: fixture timeout retained one record and fell back to four units\n'
 }
 
@@ -195,6 +187,7 @@ for name in "${GM_NAMES[@]}"; do
 done
 
 mkdir -p "$OUTPUT_DIR"
+OUTPUT_DIR="$(cd "$OUTPUT_DIR" && pwd)"
 ATTEMPTS_NDJSON="$OUTPUT_DIR/attempts.ndjson"
 TIMED_OUT_BATCHES="$OUTPUT_DIR/timed-out-batches.txt"
 : > "$ATTEMPTS_NDJSON"

@@ -40,11 +40,14 @@ def _parse_attempt(attempt):
 
 def _ordered_names(names):
     ordered = list(names)
-    if not ordered or any(not isinstance(name, str) or not name for name in ordered):
-        raise ValueError("expected one or more nonblank GM names")
-    if len(set(ordered)) != len(ordered):
+    if not ordered:
+        raise ValueError("expected one or more registry indices")
+    indices = [entry[0] if isinstance(entry, tuple) else int(entry) for entry in ordered]
+    if any(not isinstance(index, int) or index < 0 for index in indices):
+        raise ValueError("expected one or more registry indices")
+    if len(set(indices)) != len(indices):
         raise ValueError("GM names must be unique")
-    return ordered
+    return indices
 
 
 def fallback_names(names, attempt, records):
@@ -55,8 +58,8 @@ def fallback_names(names, attempt, records):
         if not isinstance(record, dict) or record.get("attempt") != attempt:
             continue
         parsed = _parse_attempt(record)
-        if parsed["name"] in ordered_names:
-            recorded.add(parsed["name"])
+        if parsed["index"] in ordered_names:
+            recorded.add(parsed["index"])
     return [name for name in ordered_names if name not in recorded]
 
 
@@ -74,7 +77,7 @@ def aggregate_attempt_records(names, records):
         if attempt not in {0, 1, 2}:
             raise ValueError("outer attempt must be 0, 1, or 2")
         parsed = _parse_attempt(record)
-        name = parsed["name"]
+        name = parsed["index"]
         if name not in expected_names:
             raise ValueError("recorded GM is not selected: %s" % name)
         key = (name, attempt)
@@ -117,16 +120,18 @@ def append_scanner_records(names, attempt, scanner_output, attempts_ndjson):
         if not isinstance(record, dict) or not isinstance(record.get("attempt"), int):
             raise ValueError("attempt record requires an integer outer attempt")
         parsed = _parse_attempt(record)
-        seen.add((parsed["name"], record["attempt"]))
+        seen.add((parsed["index"], record["attempt"]))
 
     additions = []
     for line in scanner_output.read_text().splitlines():
         if not line.strip():
             continue
+        if not line.startswith(("PASS|", "FAIL|", "TIMEOUT|")):
+            continue
         parsed = _parse_attempt(line)
-        if parsed["name"] not in selected_names:
-            raise ValueError("scanner returned unselected GM: %s" % parsed["name"])
-        key = (parsed["name"], attempt)
+        if parsed["index"] not in selected_names:
+            raise ValueError("scanner returned unselected GM index: %s" % parsed["index"])
+        key = (parsed["index"], attempt)
         if key in seen:
             raise ValueError("duplicate GM/attempt record: %s/%s" % key)
         seen.add(key)
@@ -205,9 +210,10 @@ def classify_attempts(attempts):
 def build_report(attempts_by_name, timed_out_batches, provenance):
     """Build a sorted report retaining all records required for rebaseline review."""
     rows = []
-    for name in sorted(attempts_by_name):
+    for name in sorted(attempts_by_name, key=str):
         attempts = attempts_by_name[name]
-        row = {"name": name, "rawSamples": [
+        first = _parse_attempt(attempts[0])
+        row = {"registryIndex": first["index"], "name": first["name"], "rawSamples": [
             attempt["record"] if isinstance(attempt, dict) else attempt for attempt in attempts
         ]}
         row.update(classify_attempts(attempts))
@@ -252,6 +258,9 @@ def to_markdown(report):
     else:
         lines.append("- None")
     return "\n".join(lines) + "\n"
+
+
+fallback_indices = fallback_names
 
 
 def _git_head():
@@ -304,7 +313,7 @@ def main():
     if args.fallback:
         if names is None or args.attempt is None or not args.attempts_ndjson:
             parser.error("--fallback requires --names, --attempt, and --attempts-ndjson")
-        print("\n".join(fallback_names(names, args.attempt, _read_ndjson(args.attempts_ndjson))))
+        print("\n".join(map(str, fallback_names(names, args.attempt, _read_ndjson(args.attempts_ndjson)))) )
         return
     if args.aggregate:
         if names is None or not args.attempts_ndjson:
