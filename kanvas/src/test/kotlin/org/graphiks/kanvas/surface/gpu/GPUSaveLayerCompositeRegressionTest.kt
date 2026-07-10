@@ -10,6 +10,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Test
+import kotlin.math.pow
 
 @OptIn(ExperimentalUnsignedTypes::class)
 class GPUSaveLayerCompositeRegressionTest {
@@ -29,7 +30,7 @@ class GPUSaveLayerCompositeRegressionTest {
             drawRect(
                 Rect(1f, 1f, 7f, 3f),
                 Paint(
-                    color = Color.fromRGBA(1f, 0f, 0f, 0.5f),
+                    color = translucentRed.toColor(),
                     antiAlias = false,
                     blendMode = BlendMode.SRC,
                 ),
@@ -39,10 +40,10 @@ class GPUSaveLayerCompositeRegressionTest {
 
         val pixels = surface.render().pixels
 
-        assertPixelNear(pixels, x = 0, y = 0, expected = intArrayOf(255, 255, 255, 255), tolerance = 0)
-        assertPixelNear(pixels, x = 2, y = 6, expected = intArrayOf(191, 191, 191, 255), tolerance = 0)
-        assertPixelNear(pixels, x = 2, y = 2, expected = intArrayOf(255, 128, 128, 255), tolerance = 2)
-        assertPixelNear(pixels, x = 5, y = 2, expected = intArrayOf(224, 96, 96, 255), tolerance = 2)
+        assertPixelNear(pixels, x = 0, y = 0, expected = white, tolerance = 0)
+        assertPixelNear(pixels, x = 2, y = 6, expected = checkerGray, tolerance = 0)
+        assertPixelNear(pixels, x = 2, y = 2, expected = sourceOverSrgb(translucentRed, white), tolerance = 2)
+        assertPixelNear(pixels, x = 5, y = 2, expected = sourceOverSrgb(translucentRed, checkerGray), tolerance = 2)
     }
 
     @Test
@@ -53,24 +54,23 @@ class GPUSaveLayerCompositeRegressionTest {
         surface.canvas {
             drawRect(
                 Rect(0f, 0f, 8f, 8f),
-                Paint(color = Color.fromRGBA(0f, 1f, 0f, 1f), antiAlias = false),
+                Paint(color = green.toColor(), antiAlias = false),
             )
             saveLayer()
             drawRect(
                 Rect(0f, 0f, 8f, 8f),
                 Paint(
-                    color = Color.fromRGBA(1f, 0f, 0f, 0.5f),
+                    color = translucentRed.toColor(),
                     antiAlias = false,
-                    blendMode = BlendMode.SRC,
                 ),
             )
             saveLayer()
             drawRect(
                 Rect(2f, 2f, 6f, 6f),
                 Paint(
-                    color = Color.fromRGBA(0f, 0f, 1f, 0.5f),
+                    color = translucentBlue.toColor(),
                     antiAlias = false,
-                    blendMode = BlendMode.SRC,
+                    blendMode = BlendMode.DST_OUT,
                 ),
             )
             restore()
@@ -78,22 +78,23 @@ class GPUSaveLayerCompositeRegressionTest {
         }
 
         val pixels = surface.render().pixels
+        val expectedOuterLayer = sourceOverSrgb(translucentRed, green)
 
-        assertPixelNear(pixels, x = 1, y = 1, expected = intArrayOf(128, 128, 0, 255), tolerance = 2)
-        assertPixelNear(pixels, x = 3, y = 3, expected = intArrayOf(64, 64, 128, 255), tolerance = 2)
+        assertPixelNear(pixels, x = 1, y = 1, expected = expectedOuterLayer, tolerance = 2)
+        assertPixelNear(pixels, x = 3, y = 3, expected = expectedOuterLayer, tolerance = 2)
     }
 
     private fun org.graphiks.kanvas.canvas.Canvas.drawCheckerboardRoot() {
-        drawRect(Rect(0f, 0f, 4f, 4f), Paint(color = Color.WHITE, antiAlias = false))
+        drawRect(Rect(0f, 0f, 4f, 4f), Paint(color = white.toColor(), antiAlias = false))
         drawRect(
             Rect(4f, 0f, 8f, 4f),
-            Paint(color = Color.fromRGBA(0.75f, 0.75f, 0.75f, 1f), antiAlias = false),
+            Paint(color = checkerGray.toColor(), antiAlias = false),
         )
         drawRect(
             Rect(0f, 4f, 4f, 8f),
-            Paint(color = Color.fromRGBA(0.75f, 0.75f, 0.75f, 1f), antiAlias = false),
+            Paint(color = checkerGray.toColor(), antiAlias = false),
         )
-        drawRect(Rect(4f, 4f, 8f, 8f), Paint(color = Color.WHITE, antiAlias = false))
+        drawRect(Rect(4f, 4f, 8f, 8f), Paint(color = white.toColor(), antiAlias = false))
     }
 
     private fun requireWebGpu() {
@@ -106,16 +107,66 @@ class GPUSaveLayerCompositeRegressionTest {
         pixels: UByteArray,
         x: Int,
         y: Int,
-        expected: IntArray,
+        expected: Rgba,
         tolerance: Int,
     ) {
         val offset = (y * 8 + x) * 4
         val actual = IntArray(4) { channel -> pixels[offset + channel].toInt() and 0xff }
-        actual.zip(expected).forEachIndexed { channel, (actualByte, expectedByte) ->
+        actual.zip(expected.toIntArray()).forEachIndexed { channel, (actualByte, expectedByte) ->
             assertTrue(
                 kotlin.math.abs(actualByte - expectedByte) <= tolerance,
                 "channel=$channel at ($x,$y): expected=$expectedByte +/- $tolerance, actual=$actualByte",
             )
         }
+    }
+
+    /** Models one RGBA8_UNORM_SRGB source-over pass, including texture quantisation. */
+    private fun sourceOverSrgb(source: Rgba, destination: Rgba): Rgba {
+        val sourceAlpha = source.alpha / 255f
+        val destinationAlpha = destination.alpha / 255f
+        val outputAlpha = sourceAlpha + destinationAlpha * (1f - sourceAlpha)
+
+        fun composite(sourceChannel: Int, destinationChannel: Int): Int {
+            if (outputAlpha == 0f) return 0
+            val outputLinearPremul = srgbToLinear(sourceChannel) * sourceAlpha +
+                srgbToLinear(destinationChannel) * destinationAlpha * (1f - sourceAlpha)
+            return linearToSrgb(outputLinearPremul / outputAlpha)
+        }
+
+        return Rgba(
+            red = composite(source.red, destination.red),
+            green = composite(source.green, destination.green),
+            blue = composite(source.blue, destination.blue),
+            alpha = (outputAlpha * 255f + 0.5f).toInt(),
+        )
+    }
+
+    private fun srgbToLinear(channel: Int): Float {
+        val srgb = channel / 255f
+        return if (srgb <= 0.04045f) srgb / 12.92f else ((srgb + 0.055f) / 1.055f).pow(2.4f)
+    }
+
+    private fun linearToSrgb(linear: Float): Int {
+        val srgb = if (linear <= 0.0031308f) linear * 12.92f else 1.055f * linear.pow(1f / 2.4f) - 0.055f
+        return (srgb.coerceIn(0f, 1f) * 255f + 0.5f).toInt()
+    }
+
+    private data class Rgba(
+        val red: Int,
+        val green: Int,
+        val blue: Int,
+        val alpha: Int,
+    ) {
+        fun toColor(): Color = Color.fromRGBA(red / 255f, green / 255f, blue / 255f, alpha / 255f)
+
+        fun toIntArray(): IntArray = intArrayOf(red, green, blue, alpha)
+    }
+
+    private companion object {
+        val white = Rgba(red = 255, green = 255, blue = 255, alpha = 255)
+        val checkerGray = Rgba(red = 191, green = 191, blue = 191, alpha = 255)
+        val green = Rgba(red = 0, green = 255, blue = 0, alpha = 255)
+        val translucentRed = Rgba(red = 255, green = 0, blue = 0, alpha = 128)
+        val translucentBlue = Rgba(red = 0, green = 0, blue = 255, alpha = 128)
     }
 }
