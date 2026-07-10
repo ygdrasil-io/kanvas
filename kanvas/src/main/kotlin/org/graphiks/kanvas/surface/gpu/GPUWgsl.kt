@@ -400,6 +400,12 @@ internal val BLEND_FORMULA_WGSL: String = """
         let uv = vec2f(coord.x / f32(srcDims.x), coord.y / f32(srcDims.y));
         let src = textureSample(srcTexture, srcSampler, uv);
         let dst = textureSample(dstTexture, dstSampler, uv);
+        // The source intermediate is transparent outside the drawn geometry.
+        // Preserve the destination there instead of evaluating a blend formula
+        // against zero (DARKEN would otherwise turn the whole target black).
+        if (src.a == 0.0) {
+            return dst;
+        }
         switch uniforms.blendMode {
             case 0u: { return blendMultiply(src, dst); }
             case 1u: { return blendScreen(src, dst); }
