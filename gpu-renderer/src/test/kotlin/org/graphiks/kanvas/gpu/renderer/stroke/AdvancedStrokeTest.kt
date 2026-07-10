@@ -110,11 +110,43 @@ class AdvancedStrokeTest {
                 fail("DashVertexExpansion.expandVertices should complete for zero off intervals: ${e::class.simpleName}")
             }
 
-            assertEquals(4, expansion.vertices.size)
+            assertEquals(listOf(0f, 0f, 5f, 0f, 7f, 0f, 10f, 0f), expansion.vertices)
             assertEquals(listOf(0), expansion.contourStarts)
+            assertEquals(3, expansion.edgeCount)
         } finally {
             executor.shutdownNow()
         }
+    }
+
+    @Test
+    fun `dash vertex expansion interpolates endpoints inside source edge`() {
+        val expansion = DashVertexExpansion.expandVertices(
+            tessellatedVertices = listOf(0f, 0f, 10f, 0f),
+            dashIntervals = floatArrayOf(4f, 4f),
+            dashPhase = 0f,
+            strokeWidth = 1f,
+        )
+
+        assertEquals(listOf(0f, 0f, 4f, 0f, 8f, 0f, 10f, 0f), expansion.vertices)
+        assertEquals(listOf(0, 2), expansion.contourStarts)
+        assertEquals(2, expansion.edgeCount)
+    }
+
+    @Test
+    fun `dash vertex expansion retains interior vertices without off gap connector`() {
+        val expansion = DashVertexExpansion.expandVertices(
+            tessellatedVertices = listOf(0f, 0f, 3f, 4f, 6f, 4f),
+            dashIntervals = floatArrayOf(6f, 1f),
+            dashPhase = 0f,
+            strokeWidth = 1f,
+        )
+
+        assertEquals(
+            listOf(0f, 0f, 3f, 4f, 4f, 4f, 5f, 4f, 6f, 4f),
+            expansion.vertices,
+        )
+        assertEquals(listOf(0, 3), expansion.contourStarts)
+        assertEquals(3, expansion.edgeCount)
     }
 
     @Test

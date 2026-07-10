@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.surface.gpu
 
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
+import org.graphiks.kanvas.gpu.renderer.commands.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRawUniformDraw
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRectDraw
@@ -27,17 +28,35 @@ internal fun GPUBackendRenderRecorder.dispatchFillRect(
     val blendMode = cmd.blend.blendMode
     val rect = cmd.rect
     val clipBounds = cmd.clip.bounds
-    val sx = maxOf(rect.left, clipBounds.left).toInt().coerceIn(0, surfaceWidth - 1)
-    val sy = maxOf(rect.top, clipBounds.top).toInt().coerceIn(0, surfaceHeight - 1)
-    val sw = (minOf(rect.right, clipBounds.right).toInt() - sx).coerceIn(1, surfaceWidth - sx)
-    val sh = (minOf(rect.bottom, clipBounds.bottom).toInt() - sy).coerceIn(1, surfaceHeight - sy)
+    val coverageBounds = GPUBounds(
+        left = maxOf(rect.left, clipBounds.left),
+        top = maxOf(rect.top, clipBounds.top),
+        right = minOf(rect.right, clipBounds.right),
+        bottom = minOf(rect.bottom, clipBounds.bottom),
+    )
+    val bounds = GPUBounds(rect.left, rect.top, rect.right, rect.bottom)
+    val coverageScissor = if (cmd.antiAlias && cmd.material is GPUMaterialDescriptor.SolidColor) {
+        coverageScissor(bounds, clipBounds, surfaceWidth, surfaceHeight) ?: return
+    } else {
+        null
+    }
+    val truncatedScissor = if (coverageScissor == null) {
+        truncatedScissor(bounds, clipBounds, surfaceWidth, surfaceHeight) ?: return
+    } else {
+        null
+    }
+    val scissor = coverageScissor ?: truncatedScissor!!
+    val sx = scissor.x
+    val sy = scissor.y
+    val sw = scissor.width
+    val sh = scissor.height
 
     when (val material = cmd.material) {
         is GPUMaterialDescriptor.SolidColor -> {
             if (cmd.antiAlias) {
                 val aaBb = java.nio.ByteBuffer.allocate(48).order(java.nio.ByteOrder.nativeOrder())
-                aaBb.putFloat(sx.toFloat()); aaBb.putFloat(sy.toFloat())
-                aaBb.putFloat((sx + sw).toFloat()); aaBb.putFloat((sy + sh).toFloat())
+                aaBb.putFloat(coverageBounds.left); aaBb.putFloat(coverageBounds.top)
+                aaBb.putFloat(coverageBounds.right); aaBb.putFloat(coverageBounds.bottom)
                 aaBb.putFloat(srgbToLinear(material.r) * material.a)
                 aaBb.putFloat(srgbToLinear(material.g) * material.a)
                 aaBb.putFloat(srgbToLinear(material.b) * material.a)
