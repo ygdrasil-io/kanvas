@@ -3,9 +3,16 @@ package org.graphiks.kanvas.geometry
 import org.graphiks.kanvas.dsl.PathScope
 import org.graphiks.kanvas.types.Line
 import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.kanvas.types.CornerRadii
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.RRect
 import org.graphiks.kanvas.types.Rect
+import kotlin.math.PI
+import kotlin.math.abs
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.min
+import kotlin.math.sin
 import kotlin.math.sqrt
 
 class Path internal constructor() {
@@ -62,8 +69,7 @@ class Path internal constructor() {
 
     fun addRRect(rrect: RRect): Path {
         val r = rrect.rect
-        val tl = rrect.topLeft; val tr = rrect.topRight
-        val br = rrect.bottomRight; val bl = rrect.bottomLeft
+        val (tl, tr, br, bl) = normalizedRadii(rrect)
         moveTo(r.left + tl.x, r.top)
         lineTo(r.right - tr.x, r.top)
         arcTo(tr.x, tr.y, 0f, false, true, r.right, r.top + tr.y)
@@ -76,6 +82,38 @@ class Path internal constructor() {
         close()
         return this
     }
+
+    private fun normalizedRadii(rrect: RRect): Array<CornerRadii> {
+        val width = rrect.rect.width.coerceAtLeast(0f)
+        val height = rrect.rect.height.coerceAtLeast(0f)
+        val tl = rrect.topLeft.nonNegative()
+        val tr = rrect.topRight.nonNegative()
+        val br = rrect.bottomRight.nonNegative()
+        val bl = rrect.bottomLeft.nonNegative()
+        val scale = min(
+            1f,
+            min(
+                ratioOrOne(width, tl.x + tr.x),
+                min(
+                    ratioOrOne(width, bl.x + br.x),
+                    min(
+                        ratioOrOne(height, tl.y + bl.y),
+                        ratioOrOne(height, tr.y + br.y),
+                    ),
+                ),
+            ),
+        )
+        return arrayOf(tl.scaled(scale), tr.scaled(scale), br.scaled(scale), bl.scaled(scale))
+    }
+
+    private fun ratioOrOne(limit: Float, sum: Float): Float =
+        if (sum > limit && sum > 0f) limit / sum else 1f
+
+    private fun CornerRadii.nonNegative(): CornerRadii =
+        CornerRadii(x.coerceAtLeast(0f), y.coerceAtLeast(0f))
+
+    private fun CornerRadii.scaled(scale: Float): CornerRadii =
+        CornerRadii(x * scale, y * scale)
 
     fun addPath(path: Path): Path {
         verbs.addAll(path.verbs)
@@ -352,9 +390,116 @@ class Path internal constructor() {
     fun transform(matrix: Matrix33): Path {
         val result = Path()
         result.fillType = fillType
-        result.verbs.addAll(verbs)
-        result.points.addAll(points.map { matrix * it })
+        var pi = 0
+        for (verb in verbs) {
+            result.verbs.add(verb)
+            when (verb) {
+                PathVerb.MOVE, PathVerb.LINE -> {
+                    result.points.add(matrix * points[pi])
+                    pi++
+                }
+                PathVerb.QUAD -> {
+                    result.points.add(matrix * points[pi])
+                    result.points.add(matrix * points[pi + 1])
+                    pi += 2
+                }
+                PathVerb.CUBIC -> {
+                    result.points.add(matrix * points[pi])
+                    result.points.add(matrix * points[pi + 1])
+                    result.points.add(matrix * points[pi + 2])
+                    pi += 3
+                }
+                PathVerb.ARC_TO -> {
+                    val radius = points[pi]
+                    val rotationAndLargeArc = points[pi + 1]
+                    val sweep = points[pi + 2]
+                    val endpoint = points[pi + 3]
+                    val transformedArc = transformArcMetadata(
+                        radius = radius,
+                        xAxisRotation = rotationAndLargeArc.x,
+                        sweep = sweep,
+                        matrix = matrix,
+                    )
+                    result.points.add(Point(transformedArc.rx, transformedArc.ry))
+                    result.points.add(Point(transformedArc.xAxisRotation, rotationAndLargeArc.y))
+                    result.points.add(Point(transformedArc.sweepFlag, 0f))
+                    result.points.add(matrix * endpoint)
+                    pi += 4
+                }
+                PathVerb.CLOSE -> {}
+            }
+        }
         return result
+    }
+
+    private data class TransformedArcMetadata(
+        val rx: Float,
+        val ry: Float,
+        val xAxisRotation: Float,
+        val sweepFlag: Float,
+    )
+
+    private fun transformArcMetadata(
+        radius: Point,
+        xAxisRotation: Float,
+        sweep: Point,
+        matrix: Matrix33,
+    ): TransformedArcMetadata {
+        val angle = xAxisRotation.toDouble() * PI / 180.0
+        val cosAngle = cos(angle)
+        val sinAngle = sin(angle)
+        val rx = abs(radius.x.toDouble())
+        val ry = abs(radius.y.toDouble())
+        val xAxisX = cosAngle * rx
+        val xAxisY = sinAngle * rx
+        val yAxisX = -sinAngle * ry
+        val yAxisY = cosAngle * ry
+        val transformedXAxisX = matrix.scaleX * xAxisX + matrix.skewX * xAxisY
+        val transformedXAxisY = matrix.skewY * xAxisX + matrix.scaleY * xAxisY
+        val transformedYAxisX = matrix.scaleX * yAxisX + matrix.skewX * yAxisY
+        val transformedYAxisY = matrix.skewY * yAxisX + matrix.scaleY * yAxisY
+
+        val xAxisLengthSquared = transformedXAxisX * transformedXAxisX + transformedXAxisY * transformedXAxisY
+        val yAxisLengthSquared = transformedYAxisX * transformedYAxisX + transformedYAxisY * transformedYAxisY
+        val axisDot = transformedXAxisX * transformedYAxisX + transformedXAxisY * transformedYAxisY
+        val dotTolerance = 1e-6 * sqrt(xAxisLengthSquared * yAxisLengthSquared)
+        val (transformedRx, transformedRy, transformedRotation) = if (abs(axisDot) <= dotTolerance) {
+            val transformedRx = sqrt(xAxisLengthSquared)
+            val transformedRy = sqrt(yAxisLengthSquared)
+            val transformedRotation = when {
+                transformedRx > 0.0 -> atan2(transformedXAxisY, transformedXAxisX) * 180.0 / PI
+                transformedRy > 0.0 -> atan2(-transformedYAxisX, transformedYAxisY) * 180.0 / PI
+                else -> xAxisRotation.toDouble()
+            }
+            Triple(transformedRx, transformedRy, transformedRotation)
+        } else {
+            val covarianceXX = transformedXAxisX * transformedXAxisX + transformedYAxisX * transformedYAxisX
+            val covarianceXY = transformedXAxisX * transformedXAxisY + transformedYAxisX * transformedYAxisY
+            val covarianceYY = transformedXAxisY * transformedXAxisY + transformedYAxisY * transformedYAxisY
+            val trace = covarianceXX + covarianceYY
+            val diff = covarianceXX - covarianceYY
+            val root = sqrt(diff * diff + 4.0 * covarianceXY * covarianceXY)
+            val major = ((trace + root) / 2.0).coerceAtLeast(0.0)
+            val minor = ((trace - root) / 2.0).coerceAtLeast(0.0)
+            val transformedRotation = if (major > 0.0) {
+                0.5 * atan2(2.0 * covarianceXY, diff) * 180.0 / PI
+            } else {
+                xAxisRotation.toDouble()
+            }
+            Triple(sqrt(major), sqrt(minor), transformedRotation)
+        }
+        val determinant = matrix.scaleX * matrix.scaleY - matrix.skewX * matrix.skewY
+        val sweepFlag = if (determinant < 0f) {
+            if (sweep.x > 0f) 0f else 1f
+        } else {
+            sweep.x
+        }
+        return TransformedArcMetadata(
+            rx = transformedRx.toFloat(),
+            ry = transformedRy.toFloat(),
+            xAxisRotation = transformedRotation.toFloat(),
+            sweepFlag = sweepFlag,
+        )
     }
 
     internal fun verbs(): List<PathVerb> = verbs.toList()

@@ -8,6 +8,9 @@ import org.graphiks.kanvas.paint.StrokeCap
 import org.graphiks.kanvas.paint.StrokeJoin
 import org.graphiks.kanvas.types.RRect
 import org.graphiks.kanvas.types.Rect
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.sin
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -84,6 +87,45 @@ class GPUPathStrokeInputTest {
 
         assertTrue(flat.size > 9)
         assertEquals(flat.first(), flat.last())
+    }
+
+    @Test
+    fun `rounded rect conversion clamps oversized radii inside rect bounds`() {
+        val rect = Rect.fromLTRB(0f, 0f, 78f, 38f)
+        val path = Path().addRRect(RRect(rect, radius = 400f))
+
+        val flat = PathTessellator(tolerance = 0.25f, maxVertices = 128)
+            .flatten(path.toPathTessellatorData())
+
+        assertTrue(flat.isNotEmpty())
+        assertTrue(flat.all { it.x in rect.left - 0.01f..rect.right + 0.01f })
+        assertTrue(flat.all { it.y in rect.top - 0.01f..rect.bottom + 0.01f })
+    }
+
+    @Test
+    fun `large sweep arc stays inside its ellipse bounds`() {
+        val radius = 45f
+        val sweepRad = 355.0 * PI / 180.0
+        val path = Path().apply {
+            moveTo(radius, 0f)
+            arcTo(
+                rx = radius,
+                ry = radius,
+                xAxisRotation = 0f,
+                largeArc = true,
+                sweep = true,
+                x = (radius * cos(sweepRad)).toFloat(),
+                y = (radius * sin(sweepRad)).toFloat(),
+            )
+            close()
+        }
+
+        val flat = PathTessellator(tolerance = 0.25f, maxVertices = 128)
+            .flatten(path.toPathTessellatorData())
+
+        assertTrue(flat.size > 8)
+        assertTrue(flat.all { it.x in -radius - 0.01f..radius + 0.01f })
+        assertTrue(flat.all { it.y in -radius - 0.01f..radius + 0.01f })
     }
 
     @Test
