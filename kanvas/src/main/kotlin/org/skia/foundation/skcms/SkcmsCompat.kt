@@ -82,12 +82,12 @@ public class SkcmsICCProfile private constructor(
 
     public companion object {
         public fun fromColorProfile(colorProfile: ColorProfile): SkcmsICCProfile {
-            val bytes = if (isFacadeMatrixTrc(colorProfile)) {
-                IccProfileWriter.writeMatrixTrc(colorProfile)
-            } else {
-                ByteArray(0)
+            if (!isFacadeMatrixTrc(colorProfile)) {
+                return create(colorProfile, ByteArray(0))
             }
-            return create(colorProfile, bytes)
+            val bytes = IccProfileWriter.writeMatrixTrc(colorProfile)
+            val normalized = IccProfileParser.parse(bytes, IccParseLimits()).getOrThrow()
+            return create(normalized, bytes)
         }
 
         internal fun fromParsedColorProfile(

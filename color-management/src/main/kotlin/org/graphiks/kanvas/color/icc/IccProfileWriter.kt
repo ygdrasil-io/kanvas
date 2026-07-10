@@ -36,18 +36,17 @@ public object IccProfileWriter {
             Tag(IccSignature.G_TRC, transferPayload.copyOf()),
             Tag(IccSignature.B_TRC, transferPayload.copyOf()),
         )
-        val version = if (quantizedMatrix.any { it < 0 }) ICC_VERSION_4_4 else ICC_VERSION_4_3
-        return writeProfile(tags, version)
+        return writeProfile(tags)
     }
 
-    private fun writeProfile(tags: List<Tag>, version: Int): ByteArray {
+    private fun writeProfile(tags: List<Tag>): ByteArray {
         val tagTableEnd = HEADER_AND_COUNT_SIZE + tags.size * TAG_ENTRY_SIZE
         var profileSize = tagTableEnd
         tags.forEach { tag -> profileSize = align4(profileSize + tag.payload.size) }
         val bytes = ByteArray(profileSize)
 
         writeU32(bytes, PROFILE_SIZE_OFFSET, profileSize)
-        writeU32(bytes, VERSION_OFFSET, version)
+        writeU32(bytes, VERSION_OFFSET, ICC_VERSION_4_4)
         writeSignature(bytes, PROFILE_CLASS_OFFSET, IccSignature.DISPLAY_CLASS)
         writeSignature(bytes, DATA_COLOR_SPACE_OFFSET, IccSignature.RGB)
         writeSignature(bytes, PCS_OFFSET, IccSignature.XYZ)
@@ -233,7 +232,6 @@ public object IccProfileWriter {
     private const val PARAMETRIC_TYPE_4_SIZE: Int = 40
     private const val MLUC_RECORD_SIZE: Int = 12
     private const val MLUC_TEXT_OFFSET: Int = 28
-    private const val ICC_VERSION_4_3: Int = 0x04300000
     private const val ICC_VERSION_4_4: Int = 0x04400000
     private const val LANGUAGE_ENGLISH: Int = 0x656e
     private const val COUNTRY_US: Int = 0x5553

@@ -1,17 +1,19 @@
 package org.graphiks.kanvas.codec.png
 
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.graphiks.kanvas.codec.Codec
+import org.graphiks.math.SkcmsMatrix3x3
 import org.skia.foundation.SkBitmap
-import org.skia.foundation.SkICC
-import org.skia.foundation.skcms.SkNamedTransferFn
-import org.skia.foundation.skcms.SkNamedGamut
 import org.skia.foundation.SkColorSpace
+import org.skia.foundation.SkICC
+import org.skia.foundation.skcms.SkNamedGamut
+import org.skia.foundation.skcms.SkNamedTransferFn
 import org.skia.foundation.skcms.skcmsParse
 import java.io.ByteArrayOutputStream
 
@@ -147,6 +149,27 @@ class PngEncoderTest {
         val bytes = PngEncoder.encode(src)!!
         assertTrue(findChunk(bytes, 0x69434350), "non-sRGB must write iCCP")
         assertTrue(!findChunk(bytes, 0x73524742), "non-sRGB must not write sRGB")
+    }
+
+    @Test
+    fun `D50 preserving gamut three through sixty four LSB from sRGB writes iCCP`() {
+        val base = SkNamedGamut.kSRGB
+        listOf(3, 50, 64).forEach { deltaLsb ->
+            val delta = deltaLsb / 65_536f
+            val matrix = SkcmsMatrix3x3.of(
+                base[0, 0] + delta, base[0, 1] - delta, base[0, 2],
+                base[1, 0] + delta, base[1, 1] - delta, base[1, 2],
+                base[2, 0] + delta, base[2, 1] - delta, base[2, 2],
+            )
+            val colorSpace = SkColorSpace.makeRGB(SkNamedTransferFn.kSRGB, matrix)!!
+            val src = SkBitmap(4, 4, colorSpace)
+            for (i in 0 until 16) src.pixels[i] = 0xFF808080.toInt()
+
+            assertFalse(colorSpace.isSRGB(), "delta=$deltaLsb LSB")
+            val bytes = PngEncoder.encode(src)!!
+            assertTrue(findChunk(bytes, 0x69434350), "delta=$deltaLsb LSB must write iCCP")
+            assertFalse(findChunk(bytes, 0x73524742), "delta=$deltaLsb LSB must not write sRGB")
+        }
     }
 
     @Test

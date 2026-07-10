@@ -216,7 +216,7 @@ public class SkColorSpace private constructor(
             toXYZD50: SkcmsMatrix3x3,
             originalIccBytes: ByteArray?,
         ): SkColorSpace {
-            val isSrgbGamut = matricesNear(toXYZD50, SkNamedGamut.kSRGB)
+            val isSrgbGamut = isSrgbMatrix(toXYZD50)
             val isSrgbTransfer = transferFunctionsNear(transferFn, SkNamedTransferFn.kSRGB)
             return SkColorSpace(
                 transferFn = transferFn,
@@ -252,9 +252,13 @@ public class SkColorSpace private constructor(
             )
         }
 
+        // Encoding identity is deliberately narrower than the writer's D50 normalization allowance.
+        private fun isSrgbMatrix(matrix: SkcmsMatrix3x3): Boolean =
+            matricesNear(matrix, SkNamedGamut.kSRGB) || matricesNear(matrix, SERIALIZED_SRGB_GAMUT)
+
         private fun matricesNear(left: SkcmsMatrix3x3, right: SkcmsMatrix3x3): Boolean {
             for (row in 0 until 3) for (column in 0 until 3) {
-                if (abs(left[row, column] - right[row, column]) > ICC_MATRIX_TOLERANCE) return false
+                if (abs(left[row, column] - right[row, column]) > SRGB_MATRIX_IDENTITY_TOLERANCE) return false
             }
             return true
         }
@@ -272,7 +276,11 @@ public class SkColorSpace private constructor(
             left.f to right.f,
         ).all { (leftValue, rightValue) -> abs(leftValue - rightValue) <= ICC_TRANSFER_TOLERANCE }
 
-        private const val ICC_MATRIX_TOLERANCE: Float = 64f / 65_536f
+        private val SERIALIZED_SRGB_GAMUT: SkcmsMatrix3x3 by lazy {
+            checkNotNull(SkcmsICCProfile.fromColorProfile(ColorProfiles.sRGB()).colorProfile.toXyzD50)
+        }
+
+        private const val SRGB_MATRIX_IDENTITY_TOLERANCE: Float = 2f / 65_536f
         private const val ICC_TRANSFER_TOLERANCE: Float = 2f / 65_536f
     }
 }

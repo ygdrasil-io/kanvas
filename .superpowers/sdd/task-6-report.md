@@ -22,8 +22,9 @@ matrix/TRC profiles that reparse through `IccProfileParser`.
   `gTRC`, and `bTRC` tags.
 - Description/copyright use `mluc`; primaries and white use `XYZ `; all three
   curves use `para` selector 4 in `g,a,b,c,d,e,f` order.
-- Non-negative PCSXYZ matrices emit ICC v4.3. A quantized matrix containing a
-  negative PCSXYZ component, including Display P3 and Rec.2020, emits ICC v4.4.
+- Every output emits ICC v4.4 because the writer always serializes `para`
+  selector 4 with the corrected `g,a,b,c,d,e,f` semantics. Version selection is
+  independent of matrix signs.
 - Each quantized matrix row must equal the fixed D50 header white. Differences
   of at most 64 signed 15.16 units are normalized into the largest primary
   coefficient; larger differences are refused. Identity is therefore rejected
@@ -32,9 +33,10 @@ matrix/TRC profiles that reparse through `IccProfileParser`.
 - Signed 15.16 conversion rejects non-finite and out-of-range values. Curve
   quantization retains the bounded lower-slope adjustment needed to avoid a
   quantization-only downward jump, followed by parser-equivalent validation.
-- Tests reparse sRGB, Display P3, Rec.2020, and linear Rec.2020, verify version
-  semantics, exact quantized D50 row sums, semantic quantization bounds, tag
-  layout, invalid identity, overflow/non-finite values, and singular matrices.
+- Tests reparse sRGB, Display P3, Rec.2020, and linear Rec.2020, verify the v4.4
+  header with a non-zero unequal `c/e` curve, exact quantized D50 row sums,
+  semantic quantization bounds, tag layout, invalid identity,
+  overflow/non-finite values, and singular matrices.
 
 The writer still refuses GRAY, HDR, LUT, unsupported, incomplete, invalid-curve,
 and otherwise unrepresentable profiles.
@@ -56,12 +58,17 @@ and otherwise unrepresentable profiles.
   `IccProfileParser`, preserves the valid snapshot, and returns defensive copies
   from all byte getters. Mutation tests cover source bytes and returned arrays.
 - Public `fromColorProfile(ColorProfile)` no longer accepts arbitrary original
-  bytes. It rewrites representable profiles with `IccProfileWriter`; parsed-byte
-  preservation is an internal factory used only after successful parsing.
+  bytes. It writes representable profiles, reparses those bytes, and stores the
+  normalized parsed `ColorProfile`, so facade, `SkColorSpace`, and published
+  bytes share identical Rec.2020 semantics. Parsed-byte preservation is an
+  internal factory used only after successful parsing.
 - `SkColorSpace.make` remains a nullable strict adapter for RGB non-HDR
   matrix/TRC profiles. LUT, HDR, GRAY, incomplete, and explicit unsupported
   profiles are refused. `makeProfileAware` lets codecs retain those profiles
   with explicit stable refusal codes and `isSRGB() == false`.
+- sRGB metadata identity uses a two-LSB comparison against the named and
+  writer-normalized canonical matrices. The writer's 64-LSB D50 normalization
+  allowance is not used to classify arbitrary gamuts as sRGB.
 - `SkICC.WriteToICC` continues to delegate to the public writer and emits valid,
   reparsable bytes rather than synthetic selector envelopes.
 
@@ -80,6 +87,8 @@ ICC profile:
   accepted for truecolor/indexed PNG, GRAY profiles for grayscale PNG, and both
   RGB-in-gray and GRAY-in-RGB mismatches reject the image. The positive P3 test
   is now a truecolor PNG rather than the former invalid grayscale/RGB pairing.
+- PNG encoding keeps D50-preserving gamuts that differ from sRGB by 3, 50, or
+  64 LSB as non-sRGB and writes `iCCP`, never an `sRGB` chunk.
 
 Pixel reconstruction remains unchanged; these changes describe source metadata
 and explicit refusal, not a color transform.
@@ -98,11 +107,17 @@ and explicit refusal, not a color transform.
   fallback behavior.
 - Codec GREEN: all four codec suites passed after using `makeProfileAware` and
   adding PNG IHDR/ICC validation.
+- Focused re-review RED: writer, Rec.2020 facade/bytes, and near-sRGB PNG tests
+  failed respectively on the 4.3 header, pre-normalized public semantics, and
+  64-LSB sRGB classifier.
+- Focused re-review GREEN: all three targeted suites passed after making writer
+  output uniformly v4.4, reparsing the public factory output, and separating
+  semantic sRGB identity from writer normalization.
 - Final fresh command:
   `rtk ./gradlew :color-management:test :kanvas:test :codec:bmp:test :codec:jpeg:test :codec:png:test :codec:webp:test --rerun-tasks --no-daemon`
   completed with `BUILD SUCCESSFUL` in 30 seconds and 71 executed tasks.
-- Exact final results: color-management 138, Kanvas 316, BMP 31, JPEG 48,
-  PNG 59, WebP 99; total 691 tests, zero failures.
+- Exact final results: color-management 139, Kanvas 317, BMP 31, JPEG 48,
+  PNG 60, WebP 99; total 694 tests, zero failures.
 - `rtk git diff --check` passed. Scoped production scans found no former
   selector-byte reads and no AWT, ImageIO, JNI, LCMS, or native CMM dependency.
 - The full rebuild emitted only pre-existing compiler/Gradle deprecation

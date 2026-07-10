@@ -30,11 +30,7 @@ class IccProfileWriterTest {
             val bytes = IccProfileWriter.writeMatrixTrc(expected)
             val actual = IccProfileParser.parse(bytes, IccParseLimits()).getOrThrow()
 
-            assertEquals(4, bytes[8].toInt() and 0xff)
-            val hasNegativePcsXyz = checkNotNull(expected.toXyzD50).let { matrix ->
-                (0 until 3).any { row -> (0 until 3).any { column -> matrix[row, column] < 0f } }
-            }
-            assertEquals(if (hasNegativePcsXyz) 4 else 3, bytes[9].toInt() ushr 4)
+            assertEquals(ICC_VERSION_4_4, readU32(bytes, 8))
             assertEquals("acsp", ascii(bytes, 36))
             assertEquals("mntr", ascii(bytes, 12))
             assertEquals("RGB ", ascii(bytes, 16))
@@ -47,6 +43,33 @@ class IccProfileWriterTest {
                 checkNotNull(actual.transferFunction),
             )
         }
+    }
+
+    @Test
+    fun `type four corrected semantics always declare ICC 4_4`() {
+        val transferFunction = SkcmsTransferFunction(
+            g = 1f,
+            a = 0.9f,
+            b = 0f,
+            c = 0.9f,
+            d = 0.1f,
+            e = 0.1f,
+            f = 0f,
+        )
+        val bytes = IccProfileWriter.writeMatrixTrc(
+            ColorProfile(
+                colorModel = ColorModel.RGB,
+                toXyzD50 = checkNotNull(ColorProfiles.sRGB().toXyzD50),
+                transferFunction = transferFunction,
+            ),
+        )
+        val parsed = IccProfileParser.parse(bytes, IccParseLimits()).getOrThrow()
+        val actualTransfer = checkNotNull(parsed.transferFunction)
+
+        assertEquals(ICC_VERSION_4_4, readU32(bytes, 8))
+        assertEquals(transferFunction.c, actualTransfer.c, 2f * FIXED_TOLERANCE)
+        assertEquals(transferFunction.e, actualTransfer.e, 2f * FIXED_TOLERANCE)
+        assertTrue(transferFunction.c != transferFunction.e && transferFunction.e != 0f)
     }
 
     @Test
@@ -206,6 +229,7 @@ class IccProfileWriterTest {
     private companion object {
         const val FIXED_TOLERANCE: Float = 1f / 65_536f
         const val WHITE_NORMALIZATION_TOLERANCE: Float = 64f / 65_536f
+        const val ICC_VERSION_4_4: Int = 0x04400000
         val LINEAR_TRANSFER: SkcmsTransferFunction = SkcmsTransferFunction(
             g = 1f,
             a = 1f,

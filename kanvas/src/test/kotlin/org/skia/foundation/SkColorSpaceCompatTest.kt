@@ -7,6 +7,7 @@ import org.graphiks.kanvas.color.cicp.toColorProfile
 import org.graphiks.kanvas.color.icc.IccParseLimits
 import org.graphiks.kanvas.color.icc.IccProfileParser
 import org.skia.foundation.skcms.SkcmsICCProfile
+import org.skia.foundation.skcms.skcmsParse
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -26,6 +27,20 @@ class SkColorSpaceCompatTest {
             checkNotNull(ColorProfiles.displayP3().toXyzD50),
             colorSpace.toXYZD50,
         )
+    }
+
+    @Test
+    fun `Rec2020 facade and color space match reparsed published bytes exactly`() {
+        val facade = SkcmsICCProfile.fromColorProfile(ColorProfiles.rec2020())
+        val reparsed = assertNotNull(skcmsParse(facade.bytes))
+        val colorSpace = assertNotNull(SkColorSpace.make(facade))
+
+        assertEquals(reparsed.colorProfile, facade.colorProfile)
+        assertMatrixEquals(
+            checkNotNull(reparsed.colorProfile.toXyzD50),
+            checkNotNull(facade.colorProfile.toXyzD50),
+        )
+        assertMatrixEquals(checkNotNull(reparsed.colorProfile.toXyzD50), colorSpace.toXYZD50)
     }
 
     @Test
@@ -116,6 +131,15 @@ class SkColorSpaceCompatTest {
     ) {
         for (row in 0 until 3) for (column in 0 until 3) {
             kotlin.test.assertEquals(expected[row, column], actual[row, column], 1f / 65_536f)
+        }
+    }
+
+    private fun assertMatrixEquals(
+        expected: org.graphiks.math.SkcmsMatrix3x3,
+        actual: org.graphiks.math.SkcmsMatrix3x3,
+    ) {
+        for (row in 0 until 3) for (column in 0 until 3) {
+            kotlin.test.assertEquals(expected[row, column], actual[row, column])
         }
     }
 }
