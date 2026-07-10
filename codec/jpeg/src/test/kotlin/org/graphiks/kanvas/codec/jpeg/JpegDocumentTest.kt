@@ -5,6 +5,8 @@ import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
+import org.skia.foundation.SkColorType
+import org.skia.foundation.SkEncodedOrigin
 import java.io.InputStream
 
 class JpegDocumentTest {
@@ -113,6 +115,26 @@ class JpegDocumentTest {
         )
     }
 
+    @Test
+    fun `decode uses the metadata already parsed by this document`() {
+        val document = JpegDocument.open(
+            withAppSegments(
+                CodecTestFixtures.simpleGrayscaleJpeg(4, 8),
+                exifOrientationSegment(6),
+            ),
+        ).document!!
+        assertEquals(SkEncodedOrigin.kRightTop, document.metadata.origin)
+
+        val exif = document.segments.single { it.marker == 0xE1 }
+        document.ownedSourceForTesting()[exif.range.first + EXIF_ORIENTATION_VALUE_OFFSET] = 1
+
+        val result = document.decode(JpegDecodeRequest(SkColorType.kRGBA_8888, null))
+
+        assertEquals(null, result.diagnostic)
+        assertEquals(8, result.bitmap!!.width)
+        assertEquals(4, result.bitmap.height)
+    }
+
     private fun assertInvalid(data: ByteArray) {
         val diagnostic = JpegDocument.open(data).diagnostic!!
         assertEquals("jpeg.input.invalid", diagnostic.code)
@@ -131,6 +153,24 @@ class JpegDocumentTest {
             (length ushr 8).toByte(),
             length.toByte(),
         ) + payload
+    }
+
+    private fun exifOrientationSegment(orientation: Int): ByteArray {
+        val payload = byteArrayOf(
+            0x45, 0x78, 0x69, 0x66, 0, 0,
+            0x4D, 0x4D, 0, 0x2A, 0, 0, 0, 8,
+            0, 1,
+            0x01, 0x12, 0, 3, 0, 0, 0, 1,
+            0, orientation.toByte(), 0, 0,
+            0, 0, 0, 0,
+        )
+        return appSegment(0xE1, payload)
+    }
+
+    private fun JpegDocument.ownedSourceForTesting(): ByteArray {
+        val source = JpegDocument::class.java.getDeclaredField("source")
+        source.isAccessible = true
+        return source.get(this) as ByteArray
     }
 
     private class FailsPastLimitStream(
@@ -156,5 +196,9 @@ class JpegDocumentTest {
             bytesServed += count
             return count
         }
+    }
+
+    private companion object {
+        const val EXIF_ORIENTATION_VALUE_OFFSET = 24
     }
 }

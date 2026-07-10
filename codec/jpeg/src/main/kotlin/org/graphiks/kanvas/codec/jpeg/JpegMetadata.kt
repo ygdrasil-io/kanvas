@@ -125,7 +125,8 @@ internal class JpegMetadataReader(
         val directoryStart = ifdStart.toInt()
         val count = readU16(directoryStart, littleEndian)
         val entriesStart = directoryStart + TIFF_IFD_COUNT_SIZE
-        if (count > (payload.endExclusive - entriesStart) / TIFF_ENTRY_SIZE) return ExifResult.Invalid
+        val entriesEnd = entriesStart.toLong() + count.toLong() * TIFF_ENTRY_SIZE
+        if (entriesEnd + TIFF_NEXT_IFD_OFFSET_SIZE > payload.endExclusive) return ExifResult.Invalid
         for (index in 0 until count) {
             val entry = entriesStart + index * TIFF_ENTRY_SIZE
             if (readU16(entry, littleEndian) != EXIF_ORIENTATION_TAG) continue
@@ -284,6 +285,7 @@ private const val TIFF_HEADER_SIZE = 8
 private const val TIFF_MAGIC = 0x002A
 private const val TIFF_IFD_COUNT_SIZE = 2
 private const val TIFF_ENTRY_SIZE = 12
+private const val TIFF_NEXT_IFD_OFFSET_SIZE = 4
 private const val EXIF_ORIENTATION_TAG = 0x0112
 private const val TIFF_TYPE_SHORT = 3
 

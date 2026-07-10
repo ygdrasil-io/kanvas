@@ -52,9 +52,11 @@ public class JpegDocument internal constructor(
     }
 
     public fun decode(request: JpegDecodeRequest): JpegDecodeResult =
-        JpegCodec.Decoder.decode(source, request)
+        JpegCodec.Decoder.decode(this, request)
 
     internal fun makeCodec(): JpegCodec? = JpegCodec.Decoder.makeFromDocumentSource(source, metadata)
+
+    internal val encodedSize: Long get() = source.size.toLong()
 
     public companion object {
         public fun open(

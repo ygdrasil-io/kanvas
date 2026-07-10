@@ -54,6 +54,15 @@ class JpegMetadataTest {
     }
 
     @Test
+    fun `rejects EXIF IFD truncated before next offset`() {
+        val document = documentWith(exifWithoutOrientationSegment(includeNextIfdOffset = false))
+
+        assertEquals(SkEncodedOrigin.kTopLeft, document.metadata.origin)
+        assertEquals(listOf("jpeg.metadata.exif.invalid"), document.metadataDiagnostics.map(JpegDiagnostic::code))
+        assertEquals(listOf(Codec.Result.kErrorInInput), document.metadataDiagnostics.map(JpegDiagnostic::result))
+    }
+
+    @Test
     fun `retains XMP bytes after the APP1 identifier`() {
         val xmp = "<x:xmpmeta>kanvas</x:xmpmeta>".encodeToByteArray()
         val document = documentWith(xmpSegment(xmp))
@@ -160,14 +169,14 @@ class JpegMetadataTest {
         }
     }
 
-    private fun exifWithoutOrientationSegment(): ByteArray = appSegment(0xE1) {
+    private fun exifWithoutOrientationSegment(includeNextIfdOffset: Boolean = true): ByteArray = appSegment(0xE1) {
         write(EXIF_SIGNATURE)
         write('I'.code)
         write('I'.code)
         writeU16LE(0x002A)
         writeU32LE(8)
         writeU16LE(0)
-        writeU32LE(0)
+        if (includeNextIfdOffset) writeU32LE(0)
     }
 
     private fun jfifSegment(

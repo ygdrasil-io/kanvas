@@ -116,12 +116,19 @@ public class JpegCodec private constructor(
             return document.makeCodec()
         }
 
-        internal fun decode(data: ByteArray, request: JpegDecodeRequest): JpegDecodeResult {
-            val codec = JpegDocument.open(data).document?.makeCodec() ?: return JpegDecodeResult(
+        internal fun decode(document: JpegDocument, request: JpegDecodeRequest): JpegDecodeResult =
+            decode(document.makeCodec(), document.encodedSize, request)
+
+        private fun decode(
+            codec: JpegCodec?,
+            encodedSize: Long,
+            request: JpegDecodeRequest,
+        ): JpegDecodeResult {
+            codec ?: return JpegDecodeResult(
                 bitmap = null,
                 diagnostic = JpegDiagnostic(
                     code = "jpeg.decode.unsupported",
-                    offset = data.size.toLong(),
+                    offset = encodedSize,
                     result = Codec.Result.kUnimplemented,
                 ),
             )
@@ -147,7 +154,7 @@ public class JpegCodec private constructor(
                     bitmap = null,
                     diagnostic = JpegDiagnostic(
                         code = "jpeg.decode.${result.name}",
-                        offset = data.size.toLong(),
+                        offset = encodedSize,
                         result = result,
                     ),
                 )
