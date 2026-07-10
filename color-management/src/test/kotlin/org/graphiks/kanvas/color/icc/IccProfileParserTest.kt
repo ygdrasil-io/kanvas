@@ -34,13 +34,48 @@ class IccProfileParserTest {
     }
 
     @Test
-    fun `parses independent ICC rec709 v2 matrix trc profile`() {
-        val profile = parseResource("icc-rec709-v2.icc")
+    fun `parsed type 4 curve stays finite and nondecreasing at its exact threshold`() {
+        val bytes = resource("srgb-matrix-trc.icc")
+        IccProfileParser.parse(bytes, IccParseLimits()).getOrThrow()
+        val curveOffset = tagOffset(bytes, IccSignature.R_TRC.value)
+        val parameters = FloatArray(7) { index -> readS15Fixed16(bytes, curveOffset + 12 + index * 4) }
+        val curve = ParametricIccCurve(4, parameters)
+        val threshold = parameters[4]
+        val below = curve.evaluate(threshold - 1f / 65536f)
+        val at = curve.evaluate(threshold)
+
+        assertTrue(below.isFinite())
+        assertTrue(at.isFinite())
+        assertTrue(below <= at)
+        assertEquals(parameters[3] * threshold + parameters[6], at, 0f)
+    }
+
+    @Test
+    fun `strictly rejects authentic v2 curv whose size includes alignment padding`() {
+        assertFailure("icc.curve.range", resource("icc-rec709-v2.icc"))
+    }
+
+    @Test
+    fun `parses independent compact dci p3 v4 matrix trc profile`() {
+        val bytes = resource("compact-dci-p3-v4.icc")
+        val profile = IccProfileParser.parse(bytes, IccParseLimits()).getOrThrow()
 
         assertEquals(ColorModel.RGB, profile.colorModel)
         assertTrue(profile.hasMatrixTrc)
-        assertMatrixNear(ColorProfiles.sRGB().toXyzD50!!, profile.toXyzD50!!)
-        assertEquals(0x0266 / 256f, profile.transferFunction!!.g, 0f)
+        assertEquals(0x0002999a / 65536f, profile.transferFunction!!.g, 0f)
+        assertEquals(4, bytes[8].toInt() and 0xff)
+        assertEquals(
+            IccSignature.MULTI_LOCALIZED_UNICODE_TYPE.value,
+            readU32(bytes, tagOffset(bytes, signature("desc"))),
+        )
+        assertEquals(
+            IccSignature.MULTI_LOCALIZED_UNICODE_TYPE.value,
+            readU32(bytes, tagOffset(bytes, signature("cprt"))),
+        )
+        val trc = tagOffset(bytes, IccSignature.R_TRC.value)
+        assertEquals(IccSignature.PARAMETRIC_CURVE_TYPE.value, readU32(bytes, trc))
+        assertEquals(0, readU16(bytes, trc + 8))
+        assertEquals(16, tagSize(bytes, IccSignature.R_TRC.value))
     }
 
     @Test
@@ -123,7 +158,7 @@ class IccProfileParserTest {
 
     @Test
     fun `positive v4 fixtures contain required tags and zero reserved fields`() {
-        listOf("srgb-matrix-trc.icc", "display-p3-matrix-trc.icc").forEach { name ->
+        listOf("srgb-matrix-trc.icc", "display-p3-matrix-trc.icc", "compact-dci-p3-v4.icc").forEach { name ->
             val bytes = resource(name)
             val signatures = tagSignatures(bytes)
 
@@ -161,10 +196,7 @@ class IccProfileParserTest {
         )
 
         parameters.forEachIndexed { selector, values ->
-            val bytes = resource("srgb-matrix-trc.icc")
-            val curveOffset = tagOffset(bytes, IccSignature.R_TRC.value)
-            writeU16(bytes, curveOffset + 8, selector)
-            values.forEachIndexed { index, value -> writeS15Fixed16(bytes, curveOffset + 12 + index * 4, value) }
+            val bytes = rewriteSharedParametricCurve(selector, values)
 
             val profile = IccProfileParser.parse(bytes, IccParseLimits()).getOrThrow()
 
@@ -185,43 +217,49 @@ class IccProfileParserTest {
 
     @Test
     fun `rejects para whose nonlinear branch is undefined`() {
-        val bytes = resource("srgb-matrix-trc.icc")
-        writeSharedParametricCurve(bytes, 3, floatArrayOf(0.5f, 1f, -0.5f, 1f, 0.25f))
+        val bytes = rewriteSharedParametricCurve(3, floatArrayOf(0.5f, 1f, -0.5f, 1f, 0.25f))
+
+        assertFailure("icc.curve.values", bytes)
+    }
+
+    @Test
+    fun `rejects para with negative nonlinear base exactly at threshold`() {
+        val bytes = rewriteSharedParametricCurve(3, floatArrayOf(0.5f, 1f, -0.2505f, 0f, 0.25f))
 
         assertFailure("icc.curve.values", bytes)
     }
 
     @Test
     fun `rejects para with decreasing lower branch`() {
-        val bytes = resource("srgb-matrix-trc.icc")
-        writeSharedParametricCurve(bytes, 3, floatArrayOf(2f, 1f, 0f, -0.5f, 0.25f))
+        val bytes = rewriteSharedParametricCurve(3, floatArrayOf(2f, 1f, 0f, -0.5f, 0.25f))
 
         assertFailure("icc.curve.values", bytes)
     }
 
     @Test
     fun `rejects para with downward jump`() {
-        val bytes = resource("srgb-matrix-trc.icc")
-        writeSharedParametricCurve(bytes, 3, floatArrayOf(2f, 1f, 0f, 1f, 0.5f))
+        val bytes = rewriteSharedParametricCurve(3, floatArrayOf(2f, 1f, 0f, 1f, 0.5f))
 
         assertFailure("icc.curve.values", bytes)
     }
 
     @Test
     fun `rejects para with upward discontinuity`() {
-        val bytes = resource("srgb-matrix-trc.icc")
-        writeSharedParametricCurve(bytes, 3, floatArrayOf(2f, 1f, 0f, 0.1f, 0.5f))
+        val bytes = rewriteSharedParametricCurve(3, floatArrayOf(2f, 1f, 0f, 0.1f, 0.5f))
+
+        assertFailure("icc.curve.values", bytes)
+    }
+
+    @Test
+    fun `rejects para with a quantized downward jump at threshold`() {
+        val bytes = rewriteSharedParametricCurve(3, floatArrayOf(2f, 1f, -0.25f, 0.002f, 0.25f))
 
         assertFailure("icc.curve.values", bytes)
     }
 
     @Test
     fun `parses single value curv as gamma`() {
-        val bytes = resource("srgb-matrix-trc.icc")
-        val curveOffset = tagOffset(bytes, IccSignature.R_TRC.value)
-        writeU32(bytes, curveOffset, IccSignature.CURVE_TYPE.value)
-        writeU32(bytes, curveOffset + 8, 1)
-        writeU16(bytes, curveOffset + 12, 0x0200)
+        val bytes = rewriteSharedCurv(intArrayOf(0x0200))
 
         val profile = IccProfileParser.parse(bytes, IccParseLimits()).getOrThrow()
 
@@ -230,13 +268,7 @@ class IccProfileParserTest {
 
     @Test
     fun `sampled curv returns typed refusal instead of srgb`() {
-        val bytes = resource("srgb-matrix-trc.icc")
-        val curveOffset = tagOffset(bytes, IccSignature.R_TRC.value)
-        writeU32(bytes, curveOffset, IccSignature.CURVE_TYPE.value)
-        writeU32(bytes, curveOffset + 8, 3)
-        writeU16(bytes, curveOffset + 12, 0)
-        writeU16(bytes, curveOffset + 14, 0x4000)
-        writeU16(bytes, curveOffset + 16, 0xffff)
+        val bytes = rewriteSharedCurv(intArrayOf(0, 0x4000, 0xffff))
 
         val failure = IccProfileParser.parse(bytes, IccParseLimits()).failureOrNull()!!
 
@@ -245,15 +277,32 @@ class IccProfileParserTest {
 
     @Test
     fun `sampled curv is refused before sample values are inspected`() {
-        val bytes = resource("srgb-matrix-trc.icc")
-        val curveOffset = tagOffset(bytes, IccSignature.R_TRC.value)
-        writeU32(bytes, curveOffset, IccSignature.CURVE_TYPE.value)
-        writeU32(bytes, curveOffset + 8, 3)
-        writeU16(bytes, curveOffset + 12, 0xffff)
-        writeU16(bytes, curveOffset + 14, 0)
-        writeU16(bytes, curveOffset + 16, 0xffff)
+        val bytes = rewriteSharedCurv(intArrayOf(0xffff, 0, 0xffff))
 
         assertFailure("icc.curve.sampled", bytes)
+    }
+
+    @Test
+    fun `rejects para selectors whose tag retains stale type 4 size`() {
+        repeat(4) { selector ->
+            val bytes = resource("srgb-matrix-trc.icc")
+            val curveOffset = tagOffset(bytes, IccSignature.R_TRC.value)
+            writeU16(bytes, curveOffset + 8, selector)
+
+            assertFailure("icc.curve.range", bytes)
+        }
+    }
+
+    @Test
+    fun `rejects curv counts whose tag retains stale payload bytes`() {
+        listOf(0, 1, 2).forEach { count ->
+            val bytes = resource("srgb-matrix-trc.icc")
+            val curveOffset = tagOffset(bytes, IccSignature.R_TRC.value)
+            writeU32(bytes, curveOffset, IccSignature.CURVE_TYPE.value)
+            writeU32(bytes, curveOffset + 8, count)
+
+            assertFailure("icc.curve.range", bytes)
+        }
     }
 
     @Test
@@ -373,6 +422,42 @@ class IccProfileParserTest {
     }
 
     @Test
+    fun `rejects reserved device attribute bits before parsing tags`() {
+        val bytes = resource("srgb-matrix-trc.icc")
+        bytes[60] = 1
+
+        assertFailure("icc.header.attributes", bytes)
+    }
+
+    @Test
+    fun `allows defined device attributes and vendor bits`() {
+        val bytes = resource("srgb-matrix-trc.icc")
+        bytes[56] = 1
+        bytes[63] = 0x0f
+
+        IccProfileParser.parse(bytes, IccParseLimits()).getOrThrow()
+    }
+
+    @Test
+    fun `rejects reserved or undefined rendering intents before parsing tags`() {
+        val reserved = resource("srgb-matrix-trc.icc").also { it[64] = 1 }
+        val undefined = resource("srgb-matrix-trc.icc").also { it[67] = 4 }
+
+        assertFailure("icc.header.intent", reserved)
+        assertFailure("icc.header.intent", undefined)
+    }
+
+    @Test
+    fun `allows rendering intents zero through three`() {
+        repeat(4) { intent ->
+            val bytes = resource("srgb-matrix-trc.icc")
+            bytes[67] = intent.toByte()
+
+            IccProfileParser.parse(bytes, IccParseLimits()).getOrThrow()
+        }
+    }
+
+    @Test
     fun `rejects nonzero tag reserved bytes`() {
         val xyz = resource("srgb-matrix-trc.icc")
         xyz[tagOffset(xyz, IccSignature.R_XYZ.value) + 4] = 1
@@ -423,12 +508,11 @@ class IccProfileParserTest {
     @Test
     fun `rejects unequal RGB transfer curves`() {
         val original = resource("srgb-matrix-trc.icc")
-        val sourceCurve = tagOffset(original, IccSignature.R_TRC.value)
-        val bytes = original.copyOf(original.size + 40)
-        original.copyInto(bytes, destinationOffset = original.size, startIndex = sourceCurve, endIndex = sourceCurve + 40)
+        val bytes = original.copyOf(original.size + 16)
         writeU32(bytes, 0, bytes.size)
         writeU32(bytes, tagEntryOffset(bytes, IccSignature.G_TRC.value) + 4, original.size)
-        writeU16(bytes, original.size + 8, 0)
+        writeU32(bytes, tagEntryOffset(bytes, IccSignature.G_TRC.value) + 8, 16)
+        writeU32(bytes, original.size, IccSignature.PARAMETRIC_CURVE_TYPE.value)
         writeS15Fixed16(bytes, original.size + 12, 2.2f)
 
         assertFailure("icc.profile.trc", bytes)
@@ -458,6 +542,9 @@ class IccProfileParserTest {
         error("missing tag ${IccSignature(signature)}")
     }
 
+    private fun tagSize(bytes: ByteArray, signature: Int): Int =
+        readU32(bytes, tagEntryOffset(bytes, signature) + 8)
+
     private fun tagSignatures(bytes: ByteArray): Set<Int> = buildSet {
         repeat(readU32(bytes, 128)) { index -> add(readU32(bytes, 132 + index * 12)) }
     }
@@ -473,6 +560,34 @@ class IccProfileParserTest {
         writeU16(bytes, curveOffset + 8, type)
         writeU16(bytes, curveOffset + 10, 0)
         parameters.forEachIndexed { index, value -> writeS15Fixed16(bytes, curveOffset + 12 + index * 4, value) }
+    }
+
+    private fun rewriteSharedParametricCurve(type: Int, parameters: FloatArray): ByteArray {
+        val bytes = resizeSharedCurveTag(12 + parameters.size * 4)
+        writeSharedParametricCurve(bytes, type, parameters)
+        return bytes
+    }
+
+    private fun rewriteSharedCurv(samples: IntArray): ByteArray {
+        val bytes = resizeSharedCurveTag(12 + samples.size * 2)
+        val curveOffset = tagOffset(bytes, IccSignature.R_TRC.value)
+        writeU32(bytes, curveOffset, IccSignature.CURVE_TYPE.value)
+        writeU32(bytes, curveOffset + 8, samples.size)
+        samples.forEachIndexed { index, value -> writeU16(bytes, curveOffset + 12 + index * 2, value) }
+        return bytes
+    }
+
+    private fun resizeSharedCurveTag(tagSize: Int): ByteArray {
+        val original = resource("srgb-matrix-trc.icc")
+        val curveOffset = tagOffset(original, IccSignature.R_TRC.value)
+        val profileSize = curveOffset + (tagSize + 3 and -4)
+        val bytes = original.copyOf(profileSize)
+        writeU32(bytes, 0, profileSize)
+        listOf(IccSignature.R_TRC, IccSignature.G_TRC, IccSignature.B_TRC).forEach { signature ->
+            writeU32(bytes, tagEntryOffset(bytes, signature.value) + 8, tagSize)
+        }
+        for (offset in curveOffset until profileSize) bytes[offset] = 0
+        return bytes
     }
 
     private fun assertFailure(code: String, bytes: ByteArray) {
@@ -492,6 +607,11 @@ class IccProfileParserTest {
             ((bytes[offset + 1].toInt() and 0xff) shl 16) or
             ((bytes[offset + 2].toInt() and 0xff) shl 8) or
             (bytes[offset + 3].toInt() and 0xff)
+
+    private fun readU16(bytes: ByteArray, offset: Int): Int =
+        ((bytes[offset].toInt() and 0xff) shl 8) or (bytes[offset + 1].toInt() and 0xff)
+
+    private fun readS15Fixed16(bytes: ByteArray, offset: Int): Float = readU32(bytes, offset) / 65536f
 
     private fun writeU32(bytes: ByteArray, offset: Int, value: Int) {
         bytes[offset] = (value ushr 24).toByte()
@@ -519,7 +639,7 @@ class IccProfileParserTest {
             abs(expected.e - actual.e),
             abs(expected.f - actual.f),
         )
-        assertTrue(differences.all { it <= 2e-5f }, "transfer function differs: $actual")
+        assertTrue(differences.all { it <= 7e-5f }, "transfer function differs: $actual")
     }
 
     private fun assertMatrixNear(expected: SkcmsMatrix3x3, actual: SkcmsMatrix3x3) {

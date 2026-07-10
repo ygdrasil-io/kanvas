@@ -1,7 +1,6 @@
 package org.graphiks.kanvas.color.icc
 
 import org.graphiks.math.SkcmsTransferFunction
-import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.pow
 
@@ -44,7 +43,7 @@ internal class ParametricIccCurve(functionType: Int, parameters: FloatArray) : I
             else -> {
                 val lowerLimit = values[3] * values[4] + values[6]
                 if (y < lowerLimit && values[3] != 0f) (y - values[6]) / values[3] else {
-                    ((y - values[5]).coerceAtLeast(0f).pow(1f / g) - values[2]) / values[1]
+                    ((y - values[5]).pow(1f / g) - values[2]) / values[1]
                 }
             }
         }
@@ -122,7 +121,7 @@ internal fun parametricCurveValidationError(type: Int, values: FloatArray): Stri
 
     if (type >= 1) {
         val nonlinearStart = max(0f, threshold)
-        if (nonlinearStart <= 1f && values[1] * nonlinearStart + values[2] < -CURVE_VALUE_TOLERANCE) {
+        if (nonlinearStart <= 1f && values[1] * nonlinearStart + values[2] < 0f) {
             return "undefined nonlinear branch"
         }
     }
@@ -137,10 +136,10 @@ internal fun parametricCurveValidationError(type: Int, values: FloatArray): Stri
         val upper = when (type) {
             1 -> 0f
             2 -> values[3]
-            3 -> (values[1] * threshold + values[2]).coerceAtLeast(0f).pow(values[0])
-            else -> (values[1] * threshold + values[2]).coerceAtLeast(0f).pow(values[0]) + values[5]
+            3 -> (values[1] * threshold + values[2]).pow(values[0])
+            else -> (values[1] * threshold + values[2]).pow(values[0]) + values[5]
         }
-        if (!lower.isFinite() || !upper.isFinite() || abs(lower - upper) > CURVE_VALUE_TOLERANCE) {
+        if (!lower.isFinite() || !upper.isFinite() || lower != upper) {
             return "discontinuous branch"
         }
     }
@@ -148,7 +147,7 @@ internal fun parametricCurveValidationError(type: Int, values: FloatArray): Stri
     val start = rawParametricEvaluation(type, values, 0f)
     val end = rawParametricEvaluation(type, values, 1f)
     if (!start.isFinite() || !end.isFinite()) return "non-finite evaluation"
-    if (start < -CURVE_VALUE_TOLERANCE || end > 1f + CURVE_VALUE_TOLERANCE || end <= start) {
+    if (start < 0f || end > 1f || end <= start) {
         return "non-monotonic range"
     }
     return null
@@ -159,22 +158,22 @@ private fun rawParametricEvaluation(type: Int, values: FloatArray, x: Float): Fl
     return when (type) {
         0 -> x.pow(g)
         1 -> if (x >= -values[2] / values[1]) {
-            (values[1] * x + values[2]).coerceAtLeast(0f).pow(g)
+            (values[1] * x + values[2]).pow(g)
         } else {
             0f
         }
         2 -> if (x >= -values[2] / values[1]) {
-            (values[1] * x + values[2]).coerceAtLeast(0f).pow(g) + values[3]
+            (values[1] * x + values[2]).pow(g) + values[3]
         } else {
             values[3]
         }
         3 -> if (x >= values[4]) {
-            (values[1] * x + values[2]).coerceAtLeast(0f).pow(g)
+            (values[1] * x + values[2]).pow(g)
         } else {
             values[3] * x
         }
         else -> if (x >= values[4]) {
-            (values[1] * x + values[2]).coerceAtLeast(0f).pow(g) + values[5]
+            (values[1] * x + values[2]).pow(g) + values[5]
         } else {
             values[3] * x + values[6]
         }
@@ -183,6 +182,5 @@ private fun rawParametricEvaluation(type: Int, values: FloatArray, x: Float): Fl
 
 private fun Float.finiteUnitValue(): Float = if (isFinite()) coerceIn(0f, 1f) else 0f
 
-private const val CURVE_VALUE_TOLERANCE: Float = 1f / 1024f
 private const val MAX_DIRECT_SAMPLED_CURVE_ENTRIES: Int = 65_536
 private val PARAMETRIC_PARAMETER_COUNTS: IntArray = intArrayOf(1, 3, 4, 5, 7)

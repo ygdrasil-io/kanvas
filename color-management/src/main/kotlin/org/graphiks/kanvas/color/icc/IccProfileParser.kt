@@ -94,6 +94,12 @@ private class Parser(
         if (!reader.isZero(HEADER_RESERVED_OFFSET, HEADER_RESERVED_SIZE)) {
             abort("icc.header.reserved", "ICC header reserved bytes must be zero")
         }
+        if (reader.u32(DEVICE_ATTRIBUTES_LOW_OFFSET) and DEVICE_ATTRIBUTES_RESERVED_MASK != 0L) {
+            abort("icc.header.attributes", "ICC device attribute reserved bits must be zero")
+        }
+        if (reader.u32(RENDERING_INTENT_OFFSET) !in 0L..3L) {
+            abort("icc.header.intent", "ICC rendering intent must be one of 0 through 3 with reserved bits zero")
+        }
 
         profileClass = reader.signature(PROFILE_CLASS_OFFSET)
         dataColorSpace = reader.signature(DATA_COLOR_SPACE_OFFSET)
@@ -278,8 +284,8 @@ private class Parser(
         }
         val parameterCount = PARAMETRIC_PARAMETER_COUNTS[functionType]
         val requiredSize = PARAMETRIC_HEADER_SIZE + parameterCount * 4L
-        if (tag.size.toLong() < requiredSize) {
-            abort("icc.curve.range", "Parametric ICC curve parameters are truncated")
+        if (tag.size.toLong() != requiredSize) {
+            abort("icc.curve.range", "Parametric ICC curve size does not match its selector")
         }
         val parameters = FloatArray(parameterCount) { index ->
             reader.s15Fixed16(tag.offset + PARAMETRIC_HEADER_SIZE + index * 4)
@@ -296,9 +302,9 @@ private class Parser(
             abort("icc.curve.range", "Sampled ICC curve header is truncated")
         }
         val countLong = reader.u32(tag.offset + 8)
-        val payloadSize = countLong * 2L
-        if (countLong > Int.MAX_VALUE || payloadSize > tag.size.toLong() - CURVE_HEADER_SIZE) {
-            abort("icc.curve.range", "Sampled ICC curve payload is outside its tag")
+        val requiredSize = CURVE_HEADER_SIZE.toLong() + countLong * 2L
+        if (requiredSize != tag.size.toLong()) {
+            abort("icc.curve.range", "Sampled ICC curve size does not match its count")
         }
         val count = countLong.toInt()
         if (count == 0) return ParametricIccCurve(0, floatArrayOf(1f))
@@ -372,6 +378,8 @@ private const val PROFILE_CLASS_OFFSET: Int = 12
 private const val DATA_COLOR_SPACE_OFFSET: Int = 16
 private const val PCS_OFFSET: Int = 20
 private const val HEADER_SIGNATURE_OFFSET: Int = 36
+private const val DEVICE_ATTRIBUTES_LOW_OFFSET: Int = 60
+private const val RENDERING_INTENT_OFFSET: Int = 64
 private const val ILLUMINANT_OFFSET: Int = 68
 private const val HEADER_RESERVED_OFFSET: Int = 100
 private const val HEADER_RESERVED_SIZE: Int = 28
@@ -386,4 +394,5 @@ private const val D50_X: Float = 0.9642f
 private const val D50_Y: Float = 1f
 private const val D50_Z: Float = 0.8249f
 private const val D50_TOLERANCE: Float = 0.01f
+private const val DEVICE_ATTRIBUTES_RESERVED_MASK: Long = 0xfffffff0L
 private val PARAMETRIC_PARAMETER_COUNTS: IntArray = intArrayOf(1, 3, 4, 5, 7)
