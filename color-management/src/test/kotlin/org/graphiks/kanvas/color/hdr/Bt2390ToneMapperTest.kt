@@ -86,10 +86,27 @@ class Bt2390ToneMapperTest {
     }
 
     @Test
-    fun `bt2390 rejects nonpositive or nonfinite target peaks`() {
-        listOf(0.0, -1.0, Double.NaN, Double.POSITIVE_INFINITY).forEach { peak ->
+    fun `bt2390 rejects out of range or nonfinite target peaks`() {
+        listOf(0.0, -1.0, 10_000.0001, Double.NaN, Double.POSITIVE_INFINITY).forEach { peak ->
             assertFailsWith<IllegalArgumentException> { Bt2390ToneMapper(targetPeakNits = peak) }
         }
+    }
+
+    @Test
+    fun `bt2390 10000 nit target is normalized identity including white endpoint`() {
+        val mapper = Bt2390ToneMapper(targetPeakNits = 10_000.0)
+        val white = floatArrayOf(10_000f, 10_000f, 10_000f)
+        val chromatic = floatArrayOf(10_000f, 5_000f, 1_000f)
+
+        mapper.map(white, 0)
+        mapper.map(chromatic, 0)
+
+        white.forEach { assertEquals(1f, it, 2e-6f) }
+        assertTrue(white.all(Float::isFinite))
+        assertEquals(1f, chromatic[0], 2e-6f)
+        assertEquals(0.5f, chromatic[1], 2e-6f)
+        assertEquals(0.1f, chromatic[2], 2e-6f)
+        assertTrue(chromatic.all(Float::isFinite))
     }
 
     private fun normalizedChroma(rgb: FloatArray): Float {

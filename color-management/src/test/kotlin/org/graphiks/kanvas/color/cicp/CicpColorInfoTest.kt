@@ -79,6 +79,17 @@ class CicpColorInfoTest {
     }
 
     @Test
+    fun `hlg refuses primaries outside bt2020 with a stable typed failure`() {
+        listOf(1, 12).forEach { primaries ->
+            val failure = CicpColorInfo(primaries, transfer = 18, matrix = 0, fullRange = true)
+                .toColorProfile()
+                .failureOrNull()
+
+            assertEquals("cicp.transfer.unsupported", failure!!.code, "primaries=$primaries")
+        }
+    }
+
+    @Test
     fun `pq transfer decodes absolute luminance and round trips`() {
         val decoded = FloatArray(3)
         HdrTransferFunction.PQ.decode(
@@ -113,5 +124,17 @@ class CicpColorInfoTest {
 
         HdrTransferFunction.HLG.decode(floatArrayOf(1f, 1f, 1f), 0, decoded)
         decoded.forEach { assertEquals(1000f, it, 0.002f) }
+    }
+
+    @Test
+    fun `hlg chromatic signal round trips through coupled bt2020 ootf`() {
+        val signal = floatArrayOf(0.75f, 0.5f, 0.25f)
+        val decoded = FloatArray(3)
+        val encoded = FloatArray(3)
+
+        HdrTransferFunction.HLG.decode(signal, 0, decoded)
+        HdrTransferFunction.HLG.encode(decoded, encoded)
+
+        repeat(3) { channel -> assertEquals(signal[channel], encoded[channel], 3e-6f) }
     }
 }

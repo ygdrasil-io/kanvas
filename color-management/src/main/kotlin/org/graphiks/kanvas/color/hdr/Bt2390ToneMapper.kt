@@ -6,7 +6,10 @@ import org.graphiks.kanvas.color.pqInverseEotf
 import kotlin.math.min
 
 public fun interface ToneMapper {
-    /** Maps absolute display-light RGB in nits to linear RGB relative to target white. */
+    /**
+     * Maps absolute linear BT.2020 display-light RGB in nits to RGB relative to target white.
+     * Negative and non-finite source-light components are outside the domain and map to zero.
+     */
     public fun map(linearRgb: FloatArray, offset: Int)
 }
 
@@ -14,7 +17,10 @@ public fun interface ToneMapperFactory {
     public fun create(targetPeakNits: Double): ToneMapper
 }
 
-/** Factory for the BT.2390 Hermite-knee EETF using the report's YRGB application. */
+/**
+ * Factory for the legacy Report ITU-R BT.2390-6 section 5.4.1 Hermite-knee YRGB EETF.
+ * This selected legacy formula is superseded evidence and is not specified by current BT.2390-12.
+ */
 public object Bt2390ToneMapper : ToneMapperFactory {
     override fun create(targetPeakNits: Double): ToneMapper = Bt2390ToneMapperImpl(targetPeakNits)
 
@@ -26,6 +32,7 @@ private class Bt2390ToneMapperImpl(
 ) : ToneMapper {
     private val maxLum: Double
     private val kneeStart: Double
+    private val normalizedIdentity: Boolean
 
     init {
         require(targetPeakNits.isFinite() && targetPeakNits > 0.0 && targetPeakNits <= PQ_PEAK_NITS) {
@@ -33,6 +40,7 @@ private class Bt2390ToneMapperImpl(
         }
         maxLum = pqInverseEotf(targetPeakNits)
         kneeStart = 1.5 * maxLum - 0.5
+        normalizedIdentity = targetPeakNits == PQ_PEAK_NITS
     }
 
     override fun map(linearRgb: FloatArray, offset: Int) {
@@ -59,7 +67,9 @@ private class Bt2390ToneMapperImpl(
     }
 
     private fun mapLuminance(sourceNits: Double): Double {
-        val e1 = pqInverseEotf(sourceNits.coerceAtMost(PQ_PEAK_NITS))
+        val boundedSourceNits = sourceNits.coerceAtMost(PQ_PEAK_NITS)
+        if (normalizedIdentity) return boundedSourceNits
+        val e1 = pqInverseEotf(boundedSourceNits)
         val e2 = if (e1 < kneeStart) {
             e1
         } else {

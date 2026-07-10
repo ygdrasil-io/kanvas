@@ -24,6 +24,9 @@ public fun CicpColorInfo.toColorProfile(): ColorProfileParseResult {
         PRIMARIES_DISPLAY_P3 -> ColorProfiles.displayP3()
         else -> return failure("cicp.primaries.unsupported")
     }
+    if (transfer == TRANSFER_HLG && primaries != PRIMARIES_REC2020) {
+        return failure("cicp.transfer.unsupported")
+    }
     val hdrTransfer = when (transfer) {
         TRANSFER_PQ -> HdrTransferFunction.PQ
         TRANSFER_HLG -> HdrTransferFunction.HLG

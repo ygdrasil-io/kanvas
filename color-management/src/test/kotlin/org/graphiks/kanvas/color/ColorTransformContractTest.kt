@@ -380,6 +380,34 @@ class ColorTransformContractTest {
     }
 
     @Test
+    fun `bt2390 maps saturated rec2020 green before destination gamut clipping`() {
+        val source = CicpColorInfo(9, 16, 0, true).toColorProfile().getOrThrow()
+        val transform = ColorTransform.compile(source, ColorProfiles.sRGB(), AlphaType.UNPREMULTIPLIED).getOrThrow()
+        val pq100Nits = 0.5080784f
+        val pixel = floatArrayOf(0f, pq100Nits, 0f, 1f)
+
+        transform.apply(pixel, 1)
+
+        assertEquals(0f, pixel[0], 0f)
+        assertEquals(0.8268562f, pixel[1], 3e-4f)
+        assertEquals(0f, pixel[2], 0f)
+    }
+
+    @Test
+    fun `bt2390 preserves rec2020 common scale before converting mixed color to srgb`() {
+        val source = CicpColorInfo(9, 16, 0, true).toColorProfile().getOrThrow()
+        val transform = ColorTransform.compile(source, ColorProfiles.sRGB(), AlphaType.UNPREMULTIPLIED).getOrThrow()
+        val pixel = floatArrayOf(0.5080784f, 0.44028157f, 0.2996991f, 0.42f)
+
+        transform.apply(pixel, 1)
+
+        assertEquals(0.9159574f, pixel[0], 3e-4f)
+        assertEquals(0.55253863f, pixel[1], 3e-4f)
+        assertEquals(0.17632549f, pixel[2], 3e-4f)
+        assertEquals(0.42f, pixel[3], 0f)
+    }
+
+    @Test
     fun `hdr to hdr profile conversion does not tone map`() {
         val pq = CicpColorInfo(9, 16, 0, true).toColorProfile().getOrThrow()
         val hlg = CicpColorInfo(9, 18, 0, true).toColorProfile().getOrThrow()
@@ -393,6 +421,22 @@ class ColorTransformContractTest {
         assertEquals(0.7518271f, pixel[0], 4e-5f)
         assertEquals(pixel[0], pixel[1], 2e-5f)
         assertEquals(pixel[1], pixel[2], 2e-5f)
+    }
+
+    @Test
+    fun `nonneutral hlg and pq rec2020 conversion round trips without tone mapping`() {
+        val pq = CicpColorInfo(9, 16, 0, true).toColorProfile().getOrThrow()
+        val hlg = CicpColorInfo(9, 18, 0, true).toColorProfile().getOrThrow()
+        val toPq = ColorTransform.compile(hlg, pq, AlphaType.UNPREMULTIPLIED).getOrThrow()
+        val backToHlg = ColorTransform.compile(pq, hlg, AlphaType.UNPREMULTIPLIED).getOrThrow()
+        val pixel = floatArrayOf(0.75f, 0.5f, 0.25f, 1f)
+
+        toPq.apply(pixel, 1)
+        backToHlg.apply(pixel, 1)
+
+        assertEquals(0.75f, pixel[0], 5e-5f)
+        assertEquals(0.5f, pixel[1], 5e-5f)
+        assertEquals(0.25f, pixel[2], 5e-5f)
     }
 
     @Test

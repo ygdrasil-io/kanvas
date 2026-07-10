@@ -82,22 +82,34 @@ public object ColorTransform {
             val sourceValues = matrixValues(sourceMatrix)
             val destinationInverse = checkNotNull(invert3x3(matrixValues(destinationMatrix)))
             if (request.source.isHdr || request.destination.isHdr) {
+                val toneMapper = if (request.source.isHdr && !request.destination.isHdr) {
+                    Bt2390ToneMapper(targetPeakNits = SDR_REFERENCE_WHITE_NITS.toDouble())
+                } else {
+                    null
+                }
+                val (sourceToWorking, workingToDestination) = if (toneMapper != null) {
+                    val rec2020ToXyzD50 = matrixValues(checkNotNull(ColorProfiles.rec2020().toXyzD50))
+                    val sourceToRec2020 = if (sourceValues.contentEquals(rec2020ToXyzD50)) {
+                        IDENTITY_3X3
+                    } else {
+                        concat3x3(checkNotNull(invert3x3(rec2020ToXyzD50)), sourceValues)
+                    }
+                    sourceToRec2020 to concat3x3(destinationInverse, rec2020ToXyzD50)
+                } else {
+                    sourceValues to destinationInverse
+                }
                 return ColorTransformCompileResult.Success(
                     CompiledColorTransform(
                         request,
                         HdrMatrixColorTransform(
-                            sourceToXyzD50 = sourceValues,
-                            destinationFromXyzD50 = destinationInverse,
+                            sourceToWorking = sourceToWorking,
+                            workingToDestination = workingToDestination,
                             sourceTransferFunction = request.source.transferFunction,
                             sourceHdrTransferFunction = request.source.hdrTransferFunction,
                             destinationTransferFunction = request.destination.transferFunction,
                             destinationHdrTransferFunction = request.destination.hdrTransferFunction,
                             alphaType = request.alphaType,
-                            toneMapper = if (request.source.isHdr && !request.destination.isHdr) {
-                                Bt2390ToneMapper(targetPeakNits = SDR_REFERENCE_WHITE_NITS.toDouble())
-                            } else {
-                                null
-                            },
+                            toneMapper = toneMapper,
                         ),
                     ),
                 )
@@ -159,8 +171,8 @@ public object ColorTransform {
 }
 
 private class HdrMatrixColorTransform(
-    sourceToXyzD50: FloatArray,
-    destinationFromXyzD50: FloatArray,
+    sourceToWorking: FloatArray,
+    workingToDestination: FloatArray,
     private val sourceTransferFunction: SkcmsTransferFunction?,
     private val sourceHdrTransferFunction: HdrTransferFunction?,
     private val destinationTransferFunction: SkcmsTransferFunction?,
@@ -168,12 +180,12 @@ private class HdrMatrixColorTransform(
     private val alphaType: AlphaType,
     private val toneMapper: ToneMapper?,
 ) : CompiledRgbPlan {
-    private val sourceToXyzD50: FloatArray = sourceToXyzD50.copyOf()
-    private val destinationFromXyzD50: FloatArray = destinationFromXyzD50.copyOf()
+    private val sourceToWorking: FloatArray = sourceToWorking.copyOf()
+    private val workingToDestination: FloatArray = workingToDestination.copyOf()
 
     init {
-        require(this.sourceToXyzD50.size == MATRIX_COMPONENTS) { "source matrix must be 3x3" }
-        require(this.destinationFromXyzD50.size == MATRIX_COMPONENTS) { "destination matrix must be 3x3" }
+        require(this.sourceToWorking.size == MATRIX_COMPONENTS) { "source matrix must be 3x3" }
+        require(this.workingToDestination.size == MATRIX_COMPONENTS) { "destination matrix must be 3x3" }
         require((sourceTransferFunction == null) != (sourceHdrTransferFunction == null)) {
             "source must have exactly one transfer function"
         }
@@ -201,18 +213,21 @@ private class HdrMatrixColorTransform(
             }
         }
 
-        val pcsNits = FloatArray(RGB_CHANNELS)
+        val workingLinear = FloatArray(RGB_CHANNELS)
         val destinationLinear = FloatArray(RGB_CHANNELS)
-        multiply3x3(sourceToXyzD50, sourceLinearNits, pcsNits)
-        multiply3x3(destinationFromXyzD50, pcsNits, destinationLinear)
-        toneMapper?.map(destinationLinear, 0)
+        multiply3x3(sourceToWorking, sourceLinearNits, workingLinear)
+        toneMapper?.map(workingLinear, 0)
+        multiply3x3(workingToDestination, workingLinear, destinationLinear)
 
         val encoded = FloatArray(RGB_CHANNELS)
         if (destinationHdrTransferFunction != null) {
             destinationHdrTransferFunction.encode(destinationLinear, encoded)
         } else {
             repeat(RGB_CHANNELS) { channel ->
-                encoded[channel] = encode(checkNotNull(destinationTransferFunction), destinationLinear[channel])
+                encoded[channel] = encode(
+                    checkNotNull(destinationTransferFunction),
+                    clipLinearSdrDestination(destinationLinear[channel]),
+                )
             }
         }
         val premultiply = if (alphaType == AlphaType.PREMULTIPLIED) alpha else 1f
@@ -226,6 +241,10 @@ private class HdrMatrixColorTransform(
         const val RGB_CHANNELS: Int = 3
         const val ALPHA_OFFSET: Int = 3
         const val MATRIX_COMPONENTS: Int = 9
+
+        /** Component clipping is the explicit post-tone-map destination-gamut policy. */
+        fun clipLinearSdrDestination(value: Float): Float =
+            if (value.isFinite()) value.coerceIn(0f, 1f) else 0f
     }
 }
 
@@ -322,6 +341,19 @@ private fun multiply3x3(matrix: FloatArray, input: FloatArray, output: FloatArra
     }
 }
 
+private fun concat3x3(left: FloatArray, right: FloatArray): FloatArray = FloatArray(9) { index ->
+    val row = index / 3
+    val column = index % 3
+    left[row * 3] * right[column] +
+        left[row * 3 + 1] * right[3 + column] +
+        left[row * 3 + 2] * right[6 + column]
+}
+
 private fun <T : Any> assertNotNull(value: T?): T = checkNotNull(value)
 
 private const val SDR_REFERENCE_WHITE_NITS: Float = 100f
+private val IDENTITY_3X3: FloatArray = floatArrayOf(
+    1f, 0f, 0f,
+    0f, 1f, 0f,
+    0f, 0f, 1f,
+)
