@@ -2,6 +2,10 @@ package org.graphiks.kanvas.text
 
 import org.graphiks.kanvas.types.Point
 
+interface FontMetricsProvider {
+    fun getMetrics(size: Float): FontMetrics?
+}
+
 data class Font(
     val typeface: Typeface,
     val size: Float = 12f,
@@ -10,14 +14,16 @@ data class Font(
     val isEmbolden: Boolean = false,  // applied per-codepoint; ZWJ clusters get multiple increments
 ) {
     fun getMetrics(): FontMetrics? {
-        if (typeface !is FontTypeface) return null
-        val scaler = typeface.scaler ?: return null
-        val scale = size / scaler.unitsPerEmInt.toFloat()
-        return FontMetrics(
-            ascent = scaler.hheaAscent * scale,
-            descent = scaler.hheaDescent * scale,
-            leading = scaler.hheaLineGap * scale,
-        )
+        if (typeface is FontTypeface) {
+            val scaler = typeface.scaler ?: return null
+            val scale = size / scaler.unitsPerEmInt.toFloat()
+            return FontMetrics(
+                ascent = scaler.hheaAscent * scale,
+                descent = scaler.hheaDescent * scale,
+                leading = scaler.hheaLineGap * scale,
+            )
+        }
+        return (typeface as? FontMetricsProvider)?.getMetrics(size)
     }
 
     fun toTextBlob(str: String, originX: Float, originY: Float): TextBlob {

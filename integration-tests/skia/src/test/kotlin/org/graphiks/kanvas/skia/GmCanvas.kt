@@ -20,13 +20,60 @@ import org.graphiks.kanvas.types.Mesh
 import org.graphiks.kanvas.types.Vertices
 import org.graphiks.kanvas.types.VertexMode
 import org.graphiks.kanvas.text.Font
+import org.graphiks.kanvas.text.FontMetrics
+import org.graphiks.kanvas.text.FontMetricsProvider
 import org.graphiks.kanvas.text.TextBlob
+import org.graphiks.kanvas.text.Typeface
+import org.graphiks.kanvas.text.Typefaces
 import org.graphiks.math.SkColor
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.PI
 import kotlin.math.max
 import kotlin.math.min
+
+enum class TextAlign(val factor: Float) {
+    LEFT(0f),
+    CENTER(0.5f),
+    RIGHT(1f),
+}
+
+private const val PORTABLE_FONT_RESOURCE = "fonts/LiberationSans-Regular.ttf"
+private const val PORTABLE_FONT_FALLBACK_RESOURCE = "fonts/liberation/LiberationSans-Regular.ttf"
+
+private val portableTypeface: Typeface by lazy {
+    Typefaces.fromResource(PORTABLE_FONT_RESOURCE)
+        ?: Typefaces.fromResource(PORTABLE_FONT_FALLBACK_RESOURCE)
+        ?: MissingPortableTypeface
+}
+
+private object MissingPortableTypeface : Typeface, FontMetricsProvider {
+    override val fontName: String = "portable-font-missing-stub"
+
+    override fun glyphIdForCodepoint(codepoint: Int): Int = codepoint
+
+    override fun getAdvance(glyphId: Int, fontSize: Float): Float = fontSize * 0.5f
+
+    override fun getGlyphPath(glyphId: Int, fontSize: Float): Path? = null
+
+    override fun getMetrics(size: Float): FontMetrics = FontMetrics(
+        ascent = -0.8f * size,
+        descent = 0.2f * size,
+        leading = 0f,
+        xHeight = 0.5f * size,
+        capHeight = 0.7f * size,
+    )
+}
+
+private fun alignedTextX(text: String, x: Float, font: Font, alignment: Float): Float =
+    x - font.measureText(text) * alignment
+
+fun portableFont(size: Float, bold: Boolean = false): Font = Font(
+    typeface = portableTypeface,
+    size = size,
+    subpixel = true,
+    isEmbolden = bold,
+)
 
 class GmCanvas(
     private val inner: Canvas,
@@ -178,11 +225,28 @@ class GmCanvas(
         }
     }
 
-    fun drawColor(r: Float, g: Float, b: Float, a: Float = 1f) {
+    fun drawColor(
+        r: Float,
+        g: Float,
+        b: Float,
+        a: Float = 1f,
+    ) {
         drawRect(
             Rect(0f, 0f, width.toFloat(), height.toFloat()),
             Paint(color = Color.fromRGBA(r, g, b, a)),
         )
+    }
+
+    fun drawColor(
+        r: Float,
+        g: Float,
+        b: Float,
+        a: Float,
+        mode: BlendMode,
+    ) {
+        withClip {
+            inner.drawColor(Color.fromRGBA(r, g, b, a), mode)
+        }
     }
 
     fun clear(color: Color) {
@@ -383,6 +447,28 @@ class GmCanvas(
                 inner.restore()
             }
         }
+    }
+
+    fun drawStringAligned(
+        str: String,
+        x: Float,
+        y: Float,
+        font: Font,
+        paint: Paint,
+        alignment: Float = TextAlign.LEFT.factor,
+    ) {
+        drawString(str, alignedTextX(str, x, font, alignment), y, font, paint)
+    }
+
+    fun drawStringAligned(
+        str: String,
+        x: Float,
+        y: Float,
+        font: Font,
+        paint: Paint,
+        alignment: TextAlign,
+    ) {
+        drawStringAligned(str, x, y, font, paint, alignment.factor)
     }
 
     fun drawSimpleText(text: String, x: Float, y: Float, font: Font, paint: Paint) {
