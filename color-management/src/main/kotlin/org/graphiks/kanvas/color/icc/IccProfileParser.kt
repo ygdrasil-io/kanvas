@@ -268,6 +268,7 @@ private class Parser(
     private fun parseRgbLut(tags: Map<IccSignature, TagRecord>): ColorProfile {
         validateRequiredLutRoutes(tags)
         if (profileClass == IccSignature.OUTPUT_CLASS) {
+            validateGamutTransform(requiredTag(tags, IccSignature.GAMUT))
             OUTPUT_ADDITIONAL_ROUTES.forEach { signature ->
                 val direction = if (signature in A_TO_B_ROUTE_SIGNATURES) LutDirection.A_TO_B else LutDirection.B_TO_A
                 parseLutTransform(requiredTag(tags, signature), direction)
@@ -291,6 +292,29 @@ private class Parser(
         }
         if (profileClass == IccSignature.OUTPUT_CLASS && IccSignature.GAMUT !in tags) {
             abort("icc.profile.tags", "Required ICC tag ${IccSignature.GAMUT} is missing")
+        }
+    }
+
+    private fun validateGamutTransform(tag: TagRecord) {
+        when (reader.signature(tag.offset)) {
+            IccSignature.LUT_8_TYPE -> parseLegacyLutPayload(
+                tag,
+                LutDirection.B_TO_A,
+                bytesPerSample = 1,
+                purpose = LutPurpose.GAMUT,
+            )
+            IccSignature.LUT_16_TYPE -> parseLegacyLutPayload(
+                tag,
+                LutDirection.B_TO_A,
+                bytesPerSample = 2,
+                purpose = LutPurpose.GAMUT,
+            )
+            IccSignature.LUT_B_TO_A_TYPE -> parseMultiFunctionLutPayload(
+                tag,
+                LutDirection.B_TO_A,
+                LutPurpose.GAMUT,
+            )
+            else -> abort("icc.lut.type", "ICC gamut transform must use mft1, mft2, or mBA")
         }
     }
 
@@ -318,13 +342,32 @@ private class Parser(
         direction: LutDirection,
         bytesPerSample: Int,
     ): IccTransformPipeline {
+        val parsed = parseLegacyLutPayload(tag, direction, bytesPerSample, LutPurpose.COLOR_ROUTE)
+        val stages = mutableListOf<IccTransformStage>()
+        // ICC defines the PCSXYZ encoding factor for 16-bit LUTs; no 8-bit PCSXYZ encoding exists.
+        if (direction == LutDirection.B_TO_A && bytesPerSample == 2) stages += pcsEncodeStage()
+        stages += IccMatrixStage(parsed.matrix)
+        stages += IccClampStage(parsed.inputChannels)
+        stages += IccCurveStage(parsed.inputCurves)
+        stages += IccClutStage(parsed.clut)
+        stages += IccCurveStage(parsed.outputCurves)
+        if (direction == LutDirection.A_TO_B && bytesPerSample == 2) stages += pcsDecodeStage()
+        return IccTransformPipeline(stages, lutFingerprint(tag, direction))
+    }
+
+    private fun parseLegacyLutPayload(
+        tag: TagRecord,
+        direction: LutDirection,
+        bytesPerSample: Int,
+        purpose: LutPurpose,
+    ): ParsedLegacyLut {
         val headerSize = if (bytesPerSample == 1) LUT_8_HEADER_SIZE else LUT_16_HEADER_SIZE
         if (tag.size < headerSize) abort("icc.lut.range", "ICC LUT header is truncated")
         if (!reader.isZero(tag.offset + 11, 1)) abort("icc.lut.reserved", "ICC LUT padding is not zero")
 
         val inputChannels = reader.u8(tag.offset + 8)
         val outputChannels = reader.u8(tag.offset + 9)
-        validateLutChannels(inputChannels, outputChannels)
+        validateLutChannels(inputChannels, outputChannels, purpose)
         val gridPointCount = reader.u8(tag.offset + 10)
         if (gridPointCount < 2) abort("icc.lut.grid", "ICC LUT grid requires at least two points")
         val gridPoints = IntArray(inputChannels) { gridPointCount }
@@ -359,35 +402,65 @@ private class Parser(
         payloadOffset += clutBytes.toInt()
         val outputCurves = readLutTableCurves(payloadOffset, outputChannels, outputEntries, bytesPerSample)
 
-        val stages = mutableListOf<IccTransformStage>()
-        // ICC defines the PCSXYZ encoding factor for 16-bit LUTs; no 8-bit PCSXYZ encoding exists.
-        if (direction == LutDirection.B_TO_A && bytesPerSample == 2) stages += pcsEncodeStage()
-        stages += IccMatrixStage(matrix)
-        stages += IccClampStage(inputChannels)
-        stages += IccCurveStage(inputCurves)
-        stages += IccClutStage(clut)
-        stages += IccCurveStage(outputCurves)
-        if (direction == LutDirection.A_TO_B && bytesPerSample == 2) stages += pcsDecodeStage()
-        return IccTransformPipeline(stages, lutFingerprint(tag, direction))
+        return ParsedLegacyLut(inputChannels, matrix, inputCurves, clut, outputCurves)
     }
 
     private fun parseMultiFunctionLut(
         tag: TagRecord,
         direction: LutDirection,
     ): IccTransformPipeline {
+        val parsed = parseMultiFunctionLutPayload(tag, direction, LutPurpose.COLOR_ROUTE)
+        val stages = mutableListOf<IccTransformStage>()
+        if (direction == LutDirection.A_TO_B) {
+            if (parsed.aCurves != null && parsed.clut != null) {
+                stages += IccCurveStage(parsed.aCurves.curves)
+                stages += IccClutStage(parsed.clut.clut)
+            }
+            if (parsed.mCurves != null && parsed.matrix != null) {
+                stages += IccCurveStage(parsed.mCurves.curves)
+                stages += IccMatrixStage(parsed.matrix.values)
+                stages += IccClampStage(3)
+            }
+            stages += IccCurveStage(parsed.bCurves.curves)
+            stages += pcsDecodeStage()
+        } else {
+            stages += pcsEncodeStage()
+            stages += IccCurveStage(parsed.bCurves.curves)
+            if (parsed.matrix != null && parsed.mCurves != null) {
+                stages += IccMatrixStage(parsed.matrix.values)
+                stages += IccClampStage(3)
+                stages += IccCurveStage(parsed.mCurves.curves)
+            }
+            if (parsed.clut != null && parsed.aCurves != null) {
+                stages += IccClutStage(parsed.clut.clut)
+                stages += IccCurveStage(parsed.aCurves.curves)
+            }
+        }
+        return IccTransformPipeline(stages, lutFingerprint(tag, direction))
+    }
+
+    private fun parseMultiFunctionLutPayload(
+        tag: TagRecord,
+        direction: LutDirection,
+        purpose: LutPurpose,
+    ): ParsedMultiFunctionLut {
         if (majorVersion != 4) abort("icc.lut.version", "mAB and mBA require an ICC v4 profile")
         if (tag.size < MULTI_FUNCTION_HEADER_SIZE) abort("icc.lut.range", "ICC multi-function LUT is truncated")
         if (!reader.isZero(tag.offset + 10, 2)) abort("icc.lut.reserved", "ICC LUT padding is not zero")
 
         val inputChannels = reader.u8(tag.offset + 8)
         val outputChannels = reader.u8(tag.offset + 9)
-        validateLutChannels(inputChannels, outputChannels)
+        validateLutChannels(inputChannels, outputChannels, purpose)
         val bOffset = readLutElementOffset(tag, 12)
         val matrixOffset = readLutElementOffset(tag, 16)
         val mOffset = readLutElementOffset(tag, 20)
         val clutOffset = readLutElementOffset(tag, 24)
         val aOffset = readLutElementOffset(tag, 28)
-        if (bOffset == 0 || (matrixOffset == 0) != (mOffset == 0) || (clutOffset == 0) != (aOffset == 0)) {
+        if (bOffset == 0 ||
+            (matrixOffset == 0) != (mOffset == 0) ||
+            (clutOffset == 0) != (aOffset == 0) ||
+            (inputChannels != outputChannels && clutOffset == 0)
+        ) {
             abort("icc.lut.structure", "ICC multi-function LUT has an incomplete stage combination")
         }
 
@@ -424,41 +497,20 @@ private class Parser(
         }
         validateEmbeddedElementLayout(elements, tag.size)
 
-        val stages = mutableListOf<IccTransformStage>()
-        if (direction == LutDirection.A_TO_B) {
-            if (aCurves != null && clut != null) {
-                stages += IccCurveStage(aCurves.curves)
-                stages += IccClutStage(clut.clut)
-            }
-            if (mCurves != null && matrix != null) {
-                stages += IccCurveStage(mCurves.curves)
-                stages += IccMatrixStage(matrix.values)
-                stages += IccClampStage(3)
-            }
-            stages += IccCurveStage(bCurves.curves)
-            stages += pcsDecodeStage()
-        } else {
-            stages += pcsEncodeStage()
-            stages += IccCurveStage(bCurves.curves)
-            if (matrix != null && mCurves != null) {
-                stages += IccMatrixStage(matrix.values)
-                stages += IccClampStage(3)
-                stages += IccCurveStage(mCurves.curves)
-            }
-            if (clut != null && aCurves != null) {
-                stages += IccClutStage(clut.clut)
-                stages += IccCurveStage(aCurves.curves)
-            }
-        }
-        return IccTransformPipeline(stages, lutFingerprint(tag, direction))
+        return ParsedMultiFunctionLut(bCurves, matrix, mCurves, clut, aCurves)
     }
 
-    private fun validateLutChannels(inputChannels: Int, outputChannels: Int) {
+    private fun validateLutChannels(inputChannels: Int, outputChannels: Int, purpose: LutPurpose) {
         if (inputChannels !in 1..MAX_LUT_CHANNELS || outputChannels !in 1..MAX_LUT_CHANNELS) {
             abort("icc.lut.channels", "ICC LUT channels must be in 1..$MAX_LUT_CHANNELS")
         }
-        if (inputChannels != RGB_CHANNELS || outputChannels != RGB_CHANNELS) {
-            abort("icc.lut.channels", "RGB/XYZ LUT routes must have three input and output channels")
+        when (purpose) {
+            LutPurpose.COLOR_ROUTE -> if (inputChannels != RGB_CHANNELS || outputChannels != RGB_CHANNELS) {
+                abort("icc.lut.channels", "RGB/XYZ LUT routes must have three input and output channels")
+            }
+            LutPurpose.GAMUT -> if (inputChannels != RGB_CHANNELS || outputChannels != GAMUT_OUTPUT_CHANNELS) {
+                abort("icc.lut.channels", "ICC gamut transforms require three PCS inputs and one output channel")
+            }
         }
     }
 
@@ -809,6 +861,25 @@ private enum class LutDirection {
     B_TO_A,
 }
 
+private enum class LutPurpose {
+    COLOR_ROUTE,
+    GAMUT,
+}
+
+private data class ParsedLegacyLut(
+    val inputChannels: Int,
+    val matrix: FloatArray,
+    val inputCurves: List<IccPipelineCurve>,
+    val clut: IccClut,
+    val outputCurves: List<IccPipelineCurve>,
+)
+private data class ParsedMultiFunctionLut(
+    val bCurves: ParsedCurveSet,
+    val matrix: ParsedMatrix?,
+    val mCurves: ParsedCurveSet?,
+    val clut: ParsedClut?,
+    val aCurves: ParsedCurveSet?,
+)
 private data class ParsedEmbeddedCurve(val curve: IccPipelineCurve, val end: Int)
 private data class ParsedCurveSet(val curves: List<IccPipelineCurve>, val end: Int)
 private data class ParsedMatrix(val values: FloatArray, val end: Int)
@@ -860,6 +931,7 @@ private const val MULTI_FUNCTION_HEADER_SIZE: Int = 32
 private const val MULTI_FUNCTION_MATRIX_SIZE: Int = 48
 private const val MULTI_FUNCTION_CLUT_HEADER_SIZE: Int = 20
 private const val RGB_CHANNELS: Int = 3
+private const val GAMUT_OUTPUT_CHANNELS: Int = 1
 private const val MAX_LUT_CHANNELS: Int = 4
 private const val MIN_LUT_TABLE_ENTRIES: Int = 2
 private const val MAX_LUT_TABLE_ENTRIES: Int = 4096

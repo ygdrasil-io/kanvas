@@ -825,18 +825,112 @@ class IccProfileParserTest {
             ),
         )
 
-        val complete = IccProfileParser.parse(
-            buildLutProfile(
-                route,
-                route,
-                IccSignature.OUTPUT_CLASS.value,
-                includeOutputIntentRoutes = true,
-                gamut = route,
+    }
+
+    @Test
+    fun `output LUT profile rejects three channel gamut output`() {
+        val route = lut16Payload()
+
+        assertFailure(
+            "icc.lut.channels",
+            completeOutputProfile(route, gamut = route),
+        )
+    }
+
+    @Test
+    fun `output LUT profile rejects non PCS gamut input arity`() {
+        assertFailure(
+            "icc.lut.channels",
+            completeOutputProfile(
+                lut16Payload(),
+                legacyGamutPayload(bytesPerSample = 2, inputChannels = 2),
             ),
-            IccParseLimits(),
-        ).getOrThrow()
-        assertNotNull(complete.toPcs)
-        assertNotNull(complete.fromPcs)
+        )
+    }
+
+    @Test
+    fun `output LUT profile accepts permitted one channel gamut transforms`() {
+        val route = lut16Payload()
+        val gamutTransforms = listOf(
+            legacyGamutPayload(bytesPerSample = 1),
+            legacyGamutPayload(bytesPerSample = 2),
+            multiFunctionGamutPayload(IccSignature.LUT_B_TO_A_TYPE.value),
+        )
+
+        gamutTransforms.forEach { gamut ->
+            val complete = IccProfileParser.parse(
+                completeOutputProfile(route, gamut),
+                IccParseLimits(),
+            ).getOrThrow()
+            assertNotNull(complete.toPcs)
+            assertNotNull(complete.fromPcs)
+        }
+    }
+
+    @Test
+    fun `output gamut rejects A to B direction semantics`() {
+        assertFailure(
+            "icc.lut.type",
+            completeOutputProfile(
+                lut16Payload(),
+                multiFunctionGamutPayload(IccSignature.LUT_A_TO_B_TYPE.value),
+            ),
+        )
+    }
+
+    @Test
+    fun `output gamut validates legacy payload range`() {
+        val truncated = legacyGamutPayload(bytesPerSample = 2).let { it.copyOf(it.size - 2) }
+
+        assertFailure(
+            "icc.lut.range",
+            completeOutputProfile(lut16Payload(), truncated),
+        )
+    }
+
+    @Test
+    fun `output gamut validates multi function offsets`() {
+        val invalidOffset = multiFunctionGamutPayload(IccSignature.LUT_B_TO_A_TYPE.value).also {
+            writeU32(it, 12, it.size + 4)
+        }
+
+        assertFailure(
+            "icc.lut.offset",
+            completeOutputProfile(lut16Payload(), invalidOffset),
+        )
+    }
+
+    @Test
+    fun `output gamut requires clut when mBA changes channel count`() {
+        val incomplete = multiFunctionPayload(
+            type = IccSignature.LUT_B_TO_A_TYPE.value,
+            bCurves = curveSet(identityCurve()),
+            matrix = null,
+            mCurves = null,
+            clut = null,
+            aCurves = null,
+            inputChannels = 3,
+            outputChannels = 1,
+        )
+
+        assertFailure(
+            "icc.lut.structure",
+            completeOutputProfile(lut16Payload(), incomplete),
+        )
+    }
+
+    @Test
+    fun `output gamut enforces clut allocation limit`() {
+        val route = lut16Payload()
+        val failure = IccProfileParser.parse(
+            completeOutputProfile(
+                route,
+                legacyGamutPayload(bytesPerSample = 2, gridPointCount = 3),
+            ),
+            IccParseLimits(maxClutValues = 24),
+        ).failureOrNull()
+
+        assertEquals("icc.limit.clut-values", assertNotNull(failure).code)
     }
 
     @Test
@@ -1041,6 +1135,64 @@ class IccProfileParserTest {
         return bytes
     }
 
+    private fun legacyGamutPayload(
+        bytesPerSample: Int,
+        gridPointCount: Int = 2,
+        inputChannels: Int = 3,
+        outputChannels: Int = 1,
+    ): ByteArray {
+        require(bytesPerSample in 1..2)
+        val headerSize = if (bytesPerSample == 1) 48 else 52
+        val tableEntries = if (bytesPerSample == 1) 256 else 2
+        var clutValues = outputChannels
+        repeat(inputChannels) { clutValues *= gridPointCount }
+        val bytes = ByteArray(
+            headerSize +
+                inputChannels * tableEntries * bytesPerSample +
+                clutValues * bytesPerSample +
+                outputChannels * tableEntries * bytesPerSample,
+        )
+        writeU32(
+            bytes,
+            0,
+            if (bytesPerSample == 1) IccSignature.LUT_8_TYPE.value else IccSignature.LUT_16_TYPE.value,
+        )
+        bytes[8] = inputChannels.toByte()
+        bytes[9] = outputChannels.toByte()
+        bytes[10] = gridPointCount.toByte()
+        repeat(3) { writeS15Fixed16(bytes, 12 + it * 16, 1f) }
+        if (bytesPerSample == 2) {
+            writeU16(bytes, 48, tableEntries)
+            writeU16(bytes, 50, tableEntries)
+        }
+        var offset = headerSize
+        repeat(inputChannels) {
+            repeat(tableEntries) { sample ->
+                writeNormalizedSample(bytes, offset, sample, tableEntries, bytesPerSample)
+                offset += bytesPerSample
+            }
+        }
+        repeat(clutValues) { offset += bytesPerSample }
+        repeat(outputChannels) {
+            repeat(tableEntries) { sample ->
+                writeNormalizedSample(bytes, offset, sample, tableEntries, bytesPerSample)
+                offset += bytesPerSample
+            }
+        }
+        return bytes
+    }
+
+    private fun writeNormalizedSample(
+        bytes: ByteArray,
+        offset: Int,
+        sample: Int,
+        tableEntries: Int,
+        bytesPerSample: Int,
+    ) {
+        val normalized = sample * 65535 / (tableEntries - 1)
+        if (bytesPerSample == 1) bytes[offset] = (normalized ushr 8).toByte() else writeU16(bytes, offset, normalized)
+    }
+
     private fun identityCurve(): ByteArray = ByteArray(12).also {
         writeU32(it, 0, IccSignature.CURVE_TYPE.value)
     }
@@ -1073,6 +1225,24 @@ class IccProfileParserTest {
         identityCubeValues().forEachIndexed { index, value -> clut[20 + index] = (value * 255f).toInt().toByte() }
     }
 
+    private fun gamutMultiFunctionClut(): ByteArray = ByteArray(28).also { clut ->
+        clut[0] = 2
+        clut[1] = 2
+        clut[2] = 2
+        clut[16] = 1
+    }
+
+    private fun multiFunctionGamutPayload(type: Int): ByteArray = multiFunctionPayload(
+        type = type,
+        bCurves = if (type == IccSignature.LUT_B_TO_A_TYPE.value) curveSet(identityCurve()) else identityCurve(),
+        matrix = null,
+        mCurves = null,
+        clut = gamutMultiFunctionClut(),
+        aCurves = if (type == IccSignature.LUT_B_TO_A_TYPE.value) identityCurve() else curveSet(identityCurve()),
+        inputChannels = 3,
+        outputChannels = 1,
+    )
+
     private fun multiFunctionPayload(
         type: Int,
         bCurves: ByteArray,
@@ -1080,6 +1250,8 @@ class IccProfileParserTest {
         mCurves: ByteArray?,
         clut: ByteArray?,
         aCurves: ByteArray?,
+        inputChannels: Int = 3,
+        outputChannels: Int = 3,
     ): ByteArray {
         val elements = listOf(
             12 to bCurves,
@@ -1091,8 +1263,8 @@ class IccProfileParserTest {
         val size = 32 + elements.sumOf { it.second?.size ?: 0 }
         val bytes = ByteArray(size)
         writeU32(bytes, 0, type)
-        bytes[8] = 3
-        bytes[9] = 3
+        bytes[8] = inputChannels.toByte()
+        bytes[9] = outputChannels.toByte()
         var offset = 32
         elements.forEach { (field, element) ->
             if (element != null) {
@@ -1103,6 +1275,14 @@ class IccProfileParserTest {
         }
         return bytes
     }
+
+    private fun completeOutputProfile(route: ByteArray, gamut: ByteArray): ByteArray = buildLutProfile(
+        aToB = route,
+        bToA = route,
+        profileClass = IccSignature.OUTPUT_CLASS.value,
+        includeOutputIntentRoutes = true,
+        gamut = gamut,
+    )
 
     private fun aliasedMultiFunctionPayload(aliasMatrixWithCurves: Boolean): ByteArray {
         val curves = curveSet(gammaCurve(1f))
