@@ -829,6 +829,95 @@ class PngCodecTest {
     }
 
     @Test
+    fun `open preserves ICC color-model mismatch diagnostics`() {
+        val cases = listOf(
+            pngFromChunks(
+                "IHDR" to ihdr(width = 1, height = 1, bitDepth = 8, colorType = 0),
+                "iCCP" to iccpChunkData(
+                    "display-p3",
+                    profileBytes = SkICC.WriteToICC(SkNamedTransferFn.kSRGB, SkNamedGamut.kDisplayP3),
+                ),
+                "IDAT" to deflate(byteArrayOf(0, 0x40)),
+                "IEND" to ByteArray(0),
+            ),
+            pngFromChunks(
+                "IHDR" to ihdr(width = 1, height = 1, bitDepth = 8, colorType = 2),
+                "iCCP" to iccpChunkData("gray", profileBytes = grayProfileBytes()),
+                "IDAT" to deflate(byteArrayOf(0, 0x10, 0x20, 0x30)),
+                "IEND" to ByteArray(0),
+            ),
+        )
+
+        for (data in cases) {
+            val opened = PngCodec.Decoder.open(data)
+            assertTrue(opened is PngCodecOpenResult.Failure)
+            val failure = opened as PngCodecOpenResult.Failure
+            assertEquals("png.metadata.iCCP.color-model.mismatch", failure.diagnostic.code)
+            assertNull(PngCodec.Decoder.make(data))
+        }
+    }
+
+    @Test
+    fun `open exposes shared APNG refusal diagnostic`() {
+        val data = pngFromChunks(
+            "IHDR" to ihdr(width = 1, height = 1, bitDepth = 8, colorType = 0),
+            "acTL" to ByteArray(8),
+            "IDAT" to deflate(byteArrayOf(0, 0x40)),
+            "IEND" to ByteArray(0),
+        )
+
+        val opened = PngCodec.Decoder.open(data)
+
+        assertTrue(opened is PngCodecOpenResult.Failure)
+        val failure = opened as PngCodecOpenResult.Failure
+        assertEquals("png.apng.unsupported", failure.diagnostic.code)
+        assertNull(PngCodec.Decoder.make(data))
+    }
+
+    @Test
+    fun `cICP RGB profile on grayscale PNG preserves a mismatch diagnostic`() {
+        val data = pngFromChunks(
+            "IHDR" to ihdr(width = 1, height = 1, bitDepth = 8, colorType = 0),
+            "cICP" to byteArrayOf(1, 13, 0, 1),
+            "IDAT" to deflate(byteArrayOf(0, 0x40)),
+            "IEND" to ByteArray(0),
+        )
+
+        val opened = PngCodec.Decoder.open(data)
+
+        assertTrue(opened is PngCodecOpenResult.Success)
+        val codec = (opened as PngCodecOpenResult.Success).codec
+        assertNull(codec.getICCProfile())
+        assertTrue(codec.getInfo().colorSpace.isSRGB())
+        assertTrue(codec.diagnostics.any { it.code == "png.metadata.cICP.color-model.mismatch" })
+        val (bitmap, result) = codec.getImage()
+        assertEquals(Codec.Result.kSuccess, result)
+        assertEquals(argb(0xFF, 0x40, 0x40, 0x40), bitmap!!.getPixel(0, 0))
+    }
+
+    @Test
+    fun `cICP HDR profile is exposed as unsupported without transforming samples`() {
+        val data = pngFromChunks(
+            "IHDR" to ihdr(width = 1, height = 1, bitDepth = 8, colorType = 2),
+            "cICP" to byteArrayOf(9, 16, 0, 1),
+            "IDAT" to deflate(byteArrayOf(0, 0x10, 0x20, 0x30)),
+            "IEND" to ByteArray(0),
+        )
+
+        val opened = PngCodec.Decoder.open(data)
+
+        assertTrue(opened is PngCodecOpenResult.Success)
+        val codec = (opened as PngCodecOpenResult.Success).codec
+        assertNotNull(codec.getICCProfile())
+        assertTrue(codec.getICCProfile()!!.colorProfile.isHdr)
+        assertEquals(SkColorSpaceProfileStatus.kUnsupported, codec.getInfo().colorSpace.profileStatus)
+        assertEquals("color.hdr.unsupported", codec.getInfo().colorSpace.profileRefusalCode)
+        val (bitmap, result) = codec.getImage()
+        assertEquals(Codec.Result.kSuccess, result)
+        assertEquals(argb(0xFF, 0x10, 0x20, 0x30), bitmap!!.getPixel(0, 0))
+    }
+
+    @Test
     fun `sRGB and gAMA chunks synthesize ICC when sRGB is present`() {
         val data = pngFromChunks(
             "IHDR" to ihdr(width = 1, height = 1, bitDepth = 8, colorType = 0),

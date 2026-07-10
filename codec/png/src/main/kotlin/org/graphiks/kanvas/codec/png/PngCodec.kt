@@ -15,6 +15,7 @@ import org.skia.foundation.skcms.SkNamedTransferFn
 import org.skia.foundation.skcms.SkcmsICCProfile
 import org.skia.foundation.skcms.skcmsParse
 import java.io.ByteArrayOutputStream
+import java.util.Collections
 import java.util.zip.DataFormatException
 import java.util.zip.Inflater
 
@@ -36,7 +37,11 @@ import java.util.zip.Inflater
  */
 public class PngCodec private constructor(
     private val png: ParsedPng,
+    diagnostics: List<PngDiagnostic>,
 ) : Codec() {
+
+    /** Non-fatal metadata refusals retained while opening this static PNG. */
+    public val diagnostics: List<PngDiagnostic> = Collections.unmodifiableList(ArrayList(diagnostics))
 
     private val cachedInfo: SkImageInfo by lazy {
         val isF16 = png.bitDepth == 16
@@ -266,22 +271,45 @@ public class PngCodec private constructor(
                         )
                 )
 
-    internal companion object Decoder : Codec.Decoder {
+    public companion object Decoder : Codec.Decoder {
         override val name: String = "png"
 
         override fun matches(data: ByteArray): Boolean = hasPngSignature(data)
 
-        override fun make(data: ByteArray): Codec? {
-            if (!hasPngSignature(data)) return null
-            val container = when (val result = PngContainerParser.parse(data)) {
-                is PngContainerParseResult.Success -> result.container
-                is PngContainerParseResult.Failure -> return null
-            }
-            val png = parse(data, container) ?: return null
-            return PngCodec(png)
+        override fun make(data: ByteArray): Codec? = when (val result = open(data)) {
+            is PngCodecOpenResult.Success -> result.codec
+            is PngCodecOpenResult.Failure -> null
         }
 
-        private fun parse(data: ByteArray, container: PngContainer): ParsedPng? {
+        /** Opens a static PNG while retaining the shared container or metadata diagnostic on refusal. */
+        public fun open(data: ByteArray): PngCodecOpenResult {
+            val container = when (val result = PngContainerParser.parse(data)) {
+                is PngContainerParseResult.Success -> result.container
+                is PngContainerParseResult.Failure -> return PngCodecOpenResult.Failure(result.diagnostic)
+            }
+            container.metadataDiagnostics.firstOrNull()?.let { diagnostic ->
+                return PngCodecOpenResult.Failure(diagnostic)
+            }
+
+            val metadata = PngMetadataParser.parse(data, container, PngMetadataLimits.Default)
+            val cicp = resolveCicpProfile(metadata) ?: return PngCodecOpenResult.Failure(
+                diagnostic = requireNotNull((metadata.cICP as? PngMetadataValue.Refused)?.diagnostic),
+            )
+            val png = parse(data, container, cicp.profile) ?: return PngCodecOpenResult.Failure(
+                diagnostic = metadata.diagnostics.firstOrNull() ?: PngDiagnostic(
+                    code = "png.codec.decode.unsupported",
+                    offset = 0L,
+                    message = "PNG raster data cannot be decoded by the static codec",
+                ),
+            )
+            return PngCodecOpenResult.Success(PngCodec(png, metadata.diagnostics + cicp.diagnostics))
+        }
+
+        private fun parse(
+            data: ByteArray,
+            container: PngContainer,
+            cicpProfile: SkcmsICCProfile?,
+        ): ParsedPng? {
             val header = decodeHeader(container.header) ?: return null
             val idat = ByteArray(container.totalIdatBytes.toInt())
             var idatOffset = 0
@@ -360,7 +388,7 @@ public class PngCodec private constructor(
                 null
             }
             if (finalPalette != null && finalPalette.size > (1 shl h.bitDepth)) return null
-            val finalIcc = iccProfile ?: synthesizeIcc(sawSrgb, sawGamma)
+            val finalIcc = iccProfile ?: cicpProfile ?: synthesizeIcc(sawSrgb, sawGamma)
             return ParsedPng(
                 width = h.width,
                 height = h.height,
@@ -408,6 +436,30 @@ public class PngCodec private constructor(
             COLOR_GRAYSCALE, COLOR_GRAYSCALE_ALPHA -> colorModel == ColorModel.GRAY
             COLOR_RGB, COLOR_PALETTE, COLOR_RGBA -> colorModel == ColorModel.RGB
             else -> false
+        }
+
+        private fun resolveCicpProfile(metadata: PngMetadata): CicpResolution? = when (val cicp = metadata.cICP) {
+            null -> CicpResolution(profile = null, diagnostics = emptyList())
+            is PngMetadataValue.Refused -> null
+            is PngMetadataValue.Resolved -> when (cicp.value.profileResolution) {
+                PngCicpProfileResolution.RGB_PROFILE -> CicpResolution(
+                    profile = SkcmsICCProfile.fromColorProfile(requireNotNull(cicp.value.profile)),
+                    diagnostics = emptyList(),
+                )
+
+                PngCicpProfileResolution.GRAYSCALE_INFO_ONLY -> CicpResolution(
+                    profile = null,
+                    diagnostics = listOf(
+                        PngDiagnostic(
+                            code = "png.metadata.cICP.color-model.mismatch",
+                            offset = cicp.record.rawRange.startInclusive,
+                            chunkType = cicp.record.type,
+                            message = "PNG cICP RGB profile semantics are not applied to grayscale samples",
+                            severity = PngDiagnosticSeverity.REFUSAL,
+                        ),
+                    ),
+                )
+            }
         }
 
         private fun isSupportedColorDepth(colorType: Int, bitDepth: Int): Boolean =
@@ -557,6 +609,18 @@ public class PngCodec private constructor(
         val transparency: Transparency?,
         val iccProfile: SkcmsICCProfile?,
     )
+
+    private data class CicpResolution(
+        val profile: SkcmsICCProfile?,
+        val diagnostics: List<PngDiagnostic>,
+    )
+}
+
+/** Typed open result for callers that need an explicit static-PNG refusal diagnostic. */
+public sealed interface PngCodecOpenResult {
+    public data class Success(public val codec: PngCodec) : PngCodecOpenResult
+
+    public data class Failure(public val diagnostic: PngDiagnostic) : PngCodecOpenResult
 }
 
 public class PngKotlinDecoderProvider : CodecDecoderProvider {
