@@ -24,12 +24,15 @@
 ### Task 1: Add a layer-plan boundary and promote finite bounds
 
 **Files:**
+- Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/canvas/DisplayOp.kt:64-70`
+- Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/canvas/Canvas.kt:214-218`
 - Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPURenderer.kt:109-113,530-590`
 - Modify: `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUSaveLayerCompositeRegressionTest.kt`
 
 **Interfaces:**
 - Produces: private file-level `LayerPlan`, `LayerBounds`, `BackdropPlan`, and `SceneTargetFrame(label, hasContent, plan)` data types; their only behavioral use remains in `renderViaGpu`.
 - Produces: `classifyLayerRequest(rec: SaveLayerRec): LayerPlan` local to `renderViaGpu`.
+- Produces: `DisplayOp.BeginLayer(rec: SaveLayerRec, transform: Matrix33)` so the dispatcher can map bounds to device space.
 - Consumes: `GPUBackendRawUniformDraw.scissorX/scissorY/scissorWidth/scissorHeight` and `drawCompositePass`.
 
 - [ ] **Step 1: Write the failing bounded-layer tests**
@@ -58,6 +61,32 @@ fun `empty bounded saveLayer leaves parent untouched`() {
     }
     assertCheckerboard(result.pixels)
     assertEquals(0, result.diagnostics.fatalCount)
+}
+
+@Test
+fun `transformed bounded saveLayer maps local bounds to device space`() {
+    val result = renderSurface(12, 12) {
+        drawRect(Rect(0f, 0f, 12f, 12f), Paint(color = white.toColor(), antiAlias = false))
+        translate(4f, 3f)
+        saveLayer(Rect(0f, 0f, 4f, 4f))
+        drawRect(Rect(0f, 0f, 8f, 8f), Paint(color = translucentRed.toColor(), antiAlias = false))
+        restore()
+    }
+    assertPixelNear(result.pixels, 3, 3, white, 0)
+    assertPixelNear(result.pixels, 5, 4, sourceOver(white, translucentRed), 2)
+    assertPixelNear(result.pixels, 9, 4, white, 0)
+}
+
+@Test
+fun `non finite bounded saveLayer leaves parent and reports exact refusal`() {
+    val result = renderSurface(8, 8) {
+        drawCheckerboardRoot()
+        saveLayer(Rect(Float.NaN, 0f, 4f, 4f))
+        drawRect(Rect(0f, 0f, 8f, 8f), Paint(color = translucentRed.toColor(), antiAlias = false))
+        restore()
+    }
+    assertCheckerboard(result.pixels)
+    assertFatalReason(result, "unsupported.layer.bounds.non_finite")
 }
 ```
 
@@ -93,7 +122,7 @@ data class BackdropPlan(
 )
 ```
 
-Implement `classifyLayerRequest` so `rec.bounds` is mapped to finite device coordinates, intersected with `0 until width` and `0 until height`, and returned as `Supported(bounds, LayerCompositePlan())`. Return `Refused("unsupported.layer.bounds.non_finite")` for non-finite inputs. Replace the existing `bounds != null` refusal with this classifier.
+Extend `DisplayOp.BeginLayer` with `transform: Matrix33`; have `Canvas.saveLayer(rec)` append `DisplayOp.BeginLayer(rec, currentTransform)`. Implement `classifyLayerRequest` so `rec.bounds` is mapped through `op.transform` by its four corners, rejected when any mapped corner is non-finite, intersected with `0 until width` and `0 until height`, and returned as `Supported(bounds, LayerCompositePlan())`. Return `Refused("unsupported.layer.bounds.non_finite")` for non-finite inputs. Replace the existing `bounds != null` refusal with this classifier.
 
 Add a `layerScissor(plan)` helper that returns the plan bounds or the full surface. Use it for the child render target's composite draw and for the child-to-parent `drawCompositePass` at `EndLayer`. Keep the texture full surface; do not change geometry coordinate systems.
 
