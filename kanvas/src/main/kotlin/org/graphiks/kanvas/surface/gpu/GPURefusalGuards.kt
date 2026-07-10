@@ -8,6 +8,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialKind
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRenderRecorder
+import org.graphiks.kanvas.gpu.renderer.filters.NormalizedMaskFilter
 
 internal fun GPUBackendRenderRecorder.textureDimensionsRefusalReasonOrNull(
     width: Int,
@@ -29,6 +30,19 @@ internal fun NormalizedDrawCommand.fillGuardRefusalReasonOrNull(): String? {
     strokeRefusalReasonOrNull()?.let { return it }
     if (this is NormalizedDrawCommand.DrawTextRun) return null
     val material = this.material
+    val maskBlur = when (this) {
+        is NormalizedDrawCommand.FillRect -> maskFilter as? NormalizedMaskFilter.Blur
+        is NormalizedDrawCommand.FillRRect -> maskFilter as? NormalizedMaskFilter.Blur
+        is NormalizedDrawCommand.FillPath -> maskFilter as? NormalizedMaskFilter.Blur
+        else -> null
+    }
+    if (maskBlur != null && maskBlur.sigma != 0f) {
+        return if (material is GPUMaterialDescriptor.SolidColor) {
+            "unsupported.mask-filter.blur.executor_unavailable"
+        } else {
+            "unsupported.mask-filter.blur.material.${material.kind.name}"
+        }
+    }
     val acceptedByDispatch = this is NormalizedDrawCommand.FillRect ||
         this is NormalizedDrawCommand.FillPath
     if (material !is GPUMaterialDescriptor.SolidColor &&
