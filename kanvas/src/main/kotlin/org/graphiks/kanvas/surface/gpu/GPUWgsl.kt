@@ -30,11 +30,17 @@ internal val RECT_AA_WGSL: String = """
     @group(0) @binding(0) var<uniform> uniforms: Uniforms;
 
     fn rect_cov(coord: vec2f, bounds: vec4f) -> f32 {
-        let half = vec2f(0.5 * (bounds.z - bounds.x), 0.5 * (bounds.w - bounds.y));
-        let centre = vec2f(0.5 * (bounds.x + bounds.z), 0.5 * (bounds.y + bounds.w));
-        let d = abs(coord - centre) - half;
-        let sdf = max(d.x, d.y);
-        return clamp(0.5 - sdf, 0.0, 1.0);
+        let pixelMin = coord - vec2f(0.5);
+        let pixelMax = coord + vec2f(0.5);
+        let overlap = max(min(pixelMax, bounds.zw) - max(pixelMin, bounds.xy), vec2f(0.0));
+        return min(overlap.x, 1.0) * min(overlap.y, 1.0);
+    }
+
+    fn srgb_to_linear(channel: f32) -> f32 {
+        if (channel <= 0.04045) {
+            return channel / 12.92;
+        }
+        return pow((channel + 0.055) / 1.055, 2.4);
     }
 
     @vertex
@@ -47,7 +53,7 @@ internal val RECT_AA_WGSL: String = """
     @fragment
     fn fs_main(@builtin(position) coord: vec4f) -> @location(0) vec4f {
         let cov = select(rect_cov(coord.xy, uniforms.bounds), 1.0, uniforms.antiAlias == 0u);
-        return vec4f(uniforms.color.rgb * cov, uniforms.color.a * cov);
+        return vec4f(uniforms.color.rgb * srgb_to_linear(cov), uniforms.color.a * cov);
     }
 """.trimIndent()
 
