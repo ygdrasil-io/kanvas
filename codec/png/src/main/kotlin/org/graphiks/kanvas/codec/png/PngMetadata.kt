@@ -422,6 +422,12 @@ private class PngMetadataBuilder(
             PngChromaticity(u16(payload.start + 4), u16(payload.start + 6)),
             PngChromaticity(u16(payload.start + 8), u16(payload.start + 10)),
         )
+        if (primaries[0].x < maxOf(primaries[1].x, primaries[2].x) || primaries[1].y < primaries[2].y) {
+            abort(
+                "primaries.order",
+                "mDCV primaries must place the greatest x first and the greatest remaining y second",
+            )
+        }
         return PngMasteringDisplayColorVolumeMetadata(
             primaries = immutableList(primaries),
             whitePoint = PngChromaticity(u16(payload.start + 12), u16(payload.start + 14)),
@@ -915,7 +921,11 @@ private class PngMetadataBuilder(
             }
         }
         reserveDecoded((end - start).toLong())
-        return requireActivePayload().asciiString(start, end - start)
+        val tag = requireActivePayload().asciiString(start, end - start)
+        if (!tag.isWellFormedBcp47LanguageTag()) {
+            abort("language.invalid", "iTXt language tag is not well-formed BCP 47 syntax")
+        }
+        return tag
     }
 
     private fun utf8(start: Int, end: Int): String {
@@ -1084,6 +1094,123 @@ private class MetadataBudget(maximumBytes: Int) {
     }
 }
 
+private fun String.isWellFormedBcp47LanguageTag(): Boolean {
+    if (isEmpty()) return true
+    if (RFC5646_GRANDFATHERED_TAGS.any { equals(it, ignoreCase = true) }) return true
+
+    val scanner = LanguageSubtagScanner(this)
+    if (scanner.isPrivateUseSingleton()) return scanner.consumePrivateUse()
+
+    val languageLength = scanner.length
+    if (languageLength !in 2..8 || !scanner.isAlpha()) return false
+    scanner.advance()
+
+    if (languageLength <= 3) {
+        var extlangCount = 0
+        while (extlangCount < 3 && scanner.length == 3 && scanner.isAlpha()) {
+            scanner.advance()
+            extlangCount++
+        }
+    }
+    if (scanner.length == 4 && scanner.isAlpha()) scanner.advance()
+    if ((scanner.length == 2 && scanner.isAlpha()) || (scanner.length == 3 && scanner.isDigit())) {
+        scanner.advance()
+    }
+
+    val variants = HashSet<Long>()
+    while (scanner.isVariant()) {
+        if (!variants.add(scanner.caseInsensitiveKey())) return false
+        scanner.advance()
+    }
+
+    val extensionSingletons = BooleanArray(36)
+    while (scanner.isExtensionSingleton()) {
+        val singleton = scanner.singletonIndex()
+        if (extensionSingletons[singleton]) return false
+        extensionSingletons[singleton] = true
+        scanner.advance()
+
+        var subtagCount = 0
+        while (scanner.length in 2..8 && scanner.isAlphaNumeric()) {
+            scanner.advance()
+            subtagCount++
+        }
+        if (subtagCount == 0) return false
+    }
+
+    return when {
+        scanner.isPrivateUseSingleton() -> scanner.consumePrivateUse()
+        else -> !scanner.hasCurrent
+    }
+}
+
+private class LanguageSubtagScanner(private val tag: String) {
+    private var start: Int = 0
+    private var end: Int = tag.indexOf('-').let { if (it >= 0) it else tag.length }
+
+    val hasCurrent: Boolean
+        get() = start >= 0
+
+    val length: Int
+        get() = if (hasCurrent) end - start else -1
+
+    fun advance() {
+        if (!hasCurrent) return
+        if (end == tag.length) {
+            start = -1
+            end = -1
+            return
+        }
+        start = end + 1
+        end = tag.indexOf('-', start).let { if (it >= 0) it else tag.length }
+    }
+
+    fun isAlpha(): Boolean = hasCurrent && (start until end).all { tag[it].isAsciiAlpha() }
+
+    fun isDigit(): Boolean = hasCurrent && (start until end).all { tag[it] in '0'..'9' }
+
+    fun isAlphaNumeric(): Boolean = hasCurrent && (start until end).all { tag[it].isAsciiAlphaNumeric() }
+
+    fun isVariant(): Boolean = isAlphaNumeric() &&
+        (length in 5..8 || (length == 4 && tag[start] in '0'..'9'))
+
+    fun isPrivateUseSingleton(): Boolean = length == 1 && (tag[start] == 'x' || tag[start] == 'X')
+
+    fun isExtensionSingleton(): Boolean = length == 1 && tag[start].isAsciiAlphaNumeric() &&
+        !isPrivateUseSingleton()
+
+    fun singletonIndex(): Int {
+        val value = tag[start]
+        return if (value in '0'..'9') value - '0' else value.asciiLowercase() - 'a' + 10
+    }
+
+    fun caseInsensitiveKey(): Long {
+        var key = 0L
+        for (index in start until end) {
+            val value = tag[index]
+            val digit = if (value in '0'..'9') value - '0' + 1 else value.asciiLowercase() - 'a' + 11
+            key = key * 37L + digit
+        }
+        return key
+    }
+
+    fun consumePrivateUse(): Boolean {
+        advance()
+        if (!hasCurrent) return false
+        while (hasCurrent) {
+            if (length !in 1..8 || !isAlphaNumeric()) return false
+            advance()
+        }
+        return true
+    }
+}
+
+private fun Char.isAsciiAlpha(): Boolean = this in 'A'..'Z' || this in 'a'..'z'
+
+private fun Char.isAsciiAlphaNumeric(): Boolean = isAsciiAlpha() || this in '0'..'9'
+
+private fun Char.asciiLowercase(): Char = if (this in 'A'..'Z') this + ('a' - 'A') else this
+
 private fun <T> immutableList(values: List<T>): List<T> = Collections.unmodifiableList(ArrayList(values))
 
 private const val KEYWORD_MAX_BYTES: Int = 79
@@ -1092,6 +1219,35 @@ private const val HISTOGRAM_ENTRY_BUDGET_BYTES: Long = 16L
 private const val SUGGESTED_PALETTE_ENTRY_BUDGET_BYTES: Long = 48L
 private const val TRANSPARENCY_ENTRY_BUDGET_BYTES: Long = 16L
 private const val INDEXED_COLOR_TYPE: Int = 3
+// Closed grandfathered production from RFC 5646 section 2.1, not an IANA registry snapshot.
+private val RFC5646_GRANDFATHERED_TAGS: Set<String> = setOf(
+    "art-lojban",
+    "cel-gaulish",
+    "en-gb-oed",
+    "i-ami",
+    "i-bnn",
+    "i-default",
+    "i-enochian",
+    "i-hak",
+    "i-klingon",
+    "i-lux",
+    "i-mingo",
+    "i-navajo",
+    "i-pwn",
+    "i-tao",
+    "i-tay",
+    "i-tsu",
+    "no-bok",
+    "no-nyn",
+    "sgn-be-fr",
+    "sgn-be-nl",
+    "sgn-ch-de",
+    "zh-guoyu",
+    "zh-hakka",
+    "zh-min",
+    "zh-min-nan",
+    "zh-xiang",
+)
 private val STRUCTURAL_SINGLETON_TYPES: Set<String> = setOf(
     "iCCP",
     "sRGB",

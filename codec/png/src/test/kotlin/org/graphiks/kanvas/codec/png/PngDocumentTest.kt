@@ -264,6 +264,28 @@ class PngDocumentTest {
     }
 
     @Test
+    fun `critical impact keeps source metadata when ancillary edits cannot produce output`() {
+        val source = png(
+            "IHDR" to ihdr(),
+            "tEXt" to textChunk("Title", "Original"),
+            "IDAT" to byteArrayOf(0x20),
+            "IEND" to ByteArray(0),
+        )
+        val sourceDocument = open(source)
+
+        val edited = sourceDocument
+            .markPixelDataChanged()
+            .withAncillaryChunk("tEXt", textChunk("Title", "Updated"))
+        val saved = edited.save()
+
+        assertEquals(PngWriteImpact.CRITICAL, edited.writePlan.impact)
+        assertEquals("Original", resolved(edited.tEXt.single()).text)
+        assertEquals(sourceDocument.tEXt.single().record, edited.tEXt.single().record)
+        assertEquals(PngDocumentSaveStatus.REFUSED, saved.status)
+        assertNull(saved.outputBytes)
+    }
+
+    @Test
     fun `critical refusal reports every explicitly planned removal ordinal`() {
         val source = png(
             "IHDR" to ihdr(),
@@ -935,6 +957,83 @@ class PngDocumentTest {
                 (document.iTXt.single() as PngMetadataValue.Refused).diagnostic.code,
             )
             assertArrayEquals(source, document.save().bytes)
+        }
+    }
+
+    @Test
+    fun `iTXt accepts well formed BCP47 language tags`() {
+        val languageTags = listOf("en", "en-GB", "x-private", "en-x-private", "ar-AE-u-nu-latn")
+
+        for (languageTag in languageTags) {
+            val source = png(
+                "IHDR" to ihdr(),
+                "iTXt" to internationalTextChunk("Title", languageTag, "", "text"),
+                "IDAT" to byteArrayOf(0x10),
+                "IEND" to ByteArray(0),
+            )
+
+            assertEquals(languageTag, resolved(open(source).iTXt.single()).languageTag)
+        }
+    }
+
+    @Test
+    fun `iTXt rejects malformed BCP47 language tags with stable diagnostic`() {
+        val languageTags = listOf(
+            "en--US",
+            "-en",
+            "en-",
+            "en-a",
+            "en-a-foo-A-bar",
+            "sl-rozaj-rozaj",
+        )
+
+        for (languageTag in languageTags) {
+            val source = png(
+                "IHDR" to ihdr(),
+                "iTXt" to internationalTextChunk("Title", languageTag, "", "text"),
+                "IDAT" to byteArrayOf(0x10),
+                "IEND" to ByteArray(0),
+            )
+            val metadata = open(source).iTXt.single()
+
+            assertInstanceOf(PngMetadataValue.Refused::class.java, metadata, languageTag)
+            assertEquals(
+                "png.metadata.iTXt.language.invalid",
+                (metadata as PngMetadataValue.Refused).diagnostic.code,
+                languageTag,
+            )
+        }
+    }
+
+    @Test
+    fun `mDCV rejects non normative primary order with stable diagnostic`() {
+        val normative = masteringDisplay()
+        val outOfOrderPrimaries = listOf(
+            normative.copyOf().also { payload ->
+                normative.copyInto(payload, destinationOffset = 0, startIndex = 4, endIndex = 8)
+                normative.copyInto(payload, destinationOffset = 4, startIndex = 0, endIndex = 4)
+            },
+            normative.copyOf().also { payload ->
+                normative.copyInto(payload, destinationOffset = 4, startIndex = 8, endIndex = 12)
+                normative.copyInto(payload, destinationOffset = 8, startIndex = 4, endIndex = 8)
+            },
+        )
+
+        for (payload in outOfOrderPrimaries) {
+            val source = png(
+                "IHDR" to ihdr(),
+                "cICP" to byteArrayOf(1, 13, 0, 1),
+                "mDCV" to payload,
+                "IDAT" to byteArrayOf(0x10),
+                "IEND" to ByteArray(0),
+            )
+            val metadata = requireNotNull(open(source).mDCV)
+
+            assertInstanceOf(PngMetadataValue.Refused::class.java, metadata)
+            assertEquals(
+                "png.metadata.mDCV.primaries.order",
+                (metadata as PngMetadataValue.Refused).diagnostic.code,
+            )
         }
     }
 

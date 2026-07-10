@@ -17,10 +17,12 @@ public class PngDocument private constructor(
     private val container: PngContainer,
     private val limits: PngContainerLimits,
     /**
-     * Typed metadata for the bytes that [save] will emit for the current write plan.
+     * Typed metadata for the current materialized PNG view.
      *
-     * With an ancillary write plan, metadata records and diagnostics reference
-     * the planned output rather than [originalBytes].
+     * [PngWriteImpact.NONE] describes the source bytes. [PngWriteImpact.ANCILLARY]
+     * describes the projected output that [save] will emit. [PngWriteImpact.CRITICAL]
+     * produces no output, so pending edits are not projected and this remains the
+     * source or last materialized metadata view.
      */
     public val metadata: PngMetadata,
     public val writePlan: PngWritePlan,
