@@ -1,6 +1,8 @@
 package org.graphiks.kanvas.color.icc
 
 import org.graphiks.math.SkcmsTransferFunction
+import kotlin.math.abs
+import kotlin.math.max
 import kotlin.math.pow
 
 public sealed interface IccCurve {
@@ -16,39 +18,16 @@ internal class ParametricIccCurve(functionType: Int, parameters: FloatArray) : I
     private val values: FloatArray = parameters.copyOf()
 
     init {
-        require(type in PARAMETER_COUNTS.indices) { "ICC parametric curve type must be in 0..4" }
-        require(values.size == PARAMETER_COUNTS[type]) { "Wrong parameter count for ICC parametric curve type $type" }
-        require(values.all(Float::isFinite)) { "ICC parametric curve parameters must be finite" }
-        require(values[0] > 0f) { "ICC parametric curve gamma must be positive" }
-        if (type >= 1) require(values[1] > 0f) { "ICC parametric curve scale must be positive" }
+        require(parametricCurveValidationError(type, values) == null) { "Invalid ICC parametric curve" }
     }
 
     override fun evaluate(encoded: Float): Float {
-        val x = encoded.coerceIn(0f, 1f)
-        val g = values[0]
-        return when (type) {
-            0 -> x.pow(g)
-            1 -> if (x >= -values[2] / values[1]) (values[1] * x + values[2]).pow(g) else 0f
-            2 -> if (x >= -values[2] / values[1]) {
-                (values[1] * x + values[2]).pow(g) + values[3]
-            } else {
-                values[3]
-            }
-            3 -> if (x >= values[4]) {
-                (values[1] * x + values[2]).pow(g)
-            } else {
-                values[3] * x
-            }
-            else -> if (x >= values[4]) {
-                (values[1] * x + values[2]).pow(g) + values[3]
-            } else {
-                values[5] * x + values[6]
-            }
-        }
+        val x = encoded.finiteUnitValue()
+        return rawParametricEvaluation(type, values, x).coerceIn(0f, 1f)
     }
 
     override fun inverse(linear: Float): Float {
-        val y = linear.coerceIn(0f, 1f)
+        val y = linear.finiteUnitValue()
         val g = values[0]
         val result = when (type) {
             0 -> y.pow(1f / g)
@@ -63,13 +42,13 @@ internal class ParametricIccCurve(functionType: Int, parameters: FloatArray) : I
                 }
             }
             else -> {
-                val lowerLimit = values[5] * values[4] + values[6]
-                if (y < lowerLimit && values[5] != 0f) (y - values[6]) / values[5] else {
-                    ((y - values[3]).coerceAtLeast(0f).pow(1f / g) - values[2]) / values[1]
+                val lowerLimit = values[3] * values[4] + values[6]
+                if (y < lowerLimit && values[3] != 0f) (y - values[6]) / values[3] else {
+                    ((y - values[5]).coerceAtLeast(0f).pow(1f / g) - values[2]) / values[1]
                 }
             }
         }
-        return result.coerceIn(0f, 1f)
+        return if (result.isFinite()) result.coerceIn(0f, 1f) else 0f
     }
 
     fun toTransferFunction(): SkcmsTransferFunction = when (type) {
@@ -79,18 +58,12 @@ internal class ParametricIccCurve(functionType: Int, parameters: FloatArray) : I
             values[0], values[1], values[2], 0f, -values[2] / values[1], values[3], values[3],
         )
         3 -> SkcmsTransferFunction(values[0], values[1], values[2], values[3], values[4], 0f, 0f)
-        else -> SkcmsTransferFunction(
-            values[0], values[1], values[2], values[5], values[4], values[3], values[6],
-        )
-    }
-
-    private companion object {
-        val PARAMETER_COUNTS: IntArray = intArrayOf(1, 3, 4, 5, 7)
+        else -> SkcmsTransferFunction(values[0], values[1], values[2], values[3], values[4], values[5], values[6])
     }
 }
 
 internal class SampledIccCurve(samples: FloatArray) : IccCurve {
-    private val values: FloatArray = samples.copyOf()
+    private val values: FloatArray = samples.boundedSampleCopy()
 
     init {
         require(values.size >= 2) { "A sampled ICC curve requires at least two samples" }
@@ -101,7 +74,7 @@ internal class SampledIccCurve(samples: FloatArray) : IccCurve {
     }
 
     override fun evaluate(encoded: Float): Float {
-        val position = encoded.coerceIn(0f, 1f) * (values.size - 1)
+        val position = encoded.finiteUnitValue() * (values.size - 1)
         val lower = position.toInt().coerceAtMost(values.lastIndex)
         val upper = (lower + 1).coerceAtMost(values.lastIndex)
         val weight = position - lower
@@ -109,7 +82,8 @@ internal class SampledIccCurve(samples: FloatArray) : IccCurve {
     }
 
     override fun inverse(linear: Float): Float {
-        val y = linear.coerceIn(values.first(), values.last())
+        val finiteLinear = if (linear.isFinite()) linear else values.first()
+        val y = finiteLinear.coerceIn(values.first(), values.last())
         var low = 0
         var high = values.lastIndex
         while (low < high) {
@@ -124,3 +98,91 @@ internal class SampledIccCurve(samples: FloatArray) : IccCurve {
         return (lower + weight) / (values.size - 1)
     }
 }
+
+private fun FloatArray.boundedSampleCopy(): FloatArray {
+    require(size <= MAX_DIRECT_SAMPLED_CURVE_ENTRIES) { "Sampled ICC curve is too large" }
+    return copyOf()
+}
+
+internal fun parametricCurveValidationError(type: Int, values: FloatArray): String? {
+    if (type !in PARAMETRIC_PARAMETER_COUNTS.indices) return "function type"
+    if (values.size != PARAMETRIC_PARAMETER_COUNTS[type]) return "parameter count"
+    if (!values.all(Float::isFinite)) return "non-finite parameter"
+    if (values[0] <= 0f) return "gamma"
+    if (type >= 1 && values[1] <= 0f) return "nonlinear scale"
+
+    val threshold = when (type) {
+        0 -> 0f
+        1, 2 -> -values[2] / values[1]
+        else -> values[4]
+    }
+    if (!threshold.isFinite()) return "threshold"
+    if (type >= 3 && threshold !in 0f..1f) return "threshold range"
+    if (type >= 3 && values[3] < 0f) return "lower slope"
+
+    if (type >= 1) {
+        val nonlinearStart = max(0f, threshold)
+        if (nonlinearStart <= 1f && values[1] * nonlinearStart + values[2] < -CURVE_VALUE_TOLERANCE) {
+            return "undefined nonlinear branch"
+        }
+    }
+
+    if (threshold in 0f..1f && type != 0) {
+        val lower = when (type) {
+            1 -> 0f
+            2 -> values[3]
+            3 -> values[3] * threshold
+            else -> values[3] * threshold + values[6]
+        }
+        val upper = when (type) {
+            1 -> 0f
+            2 -> values[3]
+            3 -> (values[1] * threshold + values[2]).coerceAtLeast(0f).pow(values[0])
+            else -> (values[1] * threshold + values[2]).coerceAtLeast(0f).pow(values[0]) + values[5]
+        }
+        if (!lower.isFinite() || !upper.isFinite() || abs(lower - upper) > CURVE_VALUE_TOLERANCE) {
+            return "discontinuous branch"
+        }
+    }
+
+    val start = rawParametricEvaluation(type, values, 0f)
+    val end = rawParametricEvaluation(type, values, 1f)
+    if (!start.isFinite() || !end.isFinite()) return "non-finite evaluation"
+    if (start < -CURVE_VALUE_TOLERANCE || end > 1f + CURVE_VALUE_TOLERANCE || end <= start) {
+        return "non-monotonic range"
+    }
+    return null
+}
+
+private fun rawParametricEvaluation(type: Int, values: FloatArray, x: Float): Float {
+    val g = values[0]
+    return when (type) {
+        0 -> x.pow(g)
+        1 -> if (x >= -values[2] / values[1]) {
+            (values[1] * x + values[2]).coerceAtLeast(0f).pow(g)
+        } else {
+            0f
+        }
+        2 -> if (x >= -values[2] / values[1]) {
+            (values[1] * x + values[2]).coerceAtLeast(0f).pow(g) + values[3]
+        } else {
+            values[3]
+        }
+        3 -> if (x >= values[4]) {
+            (values[1] * x + values[2]).coerceAtLeast(0f).pow(g)
+        } else {
+            values[3] * x
+        }
+        else -> if (x >= values[4]) {
+            (values[1] * x + values[2]).coerceAtLeast(0f).pow(g) + values[5]
+        } else {
+            values[3] * x + values[6]
+        }
+    }
+}
+
+private fun Float.finiteUnitValue(): Float = if (isFinite()) coerceIn(0f, 1f) else 0f
+
+private const val CURVE_VALUE_TOLERANCE: Float = 1f / 1024f
+private const val MAX_DIRECT_SAMPLED_CURVE_ENTRIES: Int = 65_536
+private val PARAMETRIC_PARAMETER_COUNTS: IntArray = intArrayOf(1, 3, 4, 5, 7)

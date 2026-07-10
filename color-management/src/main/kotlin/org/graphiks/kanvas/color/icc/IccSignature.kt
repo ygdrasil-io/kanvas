@@ -23,6 +23,9 @@ public value class IccSignature(public val value: Int) {
         public val XYZ_TYPE: IccSignature = XYZ
         public val CURVE_TYPE: IccSignature = IccSignature(0x63757276)
         public val PARAMETRIC_CURVE_TYPE: IccSignature = IccSignature(0x70617261)
+        public val MULTI_LOCALIZED_UNICODE_TYPE: IccSignature = IccSignature(0x6d6c7563)
+        public val TEXT_TYPE: IccSignature = IccSignature(0x74657874)
+        public val DESCRIPTION_TYPE: IccSignature = IccSignature(0x64657363)
 
         public val R_XYZ: IccSignature = IccSignature(0x7258595a)
         public val G_XYZ: IccSignature = IccSignature(0x6758595a)
@@ -32,6 +35,8 @@ public value class IccSignature(public val value: Int) {
         public val B_TRC: IccSignature = IccSignature(0x62545243)
         public val K_TRC: IccSignature = IccSignature(0x6b545243)
         public val DESCRIPTION: IccSignature = IccSignature(0x64657363)
+        public val COPYRIGHT: IccSignature = IccSignature(0x63707274)
+        public val WHITE_POINT: IccSignature = IccSignature(0x77747074)
     }
 }
 
@@ -59,4 +64,9 @@ internal class IccBigEndianReader(
     fun signature(offset: Int): IccSignature = IccSignature(u32(offset).toInt())
 
     fun s15Fixed16(offset: Int): Float = u32(offset).toInt() / 65536f
+
+    fun isZero(offset: Int, size: Int): Boolean {
+        check(hasRange(offset.toLong(), size.toLong()))
+        return (offset until offset + size).all { bytes[it] == 0.toByte() }
+    }
 }

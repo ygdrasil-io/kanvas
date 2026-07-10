@@ -52,11 +52,15 @@ private class Parser(
     private val inputReader = IccBigEndianReader(bytes, bytes.size)
     private lateinit var reader: IccBigEndianReader
     private var profileSize: Int = 0
+    private var majorVersion: Int = 0
+    private var profileClass: IccSignature = IccSignature(0)
+    private var dataColorSpace: IccSignature = IccSignature(0)
 
     fun parse(): ColorProfileParseResult {
         parseHeader()
         val tags = parseTagTable()
-        val profile = when (reader.signature(DATA_COLOR_SPACE_OFFSET)) {
+        validateCommonRequiredTags(tags)
+        val profile = when (dataColorSpace) {
             IccSignature.RGB -> parseRgb(tags)
             IccSignature.GRAY -> parseGray(tags)
             else -> abort("icc.header.color-space", "Only RGB and GRAY ICC profiles are supported")
@@ -66,8 +70,8 @@ private class Parser(
 
     private fun parseHeader() {
         val declaredSize = inputReader.u32(PROFILE_SIZE_OFFSET)
-        if (declaredSize < HEADER_AND_COUNT_SIZE || declaredSize > bytes.size.toLong()) {
-            abort("icc.header.size", "Declared ICC profile size is outside the input")
+        if (declaredSize != bytes.size.toLong() || declaredSize < HEADER_AND_COUNT_SIZE) {
+            abort("icc.header.size", "Declared ICC profile size must exactly match the input")
         }
         if (declaredSize > limits.maxBytes.toLong()) {
             abort("icc.limit.bytes", "Declared ICC profile size exceeds maxBytes")
@@ -78,13 +82,31 @@ private class Parser(
         if (reader.signature(HEADER_SIGNATURE_OFFSET) != IccSignature.ACSP) {
             abort("icc.header.signature", "ICC header signature is not acsp")
         }
-        val majorVersion = bytes[VERSION_OFFSET].toInt() and 0xff
-        if (majorVersion != 2 && majorVersion != 4) {
+        majorVersion = bytes[VERSION_OFFSET].toInt() and 0xff
+        val minorVersion = bytes[VERSION_OFFSET + 1].toInt() ushr 4 and 0x0f
+        val bugfixVersion = bytes[VERSION_OFFSET + 1].toInt() and 0x0f
+        if ((majorVersion != 2 && majorVersion != 4) ||
+            minorVersion > 4 || bugfixVersion > 9 ||
+            !reader.isZero(VERSION_OFFSET + 2, 2)
+        ) {
             abort("icc.header.version", "Only ICC major versions 2 and 4 are supported")
         }
-        when (reader.signature(PROFILE_CLASS_OFFSET)) {
-            IccSignature.INPUT_CLASS, IccSignature.DISPLAY_CLASS, IccSignature.OUTPUT_CLASS -> Unit
-            else -> abort("icc.header.class", "ICC profile class is not a matrix/TRC device class")
+        if (!reader.isZero(HEADER_RESERVED_OFFSET, HEADER_RESERVED_SIZE)) {
+            abort("icc.header.reserved", "ICC header reserved bytes must be zero")
+        }
+
+        profileClass = reader.signature(PROFILE_CLASS_OFFSET)
+        dataColorSpace = reader.signature(DATA_COLOR_SPACE_OFFSET)
+        when (dataColorSpace) {
+            IccSignature.RGB -> if (profileClass != IccSignature.INPUT_CLASS && profileClass != IccSignature.DISPLAY_CLASS) {
+                abort("icc.header.class", "RGB matrix/TRC profiles must be input or display class")
+            }
+            IccSignature.GRAY -> if (profileClass != IccSignature.INPUT_CLASS &&
+                profileClass != IccSignature.DISPLAY_CLASS && profileClass != IccSignature.OUTPUT_CLASS
+            ) {
+                abort("icc.header.class", "GRAY matrix/TRC profile class is unsupported")
+            }
+            else -> abort("icc.header.color-space", "Only RGB and GRAY ICC profiles are supported")
         }
         if (reader.signature(PCS_OFFSET) != IccSignature.XYZ) {
             abort("icc.header.pcs", "Only XYZ profile connection space is supported")
@@ -128,7 +150,57 @@ private class Parser(
             }
             tags[signature] = TagRecord(offset.toInt(), size.toInt())
         }
+        validateTagLayout(tags.values, tableEnd.toInt())
+        tags.values.distinct().forEach { tag ->
+            if (!reader.isZero(tag.offset + 4, 4)) {
+                abort("icc.tag.reserved", "ICC tag type reserved bytes must be zero")
+            }
+        }
         return tags
+    }
+
+    private fun validateTagLayout(tags: Collection<TagRecord>, tableEnd: Int) {
+        val ranges = tags.distinct().sortedBy(TagRecord::offset)
+        if (ranges.isEmpty() || ranges.first().offset != tableEnd) {
+            abort("icc.profile.envelope", "First ICC tag data must immediately follow the tag table")
+        }
+        var expectedOffset = tableEnd.toLong()
+        ranges.forEach { tag ->
+            if (tag.offset.toLong() < expectedOffset) {
+                abort("icc.tag.overlap", "ICC tag data ranges partially overlap")
+            }
+            if (tag.offset.toLong() > expectedOffset) {
+                abort("icc.profile.envelope", "ICC profile contains unexplained bytes between tag elements")
+            }
+            expectedOffset = align4(tag.offset.toLong() + tag.size.toLong())
+        }
+        if (expectedOffset != profileSize.toLong()) {
+            abort("icc.profile.envelope", "ICC profile has bytes outside its tag data envelope")
+        }
+    }
+
+    private fun validateCommonRequiredTags(tags: Map<IccSignature, TagRecord>) {
+        val description = requiredTag(tags, IccSignature.DESCRIPTION)
+        val copyright = requiredTag(tags, IccSignature.COPYRIGHT)
+        parseXyzTag(requiredTag(tags, IccSignature.WHITE_POINT))
+        val expectedDescriptionType = if (majorVersion == 2) {
+            IccSignature.DESCRIPTION_TYPE
+        } else {
+            IccSignature.MULTI_LOCALIZED_UNICODE_TYPE
+        }
+        val expectedCopyrightType = if (majorVersion == 2) {
+            IccSignature.TEXT_TYPE
+        } else {
+            IccSignature.MULTI_LOCALIZED_UNICODE_TYPE
+        }
+        requireTagType(description, expectedDescriptionType, "profile description")
+        requireTagType(copyright, expectedCopyrightType, "copyright")
+    }
+
+    private fun requireTagType(tag: TagRecord, expected: IccSignature, name: String) {
+        if (reader.signature(tag.offset) != expected) {
+            abort("icc.tag.type", "ICC $name tag has an incompatible type")
+        }
     }
 
     private fun parseRgb(tags: Map<IccSignature, TagRecord>): ColorProfile {
@@ -143,13 +215,17 @@ private class Parser(
         val r = parseXyzTag(rXyz)
         val g = parseXyzTag(gXyz)
         val b = parseXyzTag(bXyz)
+        val matrix = SkcmsMatrix3x3.of(
+            r[0], g[0], b[0],
+            r[1], g[1], b[1],
+            r[2], g[2], b[2],
+        )
+        if (!isRepresentableMatrix(matrix)) {
+            abort("icc.profile.matrix", "RGB ICC matrix is non-finite, singular, or not invertible as Float")
+        }
         return ColorProfile(
             colorModel = ColorModel.RGB,
-            toXyzD50 = SkcmsMatrix3x3.of(
-                r[0], g[0], b[0],
-                r[1], g[1], b[1],
-                r[2], g[2], b[2],
-            ),
+            toXyzD50 = matrix,
             transferFunction = transferFunction,
         )
     }
@@ -181,7 +257,10 @@ private class Parser(
     }
 
     private fun parseCurve(tag: TagRecord): IccCurve = when (reader.signature(tag.offset)) {
-        IccSignature.PARAMETRIC_CURVE_TYPE -> parseParametricCurve(tag)
+        IccSignature.PARAMETRIC_CURVE_TYPE -> {
+            if (majorVersion != 4) abort("icc.curve.version", "Parametric ICC curves require a v4 profile")
+            parseParametricCurve(tag)
+        }
         IccSignature.CURVE_TYPE -> parseSampledCurve(tag)
         else -> abort("icc.curve.type", "Unsupported ICC curve tag type")
     }
@@ -191,6 +270,9 @@ private class Parser(
             abort("icc.curve.range", "Parametric ICC curve header is truncated")
         }
         val functionType = reader.u16(tag.offset + 8)
+        if (!reader.isZero(tag.offset + 10, 2)) {
+            abort("icc.tag.reserved", "ICC parametric curve selector reserved bytes must be zero")
+        }
         if (functionType !in PARAMETRIC_PARAMETER_COUNTS.indices) {
             abort("icc.curve.type", "Unsupported ICC parametric curve selector $functionType")
         }
@@ -202,8 +284,9 @@ private class Parser(
         val parameters = FloatArray(parameterCount) { index ->
             reader.s15Fixed16(tag.offset + PARAMETRIC_HEADER_SIZE + index * 4)
         }
-        if (parameters[0] <= 0f || (functionType >= 1 && parameters[1] <= 0f)) {
-            abort("icc.curve.values", "Parametric ICC curve is not monotonic")
+        val validationError = parametricCurveValidationError(functionType, parameters)
+        if (validationError != null) {
+            abort("icc.curve.values", "Invalid parametric ICC curve: $validationError")
         }
         return ParametricIccCurve(functionType, parameters)
     }
@@ -224,14 +307,7 @@ private class Parser(
             if (gamma <= 0f) abort("icc.curve.values", "Sampled ICC gamma must be positive")
             return ParametricIccCurve(0, floatArrayOf(gamma))
         }
-
-        val samples = FloatArray(count) { index ->
-            reader.u16(tag.offset + CURVE_HEADER_SIZE + index * 2) / 65535f
-        }
-        if ((1..samples.lastIndex).any { index -> samples[index - 1] > samples[index] }) {
-            abort("icc.curve.values", "Sampled ICC curve must be monotonic")
-        }
-        return SampledIccCurve(samples)
+        abort("icc.curve.sampled", "Sampled TRCs cannot be represented by the current ColorProfile contract")
     }
 
     private fun commonTransferFunction(vararg curves: IccCurve): SkcmsTransferFunction {
@@ -250,6 +326,33 @@ private class Parser(
         reader.s15Fixed16(offset + 4),
         reader.s15Fixed16(offset + 8),
     )
+
+    private fun isRepresentableMatrix(matrix: SkcmsMatrix3x3): Boolean {
+        val a = matrix[0, 0].toDouble()
+        val b = matrix[0, 1].toDouble()
+        val c = matrix[0, 2].toDouble()
+        val d = matrix[1, 0].toDouble()
+        val e = matrix[1, 1].toDouble()
+        val f = matrix[1, 2].toDouble()
+        val g = matrix[2, 0].toDouble()
+        val h = matrix[2, 1].toDouble()
+        val i = matrix[2, 2].toDouble()
+        val determinant = a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g)
+        if (!determinant.isFinite() || determinant == 0.0) return false
+        val inverseDeterminant = 1.0 / determinant
+        val inverseValues = doubleArrayOf(
+            (e * i - f * h) * inverseDeterminant,
+            (c * h - b * i) * inverseDeterminant,
+            (b * f - c * e) * inverseDeterminant,
+            (f * g - d * i) * inverseDeterminant,
+            (a * i - c * g) * inverseDeterminant,
+            (c * d - a * f) * inverseDeterminant,
+            (d * h - e * g) * inverseDeterminant,
+            (b * g - a * h) * inverseDeterminant,
+            (a * e - b * d) * inverseDeterminant,
+        )
+        return inverseValues.all { it.isFinite() && abs(it) <= Float.MAX_VALUE.toDouble() }
+    }
 }
 
 private data class TagRecord(val offset: Int, val size: Int)
@@ -261,6 +364,8 @@ private class IccParseAbort(
 private fun abort(code: String, message: String): Nothing =
     throw IccParseAbort(ColorProfileParseResult.Failure(code, message))
 
+private fun align4(value: Long): Long = (value + 3L) and -4L
+
 private const val PROFILE_SIZE_OFFSET: Int = 0
 private const val VERSION_OFFSET: Int = 8
 private const val PROFILE_CLASS_OFFSET: Int = 12
@@ -268,10 +373,12 @@ private const val DATA_COLOR_SPACE_OFFSET: Int = 16
 private const val PCS_OFFSET: Int = 20
 private const val HEADER_SIGNATURE_OFFSET: Int = 36
 private const val ILLUMINANT_OFFSET: Int = 68
+private const val HEADER_RESERVED_OFFSET: Int = 100
+private const val HEADER_RESERVED_SIZE: Int = 28
 private const val TAG_COUNT_OFFSET: Int = 128
 private const val HEADER_AND_COUNT_SIZE: Int = 132
 private const val TAG_ENTRY_SIZE: Int = 12
-private const val MIN_TAG_SIZE: Long = 4L
+private const val MIN_TAG_SIZE: Long = 8L
 private const val XYZ_TAG_SIZE: Int = 20
 private const val CURVE_HEADER_SIZE: Int = 12
 private const val PARAMETRIC_HEADER_SIZE: Int = 12
