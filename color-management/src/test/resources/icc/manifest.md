@@ -16,10 +16,23 @@ fixtures; the parser also accepts valid monotone upward parametric gaps.
 | `srgb-matrix-trc.icc` | `4d944a40632a8c62479ad9ab2b56f17e4070ef24de3bb05e169813e78ffe1328` | ICC v4.3 display (`mntr`) | sRGB / XYZ D50 | Synthetic 496-byte matrix/TRC profile with required `desc`, `cprt`, and `wtpt` tags, zero reserved fields, a recomputed MD5 profile ID, and a standards-ordered, exactly continuous ICC `para` type 4 sRGB transfer function. Positive parser fixture. |
 | `display-p3-matrix-trc.icc` | `48786ef9677c1bf7c347e9989c115f80207af0d45f066ad584074dc0d2e789d2` | ICC v4.3 display (`mntr`) | Display P3 / XYZ D50 | Synthetic 496-byte matrix/TRC profile with the same required structural fields, exactly continuous shared TRC, recomputed MD5 profile ID, and `ColorProfiles.displayP3()` matrix. Wide-gamut positive parser fixture. |
 | `invalid-tag-offset.icc` | `bf05cf55525e685173b04cfa2c70a5fa730cbf1648ddd4c60beca727733e59d7` | Deliberately malformed derivative of the synthetic sRGB fixture | RGB / XYZ D50 | The `rXYZ` tag offset was changed from 396 to 500, four bytes beyond the declared 496-byte profile. Negative range-validation fixture. |
+| `rgb-lut-a2b-b2a.icc` | `60a526ef1e47bc6d7e33079c8e5a69241b6df38ee0f82fafb0ff360607fd640a` | ICC v4.3 output (`prtr`) | Synthetic RGB swap / XYZ D50 | Kanvas-authored 26,684-byte CC0 profile with `A2B0` `mft1` and `B2A0` `mft2` routes, required `desc`/`cprt`/`wtpt` tags, contiguous aligned tag elements, zero reserved fields, and a recomputed ICC Profile ID. The A2B route uses sampled sRGB decoding plus an 8-bit CLUT that maps RGB to the D50 XYZ values of BGR. The inverse route uses the PCSXYZ encoding scale, a signed fixed-point inverse matrix, a 16-bit identity CLUT, and 4,096-entry sampled sRGB output tables. |
 
 The synthetic profiles use contiguous four-byte-aligned tag elements. Their
 three TRC signatures exactly share one 40-byte payload; the `para` parameters
 are encoded in ICC order `g,a,b,c,d,e,f` using signed 15.16 fixed point.
+
+The LUT fixture's independent golden vectors are:
+
+| Direction | Input RGBA | Expected RGBA | Tolerance |
+| --- | --- | --- | --- |
+| `mft1` `A2B0`, then matrix/TRC sRGB destination | `[0.25, 0.50, 0.75, alpha]` | `[0.75, 0.50, 0.25, alpha]` | `0.025` per colour channel because the PCS CLUT is 8-bit |
+| matrix/TRC sRGB source, then `mft2` `B2A0` | `[0.25, 0.50, 0.75, alpha]` | `[0.75, 0.50, 0.25, alpha]` | `0.002` per colour channel |
+
+These vectors deliberately rule out an identity transform and clamp-only
+behavior. The profile and vectors were generated from the published sRGB
+transfer equation and the Task 1 D50 sRGB matrix constants; no third-party
+binary, CMM output, or copyrighted profile payload was used.
 
 ## Independent fixtures
 

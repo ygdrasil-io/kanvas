@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.color
 
+import org.graphiks.kanvas.color.icc.IccTransformPipeline
 import org.graphiks.math.SkcmsMatrix3x3
 import org.graphiks.math.SkcmsTransferFunction
 import kotlin.ConsistentCopyVisibility
@@ -32,6 +33,7 @@ public data class ColorProfile private constructor(
     private val matrix: Matrix3x3Value?,
     public val transferFunction: SkcmsTransferFunction? = null,
     public val unsupportedCode: String? = null,
+    private val lut: LutProfileValue? = null,
 ) {
     public constructor(
         colorModel: ColorModel,
@@ -43,6 +45,7 @@ public data class ColorProfile private constructor(
         matrix = toXyzD50?.let(Matrix3x3Value::copyOf),
         transferFunction = transferFunction,
         unsupportedCode = unsupportedCode,
+        lut = null,
     )
 
     /** Returns a fresh matrix copy so callers cannot mutate this profile. */
@@ -52,8 +55,17 @@ public data class ColorProfile private constructor(
     public val hasMatrixTrc: Boolean
         get() = unsupportedCode == null && matrix != null && transferFunction != null
 
-    internal val isSupportedByTask1: Boolean
-        get() = colorModel == ColorModel.RGB && hasMatrixTrc
+    internal val hasLut: Boolean
+        get() = unsupportedCode == null && lut != null
+
+    internal val toPcs: IccTransformPipeline?
+        get() = lut?.toPcs
+
+    internal val fromPcs: IccTransformPipeline?
+        get() = lut?.fromPcs
+
+    internal val isSupportedTransformEndpoint: Boolean
+        get() = colorModel == ColorModel.RGB && (hasMatrixTrc || hasLut)
 
     public companion object {
         /** Creates a profile marker that must cause typed transform refusal. */
@@ -61,8 +73,24 @@ public data class ColorProfile private constructor(
             require(code.isNotBlank()) { "Unsupported profile code must not be blank" }
             return ColorProfile(colorModel = ColorModel.RGB, unsupportedCode = code)
         }
+
+        internal fun lut(
+            toPcs: IccTransformPipeline,
+            fromPcs: IccTransformPipeline,
+        ): ColorProfile = ColorProfile(
+            colorModel = ColorModel.RGB,
+            matrix = null,
+            transferFunction = null,
+            unsupportedCode = null,
+            lut = LutProfileValue(toPcs, fromPcs),
+        )
     }
 }
+
+private data class LutProfileValue(
+    val toPcs: IccTransformPipeline,
+    val fromPcs: IccTransformPipeline,
+)
 
 private data class Matrix3x3Value(
     val r0c0: Float,

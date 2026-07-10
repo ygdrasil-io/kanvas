@@ -6,6 +6,7 @@ import org.graphiks.math.SkcmsMatrix3x3
 import org.graphiks.math.SkcmsTransferFunction
 import kotlin.math.abs
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
@@ -675,6 +676,310 @@ class IccProfileParserTest {
         writeS15Fixed16(bytes, original.size + 12, 2.2f)
 
         assertFailure("icc.profile.trc", bytes)
+    }
+
+    @Test
+    fun `three dimensional clut interpolates at cube center`() {
+        val clut = IccClut(
+            inputChannels = 3,
+            outputChannels = 3,
+            gridPoints = intArrayOf(2, 2, 2),
+            values = identityCubeValues(),
+        )
+        val output = FloatArray(3)
+
+        clut.interpolate(floatArrayOf(0.5f, 0.5f, 0.5f), output)
+
+        assertContentEquals(floatArrayOf(0.5f, 0.5f, 0.5f), output)
+    }
+
+    @Test
+    fun `clut owns its arrays and supports aliased input output`() {
+        val gridPoints = intArrayOf(2, 2, 2)
+        val values = identityCubeValues()
+        val clut = IccClut(3, 3, gridPoints, values)
+        gridPoints.fill(9)
+        values.fill(1f)
+        clut.gridPoints.fill(9)
+        clut.values.fill(1f)
+        val aliased = floatArrayOf(0.25f, 0.75f, 0.5f)
+
+        clut.interpolate(aliased, aliased)
+
+        assertContentEquals(floatArrayOf(0.25f, 0.75f, 0.5f), aliased)
+        assertFailsWith<IllegalArgumentException> {
+            clut.interpolate(floatArrayOf(0f, 0f, 0f), FloatArray(2))
+        }
+    }
+
+    @Test
+    fun `clut rejects dimension products that overflow storage`() {
+        assertFailsWith<IllegalArgumentException> {
+            IccClut(
+                inputChannels = 4,
+                outputChannels = 4,
+                gridPoints = IntArray(4) { Int.MAX_VALUE },
+                values = FloatArray(4),
+            )
+        }
+    }
+
+    @Test
+    fun `parses fixture mft1 A2B and mft2 B2A routes`() {
+        val profile = parseResource("rgb-lut-a2b-b2a.icc")
+
+        assertTrue(profile.hasLut)
+        assertNotNull(profile.toPcs)
+        assertNotNull(profile.fromPcs)
+    }
+
+    @Test
+    fun `parses mAB and mBA with directional stage ordering`() {
+        val identityCurves = curveSet(identityCurve())
+        val gammaCurves = curveSet(gammaCurve(2f))
+        val aToB = multiFunctionPayload(
+            type = IccSignature.LUT_A_TO_B_TYPE.value,
+            bCurves = identityCurves,
+            matrix = null,
+            mCurves = null,
+            clut = identityMultiFunctionClut(),
+            aCurves = gammaCurves,
+        )
+        val bToA = multiFunctionPayload(
+            type = IccSignature.LUT_B_TO_A_TYPE.value,
+            bCurves = identityCurves,
+            matrix = diagonalMatrixElement(2f),
+            mCurves = gammaCurves,
+            clut = identityMultiFunctionClut(),
+            aCurves = identityCurves,
+        )
+        val profile = IccProfileParser.parse(buildLutProfile(aToB, bToA), IccParseLimits()).getOrThrow()
+        val toPcs = floatArrayOf(0.5f, 0.5f, 0.5f)
+        val fromPcs = floatArrayOf(0.5f, 0.5f, 0.5f)
+
+        profile.toPcs!!.apply(toPcs, 0)
+        profile.fromPcs!!.apply(fromPcs, 0)
+
+        repeat(3) { channel ->
+            assertEquals(0.49999237f, toPcs[channel], 1e-6f)
+            assertEquals(0.25000763f, fromPcs[channel], 1e-6f)
+        }
+    }
+
+    @Test
+    fun `parsed pipelines own immutable storage`() {
+        val bytes = resource("rgb-lut-a2b-b2a.icc")
+        val pipeline = IccProfileParser.parse(bytes, IccParseLimits()).getOrThrow().toPcs!!
+        val first = floatArrayOf(0.25f, 0.5f, 0.75f)
+        pipeline.apply(first, 0)
+        bytes.fill(0)
+        val second = floatArrayOf(0.25f, 0.5f, 0.75f)
+
+        pipeline.apply(second, 0)
+
+        assertContentEquals(first, second)
+    }
+
+    @Test
+    fun `rejects missing LUT direction without fallback`() {
+        val fixture = resource("rgb-lut-a2b-b2a.icc")
+        val aToB = tagPayload(fixture, IccSignature.A_TO_B_0.value)
+        val failure = IccProfileParser.parse(buildLutProfile(aToB, null), IccParseLimits()).failureOrNull()!!
+
+        assertEquals("icc.lut.direction", failure.code)
+    }
+
+    @Test
+    fun `rejects malformed LUT table bounds`() {
+        val truncated = lut16Payload().let { it.copyOf(it.size - 2) }
+        val failure = IccProfileParser.parse(
+            buildLutProfile(truncated, lut16Payload()),
+            IccParseLimits(),
+        ).failureOrNull()!!
+
+        assertEquals("icc.lut.range", failure.code)
+    }
+
+    @Test
+    fun `enforces max clut values before allocation`() {
+        val failure = IccProfileParser.parse(
+            resource("rgb-lut-a2b-b2a.icc"),
+            IccParseLimits(maxClutValues = 23),
+        ).failureOrNull()!!
+
+        assertEquals("icc.limit.clut-values", failure.code)
+    }
+
+    @Test
+    fun `rejects negative clut value limit`() {
+        val failure = IccProfileParser.parse(
+            resource("rgb-lut-a2b-b2a.icc"),
+            IccParseLimits(maxClutValues = -1),
+        ).failureOrNull()!!
+
+        assertEquals("icc.limit.invalid", failure.code)
+    }
+
+    @Test
+    fun `rejects unsupported LUT channels before payload allocation`() {
+        val aToB = lut16Payload().also {
+            it[8] = 5
+            it[10] = 255.toByte()
+        }
+        val failure = IccProfileParser.parse(
+            buildLutProfile(aToB, lut16Payload()),
+            IccParseLimits(),
+        ).failureOrNull()!!
+
+        assertEquals("icc.lut.channels", failure.code)
+    }
+
+    @Test
+    fun `rejects invalid mAB offsets and incomplete stage combinations`() {
+        val identityCurves = curveSet(identityCurve())
+        val valid = multiFunctionPayload(
+            type = IccSignature.LUT_A_TO_B_TYPE.value,
+            bCurves = identityCurves,
+            matrix = null,
+            mCurves = null,
+            clut = identityMultiFunctionClut(),
+            aCurves = identityCurves,
+        )
+        val invalidOffset = valid.copyOf().also { writeU32(it, 24, it.size + 4) }
+        val incomplete = valid.copyOf().also { writeU32(it, 24, 0) }
+        val bToA = lut16Payload()
+
+        assertFailure("icc.lut.offset", buildLutProfile(invalidOffset, bToA))
+        assertFailure("icc.lut.structure", buildLutProfile(incomplete, bToA))
+    }
+
+    private fun identityCubeValues(): FloatArray = FloatArray(2 * 2 * 2 * 3).also { values ->
+        for (r in 0..1) for (g in 0..1) for (b in 0..1) {
+            val base = (r * 4 + g * 2 + b) * 3
+            values[base] = r.toFloat()
+            values[base + 1] = g.toFloat()
+            values[base + 2] = b.toFloat()
+        }
+    }
+
+    private fun lut16Payload(): ByteArray {
+        val inputEntries = 2
+        val outputEntries = 2
+        val clutValues = 2 * 2 * 2 * 3
+        val bytes = ByteArray(52 + 3 * inputEntries * 2 + clutValues * 2 + 3 * outputEntries * 2)
+        writeU32(bytes, 0, IccSignature.LUT_16_TYPE.value)
+        bytes[8] = 3
+        bytes[9] = 3
+        bytes[10] = 2
+        repeat(3) { writeS15Fixed16(bytes, 12 + it * 16, 1f) }
+        writeU16(bytes, 48, inputEntries)
+        writeU16(bytes, 50, outputEntries)
+        var offset = 52
+        repeat(3) {
+            writeU16(bytes, offset, 0)
+            writeU16(bytes, offset + 2, 0xffff)
+            offset += 4
+        }
+        identityCubeValues().forEach { value ->
+            writeU16(bytes, offset, (value * 65535f).toInt())
+            offset += 2
+        }
+        repeat(3) {
+            writeU16(bytes, offset, 0)
+            writeU16(bytes, offset + 2, 0xffff)
+            offset += 4
+        }
+        return bytes
+    }
+
+    private fun identityCurve(): ByteArray = ByteArray(12).also {
+        writeU32(it, 0, IccSignature.CURVE_TYPE.value)
+    }
+
+    private fun gammaCurve(gamma: Float): ByteArray = ByteArray(16).also {
+        writeU32(it, 0, IccSignature.PARAMETRIC_CURVE_TYPE.value)
+        writeS15Fixed16(it, 12, gamma)
+    }
+
+    private fun curveSet(curve: ByteArray): ByteArray = ByteArray(curve.size * 3).also { set ->
+        repeat(3) { curve.copyInto(set, it * curve.size) }
+    }
+
+    private fun diagonalMatrixElement(scale: Float): ByteArray = ByteArray(48).also { matrix ->
+        repeat(3) { writeS15Fixed16(matrix, it * 16, scale) }
+    }
+
+    private fun identityMultiFunctionClut(): ByteArray = ByteArray(20 + 24).also { clut ->
+        clut[0] = 2
+        clut[1] = 2
+        clut[2] = 2
+        clut[16] = 1
+        identityCubeValues().forEachIndexed { index, value -> clut[20 + index] = (value * 255f).toInt().toByte() }
+    }
+
+    private fun multiFunctionPayload(
+        type: Int,
+        bCurves: ByteArray,
+        matrix: ByteArray?,
+        mCurves: ByteArray?,
+        clut: ByteArray?,
+        aCurves: ByteArray?,
+    ): ByteArray {
+        val elements = listOf(
+            12 to bCurves,
+            16 to matrix,
+            20 to mCurves,
+            24 to clut,
+            28 to aCurves,
+        )
+        val size = 32 + elements.sumOf { it.second?.size ?: 0 }
+        val bytes = ByteArray(size)
+        writeU32(bytes, 0, type)
+        bytes[8] = 3
+        bytes[9] = 3
+        var offset = 32
+        elements.forEach { (field, element) ->
+            if (element != null) {
+                writeU32(bytes, field, offset)
+                element.copyInto(bytes, offset)
+                offset += element.size
+            }
+        }
+        return bytes
+    }
+
+    private fun buildLutProfile(aToB: ByteArray?, bToA: ByteArray?): ByteArray {
+        val base = resource("srgb-matrix-trc.icc")
+        val tags = buildList {
+            add(IccSignature.DESCRIPTION.value to tagPayload(base, IccSignature.DESCRIPTION.value))
+            add(IccSignature.COPYRIGHT.value to tagPayload(base, IccSignature.COPYRIGHT.value))
+            add(IccSignature.WHITE_POINT.value to tagPayload(base, IccSignature.WHITE_POINT.value))
+            if (aToB != null) add(IccSignature.A_TO_B_0.value to aToB)
+            if (bToA != null) add(IccSignature.B_TO_A_0.value to bToA)
+        }
+        val tableEnd = 132 + tags.size * 12
+        val profileSize = tableEnd + tags.sumOf { (_, payload) -> (payload.size + 3) and -4 }
+        val bytes = ByteArray(profileSize)
+        base.copyInto(bytes, endIndex = 128)
+        writeU32(bytes, 0, profileSize)
+        writeU32(bytes, 12, IccSignature.OUTPUT_CLASS.value)
+        repeat(16) { bytes[84 + it] = 0 }
+        writeU32(bytes, 128, tags.size)
+        var dataOffset = tableEnd
+        tags.forEachIndexed { index, (signature, payload) ->
+            val entry = 132 + index * 12
+            writeU32(bytes, entry, signature)
+            writeU32(bytes, entry + 4, dataOffset)
+            writeU32(bytes, entry + 8, payload.size)
+            payload.copyInto(bytes, dataOffset)
+            dataOffset += (payload.size + 3) and -4
+        }
+        return bytes
+    }
+
+    private fun tagPayload(bytes: ByteArray, signature: Int): ByteArray {
+        val offset = tagOffset(bytes, signature)
+        return bytes.copyOfRange(offset, offset + tagSize(bytes, signature))
     }
 
     private fun parseResource(name: String) = IccProfileParser.parse(resource(name), IccParseLimits()).getOrThrow()

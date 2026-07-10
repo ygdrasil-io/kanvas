@@ -23,6 +23,10 @@ public value class IccSignature(public val value: Int) {
         public val XYZ_TYPE: IccSignature = XYZ
         public val CURVE_TYPE: IccSignature = IccSignature(0x63757276)
         public val PARAMETRIC_CURVE_TYPE: IccSignature = IccSignature(0x70617261)
+        public val LUT_8_TYPE: IccSignature = IccSignature(0x6d667431)
+        public val LUT_16_TYPE: IccSignature = IccSignature(0x6d667432)
+        public val LUT_A_TO_B_TYPE: IccSignature = IccSignature(0x6d414220)
+        public val LUT_B_TO_A_TYPE: IccSignature = IccSignature(0x6d424120)
         public val MULTI_LOCALIZED_UNICODE_TYPE: IccSignature = IccSignature(0x6d6c7563)
         public val TEXT_TYPE: IccSignature = IccSignature(0x74657874)
         public val DESCRIPTION_TYPE: IccSignature = IccSignature(0x64657363)
@@ -34,6 +38,12 @@ public value class IccSignature(public val value: Int) {
         public val G_TRC: IccSignature = IccSignature(0x67545243)
         public val B_TRC: IccSignature = IccSignature(0x62545243)
         public val K_TRC: IccSignature = IccSignature(0x6b545243)
+        public val A_TO_B_0: IccSignature = IccSignature(0x41324230)
+        public val A_TO_B_1: IccSignature = IccSignature(0x41324231)
+        public val A_TO_B_2: IccSignature = IccSignature(0x41324232)
+        public val B_TO_A_0: IccSignature = IccSignature(0x42324130)
+        public val B_TO_A_1: IccSignature = IccSignature(0x42324131)
+        public val B_TO_A_2: IccSignature = IccSignature(0x42324132)
         public val DESCRIPTION: IccSignature = IccSignature(0x64657363)
         public val COPYRIGHT: IccSignature = IccSignature(0x63707274)
         public val WHITE_POINT: IccSignature = IccSignature(0x77747074)
@@ -46,6 +56,11 @@ internal class IccBigEndianReader(
 ) {
     fun hasRange(offset: Long, size: Long): Boolean =
         offset >= 0L && size >= 0L && offset <= limit.toLong() - size
+
+    fun u8(offset: Int): Int {
+        check(hasRange(offset.toLong(), 1L))
+        return bytes[offset].toInt() and 0xff
+    }
 
     fun u16(offset: Int): Int {
         check(hasRange(offset.toLong(), 2L))

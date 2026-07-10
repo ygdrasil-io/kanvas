@@ -10,11 +10,12 @@ import kotlin.math.abs
 public data class IccParseLimits(
     public val maxBytes: Int = 16 * 1024 * 1024,
     public val maxTags: Int = 4096,
+    public val maxClutValues: Int = 4 * 1024 * 1024,
 )
 
 public object IccProfileParser {
     public fun parse(bytes: ByteArray, limits: IccParseLimits): ColorProfileParseResult {
-        if (limits.maxBytes < 0 || limits.maxTags < 0) {
+        if (limits.maxBytes < 0 || limits.maxTags < 0 || limits.maxClutValues < 0) {
             return failure("icc.limit.invalid", "ICC parse limits must not be negative")
         }
         if (bytes.size > limits.maxBytes) {
@@ -104,8 +105,10 @@ private class Parser(
         profileClass = reader.signature(PROFILE_CLASS_OFFSET)
         dataColorSpace = reader.signature(DATA_COLOR_SPACE_OFFSET)
         when (dataColorSpace) {
-            IccSignature.RGB -> if (profileClass != IccSignature.INPUT_CLASS && profileClass != IccSignature.DISPLAY_CLASS) {
-                abort("icc.header.class", "RGB matrix/TRC profiles must be input or display class")
+            IccSignature.RGB -> if (profileClass != IccSignature.INPUT_CLASS &&
+                profileClass != IccSignature.DISPLAY_CLASS && profileClass != IccSignature.OUTPUT_CLASS
+            ) {
+                abort("icc.header.class", "RGB profiles must be input, display, or output class")
             }
             IccSignature.GRAY -> if (profileClass != IccSignature.INPUT_CLASS &&
                 profileClass != IccSignature.DISPLAY_CLASS && profileClass != IccSignature.OUTPUT_CLASS
@@ -225,6 +228,17 @@ private class Parser(
     }
 
     private fun parseRgb(tags: Map<IccSignature, TagRecord>): ColorProfile {
+        val hasLutRoute = tags.keys.any { it in LUT_ROUTE_SIGNATURES }
+        if (hasLutRoute) {
+            return parseRgbLut(tags)
+        }
+        return parseRgbMatrixTrc(tags)
+    }
+
+    private fun parseRgbMatrixTrc(tags: Map<IccSignature, TagRecord>): ColorProfile {
+        if (profileClass == IccSignature.OUTPUT_CLASS) {
+            abort("icc.header.class", "RGB output profiles require LUT routes")
+        }
         val rXyz = requiredTag(tags, IccSignature.R_XYZ)
         val gXyz = requiredTag(tags, IccSignature.G_XYZ)
         val bXyz = requiredTag(tags, IccSignature.B_XYZ)
@@ -249,6 +263,369 @@ private class Parser(
             toXyzD50 = matrix,
             transferFunction = transferFunction,
         )
+    }
+
+    private fun parseRgbLut(tags: Map<IccSignature, TagRecord>): ColorProfile {
+        val aToB = tags[IccSignature.A_TO_B_0]
+            ?: abort("icc.lut.direction", "RGB LUT profile is missing A2B0")
+        val bToA = tags[IccSignature.B_TO_A_0]
+            ?: abort("icc.lut.direction", "RGB LUT profile is missing B2A0")
+        return ColorProfile.lut(
+            toPcs = parseLutTransform(aToB, LutDirection.A_TO_B),
+            fromPcs = parseLutTransform(bToA, LutDirection.B_TO_A),
+        )
+    }
+
+    private fun parseLutTransform(tag: TagRecord, direction: LutDirection): IccTransformPipeline =
+        when (reader.signature(tag.offset)) {
+            IccSignature.LUT_8_TYPE -> parseLegacyLut(tag, direction, bytesPerSample = 1)
+            IccSignature.LUT_16_TYPE -> parseLegacyLut(tag, direction, bytesPerSample = 2)
+            IccSignature.LUT_A_TO_B_TYPE -> {
+                if (direction != LutDirection.A_TO_B) {
+                    abort("icc.lut.type", "mAB is not valid in a B2A tag")
+                }
+                parseMultiFunctionLut(tag, direction)
+            }
+            IccSignature.LUT_B_TO_A_TYPE -> {
+                if (direction != LutDirection.B_TO_A) {
+                    abort("icc.lut.type", "mBA is not valid in an A2B tag")
+                }
+                parseMultiFunctionLut(tag, direction)
+            }
+            else -> abort("icc.lut.type", "Unsupported ICC LUT tag type")
+        }
+
+    private fun parseLegacyLut(
+        tag: TagRecord,
+        direction: LutDirection,
+        bytesPerSample: Int,
+    ): IccTransformPipeline {
+        val headerSize = if (bytesPerSample == 1) LUT_8_HEADER_SIZE else LUT_16_HEADER_SIZE
+        if (tag.size < headerSize) abort("icc.lut.range", "ICC LUT header is truncated")
+        if (!reader.isZero(tag.offset + 11, 1)) abort("icc.lut.reserved", "ICC LUT padding is not zero")
+
+        val inputChannels = reader.u8(tag.offset + 8)
+        val outputChannels = reader.u8(tag.offset + 9)
+        validateLutChannels(inputChannels, outputChannels)
+        val gridPointCount = reader.u8(tag.offset + 10)
+        if (gridPointCount < 2) abort("icc.lut.grid", "ICC LUT grid requires at least two points")
+        val gridPoints = IntArray(inputChannels) { gridPointCount }
+        val clutValueCount = checkedClutValueCount(gridPoints, outputChannels)
+
+        val inputEntries = if (bytesPerSample == 1) 256 else reader.u16(tag.offset + 48)
+        val outputEntries = if (bytesPerSample == 1) 256 else reader.u16(tag.offset + 50)
+        if (inputEntries !in MIN_LUT_TABLE_ENTRIES..MAX_LUT_TABLE_ENTRIES ||
+            outputEntries !in MIN_LUT_TABLE_ENTRIES..MAX_LUT_TABLE_ENTRIES
+        ) {
+            abort("icc.lut.table", "ICC LUT table entry count is unsupported")
+        }
+
+        val inputTableBytes = inputChannels.toLong() * inputEntries * bytesPerSample
+        val clutBytes = clutValueCount.toLong() * bytesPerSample
+        val outputTableBytes = outputChannels.toLong() * outputEntries * bytesPerSample
+        val requiredSize = headerSize.toLong() + inputTableBytes + clutBytes + outputTableBytes
+        if (requiredSize != tag.size.toLong()) {
+            abort("icc.lut.range", "ICC LUT payload size does not match its dimensions")
+        }
+
+        val matrix = FloatArray(12)
+        repeat(9) { matrix[it] = reader.s15Fixed16(tag.offset + 12 + it * 4) }
+        if (direction == LutDirection.A_TO_B && !isIdentity3x3(matrix)) {
+            abort("icc.lut.matrix", "A2B mft matrix must be identity for RGB device input")
+        }
+
+        var payloadOffset = tag.offset + headerSize
+        val inputCurves = readLutTableCurves(payloadOffset, inputChannels, inputEntries, bytesPerSample)
+        payloadOffset += inputTableBytes.toInt()
+        val clut = readClut(payloadOffset, inputChannels, outputChannels, gridPoints, clutValueCount, bytesPerSample)
+        payloadOffset += clutBytes.toInt()
+        val outputCurves = readLutTableCurves(payloadOffset, outputChannels, outputEntries, bytesPerSample)
+
+        val stages = mutableListOf<IccTransformStage>()
+        // ICC defines the PCSXYZ encoding factor for 16-bit LUTs; no 8-bit PCSXYZ encoding exists.
+        if (direction == LutDirection.B_TO_A && bytesPerSample == 2) stages += pcsEncodeStage()
+        stages += IccMatrixStage(matrix)
+        stages += IccClampStage(inputChannels)
+        stages += IccCurveStage(inputCurves)
+        stages += IccClutStage(clut)
+        stages += IccCurveStage(outputCurves)
+        if (direction == LutDirection.A_TO_B && bytesPerSample == 2) stages += pcsDecodeStage()
+        return IccTransformPipeline(stages, lutFingerprint(tag, direction))
+    }
+
+    private fun parseMultiFunctionLut(
+        tag: TagRecord,
+        direction: LutDirection,
+    ): IccTransformPipeline {
+        if (majorVersion != 4) abort("icc.lut.version", "mAB and mBA require an ICC v4 profile")
+        if (tag.size < MULTI_FUNCTION_HEADER_SIZE) abort("icc.lut.range", "ICC multi-function LUT is truncated")
+        if (!reader.isZero(tag.offset + 10, 2)) abort("icc.lut.reserved", "ICC LUT padding is not zero")
+
+        val inputChannels = reader.u8(tag.offset + 8)
+        val outputChannels = reader.u8(tag.offset + 9)
+        validateLutChannels(inputChannels, outputChannels)
+        val bOffset = readLutElementOffset(tag, 12)
+        val matrixOffset = readLutElementOffset(tag, 16)
+        val mOffset = readLutElementOffset(tag, 20)
+        val clutOffset = readLutElementOffset(tag, 24)
+        val aOffset = readLutElementOffset(tag, 28)
+        if (bOffset == 0 || (matrixOffset == 0) != (mOffset == 0) || (clutOffset == 0) != (aOffset == 0)) {
+            abort("icc.lut.structure", "ICC multi-function LUT has an incomplete stage combination")
+        }
+
+        val bCount = if (direction == LutDirection.A_TO_B) outputChannels else inputChannels
+        val mCount = if (direction == LutDirection.A_TO_B) outputChannels else inputChannels
+        val aCount = if (direction == LutDirection.A_TO_B) inputChannels else outputChannels
+        val bCurves = parseEmbeddedCurveSet(tag, bOffset, bCount)
+        val matrix = matrixOffset.takeIf { it != 0 }?.let { parseMatrixElement(tag, it) }
+        val mCurves = mOffset.takeIf { it != 0 }?.let { parseEmbeddedCurveSet(tag, it, mCount) }
+        val clut = clutOffset.takeIf { it != 0 }?.let {
+            parseMultiFunctionClut(tag, it, inputChannels, outputChannels)
+        }
+        val aCurves = aOffset.takeIf { it != 0 }?.let { parseEmbeddedCurveSet(tag, it, aCount) }
+
+        val elements = buildList {
+            add(EmbeddedElement(bOffset, bCurves.end))
+            if (matrix != null) add(EmbeddedElement(matrixOffset, matrix.end))
+            if (mCurves != null) add(EmbeddedElement(mOffset, mCurves.end))
+            if (clut != null) add(EmbeddedElement(clutOffset, clut.end))
+            if (aCurves != null) add(EmbeddedElement(aOffset, aCurves.end))
+        }
+        validateEmbeddedElementLayout(elements, tag.size)
+
+        val stages = mutableListOf<IccTransformStage>()
+        if (direction == LutDirection.A_TO_B) {
+            if (aCurves != null && clut != null) {
+                stages += IccCurveStage(aCurves.curves)
+                stages += IccClutStage(clut.clut)
+            }
+            if (mCurves != null && matrix != null) {
+                stages += IccCurveStage(mCurves.curves)
+                stages += IccMatrixStage(matrix.values)
+                stages += IccClampStage(3)
+            }
+            stages += IccCurveStage(bCurves.curves)
+            stages += pcsDecodeStage()
+        } else {
+            stages += pcsEncodeStage()
+            stages += IccCurveStage(bCurves.curves)
+            if (matrix != null && mCurves != null) {
+                stages += IccMatrixStage(matrix.values)
+                stages += IccClampStage(3)
+                stages += IccCurveStage(mCurves.curves)
+            }
+            if (clut != null && aCurves != null) {
+                stages += IccClutStage(clut.clut)
+                stages += IccCurveStage(aCurves.curves)
+            }
+        }
+        return IccTransformPipeline(stages, lutFingerprint(tag, direction))
+    }
+
+    private fun validateLutChannels(inputChannels: Int, outputChannels: Int) {
+        if (inputChannels !in 1..MAX_LUT_CHANNELS || outputChannels !in 1..MAX_LUT_CHANNELS) {
+            abort("icc.lut.channels", "ICC LUT channels must be in 1..$MAX_LUT_CHANNELS")
+        }
+        if (inputChannels != RGB_CHANNELS || outputChannels != RGB_CHANNELS) {
+            abort("icc.lut.channels", "RGB/XYZ LUT routes must have three input and output channels")
+        }
+    }
+
+    private fun checkedClutValueCount(gridPoints: IntArray, outputChannels: Int): Int {
+        var values = outputChannels.toLong()
+        gridPoints.forEach { points ->
+            if (points < 2) abort("icc.lut.grid", "ICC CLUT dimensions require at least two points")
+            if (values > Long.MAX_VALUE / points) abort("icc.lut.product", "ICC CLUT dimensions overflow")
+            values *= points
+        }
+        if (values > Int.MAX_VALUE.toLong()) abort("icc.lut.product", "ICC CLUT has an unrepresentable value count")
+        if (values > limits.maxClutValues.toLong()) {
+            abort("icc.limit.clut-values", "ICC CLUT value count $values exceeds ${limits.maxClutValues}")
+        }
+        return values.toInt()
+    }
+
+    private fun readLutTableCurves(
+        offset: Int,
+        channels: Int,
+        entries: Int,
+        bytesPerSample: Int,
+    ): List<IccCurve> = List(channels) { channel ->
+        val tableOffset = offset + channel * entries * bytesPerSample
+        val samples = FloatArray(entries) { index -> readNormalizedSample(tableOffset + index * bytesPerSample, bytesPerSample) }
+        sampledLutCurve(samples)
+    }
+
+    private fun readClut(
+        offset: Int,
+        inputChannels: Int,
+        outputChannels: Int,
+        gridPoints: IntArray,
+        valueCount: Int,
+        bytesPerSample: Int,
+    ): IccClut {
+        val values = FloatArray(valueCount) { index -> readNormalizedSample(offset + index * bytesPerSample, bytesPerSample) }
+        return IccClut(inputChannels, outputChannels, gridPoints, values)
+    }
+
+    private fun sampledLutCurve(samples: FloatArray): IccCurve {
+        if ((1 until samples.size).any { samples[it - 1] > samples[it] }) {
+            abort("icc.lut.curve", "ICC LUT one-dimensional table is not monotonic")
+        }
+        return SampledIccCurve(samples)
+    }
+
+    private fun readNormalizedSample(offset: Int, bytesPerSample: Int): Float =
+        if (bytesPerSample == 1) reader.u8(offset) / 255f else reader.u16(offset) / 65535f
+
+    private fun readLutElementOffset(tag: TagRecord, fieldOffset: Int): Int {
+        val relative = reader.u32(tag.offset + fieldOffset)
+        if (relative == 0L) return 0
+        if (relative < MULTI_FUNCTION_HEADER_SIZE || relative >= tag.size.toLong() || (relative and 3L) != 0L) {
+            abort("icc.lut.offset", "ICC LUT element offset is invalid")
+        }
+        return relative.toInt()
+    }
+
+    private fun parseEmbeddedCurveSet(tag: TagRecord, relativeOffset: Int, count: Int): ParsedCurveSet {
+        var current = relativeOffset
+        val curves = List(count) {
+            val parsed = parseEmbeddedCurve(tag, current)
+            current = parsed.end
+            parsed.curve
+        }
+        return ParsedCurveSet(curves, current)
+    }
+
+    private fun parseEmbeddedCurve(tag: TagRecord, relativeOffset: Int): ParsedEmbeddedCurve {
+        requireTagRelativeRange(tag, relativeOffset, CURVE_HEADER_SIZE.toLong(), "ICC embedded curve header is truncated")
+        val absolute = tag.offset + relativeOffset
+        if (!reader.isZero(absolute + 4, 4)) abort("icc.lut.reserved", "ICC embedded curve reserved bytes are not zero")
+        val (curve, semanticSize) = when (reader.signature(absolute)) {
+            IccSignature.CURVE_TYPE -> {
+                val count = reader.u32(absolute + 8)
+                if (count > MAX_EMBEDDED_CURVE_ENTRIES) {
+                    abort("icc.lut.curve", "ICC embedded sampled curve is too large")
+                }
+                val size = CURVE_HEADER_SIZE.toLong() + count * 2L
+                requireTagRelativeRange(tag, relativeOffset, size, "ICC embedded sampled curve is truncated")
+                val parsedCurve = when (count.toInt()) {
+                    0 -> ParametricIccCurve(0, floatArrayOf(1f))
+                    1 -> {
+                        val gamma = reader.u16(absolute + CURVE_HEADER_SIZE) / 256f
+                        if (gamma <= 0f) abort("icc.lut.curve", "ICC embedded gamma must be positive")
+                        ParametricIccCurve(0, floatArrayOf(gamma))
+                    }
+                    else -> {
+                        val samples = FloatArray(count.toInt()) { index ->
+                            reader.u16(absolute + CURVE_HEADER_SIZE + index * 2) / 65535f
+                        }
+                        sampledLutCurve(samples)
+                    }
+                }
+                parsedCurve to size
+            }
+            IccSignature.PARAMETRIC_CURVE_TYPE -> {
+                val functionType = reader.u16(absolute + 8)
+                if (!reader.isZero(absolute + 10, 2)) {
+                    abort("icc.lut.reserved", "ICC embedded parametric curve padding is not zero")
+                }
+                if (functionType !in PARAMETRIC_PARAMETER_COUNTS.indices) {
+                    abort("icc.lut.curve", "Unsupported embedded ICC parametric curve")
+                }
+                val parameterCount = PARAMETRIC_PARAMETER_COUNTS[functionType]
+                val size = PARAMETRIC_HEADER_SIZE.toLong() + parameterCount * 4L
+                requireTagRelativeRange(tag, relativeOffset, size, "ICC embedded parametric curve is truncated")
+                val parameters = FloatArray(parameterCount) { index ->
+                    reader.s15Fixed16(absolute + PARAMETRIC_HEADER_SIZE + index * 4)
+                }
+                val validationError = parametricCurveValidationError(functionType, parameters)
+                if (validationError != null) abort("icc.lut.curve", "Invalid embedded ICC curve: $validationError")
+                ParametricIccCurve(functionType, parameters) to size
+            }
+            else -> abort("icc.lut.curve", "Unsupported embedded ICC curve type")
+        }
+        val semanticEnd = relativeOffset.toLong() + semanticSize
+        val paddedEnd = align4(semanticEnd)
+        requireTagRelativeRange(tag, semanticEnd.toInt(), paddedEnd - semanticEnd, "ICC embedded curve padding is truncated")
+        if (!reader.isZero(tag.offset + semanticEnd.toInt(), (paddedEnd - semanticEnd).toInt())) {
+            abort("icc.lut.reserved", "ICC embedded curve padding is not zero")
+        }
+        return ParsedEmbeddedCurve(curve, paddedEnd.toInt())
+    }
+
+    private fun parseMatrixElement(tag: TagRecord, relativeOffset: Int): ParsedMatrix {
+        requireTagRelativeRange(tag, relativeOffset, MULTI_FUNCTION_MATRIX_SIZE.toLong(), "ICC LUT matrix is truncated")
+        val values = FloatArray(12) { index -> reader.s15Fixed16(tag.offset + relativeOffset + index * 4) }
+        return ParsedMatrix(values, relativeOffset + MULTI_FUNCTION_MATRIX_SIZE)
+    }
+
+    private fun parseMultiFunctionClut(
+        tag: TagRecord,
+        relativeOffset: Int,
+        inputChannels: Int,
+        outputChannels: Int,
+    ): ParsedClut {
+        requireTagRelativeRange(tag, relativeOffset, MULTI_FUNCTION_CLUT_HEADER_SIZE.toLong(), "ICC CLUT header is truncated")
+        val absolute = tag.offset + relativeOffset
+        val gridPoints = IntArray(inputChannels) { reader.u8(absolute + it) }
+        if (!reader.isZero(absolute + inputChannels, 16 - inputChannels) || !reader.isZero(absolute + 17, 3)) {
+            abort("icc.lut.reserved", "ICC CLUT reserved bytes are not zero")
+        }
+        val bytesPerSample = reader.u8(absolute + 16)
+        if (bytesPerSample !in 1..2) abort("icc.lut.type", "ICC CLUT precision must be one or two bytes")
+        val valueCount = checkedClutValueCount(gridPoints, outputChannels)
+        val semanticSize = MULTI_FUNCTION_CLUT_HEADER_SIZE.toLong() + valueCount.toLong() * bytesPerSample
+        requireTagRelativeRange(tag, relativeOffset, semanticSize, "ICC CLUT payload is truncated")
+        val values = FloatArray(valueCount) { index ->
+            readNormalizedSample(absolute + MULTI_FUNCTION_CLUT_HEADER_SIZE + index * bytesPerSample, bytesPerSample)
+        }
+        val semanticEnd = relativeOffset.toLong() + semanticSize
+        val paddedEnd = align4(semanticEnd)
+        requireTagRelativeRange(tag, semanticEnd.toInt(), paddedEnd - semanticEnd, "ICC CLUT padding is truncated")
+        if (!reader.isZero(tag.offset + semanticEnd.toInt(), (paddedEnd - semanticEnd).toInt())) {
+            abort("icc.lut.reserved", "ICC CLUT padding is not zero")
+        }
+        return ParsedClut(IccClut(inputChannels, outputChannels, gridPoints, values), paddedEnd.toInt())
+    }
+
+    private fun requireTagRelativeRange(tag: TagRecord, relativeOffset: Int, size: Long, message: String) {
+        if (relativeOffset < 0 || size < 0L || relativeOffset.toLong() > tag.size.toLong() - size) {
+            abort("icc.lut.range", message)
+        }
+    }
+
+    private fun validateEmbeddedElementLayout(elements: List<EmbeddedElement>, tagSize: Int) {
+        val unique = LinkedHashMap<Int, Int>()
+        elements.forEach { element ->
+            val previousEnd = unique.putIfAbsent(element.offset, element.end)
+            if (previousEnd != null && previousEnd != element.end) {
+                abort("icc.lut.structure", "Shared ICC LUT elements have incompatible sizes")
+            }
+        }
+        val sorted = unique.entries.sortedBy { it.key }
+        if (sorted.isEmpty() || sorted.first().key != MULTI_FUNCTION_HEADER_SIZE) {
+            abort("icc.lut.structure", "ICC LUT elements do not start after the header")
+        }
+        var expected = MULTI_FUNCTION_HEADER_SIZE
+        sorted.forEach { element ->
+            if (element.key != expected) abort("icc.lut.structure", "ICC LUT elements overlap or contain gaps")
+            expected = element.value
+        }
+        if (expected != tagSize) abort("icc.lut.structure", "ICC LUT has bytes outside its processing elements")
+    }
+
+    private fun lutFingerprint(tag: TagRecord, direction: LutDirection): ByteArray = ByteArray(tag.size + 1).also {
+        it[0] = direction.ordinal.toByte()
+        bytes.copyInto(it, destinationOffset = 1, startIndex = tag.offset, endIndex = tag.offset + tag.size)
+    }
+
+    private fun pcsEncodeStage(): IccTransformStage = IccScaleStage(FloatArray(3) { PCS_XYZ_ENCODE_SCALE })
+
+    private fun pcsDecodeStage(): IccTransformStage = IccScaleStage(FloatArray(3) { PCS_XYZ_DECODE_SCALE })
+
+    private fun isIdentity3x3(matrix: FloatArray): Boolean = (0 until 9).all { index ->
+        matrix[index] == if (index % 4 == 0) 1f else 0f
     }
 
     private fun parseGray(tags: Map<IccSignature, TagRecord>): ColorProfile {
@@ -385,6 +762,16 @@ private class Parser(
     }
 }
 
+private enum class LutDirection {
+    A_TO_B,
+    B_TO_A,
+}
+
+private data class ParsedEmbeddedCurve(val curve: IccCurve, val end: Int)
+private data class ParsedCurveSet(val curves: List<IccCurve>, val end: Int)
+private data class ParsedMatrix(val values: FloatArray, val end: Int)
+private data class ParsedClut(val clut: IccClut, val end: Int)
+private data class EmbeddedElement(val offset: Int, val end: Int)
 private data class TagRecord(val offset: Int, val size: Int)
 
 private class IccParseAbort(
@@ -414,9 +801,29 @@ private const val MIN_TAG_SIZE: Long = 8L
 private const val XYZ_TAG_SIZE: Int = 20
 private const val CURVE_HEADER_SIZE: Int = 12
 private const val PARAMETRIC_HEADER_SIZE: Int = 12
+private const val LUT_8_HEADER_SIZE: Int = 48
+private const val LUT_16_HEADER_SIZE: Int = 52
+private const val MULTI_FUNCTION_HEADER_SIZE: Int = 32
+private const val MULTI_FUNCTION_MATRIX_SIZE: Int = 48
+private const val MULTI_FUNCTION_CLUT_HEADER_SIZE: Int = 20
+private const val RGB_CHANNELS: Int = 3
+private const val MAX_LUT_CHANNELS: Int = 4
+private const val MIN_LUT_TABLE_ENTRIES: Int = 2
+private const val MAX_LUT_TABLE_ENTRIES: Int = 4096
+private const val MAX_EMBEDDED_CURVE_ENTRIES: Long = 65_536L
+private const val PCS_XYZ_ENCODE_SCALE: Float = 32768f / 65535f
+private const val PCS_XYZ_DECODE_SCALE: Float = 65535f / 32768f
 private const val D50_X: Float = 0.9642f
 private const val D50_Y: Float = 1f
 private const val D50_Z: Float = 0.8249f
 private const val D50_ROUNDING_HALF_UNIT: Float = 0.00005f
 private const val DEVICE_ATTRIBUTES_RESERVED_MASK: Long = 0xfffffff0L
 private val PARAMETRIC_PARAMETER_COUNTS: IntArray = intArrayOf(1, 3, 4, 5, 7)
+private val LUT_ROUTE_SIGNATURES: Set<IccSignature> = setOf(
+    IccSignature.A_TO_B_0,
+    IccSignature.A_TO_B_1,
+    IccSignature.A_TO_B_2,
+    IccSignature.B_TO_A_0,
+    IccSignature.B_TO_A_1,
+    IccSignature.B_TO_A_2,
+)

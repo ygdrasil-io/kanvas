@@ -1,9 +1,13 @@
 package org.graphiks.kanvas.color
 
+import org.graphiks.kanvas.color.icc.IccParseLimits
+import org.graphiks.kanvas.color.icc.IccProfileParser
 import org.graphiks.math.SkcmsMatrix3x3
+import org.graphiks.math.SkcmsTransferFunction
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 
 class ColorTransformContractTest {
 
@@ -80,5 +84,112 @@ class ColorTransformContractTest {
 
         assertEquals(1f, profile.toXyzD50!![0, 0])
         assertContentEquals(floatArrayOf(0.25f, 0.5f, 0.75f, 0.5f), pixels)
+    }
+
+    @Test
+    fun `matrix profiles compile into a nonidentity golden transform`() {
+        val transform = ColorTransform.compile(
+            source = ColorProfiles.displayP3(),
+            destination = ColorProfiles.sRGB(),
+            alphaType = AlphaType.UNPREMULTIPLIED,
+        ).getOrThrow()
+        val pixel = floatArrayOf(0.5f, 0.2f, 0.1f, 0.4f)
+
+        transform.apply(pixel, 1)
+
+        assertEquals(0.54172945f, pixel[0], 2e-5f)
+        assertEquals(0.17373921f, pixel[1], 2e-5f)
+        assertEquals(0.052882f, pixel[2], 2e-5f)
+        assertEquals(0.4f, pixel[3], 0f)
+    }
+
+    @Test
+    fun `mft1 LUT source transforms through PCS into matrix destination`() {
+        val lut = parseResource("rgb-lut-a2b-b2a.icc")
+        val transform = ColorTransform.compile(
+            source = lut,
+            destination = ColorProfiles.sRGB(),
+            alphaType = AlphaType.UNPREMULTIPLIED,
+        ).getOrThrow()
+        val pixel = floatArrayOf(0.25f, 0.5f, 0.75f, 0.6f)
+
+        transform.apply(pixel, 1)
+
+        assertEquals(0.75f, pixel[0], 0.025f)
+        assertEquals(0.5f, pixel[1], 0.025f)
+        assertEquals(0.25f, pixel[2], 0.025f)
+        assertEquals(0.6f, pixel[3], 0f)
+    }
+
+    @Test
+    fun `matrix source transforms through PCS into mft2 LUT destination`() {
+        val lut = parseResource("rgb-lut-a2b-b2a.icc")
+        val transform = ColorTransform.compile(
+            source = ColorProfiles.sRGB(),
+            destination = lut,
+            alphaType = AlphaType.UNPREMULTIPLIED,
+        ).getOrThrow()
+        val pixel = floatArrayOf(0.25f, 0.5f, 0.75f, 0.8f)
+
+        transform.apply(pixel, 1)
+
+        assertEquals(0.75f, pixel[0], 0.002f)
+        assertEquals(0.5f, pixel[1], 0.002f)
+        assertEquals(0.25f, pixel[2], 0.002f)
+        assertEquals(0.8f, pixel[3], 0f)
+    }
+
+    @Test
+    fun `opaque and unpremultiplied transforms preserve alpha storage`() {
+        val lut = parseResource("rgb-lut-a2b-b2a.icc")
+        listOf(AlphaType.OPAQUE, AlphaType.UNPREMULTIPLIED).forEach { alphaType ->
+            val transform = ColorTransform.compile(lut, ColorProfiles.sRGB(), alphaType).getOrThrow()
+            val pixel = floatArrayOf(0.25f, 0.5f, 0.75f, 0.37f)
+
+            transform.apply(pixel, 1)
+
+            assertEquals(0.37f, pixel[3], 0f, alphaType.name)
+        }
+    }
+
+    @Test
+    fun `premultiplied transforms are typed refusals even for identical profiles`() {
+        val failure = ColorTransform.compile(
+            source = ColorProfiles.sRGB(),
+            destination = ColorProfiles.sRGB(),
+            alphaType = AlphaType.PREMULTIPLIED,
+        ).failureOrNull()
+
+        assertEquals("color.alpha.premultiplied.unsupported", assertNotNull(failure).code)
+    }
+
+    @Test
+    fun `compile rejects direct profiles with nonmonotonic transfer functions`() {
+        val source = ColorProfile(
+            colorModel = ColorModel.RGB,
+            toXyzD50 = SkcmsMatrix3x3.IDENTITY,
+            transferFunction = SkcmsTransferFunction(
+                g = 1f,
+                a = 1f,
+                b = -0.5f,
+                c = 1f,
+                d = 0.5f,
+                e = 0f,
+                f = 0f,
+            ),
+        )
+
+        val failure = ColorTransform.compile(
+            source,
+            ColorProfiles.sRGB(),
+            AlphaType.UNPREMULTIPLIED,
+        ).failureOrNull()
+
+        assertEquals("color.profile.transfer", assertNotNull(failure).code)
+    }
+
+    private fun parseResource(name: String): ColorProfile {
+        val stream = assertNotNull(javaClass.classLoader.getResourceAsStream("icc/$name"), "missing icc/$name")
+        return stream.use { IccProfileParser.parse(it.readBytes(), IccParseLimits()).getOrThrow() }
     }
 }
