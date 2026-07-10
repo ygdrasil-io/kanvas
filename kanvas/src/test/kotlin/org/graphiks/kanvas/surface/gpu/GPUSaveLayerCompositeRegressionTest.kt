@@ -308,7 +308,7 @@ class GPUSaveLayerCompositeRegressionTest {
 
     @Test
     fun `bounded child target skips a fully out of bounds stencil test pass`() {
-        val stencilPassCalls = mutableListOf<Unit>()
+        val stencilPassCalls = mutableListOf<RecordedStencilPass>()
         val childTarget = LayerScissorOffscreenTarget(
             delegate = SpyOffscreenTarget(mutableListOf(), stencilPassCalls),
             sceneLayerBounds = { label -> if (label == "bounded-child") LayerBounds(2, 3, 3, 2) else null },
@@ -333,6 +333,59 @@ class GPUSaveLayerCompositeRegressionTest {
         }
 
         assertTrue(stencilPassCalls.isEmpty())
+    }
+
+    @Test
+    fun `bounded child target forwards filtered stencil test draws`() {
+        val stencilPasses = mutableListOf<RecordedStencilPass>()
+        val childTarget = LayerScissorOffscreenTarget(
+            delegate = SpyOffscreenTarget(mutableListOf(), stencilPasses),
+            sceneLayerBounds = { label -> if (label == "bounded-child") LayerBounds(2, 3, 3, 2) else null },
+        )
+
+        childTarget.encodeOffscreenTexture("bounded-child", clearColor = null) {
+            drawFullscreenStencilPass(
+                wgsl = "test",
+                colorFormat = "rgba8unorm",
+                stencilMode = GPUBackendStencilMode.Test,
+                triangleData = null,
+                draws = listOf(
+                    GPUBackendRawUniformDraw(ByteArray(16), 1, 1, 6, 6),
+                    GPUBackendRawUniformDraw(ByteArray(16), 0, 0, 1, 1),
+                ),
+            )
+        }
+
+        val forwarded = stencilPasses.single()
+        assertEquals(GPUBackendStencilMode.Test, forwarded.mode)
+        val draw = forwarded.draws.single()
+        assertEquals(2, draw.scissorX)
+        assertEquals(3, draw.scissorY)
+        assertEquals(3, draw.scissorWidth)
+        assertEquals(2, draw.scissorHeight)
+    }
+
+    @Test
+    fun `bounded child target forwards empty stencil write pass`() {
+        val stencilPasses = mutableListOf<RecordedStencilPass>()
+        val childTarget = LayerScissorOffscreenTarget(
+            delegate = SpyOffscreenTarget(mutableListOf(), stencilPasses),
+            sceneLayerBounds = { label -> if (label == "bounded-child") LayerBounds(2, 3, 3, 2) else null },
+        )
+
+        childTarget.encodeOffscreenTexture("bounded-child", clearColor = null) {
+            drawFullscreenStencilPass(
+                wgsl = "test",
+                colorFormat = "rgba8unorm",
+                stencilMode = GPUBackendStencilMode.Write,
+                triangleData = null,
+                draws = listOf(GPUBackendRawUniformDraw(ByteArray(16), 0, 0, 1, 1)),
+            )
+        }
+
+        val forwarded = stencilPasses.single()
+        assertEquals(GPUBackendStencilMode.Write, forwarded.mode)
+        assertTrue(forwarded.draws.isEmpty())
     }
 
     @Test
@@ -487,9 +540,14 @@ class GPUSaveLayerCompositeRegressionTest {
         assertEquals(reason, result.diagnostics.entries.single { it.level == DiagnosticLevel.FATAL }.reason)
     }
 
+    private data class RecordedStencilPass(
+        val mode: GPUBackendStencilMode,
+        val draws: List<GPUBackendRawUniformDraw>,
+    )
+
     private inner class SpyOffscreenTarget(
         private val recordedDraws: MutableList<GPUBackendRawUniformDraw>,
-        private val stencilPassCalls: MutableList<Unit>? = null,
+        private val stencilPassCalls: MutableList<RecordedStencilPass>? = null,
     ) : GPUBackendOffscreenTarget {
         override val target: GPUSurfaceTarget
             get() = error("target is not used by this spy")
@@ -519,7 +577,7 @@ class GPUSaveLayerCompositeRegressionTest {
     @Suppress("UNCHECKED_CAST")
     private fun rawDrawRecorder(
         recordedDraws: MutableList<GPUBackendRawUniformDraw>,
-        stencilPassCalls: MutableList<Unit>? = null,
+        stencilPassCalls: MutableList<RecordedStencilPass>? = null,
     ): GPUBackendRenderRecorder =
         Proxy.newProxyInstance(
             GPUBackendRenderRecorder::class.java.classLoader,
@@ -532,8 +590,13 @@ class GPUSaveLayerCompositeRegressionTest {
                     null
                 }
                 "drawFullscreenStencilPass" -> {
-                    stencilPassCalls?.add(Unit)
-                    error("unexpected stencil pass")
+                    stencilPassCalls?.add(
+                        RecordedStencilPass(
+                            mode = args!![2] as GPUBackendStencilMode,
+                            draws = args[4] as List<GPUBackendRawUniformDraw>,
+                        ),
+                    )
+                    null
                 }
                 else -> error("unexpected recorder call: ${method.name}")
             }
