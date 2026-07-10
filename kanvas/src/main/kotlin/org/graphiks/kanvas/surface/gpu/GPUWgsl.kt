@@ -444,6 +444,32 @@ internal val IMAGE_TEXTURE_WGSL: String = """
     }
 """.trimIndent()
 
+internal val FILTERED_IMAGE_COMPOSITE_WGSL: String = """
+    struct Uniforms {
+        dstRect: vec4f,
+        localSize: vec2f,
+        _pad: vec2f,
+    };
+
+    @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+    @group(1) @binding(1) var imageTex: texture_2d<f32>;
+    @group(1) @binding(2) var imageSam: sampler;
+
+    @vertex
+    fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
+        let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
+        let y = f32(idx & 2u) * 2.0 - 1.0;
+        return vec4f(x, y, 0.0, 1.0);
+    }
+
+    @fragment
+    fn fs_main(@builtin(position) coord: vec4f) -> @location(0) vec4f {
+        let local = coord.xy - uniforms.dstRect.xy;
+        let uv = local / max(uniforms.localSize, vec2f(1.0, 1.0));
+        return textureSample(imageTex, imageSam, uv);
+    }
+""".trimIndent()
+
 internal fun stencilWriteWgsl(width: Int, height: Int): String = """
 struct VertexInput {
     @location(0) position: vec2f,
