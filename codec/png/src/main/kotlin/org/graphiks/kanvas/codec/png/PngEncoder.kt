@@ -157,6 +157,7 @@ public object PngEncoder {
             "PNG tEXt keyword must not contain consecutive spaces"
         }
         val textBytes = latin1Bytes(text, "text")
+        require(textBytes.none { it == NUL }) { "PNG tEXt text must not contain a null character" }
         return keyBytes + byteArrayOf(0) + textBytes
     }
 
@@ -405,4 +406,5 @@ public object PngEncoder {
     }
 
     private val SPACE: Byte = 0x20
+    private val NUL: Byte = 0x00
 }

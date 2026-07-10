@@ -23,6 +23,7 @@ import org.skia.foundation.skcms.SkNamedGamut
 import org.skia.foundation.skcms.SkNamedTransferFn
 import org.skia.foundation.skcms.SkcmsICCProfile
 import org.skia.foundation.skcms.skcmsParse
+import org.skia.foundation.stream.SkWStream
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -183,15 +184,21 @@ class PngEncoderTest {
     }
 
     @Test
-    fun `HDR and unsupported color profiles are refused without OutputStream output`() {
+    fun `HDR unsupported and non-serializable color profiles are refused without OutputStream output`() {
         val hdr = CicpColorInfo(primaries = 9, transfer = 16, matrix = 0, fullRange = true)
             .toColorProfile()
             .getOrThrow()
+        val nonSerializableMatrix = SkcmsMatrix3x3.of(
+            SkNamedGamut.kSRGB[0, 0] + 0.01f, SkNamedGamut.kSRGB[0, 1], SkNamedGamut.kSRGB[0, 2],
+            SkNamedGamut.kSRGB[1, 0], SkNamedGamut.kSRGB[1, 1], SkNamedGamut.kSRGB[1, 2],
+            SkNamedGamut.kSRGB[2, 0], SkNamedGamut.kSRGB[2, 1], SkNamedGamut.kSRGB[2, 2],
+        )
         val refusedColorSpaces = listOf(
             SkColorSpace.makeProfileAware(SkcmsICCProfile.fromColorProfile(hdr)),
             SkColorSpace.makeProfileAware(
                 SkcmsICCProfile.fromColorProfile(ColorProfile.unsupported("icc.profile.unsupported")),
             ),
+            SkColorSpace.makeRGB(SkNamedTransferFn.kSRGB, nonSerializableMatrix)!!,
         )
 
         refusedColorSpaces.forEach { colorSpace ->
@@ -224,6 +231,31 @@ class PngEncoderTest {
     }
 
     @Test
+    fun `refusal propagates through SkWStream and SkPixmap overloads without output`() {
+        val unsupported = SkColorSpace.makeProfileAware(
+            SkcmsICCProfile.fromColorProfile(ColorProfile.unsupported("icc.profile.unsupported")),
+        )
+        val bitmap = SkBitmap(1, 1, unsupported).also { it.pixels[0] = 0xFF336699.toInt() }
+        val info = SkImageInfo.Make(
+            width = 1,
+            height = 1,
+            colorType = SkColorType.kRGBA_8888,
+            alphaType = SkAlphaType.kUnpremul,
+            colorSpace = unsupported,
+        )
+        val pixels = ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putInt(0, 0xFF336699.toInt())
+        val pixmap = SkPixmap(info, pixels, 4)
+        val bitmapStream = RecordingWStream()
+        val pixmapStream = RecordingWStream()
+
+        assertFalse(PngEncoder.encode(bitmapStream, bitmap))
+        assertEquals(0L, bitmapStream.bytesWritten())
+        assertNull(PngEncoder.encode(pixmap))
+        assertFalse(PngEncoder.encode(pixmapStream, pixmap))
+        assertEquals(0L, pixmapStream.bytesWritten())
+    }
+
+    @Test
     fun `tEXt comments use exact Latin-1 wire bytes`() {
         val src = SkBitmap(1, 1)
         val bytes = PngEncoder.encode(
@@ -238,6 +270,17 @@ class PngEncoderTest {
     }
 
     @Test
+    fun `tEXt accepts a 79-byte Latin-1 keyword`() {
+        val keyword = "R\u00e9sum\u00e9" + "x".repeat(73)
+        val bytes = PngEncoder.encode(
+            SkBitmap(1, 1),
+            PngEncoder.Options(comments = listOf(keyword, "ok")),
+        )!!
+
+        assertEquals(79, chunkData(bytes, 0x74455874).indexOf(0))
+    }
+
+    @Test
     fun `tEXt rejects invalid keyword and non Latin-1 text without output`() {
         val src = SkBitmap(1, 1)
         val invalidComments = listOf(
@@ -247,6 +290,7 @@ class PngEncoderTest {
             listOf("two  spaces", "text"),
             listOf("bad\u0080keyword", "text"),
             listOf("keyword", "snowman \u2603"),
+            listOf("keyword", "nul\u0000text"),
         )
 
         invalidComments.forEach { comments ->
@@ -304,6 +348,17 @@ class PngEncoderTest {
             pos += 12 + len
         }
         error("chunk not found: ${type.toString(16)}")
+    }
+
+    private class RecordingWStream : SkWStream() {
+        private val output = ByteArrayOutputStream()
+
+        override fun write(buffer: ByteArray, size: Int): Boolean {
+            output.write(buffer, 0, size)
+            return true
+        }
+
+        override fun bytesWritten(): Long = output.size().toLong()
     }
 
     private fun decodePng(bytes: ByteArray): SkBitmap {
