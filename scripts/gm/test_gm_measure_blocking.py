@@ -96,5 +96,28 @@ class DeterministicReportTest(unittest.TestCase):
         self.assertNotIn("`FAIL|0|alpha|device|lost`", markdown)
 
 
+class BatchFallbackTest(unittest.TestCase):
+    def test_batch_recording_only_a_falls_back_to_remaining_names(self):
+        fallback = gm_measure_blocking.fallback_names(
+            ["a", "b", "c", "d", "e"],
+            attempt=0,
+            records=[{"attempt": 0, "record": "PASS|7|a|12"}],
+        )
+
+        self.assertEqual(["b", "c", "d", "e"], fallback)
+
+    def test_aggregate_retains_three_attempts_after_fallback(self):
+        records = []
+        for attempt in range(3):
+            records.append({"attempt": attempt, "record": "PASS|7|a|12"})
+            for name in ["b", "c", "d", "e"]:
+                records.append({"attempt": attempt, "record": "PASS|8|%s|12" % name})
+
+        attempts = gm_measure_blocking.aggregate_attempt_records(["a", "b", "c", "d", "e"], records)
+
+        self.assertEqual(["a", "b", "c", "d", "e"], sorted(attempts))
+        self.assertTrue(all(len(samples) == 3 for samples in attempts.values()))
+
+
 if __name__ == "__main__":
     unittest.main()

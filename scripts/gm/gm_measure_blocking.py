@@ -38,6 +38,115 @@ def _parse_attempt(attempt):
     raise ValueError("unsupported attempt record: %r" % raw)
 
 
+def _ordered_names(names):
+    ordered = list(names)
+    if not ordered or any(not isinstance(name, str) or not name for name in ordered):
+        raise ValueError("expected one or more nonblank GM names")
+    if len(set(ordered)) != len(ordered):
+        raise ValueError("GM names must be unique")
+    return ordered
+
+
+def fallback_names(names, attempt, records):
+    """Return batch names without a flushed record for the given outer attempt."""
+    ordered_names = _ordered_names(names)
+    recorded = set()
+    for record in records:
+        if not isinstance(record, dict) or record.get("attempt") != attempt:
+            continue
+        parsed = _parse_attempt(record)
+        if parsed["name"] in ordered_names:
+            recorded.add(parsed["name"])
+    return [name for name in ordered_names if name not in recorded]
+
+
+def aggregate_attempt_records(names, records):
+    """Validate and group raw outer-attempt records for Task 2 aggregation."""
+    ordered_names = _ordered_names(names)
+    expected_names = set(ordered_names)
+    grouped = {name: [] for name in ordered_names}
+    seen = set()
+
+    for record in records:
+        if not isinstance(record, dict) or not isinstance(record.get("attempt"), int):
+            raise ValueError("attempt record requires an integer outer attempt")
+        attempt = record["attempt"]
+        if attempt not in {0, 1, 2}:
+            raise ValueError("outer attempt must be 0, 1, or 2")
+        parsed = _parse_attempt(record)
+        name = parsed["name"]
+        if name not in expected_names:
+            raise ValueError("recorded GM is not selected: %s" % name)
+        key = (name, attempt)
+        if key in seen:
+            raise ValueError("duplicate GM/attempt record: %s/%s" % key)
+        seen.add(key)
+        grouped[name].append((attempt, {"record": parsed["raw"]}))
+
+    result = {}
+    for name in ordered_names:
+        samples = sorted(grouped[name], key=lambda sample: sample[0])
+        if len(samples) != 3:
+            raise ValueError("expected exactly three attempts for %s" % name)
+        result[name] = [sample for _, sample in samples]
+    return result
+
+
+def _read_ndjson(path):
+    if not path.exists():
+        return []
+    records = []
+    for line_number, line in enumerate(path.read_text().splitlines(), start=1):
+        if not line.strip():
+            continue
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError as error:
+            raise ValueError("invalid NDJSON at %s:%s" % (path, line_number)) from error
+        records.append(record)
+    return records
+
+
+def append_scanner_records(names, attempt, scanner_output, attempts_ndjson):
+    """Append scanner lines as attributed NDJSON, rejecting duplicate GM/attempt pairs."""
+    ordered_names = _ordered_names(names)
+    selected_names = set(ordered_names)
+    existing = _read_ndjson(attempts_ndjson)
+    seen = set()
+    for record in existing:
+        if not isinstance(record, dict) or not isinstance(record.get("attempt"), int):
+            raise ValueError("attempt record requires an integer outer attempt")
+        parsed = _parse_attempt(record)
+        seen.add((parsed["name"], record["attempt"]))
+
+    additions = []
+    for line in scanner_output.read_text().splitlines():
+        if not line.strip():
+            continue
+        parsed = _parse_attempt(line)
+        if parsed["name"] not in selected_names:
+            raise ValueError("scanner returned unselected GM: %s" % parsed["name"])
+        key = (parsed["name"], attempt)
+        if key in seen:
+            raise ValueError("duplicate GM/attempt record: %s/%s" % key)
+        seen.add(key)
+        additions.append({"attempt": attempt, "record": parsed["raw"]})
+
+    if additions:
+        attempts_ndjson.parent.mkdir(parents=True, exist_ok=True)
+        with attempts_ndjson.open("a") as output:
+            for record in additions:
+                output.write(json.dumps(record, sort_keys=True) + "\n")
+
+
+def write_environment(path, uname, java_version, git_head):
+    path.write_text(to_sorted_json({
+        "gitHead": git_head,
+        "javaVersion": java_version,
+        "uname": uname,
+    }))
+
+
 def _median(samples):
     ordered = sorted(samples)
     middle = len(ordered) // 2
@@ -163,11 +272,48 @@ def _default_provenance(backend):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--input", type=Path, required=True, help="JSON mapping GM names to three attempt records")
-    parser.add_argument("--json-out", type=Path, required=True, help="destination for sorted JSON")
-    parser.add_argument("--markdown-out", type=Path, required=True, help="destination for Markdown report")
+    parser.add_argument("--input", type=Path, help="JSON mapping GM names to three attempt records")
+    parser.add_argument("--json-out", type=Path, help="destination for sorted JSON")
+    parser.add_argument("--markdown-out", type=Path, help="destination for Markdown report")
     parser.add_argument("--backend", default="unknown", help="renderer backend used for measurement")
+    parser.add_argument("--attempts-ndjson", type=Path, help="attributed raw scanner records")
+    parser.add_argument("--scanner-output", type=Path, help="raw output from one scanner invocation")
+    parser.add_argument("--names", help="comma-separated selected GM names")
+    parser.add_argument("--attempt", type=int, help="outer attempt index")
+    parser.add_argument("--fallback", action="store_true", help="print names missing the outer attempt")
+    parser.add_argument("--aggregate", action="store_true", help="write Task 2 aggregation input to stdout")
+    parser.add_argument("--append-scanner-records", action="store_true", help="attribute scanner output into NDJSON")
+    parser.add_argument("--environment-out", type=Path, help="write captured environment JSON")
+    parser.add_argument("--uname", help="captured uname")
+    parser.add_argument("--java-version", help="captured Java version")
+    parser.add_argument("--git-head", help="captured Git HEAD")
     args = parser.parse_args()
+
+    if args.environment_out:
+        if any(value is None for value in (args.uname, args.java_version, args.git_head)):
+            parser.error("--environment-out requires --uname, --java-version, and --git-head")
+        write_environment(args.environment_out, args.uname, args.java_version, args.git_head)
+        return
+
+    names = args.names.split(",") if args.names else None
+    if args.append_scanner_records:
+        if names is None or args.attempt is None or not args.scanner_output or not args.attempts_ndjson:
+            parser.error("--append-scanner-records requires --names, --attempt, --scanner-output, and --attempts-ndjson")
+        append_scanner_records(names, args.attempt, args.scanner_output, args.attempts_ndjson)
+        return
+    if args.fallback:
+        if names is None or args.attempt is None or not args.attempts_ndjson:
+            parser.error("--fallback requires --names, --attempt, and --attempts-ndjson")
+        print("\n".join(fallback_names(names, args.attempt, _read_ndjson(args.attempts_ndjson))))
+        return
+    if args.aggregate:
+        if names is None or not args.attempts_ndjson:
+            parser.error("--aggregate requires --names and --attempts-ndjson")
+        print(to_sorted_json({"attempts": aggregate_attempt_records(names, _read_ndjson(args.attempts_ndjson))}), end="")
+        return
+
+    if not args.input or not args.json_out or not args.markdown_out:
+        parser.error("--input, --json-out, and --markdown-out are required for report generation")
     input_data = json.loads(args.input.read_text())
     report = build_report(
         input_data["attempts"],
