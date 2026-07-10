@@ -7,6 +7,7 @@ import org.graphiks.kanvas.picture.PictureRecorder
 import org.graphiks.kanvas.surface.DiagnosticLevel
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
+import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.types.Rect
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -261,6 +262,115 @@ class GPUSaveLayerCompositeRegressionTest {
         assertEquals(0, result.diagnostics.fatalCount)
     }
 
+    @Test
+    fun `translated bounded saveLayer maps local bounds to device space`() {
+        requireWebGpu()
+
+        val surface = Surface(width = 8, height = 8)
+        surface.canvas {
+            drawRect(Rect(0f, 0f, 8f, 8f), Paint(color = white.toColor(), antiAlias = false))
+            translate(2f, 1f)
+            saveLayer(Rect(0f, 0f, 4f, 4f))
+            resetMatrix()
+            drawRect(Rect(0f, 0f, 8f, 8f), Paint(color = translucentRed.toColor(), antiAlias = false))
+            restore()
+        }
+
+        val result = surface.render()
+
+        assertPixelNear(result.pixels, x = 1, y = 2, expected = white, tolerance = 0)
+        assertPixelNear(result.pixels, x = 4, y = 2, expected = sourceOverSrgb(translucentRed, white), tolerance = 2)
+        assertPixelNear(result.pixels, x = 6, y = 2, expected = white, tolerance = 0)
+        assertEquals(0, result.diagnostics.fatalCount)
+    }
+
+    @Test
+    fun `scaled bounded saveLayer maps local bounds to device space`() {
+        requireWebGpu()
+
+        val surface = Surface(width = 8, height = 8)
+        surface.canvas {
+            drawRect(Rect(0f, 0f, 8f, 8f), Paint(color = white.toColor(), antiAlias = false))
+            scale(2f, 2f)
+            saveLayer(Rect(1f, 1f, 3f, 3f))
+            resetMatrix()
+            drawRect(Rect(0f, 0f, 8f, 8f), Paint(color = translucentRed.toColor(), antiAlias = false))
+            restore()
+        }
+
+        val result = surface.render()
+
+        assertPixelNear(result.pixels, x = 1, y = 3, expected = white, tolerance = 0)
+        assertPixelNear(result.pixels, x = 3, y = 3, expected = sourceOverSrgb(translucentRed, white), tolerance = 2)
+        assertPixelNear(result.pixels, x = 6, y = 3, expected = white, tolerance = 0)
+        assertEquals(0, result.diagnostics.fatalCount)
+    }
+
+    @Test
+    fun `partially offscreen bounded saveLayer clips at the device edge`() {
+        requireWebGpu()
+
+        val surface = Surface(width = 8, height = 8)
+        surface.canvas {
+            drawRect(Rect(0f, 0f, 8f, 8f), Paint(color = white.toColor(), antiAlias = false))
+            translate(-2f, 1f)
+            saveLayer(Rect(0f, 0f, 6f, 4f))
+            resetMatrix()
+            drawRect(Rect(0f, 0f, 8f, 8f), Paint(color = translucentRed.toColor(), antiAlias = false))
+            restore()
+        }
+
+        val result = surface.render()
+
+        assertPixelNear(result.pixels, x = 3, y = 2, expected = sourceOverSrgb(translucentRed, white), tolerance = 2)
+        assertPixelNear(result.pixels, x = 4, y = 2, expected = white, tolerance = 0)
+        assertEquals(0, result.diagnostics.fatalCount)
+    }
+
+    @Test
+    fun `non finite mapped saveLayer bounds leave parent and report exact refusal`() {
+        requireWebGpu()
+
+        val surface = Surface(width = 8, height = 8)
+        surface.canvas {
+            drawCheckerboardRoot()
+            concat(Matrix33.makeAll(1f, 0f, Float.POSITIVE_INFINITY, 0f, 1f, 0f))
+            saveLayer(Rect(0f, 0f, 4f, 4f))
+            drawRect(Rect(0f, 0f, 8f, 8f), Paint(color = translucentRed.toColor(), antiAlias = false))
+            restore()
+        }
+
+        val result = surface.render()
+
+        assertCheckerboard(result.pixels)
+        assertFatalReason(result, "unsupported.layer.bounds.non_finite")
+    }
+
+    @Test
+    fun `nested bounded saveLayers intersect their transformed device bounds`() {
+        requireWebGpu()
+
+        val surface = Surface(width = 8, height = 8)
+        surface.canvas {
+            drawRect(Rect(0f, 0f, 8f, 8f), Paint(color = white.toColor(), antiAlias = false))
+            translate(1f, 0f)
+            saveLayer(Rect(0f, 0f, 5f, 6f))
+            translate(2f, 0f)
+            saveLayer(Rect(0f, 0f, 5f, 6f))
+            resetMatrix()
+            drawRect(Rect(0f, 0f, 8f, 8f), Paint(color = translucentRed.toColor(), antiAlias = false))
+            restore()
+            restore()
+        }
+
+        val result = surface.render()
+
+        assertPixelNear(result.pixels, x = 2, y = 2, expected = white, tolerance = 0)
+        assertPixelNear(result.pixels, x = 5, y = 2, expected = sourceOverSrgb(translucentRed, white), tolerance = 2)
+        assertPixelNear(result.pixels, x = 6, y = 2, expected = white, tolerance = 0)
+        assertEquals(0, result.diagnostics.fatalCount)
+    }
+
     private fun org.graphiks.kanvas.canvas.Canvas.drawCheckerboardRoot() {
         drawRect(Rect(0f, 0f, 4f, 4f), Paint(color = white.toColor(), antiAlias = false))
         drawRect(
@@ -279,6 +389,11 @@ class GPUSaveLayerCompositeRegressionTest {
         assertPixelNear(pixels, x = 6, y = 0, expected = checkerGray, tolerance = 0)
         assertPixelNear(pixels, x = 0, y = 6, expected = checkerGray, tolerance = 0)
         assertPixelNear(pixels, x = 6, y = 6, expected = white, tolerance = 0)
+    }
+
+    private fun assertFatalReason(result: org.graphiks.kanvas.surface.RenderResult, reason: String) {
+        assertEquals(1, result.diagnostics.fatalCount)
+        assertEquals(reason, result.diagnostics.entries.single { it.level == DiagnosticLevel.FATAL }.reason)
     }
 
     private fun requireWebGpu() {

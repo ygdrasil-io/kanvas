@@ -61,8 +61,11 @@ sealed interface DisplayOp {
     data class SetClip(val clip: ClipStack) : DisplayOp
 
     /** Begin an offscreen layer with a complete [SaveLayerRec]. */
-    data class BeginLayer(val rec: SaveLayerRec) : DisplayOp {
-        constructor(bounds: Rect?, paint: Paint?) : this(SaveLayerRec(bounds, paint))
+    data class BeginLayer(
+        val rec: SaveLayerRec,
+        val transform: Matrix33 = Matrix33.identity(),
+    ) : DisplayOp {
+        constructor(bounds: Rect?, paint: Paint?) : this(SaveLayerRec(bounds, paint), Matrix33.identity())
 
         val bounds: Rect? get() = rec.bounds
         val paint: Paint? get() = rec.paint

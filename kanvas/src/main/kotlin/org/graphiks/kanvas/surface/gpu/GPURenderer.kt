@@ -142,21 +142,29 @@ internal fun renderViaGpu(
             val trivialLayerPaint = Paint()
             fun sceneClear() = if (sceneHasContent) null else clearTransparent
 
-            fun classifyLayerRequest(rec: SaveLayerRec): LayerPlan {
+            fun classifyLayerRequest(rec: SaveLayerRec, transform: Matrix33): LayerPlan {
                 if (rec.backdrop != null) return LayerPlan.Refused("unsupported.layer.backdrop_filter")
                 if (rec.paint != null && rec.paint != trivialLayerPaint) return LayerPlan.Refused("unsupported.layer.paint")
 
                 val bounds = rec.bounds ?: return LayerPlan.Supported(null, LayerCompositePlan())
-                if (!bounds.left.isFinite() || !bounds.top.isFinite() ||
-                    !bounds.right.isFinite() || !bounds.bottom.isFinite()
-                ) {
+                val mappedCorners = listOf(
+                    transform * org.graphiks.kanvas.types.Point(bounds.left, bounds.top),
+                    transform * org.graphiks.kanvas.types.Point(bounds.right, bounds.top),
+                    transform * org.graphiks.kanvas.types.Point(bounds.left, bounds.bottom),
+                    transform * org.graphiks.kanvas.types.Point(bounds.right, bounds.bottom),
+                )
+                if (mappedCorners.any { !it.x.isFinite() || !it.y.isFinite() }) {
                     return LayerPlan.Refused("unsupported.layer.bounds.non_finite")
                 }
 
-                val x = floor(bounds.left).toInt().coerceIn(0, width)
-                val y = floor(bounds.top).toInt().coerceIn(0, height)
-                val endX = ceil(bounds.right).toInt().coerceIn(x, width)
-                val endY = ceil(bounds.bottom).toInt().coerceIn(y, height)
+                val left = mappedCorners.minOf { it.x }
+                val top = mappedCorners.minOf { it.y }
+                val right = mappedCorners.maxOf { it.x }
+                val bottom = mappedCorners.maxOf { it.y }
+                val x = floor(left).toInt().coerceIn(0, width)
+                val y = floor(top).toInt().coerceIn(0, height)
+                val endX = ceil(right).toInt().coerceIn(x, width)
+                val endY = ceil(bottom).toInt().coerceIn(y, height)
                 return LayerPlan.Supported(
                     bounds = LayerBounds(x, y, endX - x, endY - y),
                     composite = LayerCompositePlan(),
@@ -586,7 +594,7 @@ internal fun renderViaGpu(
                         suppressedLayerDepth++
                         continue
                     }
-                    when (val plan = classifyLayerRequest(op.rec)) {
+                    when (val plan = classifyLayerRequest(op.rec, op.transform)) {
                         is LayerPlan.Refused -> {
                             diagnostics.fatal(
                                 "refuse:saveLayer:${cmdId.value}",
