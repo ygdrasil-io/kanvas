@@ -13,6 +13,16 @@ data class SkiaGmScanOptions(
     val names: Set<String> = emptySet(),
 )
 
+data class SkiaGmScanSelection(
+    val gms: List<IndexedValue<SkiaGm>>,
+    val total: Int,
+    val effectiveFrom: Int,
+    val effectiveTo: Int,
+) {
+    val emptyDiagnostic: String
+        get() = "[SKIP] --from=$effectiveFrom >= total=$total"
+}
+
 fun parseSkiaGmScanOptions(args: Array<String>): SkiaGmScanOptions {
     var from = 0
     var to = Int.MAX_VALUE
@@ -38,16 +48,28 @@ fun parseSkiaGmScanOptions(args: Array<String>): SkiaGmScanOptions {
     return SkiaGmScanOptions(from, to, timeoutSeconds, outputPath, names)
 }
 
-fun selectSkiaGmsForScan(
+fun resolveSkiaGmScanSelection(
     gms: List<SkiaGm>,
     options: SkiaGmScanOptions,
-): List<IndexedValue<SkiaGm>> {
+): SkiaGmScanSelection {
     val namedGms = gms.withIndex().filter { options.names.isEmpty() || it.value.name in options.names }
     val foundNames = namedGms.map { it.value.name }.toSet()
     val missingNames = options.names - foundNames
     require(missingNames.isEmpty()) { "Unknown Skia GM names: ${missingNames.joinToString(", ")}" }
-    return namedGms.drop(options.from).take((options.to - options.from).coerceAtLeast(0))
+    val effectiveFrom = options.from.coerceIn(0, namedGms.size)
+    val effectiveTo = options.to.coerceIn(effectiveFrom, namedGms.size)
+    return SkiaGmScanSelection(
+        gms = namedGms.subList(effectiveFrom, effectiveTo),
+        total = namedGms.size,
+        effectiveFrom = effectiveFrom,
+        effectiveTo = effectiveTo,
+    )
 }
+
+fun selectSkiaGmsForScan(
+    gms: List<SkiaGm>,
+    options: SkiaGmScanOptions,
+): List<IndexedValue<SkiaGm>> = resolveSkiaGmScanSelection(gms, options).gms
 
 /**
  * Scans GMs individually with a per-GM watchdog timeout.  When a GM hangs
@@ -68,10 +90,11 @@ fun main(args: Array<String>) {
     val options = parseSkiaGmScanOptions(args)
     RuntimeEffectWgsl4kWiring.install()
     val config = RenderConfig.fromEnvironment()
-    val selectedGms = selectSkiaGmsForScan(SkiaGmRegistry.all(), options)
+    val selection = resolveSkiaGmScanSelection(SkiaGmRegistry.all(), options)
+    val selectedGms = selection.gms
 
     if (selectedGms.isEmpty()) {
-        System.err.println("[SKIP] --from=${options.from} >= total=${selectedGms.size}")
+        System.err.println(selection.emptyDiagnostic)
         exitProcess(0)
     }
 
@@ -123,6 +146,6 @@ fun main(args: Array<String>) {
     }
 
     GPUBackendRuntimeFactory.dispose()
-    println("=== Scan [${options.from}, ${options.to}) done: PASS=$pass FAIL=$fail TIMEOUT=$timeout ===")
+    println("=== Scan [${selection.effectiveFrom}, ${selection.effectiveTo}) done: PASS=$pass FAIL=$fail TIMEOUT=$timeout ===")
     exitProcess(if (fail == 0 && timeout == 0) 0 else 1)
 }

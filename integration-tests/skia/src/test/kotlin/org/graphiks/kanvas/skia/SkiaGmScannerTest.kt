@@ -34,6 +34,22 @@ class SkiaGmScannerTest {
 
         assertEquals("Unknown Skia GM names: missing", error.message)
     }
+
+    @Test
+    fun `named selection reports normalized effective range and empty diagnostic total`() {
+        val options = SkiaGmScanOptions(from = 2, names = setOf("a", "c"))
+
+        val selection = resolveSkiaGmScanSelection(
+            listOf(ScannerStubGm("a"), ScannerStubGm("b"), ScannerStubGm("c")),
+            options,
+        )
+
+        assertEquals(2, selection.total)
+        assertEquals(2, selection.effectiveFrom)
+        assertEquals(2, selection.effectiveTo)
+        assertEquals(emptyList<IndexedValue<SkiaGm>>(), selection.gms)
+        assertEquals("[SKIP] --from=2 >= total=2", selection.emptyDiagnostic)
+    }
 }
 
 private class ScannerStubGm(
