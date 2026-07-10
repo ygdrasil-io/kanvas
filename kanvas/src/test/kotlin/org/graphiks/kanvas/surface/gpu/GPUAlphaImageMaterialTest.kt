@@ -4,8 +4,10 @@ import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
+import org.graphiks.kanvas.gpu.renderer.commands.GPUImageFilterPlan
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialKind
+import org.graphiks.kanvas.gpu.renderer.commands.GPURect
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.execution.GPUClearColor
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendOffscreenTexture
@@ -231,6 +233,60 @@ class GPUAlphaImageMaterialTest {
     }
 
     @Test
+    fun `draw image dispatch refuses an explicit image filter refusal before texture dispatch`() {
+        val recorder = CapturingRenderRecorder()
+        val diagnostics = Diagnostics()
+        val dispatched = mutableListOf<String>()
+
+        recorder.dispatchImageRect(
+            cmd = alphaImageCommand().copy(
+                imageFilterPlan = GPUImageFilterPlan.Refused("expected-refusal"),
+            ),
+            textureCache = mapOf("alpha-mask" to expandedAlphaPixels),
+            dispatched = dispatched,
+            diagnostics = diagnostics,
+            surfaceWidth = 16,
+            surfaceHeight = 16,
+            config = RenderConfig.DEFAULT,
+        )
+
+        assertEquals(1, diagnostics.fatalCount)
+        assertEquals("expected-refusal", diagnostics.entries.single().reason)
+        assertEquals(0, recorder.texturePassCount)
+        assertEquals(emptyList<String>(), dispatched)
+    }
+
+    @Test
+    fun `draw image dispatch refuses blur plans before texture dispatch`() {
+        val recorder = CapturingRenderRecorder()
+        val diagnostics = Diagnostics()
+        val dispatched = mutableListOf<String>()
+
+        recorder.dispatchImageRect(
+            cmd = alphaImageCommand().copy(
+                imageFilterPlan = GPUImageFilterPlan.Blur(
+                    sigmaX = 1f,
+                    sigmaY = 1f,
+                    haloX = 3,
+                    haloY = 3,
+                    outputBounds = GPURect(0f, 0f, 2f, 1f),
+                ),
+            ),
+            textureCache = mapOf("alpha-mask" to expandedAlphaPixels),
+            dispatched = dispatched,
+            diagnostics = diagnostics,
+            surfaceWidth = 16,
+            surfaceHeight = 16,
+            config = RenderConfig.DEFAULT,
+        )
+
+        assertEquals(1, diagnostics.fatalCount)
+        assertEquals("unsupported.image-filter.blur.route-bypass", diagnostics.entries.single().reason)
+        assertEquals(0, recorder.texturePassCount)
+        assertEquals(emptyList<String>(), dispatched)
+    }
+
+    @Test
     fun `alpha image shader fill path dispatches texture with stencil test`() {
         val paint = Paint(
             color = Color.fromRGBA(0.2f, 0.4f, 0.6f, 0.7f),
@@ -331,6 +387,18 @@ class GPUAlphaImageMaterialTest {
     private val expandedAlphaPixels = byteArrayOf(
         0x00, 0x00, 0x00, 0x00,
         0x80.toByte(), 0x80.toByte(), 0x80.toByte(), 0x80.toByte(),
+    )
+
+    private fun alphaImageCommand() = DisplayOp.DrawImage(
+        image = alphaImage,
+        src = Rect(0f, 0f, 2f, 1f),
+        dst = Rect(0f, 0f, 2f, 1f),
+        paint = Paint(),
+        transform = Matrix33.identity(),
+        clip = ClipStack.WideOpen,
+    ).toImageRectCommand(
+        GPUDrawCommandID(14),
+        GPUTargetFacts(width = 16, height = 16, colorFormat = "bgra8unorm"),
     )
 
     private fun assertFloatUniforms(bytes: ByteArray, vararg expected: Float) {
