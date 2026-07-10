@@ -122,6 +122,22 @@ class GPUImageFilterSurfaceTest {
         )
     }
 
+    @Test
+    fun `isolated repeat image blur is refused without a dispatch`() {
+        requireWebGpu()
+        val result = renderIsolatedFixtureResult(
+            Paint(imageFilter = ImageFilter.Blur(2f, 2f, TileMode.REPEAT)),
+        )
+
+        assertEquals(0, result.stats.opsDispatched)
+        assertEquals(1, result.stats.opsRefused)
+        assertEquals(1, result.diagnostics.fatalCount)
+        assertEquals(
+            "unsupported.image-filter.blur.tile-mode",
+            result.diagnostics.entries.single().reason,
+        )
+    }
+
     private fun renderFixtureThroughSurface(
         image: Image,
         paint: Paint,
@@ -140,6 +156,17 @@ class GPUImageFilterSurfaceTest {
                 Rect.fromXYWH(0f, 0f, 9f, 9f),
                 Paint(),
             )
+            drawImage(
+                opaqueRedImpulse(width = 9, height = 9, centerX = 4, centerY = 4),
+                Rect.fromXYWH(8f, 8f, 9f, 9f),
+                paint,
+            )
+        }
+        render()
+    }
+
+    private fun renderIsolatedFixtureResult(paint: Paint) = Surface(32, 32).run {
+        canvas {
             drawImage(
                 opaqueRedImpulse(width = 9, height = 9, centerX = 4, centerY = 4),
                 Rect.fromXYWH(8f, 8f, 9f, 9f),
