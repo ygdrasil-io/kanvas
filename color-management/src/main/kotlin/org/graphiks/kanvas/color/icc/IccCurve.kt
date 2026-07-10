@@ -37,9 +37,12 @@ internal class ParametricIccCurve(functionType: Int, parameters: FloatArray) : I
                 values[4] > 1f -> inverseLowerSegment(y, values[3], 0f)
                 else -> {
                     val lowerBoundary = Math.nextDown(values[4])
-                    val lowerLimit = rawParametricEvaluation(type, values, lowerBoundary).coerceIn(0f, 1f)
+                    val lowerRawLimit = rawParametricEvaluation(type, values, lowerBoundary)
+                    val lowerLimit = lowerRawLimit.coerceIn(0f, 1f)
                     val upperLimit = rawParametricEvaluation(type, values, values[4]).coerceIn(0f, 1f)
                     when {
+                        // Annex F.1 chooses the first x for a terminal plateau reached by the lower branch.
+                        y == 1f && lowerRawLimit >= 1f -> if (values[3] == 0f) 0f else y / values[3]
                         y < lowerLimit -> if (values[3] != 0f) y / values[3] else lowerBoundary
                         y < upperLimit -> closestGapBoundary(y, lowerBoundary, lowerLimit, values[4], upperLimit)
                         else -> max(values[4], (y.pow(1f / g) - values[2]) / values[1])
@@ -51,9 +54,12 @@ internal class ParametricIccCurve(functionType: Int, parameters: FloatArray) : I
                 values[4] > 1f -> inverseLowerSegment(y, values[3], values[6])
                 else -> {
                     val lowerBoundary = Math.nextDown(values[4])
-                    val lowerLimit = rawParametricEvaluation(type, values, lowerBoundary).coerceIn(0f, 1f)
+                    val lowerRawLimit = rawParametricEvaluation(type, values, lowerBoundary)
+                    val lowerLimit = lowerRawLimit.coerceIn(0f, 1f)
                     val upperLimit = rawParametricEvaluation(type, values, values[4]).coerceIn(0f, 1f)
                     when {
+                        // Annex F.1 chooses the first x for a terminal plateau reached by the lower branch.
+                        y == 1f && lowerRawLimit >= 1f -> if (values[3] == 0f) 0f else (y - values[6]) / values[3]
                         y < lowerLimit -> if (values[3] != 0f) (y - values[6]) / values[3] else lowerBoundary
                         y < upperLimit -> closestGapBoundary(y, lowerBoundary, lowerLimit, values[4], upperLimit)
                         else -> max(values[4], ((y - values[5]).pow(1f / g) - values[2]) / values[1])
