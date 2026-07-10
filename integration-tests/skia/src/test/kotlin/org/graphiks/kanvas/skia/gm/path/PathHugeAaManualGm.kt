@@ -15,7 +15,7 @@ import org.graphiks.kanvas.types.Rect
 class PathHugeAaManualGm : SkiaGm {
     override val name = "path_huge_aa_manual"
     override val renderFamily = RenderFamily.PATH
-    override val renderCost = RenderCost.FAST
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 200
     override val height = 200

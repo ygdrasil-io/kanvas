@@ -12,7 +12,7 @@ import org.graphiks.kanvas.types.Rect
 class TilingGm : SkiaGm {
     override val name = "tiling"
     override val renderFamily = RenderFamily.IMAGE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 512
     override val height = 512

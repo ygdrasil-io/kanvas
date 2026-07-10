@@ -14,7 +14,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 class AaRectEffectGm : SkiaGm {
     override val name = "aa_rect_effect"
     override val renderFamily = RenderFamily.PATH
-    override val renderCost = RenderCost.FAST
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 210
     override val height = 250

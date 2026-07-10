@@ -20,7 +20,7 @@ open class AnimCodecPlayerExifGm(
 ) : SkiaGm {
     final override val name = "AnimCodecPlayerExif_${path.substringAfterLast('/')}"
     final override val renderFamily = RenderFamily.IMAGE
-    override val renderCost = RenderCost.FAST
+    override val renderCost = RenderCost.BLOCKING
     final override val minSimilarity = 0.0
     final override val width = 300
     final override val height = 300

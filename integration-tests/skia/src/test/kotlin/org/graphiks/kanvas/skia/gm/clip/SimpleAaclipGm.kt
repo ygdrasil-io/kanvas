@@ -87,7 +87,9 @@ sealed class SimpleAaclipBaseGm(
     }
 }
 
-class SimpleAaclipRectGm : SimpleAaclipBaseGm("simpleaaclip_rect", usePath = false)
+class SimpleAaclipRectGm : SimpleAaclipBaseGm("simpleaaclip_rect", usePath = false) {
+    override val renderCost = RenderCost.FAST
+}
 class SimpleAaclipPathGm : SimpleAaclipBaseGm("simpleaaclip_path", usePath = true) {
     override val renderCost = RenderCost.FAST
 }

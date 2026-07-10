@@ -17,7 +17,7 @@ import org.graphiks.kanvas.types.Color
 class ConicPathsGm : SkiaGm {
     override val name = "conicpaths"
     override val renderFamily = RenderFamily.PATH
-    override val renderCost = RenderCost.FAST
+    override val renderCost = RenderCost.MEDIUM
     override val minSimilarity = 0.0
     override val width = 920
     override val height = 960

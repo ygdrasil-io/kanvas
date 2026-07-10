@@ -14,6 +14,15 @@ ROOT = Path(__file__).resolve().parents[2]
 REPORT = ROOT / "reports/skia-gm-render-cost/2026-07-10-blocking-reclassification.json"
 SERVICE = ROOT / "integration-tests/skia/src/test/resources/META-INF/services/org.graphiks.kanvas.skia.SkiaGm"
 SOURCE_ROOT = ROOT / "integration-tests/skia/src/test/kotlin"
+UNINSTANTIABLE_SERVICE_CLASSES = {
+    "org.graphiks.kanvas.skia.gm.blur.MatrixConvolutionGm",
+    "org.graphiks.kanvas.skia.gm.clip.ComplexClip2Gm",
+    "org.graphiks.kanvas.skia.gm.image.AnimCodecPlayerExifGm",
+    "org.graphiks.kanvas.skia.gm.image.DrawBitmapRectGm",
+    "org.graphiks.kanvas.skia.gm.path.InnerShapesGm",
+    "org.graphiks.kanvas.skia.gm.path.TrickyCubicStrokesGm",
+    "org.graphiks.kanvas.skia.gm.text.GlyphPosGm",
+}
 
 
 def matching_brace(text, opening):
@@ -86,7 +95,11 @@ def replace_render_cost(text, class_info, tag):
 def report_and_services():
     rows = json.loads(REPORT.read_text())["rows"]
     expected = {row["registryIndex"]: row["tag"] for row in rows}
-    services = [line.strip() for line in SERVICE.read_text().splitlines() if line.strip()]
+    services = [
+        line.strip()
+        for line in SERVICE.read_text().splitlines()
+        if line.strip() and line.strip() not in UNINSTANTIABLE_SERVICE_CLASSES
+    ]
     if len(rows) != 511 or len(expected) != 511:
         raise ValueError("report must contain exactly 511 unique registry rows")
     if max(expected) >= len(services):

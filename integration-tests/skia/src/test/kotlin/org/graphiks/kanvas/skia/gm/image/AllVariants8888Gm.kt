@@ -25,7 +25,7 @@ import org.graphiks.kanvas.types.Rect
 class AllVariants8888Gm : SkiaGm {
     override val name = "all_variants_8888"
     override val renderFamily = RenderFamily.IMAGE
-    override val renderCost = RenderCost.FAST
+    override val renderCost = RenderCost.MEDIUM
     override val minSimilarity = 0.0
     override val tolerance = 8
     override val width = 4 * SCALE + 30

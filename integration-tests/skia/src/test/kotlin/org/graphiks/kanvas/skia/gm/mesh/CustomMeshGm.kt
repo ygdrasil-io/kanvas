@@ -24,7 +24,7 @@ import org.graphiks.kanvas.types.VertexMode
 class CustomMeshGm : SkiaGm {
     override val name = "custommesh"
     override val renderFamily = RenderFamily.MESH
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 84.0
     override val referenceStatus = ReferenceStatusEntry(
         status = "untrustable",

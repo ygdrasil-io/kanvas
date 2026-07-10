@@ -19,7 +19,7 @@ import kotlin.math.sin
 class CircularArcsGm : SkiaGm {
     override val name = "circular_arcs"
     override val renderFamily = RenderFamily.PATH
-    override val renderCost = RenderCost.MEDIUM
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 512
     override val height = 512

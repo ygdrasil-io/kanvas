@@ -18,7 +18,7 @@ import kotlin.math.min
 class RepeatedBitmapJpgGm : SkiaGm {
     override val name = "repeated_bitmap_jpg"
     override val renderFamily = RenderFamily.IMAGE
-    override val renderCost = RenderCost.FAST
+    override val renderCost = RenderCost.MEDIUM
     override val minSimilarity = 0.0
     override val width = 576
     override val height = 576

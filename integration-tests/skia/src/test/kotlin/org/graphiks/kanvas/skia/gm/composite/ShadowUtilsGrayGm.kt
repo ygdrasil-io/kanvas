@@ -21,7 +21,7 @@ import kotlin.math.max
 class ShadowUtilsGrayGm : SkiaGm {
     override val name = "shadow_utils_gray"
     override val renderFamily = RenderFamily.COMPOSITE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 800
     override val height = 960

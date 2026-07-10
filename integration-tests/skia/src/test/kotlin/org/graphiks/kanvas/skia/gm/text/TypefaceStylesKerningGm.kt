@@ -17,7 +17,7 @@ import org.graphiks.kanvas.types.Point
 class TypefaceStylesKerningGm : SkiaGm {
     override val name = "typefacestyles_kerning"
     override val renderFamily = RenderFamily.TEXT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 640
     override val height = 480

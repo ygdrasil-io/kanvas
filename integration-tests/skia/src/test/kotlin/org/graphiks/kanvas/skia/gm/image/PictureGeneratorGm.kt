@@ -24,7 +24,7 @@ import org.graphiks.kanvas.types.Rect
 class PictureGeneratorGm : SkiaGm {
     override val name = "pictureimagegenerator"
     override val renderFamily = RenderFamily.IMAGE
-    override val renderCost = RenderCost.MEDIUM
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 1160
     override val height = 860

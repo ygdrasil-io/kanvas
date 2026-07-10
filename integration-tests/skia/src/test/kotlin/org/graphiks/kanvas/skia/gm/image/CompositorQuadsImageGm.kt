@@ -17,7 +17,7 @@ import org.graphiks.kanvas.types.Rect
 class CompositorQuadsImageGm : SkiaGm {
     override val name = "compositor_quads_image"
     override val renderFamily = RenderFamily.IMAGE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 955
     override val height = 699

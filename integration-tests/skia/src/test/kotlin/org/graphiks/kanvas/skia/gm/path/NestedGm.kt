@@ -19,7 +19,7 @@ import kotlin.random.Random
 class NestedGm : SkiaGm {
     override val name = "nested"
     override val renderFamily = RenderFamily.PATH
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 269
     override val height = 134

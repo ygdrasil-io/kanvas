@@ -171,6 +171,6 @@ class PictureShaderLocalWrapperGm : PictureShaderBaseGm(50f, 100f, true, 1f) {
 }
 
 class PictureShaderAlphaGm : PictureShaderBaseGm(50f, 100f, false, 0.25f) {
-    override val renderCost = RenderCost.FAST
+    override val renderCost = RenderCost.MEDIUM
     override val name = "pictureshader_alpha"
 }

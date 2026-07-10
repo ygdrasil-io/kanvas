@@ -20,7 +20,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 class SaveLayerGm : SkiaGm {
     override val name = "savelayer_initfromprev"
     override val renderFamily = RenderFamily.COMPOSITE
-    override val renderCost = RenderCost.FAST
+    override val renderCost = RenderCost.TRIVIAL
     override val minSimilarity = 0.0
     override val width = 256
     override val height = 256

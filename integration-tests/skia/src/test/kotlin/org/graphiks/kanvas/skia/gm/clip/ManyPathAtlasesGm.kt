@@ -57,5 +57,9 @@ open class ManyPathAtlasesGm(private val maxAtlasSize: Int) : SkiaGm {
     }
 }
 
-class ManyPathAtlases128Gm : ManyPathAtlasesGm(128)
-class ManyPathAtlases2048Gm : ManyPathAtlasesGm(2048)
+class ManyPathAtlases128Gm : ManyPathAtlasesGm(128) {
+    override val renderCost = RenderCost.FAST
+}
+class ManyPathAtlases2048Gm : ManyPathAtlasesGm(2048) {
+    override val renderCost = RenderCost.FAST
+}

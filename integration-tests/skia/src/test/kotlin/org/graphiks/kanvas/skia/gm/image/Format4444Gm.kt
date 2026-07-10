@@ -24,7 +24,7 @@ import org.graphiks.kanvas.types.Rect
 class Format4444Gm : SkiaGm {
     override val name = "format4444"
     override val renderFamily = RenderFamily.IMAGE
-    override val renderCost = RenderCost.FAST
+    override val renderCost = RenderCost.SLOW
     override val minSimilarity = 0.0
     override val tolerance = 8
     override val width = 64

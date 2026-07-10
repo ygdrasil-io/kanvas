@@ -25,7 +25,7 @@ import org.graphiks.kanvas.types.VertexMode
 class VerticesPerspectiveGm : SkiaGm {
     override val name = "vertices_perspective"
     override val renderFamily = RenderFamily.MESH
-    override val renderCost = RenderCost.FAST
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 256
     override val height = 256

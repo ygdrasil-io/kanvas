@@ -24,7 +24,7 @@ import org.graphiks.kanvas.types.Rect
 class LocalMatrixShaderPerspGm : SkiaGm {
     override val name = "localmatrixshader_persp"
     override val renderFamily = RenderFamily.IMAGE
-    override val renderCost = RenderCost.FAST
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 542
     override val height = 266

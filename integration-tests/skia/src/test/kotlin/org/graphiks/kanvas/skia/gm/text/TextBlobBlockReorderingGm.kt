@@ -20,7 +20,7 @@ import kotlin.math.floor
 class TextBlobBlockReorderingGm : SkiaGm {
     override val name = "textblobblockreordering"
     override val renderFamily = RenderFamily.TEXT
-    override val renderCost = RenderCost.MEDIUM
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 275
     override val height = 200

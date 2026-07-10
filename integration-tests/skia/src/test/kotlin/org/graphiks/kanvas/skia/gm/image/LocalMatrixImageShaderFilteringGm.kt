@@ -20,7 +20,7 @@ import org.graphiks.kanvas.types.Rect
 class LocalMatrixImageShaderFilteringGm : SkiaGm {
     override val name = "localmatriximageshader_filtering"
     override val renderFamily = RenderFamily.IMAGE
-    override val renderCost = RenderCost.FAST
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 256
     override val height = 256

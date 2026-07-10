@@ -24,7 +24,7 @@ import org.graphiks.kanvas.types.Rect
 class PictureShaderCacheGm : SkiaGm {
     override val name = "pictureshadercache"
     override val renderFamily = RenderFamily.IMAGE
-    override val renderCost = RenderCost.MEDIUM
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 100
     override val height = 100

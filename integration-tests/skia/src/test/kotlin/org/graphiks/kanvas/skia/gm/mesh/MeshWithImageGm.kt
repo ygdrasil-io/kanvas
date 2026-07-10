@@ -22,7 +22,7 @@ import kotlin.math.sin
 class MeshWithImageGm : SkiaGm {
     override val name = "mesh_with_image"
     override val renderFamily = RenderFamily.MESH
-    override val renderCost = RenderCost.FAST
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 320
     override val height = 320

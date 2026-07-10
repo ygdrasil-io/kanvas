@@ -13,7 +13,7 @@ import org.graphiks.kanvas.skia.SkiaGm
 class MacaatestGm : SkiaGm {
     override val name = "macaatest"
     override val renderFamily = RenderFamily.PATH
-    override val renderCost = RenderCost.FAST
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = 1024
     override val height = 768

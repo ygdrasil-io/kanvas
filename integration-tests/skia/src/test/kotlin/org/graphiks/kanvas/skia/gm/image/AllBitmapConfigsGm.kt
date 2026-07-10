@@ -20,7 +20,7 @@ import org.graphiks.kanvas.types.Rect
 class AllBitmapConfigsGm : SkiaGm {
     override val name = "all_bitmap_configs"
     override val renderFamily = RenderFamily.IMAGE
-    override val renderCost = RenderCost.MEDIUM
+    override val renderCost = RenderCost.SLOW
     override val minSimilarity = 0.0
     override val width = 128
     override val height = 768

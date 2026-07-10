@@ -85,7 +85,9 @@ open class GiantBitmapGm(
 class GiantBitmapClampPointScale : GiantBitmapGm(TileMode.CLAMP, false, false) {
     override val renderCost = RenderCost.FAST
 }
-class GiantBitmapRepeatPointScale : GiantBitmapGm(TileMode.REPEAT, false, false)
+class GiantBitmapRepeatPointScale : GiantBitmapGm(TileMode.REPEAT, false, false) {
+    override val renderCost = RenderCost.FAST
+}
 class GiantBitmapMirrorPointScale : GiantBitmapGm(TileMode.MIRROR, false, false) {
     override val renderCost = RenderCost.FAST
 }

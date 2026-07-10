@@ -19,7 +19,7 @@ import org.graphiks.kanvas.types.Rect
 class StrictConstraintNoRedAllowedGm : SkiaGm {
     override val name = "strict_constraint_no_red_allowed"
     override val renderFamily = RenderFamily.CLIP
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 80.0
     override val width = 128
     override val height = 128

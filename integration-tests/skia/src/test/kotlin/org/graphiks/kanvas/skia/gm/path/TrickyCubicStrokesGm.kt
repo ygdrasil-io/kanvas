@@ -29,7 +29,7 @@ open class TrickyCubicStrokesGm(
 ) : SkiaGm {
     override val name = gmName
     override val renderFamily = RenderFamily.PATH
-    override val renderCost = RenderCost.FAST
+    override val renderCost = RenderCost.BLOCKING
     override val minSimilarity = 0.0
     override val width = K_TEST_WIDTH
     override val height = K_TEST_HEIGHT

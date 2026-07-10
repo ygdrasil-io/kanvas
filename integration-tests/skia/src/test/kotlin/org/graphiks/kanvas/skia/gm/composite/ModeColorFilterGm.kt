@@ -22,7 +22,7 @@ import org.graphiks.kanvas.types.Rect
 class ModeColorFilterGm : SkiaGm {
     override val name = "modecolorfilters"
     override val renderFamily = RenderFamily.COMPOSITE
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.MEDIUM
     override val minSimilarity = 0.0
     override val width = 512
     override val height = 1024

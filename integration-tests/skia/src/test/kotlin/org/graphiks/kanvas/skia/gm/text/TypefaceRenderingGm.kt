@@ -24,7 +24,7 @@ class TypefaceRenderingGm : SkiaGm {
 class TypefaceRenderingPfaGm : SkiaGm {
     override val name = "typefacerendering_pfa"
     override val renderFamily = RenderFamily.TEXT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 640
     override val height = 840
@@ -35,7 +35,7 @@ class TypefaceRenderingPfaGm : SkiaGm {
 class TypefaceRenderingPfbGm : SkiaGm {
     override val name = "typefacerendering_pfb"
     override val renderFamily = RenderFamily.TEXT
-    override val renderCost = RenderCost.BLOCKING
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 640
     override val height = 840
