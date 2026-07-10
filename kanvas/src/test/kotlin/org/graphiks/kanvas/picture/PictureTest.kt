@@ -3,9 +3,12 @@ package org.graphiks.kanvas.picture
 import org.graphiks.kanvas.canvas.Canvas
 import org.graphiks.kanvas.canvas.DisplayListBuffer
 import org.graphiks.kanvas.canvas.DisplayOp
+import org.graphiks.kanvas.canvas.SaveLayerRec
 import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.paint.ImageFilter
+import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.KanvasTypeface
 import org.graphiks.kanvas.text.TextBlob
@@ -78,6 +81,23 @@ class PictureTest {
         assertNotNull(restored)
         assertEquals(original.cullRect, restored.cullRect)
         assertEquals(original.approximateOpCount(), restored.approximateOpCount())
+    }
+
+    @Test
+    fun `roundtrip preserves a backdrop save layer record`() {
+        val crop = Rect.fromLTRB(0f, 10f, 100f, 90f)
+        val rec = SaveLayerRec(
+            backdrop = ImageFilter.Crop(crop, TileMode.DECAL, ImageFilter.Blur(3f, 3f)),
+        )
+        val recorder = PictureRecorder()
+        val canvas = recorder.beginRecording(Rect.fromLTRB(0f, 0f, 100f, 100f))
+        canvas.saveLayer(rec)
+        canvas.restore()
+        val original = recorder.finishRecordingAsPicture()
+
+        val restored = requireNotNull(Picture.fromByteArray(original.toByteArray()))
+
+        assertEquals(original.ops, restored.ops)
     }
 
     @Test

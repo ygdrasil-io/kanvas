@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.skia
 
 import org.graphiks.kanvas.canvas.Canvas
+import org.graphiks.kanvas.canvas.SaveLayerRec
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.BlendMode
@@ -47,6 +48,12 @@ class GmCanvas(
         transformStack.add(currentTransform)
         clipStack.add(currentClip)
         inner.saveLayer(bounds, paint)
+    }
+
+    fun saveLayer(rec: SaveLayerRec) {
+        transformStack.add(currentTransform)
+        clipStack.add(currentClip)
+        inner.saveLayer(rec)
     }
 
     fun makeImageSnapshot(): Image {

@@ -60,8 +60,13 @@ sealed interface DisplayOp {
     /** Replace the current clip state. */
     data class SetClip(val clip: ClipStack) : DisplayOp
 
-    /** Begin an offscreen layer with optional bounds and compositing [Paint]. */
-    data class BeginLayer(val bounds: Rect?, val paint: Paint?) : DisplayOp
+    /** Begin an offscreen layer with a complete [SaveLayerRec]. */
+    data class BeginLayer(val rec: SaveLayerRec) : DisplayOp {
+        constructor(bounds: Rect?, paint: Paint?) : this(SaveLayerRec(bounds, paint))
+
+        val bounds: Rect? get() = rec.bounds
+        val paint: Paint? get() = rec.paint
+    }
 
     /** End the most recently begun offscreen layer, compositing it back. */
     data object EndLayer : DisplayOp
