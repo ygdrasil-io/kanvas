@@ -8,6 +8,7 @@ import org.skia.foundation.SkImageInfo
 import org.graphiks.math.SkIRect
 import org.graphiks.math.SkISize
 import org.skia.foundation.skcms.SkcmsICCProfile
+import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.util.ServiceLoader
 
@@ -271,7 +272,7 @@ public abstract class Codec protected constructor() {
         }
 
         /**
-         * Read [stream] to completion and dispatch to [MakeFromData].
+         * Read [stream] up to [maxEncodedBytes] and dispatch to [MakeFromData].
          * Mirrors `Codec::MakeFromStream(std::unique_ptr<SkStream>, …)`
          * ; the Kotlin port reads the whole stream eagerly because the
          * D3.1 facade does not yet support incremental decoding.
@@ -280,8 +281,37 @@ public abstract class Codec protected constructor() {
          * ownership of the [InputStream] (idiomatic Kotlin), unlike
          * upstream which takes a `unique_ptr` and consumes it.
          */
-        public fun MakeFromStream(stream: InputStream): Codec? =
-            MakeFromData(stream.readBytes())
+        public fun MakeFromStream(
+            stream: InputStream,
+            maxEncodedBytes: Long = DEFAULT_MAX_STREAM_BYTES,
+        ): Codec? = readStreamWithinLimit(stream, maxEncodedBytes)?.let(::MakeFromData)
+
+        private fun readStreamWithinLimit(stream: InputStream, maxEncodedBytes: Long): ByteArray? {
+            if (maxEncodedBytes < 0) return null
+            val readLimit = if (maxEncodedBytes == Long.MAX_VALUE) Long.MAX_VALUE else maxEncodedBytes + 1
+            val output = ByteArrayOutputStream()
+            val buffer = ByteArray(STREAM_READ_BUFFER_SIZE)
+            var readBytes = 0L
+            while (readBytes < readLimit) {
+                val requested = minOf(buffer.size.toLong(), readLimit - readBytes).toInt()
+                val count = stream.read(buffer, 0, requested)
+                if (count < 0) break
+                if (count == 0) {
+                    val byte = stream.read()
+                    if (byte < 0) break
+                    output.write(byte)
+                    readBytes++
+                } else {
+                    output.write(buffer, 0, count)
+                    readBytes += count.toLong()
+                }
+            }
+            return output.toByteArray().takeIf { it.size.toLong() <= maxEncodedBytes }
+        }
+
+        public const val DEFAULT_MAX_STREAM_BYTES: Long = 64L * 1024 * 1024
+
+        private const val STREAM_READ_BUFFER_SIZE: Int = 8 * 1024
     }
 
     /**

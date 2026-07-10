@@ -113,8 +113,51 @@ public class JpegCodec private constructor(
 
         override fun make(data: ByteArray): Codec? {
             if (!matches(data)) return null
+            val document = JpegDocument.open(data).document ?: return null
+            return make(document)
+        }
+
+        internal fun decode(document: JpegDocument, request: JpegDecodeRequest): JpegDecodeResult {
+            val codec = make(document) ?: return JpegDecodeResult(
+                bitmap = null,
+                diagnostic = JpegDiagnostic(
+                    code = "jpeg.decode.unsupported",
+                    offset = document.source.size.toLong(),
+                    result = Codec.Result.kUnimplemented,
+                ),
+            )
+            val sourceInfo = codec.getInfo()
+            val info = SkImageInfo.Make(
+                width = sourceInfo.width,
+                height = sourceInfo.height,
+                colorType = request.colorType,
+                alphaType = sourceInfo.alphaType,
+                colorSpace = request.colorSpace ?: sourceInfo.colorSpace,
+            )
+            val bitmap = SkBitmap(
+                width = info.width,
+                height = info.height,
+                colorSpace = info.colorSpace,
+                colorType = info.colorType,
+            )
+            val result = codec.getPixels(info, bitmap)
+            return if (result == Codec.Result.kSuccess) {
+                JpegDecodeResult(bitmap, null)
+            } else {
+                JpegDecodeResult(
+                    bitmap = null,
+                    diagnostic = JpegDiagnostic(
+                        code = "jpeg.decode.${result.name}",
+                        offset = document.source.size.toLong(),
+                        result = result,
+                    ),
+                )
+            }
+        }
+
+        private fun make(document: JpegDocument): JpegCodec? {
             val parsed = try {
-                parseJpeg(data)
+                parseJpeg(document.source)
             } catch (_: IllegalArgumentException) {
                 null
             } ?: return null
