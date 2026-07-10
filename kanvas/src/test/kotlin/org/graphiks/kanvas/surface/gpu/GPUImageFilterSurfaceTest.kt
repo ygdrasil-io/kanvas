@@ -47,6 +47,48 @@ class GPUImageFilterSurfaceTest {
     }
 
     @Test
+    fun `clamp edge reference rejects the historical decal result`() {
+        val clamp = ImageFilterBlurCpuOracle.clampBlurOpaqueRedLeftEdgeInSurface(
+            surfaceSize = 32,
+            originX = 8,
+            originY = 8,
+            sigmaX = 2f,
+            sigmaY = 2f,
+        )
+        val decal = ImageFilterBlurCpuOracle.decalBlurOpaqueRedLeftEdgeInSurface(
+            surfaceSize = 32,
+            originX = 8,
+            originY = 8,
+            sigmaX = 2f,
+            sigmaY = 2f,
+        )
+
+        assertTrue(alphaAt(clamp, 7, 12, 32) - alphaAt(decal, 7, 12, 32) > 100)
+    }
+
+    @Test
+    fun `clamp blur keeps an opaque edge in the exterior halo`() {
+        requireWebGpu()
+        val actual = renderFixtureThroughSurface(
+            image = opaqueRedLeftEdge(width = 9, height = 9),
+            paint = Paint(imageFilter = ImageFilter.Blur(2f, 2f, TileMode.CLAMP)),
+            dst = Rect.fromXYWH(8f, 8f, 9f, 9f),
+            surfaceSize = 32,
+        )
+        val expected = ImageFilterBlurCpuOracle.clampBlurOpaqueRedLeftEdgeInSurface(
+            surfaceSize = 32,
+            originX = 8,
+            originY = 8,
+            sigmaX = 2f,
+            sigmaY = 2f,
+        )
+
+        assertRgbaWithin(expected, actual, tolerance = 2)
+        // One pixel left of dst: CLAMP replicates the opaque left edge there.
+        assertTrue(alphaAt(actual, 7, 12, 32) >= 200)
+    }
+
+    @Test
     fun `zero sigma image filter is byte identical to unfiltered image`() {
         requireWebGpu()
         val image = opaqueRedImpulse(9, 9, 4, 4)
@@ -80,6 +122,16 @@ class GPUImageFilterSurfaceTest {
         pixels[offset] = 0xff.toByte()
         pixels[offset + 3] = 0xff.toByte()
         return Image.fromPixels(width, height, pixels, ColorType.RGBA_8888, "red-impulse")
+    }
+
+    private fun opaqueRedLeftEdge(width: Int, height: Int): Image {
+        val pixels = ByteArray(width * height * 4)
+        for (y in 0 until height) {
+            val offset = (y * width) * 4
+            pixels[offset] = 0xff.toByte()
+            pixels[offset + 3] = 0xff.toByte()
+        }
+        return Image.fromPixels(width, height, pixels, ColorType.RGBA_8888, "red-left-edge")
     }
 
     private fun requireWebGpu() {

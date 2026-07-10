@@ -24,6 +24,102 @@ internal object ImageFilterBlurCpuOracle {
         source[impulse] = 1f
         source[impulse + 3] = 1f
 
+        return blurredSurface(
+            source = source,
+            localWidth = localWidth,
+            localHeight = localHeight,
+            surfaceSize = surfaceSize,
+            originX = originX,
+            originY = originY,
+            haloX = haloX,
+            haloY = haloY,
+            sigmaX = sigmaX,
+            sigmaY = sigmaY,
+        )
+    }
+
+    fun clampBlurOpaqueRedLeftEdgeInSurface(
+        surfaceSize: Int,
+        originX: Int,
+        originY: Int,
+        sigmaX: Float,
+        sigmaY: Float,
+    ): ByteArray = blurOpaqueRedLeftEdgeInSurface(
+        surfaceSize = surfaceSize,
+        originX = originX,
+        originY = originY,
+        sigmaX = sigmaX,
+        sigmaY = sigmaY,
+        clampSourceOutsideDestination = true,
+    )
+
+    fun decalBlurOpaqueRedLeftEdgeInSurface(
+        surfaceSize: Int,
+        originX: Int,
+        originY: Int,
+        sigmaX: Float,
+        sigmaY: Float,
+    ): ByteArray = blurOpaqueRedLeftEdgeInSurface(
+        surfaceSize = surfaceSize,
+        originX = originX,
+        originY = originY,
+        sigmaX = sigmaX,
+        sigmaY = sigmaY,
+        clampSourceOutsideDestination = false,
+    )
+
+    private fun blurOpaqueRedLeftEdgeInSurface(
+        surfaceSize: Int,
+        originX: Int,
+        originY: Int,
+        sigmaX: Float,
+        sigmaY: Float,
+        clampSourceOutsideDestination: Boolean,
+    ): ByteArray {
+        val haloX = ceil(3f * sigmaX).toInt()
+        val haloY = ceil(3f * sigmaY).toInt()
+        val localWidth = 9 + 2 * haloX
+        val localHeight = 9 + 2 * haloY
+        val source = FloatArray(localWidth * localHeight * CHANNELS)
+        for (y in 0 until localHeight) {
+            for (x in 0 until localWidth) {
+                val sourceX = x - haloX
+                val sourceY = y - haloY
+                val inDestination = sourceX in 0 until 9 && sourceY in 0 until 9
+                val sampledX = if (clampSourceOutsideDestination) sourceX.coerceIn(0, 8) else sourceX
+                if ((inDestination || clampSourceOutsideDestination) && sampledX == 0) {
+                    val offset = (y * localWidth + x) * CHANNELS
+                    source[offset] = 1f
+                    source[offset + 3] = 1f
+                }
+            }
+        }
+        return blurredSurface(
+            source = source,
+            localWidth = localWidth,
+            localHeight = localHeight,
+            surfaceSize = surfaceSize,
+            originX = originX,
+            originY = originY,
+            haloX = haloX,
+            haloY = haloY,
+            sigmaX = sigmaX,
+            sigmaY = sigmaY,
+        )
+    }
+
+    private fun blurredSurface(
+        source: FloatArray,
+        localWidth: Int,
+        localHeight: Int,
+        surfaceSize: Int,
+        originX: Int,
+        originY: Int,
+        haloX: Int,
+        haloY: Int,
+        sigmaX: Float,
+        sigmaY: Float,
+    ): ByteArray {
         val horizontal = blurAxis(source, localWidth, localHeight, sigmaX, horizontal = true)
         val vertical = blurAxis(horizontal, localWidth, localHeight, sigmaY, horizontal = false)
         val surface = ByteArray(surfaceSize * surfaceSize * CHANNELS)
