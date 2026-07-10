@@ -13,6 +13,7 @@ dependencies {
     api("org.graphiks:wgsl-core-jvm:1.0.0-SNAPSHOT")
     api("org.graphiks:wgsl-parser-jvm:1.0.0-SNAPSHOT")
     testImplementation(kotlin("test"))
+    testImplementation("org.junit.jupiter:junit-jupiter-params:5.10.2")
     testImplementation("org.graphiks:wgsl-core-jvm:1.0.0-SNAPSHOT")
     testImplementation("org.graphiks:wgsl-parser-jvm:1.0.0-SNAPSHOT")
 }

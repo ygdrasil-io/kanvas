@@ -1154,7 +1154,7 @@ private class WgpuOffscreenTarget(
                 setVertexBufferAction = { slot, buffer -> setVertexBuffer(slot, buffer) },
                 setIndexBufferAction = { buffer, format -> setIndexBuffer(buffer, format) },
                 drawIndexedAction = { indexCount -> drawIndexed(indexCount) },
-                offscreenTextureStore = mutableMapOf(),
+                offscreenTextureStore = offscreenTextures,
             )
             try {
                 block(recorder)
