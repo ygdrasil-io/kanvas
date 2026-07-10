@@ -13,7 +13,10 @@ import org.skia.foundation.SkAlphaType
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkEncodedImageFormat
+import org.skia.foundation.SkICC
 import org.skia.foundation.SkImageInfo
+import org.skia.foundation.skcms.SkNamedGamut
+import org.skia.foundation.skcms.SkNamedTransferFn
 import java.io.ByteArrayOutputStream
 import java.util.ServiceLoader
 import java.util.zip.CRC32
@@ -753,6 +756,7 @@ class PngCodecTest {
 
     @Test
     fun `iCCP with valid RGB profile exposes parsed ICC profile`() {
+        val iccBytes = SkICC.WriteToICC(SkNamedTransferFn.kSRGB, SkNamedGamut.kDisplayP3)
         val codec = PngCodec.Decoder.make(
             grayscalePng(
                 width = 1,
@@ -760,7 +764,7 @@ class PngCodecTest {
                 rows = listOf(byteArrayOf(0x40)),
                 filters = intArrayOf(0),
                 bitDepth = 8,
-                iccp = iccpChunkData("minimal-rgb", profileBytes = minimalRgbIccProfile()),
+                iccp = iccpChunkData("display-p3", profileBytes = iccBytes),
             ),
         )
 
@@ -769,11 +773,20 @@ class PngCodecTest {
         assertNotNull(profile)
         assertEquals(0x52474220, profile!!.dataColorSpace)
         assertEquals(0x58595A20, profile.pcs)
-        assertEquals(6, profile.tagCount)
+        assertEquals(9, profile.tagCount)
         assertTrue(profile.hasTrc)
         assertTrue(profile.hasToXYZD50)
         assertNotNull(profile.buffer)
         assertEquals(profile.size, profile.buffer!!.size)
+        assertEquals(iccBytes.size, profile.size)
+        assertFalse(codec.getInfo().colorSpace.isSRGB())
+        for (row in 0 until 3) for (column in 0 until 3) {
+            assertEquals(
+                SkNamedGamut.kDisplayP3[row, column],
+                codec.getInfo().colorSpace.toXYZD50[row, column],
+                1f / 65_536f,
+            )
+        }
     }
 
     @Test
@@ -1580,11 +1593,6 @@ class PngCodecTest {
         write(value and 0xFF)
     }
 
-    private fun ByteArrayOutputStream.writeU16BE(value: Int) {
-        write((value ushr 8) and 0xFF)
-        write(value and 0xFF)
-    }
-
     private fun deflate(data: ByteArray): ByteArray {
         val deflater = Deflater()
         deflater.setInput(data)
@@ -1608,98 +1616,6 @@ class PngCodecTest {
         write(compressionMethod)
         write(deflate(profileBytes))
     }.toByteArray()
-
-    private fun minimalRgbIccProfile(): ByteArray {
-        data class Tag(val signature: String, val payload: ByteArray)
-
-        val trc = curvGammaTag(gamma256 = 0x0233)
-        val tags = listOf(
-            Tag("rTRC", trc),
-            Tag("gTRC", trc),
-            Tag("bTRC", trc),
-            Tag("rXYZ", xyzTag(0.43607f, 0.22250f, 0.01393f)),
-            Tag("gXYZ", xyzTag(0.38506f, 0.71688f, 0.09710f)),
-            Tag("bXYZ", xyzTag(0.14308f, 0.06062f, 0.71417f)),
-        )
-
-        val headerSize = 128
-        val tagTableSize = 4 + tags.size * 12
-        val dataOffset = headerSize + tagTableSize
-        val tagOffsets = IntArray(tags.size)
-        var nextOffset = dataOffset
-        tags.forEachIndexed { index, tag ->
-            tagOffsets[index] = nextOffset
-            nextOffset += tag.payload.size
-        }
-
-        return ByteArrayOutputStream().apply {
-            write(ByteArray(headerSize))
-            writeI32BEAt(0, nextOffset)
-            writeI32BEAt(8, 0x02000000)
-            writeAsciiAt(12, "mntr")
-            writeAsciiAt(16, "RGB ")
-            writeAsciiAt(20, "XYZ ")
-            writeAsciiAt(36, "acsp")
-            writeFixedAt(68, 0.9642f)
-            writeFixedAt(72, 1.0f)
-            writeFixedAt(76, 0.8249f)
-
-            writeI32BE(tags.size)
-            tags.forEachIndexed { index, tag ->
-                writeAscii(tag.signature)
-                writeI32BE(tagOffsets[index])
-                writeI32BE(tag.payload.size)
-            }
-            tags.forEach { write(it.payload) }
-        }.toByteArray()
-    }
-
-    private fun curvGammaTag(gamma256: Int): ByteArray =
-        ByteArrayOutputStream().apply {
-            writeAscii("curv")
-            writeI32BE(0)
-            writeI32BE(1)
-            writeU16BE(gamma256)
-            writeU16BE(0)
-        }.toByteArray()
-
-    private fun xyzTag(x: Float, y: Float, z: Float): ByteArray =
-        ByteArrayOutputStream().apply {
-            writeAscii("XYZ ")
-            writeI32BE(0)
-            writeFixed(x)
-            writeFixed(y)
-            writeFixed(z)
-        }.toByteArray()
-
-    private fun ByteArrayOutputStream.writeAscii(value: String) {
-        write(value.toByteArray(Charsets.US_ASCII))
-    }
-
-    private fun ByteArrayOutputStream.writeFixed(value: Float) {
-        writeI32BE((value * 65536f + 0.5f).toInt())
-    }
-
-    private fun ByteArrayOutputStream.writeI32BEAt(offset: Int, value: Int) {
-        val bytes = toByteArray()
-        reset()
-        bytes[offset] = ((value ushr 24) and 0xFF).toByte()
-        bytes[offset + 1] = ((value ushr 16) and 0xFF).toByte()
-        bytes[offset + 2] = ((value ushr 8) and 0xFF).toByte()
-        bytes[offset + 3] = (value and 0xFF).toByte()
-        write(bytes)
-    }
-
-    private fun ByteArrayOutputStream.writeAsciiAt(offset: Int, value: String) {
-        val bytes = toByteArray()
-        reset()
-        value.toByteArray(Charsets.US_ASCII).copyInto(bytes, destinationOffset = offset)
-        write(bytes)
-    }
-
-    private fun ByteArrayOutputStream.writeFixedAt(offset: Int, value: Float) {
-        writeI32BEAt(offset, (value * 65536f + 0.5f).toInt())
-    }
 
     private fun u16Row(vararg samples: Int): ByteArray = ByteArray(samples.size * 2).also { row ->
         var offset = 0

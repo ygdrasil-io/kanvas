@@ -1,47 +1,82 @@
 package org.skia.foundation.skcms
 
+import org.graphiks.kanvas.color.ColorModel
+import org.graphiks.kanvas.color.ColorProfile
+import org.graphiks.kanvas.color.ColorProfileParseResult
+import org.graphiks.kanvas.color.ColorProfiles
+import org.graphiks.kanvas.color.icc.IccParseLimits
+import org.graphiks.kanvas.color.icc.IccProfileParser
 import org.graphiks.math.SkcmsMatrix3x3
 import org.graphiks.math.SkcmsTransferFunction
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
-public data class SkcmsICCProfile(
-    public val bytes: ByteArray,
-    public val transferFn: SkcmsTransferFunction = SkNamedTransferFn.kSRGB,
-    public val toXYZD50: SkcmsMatrix3x3 = SkNamedGamut.kSRGB,
+public class SkcmsICCProfile private constructor(
+    public val colorProfile: ColorProfile,
+    originalBytes: ByteArray,
 ) {
-    public val size: Int get() = bytes.size
-    public val buffer: ByteArray? get() = bytes
-    public val dataColorSpace: Int get() = 0x52474220 // "RGB "
+    private val originalBytes: ByteArray = originalBytes.copyOf()
+
+    public constructor(
+        bytes: ByteArray,
+        transferFn: SkcmsTransferFunction = SkNamedTransferFn.kSRGB,
+        toXYZD50: SkcmsMatrix3x3 = SkNamedGamut.kSRGB,
+    ) : this(
+        colorProfile = ColorProfile(ColorModel.RGB, toXYZD50, transferFn),
+        originalBytes = bytes,
+    )
+
+    public val bytes: ByteArray get() = originalBytes.copyOf()
+    public val transferFn: SkcmsTransferFunction? get() = colorProfile.transferFunction
+    public val toXYZD50: SkcmsMatrix3x3? get() = colorProfile.toXyzD50
+    public val size: Int get() = originalBytes.size
+    public val buffer: ByteArray? get() = originalBytes.copyOf()
+    public val dataColorSpace: Int
+        get() = when (colorProfile.colorModel) {
+            ColorModel.RGB -> RGB_SIGNATURE
+            ColorModel.GRAY -> GRAY_SIGNATURE
+        }
     public val pcs: Int get() = 0x58595A20 // "XYZ "
-    public val tagCount: Int get() = 6
-    public val hasTrc: Boolean get() = true
-    public val hasToXYZD50: Boolean get() = true
+    public val tagCount: Int get() = readTagCount(originalBytes)
+    public val hasTrc: Boolean get() = colorProfile.transferFunction != null
+    public val hasToXYZD50: Boolean get() = colorProfile.toXyzD50 != null
 
     override fun equals(other: Any?): Boolean =
         this === other || (
             other is SkcmsICCProfile &&
-                bytes.contentEquals(other.bytes) &&
-                transferFn == other.transferFn &&
-                toXYZD50 == other.toXYZD50
+                originalBytes.contentEquals(other.originalBytes) &&
+                colorProfile == other.colorProfile
             )
 
     override fun hashCode(): Int {
-        var result = bytes.contentHashCode()
-        result = 31 * result + transferFn.hashCode()
-        result = 31 * result + toXYZD50.hashCode()
+        var result = originalBytes.contentHashCode()
+        result = 31 * result + colorProfile.hashCode()
         return result
+    }
+
+    public companion object {
+        public fun fromColorProfile(
+            colorProfile: ColorProfile,
+            originalBytes: ByteArray = ByteArray(0),
+        ): SkcmsICCProfile = SkcmsICCProfile(colorProfile, originalBytes)
+
+        private const val RGB_SIGNATURE: Int = 0x52474220
+        private const val GRAY_SIGNATURE: Int = 0x47524159
+        private const val ICC_TAG_COUNT_OFFSET: Int = 128
+        private const val ICC_HEADER_AND_COUNT_SIZE: Int = 132
+
+        private fun readTagCount(bytes: ByteArray): Int {
+            if (bytes.size < ICC_HEADER_AND_COUNT_SIZE) return 0
+            return ByteBuffer.wrap(bytes)
+                .order(ByteOrder.BIG_ENDIAN)
+                .getInt(ICC_TAG_COUNT_OFFSET)
+                .coerceAtLeast(0)
+        }
     }
 }
 
 public object SkNamedTransferFn {
-    public val kSRGB: SkcmsTransferFunction = SkcmsTransferFunction(
-        g = 2.4f,
-        a = 1f / 1.055f,
-        b = 0.055f / 1.055f,
-        c = 1f / 12.92f,
-        d = 0.04045f,
-        e = 0f,
-        f = 0f,
-    )
+    public val kSRGB: SkcmsTransferFunction = checkNotNull(ColorProfiles.sRGB().transferFunction)
     public val kLinear: SkcmsTransferFunction = SkcmsTransferFunction(
         g = 1f,
         a = 1f,
@@ -54,38 +89,14 @@ public object SkNamedTransferFn {
 }
 
 public object SkNamedGamut {
-    public val kSRGB: SkcmsMatrix3x3 = SkcmsMatrix3x3.of(
-        0.43606567f, 0.3851471f, 0.1430664f,
-        0.2224884f, 0.71687317f, 0.06060791f,
-        0.01391602f, 0.097076416f, 0.71409607f,
-    )
-    public val kDisplayP3: SkcmsMatrix3x3 = SkcmsMatrix3x3.of(
-        0.51512146f, 0.29197693f, 0.15710449f,
-        0.24119568f, 0.6922455f, 0.0665741f,
-        -0.0010528564f, 0.041885376f, 0.7840729f,
-    )
-    public val kRec2020: SkcmsMatrix3x3 = SkcmsMatrix3x3.of(
-        0.6734772f, 0.16566467f, 0.12504578f,
-        0.27903748f, 0.67533875f, 0.04560852f,
-        -0.0019378662f, 0.02998352f, 0.7968445f,
-    )
+    public val kSRGB: SkcmsMatrix3x3 = checkNotNull(ColorProfiles.sRGB().toXyzD50)
+    public val kDisplayP3: SkcmsMatrix3x3 = checkNotNull(ColorProfiles.displayP3().toXyzD50)
+    public val kRec2020: SkcmsMatrix3x3 = checkNotNull(ColorProfiles.rec2020().toXyzD50)
 }
 
 public fun skcmsParse(bytes: ByteArray): SkcmsICCProfile? {
-    if (bytes.size < 132) return null
-    if (bytes[36] != 'a'.code.toByte() ||
-        bytes[37] != 'c'.code.toByte() ||
-        bytes[38] != 's'.code.toByte() ||
-        bytes[39] != 'p'.code.toByte()
-    ) return null
-    val gamut = when (bytes[128].toInt()) {
-        1 -> SkNamedGamut.kDisplayP3
-        2 -> SkNamedGamut.kRec2020
-        else -> SkNamedGamut.kSRGB
+    return when (val result = IccProfileParser.parse(bytes, IccParseLimits())) {
+        is ColorProfileParseResult.Success -> SkcmsICCProfile.fromColorProfile(result.profile, bytes)
+        is ColorProfileParseResult.Failure -> null
     }
-    val transfer = when (bytes[129].toInt()) {
-        1 -> SkNamedTransferFn.kLinear
-        else -> SkNamedTransferFn.kSRGB
-    }
-    return SkcmsICCProfile(bytes.copyOf(), transfer, gamut)
 }

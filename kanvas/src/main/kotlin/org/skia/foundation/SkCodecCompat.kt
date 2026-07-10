@@ -1,5 +1,8 @@
 package org.skia.foundation
 
+import org.graphiks.kanvas.color.ColorModel
+import org.graphiks.kanvas.color.ColorProfile
+import org.graphiks.kanvas.color.ColorProfiles
 import org.graphiks.math.SkColor
 import org.graphiks.math.SkColorGetA
 import org.graphiks.math.SkColorGetB
@@ -16,6 +19,7 @@ import org.skia.foundation.skcms.SkNamedTransferFn
 import org.skia.foundation.skcms.SkcmsICCProfile
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import kotlin.math.abs
 
 public enum class SkColorType(public val bytesPerPixel: Int) {
     kUnknown(0),
@@ -119,12 +123,18 @@ public enum class SkEncodedOrigin(public val exifValue: Int) {
 public class SkColorSpace private constructor(
     public val transferFn: SkcmsTransferFunction,
     public val toXYZD50: SkcmsMatrix3x3,
+    public val colorProfile: ColorProfile,
+    originalIccBytes: ByteArray?,
     private val srgb: Boolean,
+    private val srgbTransfer: Boolean,
     private val linear: Boolean,
 ) {
+    private val originalIccBytes: ByteArray? = originalIccBytes?.copyOf()
+
+    public val iccProfileBytes: ByteArray? get() = originalIccBytes?.copyOf()
     public fun isSRGB(): Boolean = srgb
     public fun gammaIsLinear(): Boolean = linear
-    public fun gammaCloseToSRGB(): Boolean = !linear
+    public fun gammaCloseToSRGB(): Boolean = srgbTransfer
 
     override fun toString(): String =
         if (srgb) "SkColorSpace(sRGB)" else "SkColorSpace(RGB)"
@@ -133,13 +143,19 @@ public class SkColorSpace private constructor(
         private val SRGB = SkColorSpace(
             transferFn = SkNamedTransferFn.kSRGB,
             toXYZD50 = SkNamedGamut.kSRGB,
+            colorProfile = ColorProfiles.sRGB(),
+            originalIccBytes = null,
             srgb = true,
+            srgbTransfer = true,
             linear = false,
         )
         private val LINEAR_SRGB = SkColorSpace(
             transferFn = SkNamedTransferFn.kLinear,
             toXYZD50 = SkNamedGamut.kSRGB,
+            colorProfile = ColorProfile(ColorModel.RGB, SkNamedGamut.kSRGB, SkNamedTransferFn.kLinear),
+            originalIccBytes = null,
             srgb = false,
+            srgbTransfer = false,
             linear = true,
         )
 
@@ -148,22 +164,71 @@ public class SkColorSpace private constructor(
         public fun makeSRGBLinear(): SkColorSpace = LINEAR_SRGB
         public fun MakeSRGBLinear(): SkColorSpace = LINEAR_SRGB
 
-        public fun make(profile: SkcmsICCProfile): SkColorSpace? =
-            makeRGB(profile.transferFn, profile.toXYZD50)
+        public fun make(profile: SkcmsICCProfile): SkColorSpace? {
+            val colorProfile = profile.colorProfile
+            if (colorProfile.colorModel != ColorModel.RGB ||
+                colorProfile.unsupportedCode != null ||
+                colorProfile.isHdr ||
+                !colorProfile.hasMatrixTrc
+            ) {
+                return null
+            }
+            val transferFunction = colorProfile.transferFunction ?: return null
+            val matrix = colorProfile.toXyzD50 ?: return null
+            val originalBytes = profile.bytes.takeIf { it.isNotEmpty() }
+            return makeMatrixTrc(colorProfile, transferFunction, matrix, originalBytes)
+        }
 
         public fun makeRGB(
             transferFn: SkcmsTransferFunction,
             toXYZD50: SkcmsMatrix3x3,
-        ): SkColorSpace? {
-            val isSrgbGamut = toXYZD50 == SkNamedGamut.kSRGB
-            val isSrgbTransfer = transferFn == SkNamedTransferFn.kSRGB
+        ): SkColorSpace? = makeMatrixTrc(
+            colorProfile = ColorProfile(ColorModel.RGB, toXYZD50, transferFn),
+            transferFn = transferFn,
+            toXYZD50 = toXYZD50,
+            originalIccBytes = null,
+        )
+
+        private fun makeMatrixTrc(
+            colorProfile: ColorProfile,
+            transferFn: SkcmsTransferFunction,
+            toXYZD50: SkcmsMatrix3x3,
+            originalIccBytes: ByteArray?,
+        ): SkColorSpace {
+            val isSrgbGamut = matricesNear(toXYZD50, SkNamedGamut.kSRGB)
+            val isSrgbTransfer = transferFunctionsNear(transferFn, SkNamedTransferFn.kSRGB)
             return SkColorSpace(
                 transferFn = transferFn,
                 toXYZD50 = toXYZD50,
+                colorProfile = colorProfile,
+                originalIccBytes = originalIccBytes,
                 srgb = isSrgbGamut && isSrgbTransfer,
-                linear = transferFn == SkNamedTransferFn.kLinear,
+                srgbTransfer = isSrgbTransfer,
+                linear = transferFunctionsNear(transferFn, SkNamedTransferFn.kLinear),
             )
         }
+
+        private fun matricesNear(left: SkcmsMatrix3x3, right: SkcmsMatrix3x3): Boolean {
+            for (row in 0 until 3) for (column in 0 until 3) {
+                if (abs(left[row, column] - right[row, column]) > ICC_FIXED_TOLERANCE) return false
+            }
+            return true
+        }
+
+        private fun transferFunctionsNear(
+            left: SkcmsTransferFunction,
+            right: SkcmsTransferFunction,
+        ): Boolean = listOf(
+            left.g to right.g,
+            left.a to right.a,
+            left.b to right.b,
+            left.c to right.c,
+            left.d to right.d,
+            left.e to right.e,
+            left.f to right.f,
+        ).all { (leftValue, rightValue) -> abs(leftValue - rightValue) <= ICC_FIXED_TOLERANCE }
+
+        private const val ICC_FIXED_TOLERANCE: Float = 2f / 65_536f
     }
 }
 
