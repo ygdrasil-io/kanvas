@@ -13,7 +13,11 @@ import org.skia.foundation.SkICC
 import org.skia.foundation.stream.SkWStream
 import java.io.ByteArrayOutputStream
 import java.io.OutputStream
+import kotlin.math.ceil
 import kotlin.math.cos
+import kotlin.math.floor
+import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.roundToInt
 
 public object JpegEncoder {
@@ -78,7 +82,7 @@ public object JpegEncoder {
 
     public fun encode(dst: OutputStream, src: SkBitmap, options: Options = defaultOptions): Boolean {
         return try {
-            if (src.width <= 0 || src.height <= 0 || !options.isSequentialHuffmanRequest()) return false
+            if (src.width !in 1..0xFFFF || src.height !in 1..0xFFFF || !options.isSequentialHuffmanRequest()) return false
             JpegWriter(dst, src, options).write()
             true
         } catch (_: Throwable) {
@@ -103,7 +107,7 @@ public object JpegEncoder {
 
     private object encoderSupport {
         fun pixmapToBitmap(src: SkPixmap): SkBitmap? {
-            if (src.width() <= 0 || src.height() <= 0) return null
+            if (src.width() !in 1..0xFFFF || src.height() !in 1..0xFFFF) return null
             if (src.colorType() == SkColorType.kUnknown) return null
             val cs = src.colorSpace() ?: org.skia.foundation.SkColorSpace.makeSRGB()
             val bm = SkBitmap(src.width(), src.height(), cs, SkColorType.kRGBA_8888)
@@ -242,29 +246,24 @@ private class JpegWriter(
     }
 
     private fun componentSample(component: Int, sampleX: Int, sampleY: Int): Double {
-        var sum = 0.0
-        var count = 0
         val componentSampling = sampling.components[component]
-        val startX = Math.floorDiv(sampleX * sampling.maxH, componentSampling.horizontal)
-        val endX = ceilDiv((sampleX + 1) * sampling.maxH, componentSampling.horizontal)
-        val startY = Math.floorDiv(sampleY * sampling.maxV, componentSampling.vertical)
-        val endY = ceilDiv((sampleY + 1) * sampling.maxV, componentSampling.vertical)
-        for (y in startY until endY) {
-            for (x in startX until endX) {
-                val px = rgb[clamp(y, 0, bitmap.height - 1) * bitmap.width + clamp(x, 0, bitmap.width - 1)]
-                val r = (px ushr 16) and 0xFF
-                val g = (px ushr 8) and 0xFF
-                val b = px and 0xFF
-                val sample8 = when (component) {
-                    COMPONENT_Y -> 0.299 * r + 0.587 * g + 0.114 * b
-                    COMPONENT_CB -> -0.168736 * r - 0.331264 * g + 0.5 * b + 128.0
-                    else -> 0.5 * r - 0.418688 * g - 0.081312 * b + 128.0
-                }
-                sum += sample8 * ((1 shl options.precision) - 1) / 255.0
-                count++
+        return areaAverage(
+            left = sampleX.toDouble() * sampling.maxH / componentSampling.horizontal,
+            top = sampleY.toDouble() * sampling.maxV / componentSampling.vertical,
+            right = (sampleX + 1).toDouble() * sampling.maxH / componentSampling.horizontal,
+            bottom = (sampleY + 1).toDouble() * sampling.maxV / componentSampling.vertical,
+        ) { x, y ->
+            val px = rgb[clamp(y, 0, bitmap.height - 1) * bitmap.width + clamp(x, 0, bitmap.width - 1)]
+            val r = (px ushr 16) and 0xFF
+            val g = (px ushr 8) and 0xFF
+            val b = px and 0xFF
+            val sample8 = when (component) {
+                COMPONENT_Y -> 0.299 * r + 0.587 * g + 0.114 * b
+                COMPONENT_CB -> -0.168736 * r - 0.331264 * g + 0.5 * b + 128.0
+                else -> 0.5 * r - 0.418688 * g - 0.081312 * b + 128.0
             }
+            sample8 * ((1 shl options.precision) - 1) / 255.0
         }
-        return sum / count
     }
 
     private fun fdctQuantize(samples: DoubleArray, quant: IntArray): IntArray {
@@ -523,6 +522,33 @@ private fun clamp(value: Int, min: Int, max: Int): Int =
         value > max -> max
         else -> value
     }
+
+/** Area-weighted sample over a continuous source cell; the callback owns edge extension. */
+internal fun areaAverage(
+    left: Double,
+    top: Double,
+    right: Double,
+    bottom: Double,
+    sample: (x: Int, y: Int) -> Double,
+): Double {
+    require(left.isFinite() && top.isFinite() && right.isFinite() && bottom.isFinite())
+    require(right > left && bottom > top)
+    var weightedSum = 0.0
+    var totalWeight = 0.0
+    for (y in floor(top).toInt() until ceil(bottom).toInt()) {
+        val verticalWeight = (min(bottom, y + 1.0) - max(top, y.toDouble())).coerceAtLeast(0.0)
+        if (verticalWeight == 0.0) continue
+        for (x in floor(left).toInt() until ceil(right).toInt()) {
+            val horizontalWeight = (min(right, x + 1.0) - max(left, x.toDouble())).coerceAtLeast(0.0)
+            val weight = horizontalWeight * verticalWeight
+            if (weight == 0.0) continue
+            weightedSum += sample(x, y) * weight
+            totalWeight += weight
+        }
+    }
+    require(totalWeight > 0.0)
+    return weightedSum / totalWeight
+}
 
 private fun ceilDiv(a: Int, b: Int): Int = (a + b - 1) / b
 

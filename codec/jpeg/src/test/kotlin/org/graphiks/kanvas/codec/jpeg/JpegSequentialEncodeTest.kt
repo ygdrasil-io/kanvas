@@ -9,10 +9,14 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.skia.foundation.SkAlphaType
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkEncodedOrigin
+import org.skia.foundation.SkImageInfo
+import org.skia.foundation.SkPixmap
+import java.nio.ByteBuffer
 
 class JpegSequentialEncodeTest {
 
@@ -43,6 +47,28 @@ class JpegSequentialEncodeTest {
     }
 
     @Test
+    fun `SOF1 uses sixteen bit DQT and an AC DHT covering extended categories`() {
+        val bytes = JpegEncoder.encode(
+            gradient(19, 13),
+            JpegEncoder.Options(precision = 12, sampling = JpegSampling.S444),
+        )!!
+        val document = JpegDocument.open(bytes).document!!
+        val dqt = document.copyPayload(document.segments.single { it.marker == 0xDB })
+        val acLuma = document.copyPayload(
+            document.segments.single { segment ->
+                segment.marker == 0xC4 && (document.copyPayload(segment)[0].toInt() and 0xFF) == 0x10
+            },
+        )
+
+        assertEquals(0x10, dqt[0].toInt() and 0xFF)
+        assertEquals(0x11, dqt[129].toInt() and 0xFF)
+        assertEquals(255, acLuma[1 + 7].toInt() and 0xFF)
+        val symbols = acLuma.copyOfRange(17, acLuma.size).map { it.toInt() and 0xFF }.toSet()
+        assertTrue((0x0B..0x0E).all(symbols::contains), "AC categories 11..14 must be representable")
+        assertDecodes(bytes)
+    }
+
+    @Test
     fun `all declared sampling factors are written and factor validation is bounded`() {
         val source = gradient(17, 11)
         assertEquals(0x11, sofSampling(JpegEncoder.encode(source, JpegEncoder.Options(sampling = JpegSampling.S444))!!).first())
@@ -63,15 +89,41 @@ class JpegSequentialEncodeTest {
     }
 
     @Test
+    fun `nondivisible sampling cells use an overlap weighted area average`() {
+        val values = intArrayOf(
+            0, 1, 2, 3,
+            10, 11, 12, 13,
+            20, 21, 22, 23,
+            30, 31, 32, 33,
+        )
+        val actual = areaAverage(
+            left = 0.0,
+            top = 4.0 / 3.0,
+            right = 4.0 / 3.0,
+            bottom = 8.0 / 3.0,
+        ) { x, y -> values[y * 4 + x].toDouble() }
+
+        // Independent overlap calculation: x weights [1, 1/3], y weights [2/3, 2/3].
+        val expected = (
+            10.0 * 2.0 / 3.0 + 11.0 * 2.0 / 9.0 +
+                20.0 * 2.0 / 3.0 + 21.0 * 2.0 / 9.0
+            ) / (16.0 / 9.0)
+        assertEquals(expected, actual, 1e-12)
+    }
+
+    @Test
     fun `restart interval emits DRI and ordered restart markers`() {
+        val source = gradient(49, 25)
         val bytes = JpegEncoder.encode(
-            gradient(49, 25),
+            source,
             JpegEncoder.Options(restartInterval = 2, sampling = JpegSampling.S420),
         )!!
+        val noRestart = JpegEncoder.encode(source, JpegEncoder.Options(sampling = JpegSampling.S420))!!
 
         assertEquals(2, dri(bytes))
         assertTrue(entropyRestartMarkers(bytes).zipWithNext().all { (left, right) -> right == (left + 1) and 7 })
         assertTrue(entropyRestartMarkers(bytes).isNotEmpty())
+        assertEquals(decode(noRestart).pixels.toList(), decode(bytes).pixels.toList(), "RST must reset DC predictors")
         assertDecodes(bytes)
     }
 
@@ -165,6 +217,22 @@ class JpegSequentialEncodeTest {
                 JpegEncoder.Options(hierarchy = listOf(JpegHierarchyLevel(1, 2, JpegEncodeProcess.SequentialHuffman))),
             ),
         )
+    }
+
+    @Test
+    fun `encoder refuses dimensions outside SOF range before writing output`() {
+        for (source in listOf(SkBitmap(65_536, 1), SkBitmap(1, 65_536))) {
+            val output = java.io.ByteArrayOutputStream()
+            assertFalse(JpegEncoder.encode(output, source))
+            assertEquals(0, output.size())
+            assertNull(JpegEncoder.encode(source))
+        }
+        val oversizedPixmap = SkPixmap(
+            SkImageInfo.Make(65_536, 1, SkColorType.kRGBA_8888, SkAlphaType.kUnpremul, SkColorSpace.makeSRGB()),
+            ByteBuffer.allocate(65_536 * 4),
+            65_536 * 4,
+        )
+        assertNull(JpegEncoder.encode(oversizedPixmap))
     }
 
     private fun assertReasonableRoundTrip(source: SkBitmap, bytes: ByteArray) {
