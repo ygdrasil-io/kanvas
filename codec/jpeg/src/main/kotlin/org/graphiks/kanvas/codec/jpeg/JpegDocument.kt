@@ -78,6 +78,16 @@ public class JpegDocument internal constructor(
     public fun decode(request: JpegDecodeRequest): JpegDecodeResult =
         JpegCodec.Decoder.decode(this, request)
 
+    /**
+     * Performs a validated JPEG coefficient-domain transform. Unsupported
+     * processes receive a diagnostic; this method never routes through the
+     * pixel encoder as a fallback.
+     */
+    public fun transcode(
+        transform: JpegTransform,
+        metadataPolicy: JpegMetadataPolicy = JpegMetadataPolicy.Preserve,
+    ): JpegTranscodeResult = transcodeJpegDocument(this, source, transform, metadataPolicy)
+
     internal fun makeCodec(): JpegCodec? = JpegCodec.Decoder.makeFromDocumentSource(source, metadata)
 
     internal val encodedSize: Long get() = source.size.toLong()

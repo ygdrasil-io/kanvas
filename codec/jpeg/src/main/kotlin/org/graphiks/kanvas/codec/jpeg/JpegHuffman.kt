@@ -3,6 +3,8 @@ package org.graphiks.kanvas.codec.jpeg
 /** A JPEG canonical Huffman table constructed from its DHT code-length counts. */
 internal class HuffmanTable(lengths: IntArray, symbols: IntArray) {
     private val symbolsByCode: Map<Int, Int>
+    private val codesBySymbol: IntArray = IntArray(256)
+    private val lengthsBySymbol: IntArray = IntArray(256)
 
     init {
         if (lengths.size != 16) fail()
@@ -14,7 +16,12 @@ internal class HuffmanTable(lengths: IntArray, symbols: IntArray) {
             if (count < 0 || code + count > (1 shl length)) fail()
             for (unused in 0 until count) {
                 if (symbolIndex >= symbols.size) fail()
-                entries[(length shl 16) or code] = symbols[symbolIndex++]
+                val symbol = symbols[symbolIndex++]
+                entries[(length shl 16) or code] = symbol
+                if (lengthsBySymbol[symbol] == 0) {
+                    codesBySymbol[symbol] = code
+                    lengthsBySymbol[symbol] = length
+                }
                 code++
             }
             code = code shl 1
@@ -30,6 +37,21 @@ internal class HuffmanTable(lengths: IntArray, symbols: IntArray) {
             symbolsByCode[(length shl 16) or code]?.let { return it }
         }
         fail()
+    }
+
+    /**
+     * Returns the canonical representation of [symbol] for coefficient-domain
+     * JPEG re-emission.  Decoding and transform writing share the exact DHT
+     * table; no generated or external Huffman table is selected at runtime.
+     */
+    fun code(symbol: Int): Int {
+        if (symbol !in codesBySymbol.indices || lengthsBySymbol[symbol] == 0) fail()
+        return codesBySymbol[symbol]
+    }
+
+    fun length(symbol: Int): Int {
+        if (symbol !in lengthsBySymbol.indices || lengthsBySymbol[symbol] == 0) fail()
+        return lengthsBySymbol[symbol]
     }
 }
 
