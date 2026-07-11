@@ -3,7 +3,12 @@ package org.graphiks.kanvas.codec.jpeg
 import java.io.ByteArrayOutputStream
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.skia.foundation.SkAlphaType
+import org.skia.foundation.SkBitmap
+import org.skia.foundation.SkColorType
+import org.skia.foundation.SkImageInfo
 import kotlin.math.roundToInt
 
 class JpegSequentialDecodeTest {
@@ -115,6 +120,62 @@ class JpegSequentialDecodeTest {
         assertEquals(12, samples.precision)
         assertEquals(2_049, samples.planes.single()[0])
         assertPixel(data, 0xFF808080.toInt())
+    }
+
+    @Test
+    fun `normalizes SOF1 12 bit grayscale F16 from source precision`() {
+        val codec = JpegCodec.Decoder.make(
+            sequentialJpeg(
+                marker = SOF1,
+                precision = 12,
+                components = listOf(FixtureComponent(1, 0x11, 2_049)),
+            ),
+        )!!
+        val info = SkImageInfo.Make(
+            width = 8,
+            height = 8,
+            colorType = SkColorType.kRGBA_F16Norm,
+            alphaType = SkAlphaType.kPremul,
+            colorSpace = codec.getInfo().colorSpace,
+        )
+        val bitmap = SkBitmap(8, 8, info.colorSpace, info.colorType)
+
+        assertEquals(org.graphiks.kanvas.codec.Codec.Result.kSuccess, codec.getPixels(info, bitmap))
+        val pixel = FloatArray(4)
+        bitmap.getPixelF16(0, 0, pixel)
+        assertEquals(2_049f / 4_095f, pixel[0], 0.00025f)
+        assertTrue(kotlin.math.abs(pixel[0] - 128f / 255f) > 0.001f)
+    }
+
+    @Test
+    fun `keeps SOF1 12 bit YCbCr F16 neutral at the source midpoint`() {
+        val codec = JpegCodec.Decoder.make(
+            sequentialJpeg(
+                marker = SOF1,
+                precision = 12,
+                components = listOf(
+                    FixtureComponent(1, 0x11, 2_048),
+                    FixtureComponent(2, 0x11, 2_048),
+                    FixtureComponent(3, 0x11, 2_048),
+                ),
+            ),
+        )!!
+        val info = SkImageInfo.Make(
+            width = 8,
+            height = 8,
+            colorType = SkColorType.kRGBA_F16Norm,
+            alphaType = SkAlphaType.kPremul,
+            colorSpace = codec.getInfo().colorSpace,
+        )
+        val bitmap = SkBitmap(8, 8, info.colorSpace, info.colorType)
+
+        assertEquals(org.graphiks.kanvas.codec.Codec.Result.kSuccess, codec.getPixels(info, bitmap))
+        val pixel = FloatArray(4)
+        bitmap.getPixelF16(0, 0, pixel)
+        val expected = 2_048f / 4_095f
+        assertEquals(expected, pixel[0], 0.00025f)
+        assertEquals(expected, pixel[1], 0.00025f)
+        assertEquals(expected, pixel[2], 0.00025f)
     }
 
     @Test

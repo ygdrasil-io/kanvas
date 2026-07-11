@@ -48,10 +48,18 @@ public class JpegCodec private constructor(
         if (!canDecodeTo(info.colorType)) return Result.kInvalidConversion
         val pixels = try {
             if (jpeg.coding == JpegCoding.kProgressive) {
-                decodeProgressive(jpeg) ?: return Result.kUnimplemented
+                DecodedPixels(decodeProgressive(jpeg) ?: return Result.kUnimplemented)
             } else {
                 val scan = jpeg.scans.singleOrNull() ?: fail()
-                composePixels(decodeSequentialDct(jpeg, scan), jpeg.colorModel())
+                val samples = decodeSequentialDct(jpeg, scan)
+                DecodedPixels(
+                    rgba8888 = composePixels(samples, jpeg.colorModel()),
+                    rgbaF16 = if (info.colorType == SkColorType.kRGBA_F16Norm) {
+                        composeF16Pixels(samples, jpeg.colorModel())
+                    } else {
+                        null
+                    },
+                )
             }
         } catch (_: IllegalArgumentException) {
             return Result.kErrorInInput
@@ -74,20 +82,22 @@ public class JpegCodec private constructor(
     private fun canDecodeTo(colorType: SkColorType): Boolean =
         colorType == SkColorType.kRGBA_8888 || colorType == SkColorType.kRGBA_F16Norm
 
-    private fun writeDecodedPixels(dst: SkBitmap, pixels: IntArray): Result {
+    private fun writeDecodedPixels(dst: SkBitmap, pixels: DecodedPixels): Result {
         return when (dst.colorType) {
             SkColorType.kRGBA_8888 -> {
-                System.arraycopy(pixels, 0, dst.pixels8888, 0, pixels.size)
+                System.arraycopy(pixels.rgba8888, 0, dst.pixels8888, 0, pixels.rgba8888.size)
                 Result.kSuccess
             }
             SkColorType.kRGBA_F16Norm -> {
                 for (y in 0 until dst.height) {
                     for (x in 0 until dst.width) {
-                        val color = pixels[y * dst.width + x]
-                        val a = ((color ushr 24) and 0xFF) / 255f
-                        val r = ((color ushr 16) and 0xFF) / 255f
-                        val g = ((color ushr 8) and 0xFF) / 255f
-                        val b = (color and 0xFF) / 255f
+                        val index = y * dst.width + x
+                        val color = pixels.rgba8888[index]
+                        val f16 = pixels.rgbaF16
+                        val a = f16?.get(index * 4 + 3) ?: ((color ushr 24) and 0xFF) / 255f
+                        val r = f16?.get(index * 4) ?: ((color ushr 16) and 0xFF) / 255f
+                        val g = f16?.get(index * 4 + 1) ?: ((color ushr 8) and 0xFF) / 255f
+                        val b = f16?.get(index * 4 + 2) ?: (color and 0xFF) / 255f
                         dst.setPixelF16(x, y, r * a, g * a, b * a, a)
                     }
                 }
@@ -96,6 +106,11 @@ public class JpegCodec private constructor(
             else -> Result.kInvalidConversion
         }
     }
+
+    private data class DecodedPixels(
+        val rgba8888: IntArray,
+        val rgbaF16: FloatArray? = null,
+    )
 
     internal companion object Decoder : Codec.Decoder {
         override val name: String = "jpeg"
