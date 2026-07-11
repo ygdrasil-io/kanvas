@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.codec.jpeg
 
+import java.io.OutputStream
+
 /** A JPEG canonical Huffman table constructed from its DHT code-length counts. */
 internal class HuffmanTable(lengths: IntArray, symbols: IntArray) {
     private val symbolsByCode: Map<Int, Int>
@@ -53,6 +55,49 @@ internal class HuffmanTable(lengths: IntArray, symbols: IntArray) {
         if (symbol !in lengthsBySymbol.indices || lengthsBySymbol[symbol] == 0) fail()
         return lengthsBySymbol[symbol]
     }
+}
+
+/** Writes stuffed entropy bytes and MCU-boundary restart markers. */
+internal class EntropyBitWriter(private val out: OutputStream) {
+    private var buffer = 0
+    private var bitCount = 0
+
+    fun write(code: Int, length: Int) {
+        for (index in length - 1 downTo 0) {
+            buffer = (buffer shl 1) or ((code ushr index) and 1)
+            bitCount++
+            if (bitCount == 8) flushByte(buffer)
+        }
+    }
+
+    fun flush() {
+        if (bitCount > 0) {
+            flushByte((buffer shl (8 - bitCount)) or ((1 shl (8 - bitCount)) - 1))
+        }
+    }
+
+    fun writeRestart(marker: Int) {
+        flush()
+        out.write(0xFF)
+        out.write(0xD0 + marker)
+    }
+
+    private fun flushByte(value: Int) {
+        val byte = value and 0xFF
+        out.write(byte)
+        if (byte == 0xFF) out.write(0x00)
+        buffer = 0
+        bitCount = 0
+    }
+}
+
+/** Canonical encoder view of a DHT table. */
+internal class EncoderHuffmanTable(lengths: IntArray, symbols: IntArray) {
+    private val canonical: HuffmanTable = HuffmanTable(lengths, symbols)
+
+    fun code(symbol: Int): Int = canonical.code(symbol)
+
+    fun length(symbol: Int): Int = canonical.length(symbol)
 }
 
 /** Reads entropy-coded JPEG bits, unstuffing 0xFF00 and consuming RST markers explicitly. */

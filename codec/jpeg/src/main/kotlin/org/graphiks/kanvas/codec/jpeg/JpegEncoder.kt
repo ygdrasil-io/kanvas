@@ -29,15 +29,44 @@ public object JpegEncoder {
         k444,
     }
 
-    public data class Options(
+    public data class Options @JvmOverloads constructor(
         val quality: Int = 100,
-        val downsample: Downsample = Downsample.k420,
-        val alphaOption: AlphaOption = AlphaOption.kIgnore,
-        val orientation: SkEncodedOrigin = SkEncodedOrigin.kTopLeft,
+        @Deprecated("Use sampling") val downsample: Downsample = Downsample.k420,
+        @Deprecated("Use alphaPolicy") val alphaOption: AlphaOption = AlphaOption.kIgnore,
+        @Deprecated("Use metadata.exif") val orientation: SkEncodedOrigin = SkEncodedOrigin.kTopLeft,
+        val process: JpegEncodeProcess = JpegEncodeProcess.SequentialHuffman,
+        val precision: Int = 8,
+        /** When absent, [downsample] remains the deprecated compatibility mapping. */
+        val sampling: JpegSampling? = null,
+        val restartInterval: Int = 0,
+        val metadata: JpegEncodeMetadata = JpegEncodeMetadata(),
+        /** When absent, [alphaOption] remains the deprecated compatibility mapping. */
+        val alphaPolicy: JpegAlphaPolicy? = null,
+        val hierarchy: List<JpegHierarchyLevel> = emptyList(),
     ) {
         init {
             require(quality in 0..100) { "quality must be in [0, 100], got $quality" }
+            require(precision == 8 || precision == 12) { "precision must be 8 or 12, got $precision" }
+            require(restartInterval in 0..0xFFFF) {
+                "restart interval must be in [0, 65535], got $restartInterval"
+            }
         }
+
+        @Suppress("DEPRECATION")
+        internal fun effectiveSampling(): JpegSampling = sampling ?: when (downsample) {
+            Downsample.k420 -> JpegSampling.S420
+            Downsample.k422 -> JpegSampling.S422
+            Downsample.k444 -> JpegSampling.S444
+        }
+
+        @Suppress("DEPRECATION")
+        internal fun effectiveAlphaPolicy(): JpegAlphaPolicy = alphaPolicy ?: when (alphaOption) {
+            AlphaOption.kIgnore -> JpegAlphaPolicy.Ignore
+            AlphaOption.kBlendOnBlack -> JpegAlphaPolicy.BlendOnBlack
+        }
+
+        internal fun isSequentialHuffmanRequest(): Boolean =
+            process == JpegEncodeProcess.SequentialHuffman && hierarchy.isEmpty()
     }
 
     private val defaultOptions = Options()
@@ -49,7 +78,7 @@ public object JpegEncoder {
 
     public fun encode(dst: OutputStream, src: SkBitmap, options: Options = defaultOptions): Boolean {
         return try {
-            if (src.width <= 0 || src.height <= 0) return false
+            if (src.width <= 0 || src.height <= 0 || !options.isSequentialHuffmanRequest()) return false
             JpegWriter(dst, src, options).write()
             true
         } catch (_: Throwable) {
@@ -88,18 +117,27 @@ public object JpegEncoder {
     }
 }
 
+@Suppress("DEPRECATION")
 private class JpegWriter(
     private val out: OutputStream,
     private val bitmap: SkBitmap,
     private val options: JpegEncoder.Options,
 ) {
-    private val sampling = Sampling.from(options.downsample)
-    private val qLuma = scaledQuantTable(STD_LUMA_Q, options.quality)
-    private val qChroma = scaledQuantTable(STD_CHROMA_Q, options.quality)
-    private val dcLuma = EncoderHuffmanTable(STD_DC_LUMA_BITS, STD_DC_VALUES)
-    private val acLuma = EncoderHuffmanTable(STD_AC_LUMA_BITS, STD_AC_LUMA_VALUES)
-    private val dcChroma = EncoderHuffmanTable(STD_DC_CHROMA_BITS, STD_DC_VALUES)
-    private val acChroma = EncoderHuffmanTable(STD_AC_CHROMA_BITS, STD_AC_CHROMA_VALUES)
+    private val sampling = Sampling.from(options.effectiveSampling())
+    private val qLuma = scaledQuantTable(STD_LUMA_Q, options.quality, options.precision)
+    private val qChroma = scaledQuantTable(STD_CHROMA_Q, options.quality, options.precision)
+    private val dcLumaBits = if (options.precision == 12) EXTENDED_HUFFMAN_BITS else STD_DC_LUMA_BITS
+    private val dcLumaValues = if (options.precision == 12) EXTENDED_HUFFMAN_VALUES else STD_DC_VALUES
+    private val acLumaBits = if (options.precision == 12) EXTENDED_HUFFMAN_BITS else STD_AC_LUMA_BITS
+    private val acLumaValues = if (options.precision == 12) EXTENDED_HUFFMAN_VALUES else STD_AC_LUMA_VALUES
+    private val dcChromaBits = if (options.precision == 12) EXTENDED_HUFFMAN_BITS else STD_DC_CHROMA_BITS
+    private val dcChromaValues = if (options.precision == 12) EXTENDED_HUFFMAN_VALUES else STD_DC_VALUES
+    private val acChromaBits = if (options.precision == 12) EXTENDED_HUFFMAN_BITS else STD_AC_CHROMA_BITS
+    private val acChromaValues = if (options.precision == 12) EXTENDED_HUFFMAN_VALUES else STD_AC_CHROMA_VALUES
+    private val dcLuma = EncoderHuffmanTable(dcLumaBits, dcLumaValues)
+    private val acLuma = EncoderHuffmanTable(acLumaBits, acLumaValues)
+    private val dcChroma = EncoderHuffmanTable(dcChromaBits, dcChromaValues)
+    private val acChroma = EncoderHuffmanTable(acChromaBits, acChromaValues)
     private val rgb = IntArray(bitmap.width * bitmap.height)
     private val previousDc = IntArray(3)
 
@@ -107,28 +145,36 @@ private class JpegWriter(
         materializeRgb()
         writeMarker(SOI)
         writeApp0()
-        if (!bitmap.colorSpace.isSRGB()) {
-            writeIccApp2()
-        }
-        if (options.orientation != SkEncodedOrigin.kTopLeft) {
-            writeExifApp1()
-        }
+        writeMetadata()
         writeDqt()
-        writeSof0()
-        writeDht(0, 0, STD_DC_LUMA_BITS, STD_DC_VALUES)
-        writeDht(1, 0, STD_AC_LUMA_BITS, STD_AC_LUMA_VALUES)
-        writeDht(0, 1, STD_DC_CHROMA_BITS, STD_DC_VALUES)
-        writeDht(1, 1, STD_AC_CHROMA_BITS, STD_AC_CHROMA_VALUES)
+        writeSof()
+        writeDht(0, 0, dcLumaBits, dcLumaValues)
+        writeDht(1, 0, acLumaBits, acLumaValues)
+        writeDht(0, 1, dcChromaBits, dcChromaValues)
+        writeDht(1, 1, acChromaBits, acChromaValues)
+        if (options.restartInterval > 0) writeDri()
         writeSos()
 
-        val bits = EntropyWriter(out)
+        val bits = EntropyBitWriter(out)
         val mcuWidth = sampling.maxH * 8
         val mcuHeight = sampling.maxV * 8
         val mcusX = ceilDiv(bitmap.width, mcuWidth)
         val mcusY = ceilDiv(bitmap.height, mcuHeight)
+        var mcu = 0
+        var restartMarker = 0
         for (my in 0 until mcusY) {
             for (mx in 0 until mcusX) {
                 encodeMcu(bits, mx, my)
+                mcu++
+                if (
+                    options.restartInterval > 0 &&
+                    mcu % options.restartInterval == 0 &&
+                    mcu < mcusX * mcusY
+                ) {
+                    bits.writeRestart(restartMarker)
+                    restartMarker = (restartMarker + 1) and 7
+                    previousDc.fill(0)
+                }
             }
         }
         bits.flush()
@@ -143,9 +189,9 @@ private class JpegWriter(
                 val r = SkColorGetR(argb)
                 val g = SkColorGetG(argb)
                 val b = SkColorGetB(argb)
-                val packed = when (options.alphaOption) {
-                    JpegEncoder.AlphaOption.kIgnore -> packRgb(r, g, b)
-                    JpegEncoder.AlphaOption.kBlendOnBlack -> {
+                val packed = when (options.effectiveAlphaPolicy()) {
+                    JpegAlphaPolicy.Ignore -> packRgb(r, g, b)
+                    JpegAlphaPolicy.BlendOnBlack -> {
                         packRgb(
                             (r * a + 127) / 255,
                             (g * a + 127) / 255,
@@ -158,18 +204,19 @@ private class JpegWriter(
         }
     }
 
-    private fun encodeMcu(bits: EntropyWriter, mcuX: Int, mcuY: Int) {
-        for (blockY in 0 until sampling.yV) {
-            for (blockX in 0 until sampling.yH) {
-                encodeBlock(bits, COMPONENT_Y, mcuX, mcuY, blockX, blockY)
+    private fun encodeMcu(bits: EntropyBitWriter, mcuX: Int, mcuY: Int) {
+        for (component in 0 until 3) {
+            val componentSampling = sampling.components[component]
+            for (blockY in 0 until componentSampling.vertical) {
+                for (blockX in 0 until componentSampling.horizontal) {
+                    encodeBlock(bits, component, mcuX, mcuY, blockX, blockY)
+                }
             }
         }
-        encodeBlock(bits, COMPONENT_CB, mcuX, mcuY, 0, 0)
-        encodeBlock(bits, COMPONENT_CR, mcuX, mcuY, 0, 0)
     }
 
     private fun encodeBlock(
-        bits: EntropyWriter,
+        bits: EntropyBitWriter,
         component: Int,
         mcuX: Int,
         mcuY: Int,
@@ -177,14 +224,13 @@ private class JpegWriter(
         blockY: Int,
     ) {
         val samples = DoubleArray(64)
-        val scaleX = if (component == COMPONENT_Y) 1 else sampling.maxH / sampling.cH
-        val scaleY = if (component == COMPONENT_Y) 1 else sampling.maxV / sampling.cV
-        val baseX = mcuX * sampling.maxH * 8 + blockX * 8 * scaleX
-        val baseY = mcuY * sampling.maxV * 8 + blockY * 8 * scaleY
-
         for (sy in 0 until 8) {
             for (sx in 0 until 8) {
-                samples[sy * 8 + sx] = componentSample(component, baseX + sx * scaleX, baseY + sy * scaleY, scaleX, scaleY)
+                samples[sy * 8 + sx] = componentSample(
+                    component,
+                    mcuX * sampling.components[component].horizontal * 8 + blockX * 8 + sx,
+                    mcuY * sampling.components[component].vertical * 8 + blockY * 8 + sy,
+                )
             }
         }
 
@@ -195,20 +241,26 @@ private class JpegWriter(
         writeCoefficients(bits, coeffs, component, dcTable, acTable)
     }
 
-    private fun componentSample(component: Int, x: Int, y: Int, scaleX: Int, scaleY: Int): Double {
+    private fun componentSample(component: Int, sampleX: Int, sampleY: Int): Double {
         var sum = 0.0
         var count = 0
-        for (dy in 0 until scaleY) {
-            for (dx in 0 until scaleX) {
-                val px = rgb[clamp(y + dy, 0, bitmap.height - 1) * bitmap.width + clamp(x + dx, 0, bitmap.width - 1)]
+        val componentSampling = sampling.components[component]
+        val startX = Math.floorDiv(sampleX * sampling.maxH, componentSampling.horizontal)
+        val endX = ceilDiv((sampleX + 1) * sampling.maxH, componentSampling.horizontal)
+        val startY = Math.floorDiv(sampleY * sampling.maxV, componentSampling.vertical)
+        val endY = ceilDiv((sampleY + 1) * sampling.maxV, componentSampling.vertical)
+        for (y in startY until endY) {
+            for (x in startX until endX) {
+                val px = rgb[clamp(y, 0, bitmap.height - 1) * bitmap.width + clamp(x, 0, bitmap.width - 1)]
                 val r = (px ushr 16) and 0xFF
                 val g = (px ushr 8) and 0xFF
                 val b = px and 0xFF
-                sum += when (component) {
+                val sample8 = when (component) {
                     COMPONENT_Y -> 0.299 * r + 0.587 * g + 0.114 * b
                     COMPONENT_CB -> -0.168736 * r - 0.331264 * g + 0.5 * b + 128.0
                     else -> 0.5 * r - 0.418688 * g - 0.081312 * b + 128.0
                 }
+                sum += sample8 * ((1 shl options.precision) - 1) / 255.0
                 count++
             }
         }
@@ -222,7 +274,7 @@ private class JpegWriter(
                 var sum = 0.0
                 for (y in 0 until 8) {
                     for (x in 0 until 8) {
-                        sum += (samples[y * 8 + x] - 128.0) *
+                        sum += (samples[y * 8 + x] - (1 shl (options.precision - 1))) *
                             COS_TABLE[u * 8 + x] *
                             COS_TABLE[v * 8 + y]
                     }
@@ -238,7 +290,7 @@ private class JpegWriter(
     }
 
     private fun writeCoefficients(
-        bits: EntropyWriter,
+        bits: EntropyBitWriter,
         coeffs: IntArray,
         component: Int,
         dcTable: EncoderHuffmanTable,
@@ -284,26 +336,44 @@ private class JpegWriter(
         writeSegment(APP0, payload)
     }
 
-    private fun writeDqt() {
-        writeSegment(DQT, byteArrayOf(0x00) + quantBytes(qLuma) + byteArrayOf(0x01) + quantBytes(qChroma))
+    private fun writeMetadata() {
+        val requested = options.metadata
+        val icc = requested.icc ?: if (!bitmap.colorSpace.isSRGB()) {
+            SkICC.WriteToICC(bitmap.colorSpace.transferFn, bitmap.colorSpace.toXYZD50)
+        } else {
+            null
+        }
+        if (icc != null) writeIccApp2(icc)
+        requested.adobeTransform?.let(::writeAdobeApp14)
+        val exif = requested.exif
+        when {
+            exif != null -> writeExifApp1(exif)
+            options.orientation != SkEncodedOrigin.kTopLeft -> writeExifApp1(orientationTiff(options.orientation.exifValue))
+        }
+        requested.xmp?.let(::writeXmpApp1)
+        requested.comment?.let { writeSegment(COM, it) }
     }
 
-    private fun writeSof0() {
+    private fun writeDqt() {
+        val sixteenBit = options.precision == 12
+        val lumaSpec = if (sixteenBit) 0x10 else 0x00
+        val chromaSpec = if (sixteenBit) 0x11 else 0x01
+        writeSegment(DQT, byteArrayOf(lumaSpec.toByte()) + quantBytes(qLuma, sixteenBit) + byteArrayOf(chromaSpec.toByte()) + quantBytes(qChroma, sixteenBit))
+    }
+
+    private fun writeSof() {
         val payload = ByteArrayOutputStream()
-        payload.write(8)
+        payload.write(options.precision)
         writeU16BE(payload, bitmap.height)
         writeU16BE(payload, bitmap.width)
         payload.write(3)
-        payload.write(1)
-        payload.write((sampling.yH shl 4) or sampling.yV)
-        payload.write(0)
-        payload.write(2)
-        payload.write(0x11)
-        payload.write(1)
-        payload.write(3)
-        payload.write(0x11)
-        payload.write(1)
-        writeSegment(SOF0, payload.toByteArray())
+        for (component in 0 until 3) {
+            val factor = sampling.components[component]
+            payload.write(component + 1)
+            payload.write((factor.horizontal shl 4) or factor.vertical)
+            payload.write(if (component == COMPONENT_Y) 0 else 1)
+        }
+        writeSegment(if (options.precision == 8) SOF0 else SOF1, payload.toByteArray())
     }
 
     private fun writeDht(tableClass: Int, tableId: Int, bits: IntArray, values: IntArray) {
@@ -312,6 +382,12 @@ private class JpegWriter(
         bits.forEach { payload.write(it) }
         values.forEach { payload.write(it) }
         writeSegment(DHT, payload.toByteArray())
+    }
+
+    private fun writeDri() {
+        val payload = ByteArrayOutputStream()
+        writeU16BE(payload, options.restartInterval)
+        writeSegment(DRI, payload.toByteArray())
     }
 
     private fun writeSos() {
@@ -331,10 +407,9 @@ private class JpegWriter(
         out.write(payload)
     }
 
-    private fun writeIccApp2() {
-        val iccBytes = SkICC.WriteToICC(bitmap.colorSpace.transferFn, bitmap.colorSpace.toXYZD50)
+    private fun writeIccApp2(iccBytes: ByteArray) {
         val signature = byteArrayOf(0x49, 0x43, 0x43, 0x5F, 0x50, 0x52, 0x4F, 0x46, 0x49, 0x4C, 0x45, 0x00)
-        val maxChunkPayload = 65519
+        val maxChunkPayload = JpegWriterLimits.MAX_ICC_CHUNK_BYTES
         val totalChunks = (iccBytes.size + maxChunkPayload - 1) / maxChunkPayload
         var offset = 0
         for (i in 1..totalChunks) {
@@ -347,8 +422,23 @@ private class JpegWriter(
         }
     }
 
-    private fun writeExifApp1() {
-        val orientationValue = options.orientation.exifValue
+    private fun writeAdobeApp14(transform: Int) {
+        val payload = byteArrayOf(
+            'A'.code.toByte(), 'd'.code.toByte(), 'o'.code.toByte(), 'b'.code.toByte(), 'e'.code.toByte(),
+            0x00, 0x64, 0x00, 0x00, 0x00, 0x00, transform.toByte(),
+        )
+        writeSegment(APP14, payload)
+    }
+
+    private fun writeXmpApp1(xmp: ByteArray) {
+        writeSegment(APP1, XMP_IDENTIFIER + xmp)
+    }
+
+    private fun writeExifApp1(tiff: ByteArray) {
+        writeSegment(APP1, EXIF_IDENTIFIER + tiff)
+    }
+
+    private fun orientationTiff(orientationValue: Int): ByteArray {
         val tiffPayload = ByteArrayOutputStream()
         tiffPayload.write('M'.code)
         tiffPayload.write('M'.code)
@@ -361,8 +451,7 @@ private class JpegWriter(
         writeU16BE(tiffPayload, orientationValue)
         writeU16BE(tiffPayload, 0)
         writeU32BE(tiffPayload, 0)
-        val segmentPayload = byteArrayOf(0x45, 0x78, 0x69, 0x66, 0x00, 0x00) + tiffPayload.toByteArray()
-        writeSegment(APP1, segmentPayload)
+        return tiffPayload.toByteArray()
     }
 
     private fun writeU32BE(out: ByteArrayOutputStream, value: Int) {
@@ -379,84 +468,32 @@ private class JpegWriter(
 }
 
 private data class Sampling(
-    val yH: Int,
-    val yV: Int,
+    val components: List<JpegSamplingFactor>,
 ) {
-    val cH: Int = 1
-    val cV: Int = 1
-    val maxH: Int = yH
-    val maxV: Int = yV
+    val maxH: Int = components.maxOf(JpegSamplingFactor::horizontal)
+    val maxV: Int = components.maxOf(JpegSamplingFactor::vertical)
 
     companion object {
-        fun from(downsample: JpegEncoder.Downsample): Sampling =
-            when (downsample) {
-                JpegEncoder.Downsample.k420 -> Sampling(yH = 2, yV = 2)
-                JpegEncoder.Downsample.k422 -> Sampling(yH = 2, yV = 1)
-                JpegEncoder.Downsample.k444 -> Sampling(yH = 1, yV = 1)
-            }
+        fun from(sampling: JpegSampling): Sampling = Sampling(sampling.components)
     }
 }
 
-private class EntropyWriter(private val out: OutputStream) {
-    private var buffer = 0
-    private var bitCount = 0
-
-    fun write(code: Int, length: Int) {
-        for (i in length - 1 downTo 0) {
-            buffer = (buffer shl 1) or ((code ushr i) and 1)
-            bitCount++
-            if (bitCount == 8) flushByte(buffer)
-        }
-    }
-
-    fun flush() {
-        if (bitCount > 0) {
-            flushByte((buffer shl (8 - bitCount)) or ((1 shl (8 - bitCount)) - 1))
-        }
-    }
-
-    private fun flushByte(value: Int) {
-        val b = value and 0xFF
-        out.write(b)
-        if (b == 0xFF) out.write(0x00)
-        buffer = 0
-        bitCount = 0
-    }
-}
-
-private class EncoderHuffmanTable(bits: IntArray, values: IntArray) {
-    private val codes = IntArray(256)
-    private val lengths = IntArray(256)
-
-    init {
-        var code = 0
-        var valueIndex = 0
-        for (length in 1..16) {
-            repeat(bits[length - 1]) {
-                val symbol = values[valueIndex++]
-                codes[symbol] = code
-                lengths[symbol] = length
-                code++
-            }
-            code = code shl 1
-        }
-    }
-
-    fun code(symbol: Int): Int = codes[symbol]
-
-    fun length(symbol: Int): Int = lengths[symbol]
-}
-
-private fun scaledQuantTable(base: IntArray, quality: Int): IntArray {
+private fun scaledQuantTable(base: IntArray, quality: Int, precision: Int): IntArray {
     val q = quality.coerceIn(1, 100)
     val scale = if (q < 50) 5000 / q else 200 - q * 2
+    val sampleScale = if (precision == 12) 16 else 1
     return IntArray(64) { i ->
-        ((base[ZIGZAG[i]] * scale + 50) / 100).coerceIn(1, 255)
+        (((base[ZIGZAG[i]] * scale + 50) / 100) * sampleScale).coerceIn(1, 65535)
     }
 }
 
-private fun quantBytes(table: IntArray): ByteArray =
-    ByteArray(64) { i -> table[i].toByte() }
+private fun quantBytes(table: IntArray, sixteenBit: Boolean): ByteArray =
+    if (sixteenBit) ByteArray(128).also { bytes ->
+        for (i in table.indices) {
+            bytes[i * 2] = (table[i] ushr 8).toByte()
+            bytes[i * 2 + 1] = table[i].toByte()
+        }
+    } else ByteArray(64) { i -> table[i].toByte() }
 
 private fun coefficientSize(value: Int): Int {
     if (value == 0) return 0
@@ -498,12 +535,19 @@ private const val EOI = 0xD9
 private const val APP0 = 0xE0
 private const val APP1 = 0xE1
 private const val APP2 = 0xE2
+private const val APP14 = 0xEE
 private const val DQT = 0xDB
 private const val SOF0 = 0xC0
+private const val SOF1 = 0xC1
 private const val DHT = 0xC4
 private const val SOS = 0xDA
+private const val DRI = 0xDD
+private const val COM = 0xFE
 
 private const val INV_SQRT2 = 0.7071067811865476
+
+private val EXIF_IDENTIFIER = byteArrayOf(0x45, 0x78, 0x69, 0x66, 0x00, 0x00)
+private val XMP_IDENTIFIER = "http://ns.adobe.com/xap/1.0/\u0000".encodeToByteArray()
 
 private val COS_TABLE = DoubleArray(64) { index ->
     val u = index / 8
@@ -547,6 +591,18 @@ private val STD_CHROMA_Q = intArrayOf(
 private val STD_DC_LUMA_BITS = intArrayOf(0, 1, 5, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0)
 private val STD_DC_CHROMA_BITS = intArrayOf(0, 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0)
 private val STD_DC_VALUES = intArrayOf(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11)
+
+/**
+ * A complete canonical table used only for 12-bit sequential output. The
+ * baseline standard AC tables omit coefficient categories 11..14, whereas
+ * extended JPEG permits them. Counts 255/1 avoid the one-byte DHT count
+ * limit while retaining a valid prefix code for every byte-valued symbol.
+ */
+private val EXTENDED_HUFFMAN_BITS = IntArray(16).also { bits ->
+    bits[7] = 255
+    bits[8] = 1
+}
+private val EXTENDED_HUFFMAN_VALUES = IntArray(256) { it }
 
 private val STD_AC_LUMA_BITS = intArrayOf(0, 2, 1, 3, 3, 2, 4, 3, 5, 5, 4, 4, 0, 0, 1, 0x7D)
 private val STD_AC_LUMA_VALUES = intArrayOf(
