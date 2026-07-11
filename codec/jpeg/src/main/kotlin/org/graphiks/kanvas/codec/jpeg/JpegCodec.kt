@@ -16,9 +16,9 @@ import kotlin.math.roundToInt
 /**
  * First pure Kotlin JPEG decoder slice.
  *
- * This backend owns JPEG container parsing and pure Kotlin sequential Huffman
- * DCT decoding. Sequential SOF0/SOF1 frames support 8-bit and SOF1 12-bit
- * grayscale, YCbCr, RGB, CMYK, and YCCK component data.
+ * This backend owns JPEG container parsing and pure Kotlin Huffman decoding.
+ * It supports sequential and progressive DCT frames plus SOF3 lossless frames
+ * for grayscale, YCbCr, RGB, CMYK, and YCCK component data.
  */
 public class JpegCodec private constructor(
     private val jpeg: ParsedJpeg,
@@ -50,28 +50,23 @@ public class JpegCodec private constructor(
         if (dst.colorType != info.colorType) return Result.kInvalidParameters
         if (!canDecodeTo(info.colorType)) return Result.kInvalidConversion
         val pixels = try {
-            if (jpeg.coding == JpegCoding.kProgressive) {
-                val samples = decodeProgressiveDct(jpeg)
-                DecodedPixels(
-                    rgba8888 = composePixels(samples, jpeg.colorModel()),
-                    rgbaF16 = if (info.colorType == SkColorType.kRGBA_F16Norm) {
-                        composeF16Pixels(samples, jpeg.colorModel())
-                    } else {
-                        null
-                    },
-                )
-            } else {
-                val samples = decodeSequentialDct(jpeg)
-                DecodedPixels(
-                    rgba8888 = composePixels(samples, jpeg.colorModel()),
-                    rgbaF16 = if (info.colorType == SkColorType.kRGBA_F16Norm) {
-                        composeF16Pixels(samples, jpeg.colorModel())
-                    } else {
-                        null
-                    },
-                )
+            val samples = when (jpeg.coding) {
+                JpegCoding.kBaseline -> decodeSequentialDct(jpeg)
+                JpegCoding.kProgressive -> decodeProgressiveDct(jpeg)
+                JpegCoding.kLossless -> decodeLossless(jpeg)
             }
+            DecodedPixels(
+                rgba8888 = composePixels(samples, jpeg.colorModel()),
+                rgbaF16 = if (info.colorType == SkColorType.kRGBA_F16Norm) {
+                    composeF16Pixels(samples, jpeg.colorModel())
+                } else {
+                    null
+                },
+            )
         } catch (failure: ProgressiveJpegException) {
+            lastDecodeDiagnosticCode = failure.diagnosticCode
+            return Result.kErrorInInput
+        } catch (failure: LosslessJpegException) {
             lastDecodeDiagnosticCode = failure.diagnosticCode
             return Result.kErrorInInput
         } catch (_: IllegalArgumentException) {
@@ -258,6 +253,7 @@ internal data class EntropyScan(
 internal enum class JpegCoding {
     kBaseline,
     kProgressive,
+    kLossless,
 }
 
 internal fun parseJpeg(data: ByteArray, metadata: JpegMetadata): ParsedJpeg? {
@@ -297,7 +293,7 @@ internal fun parseJpeg(data: ByteArray, metadata: JpegMetadata): ParsedJpeg? {
                     payloadStart,
                     payloadEnd,
                     frameComponents,
-                    currentCoding == JpegCoding.kProgressive,
+                    currentCoding,
                 ) ?: return null
                 scan = current
                 scanCount++
@@ -360,7 +356,7 @@ internal fun parseJpeg(data: ByteArray, metadata: JpegMetadata): ParsedJpeg? {
                 when (marker) {
                     MARKER_DQT -> parseDqt(data, payloadStart, payloadEnd, quantTables)
                     MARKER_DHT -> parseDht(data, payloadStart, payloadEnd, dcTables, acTables)
-                    MARKER_SOF0, MARKER_SOF1, MARKER_SOF2 -> {
+                    MARKER_SOF0, MARKER_SOF1, MARKER_SOF2, MARKER_SOF3 -> {
                         if (coding != null) return null
                         val frameSpec = JpegFrameSpec.fromSof(marker) ?: return null
                         if (frameSpec.entropyCoding != JpegEntropyCoding.HUFFMAN || frameSpec.differential) return null
@@ -372,7 +368,7 @@ internal fun parseJpeg(data: ByteArray, metadata: JpegMetadata): ParsedJpeg? {
                         coding = when (frameSpec.sampleCoding) {
                             JpegSampleCoding.DCT_SEQUENTIAL -> JpegCoding.kBaseline
                             JpegSampleCoding.DCT_PROGRESSIVE -> JpegCoding.kProgressive
-                            JpegSampleCoding.LOSSLESS -> return null
+                            JpegSampleCoding.LOSSLESS -> JpegCoding.kLossless
                         }
                     }
                     MARKER_DRI -> {
@@ -428,7 +424,8 @@ private fun buildParsed(
     scans: List<EntropyScan>,
 ): ParsedJpeg? {
     val cs = components ?: return null
-    if (width !in 1..MAX_DIMENSION || height !in 1..MAX_DIMENSION || precision !in listOf(8, 12)) return null
+    if (width !in 1..MAX_DIMENSION || height !in 1..MAX_DIMENSION) return null
+    if (precision !in (if (coding == JpegCoding.kLossless) listOf(8, 12, 16) else listOf(8, 12))) return null
     if (cs.size !in listOf(1, 3, 4)) return null
     if (coding == JpegCoding.kProgressive && cs.size == 4) return null
     if (coding == JpegCoding.kProgressive) {
@@ -457,7 +454,11 @@ private fun buildParsed(
             scans,
         )
     }
-    if (!validateSequentialScans(cs, scans)) return null
+    if (coding == JpegCoding.kLossless) {
+        if (!validateLosslessScans(cs, scans, precision)) return null
+    } else if (!validateSequentialScans(cs, scans)) {
+        return null
+    }
     if (colorModelFor(cs, metadata) == null) return null
     if (scans.isEmpty() || scans.any { it.data.isEmpty() }) return null
     return ParsedJpeg(
@@ -500,6 +501,41 @@ private fun validateSequentialScans(
                 entropyScan.quantTables[component.quantTable] == null ||
                 entropyScan.dcTables[component.dcTable] == null ||
                 entropyScan.acTables[component.acTable] == null
+            ) {
+                return false
+            }
+        }
+    }
+    return seen.size == frameComponents.size
+}
+
+private fun validateLosslessScans(
+    frameComponents: List<Component>,
+    scans: List<EntropyScan>,
+    precision: Int,
+): Boolean {
+    val seen = HashSet<Int>(frameComponents.size)
+    for (component in frameComponents) {
+        if (component.h !in 1..4 || component.v !in 1..4 || component.quantTable != 0) return false
+    }
+    for (entropyScan in scans) {
+        val scan = entropyScan.scan
+        val pointTransform = scan.successiveApprox and 0x0F
+        if (
+            scan.components.isEmpty() ||
+            scan.spectralStart !in 1..7 ||
+            scan.spectralEnd != 0 ||
+            scan.successiveApprox ushr 4 != 0 ||
+            pointTransform !in 0 until precision
+        ) {
+            return false
+        }
+        for (component in scan.components) {
+            if (
+                !seen.add(component.frameIndex) ||
+                component.dcTable !in entropyScan.dcTables.indices ||
+                component.acTable != 0 ||
+                entropyScan.dcTables[component.dcTable] == null
             ) {
                 return false
             }
@@ -582,7 +618,7 @@ private fun parseSof(data: ByteArray, start: Int, end: Int, spec: JpegFrameSpec)
     val width = readU16BE(data, p).also { p += 2 }
     val componentCount = data[p++].toInt() and 0xFF
     if (
-        precision !in listOf(8, 12) ||
+        precision !in (if (spec.sampleCoding == JpegSampleCoding.LOSSLESS) listOf(8, 12, 16) else listOf(8, 12)) ||
         (spec.marker == MARKER_SOF0 && precision != 8) ||
         componentCount !in listOf(1, 3, 4) ||
         end - p != componentCount * 3
@@ -595,7 +631,7 @@ private fun parseSof(data: ByteArray, start: Int, end: Int, spec: JpegFrameSpec)
         val id = data[p++].toInt() and 0xFF
         val sampling = data[p++].toInt() and 0xFF
         val quant = data[p++].toInt() and 0xFF
-        if (!ids.add(id)) return null
+        if (!ids.add(id) || (spec.sampleCoding == JpegSampleCoding.LOSSLESS && quant != 0)) return null
         components += Component(id, sampling ushr 4, sampling and 0x0F, quant, index, 0, 0)
     }
     return Frame(width, height, precision, components)
@@ -606,7 +642,7 @@ private fun parseSos(
     start: Int,
     end: Int,
     frameComponents: List<Component>?,
-    progressive: Boolean,
+    coding: JpegCoding,
 ): Scan? {
     val frame = frameComponents ?: return null
     if (end - start < 6) return null
@@ -626,16 +662,18 @@ private fun parseSos(
     val spectralStart = data[p++].toInt() and 0xFF
     val spectralEnd = data[p++].toInt() and 0xFF
     val approx = data[p++].toInt() and 0xFF
-    if (progressive) {
+    if (coding == JpegCoding.kProgressive) {
         val successiveHigh = approx ushr 4
         val successiveLow = approx and 0x0F
         if (spectralStart !in 0..63 || spectralEnd !in spectralStart..63) return null
         if (successiveHigh > 13 || successiveLow > 13) return null
         if (spectralStart == 0 && spectralEnd != 0) return null
         if (spectralStart != 0 && componentCount != 1) return null
-    } else if (spectralStart != 0 || spectralEnd != 63 || approx != 0) {
-        return null
-    }
+    } else if (coding == JpegCoding.kLossless) {
+        if (spectralStart !in 1..7 || spectralEnd != 0 || approx ushr 4 != 0 || components.any { it.acTable != 0 }) {
+            return null
+        }
+    } else if (spectralStart != 0 || spectralEnd != 63 || approx != 0) return null
     return Scan(components, spectralStart, spectralEnd, approx)
 }
 
@@ -647,6 +685,7 @@ internal fun fail(): Nothing = throw IllegalArgumentException("invalid JPEG")
 private const val MARKER_SOF0 = 0xC0
 private const val MARKER_SOF1 = 0xC1
 private const val MARKER_SOF2 = 0xC2
+private const val MARKER_SOF3 = 0xC3
 private const val MARKER_DHT = 0xC4
 private const val MARKER_SOS = 0xDA
 private const val MARKER_DQT = 0xDB
