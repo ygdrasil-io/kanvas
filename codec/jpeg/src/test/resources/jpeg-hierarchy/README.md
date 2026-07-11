@@ -70,20 +70,22 @@ maximum absolute error of one final grayscale sample. This applies to the
 quality-100 fixtures because every one begins with a lossy DCT base frame
 (SOF1 or SOF9): Kanvas's existing floating IDCT and the reference's fixed-point
 IDCT can round that base one sample apart, including at 0/255 endpoints. The
-differential Huffman/arithmetic entropy paths are not granted a tolerance: the
-SOF15 test also asserts its raw 4×4 arithmetic-lossless residual symbol plane
-exactly before DCT-base composition, and the 8×8 SOF15 oracle exercises the QM
-contexts and DRI/RST state reset. Hierarchical composition follows the reference
-merger by retaining signed intermediate samples; normal pixel composition is
-the single saturating boundary.
+one-sample tolerance is limited to final DCT-base composition. Separately, the SOF15 4×4
+test asserts the complete raw arithmetic-lossless residual plane exactly as
+`[0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 1, 0]` before composition. The
+8×8 SOF15 oracle exercises the QM contexts and DRI/RST state reset.
+Hierarchical composition follows the reference merger by retaining signed
+intermediate samples; normal pixel composition is the single saturating
+boundary.
 
-The 16×16 `threshold` fixture is a raw arithmetic-lossless residual oracle,
-not a final-pixel acceptance fixture. Its quality-10 SOF9 base exposes an
+The 16×16 `threshold` fixture is a targeted raw arithmetic-lossless residual
+regression fixture, not a final-pixel acceptance fixture. Its quality-10 SOF9 base exposes an
 existing arithmetic-DCT reconstruction difference in Kanvas of up to 22
 samples against the fixed-point reference, outside this hierarchy task's
-one-sample DCT evidence envelope. The test anchors independent reference
-residual values before and after DRI=32 restarts, including `-55`, `-152`, and
-`-49`; it also requires both `|D| = 2` and `|D| > 2`. This isolates and proves
+one-sample DCT evidence envelope. The test asserts selected independent
+reference residual anchors before and after DRI=32 restarts, including `-55`,
+`-152`, and `-49`; these anchors are not an exhaustive 16×16 raw-residual
+oracle. It also requires both `|D| = 2` and `|D| > 2`. This isolates and proves
 the SOF15 QM lossless path without presenting that inherited SOF9 variance as
 a hierarchy result.
 
@@ -103,7 +105,7 @@ a hierarchy result.
 These small 4×4 fixtures prove full document hierarchy, frame ordering,
 reference selection, EXP handling, and every differential entropy/sample
 family. The 8×8 SOF15 fixture additionally certifies arithmetic-lossless
-context transitions and DRI/RST reset; the 16×16 raw oracle crosses the
+context transitions and DRI/RST reset; the 16×16 threshold fixture crosses the
 `L=0,U=1` magnitude classification boundary. For normative interpretation,
 T.81 is the controlling specification; the pinned implementation is separate
 interoperability evidence. Its `ACLosslessScan::QMContextSet` classifies a

@@ -111,6 +111,36 @@ class JpegHierarchyDecodeTest {
     }
 
     @Test
+    fun `SOF15 4x4 raw residual matches the reference exactly`() {
+        val document = requireNotNull(
+            JpegDocument.open(fixture("sof15-arithmetic-lossless-exp00.jpg")).document,
+        )
+        val hierarchy = requireNotNull(document.hierarchy)
+
+        val residual = decodeDifferentialArithmeticLossless(hierarchy.parsedFrames[1]).planes.single()
+
+        assertEquals(
+            listOf(0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 1, 0),
+            residual.toList(),
+        )
+    }
+
+    @Test
+    fun `hierarchy reparse budget refuses document before entropy decode`() {
+        val source = fixture("sof5-huffman-sequential-exp11.jpg")
+        val limits = JpegLimits(
+            maxEncodedBytes = source.size.toLong(),
+            maxPixels = JpegLimits.DEFAULT.maxPixels,
+            maxScans = JpegLimits.DEFAULT.maxScans,
+            maxSegments = JpegLimits.DEFAULT.maxSegments,
+        )
+
+        val document = requireNotNull(JpegDocument.open(source, limits).document)
+
+        assertEquals("jpeg.hierarchy.reparse.bytes", document.hierarchyDiagnostic?.code)
+    }
+
+    @Test
     fun `DHP and EXP validation refuses invalid references before entropy decode`() {
         val source = fixture("sof5-huffman-sequential-exp11.jpg")
         val sourceDocument = requireNotNull(JpegDocument.open(source).document)

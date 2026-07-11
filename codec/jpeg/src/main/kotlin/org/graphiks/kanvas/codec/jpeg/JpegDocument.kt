@@ -33,6 +33,7 @@ public data class JpegDecodeResult(
 public class JpegDocument internal constructor(
     source: ByteArray,
     segments: List<JpegSegment>,
+    hierarchyReparseBudget: JpegHierarchyReparseBudget,
 ) {
     private val source: ByteArray = source
 
@@ -59,7 +60,7 @@ public class JpegDocument internal constructor(
         val (parsedMetadata, diagnostics) = parseJpegMetadata(source, this.segments)
         metadata = parsedMetadata
         metadataDiagnostics = Collections.unmodifiableList(diagnostics)
-        val parsedHierarchy = parseJpegHierarchy(source, this.segments, metadata)
+        val parsedHierarchy = parseJpegHierarchy(source, this.segments, metadata, hierarchyReparseBudget)
         hierarchy = parsedHierarchy.hierarchy
         hierarchyDiagnostic = parsedHierarchy.diagnostic
     }
@@ -142,7 +143,10 @@ private fun parseJpegDocument(
         when (marker) {
             MARKER_EOI -> {
                 appendSegment(marker, offset, offset, markerOffset)?.let { return it }
-                return JpegOpenResult(JpegDocument(source, segments.toList()), null)
+                return JpegOpenResult(
+                    JpegDocument(source, segments.toList(), hierarchyReparseBudget(source.size, limits)),
+                    null,
+                )
             }
 
             MARKER_SOI, in MARKER_RST0..MARKER_RST7 -> return invalidJpeg(markerOffset.toLong())
@@ -237,6 +241,20 @@ private fun segmentPayloadEnd(data: ByteArray, lengthOffset: Int): Int? {
     return payloadEnd.takeIf { it <= data.size.toLong() }?.toInt()
 }
 
+/**
+ * Hierarchical JPEG frame parsing temporarily creates self-contained streams.
+ * Keep their aggregate size bounded both by the caller's encoded-byte limit
+ * and by a small multiple of the already accepted document.
+ */
+private fun hierarchyReparseBudget(sourceSize: Int, limits: JpegLimits): JpegHierarchyReparseBudget =
+    JpegHierarchyReparseBudget(
+        maxFrameCount = minOf(limits.maxScans, limits.maxSegments),
+        maxMaterializedBytes = minOf(
+            limits.maxEncodedBytes,
+            sourceSize.toLong() * HIERARCHY_REPARSE_SOURCE_MULTIPLIER,
+        ),
+    )
+
 private fun isStartOfFrame(marker: Int): Boolean =
     marker in 0xC0..0xCF && marker != 0xC4 && marker != 0xC8 && marker != 0xCC
 
@@ -318,6 +336,7 @@ private const val MARKER_RST0: Int = 0xD0
 private const val MARKER_RST7: Int = 0xD7
 private const val DEFAULT_READ_BUFFER_SIZE: Int = 8 * 1024
 private const val MAX_MATERIALIZABLE_ENCODED_BYTES: Long = Int.MAX_VALUE.toLong() - 8L
+private const val HIERARCHY_REPARSE_SOURCE_MULTIPLIER: Long = 2L
 private const val MAX_ENCODED_BYTES_WITH_SENTINEL: Long = MAX_MATERIALIZABLE_ENCODED_BYTES - 1L
 private const val MIN_SOS_PAYLOAD_BYTES: Int = 6
 private const val SOS_FIXED_PAYLOAD_BYTES: Int = 4

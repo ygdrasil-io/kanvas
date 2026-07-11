@@ -63,11 +63,18 @@ internal data class JpegHierarchyParseResult(
     val diagnostic: JpegDiagnostic?,
 )
 
+/** Bounds temporary JPEG streams built while parsing each DHP frame. */
+internal data class JpegHierarchyReparseBudget(
+    val maxFrameCount: Int,
+    val maxMaterializedBytes: Long,
+)
+
 /** Parses DHP/EXP relationships from the already container-validated marker list. */
 internal fun parseJpegHierarchy(
     source: ByteArray,
     segments: List<JpegSegment>,
     metadata: JpegMetadata,
+    reparseBudget: JpegHierarchyReparseBudget,
 ): JpegHierarchyParseResult {
     val dhp = segments.filter { it.marker == MARKER_DHP }
     if (dhp.isEmpty()) {
@@ -158,7 +165,12 @@ internal fun parseJpegHierarchy(
     if (frames.last().width != declaration.width || frames.last().height != declaration.height) {
         return hierarchyFailure("jpeg.hierarchy.final.geometry", declarationSegment.offset)
     }
-    val parsedFrames = parseHierarchyFrameStreams(source, segments, metadata)
+    val reparsePlan = hierarchyFrameReparsePlan(segments)
+        ?: return hierarchyFailure("jpeg.hierarchy.frame.parse", declarationSegment.offset)
+    validateHierarchyReparseBudget(source, segments, reparsePlan, reparseBudget)?.let { diagnostic ->
+        return JpegHierarchyParseResult(null, diagnostic)
+    }
+    val parsedFrames = parseHierarchyFrameStreams(source, segments, metadata, reparsePlan)
         ?: return hierarchyFailure("jpeg.hierarchy.frame.parse", declarationSegment.offset)
     if (parsedFrames.size != frames.size || parsedFrames.zip(frames).any { (parsed, frame) ->
             parsed.frameSpec.marker != frame.sofMarker || parsed.width != frame.width || parsed.height != frame.height
@@ -180,14 +192,11 @@ private fun parseHierarchyFrameStreams(
     source: ByteArray,
     segments: List<JpegSegment>,
     metadata: JpegMetadata,
+    reparsePlan: HierarchyFrameReparsePlan,
 ): List<ParsedJpeg>? {
-    val frameIndices = segments.indices.filter { JpegFrameSpec.fromSof(segments[it].marker) != null }
-    if (frameIndices.isEmpty()) return null
-    val endOfImage = segments.indexOfFirst { it.marker == MARKER_EOI }
-    if (endOfImage < 0) return null
-    return frameIndices.mapIndexed { position, segmentIndex ->
+    return reparsePlan.frameIndices.mapIndexed { position, segmentIndex ->
         val frameSegment = segments[segmentIndex]
-        val nextFrameIndex = frameIndices.getOrNull(position + 1) ?: endOfImage
+        val nextFrameIndex = reparsePlan.frameIndices.getOrNull(position + 1) ?: reparsePlan.endOfImageIndex
         val endOffset = segments[nextFrameIndex].offset.toInt()
         if (endOffset <= frameSegment.offset || endOffset > source.size) return null
         val isolated = ByteArrayOutputStream().apply {
@@ -206,13 +215,80 @@ private fun parseHierarchyFrameStreams(
     }
 }
 
+private data class HierarchyFrameReparsePlan(
+    val frameIndices: List<Int>,
+    val endOfImageIndex: Int,
+)
+
+/**
+ * Plans frame reparsing without copying any encoded bytes, so the hierarchy
+ * budget can reject repeated table prefixes before they are materialized.
+ */
+private fun hierarchyFrameReparsePlan(segments: List<JpegSegment>): HierarchyFrameReparsePlan? {
+    val frameIndices = segments.indices.filter { JpegFrameSpec.fromSof(segments[it].marker) != null }
+    if (frameIndices.isEmpty()) return null
+    val endOfImageIndex = segments.indexOfFirst { it.marker == MARKER_EOI }
+    if (endOfImageIndex < 0) return null
+    return HierarchyFrameReparsePlan(frameIndices, endOfImageIndex)
+}
+
+private fun validateHierarchyReparseBudget(
+    source: ByteArray,
+    segments: List<JpegSegment>,
+    reparsePlan: HierarchyFrameReparsePlan,
+    budget: JpegHierarchyReparseBudget,
+): JpegDiagnostic? {
+    val frameIndices = reparsePlan.frameIndices
+    if (frameIndices.size > budget.maxFrameCount) {
+        return hierarchyBudgetFailure(
+            "jpeg.hierarchy.reparse.frames",
+            segments[frameIndices[budget.maxFrameCount]].offset,
+        )
+    }
+
+    var prefixBytes = 0L
+    var materializedBytes = 0L
+    var nextSegment = 0
+    for ((position, frameIndex) in frameIndices.withIndex()) {
+        while (nextSegment < frameIndex) {
+            val prefixSegment = segments[nextSegment]
+            if (prefixSegment.marker in TABLE_PREFIX_MARKERS) {
+                prefixBytes += rawSegmentByteCount(source, prefixSegment)
+                    ?: return hierarchyBudgetFailure("jpeg.hierarchy.frame.parse", prefixSegment.offset)
+            }
+            nextSegment++
+        }
+        val frameSegment = segments[frameIndex]
+        val nextFrameIndex = frameIndices.getOrNull(position + 1) ?: reparsePlan.endOfImageIndex
+        val endOffset = segments[nextFrameIndex].offset
+        val frameBytes = endOffset - frameSegment.offset
+        if (frameBytes <= 0 || endOffset > source.size.toLong()) {
+            return hierarchyBudgetFailure("jpeg.hierarchy.frame.parse", frameSegment.offset)
+        }
+        val isolatedBytes = frameBytes + prefixBytes + SOI_AND_EOI_BYTES
+        if (isolatedBytes > budget.maxMaterializedBytes - materializedBytes) {
+            return hierarchyBudgetFailure("jpeg.hierarchy.reparse.bytes", frameSegment.offset)
+        }
+        materializedBytes += isolatedBytes
+        nextSegment = frameIndex + 1
+    }
+    return null
+}
+
+private fun rawSegmentByteCount(source: ByteArray, segment: JpegSegment): Long? {
+    val start = segment.offset
+    val endExclusive = if (segment.range.isEmpty()) {
+        start + JPEG_LENGTH_SEGMENT_BYTES
+    } else {
+        segment.range.last.toLong() + 1L
+    }
+    if (start < 0 || endExclusive !in start..source.size.toLong()) return null
+    return endExclusive - start
+}
+
 private fun ByteArrayOutputStream.writeRawSegment(source: ByteArray, segment: JpegSegment) {
-    val start = segment.offset.toInt()
-    // Prefix markers all have a two-byte length field. A zero-payload DAC is
-    // therefore still four bytes (`FF CC 00 02`), not a marker-only segment.
-    val endExclusive = if (segment.range.isEmpty()) start + 4 else segment.range.last + 1
-    if (start < 0 || endExclusive !in start..source.size) fail()
-    write(source, start, endExclusive - start)
+    val byteCount = rawSegmentByteCount(source, segment)?.toInt() ?: fail()
+    write(source, segment.offset.toInt(), byteCount)
 }
 
 private fun parseDhp(source: ByteArray, segment: JpegSegment): JpegHierarchyDefinition? {
@@ -316,6 +392,9 @@ private fun readHierarchyU16(data: ByteArray, offset: Int): Int =
 private fun hierarchyFailure(code: String, offset: Long): JpegHierarchyParseResult =
     JpegHierarchyParseResult(null, JpegDiagnostic(code, offset, Codec.Result.kErrorInInput))
 
+private fun hierarchyBudgetFailure(code: String, offset: Long): JpegDiagnostic =
+    JpegDiagnostic(code, offset, Codec.Result.kErrorInInput)
+
 internal data class HierarchyComponentLayout(
     val id: Int,
     val horizontalSampling: Int,
@@ -337,6 +416,8 @@ private const val MARKER_EXP = 0xDF
 private const val MARKER_EOI = 0xD9
 private const val HIERARCHY_FIXED_PAYLOAD_BYTES = 6
 private const val HIERARCHY_COMPONENT_BYTES = 3
+private const val SOI_AND_EOI_BYTES = 4L
+private const val JPEG_LENGTH_SEGMENT_BYTES = 4L
 private val TABLE_PREFIX_MARKERS = setOf(0xDB, 0xC4, 0xCC, 0xDD)
 
 internal class JpegHierarchyException(

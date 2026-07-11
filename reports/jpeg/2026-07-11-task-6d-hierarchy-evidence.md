@@ -6,8 +6,12 @@ Kanvas now parses a document-level `DHP`/`EXP` hierarchy and decodes its
 linear reference chain in pure Kotlin. The implementation validates the DHP
 declaration, component IDs/sampling/quantization layout, initial/reference
 frame ordering, EXP cardinality and placement, expanded geometry, final
-geometry, and rematerialized per-frame entropy streams before any entropy
-decode. A standalone differential SOF continues to return
+geometry, and a pre-allocation reparse budget. It rejects a hierarchy before
+frame-stream construction when its frame count exceeds the document scan/
+segment limits or when aggregate isolated JPEG bytes exceed
+`min(maxEncodedBytes, 2 × encoded document bytes)`, returning a stable
+`jpeg.hierarchy.reparse.frames` or `jpeg.hierarchy.reparse.bytes` diagnostic.
+A standalone differential SOF continues to return
 `jpeg.differential.reference.required`.
 
 The six differential SOF routes are direct Kotlin implementations:
@@ -50,14 +54,16 @@ licence provenance are recorded in
 hierarchy PGM oracles. The quality-100 fixtures permit at most one final sample
 of error because their first frame is a lossy DCT base and Kanvas's existing
 floating IDCT differs by one endpoint rounding sample from the reference's
-fixed-point IDCT. This is not an entropy tolerance: SOF15 also asserts exact
-raw arithmetic-lossless residual values before composition.
+fixed-point IDCT. This final-pixel tolerance does not cover the SOF15 4×4 raw
+arithmetic-lossless residual: the complete plane is asserted exactly as
+`[0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 1, 0]` before composition.
 
 The SOF15 8×8 DRI=8 fixture verifies QM context flow and restart reset. The
 SOF15 16×16 DRI=32 quality-10 fixture contains independent reference residual
 anchors `-55`, `-152`, `-39`, `51`, `-23`, `-49`, `-28`, `-64`, `-4`, and
-`-64` across restart boundaries, and reaches both `|D| = 2` and `|D| > 2` for
-DAC `L=0,U=1`.
+`-64` across restart boundaries; they are targeted anchors rather than a
+complete raw-residual oracle. It reaches both `|D| = 2` and `|D| > 2` for DAC
+`L=0,U=1`.
 
 The latter fixture is deliberately a raw residual regression oracle rather than
 a final-pixel acceptance test: its low-quality SOF9 base reveals a pre-existing
