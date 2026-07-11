@@ -367,6 +367,7 @@ private fun decodeProgressiveScan(
                         ]
                         if (scan.spectralStart == 0) {
                             decodeProgressiveDcCoefficient(
+                                frame.precision,
                                 entropyScan,
                                 component,
                                 reader,
@@ -378,6 +379,7 @@ private fun decodeProgressiveScan(
                             )
                         } else if (successiveHigh == 0) {
                             eobRun = decodeProgressiveAcInitial(
+                                frame.precision,
                                 entropyScan,
                                 component,
                                 reader,
@@ -408,6 +410,7 @@ private fun decodeProgressiveScan(
 }
 
 private fun decodeProgressiveDcCoefficient(
+    precision: Int,
     entropyScan: EntropyScan,
     component: Component,
     reader: EntropyBitReader,
@@ -421,7 +424,7 @@ private fun decodeProgressiveDcCoefficient(
     if (successiveHigh == 0) {
         val dcTable = entropyScan.dcTables[component.dcTable] ?: fail()
         val category = dcTable.decode(reader)
-        if (category !in 0..11) fail()
+        if (category !in 0..if (precision == 8) 11 else 15) fail()
         val dcValue = receiveAndExtend(reader, category)
         previousDc[component.frameIndex] = if (differential) dcValue else previousDc[component.frameIndex] + dcValue
         coefficients[0] = previousDc[component.frameIndex] * (1 shl successiveLow) * quant[0]
@@ -431,6 +434,7 @@ private fun decodeProgressiveDcCoefficient(
 }
 
 private fun decodeProgressiveAcInitial(
+    precision: Int,
     entropyScan: EntropyScan,
     component: Component,
     reader: EntropyBitReader,
@@ -456,7 +460,7 @@ private fun decodeProgressiveAcInitial(
             }
             return (1 shl run) + reader.readBits(run) - 1
         }
-        if (size > 10) fail()
+        if (size > if (precision == 8) 10 else 14) fail()
         coefficient += run
         if (coefficient > scan.spectralEnd) fail()
         val index = JPEG_ZIGZAG[coefficient]

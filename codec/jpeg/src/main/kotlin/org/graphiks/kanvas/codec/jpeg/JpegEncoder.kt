@@ -963,10 +963,10 @@ private val STD_DC_CHROMA_BITS = intArrayOf(0, 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 
 private val STD_DC_VALUES = intArrayOf(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11)
 
 /**
- * A complete canonical table used only for 12-bit sequential output. The
- * baseline standard AC tables omit coefficient categories 11..14, whereas
- * extended JPEG permits them. Counts 255/1 avoid the one-byte DHT count
- * limit while retaining a valid prefix code for every byte-valued symbol.
+ * A complete canonical table for 12-bit DCT output. The baseline standard AC
+ * tables omit coefficient categories 11..14, whereas extended JPEG permits
+ * them. Counts 255/1 avoid the one-byte DHT count limit while retaining a
+ * valid prefix code for every byte-valued symbol.
  */
 private val EXTENDED_HUFFMAN_BITS = IntArray(16).also { bits ->
     bits[7] = 255

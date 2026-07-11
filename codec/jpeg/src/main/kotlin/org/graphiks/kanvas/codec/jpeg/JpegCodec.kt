@@ -502,7 +502,6 @@ internal fun buildParsed(
     if (cs.size !in listOf(1, 3, 4)) return null
     if (coding == JpegCoding.kProgressive && cs.size == 4) return null
     if (coding == JpegCoding.kProgressive) {
-        if (precision != 8) return null
         for (component in cs) {
             if (component.h !in 1..4 || component.v !in 1..4) return null
             if (component.quantTable !in quantTables.indices || quantTables[component.quantTable] == null) return null

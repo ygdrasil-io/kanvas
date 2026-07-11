@@ -36,6 +36,59 @@ class JpegAdvancedEncodeTest {
     }
 
     @Test
+    fun `progressive 12-bit grayscale round trips a category 12 DC difference`() {
+        val source = bitmap(16, 8) { x, _ ->
+            val value = if (x < 8) 0 else 0xFF
+            0xFF000000.toInt() or (value shl 16) or (value shl 8) or value
+        }
+
+        val bytes = JpegEncoder.encode(
+            source,
+            JpegEncoder.Options(
+                quality = 100,
+                process = JpegEncodeProcess.ProgressiveHuffman,
+                precision = 12,
+                colorModel = JpegEncodeColorModel.Grayscale,
+                sampling = JpegSampling.S444,
+                progressiveScans = listOf(
+                    JpegProgressiveScan(componentIds = listOf(1), spectralStart = 0, spectralEnd = 0),
+                ),
+            ),
+        )
+
+        assertNotNull(bytes)
+        assertReasonableRoundTrip(source, bytes!!)
+    }
+
+    @Test
+    fun `progressive 12-bit grayscale round trips an AC category 11 or greater`() {
+        val source = bitmap(8, 8) { x, y ->
+            val value = if ((x + y) and 1 == 0) 0 else 0xFF
+            0xFF000000.toInt() or (value shl 16) or (value shl 8) or value
+        }
+
+        val bytes = JpegEncoder.encode(
+            source,
+            JpegEncoder.Options(
+                quality = 100,
+                process = JpegEncodeProcess.ProgressiveHuffman,
+                precision = 12,
+                colorModel = JpegEncodeColorModel.Grayscale,
+                sampling = JpegSampling.S444,
+                progressiveScans = listOf(
+                    JpegProgressiveScan(componentIds = listOf(1), spectralStart = 0, spectralEnd = 0),
+                    JpegProgressiveScan(componentIds = listOf(1), spectralStart = 1, spectralEnd = 63),
+                ),
+            ),
+        )
+
+        assertNotNull(bytes)
+        val (_, result) = JpegCodec.Decoder.make(bytes!!)!!.getImage()
+        assertEquals(org.graphiks.kanvas.codec.Codec.Result.kSuccess, result)
+        assertReasonableRoundTrip(source, bytes)
+    }
+
+    @Test
     fun `progressive color script writes restart markers and all declared scans`() {
         val source = color(17, 9)
         val script = listOf(
