@@ -16,9 +16,10 @@ import kotlin.math.roundToInt
 /**
  * First pure Kotlin JPEG decoder slice.
  *
- * This backend owns JPEG container parsing and pure Kotlin Huffman decoding.
- * It supports sequential and progressive DCT frames plus SOF3 lossless frames
- * for grayscale, YCbCr, RGB, CMYK, and YCCK component data.
+ * This backend owns JPEG container parsing and pure Kotlin entropy decoding.
+ * It supports Huffman and arithmetic sequential/progressive DCT frames plus
+ * SOF3 Huffman lossless frames for grayscale, YCbCr, RGB, CMYK, and YCCK
+ * component data. SOF11 arithmetic lossless is explicitly refused.
  */
 public class JpegCodec private constructor(
     private val jpeg: ParsedJpeg,
@@ -51,9 +52,18 @@ public class JpegCodec private constructor(
         if (!canDecodeTo(info.colorType)) return Result.kInvalidConversion
         val pixels = try {
             val samples = when (jpeg.coding) {
-                JpegCoding.kBaseline -> decodeSequentialDct(jpeg)
-                JpegCoding.kProgressive -> decodeProgressiveDct(jpeg)
-                JpegCoding.kLossless -> decodeLossless(jpeg)
+                JpegCoding.kBaseline -> when (jpeg.entropyCoding) {
+                    JpegEntropyCoding.HUFFMAN -> decodeSequentialDct(jpeg)
+                    JpegEntropyCoding.ARITHMETIC -> decodeArithmeticSequentialDct(jpeg)
+                }
+                JpegCoding.kProgressive -> when (jpeg.entropyCoding) {
+                    JpegEntropyCoding.HUFFMAN -> decodeProgressiveDct(jpeg)
+                    JpegEntropyCoding.ARITHMETIC -> decodeArithmeticProgressiveDct(jpeg)
+                }
+                JpegCoding.kLossless -> when (jpeg.entropyCoding) {
+                    JpegEntropyCoding.HUFFMAN -> decodeLossless(jpeg)
+                    JpegEntropyCoding.ARITHMETIC -> arithmeticFailure("jpeg.arithmetic.lossless.unsupported")
+                }
             }
             DecodedPixels(
                 rgba8888 = composePixels(samples, jpeg.colorModel()),
@@ -67,6 +77,9 @@ public class JpegCodec private constructor(
             lastDecodeDiagnosticCode = failure.diagnosticCode
             return Result.kErrorInInput
         } catch (failure: LosslessJpegException) {
+            lastDecodeDiagnosticCode = failure.diagnosticCode
+            return Result.kErrorInInput
+        } catch (failure: ArithmeticJpegException) {
             lastDecodeDiagnosticCode = failure.diagnosticCode
             return Result.kErrorInInput
         } catch (_: IllegalArgumentException) {
@@ -209,6 +222,7 @@ internal data class ParsedJpeg(
     val restartInterval: Int,
     val metadata: JpegMetadata,
     val coding: JpegCoding,
+    val entropyCoding: JpegEntropyCoding,
     val scanSpectralStart: Int,
     val scanSpectralEnd: Int,
     val scanSuccessiveApprox: Int,
@@ -247,7 +261,16 @@ internal data class EntropyScan(
     val quantTables: Array<IntArray?>,
     val dcTables: Array<HuffmanTable?>,
     val acTables: Array<HuffmanTable?>,
+    /** Snapshot of DAC conditioning active when this SOS began, or null for Huffman scans. */
+    val arithmeticConditioning: ArithmeticConditioning?,
     val restartInterval: Int,
+)
+
+/** Immutable per-scan JPEG arithmetic conditioning state established by DAC markers. */
+internal data class ArithmeticConditioning(
+    val dcLower: IntArray,
+    val dcUpper: IntArray,
+    val acK: IntArray,
 )
 
 internal enum class JpegCoding {
@@ -261,6 +284,9 @@ internal fun parseJpeg(data: ByteArray, metadata: JpegMetadata): ParsedJpeg? {
     val quantTables = arrayOfNulls<IntArray>(4)
     val dcTables = arrayOfNulls<HuffmanTable>(4)
     val acTables = arrayOfNulls<HuffmanTable>(4)
+    val arithmeticDcLower = IntArray(16)
+    val arithmeticDcUpper = IntArray(16) { 1 }
+    val arithmeticAcK = IntArray(16) { 5 }
     var width = 0
     var height = 0
     var precision = 0
@@ -270,6 +296,7 @@ internal fun parseJpeg(data: ByteArray, metadata: JpegMetadata): ParsedJpeg? {
     var scanCount = 0
     val scans = ArrayList<EntropyScan>()
     var coding: JpegCoding? = null
+    var entropyCoding: JpegEntropyCoding? = null
     var restartInterval = 0
     var offset = 2
 
@@ -315,6 +342,15 @@ internal fun parseJpeg(data: ByteArray, metadata: JpegMetadata): ParsedJpeg? {
                                 quantTables = quantTables.copyOf(),
                                 dcTables = dcTables.copyOf(),
                                 acTables = acTables.copyOf(),
+                                arithmeticConditioning = if (entropyCoding == JpegEntropyCoding.ARITHMETIC) {
+                                    ArithmeticConditioning(
+                                        dcLower = arithmeticDcLower.copyOf(),
+                                        dcUpper = arithmeticDcUpper.copyOf(),
+                                        acK = arithmeticAcK.copyOf(),
+                                    )
+                                } else {
+                                    null
+                                },
                                 restartInterval = restartInterval,
                             )
                             if (next == MARKER_EOI) {
@@ -330,6 +366,7 @@ internal fun parseJpeg(data: ByteArray, metadata: JpegMetadata): ParsedJpeg? {
                                     restartInterval,
                                     metadata,
                                     currentCoding,
+                                    entropyCoding ?: return null,
                                     current.spectralStart,
                                     current.spectralEnd,
                                     current.successiveApprox,
@@ -356,10 +393,11 @@ internal fun parseJpeg(data: ByteArray, metadata: JpegMetadata): ParsedJpeg? {
                 when (marker) {
                     MARKER_DQT -> parseDqt(data, payloadStart, payloadEnd, quantTables)
                     MARKER_DHT -> parseDht(data, payloadStart, payloadEnd, dcTables, acTables)
-                    MARKER_SOF0, MARKER_SOF1, MARKER_SOF2, MARKER_SOF3 -> {
+                    MARKER_SOF0, MARKER_SOF1, MARKER_SOF2, MARKER_SOF3,
+                    MARKER_SOF9, MARKER_SOF10, MARKER_SOF11 -> {
                         if (coding != null) return null
                         val frameSpec = JpegFrameSpec.fromSof(marker) ?: return null
-                        if (frameSpec.entropyCoding != JpegEntropyCoding.HUFFMAN || frameSpec.differential) return null
+                        if (frameSpec.differential) return null
                         val frame = parseSof(data, payloadStart, payloadEnd, frameSpec) ?: return null
                         width = frame.width
                         height = frame.height
@@ -370,7 +408,16 @@ internal fun parseJpeg(data: ByteArray, metadata: JpegMetadata): ParsedJpeg? {
                             JpegSampleCoding.DCT_PROGRESSIVE -> JpegCoding.kProgressive
                             JpegSampleCoding.LOSSLESS -> JpegCoding.kLossless
                         }
+                        entropyCoding = frameSpec.entropyCoding
                     }
+                    MARKER_DAC -> parseDac(
+                        data,
+                        payloadStart,
+                        payloadEnd,
+                        arithmeticDcLower,
+                        arithmeticDcUpper,
+                        arithmeticAcK,
+                    )
                     MARKER_DRI -> {
                         if (payloadEnd - payloadStart != 2) return null
                         restartInterval = readU16BE(data, payloadStart)
@@ -394,6 +441,7 @@ internal fun parseJpeg(data: ByteArray, metadata: JpegMetadata): ParsedJpeg? {
             restartInterval,
             metadata,
             coding,
+            entropyCoding ?: return null,
             lastScan.spectralStart,
             lastScan.spectralEnd,
             lastScan.successiveApprox,
@@ -417,6 +465,7 @@ private fun buildParsed(
     restartInterval: Int,
     metadata: JpegMetadata,
     coding: JpegCoding,
+    entropyCoding: JpegEntropyCoding,
     scanSpectralStart: Int,
     scanSpectralEnd: Int,
     scanSuccessiveApprox: Int,
@@ -434,6 +483,7 @@ private fun buildParsed(
             if (component.h !in 1..4 || component.v !in 1..4) return null
             if (component.quantTable !in quantTables.indices || quantTables[component.quantTable] == null) return null
         }
+        if (entropyCoding == JpegEntropyCoding.ARITHMETIC && !validateArithmeticProgressiveScans(scans)) return null
         if (scanData.isEmpty()) return null
         return ParsedJpeg(
             width,
@@ -447,6 +497,7 @@ private fun buildParsed(
             restartInterval,
             metadata,
             coding,
+            entropyCoding,
             scanSpectralStart,
             scanSpectralEnd,
             scanSuccessiveApprox,
@@ -455,8 +506,15 @@ private fun buildParsed(
         )
     }
     if (coding == JpegCoding.kLossless) {
-        if (!validateLosslessScans(cs, scans, precision)) return null
-    } else if (!validateSequentialScans(cs, scans)) {
+        if (entropyCoding == JpegEntropyCoding.HUFFMAN && !validateLosslessScans(cs, scans, precision)) return null
+        if (entropyCoding == JpegEntropyCoding.ARITHMETIC && !validateArithmeticLosslessRefusalScans(cs, scans, precision)) return null
+    } else if (
+        if (entropyCoding == JpegEntropyCoding.HUFFMAN) {
+            !validateSequentialScans(cs, scans)
+        } else {
+            !validateArithmeticSequentialScans(cs, scans)
+        }
+    ) {
         return null
     }
     if (colorModelFor(cs, metadata) == null) return null
@@ -473,12 +531,44 @@ private fun buildParsed(
         restartInterval,
         metadata,
         coding,
+        entropyCoding,
         scanSpectralStart,
         scanSpectralEnd,
         scanSuccessiveApprox,
         scanCount,
         scans,
     )
+}
+
+private fun validateArithmeticProgressiveScans(scans: List<EntropyScan>): Boolean = scans.all { entropyScan ->
+    entropyScan.arithmeticConditioning != null && entropyScan.scan.components.all { component ->
+        component.dcTable in 0..15 && component.acTable in 0..15
+    }
+}
+
+private fun validateArithmeticSequentialScans(
+    frameComponents: List<Component>,
+    scans: List<EntropyScan>,
+): Boolean {
+    val seen = HashSet<Int>(frameComponents.size)
+    for (component in frameComponents) {
+        if (component.h !in 1..4 || component.v !in 1..4) return false
+    }
+    for (entropyScan in scans) {
+        if (entropyScan.arithmeticConditioning == null || entropyScan.scan.components.isEmpty()) return false
+        for (component in entropyScan.scan.components) {
+            if (
+                !seen.add(component.frameIndex) ||
+                component.quantTable !in entropyScan.quantTables.indices ||
+                component.dcTable !in 0..15 ||
+                component.acTable !in 0..15 ||
+                entropyScan.quantTables[component.quantTable] == null
+            ) {
+                return false
+            }
+        }
+    }
+    return seen.size == frameComponents.size
 }
 
 private fun validateSequentialScans(
@@ -539,6 +629,36 @@ private fun validateLosslessScans(
             ) {
                 return false
             }
+        }
+    }
+    return seen.size == frameComponents.size
+}
+
+/** Validates SOF11 container structure only; decoding is intentionally refused at runtime. */
+private fun validateArithmeticLosslessRefusalScans(
+    frameComponents: List<Component>,
+    scans: List<EntropyScan>,
+    precision: Int,
+): Boolean {
+    val seen = HashSet<Int>(frameComponents.size)
+    for (component in frameComponents) {
+        if (component.h !in 1..4 || component.v !in 1..4 || component.quantTable != 0) return false
+    }
+    for (entropyScan in scans) {
+        val scan = entropyScan.scan
+        val pointTransform = scan.successiveApprox and 0x0F
+        if (
+            entropyScan.arithmeticConditioning == null ||
+            scan.components.isEmpty() ||
+            scan.spectralStart !in 1..7 ||
+            scan.spectralEnd != 0 ||
+            scan.successiveApprox ushr 4 != 0 ||
+            pointTransform !in 0 until precision
+        ) {
+            return false
+        }
+        for (component in scan.components) {
+            if (!seen.add(component.frameIndex) || component.dcTable !in 0..15 || component.acTable != 0) return false
         }
     }
     return seen.size == frameComponents.size
@@ -608,6 +728,33 @@ private fun parseDht(
         if (tableClass == 0) dcTables[tableId] = table else acTables[tableId] = table
     }
     if (p != end) fail()
+}
+
+private fun parseDac(
+    data: ByteArray,
+    start: Int,
+    end: Int,
+    dcLower: IntArray,
+    dcUpper: IntArray,
+    acK: IntArray,
+) {
+    if ((end - start) and 1 != 0) fail()
+    var p = start
+    while (p < end) {
+        val index = data[p++].toInt() and 0xFF
+        val value = data[p++].toInt() and 0xFF
+        when (index) {
+            in 0..15 -> {
+                val lower = value and 0x0F
+                val upper = value ushr 4
+                if (lower > upper) fail()
+                dcLower[index] = lower
+                dcUpper[index] = upper
+            }
+            in 16..31 -> acK[index - 16] = value
+            else -> fail()
+        }
+    }
 }
 
 private fun parseSof(data: ByteArray, start: Int, end: Int, spec: JpegFrameSpec): Frame? {
@@ -686,7 +833,11 @@ private const val MARKER_SOF0 = 0xC0
 private const val MARKER_SOF1 = 0xC1
 private const val MARKER_SOF2 = 0xC2
 private const val MARKER_SOF3 = 0xC3
+private const val MARKER_SOF9 = 0xC9
+private const val MARKER_SOF10 = 0xCA
+private const val MARKER_SOF11 = 0xCB
 private const val MARKER_DHT = 0xC4
+private const val MARKER_DAC = 0xCC
 private const val MARKER_SOS = 0xDA
 private const val MARKER_DQT = 0xDB
 private const val MARKER_DRI = 0xDD
