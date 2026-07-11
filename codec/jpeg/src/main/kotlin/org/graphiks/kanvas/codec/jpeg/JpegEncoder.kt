@@ -47,10 +47,18 @@ public object JpegEncoder {
         /** When absent, [alphaOption] remains the deprecated compatibility mapping. */
         val alphaPolicy: JpegAlphaPolicy? = null,
         val hierarchy: List<JpegHierarchyLevel> = emptyList(),
+        val colorModel: JpegEncodeColorModel = JpegEncodeColorModel.YCbCr,
+        /** Required for [JpegEncodeProcess.ProgressiveHuffman]. */
+        val progressiveScans: List<JpegProgressiveScan> = emptyList(),
+        /** Required for [JpegEncodeProcess.LosslessHuffman]. */
+        val losslessParameters: JpegLosslessParameters? = null,
     ) {
         init {
             require(quality in 0..100) { "quality must be in [0, 100], got $quality" }
-            require(precision == 8 || precision == 12) { "precision must be 8 or 12, got $precision" }
+            require(
+                precision == 8 || precision == 12 ||
+                    (precision == 16 && process == JpegEncodeProcess.LosslessHuffman),
+            ) { "precision must be 8 or 12 (or 16 for lossless Huffman), got $precision" }
             require(restartInterval in 0..0xFFFF) {
                 "restart interval must be in [0, 65535], got $restartInterval"
             }
@@ -69,8 +77,12 @@ public object JpegEncoder {
             AlphaOption.kBlendOnBlack -> JpegAlphaPolicy.BlendOnBlack
         }
 
-        internal fun isSequentialHuffmanRequest(): Boolean =
-            process == JpegEncodeProcess.SequentialHuffman && hierarchy.isEmpty()
+        internal fun isSupportedHuffmanRequest(): Boolean =
+            process in setOf(
+                JpegEncodeProcess.SequentialHuffman,
+                JpegEncodeProcess.ProgressiveHuffman,
+                JpegEncodeProcess.LosslessHuffman,
+            ) && hierarchy.isEmpty()
     }
 
     private val defaultOptions = Options()
@@ -82,7 +94,7 @@ public object JpegEncoder {
 
     public fun encode(dst: OutputStream, src: SkBitmap, options: Options = defaultOptions): Boolean {
         return try {
-            if (src.width !in 1..0xFFFF || src.height !in 1..0xFFFF || !options.isSequentialHuffmanRequest()) return false
+            if (src.width !in 1..0xFFFF || src.height !in 1..0xFFFF || !options.isSupportedHuffmanRequest()) return false
             JpegWriter(dst, src, options).write()
             true
         } catch (_: Throwable) {
@@ -128,53 +140,90 @@ private class JpegWriter(
     private val options: JpegEncoder.Options,
 ) {
     private val sampling = Sampling.from(options.effectiveSampling())
+    private val componentCount = if (options.colorModel == JpegEncodeColorModel.Grayscale) 1 else 3
+    private val componentSampling = sampling.components.take(componentCount)
+    private val maxH = componentSampling.maxOf(JpegSamplingFactor::horizontal)
+    private val maxV = componentSampling.maxOf(JpegSamplingFactor::vertical)
+    private val isDct: Boolean = options.process != JpegEncodeProcess.LosslessHuffman
     private val qLuma = scaledQuantTable(STD_LUMA_Q, options.quality, options.precision)
     private val qChroma = scaledQuantTable(STD_CHROMA_Q, options.quality, options.precision)
-    private val dcLumaBits = if (options.precision == 12) EXTENDED_HUFFMAN_BITS else STD_DC_LUMA_BITS
-    private val dcLumaValues = if (options.precision == 12) EXTENDED_HUFFMAN_VALUES else STD_DC_VALUES
-    private val acLumaBits = if (options.precision == 12) EXTENDED_HUFFMAN_BITS else STD_AC_LUMA_BITS
-    private val acLumaValues = if (options.precision == 12) EXTENDED_HUFFMAN_VALUES else STD_AC_LUMA_VALUES
-    private val dcChromaBits = if (options.precision == 12) EXTENDED_HUFFMAN_BITS else STD_DC_CHROMA_BITS
-    private val dcChromaValues = if (options.precision == 12) EXTENDED_HUFFMAN_VALUES else STD_DC_VALUES
-    private val acChromaBits = if (options.precision == 12) EXTENDED_HUFFMAN_BITS else STD_AC_CHROMA_BITS
-    private val acChromaValues = if (options.precision == 12) EXTENDED_HUFFMAN_VALUES else STD_AC_CHROMA_VALUES
+    private val extendedHuffman = options.precision > 8
+    private val dcLumaBits = if (extendedHuffman) EXTENDED_HUFFMAN_BITS else STD_DC_LUMA_BITS
+    private val dcLumaValues = if (extendedHuffman) EXTENDED_HUFFMAN_VALUES else STD_DC_VALUES
+    private val acLumaBits = if (extendedHuffman) EXTENDED_HUFFMAN_BITS else STD_AC_LUMA_BITS
+    private val acLumaValues = if (extendedHuffman) EXTENDED_HUFFMAN_VALUES else STD_AC_LUMA_VALUES
+    private val dcChromaBits = if (extendedHuffman) EXTENDED_HUFFMAN_BITS else STD_DC_CHROMA_BITS
+    private val dcChromaValues = if (extendedHuffman) EXTENDED_HUFFMAN_VALUES else STD_DC_VALUES
+    private val acChromaBits = if (extendedHuffman) EXTENDED_HUFFMAN_BITS else STD_AC_CHROMA_BITS
+    private val acChromaValues = if (extendedHuffman) EXTENDED_HUFFMAN_VALUES else STD_AC_CHROMA_VALUES
     private val dcLuma = EncoderHuffmanTable(dcLumaBits, dcLumaValues)
     private val acLuma = EncoderHuffmanTable(acLumaBits, acLumaValues)
     private val dcChroma = EncoderHuffmanTable(dcChromaBits, dcChromaValues)
     private val acChroma = EncoderHuffmanTable(acChromaBits, acChromaValues)
     private val rgb = IntArray(bitmap.width * bitmap.height)
-    private val previousDc = IntArray(3)
+    private val previousDc = IntArray(componentCount)
 
     fun write() {
+        validateRequest()
         materializeRgb()
         writeMarker(SOI)
-        writeApp0()
+        if (options.colorModel != JpegEncodeColorModel.Rgb) writeApp0()
         writeMetadata()
-        writeDqt()
+        if (isDct) writeDqt()
         writeSof()
-        writeDht(0, 0, dcLumaBits, dcLumaValues)
-        writeDht(1, 0, acLumaBits, acLumaValues)
-        writeDht(0, 1, dcChromaBits, dcChromaValues)
-        writeDht(1, 1, acChromaBits, acChromaValues)
+        writeHuffmanTables()
         if (options.restartInterval > 0) writeDri()
-        writeSos()
+        when (options.process) {
+            JpegEncodeProcess.SequentialHuffman -> writeSequentialEntropy()
+            JpegEncodeProcess.ProgressiveHuffman -> writeProgressiveEntropy()
+            JpegEncodeProcess.LosslessHuffman -> writeLosslessEntropy()
+            else -> error("unsupported JPEG process")
+        }
+        writeMarker(EOI)
+    }
 
+    private fun validateRequest() {
+        when (options.process) {
+            JpegEncodeProcess.SequentialHuffman -> {
+                require(options.colorModel != JpegEncodeColorModel.Rgb) { "sequential RGB output is not implemented" }
+                require(options.progressiveScans.isEmpty()) { "sequential output does not accept a progressive scan script" }
+                require(options.losslessParameters == null) { "sequential output does not accept lossless parameters" }
+            }
+            JpegEncodeProcess.ProgressiveHuffman -> {
+                require(options.colorModel != JpegEncodeColorModel.Rgb) { "progressive RGB output is not implemented" }
+                require(options.losslessParameters == null) { "progressive output does not accept lossless parameters" }
+                require(options.precision == 8 || options.precision == 12) { "progressive precision must be 8 or 12" }
+                validatedProgressiveScans()
+            }
+            JpegEncodeProcess.LosslessHuffman -> {
+                require(options.colorModel in setOf(JpegEncodeColorModel.Grayscale, JpegEncodeColorModel.Rgb)) {
+                    "lossless output requires Grayscale or Rgb components"
+                }
+                require(options.progressiveScans.isEmpty()) { "lossless output does not accept a progressive scan script" }
+                require(options.losslessParameters != null) { "lossless output requires predictor and point transform" }
+                require(options.losslessParameters.pointTransform < options.precision) {
+                    "lossless point transform must be less than precision"
+                }
+                require(componentSampling.all { it.horizontal == 1 && it.vertical == 1 }) {
+                    "lossless RGB and grayscale output requires 1x1 sampling"
+                }
+            }
+            else -> error("unsupported JPEG process")
+        }
+    }
+
+    private fun writeSequentialEntropy() {
+        writeSos(componentIds(), spectralStart = 0, spectralEnd = 63, successiveApprox = 0)
         val bits = EntropyBitWriter(out)
-        val mcuWidth = sampling.maxH * 8
-        val mcuHeight = sampling.maxV * 8
-        val mcusX = ceilDiv(bitmap.width, mcuWidth)
-        val mcusY = ceilDiv(bitmap.height, mcuHeight)
+        val mcusX = ceilDiv(bitmap.width, maxH * 8)
+        val mcusY = ceilDiv(bitmap.height, maxV * 8)
         var mcu = 0
         var restartMarker = 0
         for (my in 0 until mcusY) {
             for (mx in 0 until mcusX) {
                 encodeMcu(bits, mx, my)
                 mcu++
-                if (
-                    options.restartInterval > 0 &&
-                    mcu % options.restartInterval == 0 &&
-                    mcu < mcusX * mcusY
-                ) {
+                if (atRestartBoundary(mcu, mcusX * mcusY)) {
                     bits.writeRestart(restartMarker)
                     restartMarker = (restartMarker + 1) and 7
                     previousDc.fill(0)
@@ -182,8 +231,10 @@ private class JpegWriter(
             }
         }
         bits.flush()
-        writeMarker(EOI)
     }
+
+    private fun atRestartBoundary(mcu: Int, totalMcus: Int): Boolean =
+        options.restartInterval > 0 && mcu % options.restartInterval == 0 && mcu < totalMcus
 
     private fun materializeRgb() {
         for (y in 0 until bitmap.height) {
@@ -209,10 +260,10 @@ private class JpegWriter(
     }
 
     private fun encodeMcu(bits: EntropyBitWriter, mcuX: Int, mcuY: Int) {
-        for (component in 0 until 3) {
-            val componentSampling = sampling.components[component]
-            for (blockY in 0 until componentSampling.vertical) {
-                for (blockX in 0 until componentSampling.horizontal) {
+        for (component in 0 until componentCount) {
+            val factor = componentSampling[component]
+            for (blockY in 0 until factor.vertical) {
+                for (blockX in 0 until factor.horizontal) {
                     encodeBlock(bits, component, mcuX, mcuY, blockX, blockY)
                 }
             }
@@ -227,40 +278,47 @@ private class JpegWriter(
         blockX: Int,
         blockY: Int,
     ) {
-        val samples = DoubleArray(64)
-        for (sy in 0 until 8) {
-            for (sx in 0 until 8) {
-                samples[sy * 8 + sx] = componentSample(
-                    component,
-                    mcuX * sampling.components[component].horizontal * 8 + blockX * 8 + sx,
-                    mcuY * sampling.components[component].vertical * 8 + blockY * 8 + sy,
-                )
-            }
-        }
-
-        val quant = if (component == COMPONENT_Y) qLuma else qChroma
-        val coeffs = fdctQuantize(samples, quant)
+        val factor = componentSampling[component]
+        val coeffs = dctBlockCoefficients(
+            component = component,
+            globalBlockX = mcuX * factor.horizontal + blockX,
+            globalBlockY = mcuY * factor.vertical + blockY,
+        )
         val dcTable = if (component == COMPONENT_Y) dcLuma else dcChroma
         val acTable = if (component == COMPONENT_Y) acLuma else acChroma
         writeCoefficients(bits, coeffs, component, dcTable, acTable)
     }
 
+    private fun dctBlockCoefficients(component: Int, globalBlockX: Int, globalBlockY: Int): IntArray {
+        val samples = DoubleArray(64)
+        for (sy in 0 until 8) {
+            for (sx in 0 until 8) {
+                samples[sy * 8 + sx] = componentSample(component, globalBlockX * 8 + sx, globalBlockY * 8 + sy)
+            }
+        }
+        return fdctQuantize(samples, if (component == COMPONENT_Y) qLuma else qChroma)
+    }
+
     private fun componentSample(component: Int, sampleX: Int, sampleY: Int): Double {
-        val componentSampling = sampling.components[component]
+        val factor = componentSampling[component]
         return areaAverage(
-            left = sampleX.toDouble() * sampling.maxH / componentSampling.horizontal,
-            top = sampleY.toDouble() * sampling.maxV / componentSampling.vertical,
-            right = (sampleX + 1).toDouble() * sampling.maxH / componentSampling.horizontal,
-            bottom = (sampleY + 1).toDouble() * sampling.maxV / componentSampling.vertical,
+            left = sampleX.toDouble() * maxH / factor.horizontal,
+            top = sampleY.toDouble() * maxV / factor.vertical,
+            right = (sampleX + 1).toDouble() * maxH / factor.horizontal,
+            bottom = (sampleY + 1).toDouble() * maxV / factor.vertical,
         ) { x, y ->
             val px = rgb[clamp(y, 0, bitmap.height - 1) * bitmap.width + clamp(x, 0, bitmap.width - 1)]
             val r = (px ushr 16) and 0xFF
             val g = (px ushr 8) and 0xFF
             val b = px and 0xFF
-            val sample8 = when (component) {
-                COMPONENT_Y -> 0.299 * r + 0.587 * g + 0.114 * b
-                COMPONENT_CB -> -0.168736 * r - 0.331264 * g + 0.5 * b + 128.0
-                else -> 0.5 * r - 0.418688 * g - 0.081312 * b + 128.0
+            val sample8 = when (options.colorModel) {
+                JpegEncodeColorModel.Grayscale -> 0.299 * r + 0.587 * g + 0.114 * b
+                JpegEncodeColorModel.YCbCr -> when (component) {
+                    COMPONENT_Y -> 0.299 * r + 0.587 * g + 0.114 * b
+                    COMPONENT_CB -> -0.168736 * r - 0.331264 * g + 0.5 * b + 128.0
+                    else -> 0.5 * r - 0.418688 * g - 0.081312 * b + 128.0
+                }
+                JpegEncodeColorModel.Rgb -> error("DCT RGB output is not implemented")
             }
             sample8 * ((1 shl options.precision) - 1) / 255.0
         }
@@ -343,7 +401,12 @@ private class JpegWriter(
             null
         }
         if (icc != null) writeIccApp2(icc)
-        requested.adobeTransform?.let(::writeAdobeApp14)
+        if (options.process == JpegEncodeProcess.LosslessHuffman && options.colorModel == JpegEncodeColorModel.Rgb) {
+            require(requested.adobeTransform == null) { "lossless RGB writes Adobe transform 0 itself" }
+            writeAdobeApp14(0)
+        } else {
+            requested.adobeTransform?.let(::writeAdobeApp14)
+        }
         val exif = requested.exif
         when {
             exif != null -> writeExifApp1(exif)
@@ -357,7 +420,15 @@ private class JpegWriter(
         val sixteenBit = options.precision == 12
         val lumaSpec = if (sixteenBit) 0x10 else 0x00
         val chromaSpec = if (sixteenBit) 0x11 else 0x01
-        writeSegment(DQT, byteArrayOf(lumaSpec.toByte()) + quantBytes(qLuma, sixteenBit) + byteArrayOf(chromaSpec.toByte()) + quantBytes(qChroma, sixteenBit))
+        val payload = ByteArrayOutputStream().apply {
+            write(lumaSpec)
+            write(quantBytes(qLuma, sixteenBit))
+            if (componentCount > 1) {
+                write(chromaSpec)
+                write(quantBytes(qChroma, sixteenBit))
+            }
+        }.toByteArray()
+        writeSegment(DQT, payload)
     }
 
     private fun writeSof() {
@@ -365,14 +436,29 @@ private class JpegWriter(
         payload.write(options.precision)
         writeU16BE(payload, bitmap.height)
         writeU16BE(payload, bitmap.width)
-        payload.write(3)
-        for (component in 0 until 3) {
-            val factor = sampling.components[component]
+        payload.write(componentCount)
+        for (component in 0 until componentCount) {
+            val factor = componentSampling[component]
             payload.write(component + 1)
             payload.write((factor.horizontal shl 4) or factor.vertical)
-            payload.write(if (component == COMPONENT_Y) 0 else 1)
+            payload.write(if (options.process == JpegEncodeProcess.LosslessHuffman || component == COMPONENT_Y) 0 else 1)
         }
-        writeSegment(if (options.precision == 8) SOF0 else SOF1, payload.toByteArray())
+        val marker = when (options.process) {
+            JpegEncodeProcess.SequentialHuffman -> if (options.precision == 8) SOF0 else SOF1
+            JpegEncodeProcess.ProgressiveHuffman -> SOF2
+            JpegEncodeProcess.LosslessHuffman -> SOF3
+            else -> error("unsupported JPEG process")
+        }
+        writeSegment(marker, payload.toByteArray())
+    }
+
+    private fun writeHuffmanTables() {
+        writeDht(0, 0, dcLumaBits, dcLumaValues)
+        if (isDct) writeDht(1, 0, acLumaBits, acLumaValues)
+        if (componentCount > 1) {
+            writeDht(0, 1, dcChromaBits, dcChromaValues)
+            if (isDct) writeDht(1, 1, acChromaBits, acChromaValues)
+        }
     }
 
     private fun writeDht(tableClass: Int, tableId: Int, bits: IntArray, values: IntArray) {
@@ -389,15 +475,271 @@ private class JpegWriter(
         writeSegment(DRI, payload.toByteArray())
     }
 
-    private fun writeSos() {
-        val payload = byteArrayOf(
-            0x03,
-            0x01, 0x00,
-            0x02, 0x11,
-            0x03, 0x11,
-            0x00, 0x3F, 0x00,
-        )
-        writeSegment(SOS, payload)
+    private fun writeSos(componentIds: List<Int>, spectralStart: Int, spectralEnd: Int, successiveApprox: Int) {
+        val payload = ByteArrayOutputStream()
+        payload.write(componentIds.size)
+        for (id in componentIds) {
+            payload.write(id)
+            val table = if (id == 1) 0 else 1
+            payload.write(if (options.process == JpegEncodeProcess.LosslessHuffman) table shl 4 else (table shl 4) or table)
+        }
+        payload.write(spectralStart)
+        payload.write(spectralEnd)
+        payload.write(successiveApprox)
+        writeSegment(SOS, payload.toByteArray())
+    }
+
+    private fun componentIds(): List<Int> = (1..componentCount).toList()
+
+    private fun validatedProgressiveScans(): List<JpegProgressiveScan> {
+        val scans = options.progressiveScans
+        require(scans.isNotEmpty()) { "progressive output requires an explicit scan script" }
+        val seen = Array(componentCount) { BooleanArray(64) }
+        val dcSeen = BooleanArray(componentCount)
+        for (scan in scans) {
+            require(scan.successiveHigh == 0 && scan.successiveLow == 0) {
+                "progressive refinement scans are not implemented"
+            }
+            require(scan.componentIds.all { it in 1..componentCount }) { "progressive scan references an unknown component" }
+            if (scan.spectralStart == 0) {
+                require(scan.spectralEnd == 0) { "a progressive DC scan must use Se = 0" }
+            } else {
+                require(scan.componentIds.size == 1) { "a progressive AC scan must contain exactly one component" }
+                require(dcSeen[scan.componentIds.single() - 1]) { "a progressive AC scan must follow its DC scan" }
+            }
+            for (id in scan.componentIds) {
+                for (coefficient in scan.spectralStart..scan.spectralEnd) {
+                    require(!seen[id - 1][coefficient]) { "progressive scan script writes a coefficient twice" }
+                    seen[id - 1][coefficient] = true
+                }
+                if (scan.spectralStart == 0) dcSeen[id - 1] = true
+            }
+        }
+        require(seen.all { it[0] }) { "progressive scan script must initialize DC for every component" }
+        return scans
+    }
+
+    private data class EncodedDctPlane(
+        val blocksWide: Int,
+        val blocksHigh: Int,
+        val coefficients: Array<IntArray>,
+    ) {
+        fun block(x: Int, y: Int): IntArray = coefficients[y * blocksWide + x]
+    }
+
+    private fun buildDctPlanes(): List<EncodedDctPlane> {
+        val frameMcusWide = ceilDiv(bitmap.width, maxH * 8)
+        val frameMcusHigh = ceilDiv(bitmap.height, maxV * 8)
+        return List(componentCount) { component ->
+            val factor = componentSampling[component]
+            val blocksWide = frameMcusWide * factor.horizontal
+            val blocksHigh = frameMcusHigh * factor.vertical
+            EncodedDctPlane(
+                blocksWide = blocksWide,
+                blocksHigh = blocksHigh,
+                coefficients = Array(blocksWide * blocksHigh) { index ->
+                    dctBlockCoefficients(component, index % blocksWide, index / blocksWide)
+                },
+            )
+        }
+    }
+
+    private fun writeProgressiveEntropy() {
+        val planes = buildDctPlanes()
+        for (scan in validatedProgressiveScans()) {
+            writeSos(scan.componentIds, scan.spectralStart, scan.spectralEnd, 0)
+            val bits = EntropyBitWriter(out)
+            if (scan.spectralStart == 0) {
+                writeProgressiveDcScan(bits, scan, planes)
+            } else {
+                writeProgressiveAcScan(bits, scan, planes)
+            }
+            bits.flush()
+        }
+    }
+
+    private fun writeProgressiveDcScan(
+        bits: EntropyBitWriter,
+        scan: JpegProgressiveScan,
+        planes: List<EncodedDctPlane>,
+    ) {
+        val components = scan.componentIds.map { it - 1 }
+        val nonInterleaved = components.size == 1
+        val frameMcusWide = ceilDiv(bitmap.width, maxH * 8)
+        val frameMcusHigh = ceilDiv(bitmap.height, maxV * 8)
+        val mcusWide = if (nonInterleaved) planes[components.single()].blocksWide else frameMcusWide
+        val mcusHigh = if (nonInterleaved) planes[components.single()].blocksHigh else frameMcusHigh
+        val predictors = IntArray(componentCount)
+        var mcu = 0
+        var restartMarker = 0
+        for (mcuY in 0 until mcusHigh) {
+            for (mcuX in 0 until mcusWide) {
+                for (component in components) {
+                    val factor = componentSampling[component]
+                    val baseX = if (nonInterleaved) mcuX else mcuX * factor.horizontal
+                    val baseY = if (nonInterleaved) mcuY else mcuY * factor.vertical
+                    val blocksWide = if (nonInterleaved) 1 else factor.horizontal
+                    val blocksHigh = if (nonInterleaved) 1 else factor.vertical
+                    val table = if (component == COMPONENT_Y) dcLuma else dcChroma
+                    for (blockY in 0 until blocksHigh) {
+                        for (blockX in 0 until blocksWide) {
+                            val coefficient = planes[component].block(baseX + blockX, baseY + blockY)[0]
+                            val difference = coefficient - predictors[component]
+                            predictors[component] = coefficient
+                            writeHuffmanValue(bits, table, difference)
+                        }
+                    }
+                }
+                mcu++
+                if (atRestartBoundary(mcu, mcusWide * mcusHigh)) {
+                    bits.writeRestart(restartMarker)
+                    restartMarker = (restartMarker + 1) and 7
+                    predictors.fill(0)
+                }
+            }
+        }
+    }
+
+    private fun writeProgressiveAcScan(
+        bits: EntropyBitWriter,
+        scan: JpegProgressiveScan,
+        planes: List<EncodedDctPlane>,
+    ) {
+        val component = scan.componentIds.single() - 1
+        val plane = planes[component]
+        val table = if (component == COMPONENT_Y) acLuma else acChroma
+        var mcu = 0
+        var restartMarker = 0
+        for (blockY in 0 until plane.blocksHigh) {
+            for (blockX in 0 until plane.blocksWide) {
+                writeInitialAcCoefficients(bits, plane.block(blockX, blockY), scan.spectralStart, scan.spectralEnd, table)
+                mcu++
+                if (atRestartBoundary(mcu, plane.blocksWide * plane.blocksHigh)) {
+                    bits.writeRestart(restartMarker)
+                    restartMarker = (restartMarker + 1) and 7
+                }
+            }
+        }
+    }
+
+    private fun writeInitialAcCoefficients(
+        bits: EntropyBitWriter,
+        coefficients: IntArray,
+        spectralStart: Int,
+        spectralEnd: Int,
+        table: EncoderHuffmanTable,
+    ) {
+        var zeroRun = 0
+        for (coefficient in spectralStart..spectralEnd) {
+            val value = coefficients[coefficient]
+            if (value == 0) {
+                zeroRun++
+                continue
+            }
+            while (zeroRun >= 16) {
+                bits.write(table.code(0xF0), table.length(0xF0))
+                zeroRun -= 16
+            }
+            val size = coefficientSize(value)
+            val symbol = (zeroRun shl 4) or size
+            bits.write(table.code(symbol), table.length(symbol))
+            bits.write(amplitudeBits(value, size), size)
+            zeroRun = 0
+        }
+        if (zeroRun > 0) bits.write(table.code(0), table.length(0))
+    }
+
+    private fun writeLosslessEntropy() {
+        val parameters = requireNotNull(options.losslessParameters)
+        val planes = buildLosslessPlanes(parameters.pointTransform)
+        writeSos(componentIds(), parameters.predictor, spectralEnd = 0, successiveApprox = parameters.pointTransform)
+        val bits = EntropyBitWriter(out)
+        var mcu = 0
+        var restartMarker = 0
+        val totalMcus = bitmap.width * bitmap.height
+        for (y in 0 until bitmap.height) {
+            for (x in 0 until bitmap.width) {
+                val intervalStart = mcu == 0 || (options.restartInterval > 0 && mcu % options.restartInterval == 0)
+                for (component in 0 until componentCount) {
+                    val value = planes[component][y * bitmap.width + x]
+                    val predicted = losslessPrediction(
+                        plane = planes[component],
+                        x = x,
+                        y = y,
+                        predictor = parameters.predictor,
+                        pointTransform = parameters.pointTransform,
+                        initialPredictor = intervalStart,
+                    )
+                    val difference = (value - predicted) shr parameters.pointTransform
+                    writeHuffmanValue(bits, if (component == COMPONENT_Y) dcLuma else dcChroma, difference)
+                }
+                mcu++
+                if (atRestartBoundary(mcu, totalMcus)) {
+                    bits.writeRestart(restartMarker)
+                    restartMarker = (restartMarker + 1) and 7
+                }
+            }
+        }
+        bits.flush()
+    }
+
+    private fun buildLosslessPlanes(pointTransform: Int): List<IntArray> {
+        val maxSample = (1 shl options.precision) - 1
+        return List(componentCount) { component ->
+            IntArray(bitmap.width * bitmap.height) { index ->
+                val packed = rgb[index]
+                val sample8 = when (options.colorModel) {
+                    JpegEncodeColorModel.Grayscale -> (
+                        0.299 * ((packed ushr 16) and 0xFF) +
+                            0.587 * ((packed ushr 8) and 0xFF) +
+                            0.114 * (packed and 0xFF)
+                        ).roundToInt()
+                    JpegEncodeColorModel.Rgb -> when (component) {
+                        0 -> (packed ushr 16) and 0xFF
+                        1 -> (packed ushr 8) and 0xFF
+                        else -> packed and 0xFF
+                    }
+                    JpegEncodeColorModel.YCbCr -> error("lossless YCbCr output is not implemented")
+                }
+                (((sample8 * maxSample + 127) / 255) ushr pointTransform) shl pointTransform
+            }
+        }
+    }
+
+    private fun losslessPrediction(
+        plane: IntArray,
+        x: Int,
+        y: Int,
+        predictor: Int,
+        pointTransform: Int,
+        initialPredictor: Boolean,
+    ): Int = when {
+        initialPredictor -> 1 shl (options.precision - 1)
+        y == 0 -> plane[y * bitmap.width + x - 1]
+        x == 0 -> plane[(y - 1) * bitmap.width + x]
+        else -> losslessEncoderPredictor(
+            predictor = predictor,
+            left = plane[y * bitmap.width + x - 1] shr pointTransform,
+            above = plane[(y - 1) * bitmap.width + x] shr pointTransform,
+            upperLeft = plane[(y - 1) * bitmap.width + x - 1] shr pointTransform,
+        ) shl pointTransform
+    }
+
+    private fun losslessEncoderPredictor(predictor: Int, left: Int, above: Int, upperLeft: Int): Int = when (predictor) {
+        1 -> left
+        2 -> above
+        3 -> upperLeft
+        4 -> left + above - upperLeft
+        5 -> left + ((above - upperLeft) shr 1)
+        6 -> above + ((left - upperLeft) shr 1)
+        7 -> (left + above) shr 1
+        else -> error("lossless predictor is invalid")
+    }
+
+    private fun writeHuffmanValue(bits: EntropyBitWriter, table: EncoderHuffmanTable, value: Int) {
+        val size = coefficientSize(value)
+        bits.write(table.code(size), table.length(size))
+        if (size > 0) bits.write(amplitudeBits(value, size), size)
     }
 
     private fun writeSegment(marker: Int, payload: ByteArray) {
@@ -565,6 +907,8 @@ private const val APP14 = 0xEE
 private const val DQT = 0xDB
 private const val SOF0 = 0xC0
 private const val SOF1 = 0xC1
+private const val SOF2 = 0xC2
+private const val SOF3 = 0xC3
 private const val DHT = 0xC4
 private const val SOS = 0xDA
 private const val DRI = 0xDD

@@ -16,6 +16,53 @@ public enum class JpegEncodeProcess {
     DifferentialLosslessArithmetic,
 }
 
+/** Component representation materialized from the RGBA bitmap before JPEG coding. */
+public enum class JpegEncodeColorModel {
+    /** A luminance-only JPEG frame. */
+    Grayscale,
+    /** Three Y, Cb, Cr components; this is the historical sequential default. */
+    YCbCr,
+    /** Three untransformed R, G, B components; supported by the lossless writer only. */
+    Rgb,
+}
+
+/**
+ * One progressive Huffman scan.  The current static writer accepts initial
+ * scans only: `Ah = Al = 0`; a DC scan has `Ss = Se = 0` and an AC scan has
+ * exactly one component.  Refinement remains an explicit refusal rather than
+ * silently producing a sequential image.
+ */
+public data class JpegProgressiveScan(
+    val componentIds: List<Int>,
+    val spectralStart: Int,
+    val spectralEnd: Int,
+    val successiveHigh: Int = 0,
+    val successiveLow: Int = 0,
+) {
+    init {
+        require(componentIds.isNotEmpty()) { "a progressive scan needs at least one component" }
+        require(componentIds.distinct().size == componentIds.size) { "a progressive scan cannot repeat a component" }
+        require(componentIds.all { it in 1..255 }) { "JPEG component ids must be in [1, 255]" }
+        require(spectralStart in 0..63 && spectralEnd in 0..63 && spectralStart <= spectralEnd) {
+            "progressive spectral selection must be within [0, 63]"
+        }
+        require(successiveHigh in 0..13 && successiveLow in 0..13) {
+            "progressive successive approximation must be within [0, 13]"
+        }
+    }
+}
+
+/** Predictor and point transform for a SOF3 Huffman lossless scan. */
+public data class JpegLosslessParameters(
+    val predictor: Int,
+    val pointTransform: Int,
+) {
+    init {
+        require(predictor in 1..7) { "lossless predictor must be in [1, 7]" }
+        require(pointTransform in 0..15) { "lossless point transform must be in [0, 15]" }
+    }
+}
+
 /** Defines how a source alpha channel is projected onto opaque JPEG samples. */
 public enum class JpegAlphaPolicy {
     Ignore,
