@@ -1,10 +1,12 @@
 package org.graphiks.kanvas.codec.jpeg
 
 import java.io.ByteArrayOutputStream
+import org.junit.jupiter.api.Assertions.assertDoesNotThrow
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.function.ThrowingSupplier
 import org.skia.foundation.SkColorType
 import kotlin.math.roundToInt
 
@@ -51,6 +53,24 @@ class JpegProgressiveDecodeTest {
     }
 
     @Test
+    fun `decodes MCU padded coefficient grids for a subsampled progressive image`() {
+        val data = progressiveSubsampledMcuPaddedJpeg()
+        val samples = assertDoesNotThrow(ThrowingSupplier { progressiveSamples(data) })
+        assertEquals(160, samples.planes[0][0])
+        assertEquals(160, samples.planes[0][16 + 7 * 17])
+
+        val codec = JpegCodec.Decoder.make(data)
+        assertNotNull(codec)
+
+        val (bitmap, result) = codec!!.getImage()
+
+        assertEquals(org.graphiks.kanvas.codec.Codec.Result.kSuccess, result)
+        assertNotNull(bitmap)
+        assertEquals(yCbCrToArgb(160, 96, 192), bitmap!!.getPixel(0, 0))
+        assertEquals(yCbCrToArgb(160, 96, 192), bitmap.getPixel(16, 7))
+    }
+
+    @Test
     fun `reports stable diagnostics for duplicate incomplete and illegal progressive scans`() {
         assertProgressiveDiagnostic(ProgressiveFault.DUPLICATE_DC, "jpeg.progressive.scan.duplicate")
         assertProgressiveDiagnostic(ProgressiveFault.REFINEMENT_BEFORE_INITIAL, "jpeg.progressive.scan.refinement-order")
@@ -68,6 +88,55 @@ class JpegProgressiveDecodeTest {
     private fun progressiveSamples(data: ByteArray): DecodedJpegSamples {
         val document = JpegDocument.open(data).document!!
         return decodeProgressiveDct(parseJpeg(data, document.metadata)!!)
+    }
+
+    private fun progressiveSubsampledMcuPaddedJpeg(): ByteArray {
+        val out = ByteArrayOutputStream()
+        out.writeMarker(0xD8)
+        out.writeSegment(0xDB) {
+            write(0)
+            repeat(64) { write(8) }
+        }
+        out.writeSegment(0xC2) {
+            write(8)
+            writeU16BE(8)
+            writeU16BE(17)
+            write(3)
+            write(1)
+            write(0x21)
+            write(0)
+            for (id in 2..3) {
+                write(id)
+                write(0x11)
+                write(0)
+            }
+        }
+        out.writeSegment(0xC4) {
+            write(0x00)
+            repeat(3) { write(0) }
+            write(12)
+            repeat(12) { write(0) }
+            for (symbol in 0..11) write(symbol)
+        }
+        out.writeSegment(0xC4) {
+            write(0x10)
+            write(0)
+            write(4)
+            repeat(14) { write(0) }
+            write(0)
+            write(1)
+            write(0x10)
+            write(0x11)
+        }
+        out.writeSegment(0xDD) { writeU16BE(1) }
+
+        val interleavedMcu = dcBits(32) + "0000" + dcBits(-32) + dcBits(64)
+        writeDcScan(out, listOf(1, 2, 3), successiveApprox = 0, bits = List(2) { interleavedMcu }, restartInterval = 1)
+        writeAcScan(out, 1, successiveApprox = 0, bits = List(4) { "00" }, restartInterval = 1)
+        writeAcScan(out, 2, successiveApprox = 0, bits = List(2) { "00" }, restartInterval = 1)
+        writeAcScan(out, 3, successiveApprox = 0, bits = List(2) { "00" }, restartInterval = 1)
+        out.writeMarker(0xD9)
+        return out.toByteArray()
     }
 
     private fun progressiveColorJpeg(

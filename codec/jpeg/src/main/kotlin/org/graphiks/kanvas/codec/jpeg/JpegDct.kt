@@ -213,11 +213,15 @@ internal fun decodeProgressiveDct(frame: ParsedJpeg): DecodedJpegSamples {
         val maxV = frame.components.maxOf { it.v }
         val maxSample = (1 shl frame.precision) - 1
         val centerSample = 1 shl (frame.precision - 1)
+        val mcusWide = (frame.width + maxH * 8 - 1) / (maxH * 8)
+        val mcusHigh = (frame.height + maxV * 8 - 1) / (maxV * 8)
         val planes = frame.components.map { component ->
             ProgressiveComponentPlane(
                 component = component,
                 width = (frame.width * component.h + maxH - 1) / maxH,
                 height = (frame.height * component.v + maxV - 1) / maxV,
+                blocksWide = mcusWide * component.h,
+                blocksHigh = mcusHigh * component.v,
             )
         }
         validateProgressiveScans(frame)
@@ -248,8 +252,8 @@ private data class ProgressiveComponentPlane(
     val component: Component,
     val width: Int,
     val height: Int,
-    val blocksWide: Int = (width + 7) / 8,
-    val blocksHigh: Int = (height + 7) / 8,
+    val blocksWide: Int,
+    val blocksHigh: Int,
     val coefficients: Array<IntArray> = Array(blocksWide * blocksHigh) { IntArray(64) },
     val samples: IntArray = IntArray(width * height),
 )

@@ -25,3 +25,21 @@ Résultat : `BUILD SUCCESSFUL` — 81 tests JPEG, dont `JpegProgressiveDecodeTes
 ## Portée
 
 `JpegCodec.kt` a été modifié avec l’autorisation explicite de raccorder le nouveau décodeur progressif à `composePixels` et aux sorties existantes. Aucun fallback, AWT, ImageIO, JNI ou `java.desktop` n’a été ajouté.
+
+## Correctif P1 — Grille de coefficients MCU paddée
+
+- Cause : la grille de coefficients progressive était dimensionnée depuis le plan de samples visible. Une image 17×8 avec Y 2×1 et Cb/Cr 1×1 possède deux MCU horizontaux : Y requiert donc quatre blocs, alors que le plan visible Y (17 samples) n’en réservait que trois. Le second MCU déclenchait `ArrayIndexOutOfBoundsException`.
+- Correctif : la grille de coefficients est désormais dimensionnée par le nombre de MCU paddés, multiplié par le sampling horizontal et vertical de chaque composante. Les buffers de samples restent dimensionnés à la zone visible ; l’IDCT ignore les samples hors cadre.
+- Régression ajoutée : fixture progressive 17×8 Y 2×1 / CbCr 1×1, scan DC interleaved, scans AC non-interleaved et DRI=1. Elle vérifie l’absence d’exception, les samples Y visibles et les pixels RGB aux deux extrémités horizontales.
+
+### TDD et vérification du correctif
+
+- RED observé avant le correctif : `ArrayIndexOutOfBoundsException` depuis `decodeProgressiveScan` sur la fixture subsamplée non alignée MCU.
+- GREEN :
+
+```text
+rtk ./gradlew :codec:jpeg:test --no-daemon --tests org.graphiks.kanvas.codec.jpeg.JpegProgressiveDecodeTest
+rtk ./gradlew :codec:jpeg:test --no-daemon
+```
+
+Résultats : `BUILD SUCCESSFUL` ; test ciblé (5 tests) et suite JPEG complète (81 tests) verts.
