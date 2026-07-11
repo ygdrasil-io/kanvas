@@ -230,10 +230,14 @@ class JpegCodecTest {
     }
 
     @Test
-    fun `rejects unsupported four component jpeg variants`() {
+    fun `rejects unsupported four component jpeg variants and decodes valid CMYK sampling`() {
         assertNull(JpegCodec.Decoder.make(cmykJpeg(width = 8, height = 8, includeAdobe = false)))
         assertNull(JpegCodec.Decoder.make(cmykJpeg(width = 8, height = 8, adobeTransform = 1)))
-        assertNull(JpegCodec.Decoder.make(cmykJpeg(width = 16, height = 8, cSampling = 0x21)))
+        val codec = JpegCodec.Decoder.make(cmykJpeg(width = 16, height = 8, cSampling = 0x21))!!
+        val (bitmap, result) = codec.getImage()
+
+        assertEquals(Codec.Result.kSuccess, result)
+        assertEquals(0xFF404040.toInt(), bitmap!!.getPixel(15, 7))
     }
 
     @Test
@@ -288,9 +292,21 @@ class JpegCodecTest {
     }
 
     @Test
-    fun `rejects exotic color sampling`() {
-        assertNull(JpegCodec.Decoder.make(colorJpeg(width = 8, height = 16, ySampling = 0x12)))
-        assertNull(JpegCodec.Decoder.make(colorJpeg(width = 16, height = 8, ySampling = 0x21, cbSampling = 0x21)))
+    fun `decodes valid 440 color sampling`() {
+        val codec = JpegCodec.Decoder.make(colorJpeg(width = 8, height = 16, ySampling = 0x12))!!
+        val (bitmap, result) = codec.getImage()
+
+        assertEquals(Codec.Result.kSuccess, result)
+        assertEquals(yCbCrToArgb(152, 80, 200), bitmap!!.getPixel(7, 15))
+    }
+
+    @Test
+    fun `reports malformed mixed sampling entropy during decode`() {
+        val codec = JpegCodec.Decoder.make(colorJpeg(width = 16, height = 8, ySampling = 0x21, cbSampling = 0x21))!!
+
+        val (_, result) = codec.getImage()
+
+        assertEquals(Codec.Result.kErrorInInput, result)
     }
 
     @Test
