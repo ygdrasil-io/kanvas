@@ -791,6 +791,14 @@ class JpegCodecTest {
         }
         out.write(entropyBits("0111"))
         if (refine) {
+            // AC refinement emits the EOB Huffman symbol before the correction
+            // bit for the already-significant coefficient.
+            out.writeSegment(0xC4) {
+                write(0x10)
+                write(1)
+                repeat(15) { write(0) }
+                write(0x00)
+            }
             out.writeSegment(0xDA) {
                 write(1)
                 write(1)
@@ -799,7 +807,7 @@ class JpegCodecTest {
                 write(1)
                 write(0x10)
             }
-            out.write(entropyBits("10"))
+            out.write(entropyBits("01"))
         }
         out.writeMarker(0xD9)
         return out.toByteArray()

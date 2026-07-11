@@ -162,6 +162,14 @@ internal class ArithmeticDecoder(private val bytes: ByteArray) {
 
     fun fixedBit(): Int = decode(fixedBin, 0)
 
+    /**
+     * Decodes a QM bit using caller-owned contexts.
+     *
+     * Lossless arithmetic coding has Annex D's separate S0/SS/SP/SN and
+     * magnitude context sets, so it must not reuse the DCT DC statistics.
+     */
+    internal fun decodeContext(contexts: ByteArray, index: Int): Int = decode(contexts, index)
+
     private fun decode(stats: ByteArray, index: Int): Int {
         if (index !in stats.indices) arithmeticFailure("jpeg.arithmetic.entropy.invalid")
         while (a < 0x8000) {

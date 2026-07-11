@@ -13,7 +13,14 @@ internal data class DecodedJpegSamples(
 )
 
 /** Decodes all validated sequential scans and composes their native component planes. */
-internal fun decodeSequentialDct(frame: ParsedJpeg): DecodedJpegSamples {
+internal fun decodeSequentialDct(frame: ParsedJpeg): DecodedJpegSamples =
+    decodeSequentialDct(frame, differential = false)
+
+/** Decodes a SOF5 residual without applying the ordinary DCT level shift or clamping it. */
+internal fun decodeDifferentialSequentialDct(frame: ParsedJpeg): DecodedJpegSamples =
+    decodeSequentialDct(frame, differential = true)
+
+private fun decodeSequentialDct(frame: ParsedJpeg, differential: Boolean): DecodedJpegSamples {
     if (frame.coding != JpegCoding.kBaseline) fail()
     val maxH = frame.components.maxOf { it.h }
     val maxV = frame.components.maxOf { it.v }
@@ -27,14 +34,14 @@ internal fun decodeSequentialDct(frame: ParsedJpeg): DecodedJpegSamples {
         )
     }
     for (scan in frame.scans) {
-        decodeSequentialScan(frame, scan, nativePlanes, maxH, maxV, centerSample, maxSample)
+        decodeSequentialScan(frame, scan, nativePlanes, maxH, maxV, centerSample, maxSample, differential)
     }
     val planes = Array(frame.components.size) { IntArray(frame.width * frame.height) }
     for (y in 0 until frame.height) {
         for (x in 0 until frame.width) {
             for (plane in nativePlanes) {
                 planes[plane.component.frameIndex][y * frame.width + x] =
-                    sampleSequentialComponent(plane, x, y, maxH, maxV, maxSample)
+                    sampleSequentialComponent(plane, x, y, maxH, maxV, maxSample, clamp = !differential)
             }
         }
     }
@@ -56,6 +63,7 @@ private fun decodeSequentialScan(
     maxV: Int,
     centerSample: Int,
     maxSample: Int,
+    differential: Boolean,
 ) {
     val scanComponents = entropyScan.scan.components
     val nonInterleaved = scanComponents.size == 1
@@ -92,9 +100,10 @@ private fun decodeSequentialScan(
                             plane,
                             componentBlockX + blockX,
                             componentBlockY + blockY,
-                            decodeSequentialBlock(frame.precision, entropyScan, component, reader, previousDc),
+                            decodeSequentialBlock(frame.precision, entropyScan, component, reader, previousDc, differential),
                             centerSample,
                             maxSample,
+                            differential,
                         )
                     }
                 }
@@ -119,6 +128,7 @@ private fun decodeSequentialBlock(
     component: Component,
     reader: EntropyBitReader,
     previousDc: IntArray,
+    differential: Boolean,
 ): IntArray {
     val quant = entropyScan.quantTables[component.quantTable] ?: fail()
     val dcTable = entropyScan.dcTables[component.dcTable] ?: fail()
@@ -126,7 +136,8 @@ private fun decodeSequentialBlock(
     val coeffs = IntArray(64)
     val dcCategory = dcTable.decode(reader)
     if (dcCategory !in 0..if (precision == 8) 11 else 15) fail()
-    previousDc[component.frameIndex] += receiveAndExtend(reader, dcCategory)
+    val dcValue = receiveAndExtend(reader, dcCategory)
+    previousDc[component.frameIndex] = if (differential) dcValue else previousDc[component.frameIndex] + dcValue
     coeffs[0] = previousDc[component.frameIndex] * quant[0]
 
     var coefficient = 1
@@ -158,6 +169,7 @@ private fun writeSequentialBlock(
     block: IntArray,
     centerSample: Int,
     maxSample: Int,
+    differential: Boolean,
 ) {
     for (y in 0 until 8) {
         val targetY = blockY * 8 + y
@@ -165,8 +177,10 @@ private fun writeSequentialBlock(
         for (x in 0 until 8) {
             val targetX = blockX * 8 + x
             if (targetX >= plane.width) continue
-            plane.samples[targetY * plane.width + targetX] =
-                (block[y * 8 + x] + centerSample).coerceIn(0, maxSample)
+            val value = block[y * 8 + x]
+            plane.samples[targetY * plane.width + targetX] = if (differential) value else {
+                (value + centerSample).coerceIn(0, maxSample)
+            }
         }
     }
 }
@@ -178,6 +192,7 @@ private fun sampleSequentialComponent(
     maxH: Int,
     maxV: Int,
     maxSample: Int,
+    clamp: Boolean = true,
 ): Int {
     val component = plane.component
     if (component.h == maxH && component.v == maxV) {
@@ -195,7 +210,8 @@ private fun sampleSequentialComponent(
         sampleSequentialComponentAt(plane, x1, y0) * fx
     val bottom = sampleSequentialComponentAt(plane, x0, y1) * (1.0 - fx) +
         sampleSequentialComponentAt(plane, x1, y1) * fx
-    return (top * (1.0 - fy) + bottom * fy).roundToInt().coerceIn(0, maxSample)
+    val value = (top * (1.0 - fy) + bottom * fy).roundToInt()
+    return if (clamp) value.coerceIn(0, maxSample) else value
 }
 
 private fun sampleSequentialComponentAt(
@@ -205,7 +221,14 @@ private fun sampleSequentialComponentAt(
 ): Int = plane.samples[y * plane.width + x]
 
 /** Decodes all progressive scans into native component planes before composition. */
-internal fun decodeProgressiveDct(frame: ParsedJpeg): DecodedJpegSamples {
+internal fun decodeProgressiveDct(frame: ParsedJpeg): DecodedJpegSamples =
+    decodeProgressiveDct(frame, differential = false)
+
+/** Decodes a SOF6 residual without applying the ordinary DCT level shift or clamping it. */
+internal fun decodeDifferentialProgressiveDct(frame: ParsedJpeg): DecodedJpegSamples =
+    decodeProgressiveDct(frame, differential = true)
+
+private fun decodeProgressiveDct(frame: ParsedJpeg, differential: Boolean): DecodedJpegSamples {
     if (frame.coding != JpegCoding.kProgressive) progressiveFailure("jpeg.progressive.frame.invalid")
     if (frame.scans.isEmpty()) progressiveFailure("jpeg.progressive.scan.incomplete")
     return try {
@@ -226,15 +249,15 @@ internal fun decodeProgressiveDct(frame: ParsedJpeg): DecodedJpegSamples {
         }
         validateProgressiveScans(frame)
         for (entropyScan in frame.scans) {
-            decodeProgressiveScan(frame, entropyScan, planes, maxH, maxV)
+            decodeProgressiveScan(frame, entropyScan, planes, maxH, maxV, differential)
         }
         val samples = Array(frame.components.size) { IntArray(frame.width * frame.height) }
         for (plane in planes) {
-            materializeProgressivePlane(plane, centerSample, maxSample)
+            materializeProgressivePlane(plane, centerSample, maxSample, differential)
             for (y in 0 until frame.height) {
                 for (x in 0 until frame.width) {
                     samples[plane.component.frameIndex][y * frame.width + x] =
-                        sampleProgressiveComponent(plane, x, y, maxH, maxV, maxSample)
+                        sampleProgressiveComponent(plane, x, y, maxH, maxV, maxSample, clamp = !differential)
                 }
             }
         }
@@ -311,6 +334,7 @@ private fun decodeProgressiveScan(
     planes: List<ProgressiveComponentPlane>,
     maxH: Int,
     maxV: Int,
+    differential: Boolean,
 ) {
     val scan = entropyScan.scan
     val nonInterleaved = scan.components.size == 1
@@ -350,6 +374,7 @@ private fun decodeProgressiveScan(
                                 coefficients,
                                 successiveHigh,
                                 successiveLow,
+                                differential,
                             )
                         } else if (successiveHigh == 0) {
                             eobRun = decodeProgressiveAcInitial(
@@ -390,13 +415,15 @@ private fun decodeProgressiveDcCoefficient(
     coefficients: IntArray,
     successiveHigh: Int,
     successiveLow: Int,
+    differential: Boolean,
 ) {
     val quant = entropyScan.quantTables[component.quantTable] ?: fail()
     if (successiveHigh == 0) {
         val dcTable = entropyScan.dcTables[component.dcTable] ?: fail()
         val category = dcTable.decode(reader)
         if (category !in 0..11) fail()
-        previousDc[component.frameIndex] += receiveAndExtend(reader, category)
+        val dcValue = receiveAndExtend(reader, category)
+        previousDc[component.frameIndex] = if (differential) dcValue else previousDc[component.frameIndex] + dcValue
         coefficients[0] = previousDc[component.frameIndex] * (1 shl successiveLow) * quant[0]
     } else if (reader.readBit() != 0) {
         coefficients[0] += (1 shl successiveLow) * quant[0]
@@ -455,79 +482,60 @@ private fun decodeProgressiveAcRefinement(
         refineExistingProgressiveAc(coefficients, quant, reader, refinement, coefficient, scan.spectralEnd)
         return previousEobRun - 1
     }
-    while (coefficient <= scan.spectralEnd) {
-        val index = JPEG_ZIGZAG[coefficient]
-        if (coefficients[index] != 0) {
-            refineExistingProgressiveAcCoefficient(coefficients, quant, reader, refinement, index)
-            coefficient++
-            continue
-        }
-        val runAndSize = acTable.decode(reader)
-        val run = runAndSize ushr 4
-        val size = runAndSize and 0x0F
-        if (size == 0) {
-            if (run == 15) {
-                coefficient = skipZeroesForProgressiveRefinement(
-                    coefficients,
-                    quant,
-                    reader,
-                    refinement,
-                    coefficient,
-                    scan.spectralEnd,
-                    16,
-                )
-                continue
-            }
-            val eobRun = (1 shl run) + reader.readBits(run)
-            refineExistingProgressiveAc(coefficients, quant, reader, refinement, coefficient, scan.spectralEnd)
-            return eobRun - 1
-        }
-        if (size != 1) fail()
-        coefficient = skipZeroesForProgressiveRefinement(
-            coefficients,
-            quant,
-            reader,
-            refinement,
-            coefficient,
-            scan.spectralEnd,
-            run,
-        )
-        if (coefficient > scan.spectralEnd) fail()
-        val newIndex = JPEG_ZIGZAG[coefficient]
-        if (coefficients[newIndex] != 0) fail()
-        coefficients[newIndex] = if (reader.readBit() == 0) {
-            -refinement * quant[newIndex]
-        } else {
-            refinement * quant[newIndex]
-        }
-        coefficient++
-    }
-    return 0
-}
 
-private fun skipZeroesForProgressiveRefinement(
-    coefficients: IntArray,
-    quant: IntArray,
-    reader: EntropyBitReader,
-    refinement: Int,
-    start: Int,
-    end: Int,
-    zeroCount: Int,
-): Int {
-    var coefficient = start
-    var zeroes = zeroCount
-    while (coefficient <= end) {
+    // In an AC refinement scan, the Huffman symbol precedes all refinement bits
+    // for the coefficient run that it controls. In particular, a significant
+    // first coefficient must not consume a refinement bit before that symbol.
+    // The reference parser reads the symbol, then walks the run while consuming
+    // refinement bits from already-significant coefficients.
+    var run = 0
+    var pendingValue = 0
+    var eobRun = 0
+    var needsSymbol = true
+    while (coefficient <= scan.spectralEnd) {
+        if (needsSymbol) {
+            val runAndSize = acTable.decode(reader)
+            val encodedRun = runAndSize ushr 4
+            val size = runAndSize and 0x0F
+            when {
+                size == 0 && encodedRun == 15 -> {
+                    // This run includes the current zero coefficient.
+                    run = 16
+                    pendingValue = 0
+                }
+                size == 0 -> {
+                    eobRun = (1 shl encodedRun) + reader.readBits(encodedRun)
+                    // Preserve refinement bits in the remainder of this block.
+                    run = scan.spectralEnd - coefficient + 1
+                    pendingValue = 0
+                }
+                size == 1 -> {
+                    run = encodedRun
+                    pendingValue = if (reader.readBit() == 0) -1 else 1
+                }
+                else -> fail()
+            }
+            needsSymbol = false
+        }
         val index = JPEG_ZIGZAG[coefficient]
         if (coefficients[index] != 0) {
             refineExistingProgressiveAcCoefficient(coefficients, quant, reader, refinement, index)
+        } else if (run > 0) {
+            run--
         } else {
-            if (zeroes == 0) return coefficient
-            zeroes--
+            if (pendingValue == 0) {
+                // An EOB run covers every remaining coefficient. Reaching a
+                // zero here would violate that declared coverage.
+                fail()
+            }
+            coefficients[index] = pendingValue * refinement * quant[index]
+            pendingValue = 0
+            needsSymbol = true
         }
         coefficient++
     }
-    if (zeroes != 0) fail()
-    return coefficient
+    if (pendingValue != 0 || (eobRun == 0 && run != 0)) fail()
+    return if (eobRun > 0) eobRun - 1 else 0
 }
 
 private fun refineExistingProgressiveAc(
@@ -562,6 +570,7 @@ private fun materializeProgressivePlane(
     plane: ProgressiveComponentPlane,
     centerSample: Int,
     maxSample: Int,
+    differential: Boolean,
 ) {
     for (blockY in 0 until plane.blocksHigh) {
         for (blockX in 0 until plane.blocksWide) {
@@ -572,8 +581,10 @@ private fun materializeProgressivePlane(
                 for (x in 0 until 8) {
                     val targetX = blockX * 8 + x
                     if (targetX >= plane.width) continue
-                    plane.samples[targetY * plane.width + targetX] =
-                        (block[y * 8 + x] + centerSample).coerceIn(0, maxSample)
+                val value = block[y * 8 + x]
+                plane.samples[targetY * plane.width + targetX] = if (differential) value else {
+                    (value + centerSample).coerceIn(0, maxSample)
+                }
                 }
             }
         }
@@ -587,6 +598,7 @@ private fun sampleProgressiveComponent(
     maxH: Int,
     maxV: Int,
     maxSample: Int,
+    clamp: Boolean = true,
 ): Int {
     val component = plane.component
     if (component.h == maxH && component.v == maxV) return plane.samples[y * plane.width + x]
@@ -600,11 +612,19 @@ private fun sampleProgressiveComponent(
     val fy = (sourceY - y0).coerceIn(0.0, 1.0)
     val top = plane.samples[y0 * plane.width + x0] * (1.0 - fx) + plane.samples[y0 * plane.width + x1] * fx
     val bottom = plane.samples[y1 * plane.width + x0] * (1.0 - fx) + plane.samples[y1 * plane.width + x1] * fx
-    return (top * (1.0 - fy) + bottom * fy).roundToInt().coerceIn(0, maxSample)
+    val value = (top * (1.0 - fy) + bottom * fy).roundToInt()
+    return if (clamp) value.coerceIn(0, maxSample) else value
 }
 
 /** Decodes a SOF9 arithmetic sequential DCT frame without delegating to Huffman paths. */
-internal fun decodeArithmeticSequentialDct(frame: ParsedJpeg): DecodedJpegSamples {
+internal fun decodeArithmeticSequentialDct(frame: ParsedJpeg): DecodedJpegSamples =
+    decodeArithmeticSequentialDct(frame, differential = false)
+
+/** Decodes a SOF13 residual without applying the ordinary DCT level shift or clamping it. */
+internal fun decodeDifferentialArithmeticSequentialDct(frame: ParsedJpeg): DecodedJpegSamples =
+    decodeArithmeticSequentialDct(frame, differential = true)
+
+private fun decodeArithmeticSequentialDct(frame: ParsedJpeg, differential: Boolean): DecodedJpegSamples {
     if (frame.coding != JpegCoding.kBaseline || frame.entropyCoding != JpegEntropyCoding.ARITHMETIC) {
         arithmeticFailure("jpeg.arithmetic.frame.invalid")
     }
@@ -621,14 +641,14 @@ internal fun decodeArithmeticSequentialDct(frame: ParsedJpeg): DecodedJpegSample
             )
         }
         for (scan in frame.scans) {
-            decodeArithmeticSequentialScan(frame, scan, nativePlanes, maxH, maxV, centerSample, maxSample)
+            decodeArithmeticSequentialScan(frame, scan, nativePlanes, maxH, maxV, centerSample, maxSample, differential)
         }
         val samples = Array(frame.components.size) { IntArray(frame.width * frame.height) }
         for (y in 0 until frame.height) {
             for (x in 0 until frame.width) {
                 for (plane in nativePlanes) {
                     samples[plane.component.frameIndex][y * frame.width + x] =
-                        sampleSequentialComponent(plane, x, y, maxH, maxV, maxSample)
+                    sampleSequentialComponent(plane, x, y, maxH, maxV, maxSample, clamp = !differential)
                 }
             }
         }
@@ -650,6 +670,7 @@ private fun decodeArithmeticSequentialScan(
     maxV: Int,
     centerSample: Int,
     maxSample: Int,
+    differential: Boolean,
 ) {
     val conditioning = entropyScan.arithmeticConditioning ?: arithmeticFailure("jpeg.arithmetic.scan.conditioning")
     val scanComponents = entropyScan.scan.components
@@ -686,9 +707,11 @@ private fun decodeArithmeticSequentialScan(
                                 decoder,
                                 previousDc,
                                 dcContexts,
+                                differential,
                             ),
                             centerSample,
                             maxSample,
+                            differential,
                         )
                     }
                 }
@@ -710,6 +733,7 @@ private fun decodeArithmeticSequentialBlock(
     decoder: ArithmeticDecoder,
     previousDc: IntArray,
     dcContexts: IntArray,
+    differential: Boolean,
 ): IntArray {
     val quant = entropyScan.quantTables[component.quantTable] ?: arithmeticFailure("jpeg.arithmetic.scan.table")
     val dc = decoder.decodeDcDifference(
@@ -719,7 +743,9 @@ private fun decodeArithmeticSequentialBlock(
         conditioning.dcUpper[component.dcTable],
     )
     dcContexts[component.frameIndex] = dc.nextContext
-    previousDc[component.frameIndex] = (previousDc[component.frameIndex] + dc.value) and 0xFFFF
+    previousDc[component.frameIndex] = if (differential) dc.value else {
+        (previousDc[component.frameIndex] + dc.value) and 0xFFFF
+    }
     val coefficients = IntArray(64)
     coefficients[0] = signedArithmeticDc(previousDc[component.frameIndex]) * quant[0]
     decoder.decodeAcInitial(
@@ -735,7 +761,14 @@ private fun decodeArithmeticSequentialBlock(
 }
 
 /** Decodes a SOF10 arithmetic progressive DCT frame without Huffman fallback. */
-internal fun decodeArithmeticProgressiveDct(frame: ParsedJpeg): DecodedJpegSamples {
+internal fun decodeArithmeticProgressiveDct(frame: ParsedJpeg): DecodedJpegSamples =
+    decodeArithmeticProgressiveDct(frame, differential = false)
+
+/** Decodes a SOF14 residual without applying the ordinary DCT level shift or clamping it. */
+internal fun decodeDifferentialArithmeticProgressiveDct(frame: ParsedJpeg): DecodedJpegSamples =
+    decodeArithmeticProgressiveDct(frame, differential = true)
+
+private fun decodeArithmeticProgressiveDct(frame: ParsedJpeg, differential: Boolean): DecodedJpegSamples {
     if (frame.coding != JpegCoding.kProgressive || frame.entropyCoding != JpegEntropyCoding.ARITHMETIC) {
         arithmeticFailure("jpeg.arithmetic.frame.invalid")
     }
@@ -758,15 +791,15 @@ internal fun decodeArithmeticProgressiveDct(frame: ParsedJpeg): DecodedJpegSampl
         }
         validateArithmeticProgressiveDctScans(frame)
         for (entropyScan in frame.scans) {
-            decodeArithmeticProgressiveScan(frame, entropyScan, planes, maxH, maxV)
+            decodeArithmeticProgressiveScan(frame, entropyScan, planes, maxH, maxV, differential)
         }
         val samples = Array(frame.components.size) { IntArray(frame.width * frame.height) }
         for (plane in planes) {
-            materializeProgressivePlane(plane, centerSample, maxSample)
+            materializeProgressivePlane(plane, centerSample, maxSample, differential)
             for (y in 0 until frame.height) {
                 for (x in 0 until frame.width) {
                     samples[plane.component.frameIndex][y * frame.width + x] =
-                        sampleProgressiveComponent(plane, x, y, maxH, maxV, maxSample)
+                        sampleProgressiveComponent(plane, x, y, maxH, maxV, maxSample, clamp = !differential)
                 }
             }
         }
@@ -822,6 +855,7 @@ private fun decodeArithmeticProgressiveScan(
     planes: List<ProgressiveComponentPlane>,
     maxH: Int,
     maxV: Int,
+    differential: Boolean,
 ) {
     val conditioning = entropyScan.arithmeticConditioning ?: arithmeticFailure("jpeg.arithmetic.scan.conditioning")
     val scan = entropyScan.scan
@@ -863,6 +897,7 @@ private fun decodeArithmeticProgressiveScan(
                                     dcContexts,
                                     coefficients,
                                     successiveLow,
+                                    differential,
                                 )
                             }
                             scan.spectralStart == 0 -> {
@@ -916,6 +951,7 @@ private fun decodeArithmeticProgressiveDcInitial(
     dcContexts: IntArray,
     coefficients: IntArray,
     successiveLow: Int,
+    differential: Boolean,
 ) {
     val quant = entropyScan.quantTables[component.quantTable] ?: arithmeticFailure("jpeg.arithmetic.scan.table")
     val dc = decoder.decodeDcDifference(
@@ -925,7 +961,9 @@ private fun decodeArithmeticProgressiveDcInitial(
         conditioning.dcUpper[component.dcTable],
     )
     dcContexts[component.frameIndex] = dc.nextContext
-    previousDc[component.frameIndex] = (previousDc[component.frameIndex] + dc.value) and 0xFFFF
+    previousDc[component.frameIndex] = if (differential) dc.value else {
+        (previousDc[component.frameIndex] + dc.value) and 0xFFFF
+    }
     coefficients[0] = signedArithmeticDc(previousDc[component.frameIndex]) * (1 shl successiveLow) * quant[0]
 }
 

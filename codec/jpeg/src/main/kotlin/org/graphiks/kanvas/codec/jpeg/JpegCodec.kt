@@ -151,6 +151,12 @@ public class JpegCodec private constructor(
         }
 
         internal fun decode(document: JpegDocument, request: JpegDecodeRequest): JpegDecodeResult {
+            document.hierarchyDiagnostic?.let { diagnostic ->
+                return JpegDecodeResult(bitmap = null, diagnostic = diagnostic)
+            }
+            document.hierarchy?.let { hierarchy ->
+                return decodeJpegHierarchy(document, hierarchy, request)
+            }
             val differentialSofOffset = document.differentialSofOffset
             if (differentialSofOffset != null) {
                 return JpegDecodeResult(
@@ -233,6 +239,7 @@ internal data class ParsedJpeg(
     val scanData: ByteArray,
     val restartInterval: Int,
     val metadata: JpegMetadata,
+    val frameSpec: JpegFrameSpec,
     val coding: JpegCoding,
     val entropyCoding: JpegEntropyCoding,
     val scanSpectralStart: Int,
@@ -309,6 +316,7 @@ internal fun parseJpeg(data: ByteArray, metadata: JpegMetadata): ParsedJpeg? {
     val scans = ArrayList<EntropyScan>()
     var coding: JpegCoding? = null
     var entropyCoding: JpegEntropyCoding? = null
+    var frameSpec: JpegFrameSpec? = null
     var restartInterval = 0
     var offset = 2
 
@@ -333,6 +341,7 @@ internal fun parseJpeg(data: ByteArray, metadata: JpegMetadata): ParsedJpeg? {
                     payloadEnd,
                     frameComponents,
                     currentCoding,
+                    frameSpec?.differential == true,
                 ) ?: return null
                 scan = current
                 scanCount++
@@ -377,6 +386,7 @@ internal fun parseJpeg(data: ByteArray, metadata: JpegMetadata): ParsedJpeg? {
                                     scanData,
                                     restartInterval,
                                     metadata,
+                                    frameSpec ?: return null,
                                     currentCoding,
                                     entropyCoding ?: return null,
                                     current.spectralStart,
@@ -405,34 +415,34 @@ internal fun parseJpeg(data: ByteArray, metadata: JpegMetadata): ParsedJpeg? {
                 when (marker) {
                     MARKER_DQT -> parseDqt(data, payloadStart, payloadEnd, quantTables)
                     MARKER_DHT -> parseDht(data, payloadStart, payloadEnd, dcTables, acTables)
-                    MARKER_SOF0, MARKER_SOF1, MARKER_SOF2, MARKER_SOF3,
-                    MARKER_SOF9, MARKER_SOF10, MARKER_SOF11 -> {
+                    else -> JpegFrameSpec.fromSof(marker)?.let { spec ->
                         if (coding != null) return null
-                        val frameSpec = JpegFrameSpec.fromSof(marker) ?: return null
-                        if (frameSpec.differential) return null
-                        val frame = parseSof(data, payloadStart, payloadEnd, frameSpec) ?: return null
+                        val frame = parseSof(data, payloadStart, payloadEnd, spec) ?: return null
                         width = frame.width
                         height = frame.height
                         precision = frame.precision
                         frameComponents = frame.components
-                        coding = when (frameSpec.sampleCoding) {
+                        coding = when (spec.sampleCoding) {
                             JpegSampleCoding.DCT_SEQUENTIAL -> JpegCoding.kBaseline
                             JpegSampleCoding.DCT_PROGRESSIVE -> JpegCoding.kProgressive
                             JpegSampleCoding.LOSSLESS -> JpegCoding.kLossless
                         }
-                        entropyCoding = frameSpec.entropyCoding
-                    }
-                    MARKER_DAC -> parseDac(
-                        data,
-                        payloadStart,
-                        payloadEnd,
-                        arithmeticDcLower,
-                        arithmeticDcUpper,
-                        arithmeticAcK,
-                    )
-                    MARKER_DRI -> {
-                        if (payloadEnd - payloadStart != 2) return null
-                        restartInterval = readU16BE(data, payloadStart)
+                        entropyCoding = spec.entropyCoding
+                        frameSpec = spec
+                    } ?: when (marker) {
+                        MARKER_DAC -> parseDac(
+                            data,
+                            payloadStart,
+                            payloadEnd,
+                            arithmeticDcLower,
+                            arithmeticDcUpper,
+                            arithmeticAcK,
+                        )
+                        MARKER_DRI -> {
+                            if (payloadEnd - payloadStart != 2) return null
+                            restartInterval = readU16BE(data, payloadStart)
+                        }
+                        else -> Unit
                     }
                 }
                 offset = payloadEnd
@@ -452,6 +462,7 @@ internal fun parseJpeg(data: ByteArray, metadata: JpegMetadata): ParsedJpeg? {
             scanData,
             restartInterval,
             metadata,
+            frameSpec ?: return null,
             coding,
             entropyCoding ?: return null,
             lastScan.spectralStart,
@@ -465,7 +476,7 @@ internal fun parseJpeg(data: ByteArray, metadata: JpegMetadata): ParsedJpeg? {
     }
 }
 
-private fun buildParsed(
+internal fun buildParsed(
     width: Int,
     height: Int,
     precision: Int,
@@ -476,6 +487,7 @@ private fun buildParsed(
     scanData: ByteArray,
     restartInterval: Int,
     metadata: JpegMetadata,
+    frameSpec: JpegFrameSpec,
     coding: JpegCoding,
     entropyCoding: JpegEntropyCoding,
     scanSpectralStart: Int,
@@ -508,6 +520,7 @@ private fun buildParsed(
             scanData,
             restartInterval,
             metadata,
+            frameSpec,
             coding,
             entropyCoding,
             scanSpectralStart,
@@ -518,8 +531,8 @@ private fun buildParsed(
         )
     }
     if (coding == JpegCoding.kLossless) {
-        if (entropyCoding == JpegEntropyCoding.HUFFMAN && !validateLosslessScans(cs, scans, precision)) return null
-        if (entropyCoding == JpegEntropyCoding.ARITHMETIC && !validateArithmeticLosslessRefusalScans(cs, scans, precision)) return null
+        if (entropyCoding == JpegEntropyCoding.HUFFMAN && !validateLosslessScans(cs, scans, precision, frameSpec.differential)) return null
+        if (entropyCoding == JpegEntropyCoding.ARITHMETIC && !validateArithmeticLosslessRefusalScans(cs, scans, precision, frameSpec.differential)) return null
     } else if (
         if (entropyCoding == JpegEntropyCoding.HUFFMAN) {
             !validateSequentialScans(cs, scans)
@@ -542,6 +555,7 @@ private fun buildParsed(
         scanData,
         restartInterval,
         metadata,
+        frameSpec,
         coding,
         entropyCoding,
         scanSpectralStart,
@@ -615,6 +629,7 @@ private fun validateLosslessScans(
     frameComponents: List<Component>,
     scans: List<EntropyScan>,
     precision: Int,
+    differential: Boolean,
 ): Boolean {
     val seen = HashSet<Int>(frameComponents.size)
     for (component in frameComponents) {
@@ -625,7 +640,7 @@ private fun validateLosslessScans(
         val pointTransform = scan.successiveApprox and 0x0F
         if (
             scan.components.isEmpty() ||
-            scan.spectralStart !in 1..7 ||
+            scan.spectralStart !in (if (differential) 0..0 else 1..7) ||
             scan.spectralEnd != 0 ||
             scan.successiveApprox ushr 4 != 0 ||
             pointTransform !in 0 until precision
@@ -651,6 +666,7 @@ private fun validateArithmeticLosslessRefusalScans(
     frameComponents: List<Component>,
     scans: List<EntropyScan>,
     precision: Int,
+    differential: Boolean,
 ): Boolean {
     val seen = HashSet<Int>(frameComponents.size)
     for (component in frameComponents) {
@@ -662,7 +678,7 @@ private fun validateArithmeticLosslessRefusalScans(
         if (
             entropyScan.arithmeticConditioning == null ||
             scan.components.isEmpty() ||
-            scan.spectralStart !in 1..7 ||
+            scan.spectralStart !in (if (differential) 0..0 else 1..7) ||
             scan.spectralEnd != 0 ||
             scan.successiveApprox ushr 4 != 0 ||
             pointTransform !in 0 until precision
@@ -676,7 +692,7 @@ private fun validateArithmeticLosslessRefusalScans(
     return seen.size == frameComponents.size
 }
 
-private fun ParsedJpeg.colorModel(): JpegColorModel = colorModelFor(components, metadata) ?: fail()
+internal fun ParsedJpeg.colorModel(): JpegColorModel = colorModelFor(components, metadata) ?: fail()
 
 private fun colorModelFor(components: List<Component>, metadata: JpegMetadata): JpegColorModel? = when (components.size) {
     1 -> JpegColorModel.GRAYSCALE
@@ -802,6 +818,7 @@ private fun parseSos(
     end: Int,
     frameComponents: List<Component>?,
     coding: JpegCoding,
+    differential: Boolean,
 ): Scan? {
     val frame = frameComponents ?: return null
     if (end - start < 6) return null
@@ -829,7 +846,12 @@ private fun parseSos(
         if (spectralStart == 0 && spectralEnd != 0) return null
         if (spectralStart != 0 && componentCount != 1) return null
     } else if (coding == JpegCoding.kLossless) {
-        if (spectralStart !in 1..7 || spectralEnd != 0 || approx ushr 4 != 0 || components.any { it.acTable != 0 }) {
+        if (
+            spectralStart !in (if (differential) 0..0 else 1..7) ||
+            spectralEnd != 0 ||
+            approx ushr 4 != 0 ||
+            components.any { it.acTable != 0 }
+        ) {
             return null
         }
     } else if (spectralStart != 0 || spectralEnd != 63 || approx != 0) return null

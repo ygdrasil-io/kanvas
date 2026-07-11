@@ -51,10 +51,17 @@ public class JpegDocument internal constructor(
     internal val metadata: JpegMetadata
     internal val metadataDiagnostics: List<JpegDiagnostic>
 
+    /** Parsed DHP/EXP frame graph, when this document declares a JPEG hierarchy. */
+    public val hierarchy: JpegHierarchy?
+    internal val hierarchyDiagnostic: JpegDiagnostic?
+
     init {
         val (parsedMetadata, diagnostics) = parseJpegMetadata(source, this.segments)
         metadata = parsedMetadata
         metadataDiagnostics = Collections.unmodifiableList(diagnostics)
+        val parsedHierarchy = parseJpegHierarchy(source, this.segments, metadata)
+        hierarchy = parsedHierarchy.hierarchy
+        hierarchyDiagnostic = parsedHierarchy.diagnostic
     }
 
     /** Returns a defensive copy of [segment]'s encoded payload. */
