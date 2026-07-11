@@ -29,11 +29,15 @@ import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendVertexPositionUVData
 import org.graphiks.kanvas.gpu.renderer.execution.GPUClearColor
 import org.graphiks.kanvas.gpu.renderer.execution.GPUSurfaceTarget
 import org.graphiks.kanvas.gpu.renderer.filters.MaskBlurPlan
+import org.graphiks.kanvas.gpu.renderer.filters.MaskBlurPlanner
 import org.graphiks.kanvas.gpu.renderer.filters.NormalizedBlurStyle
+import org.graphiks.kanvas.gpu.renderer.filters.NormalizedMaskFilter
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.surface.Diagnostics
+import org.graphiks.kanvas.surface.RenderConfig
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
@@ -61,7 +65,11 @@ class GPUMaskBlurDispatchTest {
         val diagnostics = Diagnostics()
 
         val result = target.renderMaskBlurCommand(
-            "scene", nonUniformRRectCommand(), readyPlan(NormalizedBlurStyle.NORMAL),
+            "scene",
+            nonUniformRRectCommand().copy(
+                maskFilter = NormalizedMaskFilter.Blur(NormalizedBlurStyle.NORMAL, sigma = 2f),
+            ),
+            readyPlan(NormalizedBlurStyle.NORMAL),
             GPUClearColor(0.0, 0.0, 0.0, 0.0), dispatched, diagnostics, "rgba8unorm",
         )
 
@@ -69,6 +77,19 @@ class GPUMaskBlurDispatchTest {
         assertTrue(dispatched.isEmpty())
         assertEquals(0, target.createdTextures.size)
         assertEquals("non_uniform_radii", diagnostics.entries.single().reason)
+    }
+
+    @Test
+    fun `zero sigma non uniform rrect remains an identity plan`() {
+        val command = nonUniformRRectCommand().copy(
+            maskFilter = NormalizedMaskFilter.Blur(NormalizedBlurStyle.NORMAL, sigma = 0f),
+        )
+
+        assertNull(command.maskBlurPreflightRefusalReasonOrNull())
+        assertEquals(
+            MaskBlurPlan.Identity,
+            MaskBlurPlanner.plan(command.toMaskBlurRequest(64, 64, 4096, RenderConfig.DEFAULT)),
+        )
     }
 
     @Test

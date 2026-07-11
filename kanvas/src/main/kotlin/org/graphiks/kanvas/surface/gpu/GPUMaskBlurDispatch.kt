@@ -180,8 +180,11 @@ internal fun NormalizedDrawCommand.toMaskBlurRequest(
     )
 }
 
-internal fun NormalizedDrawCommand.maskBlurPreflightRefusalReasonOrNull(): String? =
-    (this as? NormalizedDrawCommand.FillRRect)?.nonUniformRadiiRefusalReasonOrNull()
+internal fun NormalizedDrawCommand.maskBlurPreflightRefusalReasonOrNull(): String? {
+    val rrect = this as? NormalizedDrawCommand.FillRRect ?: return null
+    val blur = rrect.maskFilter as? NormalizedMaskFilter.Blur ?: return null
+    return if (blur.sigma != 0f) rrect.nonUniformRadiiRefusalReasonOrNull() else null
+}
 
 private fun NormalizedDrawCommand.toLocalMaskCommand(plan: MaskBlurPlan.Ready): NormalizedDrawCommand {
     val origin = plan.deviceBounds
