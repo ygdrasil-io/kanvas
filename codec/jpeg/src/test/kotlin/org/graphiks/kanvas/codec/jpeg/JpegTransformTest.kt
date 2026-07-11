@@ -6,10 +6,12 @@ import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkColorType
+import java.io.ByteArrayOutputStream
 
 /**
  * The source image is generated deterministically with [JpegEncoder], so it is
@@ -37,6 +39,39 @@ class JpegTransformTest {
     }
 
     @Test
+    fun `identity validates transform subset before preserving bytes`() {
+        val multiSos = duplicateSequentialScan(CodecTestFixtures.simpleGrayscaleJpeg())
+        assertTransformDiagnostic(multiSos, JpegTransform.Identity, "jpeg.transform.scan.unsupported")
+
+        val nonInterleaved = firstComponentOnlyScan(encodedFixture(32, 16))
+        assertTransformDiagnostic(nonInterleaved, JpegTransform.Identity, "jpeg.transform.input.invalid")
+
+        val invalidDqt = CodecTestFixtures.simpleGrayscaleJpeg().copyOf()
+        val invalidDqtDocument = JpegDocument.open(invalidDqt).document!!
+        invalidDqt[invalidDqtDocument.segments.single { it.marker == 0xDB }.range.first] = 0x20
+        assertTransformDiagnostic(invalidDqt, JpegTransform.Identity, "jpeg.transform.input.invalid")
+
+        val invalidDht = CodecTestFixtures.simpleGrayscaleJpeg().copyOf()
+        val invalidDhtDocument = JpegDocument.open(invalidDht).document!!
+        invalidDht[invalidDhtDocument.segments.first { it.marker == 0xC4 }.range.first + 1] = 0x7F
+        assertTransformDiagnostic(invalidDht, JpegTransform.Identity, "jpeg.transform.input.invalid")
+    }
+
+    @Test
+    fun `identity refuses trailing stuffed entropy and restart markers`() {
+        val invalidPadding = CodecTestFixtures.simpleGrayscaleJpeg().copyOf()
+        val invalidPaddingDocument = JpegDocument.open(invalidPadding).document!!
+        invalidPadding[invalidPaddingDocument.segments.single { it.marker == 0xD9 }.offset.toInt() - 1] = 0x20
+        assertTransformDiagnostic(invalidPadding, JpegTransform.Identity, "jpeg.transform.entropy.invalid")
+
+        val trailingStuffed = appendEntropy(CodecTestFixtures.simpleGrayscaleJpeg(), byteArrayOf(0xFF.toByte(), 0))
+        assertTransformDiagnostic(trailingStuffed, JpegTransform.Identity, "jpeg.transform.entropy.invalid")
+
+        val trailingRestart = appendEntropy(restartGrayscaleFixture(), byteArrayOf(0xFF.toByte(), 0xD1.toByte()))
+        assertTransformDiagnostic(trailingRestart, JpegTransform.Identity, "jpeg.transform.entropy.invalid")
+    }
+
+    @Test
     fun `MCU aligned crop is a coefficient transform and preserves unknown APP`() {
         // 4:4:4 avoids a deliberately different chroma edge interpolation at
         // a newly cropped boundary; it lets this test assert literal decoded
@@ -50,6 +85,41 @@ class JpegTransformTest {
         assertPixelsEqual(expected, decodedPixels(result.bytes!!))
         val transformed = JpegDocument.open(result.bytes).document!!
         assertArrayEquals(UNKNOWN_APP_PAYLOAD, transformed.copyPayload(transformed.segments.single { it.marker == UNKNOWN_APP_MARKER }))
+    }
+
+    @Test
+    fun `subsampled crops select the independently expected MCU coefficient blocks`() {
+        val cases = listOf(
+            JpegEncoder.Downsample.k420 to (32 to 16),
+            JpegEncoder.Downsample.k422 to (32 to 8),
+        )
+        for ((sampling, size) in cases) {
+            val source = encodedFixture(size.first, size.second, sampling, quality = 73)
+            val sourceDocument = JpegDocument.open(source).document!!
+            val sourceCoefficients = decodeSequentialCoefficients(parseJpeg(source, sourceDocument.metadata)!!)
+            val transformedBytes = sourceDocument.transcode(JpegTransform.Crop(16, 0, 16, size.second)).bytes!!
+            val transformedDocument = JpegDocument.open(transformedBytes).document!!
+            val transformedCoefficients = decodeSequentialCoefficients(parseJpeg(transformedBytes, transformedDocument.metadata)!!)
+
+            assertEquals(1, transformedCoefficients.mcusWide, sampling.name)
+            assertEquals(sourceCoefficients.mcusHigh, transformedCoefficients.mcusHigh, sampling.name)
+            for (componentIndex in sourceCoefficients.planes.indices) {
+                val sourcePlane = sourceCoefficients.planes[componentIndex]
+                val transformedPlane = transformedCoefficients.planes[componentIndex]
+                assertEquals(sourcePlane.horizontalSampling, transformedPlane.blocksWide, sampling.name)
+                assertEquals(sourcePlane.blocksHigh, transformedPlane.blocksHigh, sampling.name)
+                for (blockY in 0 until transformedPlane.blocksHigh) {
+                    for (blockX in 0 until transformedPlane.blocksWide) {
+                        val expectedSourceBlockX = sourcePlane.horizontalSampling + blockX
+                        assertArrayEquals(
+                            sourcePlane.blocks[blockY * sourcePlane.blocksWide + expectedSourceBlockX],
+                            transformedPlane.blocks[blockY * transformedPlane.blocksWide + blockX],
+                            "${sampling.name} component=$componentIndex block=($blockX,$blockY)",
+                        )
+                    }
+                }
+            }
+        }
     }
 
     @Test
@@ -68,6 +138,48 @@ class JpegTransformTest {
             val result = JpegDocument.open(source).document!!.transcode(transform)
             assertNull(result.diagnostic, transform.toString())
             assertPixelsEqual(pixels, decodedPixels(result.bytes!!), transform.toString())
+        }
+    }
+
+    @Test
+    fun `right angle rotations transpose asymmetric DQT values`() {
+        val source = encodedFixture(32, 32, JpegEncoder.Downsample.k420, quality = 73)
+        val sourceDocument = JpegDocument.open(source).document!!
+        val sourceFrame = parseJpeg(source, sourceDocument.metadata)!!
+        val lumaQuantization = sourceFrame.quantTables[0]!!
+        assertTrue(
+            (0 until 8).any { y -> (0 until 8).any { x -> lumaQuantization[y * 8 + x] != lumaQuantization[x * 8 + y] } },
+            "quality fixture must have an asymmetric DQT",
+        )
+        val expected = decodedPixels(source)
+
+        for (transform in listOf(JpegTransform.Rotate90, JpegTransform.Rotate270)) {
+            val result = sourceDocument.transcode(transform)
+            assertNull(result.diagnostic, transform.toString())
+            assertPixelsEqual(
+                if (transform == JpegTransform.Rotate90) expected.rotate90() else expected.rotate270(),
+                decodedPixels(result.bytes!!),
+                transform.toString(),
+            )
+        }
+    }
+
+    @Test
+    fun `right angle rotations transpose every used 16 bit DQT table`() {
+        val source = promoteDqtTo16Bit(encodedFixture(32, 32, JpegEncoder.Downsample.k420, quality = 73))
+        val sourceDocument = JpegDocument.open(source).document!!
+        val sourceFrame = parseJpeg(source, sourceDocument.metadata)!!
+        assertTrue(sourceFrame.quantTables.filterNotNull().size >= 2, "fixture must retain multiple DQT tables")
+        val expected = decodedPixels(source)
+
+        for (transform in listOf(JpegTransform.Rotate90, JpegTransform.Rotate270)) {
+            val result = sourceDocument.transcode(transform)
+            assertNull(result.diagnostic, transform.toString())
+            assertPixelsEqual(
+                if (transform == JpegTransform.Rotate90) expected.rotate90() else expected.rotate270(),
+                decodedPixels(result.bytes!!),
+                "16-bit ${transform}",
+            )
         }
     }
 
@@ -116,6 +228,29 @@ class JpegTransformTest {
     }
 
     @Test
+    fun `transcode output is bounded by document encoded byte limit`() {
+        val source = listOf(23, 37, 61, 73).asSequence()
+            .map { quality -> encodedFixture(64, 64, JpegEncoder.Downsample.k420, quality) }
+            .firstOrNull { candidate ->
+                val result = JpegDocument.open(candidate).document!!.transcode(JpegTransform.Rotate90)
+                (result.bytes?.size ?: 0) > candidate.size
+            }
+            ?: error("deterministic transform fixture must expand its entropy")
+        val limits = JpegLimits(
+            maxEncodedBytes = source.size.toLong(),
+            maxPixels = JpegLimits.DEFAULT.maxPixels,
+            maxScans = JpegLimits.DEFAULT.maxScans,
+            maxSegments = JpegLimits.DEFAULT.maxSegments,
+        )
+
+        val result = JpegDocument.open(source, limits).document!!.transcode(JpegTransform.Rotate90)
+
+        assertEquals(null, result.bytes)
+        assertEquals("jpeg.transform.limit.encoded-bytes", result.diagnostic!!.code)
+        assertEquals(Codec.Result.kInvalidInput, result.diagnostic.result)
+    }
+
+    @Test
     fun `progressive and arithmetic frames have explicit transform refusals`() {
         val progressive = encodedFixture(32, 32).replaceSofMarker(0xC2)
         val arithmetic = encodedFixture(32, 32).replaceSofMarker(0xC9)
@@ -138,6 +273,7 @@ class JpegTransformTest {
         width: Int,
         height: Int,
         downsample: JpegEncoder.Downsample = JpegEncoder.Downsample.k420,
+        quality: Int = 100,
     ): ByteArray {
         val bitmap = SkBitmap(width, height, SkColorSpace.makeSRGB(), SkColorType.kRGBA_8888)
         for (y in 0 until height) for (x in 0 until width) {
@@ -146,7 +282,7 @@ class JpegTransformTest {
             val b = ((x * 19) xor (y * 37)) and 0xFF
             bitmap.pixels[y * width + x] = (0xFF shl 24) or (r shl 16) or (g shl 8) or b
         }
-        return JpegEncoder.encode(bitmap, JpegEncoder.Options(quality = 100, downsample = downsample))!!
+        return JpegEncoder.encode(bitmap, JpegEncoder.Options(quality = quality, downsample = downsample))!!
     }
 
     private fun withUnknownApp(jpeg: ByteArray): ByteArray {
@@ -168,6 +304,68 @@ class JpegTransformTest {
         val entropy = byteArrayOf(0x3F, 0xFF.toByte(), 0xD0.toByte(), 0x3F)
         return original.copyOfRange(0, sosOffset) + dri +
             original.copyOfRange(sosOffset, entropyStart) + entropy + original.copyOfRange(eoiOffset, original.size)
+    }
+
+    private fun duplicateSequentialScan(original: ByteArray): ByteArray {
+        val document = JpegDocument.open(original).document!!
+        val sos = document.segments.single { it.marker == 0xDA }
+        val eoi = document.segments.single { it.marker == 0xD9 }
+        val sosOffset = sos.offset.toInt()
+        val entropyStart = sos.range.last + 1
+        val eoiOffset = eoi.offset.toInt()
+        val scanHeader = original.copyOfRange(sosOffset, entropyStart)
+        val entropy = original.copyOfRange(entropyStart, eoiOffset)
+        return original.copyOfRange(0, entropyStart) + entropy + scanHeader + entropy + original.copyOfRange(eoiOffset, original.size)
+    }
+
+    private fun firstComponentOnlyScan(original: ByteArray): ByteArray {
+        val document = JpegDocument.open(original).document!!
+        val sos = document.segments.single { it.marker == 0xDA }
+        val sosOffset = sos.offset.toInt()
+        val entropyStart = sos.range.last + 1
+        val payload = document.copyPayload(sos)
+        val componentId = payload[1]
+        val tableSelector = payload[2]
+        val singleComponentSos = byteArrayOf(
+            0xFF.toByte(), 0xDA.toByte(), 0, 8,
+            1, componentId, tableSelector,
+            0, 63, 0,
+        )
+        return original.copyOfRange(0, sosOffset) + singleComponentSos + original.copyOfRange(entropyStart, original.size)
+    }
+
+    private fun appendEntropy(original: ByteArray, extra: ByteArray): ByteArray {
+        val document = JpegDocument.open(original).document!!
+        val eoiOffset = document.segments.single { it.marker == 0xD9 }.offset.toInt()
+        return original.copyOfRange(0, eoiOffset) + extra + original.copyOfRange(eoiOffset, original.size)
+    }
+
+    /** Converts the project encoder's two 8-bit DQT tables to equivalent 16-bit DQT tables. */
+    private fun promoteDqtTo16Bit(original: ByteArray): ByteArray {
+        val document = JpegDocument.open(original).document!!
+        val dqt = document.segments.single { it.marker == 0xDB }
+        val payload = document.copyPayload(dqt)
+        val promoted = ByteArrayOutputStream(payload.size * 2)
+        var offset = 0
+        while (offset < payload.size) {
+            val spec = payload[offset++].toInt() and 0xFF
+            require(spec ushr 4 == 0) { "fixture DQT must start at 8-bit precision" }
+            promoted.write(0x10 or (spec and 0x0F))
+            repeat(64) {
+                promoted.write(0)
+                promoted.write(payload[offset++].toInt() and 0xFF)
+            }
+        }
+        val promotedPayload = promoted.toByteArray()
+        val length = promotedPayload.size + 2
+        val segment = byteArrayOf(0xFF.toByte(), 0xDB.toByte(), (length ushr 8).toByte(), length.toByte()) + promotedPayload
+        return original.copyOfRange(0, dqt.offset.toInt()) + segment + original.copyOfRange(dqt.range.last + 1, original.size)
+    }
+
+    private fun assertTransformDiagnostic(data: ByteArray, transform: JpegTransform, code: String) {
+        val result = JpegDocument.open(data).document!!.transcode(transform)
+        assertEquals(null, result.bytes)
+        assertEquals(code, result.diagnostic!!.code)
     }
 
     private fun ByteArray.replaceSofMarker(marker: Int): ByteArray = copyOf().also { bytes ->

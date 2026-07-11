@@ -87,6 +87,19 @@ internal class EntropyBitReader(private val bytes: ByteArray) {
         while (offset < bytes.size && bytes[offset] == 0xFF.toByte()) offset++
         if (offset >= bytes.size || (bytes[offset++].toInt() and 0xFF) != 0xD0 + expected) fail()
     }
+
+    /**
+     * Validates the scan tail after its declared MCU count is exhausted. JPEG
+     * pads only the unused low bits of the last entropy byte with ones; no
+     * stuffed data, restart marker, or other entropy byte may remain.
+     */
+    fun finish() {
+        if (remaining > 0) {
+            val paddingMask = (1 shl remaining) - 1
+            if ((current and paddingMask) != paddingMask) fail()
+        }
+        if (offset != bytes.size) fail()
+    }
 }
 
 internal fun receiveAndExtend(reader: EntropyBitReader, size: Int): Int {

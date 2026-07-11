@@ -34,6 +34,7 @@ public class JpegDocument internal constructor(
     source: ByteArray,
     segments: List<JpegSegment>,
     hierarchyReparseBudget: JpegHierarchyReparseBudget,
+    private val maxEncodedBytes: Long,
 ) {
     private val source: ByteArray = source
 
@@ -91,6 +92,7 @@ public class JpegDocument internal constructor(
     internal fun makeCodec(): JpegCodec? = JpegCodec.Decoder.makeFromDocumentSource(source, metadata)
 
     internal val encodedSize: Long get() = source.size.toLong()
+    internal val transcodeEncodedByteLimit: Long get() = maxEncodedBytes
 
     public companion object {
         public fun open(
@@ -154,7 +156,12 @@ private fun parseJpegDocument(
             MARKER_EOI -> {
                 appendSegment(marker, offset, offset, markerOffset)?.let { return it }
                 return JpegOpenResult(
-                    JpegDocument(source, segments.toList(), hierarchyReparseBudget(source.size, limits)),
+                    JpegDocument(
+                        source,
+                        segments.toList(),
+                        hierarchyReparseBudget(source.size, limits),
+                        limits.maxEncodedBytes,
+                    ),
                     null,
                 )
             }

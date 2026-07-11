@@ -50,11 +50,11 @@ internal fun transcodeJpegDocument(
     ) {
         return transformDiagnostic(frameSegment.offset, "jpeg.transform.process.unsupported")
     }
-    if (transform == JpegTransform.Identity && metadataPolicy == JpegMetadataPolicy.Preserve) {
-        return JpegTranscodeResult(source.copyOf(), null)
-    }
     if (document.metadata.origin != SkEncodedOrigin.kTopLeft) {
         return transformDiagnostic(frameSegment.offset, "jpeg.transform.orientation.unsupported")
+    }
+    if (document.segments.count { it.marker == TRANSFORM_MARKER_SOS } != 1) {
+        return transformDiagnostic(frameSegment.offset, "jpeg.transform.scan.unsupported")
     }
 
     val frame = try {
@@ -76,12 +76,17 @@ internal fun transcodeJpegDocument(
     } catch (_: IllegalArgumentException) {
         return transformDiagnostic(frameSegment.offset, "jpeg.transform.entropy.invalid", Codec.Result.kErrorInInput)
     }
+    if (transform == JpegTransform.Identity && metadataPolicy == JpegMetadataPolicy.Preserve) {
+        return JpegTranscodeResult(source.copyOf(), null)
+    }
     val transformed = transformCoefficients(coefficients, transform, geometry)
     return try {
         JpegTranscodeResult(
             serializeTransformedJpeg(document, source, frame, transformed, geometry, metadataPolicy),
             null,
         )
+    } catch (_: TransformOutputLimitException) {
+        transformDiagnostic(frameSegment.offset, "jpeg.transform.limit.encoded-bytes", Codec.Result.kInvalidInput)
     } catch (_: IllegalArgumentException) {
         // Reordering can require a Huffman symbol absent from an unusually
         // restricted source DHT.  Refuse rather than silently substituting a
@@ -167,13 +172,13 @@ private fun transformGeometry(frame: ParsedJpeg, transform: JpegTransform): Tran
     }
 }
 
-private data class CoefficientImage(
+internal data class CoefficientImage(
     val mcusWide: Int,
     val mcusHigh: Int,
     val planes: List<CoefficientPlane>,
 )
 
-private data class CoefficientPlane(
+internal data class CoefficientPlane(
     val componentIndex: Int,
     val horizontalSampling: Int,
     val verticalSampling: Int,
@@ -182,7 +187,7 @@ private data class CoefficientPlane(
     val blocks: Array<IntArray>,
 )
 
-private fun decodeSequentialCoefficients(frame: ParsedJpeg): CoefficientImage {
+internal fun decodeSequentialCoefficients(frame: ParsedJpeg): CoefficientImage {
     val scan = frame.scans.single()
     val maxH = frame.components.maxOf { it.h }
     val maxV = frame.components.maxOf { it.v }
@@ -223,6 +228,7 @@ private fun decodeSequentialCoefficients(frame: ParsedJpeg): CoefficientImage {
             }
         }
     }
+    reader.finish()
     return CoefficientImage(mcusWide, mcusHigh, planes)
 }
 
@@ -388,13 +394,16 @@ private fun serializeTransformedJpeg(
     geometry: TransformGeometry,
     metadataPolicy: JpegMetadataPolicy,
 ): ByteArray {
-    val entropy = writeSequentialCoefficients(frame, coefficients)
-    val out = ByteArrayOutputStream(source.size)
+    val entropy = writeSequentialCoefficients(frame, coefficients, document.transcodeEncodedByteLimit)
+    val out = BoundedTransformOutput(document.transcodeEncodedByteLimit, source.size)
     var entropyWritten = false
+    val usedQuantizationTables = frame.components.map { it.quantTable }.toSet()
     for (segment in document.segments) {
         when {
             segment.marker in TRANSFORM_MARKER_RST0..TRANSFORM_MARKER_RST7 -> Unit
             segment.marker == frame.frameSpec.marker -> writeTransformedSof(out, document.copyPayload(segment), segment.marker, geometry)
+            segment.marker == TRANSFORM_MARKER_DQT && !entropyWritten && geometry.swapsSamplingAxes ->
+                writeTransposedDqt(out, document.copyPayload(segment), segment.marker, usedQuantizationTables)
             segment.marker == TRANSFORM_MARKER_SOS -> {
                 writeRawSegment(out, source, segment)
                 out.write(entropy)
@@ -429,6 +438,65 @@ private fun writeTransformedSof(
             payload[samplingOffset] = ((sampling shl 4) or (sampling ushr 4)).toByte()
         }
     }
+    writeSegment(out, marker, payload)
+}
+
+/**
+ * DQT values are serialized in zigzag order, while coefficient transforms use
+ * natural [v, u] order. A quarter turn therefore needs Q'[v,u] = Q[u,v].
+ * Only tables selected by the frame's components are changed; unrelated DQT
+ * payloads remain raw through the general segment-preservation path.
+ */
+private fun writeTransposedDqt(
+    out: ByteArrayOutputStream,
+    originalPayload: ByteArray,
+    marker: Int,
+    usedTables: Set<Int>,
+) {
+    val payload = originalPayload.copyOf()
+    var offset = 0
+    while (offset < payload.size) {
+        val spec = payload[offset++].toInt() and 0xFF
+        val precision = spec ushr 4
+        val tableId = spec and 0x0F
+        val bytesPerValue = when (precision) {
+            0 -> 1
+            1 -> 2
+            else -> fail()
+        }
+        val valuesOffset = offset
+        if (offset + 64 * bytesPerValue > payload.size) fail()
+        if (tableId in usedTables) {
+            val natural = IntArray(64)
+            for (zigZagIndex in 0 until 64) {
+                val valueOffset = valuesOffset + zigZagIndex * bytesPerValue
+                natural[JPEG_ZIGZAG[zigZagIndex]] = if (bytesPerValue == 1) {
+                    payload[valueOffset].toInt() and 0xFF
+                } else {
+                    ((payload[valueOffset].toInt() and 0xFF) shl 8) or (payload[valueOffset + 1].toInt() and 0xFF)
+                }
+            }
+            for (zigZagIndex in 0 until 64) {
+                val destination = JPEG_ZIGZAG[zigZagIndex]
+                val u = destination and 7
+                val v = destination ushr 3
+                val value = natural[u * 8 + v]
+                val valueOffset = valuesOffset + zigZagIndex * bytesPerValue
+                if (bytesPerValue == 1) {
+                    payload[valueOffset] = value.toByte()
+                } else {
+                    payload[valueOffset] = (value ushr 8).toByte()
+                    payload[valueOffset + 1] = value.toByte()
+                }
+            }
+        }
+        offset += 64 * bytesPerValue
+    }
+    if (offset != payload.size) fail()
+    writeSegment(out, marker, payload)
+}
+
+private fun writeSegment(out: ByteArrayOutputStream, marker: Int, payload: ByteArray) {
     out.write(0xFF)
     out.write(marker)
     out.write((payload.size + 2) ushr 8)
@@ -443,9 +511,13 @@ private fun writeRawSegment(out: ByteArrayOutputStream, source: ByteArray, segme
     out.write(source, start, endExclusive - start)
 }
 
-private fun writeSequentialCoefficients(frame: ParsedJpeg, coefficients: CoefficientImage): ByteArray {
+private fun writeSequentialCoefficients(
+    frame: ParsedJpeg,
+    coefficients: CoefficientImage,
+    maxEncodedBytes: Long,
+): ByteArray {
     val scan = frame.scans.single()
-    val out = ByteArrayOutputStream()
+    val out = BoundedTransformOutput(maxEncodedBytes, 0)
     val writer = CoefficientEntropyWriter(out)
     val previousDc = IntArray(frame.components.size)
     var nextRestartMarker = 0
@@ -552,6 +624,30 @@ private class CoefficientEntropyWriter(private val out: ByteArrayOutputStream) {
     }
 }
 
+private class TransformOutputLimitException : IllegalArgumentException()
+
+/** Bounds both entropy emission and assembled JPEG bytes by the open document's limit. */
+private class BoundedTransformOutput(
+    private val maximumBytes: Long,
+    initialCapacity: Int,
+) : ByteArrayOutputStream(minOf(initialCapacity.toLong(), maximumBytes).toInt()) {
+    override fun write(value: Int) {
+        reserve(1)
+        super.write(value)
+    }
+
+    override fun write(bytes: ByteArray, offset: Int, length: Int) {
+        reserve(length)
+        super.write(bytes, offset, length)
+    }
+
+    private fun reserve(length: Int) {
+        if (length < 0 || count.toLong() > maximumBytes - length.toLong()) {
+            throw TransformOutputLimitException()
+        }
+    }
+}
+
 private fun coefficientSize(value: Int): Int {
     if (value == 0) return 0
     var magnitude = if (value == Int.MIN_VALUE) Int.MAX_VALUE else kotlin.math.abs(value)
@@ -576,6 +672,7 @@ private fun transformInputDiagnostic(offset: Long): JpegTranscodeResult =
     transformDiagnostic(offset, "jpeg.transform.input.invalid", Codec.Result.kErrorInInput)
 
 private const val TRANSFORM_MARKER_SOS = 0xDA
+private const val TRANSFORM_MARKER_DQT = 0xDB
 private const val TRANSFORM_MARKER_RST0 = 0xD0
 private const val TRANSFORM_MARKER_RST7 = 0xD7
 private const val MAX_TRANSFORM_COEFFICIENT_BLOCKS: Long = 262_144L
