@@ -48,6 +48,7 @@ class GPUMaskBlurSurfaceTest {
     fun `solid and inner preserve documented coverage`() {
         assertEquals(255, alphaAt(renderRect(BlurStyle.SOLID, 2f), 12, 12, 32))
         assertTrue(alphaAt(renderRect(BlurStyle.INNER, 2f), 12, 12, 32) > 0)
+        assertEquals(0, alphaAt(renderRect(BlurStyle.INNER, 2f), 7, 12, 32))
     }
 
     @Test
