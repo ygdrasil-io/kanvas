@@ -765,6 +765,12 @@ private class WgpuOffscreenTarget(
     private val queueManager: GPUQueueManager,
     private val recordRuntimeResourceLeasesAction: (List<GPUResourceLease>) -> Unit,
 ) : GPUBackendOffscreenTarget {
+    override val maxTextureDimension2D: Int = capabilities.limits
+        ?.maxTextureDimension2D
+        ?.coerceAtMost(Int.MAX_VALUE.toLong())
+        ?.toInt()
+        ?: Int.MAX_VALUE
+
     private val safeWidth = request.width.coerceAtMost(MAX_TEXTURE_DIMENSION)
     private val safeHeight = request.height.coerceAtMost(MAX_TEXTURE_DIMENSION)
     private val format = request.colorFormat.toWgpuTextureFormat()

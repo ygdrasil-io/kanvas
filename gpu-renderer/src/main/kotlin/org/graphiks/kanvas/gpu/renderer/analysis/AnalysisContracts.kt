@@ -284,10 +284,10 @@ class GPUFirstRoutePlanner(
         )
     }
 
-    /** Builds a prepared, unexecuted blur-mask FillRect route contract. */
+    /** Builds an executable blur-mask FillRect route contract. */
     private fun blurMaskFillRectRouteDecision(command: NormalizedDrawCommand.FillRect): GPUFirstRoutePlan {
         val recordId = "analysis.fill_rect.${command.commandId.value}"
-        val routeLabel = "prepared.fill_rect.mask_blur"
+        val routeLabel = "executable.fill_rect.mask_blur"
         val pipelineKey = "mask-blur.rect-fill.rgba8unorm.src_over"
         val renderStep = "rect.fill.mask_blur"
         val consumerKind = "mask-blur.rect-fill"
@@ -304,7 +304,7 @@ class GPUFirstRoutePlanner(
             "transform-class",
             "requested-sigma=${mf.sigma}",
             "normalized-style=${mf.style.name.lowercase()}",
-            "route-status=prepared",
+            "kanvas.surface.gpu.GPUMaskBlurDispatch",
         )
         val analysisRecord = GPUDrawAnalysisRecord(
             recordId = recordId,
@@ -447,10 +447,10 @@ class GPUFirstRoutePlanner(
         )
     }
 
-    /** Builds a prepared, unexecuted blur-mask FillRRect route contract. */
+    /** Builds an executable blur-mask FillRRect route contract. */
     private fun blurMaskFillRRectRouteDecision(command: NormalizedDrawCommand.FillRRect): GPUFirstRoutePlan {
         val recordId = "analysis.fill_rrect.${command.commandId.value}"
-        val routeLabel = "prepared.fill_rrect.mask_blur"
+        val routeLabel = "executable.fill_rrect.mask_blur"
         val pipelineKey = "mask-blur.rrect-fill.rgba8unorm.src_over"
         val renderStep = "rrect.fill.mask_blur"
         val consumerKind = "mask-blur.rrect-fill"
@@ -467,7 +467,7 @@ class GPUFirstRoutePlanner(
             "transform-class",
             "requested-sigma=${mf.sigma}",
             "normalized-style=${mf.style.name.lowercase()}",
-            "route-status=prepared",
+            "kanvas.surface.gpu.GPUMaskBlurDispatch",
         )
         val analysisRecord = GPUDrawAnalysisRecord(
             recordId = recordId,
@@ -654,10 +654,10 @@ class GPUFirstRoutePlanner(
         )
     }
 
-    /** Builds a prepared, unexecuted blur-mask FillPath route contract. */
+    /** Builds an executable blur-mask FillPath route contract. */
     private fun blurMaskFillPathRouteDecision(command: NormalizedDrawCommand.FillPath): GPUFirstRoutePlan {
         val recordId = "analysis.fill_path.${command.commandId.value}"
-        val routeLabel = "prepared.path_fill.mask_blur"
+        val routeLabel = "executable.path_fill.mask_blur"
         val pipelineKey = "mask-blur.path-fill.rgba8unorm.src_over"
         val renderStep = "path.fill.mask_blur"
         val consumerKind = "mask-blur.path-fill"
@@ -676,7 +676,7 @@ class GPUFirstRoutePlanner(
             "tessellation-hash",
             "requested-sigma=${mf.sigma}",
             "normalized-style=${mf.style.name.lowercase()}",
-            "route-status=prepared",
+            "kanvas.surface.gpu.GPUMaskBlurDispatch",
         )
         val analysisRecord = GPUDrawAnalysisRecord(
             recordId = recordId,

@@ -20,6 +20,8 @@ import org.graphiks.kanvas.gpu.renderer.execution.GPUClearColor
 import org.graphiks.kanvas.types.Color
 
 import org.graphiks.kanvas.gpu.renderer.execution.GPUOffscreenTargetRequest
+import org.graphiks.kanvas.gpu.renderer.filters.MaskBlurPlan
+import org.graphiks.kanvas.gpu.renderer.filters.MaskBlurPlanner
 import org.graphiks.kanvas.gpu.renderer.geometry.PathData
 import org.graphiks.kanvas.gpu.renderer.geometry.PathTessellator
 import org.graphiks.kanvas.gpu.renderer.geometry.PathVerb as GpuPathVerb
@@ -180,6 +182,59 @@ internal fun renderViaGpu(
                         ),
                     )
                 }
+            }
+
+            fun planMaskBlur(command: NormalizedDrawCommand): MaskBlurPlan =
+                MaskBlurPlanner.plan(
+                    command.toMaskBlurRequest(width, height, t.maxTextureDimension2D, config),
+                )
+
+            fun refuseMaskBlur(command: NormalizedDrawCommand, plan: MaskBlurPlan.Refused) {
+                diagnostics.fatal(
+                    "refuse:${command.diagnosticName}",
+                    command.diagnosticName,
+                    plan.code,
+                )
+            }
+
+            fun renderMaskBlur(command: NormalizedDrawCommand, plan: MaskBlurPlan.Ready): Boolean =
+                t.renderMaskBlurCommand(
+                    sceneLabel,
+                    command,
+                    plan,
+                    sceneClear(),
+                    dispatched,
+                    diagnostics,
+                    texFormat,
+                ).rendered
+
+            fun dispatchRectDirect(command: NormalizedDrawCommand.FillRect): Boolean {
+                if (command.blend.requiresDestinationRead) {
+                    renderAdvancedBlend(command)
+                } else {
+                    t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
+                        dispatchFillRect(command, dispatched, diagnostics, width, height, config)
+                    }
+                }
+                return true
+            }
+
+            fun dispatchPathDirect(command: NormalizedDrawCommand.FillPath): Boolean {
+                if (command.blend.requiresDestinationRead) {
+                    diagnostics.fatal("refuse:drawPath:${command.commandId.value}", "drawPath", "unsupported_blend:advanced")
+                    return false
+                }
+                t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
+                    dispatchFillPath(command, dispatched, diagnostics, width, height, config)
+                }
+                return true
+            }
+
+            fun dispatchRRectDirect(command: NormalizedDrawCommand.FillRRect): Boolean {
+                t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
+                    dispatchFillRRect(command, dispatched, diagnostics, width, height, config)
+                }
+                return true
             }
 
             fun drawGlyphPath(
@@ -601,27 +656,44 @@ internal fun renderViaGpu(
                 if (suppressedLayerDepth > 0) continue
                 when (op) {
                     is DisplayOp.DrawRect -> {
-                        if (op.paint.isStroke()) {
+                        val rendered = if (op.paint.isStroke()) {
                             val cmd = op.toStrokePathCommand(cmdId, targets)
-                            if (cmd.blend.requiresDestinationRead) {
-                                diagnostics.fatal("refuse:drawRect:${cmdId.value}", "drawRect", "unsupported_blend:advanced")
-                                continue
-                            } else {
-                                t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
-                                    dispatchFillPath(cmd, dispatched, diagnostics, width, height, config)
+                            if (cmd.maskFilter == null) {
+                                if (cmd.blend.requiresDestinationRead) {
+                                    diagnostics.fatal("refuse:drawRect:${cmdId.value}", "drawRect", "unsupported_blend:advanced")
+                                    false
+                                } else {
+                                    dispatchPathDirect(cmd)
+                                }
+                            } else when (val plan = planMaskBlur(cmd)) {
+                                is MaskBlurPlan.Ready -> renderMaskBlur(cmd, plan)
+                                is MaskBlurPlan.Refused -> {
+                                    refuseMaskBlur(cmd, plan)
+                                    false
+                                }
+                                MaskBlurPlan.Identity -> {
+                                    if (cmd.blend.requiresDestinationRead) {
+                                        diagnostics.fatal("refuse:drawRect:${cmdId.value}", "drawRect", "unsupported_blend:advanced")
+                                        false
+                                    } else {
+                                        dispatchPathDirect(cmd)
+                                    }
                                 }
                             }
                         } else {
                             val cmd = op.toNormalizedCommand(cmdId, targets)
-                            if (cmd.blend.requiresDestinationRead) {
-                                renderAdvancedBlend(cmd)
-                            } else {
-                                t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
-                                    dispatchFillRect(cmd, dispatched, diagnostics, width, height, config)
+                            if (cmd.maskFilter == null) {
+                                dispatchRectDirect(cmd)
+                            } else when (val plan = planMaskBlur(cmd)) {
+                                is MaskBlurPlan.Ready -> renderMaskBlur(cmd, plan)
+                                is MaskBlurPlan.Refused -> {
+                                    refuseMaskBlur(cmd, plan)
+                                    false
                                 }
+                                MaskBlurPlan.Identity -> dispatchRectDirect(cmd)
                             }
                         }
-                        sceneHasContent = true
+                        sceneHasContent = sceneHasContent || rendered
                     }
                     is DisplayOp.DrawPath -> {
                         val paint = op.paint
@@ -634,14 +706,17 @@ internal fun renderViaGpu(
                         ) {
                             val rectCmd = DisplayOp.DrawRect(pathRect, paint, op.transform, op.clip)
                                 .toNormalizedCommand(cmdId, targets)
-                            if (rectCmd.blend.requiresDestinationRead) {
-                                renderAdvancedBlend(rectCmd)
-                            } else {
-                                t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
-                                    dispatchFillRect(rectCmd, dispatched, diagnostics, width, height, config)
+                            val rendered = if (rectCmd.maskFilter == null) {
+                                dispatchRectDirect(rectCmd)
+                            } else when (val plan = planMaskBlur(rectCmd)) {
+                                is MaskBlurPlan.Ready -> renderMaskBlur(rectCmd, plan)
+                                is MaskBlurPlan.Refused -> {
+                                    refuseMaskBlur(rectCmd, plan)
+                                    false
                                 }
+                                MaskBlurPlan.Identity -> dispatchRectDirect(rectCmd)
                             }
-                            sceneHasContent = true
+                            sceneHasContent = sceneHasContent || rendered
                             continue
                         }
                         val pathData = op.path.toPathTessellatorData()
@@ -668,15 +743,17 @@ internal fun renderViaGpu(
                         ).flatMap { listOf(it.x, it.y) }
                         val contourStarts = flattened.contourStarts.ifEmpty { listOf(0) }
                         val cmd = op.toNormalizedCommand(cmdId, targets, vertices, contourStarts, flat.size)
-                        if (cmd.blend.requiresDestinationRead) {
-                            diagnostics.fatal("refuse:drawPath:${cmdId.value}", "drawPath", "unsupported_blend:advanced")
-                            continue
-                        } else {
-                            t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
-                                dispatchFillPath(cmd, dispatched, diagnostics, width, height, config)
+                        val rendered = if (cmd.maskFilter == null) {
+                            dispatchPathDirect(cmd)
+                        } else when (val plan = planMaskBlur(cmd)) {
+                            is MaskBlurPlan.Ready -> renderMaskBlur(cmd, plan)
+                            is MaskBlurPlan.Refused -> {
+                                refuseMaskBlur(cmd, plan)
+                                false
                             }
+                            MaskBlurPlan.Identity -> dispatchPathDirect(cmd)
                         }
-                        sceneHasContent = true
+                        sceneHasContent = sceneHasContent || rendered
                     }
                     is DisplayOp.DrawRRect -> {
                         if (op.paint.isStroke()) {
@@ -684,10 +761,17 @@ internal fun renderViaGpu(
                             continue
                         }
                         val cmd = op.toNormalizedCommand(cmdId, targets)
-                        t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
-                            dispatchFillRRect(cmd, dispatched, diagnostics, width, height, config)
+                        val rendered = if (cmd.maskFilter == null) {
+                            dispatchRRectDirect(cmd)
+                        } else when (val plan = planMaskBlur(cmd)) {
+                            is MaskBlurPlan.Ready -> renderMaskBlur(cmd, plan)
+                            is MaskBlurPlan.Refused -> {
+                                refuseMaskBlur(cmd, plan)
+                                false
+                            }
+                            MaskBlurPlan.Identity -> dispatchRRectDirect(cmd)
                         }
-                        sceneHasContent = true
+                        sceneHasContent = sceneHasContent || rendered
                     }
                     is DisplayOp.DrawImage -> {
                         val cmd = op.toImageRectCommand(cmdId, targets)

@@ -191,6 +191,10 @@ val GPUBackendSession.phase0EvidenceDumpLines: List<String>
 interface GPUBackendOffscreenTarget : AutoCloseable {
     val target: GPUSurfaceTarget
 
+    /** Largest 2D texture accepted by this target before offscreen allocation. */
+    val maxTextureDimension2D: Int
+        get() = Int.MAX_VALUE
+
     /** Records one fullscreen render pass into the target with the provided clear color. */
     fun encode(
         clearColor: GPUClearColor,
