@@ -185,9 +185,10 @@ internal fun renderViaGpu(
             }
 
             fun planMaskBlur(command: NormalizedDrawCommand): MaskBlurPlan =
-                MaskBlurPlanner.plan(
-                    command.toMaskBlurRequest(width, height, t.maxTextureDimension2D, config),
-                )
+                command.maskBlurPreflightRefusalReasonOrNull()?.let(MaskBlurPlan::Refused)
+                    ?: MaskBlurPlanner.plan(
+                        command.toMaskBlurRequest(width, height, t.maxTextureDimension2D, config),
+                    )
 
             fun refuseMaskBlur(command: NormalizedDrawCommand, plan: MaskBlurPlan.Refused) {
                 diagnostics.fatal(

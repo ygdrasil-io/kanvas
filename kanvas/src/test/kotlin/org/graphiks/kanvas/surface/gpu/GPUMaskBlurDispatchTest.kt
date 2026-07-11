@@ -8,6 +8,9 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
 import org.graphiks.kanvas.gpu.renderer.commands.GPULayerFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.GPUOrderingFacts
+import org.graphiks.kanvas.gpu.renderer.commands.GPUPathFacts
+import org.graphiks.kanvas.gpu.renderer.commands.GPURRect
+import org.graphiks.kanvas.gpu.renderer.commands.GPURRectCornerRadii
 import org.graphiks.kanvas.gpu.renderer.commands.GPURect
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
@@ -30,6 +33,7 @@ import org.graphiks.kanvas.gpu.renderer.filters.NormalizedBlurStyle
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.surface.Diagnostics
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
@@ -50,6 +54,47 @@ class GPUMaskBlurDispatchTest {
         assertEquals(4, target.createdTextures.size)
     }
 
+    @Test
+    fun `non uniform rrect blur refuses before allocating local textures`() {
+        val target = CapturingMaskBlurTarget()
+        val dispatched = mutableListOf<String>()
+        val diagnostics = Diagnostics()
+
+        val result = target.renderMaskBlurCommand(
+            "scene", nonUniformRRectCommand(), readyPlan(NormalizedBlurStyle.NORMAL),
+            GPUClearColor(0.0, 0.0, 0.0, 0.0), dispatched, diagnostics, "rgba8unorm",
+        )
+
+        assertFalse(result.rendered)
+        assertTrue(dispatched.isEmpty())
+        assertEquals(0, target.createdTextures.size)
+        assertEquals("non_uniform_radii", diagnostics.entries.single().reason)
+    }
+
+    @Test
+    fun `local path mask scales dash intervals and phase`() {
+        val target = CapturingMaskBlurTarget()
+        val plan = readyPlan(NormalizedBlurStyle.NORMAL).copy(
+            scale = 0.5f,
+            deviceBounds = GPUBounds(0f, 0f, 64f, 64f),
+        )
+
+        val result = target.renderMaskBlurCommand(
+            "scene", dashedPathCommand(), plan,
+            GPUClearColor(0.0, 0.0, 0.0, 0.0), mutableListOf(), Diagnostics(), "rgba8unorm",
+        )
+
+        assertTrue(result.rendered)
+        val expected = strokeToFillGeometry(
+            contourVertices = listOf(4f, 4f, 16f, 4f),
+            contourStarts = listOf(0),
+            strokeWidth = 2f,
+            dashArray = floatArrayOf(4f, 2f),
+            dashPhase = 1f,
+        )
+        assertEquals(expected.vertices, requireNotNull(target.maskTriangleData).vertices.toList())
+    }
+
     private fun solidRectCommand(): NormalizedDrawCommand.FillRect {
         val target = GPUTargetFacts(width = 64, height = 64, colorFormat = "rgba8unorm")
         val bounds = GPUBounds(10f, 10f, 30f, 30f)
@@ -64,6 +109,66 @@ class GPUMaskBlurDispatchTest {
             bounds = bounds,
             ordering = GPUOrderingFacts(0, dependsOnDestination = false, requiresBarrier = false),
             source = GPUCommandSource(adapter = "unit-test", operation = "fillRect"),
+            antiAlias = false,
+        )
+    }
+
+    private fun nonUniformRRectCommand(): NormalizedDrawCommand.FillRRect {
+        val target = GPUTargetFacts(width = 64, height = 64, colorFormat = "rgba8unorm")
+        val bounds = GPUBounds(10f, 10f, 30f, 30f)
+        return NormalizedDrawCommand.FillRRect(
+            commandId = GPUDrawCommandID(2),
+            rrect = GPURRect(
+                rect = GPURect(10f, 10f, 30f, 30f),
+                topLeft = GPURRectCornerRadii(2f, 2f),
+                topRight = GPURRectCornerRadii(3f, 2f),
+                bottomRight = GPURRectCornerRadii(2f, 2f),
+                bottomLeft = GPURRectCornerRadii(2f, 2f),
+            ),
+            transform = GPUTransformFacts.identity(),
+            clip = GPUClipFacts.wideOpen(GPUBounds(0f, 0f, 64f, 64f)),
+            layer = GPULayerFacts.root(target),
+            material = GPUMaterialDescriptor.SolidColor(1f, 0.25f, 0.5f, 1f),
+            blend = GPUBlendFacts.srcOver(),
+            bounds = bounds,
+            ordering = GPUOrderingFacts(0, dependsOnDestination = false, requiresBarrier = false),
+            source = GPUCommandSource(adapter = "unit-test", operation = "fillRRect"),
+            antiAlias = false,
+        )
+    }
+
+    private fun dashedPathCommand(): NormalizedDrawCommand.FillPath {
+        val target = GPUTargetFacts(width = 64, height = 64, colorFormat = "rgba8unorm")
+        return NormalizedDrawCommand.FillPath(
+            commandId = GPUDrawCommandID(3),
+            pathKey = "dash-path",
+            pathDescriptor = GPUPathFacts(
+                pathKey = "dash-path",
+                verbCount = 2,
+                pointCount = 2,
+                fillRule = "winding",
+                inverseFill = false,
+                finiteProof = "all_finite",
+                volatility = "static",
+                transformClass = "identity",
+                edgeCount = 1,
+            ),
+            tessellatedVertices = listOf(8f, 8f, 32f, 8f),
+            contourStarts = listOf(0),
+            totalVertexCount = 2,
+            edgeCount = 1,
+            transform = GPUTransformFacts.identity(),
+            clip = GPUClipFacts.wideOpen(GPUBounds(0f, 0f, 64f, 64f)),
+            layer = GPULayerFacts.root(target),
+            material = GPUMaterialDescriptor.SolidColor(1f, 0.25f, 0.5f, 1f),
+            blend = GPUBlendFacts.srcOver(),
+            bounds = GPUBounds(8f, 8f, 32f, 8f),
+            ordering = GPUOrderingFacts(0, dependsOnDestination = false, requiresBarrier = false),
+            source = GPUCommandSource(adapter = "unit-test", operation = "fillPath"),
+            stroke = true,
+            strokeWidth = 4f,
+            dashIntervals = floatArrayOf(8f, 4f),
+            dashPhase = 2f,
             antiAlias = false,
         )
     }
@@ -85,6 +190,7 @@ class GPUMaskBlurDispatchTest {
     private class CapturingMaskBlurTarget : GPUBackendOffscreenTarget {
         val passKinds = mutableListOf<String>()
         val createdTextures = mutableListOf<GPUBackendOffscreenTexture>()
+        var maskTriangleData: GPUBackendTriangleData? = null
 
         override val target: GPUSurfaceTarget
             get() = error("target is not used by this pass-planning test")
@@ -153,7 +259,13 @@ class GPUMaskBlurDispatchTest {
 
             override fun drawFullscreenUniformPayloadPass(wgsl: String, colorFormat: String, draws: List<GPUBackendUniformPayloadDraw>, blendMode: GPUBlendMode?, sourceLabel: String, passBatchKind: GPUBackendSimplePassBatchKind?) = unexpected()
             override fun drawFullscreenRawUniformPass(wgsl: String, colorFormat: String, draws: List<GPUBackendRawUniformDraw>, blendMode: GPUBlendMode?, passBatchKind: GPUBackendSimplePassBatchKind?) = unexpected()
-            override fun drawFullscreenStencilPass(wgsl: String, colorFormat: String, stencilMode: GPUBackendStencilMode, triangleData: GPUBackendTriangleData?, draws: List<GPUBackendRawUniformDraw>, blendMode: GPUBlendMode?) = unexpected()
+            override fun drawFullscreenStencilPass(wgsl: String, colorFormat: String, stencilMode: GPUBackendStencilMode, triangleData: GPUBackendTriangleData?, draws: List<GPUBackendRawUniformDraw>, blendMode: GPUBlendMode?) {
+                if (stencilMode == GPUBackendStencilMode.Write) {
+                    maskTriangleData = triangleData
+                } else {
+                    passKinds += "mask"
+                }
+            }
             override fun drawFullscreenTextureUniformPass(wgsl: String, colorFormat: String, textureRgba: ByteArray, textureWidth: Int, textureHeight: Int, textureFormat: String, draws: List<GPUBackendRawUniformDraw>, blendMode: GPUBlendMode?, stencilMode: GPUBackendStencilMode?) = unexpected()
             override fun createVertexColorBuffer(data: GPUBackendVertexColorData): String = unexpected()
             override fun drawVertexColorIndexed(vertexBufferLabel: String, indexCount: Int, uniformDraw: GPUBackendRawUniformDraw, blendMode: GPUBlendMode?) = unexpected()

@@ -248,7 +248,7 @@ class GPUBackendRuntimeNativeSmokeTest {
     }
 
     @Test
-    fun `backend runtime exposes conservative GPU capabilities when backend is available`() {
+    fun `backend runtime exposes adapter backed GPU capabilities when backend is available`() {
         val runtime = GPUBackendRuntimeFactory.createOrNull()
         assumeTrue(runtime != null, "GPU backend unavailable in current environment")
 
@@ -264,7 +264,7 @@ class GPUBackendRuntimeNativeSmokeTest {
             assertEquals(8192L, limits.maxTextureDimension2D)
             assertEquals(256L, limits.copyBytesPerRowAlignment)
             assertEquals(256L, limits.minUniformBufferOffsetAlignment)
-            assertEquals("runtime.conservative", limits.source)
+            assertEquals("adapter.limits", limits.source)
             assertEquals(
                 listOf("maxTextureDimension2D", "copyBytesPerRowAlignment", "minUniformBufferOffsetAlignment"),
                 facts.map { it.name },

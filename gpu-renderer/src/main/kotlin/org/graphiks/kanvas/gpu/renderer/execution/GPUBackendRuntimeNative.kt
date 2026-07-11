@@ -448,10 +448,16 @@ private class WgpuBackendSession(
     private val runtimeResourceLeases = mutableListOf<GPUResourceLease>()
     private val queueManager = GPUQueueManager()
     private val adapterSummary = adapterSummary(glfw)
-    private val backendLimits = GPULimits.conservative(
-        maxTextureDimension2D = MAX_TEXTURE_DIMENSION.toLong(),
+    private val backendLimits = GPULimits(
+        maxTextureDimension2D = minOf(
+            glfw.wgpuContext.adapter.limits.maxTextureDimension2D.toLong(),
+            MAX_TEXTURE_DIMENSION.toLong(),
+        ),
         copyBytesPerRowAlignment = COPY_BYTES_PER_ROW_ALIGNMENT.toLong(),
-        minUniformBufferOffsetAlignment = DEFAULT_UNIFORM_BUFFER_OFFSET_ALIGNMENT.toLong(),
+        minUniformBufferOffsetAlignment = glfw.wgpuContext.adapter.limits
+            .minUniformBufferOffsetAlignment
+            .toLong(),
+        source = "adapter.limits",
     )
     private var offscreenTargetOrdinalCounter = 0L
 

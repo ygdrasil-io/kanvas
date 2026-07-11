@@ -40,6 +40,10 @@ internal fun GPUBackendOffscreenTarget.renderMaskBlurCommand(
     diagnostics: Diagnostics,
     colorFormat: String,
 ): GPUMaskBlurDispatchResult {
+    command.maskBlurPreflightRefusalReasonOrNull()?.let { reason ->
+        diagnostics.fatal("refuse:${command.diagnosticName}", command.diagnosticName, reason)
+        return GPUMaskBlurDispatchResult(rendered = false)
+    }
     val material = command.material as? GPUMaterialDescriptor.SolidColor
         ?: run {
             diagnostics.fatal(
@@ -176,6 +180,9 @@ internal fun NormalizedDrawCommand.toMaskBlurRequest(
     )
 }
 
+internal fun NormalizedDrawCommand.maskBlurPreflightRefusalReasonOrNull(): String? =
+    (this as? NormalizedDrawCommand.FillRRect)?.nonUniformRadiiRefusalReasonOrNull()
+
 private fun NormalizedDrawCommand.toLocalMaskCommand(plan: MaskBlurPlan.Ready): NormalizedDrawCommand {
     val origin = plan.deviceBounds
     val localClip = GPUClipFacts.wideOpen(
@@ -201,6 +208,8 @@ private fun NormalizedDrawCommand.toLocalMaskCommand(plan: MaskBlurPlan.Ready): 
             blend = GPUBlendFacts.srcOver(),
             bounds = bounds.toLocal(origin, plan.scale),
             strokeWidth = strokeWidth * plan.scale,
+            dashIntervals = dashIntervals?.map { it * plan.scale }?.toFloatArray(),
+            dashPhase = dashPhase * plan.scale,
             maskFilter = null,
         )
         is NormalizedDrawCommand.FillRRect -> copy(
