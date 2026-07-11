@@ -150,8 +150,20 @@ public class JpegCodec private constructor(
             return document.makeCodec()
         }
 
-        internal fun decode(document: JpegDocument, request: JpegDecodeRequest): JpegDecodeResult =
-            decode(document.makeCodec(), document.encodedSize, request)
+        internal fun decode(document: JpegDocument, request: JpegDecodeRequest): JpegDecodeResult {
+            val differentialSofOffset = document.differentialSofOffset
+            if (differentialSofOffset != null) {
+                return JpegDecodeResult(
+                    bitmap = null,
+                    diagnostic = JpegDiagnostic(
+                        code = "jpeg.differential.reference.required",
+                        offset = differentialSofOffset,
+                        result = Codec.Result.kUnimplemented,
+                    ),
+                )
+            }
+            return decode(document.makeCodec(), document.encodedSize, request)
+        }
 
         private fun decode(
             codec: JpegCodec?,

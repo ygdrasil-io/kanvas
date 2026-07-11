@@ -39,6 +39,15 @@ public class JpegDocument internal constructor(
     /** Snapshot that rejects mutation even when callers cast it to [MutableList]. */
     public val segments: List<JpegSegment> = Collections.unmodifiableList(segments.toList())
 
+    /**
+     * A differential frame cannot be decoded outside a validated JPEG hierarchy:
+     * it needs the preceding reference-frame component state (and possibly EXP
+     * geometry). The hierarchy decoder will consume this marker when available.
+     */
+    internal val differentialSofOffset: Long? = this.segments.firstOrNull { segment ->
+        JpegFrameSpec.fromSof(segment.marker)?.differential == true
+    }?.offset
+
     internal val metadata: JpegMetadata
     internal val metadataDiagnostics: List<JpegDiagnostic>
 
