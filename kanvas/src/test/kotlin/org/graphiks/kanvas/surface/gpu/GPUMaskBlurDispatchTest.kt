@@ -59,6 +59,22 @@ class GPUMaskBlurDispatchTest {
     }
 
     @Test
+    fun `mask blur uses unorm local targets before compositing into an srgb scene`() {
+        val target = CapturingMaskBlurTarget()
+
+        val result = target.renderMaskBlurCommand(
+            "scene", solidRectCommand(), readyPlan(NormalizedBlurStyle.NORMAL),
+            GPUClearColor(0.0, 0.0, 0.0, 0.0), mutableListOf(), Diagnostics(), "rgba8unorm-srgb",
+        )
+
+        assertTrue(result.rendered)
+        assertEquals(
+            listOf("rgba8unorm", "rgba8unorm", "rgba8unorm", "rgba8unorm", "rgba8unorm-srgb"),
+            target.passColorFormats,
+        )
+    }
+
+    @Test
     fun `non uniform rrect blur refuses before allocating local textures`() {
         val target = CapturingMaskBlurTarget()
         val dispatched = mutableListOf<String>()
@@ -90,6 +106,21 @@ class GPUMaskBlurDispatchTest {
             MaskBlurPlan.Identity,
             MaskBlurPlanner.plan(command.toMaskBlurRequest(64, 64, 4096, RenderConfig.DEFAULT)),
         )
+    }
+
+    @Test
+    fun `wide open clip plans the full blur halo beyond geometry bounds`() {
+        val command = solidRectCommand().copy(
+            rect = GPURect(10f, 10f, 20f, 20f),
+            clip = GPUClipFacts.wideOpen(GPUBounds(10f, 10f, 20f, 20f)),
+            bounds = GPUBounds(10f, 10f, 20f, 20f),
+            maskFilter = NormalizedMaskFilter.Blur(NormalizedBlurStyle.NORMAL, sigma = 2f),
+        )
+
+        val plan = MaskBlurPlanner.plan(command.toMaskBlurRequest(32, 32, 4096, RenderConfig.DEFAULT))
+
+        assertTrue(plan is MaskBlurPlan.Ready)
+        assertEquals(GPUBounds(4f, 4f, 26f, 26f), (plan as MaskBlurPlan.Ready).deviceBounds)
     }
 
     @Test
@@ -210,6 +241,7 @@ class GPUMaskBlurDispatchTest {
 
     private class CapturingMaskBlurTarget : GPUBackendOffscreenTarget {
         val passKinds = mutableListOf<String>()
+        val passColorFormats = mutableListOf<String>()
         val createdTextures = mutableListOf<GPUBackendOffscreenTexture>()
         var maskTriangleData: GPUBackendTriangleData? = null
 
@@ -252,6 +284,7 @@ class GPUMaskBlurDispatchTest {
                 passBatchKind: GPUBackendSimplePassBatchKind?,
             ) {
                 passKinds += "mask"
+                passColorFormats += colorFormat
             }
 
             override fun drawCompositePass(
@@ -266,6 +299,7 @@ class GPUMaskBlurDispatchTest {
                     destinationLabel.endsWith(":vertical") -> "blur-v"
                     else -> "scene"
                 }
+                passColorFormats += colorFormat
             }
 
             override fun drawBlendPass(
@@ -276,6 +310,7 @@ class GPUMaskBlurDispatchTest {
                 draws: List<GPUBackendRawUniformDraw>,
             ) {
                 passKinds += "style"
+                passColorFormats += colorFormat
             }
 
             override fun drawFullscreenUniformPayloadPass(wgsl: String, colorFormat: String, draws: List<GPUBackendUniformPayloadDraw>, blendMode: GPUBlendMode?, sourceLabel: String, passBatchKind: GPUBackendSimplePassBatchKind?) = unexpected()

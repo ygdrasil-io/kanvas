@@ -811,6 +811,7 @@ private class WgpuOffscreenTarget(
     )
     private val vertexBuffers = mutableMapOf<String, Pair<GPUBuffer, Int>>()
     private val offscreenTextures = mutableMapOf<String, GPUTexture>()
+    private val offscreenTextureFormats = mutableMapOf<String, GPUTextureFormat>()
     private val frameOrdinalCounter = AtomicLong(0L)
     private val textureFrameOrdinalCounter = AtomicLong(0L)
     private val pendingReadbackSubmissionIds = ArrayDeque<GPUQueueSubmissionId>()
@@ -1037,6 +1038,7 @@ private class WgpuOffscreenTarget(
             ),
         )
         offscreenTextures[label] = tex
+        offscreenTextureFormats[label] = texture.format.toWgpuTextureFormat()
         telemetryRecorder.recordIntermediateTextureCreated()
         return label
     }
@@ -1077,7 +1079,8 @@ private class WgpuOffscreenTarget(
             encodeOffscreenTextureInternal(
                 textureLabel = textureLabel,
                 clearColor = clearColor,
-                textureFormat = format,
+                textureFormat = offscreenTextureFormats[textureLabel]
+                    ?: error("Offscreen texture format not found: $textureLabel"),
                 resources = resources,
                 block = { recorder -> recorder.block() },
             )

@@ -198,8 +198,15 @@ internal fun renderViaGpu(
                 )
             }
 
-            fun renderMaskBlur(command: NormalizedDrawCommand, plan: MaskBlurPlan.Ready): Boolean =
-                t.renderMaskBlurCommand(
+            fun renderMaskBlur(command: NormalizedDrawCommand, plan: MaskBlurPlan.Ready): Boolean {
+                plan.diagnostics.forEach { diagnostic ->
+                    diagnostics.degrade(
+                        "degrade:${command.diagnosticName}:${command.commandId.value}:${diagnostic.code}",
+                        command.diagnosticName,
+                        diagnostic.code,
+                    )
+                }
+                return t.renderMaskBlurCommand(
                     sceneLabel,
                     command,
                     plan,
@@ -208,6 +215,7 @@ internal fun renderViaGpu(
                     diagnostics,
                     texFormat,
                 ).rendered
+            }
 
             fun dispatchRectDirect(command: NormalizedDrawCommand.FillRect): Boolean {
                 if (command.blend.requiresDestinationRead) {
