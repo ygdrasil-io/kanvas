@@ -72,6 +72,21 @@ class JpegTransformTest {
     }
 
     @Test
+    fun `identity refuses non one padding immediately before restart`() {
+        val valid = restartGrayscaleFixture()
+        assertNull(JpegDocument.open(valid).document!!.transcode(JpegTransform.Identity).diagnostic)
+
+        val invalidPadding = valid.copyOf()
+        val invalidPaddingDocument = JpegDocument.open(invalidPadding).document!!
+        val restart = invalidPaddingDocument.segments.single { it.marker == 0xD0 }
+        // The zero-block codes are 00. Only the six following padding bits are
+        // changed from 111111 to 100000; the RST0 marker itself is untouched.
+        invalidPadding[restart.offset.toInt() - 1] = 0x20
+
+        assertTransformDiagnostic(invalidPadding, JpegTransform.Identity, "jpeg.transform.entropy.invalid")
+    }
+
+    @Test
     fun `MCU aligned crop is a coefficient transform and preserves unknown APP`() {
         // 4:4:4 avoids a deliberately different chroma edge interpolation at
         // a newly cropped boundary; it lets this test assert literal decoded

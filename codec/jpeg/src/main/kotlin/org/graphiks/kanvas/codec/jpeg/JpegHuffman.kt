@@ -82,6 +82,7 @@ internal class EntropyBitReader(private val bytes: ByteArray) {
     }
 
     fun consumeRestart(expected: Int) {
+        validatePaddingBits()
         remaining = 0
         if (offset >= bytes.size || bytes[offset] != 0xFF.toByte()) fail()
         while (offset < bytes.size && bytes[offset] == 0xFF.toByte()) offset++
@@ -94,11 +95,14 @@ internal class EntropyBitReader(private val bytes: ByteArray) {
      * stuffed data, restart marker, or other entropy byte may remain.
      */
     fun finish() {
-        if (remaining > 0) {
-            val paddingMask = (1 shl remaining) - 1
-            if ((current and paddingMask) != paddingMask) fail()
-        }
+        validatePaddingBits()
         if (offset != bytes.size) fail()
+    }
+
+    private fun validatePaddingBits() {
+        if (remaining == 0) return
+        val paddingMask = (1 shl remaining) - 1
+        if ((current and paddingMask) != paddingMask) fail()
     }
 }
 
