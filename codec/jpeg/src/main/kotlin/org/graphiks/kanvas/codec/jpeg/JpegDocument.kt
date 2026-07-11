@@ -23,6 +23,13 @@ public data class JpegDecodeResult(
     val diagnostic: JpegDiagnostic?,
 )
 
+/**
+ * Parsed JPEG container that owns the encoded bytes used later for metadata and decoding.
+ *
+ * The [open] overload taking a [ByteArray] takes an ownership copy. The stream overload
+ * materializes its bounded input once and transfers that buffer directly to this document,
+ * avoiding a second encoded-source copy (zero-copy transfer).
+ */
 public class JpegDocument internal constructor(
     source: ByteArray,
     segments: List<JpegSegment>,

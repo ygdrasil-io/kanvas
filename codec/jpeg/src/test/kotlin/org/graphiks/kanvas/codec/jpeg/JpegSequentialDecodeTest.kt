@@ -3,6 +3,7 @@ package org.graphiks.kanvas.codec.jpeg
 import java.io.ByteArrayOutputStream
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.skia.foundation.SkAlphaType
@@ -53,6 +54,72 @@ class JpegSequentialDecodeTest {
                 assertPixel(jpeg, yCbCrToArgb(160, 96, 192), "h=$h v=$v")
             }
         }
+    }
+
+    @Test
+    fun `decodes SOF0 and SOF1 multi SOS component scans with restart intervals`() {
+        for (marker in listOf(SOF0, SOF1)) {
+            val jpeg = sequentialJpeg(
+                marker = marker,
+                precision = 8,
+                components = listOf(
+                    FixtureComponent(1, 0x21, listOf(160, 160, 160, 160)),
+                    FixtureComponent(2, 0x11, listOf(96, 160)),
+                    FixtureComponent(3, 0x11, listOf(128, 128)),
+                ),
+                scans = listOf(listOf(0), listOf(1), listOf(2)),
+                mcuColumns = 2,
+                restartInterval = 1,
+            )
+
+            val document = JpegDocument.open(jpeg).document!!
+            val frame = parseJpeg(jpeg, document.metadata)!!
+            assertEquals(3, frame.scans.size, "marker=$marker")
+            assertEquals(3, frame.components.size, "marker=$marker")
+            assertPixelAt(jpeg, 15, 0, yCbCrToArgb(160, 112, 128), "marker=$marker x=15")
+            assertPixelAt(jpeg, 16, 0, yCbCrToArgb(160, 144, 128), "marker=$marker x=16")
+        }
+    }
+
+    @Test
+    fun `rejects multi SOS sequential frames with missing duplicate or unknown table components`() {
+        val components = listOf(
+            FixtureComponent(1, 0x11, 160),
+            FixtureComponent(2, 0x11, 96),
+            FixtureComponent(3, 0x11, 192),
+        )
+
+        assertNull(
+            JpegCodec.Decoder.make(
+                sequentialJpeg(
+                    marker = SOF0,
+                    precision = 8,
+                    components = components,
+                    scans = listOf(listOf(0), listOf(0), listOf(2)),
+                ),
+            ),
+        )
+        assertNull(
+            JpegCodec.Decoder.make(
+                sequentialJpeg(
+                    marker = SOF0,
+                    precision = 8,
+                    components = components,
+                    scans = listOf(listOf(0), listOf(1)),
+                ),
+            ),
+        )
+        assertNull(
+            JpegCodec.Decoder.make(
+                sequentialJpeg(
+                    marker = SOF0,
+                    precision = 8,
+                    components = components,
+                    scans = listOf(listOf(0), listOf(1), listOf(2)),
+                    tableSelectors = mapOf(2 to 0x11),
+                ),
+            ),
+        )
     }
 
     @Test
@@ -115,7 +182,7 @@ class JpegSequentialDecodeTest {
         )
         val document = JpegDocument.open(data).document!!
         val frame = parseJpeg(data, document.metadata)!!
-        val samples = decodeSequentialDct(frame, frame.scans.single())
+        val samples = decodeSequentialDct(frame)
 
         assertEquals(12, samples.precision)
         assertEquals(2_049, samples.planes.single()[0])
@@ -196,12 +263,25 @@ class JpegSequentialDecodeTest {
         assertEquals(org.graphiks.kanvas.codec.Codec.Result.kErrorInInput, result)
     }
 
+    @Test
+    fun `rejects sequential AC magnitude larger than SOF1 permits`() {
+        val codec = JpegCodec.Decoder.make(malformedAcMagnitudeJpeg(SOF1, 12))!!
+
+        val (_, result) = codec.getImage()
+
+        assertEquals(org.graphiks.kanvas.codec.Codec.Result.kErrorInInput, result)
+    }
+
     private fun assertPixel(data: ByteArray, expected: Int, label: String = "") {
+        assertPixelAt(data, 0, 0, expected, label)
+    }
+
+    private fun assertPixelAt(data: ByteArray, x: Int, y: Int, expected: Int, label: String = "") {
         val codec = JpegCodec.Decoder.make(data)
         assertNotNull(codec, label)
         val (bitmap, result) = codec!!.getImage()
         assertEquals(org.graphiks.kanvas.codec.Codec.Result.kSuccess, result, label)
-        assertEquals(expected, bitmap!!.getPixel(0, 0), label)
+        assertEquals(expected, bitmap!!.getPixel(x, y), label)
     }
 
     private fun sequentialJpeg(
@@ -209,6 +289,11 @@ class JpegSequentialDecodeTest {
         precision: Int,
         components: List<FixtureComponent>,
         adobeTransform: Int? = null,
+        scans: List<List<Int>> = listOf(components.indices.toList()),
+        mcuColumns: Int = 1,
+        mcuRows: Int = 1,
+        restartInterval: Int = 0,
+        tableSelectors: Map<Int, Int> = emptyMap(),
     ): ByteArray {
         val maxH = components.maxOf { it.sampling ushr 4 }
         val maxV = components.maxOf { it.sampling and 0x0F }
@@ -229,8 +314,8 @@ class JpegSequentialDecodeTest {
         }
         out.writeSegment(marker) {
             write(precision)
-            writeU16BE(maxV * 8)
-            writeU16BE(maxH * 8)
+            writeU16BE(maxV * 8 * mcuRows)
+            writeU16BE(maxH * 8 * mcuColumns)
             write(components.size)
             for (component in components) {
                 write(component.id)
@@ -251,31 +336,74 @@ class JpegSequentialDecodeTest {
             repeat(15) { write(0) }
             write(0)
         }
-        out.writeSegment(0xDA) {
-            write(components.size)
-            for (component in components) {
-                write(component.id)
+        if (restartInterval > 0) {
+            out.writeSegment(0xDD) { writeU16BE(restartInterval) }
+        }
+        for (scan in scans) {
+            out.writeSegment(0xDA) {
+                write(scan.size)
+                for (index in scan) {
+                    write(components[index].id)
+                    write(tableSelectors[index] ?: 0)
+                }
+                write(0)
+                write(63)
                 write(0)
             }
-            write(0)
-            write(63)
-            write(0)
-        }
-        val previousDc = IntArray(components.size)
-        val bits = buildString {
-            for ((index, component) in components.withIndex()) {
-                val desiredDc = (component.sample - (1 shl (precision - 1))) * 8
-                repeat((component.sampling ushr 4) * (component.sampling and 0x0F)) {
-                    val difference = desiredDc - previousDc[index]
-                    previousDc[index] = desiredDc
-                    val category = category(difference)
-                    append(category.toString(2).padStart(4, '0'))
-                    append(amplitude(difference, category))
-                    append('0')
+            val previousDc = IntArray(components.size)
+            fun encodeBlock(index: Int, blockIndex: Int): String {
+                val component = components[index]
+                val sample = component.samples[blockIndex % component.samples.size]
+                val desiredDc = (sample - (1 shl (precision - 1))) * 8
+                val difference = desiredDc - previousDc[index]
+                previousDc[index] = desiredDc
+                val category = category(difference)
+                return category.toString(2).padStart(4, '0') + amplitude(difference, category) + '0'
+            }
+            val mcuBits = if (scan.size == 1) {
+                val index = scan.single()
+                val component = components[index]
+                val h = component.sampling ushr 4
+                val v = component.sampling and 0x0F
+                ArrayList<String>(mcuColumns * mcuRows * h * v).apply {
+                    for (blockY in 0 until mcuRows * v) {
+                        for (blockX in 0 until mcuColumns * h) {
+                            add(encodeBlock(index, blockY * mcuColumns * h + blockX))
+                            if (restartInterval > 0 && size % restartInterval == 0 &&
+                                size < mcuColumns * mcuRows * h * v
+                            ) {
+                                previousDc.fill(0)
+                            }
+                        }
+                    }
+                }
+            } else {
+                ArrayList<String>(mcuColumns * mcuRows).apply {
+                    for (mcuY in 0 until mcuRows) {
+                        for (mcuX in 0 until mcuColumns) {
+                            add(buildString {
+                                for (index in scan) {
+                                    val component = components[index]
+                                    val h = component.sampling ushr 4
+                                    val v = component.sampling and 0x0F
+                                    for (blockY in 0 until v) {
+                                        for (blockX in 0 until h) {
+                                            val blockIndex =
+                                                (mcuY * v + blockY) * (mcuColumns * h) + mcuX * h + blockX
+                                            append(encodeBlock(index, blockIndex))
+                                        }
+                                    }
+                                }
+                            })
+                            if (restartInterval > 0 && size % restartInterval == 0 && size < mcuColumns * mcuRows) {
+                                previousDc.fill(0)
+                            }
+                        }
+                    }
                 }
             }
+            out.write(entropyMcuBits(mcuBits, restartInterval))
         }
-        out.write(entropyBits(bits))
         out.writeMarker(0xD9)
         return out.toByteArray()
     }
@@ -321,15 +449,15 @@ class JpegSequentialDecodeTest {
         return out.toByteArray()
     }
 
-    private fun malformedAcMagnitudeJpeg(): ByteArray {
+    private fun malformedAcMagnitudeJpeg(marker: Int = SOF0, precision: Int = 8): ByteArray {
         val out = ByteArrayOutputStream()
         out.writeMarker(0xD8)
         out.writeSegment(0xDB) {
             write(0)
             repeat(64) { write(1) }
         }
-        out.writeSegment(SOF0) {
-            write(8)
+        out.writeSegment(marker) {
+            write(precision)
             writeU16BE(8)
             writeU16BE(8)
             write(1)
@@ -388,6 +516,17 @@ class JpegSequentialDecodeTest {
         }.toByteArray()
     }
 
+    private fun entropyMcuBits(mcuBits: List<String>, restartInterval: Int): ByteArray {
+        if (restartInterval == 0) return entropyBits(mcuBits.joinToString(separator = ""))
+        return ByteArrayOutputStream().apply {
+            for (start in mcuBits.indices step restartInterval) {
+                val end = (start + restartInterval).coerceAtMost(mcuBits.size)
+                write(entropyBits(mcuBits.subList(start, end).joinToString(separator = "")))
+                if (end < mcuBits.size) writeMarker(0xD0 + (start / restartInterval and 7))
+            }
+        }.toByteArray()
+    }
+
     private fun yCbCrToArgb(y: Int, cb: Int, cr: Int): Int {
         val r = (y + 1.402 * (cr - 128)).roundToInt().coerceIn(0, 255)
         val g = (y - 0.344136 * (cb - 128) - 0.714136 * (cr - 128)).roundToInt().coerceIn(0, 255)
@@ -418,7 +557,9 @@ class JpegSequentialDecodeTest {
         write(value and 0xFF)
     }
 
-    private data class FixtureComponent(val id: Int, val sampling: Int, val sample: Int)
+    private data class FixtureComponent(val id: Int, val sampling: Int, val samples: List<Int>) {
+        constructor(id: Int, sampling: Int, sample: Int) : this(id, sampling, listOf(sample))
+    }
 
     private companion object {
         const val SOF0 = 0xC0

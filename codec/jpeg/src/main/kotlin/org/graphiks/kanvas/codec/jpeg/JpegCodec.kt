@@ -50,8 +50,7 @@ public class JpegCodec private constructor(
             if (jpeg.coding == JpegCoding.kProgressive) {
                 DecodedPixels(decodeProgressive(jpeg) ?: return Result.kUnimplemented)
             } else {
-                val scan = jpeg.scans.singleOrNull() ?: fail()
-                val samples = decodeSequentialDct(jpeg, scan)
+                val samples = decodeSequentialDct(jpeg)
                 DecodedPixels(
                     rgba8888 = composePixels(samples, jpeg.colorModel()),
                     rgbaF16 = if (info.colorType == SkColorType.kRGBA_F16Norm) {
@@ -233,6 +232,11 @@ internal data class Scan(
 internal data class EntropyScan(
     val scan: Scan,
     val data: ByteArray,
+    /** Decoder state active when this SOS began; arrays are shallow copies of immutable tables. */
+    val quantTables: Array<IntArray?>,
+    val dcTables: Array<HuffmanTable?>,
+    val acTables: Array<HuffmanTable?>,
+    val restartInterval: Int,
 )
 
 internal enum class JpegCoding {
@@ -293,7 +297,14 @@ internal fun parseJpeg(data: ByteArray, metadata: JpegMetadata): ParsedJpeg? {
                         if (next in 0xD0..0xD7 && restartInterval == 0) return null
                         if (next != 0x00 && next !in 0xD0..0xD7) {
                             scanData = data.copyOfRange(scanStart, offset)
-                            scans += EntropyScan(current, scanData)
+                            scans += EntropyScan(
+                                scan = current,
+                                data = scanData,
+                                quantTables = quantTables.copyOf(),
+                                dcTables = dcTables.copyOf(),
+                                acTables = acTables.copyOf(),
+                                restartInterval = restartInterval,
+                            )
                             if (next == MARKER_EOI) {
                                 return buildParsed(
                                     width,
@@ -302,7 +313,7 @@ internal fun parseJpeg(data: ByteArray, metadata: JpegMetadata): ParsedJpeg? {
                                     quantTables,
                                     dcTables,
                                     acTables,
-                                    if (currentCoding == JpegCoding.kProgressive) frameComponents else current.components,
+                                    frameComponents,
                                     scanData,
                                     restartInterval,
                                     metadata,
@@ -314,7 +325,6 @@ internal fun parseJpeg(data: ByteArray, metadata: JpegMetadata): ParsedJpeg? {
                                     scans.toList(),
                                 )
                             }
-                            if (currentCoding == JpegCoding.kBaseline) return null
                             offset = markerStart
                             break
                         }
@@ -367,7 +377,7 @@ internal fun parseJpeg(data: ByteArray, metadata: JpegMetadata): ParsedJpeg? {
             quantTables,
             dcTables,
             acTables,
-            if (coding == JpegCoding.kProgressive) frameComponents else lastScan.components,
+            frameComponents,
             scanData,
             restartInterval,
             metadata,
@@ -431,25 +441,9 @@ private fun buildParsed(
             scans,
         )
     }
-    for (component in cs) {
-        if (component.h !in 1..4 || component.v !in 1..4) return null
-        if (
-            component.quantTable !in quantTables.indices ||
-            component.dcTable !in dcTables.indices ||
-            component.acTable !in acTables.indices
-        ) {
-            return null
-        }
-        if (
-            quantTables[component.quantTable] == null ||
-            dcTables[component.dcTable] == null ||
-            acTables[component.acTable] == null
-        ) {
-            return null
-        }
-    }
+    if (!validateSequentialScans(cs, scans)) return null
     if (colorModelFor(cs, metadata) == null) return null
-    if (scanData.isEmpty()) return null
+    if (scans.isEmpty() || scans.any { it.data.isEmpty() }) return null
     return ParsedJpeg(
         width,
         height,
@@ -468,6 +462,34 @@ private fun buildParsed(
         scanCount,
         scans,
     )
+}
+
+private fun validateSequentialScans(
+    frameComponents: List<Component>,
+    scans: List<EntropyScan>,
+): Boolean {
+    val seen = HashSet<Int>(frameComponents.size)
+    for (component in frameComponents) {
+        if (component.h !in 1..4 || component.v !in 1..4) return false
+    }
+    for (entropyScan in scans) {
+        val scan = entropyScan.scan
+        if (scan.components.isEmpty()) return false
+        for (component in scan.components) {
+            if (!seen.add(component.frameIndex)) return false
+            if (
+                component.quantTable !in entropyScan.quantTables.indices ||
+                component.dcTable !in entropyScan.dcTables.indices ||
+                component.acTable !in entropyScan.acTables.indices ||
+                entropyScan.quantTables[component.quantTable] == null ||
+                entropyScan.dcTables[component.dcTable] == null ||
+                entropyScan.acTables[component.acTable] == null
+            ) {
+                return false
+            }
+        }
+    }
+    return seen.size == frameComponents.size
 }
 
 private fun ParsedJpeg.colorModel(): JpegColorModel = colorModelFor(components, metadata) ?: fail()
@@ -575,11 +597,7 @@ private fun parseSos(
     var p = start
     val componentCount = data[p++].toInt() and 0xFF
     if (end - start != 4 + componentCount * 2) return null
-    if (progressive) {
-        if (componentCount !in 1..frame.size) return null
-    } else if (componentCount != frame.size) {
-        return null
-    }
+    if (componentCount !in 1..frame.size) return null
     val components = ArrayList<Component>(componentCount)
     val seen = HashSet<Int>()
     for (i in 0 until componentCount) {
