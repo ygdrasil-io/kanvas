@@ -11,3 +11,11 @@ public class JpegSegment internal constructor(
     val offset: Long,
     val range: IntRange,
 )
+
+/** Stable progressive scan validation failure surfaced by [JpegDocument.decode]. */
+internal class ProgressiveJpegException(
+    val diagnosticCode: String,
+) : IllegalArgumentException(diagnosticCode)
+
+internal fun progressiveFailure(diagnosticCode: String): Nothing =
+    throw ProgressiveJpegException(diagnosticCode)

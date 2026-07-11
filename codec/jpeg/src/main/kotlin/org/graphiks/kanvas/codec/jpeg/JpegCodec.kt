@@ -24,6 +24,8 @@ public class JpegCodec private constructor(
     private val jpeg: ParsedJpeg,
 ) : Codec() {
 
+    private var lastDecodeDiagnosticCode: String? = null
+
     private val cachedInfo: SkImageInfo by lazy {
         SkImageInfo.Make(
             width = if (jpeg.metadata.origin.swapsWidthHeight()) jpeg.height else jpeg.width,
@@ -43,12 +45,21 @@ public class JpegCodec private constructor(
     override fun getOrigin(): SkEncodedOrigin = jpeg.metadata.origin
 
     override fun getPixels(info: SkImageInfo, dst: SkBitmap): Result {
+        lastDecodeDiagnosticCode = null
         if (dst.width != info.width || dst.height != info.height) return Result.kInvalidParameters
         if (dst.colorType != info.colorType) return Result.kInvalidParameters
         if (!canDecodeTo(info.colorType)) return Result.kInvalidConversion
         val pixels = try {
             if (jpeg.coding == JpegCoding.kProgressive) {
-                DecodedPixels(decodeProgressive(jpeg) ?: return Result.kUnimplemented)
+                val samples = decodeProgressiveDct(jpeg)
+                DecodedPixels(
+                    rgba8888 = composePixels(samples, jpeg.colorModel()),
+                    rgbaF16 = if (info.colorType == SkColorType.kRGBA_F16Norm) {
+                        composeF16Pixels(samples, jpeg.colorModel())
+                    } else {
+                        null
+                    },
+                )
             } else {
                 val samples = decodeSequentialDct(jpeg)
                 DecodedPixels(
@@ -60,6 +71,9 @@ public class JpegCodec private constructor(
                     },
                 )
             }
+        } catch (failure: ProgressiveJpegException) {
+            lastDecodeDiagnosticCode = failure.diagnosticCode
+            return Result.kErrorInInput
         } catch (_: IllegalArgumentException) {
             return Result.kErrorInInput
         }
@@ -77,6 +91,8 @@ public class JpegCodec private constructor(
         if (!PixmapUtils.Orient(dst, raw, jpeg.metadata.origin)) return Result.kInvalidParameters
         return Result.kSuccess
     }
+
+    private fun lastDecodeDiagnosticCode(): String? = lastDecodeDiagnosticCode
 
     private fun canDecodeTo(colorType: SkColorType): Boolean =
         colorType == SkColorType.kRGBA_8888 || colorType == SkColorType.kRGBA_F16Norm
@@ -163,7 +179,7 @@ public class JpegCodec private constructor(
                 JpegDecodeResult(
                     bitmap = null,
                     diagnostic = JpegDiagnostic(
-                        code = "jpeg.decode.${result.name}",
+                        code = codec.lastDecodeDiagnosticCode() ?: "jpeg.decode.${result.name}",
                         offset = encodedSize,
                         result = result,
                     ),
@@ -621,309 +637,6 @@ private fun parseSos(
         return null
     }
     return Scan(components, spectralStart, spectralEnd, approx)
-}
-
-private fun decodeProgressive(jpeg: ParsedJpeg): IntArray? {
-    if (jpeg.components.size != 1) return null
-    if (jpeg.scans.isEmpty()) return null
-    if (jpeg.scans.size == 1) {
-        val scan = jpeg.scans.single().scan
-        if (scan.spectralStart != 0 || scan.spectralEnd != 0 || scan.successiveApprox != 0) return null
-    }
-    return decodeProgressiveGrayscaleInitial(jpeg)
-}
-
-private fun decodeProgressiveGrayscaleInitial(jpeg: ParsedJpeg): IntArray? {
-    val component = jpeg.components.single()
-    if (component.h != 1 || component.v != 1) fail()
-    val quant = jpeg.quantTables[component.quantTable] ?: fail()
-    val blocksX = (jpeg.width + 7) / 8
-    val blocksY = (jpeg.height + 7) / 8
-    val totalMcus = blocksX * blocksY
-    val blockCoeffs = Array(totalMcus) { IntArray(64) }
-    var sawDc = false
-    var dcApproxLow = -1
-
-    for (entropyScan in jpeg.scans) {
-        val scan = entropyScan.scan
-        if (scan.components.size != 1 || scan.components.single().id != component.id) return null
-        val successiveHigh = scan.successiveApprox ushr 4
-        val successiveLow = scan.successiveApprox and 0x0F
-        if (scan.spectralStart == 0) {
-            if (scan.spectralEnd != 0) return null
-            if (successiveHigh == 0) {
-                if (sawDc) return null
-                decodeProgressiveGrayscaleDcScan(jpeg, entropyScan, blockCoeffs, quant, successiveLow)
-                sawDc = true
-                dcApproxLow = successiveLow
-            } else {
-                if (!sawDc || successiveHigh != dcApproxLow || successiveLow != successiveHigh - 1) return null
-                decodeProgressiveGrayscaleDcRefinementScan(jpeg, entropyScan, blockCoeffs, quant, successiveLow)
-                dcApproxLow = successiveLow
-            }
-        } else {
-            if (!sawDc) return null
-            if (successiveHigh == 0) {
-                decodeProgressiveGrayscaleAcScan(jpeg, entropyScan, blockCoeffs, quant, successiveLow)
-            } else {
-                if (successiveLow != successiveHigh - 1) return null
-                decodeProgressiveGrayscaleAcRefinementScan(jpeg, entropyScan, blockCoeffs, quant, successiveLow)
-            }
-        }
-    }
-
-    if (!sawDc) return null
-    val pixels = IntArray(jpeg.width * jpeg.height)
-    for (by in 0 until blocksY) {
-        for (bx in 0 until blocksX) {
-            val block = idct(blockCoeffs[by * blocksX + bx])
-            for (y in 0 until 8) {
-                val py = by * 8 + y
-                if (py >= jpeg.height) continue
-                for (x in 0 until 8) {
-                    val px = bx * 8 + x
-                    if (px >= jpeg.width) continue
-                    val v = (block[y * 8 + x] + 128).coerceIn(0, 255)
-                    pixels[py * jpeg.width + px] = argb(0xFF, v, v, v)
-                }
-            }
-        }
-    }
-    return pixels
-}
-
-private fun decodeProgressiveGrayscaleDcScan(
-    jpeg: ParsedJpeg,
-    entropyScan: EntropyScan,
-    blockCoeffs: Array<IntArray>,
-    quant: IntArray,
-    successiveLow: Int,
-) {
-    val component = entropyScan.scan.components.single()
-    val dcTable = jpeg.dcTables[component.dcTable] ?: fail()
-    val reader = EntropyBitReader(entropyScan.data)
-    var previousDc = 0
-    var nextRestartMarker = 0
-    for (blockIndex in blockCoeffs.indices) {
-        val dcCategory = dcTable.decode(reader)
-        if (dcCategory !in 0..11) fail()
-        previousDc += receiveAndExtend(reader, dcCategory)
-        blockCoeffs[blockIndex][0] = previousDc * (1 shl successiveLow) * quant[0]
-        if (jpeg.restartInterval > 0 && (blockIndex + 1) % jpeg.restartInterval == 0 && blockIndex + 1 < blockCoeffs.size) {
-            reader.consumeRestart(nextRestartMarker)
-            nextRestartMarker = (nextRestartMarker + 1) and 7
-            previousDc = 0
-        }
-    }
-}
-
-private fun decodeProgressiveGrayscaleDcRefinementScan(
-    jpeg: ParsedJpeg,
-    entropyScan: EntropyScan,
-    blockCoeffs: Array<IntArray>,
-    quant: IntArray,
-    successiveLow: Int,
-) {
-    val reader = EntropyBitReader(entropyScan.data)
-    var nextRestartMarker = 0
-    val refinement = (1 shl successiveLow) * quant[0]
-    for (blockIndex in blockCoeffs.indices) {
-        if (reader.readBit() != 0) {
-            blockCoeffs[blockIndex][0] += refinement
-        }
-        if (jpeg.restartInterval > 0 && (blockIndex + 1) % jpeg.restartInterval == 0 && blockIndex + 1 < blockCoeffs.size) {
-            reader.consumeRestart(nextRestartMarker)
-            nextRestartMarker = (nextRestartMarker + 1) and 7
-        }
-    }
-}
-
-private fun decodeProgressiveGrayscaleAcScan(
-    jpeg: ParsedJpeg,
-    entropyScan: EntropyScan,
-    blockCoeffs: Array<IntArray>,
-    quant: IntArray,
-    successiveLow: Int,
-) {
-    val scan = entropyScan.scan
-    val component = scan.components.single()
-    val acTable = jpeg.acTables[component.acTable] ?: fail()
-    val reader = EntropyBitReader(entropyScan.data)
-    var nextRestartMarker = 0
-    val scale = 1 shl successiveLow
-    var eobRun = 0
-    for (blockIndex in blockCoeffs.indices) {
-        if (eobRun > 0) {
-            eobRun--
-            if (jpeg.restartInterval > 0 && (blockIndex + 1) % jpeg.restartInterval == 0 && blockIndex + 1 < blockCoeffs.size) {
-                reader.consumeRestart(nextRestartMarker)
-                nextRestartMarker = (nextRestartMarker + 1) and 7
-                eobRun = 0
-            }
-            continue
-        }
-        var k = scan.spectralStart
-        while (k <= scan.spectralEnd) {
-            val rs = acTable.decode(reader)
-            if (rs == 0x00) break
-            val run = rs ushr 4
-            val size = rs and 0x0F
-            if (size == 0) {
-                if (run == 15) {
-                    k += 16
-                    continue
-                }
-                eobRun = (1 shl run) + reader.readBits(run)
-                eobRun--
-                break
-            }
-            k += run
-            if (k > scan.spectralEnd) fail()
-            val coefficientIndex = JPEG_ZIGZAG[k]
-            blockCoeffs[blockIndex][coefficientIndex] =
-                receiveAndExtend(reader, size) * scale * quant[coefficientIndex]
-            k++
-        }
-        if (jpeg.restartInterval > 0 && (blockIndex + 1) % jpeg.restartInterval == 0 && blockIndex + 1 < blockCoeffs.size) {
-            reader.consumeRestart(nextRestartMarker)
-            nextRestartMarker = (nextRestartMarker + 1) and 7
-            eobRun = 0
-        }
-    }
-}
-
-private fun decodeProgressiveGrayscaleAcRefinementScan(
-    jpeg: ParsedJpeg,
-    entropyScan: EntropyScan,
-    blockCoeffs: Array<IntArray>,
-    quant: IntArray,
-    successiveLow: Int,
-) {
-    val scan = entropyScan.scan
-    val component = scan.components.single()
-    val acTable = jpeg.acTables[component.acTable] ?: fail()
-    val reader = EntropyBitReader(entropyScan.data)
-    var nextRestartMarker = 0
-    val refinement = 1 shl successiveLow
-    var eobRun = 0
-    for (blockIndex in blockCoeffs.indices) {
-        var k = scan.spectralStart
-        if (eobRun > 0) {
-            refineExistingAcCoefficients(blockCoeffs[blockIndex], quant, reader, refinement, k, scan.spectralEnd)
-            eobRun--
-        } else {
-            while (k <= scan.spectralEnd) {
-                val coefficientIndex = JPEG_ZIGZAG[k]
-                if (blockCoeffs[blockIndex][coefficientIndex] != 0) {
-                    refineExistingAcCoefficient(blockCoeffs[blockIndex], quant, reader, refinement, coefficientIndex)
-                    k++
-                    continue
-                }
-
-                val rs = acTable.decode(reader)
-                val run = rs ushr 4
-                val size = rs and 0x0F
-                if (size == 0) {
-                    if (run == 15) {
-                        k = skipZeroAcCoefficientsForRefinement(
-                            blockCoeffs[blockIndex],
-                            quant,
-                            reader,
-                            refinement,
-                            k,
-                            scan.spectralEnd,
-                            zeroCount = 16,
-                        )
-                        continue
-                    }
-                    eobRun = (1 shl run) + reader.readBits(run)
-                    refineExistingAcCoefficients(blockCoeffs[blockIndex], quant, reader, refinement, k, scan.spectralEnd)
-                    eobRun--
-                    break
-                }
-                if (size != 1) fail()
-                k = skipZeroAcCoefficientsForRefinement(
-                    blockCoeffs[blockIndex],
-                    quant,
-                    reader,
-                    refinement,
-                    k,
-                    scan.spectralEnd,
-                    zeroCount = run,
-                )
-                if (k > scan.spectralEnd) fail()
-                val newCoefficientIndex = JPEG_ZIGZAG[k]
-                if (blockCoeffs[blockIndex][newCoefficientIndex] != 0) fail()
-                val signBit = reader.readBit()
-                blockCoeffs[blockIndex][newCoefficientIndex] =
-                    if (signBit == 0) -refinement * quant[newCoefficientIndex] else refinement * quant[newCoefficientIndex]
-                k++
-            }
-        }
-        if (jpeg.restartInterval > 0 && (blockIndex + 1) % jpeg.restartInterval == 0 && blockIndex + 1 < blockCoeffs.size) {
-            reader.consumeRestart(nextRestartMarker)
-            nextRestartMarker = (nextRestartMarker + 1) and 7
-            eobRun = 0
-        }
-    }
-}
-
-private fun skipZeroAcCoefficientsForRefinement(
-    blockCoeffs: IntArray,
-    quant: IntArray,
-    reader: EntropyBitReader,
-    refinement: Int,
-    start: Int,
-    end: Int,
-    zeroCount: Int,
-): Int {
-    var k = start
-    var remainingZeroes = zeroCount
-    while (k <= end) {
-        val coefficientIndex = JPEG_ZIGZAG[k]
-        if (blockCoeffs[coefficientIndex] != 0) {
-            refineExistingAcCoefficient(blockCoeffs, quant, reader, refinement, coefficientIndex)
-        } else {
-            if (remainingZeroes == 0) return k
-            remainingZeroes--
-        }
-        k++
-    }
-    if (remainingZeroes == 0) return k
-    fail()
-}
-
-private fun refineExistingAcCoefficients(
-    blockCoeffs: IntArray,
-    quant: IntArray,
-    reader: EntropyBitReader,
-    refinement: Int,
-    start: Int,
-    end: Int,
-) {
-    for (k in start..end) {
-        val coefficientIndex = JPEG_ZIGZAG[k]
-        if (blockCoeffs[coefficientIndex] != 0) {
-            refineExistingAcCoefficient(blockCoeffs, quant, reader, refinement, coefficientIndex)
-        }
-    }
-}
-
-private fun refineExistingAcCoefficient(
-    blockCoeffs: IntArray,
-    quant: IntArray,
-    reader: EntropyBitReader,
-    refinement: Int,
-    coefficientIndex: Int,
-) {
-    val coefficient = blockCoeffs[coefficientIndex]
-    if (coefficient == 0 || reader.readBit() == 0) return
-    blockCoeffs[coefficientIndex] +=
-        if (coefficient > 0) {
-            refinement * quant[coefficientIndex]
-        } else {
-            -refinement * quant[coefficientIndex]
-        }
 }
 
 private fun readU16BE(bytes: ByteArray, offset: Int): Int =
