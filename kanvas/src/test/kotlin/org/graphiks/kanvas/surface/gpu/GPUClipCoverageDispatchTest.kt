@@ -38,6 +38,7 @@ import org.graphiks.kanvas.canvas.ClipStackOp
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.BlendMode
+import org.graphiks.kanvas.picture.Picture
 import org.graphiks.kanvas.pipeline.ClipOp
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.CornerRadii
@@ -179,6 +180,47 @@ class GPUClipCoverageDispatchTest {
 
         assertEquals(2, result.registeredUsesByKey.values.single())
         assertTrue(result.refusalCodes.isEmpty())
+    }
+
+    @Test
+    fun `use prepass skips refused picture before later shared mask use is released`() {
+        val clip = ClipStack.Complex(
+            listOf(
+                ClipStackOp.RectOp(Rect.fromLTRB(0f, 0f, 8f, 8f), ClipOp.INTERSECT, antiAlias = true),
+            ),
+        )
+        val refused = DisplayOp.DrawPicture(
+            picture = Picture(Rect.fromLTRB(0f, 0f, 8f, 8f), emptyList()),
+            paint = Paint.fill(Color.RED),
+            transform = Matrix33.identity(),
+            clip = clip,
+        )
+        val accepted = DisplayOp.DrawRect(
+            rect = Rect.fromLTRB(1f, 1f, 7f, 7f),
+            paint = Paint.fill(Color.RED),
+            transform = Matrix33.identity(),
+            clip = clip,
+        )
+        val cache = GPUClipCoverageFrameCache(totalBudgetBytes = 4096)
+        val plan = accepted.gpuClipCoveragePlanOrNull(
+            target = GPUTargetFacts(8, 8, "rgba8unorm"),
+            config = RenderConfig.DEFAULT,
+            maxTextureDimension2D = 4096,
+        ) as GPUClipCoveragePlan.Mask
+
+        val result = GPUClipUsePrepass.register(
+            operations = listOf(refused, accepted),
+            target = GPUTargetFacts(8, 8, "rgba8unorm"),
+            config = RenderConfig.DEFAULT,
+            maxTextureDimension2D = 4096,
+            cache = cache,
+        )
+
+        assertEquals(mapOf(plan.contentKey to 1), result.registeredUsesByKey)
+        assertEquals(listOf("unsupported.picture.paint"), result.refusalCodes)
+        cache.acquire(plan) { "shared-mask" }.close()
+        assertFalse(cache.contains(plan.contentKey))
+        assertEquals(0L, cache.bytesInUse)
     }
 
     @Test

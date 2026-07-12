@@ -9,12 +9,14 @@ import kotlin.math.sin
 import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.picture.Picture
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoverageElement
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoverageElementKind
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoverageOperation
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipFillRule
 import org.graphiks.kanvas.gpu.renderer.clips.GPUBounds
+import org.graphiks.kanvas.gpu.renderer.commands.GPUBlendFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendCoverageMask
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendCoverageMaskRequest
@@ -211,6 +213,10 @@ internal object GPUClipUsePrepass {
                 return
             }
             if (suppressedLayerDepth > 0 || operation.perspectiveCaptureRefusalReasonOrNull() != null) return
+            operation.coreRoutePreflightRefusalReason()?.let { refusal ->
+                refusals += refusal
+                return
+            }
             when (val plan = operation.gpuClipCoveragePlanOrNull(target, config, maxTextureDimension2D)) {
                 is GPUClipCoveragePlan.Mask -> {
                     cache.registerUses(plan.contentKey, count = 1)
@@ -237,6 +243,100 @@ internal fun DisplayOp.gpuClipCoveragePlanOrNull(
 ): GPUClipCoveragePlan? {
     val request = clipForMaskPrepass()?.toGPUClipFacts(target)?.coverageRequest ?: return null
     return GPUClipCoveragePlanner.plan(request, config, maxTextureDimension2D)
+}
+
+/** Shared renderer/prepass refusal contract: refused draws must never reserve a mask use. */
+internal fun DisplayOp.coreRoutePreflightRefusalReason(): String? = when (this) {
+    is DisplayOp.DrawMesh -> if (mesh.program != null) "unsupported.mesh.program" else null
+    is DisplayOp.DrawPicture -> picturePreflightRefusalReason()
+    else -> null
+}
+
+private fun DisplayOp.DrawPicture.picturePreflightRefusalReason(): String? {
+    if (paint != null) return "unsupported.picture.paint"
+
+    fun validatePicture(picture: Picture): String? {
+        for (nested in picture.ops) {
+            when (nested) {
+                is DisplayOp.DrawPicture -> {
+                    if (nested.paint != null) return "unsupported.picture.nested_paint"
+                    if (nested.clip != ClipStack.WideOpen) return "unsupported.picture.nested_clip"
+                    val nestedRefusal = validatePicture(nested.picture)
+                    if (nestedRefusal != null) return nestedRefusal
+                }
+                is DisplayOp.BeginLayer,
+                DisplayOp.EndLayer,
+                -> return "unsupported.picture.save_layer"
+                else -> if (nested.hasCapturedPictureClip()) return "unsupported.picture.nested_clip"
+            }
+        }
+        return null
+    }
+
+    val destinationRead = pictureContainsDestinationReadBlend()
+    if (destinationRead != null) {
+        return "unsupported.picture.nested_destination_read_blend:${destinationRead.modeLabel.lowercase()}"
+    }
+    return validatePicture(picture)
+}
+
+private fun DisplayOp.hasCapturedPictureClip(): Boolean = when (this) {
+    is DisplayOp.DrawRect -> clip != ClipStack.WideOpen
+    is DisplayOp.DrawRRect -> clip != ClipStack.WideOpen
+    is DisplayOp.DrawPath -> clip != ClipStack.WideOpen
+    is DisplayOp.DrawImage -> clip != ClipStack.WideOpen
+    is DisplayOp.DrawText -> clip != ClipStack.WideOpen
+    is DisplayOp.DrawColor -> clip != ClipStack.WideOpen
+    is DisplayOp.DrawPoint -> clip != ClipStack.WideOpen
+    is DisplayOp.DrawPoints -> clip != ClipStack.WideOpen
+    is DisplayOp.DrawDRRect -> clip != ClipStack.WideOpen
+    is DisplayOp.DrawImageNine -> clip != ClipStack.WideOpen
+    is DisplayOp.DrawImageLattice -> clip != ClipStack.WideOpen
+    is DisplayOp.DrawVertices -> clip != ClipStack.WideOpen
+    is DisplayOp.DrawMesh -> clip != ClipStack.WideOpen
+    is DisplayOp.DrawAtlas -> clip != ClipStack.WideOpen
+    is DisplayOp.DrawPicture -> clip != ClipStack.WideOpen
+    is DisplayOp.Clear,
+    is DisplayOp.SetTransform,
+    is DisplayOp.SetClip,
+    is DisplayOp.BeginLayer,
+    DisplayOp.EndLayer,
+    is DisplayOp.Annotation,
+    is DisplayOp.FlushAndSnapshot,
+    -> false
+}
+
+private fun DisplayOp.pictureContainsDestinationReadBlend(): GPUBlendFacts? = when (this) {
+    is DisplayOp.DrawPicture -> picture.ops.firstNotNullOfOrNull { nested ->
+        nested.pictureContainsDestinationReadBlend()
+    }
+    else -> clipCompositeBlendFacts().takeIf(GPUBlendFacts::requiresDestinationRead)
+}
+
+internal fun DisplayOp.clipCompositeBlendFacts(): GPUBlendFacts = when (this) {
+    is DisplayOp.DrawRect -> paint.blendMode.toGpuBlendFacts()
+    is DisplayOp.DrawRRect -> paint.blendMode.toGpuBlendFacts()
+    is DisplayOp.DrawPath -> paint.blendMode.toGpuBlendFacts()
+    is DisplayOp.DrawImage -> paint?.blendMode?.toGpuBlendFacts() ?: GPUBlendFacts.srcOver()
+    is DisplayOp.DrawText -> paint.blendMode.toGpuBlendFacts()
+    is DisplayOp.DrawColor -> mode.toGpuBlendFacts()
+    is DisplayOp.DrawPoint -> paint.blendMode.toGpuBlendFacts()
+    is DisplayOp.DrawPoints -> paint.blendMode.toGpuBlendFacts()
+    is DisplayOp.DrawDRRect -> paint.blendMode.toGpuBlendFacts()
+    is DisplayOp.DrawImageNine -> paint?.blendMode?.toGpuBlendFacts() ?: GPUBlendFacts.srcOver()
+    is DisplayOp.DrawImageLattice -> paint?.blendMode?.toGpuBlendFacts() ?: GPUBlendFacts.srcOver()
+    is DisplayOp.DrawPicture -> paint?.blendMode?.toGpuBlendFacts() ?: GPUBlendFacts.srcOver()
+    is DisplayOp.DrawVertices -> paint.blendMode.toGpuBlendFacts()
+    is DisplayOp.DrawMesh -> (blendMode ?: paint.blendMode).toGpuBlendFacts()
+    is DisplayOp.DrawAtlas -> (paint?.blendMode ?: blendMode).toGpuBlendFacts()
+    is DisplayOp.SetTransform,
+    is DisplayOp.SetClip,
+    is DisplayOp.BeginLayer,
+    DisplayOp.EndLayer,
+    is DisplayOp.Clear,
+    is DisplayOp.Annotation,
+    is DisplayOp.FlushAndSnapshot,
+    -> GPUBlendFacts.srcOver()
 }
 
 private fun DisplayOp.clipForMaskPrepass(): ClipStack? = when (this) {

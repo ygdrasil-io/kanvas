@@ -72,6 +72,7 @@ data class GPUBackendRuntimeTelemetry(
     val buffersCreated: Long = 0L,
     val texturesCreated: Long = 0L,
     val intermediateTexturesCreated: Long = 0L,
+    val coverageMasksDestroyed: Long = 0L,
     val destinationCopies: Long = 0L,
     val destinationReadbackSnapshots: Long = 0L,
     val msaaTargets: Long = 0L,
@@ -97,6 +98,9 @@ data class GPUBackendRuntimeTelemetry(
         require(texturesCreated >= 0L) { "GPUBackendRuntimeTelemetry.texturesCreated must be non-negative" }
         require(intermediateTexturesCreated >= 0L) {
             "GPUBackendRuntimeTelemetry.intermediateTexturesCreated must be non-negative"
+        }
+        require(coverageMasksDestroyed >= 0L) {
+            "GPUBackendRuntimeTelemetry.coverageMasksDestroyed must be non-negative"
         }
         require(destinationCopies >= 0L) {
             "GPUBackendRuntimeTelemetry.destinationCopies must be non-negative"
@@ -126,7 +130,8 @@ data class GPUBackendRuntimeTelemetry(
             "gpu-runtime.telemetry renderPasses=$renderPasses offscreenPasses=$offscreenPasses " +
                 "windowPasses=$windowPasses submissions=$submissions commandBuffers=$commandBuffers " +
                 "buffersCreated=$buffersCreated texturesCreated=$texturesCreated " +
-                "intermediateTexturesCreated=$intermediateTexturesCreated destinationCopies=$destinationCopies " +
+                "intermediateTexturesCreated=$intermediateTexturesCreated coverageMasksDestroyed=$coverageMasksDestroyed " +
+                "destinationCopies=$destinationCopies " +
                 "destinationReadbackSnapshots=$destinationReadbackSnapshots " +
                 "msaaTargets=$msaaTargets msaaResolves=$msaaResolves " +
                 "bindGroupsCreated=$bindGroupsCreated samplersCreated=$samplersCreated " +

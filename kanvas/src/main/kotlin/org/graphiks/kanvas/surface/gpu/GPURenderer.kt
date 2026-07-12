@@ -1011,67 +1011,7 @@ internal fun renderViaGpu(
                 return dispatchPathDirect(command)
             }
 
-            fun DisplayOp.hasCapturedPictureClip(): Boolean = when (this) {
-                is DisplayOp.DrawRect -> clip != ClipStack.WideOpen
-                is DisplayOp.DrawRRect -> clip != ClipStack.WideOpen
-                is DisplayOp.DrawPath -> clip != ClipStack.WideOpen
-                is DisplayOp.DrawImage -> clip != ClipStack.WideOpen
-                is DisplayOp.DrawText -> clip != ClipStack.WideOpen
-                is DisplayOp.DrawColor -> clip != ClipStack.WideOpen
-                is DisplayOp.DrawPoint -> clip != ClipStack.WideOpen
-                is DisplayOp.DrawPoints -> clip != ClipStack.WideOpen
-                is DisplayOp.DrawDRRect -> clip != ClipStack.WideOpen
-                is DisplayOp.DrawImageNine -> clip != ClipStack.WideOpen
-                is DisplayOp.DrawImageLattice -> clip != ClipStack.WideOpen
-                is DisplayOp.DrawVertices -> clip != ClipStack.WideOpen
-                is DisplayOp.DrawMesh -> clip != ClipStack.WideOpen
-                is DisplayOp.DrawAtlas -> clip != ClipStack.WideOpen
-                is DisplayOp.DrawPicture -> clip != ClipStack.WideOpen
-                is DisplayOp.Clear,
-                is DisplayOp.SetTransform,
-                is DisplayOp.SetClip,
-                is DisplayOp.BeginLayer,
-                DisplayOp.EndLayer,
-                is DisplayOp.Annotation,
-                is DisplayOp.FlushAndSnapshot,
-                -> false
-            }
-
-            /** Reject picture semantics that flattening would otherwise drop before a clip lease is acquired. */
-            fun picturePreflightRefusalReason(op: DisplayOp.DrawPicture): String? {
-                if (op.paint != null) return "unsupported.picture.paint"
-
-                fun validatePicture(picture: Picture): String? {
-                    for (nested in picture.ops) {
-                        when (nested) {
-                            is DisplayOp.DrawPicture -> {
-                                if (nested.paint != null) return "unsupported.picture.nested_paint"
-                                if (nested.clip != ClipStack.WideOpen) return "unsupported.picture.nested_clip"
-                                val nestedRefusal = validatePicture(nested.picture)
-                                if (nestedRefusal != null) return nestedRefusal
-                            }
-                            is DisplayOp.BeginLayer,
-                            DisplayOp.EndLayer,
-                            -> return "unsupported.picture.save_layer"
-                            else -> if (nested.hasCapturedPictureClip()) return "unsupported.picture.nested_clip"
-                        }
-                    }
-                    return null
-                }
-
-                val destinationRead = op.pictureContainsDestinationReadBlend()
-                if (destinationRead != null) {
-                    return "unsupported.picture.nested_destination_read_blend:${destinationRead.modeLabel.lowercase()}"
-                }
-
-                return validatePicture(op.picture)
-            }
-
-            fun coreRoutePreflightRefusalReason(op: DisplayOp): String? = when (op) {
-                is DisplayOp.DrawMesh -> if (op.mesh.program != null) "unsupported.mesh.program" else null
-                is DisplayOp.DrawPicture -> picturePreflightRefusalReason(op)
-                else -> null
-            }
+            fun coreRoutePreflightRefusalReason(op: DisplayOp): String? = op.coreRoutePreflightRefusalReason()
 
             fun coreRouteOperationName(op: DisplayOp): String = when (op) {
                 is DisplayOp.DrawMesh -> "drawMesh"
@@ -2667,41 +2607,6 @@ private fun computeAtlasDst(texRect: Rect, xform: Matrix33): Rect {
     val r = maxOf(x0, x1, x2, x3)
     val b = maxOf(y0, y1, y2, y3)
     return Rect.fromLTRB(l, t, r, b)
-}
-
-/** The original blend facts restored only at the logical source-to-scene boundary. */
-private fun DisplayOp.clipCompositeBlendFacts(): GPUBlendFacts = when (this) {
-    is DisplayOp.DrawRect -> paint.blendMode.toGpuBlendFacts()
-    is DisplayOp.DrawRRect -> paint.blendMode.toGpuBlendFacts()
-    is DisplayOp.DrawPath -> paint.blendMode.toGpuBlendFacts()
-    is DisplayOp.DrawImage -> paint?.blendMode?.toGpuBlendFacts() ?: GPUBlendFacts.srcOver()
-    is DisplayOp.DrawText -> paint.blendMode.toGpuBlendFacts()
-    is DisplayOp.DrawColor -> mode.toGpuBlendFacts()
-    is DisplayOp.DrawPoint -> paint.blendMode.toGpuBlendFacts()
-    is DisplayOp.DrawPoints -> paint.blendMode.toGpuBlendFacts()
-    is DisplayOp.DrawDRRect -> paint.blendMode.toGpuBlendFacts()
-    is DisplayOp.DrawImageNine -> paint?.blendMode?.toGpuBlendFacts() ?: GPUBlendFacts.srcOver()
-    is DisplayOp.DrawImageLattice -> paint?.blendMode?.toGpuBlendFacts() ?: GPUBlendFacts.srcOver()
-    is DisplayOp.DrawPicture -> paint?.blendMode?.toGpuBlendFacts() ?: GPUBlendFacts.srcOver()
-    is DisplayOp.DrawVertices -> paint.blendMode.toGpuBlendFacts()
-    is DisplayOp.DrawMesh -> (blendMode ?: paint.blendMode).toGpuBlendFacts()
-    is DisplayOp.DrawAtlas -> (paint?.blendMode ?: blendMode).toGpuBlendFacts()
-    is DisplayOp.SetTransform,
-    is DisplayOp.SetClip,
-    is DisplayOp.BeginLayer,
-    DisplayOp.EndLayer,
-    is DisplayOp.Clear,
-    is DisplayOp.Annotation,
-    is DisplayOp.FlushAndSnapshot,
-    -> GPUBlendFacts.srcOver()
-}
-
-/** Returns the first destination-reading blend in this picture tree, in display-list order. */
-private fun DisplayOp.pictureContainsDestinationReadBlend(): GPUBlendFacts? = when (this) {
-    is DisplayOp.DrawPicture -> picture.ops.firstNotNullOfOrNull { nested ->
-        nested.pictureContainsDestinationReadBlend()
-    }
-    else -> clipCompositeBlendFacts().takeIf(GPUBlendFacts::requiresDestinationRead)
 }
 
 private fun hasColorGlyphs(blob: TextBlob): Boolean {

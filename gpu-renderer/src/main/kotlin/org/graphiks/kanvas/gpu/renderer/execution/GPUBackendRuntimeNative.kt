@@ -588,6 +588,7 @@ private class WgpuBackendRuntimeTelemetryRecorder {
     private var buffersCreated = 0L
     private var texturesCreated = 0L
     private var intermediateTexturesCreated = 0L
+    private var coverageMasksDestroyed = 0L
     private var destinationCopies = 0L
     private var destinationReadbackSnapshots = 0L
     private var msaaTargets = 0L
@@ -648,6 +649,12 @@ private class WgpuBackendRuntimeTelemetryRecorder {
     @Synchronized
     fun recordIntermediateTextureCreated() {
         intermediateTexturesCreated += 1L
+    }
+
+    /** Records a full logical coverage-mask teardown after GPU completion or target close. */
+    @Synchronized
+    fun recordCoverageMaskDestroyed() {
+        coverageMasksDestroyed += 1L
     }
 
     /** Records one destination copy consumed by a blend pass. */
@@ -745,6 +752,7 @@ private class WgpuBackendRuntimeTelemetryRecorder {
             buffersCreated = buffersCreated,
             texturesCreated = texturesCreated,
             intermediateTexturesCreated = intermediateTexturesCreated,
+            coverageMasksDestroyed = coverageMasksDestroyed,
             destinationCopies = destinationCopies,
             destinationReadbackSnapshots = destinationReadbackSnapshots,
             msaaTargets = msaaTargets,
@@ -827,6 +835,7 @@ private class WgpuOffscreenTarget(
     private val offscreenTextures = mutableMapOf<String, WgpuOffscreenTextureResources>()
     private val releasedOffscreenTextures = mutableListOf<WgpuOffscreenTextureResources>()
     private val coverageMasks = mutableMapOf<String, WgpuCoverageMaskResources>()
+    private val releasedCoverageMasks = mutableListOf<WgpuCoverageMaskResources>()
     private val frameOrdinalCounter = AtomicLong(0L)
     private val textureFrameOrdinalCounter = AtomicLong(0L)
     private val coverageMaskOrdinalCounter = AtomicLong(0L)
@@ -890,9 +899,10 @@ private class WgpuOffscreenTarget(
         completedReadbackSubmissionIds: Set<GPUQueueSubmissionId>,
     ) {
         val lastReadbackSubmissionId = completedReadbackSubmissionIds.maxByOrNull(GPUQueueSubmissionId::value) ?: return
-        releasedOffscreenTextures
-            .mapNotNull(WgpuOffscreenTextureResources::lastSubmissionId)
+        (releasedOffscreenTextures.mapNotNull(WgpuOffscreenTextureResources::lastSubmissionId) +
+            releasedCoverageMasks.mapNotNull(WgpuCoverageMaskResources::lastSubmissionId))
             .filter { submissionId -> submissionId.value <= lastReadbackSubmissionId.value }
+            .distinct()
             .forEach { submissionId ->
                 if (queueManager.markCompleted(submissionId, GPU_QUEUE_COMPLETION_READBACK_COMPLETE)) {
                     completedSubmissionIds += submissionId
@@ -900,6 +910,7 @@ private class WgpuOffscreenTarget(
             }
         queueManager.releaseCompleted()
         drainReleasedOffscreenTextures()
+        drainReleasedCoverageMasks()
     }
 
     private fun completePendingTargetCloseSubmissions() {
@@ -920,6 +931,7 @@ private class WgpuOffscreenTarget(
         }
         queueManager.releaseCompleted()
         drainReleasedOffscreenTextures()
+        drainReleasedCoverageMasks()
     }
 
     private fun trackOffscreenTextureUse(
@@ -929,6 +941,9 @@ private class WgpuOffscreenTarget(
         val textureResources = offscreenTextures[label] ?: return
         if (usedTextures.add(textureResources)) {
             textureResources.activeEncodes += 1
+            textureResources.coverageMaskResources?.let { maskResources ->
+                maskResources.activeEncodes += 1
+            }
         }
     }
 
@@ -938,6 +953,7 @@ private class WgpuOffscreenTarget(
     ) {
         usedTextures.forEach { textureResources ->
             textureResources.lastSubmissionId = submission.id
+            textureResources.coverageMaskResources?.lastSubmissionId = submission.id
         }
     }
 
@@ -945,8 +961,13 @@ private class WgpuOffscreenTarget(
         usedTextures.forEach { textureResources ->
             textureResources.activeEncodes -= 1
             check(textureResources.activeEncodes >= 0) { "Offscreen texture active encodes underflow" }
+            textureResources.coverageMaskResources?.let { maskResources ->
+                maskResources.activeEncodes -= 1
+                check(maskResources.activeEncodes >= 0) { "Coverage mask active encodes underflow" }
+            }
         }
         drainReleasedOffscreenTextures()
+        drainReleasedCoverageMasks()
     }
 
     private fun drainReleasedOffscreenTextures() {
@@ -955,6 +976,19 @@ private class WgpuOffscreenTarget(
             if (textureResources.activeEncodes == 0 && submissionComplete) {
                 releasedOffscreenTextures.remove(textureResources)
                 textureResources.texture.close()
+            }
+        }
+    }
+
+    private fun drainReleasedCoverageMasks() {
+        releasedCoverageMasks.toList().forEach { maskResources ->
+            val submissionComplete = maskResources.lastSubmissionId?.let(completedSubmissionIds::contains) ?: true
+            if (maskResources.activeEncodes == 0 && submissionComplete) {
+                releasedCoverageMasks.remove(maskResources)
+                maskResources.resolveTexture?.close()
+                maskResources.depthStencilTexture.close()
+                maskResources.renderTexture.close()
+                telemetryRecorder.recordCoverageMaskDestroyed()
             }
         }
     }
@@ -1203,18 +1237,20 @@ private class WgpuOffscreenTarget(
             sampleCount = request.sampleCount,
         )
         val sampleTexture = resolveTexture ?: renderTexture
-        val sampleTextureResources = WgpuOffscreenTextureResources(
-            texture = sampleTexture,
-            format = maskFormat,
-            releasable = false,
-        )
-        coverageMasks[renderLabel] = WgpuCoverageMaskResources(
+        val maskResources = WgpuCoverageMaskResources(
             mask = mask,
             renderTexture = renderTexture,
             resolveTexture = resolveTexture,
             depthStencilTexture = depthStencilTexture,
             queueLabel = "coverage-mask-$ordinal",
         )
+        val sampleTextureResources = WgpuOffscreenTextureResources(
+            texture = sampleTexture,
+            format = maskFormat,
+            releasable = false,
+            coverageMaskResources = maskResources,
+        )
+        coverageMasks[renderLabel] = maskResources
         offscreenTextures[sampleLabel] = sampleTextureResources
         if (request.sampleCount > 1) {
             telemetryRecorder.recordMsaaTarget()
@@ -1326,6 +1362,7 @@ private class WgpuOffscreenTarget(
                 recordRuntimeResourceLeasesAction(frameResourceLeases)
                 retainPendingTargetCloseSubmission(submission)
                 recordOffscreenTextureSubmission(usedOffscreenTextures, submission)
+                maskResources.lastSubmissionId = submission.id
                 telemetryRecorder.recordSubmission()
                 telemetryRecorder.recordOffscreenRenderPass()
             }
@@ -1339,8 +1376,7 @@ private class WgpuOffscreenTarget(
     override fun releaseCoverageMask(mask: GPUBackendCoverageMask) {
         val maskResources = coverageMasks[mask.renderLabel] ?: return
         if (maskResources.mask != mask) return
-        maskResources.releaseRequested = true
-        destroyCoverageMaskIfReleased(maskResources)
+        requestCoverageMaskRelease(maskResources)
     }
 
     override fun copyOffscreenTexture(sourceTextureLabel: String, destinationTextureLabel: String) {
@@ -1485,13 +1521,21 @@ private class WgpuOffscreenTarget(
             ?: error("Offscreen texture not found: $label")
     }
 
+    private fun requestCoverageMaskRelease(maskResources: WgpuCoverageMaskResources) {
+        if (maskResources.releaseRequested) return
+        maskResources.releaseRequested = true
+        if (coverageMasks[maskResources.mask.renderLabel] === maskResources) {
+            coverageMasks.remove(maskResources.mask.renderLabel)
+        }
+        if (offscreenTextures[maskResources.mask.sampleLabel]?.coverageMaskResources === maskResources) {
+            offscreenTextures.remove(maskResources.mask.sampleLabel)
+        }
+        releasedCoverageMasks += maskResources
+        drainReleasedCoverageMasks()
+    }
+
     private fun destroyCoverageMaskIfReleased(maskResources: WgpuCoverageMaskResources) {
-        if (!maskResources.releaseRequested || maskResources.activeEncodes != 0) return
-        if (coverageMasks.remove(maskResources.mask.renderLabel) !== maskResources) return
-        offscreenTextures.remove(maskResources.mask.sampleLabel)
-        maskResources.resolveTexture?.close()
-        maskResources.depthStencilTexture.close()
-        maskResources.renderTexture.close()
+        if (maskResources.releaseRequested) drainReleasedCoverageMasks()
     }
 
     internal fun encodeOffscreenTextureInternal(
@@ -1626,7 +1670,9 @@ private class WgpuOffscreenTarget(
         vertexBuffers.values.forEach { (buffer, _) -> closeQuietly { buffer.close() } }
         vertexBuffers.clear()
         coverageMasks.values.toList().forEach { maskResources ->
-            maskResources.releaseRequested = true
+            closeQuietly { requestCoverageMaskRelease(maskResources) }
+        }
+        releasedCoverageMasks.toList().forEach { maskResources ->
             closeQuietly { destroyCoverageMaskIfReleased(maskResources) }
         }
         offscreenTextures.values.forEach { textureResources -> closeQuietly { textureResources.texture.close() } }
@@ -1804,12 +1850,13 @@ private class WgpuOffscreenTextureResources(
     val texture: GPUTexture,
     val format: GPUTextureFormat,
     val releasable: Boolean = true,
+    val coverageMaskResources: WgpuCoverageMaskResources? = null,
     var activeEncodes: Int = 0,
     var lastSubmissionId: GPUQueueSubmissionId? = null,
     var releaseRequested: Boolean = false,
 )
 
-/** Target-owned native resources for one coverage mask. They are closed only after active encoding has submitted. */
+/** Target-owned native resources for one coverage mask. They close after their final submission completes. */
 private class WgpuCoverageMaskResources(
     val mask: GPUBackendCoverageMask,
     val renderTexture: GPUTexture,
@@ -1817,6 +1864,7 @@ private class WgpuCoverageMaskResources(
     val depthStencilTexture: GPUTexture,
     val queueLabel: String,
     var activeEncodes: Int = 0,
+    var lastSubmissionId: GPUQueueSubmissionId? = null,
     var releaseRequested: Boolean = false,
 )
 

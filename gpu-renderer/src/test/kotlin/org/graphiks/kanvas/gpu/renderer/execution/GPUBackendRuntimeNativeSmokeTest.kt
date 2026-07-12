@@ -552,6 +552,87 @@ class GPUBackendRuntimeNativeSmokeTest {
     }
 
     @Test
+    fun `released sampled coverage mask remains physically allocated until final readback`() {
+        GPUBackendRuntimeFactory.createOrNull().use { session ->
+            assumeTrue(session != null, "GPU backend unavailable in current environment")
+            val runtimeSession = session!!
+            val destroyedBefore = runtimeSession.runtimeTelemetry.coverageMasksDestroyed
+
+            runtimeSession.createOffscreenTarget(
+                GPUOffscreenTargetRequest(width = 4, height = 4, colorFormat = "rgba8unorm"),
+            ).use { target ->
+                val mask = target.createCoverageMask(
+                    GPUBackendCoverageMaskRequest("released-sampled-mask", 4, 4, sampleCount = 1),
+                )
+                target.encodeCoverageMask(mask, GPUClearColor(0.0, 0.0, 0.0, 0.0)) {
+                    drawFullscreenPass(
+                        wgsl = solidColorFullscreenWgsl(),
+                        colorFormat = "rgba8unorm",
+                        draws = listOf(
+                            GPUBackendRectDraw(floatArrayOf(1f, 0f, 0f, 1f), 0, 0, 4, 4),
+                        ),
+                    )
+                }
+                target.encode(GPUClearColor(0.0, 0.0, 0.0, 0.0)) {
+                    drawCompositePass(
+                        wgsl = singleTextureWgsl(),
+                        colorFormat = "rgba8unorm",
+                        textureLabel = mask.sampleLabel,
+                        draws = listOf(
+                            GPUBackendRawUniformDraw(
+                                uniformBytes = solidColorUniformBytes(0f, 0f, 0f, 0f),
+                                scissorX = 0,
+                                scissorY = 0,
+                                scissorWidth = 4,
+                                scissorHeight = 4,
+                            ),
+                        ),
+                        blendMode = GPUBlendMode.SRC,
+                    )
+                }
+
+                target.releaseCoverageMask(mask)
+
+                assertEquals(destroyedBefore, runtimeSession.runtimeTelemetry.coverageMasksDestroyed)
+                assertFailsWith<IllegalStateException> {
+                    target.encodeOffscreenTexture(mask.sampleLabel, GPUClearColor(0.0, 0.0, 0.0, 0.0)) {}
+                }
+                assertContentEquals(
+                    byteArrayOf(0xFF.toByte(), 0, 0, 0xFF.toByte()),
+                    target.readRgba().copyOfRange(0, 4),
+                )
+                assertEquals(destroyedBefore + 1L, runtimeSession.runtimeTelemetry.coverageMasksDestroyed)
+            }
+        }
+    }
+
+    @Test
+    fun `released coverage mask is physically destroyed when its target closes`() {
+        GPUBackendRuntimeFactory.createOrNull().use { session ->
+            assumeTrue(session != null, "GPU backend unavailable in current environment")
+            val runtimeSession = session!!
+            val destroyedBefore = runtimeSession.runtimeTelemetry.coverageMasksDestroyed
+
+            runtimeSession.createOffscreenTarget(
+                GPUOffscreenTargetRequest(width = 4, height = 4, colorFormat = "rgba8unorm"),
+            ).use { target ->
+                val mask = target.createCoverageMask(
+                    GPUBackendCoverageMaskRequest("released-mask-target-close", 4, 4, sampleCount = 1),
+                )
+                target.encodeCoverageMask(mask, GPUClearColor(0.0, 0.0, 0.0, 0.0)) {}
+                target.releaseCoverageMask(mask)
+
+                assertEquals(destroyedBefore, runtimeSession.runtimeTelemetry.coverageMasksDestroyed)
+                assertFailsWith<IllegalStateException> {
+                    target.encodeOffscreenTexture(mask.sampleLabel, GPUClearColor(0.0, 0.0, 0.0, 0.0)) {}
+                }
+            }
+
+            assertEquals(destroyedBefore + 1L, runtimeSession.runtimeTelemetry.coverageMasksDestroyed)
+        }
+    }
+
+    @Test
     fun `primary target copy stays on GPU`() {
         GPUBackendRuntimeFactory.createOrNull().use { session ->
             assumeTrue(session != null, "GPU backend unavailable in current environment")
