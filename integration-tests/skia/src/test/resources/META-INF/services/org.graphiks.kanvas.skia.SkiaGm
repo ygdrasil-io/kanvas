@@ -564,7 +564,6 @@ org.graphiks.kanvas.skia.gm.text.ColoremojiBlendmodesGm
 org.graphiks.kanvas.skia.gm.text.ColoremojiBlendmodesSimpleGm
 org.graphiks.kanvas.skia.gm.text.ColrV1Gm
 org.graphiks.kanvas.skia.gm.text.Crbug1073670Gm
-org.graphiks.kanvas.skia.gm.text.Crbug478659067Gm
 org.graphiks.kanvas.skia.gm.text.DfTextBlobPerspGm
 org.graphiks.kanvas.skia.gm.text.DfTextGm
 org.graphiks.kanvas.skia.gm.text.DrawTextRSXformGm
