@@ -39,8 +39,13 @@ object GPUClipCoveragePlanner {
         scissorFor(request)?.let { return it }
 
         val sampleCount = if (request.antiAlias) AA_SAMPLE_COUNT else NON_AA_SAMPLE_COUNT
-        val resolvedBytes = request.targetWidth.toLong() * request.targetHeight.toLong() * BYTES_PER_PIXEL
-        val requiredBytes = resolvedBytes * sampleCount.toLong() + resolvedBytes
+        val intermediateBytes = intermediateBytes(
+            width = request.targetWidth,
+            height = request.targetHeight,
+            sampleCount = sampleCount,
+        ) ?: return GPUClipCoveragePlan.Refused(GPUClipCoverageRefusalCodes.INTERMEDIATE_BUDGET)
+        val resolvedBytes = intermediateBytes.resolved
+        val requiredBytes = intermediateBytes.required
         if (requiredBytes > config.maxClipIntermediateBytes.toLong()) {
             return GPUClipCoveragePlan.Refused(GPUClipCoverageRefusalCodes.INTERMEDIATE_BUDGET)
         }
@@ -54,6 +59,15 @@ object GPUClipCoveragePlanner {
             requiredBytes = requiredBytes,
             elements = request.elements.toList(),
         )
+    }
+
+    private fun intermediateBytes(width: Int, height: Int, sampleCount: Int): IntermediateBytes? = try {
+        val pixelCount = Math.multiplyExact(width.toLong(), height.toLong())
+        val resolved = Math.multiplyExact(pixelCount, BYTES_PER_PIXEL)
+        val attachment = Math.multiplyExact(resolved, sampleCount.toLong())
+        IntermediateBytes(resolved = resolved, required = Math.addExact(attachment, resolved))
+    } catch (_: ArithmeticException) {
+        null
     }
 
     private fun scissorFor(request: GPUClipCoverageRequest): GPUClipCoveragePlan.Scissor? {
@@ -73,6 +87,11 @@ object GPUClipCoveragePlanner {
             ),
         )
     }
+
+    private data class IntermediateBytes(
+        val resolved: Long,
+        val required: Long,
+    )
 }
 
 /** Thread-safe cache for immutable mask plans; WebGPU resources are added by later tasks. */

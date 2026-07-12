@@ -125,6 +125,24 @@ class GPUClipCoverageContractsTest {
     }
 
     @Test
+    fun `clip planner refuses intermediate byte arithmetic overflow`() {
+        val plan = GPUClipCoveragePlanner.plan(
+            request = request(
+                width = Int.MAX_VALUE,
+                height = Int.MAX_VALUE,
+                elements = listOf(element()),
+            ),
+            config = RenderConfig(maxClipIntermediateBytes = UInt.MAX_VALUE),
+            maxTextureDimension2D = Int.MAX_VALUE,
+        )
+
+        assertEquals(
+            "unsupported.clip.intermediate_budget",
+            assertIs<GPUClipCoveragePlan.Refused>(plan).code,
+        )
+    }
+
+    @Test
     fun `clip intermediate byte limit defaults and accepts a valid environment override`() {
         assertEquals(67_108_864u, RenderConfig.fromEnvironment().maxClipIntermediateBytes)
 
