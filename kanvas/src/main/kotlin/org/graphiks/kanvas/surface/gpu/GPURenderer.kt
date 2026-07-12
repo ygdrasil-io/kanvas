@@ -74,6 +74,7 @@ internal fun renderViaGpu(
     height: Int,
     format: PixelFormat,
     config: RenderConfig,
+    routeTrace: GPUClipRouteTrace? = null,
 ): RenderResult {
     val ops = buffer.ops()
     val diagnostics = Diagnostics()
@@ -1023,6 +1024,7 @@ internal fun renderViaGpu(
                     colorFormat = texFormat,
                     config = config,
                     frameCache = clipFrameCache,
+                    trace = routeTrace,
                 )
                 if (blend.requiresDestinationRead) {
                     t.renderWithClip(

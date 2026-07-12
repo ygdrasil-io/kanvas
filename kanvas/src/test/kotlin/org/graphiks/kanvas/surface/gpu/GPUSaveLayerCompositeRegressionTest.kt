@@ -88,7 +88,7 @@ class GPUSaveLayerCompositeRegressionTest {
     }
 
     @Test
-    fun `ordinary saveLayer composites clipped DrawColor SRC over its parent`() {
+    fun `ordinary saveLayer refuses clipped DrawColor SRC before it reaches its parent`() {
         requireWebGpu()
 
         val surface = Surface(width = 8, height = 8)
@@ -102,19 +102,24 @@ class GPUSaveLayerCompositeRegressionTest {
             restore()
         }
 
-        val pixels = surface.render().pixels
+        val result = surface.render()
 
         assertPixelNear(
-            pixels,
+            result.pixels,
             x = 2,
             y = 2,
-            expected = sourceOverSrgb(translucentBackground, checkerGray),
-            tolerance = 2,
+            expected = checkerGray,
+            tolerance = 0,
+        )
+        assertEquals(1, result.diagnostics.fatalCount)
+        assertEquals(
+            "unsupported.clip.mask.blend_mode:src",
+            result.diagnostics.entries.single { it.level == DiagnosticLevel.FATAL }.reason,
         )
     }
 
     @Test
-    fun `advanced blend leaves a translucent layer background unchanged outside its source`() {
+    fun `advanced blend cannot bypass a preceding clipped DrawColor SRC refusal`() {
         requireWebGpu()
 
         val surface = Surface(width = 8, height = 8)
@@ -132,14 +137,24 @@ class GPUSaveLayerCompositeRegressionTest {
             restore()
         }
 
-        val pixels = surface.render().pixels
+        val result = surface.render()
 
         assertPixelNear(
-            pixels,
+            result.pixels,
             x = 2,
             y = 2,
-            expected = sourceOverSrgb(translucentBackground, checkerGray),
-            tolerance = 2,
+            expected = checkerGray,
+            tolerance = 0,
+        )
+        assertEquals(2, result.diagnostics.fatalCount)
+        assertEquals(
+            listOf(
+                "unsupported.clip.mask.blend_mode:src",
+                "unsupported.clip.destination_read.pending_task8:screen",
+            ),
+            result.diagnostics.entries
+                .filter { it.level == DiagnosticLevel.FATAL }
+                .map { it.reason },
         )
     }
 

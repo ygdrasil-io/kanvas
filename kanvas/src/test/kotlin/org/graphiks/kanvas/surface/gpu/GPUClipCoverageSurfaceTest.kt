@@ -1,15 +1,23 @@
 package org.graphiks.kanvas.surface.gpu
 
 import org.graphiks.kanvas.geometry.Path
+import org.graphiks.kanvas.canvas.ClipStack
+import org.graphiks.kanvas.canvas.ClipStackOp
+import org.graphiks.kanvas.canvas.DisplayListBuffer
+import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
 import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.Image
+import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.pipeline.ClipOp
 import org.graphiks.kanvas.surface.Surface
+import org.graphiks.kanvas.surface.PixelFormat
+import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.types.RRect
+import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.types.alphaByte
 import org.graphiks.kanvas.types.blueByte
 import org.graphiks.kanvas.types.greenByte
@@ -78,6 +86,116 @@ class GPUClipCoverageSurfaceTest {
         )
     }
 
+    @Test
+    fun `mask refuses dst in before it emits a source`() {
+        requireWebGpu()
+
+        val result = renderMaskedRect(BlendMode.DST_IN)
+
+        assertEquals(0, result.stats.opsDispatched)
+        assertEquals(1, result.diagnostics.fatalCount)
+        assertEquals(
+            "unsupported.clip.mask.blend_mode:dst_in",
+            result.diagnostics.entries.single().reason,
+        )
+    }
+
+    @Test
+    fun `mask refuses destination read blend before it emits a source`() {
+        requireWebGpu()
+
+        val result = renderMaskedRect(BlendMode.DARKEN)
+
+        assertEquals(0, result.stats.opsDispatched)
+        assertEquals(1, result.diagnostics.fatalCount)
+        assertEquals(
+            "unsupported.clip.mask.blend_mode:darken",
+            result.diagnostics.entries.single().reason,
+        )
+    }
+
+    @Test
+    fun `no clip destination read remains delegated to task eight without a source`() {
+        requireWebGpu()
+        val surface = Surface(16, 16)
+        surface.canvas {
+            drawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.RED).copy(blendMode = BlendMode.DARKEN))
+        }
+
+        val result = surface.render()
+
+        assertEquals(0, result.stats.opsDispatched)
+        assertEquals(1, result.diagnostics.fatalCount)
+        assertEquals(
+            "unsupported.clip.destination_read.pending_task8:darken",
+            result.diagnostics.entries.single().reason,
+        )
+    }
+
+    @Test
+    fun `unsupported clear and color dodge never default to src over`() {
+        requireWebGpu()
+
+        listOf(BlendMode.CLEAR, BlendMode.COLOR_DODGE).forEach { blendMode ->
+            val surface = Surface(16, 16)
+            surface.canvas {
+                drawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.RED).copy(blendMode = blendMode))
+            }
+            val result = surface.render()
+
+            assertEquals(0, result.stats.opsDispatched, blendMode.name)
+            assertEquals(1, result.diagnostics.fatalCount, blendMode.name)
+            assertEquals(
+                "unsupported.clip.blend_unsupported:${blendMode.name.lowercase()}",
+                result.diagnostics.entries.single().reason,
+            )
+        }
+    }
+
+    @Test
+    fun `core complex clip routes use source then composite without a direct bypass`() {
+        requireWebGpu()
+        val clip = ClipStack.Complex(
+            listOf(
+                ClipStackOp.RectOp(Rect(1f, 1f, 31f, 31f), ClipOp.INTERSECT, antiAlias = true),
+                ClipStackOp.RectOp(Rect(14f, 14f, 18f, 18f), ClipOp.DIFFERENCE, antiAlias = true),
+            ),
+        )
+        val ops = listOf(
+            DisplayOp.DrawRect(Rect(2f, 2f, 8f, 8f), Paint.fill(Color.RED), Matrix33.identity(), clip),
+            DisplayOp.DrawRRect(RRect(Rect(20f, 2f, 28f, 10f), radius = 2f), Paint.fill(Color.RED), Matrix33.identity(), clip),
+            DisplayOp.DrawPath(
+                Path { moveTo(2f, 22f); lineTo(10f, 22f); lineTo(6f, 30f); close() },
+                Paint.fill(Color.RED),
+                Matrix33.identity(),
+                clip,
+            ),
+            DisplayOp.DrawImage(
+                bluePixel(),
+                Rect(0f, 0f, 1f, 1f),
+                Rect(22f, 22f, 30f, 30f),
+                Paint(),
+                Matrix33.identity(),
+                clip,
+            ),
+        )
+        val trace = GPUClipRouteTrace()
+
+        val result = renderViaGpu(
+            buffer = StaticDisplayListBuffer(ops),
+            width = 32,
+            height = 32,
+            format = PixelFormat.RGBA8,
+            config = RenderConfig.DEFAULT,
+            routeTrace = trace,
+        )
+
+        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertEquals(4, trace.logicalDrawCount)
+        assertEquals(4, trace.sourceThenCompositeCount)
+        assertEquals(0, trace.directComplexClipDispatches)
+    }
+
     private fun requireWebGpu() {
         val runtime = GPUBackendRuntimeFactory.createOrNull()
         assumeTrue(runtime != null, "GPU backend unavailable in current environment")
@@ -100,6 +218,17 @@ class GPUClipCoverageSurfaceTest {
     private fun alphaAt(pixels: UByteArray, x: Int, y: Int): Int =
         pixels[(y * 16 + x) * 4 + 3].toInt() and 0xff
 
+    private fun renderMaskedRect(blendMode: BlendMode) = Surface(16, 16).run {
+        canvas {
+            save()
+            clipRect(Rect(1f, 1f, 15f, 15f), ClipOp.INTERSECT, antiAlias = true)
+            clipRect(Rect(6f, 6f, 10f, 10f), ClipOp.DIFFERENCE, antiAlias = true)
+            drawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.RED).copy(blendMode = blendMode))
+            restore()
+        }
+        render()
+    }
+
     private fun bluePixel(): Image = Image.fromPixels(
         width = 1,
         height = 1,
@@ -107,4 +236,12 @@ class GPUClipCoverageSurfaceTest {
         colorType = ColorType.RGBA_8888,
         sourceId = "clip-blue-pixel",
     )
+
+    private class StaticDisplayListBuffer(
+        private val operations: List<DisplayOp>,
+    ) : DisplayListBuffer {
+        override fun append(op: DisplayOp): Nothing = error("Static buffer is immutable")
+
+        override fun ops(): List<DisplayOp> = operations
+    }
 }

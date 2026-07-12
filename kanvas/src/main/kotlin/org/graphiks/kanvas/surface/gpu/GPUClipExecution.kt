@@ -3,6 +3,7 @@ package org.graphiks.kanvas.surface.gpu
 import org.graphiks.kanvas.gpu.renderer.clips.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBlendFacts
+import org.graphiks.kanvas.gpu.renderer.commands.GPUBlendKind
 import org.graphiks.kanvas.gpu.renderer.commands.GPUClipFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUImageFilterPlan
 import org.graphiks.kanvas.gpu.renderer.commands.GPURect
@@ -95,7 +96,27 @@ internal fun GPUBackendOffscreenTarget.renderWithClip(
     diagnostics: Diagnostics,
     encodeDirect: () -> Boolean,
     encodeSource: () -> Boolean,
-): Boolean = when (clipPlan) {
+): Boolean {
+    if (blend.kind == GPUBlendKind.Unsupported ||
+        (blend.kind != GPUBlendKind.SrcOver && blend.blendMode == null)
+    ) {
+        diagnostics.fatal(
+            code = "refuse:clip-blend:${context.sourceLabelForDiagnostics}",
+            operation = context.sourceLabelForDiagnostics,
+            reason = "unsupported.clip.blend_unsupported:${blend.modeLabel.lowercase()}",
+        )
+        return false
+    }
+    if (clipPlan is GPUClipCoveragePlan.Mask && !blend.isSafeMaskComposite()) {
+        diagnostics.fatal(
+            code = "refuse:clip-mask:${context.sourceLabelForDiagnostics}",
+            operation = context.sourceLabelForDiagnostics,
+            reason = "unsupported.clip.mask.blend_mode:${blend.modeLabel}",
+            facts = listOf(DiagnosticFact("clip.strategy", "alpha-mask")),
+        )
+        return false
+    }
+    return when (clipPlan) {
     GPUClipCoveragePlan.NoClip,
     is GPUClipCoveragePlan.Scissor,
     -> {
@@ -115,60 +136,44 @@ internal fun GPUBackendOffscreenTarget.renderWithClip(
         }
     }
     is GPUClipCoveragePlan.Mask -> {
-        if (blend.requiresDestinationRead) {
-            try {
-                acquireClipMask(clipPlan, context.frameCache, diagnostics, context.config).use { lease ->
-                    context.destinationReadComposer.compose(
-                        context,
-                        lease.mask.sampleLabel,
-                        blend,
-                        diagnostics,
-                        encodeSource,
+        try {
+            acquireClipMask(clipPlan, context.frameCache, diagnostics, context.config).use { lease ->
+                if (!encodeSource()) return@use false
+                encodeOffscreenTexture(context.sceneLabel, null) {
+                    drawTwoTexturePass(
+                        wgsl = CLIP_MASK_COMPOSITE_WGSL,
+                        colorFormat = context.colorFormat,
+                        firstTextureLabel = context.sourceLabel,
+                        secondTextureLabel = lease.mask.sampleLabel,
+                        draws = listOf(clipMaskCompositeUniformDraw(context.targetWidth, context.targetHeight)),
+                        blendMode = GPUBlendMode.SRC_OVER,
                     )
                 }
-            } catch (_: GPUClipCoverageFrameBudgetExceededException) {
-                diagnostics.fatal(
-                    code = "refuse:clip-mask:${context.sourceLabelForDiagnostics}",
+                context.trace?.sourceThenComposite()
+                diagnostics.degrade(
+                    code = "route:clip:${context.sourceLabelForDiagnostics}",
                     operation = context.sourceLabelForDiagnostics,
-                    reason = "unsupported.clip.frame_budget",
+                    reason = "clip-source-then-composite",
+                    facts = listOf(DiagnosticFact("clip.strategy", "alpha-mask")),
                 )
-                false
+                true
             }
-        } else {
-            try {
-                acquireClipMask(clipPlan, context.frameCache, diagnostics, context.config).use { lease ->
-                    if (!encodeSource()) return@use false
-                    encodeOffscreenTexture(context.sceneLabel, null) {
-                        drawTwoTexturePass(
-                            wgsl = CLIP_MASK_COMPOSITE_WGSL,
-                            colorFormat = context.colorFormat,
-                            firstTextureLabel = context.sourceLabel,
-                            secondTextureLabel = lease.mask.sampleLabel,
-                            draws = listOf(clipMaskCompositeUniformDraw(context.targetWidth, context.targetHeight)),
-                            blendMode = blend.blendMode ?: GPUBlendMode.SRC_OVER,
-                        )
-                    }
-                    context.trace?.sourceThenComposite()
-                    diagnostics.degrade(
-                        code = "route:clip:${context.sourceLabelForDiagnostics}",
-                        operation = context.sourceLabelForDiagnostics,
-                        reason = "clip-source-then-composite",
-                        facts = listOf(DiagnosticFact("clip.strategy", "alpha-mask")),
-                    )
-                    true
-                }
-            } catch (_: GPUClipCoverageFrameBudgetExceededException) {
-                diagnostics.fatal(
-                    code = "refuse:clip-mask:${context.sourceLabelForDiagnostics}",
-                    operation = context.sourceLabelForDiagnostics,
-                    reason = "unsupported.clip.frame_budget",
-                )
-                false
-            }
+        } catch (_: GPUClipCoverageFrameBudgetExceededException) {
+            diagnostics.fatal(
+                code = "refuse:clip-mask:${context.sourceLabelForDiagnostics}",
+                operation = context.sourceLabelForDiagnostics,
+                reason = "unsupported.clip.frame_budget",
+            )
+            false
         }
     }
     is GPUClipCoveragePlan.Refused -> false
 }
+}
+
+private fun GPUBlendFacts.isSafeMaskComposite(): Boolean =
+    !requiresDestinationRead &&
+        (kind == GPUBlendKind.SrcOver || blendMode == GPUBlendMode.SRC_OVER)
 
 /** Source passes ignore the captured clip and always use fixed-function SrcOver into a full target. */
 private fun clipSourceFacts(targetWidth: Int, targetHeight: Int): GPUClipFacts =
