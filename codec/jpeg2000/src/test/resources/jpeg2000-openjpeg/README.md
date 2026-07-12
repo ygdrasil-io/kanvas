@@ -42,6 +42,37 @@ byte-for-byte the pinned fixtures described below.
   active extents 64×17 then 32×17. Its packet header has two codeblock entries
   and two separately bounded EBCOT bodies.
 
+### Two reversible 5/3 levels: 8×8
+
+* **Source P2 PGM:** [`source-ndecomp2-8x8.pgm`](source-ndecomp2-8x8.pgm),
+  SHA-256 `776f58efb28e49ed6656bd5d331757c8546b99fda4754f8d3ca7e3ee36601ed9`.
+  Its samples are generated in row-major order by `(17 * x + 29 * y) & 255`.
+* **Raw J2K SHA-256:**
+  `75abf991e34966f1e929baee2666b63f53f8c49be900c35e8c5ec14ae56b2a78`.
+* **Profile:** one unsigned 8-bit grayscale component; origin `(0,0)`; one
+  8×8 tile; LRCP; one layer; three resolutions (`Ndecomp=2`); a declared
+  64×64 code-block; default single precinct; reversible 5/3 transform; no
+  quantization; no SOP/EPH/PPM/PPT. The tile contains three contiguous LRCP
+  packets: `LL2`, then `HL2/LH2/HH2`, then `HL1/LH1/HH1`. Each subband has
+  one separately bounded EBCOT body.
+* **Odd counterpart:** the same source as the high-pass regression below is
+  also encoded as the 5×5, three-resolution fixture
+  `openjpeg-2.5.4-lossless-ndecomp2-5x5-random.j2k.base64`, SHA-256
+  `fba82a726aa8992d948e763c443b48491e0106d1b3cdc23b9d8b00390dd1a03f`.
+  It covers both odd 5/3 synthesis edges across two levels and a 25-pass
+  EBCOT body.
+
+### Odd high-pass context regression: 5×5
+
+* **Source P2 PGM:** [`source-ndecomp2-5x5-random.pgm`](source-ndecomp2-5x5-random.pgm),
+  SHA-256 `6e2ee7ce0880c67527f1a1dd6fed83703de8b66943dd9d623d1efb0ba5c8b612`.
+  The non-empty detail bands exercise the directional `HL` zero-coding context
+  where horizontal and vertical significant-neighbour counts differ.
+* **Raw J2K SHA-256:** `4d20cb6c3b76efbb54d3bba59490e0f0174c118ad053e15ea62bbe89ee561875`.
+* **Profile:** the same lossless, one-tile, one-layer, 64×64-codeblock
+  constraints as above, with two resolutions (`Ndecomp=1`). It has an odd
+  5×5 frame and one LL plus one HL/LH/HH packet.
+
 ## Reproduction
 
 ```text
@@ -53,6 +84,21 @@ opj_compress -i source-two-codeblocks-96x17.pgm \
   -o openjpeg-2.5.4-lossless-two-codeblocks-96x17.j2k \
   -n 1 -b 64,64 -r 1 -p LRCP
 opj_decompress -i openjpeg-2.5.4-lossless-two-codeblocks-96x17.j2k -o decoded.pgm
+
+opj_compress -i source-ndecomp2-8x8.pgm \
+  -o openjpeg-2.5.4-lossless-ndecomp2-8x8.j2k \
+  -n 3 -b 64,64 -r 1 -p LRCP
+opj_decompress -i openjpeg-2.5.4-lossless-ndecomp2-8x8.j2k -o decoded.pgm
+
+opj_compress -i source-ndecomp2-5x5-random.pgm \
+  -o openjpeg-2.5.4-lossless-ndecomp2-5x5-random.j2k \
+  -n 3 -b 64,64 -r 1 -p LRCP
+opj_decompress -i openjpeg-2.5.4-lossless-ndecomp2-5x5-random.j2k -o decoded.pgm
+
+opj_compress -i source-ndecomp2-5x5-random.pgm \
+  -o openjpeg-2.5.4-lossless-ndecomp1-5x5-random.j2k \
+  -n 2 -b 64,64 -r 1 -p LRCP
+opj_decompress -i openjpeg-2.5.4-lossless-ndecomp1-5x5-random.j2k -o decoded.pgm
 ```
 
 The optional `Jpeg2000OracleTest` requires the explicit Gradle property
@@ -67,5 +113,7 @@ Tier-2/MQ/EBCOT route. The two-codeblock claim validates packet-header BIO bit
 stuffing, independent inclusion and zero-bit-plane tag trees with two leaves,
 per-codeblock coding-pass and segment-length syntax, separately bounded
 EBCOT bodies, MQ arithmetic decoding, and style-0 Tier-1 EBCOT bit-plane
-passes. General JPEG 2000 profiles remain outside this fixture scope. No pixel
+passes. The Ndecomp=2 fixture further validates three adjacent LRCP packet
+headers, the seven subband order, and two inverse reversible 5/3 synthesis
+stages. General JPEG 2000 profiles remain outside this fixture scope. No pixel
 fallback to OpenJPEG is allowed.

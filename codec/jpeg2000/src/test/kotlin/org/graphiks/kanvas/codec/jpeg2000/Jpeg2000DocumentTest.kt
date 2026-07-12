@@ -22,6 +22,14 @@ class Jpeg2000DocumentTest {
     }
 
     @Test
+    fun `reversible 53 forward analysis round trips an odd length vector`() {
+        val samples = intArrayOf(-60, 17, 103, -44, 91)
+        val (low, high) = forwardReversible53(samples)
+
+        assertArrayEquals(samples, inverseReversible53(low, high, samples.size))
+    }
+
+    @Test
     fun `zero coding contexts use the directional JPEG 2000 subband tables`() {
         assertEquals(5, j2kZeroCodingContext(0, 1, 0, J2kSubbandOrientation.HL))
         assertEquals(3, j2kZeroCodingContext(1, 0, 0, J2kSubbandOrientation.HL))
@@ -29,6 +37,7 @@ class Jpeg2000DocumentTest {
         assertEquals(6, j2kZeroCodingContext(0, 0, 2, J2kSubbandOrientation.HH))
         assertEquals(7, j2kZeroCodingContext(1, 0, 2, J2kSubbandOrientation.HH))
         assertEquals(8, j2kZeroCodingContext(0, 0, 3, J2kSubbandOrientation.HH))
+        assertEquals(8, j2kZeroCodingContext(1, 2, 2, J2kSubbandOrientation.HL))
     }
 
     @Test
@@ -55,6 +64,20 @@ class Jpeg2000DocumentTest {
 
         assertEquals(
             "a2c33040c14e8d0cece4ac9ee69a3ed3cbb437b8e46a3e787c5318b587ef612c",
+            actual,
+        )
+    }
+
+    @Test
+    fun `pinned OpenJPEG random odd Ndecomp one J2K fixture has its documented SHA-256`() {
+        val actual = MessageDigest.getInstance("SHA-256")
+            .digest(Jpeg2000TestFixtures.openJpegLosslessNdecomp1_5x5())
+            .joinToString(separator = "") { byte ->
+                byte.toInt().and(0xff).toString(16).padStart(2, '0')
+            }
+
+        assertEquals(
+            "4d20cb6c3b76efbb54d3bba59490e0f0174c118ad053e15ea62bbe89ee561875",
             actual,
         )
     }
@@ -114,6 +137,207 @@ class Jpeg2000DocumentTest {
                 )
             }
         }
+    }
+
+    @Test
+    fun `OpenJPEG Ndecomp one random five by five frame decodes pixels exactly`() {
+        val codec = requireNotNull(Codec.MakeFromData(Jpeg2000TestFixtures.openJpegLosslessNdecomp1_5x5()))
+
+        val (bitmap, result) = codec.getImage()
+
+        assertEquals(Codec.Result.kSuccess, result)
+        val decoded = requireNotNull(bitmap)
+        val expected = sourcePgmPixels(
+            resource = "/jpeg2000-openjpeg/source-ndecomp2-5x5-random.pgm",
+            width = 5,
+            height = 5,
+        )
+        for (y in 0 until decoded.height) {
+            for (x in 0 until decoded.width) {
+                val sample = expected[y * decoded.width + x].toInt() and 0xFF
+                assertEquals(
+                    0xFF000000.toInt() or (sample shl 16) or (sample shl 8) or sample,
+                    decoded.getPixel(x, y),
+                    "x=$x y=$y decoded=${decoded.pixels8888.joinToString()}",
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `OpenJPEG Ndecomp two reversible J2K fixture decodes pixels exactly`() {
+        val codestream = Jpeg2000TestFixtures.openJpegLosslessNdecomp2_8x8()
+        val codec = requireNotNull(Codec.MakeFromData(codestream))
+        val document = requireNotNull(Jpeg2000Document.open(codestream).document)
+
+        val (bitmap, result) = codec.getImage()
+
+        assertEquals(Codec.Result.kSuccess, result, "document diagnostic=${document.decode().diagnostic}")
+        val decoded = requireNotNull(bitmap)
+        assertEquals(8, decoded.width)
+        assertEquals(8, decoded.height)
+        val expected = sourcePgmPixels(
+            resource = "/jpeg2000-openjpeg/source-ndecomp2-8x8.pgm",
+            width = 8,
+            height = 8,
+        )
+        for (y in 0 until 8) {
+            for (x in 0 until 8) {
+                val sample = expected[y * decoded.width + x].toInt() and 0xFF
+                assertEquals(
+                    0xFF000000.toInt() or (sample shl 16) or (sample shl 8) or sample,
+                    decoded.getPixel(x, y),
+                    "x=$x y=$y",
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `OpenJPEG odd Ndecomp two frame reconstructs both 53 symmetric edges`() {
+        val codec = requireNotNull(Codec.MakeFromData(Jpeg2000TestFixtures.openJpegLosslessNdecomp2_5x5()))
+
+        val (bitmap, result) = codec.getImage()
+
+        assertEquals(Codec.Result.kSuccess, result)
+        val decoded = requireNotNull(bitmap)
+        val expected = sourcePgmPixels(
+            resource = "/jpeg2000-openjpeg/source-ndecomp2-5x5-random.pgm",
+            width = 5,
+            height = 5,
+        )
+        assertEquals(5, decoded.width)
+        assertEquals(5, decoded.height)
+        for (y in 0 until decoded.height) {
+            for (x in 0 until decoded.width) {
+                val sample = expected[y * decoded.width + x].toInt() and 0xFF
+                assertEquals(
+                    0xFF000000.toInt() or (sample shl 16) or (sample shl 8) or sample,
+                    decoded.getPixel(x, y),
+                    "x=$x y=$y decoded=${decoded.pixels8888.joinToString()}",
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `OpenJPEG odd Ndecomp two codeblocks contain the expected reversible DWT coefficients`() {
+        val codestream = Jpeg2000TestFixtures.openJpegLosslessNdecomp2_5x5()
+        val samples = sourcePgmPixels(
+            resource = "/jpeg2000-openjpeg/source-ndecomp2-5x5-random.pgm",
+            width = 5,
+            height = 5,
+        ).map { it.toInt() and 0xFF }.map { it - 128 }.toIntArray()
+        val levelOne = forwardReversible53Bands(samples, width = 5, height = 5)
+        val levelTwo = forwardReversible53Bands(levelOne.ll, width = 3, height = 3)
+        val expected = arrayOf(
+            levelTwo.ll,
+            levelTwo.hl,
+            levelTwo.lh,
+            levelTwo.hh,
+            levelOne.hl,
+            levelOne.lh,
+            levelOne.hh,
+        )
+        val reconstructedLevelOne = inverseReversible53Bands(levelTwo, width = 3, height = 3)
+        assertArrayEquals(levelOne.ll, reconstructedLevelOne)
+        assertArrayEquals(
+            samples,
+            inverseReversible53Bands(
+                Reversible53Bands(reconstructedLevelOne, levelOne.hl, levelOne.lh, levelOne.hh),
+                width = 5,
+                height = 5,
+            ),
+        )
+
+        val actual = decodeNdecompTwoCodeblocks(codestream)
+
+        assertEquals(
+            expected.map(IntArray::contentToString),
+            actual.map(IntArray::contentToString),
+        )
+    }
+
+    @Test
+    fun `Ndecomp two packet stream separates LL coarse and fine codeblock bodies`() {
+        val codestream = Jpeg2000TestFixtures.openJpegLosslessNdecomp2_8x8()
+        val packetOffset = (0 until codestream.size - 1).single { index ->
+            codestream[index] == 0xFF.toByte() && codestream[index + 1] == 0x93.toByte()
+        } + 2
+        val spans = readNdecompTwoPacketSpans(
+            packet = codestream.copyOfRange(packetOffset, codestream.size - 2),
+            absoluteOffset = packetOffset,
+        )
+
+        assertEquals(3, spans.size)
+        assertEquals(1, spans[0].header.codeblocks.size)
+        assertEquals(3, spans[1].header.codeblocks.size)
+        assertEquals(3, spans[2].header.codeblocks.size)
+        assertEquals(spans[0].bodyEnd, spans[1].packetOffset)
+        assertEquals(spans[1].bodyEnd, spans[2].packetOffset)
+        assertEquals(codestream.size - 2, spans[2].bodyEnd)
+    }
+
+    @Test
+    fun `pinned OpenJPEG Ndecomp two source PGM has its documented SHA-256`() {
+        val source = requireNotNull(
+            javaClass.getResourceAsStream("/jpeg2000-openjpeg/source-ndecomp2-8x8.pgm"),
+        ) { "missing Ndecomp two OpenJPEG source PGM" }.use { input -> input.readBytes() }
+        val actual = MessageDigest.getInstance("SHA-256")
+            .digest(source)
+            .joinToString(separator = "") { byte ->
+                byte.toInt().and(0xff).toString(16).padStart(2, '0')
+            }
+
+        assertEquals(
+            "776f58efb28e49ed6656bd5d331757c8546b99fda4754f8d3ca7e3ee36601ed9",
+            actual,
+        )
+    }
+
+    @Test
+    fun `pinned OpenJPEG Ndecomp two J2K fixture has its documented SHA-256`() {
+        val actual = MessageDigest.getInstance("SHA-256")
+            .digest(Jpeg2000TestFixtures.openJpegLosslessNdecomp2_8x8())
+            .joinToString(separator = "") { byte ->
+                byte.toInt().and(0xff).toString(16).padStart(2, '0')
+            }
+
+        assertEquals(
+            "75abf991e34966f1e929baee2666b63f53f8c49be900c35e8c5ec14ae56b2a78",
+            actual,
+        )
+    }
+
+    @Test
+    fun `pinned OpenJPEG odd Ndecomp two source PGM has its documented SHA-256`() {
+        val source = requireNotNull(
+            javaClass.getResourceAsStream("/jpeg2000-openjpeg/source-ndecomp2-5x5-random.pgm"),
+        ) { "missing odd Ndecomp two OpenJPEG source PGM" }.use { input -> input.readBytes() }
+        val actual = MessageDigest.getInstance("SHA-256")
+            .digest(source)
+            .joinToString(separator = "") { byte ->
+                byte.toInt().and(0xff).toString(16).padStart(2, '0')
+            }
+
+        assertEquals(
+            "6e2ee7ce0880c67527f1a1dd6fed83703de8b66943dd9d623d1efb0ba5c8b612",
+            actual,
+        )
+    }
+
+    @Test
+    fun `pinned OpenJPEG odd Ndecomp two J2K fixture has its documented SHA-256`() {
+        val actual = MessageDigest.getInstance("SHA-256")
+            .digest(Jpeg2000TestFixtures.openJpegLosslessNdecomp2_5x5())
+            .joinToString(separator = "") { byte ->
+                byte.toInt().and(0xff).toString(16).padStart(2, '0')
+            }
+
+        assertEquals(
+            "fba82a726aa8992d948e763c443b48491e0106d1b3cdc23b9d8b00390dd1a03f",
+            actual,
+        )
     }
 
     @Test
@@ -699,6 +923,147 @@ class Jpeg2000DocumentTest {
         assertEquals(height.toString(), token())
         assertEquals("255", token())
         return ByteArray(width * height) { token().toInt().toByte() }
+    }
+
+    private data class Reversible53Bands(
+        val ll: IntArray,
+        val hl: IntArray,
+        val lh: IntArray,
+        val hh: IntArray,
+    )
+
+    private fun forwardReversible53Bands(samples: IntArray, width: Int, height: Int): Reversible53Bands {
+        val lowWidth = (width + 1) ushr 1
+        val highWidth = width ushr 1
+        val lowHeight = (height + 1) ushr 1
+        val highHeight = height ushr 1
+        val lowColumns = IntArray(width * lowHeight)
+        val highColumns = IntArray(width * highHeight)
+        for (x in 0 until width) {
+            val (low, high) = forwardReversible53(IntArray(height) { y -> samples[y * width + x] })
+            for (y in low.indices) lowColumns[y * width + x] = low[y]
+            for (y in high.indices) highColumns[y * width + x] = high[y]
+        }
+        val ll = IntArray(lowWidth * lowHeight)
+        val hl = IntArray(highWidth * lowHeight)
+        for (y in 0 until lowHeight) {
+            val (low, high) = forwardReversible53(lowColumns.copyOfRange(y * width, (y + 1) * width))
+            low.copyInto(ll, y * lowWidth)
+            high.copyInto(hl, y * highWidth)
+        }
+        val lh = IntArray(lowWidth * highHeight)
+        val hh = IntArray(highWidth * highHeight)
+        for (y in 0 until highHeight) {
+            val (low, high) = forwardReversible53(highColumns.copyOfRange(y * width, (y + 1) * width))
+            low.copyInto(lh, y * lowWidth)
+            high.copyInto(hh, y * highWidth)
+        }
+        return Reversible53Bands(ll, hl, lh, hh)
+    }
+
+    private fun forwardReversible53(samples: IntArray): Pair<IntArray, IntArray> {
+        val low = IntArray((samples.size + 1) ushr 1) { index -> samples[index shl 1] }
+        val high = IntArray(samples.size ushr 1) { index -> samples[(index shl 1) + 1] }
+        for (index in high.indices) {
+            high[index] -= Math.floorDiv(low[index] + low[minOf(index + 1, low.lastIndex)], 2)
+        }
+        for (index in low.indices) {
+            low[index] += Math.floorDiv(high[if (index == 0) 0 else index - 1] + high[minOf(index, high.lastIndex)] + 2, 4)
+        }
+        return low to high
+    }
+
+    private fun inverseReversible53Bands(bands: Reversible53Bands, width: Int, height: Int): IntArray {
+        val lowWidth = (width + 1) ushr 1
+        val highWidth = width ushr 1
+        val lowHeight = (height + 1) ushr 1
+        val highHeight = height ushr 1
+        val lowRows = IntArray(width * lowHeight)
+        val highRows = IntArray(width * highHeight)
+        for (y in 0 until lowHeight) {
+            inverseReversible53(
+                bands.ll.copyOfRange(y * lowWidth, (y + 1) * lowWidth),
+                bands.hl.copyOfRange(y * highWidth, (y + 1) * highWidth),
+                width,
+            ).copyInto(lowRows, y * width)
+        }
+        for (y in 0 until highHeight) {
+            inverseReversible53(
+                bands.lh.copyOfRange(y * lowWidth, (y + 1) * lowWidth),
+                bands.hh.copyOfRange(y * highWidth, (y + 1) * highWidth),
+                width,
+            ).copyInto(highRows, y * width)
+        }
+        return IntArray(width * height).also { output ->
+            for (x in 0 until width) {
+                val samples = inverseReversible53(
+                    IntArray(lowHeight) { y -> lowRows[y * width + x] },
+                    IntArray(highHeight) { y -> highRows[y * width + x] },
+                    height,
+                )
+                for (y in samples.indices) output[y * width + x] = samples[y]
+            }
+        }
+    }
+
+    private fun decodeNdecompTwoCodeblocks(codestream: ByteArray): Array<IntArray> {
+        val packetOffset = (0 until codestream.size - 1).single { index ->
+            codestream[index] == 0xFF.toByte() && codestream[index + 1] == 0x93.toByte()
+        } + 2
+        val spans = readNdecompTwoPacketSpans(
+            codestream.copyOfRange(packetOffset, codestream.size - 2),
+            packetOffset,
+        )
+        assertEquals(
+            listOf(
+                listOf(J2kPacketCodeblock(6, 16, 4)),
+                listOf(J2kPacketCodeblock(7, 19, 3), J2kPacketCodeblock(6, 16, 2), J2kPacketCodeblock(7, 19, 2)),
+                listOf(J2kPacketCodeblock(7, 19, 8), J2kPacketCodeblock(8, 22, 7), J2kPacketCodeblock(9, 25, 6)),
+            ),
+            spans.map { it.header.codeblocks },
+        )
+        fun decode(entry: J2kPacketCodeblock, bodyOffset: Int, width: Int, height: Int, orientation: J2kSubbandOrientation): IntArray =
+            J2kTier1Decoder(
+                width = width,
+                height = height,
+                numBitPlanes = entry.numBitPlanes,
+                passes = entry.passes,
+                codeblock = codestream.copyOfRange(bodyOffset, bodyOffset + entry.bodyLength),
+                codeblockOffset = bodyOffset,
+                orientation = orientation,
+            ).decode()
+        val ll = decode(spans[0].header.codeblocks.single(), spans[0].bodyOffset, width = 2, height = 2, J2kSubbandOrientation.LL)
+        fun details(
+            span: J2kPacketSpan,
+            width: Int,
+            lowWidth: Int,
+            lowHeight: Int,
+            highHeight: Int,
+        ): Array<IntArray> {
+            var offset = span.bodyOffset
+            return Array(3) { index ->
+                val entry = span.header.codeblocks[index]
+                val dimensions = when (index) {
+                    0 -> width to lowHeight
+                    1 -> lowWidth to highHeight
+                    else -> width to highHeight
+                }
+                decode(entry, offset, dimensions.first, dimensions.second, J2kSubbandOrientation.entries[index + 1]).also {
+                    offset += entry.bodyLength
+                }
+            }
+        }
+        return arrayOf(
+            ll,
+            *details(spans[1], width = 1, lowWidth = 2, lowHeight = 2, highHeight = 1),
+            *details(
+                spans[2],
+                width = 2,
+                lowWidth = 3,
+                lowHeight = 3,
+                highHeight = 2,
+            ),
+        )
     }
 
     private fun fixtureDecisions(): List<J2kEbcotDecision> {

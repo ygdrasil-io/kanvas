@@ -70,8 +70,9 @@ public class Jpeg2000Box internal constructor(
  * component, one tile, one layer, reversible 5/3 transform and no
  * quantization. Raw codestreams in that profile may use either `Ndecomp=0`
  * with one packet and up to two horizontal codeblocks, or the bounded
- * `Ndecomp=1` two-resolution path with one LL packet and one HL/LH/HH packet;
- * JP2 remains structural only.
+ * `Ndecomp=1` two-resolution path with one LL packet and one HL/LH/HH packet,
+ * or the bounded `Ndecomp=2` three-resolution path with LL2, coarse
+ * HL2/LH2/HH2 and fine HL1/LH1/HH1 packets; JP2 remains structural only.
  */
 public class Jpeg2000Document private constructor(
     private val source: ByteArray,
@@ -410,7 +411,7 @@ private class J2kCodestreamParser(
         val transform = data[p + 9].u8()
         if (
             scod != 0 || progression != 0 || layers != 1 || multiComponentTransform != 0 ||
-            decompositions !in 0..1 || codeBlockWidth != 4 || codeBlockHeight != 4 ||
+            decompositions !in 0..2 || codeBlockWidth != 4 || codeBlockHeight != 4 ||
             codeBlockStyle != 0 || transform != 1
         ) {
             j2kFailure("jpeg2000.cod.profile.unsupported", markerOffset, Codec.Result.kUnimplemented)
@@ -425,6 +426,7 @@ private class J2kCodestreamParser(
         val expected = when (decompositions) {
             0 -> byteArrayOf(0x40, 0x40)
             1 -> byteArrayOf(0x40, 0x40, 0x48, 0x48, 0x50)
+            2 -> byteArrayOf(0x40, 0x40, 0x48, 0x48, 0x50, 0x48, 0x48, 0x50)
             else -> j2kFailure("jpeg2000.cod.missing", markerOffset)
         }
         if (segment.payloadSize != expected.size || !data.rangeEquals(segment.payloadOffset, expected, 0, expected.size)) {

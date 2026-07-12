@@ -23,12 +23,12 @@ private fun entropyFailure(
 /**
  * Decodes the intentionally small raw Part-1 profile validated by
  * [J2kCodestreamParser]: one 8-bit unsigned component, one or two horizontal
- * 64x64 codeblocks, a single LRCP packet, reversible quantization and no DWT
- * levels.
+ * 64x64 codeblocks, one-layer LRCP packets, reversible quantization and up
+ * to two reversible 5/3 DWT levels.
  *
  * The packet header, MQ arithmetic stream and EBCOT passes are all decoded
- * from the encoded bytes. This is deliberately not a JP2, tiled, DWT, or
- * general multi-codeblock implementation.
+ * from the encoded bytes. This is deliberately not a JP2, tiled, general
+ * multi-codeblock, or general multi-resolution implementation.
  */
 internal fun decodeNarrowRawJ2k(
     source: ByteArray,
@@ -46,41 +46,43 @@ internal fun decodeNarrowRawJ2k(
     if (entropy.packetOffset < 0 || entropy.packetLength <= 0 || packetEnd > source.size) {
         entropyFailure("jpeg2000.packet.bounds", entropy.packetOffset)
     }
-    if (entropy.decompositions == 1) {
-        decodeNdecompOneRawJ2k(source, frame, entropy)
-    } else {
-        if (entropy.decompositions != 0) {
+    when (entropy.decompositions) {
+        0 -> {
+            val packet = source.copyOfRange(entropy.packetOffset, packetEnd.toInt())
+            val codeblockWidths = narrowRawJ2kCodeblockWidths(frame.width)
+            val header = J2kPacketHeader.read(packet, entropy.packetOffset, codeblockWidths.size)
+            var bodyOffset = header.bodyOffset
+            val coefficients = header.codeblocks.mapIndexed { index, codeblock ->
+                val bodyEnd = bodyOffset + codeblock.bodyLength
+                val decoded = J2kTier1Decoder(
+                    width = codeblockWidths[index],
+                    height = frame.height,
+                    numBitPlanes = codeblock.numBitPlanes,
+                    passes = codeblock.passes,
+                    codeblock = packet.copyOfRange(bodyOffset, bodyEnd),
+                    codeblockOffset = entropy.packetOffset + bodyOffset,
+                ).decode()
+                bodyOffset = bodyEnd
+                decoded
+            }
+
+            val bitmap = SkBitmap(frame.width, frame.height)
+            for (y in 0 until frame.height) {
+                for (x in 0 until frame.width) {
+                    val codeblockIndex = if (x < RAW_J2K_CODEBLOCK_WIDTH) 0 else 1
+                    val codeblockX = if (codeblockIndex == 0) x else x - RAW_J2K_CODEBLOCK_WIDTH
+                    val sample = (coefficients[codeblockIndex][y * codeblockWidths[codeblockIndex] + codeblockX] + 128)
+                        .coerceIn(0, 255)
+                    bitmap.setPixel(x, y, 0xFF000000.toInt() or (sample shl 16) or (sample shl 8) or sample)
+                }
+            }
+            Jpeg2000DecodeResult(bitmap, null)
+        }
+        1 -> decodeNdecompOneRawJ2k(source, frame, entropy)
+        2 -> decodeNdecompTwoRawJ2k(source, frame, entropy)
+        else -> {
             entropyFailure("jpeg2000.entropy.profile.unsupported", entropy.packetOffset, Codec.Result.kUnimplemented)
         }
-        val packet = source.copyOfRange(entropy.packetOffset, packetEnd.toInt())
-        val codeblockWidths = narrowRawJ2kCodeblockWidths(frame.width)
-        val header = J2kPacketHeader.read(packet, entropy.packetOffset, codeblockWidths.size)
-        var bodyOffset = header.bodyOffset
-        val coefficients = header.codeblocks.mapIndexed { index, codeblock ->
-            val bodyEnd = bodyOffset + codeblock.bodyLength
-            val decoded = J2kTier1Decoder(
-                width = codeblockWidths[index],
-                height = frame.height,
-                numBitPlanes = codeblock.numBitPlanes,
-                passes = codeblock.passes,
-                codeblock = packet.copyOfRange(bodyOffset, bodyEnd),
-                codeblockOffset = entropy.packetOffset + bodyOffset,
-            ).decode()
-            bodyOffset = bodyEnd
-            decoded
-        }
-
-        val bitmap = SkBitmap(frame.width, frame.height)
-        for (y in 0 until frame.height) {
-            for (x in 0 until frame.width) {
-                val codeblockIndex = if (x < RAW_J2K_CODEBLOCK_WIDTH) 0 else 1
-                val codeblockX = if (codeblockIndex == 0) x else x - RAW_J2K_CODEBLOCK_WIDTH
-                val sample = (coefficients[codeblockIndex][y * codeblockWidths[codeblockIndex] + codeblockX] + 128)
-                    .coerceIn(0, 255)
-                bitmap.setPixel(x, y, 0xFF000000.toInt() or (sample shl 16) or (sample shl 8) or sample)
-            }
-        }
-        Jpeg2000DecodeResult(bitmap, null)
     }
 } catch (failure: J2kEntropyFailure) {
     Jpeg2000DecodeResult(null, failure.diagnostic)
@@ -171,6 +173,121 @@ private fun decodeNdecompOneRawJ2k(
     return Jpeg2000DecodeResult(bitmap, null)
 }
 
+/** Decodes two reversible 5/3 levels with one codeblock in each subband. */
+private fun decodeNdecompTwoRawJ2k(
+    source: ByteArray,
+    frame: Jpeg2000FrameInfo,
+    entropy: J2kEntropyInput,
+): Jpeg2000DecodeResult {
+    if (frame.width < 4 || frame.height < 4) {
+        entropyFailure("jpeg2000.ndecomp2.geometry.unsupported", entropy.packetOffset, Codec.Result.kUnimplemented)
+    }
+    val packet = source.copyOfRange(entropy.packetOffset, entropy.packetOffset + entropy.packetLength)
+    val spans = readNdecompTwoPacketSpans(packet, entropy.packetOffset)
+    val llEntry = spans[0].header.codeblocks.single()
+    val coarseEntries = spans[1].header.codeblocks
+    val fineEntries = spans[2].header.codeblocks
+    if (coarseEntries.size != 3 || fineEntries.size != 3) {
+        entropyFailure("jpeg2000.ndecomp2.packet.codeblocks", spans[1].packetOffset)
+    }
+
+    val low1Width = (frame.width + 1) ushr 1
+    val high1Width = frame.width ushr 1
+    val low1Height = (frame.height + 1) ushr 1
+    val high1Height = frame.height ushr 1
+    val low2Width = (low1Width + 1) ushr 1
+    val high2Width = low1Width ushr 1
+    val low2Height = (low1Height + 1) ushr 1
+    val high2Height = low1Height ushr 1
+
+    val ll2 = decodeNdecompOneCodeblock(source, llEntry, spans[0].bodyOffset, low2Width, low2Height, J2kSubbandOrientation.LL)
+    val coarse = decodeNdecompDetailBands(source, spans[1], coarseEntries, high2Width, low2Width, low2Height, high2Height)
+    val fine = decodeNdecompDetailBands(source, spans[2], fineEntries, high1Width, low1Width, low1Height, high1Height)
+    val ll1 = inverseReversible53Bands(
+        width = low1Width, height = low1Height, lowWidth = low2Width, lowHeight = low2Height,
+        highWidth = high2Width, highHeight = high2Height, ll = ll2, hl = coarse[0], lh = coarse[1], hh = coarse[2],
+    )
+    val coefficients = inverseReversible53Bands(
+        width = frame.width, height = frame.height, lowWidth = low1Width, lowHeight = low1Height,
+        highWidth = high1Width, highHeight = high1Height, ll = ll1, hl = fine[0], lh = fine[1], hh = fine[2],
+    )
+    return grayscaleBitmap(frame.width, frame.height, coefficients)
+}
+
+private fun decodeNdecompDetailBands(
+    source: ByteArray,
+    span: J2kPacketSpan,
+    entries: List<J2kPacketCodeblock>,
+    highWidth: Int,
+    lowWidth: Int,
+    lowHeight: Int,
+    highHeight: Int,
+): Array<IntArray> {
+    var bodyOffset = span.bodyOffset
+    fun decode(index: Int, width: Int, height: Int, orientation: J2kSubbandOrientation): IntArray {
+        val entry = entries[index]
+        val decoded = decodeNdecompOneCodeblock(source, entry, bodyOffset, width, height, orientation)
+        bodyOffset += entry.bodyLength
+        return decoded
+    }
+    val result = arrayOf(
+        decode(0, highWidth, lowHeight, J2kSubbandOrientation.HL),
+        decode(1, lowWidth, highHeight, J2kSubbandOrientation.LH),
+        decode(2, highWidth, highHeight, J2kSubbandOrientation.HH),
+    )
+    if (bodyOffset != span.bodyEnd) entropyFailure("jpeg2000.ndecomp2.packet.trailing", bodyOffset)
+    return result
+}
+
+private fun inverseReversible53Bands(
+    width: Int,
+    height: Int,
+    lowWidth: Int,
+    lowHeight: Int,
+    highWidth: Int,
+    highHeight: Int,
+    ll: IntArray,
+    hl: IntArray,
+    lh: IntArray,
+    hh: IntArray,
+): IntArray {
+    val lowRows = IntArray(width * lowHeight)
+    val highRows = IntArray(width * highHeight)
+    for (y in 0 until lowHeight) {
+        inverseReversible53(
+            ll.copyOfRange(y * lowWidth, (y + 1) * lowWidth),
+            hl.copyOfRange(y * highWidth, (y + 1) * highWidth),
+            width,
+        ).copyInto(lowRows, y * width)
+    }
+    for (y in 0 until highHeight) {
+        inverseReversible53(
+            lh.copyOfRange(y * lowWidth, (y + 1) * lowWidth),
+            hh.copyOfRange(y * highWidth, (y + 1) * highWidth),
+            width,
+        ).copyInto(highRows, y * width)
+    }
+    return IntArray(width * height).also { output ->
+        val lowColumn = IntArray(lowHeight)
+        val highColumn = IntArray(highHeight)
+        for (x in 0 until width) {
+            for (y in 0 until lowHeight) lowColumn[y] = lowRows[y * width + x]
+            for (y in 0 until highHeight) highColumn[y] = highRows[y * width + x]
+            val samples = inverseReversible53(lowColumn, highColumn, height)
+            for (y in samples.indices) output[y * width + x] = samples[y]
+        }
+    }
+}
+
+private fun grayscaleBitmap(width: Int, height: Int, coefficients: IntArray): Jpeg2000DecodeResult {
+    val bitmap = SkBitmap(width, height)
+    coefficients.forEachIndexed { index, coefficient ->
+        val sample = (coefficient + 128).coerceIn(0, 255)
+        bitmap.pixels[index] = 0xFF000000.toInt() or (sample shl 16) or (sample shl 8) or sample
+    }
+    return Jpeg2000DecodeResult(bitmap, null)
+}
+
 private fun decodeNdecompOneCodeblock(
     source: ByteArray,
     entry: J2kPacketCodeblock,
@@ -200,7 +317,7 @@ internal data class J2kPacketCodeblock(
     val bodyLength: Int,
 )
 
-/** A bounded packet span in the Ndecomp=1 two-resolution lossless profile. */
+/** A bounded packet span in one of the supported multi-resolution lossless profiles. */
 internal data class J2kPacketSpan(
     val packetOffset: Int,
     val header: J2kPacketHeader,
@@ -231,21 +348,30 @@ internal data class J2kPacketHeader(
             return header
         }
 
-        /** Reads one packet header and body lengths from the start of a larger packet stream. */
+        /**
+         * Reads one packet header and body lengths from a range of a larger packet stream.
+         *
+         * [packetStart] is measured from [packet]'s first byte, while offsets in the returned
+         * header remain relative to [packetStart]. This avoids copying the unconsumed suffix
+         * while walking adjacent LRCP packets.
+         */
         internal fun readPrefix(
             packet: ByteArray,
             absoluteOffset: Int,
             codeblockCount: Int,
             independentSubbandTrees: Boolean = false,
             bandNumBitPlanes: IntArray? = null,
+            packetStart: Int = 0,
         ): J2kPacketHeader {
-            if (codeblockCount !in 1..3) entropyFailure("jpeg2000.packet.codeblocks", absoluteOffset)
+            if (packetStart !in 0 until packet.size) entropyFailure("jpeg2000.packet.truncated", absoluteOffset + packetStart)
+            val packetOffset = absoluteOffset + packetStart
+            if (codeblockCount !in 1..3) entropyFailure("jpeg2000.packet.codeblocks", packetOffset)
             val baseBitPlanes = bandNumBitPlanes ?: IntArray(codeblockCount) { DEFAULT_BAND_NUM_BIT_PLANES }
             if (baseBitPlanes.size != codeblockCount || baseBitPlanes.any { it !in 1..MAX_CODEBLOCK_BIT_PLANES }) {
-                entropyFailure("jpeg2000.packet.bitplanes", absoluteOffset)
+                entropyFailure("jpeg2000.packet.bitplanes", packetOffset)
             }
-            val bits = J2kPacketBits(packet, absoluteOffset)
-            if (bits.readBit() == 0) entropyFailure("jpeg2000.packet.empty", absoluteOffset)
+            val bits = J2kPacketBits(packet, absoluteOffset, packetStart)
+            if (bits.readBit() == 0) entropyFailure("jpeg2000.packet.empty", bits.offset)
 
             val inclusion = J2kTagTree(codeblockCount)
             val insignificantMsbs = J2kTagTree(codeblockCount)
@@ -276,14 +402,14 @@ internal data class J2kPacketHeader(
                     }
                 }
                 // SQcd=0x40/SPqcd=0x40 maps exponent 8 to a base of 9.
-                // Ndecomp=1 passes the distinct base for each detail subband.
+                // Multi-resolution profiles pass a distinct base for each detail subband.
                 val numBitPlanes = baseBitPlanes[index] + 1 - zeroBitPlanes
                 if (numBitPlanes !in 1..MAX_CODEBLOCK_BIT_PLANES) {
                     entropyFailure("jpeg2000.packet.zero-bitplanes", bits.offset)
                 }
 
                 val passes = bits.readNumPasses()
-                if (passes !in 1..MAX_PASSES) entropyFailure("jpeg2000.packet.passes", bits.offset)
+                if (passes !in 1..(3 * numBitPlanes - 2)) entropyFailure("jpeg2000.packet.passes", bits.offset)
                 val lengthIncrement = bits.readCommaCode()
                 if (lengthIncrement > MAX_LENGTH_INCREMENT) entropyFailure("jpeg2000.packet.length-bits", bits.offset)
                 val lengthBits = INITIAL_LENGTH_BITS + lengthIncrement + floorLog2(passes)
@@ -294,15 +420,16 @@ internal data class J2kPacketHeader(
             }
             bits.alignToPacketBoundary()
             val bodyOffset = bits.bytesRead
-            val bodiesLength = codeblocks.sumOf(J2kPacketCodeblock::bodyLength)
-            if (bodiesLength > packet.size - bodyOffset) entropyFailure("jpeg2000.packet.truncated", bits.offset)
+            val bodiesLength = codeblocks.sumOf { it.bodyLength.toLong() }
+            if (bodiesLength > packet.size - packetStart - bodyOffset) {
+                entropyFailure("jpeg2000.packet.truncated", bits.offset)
+            }
             return J2kPacketHeader(codeblocks, bodyOffset)
         }
 
         private const val DEFAULT_BAND_NUM_BIT_PLANES = 9
         private const val MAX_ZERO_BIT_PLANES = 9
         private const val MAX_CODEBLOCK_BIT_PLANES = 11
-        private const val MAX_PASSES = 22
         private const val MAX_LENGTH_INCREMENT = 24
         private const val INITIAL_LENGTH_BITS = 3
     }
@@ -320,11 +447,12 @@ internal fun readNdecompOnePacketSpans(packet: ByteArray, absoluteOffset: Int): 
     if (firstBodyEnd >= packet.size) entropyFailure("jpeg2000.ndecomp1.packet.missing", absoluteOffset + firstBodyEnd)
 
     val resolutionOne = J2kPacketHeader.readPrefix(
-        packet = packet.copyOfRange(firstBodyEnd, packet.size),
-        absoluteOffset = absoluteOffset + firstBodyEnd,
+        packet = packet,
+        absoluteOffset = absoluteOffset,
         codeblockCount = 3,
         independentSubbandTrees = true,
         bandNumBitPlanes = intArrayOf(10, 10, 11),
+        packetStart = firstBodyEnd,
     )
     val secondBodyOffset = firstBodyEnd + resolutionOne.bodyOffset
     val secondBodyEnd = secondBodyOffset + resolutionOne.bodyLength
@@ -346,17 +474,57 @@ internal fun readNdecompOnePacketSpans(packet: ByteArray, absoluteOffset: Int): 
     )
 }
 
+/** Reads the three LRCP packets of the bounded Ndecomp=2 profile. */
+internal fun readNdecompTwoPacketSpans(packet: ByteArray, absoluteOffset: Int): List<J2kPacketSpan> {
+    val ll = J2kPacketHeader.readPrefix(
+        packet,
+        absoluteOffset,
+        codeblockCount = 1,
+        bandNumBitPlanes = intArrayOf(9),
+    )
+    val firstBodyEnd = ll.bodyOffset + ll.bodyLength
+    if (firstBodyEnd >= packet.size) entropyFailure("jpeg2000.ndecomp2.packet.missing", absoluteOffset + firstBodyEnd)
+    val coarse = J2kPacketHeader.readPrefix(
+        packet,
+        absoluteOffset,
+        codeblockCount = 3,
+        independentSubbandTrees = true,
+        bandNumBitPlanes = intArrayOf(10, 10, 11),
+        packetStart = firstBodyEnd,
+    )
+    val secondBodyOffset = firstBodyEnd + coarse.bodyOffset
+    val secondBodyEnd = secondBodyOffset + coarse.bodyLength
+    if (secondBodyEnd >= packet.size) entropyFailure("jpeg2000.ndecomp2.packet.missing", absoluteOffset + secondBodyEnd)
+    val fine = J2kPacketHeader.readPrefix(
+        packet,
+        absoluteOffset,
+        codeblockCount = 3,
+        independentSubbandTrees = true,
+        bandNumBitPlanes = intArrayOf(10, 10, 11),
+        packetStart = secondBodyEnd,
+    )
+    val thirdBodyOffset = secondBodyEnd + fine.bodyOffset
+    val thirdBodyEnd = thirdBodyOffset + fine.bodyLength
+    if (thirdBodyEnd != packet.size) entropyFailure("jpeg2000.ndecomp2.packet.trailing", absoluteOffset + thirdBodyEnd)
+    return listOf(
+        J2kPacketSpan(absoluteOffset, ll, absoluteOffset + ll.bodyOffset, absoluteOffset + firstBodyEnd),
+        J2kPacketSpan(absoluteOffset + firstBodyEnd, coarse, absoluteOffset + secondBodyOffset, absoluteOffset + secondBodyEnd),
+        J2kPacketSpan(absoluteOffset + secondBodyEnd, fine, absoluteOffset + thirdBodyOffset, absoluteOffset + thirdBodyEnd),
+    )
+}
+
 /** JPEG 2000 packet-header BIO reader, including the 0xFF seven-bit rule. */
 private class J2kPacketBits(
     private val bytes: ByteArray,
     private val absoluteStart: Int,
+    private val packetStart: Int = 0,
 ) {
-    private var position = 0
+    private var position = packetStart
     private var current = -1
     private var remaining = 0
 
     val offset: Int get() = absoluteStart + position
-    val bytesRead: Int get() = position
+    val bytesRead: Int get() = position - packetStart
 
     fun readBit(): Int {
         if (remaining == 0) loadByte()
@@ -634,7 +802,7 @@ internal fun j2kZeroCodingContext(
             horizontal == 0 && vertical == 1 -> 6
             horizontal == 0 -> 8
             horizontal == 1 && vertical == 0 -> 3
-            horizontal == 1 -> 7
+            horizontal == 1 && vertical == 1 -> 7
             vertical == 0 -> 4
             vertical == 1 -> 7
             else -> 8
