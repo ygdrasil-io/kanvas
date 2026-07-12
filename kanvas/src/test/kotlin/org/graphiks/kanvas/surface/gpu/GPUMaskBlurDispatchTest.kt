@@ -275,6 +275,7 @@ class GPUMaskBlurDispatchTest {
         val passColorFormats = mutableListOf<String>()
         val compositePasses = mutableListOf<CompositePass>()
         val createdTextures = mutableListOf<GPUBackendOffscreenTexture>()
+        val targetCopyTextureLabels = mutableListOf<String>()
         var maskTriangleData: GPUBackendTriangleData? = null
 
         override val target: GPUSurfaceTarget
@@ -291,6 +292,10 @@ class GPUMaskBlurDispatchTest {
         }
 
         override fun snapshotTargetToOffscreenTexture(textureLabel: String) = error("Unexpected snapshot")
+
+        override fun copyTargetToOffscreenTexture(destinationTextureLabel: String) {
+            targetCopyTextureLabels += destinationTextureLabel
+        }
 
         override fun encodeOffscreenTexture(
             textureLabel: String,

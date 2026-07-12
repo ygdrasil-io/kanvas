@@ -279,6 +279,7 @@ class GPUClipCoverageDispatchTest {
         val passKinds = mutableListOf<String>()
         val releasedMasks = mutableListOf<GPUBackendCoverageMask>()
         val vertexBlendModes = mutableListOf<GPUBlendMode?>()
+        val targetCopyTextureLabels = mutableListOf<String>()
         var stencilWriteTriangleData: GPUBackendTriangleData? = null
 
         fun recorder(): GPUBackendRenderRecorder = CapturingRecorder()
@@ -294,6 +295,10 @@ class GPUClipCoverageDispatchTest {
         override fun createOffscreenTexture(texture: GPUBackendOffscreenTexture): String = unexpected()
 
         override fun snapshotTargetToOffscreenTexture(textureLabel: String) = unexpected()
+
+        override fun copyTargetToOffscreenTexture(destinationTextureLabel: String) {
+            targetCopyTextureLabels += destinationTextureLabel
+        }
 
         override fun encodeOffscreenTexture(
             textureLabel: String,

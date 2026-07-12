@@ -1280,6 +1280,43 @@ private class WgpuOffscreenTarget(
         }
     }
 
+    override fun copyTargetToOffscreenTexture(destinationTextureLabel: String) {
+        val destination = offscreenTexture(destinationTextureLabel)
+        require(texture.width == destination.width && texture.height == destination.height) {
+            "Primary-target GPU copy requires equal texture dimensions"
+        }
+        require(request.colorFormat.toWgpuTextureFormat() == offscreenTextureFormats.getValue(destinationTextureLabel)) {
+            "Primary-target GPU copy requires equal texture formats"
+        }
+
+        val copyOrdinal = copyOrdinalCounter.incrementAndGet()
+        GPUResourceScope().use { resources ->
+            val encoder = resources.trackIfAutoCloseable(device.createCommandEncoder())
+            encoder.copyTextureToTexture(
+                source = TexelCopyTextureInfo(texture = texture),
+                destination = TexelCopyTextureInfo(texture = destination),
+                copySize = Extent3D(width = texture.width, height = texture.height),
+            )
+            val commandBuffer = resources.trackIfAutoCloseable(encoder.finish())
+            telemetryRecorder.recordCommandBufferFinished()
+            queue.submit(listOf(commandBuffer))
+            val submission = queueManager.submit(
+                label = "target-copy:$copyOrdinal",
+                retainedResources = gpuRuntimeRetainedResourceRefs(
+                    targetRef = GPUQueuedResourceRef("target:${target.targetId}"),
+                    leases = emptyList(),
+                    extraRefs = listOf(
+                        GPUQueuedResourceRef("target-copy-source:$copyOrdinal"),
+                        GPUQueuedResourceRef("target-copy-destination:$copyOrdinal"),
+                    ),
+                ),
+            )
+            retainPendingTargetCloseSubmission(submission)
+            telemetryRecorder.recordSubmission()
+            telemetryRecorder.recordDestinationCopy()
+        }
+    }
+
     override fun snapshotTargetToOffscreenTexture(textureLabel: String) {
         val snapshot = readRgba()
         encodeOffscreenTexture(

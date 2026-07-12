@@ -210,6 +210,9 @@ interface GPUBackendOffscreenTarget : AutoCloseable {
     /** Readback-snapshots the most recently encoded primary target into a previously-created offscreen texture. */
     fun snapshotTargetToOffscreenTexture(textureLabel: String)
 
+    /** Copies the primary render target into an existing secondary texture entirely on the GPU. */
+    fun copyTargetToOffscreenTexture(destinationTextureLabel: String)
+
     /** Renders into a previously-created offscreen texture via a separate render pass. When [clearColor] is null the pass preserves existing texture content via [GPULoadOp.Load]. */
     fun encodeOffscreenTexture(
         textureLabel: String,

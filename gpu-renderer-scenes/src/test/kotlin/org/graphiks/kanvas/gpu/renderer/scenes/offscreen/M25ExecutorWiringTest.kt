@@ -259,7 +259,7 @@ class M25ExecutorWiringTest {
     }
 
     @Test
-    fun `destination read preparation materializes both textures through provider and defers destination readback snapshot`() {
+    fun `destination read renderer copies the primary target on the GPU without a readback snapshot`() {
         val drawPlan = RectOnlyDrawPlan(
             sceneId = "destination-copy-scene",
             clearColor = SceneColor(0f, 0f, 0f, 0f),
@@ -306,31 +306,29 @@ class M25ExecutorWiringTest {
             ),
         )
         val target = RecordingOffscreenTarget(width = 64, height = 64)
+        val renderer = RectOnlyOffscreenRenderer(
+            intermediatePlanAdapter = SceneIntermediatePlanAdapter { plan },
+            intermediatePlanExecutor = SceneIntermediatePlanExecutor(),
+        )
+        val intermediateDiagnostics = mutableListOf<String>()
 
-        val execution = SceneIntermediatePlanExecutor().executeSaveLayerPreparation(
-            target = target,
-            drawPlan = drawPlan,
-            plan = plan,
-        ) {
-            drawFullscreenPass("solid-rect-wgsl", OFFSCREEN_COLOR_FORMAT, SceneIntermediatePlanExecutor.solidRectDraws(it))
-        }
+        renderer.renderToPixels(target, drawPlan, intermediateDiagnostics)
 
-        val prepared = assertIs<SceneIntermediateExecutionResult.Prepared>(execution)
         assertEquals(listOf("dst-copy:foreground", "blend-src:foreground"), target.createdTextureLabels)
         assertEquals(1, target.offscreenEncodeCount, "only the source texture is rendered during preparation")
-        assertEquals(0, target.targetReadbackSnapshots, "destination snapshot must happen through the backend snapshot hook later")
+        assertEquals(listOf("dst-copy:foreground"), target.targetCopyTextureLabels)
         assertEquals(
             2,
-            prepared.diagnostics.count {
+            intermediateDiagnostics.count {
                 it.startsWith("resource-provider.cache lane=intermediate-texture result=create")
             },
-            prepared.diagnostics.toString(),
+            intermediateDiagnostics.toString(),
         )
         assertTrue(
-            prepared.diagnostics.any {
-                it.contains("intermediate.scene.destination-read-readback-snapshot-deferred command=foreground")
+            intermediateDiagnostics.any {
+                it == "intermediate.scene.destination-read-gpu-copied command=foreground"
             },
-            prepared.diagnostics.toString(),
+            intermediateDiagnostics.toString(),
         )
     }
 
@@ -544,8 +542,7 @@ class M25ExecutorWiringTest {
         var offscreenEncodeCount: Int = 0
             private set
         val createdTextureLabels: MutableList<String> = mutableListOf()
-        var targetReadbackSnapshots: Int = 0
-            private set
+        val targetCopyTextureLabels: MutableList<String> = mutableListOf()
 
         override fun encode(clearColor: GPUClearColor, block: GPUBackendRenderRecorder.() -> Unit) {
             mainEncodeCount += 1
@@ -555,8 +552,11 @@ class M25ExecutorWiringTest {
         override fun readRgba(): ByteArray =
             ByteArray(target.descriptor.width * target.descriptor.height * 4)
 
-        override fun snapshotTargetToOffscreenTexture(textureLabel: String) {
-            targetReadbackSnapshots += 1
+        override fun snapshotTargetToOffscreenTexture(textureLabel: String): Nothing =
+            error("Scene destination reads must not use readback snapshots")
+
+        override fun copyTargetToOffscreenTexture(destinationTextureLabel: String) {
+            targetCopyTextureLabels += destinationTextureLabel
         }
 
         override fun createOffscreenTexture(texture: GPUBackendOffscreenTexture): String {

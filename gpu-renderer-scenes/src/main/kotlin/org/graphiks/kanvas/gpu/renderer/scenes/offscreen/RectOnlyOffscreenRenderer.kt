@@ -791,11 +791,8 @@ class RectOnlyOffscreenRenderer internal constructor(
         }
 
         execution.destinationReadBlends.forEach { blend ->
-            target.snapshotTargetToOffscreenTexture(blend.destinationTextureLabel)
-            intermediateDiagnostics?.add(
-                "intermediate.scene.destination-read-readback-snapshotted command=${blend.commandId} " +
-                    "source=surface:${drawPlan.sceneId} destinationTexture=${blend.destinationTextureLabel}",
-            )
+            target.copyTargetToOffscreenTexture(blend.destinationTextureLabel)
+            intermediateDiagnostics?.add("intermediate.scene.destination-read-gpu-copied command=${blend.commandId}")
         }
 
         target.encode(clearColor = GPUClearColor(0.0, 0.0, 0.0, 0.0)) {

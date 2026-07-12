@@ -157,6 +157,7 @@ class GPUImageFilterDispatchTest {
     private class CapturingOffscreenTarget : GPUBackendOffscreenTarget {
         val passKinds = mutableListOf<String>()
         val createdTextures = mutableListOf<GPUBackendOffscreenTexture>()
+        val targetCopyTextureLabels = mutableListOf<String>()
         var sourceDraw: GPUBackendRawUniformDraw? = null
         var onSceneComposite: (() -> Unit)? = null
 
@@ -173,6 +174,10 @@ class GPUImageFilterDispatchTest {
         }
 
         override fun snapshotTargetToOffscreenTexture(textureLabel: String) = error("Unexpected snapshot")
+
+        override fun copyTargetToOffscreenTexture(destinationTextureLabel: String) {
+            targetCopyTextureLabels += destinationTextureLabel
+        }
 
         override fun encodeOffscreenTexture(
             textureLabel: String,

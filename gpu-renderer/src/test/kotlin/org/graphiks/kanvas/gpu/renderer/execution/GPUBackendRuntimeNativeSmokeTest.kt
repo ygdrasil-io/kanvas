@@ -390,6 +390,29 @@ class GPUBackendRuntimeNativeSmokeTest {
     }
 
     @Test
+    fun `primary target copy stays on GPU`() {
+        GPUBackendRuntimeFactory.createOrNull().use { session ->
+            assumeTrue(session != null, "GPU backend unavailable in current environment")
+            val runtimeSession = session!!
+            runtimeSession.createOffscreenTarget(
+                GPUOffscreenTargetRequest(width = 16, height = 16, colorFormat = "rgba8unorm"),
+            ).use { target ->
+                val destination = target.createOffscreenTexture(
+                    GPUBackendOffscreenTexture("primary-copy", 16, 16, "rgba8unorm"),
+                )
+                val copiesBefore = runtimeSession.runtimeTelemetry.destinationCopies
+                val readbacksBefore = runtimeSession.runtimeTelemetry.destinationReadbackSnapshots
+
+                target.copyTargetToOffscreenTexture(destination)
+
+                val telemetry = runtimeSession.runtimeTelemetry
+                assertTrue(telemetry.destinationCopies > copiesBefore)
+                assertEquals(readbacksBefore, telemetry.destinationReadbackSnapshots)
+            }
+        }
+    }
+
+    @Test
     fun `coverage masks run stencil cover at one and four samples and release after submission`() {
         GPUBackendRuntimeFactory.createOrNull().use { session ->
             assumeTrue(session != null, "GPU backend unavailable in current environment")
