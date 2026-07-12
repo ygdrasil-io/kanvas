@@ -19,5 +19,12 @@
 
 - RED initial : le test de vertices source échouait car `dispatchTexturedVertices` ne supportait ni override `SrcOver` ni résultat booléen.
 - Correction vérifiée : `rtk ./gradlew :kanvas:test --tests org.graphiks.kanvas.surface.gpu.GPUClipCoverageDispatchTest --tests org.graphiks.kanvas.surface.gpu.GPUClipCoverageSurfaceTest`, y compris le refus préalable des index texturés invalides.
-- Suite complète vérifiée : `rtk ./gradlew :kanvas:test` (succès, 2026-07-12).
+- Suite complète vérifiée sur la livraison initiale : `rtk ./gradlew :kanvas:test` (succès, 2026-07-12) ; les corrections de revue ont leur vérification fraîche ciblée ci-dessous.
 - Nouveaux scénarios GPU réels : texte atlas + vertices texturés BGRA avec assertion de pixel transformé ; refus Mesh-program/Picture paint/clip/text outline non encodable/variants vertices non encodés ; picture borné, mesh sans programme et toutes les routes multi-part sous clip complexe, avec un composite source par draw logique et zéro bypass direct complexe.
+
+## Suivi de revue indépendante
+
+- Le premier sous-dispatch d’une source `Mask` est maintenant le seul à recevoir un clear transparent : `sourceHasContent` devient vrai après chaque encodeur source réussi. Les pixels confirment que les glyphes outline, points, cells `ImageNine` et sprites `Atlas` restent tous visibles.
+- Le préflight récursif de `DrawPicture` refuse avant `clip_mask_acquire` tout `paint` ou clip capturé porté par un `DrawPicture` imbriqué. Les refus de `Mesh.program` passent également avant toute acquisition de lease/source.
+- Les diagnostics de vertices texturés utilisent désormais l’opération logique stable (`drawVertices` ou `drawMesh`) au lieu d’un `Paint.toString()` ou d’une famille héritée.
+- RED/GREEN : le test de points multi-parties échouait avec une première sous-passe transparente ; les préflights Picture et le nom `drawMesh` échouaient aussi avant correction. Vérification fraîche : `rtk ./gradlew :kanvas:test --rerun-tasks --tests org.graphiks.kanvas.surface.gpu.GPUClipCoverageSurfaceTest` (22 tests, succès).

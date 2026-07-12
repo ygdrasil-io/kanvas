@@ -2,6 +2,7 @@ package org.graphiks.kanvas.surface.gpu
 
 import org.graphiks.kanvas.canvas.DisplayListBuffer
 import org.graphiks.kanvas.canvas.DisplayOp
+import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.geometry.FillType
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.paint.Paint
@@ -45,6 +46,7 @@ import org.graphiks.kanvas.font.scaler.GlyphRepresentation
 import org.graphiks.kanvas.font.scaler.GlyphScaler
 import org.graphiks.kanvas.font.scaler.OutlineCommand
 import org.graphiks.kanvas.paint.TileMode
+import org.graphiks.kanvas.picture.Picture
 import org.graphiks.kanvas.text.FontTypeface
 import org.graphiks.kanvas.text.GlyphCoordinateMapper
 import org.graphiks.kanvas.text.GpuTextBlob
@@ -109,10 +111,22 @@ internal fun renderViaGpu(
 
             var sceneHasContent = false
             var clipSourceRoute = false
+            var sourceHasContent = false
             val layerStack = java.util.ArrayDeque<SceneTargetFrame>()
             var layerOrdinal = 0
             val clearTransparent = GPUClearColor(0.0, 0.0, 0.0, 0.0)
-            fun sceneClear() = if (sceneHasContent) null else clearTransparent
+            fun sceneClear() = when {
+                clipSourceRoute && sourceHasContent -> null
+                clipSourceRoute -> clearTransparent
+                sceneHasContent -> null
+                else -> clearTransparent
+            }
+
+            /** Keeps multi-part clip sources transparent only until their first successful sub-pass. */
+            fun recordSourcePart(rendered: Boolean): Boolean {
+                if (clipSourceRoute && rendered) sourceHasContent = true
+                return rendered
+            }
 
             fun blendModeIndex(mode: GPUBlendMode): Int = when (mode) {
                 GPUBlendMode.MULTIPLY -> 0
@@ -205,7 +219,7 @@ internal fun renderViaGpu(
                         diagnostic.code,
                     )
                 }
-                return t.renderMaskBlurCommand(
+                return recordSourcePart(t.renderMaskBlurCommand(
                     sceneLabel,
                     routedCommand,
                     plan,
@@ -214,7 +228,7 @@ internal fun renderViaGpu(
                     diagnostics,
                     texFormat,
                     recordResult = !clipSourceRoute,
-                ).rendered
+                ).rendered)
             }
 
             fun dispatchRectDirect(command: NormalizedDrawCommand.FillRect): Boolean {
@@ -229,7 +243,7 @@ internal fun renderViaGpu(
                         )
                     }
                 }
-                return true
+                return recordSourcePart(true)
             }
 
             fun dispatchPathDirect(command: NormalizedDrawCommand.FillPath): Boolean {
@@ -244,7 +258,7 @@ internal fun renderViaGpu(
                         recordResult = !clipSourceRoute,
                     )
                 }
-                return true
+                return recordSourcePart(true)
             }
 
             fun dispatchRRectDirect(command: NormalizedDrawCommand.FillRRect): Boolean {
@@ -255,7 +269,7 @@ internal fun renderViaGpu(
                         recordResult = !clipSourceRoute,
                     )
                 }
-                return true
+                return recordSourcePart(true)
             }
 
             fun drawGlyphPath(
@@ -620,7 +634,7 @@ internal fun renderViaGpu(
                         )
                     }
                 }
-                return diagnostics.fatalCount == fatalBefore && plan !is GPUImageFilterPlan.Refused
+                return recordSourcePart(diagnostics.fatalCount == fatalBefore && plan !is GPUImageFilterPlan.Refused)
             }
 
             val clipFrameCache = GPUClipCoverageFrameCache(config.maxClipIntermediateBytes.toLong())
@@ -674,7 +688,7 @@ internal fun renderViaGpu(
                         }
                     }
                 }
-                return rendered && diagnostics.fatalCount == fatalBefore
+                return recordSourcePart(rendered && diagnostics.fatalCount == fatalBefore)
             }
 
             /** Encodes path-backed or textured vertices into the current target without reapplying the outer clip. */
@@ -685,7 +699,6 @@ internal fun renderViaGpu(
                 clip: org.graphiks.kanvas.canvas.ClipStack,
                 cmdId: GPUDrawCommandID,
                 operationName: String,
-                texturedDiagnosticName: String = operationName,
             ): Boolean {
                 if (!transform.isAffine()) {
                     diagnostics.fatal(
@@ -716,8 +729,8 @@ internal fun renderViaGpu(
                     val imageShader = paint.shader as? Shader.Image
                     if (imageShader == null) {
                         diagnostics.degrade(
-                            "unimplemented:$texturedDiagnosticName:textured:${cmdId.value}",
-                            texturedDiagnosticName,
+                            "unimplemented:$operationName:textured:${cmdId.value}",
+                            operationName,
                             "gpu_textured_vertices_no_image_shader",
                         )
                         return false
@@ -725,8 +738,8 @@ internal fun renderViaGpu(
                     val image = imageShader.image
                     if (image.pixels == null) {
                         diagnostics.degrade(
-                            "unimplemented:$texturedDiagnosticName:textured:${cmdId.value}",
-                            texturedDiagnosticName,
+                            "unimplemented:$operationName:textured:${cmdId.value}",
+                            operationName,
                             "gpu_textured_vertices_no_pixels",
                         )
                         return false
@@ -790,11 +803,11 @@ internal fun renderViaGpu(
                             surfaceWidth = width,
                             surfaceHeight = height,
                             config = config,
-                            diagnosticName = paint.toString(),
+                            diagnosticName = operationName,
                             blendModeOverride = if (clipSourceRoute) GPUBlendMode.SRC_OVER else null,
                         )
                     }
-                    return encoded
+                    return recordSourcePart(encoded)
                 }
 
                 if (vertices.positions.size < 3) return false
@@ -850,14 +863,87 @@ internal fun renderViaGpu(
                 return dispatchPathDirect(command)
             }
 
+            fun DisplayOp.hasCapturedPictureClip(): Boolean = when (this) {
+                is DisplayOp.DrawRect -> clip != ClipStack.WideOpen
+                is DisplayOp.DrawRRect -> clip != ClipStack.WideOpen
+                is DisplayOp.DrawPath -> clip != ClipStack.WideOpen
+                is DisplayOp.DrawImage -> clip != ClipStack.WideOpen
+                is DisplayOp.DrawText -> clip != ClipStack.WideOpen
+                is DisplayOp.DrawColor -> clip != ClipStack.WideOpen
+                is DisplayOp.DrawPoint -> clip != ClipStack.WideOpen
+                is DisplayOp.DrawPoints -> clip != ClipStack.WideOpen
+                is DisplayOp.DrawDRRect -> clip != ClipStack.WideOpen
+                is DisplayOp.DrawImageNine -> clip != ClipStack.WideOpen
+                is DisplayOp.DrawImageLattice -> clip != ClipStack.WideOpen
+                is DisplayOp.DrawVertices -> clip != ClipStack.WideOpen
+                is DisplayOp.DrawMesh -> clip != ClipStack.WideOpen
+                is DisplayOp.DrawAtlas -> clip != ClipStack.WideOpen
+                is DisplayOp.DrawPicture -> clip != ClipStack.WideOpen
+                is DisplayOp.Clear,
+                is DisplayOp.SetTransform,
+                is DisplayOp.SetClip,
+                is DisplayOp.BeginLayer,
+                DisplayOp.EndLayer,
+                is DisplayOp.Annotation,
+                is DisplayOp.FlushAndSnapshot,
+                -> false
+            }
+
+            /** Reject picture semantics that flattening would otherwise drop before a clip lease is acquired. */
+            fun picturePreflightRefusalReason(op: DisplayOp.DrawPicture): String? {
+                if (op.paint != null) return "unsupported.picture.paint"
+
+                fun validatePicture(picture: Picture): String? {
+                    for (nested in picture.ops) {
+                        when (nested) {
+                            is DisplayOp.DrawPicture -> {
+                                if (nested.paint != null) return "unsupported.picture.nested_paint"
+                                if (nested.clip != ClipStack.WideOpen) return "unsupported.picture.nested_clip"
+                                val nestedRefusal = validatePicture(nested.picture)
+                                if (nestedRefusal != null) return nestedRefusal
+                            }
+                            is DisplayOp.BeginLayer,
+                            DisplayOp.EndLayer,
+                            -> return "unsupported.picture.save_layer"
+                            else -> if (nested.hasCapturedPictureClip()) return "unsupported.picture.nested_clip"
+                        }
+                    }
+                    return null
+                }
+
+                return validatePicture(op.picture)
+            }
+
+            fun coreRoutePreflightRefusalReason(op: DisplayOp): String? = when (op) {
+                is DisplayOp.DrawMesh -> if (op.mesh.program != null) "unsupported.mesh.program" else null
+                is DisplayOp.DrawPicture -> picturePreflightRefusalReason(op)
+                else -> null
+            }
+
+            fun coreRouteOperationName(op: DisplayOp): String = when (op) {
+                is DisplayOp.DrawMesh -> "drawMesh"
+                is DisplayOp.DrawPicture -> "drawPicture"
+                else -> "gpu"
+            }
+
+            fun refuseCoreRoutePreflight(op: DisplayOp, cmdId: GPUDrawCommandID): Boolean {
+                val reason = coreRoutePreflightRefusalReason(op) ?: return false
+                val operation = coreRouteOperationName(op)
+                diagnostics.fatal("refuse:$operation:${cmdId.value}", operation, reason)
+                return true
+            }
+
             /** Executes the normalized core routes in either the scene or the transparent full-target source. */
             fun executeCoreClipRoute(op: DisplayOp, cmdId: GPUDrawCommandID, source: Boolean): Boolean {
                 val savedSceneLabel = sceneLabel
                 val savedSceneHasContent = sceneHasContent
+                val savedSourceHasContent = sourceHasContent
+                val savedClipSourceRoute = clipSourceRoute
                 if (source) {
                     sceneLabel = srcLabel
                     sceneHasContent = false
                     clipSourceRoute = true
+                    sourceHasContent = false
                 }
                 val fatalBefore = diagnostics.fatalCount
                 var rendered = false
@@ -1015,17 +1101,16 @@ internal fun renderViaGpu(
                                     clip = op.clip,
                                     cmdId = cmdId,
                                     operationName = "drawMesh",
-                                    // Preserve the existing textured-mesh diagnostic family.
-                                    texturedDiagnosticName = "drawVertices",
                                 )
                             }
                         }
                         is DisplayOp.DrawPicture -> {
-                            if (op.paint != null) {
+                            val preflightRefusal = coreRoutePreflightRefusalReason(op)
+                            if (preflightRefusal != null) {
                                 diagnostics.fatal(
                                     "refuse:drawPicture:${cmdId.value}",
                                     "drawPicture",
-                                    "unsupported.picture.paint",
+                                    preflightRefusal,
                                 )
                                 false
                             } else {
@@ -1287,13 +1372,16 @@ internal fun renderViaGpu(
                         else -> error("Core clip route received ${op.javaClass.simpleName}")
                     }
                     rendered = rendered && diagnostics.fatalCount == fatalBefore
-                    if (rendered) sceneHasContent = true
+                    if (rendered) {
+                        if (clipSourceRoute) sourceHasContent = true else sceneHasContent = true
+                    }
                 } finally {
                     if (source) {
-                        rendered = rendered && sceneHasContent
+                        rendered = rendered && sourceHasContent
                         sceneLabel = savedSceneLabel
                         sceneHasContent = savedSceneHasContent
-                        clipSourceRoute = false
+                        sourceHasContent = savedSourceHasContent
+                        clipSourceRoute = savedClipSourceRoute
                     }
                 }
                 return rendered
@@ -1382,6 +1470,7 @@ internal fun renderViaGpu(
                 }
                 if (suppressedLayerDepth > 0) continue
                 if (refusePerspectiveCapture(op, cmdId)) continue
+                if (refuseCoreRoutePreflight(op, cmdId)) continue
                 val requestedClipPlan = op.gpuClipCoveragePlanOrNull(targets, config, t.maxTextureDimension2D)
                 if (requestedClipPlan is GPUClipCoveragePlan.Refused) {
                     diagnostics.fatal("refuse:${op.javaClass.simpleName}:${cmdId.value}", "clip", requestedClipPlan.code)

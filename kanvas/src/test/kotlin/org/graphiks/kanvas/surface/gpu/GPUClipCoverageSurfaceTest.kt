@@ -266,6 +266,123 @@ class GPUClipCoverageSurfaceTest {
     }
 
     @Test
+    fun `outlined multi glyph text preserves every source glyph under a complex clip`() {
+        requireWebGpu()
+        val typeface = FontTypeface(
+            javaClass.classLoader
+                .getResourceAsStream("fonts/liberation/LiberationSans-Regular.ttf")!!
+                .readBytes(),
+            fontName = "LiberationSans-Regular",
+        )
+
+        val result = renderViaGpu(
+            StaticDisplayListBuffer(
+                listOf(
+                    DisplayOp.DrawText(
+                        Font(typeface, 16f).toTextBlob("AA", 2f, 18f),
+                        0f,
+                        0f,
+                        Paint.stroke(Color.RED, 1f),
+                        Matrix33.identity(),
+                        complexFullClip(),
+                    ),
+                ),
+            ),
+            32,
+            32,
+            PixelFormat.RGBA8,
+            RenderConfig.DEFAULT,
+        )
+
+        assertVisibleIn(result.pixels, 32, 2..10, 4..19)
+        assertVisibleIn(result.pixels, 32, 14..24, 4..19)
+    }
+
+    @Test
+    fun `complex clip source retains every point subpass`() {
+        requireWebGpu()
+
+        val result = renderViaGpu(
+            StaticDisplayListBuffer(
+                listOf(
+                    DisplayOp.DrawPoints(
+                        PointMode.POINTS,
+                        listOf(Point(4f, 4f), Point(20f, 4f)),
+                        Paint.fill(Color.RED),
+                        Matrix33.identity(),
+                        complexFullClip(),
+                    ),
+                ),
+            ),
+            32,
+            32,
+            PixelFormat.RGBA8,
+            RenderConfig.DEFAULT,
+        )
+
+        assertVisibleAt(result.pixels, 32, 4, 4)
+        assertVisibleAt(result.pixels, 32, 20, 4)
+    }
+
+    @Test
+    fun `complex clip source retains every image cell subpass`() {
+        requireWebGpu()
+        val image = opaqueImage(size = 3)
+
+        val result = renderViaGpu(
+            StaticDisplayListBuffer(
+                listOf(
+                    DisplayOp.DrawImageNine(
+                        image,
+                        Rect(1f, 1f, 2f, 2f),
+                        Rect(2f, 2f, 14f, 14f),
+                        null,
+                        Matrix33.identity(),
+                        complexFullClip(),
+                    ),
+                ),
+            ),
+            32,
+            32,
+            PixelFormat.RGBA8,
+            RenderConfig.DEFAULT,
+        )
+
+        assertVisibleAt(result.pixels, 32, 3, 3)
+        assertVisibleAt(result.pixels, 32, 12, 12)
+    }
+
+    @Test
+    fun `complex clip source retains every atlas sprite subpass`() {
+        requireWebGpu()
+        val image = opaqueImage(size = 3)
+
+        val result = renderViaGpu(
+            StaticDisplayListBuffer(
+                listOf(
+                    DisplayOp.DrawAtlas(
+                        atlas = image,
+                        transforms = listOf(Matrix33.translate(2f, 20f), Matrix33.translate(18f, 20f)),
+                        texRects = listOf(Rect(0f, 0f, 3f, 3f), Rect(0f, 0f, 3f, 3f)),
+                        colors = null,
+                        blendMode = BlendMode.SRC_OVER,
+                        paint = null,
+                        transform = Matrix33.identity(),
+                        clip = complexFullClip(),
+                    ),
+                ),
+            ),
+            32,
+            32,
+            PixelFormat.RGBA8,
+            RenderConfig.DEFAULT,
+        )
+
+        assertVisibleAt(result.pixels, 32, 3, 21)
+        assertVisibleAt(result.pixels, 32, 19, 21)
+    }
+
+    @Test
     fun `mesh program is refused rather than rendered as plain vertices`() {
         requireWebGpu()
         val clip = ClipStack.Complex(
@@ -296,6 +413,82 @@ class GPUClipCoverageSurfaceTest {
         assertEquals(1, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
         assertTrue(result.diagnostics.entries.any { it.reason == "unsupported.mesh.program" })
         assertEquals(0, trace.logicalDrawCount)
+        assertTrue(result.diagnostics.entries.none { it.reason == "clip_mask_acquire" })
+    }
+
+    @Test
+    fun `nested picture paint and clip are refused before masked source acquisition`() {
+        requireWebGpu()
+        val child = Picture(
+            Rect(0f, 0f, 8f, 8f),
+            listOf(DisplayOp.DrawRect(Rect(1f, 1f, 7f, 7f), Paint.fill(Color.RED), Matrix33.identity(), ClipStack.WideOpen)),
+        )
+        val outerClip = complexFullClip()
+        val invalidPictures = listOf(
+            Picture(
+                Rect(0f, 0f, 8f, 8f),
+                listOf(DisplayOp.DrawPicture(child, Paint.fill(Color.RED), Matrix33.identity(), ClipStack.WideOpen)),
+            ) to "unsupported.picture.nested_paint",
+            Picture(
+                Rect(0f, 0f, 8f, 8f),
+                listOf(DisplayOp.DrawPicture(child, null, Matrix33.identity(), outerClip)),
+            ) to "unsupported.picture.nested_clip",
+        )
+
+        invalidPictures.forEach { (picture, expectedReason) ->
+            val trace = GPUClipRouteTrace()
+            val result = renderViaGpu(
+                StaticDisplayListBuffer(
+                    listOf(DisplayOp.DrawPicture(picture, null, Matrix33.identity(), outerClip)),
+                ),
+                32,
+                32,
+                PixelFormat.RGBA8,
+                RenderConfig.DEFAULT,
+                trace,
+            )
+
+            assertTrue(result.diagnostics.entries.any { it.reason == expectedReason }, result.diagnostics.entries.toString())
+            assertEquals(0, trace.logicalDrawCount)
+            assertTrue(result.diagnostics.entries.none { it.reason == "clip_mask_acquire" })
+        }
+    }
+
+    @Test
+    fun `vertices diagnostics retain their logical operation name`() {
+        requireWebGpu()
+        val vertices = Vertices(
+            VertexMode.TRIANGLES,
+            positions = listOf(Point(2f, 2f), Point(8f, 2f), Point(2f, 8f)),
+            texCoords = listOf(Point(0f, 0f), Point(1f, 0f), Point(0f, 1f)),
+        )
+        val expectedOperations = listOf(
+            DisplayOp.DrawVertices(vertices, Paint.fill(Color.WHITE), Matrix33.identity(), complexFullClip()) to "drawVertices",
+            DisplayOp.DrawMesh(
+                Mesh(vertices, bounds = Rect(2f, 2f, 8f, 8f)),
+                Paint.fill(Color.WHITE),
+                null,
+                Matrix33.identity(),
+                complexFullClip(),
+            ) to "drawMesh",
+        )
+
+        expectedOperations.forEach { (op, expectedOperation) ->
+            val result = renderViaGpu(
+                StaticDisplayListBuffer(listOf(op)),
+                32,
+                32,
+                PixelFormat.RGBA8,
+                RenderConfig.DEFAULT,
+            )
+
+            assertTrue(
+                result.diagnostics.entries.any {
+                    it.operation == expectedOperation && it.reason == "gpu_textured_vertices_no_image_shader"
+                },
+                result.diagnostics.entries.toString(),
+            )
+        }
     }
 
     @Test
@@ -584,6 +777,18 @@ class GPUClipCoverageSurfaceTest {
         assertEquals(0, pixels[offset + 3].toInt() and 0xff)
     }
 
+    private fun assertVisibleAt(pixels: UByteArray, width: Int, x: Int, y: Int) {
+        val alpha = pixels[(y * width + x) * 4 + 3].toInt() and 0xff
+        assertTrue(alpha >= 200, "expected visible pixel at ($x, $y)")
+    }
+
+    private fun assertVisibleIn(pixels: UByteArray, width: Int, xs: IntRange, ys: IntRange) {
+        assertTrue(
+            ys.any { y -> xs.any { x -> (pixels[(y * width + x) * 4 + 3].toInt() and 0xff) >= 200 } },
+            "expected a visible pixel in x=$xs, y=$ys",
+        )
+    }
+
     private fun alphaAt(pixels: UByteArray, x: Int, y: Int): Int =
         pixels[(y * 16 + x) * 4 + 3].toInt() and 0xff
 
@@ -597,6 +802,10 @@ class GPUClipCoverageSurfaceTest {
         }
         render()
     }
+
+    private fun complexFullClip(): ClipStack = ClipStack.Complex(
+        listOf(ClipStackOp.RectOp(Rect(1f, 1f, 31f, 31f), ClipOp.INTERSECT, antiAlias = true)),
+    )
 
     private fun bluePixel(): Image = Image.fromPixels(
         width = 1,
