@@ -3,8 +3,10 @@ package org.graphiks.kanvas.codec.jpegxl
 import java.nio.file.Files
 import java.nio.file.Path
 import java.security.MessageDigest
+import java.util.Base64
 import org.graphiks.kanvas.codec.Codec
 import org.junit.jupiter.api.Assertions.assertArrayEquals
+import org.junit.jupiter.api.Assertions.assertDoesNotThrow
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assumptions.assumeTrue
@@ -15,6 +17,57 @@ import org.junit.jupiter.api.Test
  * described in `src/test/resources/jpegxl-modular/README.md`.
  */
 class JpegXlModularDecodeTest {
+
+    @Test
+    fun `simple one symbol prefix code returns its implicit symbol without reading a code bit`() {
+        val modularClass = Class.forName("org.graphiks.kanvas.codec.jpegxl.JpegXlModularKt")
+        val readerClass = Class.forName("org.graphiks.kanvas.codec.jpegxl.JxlBits")
+        val reader = readerClass.getDeclaredConstructor(
+            ByteArray::class.java,
+            Int::class.javaPrimitiveType,
+            Int::class.javaPrimitiveType,
+        ).apply { isAccessible = true }.newInstance(byteArrayOf(0b0000_1000), 0, 1)
+        val simple = modularClass.getDeclaredMethod(
+            "readJxlSimpleHuffman",
+            readerClass,
+            Int::class.javaPrimitiveType,
+        ).apply { isAccessible = true }
+
+        // JPEG XL Prefix/Huffman simple form: num_symbols=1 and symbol=2 in
+        // an alphabet of four. There are no bits for the sole codeword.
+        val code = assertDoesNotThrow<Any> { simple.invoke(null, reader, 4) }
+        val singleton = code.javaClass.getDeclaredMethod("getSingleton").apply { isAccessible = true }.invoke(code)
+        assertEquals(2, singleton)
+        val position = readerClass.getDeclaredField("position").apply { isAccessible = true }
+        val positionBeforeRead = position.getInt(reader)
+        val read = code.javaClass.getDeclaredMethod("read", readerClass).apply { isAccessible = true }
+        assertEquals(2, read.invoke(code, reader))
+        assertEquals(positionBeforeRead, position.getInt(reader))
+    }
+
+    @Test
+    fun `public codec decodes raw one section modular grayscale pixels exactly`() {
+        val encoded = Base64.getMimeDecoder().decode(fixture("single-group-4x3-8bit-lossless.jxl.base64"))
+        assertEquals("b01d8f59c10376d91f06d2df8c20e04e34f8684282a7a2f8659f1f6fcc6e97c7", sha256(encoded))
+        val expected = byteArrayOf(103, 101, 100, 99, 98, 99, 100, 101, 97, 99, 101, 101)
+        val codec = requireNotNull(Codec.MakeFromData(encoded))
+
+        val (actual, result) = codec.getImage()
+
+        val diagnostic = requireNotNull(JpegXlDocument.open(encoded).document).decode().diagnostic
+        assertEquals(Codec.Result.kSuccess, result, "diagnostic=$diagnostic")
+        val bitmap = requireNotNull(actual)
+        assertEquals(4, bitmap.width)
+        assertEquals(3, bitmap.height)
+        val grayscale = ByteArray(expected.size) { index ->
+            ((bitmap.pixels[index] ushr 16) and 0xFF).toByte()
+        }
+        assertArrayEquals(expected, grayscale)
+        bitmap.pixels.forEachIndexed { index, pixel ->
+            val sample = expected[index].toInt() and 0xFF
+            assertEquals(0xFF000000.toInt() or (sample shl 16) or (sample shl 8) or sample, pixel, "pixel=$index")
+        }
+    }
 
     @Test
     fun `pinned raw modular lossless fixture has documented SHA-256`() {
@@ -112,4 +165,5 @@ class JpegXlModularDecodeTest {
     }
 
     private data class P5(val width: Int, val height: Int, val samples: ByteArray)
+
 }

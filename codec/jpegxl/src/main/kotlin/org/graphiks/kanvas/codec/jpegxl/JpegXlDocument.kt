@@ -64,10 +64,10 @@ public class JpegXlBox internal constructor(
 /**
  * Immutable, bounded JPEG XL document containing a validated SizeHeader.
  *
- * This owner deliberately stops before image metadata, frame headers and the
- * Modular/VardCT ANS payload. It therefore reports an explicit
- * `kUnimplemented` result instead of manufacturing pixels or silently
- * falling through to another provider.
+ * Raw codestreams may decode through the deliberately narrow direct
+ * grayscale Modular profile. Other JPEG XL image features—including
+ * containers—return explicit `kUnimplemented` results instead of
+ * manufacturing pixels or silently falling through to another provider.
  */
 public class JpegXlDocument private constructor(
     private val source: ByteArray,

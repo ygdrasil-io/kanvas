@@ -28,11 +28,13 @@ internal fun decodeNarrowJpegXlModular(
     reader.jumpToByteBoundary()
     val header = readNarrowFrameHeader(reader, frame, metadata)
     val toc = readNarrowToc(reader, header, codestreamEndExclusive)
-    val global = readJxlGlobalModular(source, toc.sections.first(), frame, header)
-    val groupSections = acGroupSections(toc, header)
+    val globalReader = JxlBits(source, toc.sections.first().start, toc.sections.first().endExclusive)
+    val global = readJxlGlobalModular(globalReader, frame, header)
+    val groupSections = if (header.groupCount == 1) null else acGroupSections(toc, header)
     val bitmap = SkBitmap(frame.width, frame.height)
     val groupColumns = ceilDiv(frame.width, header.groupDimension)
     for (groupId in 0 until header.groupCount) {
+        val groupOffset = groupSections?.get(groupId)?.start ?: toc.sections.first().start
         val groupColumn = groupId % groupColumns
         val groupRow = groupId / groupColumns
         val groupX = groupColumn * header.groupDimension
@@ -41,18 +43,33 @@ internal fun decodeNarrowJpegXlModular(
         val groupHeight = minOf(header.groupDimension, frame.height - groupY)
         if (groupWidth <= 0 || groupHeight <= 0) {
             throw JxlModularFailure(
-                JpegXlDiagnostic("jpegxl.modular.group.geometry", groupSections[groupId].start.toLong()),
+                JpegXlDiagnostic("jpegxl.modular.group.geometry", groupOffset.toLong()),
             )
         }
-        val samples = decodeNarrowJxlAcGroup(
-            source = source,
-            section = groupSections[groupId],
-            global = global,
-            header = header,
-            groupId = groupId,
-            width = groupWidth,
-            height = groupHeight,
-        )
+        val samples = if (groupSections == null) {
+            // A frame with exactly one group has one TOC section. JPEG XL
+            // serializes its global Modular data and the sole AC group in the
+            // same bit reader; the AC stream id is zero in that layout.
+            decodeJxlModularGroup(
+                reader = globalReader,
+                tree = global.tree,
+                code = global.code,
+                header = global.header,
+                streamId = 0,
+                width = groupWidth,
+                height = groupHeight,
+            )
+        } else {
+            decodeNarrowJxlAcGroup(
+                source = source,
+                section = groupSections[groupId],
+                global = global,
+                header = header,
+                groupId = groupId,
+                width = groupWidth,
+                height = groupHeight,
+            )
+        }
         for (y in 0 until groupHeight) {
             val sourceRow = y * groupWidth
             val destinationRow = (groupY + y) * frame.width + groupX
@@ -60,7 +77,7 @@ internal fun decodeNarrowJpegXlModular(
                 val sample = samples[sourceRow + x]
                 if (sample !in 0..255) {
                     throw JxlModularFailure(
-                        JpegXlDiagnostic("jpegxl.modular.sample.bit-depth", groupSections[groupId].start.toLong()),
+                        JpegXlDiagnostic("jpegxl.modular.sample.bit-depth", groupOffset.toLong()),
                     )
                 }
                 bitmap.pixels8888[destinationRow + x] =
@@ -123,7 +140,11 @@ private data class JxlWeightedHeader(
     val weights: IntArray,
 )
 
-private data class JxlGlobalModular(val tree: JxlMaTree, val code: JxlEntropyCode)
+private data class JxlGlobalModular(
+    val tree: JxlMaTree,
+    val code: JxlEntropyCode,
+    val header: JxlGroupHeader,
+)
 
 private data class JxlMaTree(val nodes: List<JxlMaNode>, val leafCount: Int)
 
@@ -281,12 +302,10 @@ private fun acGroupSections(toc: JxlNarrowToc, frame: JxlNarrowFrameHeader): Lis
 }
 
 private fun readJxlGlobalModular(
-    source: ByteArray,
-    section: JxlSection,
+    reader: JxlBits,
     frame: JpegXlFrameInfo,
     header: JxlNarrowFrameHeader,
 ): JxlGlobalModular {
-    val reader = JxlBits(source, section.start, section.endExclusive)
     // ProcessDCGlobal always carries DequantMatrices::DecodeDC before the
     // Modular payload, even though direct Modular samples do not use those
     // matrices. The narrow profile requires its canonical all-default bit.
@@ -303,7 +322,7 @@ private fun readJxlGlobalModular(
     val globalHeader = readJxlGroupHeader(reader)
     if (!globalHeader.useGlobalTree) reader.fail("jpegxl.modular.global.header", Codec.Result.kUnimplemented)
     check(header.groupDimension > 0)
-    return JxlGlobalModular(tree, code)
+    return JxlGlobalModular(tree, code, globalHeader)
 }
 
 private fun decodeNarrowJxlAcGroup(
@@ -1186,9 +1205,9 @@ private fun readJxlSimpleHuffman(reader: JxlBits, alphabetSize: Int): JxlHuffman
     }
     var count = symbols.size
     if (count == 4 && reader.readBool()) count++
+    if (count == 1) return JxlHuffmanCode(emptyMap(), singleton = symbols[0])
     val lengths = IntArray(alphabetSize)
     when (count) {
-        1 -> lengths[symbols[0]] = 0
         2 -> symbols.sorted().forEach { lengths[it] = 1 }
         3 -> {
             lengths[symbols[0]] = 1

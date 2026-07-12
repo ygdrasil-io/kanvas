@@ -10,7 +10,7 @@ import org.skia.foundation.SkEncodedImageFormat
 import org.skia.foundation.SkImageInfo
 import org.skia.foundation.skcms.SkcmsICCProfile
 
-/** Pure Kotlin JPEG XL dispatcher owner for the validated SizeHeader boundary. */
+/** Pure Kotlin JPEG XL dispatcher owner for the bounded raw Modular profile. */
 public class JpegXlCodec private constructor(
     private val document: JpegXlDocument,
 ) : Codec() {

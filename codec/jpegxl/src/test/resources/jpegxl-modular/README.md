@@ -27,6 +27,7 @@ djxl flower-510x532-8bit-lossless.jxl oracle.pgm --num_threads=0 -v
 | --- | --- | --- |
 | `flower-510x532-8bit-lossless.jxl` | `c68282d6f7644cdf3485010a566c18b5ded40c3c25dcce59fe3672eeade06aa9` | Codestream brut Modular lossless 120691 octets |
 | `flower-510x532-8bit-lossless.pgm` | `4580f75490c0bc38159a381615571e2a341fc0adde99b4b3b0ed5bbea97da1fc` | Source et oracle pixels P5 510×532 |
+| `single-group-4x3-8bit-lossless.jxl.base64` | `b01d8f59c10376d91f06d2df8c20e04e34f8684282a7a2f8659f1f6fcc6e97c7` (codestream décodé) | Régression raw Modular 4×3, mono-groupe et section TOC unique; pixels `67 65 64 63 / 62 63 64 65 / 61 63 65 65` |
 
 Pour rejouer l’oracle explicitement :
 
