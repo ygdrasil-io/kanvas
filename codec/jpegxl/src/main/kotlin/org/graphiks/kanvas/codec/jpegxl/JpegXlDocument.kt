@@ -64,9 +64,9 @@ public class JpegXlBox internal constructor(
 /**
  * Immutable, bounded JPEG XL document containing a validated SizeHeader.
  *
- * Raw codestreams may decode through the deliberately narrow direct
- * grayscale Modular profile. Other JPEG XL image features—including
- * containers—return explicit `kUnimplemented` results instead of
+ * Raw codestreams and an exact `JXL `/`ftyp`/`jxlc` envelope may decode
+ * through the deliberately narrow direct grayscale Modular profile. Other
+ * JPEG XL image features return explicit `kUnimplemented` results instead of
  * manufacturing pixels or silently falling through to another provider.
  */
 public class JpegXlDocument private constructor(
@@ -90,13 +90,13 @@ public class JpegXlDocument private constructor(
         return source.copyOfRange(box.payloadOffset, box.payloadOffset + box.payloadSize)
     }
 
-    /** Decodes the deliberately narrow, proven raw JPEG XL Modular profile. */
+    /** Decodes the deliberately narrow, proven JPEG XL Modular profile. */
     public fun decode(): JpegXlDecodeResult {
-        if (container != JpegXlContainer.CODESTREAM) {
+        if (container == JpegXlContainer.CONTAINER && !isNarrowPixelContainer()) {
             return JpegXlDecodeResult(
                 bitmap = null,
                 diagnostic = JpegXlDiagnostic(
-                    code = "jpegxl.container.pixel.unimplemented",
+                    code = "jpegxl.container.topology.unimplemented",
                     offset = codestreamStart.toLong(),
                     result = Codec.Result.kUnimplemented,
                 ),
@@ -110,6 +110,9 @@ public class JpegXlDocument private constructor(
             fallbackOffset = entropyOffset,
         )
     }
+
+    private fun isNarrowPixelContainer(): Boolean =
+        boxes.size == 3 && boxes.map(JpegXlBox::type) == listOf("JXL ", "ftyp", "jxlc")
 
     public companion object {
         /** Opens a raw JPEG XL codestream after validating its SizeHeader. */
