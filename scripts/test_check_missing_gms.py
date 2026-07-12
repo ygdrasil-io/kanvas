@@ -254,12 +254,19 @@ class CheckMissingGmsClassificationTest(unittest.TestCase):
         self.assertIn("Matched: 2 (2 direct + 0 parameterized)", output)
         self.assertIn("=== REFERENCE PNGs WITHOUT Kotlin GM (1) ===", output)
         self.assertIn("  convex-lineonly-paths-noalias.png", output)
+        self.assertIn(
+            "bitmaptiled_fractional_horizontal_manual.png "
+            "(base 'bitmaptiled_fractional_horizontal' also missing)",
+            output,
+        )
         self.assertIn("=== GM names WITHOUT reference PNG (1) ===", output)
-        self.assertIn("  convex_lineonly_paths_noalias.png", output)
+        gm_names_section = output.split("=== GM names WITHOUT reference PNG (1) ===", 1)[1]
+        self.assertIn("  convex_lineonly_paths_noalias.png", gm_names_section)
         self.assertNotIn("  convex-lineonly-paths.png", output)
         self.assertNotIn("  convex-lineonly-paths-stroke-and-fill.png", output)
-        self.assertNotIn("  convex_lineonly_paths.png", output)
-        self.assertNotIn("  convex_lineonly_paths_stroke_and_fill.png", output)
+        self.assertNotIn("  convex_lineonly_paths.png", gm_names_section)
+        self.assertNotIn("  convex_lineonly_paths_stroke_and_fill.png", gm_names_section)
+        self.assertNotIn("  bitmaptiled_fractional_horizontal_manual.png", gm_names_section)
 
 
 @contextlib.contextmanager
@@ -343,6 +350,7 @@ def explicit_alias_fixture_dirs():
             "convex-lineonly-paths",
             "convex-lineonly-paths-stroke-and-fill",
             "convex-lineonly-paths-noalias",
+            "bitmaptiled_fractional_horizontal_manual",
         ):
             (ref_dir / f"{name}.png").write_bytes(b"")
 
@@ -365,6 +373,10 @@ def explicit_alias_fixture_dirs():
 
                 class ConvexLineOnlyPathsNoAliasGm : SkiaGm {
                     override val name = "convex_lineonly_paths_noalias"
+                }
+
+                class BitmapTiledFractionalHorizontalManualGm : SkiaGm {
+                    override val name = "bitmaptiled_fractional_horizontal_manual"
                 }
                 """
             ),

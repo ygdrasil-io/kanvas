@@ -205,8 +205,8 @@ def collect_manual_orphans(manual_names, gm_names, found_names, reference_name_a
     return manual_orphans
 
 
-def collect_gm_names_without_reference(gm_names, matched_names, variant_names):
-    extra = sorted(set(gm_names) - set(matched_names))
+def collect_gm_names_without_reference(gm_names, matched_names, manual_names, variant_names):
+    extra = sorted(set(gm_names) - set(matched_names) - set(manual_names))
     return [
         name for name in extra
         if not any(name in variants for variants in variant_names.values())
@@ -253,6 +253,7 @@ def main():
     extra_gm_names = collect_gm_names_without_reference(
         gm_names,
         found_names,
+        manual_names,
         variant_names,
     )
 
