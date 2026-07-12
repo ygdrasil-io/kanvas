@@ -56,16 +56,20 @@ overrides `referenceName`.
 `referenceName` is used only when loading the reference PNG and when reporting
 the reference asset selected by the runner or dashboard.
 
-The initial verified aliases are:
+The current registry does not receive a concrete alias in this PR. The names
+`colorcubert`, `colorcubecolorfilterrt`, and `lineargradientrt` are reused by
+multiple Kotlin classes, including approximate ports with different canvas
+dimensions. Assigning `color_cube_rt`, `color_cube_cf_rt`, or
+`linear_gradient_rt` to those classes would attach a reference to the wrong
+rendering. The already source-aligned concrete ports keep their existing names
+(`runtime_effect.ColorCubeRTGm` uses `color_cube_rt` and
+`gradient.LinearGradientRTGm` uses `linear_gradient_rt`).
 
-| Kotlin GM | CPP registration | Reference PNG |
-|---|---|---|
-| `ColorCubeRTGm` | `color_cube_rt` | `color_cube_rt.png` |
-| `ColorCubeColorFilterRTGm` | `color_cube_cf_rt` | `color_cube_cf_rt.png` |
-| `LinearGradientRTGm` | `linear_gradient_rt` | `linear_gradient_rt.png` |
-
-No alias is assigned when the C++ source registers multiple variants and the
-Kotlin port does not identify one concrete variant. This applies to the
+The `referenceName` contract is still covered by a synthetic aliased GM test
+fixture, so a future one-to-one mapping can be added without changing the
+runner contract. No alias is assigned when the C++ source registers multiple
+variants and the Kotlin port does not identify one concrete variant. This
+applies to the
 anisotropic, clipped-bitmap-shader, circular-arc, encode-sRGB, perspective-
 shader, preserve-fill-rule, shallow-gradient, and varied-text families.
 
@@ -111,8 +115,9 @@ or score baselines will be added by this PR.
     logical GM output names;
 - `integration-tests/skia/src/test/kotlin/org/graphiks/kanvas/skia/SkiaDashboardGenerator.kt`
   - resolve dashboard reference assets through the same contract;
-- the three runtime-effect GM Kotlin files listed in the alias table
-  - declare only CPP-verified reference aliases;
+- the existing runtime-effect GM tests
+  - prove that source-aligned names remain unchanged and that approximate
+    duplicate names are not aliased;
 - `scripts/check_missing_gms.py`
   - provide source-aware classification and stable CLI output;
 - `scripts/test_check_missing_gms.py`
@@ -124,12 +129,13 @@ or score baselines will be added by this PR.
 Test-first implementation will cover:
 
 1. the default `referenceName == name` behavior;
-2. each of the three verified aliases;
-3. runner reference loading with an aliased reference while retaining the
+2. a synthetic one-to-one alias through `referenceName`;
+3. the source-aligned runtime-effect names remain unchanged;
+4. runner reference loading with an aliased reference while retaining the
    logical output directory name;
-4. dashboard lookup using the same alias;
-5. checker classifications using temporary Kotlin/CPP/reference fixtures;
-6. rejection of ambiguous variant families as direct aliases.
+5. dashboard lookup using the same alias;
+6. checker classifications using temporary Kotlin/CPP/reference fixtures;
+7. rejection of ambiguous variant families as direct aliases.
 
 Validation will include the focused Python/Kotlin tests, the Skia GM registry
 and runner tests, the source-aware checker against the checked-in references,
@@ -147,10 +153,11 @@ unpublished `external/poc-koreos` submodule remain out of scope.
 
 ## Acceptance criteria
 
-- The three CPP-verified aliases load their existing reference PNGs without
+- The runner and dashboard support a one-to-one `referenceName` alias without
   changing logical GM selection or output naming.
-- The source-aware checker no longer reports those aliases as missing and
-  explains variant-family and unsupported cases.
+- No approximate or duplicate Kotlin GM receives an inferred reference alias.
+- The source-aware checker explains exact names, aliases, variant families,
+  unsupported cases, and genuine missing references.
 - No reference PNG files are added, removed, or duplicated.
 - Focused tests and the relevant Skia GM validation pass.
 - The PR description documents the root cause, the source evidence, the
