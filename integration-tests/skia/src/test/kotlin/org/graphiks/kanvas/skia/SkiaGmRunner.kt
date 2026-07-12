@@ -75,7 +75,7 @@ class SkiaGmRunner {
         }
 
         if (!ReferenceManager.hasReference(refPath)) {
-            error("Reference PNG not found at $refPath. Run: cp <skia-native-reference> src/test/resources/reference/${gm.name}.png")
+            error(missingReferenceMessage(refPath))
         }
 
         val reference = ReferenceManager.loadReference(refPath)
@@ -150,6 +150,9 @@ class SkiaGmRunner {
 
 internal fun referenceResourcePath(gm: SkiaGm): String =
     "/reference/${gm.referenceName}.png"
+
+internal fun missingReferenceMessage(refPath: String): String =
+    "Reference PNG not found at $refPath. Run: cp <skia-native-reference> src/test/resources$refPath"
 
 internal fun selectSkiaGmsForRunner(gms: List<SkiaGm>, name: String?): List<SkiaGm> =
     if (name == null) gms else gms.filter { it.name == name }

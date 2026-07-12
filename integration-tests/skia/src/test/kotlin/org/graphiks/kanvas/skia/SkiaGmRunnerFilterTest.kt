@@ -37,6 +37,14 @@ class SkiaGmRunnerFilterTest {
         assertEquals("/reference/cpp-gm.png", referenceResourcePath(gm))
         assertEquals("logical-gm", gm.name)
     }
+
+    @Test
+    fun `missing reference guidance uses the reference path`() {
+        assertEquals(
+            "Reference PNG not found at /reference/cpp-gm.png. Run: cp <skia-native-reference> src/test/resources/reference/cpp-gm.png",
+            missingReferenceMessage("/reference/cpp-gm.png"),
+        )
+    }
 }
 
 private class StubRunnerGm(
