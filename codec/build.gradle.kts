@@ -9,6 +9,7 @@ dependencies {
     api(project(":codec:png"))
     api(project(":codec:jpeg"))
     api(project(":codec:jpeg-ls"))
+    api(project(":codec:jpeg2000"))
     api(project(":codec:gif"))
     api(project(":codec:wbmp"))
     api(project(":codec:bmp"))

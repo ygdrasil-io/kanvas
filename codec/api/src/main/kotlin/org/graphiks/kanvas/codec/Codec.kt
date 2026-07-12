@@ -350,6 +350,7 @@ public abstract class Codec protected constructor() {
             "png",
             "jpeg-ls",
             "jpeg",
+            "jpeg2000",
             "gif",
             "bmp",
             "webp",

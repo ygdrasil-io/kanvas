@@ -13,6 +13,7 @@ val pureKotlinCodecProjects = setOf(
     "codec:test-fixtures",
     "codec:png",
     "codec:jpeg",
+    "codec:jpeg2000",
     "codec:gif",
     "codec:bmp",
     "codec:wbmp",
