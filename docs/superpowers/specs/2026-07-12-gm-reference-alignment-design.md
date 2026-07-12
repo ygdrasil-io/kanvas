@@ -56,8 +56,8 @@ overrides `referenceName`.
 `referenceName` is used only when loading the reference PNG and when reporting
 the reference asset selected by the runner or dashboard.
 
-This PR applies only two concrete aliases, both verified against
-`/Users/chaos/workspace/kanvas-forge/skia-main/gm/convex_all_line_paths.cpp`:
+This PR applies only two concrete aliases, both verified against Skia's
+`gm/convex_all_line_paths.cpp`:
 `ConvexLineOnlyPathsGm.referenceName = "convex-lineonly-paths"` and
 `ConvexLineOnlyPathsStrokeAndFillGm.referenceName =
 "convex-lineonly-paths-stroke-and-fill"`. Those Kotlin ports already match the
