@@ -36,7 +36,7 @@ class CheckMissingGmsClassificationTest(unittest.TestCase):
         self.assertEqual("normalized-alias", result["kind"])
         self.assertEqual("linear_gradient_rt", result["reference"])
 
-    def test_prefix_family_is_reported_as_variant(self):
+    def test_explicit_cpp_family_evidence_is_retained(self):
         checker = load_checker()
 
         result = checker.classify_reference(
@@ -46,6 +46,24 @@ class CheckMissingGmsClassificationTest(unittest.TestCase):
         )
 
         self.assertEqual("variant-family", result["kind"])
+        self.assertEqual(
+            ["clipped-bitmap-shaders-clamp", "clipped-bitmap-shaders-tile"],
+            result["references"],
+        )
+
+    def test_generic_cpp_buckets_do_not_classify_references(self):
+        checker = load_checker()
+
+        cases = (
+            ("all", {"all_bitmap_configs", "all_variants_8888"}),
+            ("circle", {"circle_sizes"}),
+            ("color", {"color_cube_rt", "colorwheel"}),
+        )
+        for gm_name, references in cases:
+            with self.subTest(gm_name=gm_name):
+                result = checker.classify_reference(gm_name, references, {gm_name})
+                self.assertEqual("missing", result["kind"])
+                self.assertEqual([], result["references"])
 
     def test_unmatched_name_is_actionable_missing(self):
         checker = load_checker()
@@ -58,68 +76,145 @@ class CheckMissingGmsClassificationTest(unittest.TestCase):
 
         self.assertEqual("missing", result["kind"])
 
-    def test_cli_fixture_reports_source_aware_headings(self):
+    def test_cli_no_argument_mode_preserves_legacy_matched_semantics(self):
         checker = load_checker()
 
-        with tempfile.TemporaryDirectory(prefix="check_missing_gms_") as temp_root:
-            root = Path(temp_root)
-            ref_dir = root / "reference"
-            gm_dir = root / "gm-kotlin"
-            cpp_gm_dir = root / "gm-cpp"
-            ref_dir.mkdir()
-            gm_dir.mkdir()
-            cpp_gm_dir.mkdir()
-
-            for name in (
-                "linear_gradient_rt",
-                "clipped-bitmap-shaders-clamp",
-                "clipped-bitmap-shaders-tile",
-                "aarectmodes",
-            ):
-                (ref_dir / f"{name}.png").write_bytes(b"")
-
-            (gm_dir / "LinearGradientRtGm.kt").write_text(
-                'object LinearGradientRtGm : DemoGm("lineargradientrt")\n',
-                encoding="utf-8",
-            )
-            (gm_dir / "ClippedBitmapShadersGm.kt").write_text(
-                'object ClippedBitmapShadersGm : DemoGm("clippedbitmapshaders")\n',
-                encoding="utf-8",
-            )
-            (gm_dir / "AaRectEffectGm.kt").write_text(
-                'object AaRectEffectGm : DemoGm("aa_rect_effect")\n',
-                encoding="utf-8",
+        with fixture_dirs() as fixture:
+            output = run_checker(
+                checker,
+                ref_dir=fixture["ref_dir"],
+                gm_dir=fixture["gm_dir"],
             )
 
-            (cpp_gm_dir / "fixture.cpp").write_text(
-                "\n".join(
-                    [
-                        "DEF_SIMPLE_GM(clippedbitmapshaders) {}",
-                        "DEF_SIMPLE_GM(aa_rect_effect) {}",
-                    ]
-                )
-                + "\n",
-                encoding="utf-8",
+        self.assertIn("Matched: 5 (3 direct + 2 parameterized)", output)
+        self.assertIn("source-evidence: unavailable", output)
+        self.assertIn("--- Parameterized variants of existing GMs ---", output)
+        self.assertIn("  nested_aa.png  <- from nested", output)
+        self.assertIn("  nested_bw.png  <- from nested", output)
+        self.assertIn("=== GM names WITHOUT reference PNG (4) ===", output)
+        self.assertIn("  all.png", output)
+        self.assertIn("  clippedbitmapshaders.png", output)
+        self.assertIn("  lineargradientrt.png", output)
+        self.assertIn("  missing_gm.png", output)
+        self.assertNotIn("--- Normalized aliases ---", output)
+        self.assertNotIn("--- Variant families from CPP source evidence ---", output)
+
+    def test_cli_with_cpp_gm_dir_separates_source_evidence_and_suppresses_generic_buckets(self):
+        checker = load_checker()
+
+        with fixture_dirs() as fixture:
+            output = run_checker(
+                checker,
+                ref_dir=fixture["ref_dir"],
+                gm_dir=fixture["gm_dir"],
+                cpp_gm_dir=fixture["cpp_gm_dir"],
             )
 
-            stdout = io.StringIO()
-            argv = [
-                str(SCRIPT_PATH),
-                "--cpp-gm-dir",
-                str(cpp_gm_dir),
-            ]
-            with (
-                mock.patch.object(checker, "REF_DIR", ref_dir),
-                mock.patch.object(checker, "GM_DIR", gm_dir),
-                mock.patch.object(sys, "argv", argv),
-                contextlib.redirect_stdout(stdout),
-            ):
-                checker.main()
-
-        output = stdout.getvalue()
+        self.assertIn("Matched: 5 (3 direct + 2 parameterized)", output)
+        self.assertIn("source-evidence: cpp-gm-dir=", output)
         self.assertIn("--- Normalized aliases ---", output)
+        self.assertIn("  lineargradientrt.png  <- alias linear_gradient_rt.png", output)
         self.assertIn("--- Variant families from CPP source evidence ---", output)
-        self.assertIn("=== ACTIONABLE missing references ===", output)
+        self.assertIn(
+            "  clippedbitmapshaders.png  <- variants "
+            "clipped-bitmap-shaders-clamp.png, clipped-bitmap-shaders-tile.png",
+            output,
+        )
+        self.assertNotIn("  all.png  <- variants", output)
+        self.assertIn("=== GM names WITHOUT reference PNG (2) ===", output)
+        self.assertIn("  all.png", output)
+        self.assertIn("  missing_gm.png", output)
+
+    def test_cli_section_ordering_keeps_diagnostics_before_actionable_missing(self):
+        checker = load_checker()
+
+        with fixture_dirs() as fixture:
+            output = run_checker(
+                checker,
+                ref_dir=fixture["ref_dir"],
+                gm_dir=fixture["gm_dir"],
+                cpp_gm_dir=fixture["cpp_gm_dir"],
+            )
+
+        section_positions = [
+            output.index("source-evidence: cpp-gm-dir="),
+            output.index("--- Normalized aliases ---"),
+            output.index("--- Variant families from CPP source evidence ---"),
+            output.index("=== GM names WITHOUT reference PNG (2) ==="),
+        ]
+        self.assertEqual(section_positions, sorted(section_positions))
+
+
+@contextlib.contextmanager
+def fixture_dirs():
+    with tempfile.TemporaryDirectory(prefix="check_missing_gms_") as temp_root:
+        root = Path(temp_root)
+        ref_dir = root / "reference"
+        gm_dir = root / "gm-kotlin"
+        cpp_gm_dir = root / "gm-cpp"
+        ref_dir.mkdir()
+        gm_dir.mkdir()
+        cpp_gm_dir.mkdir()
+
+        for name in (
+            "direct",
+            "nested_aa",
+            "nested_bw",
+            "linear_gradient_rt",
+            "clipped-bitmap-shaders-clamp",
+            "clipped-bitmap-shaders-tile",
+            "all_bitmap_configs",
+            "all_variants_8888",
+        ):
+            (ref_dir / f"{name}.png").write_bytes(b"")
+
+        for filename, gm_name in (
+            ("DirectGm.kt", "direct"),
+            ("NestedGm.kt", "nested"),
+            ("LinearGradientRtGm.kt", "lineargradientrt"),
+            ("ClippedBitmapShadersGm.kt", "clippedbitmapshaders"),
+            ("AllGm.kt", "all"),
+            ("AllBitmapConfigsGm.kt", "all_bitmap_configs"),
+            ("AllVariants8888Gm.kt", "all_variants_8888"),
+            ("MissingGm.kt", "missing_gm"),
+        ):
+            (gm_dir / filename).write_text(
+                f'object {filename.removesuffix(".kt")} : DemoGm("{gm_name}")\n',
+                encoding="utf-8",
+            )
+
+        (cpp_gm_dir / "fixture.cpp").write_text(
+            "\n".join(
+                [
+                    "DEF_SIMPLE_GM(clippedbitmapshaders) {}",
+                    "DEF_SIMPLE_GM(all) {}",
+                    "DEF_SIMPLE_GM(missing_gm) {}",
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        yield {
+            "ref_dir": ref_dir,
+            "gm_dir": gm_dir,
+            "cpp_gm_dir": cpp_gm_dir,
+        }
+
+
+def run_checker(checker, ref_dir: Path, gm_dir: Path, cpp_gm_dir: Path | None = None) -> str:
+    stdout = io.StringIO()
+    argv = [str(SCRIPT_PATH)]
+    if cpp_gm_dir is not None:
+        argv.extend(["--cpp-gm-dir", str(cpp_gm_dir)])
+    with (
+        mock.patch.object(checker, "REF_DIR", ref_dir),
+        mock.patch.object(checker, "GM_DIR", gm_dir),
+        mock.patch.object(sys, "argv", argv),
+        contextlib.redirect_stdout(stdout),
+    ):
+        checker.main()
+    return stdout.getvalue()
 
 
 if __name__ == "__main__":

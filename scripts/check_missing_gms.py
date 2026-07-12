@@ -147,6 +147,40 @@ def normalize_name(value: str) -> str:
     return "".join(ch for ch in value.casefold() if ch.isalnum())
 
 
+def extract_family_reference_prefix(reference: str, normalized_family: str) -> str | None:
+    normalized_index = 0
+    for index, char in enumerate(reference.casefold()):
+        if not char.isalnum():
+            continue
+        if normalized_index >= len(normalized_family) or char != normalized_family[normalized_index]:
+            return None
+        normalized_index += 1
+        if normalized_index == len(normalized_family):
+            if index + 1 >= len(reference) or reference[index + 1] not in "-_":
+                return None
+            return reference[:index + 1]
+    return None
+
+
+def is_authoritative_variant_family(gm_name: str, references: list[str]) -> bool:
+    normalized_family = normalize_name(gm_name)
+    if len(references) < 2:
+        return False
+
+    family_prefixes = [
+        extract_family_reference_prefix(reference, normalized_family)
+        for reference in references
+    ]
+    if any(prefix is None for prefix in family_prefixes):
+        return False
+
+    token_counts = [
+        len([token for token in re.split(r"[-_]+", prefix) if token])
+        for prefix in family_prefixes
+    ]
+    return max(token_counts, default=0) >= 2 or len(normalized_family) >= 10
+
+
 def classify_reference(gm_name: str, references: set[str], cpp_names: set[str] | None) -> dict[str, object]:
     if gm_name in references:
         return {
@@ -172,9 +206,9 @@ def classify_reference(gm_name: str, references: set[str], cpp_names: set[str] |
         variant_matches = sorted(
             reference
             for reference in references
-            if normalize_name(reference).startswith(normalized_gm_name)
+            if extract_family_reference_prefix(reference, normalized_gm_name) is not None
         )
-        if variant_matches:
+        if variant_matches and is_authoritative_variant_family(gm_name, variant_matches):
             return {
                 "kind": "variant-family",
                 "gm_name": gm_name,
@@ -203,6 +237,46 @@ def parse_args():
     return args
 
 
+def collect_reference_matches(reference_names, gm_names):
+    found_names = set()
+    variant_names = {}
+    orphan_names = []
+
+    for name in reference_names:
+        if name in gm_names:
+            found_names.add(name)
+        else:
+            parent = is_parameterized_variant(name, gm_names)
+            if parent:
+                variant_names.setdefault(parent, []).append(name)
+            else:
+                orphan_names.append(name)
+
+    return found_names, variant_names, orphan_names
+
+
+def collect_manual_orphans(manual_names, gm_names, found_names):
+    manual_orphans = []
+    for name in sorted(manual_names):
+        base = name.replace("_manual", "")
+        if base in gm_names:
+            found_names.add(base)
+        else:
+            manual_orphans.append(name)
+    return manual_orphans
+
+
+def collect_gm_names_without_reference(gm_names, reference_names, manual_names, variant_names):
+    extra = sorted(set(gm_names) - set(reference_names) - manual_names)
+    return [
+        name for name in extra
+        if not any(name in variants for variants in variant_names.values())
+        and not any(name in str(variants) for variants in variant_names.values())
+        and "$" not in name
+        and "{" not in name
+    ]
+
+
 def main():
     args = parse_args()
 
@@ -225,49 +299,43 @@ def main():
         else:
             ref_by_base.setdefault(name, []).append(p)
 
-    classifications = {}
-    matched_references = set()
+    reference_names = set(ref_by_base)
+    found_names, variant_names, orphan_names = collect_reference_matches(
+        reference_names,
+        gm_names,
+    )
+    manual_orphans = collect_manual_orphans(manual_names, gm_names, found_names)
+    extra_gm_names = collect_gm_names_without_reference(
+        gm_names,
+        reference_names,
+        manual_names,
+        variant_names,
+    )
+
     normalized_aliases = []
     variant_families = []
-    actionable_missing = []
-    manual_orphans = []
-
-    reference_names = set(ref_by_base)
-    for gm_name in sorted(gm_names):
-        result = classify_reference(gm_name, reference_names, cpp_names)
-        classifications[gm_name] = result
-        matched_references.update(result["references"])
-        if result["kind"] == "normalized-alias":
-            normalized_aliases.append(result)
-        elif result["kind"] == "variant-family":
-            variant_families.append(result)
-        elif result["kind"] == "missing":
-            actionable_missing.append(result)
-
-    orphan_names = sorted(reference_names - matched_references)
-
-    for name in sorted(manual_names):
-        base = name.replace("_manual", "")
-        if base in matched_references or any(
-            result["gm_name"] == base or base in result["references"]
-            for result in classifications.values()
-        ):
-            continue
-        else:
-            manual_orphans.append(name)
+    actionable_missing = extra_gm_names
+    if cpp_names is not None:
+        actionable_missing = []
+        for gm_name in extra_gm_names:
+            result = classify_reference(gm_name, reference_names, cpp_names)
+            if result["kind"] == "normalized-alias":
+                normalized_aliases.append(result)
+            elif result["kind"] == "variant-family":
+                variant_families.append(result)
+            else:
+                actionable_missing.append(gm_name)
 
     print(f"Reference PNGs:     {len(ref_pngs)}")
     print(f"GM names extracted: {len(gm_names)}")
 
-    direct_count = sum(1 for result in classifications.values() if result["kind"] == "direct")
-    normalized_alias_count = len(normalized_aliases)
-    variant_reference_count = sum(len(result["references"]) for result in variant_families)
-    matched = direct_count + normalized_alias_count + variant_reference_count
+    direct_count = len(found_names)
+    parameterized_count = sum(len(variants) for variants in variant_names.values())
+    matched = direct_count + parameterized_count
     print(
         f"Matched: {matched} "
         f"({direct_count} direct + "
-        f"{normalized_alias_count} normalized-alias + "
-        f"{variant_reference_count} variant-family)"
+        f"{parameterized_count} parameterized)"
     )
 
     if cpp_names is None:
@@ -275,20 +343,15 @@ def main():
     else:
         print(f"\nsource-evidence: cpp-gm-dir={args.cpp_gm_dir}")
 
-    print("\n--- Normalized aliases ---")
-    print(f"count: {len(normalized_aliases)}")
-    for result in normalized_aliases:
-        print(f"  {result['gm_name']}.png  <- alias {result['reference']}.png")
-
-    print("\n--- Variant families from CPP source evidence ---")
-    print(f"count: {len(variant_families)}")
-    for result in variant_families:
-        references = ", ".join(f"{reference}.png" for reference in result["references"])
-        print(f"  {result['gm_name']}.png  <- variants {references}")
+    if variant_names:
+        print(f"\n--- Parameterized variants of existing GMs ---")
+        for parent in sorted(variant_names):
+            for variant_name in sorted(variant_names[parent]):
+                print(f"  {variant_name}.png  <- from {parent}")
 
     if orphan_names:
         print(f"\n=== REFERENCE PNGs WITHOUT Kotlin GM ({len(orphan_names)}) ===\n")
-        for name in orphan_names:
+        for name in sorted(orphan_names):
             print(f"  {name}.png")
 
     if manual_orphans:
@@ -297,10 +360,22 @@ def main():
             base = name.replace("_manual", "")
             print(f"  {name}.png (base '{base}' also missing)")
 
-    print("\n=== ACTIONABLE missing references ===")
-    print(f"count: {len(actionable_missing)}\n")
-    for result in actionable_missing:
-        print(f"  {result['gm_name']}.png")
+    if cpp_names is not None:
+        print("\n--- Normalized aliases ---")
+        print(f"count: {len(normalized_aliases)}")
+        for result in normalized_aliases:
+            print(f"  {result['gm_name']}.png  <- alias {result['reference']}.png")
+
+        print("\n--- Variant families from CPP source evidence ---")
+        print(f"count: {len(variant_families)}")
+        for result in variant_families:
+            references = ", ".join(f"{reference}.png" for reference in result["references"])
+            print(f"  {result['gm_name']}.png  <- variants {references}")
+
+    if actionable_missing:
+        print(f"\n=== GM names WITHOUT reference PNG ({len(actionable_missing)}) ===\n")
+        for name in actionable_missing:
+            print(f"  {name}.png")
 
 
 if __name__ == "__main__":
