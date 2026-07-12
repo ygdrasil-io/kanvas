@@ -53,7 +53,7 @@ internal fun generateSkiaDashboard(args: Array<String>, gms: List<SkiaGm> = Skia
     outputDir.resolve("images/diff").mkdirs()
     outputDir.resolve("data").mkdirs()
     for (gm in dashboardGms) {
-        val refFile = refDir.resolve("${gm.name}.png")
+        val refFile = referenceFile(refDir, gm)
         val genFile = genDir.resolve("${gm.renderFamily.name.lowercase()}/${gm.name}.png")
         val fam = gm.renderFamily.name
         val refStatus = gm.referenceStatus
@@ -174,6 +174,9 @@ internal fun generateSkiaDashboard(args: Array<String>, gms: List<SkiaGm> = Skia
     println("Dashboard generated: ${outputDir.absolutePath}")
     println("Total: ${gms.size}, Pass: $passed, Fail: $failed, No score: $noScore, Avg sim: ${String.format(Locale.US, "%.1f", avgSim)}%")
 }
+
+internal fun referenceFile(refDir: File, gm: SkiaGm): File =
+    refDir.resolve("${gm.referenceName}.png")
 
 private fun argAt(args: Array<String>, flag: String): String {
     val idx = args.indexOf(flag)

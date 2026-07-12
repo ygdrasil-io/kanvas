@@ -64,7 +64,7 @@ class SkiaGmRunner {
         val result = SkiaGmRenderer.render(gm, config = config)
         val elapsedMs = (System.nanoTime() - t0) / 1_000_000
 
-        val refPath = "/reference/${gm.name}.png"
+        val refPath = referenceResourcePath(gm)
         val refStatus = gm.referenceStatus
 
         if (refStatus.untrustable) {
@@ -147,6 +147,9 @@ class SkiaGmRunner {
         }
     }
 }
+
+internal fun referenceResourcePath(gm: SkiaGm): String =
+    "/reference/${gm.referenceName}.png"
 
 internal fun selectSkiaGmsForRunner(gms: List<SkiaGm>, name: String?): List<SkiaGm> =
     if (name == null) gms else gms.filter { it.name == name }

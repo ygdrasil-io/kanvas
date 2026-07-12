@@ -29,11 +29,29 @@ class SkiaGmRunnerFilterTest {
 
         assertEquals(listOf("text_scale_skew_rotate"), selected.map { it.name })
     }
+
+    @Test
+    fun `reference resource path uses reference name while preserving logical name`() {
+        val gm = AliasStubRunnerGm()
+
+        assertEquals("/reference/cpp-gm.png", referenceResourcePath(gm))
+        assertEquals("logical-gm", gm.name)
+    }
 }
 
 private class StubRunnerGm(
     override val name: String,
 ) : SkiaGm {
+    override val renderFamily = RenderFamily.TEXT
+    override val renderCost = RenderCost.FAST
+    override val minSimilarity = 80.0
+    override fun draw(canvas: GmCanvas, width: Int, height: Int) = Unit
+}
+
+private class AliasStubRunnerGm(
+    override val name: String = "logical-gm",
+) : SkiaGm {
+    override val referenceName: String = "cpp-gm"
     override val renderFamily = RenderFamily.TEXT
     override val renderCost = RenderCost.FAST
     override val minSimilarity = 80.0

@@ -26,6 +26,7 @@ data class ReferenceStatusEntry(
 
 interface SkiaGm {
     val name: String
+    val referenceName: String get() = name
     val renderFamily: RenderFamily
     val renderCost: RenderCost
     val minSimilarity: Double
