@@ -4,14 +4,20 @@
 Usage: python3 scripts/compare_skia_vs_kanvas_gms.py
 """
 
+import argparse
+import os
 import re
 import sys
 from pathlib import Path
 
+from extract_skia_gm_names import (
+    extract_gm_names as extract_cpp_gm_names,
+    resolve_default_gm_dir,
+)
+
 REPO = Path(__file__).resolve().parent.parent
 REF_DIR = REPO / "integration-tests" / "skia" / "src" / "test" / "resources" / "reference"
 GM_DIR = REPO / "integration-tests" / "skia" / "src" / "test" / "kotlin" / "org" / "graphiks" / "kanvas" / "skia" / "gm"
-SKIA_GM_DIR = Path("/Users/chaos/workspace/kanvas-forge/skia-main/gm")
 
 
 # ---------------------------------------------------------------------------
@@ -83,20 +89,53 @@ def extract_kanvas_gm_names():
 # 2. Extract Skia GM names from C++ source
 # ---------------------------------------------------------------------------
 
-def extract_skia_gm_names():
-    """Extract GM names from C++ source using the extract_skia_gm_names.py script."""
-    import subprocess
-    script = REPO / "scripts" / "extract_skia_gm_names.py"
-    result = subprocess.run(
-        [sys.executable, str(script), "--gm-dir", str(SKIA_GM_DIR), "--names"],
-        capture_output=True, text=True, timeout=60,
+CPP_GM_DIR_ENV = "KANVAS_SKIA_GM_DIR"
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--cpp-gm-dir",
+        type=Path,
+        help=(
+            "path to the Skia C++ gm/ directory; if omitted, the script uses "
+            f"${CPP_GM_DIR_ENV} or the extractor defaults when available"
+        ),
     )
-    names = set()
-    for line in result.stdout.strip().split("\n"):
-        line = line.strip()
-        if line:
-            names.add(line)
-    return names
+    args = parser.parse_args()
+    if args.cpp_gm_dir is not None and not args.cpp_gm_dir.is_dir():
+        parser.error(f"--cpp-gm-dir is not a directory: {args.cpp_gm_dir}")
+    return args
+
+
+def resolve_cpp_gm_dir(cpp_gm_dir: Path | None, env: dict[str, str] | None = None) -> Path:
+    if cpp_gm_dir is not None:
+        return cpp_gm_dir
+
+    if env is None:
+        env = os.environ
+    env_value = env.get(CPP_GM_DIR_ENV)
+    if env_value:
+        env_path = Path(env_value)
+        if not env_path.is_dir():
+            raise ValueError(f"{CPP_GM_DIR_ENV} is not a directory: {env_path}")
+        return env_path
+
+    default_gm_dir = resolve_default_gm_dir()
+    if default_gm_dir is not None:
+        return default_gm_dir
+
+    raise ValueError(
+        f"provide --cpp-gm-dir or {CPP_GM_DIR_ENV}, or make an extractor default available"
+    )
+
+
+def extract_skia_gm_names(cpp_gm_dir: Path):
+    """Extract authoritative GM names from a caller-provided C++ gm directory."""
+    return {
+        name for name in extract_cpp_gm_names(cpp_gm_dir)
+        if not name.startswith("<")
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -111,11 +150,17 @@ def normalize(name):
 
 
 def main():
+    args = parse_args()
+    try:
+        cpp_gm_dir = resolve_cpp_gm_dir(args.cpp_gm_dir)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+
     print("Extracting Kanvas GM names...", file=sys.stderr)
     kanvas_names = extract_kanvas_gm_names()
 
     print("Extracting Skia GM names from C++ sources...", file=sys.stderr)
-    skia_names = extract_skia_gm_names()
+    skia_names = extract_skia_gm_names(cpp_gm_dir)
 
     # Get reference PNG base names
     ref_names = set()

@@ -227,3 +227,49 @@ Observed verification:
 Implementation commit:
 
 - `99252bcb54343ecb8feebee08b763bfeab8b76da` — `fix: restore legacy GM checker semantics`
+
+---
+
+## Pre-PR corrective follow-up for extractor/compare scripts
+
+Focused fixes landed in:
+
+- `scripts/extract_skia_gm_names.py`
+- `scripts/test_extract_skia_gm_names.py`
+- `scripts/compare_skia_vs_kanvas_gms.py`
+- `scripts/test_compare_skia_vs_kanvas_gms.py`
+
+Key corrections:
+
+- resolved inherited `RuntimeShaderGM` base-constructor names from real upstream C++:
+  `runtime_shader`, `threshold_rt`, `spiral_rt`, `unsharp_rt`,
+  `color_cube_rt`, `color_cube_cf_rt`
+- resolved constructor/state-driven `getName()` builders for:
+  - `ClippedBitmapShadersGM` → `clipped-bitmap-shaders-{tile,mirror,clamp}` and `-hq`
+  - `AnisotropicGM` → `anisotropic_image_scale_{linear,mip,aniso}`
+  - `ClipSuperRRect` constructor literal pass-through
+- stopped treating placeholder names like `<unresolved:...>` as authoritative API or compare output
+- ignored commented-out `DEF_GM(...)` registrations instead of inventing disabled names
+- removed the checked-in `/Users/chaos/...` path from `compare_skia_vs_kanvas_gms.py`
+- added explicit `--cpp-gm-dir` plus `KANVAS_SKIA_GM_DIR` / extractor-default resolution
+
+Fresh verification:
+
+- `rtk python3 scripts/test_extract_skia_gm_names.py` → `OK (5 tests)`
+- `rtk python3 scripts/test_compare_skia_vs_kanvas_gms.py` → `OK (5 tests)`
+- `rtk python3 scripts/test_check_missing_gms.py` → `OK (7 tests)`
+- `rtk python3 scripts/check_missing_gms.py --cpp-gm-dir /Users/chaos/workspace/kanvas-forge/skia-main/gm`
+- `rtk python3 scripts/compare_skia_vs_kanvas_gms.py --cpp-gm-dir /Users/chaos/workspace/kanvas-forge/skia-main/gm | rg -n "<unresolved:|runtime_shader|threshold_rt|spiral_rt|clipped-bitmap-shaders|clip_super_rrect|anisotropic_image_scale" -S`
+
+Actual-source evidence summary from the fresh extractor run:
+
+- authoritative names now include all requested real upstream patterns above
+- `AUTHORITATIVE_COUNT 789`
+- `UNRESOLVED_COUNT 117`
+
+Residual concern:
+
+- `scripts/check_missing_gms.py` still reports `Variant families from CPP source evidence: 0`
+  on this real-source run. After the generic/noisy buckets were intentionally
+  suppressed, the remaining trustworthy evidence is showing up primarily as
+  concrete upstream variant names rather than checker-promoted family buckets.

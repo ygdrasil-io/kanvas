@@ -74,8 +74,51 @@ def strip_line_comment(line):
     return line
 
 
+def strip_comments_preserve_strings(text):
+    result = []
+    i = 0
+    in_string = False
+    string_char = None
+    while i < len(text):
+        ch = text[i]
+        if in_string:
+            result.append(ch)
+            if ch == '\\' and i + 1 < len(text):
+                result.append(text[i + 1])
+                i += 2
+                continue
+            if ch == string_char:
+                in_string = False
+                string_char = None
+            i += 1
+            continue
+        if ch in ('"', "'"):
+            in_string = True
+            string_char = ch
+            result.append(ch)
+            i += 1
+            continue
+        if ch == '/' and i + 1 < len(text):
+            next_ch = text[i + 1]
+            if next_ch == '/':
+                i += 2
+                while i < len(text) and text[i] != '\n':
+                    i += 1
+                continue
+            if next_ch == '*':
+                i += 2
+                while i + 1 < len(text) and not (text[i] == '*' and text[i + 1] == '/'):
+                    i += 1
+                i += 2
+                continue
+        result.append(ch)
+        i += 1
+    return ''.join(result)
+
+
 def extract_simple_gm_names(content):
     names = set()
+    content = strip_comments_preserve_strings(content)
     pat = re.compile(
         r'DEF_SIMPLE_GM(?:_CAN_FAIL|_BG|_BG_CAN_FAIL|_BG_NAME|_BG_NAME_CAN_FAIL)?\s*\(\s*'
         r'(\w+)'
@@ -100,6 +143,14 @@ def parse_class_definitions(lines):
 
         cls_name = m.group(1)
         if cls_name in ('sk_sp',): continue
+        bases = []
+        if ':' in stripped:
+            inheritance = stripped.split(':', 1)[1].rsplit('{', 1)[0]
+            for base in inheritance.split(','):
+                base = base.strip()
+                if not base:
+                    continue
+                bases.append(base.split()[-1].split('::')[-1])
 
         # Find the opening brace in the original line
         brace_pos = line.find('{')
@@ -108,11 +159,15 @@ def parse_class_definitions(lines):
 
         end_line, _ = find_matching_brace(lines, i, brace_pos)
         if end_line is not None:
-            classes[cls_name] = (i, end_line)
+            classes[cls_name] = {
+                'start': i,
+                'end': end_line,
+                'bases': bases,
+            }
     return classes
 
 
-def extract_getname_from_class(lines, start_line, end_line):
+def extract_getname_pattern_from_class(lines, start_line, end_line):
     for i in range(start_line, end_line + 1):
         l = strip_line_comment(lines[i])
         if not re.search(r'(?:SkString|const\s+char\s*\*)\s+getName\(\)', l):
@@ -137,28 +192,28 @@ def extract_getname_from_class(lines, start_line, end_line):
         # return SkString("literal");
         m = re.search(r'return\s+SkString\(["\']([^"\']+)["\']\)', body)
         if m:
-            return ('literal', m.group(1))
+            return ('literal', m.group(1), body)
 
         # return SkString(cond ? "a" : "b");
         m = re.search(r'return\s+SkString\(\w+\s*\?\s*["\']([^"\']+)["\']\s*:\s*["\']([^"\']+)["\']\)', body)
         if m:
             # Both branches of ternary — return first option (truthy branch)
-            return ('literal', m.group(1))
+            return ('literal', m.group(1), body)
 
         # return SkString(varName); — variable via SkString constructor
         m = re.search(r'return\s+SkString\((\w+)\)', body)
         if m:
-            return ('variable', m.group(1))
+            return ('variable', m.group(1), body)
 
         # return varName; — direct variable reference
         m = re.search(r'return\s+(\w+)\s*;', body)
         if m:
-            return ('variable', m.group(1))
+            return ('variable', m.group(1), body)
 
         # return SkStringPrintf("fmt", ...);
         m = re.search(r'return\s+(?:SkStringPrintf|printf)\(["\']([^"\']+)["\']', body)
         if m:
-            return ('fmt', m.group(1))
+            return ('fmt', m.group(1), body)
 
         # var.printf("fmt", ...) / var.appendf / name.append("...")  followed by return var
         for var_prefix in [r'\w+', r'f\w+', r'name', r'str', r'fullName', r'descriptor']:
@@ -167,9 +222,16 @@ def extract_getname_from_class(lines, start_line, end_line):
                 body
             )
             if m:
-                return ('fmt', m.group(2))
+                return ('fmt', m.group(2), body)
 
-    return None, None
+        return None, None, body
+
+    return None, None, None
+
+
+def extract_getname_from_class(lines, start_line, end_line):
+    kind, value, _ = extract_getname_pattern_from_class(lines, start_line, end_line)
+    return kind, value
 
 
 def extract_def_gm_codes(content):
@@ -177,6 +239,7 @@ def extract_def_gm_codes(content):
     CODE includes the semicolon(s) inside the outer parens, e.g.
     DEF_GM(return new FooGM;)  → CODE = "return new FooGM;" """
     results = []
+    content = strip_comments_preserve_strings(content)
     idx = 0
     while True:
         start = content.find('DEF_GM', idx)
@@ -211,6 +274,418 @@ def extract_def_gm_codes(content):
         else:
             break
     return results
+
+
+def find_matching_delimiter(text, start_idx, opener='(', closer=')'):
+    depth = 0
+    in_string = False
+    string_char = None
+    i = start_idx
+    while i < len(text):
+        ch = text[i]
+        if in_string:
+            if ch == '\\':
+                i += 2
+                continue
+            if ch == string_char:
+                in_string = False
+                string_char = None
+            i += 1
+            continue
+        if ch in ('"', "'"):
+            in_string = True
+            string_char = ch
+            i += 1
+            continue
+        if ch == opener:
+            depth += 1
+        elif ch == closer:
+            depth -= 1
+            if depth == 0:
+                return i
+        i += 1
+    return None
+
+
+def split_top_level_args(text):
+    args = []
+    current = []
+    paren_depth = 0
+    brace_depth = 0
+    bracket_depth = 0
+    in_string = False
+    string_char = None
+    i = 0
+    while i < len(text):
+        ch = text[i]
+        if in_string:
+            current.append(ch)
+            if ch == '\\' and i + 1 < len(text):
+                current.append(text[i + 1])
+                i += 2
+                continue
+            if ch == string_char:
+                in_string = False
+                string_char = None
+            i += 1
+            continue
+        if ch in ('"', "'"):
+            in_string = True
+            string_char = ch
+            current.append(ch)
+            i += 1
+            continue
+        if ch == '(':
+            paren_depth += 1
+        elif ch == ')':
+            paren_depth -= 1
+        elif ch == '{':
+            brace_depth += 1
+        elif ch == '}':
+            brace_depth -= 1
+        elif ch == '[':
+            bracket_depth += 1
+        elif ch == ']':
+            bracket_depth -= 1
+        elif ch == ',' and paren_depth == 0 and brace_depth == 0 and bracket_depth == 0:
+            arg = ''.join(current).strip()
+            if arg:
+                args.append(arg)
+            current = []
+            i += 1
+            continue
+        current.append(ch)
+        i += 1
+    tail = ''.join(current).strip()
+    if tail:
+        args.append(tail)
+    return args
+
+
+def parse_new_class_args(code, class_name):
+    m = re.search(r'return\s+new\s+(?:\w+::)?' + re.escape(class_name) + r'\s*\(', code)
+    if not m:
+        return None
+    paren_start = code.find('(', m.start())
+    if paren_start == -1:
+        return None
+    paren_end = find_matching_delimiter(code, paren_start)
+    if paren_end is None:
+        return None
+    return split_top_level_args(code[paren_start + 1:paren_end])
+
+
+def find_constructor_signature(lines, class_info, class_name):
+    start = class_info['start']
+    end = class_info['end']
+    for i in range(start + 1, end + 1):
+        l = strip_line_comment(lines[i])
+        if '~' + class_name in l:
+            continue
+        match = re.search(r'\b' + re.escape(class_name) + r'\s*\(', l)
+        if not match:
+            continue
+        signature_parts = []
+        in_block_comment = False
+        in_string = False
+        string_char = None
+        paren_depth = 0
+        for j in range(i, end + 1):
+            line = lines[j]
+            start_char = match.start() if j == i else 0
+            k = start_char
+            while k < len(line):
+                ch = line[k]
+                if in_string:
+                    signature_parts.append(ch)
+                    if ch == '\\' and k + 1 < len(line):
+                        signature_parts.append(line[k + 1])
+                        k += 2
+                        continue
+                    if ch == string_char:
+                        in_string = False
+                        string_char = None
+                    k += 1
+                    continue
+                if in_block_comment:
+                    if ch == '*' and k + 1 < len(line) and line[k + 1] == '/':
+                        in_block_comment = False
+                        k += 2
+                        continue
+                    k += 1
+                    continue
+                if ch in ('"', "'"):
+                    in_string = True
+                    string_char = ch
+                    signature_parts.append(ch)
+                    k += 1
+                    continue
+                if ch == '/' and k + 1 < len(line):
+                    if line[k + 1] == '/':
+                        break
+                    if line[k + 1] == '*':
+                        in_block_comment = True
+                        k += 2
+                        continue
+                if ch == '(':
+                    paren_depth += 1
+                elif ch == ')' and paren_depth > 0:
+                    paren_depth -= 1
+                if ch == '{' and paren_depth == 0:
+                    return ''.join(signature_parts).strip()
+                signature_parts.append(ch)
+                k += 1
+            signature_parts.append(' ')
+    return None
+
+
+def parse_constructor_signature(signature, class_name):
+    ctor_start = signature.find(class_name)
+    if ctor_start == -1:
+        return None
+    paren_start = signature.find('(', ctor_start)
+    if paren_start == -1:
+        return None
+    paren_end = find_matching_delimiter(signature, paren_start)
+    if paren_end is None:
+        return None
+
+    params_text = signature[paren_start + 1:paren_end]
+    remainder = signature[paren_end + 1:].strip()
+    param_defs = []
+    for param in split_top_level_args(params_text):
+        param = param.strip()
+        if not param or param == 'void':
+            continue
+        default = None
+        if '=' in param:
+            before_default, default = param.split('=', 1)
+            param = before_default.strip()
+            default = default.strip()
+        name_match = re.search(r'(\w+)\s*$', param)
+        if not name_match:
+            continue
+        param_defs.append((name_match.group(1), default))
+
+    initializers = []
+    if remainder.startswith(':'):
+        for initializer in split_top_level_args(remainder[1:].strip()):
+            init_match = re.match(r'(?:(?:\w+::)*)?(\w+)\s*([({])(.*)([)}])\s*$', initializer, re.S)
+            if not init_match:
+                continue
+            initializers.append({
+                'name': init_match.group(1),
+                'args': split_top_level_args(init_match.group(3)),
+            })
+
+    return {
+        'params': param_defs,
+        'initializers': initializers,
+    }
+
+
+def build_param_env(param_defs, arg_values):
+    env = {}
+    for index, (name, default) in enumerate(param_defs):
+        if index < len(arg_values):
+            env[name] = arg_values[index]
+        elif default is not None:
+            env[name] = default
+    return env
+
+
+def resolve_expr(expr, env):
+    expr = expr.strip()
+    if expr in env:
+        expr = str(env[expr]).strip()
+    if expr == 'true':
+        return True
+    if expr == 'false':
+        return False
+    quoted = re.fullmatch(r'["\']([^"\']*)["\']', expr)
+    if quoted:
+        return quoted.group(1)
+    return expr
+
+
+def normalize_cpp_symbol(value):
+    return re.sub(r'\s+', '', value)
+
+
+def labels_match(actual_value, label_value):
+    actual_norm = normalize_cpp_symbol(str(actual_value))
+    label_norm = normalize_cpp_symbol(str(label_value))
+    return (
+        actual_norm == label_norm
+        or actual_norm.endswith(label_norm)
+        or label_norm.endswith(actual_norm)
+    )
+
+
+def class_matches_or_inherits(class_name, target_name, classes):
+    if class_name == target_name:
+        return True
+    class_info = classes.get(class_name)
+    if not class_info:
+        return False
+    return any(class_matches_or_inherits(base, target_name, classes) for base in class_info['bases'])
+
+
+def get_getname_info(class_name, classes, lines, seen=None):
+    if seen is None:
+        seen = set()
+    if class_name in seen:
+        return None
+    seen.add(class_name)
+
+    class_info = classes.get(class_name)
+    if not class_info:
+        return None
+
+    kind, value, body = extract_getname_pattern_from_class(lines, class_info['start'], class_info['end'])
+    if kind is not None or body is not None:
+        return class_name, kind, value, body
+
+    for base in class_info['bases']:
+        base_info = get_getname_info(base, classes, lines, seen)
+        if base_info is not None:
+            return base_info
+    return None
+
+
+def resolve_member_value(class_name, owner_class_name, member_name, classes, lines, arg_values, seen=None):
+    if seen is None:
+        seen = set()
+    state_key = (class_name, owner_class_name, member_name, tuple(arg_values))
+    if state_key in seen:
+        return None
+    seen.add(state_key)
+
+    class_info = classes.get(class_name)
+    if not class_info:
+        return None
+    signature = find_constructor_signature(lines, class_info, class_name)
+    if signature is None:
+        return None
+    constructor = parse_constructor_signature(signature, class_name)
+    if constructor is None:
+        return None
+    env = build_param_env(constructor['params'], arg_values)
+
+    if class_name == owner_class_name:
+        for initializer in constructor['initializers']:
+            if initializer['name'] == member_name and initializer['args']:
+                return resolve_expr(initializer['args'][0], env)
+
+    for initializer in constructor['initializers']:
+        init_name = initializer['name']
+        if init_name in class_info['bases'] and class_matches_or_inherits(init_name, owner_class_name, classes):
+            base_args = [resolve_expr(arg, env) for arg in initializer['args']]
+            resolved = resolve_member_value(
+                init_name,
+                owner_class_name,
+                member_name,
+                classes,
+                lines,
+                base_args,
+                seen,
+            )
+            if resolved is not None:
+                return resolved
+    return None
+
+
+def resolve_constructor_state(class_name, classes, lines, arg_values):
+    class_info = classes.get(class_name)
+    if not class_info:
+        return {}
+    signature = find_constructor_signature(lines, class_info, class_name)
+    if signature is None:
+        return {}
+    constructor = parse_constructor_signature(signature, class_name)
+    if constructor is None:
+        return {}
+    env = build_param_env(constructor['params'], arg_values)
+    state = {}
+    for initializer in constructor['initializers']:
+        if initializer['name'] in class_info['bases']:
+            continue
+        if initializer['args']:
+            state[initializer['name']] = resolve_expr(initializer['args'][0], env)
+    return state
+
+
+def evaluate_switch_constructed_name(body, state):
+    switch_match = re.search(r'switch\s*\(\s*(\w+)\s*\)\s*\{(.*?)\}', body, re.S)
+    if not switch_match:
+        return None
+
+    switch_var = switch_match.group(1)
+    switch_value = state.get(switch_var)
+    if switch_value is None:
+        return None
+
+    switch_body = switch_match.group(2)
+    selected_var = None
+    selected_value = None
+    selected_mode = None
+
+    for case_match in re.finditer(
+        r'case\s+(.*?)(?<!:):(?!:)\s*(.*?)(?=case\s+.*?(?<!:):(?!:)|default\s*:|$)',
+        switch_body,
+        re.S,
+    ):
+        if not labels_match(switch_value, case_match.group(1).strip()):
+            continue
+        case_body = case_match.group(2)
+        direct_assign = re.search(r'(\w+)\s*=\s*"([^"]+)"', case_body)
+        if direct_assign:
+            selected_var = direct_assign.group(1)
+            selected_value = direct_assign.group(2)
+            selected_mode = 'replace'
+            break
+        append_assign = re.search(r'(\w+)\s*\+=\s*"([^"]+)"', case_body)
+        if append_assign:
+            selected_var = append_assign.group(1)
+            selected_value = append_assign.group(2)
+            selected_mode = 'append'
+            break
+        append_call = re.search(r'(\w+)\.append\("([^"]+)"\)', case_body)
+        if append_call:
+            selected_var = append_call.group(1)
+            selected_value = append_call.group(2)
+            selected_mode = 'append'
+            break
+
+    if selected_var is None or selected_value is None:
+        return None
+
+    prefix = ''
+    init_match = re.search(r'SkString\s+' + re.escape(selected_var) + r'\("([^"]*)"\)', body)
+    if init_match:
+        prefix = init_match.group(1)
+    prepend_match = re.search(r'\b' + re.escape(selected_var) + r'\.prepend\("([^"]+)"\)', body)
+    if prepend_match:
+        prefix = prepend_match.group(1) + prefix
+
+    suffix = ''
+    for cond_match in re.finditer(
+        r'if\s*\(\s*(\w+)\s*\)\s*\{(.*?)\}',
+        body,
+        re.S,
+    ):
+        if not state.get(cond_match.group(1)):
+            continue
+        append_match = re.search(
+            r'\b' + re.escape(selected_var) + r'(?:\.append\("([^"]+)"\)|\s*\+=\s*"([^"]+)")',
+            cond_match.group(2),
+        )
+        if append_match:
+            suffix += append_match.group(1) or append_match.group(2)
+
+    if selected_mode == 'append':
+        return prefix + selected_value + suffix
+    return prefix + selected_value + suffix
 
 
 def trace_variable_from_constructor(lines, class_start, class_end, var_name):
@@ -303,9 +778,13 @@ def unresolved_name(class_name):
     return f'<unresolved:{class_name}>'
 
 
+def is_placeholder_name(name):
+    return name.startswith('<')
+
+
 def make_name_key(name):
-    """Sort helper: place unresolved (<...>) names at end."""
-    if name.startswith('<'):
+    """Sort helper: place placeholder (<...>) names at end."""
+    if is_placeholder_name(name):
         return (1, name)
     return (0, name)
 
@@ -314,7 +793,7 @@ def build_inventory(gm_dir: Path):
     cpp_files = sorted(gm_dir.glob('*.cpp'))
 
     # Build a per-file cache of class definitions: class_name -> (file_lines, start, end)
-    file_classes_cache = {}  # filepath -> {class_name: (start_line, end_line)}
+    file_classes_cache = {}  # filepath -> {class_name: {start, end, bases}}
 
     for fp in cpp_files:
         with fp.open('r', errors='replace') as f:
@@ -350,30 +829,54 @@ def build_inventory(gm_dir: Path):
             resolved = None
 
             if cls_name in classes:
-                start, end = classes[cls_name]
-                kind, val = extract_getname_from_class(lines, start, end)
+                getname_info = get_getname_info(cls_name, classes, lines)
+                if getname_info is None:
+                    kind = None
+                    val = None
+                    owner_class_name = None
+                    getname_body = None
+                else:
+                    owner_class_name, kind, val, getname_body = getname_info
+                def_gm_args = parse_new_class_args(code, cls_name) or []
                 if kind == 'literal':
                     resolved = val
                 elif kind == 'variable':
-                    tr = trace_variable_from_constructor(lines, start, end, val)
-                    if tr and tr[0] == 'literal':
-                        resolved = tr[1]
-                    elif tr and tr[0] == 'param':
-                        param_name = tr[1]
-                        arg_m = re.search(r'["\']([^"\']+)["\']', code)
-                        if arg_m:
-                            resolved = arg_m.group(1)
-                        else:
-                            unresolved.append((fname, cls_name, f'param:{param_name}',
-                                               'param unresolved'))
-                            resolved = unresolved_name(cls_name)
+                    if owner_class_name is not None:
+                        resolved = resolve_member_value(
+                            cls_name,
+                            owner_class_name,
+                            val,
+                            classes,
+                            lines,
+                            def_gm_args,
+                        )
                     else:
-                        arg_m = re.search(r'["\']([^"\']+)["\']', code)
-                        if arg_m:
-                            resolved = arg_m.group(1)
+                        resolved = None
+                    if resolved is None and getname_body is not None:
+                        state = resolve_constructor_state(cls_name, classes, lines, def_gm_args)
+                        resolved = evaluate_switch_constructed_name(getname_body, state)
+                    if resolved is None:
+                        start = classes[cls_name]['start']
+                        end = classes[cls_name]['end']
+                        tr = trace_variable_from_constructor(lines, start, end, val)
+                        if tr and tr[0] == 'literal':
+                            resolved = tr[1]
+                        elif tr and tr[0] == 'param':
+                            param_name = tr[1]
+                            arg_m = re.search(r'["\']([^"\']+)["\']', code)
+                            if arg_m:
+                                resolved = arg_m.group(1)
+                            else:
+                                unresolved.append((fname, cls_name, f'param:{param_name}',
+                                                   'param unresolved'))
+                                resolved = unresolved_name(cls_name)
                         else:
-                            unresolved.append((fname, cls_name, val, 'variable unresolved'))
-                            resolved = unresolved_name(cls_name)
+                            arg_m = re.search(r'["\']([^"\']+)["\']', code)
+                            if arg_m:
+                                resolved = arg_m.group(1)
+                            else:
+                                unresolved.append((fname, cls_name, val, 'variable unresolved'))
+                                resolved = unresolved_name(cls_name)
                 elif kind == 'fmt':
                     arg_m = re.search(r'["\']([^"\']+)["\']', code)
                     if arg_m:
@@ -401,9 +904,13 @@ def build_inventory(gm_dir: Path):
 
             all_names.add(resolved)
 
+    sorted_names = sorted(all_names, key=make_name_key)
+    authoritative_names = [name for name in sorted_names if not is_placeholder_name(name)]
+
     return {
         'cpp_files': cpp_files,
-        'sorted_names': sorted(all_names, key=make_name_key),
+        'sorted_names': sorted_names,
+        'sorted_authoritative_names': authoritative_names,
         'total_simple': total_simple,
         'total_def_gm': total_def_gm,
         'unresolved': unresolved,
@@ -411,7 +918,7 @@ def build_inventory(gm_dir: Path):
 
 
 def extract_gm_names(gm_dir: Path) -> set[str]:
-    return set(build_inventory(gm_dir)['sorted_names'])
+    return set(build_inventory(gm_dir)['sorted_authoritative_names'])
 
 
 def resolve_default_gm_dir():
@@ -449,7 +956,7 @@ def parse_args():
 def main():
     args = parse_args()
     inventory = build_inventory(args.gm_dir)
-    sorted_names = inventory['sorted_names']
+    sorted_names = inventory['sorted_authoritative_names']
 
     if args.names:
         for n in sorted_names:
@@ -464,7 +971,7 @@ def main():
 
     unresolved_actual = inventory['unresolved']
     if unresolved_actual:
-        print(f"Unresolved ({len(unresolved_actual)} entries, using fallback):")
+        print(f"Unresolved ({len(unresolved_actual)} entries, excluded from authoritative names):")
         for f, cls, kind, reason in unresolved_actual:
             print(f"  {cls} in {f}: {reason} (kind={kind})")
         print()
