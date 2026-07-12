@@ -788,7 +788,7 @@ private class WgpuOffscreenTarget(
         TextureDescriptor(
             size = Extent3D(width = safeWidth.toUInt(), height = safeHeight.toUInt()),
             format = format,
-            usage = GPUTextureUsage.RenderAttachment or GPUTextureUsage.CopySrc,
+            usage = GPUTextureUsage.RenderAttachment or GPUTextureUsage.CopySrc or GPUTextureUsage.CopyDst,
             label = "GPUBackend.offscreen.color",
         ),
     )
@@ -812,8 +812,11 @@ private class WgpuOffscreenTarget(
     private val vertexBuffers = mutableMapOf<String, Pair<GPUBuffer, Int>>()
     private val offscreenTextures = mutableMapOf<String, GPUTexture>()
     private val offscreenTextureFormats = mutableMapOf<String, GPUTextureFormat>()
+    private val coverageMasks = mutableMapOf<String, WgpuCoverageMaskResources>()
     private val frameOrdinalCounter = AtomicLong(0L)
     private val textureFrameOrdinalCounter = AtomicLong(0L)
+    private val coverageMaskOrdinalCounter = AtomicLong(0L)
+    private val copyOrdinalCounter = AtomicLong(0L)
     private val pendingReadbackSubmissionIds = ArrayDeque<GPUQueueSubmissionId>()
     private val pendingTargetCloseSubmissionIds = ArrayDeque<GPUQueueSubmissionId>()
 
@@ -1033,7 +1036,11 @@ private class WgpuOffscreenTarget(
             TextureDescriptor(
                 size = Extent3D(width = safeW.toUInt(), height = safeH.toUInt()),
                 format = texture.format.toWgpuTextureFormat(),
-                usage = GPUTextureUsage.RenderAttachment or GPUTextureUsage.TextureBinding or GPUTextureUsage.CopySrc,
+                usage =
+                    GPUTextureUsage.RenderAttachment or
+                        GPUTextureUsage.TextureBinding or
+                        GPUTextureUsage.CopySrc or
+                        GPUTextureUsage.CopyDst,
                 label = label,
             ),
         )
@@ -1041,6 +1048,229 @@ private class WgpuOffscreenTarget(
         offscreenTextureFormats[label] = texture.format.toWgpuTextureFormat()
         telemetryRecorder.recordIntermediateTextureCreated()
         return label
+    }
+
+    override fun createCoverageMask(request: GPUBackendCoverageMaskRequest): GPUBackendCoverageMask {
+        val safeMaskWidth = request.width.coerceAtMost(MAX_TEXTURE_DIMENSION)
+        val safeMaskHeight = request.height.coerceAtMost(MAX_TEXTURE_DIMENSION)
+        val maskFormat = request.format.toWgpuTextureFormat()
+        val ordinal = coverageMaskOrdinalCounter.incrementAndGet()
+        val baseLabel = "coverageMask:${request.label}:$ordinal:${safeMaskWidth}x${safeMaskHeight}:samples=${request.sampleCount}"
+        val renderLabel = "$baseLabel:render"
+        val sampleLabel = if (request.sampleCount == 1) renderLabel else "$baseLabel:resolve"
+        val renderUsage =
+            GPUTextureUsage.RenderAttachment or
+                GPUTextureUsage.CopySrc or
+                GPUTextureUsage.CopyDst or
+                if (request.sampleCount == 1) GPUTextureUsage.TextureBinding else GPUTextureUsage.None
+        val renderTexture = createTrackedTexture(
+            TextureDescriptor(
+                size = Extent3D(width = safeMaskWidth.toUInt(), height = safeMaskHeight.toUInt()),
+                format = maskFormat,
+                usage = renderUsage,
+                sampleCount = request.sampleCount.toUInt(),
+                label = renderLabel,
+            ),
+        )
+        val resolveTexture = if (request.sampleCount == 1) {
+            null
+        } else {
+            createTrackedTexture(
+                TextureDescriptor(
+                    size = Extent3D(width = safeMaskWidth.toUInt(), height = safeMaskHeight.toUInt()),
+                    format = maskFormat,
+                    usage =
+                        GPUTextureUsage.RenderAttachment or
+                            GPUTextureUsage.TextureBinding or
+                            GPUTextureUsage.CopySrc or
+                            GPUTextureUsage.CopyDst,
+                    label = sampleLabel,
+                ),
+            )
+        }
+        val depthStencilTexture = createTrackedTexture(
+            TextureDescriptor(
+                size = Extent3D(width = safeMaskWidth.toUInt(), height = safeMaskHeight.toUInt()),
+                format = GPUTextureFormat.Depth24PlusStencil8,
+                usage = GPUTextureUsage.RenderAttachment,
+                sampleCount = request.sampleCount.toUInt(),
+                label = "$baseLabel:depth-stencil",
+            ),
+        )
+        val mask = GPUBackendCoverageMask(
+            renderLabel = renderLabel,
+            sampleLabel = sampleLabel,
+            width = safeMaskWidth,
+            height = safeMaskHeight,
+            sampleCount = request.sampleCount,
+        )
+        val sampleTexture = resolveTexture ?: renderTexture
+        coverageMasks[renderLabel] = WgpuCoverageMaskResources(
+            mask = mask,
+            renderTexture = renderTexture,
+            resolveTexture = resolveTexture,
+            depthStencilTexture = depthStencilTexture,
+            queueLabel = "coverage-mask-$ordinal",
+        )
+        offscreenTextures[sampleLabel] = sampleTexture
+        offscreenTextureFormats[sampleLabel] = maskFormat
+        if (request.sampleCount > 1) {
+            telemetryRecorder.recordMsaaTarget()
+            telemetryRecorder.recordMsaaResolve()
+        }
+        telemetryRecorder.recordIntermediateTextureCreated()
+        return mask
+    }
+
+    override fun encodeCoverageMask(
+        mask: GPUBackendCoverageMask,
+        clearColor: GPUClearColor?,
+        block: GPUBackendRenderRecorder.() -> Unit,
+    ) {
+        val maskResources = coverageMasks[mask.renderLabel]
+            ?: error("Coverage mask not found: ${mask.renderLabel}")
+        require(maskResources.mask == mask) { "Coverage mask does not match target allocation: ${mask.renderLabel}" }
+        check(!maskResources.releaseRequested) { "Coverage mask has been released: ${mask.renderLabel}" }
+
+        val frameOrdinal = textureFrameOrdinalCounter.incrementAndGet()
+        val frameId = "${maskResources.queueLabel}-frame-$frameOrdinal"
+        val frameResourceLeases = mutableListOf<GPUResourceLease>()
+        maskResources.activeEncodes += 1
+        try {
+            GPUResourceScope().use { resources ->
+                val renderView = resources.track(maskResources.renderTexture.createView()) { it.close() }
+                val resolveView = maskResources.resolveTexture?.let { resolveTexture ->
+                    resources.track(resolveTexture.createView()) { it.close() }
+                }
+                val depthStencilView = resources.track(maskResources.depthStencilTexture.createView()) { it.close() }
+                val encoder = resources.trackIfAutoCloseable(device.createCommandEncoder())
+                encoder.beginRenderPass(
+                    RenderPassDescriptor(
+                        colorAttachments = listOf(
+                            RenderPassColorAttachment(
+                                view = renderView,
+                                resolveTarget = resolveView,
+                                loadOp = if (clearColor != null) GPULoadOp.Clear else GPULoadOp.Load,
+                                clearValue = clearColor?.toWgpuColor()
+                                    ?: Color(r = 0.0, g = 0.0, b = 0.0, a = 0.0),
+                                storeOp = GPUStoreOp.Store,
+                            ),
+                        ),
+                        depthStencilAttachment = RenderPassDepthStencilAttachment(
+                            view = depthStencilView,
+                            stencilClearValue = 0u,
+                            stencilLoadOp = GPULoadOp.Clear,
+                            stencilStoreOp = GPUStoreOp.Store,
+                            stencilReadOnly = false,
+                            depthReadOnly = true,
+                        ),
+                    ),
+                ) {
+                    val recorder = WgpuRenderRecorder(
+                        deviceGeneration = deviceGeneration,
+                        device = device,
+                        queue = queue,
+                        targetId = "${target.targetId}:${maskResources.queueLabel}",
+                        frameId = frameId,
+                        budgetClass = "runtime-coverage-mask",
+                        targetFormat = offscreenTextureFormats.getValue(mask.sampleLabel),
+                        capabilities = capabilities,
+                        resourceScope = resources,
+                        executionCaches = executionCaches,
+                        telemetryRecorder = telemetryRecorder,
+                        resourceProvider = resourceProvider,
+                        runtimeResourceAdapter = runtimeResourceAdapter,
+                        recordResourceLeasesAction = { leases -> frameResourceLeases += leases },
+                        setPipelineAction = { pipeline -> setPipeline(pipeline) },
+                        setBindGroupAction = { index, bindGroup -> setBindGroup(index, bindGroup) },
+                        setScissorAction = { x, y, width, height ->
+                            val cx = x.coerceAtMost(mask.width.toUInt())
+                            val cy = y.coerceAtMost(mask.height.toUInt())
+                            val cw = width.coerceAtMost(mask.width.toUInt() - cx)
+                            val ch = height.coerceAtMost(mask.height.toUInt() - cy)
+                            setScissorRect(cx, cy, cw, ch)
+                        },
+                        drawAction = { vertexCount -> draw(vertexCount) },
+                        setStencilReferenceAction = { ref -> setStencilReference(ref) },
+                        setVertexBufferAction = { slot, buffer -> setVertexBuffer(slot, buffer) },
+                        setIndexBufferAction = { buffer, indexFormat -> setIndexBuffer(buffer, indexFormat) },
+                        drawIndexedAction = { indexCount -> drawIndexed(indexCount) },
+                        offscreenTextureStore = offscreenTextures,
+                    )
+                    try {
+                        recorder.block()
+                    } finally {
+                        recorder.closeCachedResources()
+                    }
+                    end()
+                }
+                val commandBuffer = resources.trackIfAutoCloseable(encoder.finish())
+                telemetryRecorder.recordCommandBufferFinished()
+                queue.submit(listOf(commandBuffer))
+                val submission = queueManager.submit(
+                    label = "coverage-mask-pass:$frameId",
+                    retainedResources = gpuRuntimeRetainedResourceRefs(
+                        targetRef = GPUQueuedResourceRef("target:${target.targetId}:${maskResources.queueLabel}"),
+                        leases = frameResourceLeases,
+                    ),
+                )
+                recordRuntimeResourceLeasesAction(frameResourceLeases)
+                retainPendingTargetCloseSubmission(submission)
+                telemetryRecorder.recordSubmission()
+                telemetryRecorder.recordOffscreenRenderPass()
+            }
+        } finally {
+            maskResources.activeEncodes -= 1
+            destroyCoverageMaskIfReleased(maskResources)
+        }
+    }
+
+    override fun releaseCoverageMask(mask: GPUBackendCoverageMask) {
+        val maskResources = coverageMasks[mask.renderLabel] ?: return
+        if (maskResources.mask != mask) return
+        maskResources.releaseRequested = true
+        destroyCoverageMaskIfReleased(maskResources)
+    }
+
+    override fun copyOffscreenTexture(sourceTextureLabel: String, destinationTextureLabel: String) {
+        require(sourceTextureLabel != destinationTextureLabel) {
+            "GPU-to-GPU copy source and destination must differ"
+        }
+        val sourceTexture = offscreenTexture(sourceTextureLabel)
+        val destinationTexture = offscreenTexture(destinationTextureLabel)
+        require(sourceTexture.width == destinationTexture.width && sourceTexture.height == destinationTexture.height) {
+            "GPU-to-GPU copy requires equal texture dimensions"
+        }
+        require(offscreenTextureFormats[sourceTextureLabel] == offscreenTextureFormats[destinationTextureLabel]) {
+            "GPU-to-GPU copy requires equal texture formats"
+        }
+
+        val copyOrdinal = copyOrdinalCounter.incrementAndGet()
+        GPUResourceScope().use { resources ->
+            val encoder = resources.trackIfAutoCloseable(device.createCommandEncoder())
+            encoder.copyTextureToTexture(
+                source = TexelCopyTextureInfo(texture = sourceTexture),
+                destination = TexelCopyTextureInfo(texture = destinationTexture),
+                copySize = Extent3D(width = sourceTexture.width, height = sourceTexture.height),
+            )
+            val commandBuffer = resources.trackIfAutoCloseable(encoder.finish())
+            telemetryRecorder.recordCommandBufferFinished()
+            queue.submit(listOf(commandBuffer))
+            val submission = queueManager.submit(
+                label = "offscreen-copy:$copyOrdinal",
+                retainedResources = gpuRuntimeRetainedResourceRefs(
+                    targetRef = GPUQueuedResourceRef("target:${target.targetId}"),
+                    leases = emptyList(),
+                    extraRefs = listOf(
+                        GPUQueuedResourceRef("copy-source:$copyOrdinal"),
+                        GPUQueuedResourceRef("copy-destination:$copyOrdinal"),
+                    ),
+                ),
+            )
+            retainPendingTargetCloseSubmission(submission)
+            telemetryRecorder.recordSubmission()
+            telemetryRecorder.recordDestinationCopy()
+        }
     }
 
     override fun snapshotTargetToOffscreenTexture(textureLabel: String) {
@@ -1090,6 +1320,16 @@ private class WgpuOffscreenTarget(
     internal fun offscreenTexture(label: String): GPUTexture {
         return offscreenTextures[label]
             ?: error("Offscreen texture not found: $label")
+    }
+
+    private fun destroyCoverageMaskIfReleased(maskResources: WgpuCoverageMaskResources) {
+        if (!maskResources.releaseRequested || maskResources.activeEncodes != 0) return
+        if (coverageMasks.remove(maskResources.mask.renderLabel) !== maskResources) return
+        offscreenTextures.remove(maskResources.mask.sampleLabel)
+        offscreenTextureFormats.remove(maskResources.mask.sampleLabel)
+        maskResources.resolveTexture?.close()
+        maskResources.depthStencilTexture.close()
+        maskResources.renderTexture.close()
     }
 
     internal fun encodeOffscreenTextureInternal(
@@ -1210,6 +1450,10 @@ private class WgpuOffscreenTarget(
         closeQuietly { texture.close() }
         vertexBuffers.values.forEach { (buffer, _) -> closeQuietly { buffer.close() } }
         vertexBuffers.clear()
+        coverageMasks.values.toList().forEach { maskResources ->
+            maskResources.releaseRequested = true
+            closeQuietly { destroyCoverageMaskIfReleased(maskResources) }
+        }
         offscreenTextures.values.forEach { tex -> closeQuietly { tex.close() } }
         offscreenTextures.clear()
         firstFailure?.let { throw it }
@@ -1371,6 +1615,17 @@ private class WgpuWindowSurface(
         }
     }
 }
+
+/** Target-owned native resources for one coverage mask. They are closed only after active encoding has submitted. */
+private class WgpuCoverageMaskResources(
+    val mask: GPUBackendCoverageMask,
+    val renderTexture: GPUTexture,
+    val resolveTexture: GPUTexture?,
+    val depthStencilTexture: GPUTexture,
+    val queueLabel: String,
+    var activeEncodes: Int = 0,
+    var releaseRequested: Boolean = false,
+)
 
 private class WgpuRenderRecorder(
     private val deviceGeneration: GPUDeviceGeneration,
@@ -1886,7 +2141,11 @@ private class WgpuRenderRecorder(
                 TextureDescriptor(
                     size = Extent3D(width = safeW.toUInt(), height = safeH.toUInt()),
                     format = texture.format.toWgpuTextureFormat(),
-                    usage = GPUTextureUsage.RenderAttachment or GPUTextureUsage.TextureBinding or GPUTextureUsage.CopySrc,
+                    usage =
+                        GPUTextureUsage.RenderAttachment or
+                            GPUTextureUsage.TextureBinding or
+                            GPUTextureUsage.CopySrc or
+                            GPUTextureUsage.CopyDst,
                     label = label,
                 ),
             ),
@@ -2295,6 +2554,148 @@ private class WgpuRenderRecorder(
                 ),
             ) { it.close() }
 
+            setBindGroupAction(0u, bindGroup)
+            setBindGroupAction(1u, textureBindGroup)
+            setScissorAction(
+                draw.scissorX.toUInt(),
+                draw.scissorY.toUInt(),
+                draw.scissorWidth.toUInt(),
+                draw.scissorHeight.toUInt(),
+            )
+            drawAction(FULL_SCREEN_TRIANGLE_VERTEX_COUNT)
+        }
+    }
+
+    override fun drawTwoTexturePass(
+        wgsl: String,
+        colorFormat: String,
+        firstTextureLabel: String,
+        secondTextureLabel: String,
+        draws: List<GPUBackendRawUniformDraw>,
+        blendMode: GPUBlendMode?,
+    ) {
+        recordMultiTexturePass(
+            wgsl = wgsl,
+            colorFormat = colorFormat,
+            textureLabels = listOf(firstTextureLabel, secondTextureLabel),
+            draws = draws,
+            blendMode = blendMode,
+        )
+    }
+
+    override fun drawThreeTexturePass(
+        wgsl: String,
+        colorFormat: String,
+        firstTextureLabel: String,
+        secondTextureLabel: String,
+        thirdTextureLabel: String,
+        draws: List<GPUBackendRawUniformDraw>,
+        blendMode: GPUBlendMode?,
+    ) {
+        recordMultiTexturePass(
+            wgsl = wgsl,
+            colorFormat = colorFormat,
+            textureLabels = listOf(firstTextureLabel, secondTextureLabel, thirdTextureLabel),
+            draws = draws,
+            blendMode = blendMode,
+        )
+    }
+
+    private fun recordMultiTexturePass(
+        wgsl: String,
+        colorFormat: String,
+        textureLabels: List<String>,
+        draws: List<GPUBackendRawUniformDraw>,
+        blendMode: GPUBlendMode?,
+    ) {
+        require(wgsl.isNotBlank()) { "wgsl must not be blank" }
+        require(textureLabels.size in 2..3) { "Multi-texture passes require two or three texture labels" }
+        require(textureLabels.distinct().size == textureLabels.size) {
+            "Multi-texture passes require distinct texture labels"
+        }
+        require(colorFormat.normalizedColorFormat() == targetFormat.toBackendColorFormat()) {
+            "Requested color format $colorFormat does not match target format ${targetFormat.toBackendColorFormat()}"
+        }
+        require(draws.isNotEmpty()) { "draws required for multi-texture pass" }
+
+        val textures = textureLabels.map { textureLabel ->
+            offscreenTextureStore[textureLabel]
+                ?: error("Offscreen texture not found: $textureLabel")
+        }
+        val keys = multiTextureExecutionCacheKeys(
+            wgsl = wgsl,
+            targetFormat = targetFormat,
+            textureCount = textureLabels.size,
+            blendMode = blendMode,
+        )
+        executionCaches.recordPreimages(keys)
+        val bindGroupLayout = executionCaches.bindGroupLayout(device = device, keys = keys)
+        val textureBindGroupLayout = when (textureLabels.size) {
+            2 -> executionCaches.twoTextureBindGroupLayout(device = device, keys = keys)
+            3 -> executionCaches.threeTextureBindGroupLayout(device = device, keys = keys)
+            else -> error("Unsupported texture count ${textureLabels.size}")
+        }
+        val shader = executionCaches.shaderModule(device = device, wgsl = wgsl, keys = keys)
+        val pipelineLayout = executionCaches.texturePipelineLayout(
+            device = device,
+            bindGroupLayouts = listOf(bindGroupLayout, textureBindGroupLayout),
+            keys = keys,
+        )
+        val pipeline = executionCaches.renderPipeline(
+            device = device,
+            shader = shader,
+            pipelineLayout = pipelineLayout,
+            targetFormat = targetFormat,
+            keys = keys,
+            blendMode = blendMode,
+        )
+        val textureViews = textures.map { texture -> resourceScope.track(texture.createView()) { it.close() } }
+        val sampler = resourceScope.track(
+            createTrackedSampler(
+                SamplerDescriptor(
+                    addressModeU = GPUAddressMode.ClampToEdge,
+                    addressModeV = GPUAddressMode.ClampToEdge,
+                    magFilter = GPUFilterMode.Linear,
+                    minFilter = GPUFilterMode.Linear,
+                ),
+            ),
+        ) { it.close() }
+
+        setPipelineAction(pipeline)
+        draws.forEach { draw ->
+            val uniform = resourceScope.track(
+                createTrackedBuffer(
+                    BufferDescriptor(
+                        size = draw.uniformBytes.size.toULong(),
+                        usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
+                        label = "GPUBackend.multiTexture.uniform",
+                    ),
+                ),
+            ) { it.close() }
+            writeTrackedBuffer(uniform, 0uL, ArrayBuffer.of(draw.uniformBytes))
+            val bindGroup = resourceScope.track(
+                createTrackedBindGroup(
+                    BindGroupDescriptor(
+                        layout = bindGroupLayout,
+                        entries = listOf(
+                            BindGroupEntry(binding = 0u, resource = BufferBinding(buffer = uniform)),
+                        ),
+                    ),
+                ),
+            ) { it.close() }
+            val textureBindGroup = resourceScope.track(
+                createTrackedBindGroup(
+                    BindGroupDescriptor(
+                        layout = textureBindGroupLayout,
+                        entries = buildList {
+                            textureViews.forEachIndexed { index, view ->
+                                add(BindGroupEntry(binding = (1 + index * 2).toUInt(), resource = view))
+                                add(BindGroupEntry(binding = (2 + index * 2).toUInt(), resource = sampler))
+                            }
+                        },
+                    ),
+                ),
+            ) { it.close() }
             setBindGroupAction(0u, bindGroup)
             setBindGroupAction(1u, textureBindGroup)
             setScissorAction(
@@ -3790,6 +4191,61 @@ private class WgpuExecutionCaches(
         return decision.readyHandle()
     }
 
+    /** Returns the cached two-texture layout with deterministic texture/sampler pairs at bindings 1-4. */
+    fun twoTextureBindGroupLayout(
+        device: GPUDevice,
+        keys: FullscreenExecutionCacheKeys,
+    ): GPUBindGroupLayout = multiTextureBindGroupLayout(device, keys, textureCount = 2)
+
+    /** Returns the cached three-texture layout with deterministic texture/sampler pairs at bindings 1-6. */
+    fun threeTextureBindGroupLayout(
+        device: GPUDevice,
+        keys: FullscreenExecutionCacheKeys,
+    ): GPUBindGroupLayout = multiTextureBindGroupLayout(device, keys, textureCount = 3)
+
+    private fun multiTextureBindGroupLayout(
+        device: GPUDevice,
+        keys: FullscreenExecutionCacheKeys,
+        textureCount: Int,
+    ): GPUBindGroupLayout {
+        val decision = bindGroupLayoutCache.getOrCreate(
+            request = request(
+                domain = GPUExecutionCacheDomain.BindGroupLayout,
+                keyHash = keys.textureBindGroupLayoutKeyHash,
+                subjectHash = keys.textureBindGroupLayoutSubjectHash,
+            ),
+        ) {
+            device.createBindGroupLayout(
+                BindGroupLayoutDescriptor(
+                    entries = buildList {
+                        repeat(textureCount) { index ->
+                            add(
+                                BindGroupLayoutEntry(
+                                    binding = (1 + index * 2).toUInt(),
+                                    visibility = GPUShaderStage.Fragment,
+                                    texture = TextureBindingLayout(
+                                        sampleType = GPUTextureSampleType.Float,
+                                        viewDimension = GPUTextureViewDimension.TwoD,
+                                        multisampled = false,
+                                    ),
+                                ),
+                            )
+                            add(
+                                BindGroupLayoutEntry(
+                                    binding = (2 + index * 2).toUInt(),
+                                    visibility = GPUShaderStage.Fragment,
+                                    sampler = SamplerBindingLayout(type = GPUSamplerBindingType.Filtering),
+                                ),
+                            )
+                        }
+                    },
+                ),
+            )
+        }
+        record(decision)
+        return decision.readyHandle()
+    }
+
     /** Returns the cached pipeline layout for texture passes with two bind-group layouts. */
     fun texturePipelineLayout(
         device: GPUDevice,
@@ -4441,6 +4897,101 @@ private fun blendTextureExecutionCacheKeys(
         capabilityClass = "webgpu-wgsl-blend-pass",
         capabilityFacts = listOf("adapter-backed-helper", "targetFormat=$targetFormatClass", "textureFormat=${textureFormat.name}"),
         rendererSalt = "kgpu-m26-001",
+    )
+    val canonicalRenderPreimage = GPUPipelineKeys.canonicalRenderPreimage(renderPreimage)
+    val renderPipelineKey = GPUPipelineKeys.renderPipelineKey(renderPreimage).value
+
+    return FullscreenExecutionCacheKeys(
+        moduleKeyHash = "module:$moduleHash",
+        moduleSubjectHash = "wgsl:$wgslHash",
+        modulePreimage = modulePreimage,
+        bindGroupLayoutKeyHash = "bind-group-layout:$bindGroupLayoutHash",
+        bindGroupLayoutSubjectHash = "layout-shape:$bindGroupLayoutHash",
+        bindGroupLayoutPreimage = bindGroupLayoutPreimage,
+        textureBindGroupLayoutKeyHash = "bind-group-layout:$textureBindGroupLayoutHash",
+        textureBindGroupLayoutSubjectHash = "layout-shape:$textureBindGroupLayoutHash",
+        textureBindGroupLayoutPreimage = textureBindGroupLayoutPreimage,
+        pipelineLayoutKeyHash = "pipeline-layout:$pipelineLayoutHash",
+        pipelineLayoutSubjectHash = "bind-groups:$bindGroupLayoutHash,$textureBindGroupLayoutHash",
+        pipelineLayoutPreimage = pipelineLayoutPreimage,
+        renderPipelineKeyHash = renderPipelineKey,
+        renderPipelineSubjectHash = stableSha256(canonicalRenderPreimage),
+        renderPipelinePreimage = canonicalRenderPreimage,
+    )
+}
+
+/** Builds cache keys for generic two- and three-texture passes from layout topology, never resource labels. */
+private fun multiTextureExecutionCacheKeys(
+    wgsl: String,
+    targetFormat: GPUTextureFormat,
+    textureCount: Int,
+    blendMode: GPUBlendMode? = null,
+): FullscreenExecutionCacheKeys {
+    require(textureCount in 2..3) { "Multi-texture cache keys require two or three textures" }
+    val blendLabel = blendMode?.gpuLabel ?: "src_over"
+    val targetFormatClass = targetFormat.toBackendColorFormat()
+    val wgslHash = stableSha256(wgsl)
+    val topology = "$textureCount-texture-sampler-pairs"
+    val role = "multi-texture-$textureCount-pass"
+    val bindGroupLayoutPreimage = listOf(
+        "kind=bind-group-layout",
+        "role=$role-uniform",
+        "version=1",
+        "binding=0",
+        "visibility=vertex|fragment",
+        "bufferType=uniform",
+        "dynamicOffsets=false",
+    ).joinToString("\n")
+    val bindGroupLayoutHash = stableSha256(bindGroupLayoutPreimage)
+    val textureBindGroupLayoutPreimage = buildList {
+        add("kind=bind-group-layout")
+        add("role=$role-textures")
+        add("version=1")
+        add("topology=$topology")
+        repeat(textureCount) { index ->
+            val binding = 1 + index * 2
+            add("binding=$binding:type=texture:sample=float:view=2d")
+            add("binding=${binding + 1}:type=sampler:filtering")
+        }
+        add("visibility=fragment")
+    }.joinToString("\n")
+    val textureBindGroupLayoutHash = stableSha256(textureBindGroupLayoutPreimage)
+    val modulePreimage = listOf(
+        "kind=wgsl-module",
+        "role=$role",
+        "entryPoints=vs_main,fs_main",
+        "wgsl=$wgslHash",
+    ).joinToString("\n")
+    val moduleHash = stableSha256(modulePreimage)
+    val pipelineLayoutPreimage = listOf(
+        "kind=pipeline-layout",
+        "role=$role",
+        "version=1",
+        "bindGroupLayouts=$bindGroupLayoutHash,$textureBindGroupLayoutHash",
+    ).joinToString("\n")
+    val pipelineLayoutHash = stableSha256(pipelineLayoutPreimage)
+    val renderPreimage = GPUPipelineKeyPreimage.Render(
+        renderStepIdentity = "gpu-backend.$role",
+        renderStepVersion = "1",
+        primitiveTopology = "triangle-list",
+        materialKeyHash = stableSha256("material:$role-uniform:v1"),
+        materialProgramId = "wgsl.$role",
+        materialDictionaryVersion = "runtime-helper-v1",
+        materialLayoutHash = "$bindGroupLayoutHash,$textureBindGroupLayoutHash",
+        snippetIdentityHash = stableSha256("snippet:$role:v1"),
+        moduleHash = moduleHash,
+        vertexLayoutHash = stableSha256("vertex-layout:fullscreen-triangle:vertex-index-only"),
+        targetFormatClass = targetFormatClass,
+        blendStateHash = stableSha256("blend:$blendLabel-premul:v1"),
+        sampleStateHash = stableSha256("sample-state:count=1:mask=all"),
+        bindGroupLayoutHash = "$bindGroupLayoutHash,$textureBindGroupLayoutHash",
+        capabilityClass = "webgpu-wgsl-$role",
+        capabilityFacts = listOf(
+            "adapter-backed-helper",
+            "targetFormat=$targetFormatClass",
+            "layoutTopology=$topology",
+        ),
+        rendererSalt = "kgpu-m36-001",
     )
     val canonicalRenderPreimage = GPUPipelineKeys.canonicalRenderPreimage(renderPreimage)
     val renderPipelineKey = GPUPipelineKeys.renderPipelineKey(renderPreimage).value

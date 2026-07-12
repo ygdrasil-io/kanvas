@@ -86,6 +86,46 @@ class GPUBackendRuntimeContractsTest {
     }
 
     @Test
+    fun `coverage mask contracts retain labels and reject invalid allocations`() {
+        val request = GPUBackendCoverageMaskRequest(
+            label = "clip-mask",
+            width = 16,
+            height = 12,
+            sampleCount = 4,
+        )
+        val mask = GPUBackendCoverageMask(
+            renderLabel = "clip-mask:render",
+            sampleLabel = "clip-mask:resolve",
+            width = 16,
+            height = 12,
+            sampleCount = 4,
+        )
+
+        assertEquals("clip-mask", request.label)
+        assertEquals("rgba8unorm", request.format)
+        assertEquals("clip-mask:render", mask.renderLabel)
+        assertEquals("clip-mask:resolve", mask.sampleLabel)
+        assertFailsWith<IllegalArgumentException> {
+            GPUBackendCoverageMaskRequest(label = "", width = 16, height = 12, sampleCount = 1)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            GPUBackendCoverageMaskRequest(label = "clip", width = 0, height = 12, sampleCount = 1)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            GPUBackendCoverageMaskRequest(label = "clip", width = 16, height = 12, sampleCount = 0)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            GPUBackendCoverageMask(
+                renderLabel = "render",
+                sampleLabel = "",
+                width = 16,
+                height = 12,
+                sampleCount = 1,
+            )
+        }
+    }
+
+    @Test
     fun `runtime telemetry defaults to zero counters and deterministic dump`() {
         val telemetry = GPUBackendRuntimeTelemetry()
 

@@ -8,6 +8,8 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendOffscreenTarget
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendOffscreenTexture
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendCoverageMask
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendCoverageMaskRequest
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRawUniformDraw
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRectDraw
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRenderRecorder
@@ -570,6 +572,20 @@ class M25ExecutorWiringTest {
             RecordingRenderRecorder().block()
         }
 
+        override fun createCoverageMask(request: GPUBackendCoverageMaskRequest): GPUBackendCoverageMask =
+            error("Coverage masks are outside this recording fake")
+
+        override fun encodeCoverageMask(
+            mask: GPUBackendCoverageMask,
+            clearColor: GPUClearColor?,
+            block: GPUBackendRenderRecorder.() -> Unit,
+        ) = error("Coverage masks are outside this recording fake")
+
+        override fun releaseCoverageMask(mask: GPUBackendCoverageMask) = Unit
+
+        override fun copyOffscreenTexture(sourceTextureLabel: String, destinationTextureLabel: String) =
+            error("GPU copies are outside this recording fake")
+
         override fun close() = Unit
     }
 
@@ -610,6 +626,7 @@ class M25ExecutorWiringTest {
             textureFormat: String,
             draws: List<GPUBackendRawUniformDraw>,
             blendMode: GPUBlendMode?,
+            stencilMode: GPUBackendStencilMode?,
         ) = Unit
 
         override fun drawFullscreenStencilPass(
@@ -674,6 +691,25 @@ class M25ExecutorWiringTest {
         ) {
             compositeTextureLabels += textureLabel
         }
+
+        override fun drawTwoTexturePass(
+            wgsl: String,
+            colorFormat: String,
+            firstTextureLabel: String,
+            secondTextureLabel: String,
+            draws: List<GPUBackendRawUniformDraw>,
+            blendMode: GPUBlendMode?,
+        ) = Unit
+
+        override fun drawThreeTexturePass(
+            wgsl: String,
+            colorFormat: String,
+            firstTextureLabel: String,
+            secondTextureLabel: String,
+            thirdTextureLabel: String,
+            draws: List<GPUBackendRawUniformDraw>,
+            blendMode: GPUBlendMode?,
+        ) = Unit
 
         override fun drawBlendPass(
             wgsl: String,

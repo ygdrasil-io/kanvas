@@ -8,6 +8,8 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPURect
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendOffscreenTarget
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendOffscreenTexture
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendCoverageMask
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendCoverageMaskRequest
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRawUniformDraw
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRectDraw
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRenderRecorder
@@ -129,6 +131,21 @@ class GPUImageFilterDispatchTest {
             block(CapturingRecorder(textureLabel))
         }
 
+        override fun createCoverageMask(request: GPUBackendCoverageMaskRequest): GPUBackendCoverageMask =
+            error("Unexpected coverage mask allocation")
+
+        override fun encodeCoverageMask(
+            mask: GPUBackendCoverageMask,
+            clearColor: GPUClearColor?,
+            block: GPUBackendRenderRecorder.() -> Unit,
+        ) = error("Unexpected coverage mask pass")
+
+        override fun releaseCoverageMask(mask: GPUBackendCoverageMask) =
+            error("Unexpected coverage mask release")
+
+        override fun copyOffscreenTexture(sourceTextureLabel: String, destinationTextureLabel: String) =
+            error("Unexpected GPU-to-GPU copy")
+
         override fun close() = Unit
 
         private inner class CapturingRecorder(
@@ -165,6 +182,9 @@ class GPUImageFilterDispatchTest {
                     }
                 }
             }
+
+            override fun drawTwoTexturePass(wgsl: String, colorFormat: String, firstTextureLabel: String, secondTextureLabel: String, draws: List<GPUBackendRawUniformDraw>, blendMode: GPUBlendMode?) = unexpected()
+            override fun drawThreeTexturePass(wgsl: String, colorFormat: String, firstTextureLabel: String, secondTextureLabel: String, thirdTextureLabel: String, draws: List<GPUBackendRawUniformDraw>, blendMode: GPUBlendMode?) = unexpected()
 
             override fun drawFullscreenPass(wgsl: String, colorFormat: String, draws: List<GPUBackendRectDraw>, blendMode: GPUBlendMode?, passBatchKind: GPUBackendSimplePassBatchKind?) = unexpected()
             override fun drawFullscreenUniformPayloadPass(wgsl: String, colorFormat: String, draws: List<GPUBackendUniformPayloadDraw>, blendMode: GPUBlendMode?, sourceLabel: String, passBatchKind: GPUBackendSimplePassBatchKind?) = unexpected()

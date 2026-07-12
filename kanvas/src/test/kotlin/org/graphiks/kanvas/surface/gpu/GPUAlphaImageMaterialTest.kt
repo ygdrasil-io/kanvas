@@ -531,6 +531,25 @@ class GPUAlphaImageMaterialTest {
             blendMode: GPUBlendMode?,
         ) = unsupported()
 
+        override fun drawTwoTexturePass(
+            wgsl: String,
+            colorFormat: String,
+            firstTextureLabel: String,
+            secondTextureLabel: String,
+            draws: List<GPUBackendRawUniformDraw>,
+            blendMode: GPUBlendMode?,
+        ) = unsupported()
+
+        override fun drawThreeTexturePass(
+            wgsl: String,
+            colorFormat: String,
+            firstTextureLabel: String,
+            secondTextureLabel: String,
+            thirdTextureLabel: String,
+            draws: List<GPUBackendRawUniformDraw>,
+            blendMode: GPUBlendMode?,
+        ) = unsupported()
+
         override fun drawBlendPass(
             wgsl: String,
             colorFormat: String,

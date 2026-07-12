@@ -216,6 +216,22 @@ interface GPUBackendOffscreenTarget : AutoCloseable {
         clearColor: GPUClearColor?,
         block: GPUBackendRenderRecorder.() -> Unit,
     )
+
+    /** Allocates a stencil-capable coverage mask whose sample texture is exposed by [GPUBackendCoverageMask.sampleLabel]. */
+    fun createCoverageMask(request: GPUBackendCoverageMaskRequest): GPUBackendCoverageMask
+
+    /** Encodes the stencil-cover work for a previously-created coverage [mask]. */
+    fun encodeCoverageMask(
+        mask: GPUBackendCoverageMask,
+        clearColor: GPUClearColor?,
+        block: GPUBackendRenderRecorder.() -> Unit,
+    )
+
+    /** Releases a coverage mask after its queued GPU work has been submitted. Releasing an unknown mask is a no-op. */
+    fun releaseCoverageMask(mask: GPUBackendCoverageMask)
+
+    /** Copies a secondary offscreen texture directly on the GPU without destination readback or upload. */
+    fun copyOffscreenTexture(sourceTextureLabel: String, destinationTextureLabel: String)
 }
 
 /** Represents a native surface that can be resized and presented to screen. */
@@ -254,6 +270,40 @@ data class GPUBackendOffscreenTexture(
         require(width > 0) { "GPUBackendOffscreenTexture.width must be positive" }
         require(height > 0) { "GPUBackendOffscreenTexture.height must be positive" }
         require(format.isNotBlank()) { "GPUBackendOffscreenTexture.format must not be blank" }
+    }
+}
+
+/** Describes a stencil-capable coverage texture allocation for the low-level GPU backend runtime. */
+data class GPUBackendCoverageMaskRequest(
+    val label: String,
+    val width: Int,
+    val height: Int,
+    val sampleCount: Int,
+    val format: String = "rgba8unorm",
+) {
+    init {
+        require(label.isNotBlank()) { "GPUBackendCoverageMaskRequest.label must not be blank" }
+        require(width > 0) { "GPUBackendCoverageMaskRequest.width must be positive" }
+        require(height > 0) { "GPUBackendCoverageMaskRequest.height must be positive" }
+        require(sampleCount > 0) { "GPUBackendCoverageMaskRequest.sampleCount must be positive" }
+        require(format.isNotBlank()) { "GPUBackendCoverageMaskRequest.format must not be blank" }
+    }
+}
+
+/** Identifies the render and one-sample texture labels owned by a coverage-mask allocation. */
+data class GPUBackendCoverageMask(
+    val renderLabel: String,
+    val sampleLabel: String,
+    val width: Int,
+    val height: Int,
+    val sampleCount: Int,
+) {
+    init {
+        require(renderLabel.isNotBlank()) { "GPUBackendCoverageMask.renderLabel must not be blank" }
+        require(sampleLabel.isNotBlank()) { "GPUBackendCoverageMask.sampleLabel must not be blank" }
+        require(width > 0) { "GPUBackendCoverageMask.width must be positive" }
+        require(height > 0) { "GPUBackendCoverageMask.height must be positive" }
+        require(sampleCount > 0) { "GPUBackendCoverageMask.sampleCount must be positive" }
     }
 }
 
@@ -427,6 +477,27 @@ interface GPUBackendRenderRecorder {
         wgsl: String,
         colorFormat: String,
         textureLabel: String,
+        draws: List<GPUBackendRawUniformDraw>,
+        blendMode: GPUBlendMode? = null,
+    )
+
+    /** Draws a fullscreen pass with two previously-created texture and sampler pairs. */
+    fun drawTwoTexturePass(
+        wgsl: String,
+        colorFormat: String,
+        firstTextureLabel: String,
+        secondTextureLabel: String,
+        draws: List<GPUBackendRawUniformDraw>,
+        blendMode: GPUBlendMode? = null,
+    )
+
+    /** Draws a fullscreen pass with three previously-created texture and sampler pairs. */
+    fun drawThreeTexturePass(
+        wgsl: String,
+        colorFormat: String,
+        firstTextureLabel: String,
+        secondTextureLabel: String,
+        thirdTextureLabel: String,
         draws: List<GPUBackendRawUniformDraw>,
         blendMode: GPUBlendMode? = null,
     )

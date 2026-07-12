@@ -359,6 +359,84 @@ class GPUBackendRuntimeNativeSmokeTest {
     }
 
     @Test
+    fun `coverage mask resolves four samples and copy stays on GPU`() {
+        GPUBackendRuntimeFactory.createOrNull().use { session ->
+            assumeTrue(session != null, "GPU backend unavailable in current environment")
+            val target = session!!.createOffscreenTarget(
+                GPUOffscreenTargetRequest(width = 16, height = 16, colorFormat = "rgba8unorm"),
+            )
+            target.use {
+                val mask = it.createCoverageMask(
+                    GPUBackendCoverageMaskRequest("clip", 16, 16, sampleCount = 4),
+                )
+                val source = it.createOffscreenTexture(
+                    GPUBackendOffscreenTexture("source", 16, 16, "rgba8unorm"),
+                )
+                val snapshot = it.createOffscreenTexture(
+                    GPUBackendOffscreenTexture("snapshot", 16, 16, "rgba8unorm"),
+                )
+
+                it.encodeCoverageMask(mask, GPUClearColor(0.0, 0.0, 0.0, 0.0)) {}
+                it.copyOffscreenTexture(source, snapshot)
+                it.releaseCoverageMask(mask)
+
+                assertEquals(4, mask.sampleCount)
+            }
+            assertEquals(0L, session.runtimeTelemetry.destinationReadbackSnapshots)
+            assertTrue(session.runtimeTelemetry.destinationCopies >= 1L)
+            assertTrue(session.runtimeTelemetry.msaaResolves >= 1L)
+        }
+    }
+
+    @Test
+    fun `multi texture passes cache layout topology without texture labels`() {
+        GPUBackendRuntimeFactory.createOrNull().use { session ->
+            assumeTrue(session != null, "GPU backend unavailable in current environment")
+            session!!.createOffscreenTarget(
+                GPUOffscreenTargetRequest(width = 4, height = 4, colorFormat = "rgba8unorm"),
+            ).use { target ->
+                val first = target.createOffscreenTexture(GPUBackendOffscreenTexture("first", 4, 4, "rgba8unorm"))
+                val second = target.createOffscreenTexture(GPUBackendOffscreenTexture("second", 4, 4, "rgba8unorm"))
+                val third = target.createOffscreenTexture(GPUBackendOffscreenTexture("third", 4, 4, "rgba8unorm"))
+                val draw = GPUBackendRawUniformDraw(
+                    uniformBytes = solidColorUniformBytes(0f, 0f, 0f, 0f),
+                    scissorX = 0,
+                    scissorY = 0,
+                    scissorWidth = 4,
+                    scissorHeight = 4,
+                )
+
+                target.encode(GPUClearColor(0.0, 0.0, 0.0, 1.0)) {
+                    drawTwoTexturePass(
+                        wgsl = multiTextureWgsl(textureCount = 2),
+                        colorFormat = "rgba8unorm",
+                        firstTextureLabel = first,
+                        secondTextureLabel = second,
+                        draws = listOf(draw),
+                    )
+                }
+                target.encode(GPUClearColor(0.0, 0.0, 0.0, 1.0)) {
+                    drawThreeTexturePass(
+                        wgsl = multiTextureWgsl(textureCount = 3),
+                        colorFormat = "rgba8unorm",
+                        firstTextureLabel = first,
+                        secondTextureLabel = second,
+                        thirdTextureLabel = third,
+                        draws = listOf(draw),
+                    )
+                }
+            }
+
+            val preimages = session.executionCacheDumpLines.joinToString("\n")
+            assertTrue(preimages.contains("topology=2-texture-sampler-pairs"), preimages)
+            assertTrue(preimages.contains("topology=3-texture-sampler-pairs"), preimages)
+            assertTrue(!preimages.contains("offscreenTex:first"), preimages)
+            assertTrue(!preimages.contains("offscreenTex:second"), preimages)
+            assertTrue(!preimages.contains("offscreenTex:third"), preimages)
+        }
+    }
+
+    @Test
     fun `runtime telemetry dump includes pass batch counters`() {
         val telemetry = GPUBackendRuntimeTelemetry(
             renderPasses = 1,
@@ -1754,6 +1832,39 @@ class GPUBackendRuntimeNativeSmokeTest {
                 return vec4f(uniforms.color.rgb * tint, uniforms.color.a);
             }
         """.trimIndent()
+
+    private fun multiTextureWgsl(textureCount: Int): String {
+        require(textureCount in 2..3)
+        val textureDeclarations = (1..textureCount).joinToString("\n") { index ->
+            "@group(1) @binding(${index * 2 - 1}) var texture$index: texture_2d<f32>;\n" +
+                "@group(1) @binding(${index * 2}) var sampler$index: sampler;"
+        }
+        val samples = (1..textureCount).joinToString(" + ") { index ->
+            "textureSample(texture$index, sampler$index, uv)"
+        }
+        return """
+            struct Uniforms {
+                color: vec4f,
+            };
+
+            @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+            $textureDeclarations
+
+            @vertex
+            fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
+                let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
+                let y = f32(idx & 2u) * 2.0 - 1.0;
+                return vec4f(x, y, 0.0, 1.0);
+            }
+
+            @fragment
+            fn fs_main(@builtin(position) coord: vec4f) -> @location(0) vec4f {
+                let dims = textureDimensions(texture1);
+                let uv = vec2f(coord.x / f32(dims.x), coord.y / f32(dims.y));
+                return ($samples) / ${textureCount.toFloat()} + uniforms.color * 0.0;
+            }
+        """.trimIndent()
+    }
 
     private fun fullscreenWgslWithoutFragmentEntry(): String =
         """
