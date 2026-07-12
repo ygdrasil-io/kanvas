@@ -268,7 +268,7 @@ Run the tests from Step 2, then run the explicit external-source diagnostic:
 
 ```bash
 rtk python3 scripts/check_missing_gms.py \
-  --cpp-gm-dir /Users/chaos/workspace/kanvas-forge/skia-main/gm
+  --cpp-gm-dir "${KANVAS_SKIA_GM_DIR:-PATH}"
 ```
 
 Expected: normalized aliases and variant-family candidates are separated from
