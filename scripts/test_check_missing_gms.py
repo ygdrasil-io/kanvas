@@ -241,6 +241,26 @@ class CheckMissingGmsClassificationTest(unittest.TestCase):
         ]
         self.assertEqual(section_positions, sorted(section_positions))
 
+    def test_cli_matches_explicit_reference_name_aliases_without_false_inference(self):
+        checker = load_checker()
+
+        with explicit_alias_fixture_dirs() as fixture:
+            output = run_checker(
+                checker,
+                ref_dir=fixture["ref_dir"],
+                gm_dir=fixture["gm_dir"],
+            )
+
+        self.assertIn("Matched: 2 (2 direct + 0 parameterized)", output)
+        self.assertIn("=== REFERENCE PNGs WITHOUT Kotlin GM (1) ===", output)
+        self.assertIn("  convex-lineonly-paths-noalias.png", output)
+        self.assertIn("=== GM names WITHOUT reference PNG (1) ===", output)
+        self.assertIn("  convex_lineonly_paths_noalias.png", output)
+        self.assertNotIn("  convex-lineonly-paths.png", output)
+        self.assertNotIn("  convex-lineonly-paths-stroke-and-fill.png", output)
+        self.assertNotIn("  convex_lineonly_paths.png", output)
+        self.assertNotIn("  convex_lineonly_paths_stroke_and_fill.png", output)
+
 
 @contextlib.contextmanager
 def fixture_dirs():
@@ -307,6 +327,53 @@ def fixture_dirs():
             "ref_dir": ref_dir,
             "gm_dir": gm_dir,
             "cpp_gm_dir": cpp_gm_dir,
+        }
+
+
+@contextlib.contextmanager
+def explicit_alias_fixture_dirs():
+    with tempfile.TemporaryDirectory(prefix="check_missing_gms_reference_alias_") as temp_root:
+        root = Path(temp_root)
+        ref_dir = root / "reference"
+        gm_dir = root / "gm-kotlin"
+        ref_dir.mkdir()
+        gm_dir.mkdir()
+
+        for name in (
+            "convex-lineonly-paths",
+            "convex-lineonly-paths-stroke-and-fill",
+            "convex-lineonly-paths-noalias",
+        ):
+            (ref_dir / f"{name}.png").write_bytes(b"")
+
+        (gm_dir / "ConvexLineOnlyPathsGm.kt").write_text(
+            textwrap.dedent(
+                """\
+                package org.graphiks.kanvas.skia.gm.path
+
+                import org.graphiks.kanvas.skia.SkiaGm
+
+                class ConvexLineOnlyPathsGm : SkiaGm {
+                    override val name = "convex_lineonly_paths"
+                    override val referenceName = "convex-lineonly-paths"
+                }
+
+                class ConvexLineOnlyPathsStrokeAndFillGm : SkiaGm {
+                    override val name = "convex_lineonly_paths_stroke_and_fill"
+                    override val referenceName = "convex-lineonly-paths-stroke-and-fill"
+                }
+
+                class ConvexLineOnlyPathsNoAliasGm : SkiaGm {
+                    override val name = "convex_lineonly_paths_noalias"
+                }
+                """
+            ),
+            encoding="utf-8",
+        )
+
+        yield {
+            "ref_dir": ref_dir,
+            "gm_dir": gm_dir,
         }
 
 

@@ -16,15 +16,27 @@ import re
 import sys
 from pathlib import Path
 
-from extract_kanvas_gm_names import extract_kanvas_gm_names
+from extract_kanvas_gm_names import extract_kanvas_gm_inventory
 from extract_skia_gm_names import extract_gm_names as extract_cpp_gm_names
 
 REPO = Path(__file__).resolve().parent.parent
 REF_DIR = REPO / "integration-tests" / "skia" / "src" / "test" / "resources" / "reference"
 GM_DIR = REPO / "integration-tests" / "skia" / "src" / "test" / "kotlin" / "org" / "graphiks" / "kanvas" / "skia" / "gm"
 
+def extract_kotlin_gm_inventory():
+    inventory = extract_kanvas_gm_inventory(GM_DIR)
+    logical_names = {name for name in inventory.logical_names if is_gm_name(name)}
+    reference_name_aliases = {
+        reference_name: logical_name
+        for reference_name, logical_name in inventory.reference_name_aliases.items()
+        if is_gm_name(logical_name)
+    }
+    return logical_names, reference_name_aliases
+
+
 def extract_kotlin_gm_names():
-    return {name for name in extract_kanvas_gm_names(GM_DIR) if is_gm_name(name)}
+    logical_names, _ = extract_kotlin_gm_inventory()
+    return logical_names
 
 
 # Filter out strings that are clearly not GM names
@@ -156,14 +168,20 @@ def parse_args():
     return args
 
 
-def collect_reference_matches(reference_names, gm_names):
+def collect_reference_matches(reference_names, gm_names, reference_name_aliases):
+    direct_names = set()
     found_names = set()
+    explicit_alias_matches = {}
     variant_names = {}
     orphan_names = []
 
     for name in reference_names:
         if name in gm_names:
+            direct_names.add(name)
             found_names.add(name)
+        elif name in reference_name_aliases:
+            found_names.add(reference_name_aliases[name])
+            explicit_alias_matches.setdefault(reference_name_aliases[name], []).append(name)
         else:
             parent = is_parameterized_variant(name, gm_names)
             if parent:
@@ -171,22 +189,24 @@ def collect_reference_matches(reference_names, gm_names):
             else:
                 orphan_names.append(name)
 
-    return found_names, variant_names, orphan_names
+    return direct_names, found_names, explicit_alias_matches, variant_names, orphan_names
 
 
-def collect_manual_orphans(manual_names, gm_names, found_names):
+def collect_manual_orphans(manual_names, gm_names, found_names, reference_name_aliases):
     manual_orphans = []
     for name in sorted(manual_names):
         base = name.replace("_manual", "")
         if base in gm_names:
             found_names.add(base)
+        elif base in reference_name_aliases:
+            found_names.add(reference_name_aliases[base])
         else:
             manual_orphans.append(name)
     return manual_orphans
 
 
-def collect_gm_names_without_reference(gm_names, reference_names, manual_names, variant_names):
-    extra = sorted(set(gm_names) - set(reference_names) - manual_names)
+def collect_gm_names_without_reference(gm_names, matched_names, variant_names):
+    extra = sorted(set(gm_names) - set(matched_names))
     return [
         name for name in extra
         if not any(name in variants for variants in variant_names.values())
@@ -204,7 +224,7 @@ def main():
         sys.exit(1)
 
     ref_pngs = sorted(REF_DIR.glob("*.png"))
-    gm_names = extract_kotlin_gm_names()
+    gm_names, reference_name_aliases = extract_kotlin_gm_inventory()
     cpp_names = None
     if args.cpp_gm_dir is not None:
         cpp_names = extract_cpp_gm_names(Path(args.cpp_gm_dir))
@@ -219,15 +239,20 @@ def main():
             ref_by_base.setdefault(name, []).append(p)
 
     reference_names = set(ref_by_base)
-    found_names, variant_names, orphan_names = collect_reference_matches(
+    direct_names, found_names, explicit_alias_matches, variant_names, orphan_names = collect_reference_matches(
         reference_names,
         gm_names,
+        reference_name_aliases,
     )
-    manual_orphans = collect_manual_orphans(manual_names, gm_names, found_names)
+    manual_orphans = collect_manual_orphans(
+        manual_names,
+        gm_names,
+        found_names,
+        reference_name_aliases,
+    )
     extra_gm_names = collect_gm_names_without_reference(
         gm_names,
-        reference_names,
-        manual_names,
+        found_names,
         variant_names,
     )
 
@@ -248,7 +273,7 @@ def main():
     print(f"Reference PNGs:     {len(ref_pngs)}")
     print(f"GM names extracted: {len(gm_names)}")
 
-    direct_count = len(found_names)
+    direct_count = len(direct_names) + sum(len(matches) for matches in explicit_alias_matches.values())
     parameterized_count = sum(len(variants) for variants in variant_names.values())
     matched = direct_count + parameterized_count
     print(

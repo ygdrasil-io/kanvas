@@ -43,6 +43,28 @@ CLIPPED_BITMAP_SHADERS_FIXTURE = textwrap.dedent(
     """
 )
 
+CONVEX_LINEONLY_PATHS_FIXTURE = textwrap.dedent(
+    """\
+    package org.graphiks.kanvas.skia.gm.path
+
+    import org.graphiks.kanvas.skia.SkiaGm
+
+    class ConvexLineOnlyPathsGm : SkiaGm {
+        override val name = "convex_lineonly_paths"
+        override val referenceName = "convex-lineonly-paths"
+    }
+
+    class ConvexLineOnlyPathsStrokeAndFillGm : SkiaGm {
+        override val name = "convex_lineonly_paths_stroke_and_fill"
+        override val referenceName = "convex-lineonly-paths-stroke-and-fill"
+    }
+
+    class ConvexLineOnlyPathsNoAliasGm : SkiaGm {
+        override val name = "convex_lineonly_paths_noalias"
+    }
+    """
+)
+
 
 class ExtractKanvasGmNamesTest(unittest.TestCase):
     def test_extract_gm_names_resolves_block_getter_interpolation_and_subclasses(self) -> None:
@@ -64,6 +86,31 @@ class ExtractKanvasGmNamesTest(unittest.TestCase):
                 "clipped-bitmap-shaders-mirror-hq",
                 "clipped-bitmap-shaders-clamp-hq",
             }.issubset(actual)
+        )
+
+    def test_extract_inventory_reports_explicit_reference_name_aliases_only(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="extract_kanvas_gm_names_") as temp_dir:
+            gm_dir = Path(temp_dir)
+            (gm_dir / "ConvexLineOnlyPathsGm.kt").write_text(
+                CONVEX_LINEONLY_PATHS_FIXTURE,
+                encoding="utf-8",
+            )
+
+            actual = extract_kanvas_gm_names.extract_kanvas_gm_inventory(gm_dir)
+
+        self.assertTrue(
+            {
+                "convex_lineonly_paths",
+                "convex_lineonly_paths_stroke_and_fill",
+                "convex_lineonly_paths_noalias",
+            }.issubset(actual.logical_names)
+        )
+        self.assertEqual(
+            {
+                "convex-lineonly-paths": "convex_lineonly_paths",
+                "convex-lineonly-paths-stroke-and-fill": "convex_lineonly_paths_stroke_and_fill",
+            },
+            actual.reference_name_aliases,
         )
 
 
