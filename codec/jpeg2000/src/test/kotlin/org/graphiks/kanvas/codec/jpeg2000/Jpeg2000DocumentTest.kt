@@ -45,15 +45,87 @@ class Jpeg2000DocumentTest {
     }
 
     @Test
-    fun `OpenJPEG reversible lossless J2K fixture is owned structurally before entropy decode`() {
+    fun `OpenJPEG reversible lossless J2K fixture decodes source PGM pixels exactly`() {
+        val codec = requireNotNull(Codec.MakeFromData(Jpeg2000TestFixtures.openJpegLossless5x3()))
+
+        val (bitmap, result) = codec.getImage()
+
+        assertEquals(Codec.Result.kSuccess, result)
+        val decoded = requireNotNull(bitmap)
+        val expected = sourcePgmPixels()
+        assertEquals(5, decoded.width)
+        assertEquals(3, decoded.height)
+        for (y in 0 until decoded.height) {
+            for (x in 0 until decoded.width) {
+                val sample = expected[y * decoded.width + x].toInt() and 0xFF
+                assertEquals(
+                    0xFF000000.toInt() or (sample shl 16) or (sample shl 8) or sample,
+                    decoded.getPixel(x, y),
+                    "x=$x y=$y decoded=${decoded.pixels8888.joinToString()} trace=${fixtureDecisions().joinToString()}",
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `truncated J2K codeblock is refused without yielding a partial bitmap`() {
+        val original = Jpeg2000TestFixtures.openJpegLossless5x3()
+        val truncated = ByteArray(original.size - 1).also { result ->
+            System.arraycopy(original, 0, result, 0, 137)
+            System.arraycopy(original, 138, result, 137, 2)
+            result[110] = 0
+            result[111] = 0
+            result[112] = 0
+            result[113] = 33
+        }
+
+        val codec = requireNotNull(Codec.MakeFromData(truncated))
+
+        assertEquals(Codec.Result.kErrorInInput, codec.getImage().second)
+    }
+
+    @Test
+    fun `OpenJPEG fixture packet header declares the independently documented codeblock body`() {
+        val codestream = Jpeg2000TestFixtures.openJpegLossless5x3()
+        val sod = (0 until codestream.size - 1).single { index ->
+            codestream[index] == 0xFF.toByte() && codestream[index + 1] == 0x93.toByte()
+        }
+        val packetOffset = sod + 2
+        val packet = codestream.copyOfRange(packetOffset, codestream.size - 2)
+
+        val header = J2kPacketHeader.read(packet, packetOffset)
+
+        assertEquals(8, header.numBitPlanes)
+        assertEquals(22, header.passes)
+        assertEquals(3, header.bodyOffset)
+        assertEquals(17, packet.size - header.bodyOffset)
+    }
+
+    @Test
+    fun `negative vertical sign predictor uses OpenJPEG ctx10 and SPB one`() {
+        val decisions = fixtureDecisions()
+        val verticalSign = decisions.single { decision ->
+            decision.pass == "significance" && decision.bitPlane == 7 &&
+                decision.x == 0 && decision.y == 1 && decision.context == 10
+        }
+
+        assertEquals(1, verticalSign.signPrediction)
+        assertEquals(13, decisions.single { decision ->
+            decision.pass == "significance" && decision.bitPlane == 7 &&
+                decision.x == 1 && decision.y == 1 && decision.context in 9..13
+        }.context)
+    }
+
+    @Test
+    fun `OpenJPEG reversible lossless J2K fixture is owned and decodes through the entropy path`() {
         val codestream = Jpeg2000TestFixtures.openJpegLossless5x3()
 
         val document = requireNotNull(Jpeg2000Document.open(codestream).document)
 
         assertEquals(Jpeg2000Container.J2K, document.container)
         assertEquals(Jpeg2000FrameInfo(5, 3, 1, 8), document.frame)
-        assertEquals("jpeg2000.entropy.unimplemented", document.decode().diagnostic?.code)
-        assertEquals(Codec.Result.kUnimplemented, requireNotNull(Codec.MakeFromData(codestream)).getImage().second)
+        assertNull(document.decode().diagnostic)
+        assertEquals(Codec.Result.kSuccess, requireNotNull(Codec.MakeFromData(codestream)).getImage().second)
     }
 
     @Test
@@ -68,8 +140,17 @@ class Jpeg2000DocumentTest {
         assertEquals(1, document.frame.width)
         assertEquals(1, document.frame.height)
         assertEquals(SkEncodedImageFormat.kJPEG2000, codec.getEncodedFormat())
-        assertEquals(Codec.Result.kUnimplemented, codec.getImage().second)
-        assertEquals("jpeg2000.entropy.unimplemented", document.decode().diagnostic?.code)
+        assertEquals(Codec.Result.kErrorInInput, codec.getImage().second)
+        assertEquals(Codec.Result.kErrorInInput, document.decode().diagnostic?.result)
+    }
+
+    @Test
+    fun `raw J2K refuses a codeblock size other than the proven 64 by 64 profile`() {
+        val opened = Jpeg2000Document.open(narrowLosslessCodestream(codeBlockWidth = 3, codeBlockHeight = 4))
+
+        assertNull(opened.document)
+        assertEquals("jpeg2000.cod.profile.unsupported", opened.diagnostic?.code)
+        assertEquals(Codec.Result.kUnimplemented, opened.diagnostic?.result)
     }
 
     @Test
@@ -276,7 +357,7 @@ class Jpeg2000DocumentTest {
         assertEquals(Codec.Result.kErrorInInput, opened.diagnostic?.result)
     }
 
-    private fun narrowLosslessCodestream(): ByteArray = ByteArrayOutputStream().also { output ->
+    private fun narrowLosslessCodestream(codeBlockWidth: Int = 4, codeBlockHeight: Int = 4): ByteArray = ByteArrayOutputStream().also { output ->
         output.writeMarker(0x4F) // SOC
         output.writeSegment(0x51, ByteArrayOutputStream().also { siz ->
             siz.writeU16(0) // Rsiz
@@ -287,7 +368,7 @@ class Jpeg2000DocumentTest {
             siz.writeU16(1) // Csiz
             siz.write(byteArrayOf(7, 1, 1)) // 8-bit unsigned, no subsampling
         }.toByteArray())
-        output.writeSegment(0x52, narrowCodPayload())
+        output.writeSegment(0x52, narrowCodPayload(codeBlockWidth, codeBlockHeight))
         output.writeSegment(0x5C, byteArrayOf(0x40, 0x40)) // reversible 5/3, no quantization
         output.writeMarker(0x90)
         output.writeU16(10)
@@ -298,6 +379,40 @@ class Jpeg2000DocumentTest {
         output.writeMarker(0x93) // SOD, deliberately no EBCOT body
         output.writeMarker(0xD9) // EOC
     }.toByteArray()
+
+    private fun sourcePgmPixels(): ByteArray {
+        val pgm = requireNotNull(javaClass.getResourceAsStream("/jpeg2000-openjpeg/source.pgm")) { "missing source PGM" }
+            .use { it.readBytes() }
+        var cursor = 0
+        fun token(): String {
+            while (cursor < pgm.size && pgm[cursor].toInt().toChar().isWhitespace()) cursor++
+            while (cursor < pgm.size && pgm[cursor] == '#'.code.toByte()) {
+                while (cursor < pgm.size && pgm[cursor] != '\n'.code.toByte()) cursor++
+                while (cursor < pgm.size && pgm[cursor].toInt().toChar().isWhitespace()) cursor++
+            }
+            val start = cursor
+            while (cursor < pgm.size && !pgm[cursor].toInt().toChar().isWhitespace()) cursor++
+            return pgm.copyOfRange(start, cursor).decodeToString()
+        }
+        assertEquals("P2", token())
+        assertEquals("5", token())
+        assertEquals("3", token())
+        assertEquals("255", token())
+        return ByteArray(15) { token().toInt().toByte() }
+    }
+
+    private fun fixtureDecisions(): List<J2kEbcotDecision> {
+        val codestream = Jpeg2000TestFixtures.openJpegLossless5x3()
+        val sod = (0 until codestream.size - 1).single { index ->
+            codestream[index] == 0xFF.toByte() && codestream[index + 1] == 0x93.toByte()
+        }
+        return traceNarrowJ2kPacket(
+            packet = codestream.copyOfRange(sod + 2, codestream.size - 2),
+            packetOffset = sod + 2,
+            width = 5,
+            height = 3,
+        )
+    }
 
     private fun jp2(codestream: ByteArray, headerPayload: ByteArray = imageHeaderPayload()): ByteArray = ByteArrayOutputStream().also { output ->
         output.writeBox("jP  ", jp2SignaturePayload())
@@ -322,13 +437,13 @@ class Jpeg2000DocumentTest {
         ihdr.write(byteArrayOf(7, 7, 0, 0))
     }.toByteArray())
 
-    private fun narrowCodPayload(): ByteArray = byteArrayOf(
+    private fun narrowCodPayload(codeBlockWidth: Int = 4, codeBlockHeight: Int = 4): ByteArray = byteArrayOf(
         0, // Scod: no precinct partitioning
         0, // LRCP
         0, 1, // one layer
         0, // no MCT
         0, // one resolution
-        4, 4, // 64x64 code-block
+        codeBlockWidth.toByte(), codeBlockHeight.toByte(), // 2^(exponent + 2) code-block
         0, // no code-block style flags
         1, // reversible 5/3
     )

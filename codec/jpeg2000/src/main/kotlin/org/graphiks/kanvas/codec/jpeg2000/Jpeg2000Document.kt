@@ -68,14 +68,14 @@ public class Jpeg2000Box internal constructor(
  * raw J2K with `SIZ` directly after `SOC`, or a strictly ordered JP2 core
  * (`jP  `, `ftyp`, `jp2h`/`ihdr`, then `jp2c`), one unsigned 8-bit grayscale
  * component, one tile, one resolution, one layer, reversible 5/3 transform
- * and no quantization. The entropy payload remains explicitly unimplemented
- * until EBCOT/MQ is backed by independent fixtures; no decode result is
- * fabricated in the meantime.
+ * and no quantization. Raw codestreams in that profile may additionally use
+ * the bounded one-packet Tier-2/MQ/EBCOT path; JP2 remains structural only.
  */
 public class Jpeg2000Document private constructor(
     private val source: ByteArray,
     public val container: Jpeg2000Container,
     public val frame: Jpeg2000FrameInfo,
+    private val entropy: J2kEntropyInput?,
     boxes: List<Jpeg2000Box>,
 ) {
     public val boxes: List<Jpeg2000Box> = Collections.unmodifiableList(ArrayList(boxes))
@@ -89,19 +89,20 @@ public class Jpeg2000Document private constructor(
     /** Returns an independent copy of the encoded J2K or JP2 bytes. */
     public fun copyEncodedBytes(): ByteArray = source.copyOf()
 
-    /**
-     * Refuses entropy decoding explicitly. Packet-header tag trees, EBCOT
-     * bit-plane coding and the MQ arithmetic coder have not yet been proven
-     * against an independent J2K fixture corpus.
-     */
-    public fun decode(): Jpeg2000DecodeResult = Jpeg2000DecodeResult(
-        bitmap = null,
-        diagnostic = Jpeg2000Diagnostic(
-            code = "jpeg2000.entropy.unimplemented",
-            offset = source.size.toLong(),
-            result = Codec.Result.kUnimplemented,
-        ),
-    )
+    /** Decodes only the proven raw one-packet profile; containers stay explicit refusals. */
+    public fun decode(): Jpeg2000DecodeResult {
+        if (container != Jpeg2000Container.J2K || entropy == null) {
+            return Jpeg2000DecodeResult(
+                bitmap = null,
+                diagnostic = Jpeg2000Diagnostic(
+                    code = "jpeg2000.container.pixel.unimplemented",
+                    offset = 0,
+                    result = Codec.Result.kUnimplemented,
+                ),
+            )
+        }
+        return decodeNarrowRawJ2k(source, frame, entropy)
+    }
 
     public companion object {
         /** Opens a bounded raw J2K codestream or JP2 wrapper. */
@@ -123,7 +124,7 @@ public class Jpeg2000Document private constructor(
                     else -> j2kFailure("jpeg2000.signature.missing", 0)
                 }
                 Jpeg2000OpenResult(
-                    Jpeg2000Document(data.copyOf(), parsed.container, parsed.frame, parsed.boxes),
+                    Jpeg2000Document(data.copyOf(), parsed.container, parsed.frame, parsed.entropy, parsed.boxes),
                     null,
                 )
             } catch (failure: Jpeg2000Failure) {
@@ -140,7 +141,13 @@ public class Jpeg2000Document private constructor(
 private data class ParsedJpeg2000(
     val container: Jpeg2000Container,
     val frame: Jpeg2000FrameInfo,
+    val entropy: J2kEntropyInput?,
     val boxes: List<Jpeg2000Box>,
+)
+
+private data class ParsedRawJ2k(
+    val frame: Jpeg2000FrameInfo,
+    val entropy: J2kEntropyInput,
 )
 
 private class Jpeg2000Failure(
@@ -153,11 +160,15 @@ private fun j2kFailure(
     result: Codec.Result = Codec.Result.kErrorInInput,
 ): Nothing = throw Jpeg2000Failure(Jpeg2000Diagnostic(code, offset.toLong(), result))
 
-private fun parseRaw(data: ByteArray, limits: Jpeg2000Limits): ParsedJpeg2000 = ParsedJpeg2000(
-    container = Jpeg2000Container.J2K,
-    frame = J2kCodestreamParser(data, 0, data.size, limits).parse(),
-    boxes = emptyList(),
-)
+private fun parseRaw(data: ByteArray, limits: Jpeg2000Limits): ParsedJpeg2000 {
+    val raw = J2kCodestreamParser(data, 0, data.size, limits).parse()
+    return ParsedJpeg2000(
+        container = Jpeg2000Container.J2K,
+        frame = raw.frame,
+        entropy = raw.entropy,
+        boxes = emptyList(),
+    )
+}
 
 private fun parseJp2(data: ByteArray, limits: Jpeg2000Limits): ParsedJpeg2000 {
     val boxes = Jp2BoxParser(data, 0, data.size, limits.maxBoxes).parseTopLevel()
@@ -201,19 +212,20 @@ private fun parseJp2(data: ByteArray, limits: Jpeg2000Limits): ParsedJpeg2000 {
     if (boxes.getOrNull(2) !== header) j2kFailure("jpeg2000.jp2.jp2h.order", header.offset.toInt())
     if (boxes.getOrNull(3) !== jp2c) j2kFailure("jpeg2000.jp2.jp2c.order", jp2c.offset.toInt())
     val imageHeader = parseJp2Header(data, header)
-    val frame = J2kCodestreamParser(
+    val raw = J2kCodestreamParser(
         data,
         jp2c.payloadOffset,
         jp2c.payloadOffset + jp2c.payloadSize,
         limits,
     ).parse()
+    val frame = raw.frame
     if (
         imageHeader.width != frame.width || imageHeader.height != frame.height ||
         imageHeader.components != frame.components || imageHeader.precision != frame.precision
     ) {
         j2kFailure("jpeg2000.jp2.ihdr.mismatch", header.offset.toInt())
     }
-    return ParsedJpeg2000(Jpeg2000Container.JP2, frame, boxes)
+    return ParsedJpeg2000(Jpeg2000Container.JP2, frame, null, boxes)
 }
 
 private fun requireSingleBox(
@@ -315,7 +327,7 @@ private class J2kCodestreamParser(
     private var sawCod: Boolean = false
     private var sawQcd: Boolean = false
 
-    fun parse(): Jpeg2000FrameInfo {
+    fun parse(): ParsedRawJ2k {
         if (end - start < 2 || data[start].u8() != 0xFF || data[start + 1].u8() != SOC) {
             j2kFailure("jpeg2000.soc.missing", start)
         }
@@ -389,7 +401,7 @@ private class J2kCodestreamParser(
         val transform = data[p + 9].u8()
         if (
             scod != 0 || progression != 0 || layers != 1 || multiComponentTransform != 0 ||
-            decompositions != 0 || codeBlockWidth !in 2..10 || codeBlockHeight !in 2..10 ||
+            decompositions != 0 || codeBlockWidth != 4 || codeBlockHeight != 4 ||
             codeBlockStyle != 0 || transform != 1
         ) {
             j2kFailure("jpeg2000.cod.profile.unsupported", markerOffset, Codec.Result.kUnimplemented)
@@ -415,7 +427,7 @@ private class J2kCodestreamParser(
         sawQcd = true
     }
 
-    private fun parseTilePart(markerOffset: Int): Jpeg2000FrameInfo {
+    private fun parseTilePart(markerOffset: Int): ParsedRawJ2k {
         val currentFrame = frame ?: j2kFailure("jpeg2000.siz.missing", markerOffset)
         if (!sawCod) j2kFailure("jpeg2000.cod.missing", markerOffset)
         if (!sawQcd) j2kFailure("jpeg2000.qcd.missing", markerOffset)
@@ -432,10 +444,14 @@ private class J2kCodestreamParser(
         val tilePartEnd = markerOffset.toLong() + tilePartLength
         if (tilePartEnd > end || tilePartEnd < position + 2L) j2kFailure("jpeg2000.sot.invalid", markerOffset)
         if (readMarker() != SOD) j2kFailure("jpeg2000.sod.missing", position - 2)
-        position = tilePartEnd.toInt() // Packet headers/EBCOT body are deliberately not interpreted yet.
+        val packetOffset = position
+        position = tilePartEnd.toInt()
         if (readMarker() != EOC) j2kFailure("jpeg2000.eoc.missing", position - 2)
         if (position != end) j2kFailure("jpeg2000.eoc.trailing", position)
-        return currentFrame
+        return ParsedRawJ2k(
+            frame = currentFrame,
+            entropy = J2kEntropyInput(packetOffset, tilePartEnd.toInt() - packetOffset),
+        )
     }
 
     private fun skipSegment(markerOffset: Int) {

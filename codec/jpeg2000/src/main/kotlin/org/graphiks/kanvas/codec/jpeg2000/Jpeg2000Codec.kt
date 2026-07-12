@@ -10,7 +10,7 @@ import org.skia.foundation.SkEncodedImageFormat
 import org.skia.foundation.SkImageInfo
 import org.skia.foundation.skcms.SkcmsICCProfile
 
-/** Static pure-Kotlin JPEG 2000 dispatcher owner. Entropy decoding is explicit pending EBCOT/MQ evidence. */
+/** Static pure-Kotlin JPEG 2000 dispatcher owner for the bounded raw J2K profile. */
 public class Jpeg2000Codec private constructor(
     private val document: Jpeg2000Document,
 ) : Codec() {
@@ -38,7 +38,10 @@ public class Jpeg2000Codec private constructor(
         ) {
             return Result.kInvalidConversion
         }
-        return document.decode().diagnostic?.result ?: Result.kInternalError
+        val decoded = document.decode()
+        val bitmap = decoded.bitmap ?: return decoded.diagnostic?.result ?: Result.kErrorInInput
+        System.arraycopy(bitmap.pixels8888, 0, dst.pixels8888, 0, bitmap.pixels8888.size)
+        return Result.kSuccess
     }
 
     internal companion object Decoder : Codec.Decoder {

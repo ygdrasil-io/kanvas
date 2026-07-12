@@ -37,9 +37,9 @@ P5 output exactly with the listed samples. Normal CI is Kotlin-only.
 
 ## Current boundary
 
-Kanvas opens the fixture structurally and then returns
-`jpeg2000.entropy.unimplemented` / `kUnimplemented`. This fixture is not yet a
-Kanvas pixel-decode claim. A real decoder must first implement and validate the
-packet header (BIO bit-stuffing, inclusion and zero-bit-plane tag trees,
-coding-pass and segment-length syntax), MQ arithmetic decoder, and Tier-1
-EBCOT bit-plane passes. No pixel fallback to OpenJPEG is allowed.
+Kanvas decodes this fixture through its bounded raw JPEG 2000
+Tier-2/MQ/EBCOT route. The pixel claim validates packet-header BIO bit
+stuffing, inclusion and zero-bit-plane tag trees, coding-pass and
+segment-length syntax, MQ arithmetic decoding, and style-0 Tier-1 EBCOT
+bit-plane passes. General JPEG 2000 profiles remain outside this fixture's
+scope. No pixel fallback to OpenJPEG is allowed.
