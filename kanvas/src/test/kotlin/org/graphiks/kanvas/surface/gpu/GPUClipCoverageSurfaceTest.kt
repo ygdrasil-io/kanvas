@@ -236,17 +236,37 @@ class GPUClipCoverageSurfaceTest {
     }
 
     @Test
-    fun `mask refuses dst in before it emits a source`() {
+    fun `complex clip accepts every standard blend mode`() {
         requireWebGpu()
 
-        val result = renderMaskedRect(BlendMode.DST_IN)
+        BlendMode.entries.forEach { mode ->
+            val result = renderMaskedRect(mode)
 
-        assertEquals(0, result.stats.opsDispatched)
-        assertEquals(1, result.diagnostics.fatalCount)
-        assertEquals(
-            "unsupported.clip.mask.blend_mode:dst_in",
-            result.diagnostics.entries.single().reason,
-        )
+            assertEquals(0, result.diagnostics.fatalCount, mode.name)
+        }
+    }
+
+    @Test
+    fun `fixed alpha mask composition preserves destination outside source bounds`() {
+        requireWebGpu()
+        val result = Surface(16, 16).run {
+            canvas {
+                drawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE))
+                save()
+                clipRect(Rect(1f, 1f, 15f, 15f), ClipOp.INTERSECT, antiAlias = true)
+                clipRect(Rect(6f, 6f, 10f, 10f), ClipOp.DIFFERENCE, antiAlias = true)
+                drawRect(
+                    Rect(2f, 2f, 5f, 5f),
+                    Paint.fill(Color.RED).copy(blendMode = BlendMode.SRC),
+                )
+                restore()
+            }
+            render()
+        }
+
+        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertRgbaNear(result.pixels, 16, 3, 3, Color.RED)
+        assertRgbaNear(result.pixels, 16, 12, 12, Color.WHITE)
     }
 
     @Test
@@ -288,7 +308,7 @@ class GPUClipCoverageSurfaceTest {
     }
 
     @Test
-    fun `unsupported clear and color dodge never default to src over`() {
+    fun `clear and color dodge use their mapped clip composition routes`() {
         requireWebGpu()
 
         listOf(BlendMode.CLEAR, BlendMode.COLOR_DODGE).forEach { blendMode ->
@@ -298,12 +318,8 @@ class GPUClipCoverageSurfaceTest {
             }
             val result = surface.render()
 
-            assertEquals(0, result.stats.opsDispatched, blendMode.name)
-            assertEquals(1, result.diagnostics.fatalCount, blendMode.name)
-            assertEquals(
-                "unsupported.clip.blend_unsupported:${blendMode.name.lowercase()}",
-                result.diagnostics.entries.single().reason,
-            )
+            assertEquals(1, result.stats.opsDispatched, blendMode.name)
+            assertEquals(0, result.diagnostics.fatalCount, blendMode.name)
         }
     }
 

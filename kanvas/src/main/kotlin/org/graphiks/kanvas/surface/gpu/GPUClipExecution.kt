@@ -7,6 +7,7 @@ import kotlin.math.floor
 import org.graphiks.kanvas.gpu.renderer.clips.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBlendFacts
+import org.graphiks.kanvas.gpu.renderer.commands.GPUBlendKind
 import org.graphiks.kanvas.gpu.renderer.commands.GPUClipFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUImageFilterPlan
 import org.graphiks.kanvas.gpu.renderer.commands.GPURect
@@ -172,14 +173,21 @@ internal fun GPUBackendOffscreenTarget.renderWithClip(
                     )
                 } else {
                     if (!encodeSource()) return@use false
+                    val fixedBlendMode = blend.blendMode
+                        ?: if (blend.kind == GPUBlendKind.SrcOver) GPUBlendMode.SRC_OVER else return@use false
+                    val draw = sourceCompositeUniformDraw(
+                        context,
+                        GPUClipCoveragePlan.NoClip,
+                        if (fixedBlendMode.requiresSourceBounds()) context.sourceCompositeBounds() else null,
+                    ) ?: return@use true
                     encodeOffscreenTexture(context.sceneLabel, null) {
                         drawTwoTexturePass(
                             wgsl = CLIP_MASK_COMPOSITE_WGSL,
                             colorFormat = context.colorFormat,
                             firstTextureLabel = context.sourceLabel,
                             secondTextureLabel = lease.mask.sampleLabel,
-                            draws = listOf(clipMaskCompositeUniformDraw(context.targetWidth, context.targetHeight)),
-                            blendMode = GPUBlendMode.SRC_OVER,
+                            draws = listOf(draw),
+                            blendMode = fixedBlendMode,
                         )
                     }
                     true
@@ -208,7 +216,20 @@ internal fun GPUBackendOffscreenTarget.renderWithClip(
         }
     }
     is GPUClipCoveragePlan.Refused -> false
+    }
 }
+
+/** A transparent premultiplied source is not a no-op for every fixed-function blend. */
+private fun GPUBlendMode.requiresSourceBounds(): Boolean = when (this) {
+    GPUBlendMode.SRC_OVER,
+    GPUBlendMode.DST,
+    GPUBlendMode.DST_OVER,
+    GPUBlendMode.DST_OUT,
+    GPUBlendMode.SRC_ATOP,
+    GPUBlendMode.XOR,
+    GPUBlendMode.PLUS,
+    -> false
+    else -> true
 }
 
 /** Applies a source texture at the final composition boundary, including a device-rect scissor. */

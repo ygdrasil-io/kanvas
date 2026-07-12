@@ -107,6 +107,13 @@ class GPUMaskBlurSurfaceTest {
     }
 
     @Test
+    fun `ordinary paint does not force mask blur composition`() {
+        val result = renderOrdinaryRect(Paint.fill(Color.RED))
+
+        assertTrue(result.diagnostics.entries.none { it.code.startsWith("route:clip:") })
+    }
+
+    @Test
     fun `source-composited blur plans an exact device clip before its wide-open source pass`() {
         val config = RenderConfig(maxMaskBlurIntermediateBytes = 1_024u)
         val deviceRect = renderSourceCompositedBlur(config) {
@@ -172,6 +179,14 @@ class GPUMaskBlurSurfaceTest {
 
     private fun renderRect(style: BlurStyle, sigma: Float): ByteArray =
         renderRectResult(style, sigma).pixels.toByteArray()
+
+    private fun renderOrdinaryRect(paint: Paint) = Surface(width = 32, height = 32).run {
+        requireWebGpu()
+        canvas {
+            drawRect(Rect(8f, 8f, 17f, 17f), paint)
+        }
+        render()
+    }
 
     private fun renderRectResult(
         style: BlurStyle,

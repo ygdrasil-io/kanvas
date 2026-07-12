@@ -229,22 +229,8 @@ internal fun GPUClipCoveragePlan.preAcquireRefusalOrNull(
             reason = "unsupported.clip.blend_unsupported:${blend.modeLabel.lowercase()}",
         )
     }
-    if (this is GPUClipCoveragePlan.Mask &&
-        !blend.requiresDestinationRead &&
-        !blend.isSafeMaskComposite()
-    ) {
-        return GPUClipPreAcquireRefusal(
-            diagnosticCode = "refuse:clip-mask",
-            reason = "unsupported.clip.mask.blend_mode:${blend.modeLabel}",
-            facts = listOf(DiagnosticFact("clip.strategy", "alpha-mask")),
-        )
-    }
     return null
 }
-
-private fun GPUBlendFacts.isSafeMaskComposite(): Boolean =
-    !requiresDestinationRead &&
-        (kind == GPUBlendKind.SrcOver || blendMode == GPUBlendMode.SRC_OVER)
 
 /**
  * Counts canonical non-scissor masks once per logical source draw before any
