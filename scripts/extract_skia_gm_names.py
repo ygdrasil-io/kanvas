@@ -1,9 +1,16 @@
 #!/usr/bin/env python3
-"""Extract all Skia GM names from .cpp files in the gm/ directory."""
+"""Extract all Skia GM names from .cpp files in a Skia gm/ directory."""
 
-import glob
+import argparse
 import re
-import sys
+from pathlib import Path
+
+
+REPO = Path(__file__).resolve().parent.parent
+DEFAULT_GM_DIR_CANDIDATES = (
+    REPO / "external" / "skia" / "gm",
+    REPO.parent / "skia" / "gm",
+)
 
 
 def find_matching_brace(lines, start_line_idx, start_char_idx):
@@ -292,9 +299,8 @@ def trace_variable_from_constructor(lines, class_start, class_end, var_name):
     return None
 
 
-def fallback_name(class_name):
-    base = class_name[:-2] if class_name.endswith('GM') else class_name
-    return base.lower()
+def unresolved_name(class_name):
+    return f'<unresolved:{class_name}>'
 
 
 def make_name_key(name):
@@ -304,15 +310,14 @@ def make_name_key(name):
     return (0, name)
 
 
-def main(names_only=False):
-    gm_dir = '/Users/chaos/workspace/kanvas-forge/skia-main/gm'
-    cpp_files = sorted(glob.glob(f'{gm_dir}/*.cpp'))
+def build_inventory(gm_dir: Path):
+    cpp_files = sorted(gm_dir.glob('*.cpp'))
 
     # Build a per-file cache of class definitions: class_name -> (file_lines, start, end)
     file_classes_cache = {}  # filepath -> {class_name: (start_line, end_line)}
 
     for fp in cpp_files:
-        with open(fp, 'r', errors='replace') as f:
+        with fp.open('r', errors='replace') as f:
             lines = f.readlines()
         file_classes_cache[fp] = parse_class_definitions(lines)
 
@@ -322,10 +327,10 @@ def main(names_only=False):
     unresolved = []
 
     for fp in cpp_files:
-        with open(fp, 'r', errors='replace') as f:
+        with fp.open('r', errors='replace') as f:
             content = f.read()
         lines = content.splitlines(keepends=True)
-        fname = fp.split('/')[-1]
+        fname = fp.name
 
         # 1. DEF_SIMPLE_GM variants
         simple_names = extract_simple_gm_names(content)
@@ -361,14 +366,14 @@ def main(names_only=False):
                         else:
                             unresolved.append((fname, cls_name, f'param:{param_name}',
                                                'param unresolved'))
-                            resolved = fallback_name(cls_name)
+                            resolved = unresolved_name(cls_name)
                     else:
                         arg_m = re.search(r'["\']([^"\']+)["\']', code)
                         if arg_m:
                             resolved = arg_m.group(1)
                         else:
                             unresolved.append((fname, cls_name, val, 'variable unresolved'))
-                            resolved = fallback_name(cls_name)
+                            resolved = unresolved_name(cls_name)
                 elif kind == 'fmt':
                     arg_m = re.search(r'["\']([^"\']+)["\']', code)
                     if arg_m:
@@ -386,32 +391,80 @@ def main(names_only=False):
                             resolved = val
                     else:
                         unresolved.append((fname, cls_name, val, 'fmt unresolved'))
-                        resolved = fallback_name(cls_name)
+                        resolved = unresolved_name(cls_name)
                 else:
                     unresolved.append((fname, cls_name, kind, 'no getName'))
-                    resolved = fallback_name(cls_name)
+                    resolved = unresolved_name(cls_name)
             else:
                 unresolved.append((fname, cls_name, None, 'class not found'))
-                resolved = fallback_name(cls_name)
+                resolved = unresolved_name(cls_name)
 
             all_names.add(resolved)
 
-    sorted_names = sorted(all_names, key=make_name_key)
+    return {
+        'cpp_files': cpp_files,
+        'sorted_names': sorted(all_names, key=make_name_key),
+        'total_simple': total_simple,
+        'total_def_gm': total_def_gm,
+        'unresolved': unresolved,
+    }
 
-    if names_only:
+
+def extract_gm_names(gm_dir: Path) -> set[str]:
+    return set(build_inventory(gm_dir)['sorted_names'])
+
+
+def resolve_default_gm_dir():
+    for candidate in DEFAULT_GM_DIR_CANDIDATES:
+        if candidate.is_dir():
+            return candidate
+    return None
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--names', action='store_true', help='print only sorted GM names')
+    parser.add_argument(
+        '--gm-dir',
+        type=Path,
+        help='path to the Skia gm/ directory to scan',
+    )
+    args = parser.parse_args()
+
+    gm_dir = args.gm_dir
+    if gm_dir is None:
+        gm_dir = resolve_default_gm_dir()
+        if gm_dir is None:
+            parser.error(
+                '--gm-dir is required when no default Skia gm directory is available '
+                'under the repository checkout'
+            )
+    elif not gm_dir.is_dir():
+        parser.error(f'--gm-dir is not a directory: {gm_dir}')
+
+    args.gm_dir = gm_dir
+    return args
+
+
+def main():
+    args = parse_args()
+    inventory = build_inventory(args.gm_dir)
+    sorted_names = inventory['sorted_names']
+
+    if args.names:
         for n in sorted_names:
             print(n)
         return
 
-    print(f"Files scanned: {len(cpp_files)}")
+    print(f"Files scanned: {len(inventory['cpp_files'])}")
     print(f"Total unique GM names: {len(sorted_names)}")
-    print(f"  DEF_SIMPLE_GM variants: {total_simple}")
-    print(f"  DEF_GM class-based: {total_def_gm}")
+    print(f"  DEF_SIMPLE_GM variants: {inventory['total_simple']}")
+    print(f"  DEF_GM class-based: {inventory['total_def_gm']}")
     print()
 
-    unresolved_actual = [u for u in unresolved if not u[1].startswith('<')]
+    unresolved_actual = inventory['unresolved']
     if unresolved_actual:
-        print(f"Unresolved ({len(unresolved_actual)} entries, using fallback):")
+        print(f"Unresolved ({len(unresolved_actual)} entries, explicit placeholder name kept):")
         for f, cls, kind, reason in unresolved_actual:
             print(f"  {cls} in {f}: {reason} (kind={kind})")
         print()
@@ -433,7 +486,4 @@ def main(names_only=False):
 
 
 if __name__ == '__main__':
-    if len(sys.argv) > 1 and sys.argv[1] == '--names':
-        main(names_only=True)
-    else:
-        main()
+    main()
