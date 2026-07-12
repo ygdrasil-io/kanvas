@@ -88,9 +88,9 @@ le byte stuffing `FF 00`, la terminaison QM et des RST réels. SOF10 accepte
 un script explicite de scans initiaux seulement (`Ah = Al = 0`) : DC avant AC,
 et un seul composant par scan AC. Le coder QM suit alors la grammaire
 progressive Annex D (décision EOB et zero-run par coefficient), distincte du
-scan AC sequential. Les scans de refinement, SOF11, les variantes
-differential et la hiérarchie restent des refus explicites de l'encodeur dans
-ce sous-lot.
+scan AC sequential. Les scans de refinement et SOF11 restent des refus
+explicites. Les variantes differential et hiérarchiques restent refusées,
+sauf les intersections DHP/EXP documentées ci-dessous.
 
 L'oracle externe reste opt-in et n'est jamais une dépendance runtime ou CI :
 
@@ -115,3 +115,26 @@ une erreur de composant. Le flux gris SOF10 12-bit demande `djpeg -precision
 niveaux 8-bit transposés sur l'échelle 0..4095. Sans la propriété
 `jpegOracleDjpeg`, ces tests sont ignorés ; l'oracle ne devient donc jamais
 une dépendance runtime ou CI.
+
+## Hiérarchies arithmetic SOF13/SOF14
+
+Kanvas encode aussi deux intersections hiérarchiques étroites : grayscale
+8-bit S444, deux niveaux, référence demi-résolution puis `EXP=0x11`, avec
+base SOF9 et résidu arithmetic SOF13 sequential, ou base SOF10 et résidu
+SOF14 progressive (scans DC puis AC initiaux). Les deux flux conservent DAC,
+DRI/RST et les métadonnées. Les couleurs, plusieurs niveaux, l'expansion autre
+que ×2, le refinement, SOF15 et toute autre variante differential/hierarchy
+restent refusés.
+
+La référence ISO/IEC 10918-7 `thorfdbg/libjpeg`, compilée séparément, peut
+vérifier ces sorties sans être une dépendance runtime ou CI :
+
+```text
+rtk ./gradlew :codec:jpeg:test \
+  --tests '*JpegAdvancedEncodeTest.opt in hierarchy reference decodes generated SOF13 pixels' \
+  --tests '*JpegAdvancedEncodeTest.opt in hierarchy reference decodes generated SOF14 pixels' \
+  -PjpegOracleHierarchy=/absolute/path/to/jpeg --no-daemon
+```
+
+Les tests comparent les pixels PNM de la référence à la source avec une erreur
+maximale d'un niveau; sans `jpegOracleHierarchy`, ils sont ignorés.
