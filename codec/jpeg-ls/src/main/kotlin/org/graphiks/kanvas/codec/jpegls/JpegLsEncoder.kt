@@ -13,7 +13,9 @@ public object JpegLsEncoder {
         val nearLossless: Int = 0,
     ) {
         init {
-            require(nearLossless in 0..127) { "nearLossless must be in 0..127 for 8-bit JPEG-LS" }
+            require(nearLossless in 0..JpegLsCodingParameters.maximumNearLossless) {
+                "nearLossless must be in 0..${JpegLsCodingParameters.maximumNearLossless} for 8-bit JPEG-LS"
+            }
         }
     }
 
@@ -31,9 +33,6 @@ public object JpegLsEncoder {
                 if (r != g || g != b) grayscale = false
             }
         }
-        // RGB NEAR coding needs an independent fixture/oracle before it becomes
-        // an API promise. Grayscale retains its fully evidenced NEAR profile.
-        if (!grayscale && options.nearLossless != 0) return null
         val components = if (grayscale) listOf(JpegLsComponent(1)) else listOf(
             JpegLsComponent(1),
             JpegLsComponent(2),

@@ -2,6 +2,7 @@ package org.graphiks.kanvas.codec.jpegls
 
 import java.util.Base64
 import java.nio.file.Files
+import java.security.MessageDigest
 import kotlin.math.abs
 import org.graphiks.kanvas.codec.Codec
 import org.junit.jupiter.api.Assertions.assertArrayEquals
@@ -106,6 +107,72 @@ class JpegLsCodecTest {
     }
 
     @Test
+    fun `decodes CharLS RGB ILV1 NEAR 1 regular fixture to its oracle reconstruction`() {
+        assertCharlsRgbNearFixture(
+            fixture = charlsResource("line-near1.jls.base64"),
+            source = ppmRgb(charlsResource("line-source.ppm.base64")),
+            reconstruction = ppmRgb(charlsResource("line-near1-reconstruction.ppm.base64")),
+            near = 1,
+        )
+    }
+
+    @Test
+    fun `decodes CharLS RGB ILV1 NEAR 1 run fixture to its oracle reconstruction`() {
+        assertCharlsRgbNearFixture(
+            fixture = charlsResource("line-run-near1.jls.base64"),
+            source = ppmRgb(charlsResource("line-run-source.ppm.base64")),
+            reconstruction = ppmRgb(charlsResource("line-run-near1-reconstruction.ppm.base64")),
+            near = 1,
+        )
+    }
+
+    @Test
+    fun `decodes CharLS RGB ILV1 NEAR 127 run fixture to its oracle reconstruction`() {
+        assertCharlsRgbNearFixture(
+            fixture = charlsResource("line-run-near127.jls.base64"),
+            source = ppmRgb(charlsResource("line-run-source.ppm.base64")),
+            reconstruction = ppmRgb(charlsResource("line-run-near127-reconstruction.ppm.base64")),
+            near = 127,
+        )
+    }
+
+    @Test
+    fun `pinned CharLS RGB NEAR fixtures match their documented SHA-256`() {
+        assertEquals(
+            "eb933e7350eb37c385edb25d2949012bf77640f4d4f1ec36c748f58b7a0314e4",
+            sha256(charlsResource("line-source.ppm.base64")),
+        )
+        assertEquals(
+            "f64fcc2255c1e3ec760b8649a88ecb753142364584cdc83bc31d8853c4ed6f1d",
+            sha256(charlsResource("line-near1.jls.base64")),
+        )
+        assertEquals(
+            "dcc562c99e14984918324d670aafd4a7a8fe2abd7db5632941a1d88af58acba0",
+            sha256(charlsResource("line-near1-reconstruction.ppm.base64")),
+        )
+        assertEquals(
+            "1728363fcc8cebc8abf6edbeb3ef734b00cf3f93fab77afda8d1cc4dbdfafb59",
+            sha256(charlsResource("line-run-source.ppm.base64")),
+        )
+        assertEquals(
+            "1a1324c21c96f2d5ca00bbb87756f7166679fc17df6f47cda7fe5b871a6c681c",
+            sha256(charlsResource("line-run-near1.jls.base64")),
+        )
+        assertEquals(
+            "c652010198a2fc09a0a66da980b42bef211d8bc326b8d3e4823a56a7de538d72",
+            sha256(charlsResource("line-run-near1-reconstruction.ppm.base64")),
+        )
+        assertEquals(
+            "50aeb4c4cd46b91a0b80fc7e2751b2f282083dc8e5c6ede75d329196d4b915b0",
+            sha256(charlsResource("line-run-near127.jls.base64")),
+        )
+        assertEquals(
+            "568c3a328bed5fe0be2936c6bc986677e60c30494ab983b201020c87de3c1936",
+            sha256(charlsResource("line-run-near127-reconstruction.ppm.base64")),
+        )
+    }
+
+    @Test
     fun `refuses sample-interleaved RGB without treating it as grayscale`() {
         val sampleInterleaved = CHARLS_RGB_LINE_FIXTURE.copyOf().also { it[33] = 2 }
 
@@ -130,14 +197,14 @@ class JpegLsCodecTest {
     }
 
     @Test
-    fun `refuses RGB NEAR coding until an independent near-lossless oracle is added`() {
-        val nearOne = CHARLS_RGB_LINE_FIXTURE.copyOf().also { it[32] = 1 }
+    fun `refuses RGB NEAR above the 8-bit MAXVAL bound`() {
+        val near128 = charlsResource("line-near1.jls.base64").also { it[32] = 128.toByte() }
 
-        val opened = JpegLsDocument.open(nearOne)
+        val opened = JpegLsDocument.open(near128)
 
         assertNull(opened.document)
-        assertEquals("jpeg-ls.scan.unsupported", opened.diagnostic?.code)
-        assertEquals(Codec.Result.kUnimplemented, opened.diagnostic?.result)
+        assertEquals("jpeg-ls.scan.near.invalid", opened.diagnostic?.code)
+        assertEquals(Codec.Result.kErrorInInput, opened.diagnostic?.result)
     }
 
     @Test
@@ -218,6 +285,7 @@ class JpegLsCodecTest {
     fun `uses lower-bound default thresholds for NEAR 127`() {
         val parameters = JpegLsCodingParameters.defaults(127)
 
+        assertEquals(JpegLsCodingParameters.maximumSampleValue / 2, JpegLsCodingParameters.maximumNearLossless)
         assertEquals(255, parameters.maximumSampleValue)
         assertEquals(128, parameters.threshold1)
         assertEquals(128, parameters.threshold2)
@@ -429,6 +497,47 @@ class JpegLsCodecTest {
     }
 
     @Test
+    fun `encoder writes RGB ILV1 NEAR 1 JPEG-LS within its declared error bound`() {
+        val sourceSamples = ppmRgb(charlsResource("line-run-source.ppm.base64"))
+        val source = rgbBitmap(8, 4, sourceSamples)
+
+        val encoded = requireNotNull(JpegLsEncoder.encode(source, JpegLsEncoder.Options(nearLossless = 1)))
+        val document = requireNotNull(JpegLsDocument.open(encoded).document)
+        val (decoded, result) = requireNotNull(Codec.MakeFromData(encoded)).getImage()
+
+        assertEquals(1, document.nearLossless)
+        assertEquals(1, document.interleaveMode)
+        assertEquals(Codec.Result.kSuccess, result)
+        assertNotNull(decoded)
+        sourceSamples.forEachIndexed { index, sample ->
+            val pixel = decoded!!.getPixel(index % source.width, index / source.width)
+            assertTrue(abs((pixel ushr 16 and 0xFF) - sample[0]) <= 1, "R index=$index")
+            assertTrue(abs((pixel ushr 8 and 0xFF) - sample[1]) <= 1, "G index=$index")
+            assertTrue(abs((pixel and 0xFF) - sample[2]) <= 1, "B index=$index")
+        }
+    }
+
+    @Test
+    fun `encoder writes RGB ILV1 NEAR 127 JPEG-LS within its declared error bound`() {
+        val sourceSamples = ppmRgb(charlsResource("line-run-source.ppm.base64"))
+        val source = rgbBitmap(8, 4, sourceSamples)
+
+        val encoded = requireNotNull(JpegLsEncoder.encode(source, JpegLsEncoder.Options(nearLossless = 127)))
+        val document = requireNotNull(JpegLsDocument.open(encoded).document)
+        val (decoded, result) = requireNotNull(Codec.MakeFromData(encoded)).getImage()
+
+        assertEquals(127, document.nearLossless)
+        assertEquals(Codec.Result.kSuccess, result)
+        assertNotNull(decoded)
+        sourceSamples.forEachIndexed { index, sample ->
+            val pixel = decoded!!.getPixel(index % source.width, index / source.width)
+            assertTrue(abs((pixel ushr 16 and 0xFF) - sample[0]) <= 127, "R index=$index")
+            assertTrue(abs((pixel ushr 8 and 0xFF) - sample[1]) <= 127, "G index=$index")
+            assertTrue(abs((pixel and 0xFF) - sample[2]) <= 127, "B index=$index")
+        }
+    }
+
+    @Test
     fun `encoder writes a NEAR 1 JPEG-LS within its declared error bound`() {
         val sourceSamples = IntArray(48) { index -> (index * 37 + index / 8 * 19) and 0xFF }
         val source = grayscaleBitmap(8, 6, sourceSamples)
@@ -528,6 +637,35 @@ class JpegLsCodecTest {
                 CHARLS_RGB_LINE_SAMPLES.flatMap { it.asIterable() }.map(Int::toByte).toByteArray(),
                 decoded.copyOfRange(decoded.size - CHARLS_RGB_LINE_SAMPLES.size * 3, decoded.size),
             )
+        } finally {
+            Files.deleteIfExists(directory.resolve("encoded.jls"))
+            Files.deleteIfExists(directory.resolve("decoded.ppm"))
+            Files.deleteIfExists(directory)
+        }
+    }
+
+    @Test
+    fun `optional CharLS oracle decodes encoded RGB ILV1 NEAR 1 pixels within bound`() {
+        val oracle = System.getProperty("kanvas.jpeg-ls.oracle.charls").orEmpty()
+        if (oracle.isBlank()) return
+        val samples = ppmRgb(charlsResource("line-source.ppm.base64"))
+        val source = rgbBitmap(4, 3, samples)
+        val encoded = requireNotNull(JpegLsEncoder.encode(source, JpegLsEncoder.Options(1)))
+        val directory = Files.createTempDirectory("kanvas-jpeg-ls-rgb-near-oracle-")
+        try {
+            val input = directory.resolve("encoded.jls")
+            val output = directory.resolve("decoded.ppm")
+            Files.write(input, encoded)
+            val process = ProcessBuilder(oracle, "decode", input.toString(), output.toString())
+                .redirectErrorStream(true)
+                .start()
+            val processOutput = process.inputStream.bufferedReader().readText()
+            assertEquals(0, process.waitFor(), processOutput)
+            ppmRgb(Files.readAllBytes(output)).forEachIndexed { index, decoded ->
+                assertTrue(abs(decoded[0] - samples[index][0]) <= 1, "R index=$index")
+                assertTrue(abs(decoded[1] - samples[index][1]) <= 1, "G index=$index")
+                assertTrue(abs(decoded[2] - samples[index][2]) <= 1, "B index=$index")
+            }
         } finally {
             Files.deleteIfExists(directory.resolve("encoded.jls"))
             Files.deleteIfExists(directory.resolve("decoded.ppm"))
@@ -643,6 +781,57 @@ class JpegLsCodecTest {
             }
         }
     }
+
+    private fun assertCharlsRgbNearFixture(
+        fixture: ByteArray,
+        source: Array<IntArray>,
+        reconstruction: Array<IntArray>,
+        near: Int,
+    ) {
+        val document = requireNotNull(JpegLsDocument.open(fixture).document)
+        val (bitmap, result) = requireNotNull(Codec.MakeFromData(fixture)).getImage()
+
+        assertEquals(near, document.nearLossless)
+        assertEquals(1, document.interleaveMode)
+        assertEquals(Codec.Result.kSuccess, result)
+        assertNotNull(bitmap)
+        reconstruction.forEachIndexed { index, expected ->
+            val pixel = bitmap!!.getPixel(index % bitmap.width, index / bitmap.width)
+            assertEquals(expected[0], pixel ushr 16 and 0xFF, "R reconstruction index=$index")
+            assertEquals(expected[1], pixel ushr 8 and 0xFF, "G reconstruction index=$index")
+            assertEquals(expected[2], pixel and 0xFF, "B reconstruction index=$index")
+            assertTrue(abs(expected[0] - source[index][0]) <= near, "R source index=$index")
+            assertTrue(abs(expected[1] - source[index][1]) <= near, "G source index=$index")
+            assertTrue(abs(expected[2] - source[index][2]) <= near, "B source index=$index")
+        }
+    }
+
+    private fun charlsResource(name: String): ByteArray = Base64.getDecoder().decode(
+        requireNotNull(javaClass.getResourceAsStream("/jpeg-ls-charls/$name")) { "missing CharLS resource $name" }
+            .use { input -> input.readBytes().decodeToString().trim() },
+    )
+
+    private fun ppmRgb(ppm: ByteArray): Array<IntArray> {
+        var position = 0
+        fun token(): String {
+            while (position < ppm.size && ppm[position].toInt().toChar().isWhitespace()) position++
+            val start = position
+            while (position < ppm.size && !ppm[position].toInt().toChar().isWhitespace()) position++
+            return ppm.copyOfRange(start, position).decodeToString()
+        }
+        require(token() == "P6")
+        val width = token().toInt()
+        val height = token().toInt()
+        require(token() == "255")
+        require(position < ppm.size && ppm[position].toInt().toChar().isWhitespace())
+        position++
+        require(ppm.size - position == width * height * 3)
+        return Array(width * height) { intArrayOf(ppm[position++].u8(), ppm[position++].u8(), ppm[position++].u8()) }
+    }
+
+    private fun sha256(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256")
+        .digest(bytes)
+        .joinToString(separator = "") { byte -> byte.toInt().and(0xFF).toString(16).padStart(2, '0') }
 
     private fun decodeDiagnostic(data: ByteArray): String =
         JpegLsDocument.open(data).document?.decode()?.diagnostic.toString()

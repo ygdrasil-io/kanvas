@@ -177,13 +177,14 @@ internal data class JpegLsCodingParameters(
             val threshold1 = defaultThreshold(3 + 3 * nearLossless, nearLossless + 1)
             val threshold2 = defaultThreshold(7 + 5 * nearLossless, threshold1)
             val threshold3 = defaultThreshold(21 + 7 * nearLossless, threshold2)
-            return JpegLsCodingParameters(255, threshold1, threshold2, threshold3, 64)
+            return JpegLsCodingParameters(maximumSampleValue, threshold1, threshold2, threshold3, 64)
         }
 
-        const val maximumNearLossless: Int = 127
+        const val maximumSampleValue: Int = 255
+        const val maximumNearLossless: Int = maximumSampleValue / 2
 
         private fun defaultThreshold(candidate: Int, lowerBound: Int): Int =
-            if (candidate !in lowerBound..255) lowerBound else candidate
+            if (candidate !in lowerBound..maximumSampleValue) lowerBound else candidate
     }
 }
 
@@ -338,7 +339,6 @@ private class JpegLsParser(
         if (
             (components.size == 1 && interleaveMode != 0) ||
             (components.size == 3 && interleaveMode != 1) ||
-            (components.size == 3 && nearLossless != 0) ||
             data[parameterOffset + 2].u8() != 0
         ) {
             jpeglsFailure("jpeg-ls.scan.unsupported", markerOffset, Codec.Result.kUnimplemented)
