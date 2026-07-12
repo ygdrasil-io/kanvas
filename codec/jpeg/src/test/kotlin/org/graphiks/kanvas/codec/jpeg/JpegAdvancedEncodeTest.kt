@@ -277,6 +277,47 @@ class JpegAdvancedEncodeTest {
     }
 
     @Test
+    fun `arithmetic progressive writes SOF10 DAC DRI and restart markers for grayscale and color at 8 and 12 bit`() {
+        val cases = listOf(
+            Triple(grayscale(17, 9), JpegEncodeColorModel.Grayscale, JpegSampling.S444),
+            Triple(color(17, 9), JpegEncodeColorModel.YCbCr, JpegSampling.S420),
+        )
+
+        for ((source, colorModel, sampling) in cases) {
+            val componentIds = if (colorModel == JpegEncodeColorModel.Grayscale) listOf(1) else listOf(1, 2, 3)
+            val script = buildList {
+                add(JpegProgressiveScan(componentIds = componentIds, spectralStart = 0, spectralEnd = 0))
+                for (id in componentIds) {
+                    add(JpegProgressiveScan(componentIds = listOf(id), spectralStart = 1, spectralEnd = 63))
+                }
+            }
+            for (precision in listOf(8, 12)) {
+                val bytes = JpegEncoder.encode(
+                    source,
+                    JpegEncoder.Options(
+                        process = JpegEncodeProcess.ProgressiveArithmetic,
+                        precision = precision,
+                        colorModel = colorModel,
+                        sampling = sampling,
+                        restartInterval = 1,
+                        progressiveScans = script,
+                    ),
+                )
+
+                assertNotNull(bytes, "$colorModel precision=$precision")
+                val document = JpegDocument.open(bytes!!).document!!
+                assertEquals(0xCA, firstMarker(bytes, setOf(0xCA)))
+                assertTrue(document.segments.any { it.marker == 0xCC }, "$colorModel precision=$precision")
+                assertTrue(document.segments.any { it.marker == 0xDD }, "$colorModel precision=$precision")
+                assertTrue(document.segments.none { it.marker == 0xC4 }, "$colorModel precision=$precision")
+                assertEquals(script.size, document.segments.count { it.marker == 0xDA }, "$colorModel precision=$precision")
+                assertTrue(restartMarkers(bytes).isNotEmpty(), "$colorModel precision=$precision")
+                assertReasonableRoundTrip(source, bytes, "$colorModel precision=$precision")
+            }
+        }
+    }
+
+    @Test
     fun `opt in djpeg oracle decodes generated SOF9`() {
         val configuredOracle = System.getProperty("kanvas.jpeg.oracle.djpeg").orEmpty()
         assumeTrue(
@@ -312,10 +353,73 @@ class JpegAdvancedEncodeTest {
     }
 
     @Test
+    fun `opt in djpeg oracle decodes generated SOF10`() {
+        val configuredOracle = System.getProperty("kanvas.jpeg.oracle.djpeg").orEmpty()
+        assumeTrue(
+            configuredOracle.isNotBlank(),
+            "Set -PjpegOracleDjpeg=/absolute/path/to/djpeg to enable the external SOF10 oracle",
+        )
+        val oracle = Path.of(configuredOracle)
+        assumeTrue(Files.isExecutable(oracle), "djpeg oracle is not executable: $oracle")
+        val source = grayscale(17, 9)
+        val encoded = JpegEncoder.encode(
+            source,
+            JpegEncoder.Options(
+                process = JpegEncodeProcess.ProgressiveArithmetic,
+                colorModel = JpegEncodeColorModel.Grayscale,
+                sampling = JpegSampling.S444,
+                restartInterval = 1,
+                progressiveScans = listOf(
+                    JpegProgressiveScan(componentIds = listOf(1), spectralStart = 0, spectralEnd = 0),
+                    JpegProgressiveScan(componentIds = listOf(1), spectralStart = 1, spectralEnd = 63),
+                ),
+            ),
+        )
+        assertNotNull(encoded)
+        val jpeg = Files.createTempFile("kanvas-sof10-oracle-", ".jpg")
+        try {
+            Files.write(jpeg, encoded!!)
+            val process = ProcessBuilder(oracle.toString(), "-pnm", jpeg.toString())
+                .redirectErrorStream(true)
+                .start()
+            val output = process.inputStream.readBytes()
+            assertEquals(0, process.waitFor(), output.decodeToString())
+            assertTrue(output.size > 16)
+            assertEquals('P'.code, output[0].toInt() and 0xFF)
+            assertEquals('5'.code, output[1].toInt() and 0xFF)
+        } finally {
+            Files.deleteIfExists(jpeg)
+        }
+    }
+
+    @Test
     fun `advanced unsupported configurations refuse rather than falling back to sequential`() {
         val source = color(8, 8)
 
         assertNull(JpegEncoder.encode(source, JpegEncoder.Options(process = JpegEncodeProcess.ProgressiveHuffman)))
+        assertNull(JpegEncoder.encode(source, JpegEncoder.Options(process = JpegEncodeProcess.ProgressiveArithmetic)))
+        assertNull(
+            JpegEncoder.encode(
+                source,
+                JpegEncoder.Options(
+                    process = JpegEncodeProcess.ProgressiveArithmetic,
+                    progressiveScans = listOf(
+                        JpegProgressiveScan(componentIds = listOf(1), spectralStart = 0, spectralEnd = 0, successiveLow = 1),
+                    ),
+                ),
+            ),
+        )
+        assertNull(
+            JpegEncoder.encode(
+                source,
+                JpegEncoder.Options(
+                    process = JpegEncodeProcess.ProgressiveArithmetic,
+                    progressiveScans = listOf(
+                        JpegProgressiveScan(componentIds = listOf(1), spectralStart = 1, spectralEnd = 63),
+                    ),
+                ),
+            ),
+        )
         assertNull(
             JpegEncoder.encode(
                 source,

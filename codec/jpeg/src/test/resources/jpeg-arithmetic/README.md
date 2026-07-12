@@ -75,26 +75,31 @@ Il n'y a intentionnellement aucune fixture SOF11 (lossless arithmetic) :
 le diagnostic stable `jpeg.arithmetic.lossless.unsupported`; cela ne constitue
 pas une revendication de support lossless arithmetic.
 
-## Encodeur SOF9 Kotlin
+## Encodeurs SOF9/SOF10 Kotlin
 
-L'encodeur statique Kanvas écrit SOF9 (DCT sequential arithmetic) pour les
-images grayscale et YCbCr en précision 8 ou 12-bit. Il n'émet ni DHT ni
-fallback Huffman : les tables DAC par défaut sont écrites explicitement
-(`L=0`, `U=1`, `Kx=5`) et les scans avec DRI terminent proprement chaque
-intervalle avant le marqueur RST suivant.
+L'encodeur statique Kanvas écrit SOF9 (DCT sequential arithmetic) et SOF10
+(DCT progressive arithmetic) pour les images grayscale et YCbCr en précision
+8 ou 12-bit. Il n'émet ni DHT ni fallback Huffman : les tables DAC par défaut
+sont écrites explicitement (`L=0`, `U=1`, `Kx=5`) et les scans avec DRI
+terminent proprement chaque intervalle avant le marqueur RST suivant.
 
 Les tests couvrent les catégories DC `|v| = 2, 3, 4`, des décisions AC,
-le byte stuffing `FF 00`, la terminaison QM et des RST réels. SOF10,
-SOF11, les variantes differential et la hiérarchie restent des refus
-explicites de l'encodeur dans ce sous-lot.
+le byte stuffing `FF 00`, la terminaison QM et des RST réels. SOF10 accepte
+un script explicite de scans initiaux seulement (`Ah = Al = 0`) : DC avant AC,
+et un seul composant par scan AC. Le coder QM suit alors la grammaire
+progressive Annex D (décision EOB et zero-run par coefficient), distincte du
+scan AC sequential. Les scans de refinement, SOF11, les variantes
+differential et la hiérarchie restent des refus explicites de l'encodeur dans
+ce sous-lot.
 
 L'oracle externe reste opt-in et n'est jamais une dépendance runtime ou CI :
 
 ```text
 rtk ./gradlew :codec:jpeg:test \
   --tests '*JpegAdvancedEncodeTest.opt in djpeg oracle decodes generated SOF9' \
+  --tests '*JpegAdvancedEncodeTest.opt in djpeg oracle decodes generated SOF10' \
   -PjpegOracleDjpeg=/absolute/path/to/djpeg --no-daemon
 ```
 
-Il vérifie que `djpeg` décode un SOF9 généré par Kotlin. Sans la propriété
-`jpegOracleDjpeg`, ce test est ignoré.
+Il vérifie que `djpeg` décode des SOF9 et SOF10 générés par Kotlin. Sans la
+propriété `jpegOracleDjpeg`, ces tests sont ignorés.

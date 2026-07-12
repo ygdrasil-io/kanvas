@@ -48,7 +48,7 @@ public object JpegEncoder {
         val alphaPolicy: JpegAlphaPolicy? = null,
         val hierarchy: List<JpegHierarchyLevel> = emptyList(),
         val colorModel: JpegEncodeColorModel = JpegEncodeColorModel.YCbCr,
-        /** Required for [JpegEncodeProcess.ProgressiveHuffman]. */
+        /** Required for a progressive Huffman or arithmetic process. */
         val progressiveScans: List<JpegProgressiveScan> = emptyList(),
         /** Required for [JpegEncodeProcess.LosslessHuffman]. */
         val losslessParameters: JpegLosslessParameters? = null,
@@ -82,6 +82,7 @@ public object JpegEncoder {
                 JpegEncodeProcess.SequentialHuffman,
                 JpegEncodeProcess.SequentialArithmetic,
                 JpegEncodeProcess.ProgressiveHuffman,
+                JpegEncodeProcess.ProgressiveArithmetic,
                 JpegEncodeProcess.LosslessHuffman,
             ) && hierarchy.isEmpty()
     }
@@ -173,7 +174,9 @@ private class JpegWriter(
         if (isDct) writeDqt()
         writeSof()
         when (options.process) {
-            JpegEncodeProcess.SequentialArithmetic -> writeArithmeticConditioning()
+            JpegEncodeProcess.SequentialArithmetic,
+            JpegEncodeProcess.ProgressiveArithmetic,
+            -> writeArithmeticConditioning()
             else -> writeHuffmanTables()
         }
         if (options.restartInterval > 0) writeDri()
@@ -181,6 +184,7 @@ private class JpegWriter(
             JpegEncodeProcess.SequentialHuffman -> writeSequentialEntropy()
             JpegEncodeProcess.SequentialArithmetic -> writeSequentialEntropy()
             JpegEncodeProcess.ProgressiveHuffman -> writeProgressiveEntropy()
+            JpegEncodeProcess.ProgressiveArithmetic -> writeProgressiveEntropy()
             JpegEncodeProcess.LosslessHuffman -> writeLosslessEntropy()
             else -> error("unsupported JPEG process")
         }
@@ -199,7 +203,9 @@ private class JpegWriter(
                 require(options.progressiveScans.isEmpty()) { "sequential output does not accept a progressive scan script" }
                 require(options.losslessParameters == null) { "sequential output does not accept lossless parameters" }
             }
-            JpegEncodeProcess.ProgressiveHuffman -> {
+            JpegEncodeProcess.ProgressiveHuffman,
+            JpegEncodeProcess.ProgressiveArithmetic,
+            -> {
                 require(options.colorModel != JpegEncodeColorModel.Rgb) { "progressive RGB output is not implemented" }
                 require(options.losslessParameters == null) { "progressive output does not accept lossless parameters" }
                 require(options.precision == 8 || options.precision == 12) { "progressive precision must be 8 or 12" }
@@ -499,6 +505,7 @@ private class JpegWriter(
             JpegEncodeProcess.SequentialHuffman -> if (options.precision == 8) SOF0 else SOF1
             JpegEncodeProcess.SequentialArithmetic -> SOF9
             JpegEncodeProcess.ProgressiveHuffman -> SOF2
+            JpegEncodeProcess.ProgressiveArithmetic -> SOF10
             JpegEncodeProcess.LosslessHuffman -> SOF3
             else -> error("unsupported JPEG process")
         }
@@ -618,6 +625,10 @@ private class JpegWriter(
 
     private fun writeProgressiveEntropy() {
         val planes = buildDctPlanes()
+        if (options.process == JpegEncodeProcess.ProgressiveArithmetic) {
+            writeArithmeticProgressiveEntropy(planes)
+            return
+        }
         for (scan in validatedProgressiveScans()) {
             writeSos(scan.componentIds, scan.spectralStart, scan.spectralEnd, 0)
             val bits = EntropyBitWriter(out)
@@ -627,6 +638,88 @@ private class JpegWriter(
                 writeProgressiveAcScan(bits, scan, planes)
             }
             bits.flush()
+        }
+    }
+
+    /** Writes only progressive initial scans (`Ah = Al = 0`) using Annex D's QM coder. */
+    private fun writeArithmeticProgressiveEntropy(planes: List<EncodedDctPlane>) {
+        for (scan in validatedProgressiveScans()) {
+            writeSos(scan.componentIds, scan.spectralStart, scan.spectralEnd, successiveApprox = 0)
+            val arithmetic = ArithmeticEncoder(out, componentCount)
+            if (scan.spectralStart == 0) {
+                writeArithmeticProgressiveDcScan(arithmetic, scan, planes)
+            } else {
+                writeArithmeticProgressiveAcScan(arithmetic, scan, planes)
+            }
+            arithmetic.finish()
+        }
+    }
+
+    private fun writeArithmeticProgressiveDcScan(
+        arithmetic: ArithmeticEncoder,
+        scan: JpegProgressiveScan,
+        planes: List<EncodedDctPlane>,
+    ) {
+        val components = scan.componentIds.map { it - 1 }
+        val nonInterleaved = components.size == 1
+        val frameMcusWide = ceilDiv(bitmap.width, maxH * 8)
+        val frameMcusHigh = ceilDiv(bitmap.height, maxV * 8)
+        val mcusWide = if (nonInterleaved) planes[components.single()].blocksWide else frameMcusWide
+        val mcusHigh = if (nonInterleaved) planes[components.single()].blocksHigh else frameMcusHigh
+        val dcTables = components.map { if (it == COMPONENT_Y) 0 else 1 }.toIntArray()
+        var mcu = 0
+        for (mcuY in 0 until mcusHigh) {
+            for (mcuX in 0 until mcusWide) {
+                for (component in components) {
+                    val factor = componentSampling[component]
+                    val baseX = if (nonInterleaved) mcuX else mcuX * factor.horizontal
+                    val baseY = if (nonInterleaved) mcuY else mcuY * factor.vertical
+                    val blocksWide = if (nonInterleaved) 1 else factor.horizontal
+                    val blocksHigh = if (nonInterleaved) 1 else factor.vertical
+                    val table = if (component == COMPONENT_Y) 0 else 1
+                    for (blockY in 0 until blocksHigh) {
+                        for (blockX in 0 until blocksWide) {
+                            arithmetic.encodeProgressiveDcInitial(
+                                component = component,
+                                dcTable = table,
+                                coefficient = planes[component].block(baseX + blockX, baseY + blockY)[0],
+                                dcLower = ARITHMETIC_DC_LOWER,
+                                dcUpper = ARITHMETIC_DC_UPPER,
+                            )
+                        }
+                    }
+                }
+                mcu++
+                if (atRestartBoundary(mcu, mcusWide * mcusHigh)) {
+                    arithmetic.writeRestart(dcTables, intArrayOf())
+                }
+            }
+        }
+    }
+
+    private fun writeArithmeticProgressiveAcScan(
+        arithmetic: ArithmeticEncoder,
+        scan: JpegProgressiveScan,
+        planes: List<EncodedDctPlane>,
+    ) {
+        val component = scan.componentIds.single() - 1
+        val plane = planes[component]
+        val table = if (component == COMPONENT_Y) 0 else 1
+        var mcu = 0
+        for (blockY in 0 until plane.blocksHigh) {
+            for (blockX in 0 until plane.blocksWide) {
+                arithmetic.encodeProgressiveAcInitial(
+                    acTable = table,
+                    coefficients = plane.block(blockX, blockY),
+                    startCoefficient = scan.spectralStart,
+                    endCoefficient = scan.spectralEnd,
+                    conditioningK = ARITHMETIC_AC_K,
+                )
+                mcu++
+                if (atRestartBoundary(mcu, plane.blocksWide * plane.blocksHigh)) {
+                    arithmetic.writeRestart(intArrayOf(), intArrayOf(table))
+                }
+            }
         }
     }
 
@@ -983,6 +1076,7 @@ private const val SOF2 = 0xC2
 private const val SOF3 = 0xC3
 private const val DHT = 0xC4
 private const val SOF9 = 0xC9
+private const val SOF10 = 0xCA
 private const val DAC = 0xCC
 private const val SOS = 0xDA
 private const val DRI = 0xDD

@@ -297,6 +297,65 @@ internal class ArithmeticEncoder(
         encodeAcCoefficients(acTable, coefficients, acK)
     }
 
+    /** Encodes one initial progressive DC coefficient (`Ah = Al = 0`). */
+    fun encodeProgressiveDcInitial(
+        component: Int,
+        dcTable: Int,
+        coefficient: Int,
+        dcLower: Int,
+        dcUpper: Int,
+    ) {
+        require(component in previousDc.indices)
+        require(dcTable in dcStats.indices)
+        require(dcLower in 0..15 && dcUpper in dcLower..15)
+        encodeDcDifference(component, dcTable, coefficient, dcLower, dcUpper)
+    }
+
+    /**
+     * Encodes one initial progressive AC band (`Ah = Al = 0`).  The EOB and
+     * zero-run decisions deliberately follow Annex D's progressive grammar,
+     * which differs from the sequential arithmetic AC scan.
+     */
+    fun encodeProgressiveAcInitial(
+        acTable: Int,
+        coefficients: IntArray,
+        startCoefficient: Int,
+        endCoefficient: Int,
+        conditioningK: Int,
+    ) {
+        require(acTable in acStats.indices)
+        require(coefficients.size == 64)
+        require(startCoefficient in 1..63 && endCoefficient in startCoefficient..63)
+        require(conditioningK in 0..63)
+
+        val stats = acStats[acTable]
+        var last = endCoefficient
+        while (last >= startCoefficient && coefficients[last] == 0) last--
+
+        var coefficient = startCoefficient
+        while (coefficient <= last) {
+            var statIndex = 3 * (coefficient - 1)
+            encode(stats, statIndex, 0)
+            var value = coefficients[coefficient]
+            while (value == 0) {
+                encode(stats, statIndex + 1, 0)
+                coefficient++
+                statIndex += 3
+                value = coefficients[coefficient]
+            }
+            encode(stats, statIndex + 1, 1)
+            encode(fixedBin, 0, if (value > 0) 0 else 1)
+            encodeAcMagnitude(
+                stats = stats,
+                initialIndex = statIndex + 2,
+                absolute = if (value > 0) value else -value,
+                magnitudeStart = if (coefficient <= conditioningK) 189 else 217,
+            )
+            coefficient++
+        }
+        if (coefficient <= endCoefficient) encode(stats, 3 * (coefficient - 1), 1)
+    }
+
     fun writeRestart(dcTables: IntArray, acTables: IntArray) {
         finish()
         output.write(0xFF)
