@@ -362,6 +362,19 @@ class JpegLsCodecTest {
     }
 
     @Test
+    fun `encoder refuses LSE parameters below the NEAR threshold`() {
+        assertNull(
+            JpegLsEncoder.encode(
+                grayscaleBitmap(1, 1, intArrayOf(0x41)),
+                JpegLsEncoder.Options(
+                    nearLossless = 1,
+                    presetCodingParameters = JpegLsPresetCodingParameters(1, 7, 21, 64),
+                ),
+            ),
+        )
+    }
+
+    @Test
     fun `refuses non-RGB component identities and sampling in a color SOF55`() {
         val invalidIdentity = CHARLS_RGB_LINE_FIXTURE.copyOf().also { it[12] = 2 }
         val invalidSampling = CHARLS_RGB_LINE_FIXTURE.copyOf().also { it[13] = 0x21 }
@@ -746,6 +759,36 @@ class JpegLsCodecTest {
     }
 
     @Test
+    fun `encoder writes custom LSE parameters that decode exactly`() {
+        val samples = Array(24) { index ->
+            val x = index % 6
+            val y = index / 6
+            intArrayOf(0x41, 0x50 + x * 3 + y, 0x42 + ((x * y) and 3))
+        }
+        val encoded = requireNotNull(
+            JpegLsEncoder.encode(
+                rgbBitmap(6, 4, samples),
+                JpegLsEncoder.Options(
+                    presetCodingParameters = JpegLsPresetCodingParameters(6, 14, 42, 3),
+                ),
+            ),
+        )
+        val (bitmap, result) = requireNotNull(Codec.MakeFromData(encoded)).getImage()
+
+        assertTrue(encoded.indices.any { index ->
+            index + 1 < encoded.size && encoded[index].u8() == 0xFF && encoded[index + 1].u8() == 0xF8
+        })
+        assertEquals(Codec.Result.kSuccess, result)
+        samples.forEachIndexed { index, sample ->
+            assertEquals(
+                0xFF000000.toInt() or (sample[0] shl 16) or (sample[1] shl 8) or sample[2],
+                bitmap!!.getPixel(index % 6, index / 6),
+                "index=$index",
+            )
+        }
+    }
+
+    @Test
     fun `encoder writes RGB ILV1 NEAR 1 JPEG-LS within its declared error bound`() {
         val sourceSamples = ppmRgb(charlsResource("line-run-source.ppm.base64"))
         val source = rgbBitmap(8, 4, sourceSamples)
@@ -995,6 +1038,43 @@ class JpegLsCodecTest {
                 samples.map { sample -> sample[component].toByte() }
             }.toByteArray()
             assertArrayEquals(expectedPlanes, decoded.copyOfRange(decoded.size - expectedPlanes.size, decoded.size))
+        } finally {
+            Files.deleteIfExists(directory.resolve("encoded.jls"))
+            Files.deleteIfExists(directory.resolve("decoded.ppm"))
+            Files.deleteIfExists(directory)
+        }
+    }
+
+    @Test
+    fun `optional CharLS oracle decodes encoded custom LSE RGB exactly`() {
+        val oracle = System.getProperty("kanvas.jpeg-ls.oracle.charls").orEmpty()
+        if (oracle.isBlank()) return
+        val samples = Array(24) { index ->
+            val x = index % 6
+            val y = index / 6
+            intArrayOf(0x41, 0x50 + x * 3 + y, 0x42 + ((x * y) and 3))
+        }
+        val encoded = requireNotNull(
+            JpegLsEncoder.encode(
+                rgbBitmap(6, 4, samples),
+                JpegLsEncoder.Options(presetCodingParameters = JpegLsPresetCodingParameters(6, 14, 42, 3)),
+            ),
+        )
+        val directory = Files.createTempDirectory("kanvas-jpeg-ls-custom-lse-oracle-")
+        try {
+            val input = directory.resolve("encoded.jls")
+            val output = directory.resolve("decoded.ppm")
+            Files.write(input, encoded)
+            val process = ProcessBuilder(oracle, "decode", input.toString(), output.toString())
+                .redirectErrorStream(true)
+                .start()
+            val processOutput = process.inputStream.bufferedReader().readText()
+            assertEquals(0, process.waitFor(), processOutput)
+            val decoded = Files.readAllBytes(output)
+            assertArrayEquals(
+                samples.flatMap { it.asIterable() }.map(Int::toByte).toByteArray(),
+                decoded.copyOfRange(decoded.size - samples.size * 3, decoded.size),
+            )
         } finally {
             Files.deleteIfExists(directory.resolve("encoded.jls"))
             Files.deleteIfExists(directory.resolve("decoded.ppm"))
