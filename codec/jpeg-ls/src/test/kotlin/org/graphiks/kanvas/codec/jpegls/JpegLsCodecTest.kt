@@ -141,6 +141,21 @@ class JpegLsCodecTest {
     }
 
     @Test
+    fun `refuses HP JPEG-LS color transforms before decoding RGB pixels`() {
+        listOf(1, 2, 3).forEach { transform ->
+            val encoded = CHARLS_RGB_LINE_FIXTURE.copyOfRange(0, 2) + mrfxColorTransform(transform) +
+                CHARLS_RGB_LINE_FIXTURE.copyOfRange(2, CHARLS_RGB_LINE_FIXTURE.size)
+
+            val opened = JpegLsDocument.open(encoded)
+
+            assertNull(opened.document, "HP$transform must not create a decodable document")
+            assertEquals("jpeg-ls.color-transform.unsupported", opened.diagnostic?.code)
+            assertEquals(Codec.Result.kUnimplemented, opened.diagnostic?.result)
+            assertNull(Codec.MakeFromData(encoded), "HP$transform must not create pixels through Codec")
+        }
+    }
+
+    @Test
     fun `retains APP and COM metadata around a color JPEG-LS scan`() {
         val withMetadata = CHARLS_RGB_LINE_FIXTURE.copyOfRange(0, 2) + JFIF_APP0 + COMMENT +
             CHARLS_RGB_LINE_FIXTURE.copyOfRange(2, CHARLS_RGB_LINE_FIXTURE.size)
@@ -631,6 +646,11 @@ class JpegLsCodecTest {
 
     private fun decodeDiagnostic(data: ByteArray): String =
         JpegLsDocument.open(data).document?.decode()?.diagnostic.toString()
+
+    private fun mrfxColorTransform(transform: Int): ByteArray = byteArrayOf(
+        0xFF.toByte(), 0xE8.toByte(), 0x00, 0x07,
+        'm'.code.toByte(), 'r'.code.toByte(), 'f'.code.toByte(), 'x'.code.toByte(), transform.toByte(),
+    )
 
     private companion object {
         /**

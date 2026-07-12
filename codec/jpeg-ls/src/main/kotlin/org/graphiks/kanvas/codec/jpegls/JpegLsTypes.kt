@@ -53,8 +53,9 @@ public data class JpegLsDecodeResult(
 /**
  * Immutable, bounded JPEG-LS frame description for the supported static
  * baseline: 8-bit grayscale or RGB LOCO-I scans. RGB is accepted only with
- * `ILV=1` (line interleave), no colour transform and unit sampling; its
- * [nearLossless] bound is validated before entropy allocation.
+ * `ILV=1` (line interleave), unit sampling, and either no `mrfx` APP8 marker
+ * or `mrfx` transform zero. HP1/HP2/HP3 colour transforms are explicitly
+ * refused; its [nearLossless] bound is validated before entropy allocation.
  */
 public class JpegLsDocument private constructor(
     private val source: ByteArray,
@@ -299,8 +300,22 @@ private class JpegLsParser(
 
     private fun retainMetadata(marker: Int, markerOffset: Int) {
         val segment = segment(markerOffset, "jpeg-ls.metadata.truncated")
+        if (
+            marker == APP8 &&
+            isMrfxColorTransform(segment) &&
+            data[segment.payloadOffset + 4].u8() != 0
+        ) {
+            jpeglsFailure("jpeg-ls.color-transform.unsupported", markerOffset, Codec.Result.kUnimplemented)
+        }
         metadata += JpegLsMetadataSegment(marker, markerOffset.toLong(), segment.payloadOffset, segment.payloadSize)
     }
+
+    private fun isMrfxColorTransform(segment: SegmentBounds): Boolean =
+        segment.payloadSize >= 5 &&
+            data[segment.payloadOffset].u8() == 'm'.code &&
+            data[segment.payloadOffset + 1].u8() == 'r'.code &&
+            data[segment.payloadOffset + 2].u8() == 'f'.code &&
+            data[segment.payloadOffset + 3].u8() == 'x'.code
 
     private fun parseSos(markerOffset: Int): ParsedJpegLs {
         val layout = frameLayout ?: jpeglsFailure("jpeg-ls.sof.missing", markerOffset)
@@ -383,5 +398,6 @@ internal const val SOF55: Int = 0xF7
 internal const val LSE: Int = 0xF8
 internal const val APP_MIN: Int = 0xE0
 internal const val APP_MAX: Int = 0xEF
+internal const val APP8: Int = 0xE8
 internal const val RESTART_MIN: Int = 0xD0
 internal const val RESTART_MAX: Int = 0xD7
