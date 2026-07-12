@@ -23,6 +23,8 @@ import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.types.Color
+import org.graphiks.kanvas.image.Image
+import org.graphiks.kanvas.text.TextBlob
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotEquals
@@ -256,6 +258,28 @@ class GPUClipCoverageContractsTest {
     }
 
     @Test
+    fun `common perspective guard refuses rect image and text after reset matrix`() {
+        val clip = perspectiveClipAfterReset()
+        val transform = Matrix33.identity()
+        val operations = listOf<DisplayOp>(
+            DisplayOp.DrawRect(Rect.fromLTRB(0f, 0f, 16f, 16f), Paint.fill(Color.RED), transform, clip),
+            DisplayOp.DrawImage(
+                image = Image.placeholder(1, 1),
+                src = Rect.fromLTRB(0f, 0f, 1f, 1f),
+                dst = Rect.fromLTRB(0f, 0f, 1f, 1f),
+                paint = null,
+                transform = transform,
+                clip = clip,
+            ),
+            DisplayOp.DrawText(TextBlob(emptyList()), 0f, 0f, Paint.fill(Color.RED), transform, clip),
+        )
+
+        operations.forEach { operation ->
+            assertEquals("unsupported_transform:Perspective", operation.perspectiveCaptureRefusalReasonOrNull())
+        }
+    }
+
+    @Test
     fun `clip path defers over budget vertices to planner`() {
         val path = Path().apply {
             moveTo(0f, 0f)
@@ -376,6 +400,15 @@ class GPUClipCoverageContractsTest {
         listOf(1f, 0f) + List(vertexCount * 2) { it.toFloat() }
 
     private fun target(): GPUTargetFacts = GPUTargetFacts(64, 64, "rgba8unorm")
+
+    private fun perspectiveClipAfterReset(): ClipStack {
+        val buffer = TestBuffer()
+        val canvas = Canvas(buffer)
+        canvas.setMatrix(Matrix33.makeAll(1f, 0f, 0f, 0f, 1f, 0f, 0.1f, 0f, 1f))
+        canvas.clipRect(Rect.fromLTRB(2f, 3f, 10f, 11f), antiAlias = false)
+        canvas.resetMatrix()
+        return buffer.ops().filterIsInstance<DisplayOp.SetClip>().last().clip
+    }
 
     private companion object {
         const val MAX_CLIP_INTERMEDIATE_BYTES_PROPERTY = "kanvas.render.maxClipIntermediateBytes"

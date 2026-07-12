@@ -546,6 +546,7 @@ internal fun renderViaGpu(
             }
             fun scanImages(scanOps: List<DisplayOp>) {
                 for (op in scanOps) {
+                    if (op.perspectiveCaptureRefusalReasonOrNull() != null) continue
                     when (op) {
                         is DisplayOp.DrawImage -> cachePixels(op.image)
                         is DisplayOp.DrawImageNine -> cachePixels(op.image)
@@ -584,6 +585,15 @@ internal fun renderViaGpu(
 
             var suppressedLayerDepth = 0
             val trivialLayerPaint = Paint()
+            fun refusePerspectiveCapture(op: DisplayOp, cmdId: GPUDrawCommandID): Boolean {
+                val reason = op.perspectiveCaptureRefusalReasonOrNull() ?: return false
+                diagnostics.fatal(
+                    "refuse:gpu-perspective-clip:${cmdId.value}",
+                    "gpu",
+                    reason,
+                )
+                return true
+            }
             for (op in ops) {
                 val cmdId = GPUDrawCommandID(dispatched.size)
                 if (op is DisplayOp.BeginLayer) {
@@ -655,6 +665,7 @@ internal fun renderViaGpu(
                     continue
                 }
                 if (suppressedLayerDepth > 0) continue
+                if (refusePerspectiveCapture(op, cmdId)) continue
                 when (op) {
                     is DisplayOp.DrawRect -> {
                         val rendered = if (op.paint.isStroke()) {
@@ -999,6 +1010,7 @@ internal fun renderViaGpu(
                         }
                         for (nestedOp in expanded) {
                             val nestedCmdId = GPUDrawCommandID(dispatched.size)
+                            if (refusePerspectiveCapture(nestedOp, nestedCmdId)) continue
                             when (nestedOp) {
                                 is DisplayOp.DrawRect -> {
                                     if (nestedOp.paint.isStroke()) {
