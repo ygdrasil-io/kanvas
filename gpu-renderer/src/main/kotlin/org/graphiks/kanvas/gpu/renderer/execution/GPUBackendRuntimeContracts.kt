@@ -285,7 +285,9 @@ data class GPUBackendCoverageMaskRequest(
         require(label.isNotBlank()) { "GPUBackendCoverageMaskRequest.label must not be blank" }
         require(width > 0) { "GPUBackendCoverageMaskRequest.width must be positive" }
         require(height > 0) { "GPUBackendCoverageMaskRequest.height must be positive" }
-        require(sampleCount > 0) { "GPUBackendCoverageMaskRequest.sampleCount must be positive" }
+        require(sampleCount in setOf(1, 4)) {
+            "GPUBackendCoverageMaskRequest.sampleCount must be 1 or 4"
+        }
         require(format.isNotBlank()) { "GPUBackendCoverageMaskRequest.format must not be blank" }
     }
 }

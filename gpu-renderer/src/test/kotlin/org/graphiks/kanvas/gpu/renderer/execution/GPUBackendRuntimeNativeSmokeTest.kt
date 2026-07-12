@@ -389,6 +389,83 @@ class GPUBackendRuntimeNativeSmokeTest {
     }
 
     @Test
+    fun `coverage masks run stencil cover at one and four samples and release after submission`() {
+        GPUBackendRuntimeFactory.createOrNull().use { session ->
+            assumeTrue(session != null, "GPU backend unavailable in current environment")
+            session!!.createOffscreenTarget(
+                GPUOffscreenTargetRequest(width = 16, height = 16, colorFormat = "rgba8unorm"),
+            ).use { target ->
+                val triangle = GPUBackendTriangleData(
+                    vertices = floatArrayOf(-1f, -1f, 1f, -1f, -1f, 1f),
+                    indices = intArrayOf(0, 1, 2),
+                )
+                val coverDraw = GPUBackendRawUniformDraw(
+                    uniformBytes = solidColorUniformBytes(0f, 1f, 0f, 1f),
+                    scissorX = 0,
+                    scissorY = 0,
+                    scissorWidth = 16,
+                    scissorHeight = 16,
+                )
+                val msaaMask = target.createCoverageMask(
+                    GPUBackendCoverageMaskRequest("stencil-x4", 16, 16, sampleCount = 4),
+                )
+
+                target.encodeCoverageMask(msaaMask, GPUClearColor(0.0, 0.0, 0.0, 0.0)) {
+                    drawFullscreenStencilPass(
+                        wgsl = stencilWriteWgsl(),
+                        colorFormat = "rgba8unorm",
+                        stencilMode = GPUBackendStencilMode.Write,
+                        triangleData = triangle,
+                        draws = emptyList(),
+                    )
+                    target.releaseCoverageMask(msaaMask)
+                    drawFullscreenStencilPass(
+                        wgsl = stencilTestWgsl(),
+                        colorFormat = "rgba8unorm",
+                        stencilMode = GPUBackendStencilMode.Test,
+                        triangleData = null,
+                        draws = listOf(coverDraw),
+                    )
+                }
+                target.releaseCoverageMask(msaaMask)
+                assertFailsWith<IllegalStateException> {
+                    target.encodeOffscreenTexture(msaaMask.sampleLabel, GPUClearColor(0.0, 0.0, 0.0, 0.0)) {}
+                }
+
+                val singleSampleMask = target.createCoverageMask(
+                    GPUBackendCoverageMaskRequest("stencil-x1", 16, 16, sampleCount = 1),
+                )
+                target.encodeCoverageMask(singleSampleMask, GPUClearColor(0.0, 0.0, 0.0, 0.0)) {
+                    drawFullscreenStencilPass(
+                        wgsl = stencilWriteWgsl(),
+                        colorFormat = "rgba8unorm",
+                        stencilMode = GPUBackendStencilMode.Write,
+                        triangleData = triangle,
+                        draws = emptyList(),
+                    )
+                    drawFullscreenStencilPass(
+                        wgsl = stencilTestWgsl(),
+                        colorFormat = "rgba8unorm",
+                        stencilMode = GPUBackendStencilMode.Test,
+                        triangleData = null,
+                        draws = listOf(coverDraw),
+                    )
+                }
+                target.releaseCoverageMask(singleSampleMask)
+                val unknownMask = GPUBackendCoverageMask(
+                    renderLabel = "unknown-mask:render",
+                    sampleLabel = "unknown-mask:sample",
+                    width = 16,
+                    height = 16,
+                    sampleCount = 1,
+                )
+                target.releaseCoverageMask(unknownMask)
+                target.releaseCoverageMask(unknownMask)
+            }
+        }
+    }
+
+    @Test
     fun `multi texture passes cache layout topology without texture labels`() {
         GPUBackendRuntimeFactory.createOrNull().use { session ->
             assumeTrue(session != null, "GPU backend unavailable in current environment")
@@ -1865,6 +1942,40 @@ class GPUBackendRuntimeNativeSmokeTest {
             }
         """.trimIndent()
     }
+
+    private fun stencilWriteWgsl(): String =
+        """
+            @vertex
+            fn vs_main(@location(0) position: vec2f) -> @builtin(position) vec4f {
+                return vec4f(position, 0.0, 1.0);
+            }
+
+            @fragment
+            fn fs_main() -> @location(0) vec4f {
+                return vec4f(0.0);
+            }
+        """.trimIndent()
+
+    private fun stencilTestWgsl(): String =
+        """
+            struct Uniforms {
+                color: vec4f,
+            };
+
+            @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+
+            @vertex
+            fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
+                let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
+                let y = f32(idx & 2u) * 2.0 - 1.0;
+                return vec4f(x, y, 0.0, 1.0);
+            }
+
+            @fragment
+            fn fs_main() -> @location(0) vec4f {
+                return uniforms.color;
+            }
+        """.trimIndent()
 
     private fun fullscreenWgslWithoutFragmentEntry(): String =
         """

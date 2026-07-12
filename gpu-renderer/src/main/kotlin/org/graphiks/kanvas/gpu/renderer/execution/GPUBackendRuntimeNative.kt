@@ -52,6 +52,7 @@ import io.ygdrasil.webgpu.GPUTextureView
 import io.ygdrasil.webgpu.GPUTextureViewDimension
 import io.ygdrasil.webgpu.GPUVertexFormat
 import io.ygdrasil.webgpu.NativeSurface
+import io.ygdrasil.webgpu.MultisampleState
 import io.ygdrasil.webgpu.PipelineLayoutDescriptor
 import io.ygdrasil.webgpu.PrimitiveState
 import io.ygdrasil.webgpu.RenderPassColorAttachment
@@ -923,6 +924,7 @@ private class WgpuOffscreenTarget(
                     frameId = frameId,
                     budgetClass = "runtime-fullscreen",
                     targetFormat = format,
+                    sampleCount = 1,
                     capabilities = capabilities,
                     resourceScope = resources,
                     executionCaches = executionCaches,
@@ -1174,6 +1176,7 @@ private class WgpuOffscreenTarget(
                         frameId = frameId,
                         budgetClass = "runtime-coverage-mask",
                         targetFormat = offscreenTextureFormats.getValue(mask.sampleLabel),
+                        sampleCount = mask.sampleCount,
                         capabilities = capabilities,
                         resourceScope = resources,
                         executionCaches = executionCaches,
@@ -1386,6 +1389,7 @@ private class WgpuOffscreenTarget(
                 frameId = frameId,
                 budgetClass = "runtime-fullscreen",
                 targetFormat = textureFormat,
+                sampleCount = 1,
                 capabilities = capabilities,
                 resourceScope = resources,
                 executionCaches = executionCaches,
@@ -1554,6 +1558,7 @@ private class WgpuWindowSurface(
                     frameId = frameId,
                     budgetClass = "runtime-fullscreen",
                     targetFormat = runtime.format,
+                    sampleCount = 1,
                     capabilities = capabilities,
                     resourceScope = resources,
                     executionCaches = executionCaches,
@@ -1635,6 +1640,7 @@ private class WgpuRenderRecorder(
     private val frameId: String,
     private val budgetClass: String,
     private val targetFormat: GPUTextureFormat,
+    private val sampleCount: Int,
     private val capabilities: GPUCapabilities,
     private val resourceScope: GPUResourceScope,
     private val executionCaches: WgpuExecutionCaches,
@@ -1911,7 +1917,13 @@ private class WgpuRenderRecorder(
         writeTrackedBuffer(indexBuffer, 0uL, ArrayBuffer.of(indices))
 
         val vertexWgsl = VERTEX_COLOR_WGSL
-        val keys = stencilExecutionCacheKeys(wgsl = vertexWgsl, targetFormat = targetFormat, vertexStage = true, blendMode = blendMode)
+        val keys = stencilExecutionCacheKeys(
+            wgsl = vertexWgsl,
+            targetFormat = targetFormat,
+            sampleCount = sampleCount,
+            vertexStage = true,
+            blendMode = blendMode,
+        )
         executionCaches.recordPreimages(keys)
         val bindGroupLayout = executionCaches.bindGroupLayout(device = device, keys = keys)
         val shader = executionCaches.shaderModule(device = device, wgsl = vertexWgsl, keys = keys)
@@ -1921,6 +1933,7 @@ private class WgpuRenderRecorder(
             shader = shader,
             pipelineLayout = pipelineLayout,
             targetFormat = targetFormat,
+            sampleCount = sampleCount,
             keys = keys,
             blendMode = blendMode,
         )
@@ -2182,7 +2195,13 @@ private class WgpuRenderRecorder(
 
         val wgsl = TEXT_ATLAS_A8_WGSL
         val textureFormat = atlasFormat.toWgpuTextureFormat()
-        val keys = textAtlasExecutionCacheKeys(wgsl = wgsl, targetFormat = targetFormat, textureFormat = textureFormat, blendMode = blendMode)
+        val keys = textAtlasExecutionCacheKeys(
+            wgsl = wgsl,
+            targetFormat = targetFormat,
+            textureFormat = textureFormat,
+            sampleCount = sampleCount,
+            blendMode = blendMode,
+        )
         executionCaches.recordPreimages(keys)
 
         val bindGroupLayout = executionCaches.bindGroupLayout(device = device, keys = keys)
@@ -2198,6 +2217,7 @@ private class WgpuRenderRecorder(
             shader = shader,
             pipelineLayout = pipelineLayout,
             targetFormat = targetFormat,
+            sampleCount = sampleCount,
             keys = keys,
             blendMode = blendMode,
         )
@@ -2333,7 +2353,13 @@ private class WgpuRenderRecorder(
 
         val wgsl = colorGlyphCompositeWgsl()
         val textureFormat = atlasFormat.toWgpuTextureFormat()
-        val keys = colorGlyphExecutionCacheKeys(wgsl = wgsl, targetFormat = targetFormat, textureFormat = textureFormat, blendMode = blendMode)
+        val keys = colorGlyphExecutionCacheKeys(
+            wgsl = wgsl,
+            targetFormat = targetFormat,
+            textureFormat = textureFormat,
+            sampleCount = sampleCount,
+            blendMode = blendMode,
+        )
         executionCaches.recordPreimages(keys)
 
         val bindGroupLayout = executionCaches.bindGroupLayout(device = device, keys = keys)
@@ -2349,6 +2375,7 @@ private class WgpuRenderRecorder(
             shader = shader,
             pipelineLayout = pipelineLayout,
             targetFormat = targetFormat,
+            sampleCount = sampleCount,
             keys = keys,
             blendMode = blendMode,
         )
@@ -2482,8 +2509,19 @@ private class WgpuRenderRecorder(
             ?: error("Offscreen texture not found: $textureLabel")
         val textureFormat = GPUTextureFormat.RGBA8Unorm
 
-        val textureKeys = fullscreenTextureExecutionCacheKeys(wgsl = wgsl, targetFormat = targetFormat, textureFormat = textureFormat, blendMode = blendMode)
-        val fullKeys = fullscreenExecutionCacheKeys(wgsl = wgsl, targetFormat = targetFormat, blendMode = blendMode)
+        val textureKeys = fullscreenTextureExecutionCacheKeys(
+            wgsl = wgsl,
+            targetFormat = targetFormat,
+            textureFormat = textureFormat,
+            sampleCount = sampleCount,
+            blendMode = blendMode,
+        )
+        val fullKeys = fullscreenExecutionCacheKeys(
+            wgsl = wgsl,
+            targetFormat = targetFormat,
+            sampleCount = sampleCount,
+            blendMode = blendMode,
+        )
 
         val textureBindGroupLayout = executionCaches.textureBindGroupLayout(
             device = device,
@@ -2504,6 +2542,7 @@ private class WgpuRenderRecorder(
             shader = shader,
             pipelineLayout = pipelineLayout,
             targetFormat = targetFormat,
+            sampleCount = sampleCount,
             keys = textureKeys,
             blendMode = blendMode,
         )
@@ -2626,6 +2665,7 @@ private class WgpuRenderRecorder(
             wgsl = wgsl,
             targetFormat = targetFormat,
             textureCount = textureLabels.size,
+            sampleCount = sampleCount,
             blendMode = blendMode,
         )
         executionCaches.recordPreimages(keys)
@@ -2646,6 +2686,7 @@ private class WgpuRenderRecorder(
             shader = shader,
             pipelineLayout = pipelineLayout,
             targetFormat = targetFormat,
+            sampleCount = sampleCount,
             keys = keys,
             blendMode = blendMode,
         )
@@ -2727,8 +2768,17 @@ private class WgpuRenderRecorder(
             ?: error("Destination texture not found: $dstTextureLabel")
         val textureFormat = GPUTextureFormat.RGBA8Unorm
 
-        val textureKeys = blendTextureExecutionCacheKeys(wgsl = wgsl, targetFormat = targetFormat, textureFormat = textureFormat)
-        val fullKeys = fullscreenExecutionCacheKeys(wgsl = wgsl, targetFormat = targetFormat)
+        val textureKeys = blendTextureExecutionCacheKeys(
+            wgsl = wgsl,
+            targetFormat = targetFormat,
+            textureFormat = textureFormat,
+            sampleCount = sampleCount,
+        )
+        val fullKeys = fullscreenExecutionCacheKeys(
+            wgsl = wgsl,
+            targetFormat = targetFormat,
+            sampleCount = sampleCount,
+        )
 
         executionCaches.recordPreimages(textureKeys)
         val textureBindGroupLayout = executionCaches.blendTextureBindGroupLayout(
@@ -2750,6 +2800,7 @@ private class WgpuRenderRecorder(
             shader = shader,
             pipelineLayout = pipelineLayout,
             targetFormat = targetFormat,
+            sampleCount = sampleCount,
             keys = textureKeys,
         )
 
@@ -2840,12 +2891,18 @@ private class WgpuRenderRecorder(
         ) { it.close() }
         writeTrackedBuffer(indexBuffer, 0uL, ArrayBuffer.of(triangleData.indices))
 
-        val keys = stencilExecutionCacheKeys(wgsl = wgsl, targetFormat = targetFormat, vertexStage = true)
+        val keys = stencilExecutionCacheKeys(
+            wgsl = wgsl,
+            targetFormat = targetFormat,
+            sampleCount = sampleCount,
+            vertexStage = true,
+        )
         executionCaches.recordPreimages(keys)
         val pipeline = executionCaches.stencilWriteRenderPipeline(
             device = device,
             wgsl = wgsl,
             targetFormat = targetFormat,
+            sampleCount = sampleCount,
             keys = keys,
         )
 
@@ -2862,7 +2919,13 @@ private class WgpuRenderRecorder(
         draws: List<WgpuFullscreenUniformDraw>,
         blendMode: GPUBlendMode? = null,
     ) {
-        val keys = stencilExecutionCacheKeys(wgsl = wgsl, targetFormat = targetFormat, vertexStage = false, blendMode = blendMode)
+        val keys = stencilExecutionCacheKeys(
+            wgsl = wgsl,
+            targetFormat = targetFormat,
+            sampleCount = sampleCount,
+            vertexStage = false,
+            blendMode = blendMode,
+        )
         executionCaches.recordPreimages(keys)
         val bindGroupLayout = executionCaches.bindGroupLayout(device = device, keys = keys)
         val shader = executionCaches.shaderModule(device = device, wgsl = wgsl, keys = keys)
@@ -2872,6 +2935,7 @@ private class WgpuRenderRecorder(
             shader = shader,
             pipelineLayout = pipelineLayout,
             targetFormat = targetFormat,
+            sampleCount = sampleCount,
             keys = keys,
             blendMode = blendMode,
         )
@@ -2953,6 +3017,7 @@ private class WgpuRenderRecorder(
             wgsl = wgsl,
             targetFormat = targetFormat,
             textureFormat = gpuTextureFormat,
+            sampleCount = sampleCount,
             blendMode = blendMode,
             stencilTest = stencilMode == GPUBackendStencilMode.Test,
         )
@@ -2971,6 +3036,7 @@ private class WgpuRenderRecorder(
                 shader = shader,
                 pipelineLayout = pipelineLayout,
                 targetFormat = targetFormat,
+                sampleCount = sampleCount,
                 keys = keys,
                 blendMode = blendMode,
             )
@@ -2980,6 +3046,7 @@ private class WgpuRenderRecorder(
                 shader = shader,
                 pipelineLayout = pipelineLayout,
                 targetFormat = targetFormat,
+                sampleCount = sampleCount,
                 keys = keys,
                 blendMode = blendMode,
             )
@@ -3080,7 +3147,12 @@ private class WgpuRenderRecorder(
         }
         if (draws.isEmpty()) return
 
-        val keys = fullscreenExecutionCacheKeys(wgsl = wgsl, targetFormat = targetFormat, blendMode = blendMode)
+        val keys = fullscreenExecutionCacheKeys(
+            wgsl = wgsl,
+            targetFormat = targetFormat,
+            sampleCount = sampleCount,
+            blendMode = blendMode,
+        )
         executionCaches.recordPreimages(keys)
         val bindGroupLayout = executionCaches.bindGroupLayout(device = device, keys = keys)
         val shader = executionCaches.shaderModule(device = device, wgsl = wgsl, keys = keys)
@@ -3094,6 +3166,7 @@ private class WgpuRenderRecorder(
             shader = shader,
             pipelineLayout = pipelineLayout,
             targetFormat = targetFormat,
+            sampleCount = sampleCount,
             keys = keys,
             blendMode = blendMode,
         )
@@ -4273,6 +4346,7 @@ private class WgpuExecutionCaches(
         shader: GPUShaderModule,
         pipelineLayout: GPUPipelineLayout,
         targetFormat: GPUTextureFormat,
+        sampleCount: Int,
         keys: FullscreenExecutionCacheKeys,
         blendMode: GPUBlendMode? = null,
     ): GPURenderPipeline {
@@ -4307,6 +4381,7 @@ private class WgpuExecutionCaches(
                         stencilReadMask = 0u,
                         stencilWriteMask = 0u,
                     ),
+                    multisample = MultisampleState(count = sampleCount.toUInt()),
                     fragment = FragmentState(
                         module = shader,
                         entryPoint = "fs_main",
@@ -4329,6 +4404,7 @@ private class WgpuExecutionCaches(
         device: GPUDevice,
         wgsl: String,
         targetFormat: GPUTextureFormat,
+        sampleCount: Int,
         keys: FullscreenExecutionCacheKeys,
     ): GPURenderPipeline {
         val decision = renderPipelineCache.getOrCreate(
@@ -4382,6 +4458,7 @@ private class WgpuExecutionCaches(
                             stencilReadMask = 0xFFu,
                             stencilWriteMask = 0xFFu,
                         ),
+                        multisample = MultisampleState(count = sampleCount.toUInt()),
                         fragment = FragmentState(
                             module = shader,
                             entryPoint = "fs_main",
@@ -4420,6 +4497,7 @@ private class WgpuExecutionCaches(
         shader: GPUShaderModule,
         pipelineLayout: GPUPipelineLayout,
         targetFormat: GPUTextureFormat,
+        sampleCount: Int,
         keys: FullscreenExecutionCacheKeys,
         blendMode: GPUBlendMode? = null,
     ): GPURenderPipeline {
@@ -4454,6 +4532,7 @@ private class WgpuExecutionCaches(
                         stencilReadMask = 0xFFu,
                         stencilWriteMask = 0xFFu,
                     ),
+                    multisample = MultisampleState(count = sampleCount.toUInt()),
                     fragment = FragmentState(
                         module = shader,
                         entryPoint = "fs_main",
@@ -4477,6 +4556,7 @@ private class WgpuExecutionCaches(
         shader: GPUShaderModule,
         pipelineLayout: GPUPipelineLayout,
         targetFormat: GPUTextureFormat,
+        sampleCount: Int,
         keys: FullscreenExecutionCacheKeys,
         blendMode: GPUBlendMode? = null,
     ): GPURenderPipeline {
@@ -4531,6 +4611,7 @@ private class WgpuExecutionCaches(
                         stencilReadMask = 0u,
                         stencilWriteMask = 0u,
                     ),
+                    multisample = MultisampleState(count = sampleCount.toUInt()),
                     fragment = FragmentState(
                         module = shader,
                         entryPoint = "fs_main",
@@ -4554,6 +4635,7 @@ private class WgpuExecutionCaches(
         shader: GPUShaderModule,
         pipelineLayout: GPUPipelineLayout,
         targetFormat: GPUTextureFormat,
+        sampleCount: Int,
         keys: FullscreenExecutionCacheKeys,
         blendMode: GPUBlendMode? = null,
     ): GPURenderPipeline {
@@ -4608,6 +4690,7 @@ private class WgpuExecutionCaches(
                         stencilReadMask = 0u,
                         stencilWriteMask = 0u,
                     ),
+                    multisample = MultisampleState(count = sampleCount.toUInt()),
                     fragment = FragmentState(
                         module = shader,
                         entryPoint = "fs_main",
@@ -4740,6 +4823,7 @@ private fun fullscreenTextureExecutionCacheKeys(
     wgsl: String,
     targetFormat: GPUTextureFormat,
     textureFormat: GPUTextureFormat,
+    sampleCount: Int,
     blendMode: GPUBlendMode? = null,
     stencilTest: Boolean = false,
 ): FullscreenExecutionCacheKeys {
@@ -4804,7 +4888,7 @@ private fun fullscreenTextureExecutionCacheKeys(
         vertexLayoutHash = stableSha256("vertex-layout:fullscreen-triangle:vertex-index-only"),
         targetFormatClass = targetFormatClass,
         blendStateHash = stableSha256("blend:$blendLabel-premul:v1"),
-        sampleStateHash = stableSha256("sample-state:count=1:mask=all"),
+        sampleStateHash = sampleStateHash(sampleCount),
         bindGroupLayoutHash = "$bindGroupLayoutHash,$textureBindGroupLayoutHash",
         capabilityClass = capabilityClass,
         capabilityFacts = listOf(
@@ -4841,6 +4925,7 @@ private fun blendTextureExecutionCacheKeys(
     wgsl: String,
     targetFormat: GPUTextureFormat,
     textureFormat: GPUTextureFormat,
+    sampleCount: Int,
 ): FullscreenExecutionCacheKeys {
     val targetFormatClass = targetFormat.toBackendColorFormat()
     val wgslHash = stableSha256(wgsl)
@@ -4892,7 +4977,7 @@ private fun blendTextureExecutionCacheKeys(
         vertexLayoutHash = stableSha256("vertex-layout:fullscreen-triangle:vertex-index-only"),
         targetFormatClass = targetFormatClass,
         blendStateHash = stableSha256("blend:src_over-premul:v1"),
-        sampleStateHash = stableSha256("sample-state:count=1:mask=all"),
+        sampleStateHash = sampleStateHash(sampleCount),
         bindGroupLayoutHash = "$bindGroupLayoutHash,$textureBindGroupLayoutHash",
         capabilityClass = "webgpu-wgsl-blend-pass",
         capabilityFacts = listOf("adapter-backed-helper", "targetFormat=$targetFormatClass", "textureFormat=${textureFormat.name}"),
@@ -4925,6 +5010,7 @@ private fun multiTextureExecutionCacheKeys(
     wgsl: String,
     targetFormat: GPUTextureFormat,
     textureCount: Int,
+    sampleCount: Int,
     blendMode: GPUBlendMode? = null,
 ): FullscreenExecutionCacheKeys {
     require(textureCount in 2..3) { "Multi-texture cache keys require two or three textures" }
@@ -4983,7 +5069,7 @@ private fun multiTextureExecutionCacheKeys(
         vertexLayoutHash = stableSha256("vertex-layout:fullscreen-triangle:vertex-index-only"),
         targetFormatClass = targetFormatClass,
         blendStateHash = stableSha256("blend:$blendLabel-premul:v1"),
-        sampleStateHash = stableSha256("sample-state:count=1:mask=all"),
+        sampleStateHash = sampleStateHash(sampleCount),
         bindGroupLayoutHash = "$bindGroupLayoutHash,$textureBindGroupLayoutHash",
         capabilityClass = "webgpu-wgsl-$role",
         capabilityFacts = listOf(
@@ -5018,6 +5104,7 @@ private fun multiTextureExecutionCacheKeys(
 private fun fullscreenExecutionCacheKeys(
     wgsl: String,
     targetFormat: GPUTextureFormat,
+    sampleCount: Int,
     blendMode: GPUBlendMode? = null,
 ): FullscreenExecutionCacheKeys {
     val blendLabel = blendMode?.gpuLabel ?: "src_over"
@@ -5060,7 +5147,7 @@ private fun fullscreenExecutionCacheKeys(
         vertexLayoutHash = stableSha256("vertex-layout:fullscreen-triangle:vertex-index-only"),
         targetFormatClass = targetFormatClass,
         blendStateHash = stableSha256("blend:$blendLabel-premul:v1"),
-        sampleStateHash = stableSha256("sample-state:count=1:mask=all"),
+        sampleStateHash = sampleStateHash(sampleCount),
         bindGroupLayoutHash = bindGroupLayoutHash,
         capabilityClass = "webgpu-wgsl-fullscreen-pass",
         capabilityFacts = listOf("adapter-backed-helper", "targetFormat=$targetFormatClass"),
@@ -5089,6 +5176,7 @@ private fun textAtlasExecutionCacheKeys(
     wgsl: String,
     targetFormat: GPUTextureFormat,
     textureFormat: GPUTextureFormat,
+    sampleCount: Int,
     blendMode: GPUBlendMode? = null,
 ): FullscreenExecutionCacheKeys {
     val blendLabel = blendMode?.gpuLabel ?: "src_over"
@@ -5140,7 +5228,7 @@ private fun textAtlasExecutionCacheKeys(
         vertexLayoutHash = stableSha256("vertex-layout:text-atlas:float32x2+float32x2"),
         targetFormatClass = targetFormatClass,
         blendStateHash = stableSha256("blend:$blendLabel-premul:v1"),
-        sampleStateHash = stableSha256("sample-state:count=1:mask=all"),
+        sampleStateHash = sampleStateHash(sampleCount),
         bindGroupLayoutHash = "$bindGroupLayoutHash,$textureBindGroupLayoutHash",
         capabilityClass = "webgpu-wgsl-text-atlas-pass",
         capabilityFacts = listOf("adapter-backed-helper", "targetFormat=$targetFormatClass", "textureFormat=${textureFormat.name}"),
@@ -5172,6 +5260,7 @@ private fun colorGlyphExecutionCacheKeys(
     wgsl: String,
     targetFormat: GPUTextureFormat,
     textureFormat: GPUTextureFormat,
+    sampleCount: Int,
     blendMode: GPUBlendMode? = null,
 ): FullscreenExecutionCacheKeys {
     val blendLabel = blendMode?.gpuLabel ?: "src_over"
@@ -5223,7 +5312,7 @@ private fun colorGlyphExecutionCacheKeys(
         vertexLayoutHash = stableSha256("vertex-layout:color-glyph:float32x2+float32x2"),
         targetFormatClass = targetFormatClass,
         blendStateHash = stableSha256("blend:$blendLabel-premul:v1"),
-        sampleStateHash = stableSha256("sample-state:count=1:mask=all"),
+        sampleStateHash = sampleStateHash(sampleCount),
         bindGroupLayoutHash = "$bindGroupLayoutHash,$textureBindGroupLayoutHash",
         capabilityClass = "webgpu-wgsl-color-glyph-pass",
         capabilityFacts = listOf("adapter-backed-helper", "targetFormat=$targetFormatClass", "textureFormat=${textureFormat.name}"),
@@ -5254,6 +5343,7 @@ private fun colorGlyphExecutionCacheKeys(
 private fun stencilExecutionCacheKeys(
     wgsl: String,
     targetFormat: GPUTextureFormat,
+    sampleCount: Int,
     vertexStage: Boolean,
     blendMode: GPUBlendMode? = null,
 ): FullscreenExecutionCacheKeys {
@@ -5298,7 +5388,7 @@ private fun stencilExecutionCacheKeys(
         vertexLayoutHash = if (vertexStage) stableSha256("vertex-layout:float32x2:stencil") else stableSha256("vertex-layout:fullscreen-triangle:vertex-index-only"),
         targetFormatClass = targetFormatClass,
         blendStateHash = stableSha256("blend:$blendLabel-premul:v1"),
-        sampleStateHash = stableSha256("sample-state:count=1:mask=all"),
+        sampleStateHash = sampleStateHash(sampleCount),
         bindGroupLayoutHash = bindGroupLayoutHash,
         capabilityClass = "webgpu-wgsl-$role",
         capabilityFacts = listOf("adapter-backed-helper", "targetFormat=$targetFormatClass"),
@@ -5354,6 +5444,11 @@ private fun GPUDevice.createRenderPipelineWithValidationScope(
 private fun stableSha256(input: String): String {
     val digest = MessageDigest.getInstance("SHA-256").digest(input.toByteArray(Charsets.UTF_8))
     return "sha256:" + digest.joinToString(separator = "") { byte -> "%02x".format(byte) }
+}
+
+private fun sampleStateHash(sampleCount: Int): String {
+    require(sampleCount in setOf(1, 4)) { "GPU pipeline sampleCount must be 1 or 4" }
+    return stableSha256("sample-state:count=$sampleCount:mask=all")
 }
 
 private fun sha256Hex(input: String): String {

@@ -115,6 +115,12 @@ class GPUBackendRuntimeContractsTest {
             GPUBackendCoverageMaskRequest(label = "clip", width = 16, height = 12, sampleCount = 0)
         }
         assertFailsWith<IllegalArgumentException> {
+            GPUBackendCoverageMaskRequest(label = "clip", width = 16, height = 12, sampleCount = 2)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            GPUBackendCoverageMaskRequest(label = "clip", width = 16, height = 12, sampleCount = 8)
+        }
+        assertFailsWith<IllegalArgumentException> {
             GPUBackendCoverageMask(
                 renderLabel = "render",
                 sampleLabel = "",
