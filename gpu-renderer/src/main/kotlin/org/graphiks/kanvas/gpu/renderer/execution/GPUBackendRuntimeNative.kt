@@ -1668,19 +1668,25 @@ private class WgpuRenderRecorder(
     private val vertexColorIndexStore = mutableMapOf<String, IntArray>()
     private var texturedVertexPipelineCache = mutableMapOf<String, GPURenderPipeline>()
     private var texturedVertexBindGroupLayout: GPUBindGroupLayout? = null
+    private var texturedVertexTextureBindGroupLayout: GPUBindGroupLayout? = null
     private var dualUVVertexPipelineCache = mutableMapOf<String, GPURenderPipeline>()
     private var dualUVVertexBindGroupLayout: GPUBindGroupLayout? = null
+    private var dualUVVertexTextureBindGroupLayout: GPUBindGroupLayout? = null
     private val payloadTargetId = fullscreenPayloadTargetId(targetId)
 
     fun closeCachedResources() {
         texturedVertexBindGroupLayout?.let { closeQuietly { it.close() } }
+        texturedVertexTextureBindGroupLayout?.let { closeQuietly { it.close() } }
         dualUVVertexBindGroupLayout?.let { closeQuietly { it.close() } }
+        dualUVVertexTextureBindGroupLayout?.let { closeQuietly { it.close() } }
         texturedVertexPipelineCache.values.forEach { closeQuietly { it.close() } }
         dualUVVertexPipelineCache.values.forEach { closeQuietly { it.close() } }
         texturedVertexPipelineCache.clear()
         dualUVVertexPipelineCache.clear()
         texturedVertexBindGroupLayout = null
+        texturedVertexTextureBindGroupLayout = null
         dualUVVertexBindGroupLayout = null
+        dualUVVertexTextureBindGroupLayout = null
     }
 
     private fun closeQuietly(block: () -> Unit) {
@@ -2036,13 +2042,24 @@ private class WgpuRenderRecorder(
         val uniformBuffer = createUniformBuffer(uniformDraw.uniformBytes)
 
         val bindGroupLayout = getOrCreateTexturedVertexBindGroupLayout()
-        val bindGroup = resourceScope.track(
+        val textureBindGroupLayout = getOrCreateTexturedVertexTextureBindGroupLayout()
+        val uniformBindGroup = resourceScope.track(
             createTrackedBindGroup(
                 BindGroupDescriptor(
-                    label = "texturedVertex:$vertexBufferLabel",
+                    label = "texturedVertex.uniform:$vertexBufferLabel",
                     layout = bindGroupLayout,
                     entries = listOf(
                         BindGroupEntry(binding = 0u, resource = BufferBinding(buffer = uniformBuffer)),
+                    ),
+                ),
+            ),
+        ) { it.close() }
+        val textureBindGroup = resourceScope.track(
+            createTrackedBindGroup(
+                BindGroupDescriptor(
+                    label = "texturedVertex.texture:$vertexBufferLabel",
+                    layout = textureBindGroupLayout,
+                    entries = listOf(
                         BindGroupEntry(binding = 1u, resource = textureView),
                         BindGroupEntry(binding = 2u, resource = sampler),
                     ),
@@ -2050,10 +2067,11 @@ private class WgpuRenderRecorder(
             ),
         ) { it.close() }
 
-        val pipeline = getOrCreateTexturedVertexPipeline(textureFormat, blendMode)
+        val pipeline = getOrCreateTexturedVertexPipeline(textureFormat, blendMode, sampleCount)
 
         setPipelineAction(pipeline)
-        setBindGroupAction(0u, bindGroup)
+        setBindGroupAction(0u, uniformBindGroup)
+        setBindGroupAction(1u, textureBindGroup)
         setVertexBufferAction(0u, vertexBuffer)
         setIndexBufferAction(indexBuffer, GPUIndexFormat.Uint32)
         setScissorAction(
@@ -2113,13 +2131,24 @@ private class WgpuRenderRecorder(
         val uniformBuffer = createUniformBuffer(uniformDraw.uniformBytes)
 
         val bindGroupLayout = getOrCreateDualUVVertexBindGroupLayout()
-        val bindGroup = resourceScope.track(
+        val textureBindGroupLayout = getOrCreateDualUVVertexTextureBindGroupLayout()
+        val uniformBindGroup = resourceScope.track(
             createTrackedBindGroup(
                 BindGroupDescriptor(
-                    label = "dualVertex:$vertexBufferLabel",
+                    label = "dualVertex.uniform:$vertexBufferLabel",
                     layout = bindGroupLayout,
                     entries = listOf(
                         BindGroupEntry(binding = 0u, resource = BufferBinding(buffer = uniformBuffer)),
+                    ),
+                ),
+            ),
+        ) { it.close() }
+        val textureBindGroup = resourceScope.track(
+            createTrackedBindGroup(
+                BindGroupDescriptor(
+                    label = "dualVertex.texture:$vertexBufferLabel",
+                    layout = textureBindGroupLayout,
+                    entries = listOf(
                         BindGroupEntry(binding = 1u, resource = tex1View),
                         BindGroupEntry(binding = 2u, resource = sampler),
                         BindGroupEntry(binding = 3u, resource = tex2View),
@@ -2129,10 +2158,11 @@ private class WgpuRenderRecorder(
             ),
         ) { it.close() }
 
-        val pipeline = getOrCreateDualUVVertexPipeline(textureFormat, blendMode)
+        val pipeline = getOrCreateDualUVVertexPipeline(textureFormat, blendMode, sampleCount)
 
         setPipelineAction(pipeline)
-        setBindGroupAction(0u, bindGroup)
+        setBindGroupAction(0u, uniformBindGroup)
+        setBindGroupAction(1u, textureBindGroup)
         setVertexBufferAction(0u, vertexBuffer)
         setIndexBufferAction(indexBuffer, GPUIndexFormat.Uint32)
         setScissorAction(
@@ -3721,6 +3751,19 @@ private class WgpuRenderRecorder(
                             visibility = GPUShaderStage.Vertex or GPUShaderStage.Fragment,
                             buffer = BufferBindingLayout(type = GPUBufferBindingType.Uniform),
                         ),
+                    ),
+                ),
+            )
+        }
+        return texturedVertexBindGroupLayout!!
+    }
+
+    private fun getOrCreateTexturedVertexTextureBindGroupLayout(): GPUBindGroupLayout {
+        if (texturedVertexTextureBindGroupLayout == null) {
+            texturedVertexTextureBindGroupLayout = device.createBindGroupLayout(
+                BindGroupLayoutDescriptor(
+                    label = "texturedVertexTextureLayout",
+                    entries = listOf(
                         BindGroupLayoutEntry(
                             binding = 1u,
                             visibility = GPUShaderStage.Fragment,
@@ -3739,25 +3782,34 @@ private class WgpuRenderRecorder(
                 ),
             )
         }
-        return texturedVertexBindGroupLayout!!
+        return texturedVertexTextureBindGroupLayout!!
     }
 
-    private fun getOrCreateTexturedVertexPipeline(colorFormat: String, blendMode: GPUBlendMode?): GPURenderPipeline {
-        val key = "$colorFormat:${blendMode?.name ?: "none"}"
+    private fun getOrCreateTexturedVertexPipeline(
+        colorFormat: String,
+        blendMode: GPUBlendMode?,
+        sampleCount: Int,
+    ): GPURenderPipeline {
+        val key = "$colorFormat:${blendMode?.name ?: "none"}:samples=$sampleCount"
         return texturedVertexPipelineCache.getOrPut(key) {
-            createTexturedVertexPipeline(colorFormat, blendMode)
+            createTexturedVertexPipeline(colorFormat, blendMode, sampleCount)
         }
     }
 
-    private fun createTexturedVertexPipeline(colorFormat: String, blendMode: GPUBlendMode?): GPURenderPipeline {
+    private fun createTexturedVertexPipeline(
+        colorFormat: String,
+        blendMode: GPUBlendMode?,
+        sampleCount: Int,
+    ): GPURenderPipeline {
         val shaderModule = device.createShaderModule(
             ShaderModuleDescriptor(label = "texturedVertex:$colorFormat", code = TexturedVerticesWgsl),
         )
         val bindGroupLayout = getOrCreateTexturedVertexBindGroupLayout()
+        val textureBindGroupLayout = getOrCreateTexturedVertexTextureBindGroupLayout()
         val pipelineLayout = device.createPipelineLayout(
             PipelineLayoutDescriptor(
                 label = "texturedVertexLayout",
-                bindGroupLayouts = listOf(bindGroupLayout),
+                bindGroupLayouts = listOf(bindGroupLayout, textureBindGroupLayout),
             ),
         )
         try {
@@ -3806,6 +3858,7 @@ private class WgpuRenderRecorder(
                         stencilReadMask = 0u,
                         stencilWriteMask = 0u,
                     ),
+                    multisample = MultisampleState(count = sampleCount.toUInt()),
                     fragment = FragmentState(
                         module = shaderModule,
                         entryPoint = "fs_main",
@@ -3835,6 +3888,19 @@ private class WgpuRenderRecorder(
                             visibility = GPUShaderStage.Vertex or GPUShaderStage.Fragment,
                             buffer = BufferBindingLayout(type = GPUBufferBindingType.Uniform),
                         ),
+                    ),
+                ),
+            )
+        }
+        return dualUVVertexBindGroupLayout!!
+    }
+
+    private fun getOrCreateDualUVVertexTextureBindGroupLayout(): GPUBindGroupLayout {
+        if (dualUVVertexTextureBindGroupLayout == null) {
+            dualUVVertexTextureBindGroupLayout = device.createBindGroupLayout(
+                BindGroupLayoutDescriptor(
+                    label = "dualUVVertexTextureLayout",
+                    entries = listOf(
                         BindGroupLayoutEntry(
                             binding = 1u,
                             visibility = GPUShaderStage.Fragment,
@@ -3867,25 +3933,34 @@ private class WgpuRenderRecorder(
                 ),
             )
         }
-        return dualUVVertexBindGroupLayout!!
+        return dualUVVertexTextureBindGroupLayout!!
     }
 
-    private fun getOrCreateDualUVVertexPipeline(colorFormat: String, blendMode: GPUBlendMode?): GPURenderPipeline {
-        val key = "$colorFormat:${blendMode?.name ?: "none"}"
+    private fun getOrCreateDualUVVertexPipeline(
+        colorFormat: String,
+        blendMode: GPUBlendMode?,
+        sampleCount: Int,
+    ): GPURenderPipeline {
+        val key = "$colorFormat:${blendMode?.name ?: "none"}:samples=$sampleCount"
         return dualUVVertexPipelineCache.getOrPut(key) {
-            createDualUVVertexPipeline(colorFormat, blendMode)
+            createDualUVVertexPipeline(colorFormat, blendMode, sampleCount)
         }
     }
 
-    private fun createDualUVVertexPipeline(colorFormat: String, blendMode: GPUBlendMode?): GPURenderPipeline {
+    private fun createDualUVVertexPipeline(
+        colorFormat: String,
+        blendMode: GPUBlendMode?,
+        sampleCount: Int,
+    ): GPURenderPipeline {
         val shaderModule = device.createShaderModule(
             ShaderModuleDescriptor(label = "dualUVVertex:$colorFormat", code = TexturedVerticesDualBlendWgsl),
         )
         val bindGroupLayout = getOrCreateDualUVVertexBindGroupLayout()
+        val textureBindGroupLayout = getOrCreateDualUVVertexTextureBindGroupLayout()
         val pipelineLayout = device.createPipelineLayout(
             PipelineLayoutDescriptor(
                 label = "dualUVVertexLayout",
-                bindGroupLayouts = listOf(bindGroupLayout),
+                bindGroupLayouts = listOf(bindGroupLayout, textureBindGroupLayout),
             ),
         )
         try {
@@ -3939,6 +4014,7 @@ private class WgpuRenderRecorder(
                         stencilReadMask = 0u,
                         stencilWriteMask = 0u,
                     ),
+                    multisample = MultisampleState(count = sampleCount.toUInt()),
                     fragment = FragmentState(
                         module = shaderModule,
                         entryPoint = "fs_main",

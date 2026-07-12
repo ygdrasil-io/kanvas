@@ -466,6 +466,84 @@ class GPUBackendRuntimeNativeSmokeTest {
     }
 
     @Test
+    fun `coverage mask runs textured vertex and dual UV pipelines at four samples`() {
+        GPUBackendRuntimeFactory.createOrNull().use { session ->
+            assumeTrue(session != null, "GPU backend unavailable in current environment")
+            session!!.createOffscreenTarget(
+                GPUOffscreenTargetRequest(width = 4, height = 4, colorFormat = "rgba8unorm"),
+            ).use { target ->
+                val mask = target.createCoverageMask(
+                    GPUBackendCoverageMaskRequest("vertex-msaa", 4, 4, sampleCount = 4),
+                )
+                val uniform = GPUBackendRawUniformDraw(
+                    uniformBytes = ByteBuffer.allocate(16).order(ByteOrder.LITTLE_ENDIAN).apply {
+                        putFloat(1f)
+                        putInt(0)
+                    }.array(),
+                    scissorX = 0,
+                    scissorY = 0,
+                    scissorWidth = 4,
+                    scissorHeight = 4,
+                )
+                val rgba = byteArrayOf(
+                    0xff.toByte(), 0, 0, 0xff.toByte(),
+                    0, 0xff.toByte(), 0, 0xff.toByte(),
+                    0, 0, 0xff.toByte(), 0xff.toByte(),
+                    0xff.toByte(), 0xff.toByte(), 0xff.toByte(), 0xff.toByte(),
+                )
+
+                target.encodeCoverageMask(mask, GPUClearColor(0.0, 0.0, 0.0, 0.0)) {
+                    val texturedVertexBuffer = createVertexPositionUVBuffer(
+                        GPUBackendVertexPositionUVData(
+                            vertexData = floatArrayOf(
+                                -1f, -1f, 0f, 1f,
+                                1f, -1f, 1f, 1f,
+                                -1f, 1f, 0f, 0f,
+                                1f, 1f, 1f, 0f,
+                            ),
+                            indices = intArrayOf(0, 1, 2, 2, 1, 3),
+                        ),
+                    )
+                    drawVertexPositionUVIndexed(
+                        vertexBufferLabel = texturedVertexBuffer,
+                        indexCount = 6,
+                        uniformDraw = uniform,
+                        textureRgba = rgba,
+                        textureWidth = 2,
+                        textureHeight = 2,
+                        textureFormat = "rgba8unorm",
+                    )
+
+                    val dualVertexBuffer = createVertexPositionUVBuffer(
+                        GPUBackendVertexPositionUVData(
+                            vertexData = floatArrayOf(
+                                -1f, -1f, 0f, 1f, 0f, 1f,
+                                1f, -1f, 1f, 1f, 1f, 1f,
+                                -1f, 1f, 0f, 0f, 0f, 0f,
+                                1f, 1f, 1f, 0f, 1f, 0f,
+                            ),
+                            indices = intArrayOf(0, 1, 2, 2, 1, 3),
+                        ),
+                    )
+                    drawVertexPositionDualUVIndexed(
+                        vertexBufferLabel = dualVertexBuffer,
+                        indexCount = 6,
+                        uniformDraw = uniform,
+                        texture1Rgba = rgba,
+                        texture1Width = 2,
+                        texture1Height = 2,
+                        texture2Rgba = rgba,
+                        texture2Width = 2,
+                        texture2Height = 2,
+                        textureFormat = "rgba8unorm",
+                    )
+                }
+                target.releaseCoverageMask(mask)
+            }
+        }
+    }
+
+    @Test
     fun `multi texture passes cache layout topology without texture labels`() {
         GPUBackendRuntimeFactory.createOrNull().use { session ->
             assumeTrue(session != null, "GPU backend unavailable in current environment")
