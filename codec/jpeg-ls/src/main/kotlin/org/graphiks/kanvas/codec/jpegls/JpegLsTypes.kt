@@ -164,7 +164,7 @@ internal data class JpegLsFrame(
 /** SOF55 component identity retained to keep SOS routing strict. */
 internal data class JpegLsComponent(val id: Int)
 
-/** Effective default JPEG-LS coding parameters for the supported `MAXVAL=255` profile. */
+/** Effective validated JPEG-LS coding parameters for the supported `MAXVAL=255` profile. */
 internal data class JpegLsCodingParameters(
     val maximumSampleValue: Int,
     val threshold1: Int,
@@ -291,6 +291,7 @@ private class JpegLsParser(
         }
         val start = segment.payloadOffset
         lse = LseParameters(
+            markerOffset = markerOffset,
             maximumSampleValue = u16(start + 1),
             threshold1 = u16(start + 3),
             threshold2 = u16(start + 5),
@@ -357,23 +358,34 @@ private class JpegLsParser(
 
     private fun effectiveParameters(nearLossless: Int, markerOffset: Int): JpegLsCodingParameters {
         val raw = lse
+        val lseOffset = raw?.markerOffset ?: markerOffset
         if (raw != null && raw.maximumSampleValue != 0 && raw.maximumSampleValue != 255) {
-            jpeglsFailure("jpeg-ls.lse.unsupported", markerOffset, Codec.Result.kUnimplemented)
+            jpeglsFailure("jpeg-ls.lse.unsupported", lseOffset, Codec.Result.kUnimplemented)
         }
         if (nearLossless > JpegLsCodingParameters.maximumNearLossless) {
             jpeglsFailure("jpeg-ls.scan.near.invalid", markerOffset)
         }
         val defaults = JpegLsCodingParameters.defaults(nearLossless)
         if (raw == null) return defaults
+        val threshold1 = raw.threshold1.takeUnless { it == 0 } ?: defaults.threshold1
+        val threshold2 = raw.threshold2.takeUnless { it == 0 } ?: defaults.threshold2
+        val threshold3 = raw.threshold3.takeUnless { it == 0 } ?: defaults.threshold3
+        val reset = raw.reset.takeUnless { it == 0 } ?: defaults.reset
         if (
-            (raw.threshold1 != 0 && raw.threshold1 != defaults.threshold1) ||
-            (raw.threshold2 != 0 && raw.threshold2 != defaults.threshold2) ||
-            (raw.threshold3 != 0 && raw.threshold3 != defaults.threshold3) ||
-            (raw.reset != 0 && raw.reset != defaults.reset)
+            threshold1 !in (nearLossless + 1)..JpegLsCodingParameters.maximumSampleValue ||
+            threshold2 !in threshold1..JpegLsCodingParameters.maximumSampleValue ||
+            threshold3 !in threshold2..JpegLsCodingParameters.maximumSampleValue ||
+            reset !in 3..JpegLsCodingParameters.maximumSampleValue
         ) {
-            jpeglsFailure("jpeg-ls.lse.unsupported", markerOffset, Codec.Result.kUnimplemented)
+            jpeglsFailure("jpeg-ls.lse.invalid", lseOffset)
         }
-        return defaults
+        return JpegLsCodingParameters(
+            JpegLsCodingParameters.maximumSampleValue,
+            threshold1,
+            threshold2,
+            threshold3,
+            reset,
+        )
     }
 
     private fun u16(offset: Int): Int = (data[offset].u8() shl 8) or data[offset + 1].u8()
@@ -381,6 +393,7 @@ private class JpegLsParser(
     private data class SegmentBounds(val payloadOffset: Int, val payloadSize: Int)
     private data class FrameLayout(val width: Int, val height: Int, val components: List<JpegLsComponent>)
     private data class LseParameters(
+        val markerOffset: Int,
         val maximumSampleValue: Int,
         val threshold1: Int,
         val threshold2: Int,
