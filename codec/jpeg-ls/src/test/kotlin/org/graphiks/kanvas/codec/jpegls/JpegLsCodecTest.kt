@@ -72,6 +72,89 @@ class JpegLsCodecTest {
     }
 
     @Test
+    fun `decodes a CharLS RGB line-interleaved fixture exactly`() {
+        val document = requireNotNull(JpegLsDocument.open(CHARLS_RGB_LINE_FIXTURE).document)
+        val codec = requireNotNull(Codec.MakeFromData(CHARLS_RGB_LINE_FIXTURE))
+        val (bitmap, result) = codec.getImage()
+
+        assertEquals(Codec.Result.kSuccess, result)
+        assertEquals(3, document.componentCount)
+        assertEquals(1, document.interleaveMode)
+        assertNotNull(bitmap)
+        assertEquals(4, bitmap!!.width)
+        assertEquals(3, bitmap.height)
+        CHARLS_RGB_LINE_SAMPLES.forEachIndexed { index, sample ->
+            assertEquals(
+                0xFF000000.toInt() or (sample[0] shl 16) or (sample[1] shl 8) or sample[2],
+                bitmap.getPixel(index % 4, index / 4),
+                "index=$index",
+            )
+        }
+    }
+
+    @Test
+    fun `decodes CharLS RGB line data with independent component run indexes`() {
+        val codec = requireNotNull(Codec.MakeFromData(CHARLS_RGB_LINE_RUN_FIXTURE))
+        val (bitmap, result) = codec.getImage()
+
+        assertEquals(Codec.Result.kSuccess, result)
+        assertNotNull(bitmap)
+        repeat(32) { index ->
+            val expected = 0xFF000000.toInt() or (0x41 shl 16) or ((0x50 + index % 8) shl 8) or 0x42
+            assertEquals(expected, bitmap!!.getPixel(index % 8, index / 8), "index=$index")
+        }
+    }
+
+    @Test
+    fun `refuses sample-interleaved RGB without treating it as grayscale`() {
+        val sampleInterleaved = CHARLS_RGB_LINE_FIXTURE.copyOf().also { it[33] = 2 }
+
+        val opened = JpegLsDocument.open(sampleInterleaved)
+
+        assertNull(opened.document)
+        assertEquals("jpeg-ls.scan.unsupported", opened.diagnostic?.code)
+        assertEquals(Codec.Result.kUnimplemented, opened.diagnostic?.result)
+    }
+
+    @Test
+    fun `refuses non-RGB component identities and sampling in a color SOF55`() {
+        val invalidIdentity = CHARLS_RGB_LINE_FIXTURE.copyOf().also { it[12] = 2 }
+        val invalidSampling = CHARLS_RGB_LINE_FIXTURE.copyOf().also { it[13] = 0x21 }
+
+        listOf(invalidIdentity, invalidSampling).forEach { encoded ->
+            val opened = JpegLsDocument.open(encoded)
+            assertNull(opened.document)
+            assertEquals("jpeg-ls.frame.unsupported", opened.diagnostic?.code)
+            assertEquals(Codec.Result.kUnimplemented, opened.diagnostic?.result)
+        }
+    }
+
+    @Test
+    fun `refuses RGB NEAR coding until an independent near-lossless oracle is added`() {
+        val nearOne = CHARLS_RGB_LINE_FIXTURE.copyOf().also { it[32] = 1 }
+
+        val opened = JpegLsDocument.open(nearOne)
+
+        assertNull(opened.document)
+        assertEquals("jpeg-ls.scan.unsupported", opened.diagnostic?.code)
+        assertEquals(Codec.Result.kUnimplemented, opened.diagnostic?.result)
+    }
+
+    @Test
+    fun `retains APP and COM metadata around a color JPEG-LS scan`() {
+        val withMetadata = CHARLS_RGB_LINE_FIXTURE.copyOfRange(0, 2) + JFIF_APP0 + COMMENT +
+            CHARLS_RGB_LINE_FIXTURE.copyOfRange(2, CHARLS_RGB_LINE_FIXTURE.size)
+
+        val document = requireNotNull(JpegLsDocument.open(withMetadata).document)
+        val decoded = document.decode()
+
+        assertEquals(listOf(0xE0, 0xFE), document.metadataSegments.map { it.marker })
+        assertArrayEquals(byteArrayOf('r'.code.toByte(), 'g'.code.toByte(), 'b'.code.toByte()), document.copyPayload(document.metadataSegments[1]))
+        assertNotNull(decoded.bitmap)
+        assertEquals(0xFF414243.toInt(), decoded.bitmap!!.getPixel(0, 0))
+    }
+
+    @Test
     fun `decodes a CharLS NEAR 1 fixture within its declared error bound`() {
         val codec = requireNotNull(Codec.MakeFromData(CHARLS_NEAR_1_FIXTURE))
         val (bitmap, result) = codec.getImage()
@@ -312,6 +395,25 @@ class JpegLsCodecTest {
     }
 
     @Test
+    fun `encoder writes an RGB line-interleaved JPEG-LS that decodes exactly`() {
+        val source = rgbBitmap(4, 3, CHARLS_RGB_LINE_SAMPLES)
+
+        val encoded = requireNotNull(JpegLsEncoder.encode(source))
+        val codec = requireNotNull(Codec.MakeFromData(encoded))
+        val (decoded, result) = codec.getImage()
+
+        assertEquals(Codec.Result.kSuccess, result)
+        assertNotNull(decoded)
+        CHARLS_RGB_LINE_SAMPLES.forEachIndexed { index, sample ->
+            assertEquals(
+                0xFF000000.toInt() or (sample[0] shl 16) or (sample[1] shl 8) or sample[2],
+                decoded!!.getPixel(index % 4, index / 4),
+                "index=$index",
+            )
+        }
+    }
+
+    @Test
     fun `encoder writes a NEAR 1 JPEG-LS within its declared error bound`() {
         val sourceSamples = IntArray(48) { index -> (index * 37 + index / 8 * 19) and 0xFF }
         val source = grayscaleBitmap(8, 6, sourceSamples)
@@ -386,6 +488,34 @@ class JpegLsCodecTest {
         } finally {
             Files.deleteIfExists(directory.resolve("encoded.jls"))
             Files.deleteIfExists(directory.resolve("decoded.pgm"))
+            Files.deleteIfExists(directory)
+        }
+    }
+
+    @Test
+    fun `optional CharLS oracle decodes encoded RGB line pixels exactly`() {
+        val oracle = System.getProperty("kanvas.jpeg-ls.oracle.charls").orEmpty()
+        if (oracle.isBlank()) return
+        val source = rgbBitmap(4, 3, CHARLS_RGB_LINE_SAMPLES)
+        val encoded = requireNotNull(JpegLsEncoder.encode(source))
+        val directory = Files.createTempDirectory("kanvas-jpeg-ls-rgb-oracle-")
+        try {
+            val input = directory.resolve("encoded.jls")
+            val output = directory.resolve("decoded.ppm")
+            Files.write(input, encoded)
+            val process = ProcessBuilder(oracle, "decode", input.toString(), output.toString())
+                .redirectErrorStream(true)
+                .start()
+            val processOutput = process.inputStream.bufferedReader().readText()
+            assertEquals(0, process.waitFor(), processOutput)
+            val decoded = Files.readAllBytes(output)
+            assertArrayEquals(
+                CHARLS_RGB_LINE_SAMPLES.flatMap { it.asIterable() }.map(Int::toByte).toByteArray(),
+                decoded.copyOfRange(decoded.size - CHARLS_RGB_LINE_SAMPLES.size * 3, decoded.size),
+            )
+        } finally {
+            Files.deleteIfExists(directory.resolve("encoded.jls"))
+            Files.deleteIfExists(directory.resolve("decoded.ppm"))
             Files.deleteIfExists(directory)
         }
     }
@@ -486,6 +616,19 @@ class JpegLsCodecTest {
         }
     }
 
+    private fun rgbBitmap(width: Int, height: Int, samples: Array<IntArray>): SkBitmap {
+        require(samples.size == width * height)
+        return SkBitmap(width, height).also { bitmap ->
+            samples.forEachIndexed { index, sample ->
+                bitmap.setPixel(
+                    index % width,
+                    index / width,
+                    0xFF000000.toInt() or (sample[0] shl 16) or (sample[1] shl 8) or sample[2],
+                )
+            }
+        }
+    }
+
     private fun decodeDiagnostic(data: ByteArray): String =
         JpegLsDocument.open(data).document?.decode()?.diagnostic.toString()
 
@@ -504,6 +647,34 @@ class JpegLsCodecTest {
          */
         val CHARLS_REGULAR_FIXTURE: ByteArray = Base64.getDecoder().decode(
             "/9j/9wALCAAEAAgBAREA/9oACAEBAAAAAAAAAYAAAAFeES+xL7EvyV4AAACvgAAAr58uLSwrAAAAr0v+/9k=",
+        )
+
+        /**
+         * Generated by CharLS 3.0.0 (`c0bae6496fa5d787fbb4698debd1e5decb40cf3a`)
+         * from a project-owned binary 4x3 PPM with `--interleave-mode 1` (ILV=1,
+         * line interleave), no transform and `NEAR=0`:
+         * SHA-256 `e105dc472f9cec7ad860d8557b159b90fe540543db74e09d1be17876ff345a11`.
+         */
+        val CHARLS_RGB_LINE_FIXTURE: ByteArray = Base64.getDecoder().decode(
+            "/9j/9wARCAADAAQDAREAAhEAAxEA/9oADAMBAAIAAwAAAQAAAAGAX0Q7cRfwIyMdsiksAErFqhTg/9k=",
+        )
+
+        val CHARLS_RGB_LINE_SAMPLES: Array<IntArray> = arrayOf(
+            intArrayOf(0x41, 0x42, 0x43), intArrayOf(0x44, 0x45, 0x46),
+            intArrayOf(0x47, 0x48, 0x49), intArrayOf(0x4A, 0x4B, 0x4C),
+            intArrayOf(0x4D, 0x4E, 0x4F), intArrayOf(0x50, 0x51, 0x52),
+            intArrayOf(0x53, 0x54, 0x55), intArrayOf(0x56, 0x57, 0x58),
+            intArrayOf(0x61, 0x62, 0x63), intArrayOf(0x64, 0x65, 0x66),
+            intArrayOf(0x67, 0x68, 0x69), intArrayOf(0x6A, 0x6B, 0x6C),
+        )
+
+        /**
+         * Independent CharLS 3.0.0 ILV=1 fixture with constant R/B lines and
+         * a varying G line, so component run indexes diverge:
+         * SHA-256 `f2ab751d6e1654785b6cb1aacbc64eef24c166880ba5c03f2d4a0b3bd89c08db`.
+         */
+        val CHARLS_RGB_LINE_RUN_FIXTURE: ByteArray = Base64.getDecoder().decode(
+            "/9j/9wARCAAEAAgDAREAAhEAAxEA/9oADAMBAAIAAwAAAQAAAAGAleL6qqIf+fyV5f9n9/f2/9k=",
         )
 
         /**
@@ -628,6 +799,11 @@ class JpegLsCodecTest {
             0xFF.toByte(), 0xE0.toByte(), 0x00, 0x10,
             'J'.code.toByte(), 'F'.code.toByte(), 'I'.code.toByte(), 'F'.code.toByte(), 0,
             0x01, 0x02, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00,
+        )
+
+        val COMMENT: ByteArray = byteArrayOf(
+            0xFF.toByte(), 0xFE.toByte(), 0x00, 0x05,
+            'r'.code.toByte(), 'g'.code.toByte(), 'b'.code.toByte(),
         )
     }
 }

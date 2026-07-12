@@ -52,8 +52,9 @@ public data class JpegLsDecodeResult(
 
 /**
  * Immutable, bounded JPEG-LS frame description for the supported static
- * baseline: a one-component, 8-bit LOCO-I scan. Its [nearLossless] bound is
- * validated against the supported `MAXVAL=255` profile before entropy allocation.
+ * baseline: 8-bit grayscale or RGB LOCO-I scans. RGB is accepted only with
+ * `ILV=1` (line interleave), no colour transform and unit sampling; its
+ * [nearLossless] bound is validated before entropy allocation.
  */
 public class JpegLsDocument private constructor(
     private val source: ByteArray,
@@ -64,6 +65,10 @@ public class JpegLsDocument private constructor(
     public val width: Int get() = frame.width
     public val height: Int get() = frame.height
     public val nearLossless: Int get() = frame.nearLossless
+    /** Number of image components in the validated SOF55 frame (one or three). */
+    public val componentCount: Int get() = frame.components.size
+    /** JPEG-LS SOS ILV value: `0` for grayscale, `1` for RGB line interleave. */
+    public val interleaveMode: Int get() = frame.interleaveMode
     public val metadataSegments: List<JpegLsMetadataSegment> =
         Collections.unmodifiableList(ArrayList(metadata))
 
@@ -76,16 +81,21 @@ public class JpegLsDocument private constructor(
     /** Returns an independent copy of the original structurally preserved stream. */
     public fun copyEncodedBytes(): ByteArray = source.copyOf()
 
-    /** Decode the supported grayscale LOCO-I scan without fabricating a fallback. */
+    /** Decode the supported grayscale or line-interleaved RGB LOCO-I scan without a fallback. */
     public fun decode(): JpegLsDecodeResult {
         return try {
             val samples = JpegLsEntropy.decode(source, entropyOffset, frame)
             val bitmap = SkBitmap(width, height)
-            samples.forEachIndexed { index, sample ->
+            val components = frame.components.size
+            repeat(width * height) { index ->
+                val base = index * components
+                val red = samples[base]
+                val green = if (components == 1) red else samples[base + 1]
+                val blue = if (components == 1) red else samples[base + 2]
                 bitmap.setPixel(
                     index % width,
                     index / width,
-                    0xFF000000.toInt() or (sample shl 16) or (sample shl 8) or sample,
+                    0xFF000000.toInt() or (red shl 16) or (green shl 8) or blue,
                 )
             }
             JpegLsDecodeResult(bitmap, null)
@@ -143,9 +153,14 @@ public class JpegLsDocument private constructor(
 internal data class JpegLsFrame(
     val width: Int,
     val height: Int,
+    val components: List<JpegLsComponent>,
     val nearLossless: Int,
     val parameters: JpegLsCodingParameters,
+    val interleaveMode: Int,
 )
+
+/** SOF55 component identity retained to keep SOS routing strict. */
+internal data class JpegLsComponent(val id: Int)
 
 /** Effective default JPEG-LS coding parameters for the supported `MAXVAL=255` profile. */
 internal data class JpegLsCodingParameters(
@@ -189,7 +204,7 @@ private class JpegLsParser(
     private val limits: JpegLsLimits,
 ) {
     private var position: Int = 0
-    private var frameDimensions: FrameDimensions? = null
+    private var frameLayout: FrameLayout? = null
     private var sawSof: Boolean = false
     private var sawLse: Boolean = false
     private var lse: LseParameters? = null
@@ -243,18 +258,25 @@ private class JpegLsParser(
         val height = u16(start + 1)
         val width = u16(start + 3)
         val components = data[start + 5].u8()
-        if (segment.payloadSize != 6 + components * 3 || precision != 8 || components != 1) {
+        if (segment.payloadSize != 6 + components * 3 || precision != 8 || components !in setOf(1, 3)) {
             jpeglsFailure("jpeg-ls.frame.unsupported", markerOffset, Codec.Result.kUnimplemented)
         }
         if (width <= 0 || height <= 0) jpeglsFailure("jpeg-ls.frame.dimensions", markerOffset)
         if (width > limits.maxWidth || height > limits.maxHeight || width.toLong() * height > limits.maxPixels) {
             jpeglsFailure("jpeg-ls.limit.pixels", markerOffset, Codec.Result.kOutOfMemory)
         }
-        val component = start + 6
-        if (data[component].u8() != 1 || data[component + 1].u8() != 0x11 || data[component + 2].u8() != 0) {
-            jpeglsFailure("jpeg-ls.frame.unsupported", markerOffset, Codec.Result.kUnimplemented)
+        val frameComponents = ArrayList<JpegLsComponent>(components)
+        repeat(components) { index ->
+            val component = start + 6 + index * 3
+            if (
+                data[component].u8() != index + 1 || data[component + 1].u8() != 0x11 ||
+                data[component + 2].u8() != 0
+            ) {
+                jpeglsFailure("jpeg-ls.frame.unsupported", markerOffset, Codec.Result.kUnimplemented)
+            }
+            frameComponents += JpegLsComponent(index + 1)
         }
-        frameDimensions = FrameDimensions(width, height)
+        frameLayout = FrameLayout(width, height, frameComponents)
         sawSof = true
     }
 
@@ -281,20 +303,34 @@ private class JpegLsParser(
     }
 
     private fun parseSos(markerOffset: Int): ParsedJpegLs {
-        val dimensions = frameDimensions ?: jpeglsFailure("jpeg-ls.sof.missing", markerOffset)
+        val layout = frameLayout ?: jpeglsFailure("jpeg-ls.sof.missing", markerOffset)
         val segment = segment(markerOffset, "jpeg-ls.sos.truncated")
-        if (segment.payloadSize != 6) jpeglsFailure("jpeg-ls.sos.invalid", markerOffset)
+        val components = layout.components
+        if (segment.payloadSize != 4 + components.size * 2) jpeglsFailure("jpeg-ls.sos.invalid", markerOffset)
         val start = segment.payloadOffset
+        if (data[start].u8() != components.size) {
+            jpeglsFailure("jpeg-ls.scan.unsupported", markerOffset, Codec.Result.kUnimplemented)
+        }
+        components.forEachIndexed { index, component ->
+            val offset = start + 1 + index * 2
+            if (data[offset].u8() != component.id || data[offset + 1].u8() != 0) {
+                jpeglsFailure("jpeg-ls.scan.unsupported", markerOffset, Codec.Result.kUnimplemented)
+            }
+        }
+        val parameterOffset = start + 1 + components.size * 2
+        val nearLossless = data[parameterOffset].u8()
+        val interleaveMode = data[parameterOffset + 1].u8()
         if (
-            data[start].u8() != 1 || data[start + 1].u8() != 1 || data[start + 2].u8() != 0 ||
-            data[start + 4].u8() != 0 || data[start + 5].u8() != 0
+            (components.size == 1 && interleaveMode != 0) ||
+            (components.size == 3 && interleaveMode != 1) ||
+            (components.size == 3 && nearLossless != 0) ||
+            data[parameterOffset + 2].u8() != 0
         ) {
             jpeglsFailure("jpeg-ls.scan.unsupported", markerOffset, Codec.Result.kUnimplemented)
         }
-        val nearLossless = data[start + 3].u8()
         val parameters = effectiveParameters(nearLossless, markerOffset)
         return ParsedJpegLs(
-            JpegLsFrame(dimensions.width, dimensions.height, nearLossless, parameters),
+            JpegLsFrame(layout.width, layout.height, components, nearLossless, parameters, interleaveMode),
             position,
             metadata.toList(),
         )
@@ -324,7 +360,7 @@ private class JpegLsParser(
     private fun u16(offset: Int): Int = (data[offset].u8() shl 8) or data[offset + 1].u8()
 
     private data class SegmentBounds(val payloadOffset: Int, val payloadSize: Int)
-    private data class FrameDimensions(val width: Int, val height: Int)
+    private data class FrameLayout(val width: Int, val height: Int, val components: List<JpegLsComponent>)
     private data class LseParameters(
         val maximumSampleValue: Int,
         val threshold1: Int,

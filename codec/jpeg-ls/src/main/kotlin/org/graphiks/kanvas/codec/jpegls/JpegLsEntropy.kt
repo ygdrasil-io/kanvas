@@ -11,12 +11,16 @@ internal object JpegLsEntropy {
     )
 
     fun decode(source: ByteArray, entropyOffset: Int, frame: JpegLsFrame): IntArray = try {
-        decodeScan(source, entropyOffset, frame)
+        when (frame.interleaveMode) {
+            0 -> decodeMonochromeScan(source, entropyOffset, frame)
+            1 -> decodeRgbLineInterleavedScan(source, entropyOffset, frame)
+            else -> jpeglsFailure("jpeg-ls.scan.unsupported", entropyOffset, org.graphiks.kanvas.codec.Codec.Result.kUnimplemented)
+        }
     } catch (marker: EntropyMarker) {
         jpeglsFailure("jpeg-ls.entropy.marker", marker.offset)
     }
 
-    private fun decodeScan(source: ByteArray, entropyOffset: Int, frame: JpegLsFrame): IntArray {
+    private fun decodeMonochromeScan(source: ByteArray, entropyOffset: Int, frame: JpegLsFrame): IntArray {
         val reader = JpegLsBitReader(source, entropyOffset)
         val state = LocoState(frame)
         var previous = IntArray(frame.width + 2)
@@ -57,8 +61,83 @@ internal object JpegLsEntropy {
         return output
     }
 
+    /**
+     * T.87 line-interleaved RGB keeps one adaptive regular/run context set for
+     * the scan, while each component owns its line history and run index. The
+     * coded order is R-line, G-line, B-line for every image row.
+     */
+    private fun decodeRgbLineInterleavedScan(source: ByteArray, entropyOffset: Int, frame: JpegLsFrame): IntArray {
+        val reader = JpegLsBitReader(source, entropyOffset)
+        val state = LocoState(frame)
+        val components = frame.components.size
+        check(components == 3)
+        var previous = Array(components) { IntArray(frame.width + 2) }
+        var current = Array(components) { IntArray(frame.width + 2) }
+        val runIndices = IntArray(components)
+        val output = IntArray(frame.width * frame.height * components)
+
+        for (y in 0 until frame.height) {
+            for (component in 0 until components) {
+                previous[component][frame.width + 1] = previous[component][frame.width]
+                current[component][0] = previous[component][1]
+            }
+            for (component in 0 until components) {
+                state.runIndex = runIndices[component]
+                decodeLine(reader, state, previous[component], current[component], frame.width)
+                runIndices[component] = state.runIndex
+                for (x in 0 until frame.width) {
+                    output[(y * frame.width + x) * components + component] = current[component][x + 1]
+                }
+            }
+            val swap = previous
+            previous = current
+            current = swap
+        }
+        reader.finishAtEoi()
+        return output
+    }
+
+    private fun decodeLine(
+        reader: JpegLsBitReader,
+        state: LocoState,
+        previous: IntArray,
+        current: IntArray,
+        width: Int,
+    ) {
+        var index = 1
+        while (index <= width) {
+            val ra = current[index - 1]
+            val rb = previous[index]
+            val rc = previous[index - 1]
+            val rd = previous[index + 1]
+            val context = state.context(rd - rb, rb - rc, rc - ra)
+            if (context.index != 0) {
+                current[index] = state.decodeRegular(reader, context, predict(ra, rb, rc))
+                index++
+            } else {
+                val run = state.decodeRun(reader, width - index + 1)
+                if (run > width - index + 1) jpeglsFailure("jpeg-ls.run.invalid", reader.offset)
+                repeat(run) { offset -> current[index + offset] = ra }
+                index += run
+                if (index <= width) {
+                    current[index] = state.decodeRunInterruption(reader, ra, previous[index])
+                    state.decrementRunIndex()
+                    index++
+                }
+            }
+        }
+    }
+
     fun encode(width: Int, height: Int, samples: IntArray, frame: JpegLsFrame): ByteArray {
-        require(samples.size == width * height)
+        require(samples.size == width * height * frame.components.size)
+        return when (frame.interleaveMode) {
+            0 -> encodeMonochrome(width, height, samples, frame)
+            1 -> encodeRgbLineInterleaved(width, height, samples, frame)
+            else -> error("unsupported JPEG-LS interleave mode ${frame.interleaveMode}")
+        }
+    }
+
+    private fun encodeMonochrome(width: Int, height: Int, samples: IntArray, frame: JpegLsFrame): ByteArray {
         val writer = JpegLsBitWriter()
         val state = LocoState(frame)
         var previous = IntArray(width + 2)
@@ -104,6 +183,74 @@ internal object JpegLsEntropy {
         return writer.finish()
     }
 
+    private fun encodeRgbLineInterleaved(
+        width: Int,
+        height: Int,
+        samples: IntArray,
+        frame: JpegLsFrame,
+    ): ByteArray {
+        val writer = JpegLsBitWriter()
+        val state = LocoState(frame)
+        val components = frame.components.size
+        check(components == 3)
+        var previous = Array(components) { IntArray(width + 2) }
+        var current = Array(components) { IntArray(width + 2) }
+        val runIndices = IntArray(components)
+
+        for (y in 0 until height) {
+            for (component in 0 until components) {
+                previous[component][width + 1] = previous[component][width]
+                current[component][0] = previous[component][1]
+                for (x in 0 until width) {
+                    current[component][x + 1] = samples[(y * width + x) * components + component]
+                }
+            }
+            for (component in 0 until components) {
+                state.runIndex = runIndices[component]
+                encodeLine(writer, state, previous[component], current[component], width)
+                runIndices[component] = state.runIndex
+            }
+            val swap = previous
+            previous = current
+            current = swap
+        }
+        return writer.finish()
+    }
+
+    private fun encodeLine(
+        writer: JpegLsBitWriter,
+        state: LocoState,
+        previous: IntArray,
+        current: IntArray,
+        width: Int,
+    ) {
+        var index = 1
+        while (index <= width) {
+            val ra = current[index - 1]
+            val rb = previous[index]
+            val rc = previous[index - 1]
+            val rd = previous[index + 1]
+            val context = state.context(rd - rb, rb - rc, rc - ra)
+            if (context.index != 0) {
+                current[index] = state.encodeRegular(writer, context, predict(ra, rb, rc), current[index])
+                index++
+            } else {
+                var run = 0
+                while (run < width - index + 1 && state.isNear(current[index + run], ra)) {
+                    run++
+                }
+                state.encodeRun(writer, run, run == width - index + 1)
+                repeat(run) { offset -> current[index + offset] = ra }
+                index += run
+                if (index <= width) {
+                    current[index] = state.encodeRunInterruption(writer, current[index], ra, previous[index])
+                    state.decrementRunIndex()
+                    index++
+                }
+            }
+        }
+    }
+
     private fun predict(ra: Int, rb: Int, rc: Int): Int = when {
         rc >= maxOf(ra, rb) -> minOf(ra, rb)
         rc <= minOf(ra, rb) -> maxOf(ra, rb)
@@ -120,7 +267,14 @@ internal object JpegLsEntropy {
         private val initialA = maxOf(2, (range + 32) / 64)
         private val regular = Array(365) { RegularContext(initialA) }
         private val run = arrayOf(RunContext(0, initialA), RunContext(1, initialA))
-        private var runIndex: Int = 0
+        private var runIndexValue: Int = 0
+
+        var runIndex: Int
+            get() = runIndexValue
+            set(value) {
+                require(value in 0..31)
+                runIndexValue = value
+            }
 
         fun context(d1: Int, d2: Int, d3: Int): Context {
             var q1 = quantizeGradient(d1)
@@ -159,27 +313,27 @@ internal object JpegLsEntropy {
         fun decodeRun(reader: JpegLsBitReader, remaining: Int): Int {
             var length = 0
             while (reader.readBit() == 1) {
-                val step = minOf(1 shl runJ[runIndex], remaining - length)
+                val step = minOf(1 shl runJ[runIndexValue], remaining - length)
                 length += step
-                if (step == (1 shl runJ[runIndex])) incrementRunIndex()
+                if (step == (1 shl runJ[runIndexValue])) incrementRunIndex()
                 if (length == remaining) return length
             }
-            if (runJ[runIndex] > 0) length += reader.readBits(runJ[runIndex])
+            if (runJ[runIndexValue] > 0) length += reader.readBits(runJ[runIndexValue])
             return length
         }
 
         fun encodeRun(writer: JpegLsBitWriter, length: Int, endOfLine: Boolean) {
             var remaining = length
-            while (remaining >= (1 shl runJ[runIndex])) {
+            while (remaining >= (1 shl runJ[runIndexValue])) {
                 writer.writeBit(1)
-                remaining -= 1 shl runJ[runIndex]
+                remaining -= 1 shl runJ[runIndexValue]
                 incrementRunIndex()
             }
             if (endOfLine) {
                 if (remaining != 0) writer.writeBit(1)
             } else {
                 writer.writeBit(0)
-                if (runJ[runIndex] > 0) writer.writeBits(remaining, runJ[runIndex])
+                if (runJ[runIndexValue] > 0) writer.writeBits(remaining, runJ[runIndexValue])
             }
         }
 
@@ -187,7 +341,7 @@ internal object JpegLsEntropy {
             val type = if (isNear(ra, rb)) 1 else 0
             val stats = run[type]
             val k = stats.golombK()
-            val mapped = readMapped(reader, k, LIMIT - runJ[runIndex] - 1, qbpp)
+            val mapped = readMapped(reader, k, LIMIT - runJ[runIndexValue] - 1, qbpp)
             val error = stats.unmap(mapped + type, k)
             stats.update(error, mapped, parameters.reset)
             val prediction = if (type == 1) ra else rb
@@ -203,17 +357,17 @@ internal object JpegLsEntropy {
             val error = computeError(direction * (sample - prediction))
             val k = stats.golombK()
             val mapped = stats.map(error, k)
-            writeMapped(writer, mapped, k, LIMIT - runJ[runIndex] - 1, qbpp)
+            writeMapped(writer, mapped, k, LIMIT - runJ[runIndexValue] - 1, qbpp)
             stats.update(error, mapped, parameters.reset)
             return reconstruct(prediction, direction * error)
         }
 
         fun decrementRunIndex() {
-            if (runIndex > 0) runIndex--
+            if (runIndexValue > 0) runIndexValue--
         }
 
         private fun incrementRunIndex() {
-            if (runIndex < 31) runIndex++
+            if (runIndexValue < 31) runIndexValue++
         }
 
         fun isNear(first: Int, second: Int): Boolean = abs(first - second) <= nearLossless

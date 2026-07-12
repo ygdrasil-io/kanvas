@@ -10,7 +10,7 @@ import org.skia.foundation.SkEncodedImageFormat
 import org.skia.foundation.SkImageInfo
 import org.skia.foundation.skcms.SkcmsICCProfile
 
-/** Pure Kotlin static JPEG-LS owner for the verified 8-bit grayscale LOCO-I profile. */
+/** Pure Kotlin static JPEG-LS owner for verified 8-bit grayscale and RGB LOCO-I profiles. */
 public class JpegLsCodec private constructor(
     private val document: JpegLsDocument,
 ) : Codec() {
