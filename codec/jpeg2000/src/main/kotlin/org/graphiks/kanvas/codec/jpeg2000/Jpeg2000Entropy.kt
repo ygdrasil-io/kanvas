@@ -26,8 +26,8 @@ private fun entropyFailure(
  * levels.
  *
  * The packet header, MQ arithmetic stream and EBCOT passes are all decoded
- * from the encoded bytes.  This is deliberately not a JP2, tiled, DWT or
- * multi-codeblock implementation.
+ * from the encoded bytes. This is deliberately not a JP2, tiled, DWT, or
+ * general multi-codeblock implementation.
  */
 internal fun decodeNarrowRawJ2k(
     source: ByteArray,
