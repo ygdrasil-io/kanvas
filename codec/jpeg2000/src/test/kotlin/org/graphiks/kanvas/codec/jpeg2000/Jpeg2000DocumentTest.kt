@@ -14,6 +14,23 @@ import org.skia.foundation.SkEncodedImageFormat
 class Jpeg2000DocumentTest {
 
     @Test
+    fun `pinned OpenJPEG source PGM has its documented SHA-256`() {
+        val source = requireNotNull(
+            javaClass.getResourceAsStream("/jpeg2000-openjpeg/source.pgm"),
+        ) { "missing OpenJPEG source PGM" }.use { input -> input.readBytes() }
+        val actual = MessageDigest.getInstance("SHA-256")
+            .digest(source)
+            .joinToString(separator = "") { byte ->
+                byte.toInt().and(0xff).toString(16).padStart(2, '0')
+            }
+
+        assertEquals(
+            "2bdf55049e85c305eb510df45d10ce0150d92bac8663cf55e8e8d8b550fbd702",
+            actual,
+        )
+    }
+
+    @Test
     fun `pinned OpenJPEG J2K fixture has its documented SHA-256`() {
         val actual = MessageDigest.getInstance("SHA-256")
             .digest(Jpeg2000TestFixtures.openJpegLossless5x3())
