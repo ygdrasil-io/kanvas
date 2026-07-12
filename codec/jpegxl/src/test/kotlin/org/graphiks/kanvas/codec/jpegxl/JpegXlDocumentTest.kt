@@ -49,6 +49,7 @@ class JpegXlDocumentTest {
         assertEquals(listOf("JXL ", "ftyp", "jxlc"), document.boxes.map { it.type })
         assertArrayEquals(codestream, document.copyPayload(jxlc))
         assertNotNull(Codec.MakeFromData(container))
+        assertEquals("jpegxl.container.pixel.unimplemented", document.decode().diagnostic?.code)
     }
 
     @Test

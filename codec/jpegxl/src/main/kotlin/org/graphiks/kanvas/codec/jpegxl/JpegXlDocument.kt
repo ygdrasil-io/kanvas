@@ -73,6 +73,8 @@ public class JpegXlDocument private constructor(
     private val source: ByteArray,
     public val container: JpegXlContainer,
     public val frame: JpegXlFrameInfo,
+    private val codestreamStart: Int,
+    private val codestreamEndExclusive: Int,
     private val entropyOffset: Int,
     boxes: List<JpegXlBox>,
 ) {
@@ -88,19 +90,26 @@ public class JpegXlDocument private constructor(
         return source.copyOfRange(box.payloadOffset, box.payloadOffset + box.payloadSize)
     }
 
-    /**
-     * Refuses frame decoding at the exact boundary after the bounded
-     * SizeHeader. JPEG XL modular/VardCT frame syntax and ANS entropy coding
-     * require independently validated pixel fixtures before implementation.
-     */
-    public fun decode(): JpegXlDecodeResult = JpegXlDecodeResult(
-        bitmap = null,
-        diagnostic = JpegXlDiagnostic(
-            code = "jpegxl.frame.entropy.unimplemented",
-            offset = entropyOffset.toLong(),
-            result = Codec.Result.kUnimplemented,
-        ),
-    )
+    /** Decodes the deliberately narrow, proven raw JPEG XL Modular profile. */
+    public fun decode(): JpegXlDecodeResult {
+        if (container != JpegXlContainer.CODESTREAM) {
+            return JpegXlDecodeResult(
+                bitmap = null,
+                diagnostic = JpegXlDiagnostic(
+                    code = "jpegxl.container.pixel.unimplemented",
+                    offset = codestreamStart.toLong(),
+                    result = Codec.Result.kUnimplemented,
+                ),
+            )
+        }
+        return decodeNarrowJpegXlModular(
+            source = source,
+            codestreamStart = codestreamStart,
+            codestreamEndExclusive = codestreamEndExclusive,
+            frame = frame,
+            fallbackOffset = entropyOffset,
+        )
+    }
 
     public companion object {
         /** Opens a raw JPEG XL codestream after validating its SizeHeader. */
@@ -118,7 +127,14 @@ public class JpegXlDocument private constructor(
             return try {
                 val parsed = when {
                     isRawCodestream(data) -> parseRawCodestream(data, limits).let { raw ->
-                        ParsedDocument(JpegXlContainer.CODESTREAM, raw.frame, raw.entropyOffset, emptyList())
+                        ParsedDocument(
+                            container = JpegXlContainer.CODESTREAM,
+                            frame = raw.frame,
+                            codestreamStart = raw.codestreamStart,
+                            codestreamEndExclusive = raw.codestreamEndExclusive,
+                            entropyOffset = raw.entropyOffset,
+                            boxes = emptyList(),
+                        )
                     }
                     isContainerSignature(data) -> parseContainer(data, limits)
                     else -> jxlFailure("jpegxl.signature.missing", 0)
@@ -128,6 +144,8 @@ public class JpegXlDocument private constructor(
                         source = data.copyOf(),
                         container = parsed.container,
                         frame = parsed.frame,
+                        codestreamStart = parsed.codestreamStart,
+                        codestreamEndExclusive = parsed.codestreamEndExclusive,
                         entropyOffset = parsed.entropyOffset,
                         boxes = parsed.boxes,
                     ),
@@ -146,12 +164,16 @@ public class JpegXlDocument private constructor(
 
 private data class ParsedCodestream(
     val frame: JpegXlFrameInfo,
+    val codestreamStart: Int,
+    val codestreamEndExclusive: Int,
     val entropyOffset: Int,
 )
 
 private data class ParsedDocument(
     val container: JpegXlContainer,
     val frame: JpegXlFrameInfo,
+    val codestreamStart: Int,
+    val codestreamEndExclusive: Int,
     val entropyOffset: Int,
     val boxes: List<JpegXlBox>,
 )
@@ -185,7 +207,7 @@ private fun parseRawCodestream(
     ) {
         jxlFailure("jpegxl.limit.pixels", reader.byteOffset, Codec.Result.kOutOfMemory)
     }
-    return ParsedCodestream(frame, reader.byteOffsetCeil)
+    return ParsedCodestream(frame, start, endExclusive, reader.byteOffsetCeil)
 }
 
 private fun parseContainer(data: ByteArray, limits: JpegXlLimits): ParsedDocument {
@@ -225,6 +247,8 @@ private fun parseContainer(data: ByteArray, limits: JpegXlLimits): ParsedDocumen
     return ParsedDocument(
         container = JpegXlContainer.CONTAINER,
         frame = parsed.frame,
+        codestreamStart = parsed.codestreamStart,
+        codestreamEndExclusive = parsed.codestreamEndExclusive,
         entropyOffset = parsed.entropyOffset,
         boxes = boxes,
     )

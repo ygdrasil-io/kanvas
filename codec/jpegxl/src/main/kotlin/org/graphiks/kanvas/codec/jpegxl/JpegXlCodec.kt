@@ -38,7 +38,10 @@ public class JpegXlCodec private constructor(
         ) {
             return Result.kInvalidConversion
         }
-        return document.decode().diagnostic?.result ?: Result.kInternalError
+        val decoded = document.decode()
+        val bitmap = decoded.bitmap ?: return decoded.diagnostic?.result ?: Result.kErrorInInput
+        System.arraycopy(bitmap.pixels8888, 0, dst.pixels8888, 0, bitmap.pixels8888.size)
+        return Result.kSuccess
     }
 
     internal companion object Decoder : Codec.Decoder {
