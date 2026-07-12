@@ -25,6 +25,7 @@ import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
@@ -113,6 +114,54 @@ class GPUBackendRuntimeNativeSmokeTest {
         assertEquals(0, unmapCalls)
         assertTrue(dump.contains("submitted=1 completed=1 released=1 pending=0 waits=0 unknownCompletions=0"))
         assertTrue(dump.contains("completion=readback-failed"))
+    }
+
+    @Test
+    fun `failed readback keeps released transient pending until target close`() {
+        val manager = GPUQueueManager()
+        val submission = manager.submit(
+            label = "offscreen-pass:released-transient",
+            retainedResources = listOf(GPUQueuedResourceRef("target:released-transient")),
+        )
+        var transientDestroyed = false
+
+        assertFailsWith<IllegalStateException> {
+            gpuRuntimeWithReadbackCleanup(
+                mapAction = { error("map failed") },
+                readAction = { byteArrayOf() },
+                unmapAction = {},
+                completeAction = { completion ->
+                    if (gpuRuntimeHasCompletedReadback(completion)) {
+                        manager.markCompleted(submission.id, completion)
+                        manager.releaseCompleted()
+                        transientDestroyed = true
+                    }
+                },
+            )
+        }
+
+        assertFalse(transientDestroyed)
+        assertEquals(1L, manager.telemetry.pending)
+        manager.markCompleted(submission.id, GPU_QUEUE_COMPLETION_TARGET_CLOSE)
+        manager.releaseCompleted()
+        transientDestroyed = true
+        assertTrue(transientDestroyed)
+        assertEquals(0L, manager.telemetry.pending)
+    }
+
+    @Test
+    fun `resolved offscreen texture records sampled label`() {
+        val sampledLabels = mutableListOf<String>()
+
+        assertEquals(
+            "texture-a",
+            gpuRuntimeResolveAndRecordOffscreenTexture(
+                label = "texture-a",
+                resolve = { label -> label.takeIf { it == "texture-a" } },
+                recordUse = sampledLabels::add,
+            ),
+        )
+        assertEquals(listOf("texture-a"), sampledLabels)
     }
 
     @Test
@@ -406,6 +455,63 @@ class GPUBackendRuntimeNativeSmokeTest {
 
                 assertFailsWith<IllegalStateException> {
                     target.encodeOffscreenTexture(source, GPUClearColor(0.0, 0.0, 0.0, 0.0)) {}
+                }
+                assertContentEquals(
+                    byteArrayOf(0xFF.toByte(), 0, 0, 0xFF.toByte()),
+                    target.readRgba().copyOfRange(0, 4),
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `released multi texture sources remain valid through their final sampled submission`() {
+        val runtime = GPUBackendRuntimeFactory.createOrNull()
+        assumeTrue(runtime != null, "GPU backend unavailable in current environment")
+
+        runtime!!.use { session ->
+            session.createOffscreenTarget(
+                GPUOffscreenTargetRequest(width = 4, height = 4, colorFormat = "rgba8unorm"),
+            ).use { target ->
+                val first = target.createOffscreenTexture(
+                    GPUBackendOffscreenTexture("released-multi-first", 4, 4, "rgba8unorm"),
+                )
+                val second = target.createOffscreenTexture(
+                    GPUBackendOffscreenTexture("released-multi-second", 4, 4, "rgba8unorm"),
+                )
+                listOf(first, second).forEach { source ->
+                    target.encodeOffscreenTexture(source, GPUClearColor(0.0, 0.0, 0.0, 1.0)) {
+                        drawFullscreenPass(
+                            wgsl = solidColorFullscreenWgsl(),
+                            colorFormat = "rgba8unorm",
+                            draws = listOf(GPUBackendRectDraw(floatArrayOf(1f, 0f, 0f, 1f), 0, 0, 4, 4)),
+                        )
+                    }
+                }
+                target.encode(GPUClearColor(0.0, 0.0, 0.0, 1.0)) {
+                    drawTwoTexturePass(
+                        wgsl = multiTextureWgsl(textureCount = 2),
+                        colorFormat = "rgba8unorm",
+                        firstTextureLabel = first,
+                        secondTextureLabel = second,
+                        draws = listOf(
+                            GPUBackendRawUniformDraw(
+                                uniformBytes = solidColorUniformBytes(0f, 0f, 0f, 0f),
+                                scissorX = 0,
+                                scissorY = 0,
+                                scissorWidth = 4,
+                                scissorHeight = 4,
+                            ),
+                        ),
+                        blendMode = GPUBlendMode.SRC,
+                    )
+                }
+
+                target.releaseOffscreenTexture(first)
+                target.releaseOffscreenTexture(second)
+
+                assertFailsWith<IllegalStateException> {
+                    target.encodeOffscreenTexture(first, GPUClearColor(0.0, 0.0, 0.0, 0.0)) {}
                 }
                 assertContentEquals(
                     byteArrayOf(0xFF.toByte(), 0, 0, 0xFF.toByte()),

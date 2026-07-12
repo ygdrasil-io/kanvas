@@ -330,6 +330,19 @@ internal inline fun <T> gpuRuntimeWithReadbackCleanup(
     }
 }
 
+internal fun gpuRuntimeHasCompletedReadback(completion: String): Boolean =
+    completion == GPU_QUEUE_COMPLETION_READBACK_COMPLETE
+
+internal inline fun <T> gpuRuntimeResolveAndRecordOffscreenTexture(
+    label: String,
+    resolve: (String) -> T?,
+    recordUse: (String) -> Unit,
+): T {
+    val texture = resolve(label) ?: error("Offscreen texture not found: $label")
+    recordUse(label)
+    return texture
+}
+
 internal fun gpuRuntimeCompleteWindowPresentSubmission(
     queueManager: GPUQueueManager,
     submission: GPUQueueSubmission,
@@ -867,11 +880,10 @@ private class WgpuOffscreenTarget(
     }
 
     private fun completePendingReadbackSubmissions(completion: String) {
+        if (!gpuRuntimeHasCompletedReadback(completion)) return
         val completedReadbackSubmissionIds = pendingReadbackSubmissionIds.toSet()
         completePendingSubmissions(pendingReadbackSubmissionIds, completion)
-        if (completion == GPU_QUEUE_COMPLETION_READBACK_COMPLETE) {
-            completeReleasedOffscreenTexturesAtReadback(completedReadbackSubmissionIds)
-        }
+        completeReleasedOffscreenTexturesAtReadback(completedReadbackSubmissionIds)
     }
 
     private fun completeReleasedOffscreenTexturesAtReadback(
@@ -1598,7 +1610,7 @@ private class WgpuOffscreenTarget(
     }
 
     override fun close() {
-        completePendingReadbackSubmissions(GPU_QUEUE_COMPLETION_TARGET_CLOSE)
+        completePendingSubmissions(pendingReadbackSubmissionIds, GPU_QUEUE_COMPLETION_TARGET_CLOSE)
         completePendingTargetCloseSubmissions()
         var firstFailure: Throwable? = null
         /** Suppresses exceptions thrown inside [block] and collects the first failure for re-throw. */
@@ -2880,9 +2892,11 @@ private class WgpuRenderRecorder(
         require(draws.isNotEmpty()) { "draws required for multi-texture pass" }
 
         val textures = textureLabels.map { textureLabel ->
-            offscreenTexture(textureLabel)
-                ?: error("Offscreen texture not found: $textureLabel")
-                .also { recordOffscreenTextureUseAction(textureLabel) }
+            gpuRuntimeResolveAndRecordOffscreenTexture(
+                label = textureLabel,
+                resolve = ::offscreenTexture,
+                recordUse = recordOffscreenTextureUseAction,
+            )
         }
         val keys = multiTextureExecutionCacheKeys(
             wgsl = wgsl,
