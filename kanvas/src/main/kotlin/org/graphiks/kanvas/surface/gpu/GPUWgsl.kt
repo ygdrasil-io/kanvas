@@ -354,6 +354,94 @@ internal val COPY_WGSL: String = """
     }
 """.trimIndent()
 
+/**
+ * Static horizontal mask-blur pass. Sigma controls only the reflected uniform
+ * payload: a fixed loop ignores padded weights after `tapCount`.
+ */
+internal val MASK_BLUR_HORIZONTAL_WGSL: String = """
+    struct MaskBlurUniforms {
+        tapCount: u32,
+        _pad0: u32,
+        targetSize: vec2f,
+        _pad1: vec2f,
+        _pad2: vec2f,
+        weights: array<vec4f, 7>,
+    };
+
+    @group(0) @binding(0) var<uniform> u: MaskBlurUniforms;
+    @group(1) @binding(1) var inputTex: texture_2d<f32>;
+    @group(1) @binding(2) var inputSam: sampler;
+
+    @vertex
+    fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
+        let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
+        let y = f32(idx & 2u) * 2.0 - 1.0;
+        return vec4f(x, y, 0.0, 1.0);
+    }
+
+    @fragment
+    fn fs_main(@builtin(position) coord: vec4f) -> @location(0) vec4f {
+        let size = max(u.targetSize, vec2f(1.0, 1.0));
+        let uv = coord.xy / size;
+        let half = u.tapCount / 2u;
+        var result = vec4f(0.0);
+        for (var i = 0u; i < 25u; i = i + 1u) {
+            if (i >= u.tapCount) {
+                break;
+            }
+            let packedWeights = u.weights[i / 4u];
+            let weight = packedWeights[i % 4u];
+            let sampleOffset = vec2f(f32(i) - f32(half), 0.0) / size;
+            result += weight * textureSample(inputTex, inputSam, uv + sampleOffset);
+        }
+        return result;
+    }
+""".trimIndent()
+
+/**
+ * Static vertical mask-blur pass. Its uniform layout exactly matches
+ * [MASK_BLUR_HORIZONTAL_WGSL] so pipeline topology is independent of sigma.
+ */
+internal val MASK_BLUR_VERTICAL_WGSL: String = """
+    struct MaskBlurUniforms {
+        tapCount: u32,
+        _pad0: u32,
+        targetSize: vec2f,
+        _pad1: vec2f,
+        _pad2: vec2f,
+        weights: array<vec4f, 7>,
+    };
+
+    @group(0) @binding(0) var<uniform> u: MaskBlurUniforms;
+    @group(1) @binding(1) var inputTex: texture_2d<f32>;
+    @group(1) @binding(2) var inputSam: sampler;
+
+    @vertex
+    fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
+        let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
+        let y = f32(idx & 2u) * 2.0 - 1.0;
+        return vec4f(x, y, 0.0, 1.0);
+    }
+
+    @fragment
+    fn fs_main(@builtin(position) coord: vec4f) -> @location(0) vec4f {
+        let size = max(u.targetSize, vec2f(1.0, 1.0));
+        let uv = coord.xy / size;
+        let half = u.tapCount / 2u;
+        var result = vec4f(0.0);
+        for (var i = 0u; i < 25u; i = i + 1u) {
+            if (i >= u.tapCount) {
+                break;
+            }
+            let packedWeights = u.weights[i / 4u];
+            let weight = packedWeights[i % 4u];
+            let sampleOffset = vec2f(0.0, f32(i) - f32(half)) / size;
+            result += weight * textureSample(inputTex, inputSam, uv + sampleOffset);
+        }
+        return result;
+    }
+""".trimIndent()
+
 internal val MASK_BLUR_STYLE_WGSL: String = """
     struct Uniforms {
         style: u32,
@@ -511,6 +599,43 @@ internal val CLIP_BLEND_FORMULA_WGSL: String = """
         let srcDims = textureDimensions(srcTexture);
         let uv = vec2f(coord.x / f32(srcDims.x), coord.y / f32(srcDims.y));
         let clipAlpha = textureSample(clipTexture, clipSampler, uv).a;
+        let src = textureSample(srcTexture, srcSampler, uv) * clipAlpha;
+        let dst = textureSample(dstTexture, dstSampler, uv);
+        return blendPremul(src, dst, uniforms.blendMode);
+    }
+""".trimIndent()
+
+/** Destination-read blend formula with a device-rect clip applied at final composition. */
+internal val SCISSOR_CLIP_BLEND_FORMULA_WGSL: String = """
+    struct Uniforms {
+        blendMode: u32,
+        _pad0: u32,
+        _pad1: vec2u,
+        clipBounds: vec4f,
+    };
+
+    @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+    @group(1) @binding(1) var srcTexture: texture_2d<f32>;
+    @group(1) @binding(2) var srcSampler: sampler;
+    @group(1) @binding(3) var dstTexture: texture_2d<f32>;
+    @group(1) @binding(4) var dstSampler: sampler;
+
+    @vertex
+    fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
+        let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
+        let y = f32(idx & 2u) * 2.0 - 1.0;
+        return vec4f(x, y, 0.0, 1.0);
+    }
+
+    $DESTINATION_READ_BLEND_FORMULA_WGSL
+
+    @fragment
+    fn fs_main(@builtin(position) coord: vec4f) -> @location(0) vec4f {
+        let dims = textureDimensions(srcTexture);
+        let uv = coord.xy / vec2f(dims);
+        let inside = coord.x >= uniforms.clipBounds.x && coord.x < uniforms.clipBounds.z &&
+            coord.y >= uniforms.clipBounds.y && coord.y < uniforms.clipBounds.w;
+        let clipAlpha = select(0.0, 1.0, inside);
         let src = textureSample(srcTexture, srcSampler, uv) * clipAlpha;
         let dst = textureSample(dstTexture, dstSampler, uv);
         return blendPremul(src, dst, uniforms.blendMode);

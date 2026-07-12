@@ -80,6 +80,23 @@ class GPUMaskBlurDispatchTest {
     }
 
     @Test
+    fun `mask blur encodes static modules with padded uniform kernels`() {
+        val target = CapturingMaskBlurTarget()
+
+        val result = target.renderMaskBlurCommand(
+            "source", solidRectCommand(), readyPlan(NormalizedBlurStyle.NORMAL),
+            GPUClearColor(0.0, 0.0, 0.0, 0.0), mutableListOf(), Diagnostics(), "rgba8unorm",
+        )
+
+        assertTrue(result.rendered)
+        assertEquals(
+            listOf(MASK_BLUR_HORIZONTAL_WGSL, MASK_BLUR_VERTICAL_WGSL),
+            target.compositePasses.take(2).map { it.wgsl },
+        )
+        assertEquals(listOf(144, 144), target.compositePasses.take(2).map { it.uniformBytes })
+    }
+
+    @Test
     fun `non uniform rrect blur refuses before allocating local textures`() {
         val target = CapturingMaskBlurTarget()
         val dispatched = mutableListOf<String>()
@@ -241,6 +258,7 @@ class GPUMaskBlurDispatchTest {
         requestedSigma = 2f,
         normalizedSigma = 2f,
         effectiveSigma = 2f,
+        halo = 6,
         scale = 1f,
         deviceBounds = GPUBounds(4f, 4f, 36f, 36f),
         localWidth = 32,
@@ -251,8 +269,11 @@ class GPUMaskBlurDispatchTest {
     )
 
     private class CapturingMaskBlurTarget : GPUBackendOffscreenTarget {
+        data class CompositePass(val wgsl: String, val uniformBytes: Int)
+
         val passKinds = mutableListOf<String>()
         val passColorFormats = mutableListOf<String>()
+        val compositePasses = mutableListOf<CompositePass>()
         val createdTextures = mutableListOf<GPUBackendOffscreenTexture>()
         var maskTriangleData: GPUBackendTriangleData? = null
 
@@ -320,6 +341,7 @@ class GPUMaskBlurDispatchTest {
                 draws: List<GPUBackendRawUniformDraw>,
                 blendMode: GPUBlendMode?,
             ) {
+                compositePasses += CompositePass(wgsl, draws.single().uniformBytes.size)
                 passKinds += when {
                     destinationLabel.endsWith(":horizontal") -> "blur-h"
                     destinationLabel.endsWith(":vertical") -> "blur-v"

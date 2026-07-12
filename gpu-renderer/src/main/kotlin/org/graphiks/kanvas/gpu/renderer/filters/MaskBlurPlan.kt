@@ -11,6 +11,7 @@ sealed interface MaskBlurPlan {
         val requestedSigma: Float,
         val normalizedSigma: Float,
         val effectiveSigma: Float,
+        val halo: Int,
         val scale: Float,
         val deviceBounds: GPUBounds,
         val localWidth: Int,
@@ -43,7 +44,7 @@ object MaskBlurPlanner {
         }
         if (request.sigma == 0f) return MaskBlurPlan.Identity
 
-        val normalized = request.sigma.coerceAtMost(135f)
+        val normalized = request.sigma.coerceIn(0.5f, 135f)
         val halo = ceil(3f * normalized).toInt()
         val left = maxOf(0f, request.bounds.left - halo, request.clipBounds.left)
         val top = maxOf(0f, request.bounds.top - halo, request.clipBounds.top)
@@ -64,6 +65,7 @@ object MaskBlurPlanner {
                     request.sigma,
                     normalized,
                     normalized * scale,
+                    halo,
                     scale,
                     GPUBounds(left, top, right, bottom),
                     width,

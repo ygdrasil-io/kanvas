@@ -3,8 +3,10 @@ package org.graphiks.kanvas.surface.gpu
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
 import org.graphiks.kanvas.paint.MaskFilter
+import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.pipeline.BlurStyle
+import org.graphiks.kanvas.pipeline.ClipOp
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
@@ -84,6 +86,47 @@ class GPUMaskBlurSurfaceTest {
         assertTrue(result.diagnostics.entries.any { entry ->
             entry.reason == "unsupported.mask-filter.blur.intermediate-budget"
         })
+    }
+
+    @Test
+    fun `destination-read blur applies a device clip only at final composite`() {
+        val result = Surface(width = 32, height = 32).run {
+            requireWebGpu()
+            canvas {
+                drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE))
+                save()
+                clipRect(Rect(8f, 8f, 24f, 24f), ClipOp.INTERSECT, antiAlias = false)
+                drawRect(
+                    Rect(4f, 4f, 28f, 28f),
+                    blurPaint(BlurStyle.NORMAL, 2f).copy(blendMode = BlendMode.DARKEN),
+                )
+                restore()
+            }
+            render()
+        }
+
+        assertEquals(255, result.pixels[(4 * 32 + 4) * 4].toInt())
+        assertTrue(result.pixels[(16 * 32 + 16) * 4].toInt() < 255)
+        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+    }
+
+    @Test
+    fun `source blur preserves destination outside its halo`() {
+        val result = Surface(width = 32, height = 32).run {
+            requireWebGpu()
+            canvas {
+                drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE))
+                drawRect(
+                    Rect(10f, 10f, 22f, 22f),
+                    blurPaint(BlurStyle.NORMAL, 2f).copy(blendMode = BlendMode.SRC),
+                )
+            }
+            render()
+        }
+
+        assertEquals(255, result.pixels[(2 * 32 + 2) * 4].toInt())
+        assertEquals(0, result.pixels[(16 * 32 + 16) * 4].toInt())
+        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
     }
 
     private fun renderRect(style: BlurStyle, sigma: Float): ByteArray =

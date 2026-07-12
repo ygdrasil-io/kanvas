@@ -1,5 +1,9 @@
 package org.graphiks.kanvas.surface.gpu
 
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+import kotlin.math.ceil
+import kotlin.math.floor
 import org.graphiks.kanvas.gpu.renderer.clips.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBlendFacts
@@ -9,6 +13,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUImageFilterPlan
 import org.graphiks.kanvas.gpu.renderer.commands.GPURect
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendOffscreenTarget
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRawUniformDraw
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.surface.DiagnosticFact
 import org.graphiks.kanvas.surface.Diagnostics
@@ -26,6 +31,10 @@ internal data class GPUClipRouteContext(
     val frameCache: GPUClipCoverageFrameCache,
     val destinationReadComposer: GPUClipDestinationReadComposer = GPUClipDestinationReadRefusalComposer,
     val trace: GPUClipRouteTrace? = null,
+    /** Forces a source texture even for fixed-function no-clip/scissor composites. */
+    val forceSourceComposition: Boolean = false,
+    /** Bounds that contain the source's non-transparent content for fixed-function composition. */
+    val sourceCompositeBounds: () -> GPUBounds? = { null },
 )
 
 /** Test-visible accounting that prevents a ComplexStack draw from reaching a direct route. */
@@ -56,6 +65,7 @@ internal fun interface GPUClipDestinationReadComposer {
     fun compose(
         context: GPUClipRouteContext,
         clipMaskLabel: String?,
+        clipScissor: GPUBounds?,
         blend: GPUBlendFacts,
         diagnostics: Diagnostics,
         encodeSource: () -> Boolean,
@@ -67,6 +77,7 @@ internal object GPUClipDestinationReadRefusalComposer : GPUClipDestinationReadCo
     override fun compose(
         context: GPUClipRouteContext,
         clipMaskLabel: String?,
+        clipScissor: GPUBounds?,
         blend: GPUBlendFacts,
         diagnostics: Diagnostics,
         encodeSource: () -> Boolean,
@@ -124,7 +135,30 @@ internal fun GPUBackendOffscreenTarget.renderWithClip(
     is GPUClipCoveragePlan.Scissor,
     -> {
         if (blend.requiresDestinationRead) {
-            context.destinationReadComposer.compose(context, null, blend, diagnostics, encodeSource)
+            context.destinationReadComposer.compose(
+                context,
+                null,
+                (clipPlan as? GPUClipCoveragePlan.Scissor)?.bounds,
+                blend,
+                diagnostics,
+                encodeSource,
+            )
+        } else if (context.forceSourceComposition) {
+            if (!encodeSource()) return false
+            if (!compositeFixedSource(context, clipPlan, blend)) return false
+            context.trace?.sourceThenComposite()
+            diagnostics.degrade(
+                code = "route:clip:${context.sourceLabelForDiagnostics}",
+                operation = context.sourceLabelForDiagnostics,
+                reason = "clip-source-then-composite",
+                facts = listOf(
+                    DiagnosticFact(
+                        "clip.strategy",
+                        if (clipPlan is GPUClipCoveragePlan.Scissor) "scissor" else "source-target",
+                    ),
+                ),
+            )
+            true
         } else {
             context.trace?.direct(clipPlan)
             if (clipPlan is GPUClipCoveragePlan.Scissor) {
@@ -145,6 +179,7 @@ internal fun GPUBackendOffscreenTarget.renderWithClip(
                     context.destinationReadComposer.compose(
                         context,
                         lease.mask.sampleLabel,
+                        null,
                         blend,
                         diagnostics,
                         encodeSource,
@@ -188,6 +223,57 @@ internal fun GPUBackendOffscreenTarget.renderWithClip(
     }
     is GPUClipCoveragePlan.Refused -> false
 }
+}
+
+/** Applies a source texture at the final composition boundary, including a device-rect scissor. */
+private fun GPUBackendOffscreenTarget.compositeFixedSource(
+    context: GPUClipRouteContext,
+    clipPlan: GPUClipCoveragePlan,
+    blend: GPUBlendFacts,
+): Boolean {
+    val draw = sourceCompositeUniformDraw(context, clipPlan, context.sourceCompositeBounds()) ?: return false
+    encodeOffscreenTexture(context.sceneLabel, null) {
+        drawCompositePass(
+            wgsl = COPY_WGSL,
+            colorFormat = context.colorFormat,
+            textureLabel = context.sourceLabel,
+            draws = listOf(draw),
+            blendMode = blend.blendMode ?: GPUBlendMode.SRC_OVER,
+        )
+    }
+    return true
+}
+
+private fun sourceCompositeUniformDraw(
+    context: GPUClipRouteContext,
+    clipPlan: GPUClipCoveragePlan,
+    sourceBounds: GPUBounds?,
+): GPUBackendRawUniformDraw? {
+    val scissor = (clipPlan as? GPUClipCoveragePlan.Scissor)?.bounds
+    val left = floor(maxOf(0f, scissor?.left ?: 0f, sourceBounds?.left ?: 0f))
+        .toInt().coerceIn(0, context.targetWidth)
+    val top = floor(maxOf(0f, scissor?.top ?: 0f, sourceBounds?.top ?: 0f))
+        .toInt().coerceIn(0, context.targetHeight)
+    val right = ceil(minOf(
+        context.targetWidth.toFloat(),
+        scissor?.right ?: context.targetWidth.toFloat(),
+        sourceBounds?.right ?: context.targetWidth.toFloat(),
+    )).toInt().coerceIn(left, context.targetWidth)
+    val bottom = ceil(minOf(
+        context.targetHeight.toFloat(),
+        scissor?.bottom ?: context.targetHeight.toFloat(),
+        sourceBounds?.bottom ?: context.targetHeight.toFloat(),
+    )).toInt().coerceIn(top, context.targetHeight)
+    if (right == left || bottom == top) return null
+    return GPUBackendRawUniformDraw(
+        uniformBytes = ByteBuffer.allocate(16).order(ByteOrder.LITTLE_ENDIAN).apply {
+            putFloat(0f); putFloat(0f); putFloat(0f); putFloat(0f)
+        }.array(),
+        scissorX = left,
+        scissorY = top,
+        scissorWidth = right - left,
+        scissorHeight = bottom - top,
+    )
 }
 
 private fun GPUBlendFacts.isSafeMaskComposite(): Boolean =

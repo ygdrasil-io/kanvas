@@ -14,6 +14,25 @@ class MaskBlurPlanTest {
     }
 
     @Test
+    fun `positive sub-half sigma uses a normalized three-tap kernel`() {
+        val result = assertIs<MaskBlurPlan.Ready>(plan(sigma = 0.1f))
+
+        assertEquals(0.5f, result.normalizedSigma)
+        assertEquals(2, result.halo)
+        assertEquals(3, blurKernelUniform(result).tapCount)
+    }
+
+    @Test
+    fun `negative and non-finite sigma refuse stably`() {
+        listOf(-0.1f, Float.NaN, Float.POSITIVE_INFINITY).forEach { sigma ->
+            assertEquals(
+                "unsupported.mask-filter.blur.sigma",
+                assertIs<MaskBlurPlan.Refused>(plan(sigma = sigma)).code,
+            )
+        }
+    }
+
+    @Test
     fun `small blur keeps native scale and halo`() {
         val result = assertIs<MaskBlurPlan.Ready>(plan(sigma = 2f))
 

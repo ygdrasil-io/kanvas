@@ -6,6 +6,7 @@ import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.geometry.FillType
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.paint.MaskFilter
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
 import org.graphiks.kanvas.gpu.renderer.commands.GPUImageFilterPlan
@@ -26,6 +27,7 @@ import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.gpu.renderer.execution.GPUOffscreenTargetRequest
 import org.graphiks.kanvas.gpu.renderer.filters.MaskBlurPlan
 import org.graphiks.kanvas.gpu.renderer.filters.MaskBlurPlanner
+import org.graphiks.kanvas.gpu.renderer.filters.blurKernelUniform
 import org.graphiks.kanvas.gpu.renderer.geometry.PathData
 import org.graphiks.kanvas.gpu.renderer.geometry.PathTessellator
 import org.graphiks.kanvas.gpu.renderer.geometry.PathVerb as GpuPathVerb
@@ -73,6 +75,31 @@ internal fun selectPathVerticesForCommand(
 ): List<Point> =
     if (isStroke) flattened else triangulated
 
+private fun DisplayOp.hasActiveMaskBlur(): Boolean = when (this) {
+    is DisplayOp.DrawRect -> paint.hasActiveMaskBlur()
+    is DisplayOp.DrawPath -> paint.hasActiveMaskBlur()
+    is DisplayOp.DrawRRect -> paint.hasActiveMaskBlur()
+    else -> false
+}
+
+private fun Paint.hasActiveMaskBlur(): Boolean =
+    (maskFilter as? MaskFilter.Blur)?.sigma != 0f
+
+private fun MaskBlurPlan.Ready.maskBlurDiagnosticFacts(): List<DiagnosticFact> {
+    val kernel = blurKernelUniform(this)
+    return listOf(
+        DiagnosticFact("mask.blur.requested-sigma", requestedSigma.toString()),
+        DiagnosticFact("mask.blur.normalized-sigma", normalizedSigma.toString()),
+        DiagnosticFact("mask.blur.effective-sigma", effectiveSigma.toString()),
+        DiagnosticFact("mask.blur.halo", halo.toString()),
+        DiagnosticFact("mask.blur.dimensions", "${localWidth}x$localHeight"),
+        DiagnosticFact("mask.blur.bytes", "$bytesPerTexture/$requiredBytes"),
+        DiagnosticFact("mask.blur.taps", kernel.tapCount.toString()),
+        DiagnosticFact("mask.blur.module-keys", blurModuleKeysFor(this).joinToString(",")),
+        DiagnosticFact("mask.blur.passes", "mask,horizontal,vertical,style,source"),
+    )
+}
+
 /** Every shader destination-read mode has one stable uniform index shared by both formula shaders. */
 internal fun destinationReadBlendModeIndex(mode: GPUBlendMode): Int? = when (mode) {
     GPUBlendMode.MULTIPLY -> 0
@@ -102,6 +129,31 @@ internal fun destinationReadBlendUniformDraw(
     )
 }
 
+/** Packs the scissor-aware destination-read formula uniform block. */
+internal fun destinationReadScissorBlendUniformDraw(
+    mode: GPUBlendMode,
+    clipBounds: GPUBounds,
+    width: Int,
+    height: Int,
+): GPUBackendRawUniformDraw? {
+    val index = destinationReadBlendModeIndex(mode) ?: return null
+    val bytes = java.nio.ByteBuffer.allocate(32).order(java.nio.ByteOrder.LITTLE_ENDIAN).apply {
+        putInt(index)
+        putInt(0); putInt(0); putInt(0)
+        putFloat(clipBounds.left)
+        putFloat(clipBounds.top)
+        putFloat(clipBounds.right)
+        putFloat(clipBounds.bottom)
+    }
+    return GPUBackendRawUniformDraw(
+        uniformBytes = bytes.array(),
+        scissorX = 0,
+        scissorY = 0,
+        scissorWidth = width,
+        scissorHeight = height,
+    )
+}
+
 /**
  * Replaces the scene with the destination-read blend result. The destination texture is never
  * mapped to the CPU: an existing scene is copied GPU-to-GPU, while an empty scene gets a
@@ -113,12 +165,17 @@ internal fun GPUBackendOffscreenTarget.renderDestinationReadBlend(
     sourceLabel: String,
     snapshotLabel: String,
     clipMaskLabel: String?,
+    clipScissor: GPUBounds? = null,
     mode: GPUBlendMode,
     colorFormat: String,
     width: Int,
     height: Int,
 ): Boolean {
-    val draw = destinationReadBlendUniformDraw(mode, width, height) ?: return false
+    val draw = if (clipScissor == null) {
+        destinationReadBlendUniformDraw(mode, width, height)
+    } else {
+        destinationReadScissorBlendUniformDraw(mode, clipScissor, width, height)
+    } ?: return false
     val transparent = GPUClearColor(0.0, 0.0, 0.0, 0.0)
     if (sceneHasContent) {
         copyOffscreenTexture(sceneLabel, snapshotLabel)
@@ -126,9 +183,19 @@ internal fun GPUBackendOffscreenTarget.renderDestinationReadBlend(
         encodeOffscreenTexture(snapshotLabel, transparent) {}
     }
     encodeOffscreenTexture(sceneLabel, transparent) {
-        if (clipMaskLabel == null) {
+        if (clipMaskLabel != null) {
+            drawThreeTexturePass(
+                wgsl = CLIP_BLEND_FORMULA_WGSL,
+                colorFormat = colorFormat,
+                firstTextureLabel = sourceLabel,
+                secondTextureLabel = snapshotLabel,
+                thirdTextureLabel = clipMaskLabel,
+                draws = listOf(draw),
+                blendMode = GPUBlendMode.SRC,
+            )
+        } else if (clipScissor != null) {
             drawTwoTexturePass(
-                wgsl = BLEND_FORMULA_WGSL,
+                wgsl = SCISSOR_CLIP_BLEND_FORMULA_WGSL,
                 colorFormat = colorFormat,
                 firstTextureLabel = sourceLabel,
                 secondTextureLabel = snapshotLabel,
@@ -136,12 +203,11 @@ internal fun GPUBackendOffscreenTarget.renderDestinationReadBlend(
                 blendMode = GPUBlendMode.SRC,
             )
         } else {
-            drawThreeTexturePass(
-                wgsl = CLIP_BLEND_FORMULA_WGSL,
+            drawTwoTexturePass(
+                wgsl = BLEND_FORMULA_WGSL,
                 colorFormat = colorFormat,
                 firstTextureLabel = sourceLabel,
                 secondTextureLabel = snapshotLabel,
-                thirdTextureLabel = clipMaskLabel,
                 draws = listOf(draw),
                 blendMode = GPUBlendMode.SRC,
             )
@@ -193,6 +259,7 @@ internal fun renderViaGpu(
             var clipSourceRoute = false
             var clipSourcePreservesClip = false
             var sourceHasContent = false
+            var maskBlurSourceBounds: GPUBounds? = null
             val layerStack = java.util.ArrayDeque<SceneTargetFrame>()
             var layerOrdinal = 0
             val clearTransparent = GPUClearColor(0.0, 0.0, 0.0, 0.0)
@@ -255,6 +322,7 @@ internal fun renderViaGpu(
             }
 
             fun renderMaskBlur(command: NormalizedDrawCommand, plan: MaskBlurPlan.Ready): Boolean {
+                maskBlurSourceBounds = plan.deviceBounds
                 val routedCommand = when {
                     !clipSourceRoute -> command
                     clipSourcePreservesClip -> command.copyForDestinationReadSource()
@@ -267,6 +335,12 @@ internal fun renderViaGpu(
                         diagnostic.code,
                     )
                 }
+                diagnostics.degrade(
+                    code = "route:mask-blur:${command.commandId.value}",
+                    operation = command.diagnosticName,
+                    reason = "mask-blur-source",
+                    facts = plan.maskBlurDiagnosticFacts(),
+                )
                 return recordSourcePart(t.renderMaskBlurCommand(
                     sceneLabel,
                     routedCommand,
@@ -1481,6 +1555,7 @@ internal fun renderViaGpu(
             val destinationReadComposer = GPUClipDestinationReadComposer {
                     context,
                     clipMaskLabel,
+                    clipScissor,
                     blend,
                     composerDiagnostics,
                     encodeSource,
@@ -1512,6 +1587,7 @@ internal fun renderViaGpu(
                         sourceLabel = context.sourceLabel,
                         snapshotLabel = snapLabel,
                         clipMaskLabel = clipMaskLabel,
+                        clipScissor = clipScissor,
                         mode = mode,
                         colorFormat = context.colorFormat,
                         width = context.targetWidth,
@@ -1539,6 +1615,7 @@ internal fun renderViaGpu(
             }
             for (op in ops) {
                 val cmdId = GPUDrawCommandID(dispatched.size)
+                maskBlurSourceBounds = null
                 if (op is DisplayOp.BeginLayer) {
                     if (suppressedLayerDepth > 0) {
                         suppressedLayerDepth++
@@ -1628,6 +1705,8 @@ internal fun renderViaGpu(
                     frameCache = clipFrameCache,
                     destinationReadComposer = destinationReadComposer,
                     trace = routeTrace,
+                    forceSourceComposition = op.hasActiveMaskBlur(),
+                    sourceCompositeBounds = { maskBlurSourceBounds },
                 )
                 if (blend.requiresDestinationRead) {
                     val rendered = t.renderWithClip(
@@ -1682,7 +1761,9 @@ internal fun renderViaGpu(
                         encodeDirect = { executeCoreClipRoute(op, cmdId, source = false) },
                         encodeSource = { executeCoreClipRoute(op, cmdId, source = true) },
                     )
-                    if (rendered && clipPlan is GPUClipCoveragePlan.Mask) {
+                    if (rendered &&
+                        (clipPlan is GPUClipCoveragePlan.Mask || routeContext.forceSourceComposition)
+                    ) {
                         sceneHasContent = true
                         dispatched.add(cmdId.toString())
                         diagnostics.degrade(

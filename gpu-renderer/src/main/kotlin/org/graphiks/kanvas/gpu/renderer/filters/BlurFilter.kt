@@ -1,6 +1,48 @@
 package org.graphiks.kanvas.gpu.renderer.filters
 
+import kotlin.math.ceil
 import kotlin.math.exp
+
+/** Largest separable mask-blur kernel accepted by the static WebGPU modules. */
+const val MAX_MASK_BLUR_TAPS = 25
+
+/**
+ * Per-draw kernel payload for a static mask-blur WGSL module.
+ *
+ * The array is padded to the module's fixed maximum. Only [tapCount] values
+ * participate in sampling, so sigma remains a uniform-only specialization axis.
+ */
+data class BlurKernelUniform(
+    val tapCount: Int,
+    val weights: FloatArray,
+) {
+    init {
+        require(tapCount in 3..MAX_MASK_BLUR_TAPS) {
+            "Mask blur tapCount must be in 3..$MAX_MASK_BLUR_TAPS"
+        }
+        require(weights.size == MAX_MASK_BLUR_TAPS) {
+            "Mask blur weights must be padded to $MAX_MASK_BLUR_TAPS values"
+        }
+    }
+}
+
+/** Builds the bounded, normalized Gaussian kernel consumed by the static mask-blur modules. */
+fun blurKernelUniform(plan: MaskBlurPlan.Ready): BlurKernelUniform {
+    val activeSigma = maxOf(0.5f, plan.effectiveSigma)
+    val taps = (ceil(activeSigma).toInt() * 2 + 1).coerceIn(3, MAX_MASK_BLUR_TAPS)
+    val half = taps / 2
+    val activeWeights = FloatArray(taps) { index ->
+        val x = (index - half).toFloat()
+        exp(-(x * x) / (2f * activeSigma * activeSigma))
+    }
+    val sum = activeWeights.sum()
+    check(sum > 0f && sum.isFinite()) { "Mask blur Gaussian kernel must have a finite positive sum" }
+    val paddedWeights = FloatArray(MAX_MASK_BLUR_TAPS)
+    activeWeights.forEachIndexed { index, value ->
+        paddedWeights[index] = value / sum
+    }
+    return BlurKernelUniform(tapCount = taps, weights = paddedWeights)
+}
 
 /** Identity copy WGSL used when sigma is near-zero. */
 val BLUR_PASS_COPY_WGSL: String = """

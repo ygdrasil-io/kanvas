@@ -7,7 +7,6 @@ import kotlin.math.floor
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBlendFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.commands.GPUClipFacts
-import org.graphiks.kanvas.gpu.renderer.commands.GPUClipKind
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.GPURRect
 import org.graphiks.kanvas.gpu.renderer.commands.GPURRectCornerRadii
@@ -23,20 +22,25 @@ import org.graphiks.kanvas.gpu.renderer.filters.MaskBlurPlanner
 import org.graphiks.kanvas.gpu.renderer.filters.MaskBlurRequest
 import org.graphiks.kanvas.gpu.renderer.filters.NormalizedBlurStyle
 import org.graphiks.kanvas.gpu.renderer.filters.NormalizedMaskFilter
-import org.graphiks.kanvas.gpu.renderer.filters.generateBlurPassWgsl
+import org.graphiks.kanvas.gpu.renderer.filters.MAX_MASK_BLUR_TAPS
+import org.graphiks.kanvas.gpu.renderer.filters.blurKernelUniform
 import org.graphiks.kanvas.surface.Diagnostics
 import org.graphiks.kanvas.surface.GPUColorFormat
 import org.graphiks.kanvas.surface.RenderConfig
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
+
+internal const val MASK_BLUR_HORIZONTAL_MODULE_KEY = "mask-blur.horizontal.v1"
+internal const val MASK_BLUR_VERTICAL_MODULE_KEY = "mask-blur.vertical.v1"
 
 internal data class GPUMaskBlurDispatchResult(
     val rendered: Boolean,
 )
 
 internal fun GPUBackendOffscreenTarget.renderMaskBlurCommand(
-    sceneTextureLabel: String,
+    sourceTextureLabel: String,
     command: NormalizedDrawCommand,
     plan: MaskBlurPlan.Ready,
-    sceneClearColor: GPUClearColor?,
+    sourceClearColor: GPUClearColor?,
     dispatched: MutableList<String>,
     diagnostics: Diagnostics,
     colorFormat: String,
@@ -109,27 +113,20 @@ internal fun GPUBackendOffscreenTarget.renderMaskBlurCommand(
     }
     if (diagnostics.fatalCount != fatalBeforeMask) return GPUMaskBlurDispatchResult(rendered = false)
 
-    val fullLocalDraw = GPUBackendRawUniformDraw(
-        uniformBytes = ByteArray(16),
-        scissorX = 0,
-        scissorY = 0,
-        scissorWidth = plan.localWidth,
-        scissorHeight = plan.localHeight,
-    )
     encodeOffscreenTexture(horizontal, transparent) {
         drawCompositePass(
-            generateBlurPassWgsl(BlurAxis.HORIZONTAL, plan.effectiveSigma),
+            blurWgsl(BlurAxis.HORIZONTAL),
             "rgba8unorm",
             mask,
-            listOf(fullLocalDraw),
+            listOf(blurUniformDraw(plan)),
         )
     }
     encodeOffscreenTexture(vertical, transparent) {
         drawCompositePass(
-            generateBlurPassWgsl(BlurAxis.VERTICAL, plan.effectiveSigma),
+            blurWgsl(BlurAxis.VERTICAL),
             "rgba8unorm",
             horizontal,
-            listOf(fullLocalDraw),
+            listOf(blurUniformDraw(plan)),
         )
     }
     encodeOffscreenTexture(styled, transparent) {
@@ -141,13 +138,13 @@ internal fun GPUBackendOffscreenTarget.renderMaskBlurCommand(
             listOf(styleUniformDraw(plan.style, plan.localWidth, plan.localHeight)),
         )
     }
-    encodeOffscreenTexture(sceneTextureLabel, sceneClearColor) {
+    encodeOffscreenTexture(sourceTextureLabel, sourceClearColor) {
         drawCompositePass(
             MASK_BLUR_SOLID_COMPOSITE_WGSL,
             colorFormat,
             styled,
             listOf(finalSolidUniformDraw(material, plan)),
-            command.blend.blendMode,
+            GPUBlendMode.SRC_OVER,
         )
     }
 
@@ -171,15 +168,9 @@ internal fun NormalizedDrawCommand.toMaskBlurRequest(
         else -> null
     } as? NormalizedMaskFilter.Blur
         ?: error("Mask blur request requires a normalized blur mask filter")
-    val clipBounds = when (clip.kind) {
-        GPUClipKind.WideOpen -> GPUBounds(0f, 0f, targetWidth.toFloat(), targetHeight.toFloat())
-        GPUClipKind.DeviceRect,
-        GPUClipKind.ComplexStack,
-        -> clip.bounds
-    }
     return MaskBlurRequest(
         bounds = bounds,
-        clipBounds = clipBounds,
+        clipBounds = GPUBounds(0f, 0f, targetWidth.toFloat(), targetHeight.toFloat()),
         targetWidth = targetWidth,
         targetHeight = targetHeight,
         style = blur.style,
@@ -284,6 +275,39 @@ private fun styleUniformDraw(
         scissorWidth = localWidth,
         scissorHeight = localHeight,
     )
+
+/** Returns one of two static module sources; sigma is deliberately not an input. */
+internal fun blurWgsl(axis: BlurAxis): String = when (axis) {
+    BlurAxis.HORIZONTAL -> MASK_BLUR_HORIZONTAL_WGSL
+    BlurAxis.VERTICAL -> MASK_BLUR_VERTICAL_WGSL
+}
+
+/** Pipeline/module identity has only the static horizontal and vertical axes. */
+internal fun blurModuleKeysFor(plan: MaskBlurPlan): List<String> = when (plan) {
+    is MaskBlurPlan.Ready -> listOf(MASK_BLUR_HORIZONTAL_MODULE_KEY, MASK_BLUR_VERTICAL_MODULE_KEY)
+    MaskBlurPlan.Identity,
+    is MaskBlurPlan.Refused,
+    -> emptyList()
+}
+
+/** Packs the 144-byte parser-reflected `MaskBlurUniforms` layout. */
+private fun blurUniformDraw(plan: MaskBlurPlan.Ready): GPUBackendRawUniformDraw {
+    val kernel = blurKernelUniform(plan)
+    return GPUBackendRawUniformDraw(
+        uniformBytes = ByteBuffer.allocate(144).order(ByteOrder.LITTLE_ENDIAN).apply {
+            putInt(kernel.tapCount)
+            putInt(0)
+            putFloat(plan.localWidth.toFloat()); putFloat(plan.localHeight.toFloat())
+            putFloat(0f); putFloat(0f); putFloat(0f); putFloat(0f)
+            kernel.weights.forEach(::putFloat)
+            repeat(28 - MAX_MASK_BLUR_TAPS) { putFloat(0f) }
+        }.array(),
+        scissorX = 0,
+        scissorY = 0,
+        scissorWidth = plan.localWidth,
+        scissorHeight = plan.localHeight,
+    )
+}
 
 private fun finalSolidUniformDraw(
     material: GPUMaterialDescriptor.SolidColor,
