@@ -5,8 +5,12 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUClipKind
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRawUniformDraw
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRenderRecorder
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendStencilCoverConfig
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendStencilFillRule
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendStencilMode
-import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendTriangleData
+import org.graphiks.kanvas.gpu.renderer.geometry.FlattenedPath
+import org.graphiks.kanvas.gpu.renderer.geometry.PathTessellator
+import org.graphiks.kanvas.gpu.renderer.geometry.Point
 import org.graphiks.kanvas.paint.StrokeCap
 import org.graphiks.kanvas.paint.StrokeJoin
 import org.graphiks.kanvas.surface.Diagnostics
@@ -88,28 +92,28 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
         Pair(tessVertices, contourStarts)
     }
 
-    val indices = mutableListOf<Int>()
-    for (ci in strokeContours.indices) {
-        val start = strokeContours[ci]
-        val end = if (ci + 1 < strokeContours.size) strokeContours[ci + 1] else strokeVertices.size / 2
-        val cvCount = end - start
-        if (cvCount < 3) continue
-        for (i in 1 until cvCount - 1) {
-            indices.add(start)
-            indices.add(start + i)
-            indices.add(start + i + 1)
-        }
-    }
-
-    if (indices.size < 3) {
-        refuse("no_triangles_generated")
+    if (strokeContours.isEmpty()) {
+        refuse("no_contours")
         return
     }
 
     val finalVertices = if (cmd.antiAlias) offsetForAA(strokeVertices) else strokeVertices
-    val triangleData = GPUBackendTriangleData(
-        vertices = finalVertices.toFloatArray(),
-        indices = indices.toIntArray(),
+    if (finalVertices.any { !it.isFinite() }) {
+        refuse("non_finite_vertices")
+        return
+    }
+    val stencilConfig = pathStencilConfig(
+        fillRule = cmd.pathDescriptor.fillRule,
+        inverse = cmd.pathDescriptor.inverseFill,
+    ) ?: run {
+        refuse("unsupported_fill_rule:${cmd.pathDescriptor.fillRule}")
+        return
+    }
+    val triangleData = PathTessellator().stencilEdgeFan(
+        FlattenedPath(
+            points = finalVertices.chunked(2).map { Point(it[0], it[1]) },
+            contourStarts = strokeContours,
+        ),
     )
 
     val pathBounds = if (cmd.stroke) computeBounds(finalVertices) else cmd.bounds
@@ -129,6 +133,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
         stencilMode = GPUBackendStencilMode.Write,
         triangleData = triangleData,
         draws = emptyList(),
+        stencilConfig = stencilConfig,
     )
 
     when (val material = cmd.material) {
@@ -151,6 +156,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
                     ),
                 ),
                 blendMode = blendMode,
+                stencilConfig = stencilConfig,
             )
         }
         is GPUMaterialDescriptor.LinearGradient -> {
@@ -192,6 +198,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
                         ),
                     ),
                     blendMode = blendMode,
+                    stencilConfig = stencilConfig,
                 )
             } else {
                 val bb = java.nio.ByteBuffer.allocate(48).order(java.nio.ByteOrder.nativeOrder())
@@ -218,6 +225,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
                         ),
                     ),
                     blendMode = blendMode,
+                    stencilConfig = stencilConfig,
                 )
             }
         }
@@ -256,6 +264,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
                         ),
                     ),
                     blendMode = blendMode,
+                    stencilConfig = stencilConfig,
                 )
             } else {
                 val bb = java.nio.ByteBuffer.allocate(48).order(java.nio.ByteOrder.nativeOrder())
@@ -283,6 +292,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
                         ),
                     ),
                     blendMode = blendMode,
+                    stencilConfig = stencilConfig,
                 )
             }
         }
@@ -325,6 +335,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
                         ),
                     ),
                     blendMode = blendMode,
+                    stencilConfig = stencilConfig,
                 )
             } else {
                 val bb = java.nio.ByteBuffer.allocate(48).order(java.nio.ByteOrder.nativeOrder())
@@ -351,6 +362,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
                         ),
                     ),
                     blendMode = blendMode,
+                    stencilConfig = stencilConfig,
                 )
             }
         }
@@ -373,6 +385,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
                         ),
                     ),
                     blendMode = blendMode,
+                    stencilConfig = stencilConfig,
                 )
             } else {
                 refuse("unsupported_material:conical_gradient_fallback")
@@ -416,6 +429,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
                     ),
                 ),
                 blendMode = blendMode,
+                stencilConfig = stencilConfig,
             )
         }
         else -> {
@@ -433,4 +447,16 @@ private fun java.nio.ByteBuffer.alignUniformArray() {
     while (position() % 16 != 0) {
         putInt(0)
     }
+}
+
+private fun pathStencilConfig(
+    fillRule: String,
+    inverse: Boolean,
+): GPUBackendStencilCoverConfig? {
+    val rule = when (fillRule) {
+        "NonZero", "winding" -> GPUBackendStencilFillRule.NonZero
+        "EvenOdd", "even_odd" -> GPUBackendStencilFillRule.EvenOdd
+        else -> return null
+    }
+    return GPUBackendStencilCoverConfig(fillRule = rule, inverse = inverse)
 }

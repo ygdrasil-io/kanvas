@@ -30,6 +30,9 @@ import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendVertexColorData
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendVertexPositionUVData
 import org.graphiks.kanvas.gpu.renderer.execution.GPUClearColor
 import org.graphiks.kanvas.gpu.renderer.execution.GPUSurfaceTarget
+import org.graphiks.kanvas.gpu.renderer.geometry.FlattenedPath
+import org.graphiks.kanvas.gpu.renderer.geometry.PathTessellator
+import org.graphiks.kanvas.gpu.renderer.geometry.Point
 import org.graphiks.kanvas.gpu.renderer.filters.MaskBlurPlan
 import org.graphiks.kanvas.gpu.renderer.filters.MaskBlurPlanner
 import org.graphiks.kanvas.gpu.renderer.filters.NormalizedBlurStyle
@@ -146,7 +149,13 @@ class GPUMaskBlurDispatchTest {
             dashArray = floatArrayOf(4f, 2f),
             dashPhase = 1f,
         )
-        assertEquals(expected.vertices, requireNotNull(target.maskTriangleData).vertices.toList())
+        val expectedEdgeFan = PathTessellator().stencilEdgeFan(
+            FlattenedPath(
+                points = expected.vertices.chunked(2).map { Point(it[0], it[1]) },
+                contourStarts = expected.contourStarts,
+            ),
+        )
+        assertEquals(expectedEdgeFan.vertices.toList(), requireNotNull(target.maskTriangleData).vertices.toList())
     }
 
     private fun solidRectCommand(): NormalizedDrawCommand.FillRect {
@@ -342,7 +351,7 @@ class GPUMaskBlurDispatchTest {
                     passKinds += "mask"
                 }
             }
-            override fun drawFullscreenTextureUniformPass(wgsl: String, colorFormat: String, textureRgba: ByteArray, textureWidth: Int, textureHeight: Int, textureFormat: String, draws: List<GPUBackendRawUniformDraw>, blendMode: GPUBlendMode?, stencilMode: GPUBackendStencilMode?) = unexpected()
+            override fun drawFullscreenTextureUniformPass(wgsl: String, colorFormat: String, textureRgba: ByteArray, textureWidth: Int, textureHeight: Int, textureFormat: String, draws: List<GPUBackendRawUniformDraw>, blendMode: GPUBlendMode?, stencilMode: GPUBackendStencilMode?, stencilConfig: org.graphiks.kanvas.gpu.renderer.execution.GPUBackendStencilCoverConfig) = unexpected()
             override fun createVertexColorBuffer(data: GPUBackendVertexColorData): String = unexpected()
             override fun drawVertexColorIndexed(vertexBufferLabel: String, indexCount: Int, uniformDraw: GPUBackendRawUniformDraw, blendMode: GPUBlendMode?) = unexpected()
             override fun createVertexPositionUVBuffer(data: GPUBackendVertexPositionUVData): String = unexpected()

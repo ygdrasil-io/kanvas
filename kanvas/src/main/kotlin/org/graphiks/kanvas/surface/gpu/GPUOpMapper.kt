@@ -85,6 +85,7 @@ internal fun DisplayOp.DrawPath.toNormalizedCommand(
     val clip = this.clip.toGPUClipFacts(target)
     val transform = this.transform.toGPUTransformFacts()
     val maskFilter = paint.maskFilter.toNormalizedMaskFilter()
+    val pathStencilConfig = stencilConfig(path.fillType)
     return NormalizedDrawCommand.FillPath(
         commandId = cmdId,
         pathKey = "path-${cmdId.value}",
@@ -92,9 +93,9 @@ internal fun DisplayOp.DrawPath.toNormalizedCommand(
             pathKey = "path-${cmdId.value}",
             verbCount = 0,
             pointCount = tessellatedVertices.size / 2,
-            fillRule = "winding",
-            inverseFill = false,
-            finiteProof = "all_finite",
+            fillRule = pathStencilConfig.fillRule.name,
+            inverseFill = pathStencilConfig.inverse,
+            finiteProof = if (tessellatedVertices.all(Float::isFinite)) "all_finite" else "non_finite",
             volatility = "static",
             transformClass = "identity",
             edgeCount = edgeCount,

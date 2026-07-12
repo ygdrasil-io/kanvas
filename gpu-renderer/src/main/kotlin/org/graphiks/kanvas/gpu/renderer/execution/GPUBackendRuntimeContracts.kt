@@ -427,6 +427,10 @@ interface GPUBackendRenderRecorder {
         draws: List<GPUBackendRawUniformDraw>,
         blendMode: GPUBlendMode? = null,
         stencilMode: GPUBackendStencilMode? = null,
+        stencilConfig: GPUBackendStencilCoverConfig = GPUBackendStencilCoverConfig(
+            fillRule = GPUBackendStencilFillRule.NonZero,
+            inverse = false,
+        ),
     )
 
     /** Draws a two-pass stencil-cover fill with triangle geometry (write) and fullscreen cover (test). */

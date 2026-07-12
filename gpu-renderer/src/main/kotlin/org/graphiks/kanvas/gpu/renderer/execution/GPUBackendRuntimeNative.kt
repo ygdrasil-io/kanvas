@@ -1824,6 +1824,7 @@ private class WgpuRenderRecorder(
         draws: List<GPUBackendRawUniformDraw>,
         blendMode: GPUBlendMode?,
         stencilMode: GPUBackendStencilMode?,
+        stencilConfig: GPUBackendStencilCoverConfig,
     ) {
         recordFullscreenTextureUniformPass(
             wgsl = wgsl,
@@ -1845,6 +1846,7 @@ private class WgpuRenderRecorder(
             },
             blendMode = blendMode,
             stencilMode = stencilMode,
+            stencilConfig = stencilConfig,
         )
     }
 
@@ -3068,6 +3070,10 @@ private class WgpuRenderRecorder(
         draws: List<WgpuFullscreenUniformDraw>,
         blendMode: GPUBlendMode? = null,
         stencilMode: GPUBackendStencilMode? = null,
+        stencilConfig: GPUBackendStencilCoverConfig = GPUBackendStencilCoverConfig(
+            fillRule = GPUBackendStencilFillRule.NonZero,
+            inverse = false,
+        ),
     ) {
         require(stencilMode != GPUBackendStencilMode.Write) { "texture uniform pass only supports stencil test mode" }
         require(wgsl.isNotBlank()) { "wgsl must not be blank" }
@@ -3104,6 +3110,7 @@ private class WgpuRenderRecorder(
             sampleCount = sampleCount,
             blendMode = blendMode,
             stencilTest = stencilMode == GPUBackendStencilMode.Test,
+            stencilConfig = stencilConfig,
         )
         executionCaches.recordPreimages(keys)
         val bindGroupLayout = executionCaches.bindGroupLayout(device = device, keys = keys)
@@ -3123,6 +3130,7 @@ private class WgpuRenderRecorder(
                 sampleCount = sampleCount,
                 keys = keys,
                 blendMode = blendMode,
+                stencilConfig = stencilConfig,
             )
         } else {
             executionCaches.renderPipeline(
@@ -4954,6 +4962,10 @@ private fun fullscreenTextureExecutionCacheKeys(
     sampleCount: Int,
     blendMode: GPUBlendMode? = null,
     stencilTest: Boolean = false,
+    stencilConfig: GPUBackendStencilCoverConfig = GPUBackendStencilCoverConfig(
+        fillRule = GPUBackendStencilFillRule.NonZero,
+        inverse = false,
+    ),
 ): FullscreenExecutionCacheKeys {
     val blendLabel = blendMode?.gpuLabel ?: "src_over"
     val targetFormatClass = targetFormat.toBackendColorFormat()
@@ -5005,7 +5017,7 @@ private fun fullscreenTextureExecutionCacheKeys(
     val pipelineLayoutHash = stableSha256(pipelineLayoutPreimage)
     val renderPreimage = GPUPipelineKeyPreimage.Render(
         renderStepIdentity = renderStepIdentity,
-        renderStepVersion = "1",
+        renderStepVersion = "2",
         primitiveTopology = "triangle-list",
         materialKeyHash = stableSha256("material:fullscreen-texture-color-uniform:v1"),
         materialProgramId = materialProgramId,
@@ -5019,12 +5031,16 @@ private fun fullscreenTextureExecutionCacheKeys(
         sampleStateHash = sampleStateHash(sampleCount),
         bindGroupLayoutHash = "$bindGroupLayoutHash,$textureBindGroupLayoutHash",
         capabilityClass = capabilityClass,
-        capabilityFacts = listOf(
-            "adapter-backed-helper",
-            "targetFormat=$targetFormatClass",
-            "textureFormat=${textureFormat.name}",
-            "stencilTest=$stencilTest",
-        ),
+        capabilityFacts = buildList {
+            add("adapter-backed-helper")
+            add("targetFormat=$targetFormatClass")
+            add("textureFormat=${textureFormat.name}")
+            add("stencilTest=$stencilTest")
+            if (stencilTest) {
+                add("stencilFillRule=${stencilConfig.fillRule.name}")
+                add("stencilInverse=${stencilConfig.inverse}")
+            }
+        },
         rendererSalt = "kgpu-m26-001",
     )
     val canonicalRenderPreimage = GPUPipelineKeys.canonicalRenderPreimage(renderPreimage)

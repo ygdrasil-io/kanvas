@@ -161,6 +161,7 @@ class GPUImageFilterDispatchTest {
                 draws: List<GPUBackendRawUniformDraw>,
                 blendMode: GPUBlendMode?,
                 stencilMode: GPUBackendStencilMode?,
+                stencilConfig: org.graphiks.kanvas.gpu.renderer.execution.GPUBackendStencilCoverConfig,
             ) {
                 passKinds += "source"
                 sourceDraw = draws.single()

@@ -13,6 +13,7 @@ import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendCoverageMaskRequest
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRawUniformDraw
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRectDraw
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRenderRecorder
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendStencilCoverConfig
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendStencilMode
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendTriangleData
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendVertexColorData
@@ -627,6 +628,7 @@ class M25ExecutorWiringTest {
             draws: List<GPUBackendRawUniformDraw>,
             blendMode: GPUBlendMode?,
             stencilMode: GPUBackendStencilMode?,
+            stencilConfig: GPUBackendStencilCoverConfig,
         ) = Unit
 
         override fun drawFullscreenStencilPass(
@@ -636,6 +638,7 @@ class M25ExecutorWiringTest {
             triangleData: GPUBackendTriangleData?,
             draws: List<GPUBackendRawUniformDraw>,
             blendMode: GPUBlendMode?,
+            stencilConfig: GPUBackendStencilCoverConfig,
         ) = Unit
 
         override fun createVertexColorBuffer(data: GPUBackendVertexColorData): String = "vertex-color"
