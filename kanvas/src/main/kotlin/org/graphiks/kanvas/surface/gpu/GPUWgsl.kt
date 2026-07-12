@@ -415,6 +415,45 @@ internal val MASK_BLUR_SOLID_COMPOSITE_WGSL: String = """
     }
 """.trimIndent()
 
+private val DESTINATION_READ_BLEND_FORMULA_WGSL: String = """
+    fn unpremul(color: vec4f) -> vec3f {
+        if (color.a == 0.0) {
+            return vec3f(0.0);
+        }
+        return color.rgb / color.a;
+    }
+
+    fn blendColor(src: vec3f, dst: vec3f, blendMode: u32) -> vec3f {
+        switch blendMode {
+            case 0u: { return src * dst; }
+            case 1u: { return src + dst - src * dst; }
+            case 2u: {
+                let multiply = 2.0 * src * dst;
+                let screen = 1.0 - 2.0 * (1.0 - src) * (1.0 - dst);
+                return select(screen, multiply, dst <= vec3f(0.5));
+            }
+            case 3u: { return min(src, dst); }
+            case 4u: { return max(src, dst); }
+            case 5u: { return abs(dst - src); }
+            case 6u: { return src + dst - 2.0 * src * dst; }
+            default: { return src; }
+        }
+    }
+
+    fn blendPremul(src: vec4f, dst: vec4f, blendMode: u32) -> vec4f {
+        if (src.a == 0.0) {
+            return dst;
+        }
+        let srcColor = unpremul(src);
+        let dstColor = unpremul(dst);
+        let blended = blendColor(srcColor, dstColor, blendMode);
+        let rgb = src.rgb * (1.0 - dst.a) +
+            dst.rgb * (1.0 - src.a) +
+            src.a * dst.a * blended;
+        return vec4f(rgb, src.a + dst.a * (1.0 - src.a));
+    }
+""".trimIndent()
+
 internal val BLEND_FORMULA_WGSL: String = """
     struct Uniforms {
         blendMode: u32,
@@ -433,36 +472,7 @@ internal val BLEND_FORMULA_WGSL: String = """
         return vec4f(x, y, 0.0, 1.0);
     }
 
-    fn blendMultiply(src: vec4f, dst: vec4f) -> vec4f {
-        return vec4f(src.rgb * dst.rgb + dst.rgb * (1.0 - src.a) + src.rgb * (1.0 - dst.a), src.a + dst.a * (1.0 - src.a));
-    }
-
-    fn blendScreen(src: vec4f, dst: vec4f) -> vec4f {
-        return vec4f(src.rgb + dst.rgb - src.rgb * dst.rgb, src.a + dst.a * (1.0 - src.a));
-    }
-
-    fn blendOverlay(src: vec4f, dst: vec4f) -> vec4f {
-        let mul = 2.0 * src.rgb * dst.rgb;
-        let scrn = 1.0 - 2.0 * (1.0 - src.rgb) * (1.0 - dst.rgb);
-        let cond = step(dst.rgb, vec3f(0.5));
-        return vec4f(mix(scrn, mul, cond), src.a + dst.a * (1.0 - src.a));
-    }
-
-    fn blendDarken(src: vec4f, dst: vec4f) -> vec4f {
-        return vec4f(min(src.rgb, dst.rgb), src.a + dst.a * (1.0 - src.a));
-    }
-
-    fn blendLighten(src: vec4f, dst: vec4f) -> vec4f {
-        return vec4f(max(src.rgb, dst.rgb), src.a + dst.a * (1.0 - src.a));
-    }
-
-    fn blendDifference(src: vec4f, dst: vec4f) -> vec4f {
-        return vec4f(abs(dst.rgb - src.rgb), src.a + dst.a * (1.0 - src.a));
-    }
-
-    fn blendExclusion(src: vec4f, dst: vec4f) -> vec4f {
-        return vec4f(src.rgb + dst.rgb - 2.0 * src.rgb * dst.rgb, src.a + dst.a * (1.0 - src.a));
-    }
+    $DESTINATION_READ_BLEND_FORMULA_WGSL
 
     @fragment
     fn fs_main(@builtin(position) coord: vec4f) -> @location(0) vec4f {
@@ -470,22 +480,40 @@ internal val BLEND_FORMULA_WGSL: String = """
         let uv = vec2f(coord.x / f32(srcDims.x), coord.y / f32(srcDims.y));
         let src = textureSample(srcTexture, srcSampler, uv);
         let dst = textureSample(dstTexture, dstSampler, uv);
-        // The source intermediate is transparent outside the drawn geometry.
-        // Preserve the destination there instead of evaluating a blend formula
-        // against zero (DARKEN would otherwise turn the whole target black).
-        if (src.a == 0.0) {
-            return dst;
-        }
-        switch uniforms.blendMode {
-            case 0u: { return blendMultiply(src, dst); }
-            case 1u: { return blendScreen(src, dst); }
-            case 2u: { return blendOverlay(src, dst); }
-            case 3u: { return blendDarken(src, dst); }
-            case 4u: { return blendLighten(src, dst); }
-            case 5u: { return blendDifference(src, dst); }
-            case 6u: { return blendExclusion(src, dst); }
-            default: { return src; }
-        }
+        return blendPremul(src, dst, uniforms.blendMode);
+    }
+""".trimIndent()
+
+internal val CLIP_BLEND_FORMULA_WGSL: String = """
+    struct Uniforms {
+        blendMode: u32,
+    };
+
+    @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+    @group(1) @binding(1) var srcTexture: texture_2d<f32>;
+    @group(1) @binding(2) var srcSampler: sampler;
+    @group(1) @binding(3) var dstTexture: texture_2d<f32>;
+    @group(1) @binding(4) var dstSampler: sampler;
+    @group(1) @binding(5) var clipTexture: texture_2d<f32>;
+    @group(1) @binding(6) var clipSampler: sampler;
+
+    @vertex
+    fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
+        let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
+        let y = f32(idx & 2u) * 2.0 - 1.0;
+        return vec4f(x, y, 0.0, 1.0);
+    }
+
+    $DESTINATION_READ_BLEND_FORMULA_WGSL
+
+    @fragment
+    fn fs_main(@builtin(position) coord: vec4f) -> @location(0) vec4f {
+        let srcDims = textureDimensions(srcTexture);
+        let uv = vec2f(coord.x / f32(srcDims.x), coord.y / f32(srcDims.y));
+        let clipAlpha = textureSample(clipTexture, clipSampler, uv).a;
+        let src = textureSample(srcTexture, srcSampler, uv) * clipAlpha;
+        let dst = textureSample(dstTexture, dstSampler, uv);
+        return blendPremul(src, dst, uniforms.blendMode);
     }
 """.trimIndent()
 

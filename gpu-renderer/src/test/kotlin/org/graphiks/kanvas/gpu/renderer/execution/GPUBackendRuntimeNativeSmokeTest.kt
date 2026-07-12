@@ -9,6 +9,7 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUResourceBindingBlock
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUResourceBindingSlot
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUUniformPayloadBlock
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUUniformPayloadSlot
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.resources.GPUPayloadMaterializationRequest
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceLease
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceLeaseCacheResult
@@ -568,6 +569,7 @@ class GPUBackendRuntimeNativeSmokeTest {
                         firstTextureLabel = first,
                         secondTextureLabel = second,
                         draws = listOf(draw),
+                        blendMode = GPUBlendMode.SRC,
                     )
                 }
                 target.encode(GPUClearColor(0.0, 0.0, 0.0, 1.0)) {
@@ -578,6 +580,7 @@ class GPUBackendRuntimeNativeSmokeTest {
                         secondTextureLabel = second,
                         thirdTextureLabel = third,
                         draws = listOf(draw),
+                        blendMode = GPUBlendMode.SRC,
                     )
                 }
             }

@@ -116,21 +116,24 @@ class GPUClipCoverageSurfaceTest {
     }
 
     @Test
-    fun `mask refuses destination read blend before it emits a source`() {
+    fun `mask composes destination read blend through the source snapshot formula`() {
         requireWebGpu()
 
         val result = renderMaskedRect(BlendMode.DARKEN)
 
-        assertEquals(0, result.stats.opsDispatched)
-        assertEquals(1, result.diagnostics.fatalCount)
-        assertEquals(
-            "unsupported.clip.mask.blend_mode:darken",
-            result.diagnostics.entries.single().reason,
+        assertEquals(1, result.stats.opsDispatched)
+        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertTrue(
+            result.diagnostics.entries.any { entry ->
+                entry.reason == "gpu-copy-then-formula" &&
+                    entry.facts.any { fact -> fact.key == "clip.strategy" && fact.value == "alpha-mask" }
+            },
+            result.diagnostics.entries.toString(),
         )
     }
 
     @Test
-    fun `no clip destination read remains delegated to task eight without a source`() {
+    fun `no clip destination read composes against a transparent snapshot`() {
         requireWebGpu()
         val surface = Surface(16, 16)
         surface.canvas {
@@ -139,11 +142,14 @@ class GPUClipCoverageSurfaceTest {
 
         val result = surface.render()
 
-        assertEquals(0, result.stats.opsDispatched)
-        assertEquals(1, result.diagnostics.fatalCount)
-        assertEquals(
-            "unsupported.clip.destination_read.pending_task8:darken",
-            result.diagnostics.entries.single().reason,
+        assertEquals(1, result.stats.opsDispatched)
+        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertTrue(
+            result.diagnostics.entries.any { entry ->
+                entry.reason == "gpu-copy-then-formula" &&
+                    entry.facts.any { fact -> fact.key == "destination-read.action" && fact.value == "copy-then-formula" }
+            },
+            result.diagnostics.entries.toString(),
         )
     }
 

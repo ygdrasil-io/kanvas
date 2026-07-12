@@ -107,7 +107,10 @@ internal fun GPUBackendOffscreenTarget.renderWithClip(
         )
         return false
     }
-    if (clipPlan is GPUClipCoveragePlan.Mask && !blend.isSafeMaskComposite()) {
+    if (clipPlan is GPUClipCoveragePlan.Mask &&
+        !blend.requiresDestinationRead &&
+        !blend.isSafeMaskComposite()
+    ) {
         diagnostics.fatal(
             code = "refuse:clip-mask:${context.sourceLabelForDiagnostics}",
             operation = context.sourceLabelForDiagnostics,
@@ -138,22 +141,38 @@ internal fun GPUBackendOffscreenTarget.renderWithClip(
     is GPUClipCoveragePlan.Mask -> {
         try {
             acquireClipMask(clipPlan, context.frameCache, diagnostics, context.config).use { lease ->
-                if (!encodeSource()) return@use false
-                encodeOffscreenTexture(context.sceneLabel, null) {
-                    drawTwoTexturePass(
-                        wgsl = CLIP_MASK_COMPOSITE_WGSL,
-                        colorFormat = context.colorFormat,
-                        firstTextureLabel = context.sourceLabel,
-                        secondTextureLabel = lease.mask.sampleLabel,
-                        draws = listOf(clipMaskCompositeUniformDraw(context.targetWidth, context.targetHeight)),
-                        blendMode = GPUBlendMode.SRC_OVER,
+                val rendered = if (blend.requiresDestinationRead) {
+                    context.destinationReadComposer.compose(
+                        context,
+                        lease.mask.sampleLabel,
+                        blend,
+                        diagnostics,
+                        encodeSource,
                     )
+                } else {
+                    if (!encodeSource()) return@use false
+                    encodeOffscreenTexture(context.sceneLabel, null) {
+                        drawTwoTexturePass(
+                            wgsl = CLIP_MASK_COMPOSITE_WGSL,
+                            colorFormat = context.colorFormat,
+                            firstTextureLabel = context.sourceLabel,
+                            secondTextureLabel = lease.mask.sampleLabel,
+                            draws = listOf(clipMaskCompositeUniformDraw(context.targetWidth, context.targetHeight)),
+                            blendMode = GPUBlendMode.SRC_OVER,
+                        )
+                    }
+                    true
                 }
+                if (!rendered) return@use false
                 context.trace?.sourceThenComposite()
                 diagnostics.degrade(
                     code = "route:clip:${context.sourceLabelForDiagnostics}",
                     operation = context.sourceLabelForDiagnostics,
-                    reason = "clip-source-then-composite",
+                    reason = if (blend.requiresDestinationRead) {
+                        "clip-source-snapshot-formula"
+                    } else {
+                        "clip-source-then-composite"
+                    },
                     facts = listOf(DiagnosticFact("clip.strategy", "alpha-mask")),
                 )
                 true
@@ -236,5 +255,14 @@ internal fun NormalizedDrawCommand.copyForClipSource(
     is NormalizedDrawCommand.FillRRect -> copyForClipSource(targetWidth, targetHeight)
     is NormalizedDrawCommand.FillPath -> copyForClipSource(targetWidth, targetHeight)
     is NormalizedDrawCommand.DrawImageRect -> copyForClipSource(targetWidth, targetHeight)
+    else -> this
+}
+
+/** A scissor source still needs fixed-function SrcOver, but it must retain its original clip. */
+internal fun NormalizedDrawCommand.copyForDestinationReadSource(): NormalizedDrawCommand = when (this) {
+    is NormalizedDrawCommand.FillRect -> copy(blend = GPUBlendFacts.srcOver())
+    is NormalizedDrawCommand.FillRRect -> copy(blend = GPUBlendFacts.srcOver())
+    is NormalizedDrawCommand.FillPath -> copy(blend = GPUBlendFacts.srcOver())
+    is NormalizedDrawCommand.DrawImageRect -> copy(blend = GPUBlendFacts.srcOver())
     else -> this
 }

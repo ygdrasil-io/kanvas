@@ -5,6 +5,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.geometry.FillType
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendStencilFillRule
+import org.graphiks.kanvas.gpu.renderer.wgsl.reflectWgslModule
 import org.graphiks.wgsl.parser.Lowerer
 import org.graphiks.wgsl.parser.parseWgslResult
 
@@ -34,6 +35,15 @@ class GPUClipCoverageWgslTest {
     }
 
     @Test
+    fun `destination blend WGSL parses lowers and reflects two and three textures`() {
+        val blend = lower(BLEND_FORMULA_WGSL)
+        val clippedBlend = lower(CLIP_BLEND_FORMULA_WGSL)
+
+        assertEquals(2, blend.reflectWgslModule("destination-blend").bindings.count { it.resourceKind == "sampledTexture" })
+        assertEquals(3, clippedBlend.reflectWgslModule("destination-clip-blend").bindings.count { it.resourceKind == "sampledTexture" })
+    }
+
+    @Test
     fun `non AA shape shaders evaluate hard geometry rather than filling a conservative scissor`() {
         assertTrue(RECT_AA_WGSL.contains("let hardCov"))
         assertTrue(RRECT_WGSL.contains("let hardCov"))
@@ -43,5 +53,12 @@ class GPUClipCoverageWgslTest {
     fun `even odd hole and inverse cover use their own stencil states`() {
         assertEquals(GPUBackendStencilFillRule.EvenOdd, stencilConfig(FillType.EVEN_ODD).fillRule)
         assertTrue(stencilConfig(FillType.INVERSE_WINDING).inverse)
+    }
+
+    private fun lower(wgsl: String) = parseWgslResult(wgsl).let { parsed ->
+        assertTrue(parsed.isSuccess)
+        Lowerer().lower(parsed.translationUnit).also { lowered ->
+            assertTrue(lowered.entryPoints.isNotEmpty())
+        }
     }
 }

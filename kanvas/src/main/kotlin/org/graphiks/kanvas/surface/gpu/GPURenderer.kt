@@ -14,6 +14,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendOffscreenTexture
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendOffscreenTarget
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRawUniformDraw
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRenderRecorder
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
@@ -31,6 +32,7 @@ import org.graphiks.kanvas.gpu.renderer.geometry.Point
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.surface.Diagnostics
+import org.graphiks.kanvas.surface.DiagnosticFact
 import org.graphiks.kanvas.surface.PixelFormat
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.surface.RenderResult
@@ -69,6 +71,83 @@ internal fun selectPathVerticesForCommand(
     triangulated: List<Point>,
 ): List<Point> =
     if (isStroke) flattened else triangulated
+
+/** Every shader destination-read mode has one stable uniform index shared by both formula shaders. */
+internal fun destinationReadBlendModeIndex(mode: GPUBlendMode): Int? = when (mode) {
+    GPUBlendMode.MULTIPLY -> 0
+    GPUBlendMode.SCREEN -> 1
+    GPUBlendMode.OVERLAY -> 2
+    GPUBlendMode.DARKEN -> 3
+    GPUBlendMode.LIGHTEN -> 4
+    GPUBlendMode.DIFFERENCE -> 5
+    GPUBlendMode.EXCLUSION -> 6
+    else -> null
+}
+
+internal fun destinationReadBlendUniformDraw(
+    mode: GPUBlendMode,
+    width: Int,
+    height: Int,
+): GPUBackendRawUniformDraw? {
+    val index = destinationReadBlendModeIndex(mode) ?: return null
+    val bytes = java.nio.ByteBuffer.allocate(16).order(java.nio.ByteOrder.nativeOrder())
+    bytes.putInt(index)
+    return GPUBackendRawUniformDraw(
+        uniformBytes = bytes.array(),
+        scissorX = 0,
+        scissorY = 0,
+        scissorWidth = width,
+        scissorHeight = height,
+    )
+}
+
+/**
+ * Replaces the scene with the destination-read blend result. The destination texture is never
+ * mapped to the CPU: an existing scene is copied GPU-to-GPU, while an empty scene gets a
+ * transparent snapshot before the two- or three-texture formula pass.
+ */
+internal fun GPUBackendOffscreenTarget.renderDestinationReadBlend(
+    sceneLabel: String,
+    sceneHasContent: Boolean,
+    sourceLabel: String,
+    snapshotLabel: String,
+    clipMaskLabel: String?,
+    mode: GPUBlendMode,
+    colorFormat: String,
+    width: Int,
+    height: Int,
+): Boolean {
+    val draw = destinationReadBlendUniformDraw(mode, width, height) ?: return false
+    val transparent = GPUClearColor(0.0, 0.0, 0.0, 0.0)
+    if (sceneHasContent) {
+        copyOffscreenTexture(sceneLabel, snapshotLabel)
+    } else {
+        encodeOffscreenTexture(snapshotLabel, transparent) {}
+    }
+    encodeOffscreenTexture(sceneLabel, transparent) {
+        if (clipMaskLabel == null) {
+            drawTwoTexturePass(
+                wgsl = BLEND_FORMULA_WGSL,
+                colorFormat = colorFormat,
+                firstTextureLabel = sourceLabel,
+                secondTextureLabel = snapshotLabel,
+                draws = listOf(draw),
+                blendMode = GPUBlendMode.SRC,
+            )
+        } else {
+            drawThreeTexturePass(
+                wgsl = CLIP_BLEND_FORMULA_WGSL,
+                colorFormat = colorFormat,
+                firstTextureLabel = sourceLabel,
+                secondTextureLabel = snapshotLabel,
+                thirdTextureLabel = clipMaskLabel,
+                draws = listOf(draw),
+                blendMode = GPUBlendMode.SRC,
+            )
+        }
+    }
+    return true
+}
 
 @OptIn(ExperimentalUnsignedTypes::class)
 internal fun renderViaGpu(
@@ -111,6 +190,7 @@ internal fun renderViaGpu(
 
             var sceneHasContent = false
             var clipSourceRoute = false
+            var clipSourcePreservesClip = false
             var sourceHasContent = false
             val layerStack = java.util.ArrayDeque<SceneTargetFrame>()
             var layerOrdinal = 0
@@ -128,74 +208,6 @@ internal fun renderViaGpu(
                 return rendered
             }
 
-            fun blendModeIndex(mode: GPUBlendMode): Int = when (mode) {
-                GPUBlendMode.MULTIPLY -> 0
-                GPUBlendMode.SCREEN -> 1
-                GPUBlendMode.OVERLAY -> 2
-                GPUBlendMode.DARKEN -> 3
-                GPUBlendMode.LIGHTEN -> 4
-                GPUBlendMode.DIFFERENCE -> 5
-                GPUBlendMode.EXCLUSION -> 6
-                else -> 0
-            }
-
-            fun renderAdvancedBlend(cmd: NormalizedDrawCommand.FillRect) {
-                productIntermediatePlannerScopeDiagnostics().forEach { line ->
-                    diagnostics.warn(
-                        code = "phase5:product-destination-read:not-planner-backed",
-                        operation = "drawRect",
-                        reason = line,
-                    )
-                }
-                if (sceneHasContent) {
-                    // 1a. Snapshot existing scene -> snap
-                    t.encodeOffscreenTexture(snapLabel, clearTransparent) {
-                        drawCompositePass(
-                            wgsl = COPY_WGSL,
-                            colorFormat = texFormat,
-                            textureLabel = sceneLabel,
-                            draws = listOf(
-                                GPUBackendRawUniformDraw(
-                                    uniformBytes = ByteArray(16),
-                                    scissorX = 0, scissorY = 0,
-                                    scissorWidth = width, scissorHeight = height,
-                                ),
-                            ),
-                        )
-                    }
-                } else {
-                    // 1b. No scene yet -> clear snap to transparent (identity dst for blend)
-                    t.encodeOffscreenTexture(snapLabel, GPUClearColor(0.0, 0.0, 0.0, 0.0)) {}
-                }
-                // 2. Render source shape -> src
-                t.encodeOffscreenTexture(srcLabel, GPUClearColor(0.0, 0.0, 0.0, 0.0)) {
-                    dispatchFillRect(cmd, dispatched, diagnostics, width, height, config)
-                }
-                // 3. Blend src over snap -> scene
-                val blendMode = cmd.blend.blendMode
-                val blendIdx = if (blendMode != null) blendModeIndex(blendMode) else 0
-                val bb = java.nio.ByteBuffer.allocate(16).order(java.nio.ByteOrder.nativeOrder())
-                bb.putInt(blendIdx)
-                // The shader already returns the complete source/destination result. Start from
-                // transparent so the fixed-function SrcOver state does not compose that result a
-                // second time with the pre-blend scene.
-                t.encodeOffscreenTexture(sceneLabel, clearTransparent) {
-                    drawBlendPass(
-                        wgsl = BLEND_FORMULA_WGSL,
-                        colorFormat = texFormat,
-                        srcTextureLabel = srcLabel,
-                        dstTextureLabel = snapLabel,
-                        draws = listOf(
-                            GPUBackendRawUniformDraw(
-                                uniformBytes = bb.array(),
-                                scissorX = 0, scissorY = 0,
-                                scissorWidth = width, scissorHeight = height,
-                            ),
-                        ),
-                    )
-                }
-            }
-
             fun planMaskBlur(command: NormalizedDrawCommand): MaskBlurPlan =
                 command.maskBlurPreflightRefusalReasonOrNull()?.let(MaskBlurPlan::Refused)
                     ?: MaskBlurPlanner.plan(
@@ -211,7 +223,11 @@ internal fun renderViaGpu(
             }
 
             fun renderMaskBlur(command: NormalizedDrawCommand, plan: MaskBlurPlan.Ready): Boolean {
-                val routedCommand = if (clipSourceRoute) command.copyForClipSource(width, height) else command
+                val routedCommand = when {
+                    !clipSourceRoute -> command
+                    clipSourcePreservesClip -> command.copyForDestinationReadSource()
+                    else -> command.copyForClipSource(width, height)
+                }
                 plan.diagnostics.forEach { diagnostic ->
                     diagnostics.degrade(
                         "degrade:${command.diagnosticName}:${command.commandId.value}:${diagnostic.code}",
@@ -232,9 +248,18 @@ internal fun renderViaGpu(
             }
 
             fun dispatchRectDirect(command: NormalizedDrawCommand.FillRect): Boolean {
-                val routedCommand = if (clipSourceRoute) command.copyForClipSource(width, height) else command
+                val routedCommand = when {
+                    !clipSourceRoute -> command
+                    clipSourcePreservesClip -> command.copy(blend = GPUBlendFacts.srcOver())
+                    else -> command.copyForClipSource(width, height)
+                }
                 if (routedCommand.blend.requiresDestinationRead) {
-                    renderAdvancedBlend(routedCommand)
+                    diagnostics.fatal(
+                        "refuse:${routedCommand.diagnosticName}",
+                        routedCommand.diagnosticName,
+                        "unsupported.destination_read.source_recursion",
+                    )
+                    return false
                 } else {
                     t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
                         dispatchFillRect(
@@ -247,7 +272,11 @@ internal fun renderViaGpu(
             }
 
             fun dispatchPathDirect(command: NormalizedDrawCommand.FillPath): Boolean {
-                val routedCommand = if (clipSourceRoute) command.copyForClipSource(width, height) else command
+                val routedCommand = when {
+                    !clipSourceRoute -> command
+                    clipSourcePreservesClip -> command.copy(blend = GPUBlendFacts.srcOver())
+                    else -> command.copyForClipSource(width, height)
+                }
                 if (routedCommand.blend.requiresDestinationRead) {
                     diagnostics.fatal("refuse:drawPath:${routedCommand.commandId.value}", "drawPath", "unsupported_blend:advanced")
                     return false
@@ -262,7 +291,11 @@ internal fun renderViaGpu(
             }
 
             fun dispatchRRectDirect(command: NormalizedDrawCommand.FillRRect): Boolean {
-                val routedCommand = if (clipSourceRoute) command.copyForClipSource(width, height) else command
+                val routedCommand = when {
+                    !clipSourceRoute -> command
+                    clipSourcePreservesClip -> command.copy(blend = GPUBlendFacts.srcOver())
+                    else -> command.copyForClipSource(width, height)
+                }
                 t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
                     dispatchFillRRect(
                         routedCommand, dispatched, diagnostics, width, height, config,
@@ -606,7 +639,11 @@ internal fun renderViaGpu(
             scanImages(ops)
 
             fun renderImageCommand(cmd: NormalizedDrawCommand.DrawImageRect): Boolean {
-                val routedCommand = if (clipSourceRoute) cmd.copyForClipSource(width, height) else cmd
+                val routedCommand = when {
+                    !clipSourceRoute -> cmd
+                    clipSourcePreservesClip -> cmd.copy(blend = GPUBlendFacts.srcOver())
+                    else -> cmd.copyForClipSource(width, height)
+                }
                 val fatalBefore = diagnostics.fatalCount
                 val plan = routedCommand.imageFilterPlan
                 when (plan) {
@@ -933,16 +970,32 @@ internal fun renderViaGpu(
                 return true
             }
 
+            fun sourcePlanCommand(
+                command: NormalizedDrawCommand,
+                source: Boolean,
+            ): NormalizedDrawCommand = when {
+                !source -> command
+                clipSourcePreservesClip -> command.copyForDestinationReadSource()
+                else -> command.copyForClipSource(width, height)
+            }
+
             /** Executes the normalized core routes in either the scene or the transparent full-target source. */
-            fun executeCoreClipRoute(op: DisplayOp, cmdId: GPUDrawCommandID, source: Boolean): Boolean {
+            fun executeCoreClipRoute(
+                op: DisplayOp,
+                cmdId: GPUDrawCommandID,
+                source: Boolean,
+                preserveClipInSource: Boolean = false,
+            ): Boolean {
                 val savedSceneLabel = sceneLabel
                 val savedSceneHasContent = sceneHasContent
                 val savedSourceHasContent = sourceHasContent
                 val savedClipSourceRoute = clipSourceRoute
+                val savedClipSourcePreservesClip = clipSourcePreservesClip
                 if (source) {
                     sceneLabel = srcLabel
                     sceneHasContent = false
                     clipSourceRoute = true
+                    clipSourcePreservesClip = preserveClipInSource
                     sourceHasContent = false
                 }
                 val fatalBefore = diagnostics.fatalCount
@@ -954,9 +1007,7 @@ internal fun renderViaGpu(
                                 val command = op.toStrokePathCommand(cmdId, targets)
                                 if (command.maskFilter == null) {
                                     dispatchPathDirect(command)
-                                } else when (val blurPlan = planMaskBlur(
-                                    if (source) command.copyForClipSource(width, height) else command,
-                                )) {
+                                } else when (val blurPlan = planMaskBlur(sourcePlanCommand(command, source))) {
                                     is MaskBlurPlan.Ready -> renderMaskBlur(command, blurPlan)
                                     is MaskBlurPlan.Refused -> {
                                         refuseMaskBlur(command, blurPlan)
@@ -968,9 +1019,7 @@ internal fun renderViaGpu(
                                 val command = op.toNormalizedCommand(cmdId, targets)
                                 if (command.maskFilter == null) {
                                     dispatchRectDirect(command)
-                                } else when (val blurPlan = planMaskBlur(
-                                    if (source) command.copyForClipSource(width, height) else command,
-                                )) {
+                                } else when (val blurPlan = planMaskBlur(sourcePlanCommand(command, source))) {
                                     is MaskBlurPlan.Ready -> renderMaskBlur(command, blurPlan)
                                     is MaskBlurPlan.Refused -> {
                                         refuseMaskBlur(command, blurPlan)
@@ -993,9 +1042,7 @@ internal fun renderViaGpu(
                                     .toNormalizedCommand(cmdId, targets)
                                 if (command.maskFilter == null) {
                                     dispatchRectDirect(command)
-                                } else when (val blurPlan = planMaskBlur(
-                                    if (source) command.copyForClipSource(width, height) else command,
-                                )) {
+                                } else when (val blurPlan = planMaskBlur(sourcePlanCommand(command, source))) {
                                     is MaskBlurPlan.Ready -> renderMaskBlur(command, blurPlan)
                                     is MaskBlurPlan.Refused -> {
                                         refuseMaskBlur(command, blurPlan)
@@ -1038,9 +1085,7 @@ internal fun renderViaGpu(
                                     )
                                     if (command.maskFilter == null) {
                                         dispatchPathDirect(command)
-                                    } else when (val blurPlan = planMaskBlur(
-                                        if (source) command.copyForClipSource(width, height) else command,
-                                    )) {
+                                    } else when (val blurPlan = planMaskBlur(sourcePlanCommand(command, source))) {
                                         is MaskBlurPlan.Ready -> renderMaskBlur(command, blurPlan)
                                         is MaskBlurPlan.Refused -> {
                                             refuseMaskBlur(command, blurPlan)
@@ -1063,9 +1108,7 @@ internal fun renderViaGpu(
                                 val command = op.toNormalizedCommand(cmdId, targets)
                                 if (command.maskFilter == null) {
                                     dispatchRRectDirect(command)
-                                } else when (val blurPlan = planMaskBlur(
-                                    if (source) command.copyForClipSource(width, height) else command,
-                                )) {
+                                    } else when (val blurPlan = planMaskBlur(sourcePlanCommand(command, source))) {
                                     is MaskBlurPlan.Ready -> renderMaskBlur(command, blurPlan)
                                     is MaskBlurPlan.Refused -> {
                                         refuseMaskBlur(command, blurPlan)
@@ -1382,6 +1425,7 @@ internal fun renderViaGpu(
                         sceneHasContent = savedSceneHasContent
                         sourceHasContent = savedSourceHasContent
                         clipSourceRoute = savedClipSourceRoute
+                        clipSourcePreservesClip = savedClipSourcePreservesClip
                     }
                 }
                 return rendered
@@ -1397,6 +1441,65 @@ internal fun renderViaGpu(
                     reason,
                 )
                 return true
+            }
+            val destinationReadComposer = GPUClipDestinationReadComposer {
+                    context,
+                    clipMaskLabel,
+                    blend,
+                    composerDiagnostics,
+                    encodeSource,
+                ->
+                val mode = blend.blendMode
+                if (mode == null || destinationReadBlendModeIndex(mode) == null) {
+                    composerDiagnostics.fatal(
+                        code = "refuse:destination-read:${context.sourceLabelForDiagnostics}",
+                        operation = context.sourceLabelForDiagnostics,
+                        reason = "unsupported.destination_read.gpu_formula:${blend.modeLabel}",
+                        facts = listOf(
+                            DiagnosticFact("destination-read.source", context.sourceLabel),
+                            DiagnosticFact("destination-read.snapshot", snapLabel),
+                            DiagnosticFact("destination-read.mode", blend.modeLabel),
+                            DiagnosticFact(
+                                "clip.strategy",
+                                if (clipMaskLabel == null) "direct" else "alpha-mask",
+                            ),
+                            DiagnosticFact("destination-read.action", "refuse-before-source"),
+                        ),
+                    )
+                    false
+                } else if (!encodeSource()) {
+                    false
+                } else {
+                    val rendered = t.renderDestinationReadBlend(
+                        sceneLabel = context.sceneLabel,
+                        sceneHasContent = sceneHasContent,
+                        sourceLabel = context.sourceLabel,
+                        snapshotLabel = snapLabel,
+                        clipMaskLabel = clipMaskLabel,
+                        mode = mode,
+                        colorFormat = context.colorFormat,
+                        width = context.targetWidth,
+                        height = context.targetHeight,
+                    )
+                    if (rendered) {
+                        composerDiagnostics.degrade(
+                            code = "route:destination-read:${context.sourceLabelForDiagnostics}",
+                            operation = context.sourceLabelForDiagnostics,
+                            reason = "gpu-copy-then-formula",
+                            facts = listOf(
+                                DiagnosticFact("destination-read.source", context.sourceLabel),
+                                DiagnosticFact("destination-read.snapshot", snapLabel),
+                                DiagnosticFact("destination-read.mode", blend.modeLabel),
+                                DiagnosticFact(
+                                    "clip.strategy",
+                                    if (clipMaskLabel == null) "direct" else "alpha-mask",
+                                ),
+                                DiagnosticFact("destination-read.action", "copy-then-formula"),
+                            ),
+                        )
+                    }
+                    rendered
+                }
             }
             for (op in ops) {
                 val cmdId = GPUDrawCommandID(dispatched.size)
@@ -1487,17 +1590,34 @@ internal fun renderViaGpu(
                     colorFormat = texFormat,
                     config = config,
                     frameCache = clipFrameCache,
+                    destinationReadComposer = destinationReadComposer,
                     trace = routeTrace,
                 )
                 if (blend.requiresDestinationRead) {
-                    t.renderWithClip(
+                    val rendered = t.renderWithClip(
                         context = routeContext,
                         clipPlan = clipPlan,
                         blend = blend,
                         diagnostics = diagnostics,
                         encodeDirect = { false },
-                        encodeSource = { false },
+                        encodeSource = {
+                            executeCoreClipRoute(
+                                op,
+                                cmdId,
+                                source = true,
+                                preserveClipInSource = clipPlan is GPUClipCoveragePlan.Scissor,
+                            )
+                        },
                     )
+                    if (rendered) {
+                        sceneHasContent = true
+                        dispatched.add(cmdId.toString())
+                        diagnostics.degrade(
+                            "dispatch:${op.javaClass.simpleName}:${cmdId.value}",
+                            op.javaClass.simpleName,
+                            "dispatched",
+                        )
+                    }
                     continue
                 }
                 if (

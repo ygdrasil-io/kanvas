@@ -119,7 +119,7 @@ class GPUSaveLayerCompositeRegressionTest {
     }
 
     @Test
-    fun `advanced blend cannot bypass a preceding clipped DrawColor SRC refusal`() {
+    fun `advanced blend composes after a preceding clipped DrawColor SRC refusal`() {
         requireWebGpu()
 
         val surface = Surface(width = 8, height = 8)
@@ -146,11 +146,10 @@ class GPUSaveLayerCompositeRegressionTest {
             expected = checkerGray,
             tolerance = 0,
         )
-        assertEquals(2, result.diagnostics.fatalCount)
+        assertEquals(1, result.diagnostics.fatalCount)
         assertEquals(
             listOf(
                 "unsupported.clip.mask.blend_mode:src",
-                "unsupported.clip.destination_read.pending_task8:screen",
             ),
             result.diagnostics.entries
                 .filter { it.level == DiagnosticLevel.FATAL }
