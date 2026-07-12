@@ -2323,6 +2323,18 @@ tasks.register("checkCodecImageComplete") {
     )
 }
 
+tasks.register("checkJpegClassicComplete") {
+    group = "verification"
+    description = "Runs the portable static JPEG conformance matrix and codec guardrails without native oracles."
+
+    dependsOn(
+        ":codec:jpeg:test",
+        "checkSupportedCodecsDoc",
+        "checkRealImageFixtureDocumentation",
+        "checkPureKotlinCodecNoAwt",
+    )
+}
+
 tasks.register<Exec>("validatePureKotlinTextClaimDashboard") {
     group = "verification"
     description = "Validates the pure Kotlin text claim dashboard classifications and legacy gate visibility."

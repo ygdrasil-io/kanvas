@@ -116,6 +116,21 @@ niveaux 8-bit transposés sur l'échelle 0..4095. Sans la propriété
 `jpegOracleDjpeg`, ces tests sont ignorés ; l'oracle ne devient donc jamais
 une dépendance runtime ou CI.
 
+La gate de conformance JPEG contient aussi un contrôle structurel opt-in plus
+court, utile lorsqu'un répertoire contenant `djpeg` est fourni explicitement :
+
+```text
+rtk ./gradlew :codec:jpeg:test \
+  --tests '*JpegOracleTest' \
+  -PjpegOracleDir=/absolute/path/to/directory-containing-djpeg --no-daemon
+```
+
+`JpegOracleTest` ne cherche jamais `djpeg` dans `PATH` et reste ignoré sans
+cette propriété. Il vérifie que les flux SOF9/SOF10 produits par l'API publique
+sont lus comme PNM par l'exécutable explicitement fourni. Les comparaisons de
+pixels et tolérances de référence restent les tests `JpegAdvancedEncodeTest`
+ci-dessus.
+
 ## Hiérarchies arithmetic SOF13/SOF14
 
 Kanvas encode aussi deux intersections hiérarchiques étroites : grayscale

@@ -32,4 +32,12 @@ tasks.withType<Test>().configureEach {
         "kanvas.jpeg.oracle.hierarchy",
         providers.gradleProperty("jpegOracleHierarchy").orNull.orEmpty(),
     )
+    systemProperty(
+        "kanvas.jpeg.oracle.dir",
+        providers.gradleProperty("jpegOracleDir").orNull.orEmpty(),
+    )
+    systemProperty(
+        "kanvas.jpeg.performance.report",
+        layout.buildDirectory.file("reports/jpeg-performance.json").get().asFile.absolutePath,
+    )
 }

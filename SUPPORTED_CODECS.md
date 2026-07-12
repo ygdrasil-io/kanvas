@@ -9,7 +9,13 @@ Validation command:
 ./gradlew checkCodecImageComplete
 ```
 
-That task runs the pure Kotlin codec tests, real image tests, runtime assembly
+JPEG classic release command:
+
+```bash
+./gradlew checkJpegClassicComplete
+```
+
+`checkCodecImageComplete` runs the pure Kotlin codec tests, real image tests, runtime assembly
 checks, image encode tests, image encode guard checks, production classpath
 checks, and AWT/ImageIO guards. Format-specific rows below call out limitations
 that are intentional for the current implementation, either as temporary roadmap
@@ -20,7 +26,7 @@ gaps or as out-of-scope behavior.
 | Format | Decode | Animation | ICC / color metadata | EXIF / orientation | Alpha | 16 bpc / F16 | Progressive / interlace | Unsupported variants and notes |
 |---|---|---|---|---|---|---|---|---|
 | PNG | Supported through `codec/png`. Covers grayscale, RGB, indexed, grayscale+alpha, and RGBA PNGs. | Static PNG only; APNG (`acTL`, `fcTL`, `fdAT`) is explicitly refused. | Only `PngMetadataValue.Resolved` color chunks participate, in `cICP > iCCP > sRGB > cHRM+gAMA` order. `getICCProfile()` exposes only a valid embedded `iCCP`; resolved cICP, sRGB, and cHRM+gAMA states do not fabricate ICC provenance. Full-range RGB `cICP` resolves normally; narrow-range RGB `cICP` is explicit `png.cicp.narrow-range.unsupported` and samples stay untransformed. Grayscale `cICP` is info-only. `gAMA` alone neither resolves an sRGB metadata profile nor fabricates ICC provenance; untagged decoding uses the normal sRGB default. Valid `cHRM+gAMA` derives a matrix/TRC profile. Refused color metadata remains diagnostic-only. `getPixels` preserves samples and refuses unimplemented scale, alpha, and color-space transforms. | Not applicable. | Supported through alpha channels and `tRNS` for grayscale, RGB, and indexed PNGs. Indexed samples outside `PLTE` decode as opaque black. | 16-bit grayscale/RGB/grayscale+alpha/RGBA decode to `RGBA_F16Norm`. | Non-interlaced and Adam7 interlaced PNGs are supported. | `PngDocument` preserves pristine static PNG bytes exactly. Ancillary-only metadata edits retain untouched raw chunks, including fragmented `IDAT`; pixel or critical-impact changes are explicitly refused until re-encoding is implemented. Critical unknown chunks, invalid CRCs, malformed container structure, truncated or trailing zlib `IDAT` data, and unsupported color/depth combinations are rejected. Refused semantic color metadata is not applied. |
-| JPEG | Supported through `codec/jpeg` for sequential Huffman DCT SOF0/SOF1 (8/12-bit), progressive Huffman DCT (8-bit), sequential/progressive arithmetic DCT SOF9/SOF10 (including verified sequential 12-bit), Huffman lossless SOF3 (8/12/16-bit), and verified DHP/EXP hierarchy composition. Grayscale, YCbCr, RGB, CMYK and YCCK routes are selected from valid frame/metadata combinations; sampling factors 1..4 are covered. | Not applicable. | Multi-segment APP2 ICC profiles are parsed and exposed when complete and parseable. | EXIF orientation 1 through 8 is parsed and applied to output dimensions/pixels. | JPEG has no alpha channel. Output is opaque RGBA. | Decode can write `RGBA_F16Norm`, normalized from the source 8/12/16-bit precision supported by the decoded process. | Interleaved multi-component progressive scans, refinement, restart intervals and arithmetic DCT scans are supported by the tested routes. | Bare differential SOFs require hierarchy reference state and are explicitly refused; SOF11 arithmetic lossless is explicitly unsupported. Malformed APP markers, incomplete ICC segment sets, illegal scan scripts, invalid entropy/restart state, unsupported frame/color combinations and malformed hierarchy references are rejected or return `kUnimplemented`. |
+| JPEG | Supported through `codec/jpeg` for sequential Huffman DCT SOF0/SOF1 (8/12-bit), progressive Huffman DCT SOF2 (8/12-bit), sequential/progressive arithmetic DCT SOF9/SOF10 (including verified sequential 12-bit), Huffman lossless SOF3 (8/12/16-bit), and verified DHP/EXP hierarchy composition. Grayscale, YCbCr, RGB, CMYK and YCCK routes are selected from valid frame/metadata combinations; sampling factors 1..4 are covered. | Not applicable. | Multi-segment APP2 ICC profiles are parsed and exposed when complete and parseable. | EXIF orientation 1 through 8 is parsed and applied to output dimensions/pixels. | JPEG has no alpha channel. Output is opaque RGBA. | Decode can write `RGBA_F16Norm`, normalized from the source 8/12/16-bit precision supported by the decoded process. | Interleaved multi-component progressive scans, refinement, restart intervals and arithmetic DCT scans are supported by the tested routes. | Bare differential SOFs require hierarchy reference state and are explicitly refused; SOF11 arithmetic lossless is explicitly unsupported. Malformed APP markers, incomplete ICC segment sets, illegal scan scripts, invalid entropy/restart state, unsupported frame/color combinations and malformed hierarchy references are rejected or return `kUnimplemented`. |
 | GIF | Supported through `codec/gif`. Covers GIF87a/GIF89a indexed frames. | Supported for decoded frame count, frame rects, frame durations, transparency, interlaced frames, disposal modes used by the current tests, and Netscape loop count metadata exposed through `Codec.getRepetitionCount()`. | GIF ICC/color profiles are not exposed. Output uses sRGB. | Not applicable. | Supported through transparent color indexes. | Not applicable. Output is `RGBA_8888`. | GIF interlacing is supported. | Malformed LZW streams, invalid frame bounds, missing color tables, zero-sized canvases, and unsupported extension semantics are rejected. Malformed loop extension payloads are skipped unless they corrupt frame data. |
 | BMP | Supported through `codec/bmp`. Covers Windows/OS2 `BM` files with BITMAPINFOHEADER-compatible DIBs. | Not applicable. | V4/V5 embedded ICC profiles are parsed and exposed when parseable. Output uses sRGB. | Not applicable. | 32 bpp alpha masks are supported when present; otherwise pixels are opaque. | Not applicable. Output is `RGBA_8888`. | Not applicable. | BI_RGB, BI_BITFIELDS, BI_RLE8, and BI_RLE4 are supported for 1/4/8/16/24/32 bpp where valid. Top-down RLE is rejected. Unsupported compression modes, invalid masks, malformed palettes, and truncated pixel data are rejected. |
 | WBMP | Supported through `codec/wbmp`. Covers WAP type-0 monochrome WBMP. | Not applicable. | Not applicable. Output uses sRGB. | Not applicable. | Not supported by the format. Output is opaque black/white RGBA. | Not applicable. Output is `RGBA_8888`. | Not applicable. | Non-type-0 headers, zero dimensions, VLQ overflow, excessive dimensions, and truncated pixel data are rejected. |
@@ -51,3 +57,23 @@ gaps or as out-of-scope behavior.
   selecting another backend.
 - New support claims should land with tests in the owning codec module or
   `codec/real-image-tests`, then this matrix should be updated in the same PR.
+
+### JPEG release evidence
+
+`checkJpegClassicComplete` runs the Kotlin-only `:codec:jpeg:test` suite plus
+the codec support, fixture-provenance, and AWT/ImageIO guardrails. Its
+`JpegConformanceTest` enumerates every non-reserved JPEG SOF as either an
+evidenced decode/encode route or an asserted stable refusal; `JpegFuzzTest`
+deterministically mutates marker lengths, entropy, segment order, DRI/DAC and
+truncation while requiring bounded document handling. `JpegPerformanceEvidenceTest`
+has no timing threshold: it writes warm-up plus ten-decode median evidence to
+`codec/jpeg/build/reports/jpeg-performance.json` for photo, graphic, CMYK,
+12-bit, and large-image fixture classes.
+
+`JpegOracleTest` is opt-in only. Supplying
+`-PjpegOracleDir=/absolute/path/to/directory-containing-djpeg` enables its
+external SOF9/SOF10 parse check; no executable is searched through `PATH`, and
+neither the external binary nor a native codec is a runtime or normal-CI
+dependency. The stronger pixel-comparison oracle commands and their pinned
+fixture provenance remain documented beside the arithmetic and hierarchy
+fixtures in `codec/jpeg/src/test/resources/`.

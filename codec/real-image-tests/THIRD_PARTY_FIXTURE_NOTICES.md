@@ -3,6 +3,12 @@
 This file records redistribution notices for third-party files committed under
 `codec-real-image-tests/src/test/resources/codec-real-images`.
 
+The JPEG release conformance, fuzzing, and performance tests add no third-party
+binary fixture: photo and graphic evidence reuse the Skia JPEG entries already
+listed in `FIXTURES.md`; CMYK and large-image evidence are generated in memory.
+The optional external JPEG oracle is never redistributed or invoked unless its
+absolute path is explicitly supplied by the developer.
+
 ## PngSuite
 
 - Fixture: `codec-real-images/libpng/pngsuite2.png`
