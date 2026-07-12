@@ -94,6 +94,48 @@ class JpegLsCodecTest {
     }
 
     @Test
+    fun `decodes a CharLS RGB sample-interleaved fixture exactly`() {
+        val fixture = charlsResource("sample-lossless-6x4.jls.base64")
+        val document = requireNotNull(JpegLsDocument.open(fixture).document)
+        val codec = requireNotNull(Codec.MakeFromData(fixture))
+        val (bitmap, result) = codec.getImage()
+
+        assertEquals(Codec.Result.kSuccess, result, decodeDiagnostic(fixture))
+        assertEquals(3, document.componentCount)
+        assertEquals(2, document.interleaveMode)
+        assertNotNull(bitmap)
+        repeat(24) { index ->
+            val x = index % 6
+            val y = index / 6
+            val red = 0x41 + ((x + y) and 1) * 0x30
+            val green = 0x50 + x * 3 + y
+            val blue = 0x42 + ((x * y) and 3)
+            assertEquals(
+                0xFF000000.toInt() or (red shl 16) or (green shl 8) or blue,
+                bitmap!!.getPixel(x, y),
+                "x=$x y=$y",
+            )
+        }
+    }
+
+    @Test
+    fun `decodes CharLS RGB sample-interleaved run interruption exactly`() {
+        val fixture = charlsResource("sample-run-lossless-6x4.jls.base64")
+        val document = requireNotNull(JpegLsDocument.open(fixture).document)
+        val (bitmap, result) = requireNotNull(Codec.MakeFromData(fixture)).getImage()
+
+        assertEquals(Codec.Result.kSuccess, result, decodeDiagnostic(fixture))
+        assertEquals(2, document.interleaveMode)
+        assertNotNull(bitmap)
+        repeat(24) { index ->
+            val x = index % 6
+            val y = index / 6
+            val pixel = if (x == 4 && y == 2) 0xFF706050.toInt() else 0xFF415042.toInt()
+            assertEquals(pixel, bitmap!!.getPixel(x, y), "x=$x y=$y")
+        }
+    }
+
+    @Test
     fun `decodes CharLS RGB line data with independent component run indexes`() {
         val codec = requireNotNull(Codec.MakeFromData(CHARLS_RGB_LINE_RUN_FIXTURE))
         val (bitmap, result) = codec.getImage()
@@ -173,14 +215,43 @@ class JpegLsCodecTest {
     }
 
     @Test
-    fun `refuses sample-interleaved RGB without treating it as grayscale`() {
-        val sampleInterleaved = CHARLS_RGB_LINE_FIXTURE.copyOf().also { it[33] = 2 }
+    fun `pinned CharLS RGB sample interleave fixtures match their documented SHA-256`() {
+        assertEquals(
+            "9ab6f360d63d15651ec76416abe003002964496df2797fd7ce67226d10ea1aee",
+            sha256(charlsResource("sample-lossless-6x4.jls.base64")),
+        )
+        assertEquals(
+            "6b06b88a6ae4da9727bb010042dc3b9bcaa0e65f39d5c21e098a41825dc034a4",
+            sha256(charlsResource("sample-run-lossless-6x4.jls.base64")),
+        )
+    }
 
-        val opened = JpegLsDocument.open(sampleInterleaved)
+    @Test
+    fun `refuses an RGB interleave mode beyond the JPEG-LS range`() {
+        val invalidInterleave = CHARLS_RGB_LINE_FIXTURE.copyOf().also { it[33] = 3 }
+
+        val opened = JpegLsDocument.open(invalidInterleave)
 
         assertNull(opened.document)
         assertEquals("jpeg-ls.scan.unsupported", opened.diagnostic?.code)
         assertEquals(Codec.Result.kUnimplemented, opened.diagnostic?.result)
+    }
+
+    @Test
+    fun `refuses unproven near-lossless RGB sample interleave in both directions`() {
+        val nearSample = charlsResource("sample-lossless-6x4.jls.base64").also { it[32] = 1 }
+
+        val opened = JpegLsDocument.open(nearSample)
+
+        assertNull(opened.document)
+        assertEquals("jpeg-ls.scan.unsupported", opened.diagnostic?.code)
+        assertEquals(Codec.Result.kUnimplemented, opened.diagnostic?.result)
+        assertNull(
+            JpegLsEncoder.encode(
+                rgbBitmap(1, 1, arrayOf(intArrayOf(0x41, 0x50, 0x42))),
+                JpegLsEncoder.Options(nearLossless = 1, rgbInterleaveMode = JpegLsRgbInterleaveMode.Sample),
+            ),
+        )
     }
 
     @Test
@@ -497,6 +568,33 @@ class JpegLsCodecTest {
     }
 
     @Test
+    fun `encoder writes an RGB sample-interleaved JPEG-LS that decodes exactly`() {
+        val samples = Array(24) { index ->
+            val x = index % 6
+            val y = index / 6
+            intArrayOf(0x41 + ((x + y) and 1) * 0x30, 0x50 + x * 3 + y, 0x42 + ((x * y) and 3))
+        }
+        val encoded = requireNotNull(
+            JpegLsEncoder.encode(
+                rgbBitmap(6, 4, samples),
+                JpegLsEncoder.Options(rgbInterleaveMode = JpegLsRgbInterleaveMode.Sample),
+            ),
+        )
+        val document = requireNotNull(JpegLsDocument.open(encoded).document)
+        val (bitmap, result) = requireNotNull(Codec.MakeFromData(encoded)).getImage()
+
+        assertEquals(2, document.interleaveMode)
+        assertEquals(Codec.Result.kSuccess, result)
+        samples.forEachIndexed { index, sample ->
+            assertEquals(
+                0xFF000000.toInt() or (sample[0] shl 16) or (sample[1] shl 8) or sample[2],
+                bitmap!!.getPixel(index % 6, index / 6),
+                "index=$index",
+            )
+        }
+    }
+
+    @Test
     fun `encoder writes RGB ILV1 NEAR 1 JPEG-LS within its declared error bound`() {
         val sourceSamples = ppmRgb(charlsResource("line-run-source.ppm.base64"))
         val source = rgbBitmap(8, 4, sourceSamples)
@@ -636,6 +734,78 @@ class JpegLsCodecTest {
             assertArrayEquals(
                 CHARLS_RGB_LINE_SAMPLES.flatMap { it.asIterable() }.map(Int::toByte).toByteArray(),
                 decoded.copyOfRange(decoded.size - CHARLS_RGB_LINE_SAMPLES.size * 3, decoded.size),
+            )
+        } finally {
+            Files.deleteIfExists(directory.resolve("encoded.jls"))
+            Files.deleteIfExists(directory.resolve("decoded.ppm"))
+            Files.deleteIfExists(directory)
+        }
+    }
+
+    @Test
+    fun `optional CharLS oracle decodes encoded RGB sample pixels exactly`() {
+        val oracle = System.getProperty("kanvas.jpeg-ls.oracle.charls").orEmpty()
+        if (oracle.isBlank()) return
+        val samples = Array(24) { index ->
+            val x = index % 6
+            val y = index / 6
+            intArrayOf(0x41 + ((x + y) and 1) * 0x30, 0x50 + x * 3 + y, 0x42 + ((x * y) and 3))
+        }
+        val encoded = requireNotNull(
+            JpegLsEncoder.encode(
+                rgbBitmap(6, 4, samples),
+                JpegLsEncoder.Options(rgbInterleaveMode = JpegLsRgbInterleaveMode.Sample),
+            ),
+        )
+        val directory = Files.createTempDirectory("kanvas-jpeg-ls-rgb-sample-oracle-")
+        try {
+            val input = directory.resolve("encoded.jls")
+            val output = directory.resolve("decoded.ppm")
+            Files.write(input, encoded)
+            val process = ProcessBuilder(oracle, "decode", input.toString(), output.toString())
+                .redirectErrorStream(true)
+                .start()
+            val processOutput = process.inputStream.bufferedReader().readText()
+            assertEquals(0, process.waitFor(), processOutput)
+            val decoded = Files.readAllBytes(output)
+            assertArrayEquals(
+                samples.flatMap { it.asIterable() }.map(Int::toByte).toByteArray(),
+                decoded.copyOfRange(decoded.size - samples.size * 3, decoded.size),
+            )
+        } finally {
+            Files.deleteIfExists(directory.resolve("encoded.jls"))
+            Files.deleteIfExists(directory.resolve("decoded.ppm"))
+            Files.deleteIfExists(directory)
+        }
+    }
+
+    @Test
+    fun `optional CharLS oracle decodes encoded RGB sample run interruption exactly`() {
+        val oracle = System.getProperty("kanvas.jpeg-ls.oracle.charls").orEmpty()
+        if (oracle.isBlank()) return
+        val samples = Array(24) { index ->
+            if (index == 2 * 6 + 4) intArrayOf(0x70, 0x60, 0x50) else intArrayOf(0x41, 0x50, 0x42)
+        }
+        val encoded = requireNotNull(
+            JpegLsEncoder.encode(
+                rgbBitmap(6, 4, samples),
+                JpegLsEncoder.Options(rgbInterleaveMode = JpegLsRgbInterleaveMode.Sample),
+            ),
+        )
+        val directory = Files.createTempDirectory("kanvas-jpeg-ls-rgb-sample-run-oracle-")
+        try {
+            val input = directory.resolve("encoded.jls")
+            val output = directory.resolve("decoded.ppm")
+            Files.write(input, encoded)
+            val process = ProcessBuilder(oracle, "decode", input.toString(), output.toString())
+                .redirectErrorStream(true)
+                .start()
+            val processOutput = process.inputStream.bufferedReader().readText()
+            assertEquals(0, process.waitFor(), processOutput)
+            val decoded = Files.readAllBytes(output)
+            assertArrayEquals(
+                samples.flatMap { it.asIterable() }.map(Int::toByte).toByteArray(),
+                decoded.copyOfRange(decoded.size - samples.size * 3, decoded.size),
             )
         } finally {
             Files.deleteIfExists(directory.resolve("encoded.jls"))

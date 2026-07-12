@@ -14,6 +14,7 @@ internal object JpegLsEntropy {
         when (frame.interleaveMode) {
             0 -> decodeMonochromeScan(source, entropyOffset, frame)
             1 -> decodeRgbLineInterleavedScan(source, entropyOffset, frame)
+            2 -> decodeRgbSampleInterleavedScan(source, entropyOffset, frame)
             else -> jpeglsFailure("jpeg-ls.scan.unsupported", entropyOffset, org.graphiks.kanvas.codec.Codec.Result.kUnimplemented)
         }
     } catch (marker: EntropyMarker) {
@@ -97,6 +98,78 @@ internal object JpegLsEntropy {
         return output
     }
 
+    /**
+     * T.87 sample-interleaved RGB processes one triplet per pixel. Regular
+     * contexts are shared by all three components; run mode is selected only
+     * when all three gradients quantify to zero and its interruption uses run
+     * context 0 independently for each member of the triplet.
+     */
+    private fun decodeRgbSampleInterleavedScan(source: ByteArray, entropyOffset: Int, frame: JpegLsFrame): IntArray {
+        val reader = JpegLsBitReader(source, entropyOffset)
+        val state = LocoState(frame)
+        val components = frame.components.size
+        check(components == 3)
+        var previous = Array(components) { IntArray(frame.width + 2) }
+        var current = Array(components) { IntArray(frame.width + 2) }
+        val output = IntArray(frame.width * frame.height * components)
+
+        for (y in 0 until frame.height) {
+            for (component in 0 until components) {
+                previous[component][frame.width + 1] = previous[component][frame.width]
+                current[component][0] = previous[component][1]
+            }
+            var index = 1
+            while (index <= frame.width) {
+                val contexts = Array(components) { component ->
+                    val ra = current[component][index - 1]
+                    val rb = previous[component][index]
+                    val rc = previous[component][index - 1]
+                    val rd = previous[component][index + 1]
+                    state.context(rd - rb, rb - rc, rc - ra)
+                }
+                if (contexts.all { it.index == 0 }) {
+                    val run = state.decodeRun(reader, frame.width - index + 1)
+                    if (run > frame.width - index + 1) jpeglsFailure("jpeg-ls.run.invalid", reader.offset)
+                    repeat(run) { offset ->
+                        for (component in 0 until components) {
+                            current[component][index + offset] = current[component][index - 1]
+                        }
+                    }
+                    index += run
+                    if (index <= frame.width) {
+                        for (component in 0 until components) {
+                            current[component][index] = state.decodeSampleInterleavedRunInterruption(
+                                reader,
+                                current[component][index - 1],
+                                previous[component][index],
+                            )
+                        }
+                        state.decrementRunIndex()
+                        index++
+                    }
+                } else {
+                    for (component in 0 until components) {
+                        val ra = current[component][index - 1]
+                        val rb = previous[component][index]
+                        val rc = previous[component][index - 1]
+                        current[component][index] = state.decodeRegular(reader, contexts[component], predict(ra, rb, rc))
+                    }
+                    index++
+                }
+            }
+            for (x in 0 until frame.width) {
+                for (component in 0 until components) {
+                    output[(y * frame.width + x) * components + component] = current[component][x + 1]
+                }
+            }
+            val swap = previous
+            previous = current
+            current = swap
+        }
+        reader.finishAtEoi()
+        return output
+    }
+
     private fun decodeLine(
         reader: JpegLsBitReader,
         state: LocoState,
@@ -133,6 +206,7 @@ internal object JpegLsEntropy {
         return when (frame.interleaveMode) {
             0 -> encodeMonochrome(width, height, samples, frame)
             1 -> encodeRgbLineInterleaved(width, height, samples, frame)
+            2 -> encodeRgbSampleInterleaved(width, height, samples, frame)
             else -> error("unsupported JPEG-LS interleave mode ${frame.interleaveMode}")
         }
     }
@@ -209,6 +283,88 @@ internal object JpegLsEntropy {
                 state.runIndex = runIndices[component]
                 encodeLine(writer, state, previous[component], current[component], width)
                 runIndices[component] = state.runIndex
+            }
+            val swap = previous
+            previous = current
+            current = swap
+        }
+        return writer.finish()
+    }
+
+    /** Inverse of [decodeRgbSampleInterleavedScan], processing RGB triplets by pixel. */
+    private fun encodeRgbSampleInterleaved(
+        width: Int,
+        height: Int,
+        samples: IntArray,
+        frame: JpegLsFrame,
+    ): ByteArray {
+        val writer = JpegLsBitWriter()
+        val state = LocoState(frame)
+        val components = frame.components.size
+        check(components == 3)
+        var previous = Array(components) { IntArray(width + 2) }
+        var current = Array(components) { IntArray(width + 2) }
+
+        for (y in 0 until height) {
+            for (component in 0 until components) {
+                previous[component][width + 1] = previous[component][width]
+                current[component][0] = previous[component][1]
+                for (x in 0 until width) {
+                    current[component][x + 1] = samples[(y * width + x) * components + component]
+                }
+            }
+            var index = 1
+            while (index <= width) {
+                val contexts = Array(components) { component ->
+                    val ra = current[component][index - 1]
+                    val rb = previous[component][index]
+                    val rc = previous[component][index - 1]
+                    val rd = previous[component][index + 1]
+                    state.context(rd - rb, rb - rc, rc - ra)
+                }
+                if (contexts.all { it.index == 0 }) {
+                    var run = 0
+                    while (
+                        run < width - index + 1 &&
+                        (0 until components).all { component ->
+                            state.isNear(current[component][index + run], current[component][index - 1])
+                        }
+                    ) {
+                        run++
+                    }
+                    state.encodeRun(writer, run, run == width - index + 1)
+                    repeat(run) { offset ->
+                        for (component in 0 until components) {
+                            current[component][index + offset] = current[component][index - 1]
+                        }
+                    }
+                    index += run
+                    if (index <= width) {
+                        for (component in 0 until components) {
+                            current[component][index] = state.encodeSampleInterleavedRunInterruption(
+                                writer,
+                                current[component][index],
+                                current[component][index - 1],
+                                previous[component][index],
+                            )
+                        }
+                        state.decrementRunIndex()
+                        index++
+                    }
+                } else {
+                    for (component in 0 until components) {
+                        val ra = current[component][index - 1]
+                        val rb = previous[component][index]
+                        val rc = previous[component][index - 1]
+                        current[component][index] = state.encodeRegular(
+                            writer,
+                            contexts[component],
+                            predict(ra, rb, rc),
+                            current[component][index],
+                        )
+                    }
+                    index++
+                }
             }
             val swap = previous
             previous = current
@@ -349,6 +505,15 @@ internal object JpegLsEntropy {
             return reconstruct(prediction, sign * error)
         }
 
+        fun decodeSampleInterleavedRunInterruption(reader: JpegLsBitReader, ra: Int, rb: Int): Int {
+            val stats = run[0]
+            val k = stats.golombK()
+            val mapped = readMapped(reader, k, LIMIT - runJ[runIndexValue] - 1, qbpp)
+            val error = stats.unmap(mapped, k)
+            stats.update(error, mapped, parameters.reset)
+            return reconstruct(rb, sign(rb - ra) * error)
+        }
+
         fun encodeRunInterruption(writer: JpegLsBitWriter, sample: Int, ra: Int, rb: Int): Int {
             val type = if (isNear(ra, rb)) 1 else 0
             val stats = run[type]
@@ -360,6 +525,22 @@ internal object JpegLsEntropy {
             writeMapped(writer, mapped, k, LIMIT - runJ[runIndexValue] - 1, qbpp)
             stats.update(error, mapped, parameters.reset)
             return reconstruct(prediction, direction * error)
+        }
+
+        fun encodeSampleInterleavedRunInterruption(
+            writer: JpegLsBitWriter,
+            sample: Int,
+            ra: Int,
+            rb: Int,
+        ): Int {
+            val stats = run[0]
+            val direction = sign(rb - ra)
+            val error = computeError(direction * (sample - rb))
+            val k = stats.golombK()
+            val mapped = stats.map(error, k)
+            writeMapped(writer, mapped, k, LIMIT - runJ[runIndexValue] - 1, qbpp)
+            stats.update(error, mapped, parameters.reset)
+            return reconstruct(rb, direction * error)
         }
 
         fun decrementRunIndex() {

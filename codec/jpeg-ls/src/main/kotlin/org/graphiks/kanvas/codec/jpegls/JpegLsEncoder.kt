@@ -3,14 +3,24 @@ package org.graphiks.kanvas.codec.jpegls
 import java.io.ByteArrayOutputStream
 import org.skia.foundation.SkBitmap
 
+/** Interleave modes exposed for the RGB JPEG-LS encoder. */
+public enum class JpegLsRgbInterleaveMode {
+    /** One component line after another; the established encoder default. */
+    Line,
+
+    /** One RGB triplet after another. */
+    Sample,
+}
+
 /**
  * Static JPEG-LS encoder for verified 8-bit LOCO-I data. It emits grayscale
- * scans with `ILV=0`, or RGB scans with `ILV=1` (line interleave), preserving
- * opaque source channels without a colour transform.
+ * scans with `ILV=0`, or RGB scans with `ILV=1` (line) or `ILV=2` (sample)
+ * interleave, preserving opaque source channels without a colour transform.
  */
 public object JpegLsEncoder {
     public data class Options(
         val nearLossless: Int = 0,
+        val rgbInterleaveMode: JpegLsRgbInterleaveMode = JpegLsRgbInterleaveMode.Line,
     ) {
         init {
             require(nearLossless in 0..JpegLsCodingParameters.maximumNearLossless) {
@@ -38,6 +48,13 @@ public object JpegLsEncoder {
             JpegLsComponent(2),
             JpegLsComponent(3),
         )
+        if (
+            components.size == 3 &&
+            options.rgbInterleaveMode == JpegLsRgbInterleaveMode.Sample &&
+            options.nearLossless != 0
+        ) {
+            return null
+        }
         val samples = IntArray(source.width * source.height * components.size)
         for (y in 0 until source.height) {
             for (x in 0 until source.width) {
@@ -56,7 +73,7 @@ public object JpegLsEncoder {
             components,
             options.nearLossless,
             JpegLsCodingParameters.defaults(options.nearLossless),
-            if (components.size == 1) 0 else 1,
+            if (components.size == 1) 0 else options.rgbInterleaveMode.markerValue,
         )
         val entropy = JpegLsEntropy.encode(source.width, source.height, samples, frame)
         return ByteArrayOutputStream(entropy.size + 32).also { output ->
@@ -91,4 +108,10 @@ public object JpegLsEncoder {
         output.write(value ushr 8)
         output.write(value and 0xFF)
     }
+
+    private val JpegLsRgbInterleaveMode.markerValue: Int
+        get() = when (this) {
+            JpegLsRgbInterleaveMode.Line -> 1
+            JpegLsRgbInterleaveMode.Sample -> 2
+        }
 }

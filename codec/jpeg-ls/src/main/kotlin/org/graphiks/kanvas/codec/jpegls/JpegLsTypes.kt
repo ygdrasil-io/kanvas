@@ -52,10 +52,11 @@ public data class JpegLsDecodeResult(
 
 /**
  * Immutable, bounded JPEG-LS frame description for the supported static
- * baseline: 8-bit grayscale or RGB LOCO-I scans. RGB is accepted only with
- * `ILV=1` (line interleave), unit sampling, and either no `mrfx` APP8 marker
- * or `mrfx` transform zero. HP1/HP2/HP3 colour transforms are explicitly
- * refused; its [nearLossless] bound is validated before entropy allocation.
+ * baseline: 8-bit grayscale or RGB LOCO-I scans. RGB supports `ILV=1` (line
+ * interleave) and `ILV=2` (sample interleave), unit sampling, and either no
+ * `mrfx` APP8 marker or `mrfx` transform zero. HP1/HP2/HP3 colour transforms
+ * are explicitly refused; its [nearLossless] bound is validated before
+ * entropy allocation.
  */
 public class JpegLsDocument private constructor(
     private val source: ByteArray,
@@ -68,7 +69,7 @@ public class JpegLsDocument private constructor(
     public val nearLossless: Int get() = frame.nearLossless
     /** Number of image components in the validated SOF55 frame (one or three). */
     public val componentCount: Int get() = frame.components.size
-    /** JPEG-LS SOS ILV value: `0` for grayscale, `1` for RGB line interleave. */
+    /** JPEG-LS SOS ILV value: `0` for grayscale, `1` line or `2` sample RGB interleave. */
     public val interleaveMode: Int get() = frame.interleaveMode
     public val metadataSegments: List<JpegLsMetadataSegment> =
         Collections.unmodifiableList(ArrayList(metadata))
@@ -338,9 +339,12 @@ private class JpegLsParser(
         val interleaveMode = data[parameterOffset + 1].u8()
         if (
             (components.size == 1 && interleaveMode != 0) ||
-            (components.size == 3 && interleaveMode != 1) ||
+            (components.size == 3 && interleaveMode !in 1..2) ||
             data[parameterOffset + 2].u8() != 0
         ) {
+            jpeglsFailure("jpeg-ls.scan.unsupported", markerOffset, Codec.Result.kUnimplemented)
+        }
+        if (components.size == 3 && interleaveMode == 2 && nearLossless != 0) {
             jpeglsFailure("jpeg-ls.scan.unsupported", markerOffset, Codec.Result.kUnimplemented)
         }
         val parameters = effectiveParameters(nearLossless, markerOffset)
