@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Test
@@ -318,7 +319,23 @@ class JpegAdvancedEncodeTest {
     }
 
     @Test
-    fun `opt in djpeg oracle decodes generated SOF9`() {
+    fun `PNM pixel comparison rejects an altered oracle sample`() {
+        val expected = bitmap(1, 1) { _, _ -> 0xFF102030.toInt() }
+        val altered = PnmImage(
+            width = 1,
+            height = 1,
+            channels = 3,
+            maxValue = 255,
+            samples = intArrayOf(0x10, 0x21, 0x30),
+        )
+
+        assertThrows(AssertionError::class.java) {
+            assertPnmMatchesBitmap(altered, expected, maxError = 0, label = "altered PNM")
+        }
+    }
+
+    @Test
+    fun `opt in djpeg oracle matches generated SOF9 grayscale pixels`() {
         val configuredOracle = System.getProperty("kanvas.jpeg.oracle.djpeg").orEmpty()
         assumeTrue(
             configuredOracle.isNotBlank(),
@@ -336,24 +353,13 @@ class JpegAdvancedEncodeTest {
                 restartInterval = 1,
             ),
         )!!
-        val jpeg = Files.createTempFile("kanvas-sof9-oracle-", ".jpg")
-        try {
-            Files.write(jpeg, encoded)
-            val process = ProcessBuilder(oracle.toString(), "-pnm", jpeg.toString())
-                .redirectErrorStream(true)
-                .start()
-            val output = process.inputStream.readBytes()
-            assertEquals(0, process.waitFor(), output.decodeToString())
-            assertTrue(output.size > 16)
-            assertEquals('P'.code, output[0].toInt() and 0xFF)
-            assertEquals('5'.code, output[1].toInt() and 0xFF)
-        } finally {
-            Files.deleteIfExists(jpeg)
-        }
+        val external = decodeDjpegPnm(oracle, encoded, "kanvas-sof9-oracle-")
+        assertPnmMatchesBitmap(external, source, maxError = 2, label = "SOF9 source")
+        assertPnmMatchesBitmap(external, decodedBitmap(encoded), maxError = 1, label = "SOF9 Kanvas")
     }
 
     @Test
-    fun `opt in djpeg oracle decodes generated SOF10`() {
+    fun `opt in djpeg oracle matches generated SOF10 grayscale pixels`() {
         val configuredOracle = System.getProperty("kanvas.jpeg.oracle.djpeg").orEmpty()
         assumeTrue(
             configuredOracle.isNotBlank(),
@@ -376,20 +382,81 @@ class JpegAdvancedEncodeTest {
             ),
         )
         assertNotNull(encoded)
-        val jpeg = Files.createTempFile("kanvas-sof10-oracle-", ".jpg")
-        try {
-            Files.write(jpeg, encoded!!)
-            val process = ProcessBuilder(oracle.toString(), "-pnm", jpeg.toString())
-                .redirectErrorStream(true)
-                .start()
-            val output = process.inputStream.readBytes()
-            assertEquals(0, process.waitFor(), output.decodeToString())
-            assertTrue(output.size > 16)
-            assertEquals('P'.code, output[0].toInt() and 0xFF)
-            assertEquals('5'.code, output[1].toInt() and 0xFF)
-        } finally {
-            Files.deleteIfExists(jpeg)
-        }
+        val external = decodeDjpegPnm(oracle, encoded!!, "kanvas-sof10-oracle-")
+        assertPnmMatchesBitmap(external, source, maxError = 2, label = "SOF10 source")
+        assertPnmMatchesBitmap(external, decodedBitmap(encoded), maxError = 1, label = "SOF10 Kanvas")
+    }
+
+    @Test
+    fun `opt in djpeg oracle matches generated SOF10 color pixels`() {
+        val configuredOracle = System.getProperty("kanvas.jpeg.oracle.djpeg").orEmpty()
+        assumeTrue(
+            configuredOracle.isNotBlank(),
+            "Set -PjpegOracleDjpeg=/absolute/path/to/djpeg to enable the external SOF10 oracle",
+        )
+        val oracle = Path.of(configuredOracle)
+        assumeTrue(Files.isExecutable(oracle), "djpeg oracle is not executable: $oracle")
+        val source = color(17, 9)
+        val encoded = JpegEncoder.encode(
+            source,
+            JpegEncoder.Options(
+                process = JpegEncodeProcess.ProgressiveArithmetic,
+                colorModel = JpegEncodeColorModel.YCbCr,
+                sampling = JpegSampling.S444,
+                restartInterval = 1,
+                progressiveScans = listOf(
+                    JpegProgressiveScan(componentIds = listOf(1, 2, 3), spectralStart = 0, spectralEnd = 0),
+                    JpegProgressiveScan(componentIds = listOf(1), spectralStart = 1, spectralEnd = 63),
+                    JpegProgressiveScan(componentIds = listOf(2), spectralStart = 1, spectralEnd = 63),
+                    JpegProgressiveScan(componentIds = listOf(3), spectralStart = 1, spectralEnd = 63),
+                ),
+            ),
+        )!!
+
+        val external = decodeDjpegPnm(oracle, encoded, "kanvas-sof10-color-oracle-", "-rgb")
+        assertPnmMatchesBitmap(external, source, maxError = 3, label = "SOF10 color source")
+        assertPnmMatchesBitmap(external, decodedBitmap(encoded), maxError = 2, label = "SOF10 color Kanvas")
+    }
+
+    @Test
+    fun `opt in djpeg oracle matches generated SOF10 12-bit grayscale pixels`() {
+        val configuredOracle = System.getProperty("kanvas.jpeg.oracle.djpeg").orEmpty()
+        assumeTrue(
+            configuredOracle.isNotBlank(),
+            "Set -PjpegOracleDjpeg=/absolute/path/to/djpeg to enable the external SOF10 oracle",
+        )
+        val oracle = Path.of(configuredOracle)
+        assumeTrue(Files.isExecutable(oracle), "djpeg oracle is not executable: $oracle")
+        val source = grayscale(17, 9)
+        val encoded = JpegEncoder.encode(
+            source,
+            JpegEncoder.Options(
+                process = JpegEncodeProcess.ProgressiveArithmetic,
+                precision = 12,
+                colorModel = JpegEncodeColorModel.Grayscale,
+                sampling = JpegSampling.S444,
+                restartInterval = 1,
+                progressiveScans = listOf(
+                    JpegProgressiveScan(componentIds = listOf(1), spectralStart = 0, spectralEnd = 0),
+                    JpegProgressiveScan(componentIds = listOf(1), spectralStart = 1, spectralEnd = 63),
+                ),
+            ),
+        )!!
+
+        val external = decodeDjpegPnm(
+            oracle,
+            encoded,
+            "kanvas-sof10-12bit-oracle-",
+            "-precision",
+            "12",
+        )
+        assertPnmMatchesScaledBitmap(
+            external,
+            source,
+            precision = 12,
+            maxError = 32,
+            label = "SOF10 12-bit source",
+        )
     }
 
     @Test
@@ -578,6 +645,162 @@ class JpegAdvancedEncodeTest {
         }
         assertTrue(absoluteError / (source.width * source.height * 3) < 45, "$label mean RGB error: $absoluteError")
     }
+
+    private fun assertPnmMatchesBitmap(
+        actual: PnmImage,
+        expected: SkBitmap,
+        maxError: Int,
+        label: String,
+    ) {
+        assertEquals(expected.width, actual.width, "$label width")
+        assertEquals(expected.height, actual.height, "$label height")
+        assertTrue(actual.channels in 1..3, "$label channels=${actual.channels}")
+        assertEquals(255, actual.maxValue, "$label maxValue")
+        assertEquals(actual.width * actual.height * actual.channels, actual.samples.size, "$label sample count")
+        for (y in 0 until actual.height) {
+            for (x in 0 until actual.width) {
+                val pixel = expected.getPixel(x, y)
+                val expectedSamples = intArrayOf(
+                    pixel ushr 16 and 0xFF,
+                    pixel ushr 8 and 0xFF,
+                    pixel and 0xFF,
+                )
+                for (channel in 0 until actual.channels) {
+                    val expectedSample = if (actual.channels == 1) expectedSamples[0] else expectedSamples[channel]
+                    val sample = actual.samples[(y * actual.width + x) * actual.channels + channel]
+                    val error = kotlin.math.abs(expectedSample - sample)
+                    assertTrue(
+                        error <= maxError,
+                        "$label x=$x y=$y channel=$channel expected=$expectedSample actual=$sample error=$error max=$maxError",
+                    )
+                }
+            }
+        }
+    }
+
+    private fun assertPnmMatchesScaledBitmap(
+        actual: PnmImage,
+        expected: SkBitmap,
+        precision: Int,
+        maxError: Int,
+        label: String,
+    ) {
+        val maxValue = (1 shl precision) - 1
+        assertEquals(expected.width, actual.width, "$label width")
+        assertEquals(expected.height, actual.height, "$label height")
+        assertEquals(1, actual.channels, "$label channels")
+        assertEquals(maxValue, actual.maxValue, "$label maxValue")
+        assertEquals(actual.width * actual.height, actual.samples.size, "$label sample count")
+        for (y in 0 until actual.height) {
+            for (x in 0 until actual.width) {
+                val expected8 = expected.getPixel(x, y) ushr 16 and 0xFF
+                val expectedSample = (expected8 * maxValue + 127) / 255
+                val sample = actual.samples[y * actual.width + x]
+                val error = kotlin.math.abs(expectedSample - sample)
+                assertTrue(
+                    error <= maxError,
+                    "$label x=$x y=$y expected=$expectedSample actual=$sample error=$error max=$maxError",
+                )
+            }
+        }
+    }
+
+    private fun decodedBitmap(encoded: ByteArray): SkBitmap {
+        val (bitmap, result) = JpegCodec.Decoder.make(encoded)!!.getImage()
+        assertEquals(org.graphiks.kanvas.codec.Codec.Result.kSuccess, result)
+        return requireNotNull(bitmap)
+    }
+
+    private fun decodeDjpegPnm(
+        oracle: Path,
+        encoded: ByteArray,
+        prefix: String,
+        vararg options: String,
+    ): PnmImage {
+        val jpeg = Files.createTempFile(prefix, ".jpg")
+        try {
+            Files.write(jpeg, encoded)
+            val process = ProcessBuilder(
+                buildList {
+                    add(oracle.toString())
+                    addAll(options)
+                    add("-pnm")
+                    add(jpeg.toString())
+                },
+            ).start()
+            val output = process.inputStream.readBytes()
+            val error = process.errorStream.readBytes()
+            assertEquals(0, process.waitFor(), error.decodeToString())
+            return parsePnm(output)
+        } finally {
+            Files.deleteIfExists(jpeg)
+        }
+    }
+
+    private fun parsePnm(bytes: ByteArray): PnmImage {
+        require(bytes.size >= 4) { "PNM is too short" }
+        val magic = when {
+            bytes[0] == 'P'.code.toByte() && bytes[1] == '5'.code.toByte() -> 1
+            bytes[0] == 'P'.code.toByte() && bytes[1] == '6'.code.toByte() -> 3
+            else -> error("PNM must be binary P5 or P6")
+        }
+        var cursor = 2
+
+        fun skipWhitespaceAndComments() {
+            while (cursor < bytes.size) {
+                while (cursor < bytes.size && bytes[cursor].toInt().toChar().isWhitespace()) cursor++
+                if (cursor >= bytes.size || bytes[cursor] != '#'.code.toByte()) return
+                while (cursor < bytes.size && bytes[cursor] != '\n'.code.toByte()) cursor++
+            }
+        }
+
+        fun token(name: String): Int {
+            skipWhitespaceAndComments()
+            require(cursor < bytes.size) { "PNM missing $name" }
+            val start = cursor
+            while (cursor < bytes.size && !bytes[cursor].toInt().toChar().isWhitespace()) cursor++
+            require(start < cursor) { "PNM missing $name" }
+            return bytes.copyOfRange(start, cursor).decodeToString().toIntOrNull()
+                ?: error("PNM invalid $name")
+        }
+
+        val width = token("width")
+        val height = token("height")
+        val maxValue = token("max value")
+        require(width > 0 && height > 0) { "PNM dimensions must be positive" }
+        require(maxValue in 1..0xFFFF) { "PNM max value must be in 1..65535" }
+        require(cursor < bytes.size && bytes[cursor].toInt().toChar().isWhitespace()) {
+            "PNM header must terminate before samples"
+        }
+        cursor++
+
+        val sampleCount = Math.multiplyExact(Math.multiplyExact(width, height), magic)
+        val bytesPerSample = if (maxValue < 256) 1 else 2
+        val payloadBytes = Math.multiplyExact(sampleCount, bytesPerSample)
+        require(bytes.size - cursor == payloadBytes) {
+            "PNM payload size ${bytes.size - cursor} does not match $payloadBytes samples"
+        }
+        val samples = IntArray(sampleCount)
+        for (index in samples.indices) {
+            samples[index] = if (bytesPerSample == 1) {
+                bytes[cursor++].toInt() and 0xFF
+            } else {
+                val high = bytes[cursor++].toInt() and 0xFF
+                val low = bytes[cursor++].toInt() and 0xFF
+                (high shl 8) or low
+            }
+            require(samples[index] <= maxValue) { "PNM sample exceeds max value" }
+        }
+        return PnmImage(width, height, magic, maxValue, samples)
+    }
+
+    private data class PnmImage(
+        val width: Int,
+        val height: Int,
+        val channels: Int,
+        val maxValue: Int,
+        val samples: IntArray,
+    )
 
     private fun firstMarker(bytes: ByteArray, markers: Set<Int>): Int {
         var offset = 2

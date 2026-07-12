@@ -96,10 +96,22 @@ L'oracle externe reste opt-in et n'est jamais une dépendance runtime ou CI :
 
 ```text
 rtk ./gradlew :codec:jpeg:test \
-  --tests '*JpegAdvancedEncodeTest.opt in djpeg oracle decodes generated SOF9' \
-  --tests '*JpegAdvancedEncodeTest.opt in djpeg oracle decodes generated SOF10' \
+  --tests '*JpegAdvancedEncodeTest.opt in djpeg oracle matches generated SOF9 grayscale pixels' \
+  --tests '*JpegAdvancedEncodeTest.opt in djpeg oracle matches generated SOF10 grayscale pixels' \
+  --tests '*JpegAdvancedEncodeTest.opt in djpeg oracle matches generated SOF10 color pixels' \
+  --tests '*JpegAdvancedEncodeTest.opt in djpeg oracle matches generated SOF10 12-bit grayscale pixels' \
   -PjpegOracleDjpeg=/absolute/path/to/djpeg --no-daemon
 ```
 
-Il vérifie que `djpeg` décode des SOF9 et SOF10 générés par Kotlin. Sans la
-propriété `jpegOracleDjpeg`, ces tests sont ignorés.
+Il analyse le PNM binaire renvoyé par `djpeg`, puis vérifie chaque échantillon
+contre la source et, pour les sorties 8-bit, contre le décodeur Kanvas. Les
+flux gris 8-bit (SOF9/SOF10) tolèrent au plus 2 niveaux face à la source et 1
+niveau face à Kanvas : la compression à `quality = 100` garde une DCT
+quantifiée à 1, mais les IDCT indépendantes peuvent arrondir d'un niveau. Le
+flux couleur SOF10 est volontairement en 4:4:4 et tolère respectivement 3 et
+2 niveaux, ce qui couvre les arrondis YCbCr↔RGB supplémentaires sans masquer
+une erreur de composant. Le flux gris SOF10 12-bit demande `djpeg -precision
+12`, lit le PGM 16-bit big-endian (`maxval = 4095`) et tolère 32 niveaux : deux
+niveaux 8-bit transposés sur l'échelle 0..4095. Sans la propriété
+`jpegOracleDjpeg`, ces tests sont ignorés ; l'oracle ne devient donc jamais
+une dépendance runtime ou CI.
