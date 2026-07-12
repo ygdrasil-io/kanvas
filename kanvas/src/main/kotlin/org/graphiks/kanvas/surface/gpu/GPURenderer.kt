@@ -94,7 +94,7 @@ private fun MaskBlurPlan.Ready.maskBlurDiagnosticFacts(): List<DiagnosticFact> {
         DiagnosticFact("mask.blur.halo", halo.toString()),
         DiagnosticFact("mask.blur.dimensions", "${localWidth}x$localHeight"),
         DiagnosticFact("mask.blur.bytes", "$bytesPerTexture/$requiredBytes"),
-        DiagnosticFact("mask.blur.taps", kernel.tapCount.toString()),
+        DiagnosticFact("blur.tap_count", kernel.tapCount.toString()),
         DiagnosticFact("mask.blur.module-keys", blurModuleKeysFor(this).joinToString(",")),
         DiagnosticFact("mask.blur.passes", "mask,horizontal,vertical,style,source"),
     )

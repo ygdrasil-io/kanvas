@@ -9,8 +9,10 @@ import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
 import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.BlendMode
+import org.graphiks.kanvas.paint.MaskFilter
 import org.graphiks.kanvas.paint.MeshProgram
 import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.pipeline.BlurStyle
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.pipeline.ClipOp
 import org.graphiks.kanvas.pipeline.RuntimeEffect
@@ -99,6 +101,33 @@ class GPUClipCoverageSurfaceTest {
                 entry.facts.any { fact -> fact.key == "clip.strategy" && fact.value == "alpha-mask" }
             },
         )
+    }
+
+    @Test
+    fun `complex clip blur has no bounds fallback or unblurred dispatch`() {
+        val result = renderBlurredDifferenceClipScene()
+
+        assertEquals(0, result.stats.opsRefused, result.diagnostics.entries.toString())
+        assertTrue(
+            result.diagnostics.entries.none { it.reason.contains("complex_stack") },
+            result.diagnostics.entries.toString(),
+        )
+        assertTrue(
+            result.diagnostics.entries.any { entry ->
+                entry.facts.any { it.key == "blur.tap_count" && it.value != "1" }
+            },
+            result.diagnostics.entries.toString(),
+        )
+        assertTrue(alphaAt(result.pixels, 7, 12) > 0)
+    }
+
+    @Test
+    fun `one hundred twenty frames vary sigma and clips without cache growth by content`() {
+        val result = renderAlternatingClipAndSigmaFrames(frameCount = 120)
+
+        assertEquals(setOf(MASK_BLUR_HORIZONTAL_WGSL, MASK_BLUR_VERTICAL_WGSL), result.blurModules)
+        assertEquals(result.pipelineCountAfterWarmup, result.pipelineCountAtEnd)
+        assertEquals(0L, result.destinationReadbackSnapshots)
     }
 
     @Test
@@ -980,6 +1009,98 @@ class GPUClipCoverageSurfaceTest {
 
     private fun alphaAt(pixels: UByteArray, x: Int, y: Int): Int =
         pixels[(y * 16 + x) * 4 + 3].toInt() and 0xff
+
+    private fun renderBlurredDifferenceClipScene(
+        sigma: Float = 2f,
+        clipOffset: Float = 0f,
+    ) = Surface(16, 16).run {
+        requireWebGpu()
+        canvas {
+            drawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.fromArgb(128, 32, 64, 192)))
+            save()
+            clipRect(Rect(1f, 1f, 15f, 15f), ClipOp.INTERSECT, antiAlias = true)
+            clipPath(
+                Path {
+                    moveTo(5f + clipOffset, 4f)
+                    lineTo(12f, 4f)
+                    lineTo(12f, 8f)
+                    lineTo(9f + clipOffset, 8f)
+                    lineTo(9f + clipOffset, 12f)
+                    lineTo(5f + clipOffset, 12f)
+                    close()
+                },
+                ClipOp.DIFFERENCE,
+                antiAlias = true,
+            )
+            drawRect(
+                Rect(4f, 4f, 12f, 12f),
+                Paint.fill(Color.RED).copy(
+                    blendMode = BlendMode.DARKEN,
+                    maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, sigma),
+                ),
+            )
+            restore()
+        }
+        render()
+    }
+
+    private fun renderAlternatingClipAndSigmaFrames(frameCount: Int): AlternatingBlurFramesResult {
+        require(frameCount > 0)
+        GPUBackendRuntimeFactory.dispose()
+        val session = GPUBackendRuntimeFactory.createOrNull()
+        assumeTrue(session != null, "GPU backend unavailable in current environment")
+        session!!
+
+        val warmup = renderBlurredDifferenceClipScene(sigma = 1.5f, clipOffset = 0f)
+        assertEquals(0, warmup.stats.opsRefused, warmup.diagnostics.entries.toString())
+        val blurModules = blurModules(warmup).toMutableSet()
+        val pipelineCountAfterWarmup = session.executionCacheTelemetry
+            .filter { it.cacheName == "pipeline" }
+            .sumOf { it.creations }
+        val telemetryBeforeFrames = session.runtimeTelemetry
+
+        repeat(frameCount) { frame ->
+            val frameResult = renderBlurredDifferenceClipScene(
+                sigma = 0.5f + (frame % 7),
+                clipOffset = (frame % 3).toFloat() * 0.25f,
+            )
+            assertEquals(0, frameResult.stats.opsRefused, frameResult.diagnostics.entries.toString())
+            blurModules += blurModules(frameResult)
+        }
+
+        val pipelineCountAtEnd = session.executionCacheTelemetry
+            .filter { it.cacheName == "pipeline" }
+            .sumOf { it.creations }
+        val telemetryAfterFrames = session.runtimeTelemetry
+        return AlternatingBlurFramesResult(
+            blurModules = blurModules,
+            pipelineCountAfterWarmup = pipelineCountAfterWarmup,
+            pipelineCountAtEnd = pipelineCountAtEnd,
+            destinationReadbackSnapshots =
+                telemetryAfterFrames.destinationReadbackSnapshots - telemetryBeforeFrames.destinationReadbackSnapshots,
+        )
+    }
+
+    private fun blurModules(result: org.graphiks.kanvas.surface.RenderResult): Set<String> =
+        result.diagnostics.entries
+            .flatMap { entry -> entry.facts }
+            .filter { it.key == "mask.blur.module-keys" }
+            .flatMap { it.value.split(',') }
+            .map { key ->
+                when (key) {
+                    MASK_BLUR_HORIZONTAL_MODULE_KEY -> MASK_BLUR_HORIZONTAL_WGSL
+                    MASK_BLUR_VERTICAL_MODULE_KEY -> MASK_BLUR_VERTICAL_WGSL
+                    else -> error("Unexpected mask blur module key: $key")
+                }
+            }
+            .toSet()
+
+    private data class AlternatingBlurFramesResult(
+        val blurModules: Set<String>,
+        val pipelineCountAfterWarmup: Long,
+        val pipelineCountAtEnd: Long,
+        val destinationReadbackSnapshots: Long,
+    )
 
     private fun renderMaskedRect(blendMode: BlendMode) = Surface(16, 16).run {
         canvas {
