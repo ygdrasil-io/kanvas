@@ -273,3 +273,17 @@ Residual concern:
   on this real-source run. After the generic/noisy buckets were intentionally
   suppressed, the remaining trustworthy evidence is showing up primarily as
   concrete upstream variant names rather than checker-promoted family buckets.
+
+Follow-up (2026-07-12):
+
+- centralized Kotlin GM extraction in `scripts/extract_kanvas_gm_names.py` so
+  `check_missing_gms.py` and `compare_skia_vs_kanvas_gms.py` share the same
+  logic and cannot drift on supported Kotlin shapes
+- added regression coverage for the production
+  `ClippedBitmapShadersBase` block-getter/interpolation/subclass pattern,
+  including direct helper coverage plus caller-level assertions in both scripts
+- fresh real-source verification now extracts:
+  `clipped-bitmap-shaders-{tile,mirror,clamp}` and the `-hq` variants from
+  `integration-tests/skia/.../ClippedBitmapShadersGm.kt`
+- fresh script verification no longer flags those six names as missing/not
+  ported against `/Users/chaos/workspace/kanvas-forge/skia-main/gm`

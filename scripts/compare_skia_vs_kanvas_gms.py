@@ -6,10 +6,10 @@ Usage: python3 scripts/compare_skia_vs_kanvas_gms.py
 
 import argparse
 import os
-import re
 import sys
 from pathlib import Path
 
+from extract_kanvas_gm_names import extract_kanvas_gm_names as extract_shared_kanvas_gm_names
 from extract_skia_gm_names import (
     extract_gm_names as extract_cpp_gm_names,
     resolve_default_gm_dir,
@@ -20,69 +20,8 @@ REF_DIR = REPO / "integration-tests" / "skia" / "src" / "test" / "resources" / "
 GM_DIR = REPO / "integration-tests" / "skia" / "src" / "test" / "kotlin" / "org" / "graphiks" / "kanvas" / "skia" / "gm"
 
 
-# ---------------------------------------------------------------------------
-# 1. Extract Kanvas GM names (reuse logic from check_missing_gms.py)
-# ---------------------------------------------------------------------------
-
-def extract_subclass_names(text, parent_class):
-    names = set()
-    for m in re.finditer(
-        r'(?:class|object)\s+\w+\s*(?:\([^)]*\))?\s*:\s*'
-        + re.escape(parent_class)
-        + r'\s*\(\s*"([^"]+)"',
-        text,
-    ):
-        names.add(m.group(1))
-    return names
-
-
 def extract_kanvas_gm_names():
-    names = set()
-    for kt_file in sorted(GM_DIR.rglob("*Gm.kt")):
-        text = kt_file.read_text()
-        for m in re.finditer(r'override\s+val\s+name\s*=\s*"([^"]+)"', text):
-            names.add(m.group(1))
-        for m in re.finditer(
-            r'override\s+val\s+name(?:\s*:\s*String)?\s*=\s*if\s*\([^)]*\)\s*"([^"]+)"\s*else\s*"([^"]+)"',
-            text,
-        ):
-            names.add(m.group(1)); names.add(m.group(2))
-        for m in re.finditer(
-            r'override\s+val\s+name\s*:\s*String\s+get\s*\(\s*\)\s*=\s*if\s*\([^)]*\)\s*"([^"]+)"\s*else\s*"([^"]+)"',
-            text,
-        ):
-            names.add(m.group(1)); names.add(m.group(2))
-        m = re.search(
-            r'override\s+val\s+name\s*:\s*String\s+get\s*\(\s*\)\s*=\s*"([^"]*)\$', text
-        )
-        if m:
-            class_m = re.search(r'(?:class|object)\s+(\w+)\s*(?:\([^)]*\))?\s*[:\{]', text)
-            if class_m:
-                names.update(extract_subclass_names(text, class_m.group(1)))
-        for m in re.finditer(
-            r'class\s+(\w+)\s*\([^)]*override\s+val\s+name\s*:\s*String', text,
-        ):
-            names.update(extract_subclass_names(text, m.group(1)))
-        for m in re.finditer(r'gmName\s*=\s*"([^"]+)"', text):
-            names.add(m.group(1))
-        for m in re.finditer(r'variantName\s*=\s*"([^"]+)"', text):
-            names.add(m.group(1))
-        for m in re.finditer(r'return\s+"([^"]+)"', text):
-            names.add(m.group(1))
-        for m in re.finditer(
-            r'override\s+val\s+name\s*:\s*String\s+get\s*\(\s*\)\s*=\s*"([^"]+)"', text,
-        ):
-            names.add(m.group(1))
-        for m in re.finditer(r'return "([^"]+)"', text):
-            names.add(m.group(1))
-        for m in re.finditer(r'name\s*=\s*"([^"]+)"', text):
-            start = m.start()
-            prefix = text[max(0, start - 40):start]
-            if "override val" not in prefix and "kanvas.skia.gm" not in prefix:
-                names.add(m.group(1))
-        for m in re.finditer(r':\s*\w+\s*\(\s*"([a-z][a-z0-9_]+)"', text):
-            names.add(m.group(1))
-    return names
+    return extract_shared_kanvas_gm_names(GM_DIR)
 
 
 # ---------------------------------------------------------------------------

@@ -4,6 +4,7 @@ import importlib.util
 import io
 import sys
 import tempfile
+import textwrap
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -28,6 +29,60 @@ def load_checker():
 
 
 class CheckMissingGmsClassificationTest(unittest.TestCase):
+    def test_extract_kotlin_gm_names_sees_block_getter_subclass_variants(self):
+        checker = load_checker()
+
+        with tempfile.TemporaryDirectory(prefix="check_missing_gms_block_getter_") as temp_root:
+            gm_dir = Path(temp_root)
+            (gm_dir / "ClippedBitmapShadersGm.kt").write_text(
+                textwrap.dedent(
+                    """\
+                    package org.graphiks.kanvas.skia.gm.path
+
+                    import org.graphiks.kanvas.paint.TileMode
+                    import org.graphiks.kanvas.skia.SkiaGm
+
+                    open class ClippedBitmapShadersBase(
+                        private val mode: TileMode,
+                        private val hq: Boolean,
+                    ) : SkiaGm {
+                        override val name: String
+                            get() {
+                                val descriptor = when (mode) {
+                                    TileMode.REPEAT -> "tile"
+                                    TileMode.MIRROR -> "mirror"
+                                    TileMode.CLAMP -> "clamp"
+                                    TileMode.DECAL -> "decal"
+                                }
+                                return if (hq) "clipped-bitmap-shaders-$descriptor-hq" else "clipped-bitmap-shaders-$descriptor"
+                            }
+                    }
+
+                    class ClippedBitmapShadersTileGm : ClippedBitmapShadersBase(TileMode.REPEAT, false)
+                    class ClippedBitmapShadersMirrorGm : ClippedBitmapShadersBase(TileMode.MIRROR, false)
+                    class ClippedBitmapShadersClampGm : ClippedBitmapShadersBase(TileMode.CLAMP, false)
+                    class ClippedBitmapShadersTileHqGm : ClippedBitmapShadersBase(TileMode.REPEAT, true)
+                    class ClippedBitmapShadersMirrorHqGm : ClippedBitmapShadersBase(TileMode.MIRROR, true)
+                    class ClippedBitmapShadersClampHqGm : ClippedBitmapShadersBase(TileMode.CLAMP, true)
+                    """
+                ),
+                encoding="utf-8",
+            )
+
+            with mock.patch.object(checker, "GM_DIR", gm_dir):
+                actual = checker.extract_kotlin_gm_names()
+
+        self.assertTrue(
+            {
+                "clipped-bitmap-shaders-tile",
+                "clipped-bitmap-shaders-mirror",
+                "clipped-bitmap-shaders-clamp",
+                "clipped-bitmap-shaders-tile-hq",
+                "clipped-bitmap-shaders-mirror-hq",
+                "clipped-bitmap-shaders-clamp-hq",
+            }.issubset(actual)
+        )
+
     def test_separator_alias_is_reported_without_being_direct_match(self):
         checker = load_checker()
 

@@ -16,107 +16,15 @@ import re
 import sys
 from pathlib import Path
 
+from extract_kanvas_gm_names import extract_kanvas_gm_names
 from extract_skia_gm_names import extract_gm_names as extract_cpp_gm_names
 
 REPO = Path(__file__).resolve().parent.parent
 REF_DIR = REPO / "integration-tests" / "skia" / "src" / "test" / "resources" / "reference"
 GM_DIR = REPO / "integration-tests" / "skia" / "src" / "test" / "kotlin" / "org" / "graphiks" / "kanvas" / "skia" / "gm"
 
-
-def extract_subclass_names(text, parent_class):
-    names = set()
-    for m in re.finditer(
-        r'(?:class|object)\s+\w+\s*(?:\([^)]*\))?\s*:\s*'
-        + re.escape(parent_class)
-        + r'\s*\(\s*"([^"]+)"',
-        text,
-    ):
-        names.add(m.group(1))
-    return names
-
-
 def extract_kotlin_gm_names():
-    names = set()
-
-    for kt_file in sorted(GM_DIR.rglob("*Gm.kt")):
-        text = kt_file.read_text()
-
-        # override val name = "literal"
-        for m in re.finditer(r'override\s+val\s+name\s*=\s*"([^"]+)"', text):
-            names.add(m.group(1))
-
-        # override val name[: String] = if (c) "a" else "b"
-        for m in re.finditer(
-            r'override\s+val\s+name(?:\s*:\s*String)?\s*=\s*if\s*\([^)]*\)\s*"([^"]+)"\s*else\s*"([^"]+)"',
-            text,
-        ):
-            names.add(m.group(1))
-            names.add(m.group(2))
-
-        # get() = if (c) "a" else "b"
-        for m in re.finditer(
-            r'override\s+val\s+name\s*:\s*String\s+get\s*\(\s*\)\s*=\s*if\s*\([^)]*\)\s*"([^"]+)"\s*else\s*"([^"]+)"',
-            text,
-        ):
-            names.add(m.group(1))
-            names.add(m.group(2))
-
-        # get() = "prefix$var" -> look for subclass constructors
-        m = re.search(
-            r'override\s+val\s+name\s*:\s*String\s+get\s*\(\s*\)\s*=\s*"([^"]*)\$',
-            text,
-        )
-        if m:
-            class_m = re.search(
-                r'(?:class|object)\s+(\w+)\s*(?:\([^)]*\))?\s*[:\{]', text
-            )
-            if class_m:
-                names.update(extract_subclass_names(text, class_m.group(1)))
-
-        # constructor passthrough: override val name: String,
-        for m in re.finditer(
-            r'class\s+(\w+)\s*\([^)]*override\s+val\s+name\s*:\s*String',
-            text,
-        ):
-            names.update(extract_subclass_names(text, m.group(1)))
-
-        # gmName = "literal" (companion/factory)
-        for m in re.finditer(r'gmName\s*=\s*"([^"]+)"', text):
-            names.add(m.group(1))
-
-        # variantName = "literal"
-        for m in re.finditer(r'variantName\s*=\s*"([^"]+)"', text):
-            names.add(m.group(1))
-
-        # return "literal" in getters
-        for m in re.finditer(r'return\s+"([^"]+)"', text):
-            names.add(m.group(1))
-
-        # get() = "literal" (simple string getters)
-        for m in re.finditer(
-            r'override\s+val\s+name\s*:\s*String\s+get\s*\(\s*\)\s*=\s*"([^"]+)"',
-            text,
-        ):
-            names.add(m.group(1))
-
-        # get() {"..."; return "literal" } blocks
-        for m in re.finditer(r'return "([^"]+)"', text):
-            names.add(m.group(1))
-
-        # name = "literal" (non-override, companion context)
-        for m in re.finditer(r'name\s*=\s*"([^"]+)"', text):
-            start = m.start()
-            prefix = text[max(0, start - 40):start]
-            if "override val" not in prefix and "kanvas.skia.gm" not in prefix:
-                names.add(m.group(1))
-
-        # subclass constructor calls: class X : Parent("literal")
-        for m in re.finditer(
-            r':\s*\w+\s*\(\s*"([a-z][a-z0-9_]+)"', text,
-        ):
-            names.add(m.group(1))
-
-    return {n for n in names if is_gm_name(n)}
+    return {name for name in extract_kanvas_gm_names(GM_DIR) if is_gm_name(name)}
 
 
 # Filter out strings that are clearly not GM names
