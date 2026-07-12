@@ -104,6 +104,12 @@ public class Jpeg2000Document private constructor(
         return decodeNarrowRawJ2k(source, frame, entropy)
     }
 
+    /** Whether this document can safely back the bounded [Codec] image facade. */
+    internal fun supportsImageCodec(): Boolean =
+        container == Jpeg2000Container.J2K && entropy != null &&
+            frame.width in 1..NARROW_RAW_J2K_MAX_DIMENSION &&
+            frame.height in 1..NARROW_RAW_J2K_MAX_DIMENSION
+
     public companion object {
         /** Opens a bounded raw J2K codestream or JP2 wrapper. */
         public fun open(data: ByteArray, limits: Jpeg2000Limits = Jpeg2000Limits()): Jpeg2000OpenResult {
@@ -508,6 +514,7 @@ private const val SOT: Int = 0x90
 private const val SOD: Int = 0x93
 private const val EOC: Int = 0xD9
 private const val MAX_JP2_HEADER_BOXES: Int = 128
+internal const val NARROW_RAW_J2K_MAX_DIMENSION: Int = 64
 private val JP2_SIGNATURE_PAYLOAD: ByteArray = byteArrayOf(0x0D, 0x0A, 0x87.toByte(), 0x0A)
 private val JP2_SIGNATURE_BOX: ByteArray = byteArrayOf(
     0, 0, 0, 12,

@@ -49,7 +49,9 @@ public class Jpeg2000Codec private constructor(
 
         override fun matches(data: ByteArray): Boolean = Jpeg2000Document.looksLikeJpeg2000(data)
 
-        override fun make(data: ByteArray): Codec? = Jpeg2000Document.open(data).document?.let(::Jpeg2000Codec)
+        override fun make(data: ByteArray): Codec? = Jpeg2000Document.open(data).document
+            ?.takeIf(Jpeg2000Document::supportsImageCodec)
+            ?.let(::Jpeg2000Codec)
     }
 }
 

@@ -5,7 +5,6 @@ import java.security.MessageDigest
 import org.graphiks.kanvas.codec.Codec
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -102,6 +101,25 @@ class Jpeg2000DocumentTest {
     }
 
     @Test
+    fun `MQ probability state 26 follows Annex C MPS and LPS transitions`() {
+        val state26WithMpsZero = 26 shl 1
+
+        assertEquals(27 shl 1, J2kMqTransitions.afterMps(state26WithMpsZero))
+        assertEquals(24 shl 1, J2kMqTransitions.afterLps(state26WithMpsZero))
+    }
+
+    @Test
+    fun `EBCOT traversal visits full stripes before the final row tail`() {
+        val order = buildList {
+            forEachEbcotStripe(width = 2, height = 5) { x, startY, endY ->
+                add("$x:$startY-$endY")
+            }
+        }
+
+        assertEquals(listOf("0:0-4", "1:0-4", "0:4-5", "1:4-5"), order)
+    }
+
+    @Test
     fun `negative vertical sign predictor uses OpenJPEG ctx10 and SPB one`() {
         val decisions = fixtureDecisions()
         val verticalSign = decisions.single { decision ->
@@ -145,6 +163,15 @@ class Jpeg2000DocumentTest {
     }
 
     @Test
+    fun `oversized raw J2K remains structural but is not exposed as an image codec`() {
+        val codestream = narrowLosslessCodestream(width = 65, height = 1)
+
+        assertTrue(Jpeg2000Codec.Decoder.matches(codestream))
+        assertEquals(65, requireNotNull(Jpeg2000Document.open(codestream).document).frame.width)
+        assertNull(Codec.MakeFromData(codestream))
+    }
+
+    @Test
     fun `raw J2K refuses a codeblock size other than the proven 64 by 64 profile`() {
         val opened = Jpeg2000Document.open(narrowLosslessCodestream(codeBlockWidth = 3, codeBlockHeight = 4))
 
@@ -165,7 +192,7 @@ class Jpeg2000DocumentTest {
         assertEquals(Jpeg2000Container.JP2, document.container)
         assertEquals(listOf("jP  ", "ftyp", "jp2h", "jp2c"), document.boxes.map { it.type })
         assertArrayEquals(codestream, document.copyPayload(jp2c))
-        assertNotNull(Codec.MakeFromData(jp2))
+        assertNull(Codec.MakeFromData(jp2))
     }
 
     @Test
@@ -357,13 +384,18 @@ class Jpeg2000DocumentTest {
         assertEquals(Codec.Result.kErrorInInput, opened.diagnostic?.result)
     }
 
-    private fun narrowLosslessCodestream(codeBlockWidth: Int = 4, codeBlockHeight: Int = 4): ByteArray = ByteArrayOutputStream().also { output ->
+    private fun narrowLosslessCodestream(
+        width: Int = 1,
+        height: Int = 1,
+        codeBlockWidth: Int = 4,
+        codeBlockHeight: Int = 4,
+    ): ByteArray = ByteArrayOutputStream().also { output ->
         output.writeMarker(0x4F) // SOC
         output.writeSegment(0x51, ByteArrayOutputStream().also { siz ->
             siz.writeU16(0) // Rsiz
-            siz.writeU32(1); siz.writeU32(1) // Xsiz, Ysiz
+            siz.writeU32(width); siz.writeU32(height) // Xsiz, Ysiz
             siz.writeU32(0); siz.writeU32(0) // XOsiz, YOsiz
-            siz.writeU32(1); siz.writeU32(1) // XTsiz, YTsiz
+            siz.writeU32(width); siz.writeU32(height) // XTsiz, YTsiz
             siz.writeU32(0); siz.writeU32(0) // XTOsiz, YTOsiz
             siz.writeU16(1) // Csiz
             siz.write(byteArrayOf(7, 1, 1)) // 8-bit unsigned, no subsampling

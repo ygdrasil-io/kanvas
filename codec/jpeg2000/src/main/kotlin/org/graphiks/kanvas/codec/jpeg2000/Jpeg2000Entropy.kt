@@ -33,7 +33,11 @@ internal fun decodeNarrowRawJ2k(
     frame: Jpeg2000FrameInfo,
     entropy: J2kEntropyInput,
 ): Jpeg2000DecodeResult = try {
-    if (frame.components != 1 || frame.precision != 8 || frame.width !in 1..64 || frame.height !in 1..64) {
+    if (
+        frame.components != 1 || frame.precision != 8 ||
+        frame.width !in 1..NARROW_RAW_J2K_MAX_DIMENSION ||
+        frame.height !in 1..NARROW_RAW_J2K_MAX_DIMENSION
+    ) {
         entropyFailure("jpeg2000.entropy.profile.unsupported", entropy.packetOffset, Codec.Result.kUnimplemented)
     }
     val packetEnd = entropy.packetOffset.toLong() + entropy.packetLength.toLong()
@@ -287,10 +291,9 @@ private class J2kMqDecoder(
 
     private fun byteAt(index: Int): Int = if (index < bytes.size) bytes[index].toInt() and 0xFF else 0xFF
 
-    private fun mpsTransition(index: Int, mps: Int): Int = (MQ_NMPS[index] shl 1) or mps
+    private fun mpsTransition(index: Int, mps: Int): Int = J2kMqTransitions.afterMps((index shl 1) or mps)
 
-    private fun lpsTransition(index: Int, mps: Int): Int =
-        (MQ_NLPS[index] shl 1) or (mps xor if (MQ_SWITCH[index]) 1 else 0)
+    private fun lpsTransition(index: Int, mps: Int): Int = J2kMqTransitions.afterLps((index shl 1) or mps)
 
     private companion object {
         const val CTX_ZC = 0
@@ -310,23 +313,38 @@ private class J2kMqDecoder(
             0x08A1, 0x0521, 0x0441, 0x02A1, 0x0221, 0x0141, 0x0111, 0x0085,
             0x0049, 0x0025, 0x0015, 0x0009, 0x0005, 0x0001, 0x5601,
         )
-        val MQ_NMPS = intArrayOf(
-            1, 2, 3, 4, 5, 38, 7, 8, 9, 10, 11, 12, 13, 29, 15, 16,
-            17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 29, 28, 29, 30, 31,
-            32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 45, 46,
-        )
-        val MQ_NLPS = intArrayOf(
-            1, 6, 9, 12, 29, 33, 6, 14, 14, 14, 17, 18, 20, 21, 14, 14,
-            15, 16, 17, 18, 19, 19, 20, 21, 21, 22, 21, 25, 26, 27, 28,
-            29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 46,
-        )
-        val MQ_SWITCH = booleanArrayOf(
-            true, false, false, false, false, false, true, false, false, false, false, false,
-            false, false, true, false, false, false, false, false, false, false, false, false,
-            false, false, false, false, false, false, false, false, false, false, false, false,
-            false, false, false, false, false, false, false, false, false, false, false,
-        )
     }
+}
+
+/** Annex C's packed MQ state transitions, shared by production decode and regression tests. */
+internal object J2kMqTransitions {
+    fun afterMps(state: Int): Int {
+        val index = state ushr 1
+        return (MQ_NMPS[index] shl 1) or (state and 1)
+    }
+
+    fun afterLps(state: Int): Int {
+        val index = state ushr 1
+        val mps = state and 1
+        return (MQ_NLPS[index] shl 1) or (mps xor if (MQ_SWITCH[index]) 1 else 0)
+    }
+
+    private val MQ_NMPS = intArrayOf(
+        1, 2, 3, 4, 5, 38, 7, 8, 9, 10, 11, 12, 13, 29, 15, 16,
+        17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31,
+        32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 45, 46,
+    )
+    private val MQ_NLPS = intArrayOf(
+        1, 6, 9, 12, 29, 33, 6, 14, 14, 14, 17, 18, 20, 21, 14, 14,
+        15, 16, 17, 18, 19, 19, 20, 21, 21, 22, 24, 25, 26, 27, 28,
+        29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 46,
+    )
+    private val MQ_SWITCH = booleanArrayOf(
+        true, false, false, false, false, false, true, false, false, false, false, false,
+        false, false, true, false, false, false, false, false, false, false, false, false,
+        false, false, false, false, false, false, false, false, false, false, false, false,
+        false, false, false, false, false, false, false, false, false, false, false,
+    )
 }
 
 /** EBCOT Tier-1 decoder for style 0, one LL codeblock, and no raw bypass mode. */
@@ -408,8 +426,8 @@ internal class J2kTier1Decoder(
     }
 
     private fun decodeSignificancePass(bitPlane: Int) {
-        for (x in 0 until width) {
-            for (y in 0 until height) {
+        forEachEbcotStripe(width, height) { x, stripeStart, stripeEnd ->
+            for (y in stripeStart until stripeEnd) {
                 val index = indexOf(x, y)
                 if (!significant[index] && !visitedInSignificancePass[index] && hasSignificantNeighbour(x, y)) {
                     if (decodeDecision(zeroCodingContext(x, y), x, y) != 0) markSignificant(x, y, bitPlane)
@@ -421,8 +439,8 @@ internal class J2kTier1Decoder(
 
     private fun decodeRefinementPass(bitPlane: Int) {
         val delta = 1 shl (bitPlane - 1)
-        for (x in 0 until width) {
-            for (y in 0 until height) {
+        forEachEbcotStripe(width, height) { x, stripeStart, stripeEnd ->
+            for (y in stripeStart until stripeEnd) {
                 val index = indexOf(x, y)
                 if (significant[index] && !visitedInSignificancePass[index]) {
                     val bit = decodeDecision(magnitudeContext(x, y, index), x, y)
@@ -434,20 +452,15 @@ internal class J2kTier1Decoder(
     }
 
     private fun decodeCleanupPass(bitPlane: Int) {
-        for (x in 0 until width) {
-            var stripeStart = 0
-            while (stripeStart < height) {
-                val stripeEnd = minOf(stripeStart + 4, height)
-                if (stripeEnd - stripeStart == 4 && canUseRunMode(x, stripeStart)) {
-                    if (decodeDecision(17, x, stripeStart) != 0) {
-                        val runLength = (decodeDecision(18, x, stripeStart) shl 1) or decodeDecision(18, x, stripeStart)
-                        markSignificant(x, stripeStart + runLength, bitPlane)
-                        for (y in stripeStart + runLength + 1 until stripeEnd) decodeCleanupSample(x, y, bitPlane)
-                    }
-                } else {
-                    for (y in stripeStart until stripeEnd) decodeCleanupSample(x, y, bitPlane)
+        forEachEbcotStripe(width, height) { x, stripeStart, stripeEnd ->
+            if (stripeEnd - stripeStart == 4 && canUseRunMode(x, stripeStart)) {
+                if (decodeDecision(17, x, stripeStart) != 0) {
+                    val runLength = (decodeDecision(18, x, stripeStart) shl 1) or decodeDecision(18, x, stripeStart)
+                    markSignificant(x, stripeStart + runLength, bitPlane)
+                    for (y in stripeStart + runLength + 1 until stripeEnd) decodeCleanupSample(x, y, bitPlane)
                 }
-                stripeStart = stripeEnd
+            } else {
+                for (y in stripeStart until stripeEnd) decodeCleanupSample(x, y, bitPlane)
             }
         }
         visitedInSignificancePass.fill(false)
@@ -572,6 +585,20 @@ internal class J2kTier1Decoder(
         const val SIGNIFICANCE_PASS = 0
         const val REFINEMENT_PASS = 1
         const val CLEANUP_PASS = 2
+    }
+}
+
+/** EBCOT's normative stripe-major sample order for every Tier-1 pass. */
+internal inline fun forEachEbcotStripe(
+    width: Int,
+    height: Int,
+    visit: (x: Int, startY: Int, endY: Int) -> Unit,
+) {
+    var stripeStart = 0
+    while (stripeStart < height) {
+        val stripeEnd = minOf(stripeStart + 4, height)
+        for (x in 0 until width) visit(x, stripeStart, stripeEnd)
+        stripeStart = stripeEnd
     }
 }
 
