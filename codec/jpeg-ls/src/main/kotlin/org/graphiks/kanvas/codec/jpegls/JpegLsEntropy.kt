@@ -1,0 +1,424 @@
+package org.graphiks.kanvas.codec.jpegls
+
+import java.io.ByteArrayOutputStream
+import kotlin.math.abs
+
+/** Clean-room LOCO-I regular/run mode implementation for the 8-bit lossless profile. */
+internal object JpegLsEntropy {
+    private val runJ: IntArray = intArrayOf(
+        0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3,
+        4, 4, 5, 5, 6, 6, 7, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+    )
+
+    fun decode(source: ByteArray, entropyOffset: Int, frame: JpegLsFrame): IntArray = try {
+        decodeScan(source, entropyOffset, frame)
+    } catch (marker: EntropyMarker) {
+        jpeglsFailure("jpeg-ls.entropy.marker", marker.offset)
+    }
+
+    private fun decodeScan(source: ByteArray, entropyOffset: Int, frame: JpegLsFrame): IntArray {
+        val reader = JpegLsBitReader(source, entropyOffset)
+        val state = LocoState()
+        var previous = IntArray(frame.width + 2)
+        var current = IntArray(frame.width + 2)
+        val output = IntArray(frame.width * frame.height)
+
+        for (y in 0 until frame.height) {
+            previous[frame.width + 1] = previous[frame.width]
+            current[0] = previous[1]
+            var index = 1
+            while (index <= frame.width) {
+                val ra = current[index - 1]
+                val rb = previous[index]
+                val rc = previous[index - 1]
+                val rd = previous[index + 1]
+                val context = state.context(rd - rb, rb - rc, rc - ra)
+                if (context.index != 0) {
+                    current[index] = state.decodeRegular(reader, context, predict(ra, rb, rc))
+                    index++
+                } else {
+                    val run = state.decodeRun(reader, frame.width - index + 1)
+                    if (run > frame.width - index + 1) jpeglsFailure("jpeg-ls.run.invalid", reader.offset)
+                    repeat(run) { offset -> current[index + offset] = ra }
+                    index += run
+                    if (index <= frame.width) {
+                        current[index] = state.decodeRunInterruption(reader, ra, previous[index])
+                        state.decrementRunIndex()
+                        index++
+                    }
+                }
+            }
+            for (x in 0 until frame.width) output[y * frame.width + x] = current[x + 1]
+            val swap = previous
+            previous = current
+            current = swap
+        }
+        reader.finishAtEoi()
+        return output
+    }
+
+    fun encode(width: Int, height: Int, samples: IntArray): ByteArray {
+        require(samples.size == width * height)
+        val writer = JpegLsBitWriter()
+        val state = LocoState()
+        var previous = IntArray(width + 2)
+        var current = IntArray(width + 2)
+
+        for (y in 0 until height) {
+            previous[width + 1] = previous[width]
+            current[0] = previous[1]
+            var index = 1
+            while (index <= width) {
+                val ra = current[index - 1]
+                val rb = previous[index]
+                val rc = previous[index - 1]
+                val rd = previous[index + 1]
+                val context = state.context(rd - rb, rb - rc, rc - ra)
+                if (context.index != 0) {
+                    val sample = samples[y * width + index - 1]
+                    current[index] = state.encodeRegular(writer, context, predict(ra, rb, rc), sample)
+                    index++
+                } else {
+                    var run = 0
+                    while (run < width - index + 1 && samples[y * width + index - 1 + run] == ra) run++
+                    state.encodeRun(writer, run, run == width - index + 1)
+                    repeat(run) { offset -> current[index + offset] = ra }
+                    index += run
+                    if (index <= width) {
+                        val sample = samples[y * width + index - 1]
+                        current[index] = state.encodeRunInterruption(writer, sample, ra, previous[index])
+                        state.decrementRunIndex()
+                        index++
+                    }
+                }
+            }
+            val swap = previous
+            previous = current
+            current = swap
+        }
+        return writer.finish()
+    }
+
+    private fun predict(ra: Int, rb: Int, rc: Int): Int = when {
+        rc >= maxOf(ra, rb) -> minOf(ra, rb)
+        rc <= minOf(ra, rb) -> maxOf(ra, rb)
+        else -> ra + rb - rc
+    }
+
+    private class LocoState {
+        private val regular = Array(365) { RegularContext() }
+        private val run = arrayOf(RunContext(0), RunContext(1))
+        private var runIndex: Int = 0
+
+        fun context(d1: Int, d2: Int, d3: Int): Context {
+            var q1 = quantize(d1)
+            var q2 = quantize(d2)
+            var q3 = quantize(d3)
+            val negative = q1 < 0 || (q1 == 0 && q2 < 0) || (q1 == 0 && q2 == 0 && q3 < 0)
+            if (negative) {
+                q1 = -q1
+                q2 = -q2
+                q3 = -q3
+            }
+            return Context((q1 * 9 + q2) * 9 + q3, if (negative) -1 else 1)
+        }
+
+        fun decodeRegular(reader: JpegLsBitReader, context: Context, predicted: Int): Int {
+            val stats = regular[context.index]
+            val corrected = clamp(predicted + context.sign * stats.c)
+            val k = stats.golombK()
+            var error = unmap(readMapped(reader, k, LIMIT))
+            if (k == 0) error = error xor stats.errorCorrection()
+            stats.update(error)
+            return reconstruct(corrected, context.sign * error)
+        }
+
+        fun encodeRegular(writer: JpegLsBitWriter, context: Context, predicted: Int, sample: Int): Int {
+            val stats = regular[context.index]
+            val corrected = clamp(predicted + context.sign * stats.c)
+            val k = stats.golombK()
+            val error = signed8(context.sign * (sample - corrected))
+            writeMapped(writer, map(error xor stats.errorCorrection(k)), k, LIMIT)
+            stats.update(error)
+            return reconstruct(corrected, context.sign * error)
+        }
+
+        fun decodeRun(reader: JpegLsBitReader, remaining: Int): Int {
+            var length = 0
+            while (reader.readBit() == 1) {
+                val step = minOf(1 shl runJ[runIndex], remaining - length)
+                length += step
+                if (step == (1 shl runJ[runIndex])) incrementRunIndex()
+                if (length == remaining) return length
+            }
+            if (runJ[runIndex] > 0) length += reader.readBits(runJ[runIndex])
+            return length
+        }
+
+        fun encodeRun(writer: JpegLsBitWriter, length: Int, endOfLine: Boolean) {
+            var remaining = length
+            while (remaining >= (1 shl runJ[runIndex])) {
+                writer.writeBit(1)
+                remaining -= 1 shl runJ[runIndex]
+                incrementRunIndex()
+            }
+            if (endOfLine) {
+                if (remaining != 0) writer.writeBit(1)
+            } else {
+                writer.writeBit(0)
+                if (runJ[runIndex] > 0) writer.writeBits(remaining, runJ[runIndex])
+            }
+        }
+
+        fun decodeRunInterruption(reader: JpegLsBitReader, ra: Int, rb: Int): Int {
+            val type = if (ra == rb) 1 else 0
+            val stats = run[type]
+            val k = stats.golombK()
+            val mapped = readMapped(reader, k, LIMIT - runJ[runIndex] - 1)
+            val error = stats.unmap(mapped + type, k)
+            stats.update(error, mapped)
+            val prediction = if (type == 1) ra else rb
+            val sign = if (type == 1) 1 else sign(rb - ra)
+            return reconstruct(prediction, sign * error)
+        }
+
+        fun encodeRunInterruption(writer: JpegLsBitWriter, sample: Int, ra: Int, rb: Int): Int {
+            val type = if (ra == rb) 1 else 0
+            val stats = run[type]
+            val prediction = if (type == 1) ra else rb
+            val direction = if (type == 1) 1 else sign(rb - ra)
+            val error = signed8(direction * (sample - prediction))
+            val k = stats.golombK()
+            val mapped = stats.map(error, k)
+            writeMapped(writer, mapped, k, LIMIT - runJ[runIndex] - 1)
+            stats.update(error, mapped)
+            return reconstruct(prediction, direction * error)
+        }
+
+        fun decrementRunIndex() {
+            if (runIndex > 0) runIndex--
+        }
+
+        private fun incrementRunIndex() {
+            if (runIndex < 31) runIndex++
+        }
+    }
+
+    private data class Context(val index: Int, val sign: Int)
+
+    private class RegularContext {
+        var a: Int = INITIAL_A
+        var b: Int = 0
+        var c: Int = 0
+        var n: Int = 1
+
+        fun golombK(): Int {
+            var k = 0
+            while ((n shl k) < a) k++
+            return k
+        }
+
+        fun errorCorrection(k: Int = 0): Int = if (k == 0 && 2 * b + n - 1 < 0) -1 else 0
+
+        fun update(error: Int) {
+            a += abs(error)
+            b += error
+            if (n == RESET) {
+                a = a shr 1
+                b = b shr 1
+                n = n shr 1
+            }
+            n++
+            if (b + n <= 0) {
+                b += n
+                if (b <= -n) b = -n + 1
+                if (c > -128) c--
+            } else if (b > 0) {
+                b -= n
+                if (b > 0) b = 0
+                if (c < 127) c++
+            }
+        }
+    }
+
+    private class RunContext(private val type: Int) {
+        private var a: Int = INITIAL_A
+        private var n: Int = 1
+        private var nn: Int = 0
+
+        fun golombK(): Int {
+            val target = a + (n shr 1) * type
+            var k = 0
+            while ((n shl k) < target) k++
+            return k
+        }
+
+        fun map(error: Int, k: Int): Int {
+            val map = (k == 0 && error > 0 && 2 * nn < n) ||
+                (error < 0 && (2 * nn >= n || k != 0))
+            return 2 * abs(error) - type - if (map) 1 else 0
+        }
+
+        fun unmap(value: Int, k: Int): Int {
+            val map = (value and 1) != 0
+            val magnitude = (value + if (map) 1 else 0) / 2
+            return if ((k != 0 || 2 * nn >= n) == map) -magnitude else magnitude
+        }
+
+        fun update(error: Int, mapped: Int) {
+            if (error < 0) nn++
+            a += (mapped + 1 - type) shr 1
+            if (n == RESET) {
+                a = a shr 1
+                n = n shr 1
+                nn = nn shr 1
+            }
+            n++
+        }
+    }
+
+    private fun quantize(delta: Int): Int = when {
+        delta <= -21 -> -4
+        delta <= -7 -> -3
+        delta <= -3 -> -2
+        delta < 0 -> -1
+        delta == 0 -> 0
+        delta < 3 -> 1
+        delta < 7 -> 2
+        delta < 21 -> 3
+        else -> 4
+    }
+
+    private fun clamp(value: Int): Int = value.coerceIn(0, 255)
+    private fun signed8(value: Int): Int = (value and 0xFF).let { if (it >= 128) it - 256 else it }
+    private fun reconstruct(predicted: Int, error: Int): Int = (predicted + error) and 0xFF
+    private fun sign(value: Int): Int = if (value < 0) -1 else 1
+    private fun map(error: Int): Int = if (error >= 0) error * 2 else -error * 2 - 1
+    private fun unmap(value: Int): Int = if ((value and 1) == 0) value / 2 else -(value / 2) - 1
+
+    private fun writeMapped(writer: JpegLsBitWriter, value: Int, k: Int, limit: Int) {
+        val quotient = value shr k
+        val escape = limit - QBPP - 1
+        if (quotient < escape) {
+            repeat(quotient) { writer.writeBit(0) }
+            writer.writeBit(1)
+            if (k > 0) writer.writeBits(value and ((1 shl k) - 1), k)
+        } else {
+            repeat(escape) { writer.writeBit(0) }
+            writer.writeBit(1)
+            writer.writeBits(value - 1, QBPP)
+        }
+    }
+
+    private fun readMapped(reader: JpegLsBitReader, k: Int, limit: Int): Int {
+        var unary = 0
+        while (reader.readBit() == 0) {
+            unary++
+            if (unary > limit) jpeglsFailure("jpeg-ls.golomb.invalid", reader.offset)
+        }
+        val escape = limit - QBPP - 1
+        return if (unary < escape) {
+            (unary shl k) + if (k > 0) reader.readBits(k) else 0
+        } else {
+            reader.readBits(QBPP) + 1
+        }
+    }
+
+    private class JpegLsBitReader(
+        private val source: ByteArray,
+        start: Int,
+    ) {
+        private var position: Int = start
+        private var current: Int = 0
+        private var remaining: Int = 0
+        private var previousWasFf: Boolean = false
+
+        val offset: Int get() = position
+
+        fun readBit(): Int {
+            if (remaining == 0) loadByte()
+            remaining--
+            return (current ushr remaining) and 1
+        }
+
+        fun readBits(count: Int): Int {
+            var value = 0
+            repeat(count) { value = (value shl 1) or readBit() }
+            return value
+        }
+
+        fun finishAtEoi() {
+            try {
+                // T.87 allows the encoder to complete its coded data segment
+                // at a byte boundary. Those residual alignment bits are not
+                // image samples, so consume them only to locate the required
+                // marker; do not assign a made-up zero/one padding policy.
+                while (true) {
+                    readBit()
+                }
+            } catch (marker: EntropyMarker) {
+                if (marker.code != EOI) jpeglsFailure("jpeg-ls.entropy.marker", marker.offset)
+                if (position != source.size) jpeglsFailure("jpeg-ls.trailing-data", position)
+            }
+        }
+
+        private fun loadByte() {
+            if (position >= source.size) jpeglsFailure("jpeg-ls.entropy.truncated", position)
+            val value = source[position++].u8()
+            if (previousWasFf && (value and 0x80) != 0) {
+                throw EntropyMarker(value, position - 2)
+            }
+            current = value
+            remaining = if (previousWasFf) 7 else 8
+            previousWasFf = value == MARKER_PREFIX
+        }
+    }
+
+    private class EntropyMarker(val code: Int, val offset: Int) : RuntimeException()
+
+    private class JpegLsBitWriter {
+        private val out = ByteArrayOutputStream()
+        private var value: Int = 0
+        private var count: Int = 0
+        private var capacity: Int = 8
+        private var previousWasFf: Boolean = false
+
+        fun writeBit(bit: Int) {
+            value = (value shl 1) or (bit and 1)
+            count++
+            if (count == capacity) flushByte()
+        }
+
+        fun writeBits(bits: Int, count: Int) {
+            for (shift in count - 1 downTo 0) writeBit(bits ushr shift)
+        }
+
+        fun finish(): ByteArray {
+            if (count != 0) {
+                value = value shl (capacity - count)
+                count = capacity
+                flushByte()
+            }
+            if (previousWasFf) {
+                writeBit(0)
+                value = value shl (capacity - count)
+                count = capacity
+                flushByte()
+            }
+            return out.toByteArray()
+        }
+
+        private fun flushByte() {
+            out.write(value)
+            previousWasFf = value == MARKER_PREFIX
+            capacity = if (previousWasFf) 7 else 8
+            value = 0
+            count = 0
+        }
+    }
+
+    private const val QBPP: Int = 8
+    private const val LIMIT: Int = 32
+    private const val RESET: Int = 64
+    private const val INITIAL_A: Int = 4
+}

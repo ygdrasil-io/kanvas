@@ -9,6 +9,7 @@ import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.codec.test.CodecTestFixtures
 import org.graphiks.kanvas.codec.test.CodecTestFixtures.decodePixels
 import java.util.ServiceLoader
+import java.util.Base64
 
 class CodecAllKotlinAssemblyTest {
     @Test
@@ -18,6 +19,7 @@ class CodecAllKotlinAssemblyTest {
         assertEquals(
             listOf(
                 "png",
+                "jpeg-ls",
                 "jpeg",
                 "gif",
                 "bmp",
@@ -46,6 +48,7 @@ class CodecAllKotlinAssemblyTest {
                 "org.graphiks.kanvas.codec.bmp.BmpKotlinDecoderProvider",
                 "org.graphiks.kanvas.codec.gif.GifKotlinDecoderProvider",
                 "org.graphiks.kanvas.codec.jpeg.JpegKotlinDecoderProvider",
+                "org.graphiks.kanvas.codec.jpegls.JpegLsKotlinDecoderProvider",
                 "org.graphiks.kanvas.codec.png.PngKotlinDecoderProvider",
                 "org.graphiks.kanvas.codec.wbmp.WbmpKotlinDecoderProvider",
                 "org.graphiks.kanvas.codec.webp.WebpKotlinDecoderProvider",
@@ -64,6 +67,16 @@ class CodecAllKotlinAssemblyTest {
         for (y in CodecTestFixtures.SIMPLE_RGBA_PIXELS.indices) {
             assertArrayEquals(CodecTestFixtures.SIMPLE_RGBA_PIXELS[y], actual[y], "row=$y")
         }
+    }
+
+    @Test
+    fun `routes SOF55 to JPEG-LS before the classic JPEG provider`() {
+        val fixture = Base64.getDecoder().decode("/9j/9wALCAAEAAgBAREA/9oACAEBAAAAAAAAAYCV8/9g/9k=")
+
+        val codec = Codec.MakeFromData(fixture)
+
+        assertNotNull(codec)
+        assertEquals("org.graphiks.kanvas.codec.jpegls.JpegLsCodec", codec!!::class.qualifiedName)
     }
 
     @Test

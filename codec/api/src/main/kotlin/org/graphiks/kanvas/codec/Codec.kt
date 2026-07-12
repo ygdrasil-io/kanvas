@@ -348,6 +348,7 @@ public abstract class Codec protected constructor() {
         private var providersLoaded: Boolean = false
         private val defaultOrder: Map<String, Int> = listOf(
             "png",
+            "jpeg-ls",
             "jpeg",
             "gif",
             "bmp",
