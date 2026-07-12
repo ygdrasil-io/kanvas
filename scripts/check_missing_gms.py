@@ -8,12 +8,15 @@ Some reference PNGs come from Skia's C++ native test infrastructure with
 parameterized suffixes (e.g., colrv1_clipbox_CLIO_200.00.png). These are
 orphaned from the upstream import and don't correspond to Kanvas GMs.
 
-Usage: python3 scripts/check_missing_gms.py
+Usage: python3 scripts/check_missing_gms.py [--cpp-gm-dir PATH]
 """
 
+import argparse
 import re
 import sys
 from pathlib import Path
+
+from extract_skia_gm_names import extract_gm_names as extract_cpp_gm_names
 
 REPO = Path(__file__).resolve().parent.parent
 REF_DIR = REPO / "integration-tests" / "skia" / "src" / "test" / "resources" / "reference"
@@ -32,7 +35,7 @@ def extract_subclass_names(text, parent_class):
     return names
 
 
-def extract_gm_names():
+def extract_kotlin_gm_names():
     names = set()
 
     for kt_file in sorted(GM_DIR.rglob("*Gm.kt")):
@@ -140,13 +143,78 @@ def is_parameterized_variant(name, gm_names):
     return None
 
 
+def normalize_name(value: str) -> str:
+    return "".join(ch for ch in value.casefold() if ch.isalnum())
+
+
+def classify_reference(gm_name: str, references: set[str], cpp_names: set[str] | None) -> dict[str, object]:
+    if gm_name in references:
+        return {
+            "kind": "direct",
+            "gm_name": gm_name,
+            "reference": gm_name,
+            "references": [gm_name],
+        }
+
+    normalized_gm_name = normalize_name(gm_name)
+    normalized_matches = sorted(
+        reference for reference in references if normalize_name(reference) == normalized_gm_name
+    )
+    if len(normalized_matches) == 1:
+        return {
+            "kind": "normalized-alias",
+            "gm_name": gm_name,
+            "reference": normalized_matches[0],
+            "references": normalized_matches,
+        }
+
+    if cpp_names is not None and gm_name in cpp_names:
+        variant_matches = sorted(
+            reference
+            for reference in references
+            if normalize_name(reference).startswith(normalized_gm_name)
+        )
+        if variant_matches:
+            return {
+                "kind": "variant-family",
+                "gm_name": gm_name,
+                "reference": None,
+                "references": variant_matches,
+            }
+
+    return {
+        "kind": "missing",
+        "gm_name": gm_name,
+        "reference": None,
+        "references": [],
+    }
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--cpp-gm-dir",
+        type=Path,
+        help="path to the Skia C++ gm/ directory for source-aware diagnostic evidence",
+    )
+    args = parser.parse_args()
+    if args.cpp_gm_dir is not None and not args.cpp_gm_dir.is_dir():
+        parser.error(f"--cpp-gm-dir is not a directory: {args.cpp_gm_dir}")
+    return args
+
+
 def main():
+    args = parse_args()
+
     if not REF_DIR.is_dir():
         print(f"Error: {REF_DIR} not found", file=sys.stderr)
         sys.exit(1)
 
     ref_pngs = sorted(REF_DIR.glob("*.png"))
-    gm_names = extract_gm_names()
+    gm_names = extract_kotlin_gm_names()
+    cpp_names = None
+    if args.cpp_gm_dir is not None:
+        cpp_names = extract_cpp_gm_names(Path(args.cpp_gm_dir))
 
     ref_by_base = {}
     manual_names = set()
@@ -157,43 +225,66 @@ def main():
         else:
             ref_by_base.setdefault(name, []).append(p)
 
-    found_names = set()
-    variant_names = {}
-    orphan_names = []
+    classifications = {}
+    matched_references = set()
+    normalized_aliases = []
+    variant_families = []
+    actionable_missing = []
     manual_orphans = []
 
-    for name in ref_by_base:
-        if name in gm_names:
-            found_names.add(name)
-        else:
-            parent = is_parameterized_variant(name, gm_names)
-            if parent:
-                variant_names.setdefault(parent, []).append(name)
-            else:
-                orphan_names.append(name)
+    reference_names = set(ref_by_base)
+    for gm_name in sorted(gm_names):
+        result = classify_reference(gm_name, reference_names, cpp_names)
+        classifications[gm_name] = result
+        matched_references.update(result["references"])
+        if result["kind"] == "normalized-alias":
+            normalized_aliases.append(result)
+        elif result["kind"] == "variant-family":
+            variant_families.append(result)
+        elif result["kind"] == "missing":
+            actionable_missing.append(result)
+
+    orphan_names = sorted(reference_names - matched_references)
 
     for name in sorted(manual_names):
         base = name.replace("_manual", "")
-        if base in gm_names:
-            found_names.add(base)
+        if base in matched_references or any(
+            result["gm_name"] == base or base in result["references"]
+            for result in classifications.values()
+        ):
+            continue
         else:
             manual_orphans.append(name)
 
     print(f"Reference PNGs:     {len(ref_pngs)}")
     print(f"GM names extracted: {len(gm_names)}")
 
-    matched = len(found_names) + sum(len(v) for v in variant_names.values())
+    direct_count = sum(1 for result in classifications.values() if result["kind"] == "direct")
+    normalized_alias_count = len(normalized_aliases)
+    variant_reference_count = sum(len(result["references"]) for result in variant_families)
+    matched = direct_count + normalized_alias_count + variant_reference_count
     print(
         f"Matched: {matched} "
-        f"({len(found_names)} direct + "
-        f"{sum(len(v) for v in variant_names.values())} parameterized)"
+        f"({direct_count} direct + "
+        f"{normalized_alias_count} normalized-alias + "
+        f"{variant_reference_count} variant-family)"
     )
 
-    if variant_names:
-        print(f"\n--- Parameterized variants of existing GMs ---")
-        for parent in sorted(variant_names):
-            for v in sorted(variant_names[parent]):
-                print(f"  {v}.png  <- from {parent}")
+    if cpp_names is None:
+        print("\nsource-evidence: unavailable")
+    else:
+        print(f"\nsource-evidence: cpp-gm-dir={args.cpp_gm_dir}")
+
+    print("\n--- Normalized aliases ---")
+    print(f"count: {len(normalized_aliases)}")
+    for result in normalized_aliases:
+        print(f"  {result['gm_name']}.png  <- alias {result['reference']}.png")
+
+    print("\n--- Variant families from CPP source evidence ---")
+    print(f"count: {len(variant_families)}")
+    for result in variant_families:
+        references = ", ".join(f"{reference}.png" for reference in result["references"])
+        print(f"  {result['gm_name']}.png  <- variants {references}")
 
     if orphan_names:
         print(f"\n=== REFERENCE PNGs WITHOUT Kotlin GM ({len(orphan_names)}) ===\n")
@@ -206,19 +297,10 @@ def main():
             base = name.replace("_manual", "")
             print(f"  {name}.png (base '{base}' also missing)")
 
-    extra = sorted(
-        set(gm_names) - set(ref_by_base.keys()) - manual_names
-    )
-    extra = [
-        n for n in extra
-        if not any(n in vlist for vlist in variant_names.values())
-        and not any(n in str(v) for v in variant_names.values())
-        and "$" not in n and "{" not in n
-    ]
-    if extra:
-        print(f"\n=== GM names WITHOUT reference PNG ({len(extra)}) ===\n")
-        for name in extra:
-            print(f"  {name}.png")
+    print("\n=== ACTIONABLE missing references ===")
+    print(f"count: {len(actionable_missing)}\n")
+    for result in actionable_missing:
+        print(f"  {result['gm_name']}.png")
 
 
 if __name__ == "__main__":
