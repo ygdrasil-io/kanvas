@@ -64,6 +64,38 @@ class GPUMaskBlurDispatchTest {
     }
 
     @Test
+    fun `mask blur releases each transient exactly once after final composite`() {
+        val target = CapturingMaskBlurTarget()
+
+        assertTrue(
+            target.renderMaskBlurCommand(
+                "scene",
+                solidRectCommand(),
+                readyPlan(NormalizedBlurStyle.NORMAL),
+                GPUClearColor(0.0, 0.0, 0.0, 0.0),
+                mutableListOf(),
+                Diagnostics(),
+                "rgba8unorm",
+            ).rendered,
+        )
+        assertTrue(
+            target.renderMaskBlurCommand(
+                "scene",
+                solidRectCommand().copy(commandId = GPUDrawCommandID(4)),
+                readyPlan(NormalizedBlurStyle.NORMAL),
+                GPUClearColor(0.0, 0.0, 0.0, 0.0),
+                mutableListOf(),
+                Diagnostics(),
+                "rgba8unorm",
+            ).rendered,
+        )
+
+        assertEquals(8, target.createdTextures.size)
+        assertEquals(target.createdTextures.map(GPUBackendOffscreenTexture::label), target.releasedTextureLabels)
+        assertEquals(8, target.releasedTextureLabels.distinct().size)
+    }
+
+    @Test
     fun `mask blur uses unorm local targets before compositing into an srgb scene`() {
         val target = CapturingMaskBlurTarget()
 
@@ -302,6 +334,7 @@ class GPUMaskBlurDispatchTest {
         val passColorFormats = mutableListOf<String>()
         val compositePasses = mutableListOf<CompositePass>()
         val createdTextures = mutableListOf<GPUBackendOffscreenTexture>()
+        val releasedTextureLabels = mutableListOf<String>()
         val targetCopyTextureLabels = mutableListOf<String>()
         var maskTriangleData: GPUBackendTriangleData? = null
 
@@ -316,6 +349,10 @@ class GPUMaskBlurDispatchTest {
         override fun createOffscreenTexture(texture: GPUBackendOffscreenTexture): String {
             createdTextures += texture
             return texture.label
+        }
+
+        override fun releaseOffscreenTexture(textureLabel: String) {
+            releasedTextureLabels += textureLabel
         }
 
         override fun snapshotTargetToOffscreenTexture(textureLabel: String) = error("Unexpected snapshot")

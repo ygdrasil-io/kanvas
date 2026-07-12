@@ -811,8 +811,8 @@ private class WgpuOffscreenTarget(
         ),
     )
     private val vertexBuffers = mutableMapOf<String, Pair<GPUBuffer, Int>>()
-    private val offscreenTextures = mutableMapOf<String, GPUTexture>()
-    private val offscreenTextureFormats = mutableMapOf<String, GPUTextureFormat>()
+    private val offscreenTextures = mutableMapOf<String, WgpuOffscreenTextureResources>()
+    private val releasedOffscreenTextures = mutableListOf<WgpuOffscreenTextureResources>()
     private val coverageMasks = mutableMapOf<String, WgpuCoverageMaskResources>()
     private val frameOrdinalCounter = AtomicLong(0L)
     private val textureFrameOrdinalCounter = AtomicLong(0L)
@@ -820,6 +820,7 @@ private class WgpuOffscreenTarget(
     private val copyOrdinalCounter = AtomicLong(0L)
     private val pendingReadbackSubmissionIds = ArrayDeque<GPUQueueSubmissionId>()
     private val pendingTargetCloseSubmissionIds = ArrayDeque<GPUQueueSubmissionId>()
+    private val completedSubmissionIds = mutableSetOf<GPUQueueSubmissionId>()
 
     override val target: GPUSurfaceTarget =
         GPUSurfaceTarget(
@@ -866,7 +867,27 @@ private class WgpuOffscreenTarget(
     }
 
     private fun completePendingReadbackSubmissions(completion: String) {
+        val completedReadbackSubmissionIds = pendingReadbackSubmissionIds.toSet()
         completePendingSubmissions(pendingReadbackSubmissionIds, completion)
+        if (completion == GPU_QUEUE_COMPLETION_READBACK_COMPLETE) {
+            completeReleasedOffscreenTexturesAtReadback(completedReadbackSubmissionIds)
+        }
+    }
+
+    private fun completeReleasedOffscreenTexturesAtReadback(
+        completedReadbackSubmissionIds: Set<GPUQueueSubmissionId>,
+    ) {
+        val lastReadbackSubmissionId = completedReadbackSubmissionIds.maxByOrNull(GPUQueueSubmissionId::value) ?: return
+        releasedOffscreenTextures
+            .mapNotNull(WgpuOffscreenTextureResources::lastSubmissionId)
+            .filter { submissionId -> submissionId.value <= lastReadbackSubmissionId.value }
+            .forEach { submissionId ->
+                if (queueManager.markCompleted(submissionId, GPU_QUEUE_COMPLETION_READBACK_COMPLETE)) {
+                    completedSubmissionIds += submissionId
+                }
+            }
+        queueManager.releaseCompleted()
+        drainReleasedOffscreenTextures()
     }
 
     private fun completePendingTargetCloseSubmissions() {
@@ -878,12 +899,52 @@ private class WgpuOffscreenTarget(
         completion: String,
     ) {
         while (submissionIds.isNotEmpty()) {
+            val submissionId = submissionIds.removeFirst()
             queueManager.markCompleted(
-                id = submissionIds.removeFirst(),
+                id = submissionId,
                 completion = completion,
             )
+            completedSubmissionIds += submissionId
         }
         queueManager.releaseCompleted()
+        drainReleasedOffscreenTextures()
+    }
+
+    private fun trackOffscreenTextureUse(
+        label: String,
+        usedTextures: MutableSet<WgpuOffscreenTextureResources>,
+    ) {
+        val textureResources = offscreenTextures[label] ?: return
+        if (usedTextures.add(textureResources)) {
+            textureResources.activeEncodes += 1
+        }
+    }
+
+    private fun recordOffscreenTextureSubmission(
+        usedTextures: Set<WgpuOffscreenTextureResources>,
+        submission: GPUQueueSubmission,
+    ) {
+        usedTextures.forEach { textureResources ->
+            textureResources.lastSubmissionId = submission.id
+        }
+    }
+
+    private fun releaseOffscreenTextureUse(usedTextures: Set<WgpuOffscreenTextureResources>) {
+        usedTextures.forEach { textureResources ->
+            textureResources.activeEncodes -= 1
+            check(textureResources.activeEncodes >= 0) { "Offscreen texture active encodes underflow" }
+        }
+        drainReleasedOffscreenTextures()
+    }
+
+    private fun drainReleasedOffscreenTextures() {
+        releasedOffscreenTextures.toList().forEach { textureResources ->
+            val submissionComplete = textureResources.lastSubmissionId?.let(completedSubmissionIds::contains) ?: true
+            if (textureResources.activeEncodes == 0 && submissionComplete) {
+                releasedOffscreenTextures.remove(textureResources)
+                textureResources.texture.close()
+            }
+        }
     }
 
     override fun encode(
@@ -893,7 +954,9 @@ private class WgpuOffscreenTarget(
         val frameOrdinal = frameOrdinalCounter.incrementAndGet()
         val frameId = "offscreen-$sessionOrdinal-$offscreenTargetOrdinal-frame-$frameOrdinal"
         val frameResourceLeases = mutableListOf<GPUResourceLease>()
-        GPUResourceScope().use { resources ->
+        val usedOffscreenTextures = linkedSetOf<WgpuOffscreenTextureResources>()
+        try {
+            GPUResourceScope().use { resources ->
             val view = resources.track(texture.createView()) { it.close() }
             val encoder = resources.trackIfAutoCloseable(device.createCommandEncoder())
             encoder.beginRenderPass(
@@ -948,7 +1011,10 @@ private class WgpuOffscreenTarget(
                     setVertexBufferAction = { slot, buffer -> setVertexBuffer(slot, buffer) },
                     setIndexBufferAction = { buffer, format -> setIndexBuffer(buffer, format) },
                     drawIndexedAction = { indexCount -> drawIndexed(indexCount) },
-                    offscreenTextureStore = offscreenTextures,
+                    resolveOffscreenTextureAction = { label -> offscreenTextures[label]?.texture },
+                    recordOffscreenTextureUseAction = { label ->
+                        trackOffscreenTextureUse(label, usedOffscreenTextures)
+                    },
                 )
                 try {
                     recorder.block()
@@ -980,8 +1046,12 @@ private class WgpuOffscreenTarget(
             )
             recordRuntimeResourceLeasesAction(frameResourceLeases)
             retainPendingReadbackSubmission(submission)
+            recordOffscreenTextureSubmission(usedOffscreenTextures, submission)
             telemetryRecorder.recordSubmission()
             telemetryRecorder.recordOffscreenRenderPass()
+            }
+        } finally {
+            releaseOffscreenTextureUse(usedOffscreenTextures)
         }
     }
 
@@ -1048,10 +1118,22 @@ private class WgpuOffscreenTarget(
                 label = label,
             ),
         )
-        offscreenTextures[label] = tex
-        offscreenTextureFormats[label] = texture.format.toWgpuTextureFormat()
+        offscreenTextures[label] = WgpuOffscreenTextureResources(
+            texture = tex,
+            format = texture.format.toWgpuTextureFormat(),
+        )
         telemetryRecorder.recordIntermediateTextureCreated()
         return label
+    }
+
+    override fun releaseOffscreenTexture(textureLabel: String) {
+        val textureResources = offscreenTextures[textureLabel]
+            ?.takeIf(WgpuOffscreenTextureResources::releasable)
+            ?: return
+        offscreenTextures.remove(textureLabel)
+        textureResources.releaseRequested = true
+        releasedOffscreenTextures += textureResources
+        drainReleasedOffscreenTextures()
     }
 
     override fun createCoverageMask(request: GPUBackendCoverageMaskRequest): GPUBackendCoverageMask {
@@ -1109,6 +1191,11 @@ private class WgpuOffscreenTarget(
             sampleCount = request.sampleCount,
         )
         val sampleTexture = resolveTexture ?: renderTexture
+        val sampleTextureResources = WgpuOffscreenTextureResources(
+            texture = sampleTexture,
+            format = maskFormat,
+            releasable = false,
+        )
         coverageMasks[renderLabel] = WgpuCoverageMaskResources(
             mask = mask,
             renderTexture = renderTexture,
@@ -1116,8 +1203,7 @@ private class WgpuOffscreenTarget(
             depthStencilTexture = depthStencilTexture,
             queueLabel = "coverage-mask-$ordinal",
         )
-        offscreenTextures[sampleLabel] = sampleTexture
-        offscreenTextureFormats[sampleLabel] = maskFormat
+        offscreenTextures[sampleLabel] = sampleTextureResources
         if (request.sampleCount > 1) {
             telemetryRecorder.recordMsaaTarget()
             telemetryRecorder.recordMsaaResolve()
@@ -1139,6 +1225,7 @@ private class WgpuOffscreenTarget(
         val frameOrdinal = textureFrameOrdinalCounter.incrementAndGet()
         val frameId = "${maskResources.queueLabel}-frame-$frameOrdinal"
         val frameResourceLeases = mutableListOf<GPUResourceLease>()
+        val usedOffscreenTextures = linkedSetOf<WgpuOffscreenTextureResources>()
         maskResources.activeEncodes += 1
         try {
             GPUResourceScope().use { resources ->
@@ -1177,7 +1264,7 @@ private class WgpuOffscreenTarget(
                         targetId = "${target.targetId}:${maskResources.queueLabel}",
                         frameId = frameId,
                         budgetClass = "runtime-coverage-mask",
-                        targetFormat = offscreenTextureFormats.getValue(mask.sampleLabel),
+                        targetFormat = offscreenTextures.getValue(mask.sampleLabel).format,
                         sampleCount = mask.sampleCount,
                         targetWidth = mask.width,
                         targetHeight = mask.height,
@@ -1202,7 +1289,10 @@ private class WgpuOffscreenTarget(
                         setVertexBufferAction = { slot, buffer -> setVertexBuffer(slot, buffer) },
                         setIndexBufferAction = { buffer, indexFormat -> setIndexBuffer(buffer, indexFormat) },
                         drawIndexedAction = { indexCount -> drawIndexed(indexCount) },
-                        offscreenTextureStore = offscreenTextures,
+                        resolveOffscreenTextureAction = { label -> offscreenTextures[label]?.texture },
+                        recordOffscreenTextureUseAction = { label ->
+                            trackOffscreenTextureUse(label, usedOffscreenTextures)
+                        },
                     )
                     try {
                         recorder.block()
@@ -1223,12 +1313,14 @@ private class WgpuOffscreenTarget(
                 )
                 recordRuntimeResourceLeasesAction(frameResourceLeases)
                 retainPendingTargetCloseSubmission(submission)
+                recordOffscreenTextureSubmission(usedOffscreenTextures, submission)
                 telemetryRecorder.recordSubmission()
                 telemetryRecorder.recordOffscreenRenderPass()
             }
         } finally {
             maskResources.activeEncodes -= 1
             destroyCoverageMaskIfReleased(maskResources)
+            releaseOffscreenTextureUse(usedOffscreenTextures)
         }
     }
 
@@ -1248,12 +1340,16 @@ private class WgpuOffscreenTarget(
         require(sourceTexture.width == destinationTexture.width && sourceTexture.height == destinationTexture.height) {
             "GPU-to-GPU copy requires equal texture dimensions"
         }
-        require(offscreenTextureFormats[sourceTextureLabel] == offscreenTextureFormats[destinationTextureLabel]) {
+        require(offscreenTextures[sourceTextureLabel]?.format == offscreenTextures[destinationTextureLabel]?.format) {
             "GPU-to-GPU copy requires equal texture formats"
         }
 
         val copyOrdinal = copyOrdinalCounter.incrementAndGet()
-        GPUResourceScope().use { resources ->
+        val usedOffscreenTextures = linkedSetOf<WgpuOffscreenTextureResources>()
+        trackOffscreenTextureUse(sourceTextureLabel, usedOffscreenTextures)
+        trackOffscreenTextureUse(destinationTextureLabel, usedOffscreenTextures)
+        try {
+            GPUResourceScope().use { resources ->
             val encoder = resources.trackIfAutoCloseable(device.createCommandEncoder())
             encoder.copyTextureToTexture(
                 source = TexelCopyTextureInfo(texture = sourceTexture),
@@ -1275,8 +1371,12 @@ private class WgpuOffscreenTarget(
                 ),
             )
             retainPendingTargetCloseSubmission(submission)
+            recordOffscreenTextureSubmission(usedOffscreenTextures, submission)
             telemetryRecorder.recordSubmission()
             telemetryRecorder.recordDestinationCopy()
+            }
+        } finally {
+            releaseOffscreenTextureUse(usedOffscreenTextures)
         }
     }
 
@@ -1285,12 +1385,15 @@ private class WgpuOffscreenTarget(
         require(texture.width == destination.width && texture.height == destination.height) {
             "Primary-target GPU copy requires equal texture dimensions"
         }
-        require(request.colorFormat.toWgpuTextureFormat() == offscreenTextureFormats.getValue(destinationTextureLabel)) {
+        require(request.colorFormat.toWgpuTextureFormat() == offscreenTextures.getValue(destinationTextureLabel).format) {
             "Primary-target GPU copy requires equal texture formats"
         }
 
         val copyOrdinal = copyOrdinalCounter.incrementAndGet()
-        GPUResourceScope().use { resources ->
+        val usedOffscreenTextures = linkedSetOf<WgpuOffscreenTextureResources>()
+        trackOffscreenTextureUse(destinationTextureLabel, usedOffscreenTextures)
+        try {
+            GPUResourceScope().use { resources ->
             val encoder = resources.trackIfAutoCloseable(device.createCommandEncoder())
             encoder.copyTextureToTexture(
                 source = TexelCopyTextureInfo(texture = texture),
@@ -1312,8 +1415,12 @@ private class WgpuOffscreenTarget(
                 ),
             )
             retainPendingTargetCloseSubmission(submission)
+            recordOffscreenTextureSubmission(usedOffscreenTextures, submission)
             telemetryRecorder.recordSubmission()
             telemetryRecorder.recordDestinationCopy()
+            }
+        } finally {
+            releaseOffscreenTextureUse(usedOffscreenTextures)
         }
     }
 
@@ -1353,7 +1460,7 @@ private class WgpuOffscreenTarget(
             encodeOffscreenTextureInternal(
                 textureLabel = textureLabel,
                 clearColor = clearColor,
-                textureFormat = offscreenTextureFormats[textureLabel]
+                textureFormat = offscreenTextures[textureLabel]?.format
                     ?: error("Offscreen texture format not found: $textureLabel"),
                 resources = resources,
                 block = { recorder -> recorder.block() },
@@ -1362,7 +1469,7 @@ private class WgpuOffscreenTarget(
     }
 
     internal fun offscreenTexture(label: String): GPUTexture {
-        return offscreenTextures[label]
+        return offscreenTextures[label]?.texture
             ?: error("Offscreen texture not found: $label")
     }
 
@@ -1370,7 +1477,6 @@ private class WgpuOffscreenTarget(
         if (!maskResources.releaseRequested || maskResources.activeEncodes != 0) return
         if (coverageMasks.remove(maskResources.mask.renderLabel) !== maskResources) return
         offscreenTextures.remove(maskResources.mask.sampleLabel)
-        offscreenTextureFormats.remove(maskResources.mask.sampleLabel)
         maskResources.resolveTexture?.close()
         maskResources.depthStencilTexture.close()
         maskResources.renderTexture.close()
@@ -1386,6 +1492,9 @@ private class WgpuOffscreenTarget(
         val textureFrameOrdinal = textureFrameOrdinalCounter.incrementAndGet()
         val frameId = "offscreen-texture-$textureLabel-frame-$textureFrameOrdinal"
         val frameResourceLeases = mutableListOf<GPUResourceLease>()
+        val usedOffscreenTextures = linkedSetOf<WgpuOffscreenTextureResources>()
+        trackOffscreenTextureUse(textureLabel, usedOffscreenTextures)
+        try {
         val tex = offscreenTexture(textureLabel)
         val texView = resources.track(tex.createView()) { it.close() }
         val texWidth = tex.width
@@ -1456,7 +1565,10 @@ private class WgpuOffscreenTarget(
                 setVertexBufferAction = { slot, buffer -> setVertexBuffer(slot, buffer) },
                 setIndexBufferAction = { buffer, format -> setIndexBuffer(buffer, format) },
                 drawIndexedAction = { indexCount -> drawIndexed(indexCount) },
-                offscreenTextureStore = offscreenTextures,
+                resolveOffscreenTextureAction = { label -> offscreenTextures[label]?.texture },
+                recordOffscreenTextureUseAction = { label ->
+                    trackOffscreenTextureUse(label, usedOffscreenTextures)
+                },
             )
             try {
                 block(recorder)
@@ -1477,8 +1589,12 @@ private class WgpuOffscreenTarget(
         )
         recordRuntimeResourceLeasesAction(frameResourceLeases)
         retainPendingTargetCloseSubmission(submission)
+        recordOffscreenTextureSubmission(usedOffscreenTextures, submission)
         telemetryRecorder.recordSubmission()
         telemetryRecorder.recordOffscreenRenderPass()
+        } finally {
+            releaseOffscreenTextureUse(usedOffscreenTextures)
+        }
     }
 
     override fun close() {
@@ -1501,8 +1617,12 @@ private class WgpuOffscreenTarget(
             maskResources.releaseRequested = true
             closeQuietly { destroyCoverageMaskIfReleased(maskResources) }
         }
-        offscreenTextures.values.forEach { tex -> closeQuietly { tex.close() } }
+        offscreenTextures.values.forEach { textureResources -> closeQuietly { textureResources.texture.close() } }
         offscreenTextures.clear()
+        releasedOffscreenTextures.toList().forEach { textureResources ->
+            closeQuietly { textureResources.texture.close() }
+        }
+        releasedOffscreenTextures.clear()
         firstFailure?.let { throw it }
     }
 }
@@ -1622,7 +1742,8 @@ private class WgpuWindowSurface(
                     setVertexBufferAction = { slot, buffer -> setVertexBuffer(slot, buffer) },
                     setIndexBufferAction = { buffer, format -> setIndexBuffer(buffer, format) },
                     drawIndexedAction = { indexCount -> drawIndexed(indexCount) },
-                    offscreenTextureStore = mutableMapOf(),
+                    resolveOffscreenTextureAction = { null },
+                    recordOffscreenTextureUseAction = {},
                 )
                 try {
                     recorder.block()
@@ -1666,6 +1787,16 @@ private class WgpuWindowSurface(
     }
 }
 
+/** Target-owned native resources for one releaseable offscreen texture. */
+private class WgpuOffscreenTextureResources(
+    val texture: GPUTexture,
+    val format: GPUTextureFormat,
+    val releasable: Boolean = true,
+    var activeEncodes: Int = 0,
+    var lastSubmissionId: GPUQueueSubmissionId? = null,
+    var releaseRequested: Boolean = false,
+)
+
 /** Target-owned native resources for one coverage mask. They are closed only after active encoding has submitted. */
 private class WgpuCoverageMaskResources(
     val mask: GPUBackendCoverageMask,
@@ -1703,7 +1834,8 @@ private class WgpuRenderRecorder(
     private val setVertexBufferAction: (UInt, GPUBuffer) -> Unit,
     private val setIndexBufferAction: (GPUBuffer, GPUIndexFormat) -> Unit,
     private val drawIndexedAction: (UInt) -> Unit,
-    private val offscreenTextureStore: MutableMap<String, GPUTexture>,
+    private val resolveOffscreenTextureAction: (String) -> GPUTexture?,
+    private val recordOffscreenTextureUseAction: (String) -> Unit,
 ) : GPUBackendRenderRecorder {
     override val maxTextureDimension2D: Int = capabilities.limits
         ?.maxTextureDimension2D
@@ -1720,6 +1852,10 @@ private class WgpuRenderRecorder(
     private var dualUVVertexBindGroupLayout: GPUBindGroupLayout? = null
     private var dualUVVertexTextureBindGroupLayout: GPUBindGroupLayout? = null
     private val payloadTargetId = fullscreenPayloadTargetId(targetId)
+    private val temporaryOffscreenTextures = mutableMapOf<String, GPUTexture>()
+
+    private fun offscreenTexture(label: String): GPUTexture? =
+        resolveOffscreenTextureAction(label) ?: temporaryOffscreenTextures[label]
 
     fun closeCachedResources() {
         texturedVertexBindGroupLayout?.let { closeQuietly { it.close() } }
@@ -2233,7 +2369,7 @@ private class WgpuRenderRecorder(
         val safeW = texture.width.coerceAtMost(MAX_TEXTURE_DIMENSION)
         val safeH = texture.height.coerceAtMost(MAX_TEXTURE_DIMENSION)
         val label = "offscreenTex:${texture.label}:${texture.width}x${texture.height}:${texture.format}"
-        if (label in offscreenTextureStore) return label
+        if (offscreenTexture(label) != null) return label
         val tex = resourceScope.track(
             createTrackedTexture(
                 TextureDescriptor(
@@ -2248,7 +2384,7 @@ private class WgpuRenderRecorder(
                 ),
             ),
         ) { it.close() }
-        offscreenTextureStore[label] = tex
+        temporaryOffscreenTextures[label] = tex
         telemetryRecorder.recordIntermediateTextureCreated()
         return label
     }
@@ -2590,8 +2726,9 @@ private class WgpuRenderRecorder(
         }
         require(draws.isNotEmpty()) { "draws required for composite pass" }
 
-        val tex = offscreenTextureStore[textureLabel]
+        val tex = offscreenTexture(textureLabel)
             ?: error("Offscreen texture not found: $textureLabel")
+        recordOffscreenTextureUseAction(textureLabel)
         val textureFormat = GPUTextureFormat.RGBA8Unorm
 
         val textureKeys = fullscreenTextureExecutionCacheKeys(
@@ -2743,8 +2880,9 @@ private class WgpuRenderRecorder(
         require(draws.isNotEmpty()) { "draws required for multi-texture pass" }
 
         val textures = textureLabels.map { textureLabel ->
-            offscreenTextureStore[textureLabel]
+            offscreenTexture(textureLabel)
                 ?: error("Offscreen texture not found: $textureLabel")
+                .also { recordOffscreenTextureUseAction(textureLabel) }
         }
         val keys = multiTextureExecutionCacheKeys(
             wgsl = wgsl,
@@ -2847,10 +2985,12 @@ private class WgpuRenderRecorder(
         }
         require(draws.isNotEmpty()) { "draws required for blend pass" }
 
-        val srcTex = offscreenTextureStore[srcTextureLabel]
+        val srcTex = offscreenTexture(srcTextureLabel)
             ?: error("Source texture not found: $srcTextureLabel")
-        val dstTex = offscreenTextureStore[dstTextureLabel]
+        recordOffscreenTextureUseAction(srcTextureLabel)
+        val dstTex = offscreenTexture(dstTextureLabel)
             ?: error("Destination texture not found: $dstTextureLabel")
+        recordOffscreenTextureUseAction(dstTextureLabel)
         val textureFormat = GPUTextureFormat.RGBA8Unorm
 
         val textureKeys = blendTextureExecutionCacheKeys(

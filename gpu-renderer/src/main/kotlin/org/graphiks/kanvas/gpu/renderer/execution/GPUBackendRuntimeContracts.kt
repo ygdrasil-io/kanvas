@@ -207,6 +207,9 @@ interface GPUBackendOffscreenTarget : AutoCloseable {
     /** Creates a secondary offscreen texture that can be bound as a texture source during a subsequent [encode]. */
     fun createOffscreenTexture(texture: GPUBackendOffscreenTexture): String
 
+    /** Requests release of an unshared transient texture after its last submitted GPU use. */
+    fun releaseOffscreenTexture(textureLabel: String) = Unit
+
     /** Readback-snapshots the most recently encoded primary target into a previously-created offscreen texture. */
     fun snapshotTargetToOffscreenTexture(textureLabel: String)
 

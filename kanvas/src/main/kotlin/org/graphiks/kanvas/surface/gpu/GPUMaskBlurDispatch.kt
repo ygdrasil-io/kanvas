@@ -86,6 +86,9 @@ internal fun GPUBackendOffscreenTarget.renderMaskBlurCommand(
     val localConfig = RenderConfig(
         gpuColorFormat = GPUColorFormat.RGBA8_UNORM,
     )
+    val transientLabels = listOf(mask, horizontal, vertical, styled)
+    var renderingFailure: Throwable? = null
+    try {
     val fatalBeforeMask = diagnostics.fatalCount
     encodeOffscreenTexture(mask, transparent) {
         when (localCommand) {
@@ -161,6 +164,27 @@ internal fun GPUBackendOffscreenTarget.renderMaskBlurCommand(
         diagnostics.degrade("dispatch:${command.diagnosticName}", command.diagnosticName, "dispatched")
     }
     return GPUMaskBlurDispatchResult(rendered = true)
+    } catch (failure: Throwable) {
+        renderingFailure = failure
+        throw failure
+    } finally {
+        var releaseFailure: Throwable? = null
+        transientLabels.forEach { label ->
+            try {
+                releaseOffscreenTexture(label)
+            } catch (failure: Throwable) {
+                val firstFailure = renderingFailure ?: releaseFailure
+                if (firstFailure == null) {
+                    releaseFailure = failure
+                } else {
+                    firstFailure.addSuppressed(failure)
+                }
+            }
+        }
+        if (renderingFailure == null) {
+            releaseFailure?.let { throw it }
+        }
+    }
 }
 
 internal fun NormalizedDrawCommand.toMaskBlurRequest(

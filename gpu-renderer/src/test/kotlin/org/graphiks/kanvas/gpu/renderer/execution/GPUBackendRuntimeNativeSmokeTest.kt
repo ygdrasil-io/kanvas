@@ -360,6 +360,62 @@ class GPUBackendRuntimeNativeSmokeTest {
     }
 
     @Test
+    fun `released offscreen texture is no longer bindable after composite submission`() {
+        val runtime = GPUBackendRuntimeFactory.createOrNull()
+        assumeTrue(runtime != null, "GPU backend unavailable in current environment")
+
+        runtime!!.use { session ->
+            session.createOffscreenTarget(
+                GPUOffscreenTargetRequest(width = 4, height = 4, colorFormat = "rgba8unorm"),
+            ).use { target ->
+                val source = target.createOffscreenTexture(
+                    GPUBackendOffscreenTexture("released-source", 4, 4, "rgba8unorm"),
+                )
+                target.encodeOffscreenTexture(
+                    textureLabel = source,
+                    clearColor = GPUClearColor(0.0, 0.0, 0.0, 1.0),
+                ) {
+                    drawFullscreenPass(
+                        wgsl = solidColorFullscreenWgsl(),
+                        colorFormat = "rgba8unorm",
+                        draws = listOf(
+                            GPUBackendRectDraw(floatArrayOf(1f, 0f, 0f, 1f), 0, 0, 4, 4),
+                        ),
+                    )
+                }
+                target.encode(GPUClearColor(0.0, 0.0, 0.0, 1.0)) {
+                    drawCompositePass(
+                        wgsl = singleTextureWgsl(),
+                        colorFormat = "rgba8unorm",
+                        textureLabel = source,
+                        draws = listOf(
+                            GPUBackendRawUniformDraw(
+                                uniformBytes = solidColorUniformBytes(0f, 0f, 0f, 0f),
+                                scissorX = 0,
+                                scissorY = 0,
+                                scissorWidth = 4,
+                                scissorHeight = 4,
+                            ),
+                        ),
+                        blendMode = GPUBlendMode.SRC,
+                    )
+                }
+
+                target.releaseOffscreenTexture("unknown-offscreen-texture")
+                target.releaseOffscreenTexture(source)
+
+                assertFailsWith<IllegalStateException> {
+                    target.encodeOffscreenTexture(source, GPUClearColor(0.0, 0.0, 0.0, 0.0)) {}
+                }
+                assertContentEquals(
+                    byteArrayOf(0xFF.toByte(), 0, 0, 0xFF.toByte()),
+                    target.readRgba().copyOfRange(0, 4),
+                )
+            }
+        }
+    }
+
+    @Test
     fun `coverage mask resolves four samples and copy stays on GPU`() {
         GPUBackendRuntimeFactory.createOrNull().use { session ->
             assumeTrue(session != null, "GPU backend unavailable in current environment")
@@ -2016,6 +2072,31 @@ class GPUBackendRuntimeNativeSmokeTest {
             fn fs_main(in: VertexOut) -> @location(0) vec4f {
                 let tint = select(0.35, 1.0, in.position.x >= 0.0);
                 return vec4f(uniforms.color.rgb * tint, uniforms.color.a);
+            }
+        """.trimIndent()
+
+    private fun singleTextureWgsl(): String =
+        """
+            struct Uniforms {
+                color: vec4f,
+            };
+
+            @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+            @group(1) @binding(1) var source: texture_2d<f32>;
+            @group(1) @binding(2) var sourceSampler: sampler;
+
+            @vertex
+            fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
+                let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
+                let y = f32(idx & 2u) * 2.0 - 1.0;
+                return vec4f(x, y, 0.0, 1.0);
+            }
+
+            @fragment
+            fn fs_main(@builtin(position) coord: vec4f) -> @location(0) vec4f {
+                let dimensions = textureDimensions(source);
+                let uv = vec2f(coord.x / f32(dimensions.x), coord.y / f32(dimensions.y));
+                return textureSample(source, sourceSampler, uv) + uniforms.color * 0.0;
             }
         """.trimIndent()
 
