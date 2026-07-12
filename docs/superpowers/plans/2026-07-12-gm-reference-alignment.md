@@ -13,7 +13,7 @@
 - Do not add, remove, copy, rename, or regenerate files under `integration-tests/skia/src/test/resources/reference/`.
 - Keep `SkiaGm.name` unchanged for existing approximate, duplicate, `No-op`, `STUB`, and `Best-effort` ports.
 - Assign no concrete `referenceName` override unless the CPP registration is one-to-one and the Kotlin render is compatible with the reference dimensions and semantics.
-- Do not hard-code `/Users/chaos/...` paths in checked-in code; `--cpp-gm-dir` must be optional and explicit.
+- Do not hard-code developer-specific absolute paths in checked-in code; `--cpp-gm-dir` must be optional and explicit.
 - Do not port Ganesh or Graphite, rebuild SkSL, change the renderer, or alter similarity thresholds.
 - Keep native Kadre execution and `external/poc-koreos` out of this headless validation.
 - Preserve the existing direct-use behavior of `scripts/check_missing_gms.py` when no CPP directory is supplied.
