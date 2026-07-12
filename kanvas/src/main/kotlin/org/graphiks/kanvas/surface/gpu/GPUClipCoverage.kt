@@ -327,11 +327,7 @@ internal fun DisplayOp.coveragePlaneTask4RefusalOrNull(): String? = when (this) 
     is DisplayOp.DrawRect -> paint.maskFilter.coveragePlaneMaskBlurRefusalOrNull()
     is DisplayOp.DrawRRect -> paint.maskFilter.coveragePlaneMaskBlurRefusalOrNull()
     is DisplayOp.DrawPath -> paint.maskFilter.coveragePlaneMaskBlurRefusalOrNull()
-    is DisplayOp.DrawPicture -> picture.ops.firstNotNullOfOrNull { nested ->
-        nested.coveragePlaneTask4RefusalOrNull()
-    }?.let { nestedReason ->
-        "unsupported.coverage_plane.draw_picture.${nestedReason.removePrefix("unsupported.coverage_plane.")}"
-    }
+    is DisplayOp.DrawPicture -> "unsupported.coverage_plane.draw_picture"
     else -> null
 }
 

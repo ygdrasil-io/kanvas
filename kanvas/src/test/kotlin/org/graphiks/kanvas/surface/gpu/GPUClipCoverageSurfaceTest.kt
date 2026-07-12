@@ -1238,6 +1238,47 @@ class GPUClipCoverageSurfaceTest {
     }
 
     @Test
+    fun `alpha mask picture refuses before mask acquisition or source encoding`() {
+        requireWebGpu()
+        val clip = ClipStack.Complex(
+            listOf(ClipStackOp.RectOp(Rect(1f, 1f, 15f, 15f), ClipOp.INTERSECT, antiAlias = true)),
+        )
+        val picture = Picture(
+            Rect(0f, 0f, 16f, 16f),
+            listOf(
+                DisplayOp.DrawRect(
+                    Rect(2f, 2f, 14f, 14f),
+                    Paint.fill(Color.RED).copy(antiAlias = false),
+                    Matrix33.identity(),
+                    ClipStack.WideOpen,
+                ),
+            ),
+        )
+        val trace = GPUClipRouteTrace()
+
+        val result = renderViaGpu(
+            buffer = StaticDisplayListBuffer(
+                listOf(DisplayOp.DrawPicture(picture, null, Matrix33.identity(), clip)),
+            ),
+            width = 16,
+            height = 16,
+            format = PixelFormat.RGBA8,
+            config = RenderConfig.DEFAULT,
+            routeTrace = trace,
+        )
+
+        assertEquals(1, result.stats.opsRefused, result.diagnostics.entries.toString())
+        assertTrue(
+            result.diagnostics.entries.any { it.reason == "unsupported.coverage_plane.draw_picture" },
+            result.diagnostics.entries.toString(),
+        )
+        assertTrue(result.diagnostics.entries.none { it.reason == "clip_mask_acquire" })
+        assertEquals(0, trace.logicalDrawCount)
+        assertEquals(0, trace.sourceThenCompositeCount)
+        assertRgbaNear(result.pixels, 16, 8, 8, Color.TRANSPARENT)
+    }
+
+    @Test
     fun `remaining high level GPU routes render supported sources and refuse coverage gaps`() {
         requireWebGpu()
         val clip = ClipStack.Complex(
@@ -1253,7 +1294,7 @@ class GPUClipCoverageSurfaceTest {
         )
         val picture = Picture(
             Rect(0f, 0f, 10f, 10f),
-            listOf(DisplayOp.DrawRect(Rect(2f, 2f, 8f, 8f), Paint.fill(Color.RED), Matrix33.identity(), ClipStack.WideOpen)),
+            listOf(DisplayOp.DrawRect(Rect(24f, 24f, 30f, 30f), Paint.fill(Color.RED), Matrix33.identity(), ClipStack.WideOpen)),
         )
         val ops = listOf(
             DisplayOp.DrawPoints(PointMode.POINTS, listOf(Point(3f, 3f), Point(6f, 6f)), Paint.fill(Color.RED), Matrix33.identity(), clip),
@@ -1297,15 +1338,16 @@ class GPUClipCoverageSurfaceTest {
             routeTrace = trace,
         )
 
-        assertEquals(3, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
-        assertEquals(4, trace.logicalDrawCount, result.diagnostics.entries.toString())
-        assertEquals(4, trace.sourceThenCompositeCount, result.diagnostics.entries.toString())
+        assertEquals(4, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertEquals(3, trace.logicalDrawCount, result.diagnostics.entries.toString())
+        assertEquals(3, trace.sourceThenCompositeCount, result.diagnostics.entries.toString())
         assertEquals(0, trace.directComplexClipDispatches)
         assertEquals(
             setOf(
                 "unsupported.coverage_plane.draw_image_nine",
                 "unsupported.coverage_plane.draw_image_lattice",
                 "unsupported.coverage_plane.draw_atlas",
+                "unsupported.coverage_plane.draw_picture",
             ),
             result.diagnostics.entries
                 .map { it.reason }
@@ -1316,6 +1358,7 @@ class GPUClipCoverageSurfaceTest {
             result.diagnostics.entries.none { it.reason.startsWith("unsupported.gpu.route.unclassified") },
             result.diagnostics.entries.toString(),
         )
+        assertRgbaNear(result.pixels, 32, 26, 26, Color.TRANSPARENT)
     }
 
     private fun requireWebGpu() {
