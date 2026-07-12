@@ -28,6 +28,8 @@ internal fun GPUBackendRenderRecorder.dispatchTexturedVertices(
     diagnosticName: String,
     /** The source pass for a clipped logical draw always uses fixed-function SrcOver. */
     blendModeOverride: org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode? = null,
+    /** Destination-read scissor sources must preserve the captured clip in their temporary texture. */
+    scissor: GPUCoverageScissor? = null,
 ): Boolean {
     fun refuse(reason: String) {
         diagnostics.fatal("refuse:texturedVertices:$diagnosticName", diagnosticName, reason)
@@ -104,10 +106,10 @@ internal fun GPUBackendRenderRecorder.dispatchTexturedVertices(
 
     val uniformDraw = GPUBackendRawUniformDraw(
         uniformBytes = uniformBytes,
-        scissorX = 0,
-        scissorY = 0,
-        scissorWidth = surfaceWidth,
-        scissorHeight = surfaceHeight,
+        scissorX = scissor?.x ?: 0,
+        scissorY = scissor?.y ?: 0,
+        scissorWidth = scissor?.width ?: surfaceWidth,
+        scissorHeight = scissor?.height ?: surfaceHeight,
     )
 
     val blend = blendModeOverride ?: org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode.values()

@@ -10,6 +10,7 @@ import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
 import org.graphiks.kanvas.gpu.renderer.commands.GPUImageFilterPlan
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBlendFacts
+import org.graphiks.kanvas.gpu.renderer.commands.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
@@ -200,6 +201,27 @@ internal fun renderViaGpu(
                 clipSourceRoute -> clearTransparent
                 sceneHasContent -> null
                 else -> clearTransparent
+            }
+
+            /**
+             * A scissor clip is represented by the temporary source texture itself during a
+             * destination-read blend. Pass that same scissor to source dispatchers which do not
+             * otherwise consume a [ClipStack], so the formula cannot alter pixels outside it.
+             */
+            fun destinationReadSourceScissor(clip: ClipStack): GPUCoverageScissor? {
+                if (!clipSourcePreservesClip) return null
+                val deviceRect = clip as? ClipStack.DeviceRect ?: return null
+                return truncatedScissor(
+                    bounds = GPUBounds(0f, 0f, width.toFloat(), height.toFloat()),
+                    clipBounds = GPUBounds(
+                        deviceRect.rect.left,
+                        deviceRect.rect.top,
+                        deviceRect.rect.right,
+                        deviceRect.rect.bottom,
+                    ),
+                    surfaceWidth = width,
+                    surfaceHeight = height,
+                )
             }
 
             /** Keeps multi-part clip sources transparent only until their first successful sub-pass. */
@@ -718,6 +740,7 @@ internal fun renderViaGpu(
                                         drawOriginY = op.y,
                                         transform = op.transform,
                                         recordResult = !clipSourceRoute,
+                                        scissor = destinationReadSourceScissor(op.clip),
                                     )
                                 }
                                 true
@@ -842,6 +865,7 @@ internal fun renderViaGpu(
                             config = config,
                             diagnosticName = operationName,
                             blendModeOverride = if (clipSourceRoute) GPUBlendMode.SRC_OVER else null,
+                            scissor = destinationReadSourceScissor(clip),
                         )
                     }
                     return recordSourcePart(encoded)
@@ -2663,6 +2687,7 @@ private fun GPUBackendRenderRecorder.drawTextAtlasPass(
     drawOriginY: Float = 0f,
     transform: Matrix33? = null,
     recordResult: Boolean = true,
+    scissor: GPUCoverageScissor? = null,
 ) {
     val blob = gpuBlob.textBlob
     val mesh = buildTextAtlasMesh(gpuBlob, drawOriginX, drawOriginY, transform)
@@ -2708,10 +2733,10 @@ private fun GPUBackendRenderRecorder.drawTextAtlasPass(
         draws = listOf(
             GPUBackendRawUniformDraw(
                 uniformBytes = uniformBytes.array(),
-                scissorX = 0,
-                scissorY = 0,
-                scissorWidth = tw.toInt(),
-                scissorHeight = th.toInt(),
+                scissorX = scissor?.x ?: 0,
+                scissorY = scissor?.y ?: 0,
+                scissorWidth = scissor?.width ?: tw.toInt(),
+                scissorHeight = scissor?.height ?: th.toInt(),
             ),
         ),
         blendMode = blendMode,

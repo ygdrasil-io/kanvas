@@ -17,12 +17,17 @@
 - GREEN: all seven modes are checked against a CPU calculation of the standard formula in linear color space, then compared after sRGB conversion. The test also asserts clipped exterior preservation, partial-alpha visibility, at least seven GPU destination copies, and no destination readbacks.
 - A follow-up RED exposed non-AA scissor sources escaping their clip. The source route now retains that scissor and its regression test is green.
 
+### P1 review follow-up — text and textured geometry
+
+- RED: `DrawText`, `DrawVertices`, and `DrawMesh` under a non-AA scissor with `DARKEN` each changed white pixels outside the clip. Their source passes emitted a full-target scissor before the destination-read formula.
+- GREEN: the preserved scissor now reaches the text-atlas and textured-vertex dispatchers. `DrawMesh` shares the latter route. Each regression asserts the exterior remains opaque white after the GPU snapshot/formula pass.
+
 ## Verification
 
 Passed:
 
 - `rtk ./gradlew :kanvas:test --tests org.graphiks.kanvas.surface.gpu.GPUClipAdvancedBlendSurfaceTest --tests org.graphiks.kanvas.surface.gpu.GPUPathClipRegressionTest --tests org.graphiks.kanvas.surface.gpu.GPUClipCoverageWgslTest --tests org.graphiks.kanvas.surface.gpu.GPUClipCoverageSurfaceTest`
-- `rtk ./gradlew :gpu-renderer:test --tests org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeNativeSmokeTest`
+- `rtk ./gradlew :gpu-renderer:test --tests org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeNativeSmokeTest --rerun-tasks`
 - `rtk git diff --check`
 
 Full `rtk ./gradlew :kanvas:test` ran 495 tests and has one residual failure outside Task 8's destination-read route:

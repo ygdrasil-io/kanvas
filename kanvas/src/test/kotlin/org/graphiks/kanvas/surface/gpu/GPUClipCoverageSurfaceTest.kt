@@ -272,6 +272,98 @@ class GPUClipCoverageSurfaceTest {
     }
 
     @Test
+    fun `scissor destination read DrawText keeps exterior intact`() {
+        requireWebGpu()
+        val clip = ClipStack.DeviceRect(Rect(6f, 6f, 14f, 14f), antiAlias = false)
+        val typeface = FontTypeface(
+            javaClass.classLoader
+                .getResourceAsStream("fonts/liberation/LiberationSans-Regular.ttf")!!
+                .readBytes(),
+            fontName = "LiberationSans-Regular",
+        )
+        val result = renderViaGpu(
+            StaticDisplayListBuffer(
+                listOf(
+                    DisplayOp.DrawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE), Matrix33.identity(), ClipStack.WideOpen),
+                    DisplayOp.DrawText(
+                        blob = Font(typeface, 20f).toTextBlob("W", 0f, 15f),
+                        x = 0f,
+                        y = 0f,
+                        paint = Paint.fill(Color.BLACK).copy(blendMode = BlendMode.DARKEN),
+                        transform = Matrix33.identity(),
+                        clip = clip,
+                    ),
+                ),
+            ),
+            16,
+            16,
+            PixelFormat.RGBA8,
+            RenderConfig.DEFAULT,
+        )
+
+        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertWhiteOutsideClip(result.pixels, 16, clip.rect)
+        assertDarkenedInsideClip(result.pixels, 16, clip.rect)
+    }
+
+    @Test
+    fun `scissor destination read DrawVertices keeps exterior intact`() {
+        requireWebGpu()
+        val clip = ClipStack.DeviceRect(Rect(6f, 6f, 14f, 14f), antiAlias = false)
+        val vertices = texturedScissorTriangle()
+        val result = renderViaGpu(
+            StaticDisplayListBuffer(
+                listOf(
+                    DisplayOp.DrawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE), Matrix33.identity(), ClipStack.WideOpen),
+                    DisplayOp.DrawVertices(
+                        vertices = vertices,
+                        paint = advancedBlackImagePaint(),
+                        transform = Matrix33.identity(),
+                        clip = clip,
+                    ),
+                ),
+            ),
+            16,
+            16,
+            PixelFormat.RGBA8,
+            RenderConfig.DEFAULT,
+        )
+
+        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertWhiteOutsideClip(result.pixels, 16, clip.rect)
+        assertDarkenedInsideClip(result.pixels, 16, clip.rect)
+    }
+
+    @Test
+    fun `scissor destination read DrawMesh keeps exterior intact`() {
+        requireWebGpu()
+        val clip = ClipStack.DeviceRect(Rect(6f, 6f, 14f, 14f), antiAlias = false)
+        val mesh = Mesh(texturedScissorTriangle(), bounds = Rect(1f, 1f, 15f, 15f))
+        val result = renderViaGpu(
+            StaticDisplayListBuffer(
+                listOf(
+                    DisplayOp.DrawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE), Matrix33.identity(), ClipStack.WideOpen),
+                    DisplayOp.DrawMesh(
+                        mesh = mesh,
+                        paint = advancedBlackImagePaint(),
+                        blendMode = null,
+                        transform = Matrix33.identity(),
+                        clip = clip,
+                    ),
+                ),
+            ),
+            16,
+            16,
+            PixelFormat.RGBA8,
+            RenderConfig.DEFAULT,
+        )
+
+        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertWhiteOutsideClip(result.pixels, 16, clip.rect)
+        assertDarkenedInsideClip(result.pixels, 16, clip.rect)
+    }
+
+    @Test
     fun `outlined multi glyph text preserves every source glyph under a complex clip`() {
         requireWebGpu()
         val typeface = FontTypeface(
@@ -836,6 +928,50 @@ class GPUClipCoverageSurfaceTest {
         colorType = ColorType.RGBA_8888,
         sourceId = "clip-opaque-$size",
     )
+
+    private fun texturedScissorTriangle(): Vertices = Vertices(
+        mode = VertexMode.TRIANGLES,
+        positions = listOf(Point(1f, 1f), Point(15f, 1f), Point(1f, 15f)),
+        texCoords = listOf(Point(0f, 0f), Point(1f, 0f), Point(0f, 1f)),
+    )
+
+    private fun advancedBlackImagePaint(): Paint = Paint.fill(Color.WHITE).copy(
+        shader = Shader.Image(
+            Image.fromPixels(
+                width = 1,
+                height = 1,
+                pixels = byteArrayOf(0, 0, 0, 0xff.toByte()),
+                colorType = ColorType.RGBA_8888,
+                sourceId = "clip-scissor-black",
+            ),
+        ),
+        blendMode = BlendMode.DARKEN,
+    )
+
+    private fun assertWhiteOutsideClip(pixels: UByteArray, width: Int, clip: Rect) {
+        for (y in 0 until width) {
+            for (x in 0 until width) {
+                if (
+                    x.toFloat() >= clip.left && x.toFloat() < clip.right &&
+                    y.toFloat() >= clip.top && y.toFloat() < clip.bottom
+                ) continue
+                val offset = (y * width + x) * 4
+                assertEquals(255, pixels[offset].toInt(), "red outside clip at ($x,$y)")
+                assertEquals(255, pixels[offset + 1].toInt(), "green outside clip at ($x,$y)")
+                assertEquals(255, pixels[offset + 2].toInt(), "blue outside clip at ($x,$y)")
+                assertEquals(255, pixels[offset + 3].toInt(), "alpha outside clip at ($x,$y)")
+            }
+        }
+    }
+
+    private fun assertDarkenedInsideClip(pixels: UByteArray, width: Int, clip: Rect) {
+        val hasDarkenedPixel = (clip.top.toInt() until clip.bottom.toInt()).any { y ->
+            (clip.left.toInt() until clip.right.toInt()).any { x ->
+                pixels[(y * width + x) * 4].toInt() < 255
+            }
+        }
+        assertTrue(hasDarkenedPixel, "expected a destination-read source pixel inside $clip")
+    }
 
     private fun simpleRuntimeEffect(): RuntimeEffect {
         RuntimeEffectWgsl4kWiring.install()
