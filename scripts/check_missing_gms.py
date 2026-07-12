@@ -89,6 +89,19 @@ def is_authoritative_variant_family(gm_name: str, references: list[str]) -> bool
     return max(token_counts, default=0) >= 2 or len(normalized_family) >= 10
 
 
+def collect_authoritative_family_variants(gm_name: str, names: set[str]) -> list[str]:
+    normalized_gm_name = normalize_name(gm_name)
+    matches = sorted(
+        name
+        for name in names
+        if normalize_name(name) != normalized_gm_name
+        and extract_family_reference_prefix(name, normalized_gm_name) is not None
+    )
+    if is_authoritative_variant_family(gm_name, matches):
+        return matches
+    return []
+
+
 def classify_reference(gm_name: str, references: set[str], cpp_names: set[str] | None) -> dict[str, object]:
     if gm_name in references:
         return {
@@ -110,13 +123,11 @@ def classify_reference(gm_name: str, references: set[str], cpp_names: set[str] |
             "references": normalized_matches,
         }
 
-    if cpp_names is not None and gm_name in cpp_names:
-        variant_matches = sorted(
-            reference
-            for reference in references
-            if extract_family_reference_prefix(reference, normalized_gm_name) is not None
-        )
-        if variant_matches and is_authoritative_variant_family(gm_name, variant_matches):
+    variant_matches = collect_authoritative_family_variants(gm_name, references)
+    if cpp_names is not None:
+        cpp_variant_matches = collect_authoritative_family_variants(gm_name, cpp_names)
+        has_explicit_cpp_family = gm_name in cpp_names or bool(cpp_variant_matches)
+        if has_explicit_cpp_family and variant_matches:
             return {
                 "kind": "variant-family",
                 "gm_name": gm_name,

@@ -1,7 +1,15 @@
 #!/usr/bin/env python3
 """Compare Skia C++ GMs against Kanvas Kotlin GMs to find what's left to port.
 
-Usage: python3 scripts/compare_skia_vs_kanvas_gms.py
+Usage:
+  python3 scripts/compare_skia_vs_kanvas_gms.py [--cpp-gm-dir PATH]
+
+Resolution order for the Skia C++ gm/ source directory:
+  1. --cpp-gm-dir PATH
+  2. KANVAS_SKIA_GM_DIR
+  3. extractor defaults from scripts/extract_skia_gm_names.py
+
+If none of those resolve to a directory, the script exits with an error.
 """
 
 import argparse

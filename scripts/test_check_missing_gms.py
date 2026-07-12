@@ -97,12 +97,43 @@ class CheckMissingGmsClassificationTest(unittest.TestCase):
         result = checker.classify_reference(
             "clippedbitmapshaders",
             {"clipped-bitmap-shaders-clamp", "clipped-bitmap-shaders-tile"},
-            {"clippedbitmapshaders"},
+            {
+                "clipped-bitmap-shaders-clamp",
+                "clipped-bitmap-shaders-mirror",
+                "clipped-bitmap-shaders-tile",
+            },
         )
 
         self.assertEqual("variant-family", result["kind"])
         self.assertEqual(
             ["clipped-bitmap-shaders-clamp", "clipped-bitmap-shaders-tile"],
+            result["references"],
+        )
+
+    def test_explicit_cpp_family_evidence_accepts_underscored_variants(self):
+        checker = load_checker()
+
+        result = checker.classify_reference(
+            "anisotropic_image_scale",
+            {
+                "anisotropic_image_scale_aniso",
+                "anisotropic_image_scale_linear",
+                "anisotropic_image_scale_mip",
+            },
+            {
+                "anisotropic_image_scale_aniso",
+                "anisotropic_image_scale_linear",
+                "anisotropic_image_scale_mip",
+            },
+        )
+
+        self.assertEqual("variant-family", result["kind"])
+        self.assertEqual(
+            [
+                "anisotropic_image_scale_aniso",
+                "anisotropic_image_scale_linear",
+                "anisotropic_image_scale_mip",
+            ],
             result["references"],
         )
 
@@ -141,13 +172,18 @@ class CheckMissingGmsClassificationTest(unittest.TestCase):
                 gm_dir=fixture["gm_dir"],
             )
 
-        self.assertIn("Matched: 5 (3 direct + 2 parameterized)", output)
+        self.assertIn("Matched: 8 (6 direct + 2 parameterized)", output)
         self.assertIn("source-evidence: unavailable", output)
         self.assertIn("--- Parameterized variants of existing GMs ---", output)
         self.assertIn("  nested_aa.png  <- from nested", output)
         self.assertIn("  nested_bw.png  <- from nested", output)
-        self.assertIn("=== GM names WITHOUT reference PNG (4) ===", output)
+        self.assertIn("=== REFERENCE PNGs WITHOUT Kotlin GM (3) ===", output)
+        self.assertIn("  clipped-bitmap-shaders-clamp.png", output)
+        self.assertIn("  clipped-bitmap-shaders-tile.png", output)
+        self.assertIn("  linear_gradient_rt.png", output)
+        self.assertIn("=== GM names WITHOUT reference PNG (5) ===", output)
         self.assertIn("  all.png", output)
+        self.assertIn("  anisotropic_image_scale.png", output)
         self.assertIn("  clippedbitmapshaders.png", output)
         self.assertIn("  lineargradientrt.png", output)
         self.assertIn("  missing_gm.png", output)
@@ -165,11 +201,17 @@ class CheckMissingGmsClassificationTest(unittest.TestCase):
                 cpp_gm_dir=fixture["cpp_gm_dir"],
             )
 
-        self.assertIn("Matched: 5 (3 direct + 2 parameterized)", output)
+        self.assertIn("Matched: 8 (6 direct + 2 parameterized)", output)
         self.assertIn("source-evidence: cpp-gm-dir=", output)
         self.assertIn("--- Normalized aliases ---", output)
         self.assertIn("  lineargradientrt.png  <- alias linear_gradient_rt.png", output)
         self.assertIn("--- Variant families from CPP source evidence ---", output)
+        self.assertIn(
+            "  anisotropic_image_scale.png  <- variants "
+            "anisotropic_image_scale_aniso.png, anisotropic_image_scale_linear.png, "
+            "anisotropic_image_scale_mip.png",
+            output,
+        )
         self.assertIn(
             "  clippedbitmapshaders.png  <- variants "
             "clipped-bitmap-shaders-clamp.png, clipped-bitmap-shaders-tile.png",
@@ -216,6 +258,9 @@ def fixture_dirs():
             "nested_aa",
             "nested_bw",
             "linear_gradient_rt",
+            "anisotropic_image_scale_aniso",
+            "anisotropic_image_scale_linear",
+            "anisotropic_image_scale_mip",
             "clipped-bitmap-shaders-clamp",
             "clipped-bitmap-shaders-tile",
             "all_bitmap_configs",
@@ -226,7 +271,11 @@ def fixture_dirs():
         for filename, gm_name in (
             ("DirectGm.kt", "direct"),
             ("NestedGm.kt", "nested"),
+            ("AnisotropicImageScaleAnisoGm.kt", "anisotropic_image_scale_aniso"),
+            ("AnisotropicImageScaleLinearGm.kt", "anisotropic_image_scale_linear"),
+            ("AnisotropicImageScaleMipGm.kt", "anisotropic_image_scale_mip"),
             ("LinearGradientRtGm.kt", "lineargradientrt"),
+            ("AnisotropicImageScaleGm.kt", "anisotropic_image_scale"),
             ("ClippedBitmapShadersGm.kt", "clippedbitmapshaders"),
             ("AllGm.kt", "all"),
             ("AllBitmapConfigsGm.kt", "all_bitmap_configs"),
@@ -241,8 +290,12 @@ def fixture_dirs():
         (cpp_gm_dir / "fixture.cpp").write_text(
             "\n".join(
                 [
-                    "DEF_SIMPLE_GM(clippedbitmapshaders) {}",
-                    "DEF_SIMPLE_GM(all) {}",
+                    "DEF_SIMPLE_GM(anisotropic_image_scale_aniso) {}",
+                    "DEF_SIMPLE_GM(anisotropic_image_scale_linear) {}",
+                    "DEF_SIMPLE_GM(anisotropic_image_scale_mip) {}",
+                    "DEF_SIMPLE_GM(clipped_bitmap_shaders_clamp) {}",
+                    "DEF_SIMPLE_GM(clipped_bitmap_shaders_mirror) {}",
+                    "DEF_SIMPLE_GM(clipped_bitmap_shaders_tile) {}",
                     "DEF_SIMPLE_GM(missing_gm) {}",
                 ]
             )

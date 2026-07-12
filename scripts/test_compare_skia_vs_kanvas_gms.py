@@ -16,6 +16,16 @@ import compare_skia_vs_kanvas_gms
 
 
 class CompareSkiaVsKanvasGmsTest(unittest.TestCase):
+    def test_module_usage_docstring_covers_cpp_gm_dir_resolution(self) -> None:
+        module_doc = compare_skia_vs_kanvas_gms.__doc__
+
+        self.assertIsNotNone(module_doc)
+        assert module_doc is not None
+        self.assertIn("--cpp-gm-dir", module_doc)
+        self.assertIn("KANVAS_SKIA_GM_DIR", module_doc)
+        self.assertIn("extractor defaults", module_doc)
+        self.assertIn("exits with an error", module_doc)
+
     def test_extract_kanvas_gm_names_sees_block_getter_subclass_variants(self) -> None:
         with tempfile.TemporaryDirectory(prefix="compare_skia_vs_kanvas_gms_") as temp_dir:
             gm_dir = Path(temp_dir)
