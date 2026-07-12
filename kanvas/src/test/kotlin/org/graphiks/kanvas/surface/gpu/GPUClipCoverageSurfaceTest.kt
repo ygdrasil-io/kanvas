@@ -1117,9 +1117,6 @@ class GPUClipCoverageSurfaceTest {
         )
     }
 
-    private fun alphaAt(pixels: UByteArray, x: Int, y: Int): Int =
-        pixels[(y * 16 + x) * 4 + 3].toInt() and 0xff
-
     private fun pixelAt(pixels: UByteArray, x: Int, y: Int): List<Int> {
         val offset = (y * 16 + x) * 4
         return List(4) { channel -> pixels[offset + channel].toInt() and 0xff }

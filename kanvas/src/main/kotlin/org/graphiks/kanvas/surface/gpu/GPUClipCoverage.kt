@@ -17,6 +17,7 @@ import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipFillRule
 import org.graphiks.kanvas.gpu.renderer.clips.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBlendFacts
+import org.graphiks.kanvas.gpu.renderer.commands.GPUBlendKind
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendCoverageMask
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendCoverageMaskRequest
@@ -146,6 +147,37 @@ internal class GPUClipCoverageFrameCache(
         }
     }
 
+    /**
+     * Consumes one pre-registered use which failed before acquiring a lease.
+     *
+     * If this is the final use, returns the cached value so its owner can release
+     * the backing resource after the cache has discarded its byte accounting.
+     */
+    fun <T> cancelUnacquiredUse(contentKey: String): T? {
+        val finalValue = synchronized(this) {
+            val entry = checkNotNull(entries[contentKey]) {
+                "Clip mask cancellation has no prepass entry: $contentKey"
+            }
+            check(entry.remainingUses > 0) {
+                "Clip mask cancellation exceeds prepass count: $contentKey"
+            }
+            check(entry.remainingUses > entry.openLeases) {
+                "Clip mask cancellation would consume an acquired lease: $contentKey"
+            }
+            entry.remainingUses--
+            if (entry.remainingUses != 0) return@synchronized null
+
+            check(entry.openLeases == 0) {
+                "Clip mask reached final cancelled use while leases remain open: $contentKey"
+            }
+            allocatedBytes -= entry.accountedBytes
+            entries.remove(contentKey)
+            entry.value
+        }
+        @Suppress("UNCHECKED_CAST")
+        return finalValue as T?
+    }
+
     private fun release(contentKey: String): Boolean = synchronized(this) {
         val entry = checkNotNull(entries[contentKey]) {
             "Clip mask release has no prepass entry: $contentKey"
@@ -177,6 +209,42 @@ internal data class GPUClipUsePrepassResult(
     val registeredUsesByKey: Map<String, Int>,
     val refusalCodes: List<String>,
 )
+
+/** Static route refusal which must run before a mask lease can be acquired. */
+internal data class GPUClipPreAcquireRefusal(
+    val diagnosticCode: String,
+    val reason: String,
+    val facts: List<DiagnosticFact> = emptyList(),
+)
+
+/** Shared prepass/execution contract for routes that cannot acquire a clip mask. */
+internal fun GPUClipCoveragePlan.preAcquireRefusalOrNull(
+    blend: GPUBlendFacts,
+): GPUClipPreAcquireRefusal? {
+    if (blend.kind == GPUBlendKind.Unsupported ||
+        (blend.kind != GPUBlendKind.SrcOver && blend.blendMode == null)
+    ) {
+        return GPUClipPreAcquireRefusal(
+            diagnosticCode = "refuse:clip-blend",
+            reason = "unsupported.clip.blend_unsupported:${blend.modeLabel.lowercase()}",
+        )
+    }
+    if (this is GPUClipCoveragePlan.Mask &&
+        !blend.requiresDestinationRead &&
+        !blend.isSafeMaskComposite()
+    ) {
+        return GPUClipPreAcquireRefusal(
+            diagnosticCode = "refuse:clip-mask",
+            reason = "unsupported.clip.mask.blend_mode:${blend.modeLabel}",
+            facts = listOf(DiagnosticFact("clip.strategy", "alpha-mask")),
+        )
+    }
+    return null
+}
+
+private fun GPUBlendFacts.isSafeMaskComposite(): Boolean =
+    !requiresDestinationRead &&
+        (kind == GPUBlendKind.SrcOver || blendMode == GPUBlendMode.SRC_OVER)
 
 /**
  * Counts canonical non-scissor masks once per logical source draw before any
@@ -219,6 +287,10 @@ internal object GPUClipUsePrepass {
             }
             when (val plan = operation.gpuClipCoveragePlanOrNull(target, config, maxTextureDimension2D)) {
                 is GPUClipCoveragePlan.Mask -> {
+                    plan.preAcquireRefusalOrNull(operation.clipCompositeBlendFacts())?.let { refusal ->
+                        refusals += refusal.reason
+                        return
+                    }
                     cache.registerUses(plan.contentKey, count = 1)
                     registered[plan.contentKey] = (registered[plan.contentKey] ?: 0) + 1
                 }
@@ -382,39 +454,60 @@ internal fun GPUBackendOffscreenTarget.acquireClipMask(
     diagnostics: Diagnostics,
     config: RenderConfig,
 ): ClipMaskLease {
-    val cachedLease = cache.acquire(plan) {
-        val mask = createCoverageMask(
-            GPUBackendCoverageMaskRequest(
-                label = "clip:${plan.contentKey}",
-                width = plan.width,
-                height = plan.height,
-                sampleCount = plan.sampleCount,
-                format = config.gpuColorFormat.gpuLabel,
-            ),
-        )
-        try {
-            diagnostics.clipMaskFact(
-                reason = "clip_mask_clear",
-                plan = plan,
-                cacheHit = false,
-                pass = "clear-white",
+    val cachedLease = try {
+        cache.acquire(plan) {
+            val mask = createCoverageMask(
+                GPUBackendCoverageMaskRequest(
+                    label = "clip:${plan.contentKey}",
+                    width = plan.width,
+                    height = plan.height,
+                    sampleCount = plan.sampleCount,
+                    format = config.gpuColorFormat.gpuLabel,
+                ),
             )
-            encodeCoverageMask(mask, GPUClearColor(1.0, 1.0, 1.0, 1.0)) {
-                plan.elements.forEach { element ->
-                    val pass = renderClipElement(element, mask, config)
-                    diagnostics.clipMaskFact(
-                        reason = "clip_mask_pass",
-                        plan = plan,
-                        cacheHit = false,
-                        pass = pass,
-                    )
+            try {
+                diagnostics.clipMaskFact(
+                    reason = "clip_mask_clear",
+                    plan = plan,
+                    cacheHit = false,
+                    pass = "clear-white",
+                )
+                encodeCoverageMask(mask, GPUClearColor(1.0, 1.0, 1.0, 1.0)) {
+                    plan.elements.forEach { element ->
+                        val pass = renderClipElement(element, mask, config)
+                        diagnostics.clipMaskFact(
+                            reason = "clip_mask_pass",
+                            plan = plan,
+                            cacheHit = false,
+                            pass = pass,
+                        )
+                    }
                 }
+                mask
+            } catch (failure: Throwable) {
+                try {
+                    releaseCoverageMask(mask)
+                } catch (cleanupFailure: Throwable) {
+                    failure.addSuppressed(cleanupFailure)
+                }
+                throw failure
             }
-            mask
-        } catch (failure: Throwable) {
-            releaseCoverageMask(mask)
-            throw failure
         }
+    } catch (failure: Throwable) {
+        val cancelledMask = try {
+            cache.cancelUnacquiredUse<GPUBackendCoverageMask>(plan.contentKey)
+        } catch (cleanupFailure: Throwable) {
+            failure.addSuppressed(cleanupFailure)
+            null
+        }
+        if (cancelledMask != null) {
+            try {
+                releaseCoverageMask(cancelledMask)
+            } catch (cleanupFailure: Throwable) {
+                failure.addSuppressed(cleanupFailure)
+            }
+        }
+        throw failure
     }
     diagnostics.clipMaskFact(
         reason = "clip_mask_acquire",

@@ -13,6 +13,7 @@ import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoverageOperation
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipFillRule
 import org.graphiks.kanvas.geometry.Path
+import org.graphiks.kanvas.gpu.renderer.commands.GPUBlendFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendCoverageMask
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendCoverageMaskRequest
@@ -112,6 +113,37 @@ class GPUClipCoverageDispatchTest {
             }
         }
         assertFalse(created)
+    }
+
+    @Test
+    fun `cancelling final unacquired use returns materialized cache value`() {
+        val cache = GPUClipCoverageFrameCache(totalBudgetBytes = 8)
+        val plan = maskPlan("same")
+        cache.registerUses(plan.contentKey, count = 2)
+
+        cache.acquire(plan) { "mask:same" }.close()
+
+        assertEquals("mask:same", cache.cancelUnacquiredUse<String>(plan.contentKey))
+        assertFalse(cache.contains(plan.contentKey))
+        assertEquals(0L, cache.bytesInUse)
+    }
+
+    @Test
+    fun `cancelling use rejects an acquired lease without changing its cache entry`() {
+        val cache = GPUClipCoverageFrameCache(totalBudgetBytes = 8)
+        val plan = maskPlan("same")
+        cache.registerUses(plan.contentKey, count = 1)
+        val lease = cache.acquire(plan) { "mask:same" }
+
+        assertFailsWith<IllegalStateException> {
+            cache.cancelUnacquiredUse<String>(plan.contentKey)
+        }
+        assertTrue(cache.contains(plan.contentKey))
+        assertEquals(8L, cache.bytesInUse)
+
+        lease.close()
+        assertFalse(cache.contains(plan.contentKey))
+        assertEquals(0L, cache.bytesInUse)
     }
 
     @Test
@@ -220,6 +252,82 @@ class GPUClipCoverageDispatchTest {
         assertEquals(listOf("unsupported.picture.paint"), result.refusalCodes)
         cache.acquire(plan) { "shared-mask" }.close()
         assertFalse(cache.contains(plan.contentKey))
+        assertEquals(0L, cache.bytesInUse)
+    }
+
+    @Test
+    fun `use prepass skips complex clipped SRC before same mask src over use is released`() {
+        val clip = ClipStack.Complex(
+            listOf(
+                ClipStackOp.RectOp(Rect.fromLTRB(0f, 0f, 8f, 8f), ClipOp.INTERSECT, antiAlias = true),
+            ),
+        )
+        val refused = DisplayOp.DrawRect(
+            rect = Rect.fromLTRB(1f, 1f, 7f, 7f),
+            paint = Paint.fill(Color.RED).copy(blendMode = BlendMode.SRC),
+            transform = Matrix33.identity(),
+            clip = clip,
+        )
+        val accepted = refused.copy(paint = Paint.fill(Color.RED))
+        val cache = GPUClipCoverageFrameCache(totalBudgetBytes = 4096)
+        val plan = accepted.gpuClipCoveragePlanOrNull(
+            target = GPUTargetFacts(8, 8, "rgba8unorm"),
+            config = RenderConfig.DEFAULT,
+            maxTextureDimension2D = 4096,
+        ) as GPUClipCoveragePlan.Mask
+
+        val result = GPUClipUsePrepass.register(
+            operations = listOf(refused, accepted),
+            target = GPUTargetFacts(8, 8, "rgba8unorm"),
+            config = RenderConfig.DEFAULT,
+            maxTextureDimension2D = 4096,
+            cache = cache,
+        )
+
+        assertEquals(mapOf(plan.contentKey to 1), result.registeredUsesByKey)
+        assertEquals(listOf("unsupported.clip.mask.blend_mode:src"), result.refusalCodes)
+        cache.acquire(plan) { "shared-mask" }.close()
+        assertFalse(cache.contains(plan.contentKey))
+        assertEquals(0L, cache.bytesInUse)
+    }
+
+    @Test
+    fun `budget acquisition failure cancels planned use before later same key work`() {
+        val target = CapturingClipTarget()
+        val cache = GPUClipCoverageFrameCache(totalBudgetBytes = 8)
+        val blockerPlan = maskPlan("blocker")
+        val plannedPlan = maskPlan("same")
+        cache.registerUses(blockerPlan.contentKey, count = 1)
+        cache.registerUses(plannedPlan.contentKey, count = 1)
+        val blockerLease = cache.acquire(blockerPlan) { "blocker" }
+        val diagnostics = Diagnostics()
+
+        val rendered = target.renderWithClip(
+            context = GPUClipRouteContext(
+                sceneLabel = "scene",
+                sourceLabel = "source",
+                sourceLabelForDiagnostics = "drawRect:budget",
+                targetWidth = 8,
+                targetHeight = 8,
+                colorFormat = "rgba8unorm",
+                config = RenderConfig.DEFAULT,
+                frameCache = cache,
+            ),
+            clipPlan = plannedPlan,
+            blend = GPUBlendFacts.srcOver(),
+            diagnostics = diagnostics,
+            encodeDirect = { error("complex clip must not draw directly") },
+            encodeSource = { error("budget refusal must happen before source encoding") },
+        )
+
+        assertFalse(rendered)
+        assertEquals("unsupported.clip.frame_budget", diagnostics.entries.single().reason)
+        blockerLease.close()
+
+        cache.registerUses(plannedPlan.contentKey, count = 1)
+        cache.acquire(plannedPlan) { "same" }.close()
+
+        assertFalse(cache.contains(plannedPlan.contentKey))
         assertEquals(0L, cache.bytesInUse)
     }
 
