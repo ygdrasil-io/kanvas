@@ -13,7 +13,9 @@ val pureKotlinCodecProjects = setOf(
     "codec:test-fixtures",
     "codec:png",
     "codec:jpeg",
+    "codec:jpeg-ls",
     "codec:jpeg2000",
+    "codec:jpegxl",
     "codec:gif",
     "codec:bmp",
     "codec:wbmp",
@@ -1860,6 +1862,7 @@ tasks.register("checkSupportedCodecsDoc") {
             "| WBMP |",
             "| ICO / CUR |",
             "| WebP |",
+            "| JPEG XL |",
             "| AVIF / RAW / video |",
             "| GIF |",
             "| ICO / CUR |",
@@ -2304,6 +2307,9 @@ tasks.register("checkCodecKotlinSwitchCriteria") {
         "checkImageEncodeTestsNoAwt",
         ":codec:test",
         ":codec:jar",
+        ":codec:jpeg-ls:test",
+        ":codec:jpeg2000:test",
+        ":codec:jpegxl:test",
     )
 }
 

@@ -117,6 +117,29 @@ class JpegLsCodecTest {
     }
 
     @Test
+    fun `uses lower-bound default thresholds for NEAR 127`() {
+        val parameters = JpegLsCodingParameters.defaults(127)
+
+        assertEquals(255, parameters.maximumSampleValue)
+        assertEquals(128, parameters.threshold1)
+        assertEquals(128, parameters.threshold2)
+        assertEquals(128, parameters.threshold3)
+        assertEquals(64, parameters.reset)
+    }
+
+    @Test
+    fun `decodes the CharLS NEAR 127 gradient from 128 through 254 exactly as its reconstruction`() {
+        val codec = requireNotNull(Codec.MakeFromData(CHARLS_NEAR_127_GRADIENT_FIXTURE))
+        val (bitmap, result) = codec.getImage()
+
+        assertEquals(Codec.Result.kSuccess, result)
+        assertNotNull(bitmap)
+        CHARLS_NEAR_127_GRADIENT_DECODED.forEachIndexed { index, sample ->
+            assertEquals(sample, bitmap!!.getPixel(index, 0) and 0xFF, "index=$index")
+        }
+    }
+
+    @Test
     fun `parses default LSE parameters before the scan`() {
         val withPreset = CHARLS_REGULAR_FIXTURE.copyOfRange(0, 2) + DEFAULT_LSE + CHARLS_REGULAR_FIXTURE.copyOfRange(2, CHARLS_REGULAR_FIXTURE.size)
 
@@ -142,6 +165,33 @@ class JpegLsCodecTest {
         CHARLS_NEAR_1_SOURCE.forEachIndexed { index, sourceSample ->
             assertTrue(abs((decoded.bitmap!!.getPixel(index % 8, index / 8) and 0xFF) - sourceSample) <= 1)
         }
+    }
+
+    @Test
+    fun `parses an explicit NEAR 127 lower-bound default LSE parameter set`() {
+        val withPreset = CHARLS_NEAR_127_GRADIENT_FIXTURE.copyOfRange(0, 2) + NEAR_127_DEFAULT_LSE +
+            CHARLS_NEAR_127_GRADIENT_FIXTURE.copyOfRange(2, CHARLS_NEAR_127_GRADIENT_FIXTURE.size)
+
+        val document = requireNotNull(JpegLsDocument.open(withPreset).document)
+        val decoded = document.decode()
+
+        assertEquals(127, document.nearLossless)
+        assertNotNull(decoded.bitmap)
+        CHARLS_NEAR_127_GRADIENT_DECODED.forEachIndexed { index, sample ->
+            assertEquals(sample, decoded.bitmap!!.getPixel(index, 0) and 0xFF, "index=$index")
+        }
+    }
+
+    @Test
+    fun `refuses an explicit NEAR 127 MAXVAL threshold LSE parameter set`() {
+        val withPreset = CHARLS_NEAR_127_GRADIENT_FIXTURE.copyOfRange(0, 2) + NEAR_127_MAXVAL_LSE +
+            CHARLS_NEAR_127_GRADIENT_FIXTURE.copyOfRange(2, CHARLS_NEAR_127_GRADIENT_FIXTURE.size)
+
+        val opened = JpegLsDocument.open(withPreset)
+
+        assertNull(opened.document)
+        assertEquals("jpeg-ls.lse.unsupported", opened.diagnostic?.code)
+        assertEquals(Codec.Result.kUnimplemented, opened.diagnostic?.result)
     }
 
     @Test
@@ -397,6 +447,36 @@ class JpegLsCodecTest {
         }
     }
 
+    @Test
+    fun `optional CharLS oracle decodes encoded NEAR 127 gradient from 128 through 254 within bound`() {
+        val oracle = System.getProperty("kanvas.jpeg-ls.oracle.charls").orEmpty()
+        if (oracle.isBlank()) return
+        val samples = IntArray(127) { index -> 128 + index }
+        val encoded = requireNotNull(
+            JpegLsEncoder.encode(grayscaleBitmap(127, 1, samples), JpegLsEncoder.Options(127)),
+        )
+        val directory = Files.createTempDirectory("kanvas-jpeg-ls-near-gradient-oracle-")
+        try {
+            val input = directory.resolve("encoded.jls")
+            val output = directory.resolve("decoded.pgm")
+            Files.write(input, encoded)
+            val process = ProcessBuilder(oracle, "decode", input.toString(), output.toString())
+                .redirectErrorStream(true)
+                .start()
+            val processOutput = process.inputStream.bufferedReader().readText()
+            assertEquals(0, process.waitFor(), processOutput)
+            val outputBytes = Files.readAllBytes(output)
+            val decoded = outputBytes.copyOfRange(outputBytes.size - samples.size, outputBytes.size)
+            decoded.forEachIndexed { index, sample ->
+                assertTrue(abs(sample.u8() - samples[index]) <= 127, "index=$index")
+            }
+        } finally {
+            Files.deleteIfExists(directory.resolve("encoded.jls"))
+            Files.deleteIfExists(directory.resolve("decoded.pgm"))
+            Files.deleteIfExists(directory)
+        }
+    }
+
     private fun grayscaleBitmap(width: Int, height: Int, samples: IntArray): SkBitmap {
         require(samples.size == width * height)
         return SkBitmap(width, height).also { bitmap ->
@@ -480,6 +560,21 @@ class JpegLsCodecTest {
             0, 255, 0, 255, 0, 255, 0, 255,
         )
 
+        /**
+         * CharLS 3.0.0 NEAR=127 reconstruction of a project-owned one-row
+         * gradient containing every source sample from 128 through 254:
+         * source SHA-256 `506afb53f5c819c4fe0862f605f8e00ae403f23750d4029649a3806b345c9109`,
+         * fixture SHA-256 `546d1cdfcbb0ff11e269ba72fc8a01f22c91ab646256116e431c0af124469335`.
+         * This fixture exercises the `NEAR=127` lower-bound defaults
+         * `T1=T2=T3=128` against an independent CharLS reconstruction.
+         */
+        val CHARLS_NEAR_127_GRADIENT_FIXTURE: ByteArray = Base64.getDecoder().decode(
+            "/9j/9wALCAABAH8BAREA/9oACAEBAH8AAFf/f/9//3//f/9//3//f/9/wP/Z",
+        )
+
+        /** CharLS 3.0.0 reconstruction of [CHARLS_NEAR_127_GRADIENT_FIXTURE]. */
+        val CHARLS_NEAR_127_GRADIENT_DECODED: IntArray = IntArray(127) { 255 }
+
         val CHARLS_NEAR_1_SOURCE: IntArray = intArrayOf(
             0, 1, 2, 3, 4, 5, 6, 7,
             255, 254, 253, 252, 251, 250, 249, 248,
@@ -506,6 +601,26 @@ class JpegLsCodecTest {
             0x00, 0x06,
             0x00, 0x0C,
             0x00, 0x1C,
+            0x00, 0x40,
+        )
+
+        val NEAR_127_DEFAULT_LSE: ByteArray = byteArrayOf(
+            0xFF.toByte(), 0xF8.toByte(), 0x00, 0x0D,
+            0x01,
+            0x00, 0xFF.toByte(),
+            0x00, 0x80.toByte(),
+            0x00, 0x80.toByte(),
+            0x00, 0x80.toByte(),
+            0x00, 0x40,
+        )
+
+        val NEAR_127_MAXVAL_LSE: ByteArray = byteArrayOf(
+            0xFF.toByte(), 0xF8.toByte(), 0x00, 0x0D,
+            0x01,
+            0x00, 0xFF.toByte(),
+            0x00, 0xFF.toByte(),
+            0x00, 0xFF.toByte(),
+            0x00, 0xFF.toByte(),
             0x00, 0x40,
         )
 
