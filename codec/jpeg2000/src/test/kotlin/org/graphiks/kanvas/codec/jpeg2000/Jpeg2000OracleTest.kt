@@ -16,6 +16,25 @@ class Jpeg2000OracleTest {
 
     @Test
     fun `explicit OpenJPEG oracle decodes pinned reversible lossless fixture exactly`() {
+        assertArrayEquals(
+            expectedPixels,
+            decodeWithOracle(Jpeg2000TestFixtures.openJpegLossless5x3(), width = 5, height = 3),
+        )
+    }
+
+    @Test
+    fun `explicit OpenJPEG oracle decodes pinned two-codeblock fixture exactly`() {
+        assertArrayEquals(
+            sourceP2Pixels(
+                "/jpeg2000-openjpeg/source-two-codeblocks-96x17.pgm",
+                width = 96,
+                height = 17,
+            ),
+            decodeWithOracle(Jpeg2000TestFixtures.openJpegLosslessTwoCodeblocks96x17(), width = 96, height = 17),
+        )
+    }
+
+    private fun decodeWithOracle(j2k: ByteArray, width: Int, height: Int): ByteArray {
         val configuredOracle = System.getProperty("kanvas.jpeg2000.oracle.openjpeg").orEmpty()
         assumeTrue(
             configuredOracle.isNotBlank(),
@@ -28,7 +47,7 @@ class Jpeg2000OracleTest {
         try {
             val input = directory.resolve("fixture.j2k")
             val output = directory.resolve("decoded.pgm")
-            Files.write(input, Jpeg2000TestFixtures.openJpegLossless5x3())
+            Files.write(input, j2k)
 
             val process = ProcessBuilder(oracle.toString(), "-i", input.toString(), "-o", output.toString())
                 .redirectErrorStream(true)
@@ -36,7 +55,7 @@ class Jpeg2000OracleTest {
             val log = process.inputStream.use { it.readBytes().decodeToString() }
             assertEquals(0, process.waitFor(), "OpenJPEG output=$log")
 
-            assertArrayEquals(expectedPixels, p5Pixels(Files.readAllBytes(output)))
+            return p5Pixels(Files.readAllBytes(output), width, height)
         } finally {
             Files.walk(directory).use { paths ->
                 paths.sorted(Comparator.reverseOrder()).forEach(Files::deleteIfExists)
@@ -44,7 +63,7 @@ class Jpeg2000OracleTest {
         }
     }
 
-    private fun p5Pixels(pgm: ByteArray): ByteArray {
+    private fun p5Pixels(pgm: ByteArray, width: Int, height: Int): ByteArray {
         var cursor = 0
         fun token(): String {
             while (cursor < pgm.size && pgm[cursor].toInt().toChar().isWhitespace()) cursor++
@@ -58,13 +77,35 @@ class Jpeg2000OracleTest {
         }
 
         assertEquals("P5", token())
-        assertEquals("5", token())
-        assertEquals("3", token())
+        assertEquals(width.toString(), token())
+        assertEquals(height.toString(), token())
         assertEquals("255", token())
         while (cursor < pgm.size && pgm[cursor].toInt().toChar().isWhitespace()) cursor++
         val pixels = pgm.copyOfRange(cursor, pgm.size)
-        assertTrue(pixels.size == 15, "P5 payload size=${pixels.size}")
+        assertTrue(pixels.size == width * height, "P5 payload size=${pixels.size}")
         return pixels
+    }
+
+    private fun sourceP2Pixels(resource: String, width: Int, height: Int): ByteArray {
+        val pgm = requireNotNull(javaClass.getResourceAsStream(resource)) { "Missing source fixture $resource" }
+            .use { it.readBytes() }
+        var cursor = 0
+        fun token(): String {
+            while (cursor < pgm.size && pgm[cursor].toInt().toChar().isWhitespace()) cursor++
+            if (cursor < pgm.size && pgm[cursor] == '#'.code.toByte()) {
+                while (cursor < pgm.size && pgm[cursor] != '\n'.code.toByte()) cursor++
+                return token()
+            }
+            val start = cursor
+            while (cursor < pgm.size && !pgm[cursor].toInt().toChar().isWhitespace()) cursor++
+            return pgm.copyOfRange(start, cursor).decodeToString()
+        }
+
+        assertEquals("P2", token())
+        assertEquals(width.toString(), token())
+        assertEquals(height.toString(), token())
+        assertEquals("255", token())
+        return ByteArray(width * height) { token().toInt().toByte() }
     }
 
     private companion object {

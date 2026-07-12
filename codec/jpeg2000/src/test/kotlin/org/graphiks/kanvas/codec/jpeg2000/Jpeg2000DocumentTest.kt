@@ -13,6 +13,37 @@ import org.skia.foundation.SkEncodedImageFormat
 class Jpeg2000DocumentTest {
 
     @Test
+    fun `pinned OpenJPEG two-codeblock source PGM has its documented SHA-256`() {
+        val source = requireNotNull(
+            javaClass.getResourceAsStream("/jpeg2000-openjpeg/source-two-codeblocks-96x17.pgm"),
+        ) { "missing two-codeblock OpenJPEG source PGM" }.use { input -> input.readBytes() }
+        val actual = MessageDigest.getInstance("SHA-256")
+            .digest(source)
+            .joinToString(separator = "") { byte ->
+                byte.toInt().and(0xff).toString(16).padStart(2, '0')
+            }
+
+        assertEquals(
+            "8ea8d1148129457247b37c889415d3f5edbfde4dff929c09280618899a9eaeca",
+            actual,
+        )
+    }
+
+    @Test
+    fun `pinned OpenJPEG two-codeblock J2K fixture has its documented SHA-256`() {
+        val actual = MessageDigest.getInstance("SHA-256")
+            .digest(Jpeg2000TestFixtures.openJpegLosslessTwoCodeblocks96x17())
+            .joinToString(separator = "") { byte ->
+                byte.toInt().and(0xff).toString(16).padStart(2, '0')
+            }
+
+        assertEquals(
+            "edcce815346bf3c8ffc439aea70b831428afb3d0f7b13d58292083c22f032ae7",
+            actual,
+        )
+    }
+
+    @Test
     fun `pinned OpenJPEG source PGM has its documented SHA-256`() {
         val source = requireNotNull(
             javaClass.getResourceAsStream("/jpeg2000-openjpeg/source.pgm"),
@@ -67,6 +98,50 @@ class Jpeg2000DocumentTest {
     }
 
     @Test
+    fun `OpenJPEG two-codeblock reversible J2K fixture decodes both codeblocks pixel for pixel`() {
+        val codestream = Jpeg2000TestFixtures.openJpegLosslessTwoCodeblocks96x17()
+        val codec = Codec.MakeFromData(codestream)
+
+        assertTrue(codec != null, "the two-codeblock raw J2K profile must reach the codec facade")
+        if (codec == null) return
+        val (bitmap, result) = codec.getImage()
+
+        assertEquals(Codec.Result.kSuccess, result)
+        val decoded = requireNotNull(bitmap)
+        val expected = sourcePgmPixels(
+            resource = "/jpeg2000-openjpeg/source-two-codeblocks-96x17.pgm",
+            width = 96,
+            height = 17,
+        )
+        assertEquals(96, decoded.width)
+        assertEquals(17, decoded.height)
+        for (y in 0 until decoded.height) {
+            for (x in 0 until decoded.width) {
+                val sample = expected[y * decoded.width + x].toInt() and 0xFF
+                assertEquals(
+                    0xFF000000.toInt() or (sample shl 16) or (sample shl 8) or sample,
+                    decoded.getPixel(x, y),
+                    "x=$x y=$y",
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `two horizontal codeblock dimensions reach the image codec facade`() {
+        val codestream = narrowLosslessCodestream(width = 65, height = 1)
+
+        assertTrue(Jpeg2000Codec.Decoder.matches(codestream))
+        assertTrue(Codec.MakeFromData(codestream) != null)
+    }
+
+    @Test
+    fun `raw dimensions outside two-codeblock bounds remain outside image facade`() {
+        assertNull(Codec.MakeFromData(narrowLosslessCodestream(width = 129, height = 1)))
+        assertNull(Codec.MakeFromData(narrowLosslessCodestream(width = 96, height = 65)))
+    }
+
+    @Test
     fun `truncated J2K codeblock is refused without yielding a partial bitmap`() {
         val original = Jpeg2000TestFixtures.openJpegLossless5x3()
         val truncated = ByteArray(original.size - 1).also { result ->
@@ -101,11 +176,45 @@ class Jpeg2000DocumentTest {
     }
 
     @Test
-    fun `MQ probability state 26 follows Annex C MPS and LPS transitions`() {
-        val state26WithMpsZero = 26 shl 1
+    fun `OpenJPEG two-codeblock fixture packet header splits exactly two bounded bodies`() {
+        val codestream = Jpeg2000TestFixtures.openJpegLosslessTwoCodeblocks96x17()
+        val sod = (0 until codestream.size - 1).single { index ->
+            codestream[index] == 0xFF.toByte() && codestream[index + 1] == 0x93.toByte()
+        }
+        val packetOffset = sod + 2
+        val packet = codestream.copyOfRange(packetOffset, codestream.size - 2)
 
-        assertEquals(27 shl 1, J2kMqTransitions.afterMps(state26WithMpsZero))
-        assertEquals(24 shl 1, J2kMqTransitions.afterLps(state26WithMpsZero))
+        val header = J2kPacketHeader.read(packet, packetOffset, codeblockCount = 2)
+
+        assertEquals(2, header.codeblocks.size)
+        assertTrue(header.codeblocks.all { it.numBitPlanes in 1..9 && it.passes in 1..22 && it.bodyLength > 0 })
+        assertEquals(packet.size - header.bodyOffset, header.codeblocks.sumOf(J2kPacketCodeblock::bodyLength))
+    }
+
+    @Test
+    fun `MQ probability transitions match every Annex C state`() {
+        val nextMps = intArrayOf(
+            1, 2, 3, 4, 5, 38, 7, 8, 9, 10, 11, 12, 13, 29, 15, 16,
+            17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31,
+            32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 45, 46,
+        )
+        val nextLps = intArrayOf(
+            1, 6, 9, 12, 29, 33, 6, 14, 14, 14, 17, 18, 20, 21, 14, 14,
+            15, 16, 17, 18, 19, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28,
+            29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 46,
+        )
+        val lpsSwitchesMps = setOf(0, 6, 14)
+
+        nextMps.indices.forEach { stateIndex ->
+            (0..1).forEach { mps ->
+                val state = (stateIndex shl 1) or mps
+                assertEquals((nextMps[stateIndex] shl 1) or mps, J2kMqTransitions.afterMps(state))
+                assertEquals(
+                    (nextLps[stateIndex] shl 1) or (mps xor if (stateIndex in lpsSwitchesMps) 1 else 0),
+                    J2kMqTransitions.afterLps(state),
+                )
+            }
+        }
     }
 
     @Test
@@ -163,11 +272,11 @@ class Jpeg2000DocumentTest {
     }
 
     @Test
-    fun `oversized raw J2K remains structural but is not exposed as an image codec`() {
-        val codestream = narrowLosslessCodestream(width = 65, height = 1)
+    fun `raw dimensions beyond two codeblocks remain structural but are not exposed as an image codec`() {
+        val codestream = narrowLosslessCodestream(width = 129, height = 1)
 
         assertTrue(Jpeg2000Codec.Decoder.matches(codestream))
-        assertEquals(65, requireNotNull(Jpeg2000Document.open(codestream).document).frame.width)
+        assertEquals(129, requireNotNull(Jpeg2000Document.open(codestream).document).frame.width)
         assertNull(Codec.MakeFromData(codestream))
     }
 
@@ -412,8 +521,12 @@ class Jpeg2000DocumentTest {
         output.writeMarker(0xD9) // EOC
     }.toByteArray()
 
-    private fun sourcePgmPixels(): ByteArray {
-        val pgm = requireNotNull(javaClass.getResourceAsStream("/jpeg2000-openjpeg/source.pgm")) { "missing source PGM" }
+    private fun sourcePgmPixels(
+        resource: String = "/jpeg2000-openjpeg/source.pgm",
+        width: Int = 5,
+        height: Int = 3,
+    ): ByteArray {
+        val pgm = requireNotNull(javaClass.getResourceAsStream(resource)) { "missing source PGM: $resource" }
             .use { it.readBytes() }
         var cursor = 0
         fun token(): String {
@@ -427,10 +540,10 @@ class Jpeg2000DocumentTest {
             return pgm.copyOfRange(start, cursor).decodeToString()
         }
         assertEquals("P2", token())
-        assertEquals("5", token())
-        assertEquals("3", token())
+        assertEquals(width.toString(), token())
+        assertEquals(height.toString(), token())
         assertEquals("255", token())
-        return ByteArray(15) { token().toInt().toByte() }
+        return ByteArray(width * height) { token().toInt().toByte() }
     }
 
     private fun fixtureDecisions(): List<J2kEbcotDecision> {

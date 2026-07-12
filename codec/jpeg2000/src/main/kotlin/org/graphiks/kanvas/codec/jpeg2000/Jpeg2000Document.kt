@@ -69,7 +69,8 @@ public class Jpeg2000Box internal constructor(
  * (`jP  `, `ftyp`, `jp2h`/`ihdr`, then `jp2c`), one unsigned 8-bit grayscale
  * component, one tile, one resolution, one layer, reversible 5/3 transform
  * and no quantization. Raw codestreams in that profile may additionally use
- * the bounded one-packet Tier-2/MQ/EBCOT path; JP2 remains structural only.
+ * the bounded one-packet Tier-2/MQ/EBCOT path with up to two horizontal
+ * codeblocks; JP2 remains structural only.
  */
 public class Jpeg2000Document private constructor(
     private val source: ByteArray,
@@ -107,8 +108,8 @@ public class Jpeg2000Document private constructor(
     /** Whether this document can safely back the bounded [Codec] image facade. */
     internal fun supportsImageCodec(): Boolean =
         container == Jpeg2000Container.J2K && entropy != null &&
-            frame.width in 1..NARROW_RAW_J2K_MAX_DIMENSION &&
-            frame.height in 1..NARROW_RAW_J2K_MAX_DIMENSION
+            frame.width in 1..NARROW_RAW_J2K_MAX_WIDTH &&
+            frame.height in 1..NARROW_RAW_J2K_MAX_HEIGHT
 
     public companion object {
         /** Opens a bounded raw J2K codestream or JP2 wrapper. */
@@ -514,7 +515,9 @@ private const val SOT: Int = 0x90
 private const val SOD: Int = 0x93
 private const val EOC: Int = 0xD9
 private const val MAX_JP2_HEADER_BOXES: Int = 128
-internal const val NARROW_RAW_J2K_MAX_DIMENSION: Int = 64
+internal const val RAW_J2K_CODEBLOCK_WIDTH: Int = 64
+internal const val NARROW_RAW_J2K_MAX_WIDTH: Int = 128
+internal const val NARROW_RAW_J2K_MAX_HEIGHT: Int = 64
 private val JP2_SIGNATURE_PAYLOAD: ByteArray = byteArrayOf(0x0D, 0x0A, 0x87.toByte(), 0x0A)
 private val JP2_SIGNATURE_BOX: ByteArray = byteArrayOf(
     0, 0, 0, 12,
