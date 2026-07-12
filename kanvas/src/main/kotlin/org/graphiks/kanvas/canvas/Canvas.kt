@@ -212,7 +212,7 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
 
     /** Save state and begin a layer described by [rec], including an optional backdrop filter. */
     fun saveLayer(rec: SaveLayerRec): Int {
-        buffer.append(DisplayOp.BeginLayer(rec))
+        buffer.append(DisplayOp.BeginLayer(rec, currentTransform))
         saveStack.add(CanvasState(currentTransform, currentClip) to true)
         return saveStack.size
     }

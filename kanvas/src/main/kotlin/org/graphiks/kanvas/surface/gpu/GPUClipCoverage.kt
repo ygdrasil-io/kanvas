@@ -327,6 +327,16 @@ internal fun DisplayOp.coreRoutePreflightRefusalReason(): String? = when (this) 
 private fun DisplayOp.DrawPicture.picturePreflightRefusalReason(): String? {
     if (paint != null) return "unsupported.picture.paint"
 
+    fun containsSaveLayer(picture: Picture): Boolean = picture.ops.any { nested ->
+        when (nested) {
+            is DisplayOp.BeginLayer,
+            DisplayOp.EndLayer,
+            -> true
+            is DisplayOp.DrawPicture -> containsSaveLayer(nested.picture)
+            else -> false
+        }
+    }
+
     fun validatePicture(picture: Picture): String? {
         for (nested in picture.ops) {
             when (nested) {
@@ -349,6 +359,7 @@ private fun DisplayOp.DrawPicture.picturePreflightRefusalReason(): String? {
     if (destinationRead != null) {
         return "unsupported.picture.nested_destination_read_blend:${destinationRead.modeLabel.lowercase()}"
     }
+    if (containsSaveLayer(picture)) return "unsupported.picture.save_layer"
     return validatePicture(picture)
 }
 

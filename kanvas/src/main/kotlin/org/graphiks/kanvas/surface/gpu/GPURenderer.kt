@@ -3,6 +3,7 @@ package org.graphiks.kanvas.surface.gpu
 import org.graphiks.kanvas.canvas.DisplayListBuffer
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.canvas.ClipStack
+import org.graphiks.kanvas.canvas.SaveLayerRec
 import org.graphiks.kanvas.geometry.FillType
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.paint.Paint
@@ -19,8 +20,14 @@ import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendOffscreenTexture
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendOffscreenTarget
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRawUniformDraw
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRectDraw
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRenderRecorder
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendSimplePassBatchKind
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendStencilCoverConfig
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendStencilMode
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendTriangleData
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendUniformPayloadDraw
 
 import org.graphiks.kanvas.gpu.renderer.execution.GPUClearColor
 import org.graphiks.kanvas.types.Color
@@ -60,6 +67,13 @@ import org.graphiks.kanvas.text.MappedGlyph
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.text.TextBridge
 import kotlin.math.abs
+import kotlin.math.acos
+import kotlin.math.atan2
+import kotlin.math.ceil
+import kotlin.math.cos
+import kotlin.math.floor
+import kotlin.math.sin
+import kotlin.math.sqrt
 
 internal fun productIntermediatePlannerScopeDiagnostics(): List<String> =
     listOf(
@@ -217,6 +231,301 @@ internal fun GPUBackendOffscreenTarget.renderDestinationReadBlend(
     return true
 }
 
+internal data class LayerBounds(val x: Int, val y: Int, val width: Int, val height: Int)
+
+private sealed interface LayerPlan {
+    data class Supported(val bounds: LayerBounds?, val composite: LayerCompositePlan) : LayerPlan
+    data class Refused(val reason: String) : LayerPlan
+}
+
+private data class LayerCompositePlan(
+    val opacity: Float = 1f,
+    val blendMode: GPUBlendMode = GPUBlendMode.SRC_OVER,
+    val backdrop: BackdropPlan? = null,
+)
+
+private data class BackdropPlan(
+    val sourceLabel: String,
+    val filteredLabel: String,
+    val bounds: LayerBounds,
+)
+
+private data class SceneTargetFrame(
+    val label: String,
+    val hasContent: Boolean,
+    val plan: LayerPlan.Supported,
+)
+
+internal class LayerScissorOffscreenTarget(
+    private val delegate: GPUBackendOffscreenTarget,
+    private val sceneLayerBounds: (String) -> LayerBounds?,
+) : GPUBackendOffscreenTarget by delegate {
+    override fun encodeOffscreenTexture(
+        textureLabel: String,
+        clearColor: GPUClearColor?,
+        block: GPUBackendRenderRecorder.() -> Unit,
+    ) {
+        delegate.encodeOffscreenTexture(textureLabel, clearColor) {
+            val scopedRecorder = sceneLayerBounds(textureLabel)?.let { bounds ->
+                LayerScissorRenderRecorder(this, bounds)
+            } ?: this
+            block(scopedRecorder)
+        }
+    }
+}
+
+private class LayerScissorRenderRecorder(
+    private val delegate: GPUBackendRenderRecorder,
+    private val layerBounds: LayerBounds,
+) : GPUBackendRenderRecorder by delegate {
+    override fun drawFullscreenPass(
+        wgsl: String,
+        colorFormat: String,
+        draws: List<GPUBackendRectDraw>,
+        blendMode: GPUBlendMode?,
+        passBatchKind: GPUBackendSimplePassBatchKind?,
+    ) {
+        delegate.drawFullscreenPass(wgsl, colorFormat, draws.mapNotNull { it.intersectLayerScissor(layerBounds) }, blendMode, passBatchKind)
+    }
+
+    override fun drawFullscreenUniformPayloadPass(
+        wgsl: String,
+        colorFormat: String,
+        draws: List<GPUBackendUniformPayloadDraw>,
+        blendMode: GPUBlendMode?,
+        sourceLabel: String,
+        passBatchKind: GPUBackendSimplePassBatchKind?,
+    ) {
+        delegate.drawFullscreenUniformPayloadPass(
+            wgsl,
+            colorFormat,
+            draws.mapNotNull { it.intersectLayerScissor(layerBounds) },
+            blendMode,
+            sourceLabel,
+            passBatchKind,
+        )
+    }
+
+    override fun drawFullscreenRawUniformPass(
+        wgsl: String,
+        colorFormat: String,
+        draws: List<GPUBackendRawUniformDraw>,
+        blendMode: GPUBlendMode?,
+        passBatchKind: GPUBackendSimplePassBatchKind?,
+    ) {
+        delegate.drawFullscreenRawUniformPass(wgsl, colorFormat, draws.mapNotNull { it.intersectLayerScissor(layerBounds) }, blendMode, passBatchKind)
+    }
+
+    override fun drawFullscreenTextureUniformPass(
+        wgsl: String,
+        colorFormat: String,
+        textureRgba: ByteArray,
+        textureWidth: Int,
+        textureHeight: Int,
+        textureFormat: String,
+        draws: List<GPUBackendRawUniformDraw>,
+        blendMode: GPUBlendMode?,
+        stencilMode: GPUBackendStencilMode?,
+        stencilConfig: GPUBackendStencilCoverConfig,
+    ) {
+        delegate.drawFullscreenTextureUniformPass(
+            wgsl,
+            colorFormat,
+            textureRgba,
+            textureWidth,
+            textureHeight,
+            textureFormat,
+            draws.mapNotNull { it.intersectLayerScissor(layerBounds) },
+            blendMode,
+            stencilMode,
+            stencilConfig,
+        )
+    }
+
+    override fun drawFullscreenStencilPass(
+        wgsl: String,
+        colorFormat: String,
+        stencilMode: GPUBackendStencilMode,
+        triangleData: GPUBackendTriangleData?,
+        draws: List<GPUBackendRawUniformDraw>,
+        blendMode: GPUBlendMode?,
+        stencilConfig: GPUBackendStencilCoverConfig,
+    ) {
+        val scopedDraws = draws.mapNotNull { it.intersectLayerScissor(layerBounds) }
+        if (stencilMode == GPUBackendStencilMode.Test && scopedDraws.isEmpty()) return
+        delegate.drawFullscreenStencilPass(
+            wgsl,
+            colorFormat,
+            stencilMode,
+            triangleData,
+            scopedDraws,
+            blendMode,
+            stencilConfig,
+        )
+    }
+
+    override fun drawVertexColorIndexed(
+        vertexBufferLabel: String,
+        indexCount: Int,
+        uniformDraw: GPUBackendRawUniformDraw,
+        blendMode: GPUBlendMode?,
+    ) {
+        uniformDraw.intersectLayerScissor(layerBounds)?.let {
+            delegate.drawVertexColorIndexed(vertexBufferLabel, indexCount, it, blendMode)
+        }
+    }
+
+    override fun drawVertexPositionUVIndexed(
+        vertexBufferLabel: String,
+        indexCount: Int,
+        uniformDraw: GPUBackendRawUniformDraw,
+        textureRgba: ByteArray,
+        textureWidth: Int,
+        textureHeight: Int,
+        textureFormat: String,
+        blendMode: GPUBlendMode?,
+    ) {
+        uniformDraw.intersectLayerScissor(layerBounds)?.let {
+            delegate.drawVertexPositionUVIndexed(
+                vertexBufferLabel,
+                indexCount,
+                it,
+                textureRgba,
+                textureWidth,
+                textureHeight,
+                textureFormat,
+                blendMode,
+            )
+        }
+    }
+
+    override fun drawVertexPositionDualUVIndexed(
+        vertexBufferLabel: String,
+        indexCount: Int,
+        uniformDraw: GPUBackendRawUniformDraw,
+        texture1Rgba: ByteArray,
+        texture1Width: Int,
+        texture1Height: Int,
+        texture2Rgba: ByteArray,
+        texture2Width: Int,
+        texture2Height: Int,
+        textureFormat: String,
+        blendMode: GPUBlendMode?,
+    ) {
+        uniformDraw.intersectLayerScissor(layerBounds)?.let {
+            delegate.drawVertexPositionDualUVIndexed(
+                vertexBufferLabel,
+                indexCount,
+                it,
+                texture1Rgba,
+                texture1Width,
+                texture1Height,
+                texture2Rgba,
+                texture2Width,
+                texture2Height,
+                textureFormat,
+                blendMode,
+            )
+        }
+    }
+
+    override fun drawCompositePass(
+        wgsl: String,
+        colorFormat: String,
+        textureLabel: String,
+        draws: List<GPUBackendRawUniformDraw>,
+        blendMode: GPUBlendMode?,
+    ) {
+        delegate.drawCompositePass(wgsl, colorFormat, textureLabel, draws.mapNotNull { it.intersectLayerScissor(layerBounds) }, blendMode)
+    }
+
+    override fun drawBlendPass(
+        wgsl: String,
+        colorFormat: String,
+        srcTextureLabel: String,
+        dstTextureLabel: String,
+        draws: List<GPUBackendRawUniformDraw>,
+    ) {
+        delegate.drawBlendPass(wgsl, colorFormat, srcTextureLabel, dstTextureLabel, draws.mapNotNull { it.intersectLayerScissor(layerBounds) })
+    }
+
+    override fun drawTextAtlasPass(
+        atlasRgba: ByteArray,
+        atlasWidth: Int,
+        atlasHeight: Int,
+        atlasFormat: String,
+        vertexData: FloatArray,
+        indexData: IntArray,
+        draws: List<GPUBackendRawUniformDraw>,
+        blendMode: GPUBlendMode?,
+    ) {
+        delegate.drawTextAtlasPass(
+            atlasRgba,
+            atlasWidth,
+            atlasHeight,
+            atlasFormat,
+            vertexData,
+            indexData,
+            draws.mapNotNull { it.intersectLayerScissor(layerBounds) },
+            blendMode,
+        )
+    }
+
+    override fun drawColorGlyphPass(
+        atlasRgba: ByteArray,
+        atlasWidth: Int,
+        atlasHeight: Int,
+        atlasFormat: String,
+        vertexData: FloatArray,
+        indexData: IntArray,
+        draws: List<GPUBackendRawUniformDraw>,
+        blendMode: GPUBlendMode?,
+    ) {
+        delegate.drawColorGlyphPass(
+            atlasRgba,
+            atlasWidth,
+            atlasHeight,
+            atlasFormat,
+            vertexData,
+            indexData,
+            draws.mapNotNull { it.intersectLayerScissor(layerBounds) },
+            blendMode,
+        )
+    }
+}
+
+internal fun GPUBackendRawUniformDraw.intersectLayerScissor(
+    layerX: Int,
+    layerY: Int,
+    layerWidth: Int,
+    layerHeight: Int,
+): GPUBackendRawUniformDraw? = intersectLayerScissor(LayerBounds(layerX, layerY, layerWidth, layerHeight))
+
+private fun GPUBackendRawUniformDraw.intersectLayerScissor(layerBounds: LayerBounds): GPUBackendRawUniformDraw? =
+    intersectScissor(layerBounds)?.let { copy(scissorX = it.x, scissorY = it.y, scissorWidth = it.width, scissorHeight = it.height) }
+
+private fun GPUBackendRectDraw.intersectLayerScissor(layerBounds: LayerBounds): GPUBackendRectDraw? =
+    intersectScissor(layerBounds)?.let { copy(scissorX = it.x, scissorY = it.y, scissorWidth = it.width, scissorHeight = it.height) }
+
+private fun GPUBackendUniformPayloadDraw.intersectLayerScissor(layerBounds: LayerBounds): GPUBackendUniformPayloadDraw? =
+    intersectScissor(layerBounds)?.let {
+        GPUBackendUniformPayloadDraw(uniformBytes(), materialization, it.x, it.y, it.width, it.height)
+    }
+
+private fun GPUBackendRawUniformDraw.intersectScissor(layerBounds: LayerBounds): LayerBounds? {
+    val left = maxOf(scissorX, layerBounds.x)
+    val top = maxOf(scissorY, layerBounds.y)
+    val right = minOf(scissorX + scissorWidth, layerBounds.x + layerBounds.width)
+    val bottom = minOf(scissorY + scissorHeight, layerBounds.y + layerBounds.height)
+    return if (left < right && top < bottom) LayerBounds(left, top, right - left, bottom - top) else null
+}
+
+private fun GPUBackendRectDraw.intersectScissor(layerBounds: LayerBounds): LayerBounds? =
+    GPUBackendRawUniformDraw(byteArrayOf(0), scissorX, scissorY, scissorWidth, scissorHeight).intersectScissor(layerBounds)
+
+private fun GPUBackendUniformPayloadDraw.intersectScissor(layerBounds: LayerBounds): LayerBounds? =
+    GPUBackendRawUniformDraw(byteArrayOf(0), scissorX, scissorY, scissorWidth, scissorHeight).intersectScissor(layerBounds)
+
 @OptIn(ExperimentalUnsignedTypes::class)
 internal fun renderViaGpu(
     buffer: DisplayListBuffer,
@@ -242,9 +551,15 @@ internal fun renderViaGpu(
                 colorFormat = config.gpuColorFormat.gpuLabel,
             ),
         )
-        target.use { t ->
+        target.use { target ->
             val texFormat = config.gpuColorFormat.gpuLabel
-            var sceneLabel = t.createOffscreenTexture(
+            val rootLayerPlan = LayerPlan.Supported(bounds = null, composite = LayerCompositePlan())
+            var sceneLabel = ""
+            var scenePlan = rootLayerPlan
+            val t = LayerScissorOffscreenTarget(target) { textureLabel ->
+                scenePlan.bounds?.takeIf { textureLabel == sceneLabel }
+            }
+            sceneLabel = t.createOffscreenTexture(
                 GPUBackendOffscreenTexture(label = "kanvas:scene", width = width, height = height, format = texFormat),
             )
             val srcLabel = t.createOffscreenTexture(
@@ -254,8 +569,6 @@ internal fun renderViaGpu(
                 GPUBackendOffscreenTexture(label = "kanvas:snap", width = width, height = height, format = texFormat),
             )
 
-            data class SceneTargetFrame(val label: String, val hasContent: Boolean)
-
             var sceneHasContent = false
             var clipSourceRoute = false
             var clipSourcePreservesClip = false
@@ -264,12 +577,45 @@ internal fun renderViaGpu(
             val layerStack = java.util.ArrayDeque<SceneTargetFrame>()
             var layerOrdinal = 0
             val clearTransparent = GPUClearColor(0.0, 0.0, 0.0, 0.0)
+            val trivialLayerPaint = Paint()
             fun sceneClear() = when {
                 clipSourceRoute && sourceHasContent -> null
                 clipSourceRoute -> clearTransparent
                 sceneHasContent -> null
                 else -> clearTransparent
             }
+
+            fun classifyLayerRequest(rec: SaveLayerRec, transform: Matrix33): LayerPlan {
+                if (rec.backdrop != null) return LayerPlan.Refused("unsupported.layer.backdrop_filter")
+                if (rec.paint != null && rec.paint != trivialLayerPaint) return LayerPlan.Refused("unsupported.layer.paint")
+
+                val bounds = rec.bounds ?: return LayerPlan.Supported(null, LayerCompositePlan())
+                val mappedCorners = listOf(
+                    transform * org.graphiks.kanvas.types.Point(bounds.left, bounds.top),
+                    transform * org.graphiks.kanvas.types.Point(bounds.right, bounds.top),
+                    transform * org.graphiks.kanvas.types.Point(bounds.left, bounds.bottom),
+                    transform * org.graphiks.kanvas.types.Point(bounds.right, bounds.bottom),
+                )
+                if (mappedCorners.any { !it.x.isFinite() || !it.y.isFinite() }) {
+                    return LayerPlan.Refused("unsupported.layer.bounds.non_finite")
+                }
+
+                val left = mappedCorners.minOf { it.x }
+                val top = mappedCorners.minOf { it.y }
+                val right = mappedCorners.maxOf { it.x }
+                val bottom = mappedCorners.maxOf { it.y }
+                val x = floor(left).toInt().coerceIn(0, width)
+                val y = floor(top).toInt().coerceIn(0, height)
+                val endX = ceil(right).toInt().coerceIn(x, width)
+                val endY = ceil(bottom).toInt().coerceIn(y, height)
+                return LayerPlan.Supported(
+                    bounds = LayerBounds(x, y, endX - x, endY - y),
+                    composite = LayerCompositePlan(),
+                )
+            }
+
+            fun layerScissor(plan: LayerPlan.Supported): LayerBounds =
+                plan.bounds ?: LayerBounds(x = 0, y = 0, width = width, height = height)
 
             /**
              * A scissor clip is represented by the temporary source texture itself during a
@@ -1491,7 +1837,6 @@ internal fun renderViaGpu(
             }
 
             var suppressedLayerDepth = 0
-            val trivialLayerPaint = Paint()
             fun refusePerspectiveCapture(op: DisplayOp, cmdId: GPUDrawCommandID): Boolean {
                 val reason = op.perspectiveCaptureRefusalReasonOrNull() ?: return false
                 diagnostics.fatal(
@@ -1570,30 +1915,32 @@ internal fun renderViaGpu(
                         suppressedLayerDepth++
                         continue
                     }
-                    val refusalReason = when {
-                        op.rec.backdrop != null -> "unsupported.layer.backdrop_filter"
-                        op.rec.bounds != null -> "unsupported.layer.bounds"
-                        op.rec.paint != null && op.rec.paint != trivialLayerPaint -> "unsupported.layer.paint"
-                        else -> null
-                    }
-                    if (refusalReason != null) {
-                        diagnostics.fatal(
-                            "refuse:saveLayer:${cmdId.value}",
-                            "saveLayer",
-                            refusalReason,
-                        )
-                        suppressedLayerDepth = 1
-                    } else {
-                        layerStack.addLast(SceneTargetFrame(sceneLabel, sceneHasContent))
-                        sceneLabel = t.createOffscreenTexture(
-                            GPUBackendOffscreenTexture(
-                                label = "kanvas:saveLayer:${layerOrdinal++}",
-                                width = width,
-                                height = height,
-                                format = texFormat,
-                            ),
-                        )
-                        sceneHasContent = false
+                    when (val plan = classifyLayerRequest(op.rec, op.transform)) {
+                        is LayerPlan.Refused -> {
+                            diagnostics.fatal(
+                                "refuse:saveLayer:${cmdId.value}",
+                                "saveLayer",
+                                plan.reason,
+                            )
+                            suppressedLayerDepth = 1
+                        }
+                        is LayerPlan.Supported -> {
+                            if (plan.bounds?.let { it.width == 0 || it.height == 0 } == true) {
+                                suppressedLayerDepth = 1
+                            } else {
+                                layerStack.addLast(SceneTargetFrame(sceneLabel, sceneHasContent, scenePlan))
+                                sceneLabel = t.createOffscreenTexture(
+                                    GPUBackendOffscreenTexture(
+                                        label = "kanvas:saveLayer:${layerOrdinal++}",
+                                        width = width,
+                                        height = height,
+                                        format = texFormat,
+                                    ),
+                                )
+                                sceneHasContent = false
+                                scenePlan = plan
+                            }
+                        }
                     }
                     continue
                 }
@@ -1609,10 +1956,13 @@ internal fun renderViaGpu(
                     } else {
                         val childLabel = sceneLabel
                         val childHasContent = sceneHasContent
+                        val childPlan = scenePlan
                         val parent = layerStack.removeLast()
                         sceneLabel = parent.label
                         sceneHasContent = parent.hasContent
-                        if (childHasContent) {
+                        scenePlan = parent.plan
+                        val scissor = layerScissor(childPlan)
+                        if (childHasContent && scissor.width > 0 && scissor.height > 0) {
                             t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
                                 drawCompositePass(
                                     wgsl = COPY_WGSL,
@@ -1621,11 +1971,11 @@ internal fun renderViaGpu(
                                     draws = listOf(
                                         GPUBackendRawUniformDraw(
                                             uniformBytes = ByteArray(16),
-                                            scissorX = 0, scissorY = 0,
-                                            scissorWidth = width, scissorHeight = height,
+                                            scissorX = scissor.x, scissorY = scissor.y,
+                                            scissorWidth = scissor.width, scissorHeight = scissor.height,
                                         ),
                                     ),
-                                    blendMode = GPUBlendMode.SRC_OVER,
+                                    blendMode = childPlan.composite.blendMode,
                                 )
                             }
                             sceneHasContent = true
