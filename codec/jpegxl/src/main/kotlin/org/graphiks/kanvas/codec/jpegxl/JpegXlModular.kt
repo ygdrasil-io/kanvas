@@ -26,7 +26,7 @@ internal fun decodeNarrowJpegXlModular(
     val metadata = readNarrowMetadata(reader)
     readNarrowTransformData(reader)
     reader.jumpToByteBoundary()
-    val header = readNarrowFrameHeader(reader, frame, metadata)
+    val header = readNarrowFrameHeader(reader, frame)
     val toc = readNarrowToc(reader, header, codestreamEndExclusive)
     val globalReader = JxlBits(source, toc.sections.first().start, toc.sections.first().endExclusive)
     val global = readJxlGlobalModular(globalReader, frame, header)
@@ -58,6 +58,7 @@ internal fun decodeNarrowJpegXlModular(
                 streamId = 0,
                 width = groupWidth,
                 height = groupHeight,
+                channelCount = metadata.colorChannels,
             )
         } else {
             decodeNarrowJxlAcGroup(
@@ -68,20 +69,24 @@ internal fun decodeNarrowJpegXlModular(
                 groupId = groupId,
                 width = groupWidth,
                 height = groupHeight,
+                channelCount = metadata.colorChannels,
             )
         }
         for (y in 0 until groupHeight) {
             val sourceRow = y * groupWidth
             val destinationRow = (groupY + y) * frame.width + groupX
             for (x in 0 until groupWidth) {
-                val sample = samples[sourceRow + x]
-                if (sample !in 0..255) {
+                val sampleIndex = sourceRow + x
+                val red = samples[0][sampleIndex]
+                val green = if (metadata.colorChannels == 1) red else samples[1][sampleIndex]
+                val blue = if (metadata.colorChannels == 1) red else samples[2][sampleIndex]
+                if (red !in 0..255 || green !in 0..255 || blue !in 0..255) {
                     throw JxlModularFailure(
                         JpegXlDiagnostic("jpegxl.modular.sample.bit-depth", groupOffset.toLong()),
                     )
                 }
                 bitmap.pixels8888[destinationRow + x] =
-                    0xFF000000.toInt() or (sample shl 16) or (sample shl 8) or sample
+                    0xFF000000.toInt() or (red shl 16) or (green shl 8) or blue
             }
         }
     }
@@ -110,9 +115,7 @@ internal fun decodeNarrowJpegXlModular(
     }
 }
 
-private data class JxlNarrowMetadata(
-    val grayscale: Boolean,
-)
+private data class JxlNarrowMetadata(val colorChannels: Int)
 
 private data class JxlNarrowFrameHeader(
     val groupDimension: Int,
@@ -167,7 +170,7 @@ private fun JxlBits.fail(
 ): Nothing = throw JxlModularFailure(JpegXlDiagnostic(code, byteOffset.toLong(), result))
 
 private fun readNarrowMetadata(reader: JxlBits): JxlNarrowMetadata {
-    // ImageMetadata.all_default. The narrow profile must state grayscale,
+    // ImageMetadata.all_default. The narrow profile must state RGB or Gray,
     // 8-bit integer samples, no extra channel, direct sRGB and non-XYB.
     if (reader.readBool()) reader.fail("jpegxl.modular.metadata.profile", Codec.Result.kUnimplemented)
     if (reader.readBool()) reader.fail("jpegxl.modular.metadata.extra", Codec.Result.kUnimplemented)
@@ -181,36 +184,44 @@ private fun readNarrowMetadata(reader: JxlBits): JxlNarrowMetadata {
     }
     if (reader.readBool()) reader.fail("jpegxl.modular.metadata.xyb", Codec.Result.kUnimplemented)
 
-    // ColorEncoding.all_default is RGB; the grayscale fixture uses a direct
-    // color encoding and therefore must identify Gray explicitly.
-    if (reader.readBool()) reader.fail("jpegxl.modular.metadata.color", Codec.Result.kUnimplemented)
+    // ColorEncoding.all_default is direct RGB sRGB/D65. The narrow profile
+    // accepts it as well as explicit direct sRGB and Gray encodings.
+    if (reader.readBool()) {
+        reader.readExtensions()
+        return JxlNarrowMetadata(colorChannels = 3)
+    }
     if (reader.readBool()) reader.fail("jpegxl.modular.metadata.icc", Codec.Result.kUnimplemented)
     val colorSpace = reader.readEnum()
-    if (colorSpace != 1) reader.fail("jpegxl.modular.metadata.colorspace", Codec.Result.kUnimplemented)
+    val colorChannels = when (colorSpace) {
+        0 -> 3 // RGB
+        1 -> 1 // Gray
+        else -> reader.fail("jpegxl.modular.metadata.colorspace", Codec.Result.kUnimplemented)
+    }
     val whitePoint = reader.readEnum()
     if (whitePoint != 1) reader.fail("jpegxl.modular.metadata.white-point", Codec.Result.kUnimplemented)
+    if (colorChannels == 3 && reader.readEnum() != 1) {
+        reader.fail("jpegxl.modular.metadata.primaries", Codec.Result.kUnimplemented)
+    }
     if (reader.readBool()) reader.fail("jpegxl.modular.metadata.gamma", Codec.Result.kUnimplemented)
     if (reader.readEnum() != 13) reader.fail("jpegxl.modular.metadata.transfer", Codec.Result.kUnimplemented)
-    // The pinned cjxl fixture uses perceptual rendering intent. Rendering
-    // intent leaves raw grayscale sample reconstruction unchanged.
+    // The pinned cjxl fixtures use perceptual rendering intent. Rendering
+    // intent leaves direct RGB and Gray sample reconstruction unchanged.
     if (reader.readEnum() != 0) reader.fail("jpegxl.modular.metadata.intent", Codec.Result.kUnimplemented)
     reader.readExtensions()
 
-    return JxlNarrowMetadata(grayscale = true)
+    return JxlNarrowMetadata(colorChannels)
 }
 
 private fun readNarrowTransformData(reader: JxlBits) {
     // CustomTransformData is serialized after ImageMetadata, not inside it.
-    // For a direct grayscale Modular frame it has to use its canonical default.
+    // A direct RGB or Gray Modular frame has to use its canonical default.
     if (!reader.readBool()) reader.fail("jpegxl.modular.transform", Codec.Result.kUnimplemented)
 }
 
 private fun readNarrowFrameHeader(
     reader: JxlBits,
     frame: JpegXlFrameInfo,
-    metadata: JxlNarrowMetadata,
 ): JxlNarrowFrameHeader {
-    check(metadata.grayscale)
     if (reader.readBool()) reader.fail("jpegxl.modular.frame.default", Codec.Result.kUnimplemented)
     if (reader.readEnum() != 0) reader.fail("jpegxl.modular.frame.type", Codec.Result.kUnimplemented)
     if (!reader.readBool()) reader.fail("jpegxl.modular.frame.encoding", Codec.Result.kUnimplemented)
@@ -333,7 +344,8 @@ private fun decodeNarrowJxlAcGroup(
     groupId: Int,
     width: Int,
     height: Int,
-): IntArray {
+    channelCount: Int,
+): Array<IntArray> {
     val reader = JxlBits(source, section.start, section.endExclusive)
     val groupHeader = readJxlGroupHeader(reader)
     val (tree, code) = if (groupHeader.useGlobalTree) {
@@ -353,6 +365,7 @@ private fun decodeNarrowJxlAcGroup(
         streamId = modularAcStreamId(groupId, header),
         width = width,
         height = height,
+        channelCount = channelCount,
     )
 }
 
@@ -397,11 +410,11 @@ private fun readJxlWeightedHeader(reader: JxlBits): JxlWeightedHeader {
 }
 
 /**
- * Reconstructs one direct-Modular grayscale group from its MA residuals.
+ * Reconstructs one direct-Modular Gray or RGB group from its MA residuals.
  *
- * The narrow profile has one channel and no transforms. Its MA tree may select
- * direct non-weighted JPEG XL predictors. Weighted prediction and its error
- * property deliberately remain outside the validated profile.
+ * The narrow profile has no transforms. Its MA tree may select direct
+ * non-weighted JPEG XL predictors. Weighted prediction and its error property
+ * deliberately remain outside the validated profile.
  */
 private fun decodeJxlModularGroup(
     reader: JxlBits,
@@ -411,50 +424,55 @@ private fun decodeJxlModularGroup(
     streamId: Int,
     width: Int,
     height: Int,
-): IntArray {
+    channelCount: Int,
+): Array<IntArray> {
     if (width !in 1..256 || height !in 1..256) reader.fail("jpegxl.modular.group.dimensions")
+    if (channelCount !in 1..3) reader.fail("jpegxl.modular.channels", Codec.Result.kUnimplemented)
     val entropy = JxlEntropyReader(reader, code, distanceMultiplier = width)
-    val pixels = IntArray(width * height)
+    val channels = Array(channelCount) { IntArray(width * height) }
     val properties = IntArray(maxOf(16, tree.nodes.maxOf { node -> node.property } + 1))
-    properties[0] = 0 // channel
     // MA property 1 is the full ModularStreamId, rather than the TOC's raw
     // AC-group index. This distinguishes AC groups from the earlier DC and
     // quant-table streams when a tree branches on a static stream property.
     properties[1] = streamId
     val usesWeighted = tree.nodes.any { node -> node.property == 15 || node.predictor == 6 }
     if (usesWeighted) reader.fail("jpegxl.modular.predictor.weighted", Codec.Result.kUnimplemented)
-    for (y in 0 until height) {
-        properties[2] = y
-        properties[9] = 0
-        for (x in 0 until width) {
-            val left = if (x != 0) pixels[y * width + x - 1] else if (y != 0) pixels[(y - 1) * width] else 0
-            val top = if (y != 0) pixels[(y - 1) * width + x] else left
-            val topLeft = if (x != 0 && y != 0) pixels[(y - 1) * width + x - 1] else left
-            val topRight = if (y != 0 && x + 1 < width) pixels[(y - 1) * width + x + 1] else top
-            val leftLeft = if (x > 1) pixels[y * width + x - 2] else left
-            val topTop = if (y > 1) pixels[(y - 2) * width + x] else top
-            val topRightRight = if (y != 0 && x + 2 < width) pixels[(y - 1) * width + x + 2] else topRight
-            populateJxlProperties(properties, x, left, top, topLeft, topRight, leftLeft, topTop)
-            val leaf = tree.lookup(properties, reader)
-            val prediction = predictJxlSample(
-                predictor = leaf.predictor,
-                left = left,
-                top = top,
-                topLeft = topLeft,
-                topRight = topRight,
-                leftLeft = leftLeft,
-                topTop = topTop,
-                topRightRight = topRightRight,
-                weightedPrediction = 0,
-            )
-            val residual = unpackJxlSigned(entropy.readHybrid(leaf.context))
-            val sample = residual.toLong() * leaf.multiplier + leaf.offset + prediction
-            if (sample !in Int.MIN_VALUE.toLong()..Int.MAX_VALUE.toLong()) reader.fail("jpegxl.modular.sample.range")
-            pixels[y * width + x] = sample.toInt()
+    for (channel in channels.indices) {
+        val pixels = channels[channel]
+        properties[0] = channel
+        for (y in 0 until height) {
+            properties[2] = y
+            properties[9] = 0
+            for (x in 0 until width) {
+                val left = if (x != 0) pixels[y * width + x - 1] else if (y != 0) pixels[(y - 1) * width] else 0
+                val top = if (y != 0) pixels[(y - 1) * width + x] else left
+                val topLeft = if (x != 0 && y != 0) pixels[(y - 1) * width + x - 1] else left
+                val topRight = if (y != 0 && x + 1 < width) pixels[(y - 1) * width + x + 1] else top
+                val leftLeft = if (x > 1) pixels[y * width + x - 2] else left
+                val topTop = if (y > 1) pixels[(y - 2) * width + x] else top
+                val topRightRight = if (y != 0 && x + 2 < width) pixels[(y - 1) * width + x + 2] else topRight
+                populateJxlProperties(properties, x, left, top, topLeft, topRight, leftLeft, topTop)
+                val leaf = tree.lookup(properties, reader)
+                val prediction = predictJxlSample(
+                    predictor = leaf.predictor,
+                    left = left,
+                    top = top,
+                    topLeft = topLeft,
+                    topRight = topRight,
+                    leftLeft = leftLeft,
+                    topTop = topTop,
+                    topRightRight = topRightRight,
+                    weightedPrediction = 0,
+                )
+                val residual = unpackJxlSigned(entropy.readHybrid(leaf.context))
+                val sample = residual.toLong() * leaf.multiplier + leaf.offset + prediction
+                if (sample !in Int.MIN_VALUE.toLong()..Int.MAX_VALUE.toLong()) reader.fail("jpegxl.modular.sample.range")
+                pixels[y * width + x] = sample.toInt()
+            }
         }
     }
     entropy.checkFinal()
-    return pixels
+    return channels
 }
 
 private fun JxlMaTree.lookup(properties: IntArray, reader: JxlBits): JxlMaNode {

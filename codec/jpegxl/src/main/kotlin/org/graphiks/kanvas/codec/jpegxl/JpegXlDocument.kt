@@ -66,7 +66,7 @@ public class JpegXlBox internal constructor(
  *
  * Raw codestreams, an exact `JXL `/`ftyp`/`jxlc` envelope, and ordered
  * version-0 `jxlp` fragments may decode through the deliberately narrow direct
- * grayscale Modular profile. Other JPEG XL image features return explicit
+ * sRGB or grayscale Modular profile. Other JPEG XL image features return explicit
  * `kUnimplemented` results instead of manufacturing pixels or silently falling
  * through to another provider.
  */

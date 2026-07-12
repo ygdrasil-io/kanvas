@@ -73,6 +73,51 @@ class JpegXlModularDecodeTest {
     }
 
     @Test
+    fun `public codec decodes direct modular RGB pixels exactly`() {
+        val encoded = Base64.getMimeDecoder().decode(fixture("rgb-direct-4x3-8bit-lossless.jxl.base64"))
+        assertEquals("49b779382b5bd1402aa1a1b928fe1d205fced3032176964e3d2bfbf52e8af033", sha256(encoded))
+        val expected = intArrayOf(
+            0xFFFF0000.toInt(), 0xFF00FF00.toInt(), 0xFF0000FF.toInt(), 0xFFFFFFFF.toInt(),
+            0xFF000000.toInt(), 0xFFFFFF00.toInt(), 0xFF00FFFF.toInt(), 0xFFFF00FF.toInt(),
+            0xFF4080C0.toInt(), 0xFF0C2238.toInt(), 0xFF4E5A7B.toInt(), 0xFFFA8001.toInt(),
+        )
+
+        val encodedInputs = listOf(
+            encoded,
+            exactJxlcContainer(encoded),
+            jxlpContainer(encoded, listOf(10, encoded.size - 10)),
+        )
+
+        encodedInputs.forEach { encodedInput ->
+            val (actual, result) = requireNotNull(Codec.MakeFromData(encodedInput)).getImage()
+
+            val diagnostic = requireNotNull(JpegXlDocument.open(encodedInput).document).decode().diagnostic
+            assertEquals(Codec.Result.kSuccess, result, "diagnostic=$diagnostic")
+            val bitmap = requireNotNull(actual)
+            assertEquals(4, bitmap.width)
+            assertEquals(3, bitmap.height)
+            assertArrayEquals(expected, bitmap.pixels)
+        }
+    }
+
+    @Test
+    fun `public codec decodes modular RGB with all default color encoding`() {
+        val encoded = Base64.getMimeDecoder().decode(fixture("rgb-direct-4x3-all-default-color.jxl.base64"))
+        assertEquals("352a29dbb0718733fabdfb6251099c41049a3c38fad72b1850c51d280bd7b730", sha256(encoded))
+        val expected = intArrayOf(
+            0xFFFF0000.toInt(), 0xFF00FF00.toInt(), 0xFF0000FF.toInt(), 0xFFFFFFFF.toInt(),
+            0xFF000000.toInt(), 0xFFFFFF00.toInt(), 0xFF00FFFF.toInt(), 0xFFFF00FF.toInt(),
+            0xFF4080C0.toInt(), 0xFF0C2238.toInt(), 0xFF4E5A7B.toInt(), 0xFFFA8001.toInt(),
+        )
+
+        val (actual, result) = requireNotNull(Codec.MakeFromData(encoded)).getImage()
+
+        val diagnostic = requireNotNull(JpegXlDocument.open(encoded).document).decode().diagnostic
+        assertEquals(Codec.Result.kSuccess, result, "diagnostic=$diagnostic")
+        assertArrayEquals(expected, requireNotNull(actual).pixels)
+    }
+
+    @Test
     fun `opened raw and jxlc documents retain their encoded bytes independently of the caller`() {
         val raw = Base64.getMimeDecoder().decode(fixture("single-group-4x3-8bit-lossless.jxl.base64"))
         val encodedInputs = listOf(raw, exactJxlcContainer(raw))
