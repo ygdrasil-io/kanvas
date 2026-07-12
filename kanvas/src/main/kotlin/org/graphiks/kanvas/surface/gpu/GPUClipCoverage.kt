@@ -24,6 +24,7 @@ import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRenderRecorder
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendStencilCoverConfig
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendStencilFillRule
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendStencilMode
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendTriangleData
 import org.graphiks.kanvas.gpu.renderer.execution.GPUClearColor
 import org.graphiks.kanvas.gpu.renderer.geometry.FlattenedPath
 import org.graphiks.kanvas.gpu.renderer.geometry.PathTessellator
@@ -408,7 +409,8 @@ private fun GPUBackendRenderRecorder.renderClipElement(
                 },
                 inverse = element.inverseFill,
             )
-            val triangleData = PathTessellator().stencilEdgeFan(shape.flattened)
+            val edgeFan = PathTessellator().stencilEdgeFan(shape.flattened)
+            val triangleData = GPUBackendTriangleData(edgeFan.vertices, edgeFan.indices)
             drawFullscreenStencilPass(
                 wgsl = CLIP_STENCIL_WRITE_WGSL,
                 colorFormat = config.gpuColorFormat.gpuLabel,

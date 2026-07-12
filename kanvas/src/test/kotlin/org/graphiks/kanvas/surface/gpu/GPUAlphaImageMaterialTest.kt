@@ -390,7 +390,10 @@ class GPUAlphaImageMaterialTest {
         assertEquals("EvenOdd", command.pathDescriptor.fillRule)
         assertTrue(command.pathDescriptor.inverseFill)
         val write = recorder.stencilPasses.single { it.stencilMode == GPUBackendStencilMode.Write }
-        assertEquals(8, write.triangleData!!.triangleCount)
+        val triangleData = requireNotNull(write.triangleData)
+        assertEquals(8, triangleData.triangleCount)
+        assertEquals(48, triangleData.vertices.size)
+        assertEquals((0 until 24).toList(), triangleData.indices.toList())
         assertEquals(GPUBackendStencilFillRule.EvenOdd, write.stencilConfig.fillRule)
         assertTrue(write.stencilConfig.inverse)
         val cover = recorder.stencilPasses.single { it.stencilMode == GPUBackendStencilMode.Test }

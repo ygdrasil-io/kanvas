@@ -8,6 +8,7 @@ import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRenderRecorder
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendStencilCoverConfig
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendStencilFillRule
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendStencilMode
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendTriangleData
 import org.graphiks.kanvas.gpu.renderer.geometry.FlattenedPath
 import org.graphiks.kanvas.gpu.renderer.geometry.PathTessellator
 import org.graphiks.kanvas.gpu.renderer.geometry.Point
@@ -109,12 +110,13 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
         refuse("unsupported_fill_rule:${cmd.pathDescriptor.fillRule}")
         return
     }
-    val triangleData = PathTessellator().stencilEdgeFan(
+    val edgeFan = PathTessellator().stencilEdgeFan(
         FlattenedPath(
             points = finalVertices.chunked(2).map { Point(it[0], it[1]) },
             contourStarts = strokeContours,
         ),
     )
+    val triangleData = GPUBackendTriangleData(edgeFan.vertices, edgeFan.indices)
 
     val pathBounds = if (cmd.stroke) computeBounds(finalVertices) else cmd.bounds
     val clipBounds = if (cmd.stroke && cmd.clip.kind == GPUClipKind.WideOpen) {

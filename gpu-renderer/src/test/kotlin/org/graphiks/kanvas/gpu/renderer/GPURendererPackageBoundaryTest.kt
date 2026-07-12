@@ -56,6 +56,17 @@ class GPURendererPackageBoundaryTest {
         )
     }
 
+    /** Ensures geometry remains independent from execution-only contracts. */
+    @Test
+    fun `geometry source does not import execution contracts`() {
+        val pathTessellatorSource = productionFile("geometry/PathTessellator.kt").readText()
+
+        assertTrue(
+            actual = "org.graphiks.kanvas.gpu.renderer.execution." !in pathTessellatorSource,
+            message = "Geometry must not import execution contracts",
+        )
+    }
+
     /** Ensures GPU capabilities do not reintroduce stringly typed GPU spec concepts. */
     @Test
     fun `gpu capabilities do not reintroduce stringly typed GPU spec concepts`() {

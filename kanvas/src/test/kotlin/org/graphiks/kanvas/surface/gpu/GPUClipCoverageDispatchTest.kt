@@ -69,6 +69,10 @@ class GPUClipCoverageDispatchTest {
             listOf("clear-white", "rect-dst-in", "rrect-dst-out", "path-stencil-dst-in"),
             target.passKinds,
         )
+        val triangleData = requireNotNull(target.stencilWriteTriangleData)
+        assertEquals(4, triangleData.triangleCount)
+        assertEquals(24, triangleData.vertices.size)
+        assertEquals((0 until 12).toList(), triangleData.indices.toList())
         assertFalse(lease.cacheHit)
         lease.close()
         lease.close()
@@ -275,6 +279,7 @@ class GPUClipCoverageDispatchTest {
         val passKinds = mutableListOf<String>()
         val releasedMasks = mutableListOf<GPUBackendCoverageMask>()
         val vertexBlendModes = mutableListOf<GPUBlendMode?>()
+        var stencilWriteTriangleData: GPUBackendTriangleData? = null
 
         fun recorder(): GPUBackendRenderRecorder = CapturingRecorder()
 
@@ -347,10 +352,16 @@ class GPUClipCoverageDispatchTest {
                 blendMode: GPUBlendMode?,
                 stencilConfig: GPUBackendStencilCoverConfig,
             ) {
-                if (stencilMode == GPUBackendStencilMode.Test) {
-                    assertEquals(CLIP_MASK_COVER_WGSL, wgsl)
-                    if (passKinds.none { it.startsWith("path-stencil-") }) {
-                        passKinds += "path-stencil-${clipBlendLabel(blendMode!!)}"
+                when (stencilMode) {
+                    GPUBackendStencilMode.Write -> {
+                        assertEquals(CLIP_STENCIL_WRITE_WGSL, wgsl)
+                        stencilWriteTriangleData = triangleData
+                    }
+                    GPUBackendStencilMode.Test -> {
+                        assertEquals(CLIP_MASK_COVER_WGSL, wgsl)
+                        if (passKinds.none { it.startsWith("path-stencil-") }) {
+                            passKinds += "path-stencil-${clipBlendLabel(blendMode!!)}"
+                        }
                     }
                 }
             }

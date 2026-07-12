@@ -1,7 +1,5 @@
 package org.graphiks.kanvas.gpu.renderer.geometry
 
-import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendTriangleData
-
 /** 2D point with float coordinates. */
 data class Point(val x: Float, val y: Float)
 
@@ -40,6 +38,23 @@ data class TriangleList(
     val indices: List<Int>,
 ) {
     val triangleCount: Int get() = indices.size / 3
+}
+
+/** Backend-neutral indexed position data emitted by geometry lowering. */
+data class GeometryTriangleData(
+    val vertices: FloatArray,
+    val indices: IntArray,
+) {
+    val vertexCount: Int get() = vertices.size / 2
+    val triangleCount: Int get() = indices.size / 3
+
+    init {
+        require(vertices.size >= 6) { "GeometryTriangleData.vertices must have at least 6 floats (3 positions)" }
+        require(vertices.size % 2 == 0) { "GeometryTriangleData.vertices must contain pairs of floats" }
+        require(indices.size >= 3) { "GeometryTriangleData.indices must have at least 3 indices" }
+        require(indices.size % 3 == 0) { "GeometryTriangleData.indices must be a multiple of 3" }
+        require(indices.all { it in 0 until vertexCount }) { "GeometryTriangleData.indices out of range" }
+    }
 }
 
 /** Flattened path points and the point index where each contour begins. */
@@ -197,7 +212,7 @@ class PathTessellator(
      * Produces one triangle from an exterior anchor to each contour edge for a
      * stencil write pass. Unlike [triangulate], contour boundaries are retained.
      */
-    fun stencilEdgeFan(flattened: FlattenedPath): GPUBackendTriangleData {
+    fun stencilEdgeFan(flattened: FlattenedPath): GeometryTriangleData {
         val anchor = Point(
             minOf(-1f, flattened.points.minOf { it.x } - 1f),
             minOf(-1f, flattened.points.minOf { it.y } - 1f),
@@ -221,7 +236,7 @@ class PathTessellator(
                 indices += listOf(base, base + 1, base + 2)
             }
         }
-        return GPUBackendTriangleData(vertices.toFloatArray(), indices.toIntArray())
+        return GeometryTriangleData(vertices.toFloatArray(), indices.toIntArray())
     }
 
     private fun quadraticStepCount(p0: Point, p1: Point, p2: Point): Int {
