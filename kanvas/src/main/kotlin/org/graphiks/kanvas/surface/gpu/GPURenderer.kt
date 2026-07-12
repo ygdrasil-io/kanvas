@@ -37,6 +37,7 @@ import org.graphiks.kanvas.surface.RenderStats
 import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.types.PointMode
 import org.graphiks.kanvas.types.Rect
+import org.graphiks.kanvas.types.isAffine
 import org.graphiks.kanvas.font.colr.COLRPaintNode
 import org.graphiks.kanvas.font.colr.COLRV1ColorLineExtend
 import org.graphiks.kanvas.font.colr.COLR_FOREGROUND_PALETTE_INDEX
@@ -264,7 +265,7 @@ internal fun renderViaGpu(
                 color: Color,
                 op: DisplayOp.DrawText,
                 cmdId: GPUDrawCommandID,
-            ) {
+            ): Boolean {
                 val tx = op.transform
                 val sx = tx.scaleX; val kx = tx.skewX; val txx = tx.transX
                 val ky = tx.skewY; val sy = tx.scaleY; val ty = tx.transY
@@ -314,7 +315,7 @@ internal fun renderViaGpu(
                 )
                 val flattened = tessellator.flattenWithContours(pathData)
                 val flat = flattened.points
-                if (flat.size < 3) return
+                if (flat.size < 3) return false
                 val vertices = flat.flatMap { listOf(it.x, it.y) }
                 val syntheticOp = DisplayOp.DrawPath(
                     path = Path { },
@@ -324,21 +325,26 @@ internal fun renderViaGpu(
                 )
                 val contourStarts = flattened.contourStarts.ifEmpty { listOf(0) }
                 val cmd = syntheticOp.toNormalizedCommand(cmdId, targets, vertices, contourStarts, flat.size)
-                t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
-                    dispatchFillPath(cmd, dispatched, diagnostics, width, height, config)
-                }
+                return dispatchPathDirect(cmd)
             }
 
             fun renderShaderText(
                 op: DisplayOp.DrawText,
                 cmdId: GPUDrawCommandID,
-            ) {
-                val tf = op.blob.typeface as? FontTypeface ?: return
-                val scaler = tf.scaler ?: return
+            ): Boolean {
+                val tf = op.blob.typeface as? FontTypeface ?: run {
+                    diagnostics.degrade("degrade:drawText:${cmdId.value}", "drawText", "unsupported.text.outline.no_typeface")
+                    return false
+                }
+                val scaler = tf.scaler ?: run {
+                    diagnostics.degrade("degrade:drawText:${cmdId.value}", "drawText", "unsupported.text.outline.no_scaler")
+                    return false
+                }
                 val tx = op.transform
                 val sx = tx.scaleX; val kx = tx.skewX; val txx = tx.transX
                 val ky = tx.skewY; val sy = tx.scaleY; val ty = tx.transY
 
+                var rendered = false
                 for (run in op.blob.glyphRuns) {
                     for ((idx, gid) in run.glyphs.withIndex()) {
                         val pos = run.positions[idx]
@@ -405,15 +411,14 @@ internal fun renderViaGpu(
                         val glyphCmdId = GPUDrawCommandID(dispatched.size)
                         val contourStarts = flattened.contourStarts.ifEmpty { listOf(0) }
                         val cmd = syntheticOp.toNormalizedCommand(glyphCmdId, targets, vertices, contourStarts, flat.size)
-                        if (cmd.blend.requiresDestinationRead) {
+                        if (!clipSourceRoute && cmd.blend.requiresDestinationRead) {
                             diagnostics.fatal("refuse:drawText:shader:${glyphCmdId.value}", "drawText", "unsupported_blend:advanced")
                             continue
                         }
-                        t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
-                            dispatchFillPath(cmd, dispatched, diagnostics, width, height, config)
-                        }
+                        rendered = dispatchPathDirect(cmd) || rendered
                     }
                 }
+                return rendered
             }
 
             fun dispatchColrV1Node(
@@ -425,30 +430,35 @@ internal fun renderViaGpu(
                 op: DisplayOp.DrawText,
                 cmdId: GPUDrawCommandID,
                 solidColors: Map<Int, Color>,
-            ) {
+            ): Boolean {
                 val kind = node.kind
-                when {
+                return when {
                     kind == "colr-v1-paint-glyph" -> {
                         val refGlyphId = node.glyphId
                         if (refGlyphId == null) {
                             diagnostics.degrade("degrade:drawText:${cmdId.value}", "drawText", "colrv1_glyph_no_ref")
-                            return
-                        }
-                        val scaled = scaler.scaleGlyph(refGlyphId, fontSize)
-                        val glyphColor = node.children.firstNotNullOfOrNull { solidColors[it] }
-                            ?: op.paint.color
-                        val mapped = GlyphCoordinateMapper.map(scaled)
-                        if (mapped is MappedGlyph.Drawn) {
-                            drawGlyphPath(mapped.outlineCommands, posX + op.x, posY + op.y, glyphColor, op, cmdId)
+                            false
+                        } else {
+                            val scaled = scaler.scaleGlyph(refGlyphId, fontSize)
+                            val glyphColor = node.children.firstNotNullOfOrNull { solidColors[it] }
+                                ?: op.paint.color
+                            val mapped = GlyphCoordinateMapper.map(scaled)
+                            if (mapped is MappedGlyph.Drawn) {
+                                drawGlyphPath(mapped.outlineCommands, posX + op.x, posY + op.y, glyphColor, op, cmdId)
+                            } else {
+                                false
+                            }
                         }
                     }
-                    kind == "colr-v1-paint-solid" -> { /* color resolved by parent glyph via solidColors */ }
+                    kind == "colr-v1-paint-solid" -> false // color resolved by parent glyph via solidColors
                     kind == "colr-v1-paint-linear-gradient" ||
                     kind == "colr-v1-paint-radial-gradient" -> {
                         diagnostics.degrade("degrade:drawText:${cmdId.value}", "drawText", "colrv1_gradient_needs_paint_tree")
+                        false
                     }
                     kind == "colr-v1-paint-sweep-gradient" -> {
                         diagnostics.degrade("degrade:drawText:${cmdId.value}", "drawText", "colrv1_sweep_not_routed")
+                        false
                     }
                     kind.startsWith("colr-v1-paint-translate") ||
                     kind.startsWith("colr-v1-paint-scale") ||
@@ -458,16 +468,23 @@ internal fun renderViaGpu(
                     kind.startsWith("colr-v1-paint-composite") ||
                     kind == "colr-v1-paint-layers" ||
                     kind == "colr-v1-paint-colr-glyph" ||
-                    kind == "colr-v1-glyph" -> { /* passthrough */ }
+                    kind == "colr-v1-glyph" -> false // passthrough
+                    else -> false
                 }
             }
 
             fun renderColorText(
                 op: DisplayOp.DrawText,
                 cmdId: GPUDrawCommandID,
-            ) {
-                val tf = op.blob.typeface as? FontTypeface ?: return
-                val scaler = tf.scaler ?: return
+            ): Boolean {
+                val tf = op.blob.typeface as? FontTypeface ?: run {
+                    diagnostics.degrade("degrade:drawText:${cmdId.value}", "drawText", "unsupported.text.color.no_typeface")
+                    return false
+                }
+                val scaler = tf.scaler ?: run {
+                    diagnostics.degrade("degrade:drawText:${cmdId.value}", "drawText", "unsupported.text.color.no_scaler")
+                    return false
+                }
                 val foregroundColor = op.paint.color
 
                 fun resolveSolidColors(nodes: List<COLRPaintNode>): Map<Int, Color> {
@@ -490,6 +507,7 @@ internal fun renderViaGpu(
                     return result
                 }
 
+                var rendered = false
                 for (run in op.blob.glyphRuns) {
                     for ((idx, gid) in run.glyphs.withIndex()) {
                         val pos = run.positions[idx]
@@ -499,9 +517,9 @@ internal fun renderViaGpu(
                             is GlyphRepresentation.ColorLayersV1 -> {
                                 val solidColors = resolveSolidColors(rep.paintGraph.nodes)
                                 for (node in rep.paintGraph.nodes) {
-                                    dispatchColrV1Node(
+                                    rendered = dispatchColrV1Node(
                                         node, scaler, op.blob.fontSize, pos.x, pos.y, op, cmdId, solidColors,
-                                    )
+                                    ) || rendered
                                 }
                             }
                             is GlyphRepresentation.ColorLayers -> {
@@ -515,34 +533,29 @@ internal fun renderViaGpu(
                                     )
                                     val mapped = GlyphCoordinateMapper.map(scaled)
                                     if (mapped is MappedGlyph.Drawn) {
-                                        drawGlyphPath(mapped.outlineCommands, pos.x + op.x, pos.y + op.y, color, op, cmdId)
+                                        rendered = drawGlyphPath(
+                                            mapped.outlineCommands,
+                                            pos.x + op.x,
+                                            pos.y + op.y,
+                                            color,
+                                            op,
+                                            cmdId,
+                                        ) || rendered
                                     }
                                 }
                             }
                             is GlyphRepresentation.Bitmap -> {
-                                val x = pos.x + op.x + rep.originX
-                                val y = pos.y + op.y + rep.originY
-                                val w = rep.pixelWidth.toFloat().coerceAtLeast(1f)
-                                val h = rep.pixelHeight.toFloat().coerceAtLeast(1f)
-                                val syntheticOp = DisplayOp.DrawRect(
-                                    rect = Rect.fromLTRB(x, y, x + w, y + h),
-                                    paint = org.graphiks.kanvas.paint.Paint(
-                                        color = Color.fromRGBA(1f, 0.078f, 0.576f, 0.5f),
-                                    ),
-                                    transform = op.transform,
-                                    clip = op.clip,
+                                diagnostics.degrade(
+                                    "degrade:drawText:${cmdId.value}",
+                                    "drawText",
+                                    "unsupported.text.color_bitmap_glyph",
                                 )
-                                val cmd = syntheticOp.toNormalizedCommand(
-                                    GPUDrawCommandID(dispatched.size), targets,
-                                )
-                                t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
-                                    dispatchFillRect(cmd, dispatched, diagnostics, width, height, config)
-                                }
                             }
                             else -> {}
                         }
                     }
                 }
+                return rendered
             }
 
             fun extendToTileMode(extend: COLRV1ColorLineExtend?): TileMode = when (extend) {
@@ -618,6 +631,224 @@ internal fun renderViaGpu(
                 maxTextureDimension2D = t.maxTextureDimension2D,
                 cache = clipFrameCache,
             )
+
+            /** Encodes the whole text operation into the current target; a clip source is always SrcOver. */
+            fun renderTextCommand(op: DisplayOp.DrawText, cmdId: GPUDrawCommandID): Boolean {
+                val fatalBefore = diagnostics.fatalCount
+                val rendered = when {
+                    op.paint.shader != null && extractSolidShaderColor(op.paint.shader) == null ->
+                        renderShaderText(op, cmdId)
+                    hasColorGlyphs(op.blob) -> renderColorText(op, cmdId)
+                    op.paint.isStroke() -> renderShaderText(op, cmdId)
+                    else -> {
+                        val cmd = op.toNormalizedCommand(cmdId, targets)
+                        if (!clipSourceRoute && cmd.blend.requiresDestinationRead) {
+                            diagnostics.fatal("refuse:drawText:${cmdId.value}", "drawText", "unsupported_blend:advanced")
+                            false
+                        } else {
+                            val ctmScale = ctmEffectiveScale(op.transform)
+                            val rasterBlob = op.blob.scaledForRasterization(ctmScale)
+                            var gpuBlob = TextBridge.rasterize(rasterBlob)
+                            if (gpuBlob == null) {
+                                diagnostics.degrade("degrade:drawText:${cmdId.value}", "drawText", "rasterize_failed")
+                                false
+                            } else {
+                                gpuBlob = gpuBlob.normalizeGlyphRects(ctmScale)
+                                t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
+                                    drawTextAtlasPass(
+                                        gpuBlob = gpuBlob,
+                                        blendMode = if (clipSourceRoute) GPUBlendMode.SRC_OVER else cmd.blend.blendMode,
+                                        dispatched = dispatched,
+                                        diagnostics = diagnostics,
+                                        textColor = resolveTextColor(op.paint),
+                                        targetWidth = width,
+                                        targetHeight = height,
+                                        drawOriginX = op.x,
+                                        drawOriginY = op.y,
+                                        transform = op.transform,
+                                        recordResult = !clipSourceRoute,
+                                    )
+                                }
+                                true
+                            }
+                        }
+                    }
+                }
+                return rendered && diagnostics.fatalCount == fatalBefore
+            }
+
+            /** Encodes path-backed or textured vertices into the current target without reapplying the outer clip. */
+            fun renderVerticesCommand(
+                vertices: org.graphiks.kanvas.types.Vertices,
+                paint: Paint,
+                transform: Matrix33,
+                clip: org.graphiks.kanvas.canvas.ClipStack,
+                cmdId: GPUDrawCommandID,
+                operationName: String,
+                texturedDiagnosticName: String = operationName,
+            ): Boolean {
+                if (!transform.isAffine()) {
+                    diagnostics.fatal(
+                        "refuse:$operationName:${cmdId.value}",
+                        operationName,
+                        "unsupported.vertices.perspective_transform",
+                    )
+                    return false
+                }
+                val texCoords = vertices.texCoords
+                if (vertices.colors != null || (texCoords == null && vertices.indices != null)) {
+                    diagnostics.fatal(
+                        "refuse:$operationName:${cmdId.value}",
+                        operationName,
+                        "unsupported.vertices.colors_or_indices",
+                    )
+                    return false
+                }
+                if (texCoords != null) {
+                    if (vertices.mode != org.graphiks.kanvas.types.VertexMode.TRIANGLES) {
+                        diagnostics.fatal(
+                            "refuse:$operationName:${cmdId.value}",
+                            operationName,
+                            "unsupported.vertices.textured_mode",
+                        )
+                        return false
+                    }
+                    val imageShader = paint.shader as? Shader.Image
+                    if (imageShader == null) {
+                        diagnostics.degrade(
+                            "unimplemented:$texturedDiagnosticName:textured:${cmdId.value}",
+                            texturedDiagnosticName,
+                            "gpu_textured_vertices_no_image_shader",
+                        )
+                        return false
+                    }
+                    val image = imageShader.image
+                    if (image.pixels == null) {
+                        diagnostics.degrade(
+                            "unimplemented:$texturedDiagnosticName:textured:${cmdId.value}",
+                            texturedDiagnosticName,
+                            "gpu_textured_vertices_no_pixels",
+                        )
+                        return false
+                    }
+                    val textureBytes = image.expandToRgbaForGpu().let { expanded ->
+                        if (image.colorType != ColorType.BGRA_8888) {
+                            expanded
+                        } else {
+                            expanded.copyOf().also { rgba ->
+                                for (offset in rgba.indices step 4) {
+                                    val blue = rgba[offset]
+                                    rgba[offset] = rgba[offset + 2]
+                                    rgba[offset + 2] = blue
+                                }
+                            }
+                        }
+                    }
+                    val positions = FloatArray(vertices.positions.size * 2) { index ->
+                        val point = vertices.positions[index / 2]
+                        val deviceX = transform.scaleX * point.x + transform.skewX * point.y + transform.transX
+                        val deviceY = transform.skewY * point.x + transform.scaleY * point.y + transform.transY
+                        if (index % 2 == 0) {
+                            deviceX / width * 2f - 1f
+                        } else {
+                            1f - deviceY / height * 2f
+                        }
+                    }
+                    val uvs = FloatArray(texCoords.size * 2) { index ->
+                        if (index % 2 == 0) texCoords[index / 2].x else texCoords[index / 2].y
+                    }
+                    val indices = vertices.indices?.toIntArray() ?: IntArray(vertices.positions.size) { it }
+                    if (
+                        indices.isEmpty() ||
+                        indices.size % 3 != 0 ||
+                        indices.any { it !in vertices.positions.indices }
+                    ) {
+                        diagnostics.fatal(
+                            "refuse:$operationName:${cmdId.value}",
+                            operationName,
+                            "unsupported.vertices.indices",
+                        )
+                        return false
+                    }
+                    var encoded = false
+                    t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
+                        encoded = dispatchTexturedVertices(
+                            positions = positions,
+                            uvs = uvs,
+                            uvs2 = null,
+                            indices = indices,
+                            paint = if (clipSourceRoute) {
+                                paint.copy(blendMode = org.graphiks.kanvas.paint.BlendMode.SRC_OVER)
+                            } else {
+                                paint
+                            },
+                            textureBytes = textureBytes,
+                            textureWidth = image.width,
+                            textureHeight = image.height,
+                            textureSourceId = image.sourceId,
+                            diagnostics = diagnostics,
+                            surfaceWidth = width,
+                            surfaceHeight = height,
+                            config = config,
+                            diagnosticName = paint.toString(),
+                            blendModeOverride = if (clipSourceRoute) GPUBlendMode.SRC_OVER else null,
+                        )
+                    }
+                    return encoded
+                }
+
+                if (vertices.positions.size < 3) return false
+                val path = Path().also { path ->
+                    when (vertices.mode) {
+                        org.graphiks.kanvas.types.VertexMode.TRIANGLES -> {
+                            var index = 0
+                            while (index + 2 < vertices.positions.size) {
+                                path.moveTo(vertices.positions[index].x, vertices.positions[index].y)
+                                path.lineTo(vertices.positions[index + 1].x, vertices.positions[index + 1].y)
+                                path.lineTo(vertices.positions[index + 2].x, vertices.positions[index + 2].y)
+                                path.close()
+                                index += 3
+                            }
+                        }
+                        org.graphiks.kanvas.types.VertexMode.TRIANGLE_STRIP -> {
+                            for (index in 2 until vertices.positions.size) {
+                                path.moveTo(vertices.positions[index - 2].x, vertices.positions[index - 2].y)
+                                path.lineTo(vertices.positions[index - 1].x, vertices.positions[index - 1].y)
+                                path.lineTo(vertices.positions[index].x, vertices.positions[index].y)
+                                path.close()
+                            }
+                        }
+                        org.graphiks.kanvas.types.VertexMode.TRIANGLE_FAN -> {
+                            val first = vertices.positions.first()
+                            for (index in 2 until vertices.positions.size) {
+                                path.moveTo(first.x, first.y)
+                                path.lineTo(vertices.positions[index - 1].x, vertices.positions[index - 1].y)
+                                path.lineTo(vertices.positions[index].x, vertices.positions[index].y)
+                                path.close()
+                            }
+                        }
+                    }
+                }
+                val flattened = PathTessellator(config.curveTolerance, config.maxPathVertices.toInt())
+                    .flattenWithContours(path.toPathTessellatorData())
+                val flat = flattened.points
+                if (flat.size < 3) {
+                    diagnostics.degrade(
+                        "unimplemented:$operationName:insufficient:${cmdId.value}",
+                        operationName,
+                        "insufficient_vertices:${flat.size}",
+                    )
+                    return false
+                }
+                val command = DisplayOp.DrawPath(path, paint, transform, clip).toNormalizedCommand(
+                    cmdId,
+                    targets,
+                    flat.flatMap { listOf(it.x, it.y) },
+                    flattened.contourStarts.ifEmpty { listOf(0) },
+                    flat.size,
+                )
+                return dispatchPathDirect(command)
+            }
 
             /** Executes the normalized core routes in either the scene or the transparent full-target source. */
             fun executeCoreClipRoute(op: DisplayOp, cmdId: GPUDrawCommandID, source: Boolean): Boolean {
@@ -759,6 +990,149 @@ internal fun renderViaGpu(
                             }
                         }
                         is DisplayOp.DrawImage -> renderImageCommand(op.toImageRectCommand(cmdId, targets))
+                        is DisplayOp.DrawText -> renderTextCommand(op, cmdId)
+                        is DisplayOp.DrawVertices -> renderVerticesCommand(
+                            vertices = op.vertices,
+                            paint = op.paint,
+                            transform = op.transform,
+                            clip = op.clip,
+                            cmdId = cmdId,
+                            operationName = "drawVertices",
+                        )
+                        is DisplayOp.DrawMesh -> {
+                            if (op.mesh.program != null) {
+                                diagnostics.fatal(
+                                    "refuse:drawMesh:${cmdId.value}",
+                                    "drawMesh",
+                                    "unsupported.mesh.program",
+                                )
+                                false
+                            } else {
+                                renderVerticesCommand(
+                                    vertices = op.mesh.vertices,
+                                    paint = op.paint,
+                                    transform = op.transform,
+                                    clip = op.clip,
+                                    cmdId = cmdId,
+                                    operationName = "drawMesh",
+                                    // Preserve the existing textured-mesh diagnostic family.
+                                    texturedDiagnosticName = "drawVertices",
+                                )
+                            }
+                        }
+                        is DisplayOp.DrawPicture -> {
+                            if (op.paint != null) {
+                                diagnostics.fatal(
+                                    "refuse:drawPicture:${cmdId.value}",
+                                    "drawPicture",
+                                    "unsupported.picture.paint",
+                                )
+                                false
+                            } else {
+                            val expanded = mutableListOf<DisplayOp>()
+                            fun expand(
+                                picture: org.graphiks.kanvas.picture.Picture,
+                                outerTransform: Matrix33,
+                            ) {
+                                for (nested in picture.ops) {
+                                    if (nested is DisplayOp.DrawPicture) {
+                                        expand(nested.picture, outerTransform * nested.transform)
+                                    } else {
+                                        expanded += nested.withCombinedTransform(outerTransform)
+                                    }
+                                }
+                            }
+                            expand(op.picture, op.transform)
+                            fun hasNestedClip(nested: DisplayOp): Boolean = when (nested) {
+                                is DisplayOp.DrawRect -> nested.clip != org.graphiks.kanvas.canvas.ClipStack.WideOpen
+                                is DisplayOp.DrawRRect -> nested.clip != org.graphiks.kanvas.canvas.ClipStack.WideOpen
+                                is DisplayOp.DrawPath -> nested.clip != org.graphiks.kanvas.canvas.ClipStack.WideOpen
+                                is DisplayOp.DrawImage -> nested.clip != org.graphiks.kanvas.canvas.ClipStack.WideOpen
+                                is DisplayOp.DrawText -> nested.clip != org.graphiks.kanvas.canvas.ClipStack.WideOpen
+                                is DisplayOp.DrawColor -> nested.clip != org.graphiks.kanvas.canvas.ClipStack.WideOpen
+                                is DisplayOp.DrawPoint -> nested.clip != org.graphiks.kanvas.canvas.ClipStack.WideOpen
+                                is DisplayOp.DrawPoints -> nested.clip != org.graphiks.kanvas.canvas.ClipStack.WideOpen
+                                is DisplayOp.DrawDRRect -> nested.clip != org.graphiks.kanvas.canvas.ClipStack.WideOpen
+                                is DisplayOp.DrawImageNine -> nested.clip != org.graphiks.kanvas.canvas.ClipStack.WideOpen
+                                is DisplayOp.DrawImageLattice -> nested.clip != org.graphiks.kanvas.canvas.ClipStack.WideOpen
+                                is DisplayOp.DrawPicture -> nested.clip != org.graphiks.kanvas.canvas.ClipStack.WideOpen
+                                is DisplayOp.DrawVertices -> nested.clip != org.graphiks.kanvas.canvas.ClipStack.WideOpen
+                                is DisplayOp.DrawMesh -> nested.clip != org.graphiks.kanvas.canvas.ClipStack.WideOpen
+                                is DisplayOp.DrawAtlas -> nested.clip != org.graphiks.kanvas.canvas.ClipStack.WideOpen
+                                is DisplayOp.Clear,
+                                is DisplayOp.SetTransform,
+                                is DisplayOp.SetClip,
+                                is DisplayOp.BeginLayer,
+                                DisplayOp.EndLayer,
+                                is DisplayOp.Annotation,
+                                is DisplayOp.FlushAndSnapshot,
+                                -> false
+                            }
+                            if (expanded.any { it is DisplayOp.BeginLayer || it is DisplayOp.EndLayer }) {
+                                diagnostics.fatal(
+                                    "refuse:drawPicture:${cmdId.value}",
+                                    "drawPicture",
+                                    "unsupported.picture.save_layer",
+                                )
+                                false
+                            } else if (expanded.any(::hasNestedClip)) {
+                                diagnostics.fatal(
+                                    "refuse:drawPicture:${cmdId.value}",
+                                    "drawPicture",
+                                    "unsupported.picture.nested_clip",
+                                )
+                                false
+                            } else {
+                                var renderedChild = false
+                                var allRendered = true
+                                for (nested in expanded) {
+                                    val nestedCmdId = GPUDrawCommandID(dispatched.size)
+                                    val perspectiveRefusal = nested.perspectiveCaptureRefusalReasonOrNull()
+                                    if (perspectiveRefusal != null) {
+                                        diagnostics.fatal(
+                                            "refuse:gpu-perspective-clip:${nestedCmdId.value}",
+                                            "gpu",
+                                            perspectiveRefusal,
+                                        )
+                                        allRendered = false
+                                        continue
+                                    }
+                                    val childRendered: Boolean? = when (nested) {
+                                        is DisplayOp.DrawRect,
+                                        is DisplayOp.DrawRRect,
+                                        is DisplayOp.DrawPath,
+                                        is DisplayOp.DrawImage,
+                                        is DisplayOp.DrawText,
+                                        is DisplayOp.DrawColor,
+                                        is DisplayOp.Clear,
+                                        is DisplayOp.DrawPoint,
+                                        is DisplayOp.DrawPoints,
+                                        is DisplayOp.DrawDRRect,
+                                        is DisplayOp.DrawImageNine,
+                                        is DisplayOp.DrawImageLattice,
+                                        is DisplayOp.DrawVertices,
+                                        is DisplayOp.DrawMesh,
+                                        is DisplayOp.DrawAtlas,
+                                        is DisplayOp.DrawPicture,
+                                        -> executeCoreClipRoute(nested, nestedCmdId, source = false)
+                                        is DisplayOp.SetTransform,
+                                        is DisplayOp.SetClip,
+                                        is DisplayOp.Annotation,
+                                        is DisplayOp.FlushAndSnapshot,
+                                        -> null
+                                        is DisplayOp.BeginLayer,
+                                        DisplayOp.EndLayer,
+                                        -> error("picture layer preflight should have refused")
+                                    }
+                                    if (childRendered != null) {
+                                        renderedChild = childRendered || renderedChild
+                                        allRendered = childRendered && allRendered
+                                    }
+                                }
+                                renderedChild && allRendered
+                            }
+                            }
+                        }
                         is DisplayOp.DrawColor -> dispatchRectDirect(op.toNormalizedCommand(cmdId, targets))
                         is DisplayOp.Clear -> dispatchRectDirect(op.toNormalizedCommand(cmdId, targets))
                         is DisplayOp.DrawPoint -> {
@@ -1042,6 +1416,7 @@ internal fun renderViaGpu(
                     op is DisplayOp.DrawPath ||
                     op is DisplayOp.DrawRRect ||
                     op is DisplayOp.DrawImage ||
+                    op is DisplayOp.DrawText ||
                     op is DisplayOp.DrawColor ||
                     op is DisplayOp.Clear ||
                     op is DisplayOp.DrawPoint ||
@@ -1049,6 +1424,9 @@ internal fun renderViaGpu(
                     op is DisplayOp.DrawDRRect ||
                     op is DisplayOp.DrawImageNine ||
                     op is DisplayOp.DrawImageLattice ||
+                    op is DisplayOp.DrawPicture ||
+                    op is DisplayOp.DrawVertices ||
+                    op is DisplayOp.DrawMesh ||
                     op is DisplayOp.DrawAtlas
                 ) {
                     val rendered = t.renderWithClip(
@@ -1069,6 +1447,19 @@ internal fun renderViaGpu(
                         )
                     }
                     continue
+                }
+                // Every visual DisplayOp above has one explicit clip-aware source route. Keep the
+                // legacy block below unreachable so adding a new DisplayOp cannot silently regain
+                // a direct complex-clip path before its source encoder and inventory test exist.
+                when (op) {
+                    is DisplayOp.SetTransform,
+                    is DisplayOp.SetClip,
+                    is DisplayOp.Annotation,
+                    is DisplayOp.FlushAndSnapshot,
+                    -> continue
+                    is DisplayOp.BeginLayer,
+                    DisplayOp.EndLayer,
+                    -> continue
                 }
                 val sourceThenComposite = clipPlan is GPUClipCoveragePlan.Mask
                 val destinationLabel = sceneLabel
@@ -1844,6 +2235,7 @@ internal fun renderViaGpu(
                     }
                     is DisplayOp.Annotation -> { /* no visual output */ }
                     is DisplayOp.FlushAndSnapshot -> { /* deferred to render-backend; no-op in CPU path */ }
+                    else -> error("unreachable legacy GPU route")
                     }
                 } finally {
                     if (sourceThenComposite) {
@@ -2061,6 +2453,7 @@ private fun GPUBackendRenderRecorder.drawTextAtlasPass(
     drawOriginX: Float = 0f,
     drawOriginY: Float = 0f,
     transform: Matrix33? = null,
+    recordResult: Boolean = true,
 ) {
     val blob = gpuBlob.textBlob
     val mesh = buildTextAtlasMesh(gpuBlob, drawOriginX, drawOriginY, transform)
@@ -2114,7 +2507,7 @@ private fun GPUBackendRenderRecorder.drawTextAtlasPass(
         ),
         blendMode = blendMode,
     )
-    dispatched.add("text:${blob.hashCode()}")
+    if (recordResult) dispatched.add("text:${blob.hashCode()}")
 }
 
 private fun resolveTextColor(paint: org.graphiks.kanvas.paint.Paint): Color {

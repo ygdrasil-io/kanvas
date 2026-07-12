@@ -26,26 +26,28 @@ internal fun GPUBackendRenderRecorder.dispatchTexturedVertices(
     surfaceHeight: Int,
     config: RenderConfig,
     diagnosticName: String,
-) {
+    /** The source pass for a clipped logical draw always uses fixed-function SrcOver. */
+    blendModeOverride: org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode? = null,
+): Boolean {
     fun refuse(reason: String) {
         diagnostics.fatal("refuse:texturedVertices:$diagnosticName", diagnosticName, reason)
     }
 
     if (positions.size < 6 || positions.size % 2 != 0) {
         refuse("invalid_positions:${positions.size}")
-        return
+        return false
     }
     if (uvs.size != positions.size) {
         refuse("uv_position_mismatch:${uvs.size}vs${positions.size}")
-        return
+        return false
     }
     if (textureBytes == null) {
         refuse("no_texture_bytes")
-        return
+        return false
     }
     textureDimensionsRefusalReasonOrNull(textureWidth, textureHeight)?.let { reason ->
         refuse(reason)
-        return
+        return false
     }
     val vertexCount = positions.size / 2
 
@@ -108,7 +110,7 @@ internal fun GPUBackendRenderRecorder.dispatchTexturedVertices(
         scissorHeight = surfaceHeight,
     )
 
-    val blend = org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode.values()
+    val blend = blendModeOverride ?: org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode.values()
         .firstOrNull { it.ordinal == paint.blendMode.ordinal }
 
     if (hasDualUV) {
@@ -135,4 +137,5 @@ internal fun GPUBackendRenderRecorder.dispatchTexturedVertices(
             blendMode = blend,
         )
     }
+    return true
 }

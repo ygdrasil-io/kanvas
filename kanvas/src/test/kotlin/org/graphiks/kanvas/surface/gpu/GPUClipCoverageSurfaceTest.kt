@@ -9,15 +9,30 @@ import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
 import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.BlendMode
+import org.graphiks.kanvas.paint.MeshProgram
 import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.pipeline.ClipOp
+import org.graphiks.kanvas.pipeline.RuntimeEffect
+import org.graphiks.kanvas.pipeline.RuntimeEffectWgsl4kWiring
+import org.graphiks.kanvas.picture.Picture
+import org.graphiks.kanvas.picture.PictureRecorder
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.surface.PixelFormat
 import org.graphiks.kanvas.surface.RenderConfig
+import org.graphiks.kanvas.text.Font
+import org.graphiks.kanvas.text.FontTypeface
+import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.types.RRect
 import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.kanvas.types.Lattice
+import org.graphiks.kanvas.types.Mesh
+import org.graphiks.kanvas.types.Point
+import org.graphiks.kanvas.types.PointMode
+import org.graphiks.kanvas.types.VertexMode
+import org.graphiks.kanvas.types.Vertices
 import org.graphiks.kanvas.types.alphaByte
 import org.graphiks.kanvas.types.blueByte
 import org.graphiks.kanvas.types.greenByte
@@ -196,6 +211,354 @@ class GPUClipCoverageSurfaceTest {
         assertEquals(0, trace.directComplexClipDispatches)
     }
 
+    @Test
+    fun `text atlas and textured vertices each use one complex clip source composite`() {
+        requireWebGpu()
+        val clip = ClipStack.Complex(
+            listOf(
+                ClipStackOp.RectOp(Rect(1f, 1f, 31f, 31f), ClipOp.INTERSECT, antiAlias = true),
+                ClipStackOp.RectOp(Rect(14f, 14f, 18f, 18f), ClipOp.DIFFERENCE, antiAlias = true),
+            ),
+        )
+        val typeface = FontTypeface(
+            javaClass.classLoader
+                .getResourceAsStream("fonts/liberation/LiberationSans-Regular.ttf")!!
+                .readBytes(),
+            fontName = "LiberationSans-Regular",
+        )
+        val image = bgraBluePixel()
+        val ops = listOf(
+            DisplayOp.DrawText(
+                blob = Font(typeface, 12f).toTextBlob("A", 4f, 16f),
+                x = 0f,
+                y = 0f,
+                paint = Paint.fill(Color.RED),
+                transform = Matrix33.identity(),
+                clip = clip,
+            ),
+            DisplayOp.DrawVertices(
+                vertices = Vertices(
+                    mode = VertexMode.TRIANGLES,
+                    positions = listOf(Point(0f, 0f), Point(8f, 0f), Point(0f, 8f)),
+                    texCoords = listOf(Point(0f, 0f), Point(1f, 0f), Point(0f, 1f)),
+                ),
+                paint = Paint.fill(Color.WHITE).copy(shader = Shader.Image(image)),
+                transform = Matrix33.translate(20f, 20f),
+                clip = clip,
+            ),
+        )
+        val trace = GPUClipRouteTrace()
+
+        val result = renderViaGpu(
+            buffer = StaticDisplayListBuffer(ops),
+            width = 32,
+            height = 32,
+            format = PixelFormat.RGBA8,
+            config = RenderConfig.DEFAULT,
+            routeTrace = trace,
+        )
+
+        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertEquals(2, trace.logicalDrawCount)
+        assertEquals(2, trace.sourceThenCompositeCount)
+        assertEquals(0, trace.directComplexClipDispatches)
+        assertPixel(result.pixels, 21, 21, Color.BLUE)
+    }
+
+    @Test
+    fun `mesh program is refused rather than rendered as plain vertices`() {
+        requireWebGpu()
+        val clip = ClipStack.Complex(
+            listOf(ClipStackOp.RectOp(Rect(1f, 1f, 15f, 15f), ClipOp.INTERSECT, antiAlias = true)),
+        )
+        val effect = simpleRuntimeEffect()
+        val mesh = Mesh(
+            vertices = Vertices(
+                VertexMode.TRIANGLES,
+                listOf(Point(2f, 2f), Point(8f, 2f), Point(2f, 8f)),
+            ),
+            program = MeshProgram(effect),
+            bounds = Rect(2f, 2f, 8f, 8f),
+        )
+        val trace = GPUClipRouteTrace()
+
+        val result = renderViaGpu(
+            StaticDisplayListBuffer(
+                listOf(DisplayOp.DrawMesh(mesh, Paint.fill(Color.RED), null, Matrix33.identity(), clip)),
+            ),
+            16,
+            16,
+            PixelFormat.RGBA8,
+            RenderConfig.DEFAULT,
+            trace,
+        )
+
+        assertEquals(1, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertTrue(result.diagnostics.entries.any { it.reason == "unsupported.mesh.program" })
+        assertEquals(0, trace.logicalDrawCount)
+    }
+
+    @Test
+    fun `textured vertices refuse perspective and non triangle list source encoders`() {
+        requireWebGpu()
+        val clip = ClipStack.Complex(
+            listOf(ClipStackOp.RectOp(Rect(1f, 1f, 15f, 15f), ClipOp.INTERSECT, antiAlias = true)),
+        )
+        val triangle = listOf(Point(1f, 1f), Point(8f, 1f), Point(1f, 8f))
+        val uvs = listOf(Point(0f, 0f), Point(1f, 0f), Point(0f, 1f))
+        val paint = Paint.fill(Color.WHITE).copy(shader = Shader.Image(bgraBluePixel()))
+
+        val perspective = renderViaGpu(
+            StaticDisplayListBuffer(
+                listOf(
+                    DisplayOp.DrawVertices(
+                        Vertices(VertexMode.TRIANGLES, triangle, texCoords = uvs),
+                        paint,
+                        Matrix33.makeAll(1f, 0f, 0f, 0f, 1f, 0f, 0.1f, 0f, 1f),
+                        clip,
+                    ),
+                ),
+            ),
+            16,
+            16,
+            PixelFormat.RGBA8,
+            RenderConfig.DEFAULT,
+        )
+        assertTrue(perspective.diagnostics.entries.any { it.reason == "unsupported.vertices.perspective_transform" })
+
+        val strip = renderViaGpu(
+            StaticDisplayListBuffer(
+                listOf(
+                    DisplayOp.DrawVertices(
+                        Vertices(VertexMode.TRIANGLE_STRIP, triangle, texCoords = uvs),
+                        paint,
+                        Matrix33.identity(),
+                        clip,
+                    ),
+                ),
+            ),
+            16,
+            16,
+            PixelFormat.RGBA8,
+            RenderConfig.DEFAULT,
+        )
+        assertTrue(strip.diagnostics.entries.any { it.reason == "unsupported.vertices.textured_mode" })
+    }
+
+    @Test
+    fun `non textured vertices with colors or indices are refused instead of flattened`() {
+        requireWebGpu()
+        val clip = ClipStack.Complex(
+            listOf(ClipStackOp.RectOp(Rect(1f, 1f, 15f, 15f), ClipOp.INTERSECT, antiAlias = true)),
+        )
+        val vertices = Vertices(
+            VertexMode.TRIANGLES,
+            positions = listOf(Point(1f, 1f), Point(8f, 1f), Point(1f, 8f)),
+            colors = listOf(Color.RED, Color.GREEN, Color.BLUE),
+            indices = listOf(0, 1, 2),
+        )
+
+        val result = renderViaGpu(
+            StaticDisplayListBuffer(
+                listOf(DisplayOp.DrawVertices(vertices, Paint.fill(Color.WHITE), Matrix33.identity(), clip)),
+            ),
+            16,
+            16,
+            PixelFormat.RGBA8,
+            RenderConfig.DEFAULT,
+        )
+
+        assertTrue(result.diagnostics.entries.any { it.reason == "unsupported.vertices.colors_or_indices" })
+    }
+
+    @Test
+    fun `textured vertices with invalid indices are refused before the backend buffer`() {
+        requireWebGpu()
+        val clip = ClipStack.Complex(
+            listOf(ClipStackOp.RectOp(Rect(1f, 1f, 15f, 15f), ClipOp.INTERSECT, antiAlias = true)),
+        )
+        val vertices = Vertices(
+            VertexMode.TRIANGLES,
+            positions = listOf(Point(1f, 1f), Point(8f, 1f), Point(1f, 8f)),
+            texCoords = listOf(Point(0f, 0f), Point(1f, 0f), Point(0f, 1f)),
+            indices = listOf(0, 1, 3),
+        )
+
+        val result = renderViaGpu(
+            StaticDisplayListBuffer(
+                listOf(
+                    DisplayOp.DrawVertices(
+                        vertices,
+                        Paint.fill(Color.WHITE).copy(shader = Shader.Image(bgraBluePixel())),
+                        Matrix33.identity(),
+                        clip,
+                    ),
+                ),
+            ),
+            16,
+            16,
+            PixelFormat.RGBA8,
+            RenderConfig.DEFAULT,
+        )
+
+        assertTrue(result.diagnostics.entries.any { it.reason == "unsupported.vertices.indices" })
+    }
+
+    @Test
+    fun `picture paint and captured child clips are explicitly refused`() {
+        requireWebGpu()
+        val outerClip = ClipStack.Complex(
+            listOf(ClipStackOp.RectOp(Rect(1f, 1f, 15f, 15f), ClipOp.INTERSECT, antiAlias = true)),
+        )
+        val recorder = PictureRecorder()
+        recorder.beginRecording(Rect(0f, 0f, 8f, 8f)).drawRect(Rect(1f, 1f, 7f, 7f), Paint.fill(Color.RED))
+        val picture = recorder.finishRecordingAsPicture()
+
+        val paintResult = renderPictureWithClip(picture, Paint.fill(Color.RED), outerClip)
+        assertTrue(paintResult.diagnostics.entries.any { it.reason == "unsupported.picture.paint" })
+
+        val childClipResult = renderPictureWithClip(picture, null, outerClip)
+        assertTrue(childClipResult.diagnostics.entries.any { it.reason == "unsupported.picture.nested_clip" })
+    }
+
+    @Test
+    fun `outline text without a typeface reports a stable degradation without a source`() {
+        requireWebGpu()
+        val clip = ClipStack.Complex(
+            listOf(ClipStackOp.RectOp(Rect(1f, 1f, 15f, 15f), ClipOp.INTERSECT, antiAlias = true)),
+        )
+        val trace = GPUClipRouteTrace()
+
+        val result = renderViaGpu(
+            StaticDisplayListBuffer(
+                listOf(
+                    DisplayOp.DrawText(
+                        TextBlob(emptyList()),
+                        0f,
+                        0f,
+                        Paint.stroke(Color.RED, 1f),
+                        Matrix33.identity(),
+                        clip,
+                    ),
+                ),
+            ),
+            16,
+            16,
+            PixelFormat.RGBA8,
+            RenderConfig.DEFAULT,
+            trace,
+        )
+
+        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertTrue(result.diagnostics.entries.any { it.reason == "unsupported.text.outline.no_typeface" })
+        assertEquals(0, trace.logicalDrawCount)
+    }
+
+    @Test
+    fun `empty text does not produce a complex clip source composite`() {
+        requireWebGpu()
+        val clip = ClipStack.Complex(
+            listOf(
+                ClipStackOp.RectOp(Rect(1f, 1f, 15f, 15f), ClipOp.INTERSECT, antiAlias = true),
+            ),
+        )
+        val trace = GPUClipRouteTrace()
+
+        val result = renderViaGpu(
+            buffer = StaticDisplayListBuffer(
+                listOf(
+                    DisplayOp.DrawText(
+                        TextBlob(emptyList()),
+                        0f,
+                        0f,
+                        Paint.fill(Color.RED),
+                        Matrix33.identity(),
+                        clip,
+                    ),
+                ),
+            ),
+            width = 16,
+            height = 16,
+            format = PixelFormat.RGBA8,
+            config = RenderConfig.DEFAULT,
+            routeTrace = trace,
+        )
+
+        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertEquals(0, trace.logicalDrawCount)
+        assertEquals(0, trace.sourceThenCompositeCount)
+    }
+
+    @Test
+    fun `remaining high level GPU routes use one source composite or a stable refusal`() {
+        requireWebGpu()
+        val clip = ClipStack.Complex(
+            listOf(
+                ClipStackOp.RectOp(Rect(1f, 1f, 31f, 31f), ClipOp.INTERSECT, antiAlias = true),
+                ClipStackOp.RectOp(Rect(14f, 14f, 18f, 18f), ClipOp.DIFFERENCE, antiAlias = true),
+            ),
+        )
+        val image = opaqueImage(size = 3)
+        val triangle = Vertices(
+            mode = VertexMode.TRIANGLES,
+            positions = listOf(Point(2f, 2f), Point(8f, 2f), Point(2f, 8f)),
+        )
+        val picture = Picture(
+            Rect(0f, 0f, 10f, 10f),
+            listOf(DisplayOp.DrawRect(Rect(2f, 2f, 8f, 8f), Paint.fill(Color.RED), Matrix33.identity(), ClipStack.WideOpen)),
+        )
+        val ops = listOf(
+            DisplayOp.DrawPoints(PointMode.POINTS, listOf(Point(3f, 3f), Point(6f, 6f)), Paint.fill(Color.RED), Matrix33.identity(), clip),
+            DisplayOp.DrawDRRect(
+                RRect(Rect(2f, 20f, 10f, 28f), radius = 1f),
+                RRect(Rect(4f, 22f, 8f, 26f), radius = 1f),
+                Paint.fill(Color.RED),
+                Matrix33.identity(),
+                clip,
+            ),
+            DisplayOp.DrawImageNine(image, Rect(1f, 1f, 2f, 2f), Rect(12f, 2f, 22f, 12f), null, Matrix33.identity(), clip),
+            DisplayOp.DrawImageLattice(
+                image,
+                Lattice(xDivs = listOf(1, 2), yDivs = listOf(1, 2)),
+                Rect(12f, 14f, 22f, 24f),
+                null,
+                Matrix33.identity(),
+                clip,
+            ),
+            DisplayOp.DrawAtlas(
+                atlas = image,
+                transforms = listOf(Matrix33.identity(), Matrix33.identity()),
+                texRects = listOf(Rect(0f, 0f, 3f, 3f), Rect(0f, 0f, 3f, 3f)),
+                colors = null,
+                blendMode = BlendMode.SRC_OVER,
+                paint = null,
+                transform = Matrix33.identity(),
+                clip = clip,
+            ),
+            DisplayOp.DrawPicture(picture, null, Matrix33.identity(), clip),
+            DisplayOp.DrawMesh(Mesh(triangle, bounds = Rect(2f, 12f, 8f, 18f)), Paint.fill(Color.RED), null, Matrix33.identity(), clip),
+        )
+        val trace = GPUClipRouteTrace()
+
+        val result = renderViaGpu(
+            buffer = StaticDisplayListBuffer(ops),
+            width = 32,
+            height = 32,
+            format = PixelFormat.RGBA8,
+            config = RenderConfig.DEFAULT,
+            routeTrace = trace,
+        )
+
+        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertEquals(7, trace.logicalDrawCount, result.diagnostics.entries.toString())
+        assertEquals(7, trace.sourceThenCompositeCount, result.diagnostics.entries.toString())
+        assertEquals(0, trace.directComplexClipDispatches)
+        assertTrue(
+            result.diagnostics.entries.none { it.reason.startsWith("unsupported.gpu.route.unclassified") },
+            result.diagnostics.entries.toString(),
+        )
+    }
+
     private fun requireWebGpu() {
         val runtime = GPUBackendRuntimeFactory.createOrNull()
         assumeTrue(runtime != null, "GPU backend unavailable in current environment")
@@ -204,9 +567,15 @@ class GPUClipCoverageSurfaceTest {
 
     private fun assertPixel(pixels: UByteArray, x: Int, y: Int, expected: Color) {
         val offset = (y * 32 + x) * 4
+        val actual = listOf(
+            pixels[offset].toInt() and 0xff,
+            pixels[offset + 1].toInt() and 0xff,
+            pixels[offset + 2].toInt() and 0xff,
+            pixels[offset + 3].toInt() and 0xff,
+        )
         assertTrue((pixels[offset].toInt() and 0xff) >= expected.redByte * 200 / 255)
         assertTrue((pixels[offset + 1].toInt() and 0xff) >= expected.greenByte * 200 / 255)
-        assertTrue((pixels[offset + 2].toInt() and 0xff) >= expected.blueByte * 200 / 255)
+        assertTrue((pixels[offset + 2].toInt() and 0xff) >= expected.blueByte * 200 / 255, "actual=$actual")
         assertTrue((pixels[offset + 3].toInt() and 0xff) >= expected.alphaByte * 200 / 255)
     }
 
@@ -235,6 +604,44 @@ class GPUClipCoverageSurfaceTest {
         pixels = byteArrayOf(0, 0, 0xff.toByte(), 0xff.toByte()),
         colorType = ColorType.RGBA_8888,
         sourceId = "clip-blue-pixel",
+    )
+
+    private fun bgraBluePixel(): Image = Image.fromPixels(
+        width = 1,
+        height = 1,
+        pixels = byteArrayOf(0xff.toByte(), 0, 0, 0xff.toByte()),
+        colorType = ColorType.BGRA_8888,
+        sourceId = "clip-bgra-blue-pixel",
+    )
+
+    private fun opaqueImage(size: Int): Image = Image.fromPixels(
+        width = size,
+        height = size,
+        pixels = ByteArray(size * size * 4) { index -> if (index % 4 == 3) 0xff.toByte() else 0x7f },
+        colorType = ColorType.RGBA_8888,
+        sourceId = "clip-opaque-$size",
+    )
+
+    private fun simpleRuntimeEffect(): RuntimeEffect {
+        RuntimeEffectWgsl4kWiring.install()
+        return RuntimeEffect.compile(
+            """
+                @fragment
+                fn main() -> @location(0) vec4f {
+                    return vec4f(1.0, 0.0, 0.0, 1.0);
+                }
+            """.trimIndent(),
+        ).getOrThrow()
+    }
+
+    private fun renderPictureWithClip(picture: Picture, paint: Paint?, clip: ClipStack) = renderViaGpu(
+        StaticDisplayListBuffer(
+            listOf(DisplayOp.DrawPicture(picture, paint, Matrix33.identity(), clip)),
+        ),
+        16,
+        16,
+        PixelFormat.RGBA8,
+        RenderConfig.DEFAULT,
     )
 
     private class StaticDisplayListBuffer(

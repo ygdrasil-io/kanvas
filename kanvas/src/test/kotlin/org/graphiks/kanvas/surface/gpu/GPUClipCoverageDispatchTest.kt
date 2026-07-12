@@ -37,6 +37,7 @@ import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.canvas.ClipStackOp
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.pipeline.ClipOp
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.CornerRadii
@@ -117,6 +118,32 @@ class GPUClipCoverageDispatchTest {
         repeat(4) { assertEquals(0f, values.getFloat()) }
         assertEquals(7, draw.scissorWidth)
         assertEquals(9, draw.scissorHeight)
+    }
+
+    @Test
+    fun `textured vertices source encoder overrides the logical blend with src over`() {
+        val target = CapturingClipTarget()
+
+        val encoded = target.recorder().dispatchTexturedVertices(
+            positions = floatArrayOf(0f, 0f, 4f, 0f, 0f, 4f),
+            uvs = floatArrayOf(0f, 0f, 1f, 0f, 0f, 1f),
+            uvs2 = null,
+            indices = intArrayOf(0, 1, 2),
+            paint = Paint.fill(Color.RED).copy(blendMode = BlendMode.SRC),
+            textureBytes = byteArrayOf(0, 0, 0xff.toByte(), 0xff.toByte()),
+            textureWidth = 1,
+            textureHeight = 1,
+            textureSourceId = "clip-source-vertex",
+            diagnostics = Diagnostics(),
+            surfaceWidth = 8,
+            surfaceHeight = 8,
+            config = RenderConfig.DEFAULT,
+            diagnosticName = "drawVertices",
+            blendModeOverride = GPUBlendMode.SRC_OVER,
+        )
+
+        assertTrue(encoded)
+        assertEquals(listOf<GPUBlendMode?>(GPUBlendMode.SRC_OVER), target.vertexBlendModes)
     }
 
     @Test
@@ -247,6 +274,9 @@ class GPUClipCoverageDispatchTest {
     private class CapturingClipTarget : GPUBackendOffscreenTarget {
         val passKinds = mutableListOf<String>()
         val releasedMasks = mutableListOf<GPUBackendCoverageMask>()
+        val vertexBlendModes = mutableListOf<GPUBlendMode?>()
+
+        fun recorder(): GPUBackendRenderRecorder = CapturingRecorder()
 
         override val target: GPUSurfaceTarget
             get() = error("target is not used by this pass-planning test")
@@ -330,8 +360,10 @@ class GPUClipCoverageDispatchTest {
             override fun drawFullscreenTextureUniformPass(wgsl: String, colorFormat: String, textureRgba: ByteArray, textureWidth: Int, textureHeight: Int, textureFormat: String, draws: List<GPUBackendRawUniformDraw>, blendMode: GPUBlendMode?, stencilMode: GPUBackendStencilMode?, stencilConfig: GPUBackendStencilCoverConfig) = unexpected()
             override fun createVertexColorBuffer(data: org.graphiks.kanvas.gpu.renderer.execution.GPUBackendVertexColorData): String = unexpected()
             override fun drawVertexColorIndexed(vertexBufferLabel: String, indexCount: Int, uniformDraw: GPUBackendRawUniformDraw, blendMode: GPUBlendMode?) = unexpected()
-            override fun createVertexPositionUVBuffer(data: org.graphiks.kanvas.gpu.renderer.execution.GPUBackendVertexPositionUVData): String = unexpected()
-            override fun drawVertexPositionUVIndexed(vertexBufferLabel: String, indexCount: Int, uniformDraw: GPUBackendRawUniformDraw, textureRgba: ByteArray, textureWidth: Int, textureHeight: Int, textureFormat: String, blendMode: GPUBlendMode?) = unexpected()
+            override fun createVertexPositionUVBuffer(data: org.graphiks.kanvas.gpu.renderer.execution.GPUBackendVertexPositionUVData): String = "vertex-buffer"
+            override fun drawVertexPositionUVIndexed(vertexBufferLabel: String, indexCount: Int, uniformDraw: GPUBackendRawUniformDraw, textureRgba: ByteArray, textureWidth: Int, textureHeight: Int, textureFormat: String, blendMode: GPUBlendMode?) {
+                vertexBlendModes += blendMode
+            }
             override fun drawVertexPositionDualUVIndexed(vertexBufferLabel: String, indexCount: Int, uniformDraw: GPUBackendRawUniformDraw, texture1Rgba: ByteArray, texture1Width: Int, texture1Height: Int, texture2Rgba: ByteArray, texture2Width: Int, texture2Height: Int, textureFormat: String, blendMode: GPUBlendMode?) = unexpected()
             override fun createOffscreenTexture(texture: GPUBackendOffscreenTexture): String = unexpected()
             override fun encodeOffscreenTexture(textureLabel: String, clearColor: GPUClearColor?, block: GPUBackendRenderRecorder.() -> Unit) = unexpected()
