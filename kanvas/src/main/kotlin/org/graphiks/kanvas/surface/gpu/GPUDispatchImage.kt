@@ -18,6 +18,7 @@ internal fun GPUBackendRenderRecorder.dispatchImageRect(
     surfaceWidth: Int,
     surfaceHeight: Int,
     config: RenderConfig,
+    recordResult: Boolean = true,
 ) {
     fun refuse(reason: String) {
         diagnostics.fatal("refuse:${cmd.diagnosticName}", cmd.diagnosticName, reason)
@@ -99,5 +100,5 @@ internal fun GPUBackendRenderRecorder.dispatchImageRect(
         blendMode = blendMode,
     )
 
-    dispatched.add(cmd.commandId.toString())
+    if (recordResult) dispatched.add(cmd.commandId.toString())
 }

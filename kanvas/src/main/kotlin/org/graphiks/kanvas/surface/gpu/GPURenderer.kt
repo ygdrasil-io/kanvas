@@ -8,6 +8,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
 import org.graphiks.kanvas.gpu.renderer.commands.GPUImageFilterPlan
+import org.graphiks.kanvas.gpu.renderer.commands.GPUBlendFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
@@ -66,6 +67,7 @@ internal fun selectPathVerticesForCommand(
 ): List<Point> =
     if (isStroke) flattened else triangulated
 
+@OptIn(ExperimentalUnsignedTypes::class)
 internal fun renderViaGpu(
     buffer: DisplayListBuffer,
     width: Int,
@@ -104,6 +106,7 @@ internal fun renderViaGpu(
             data class SceneTargetFrame(val label: String, val hasContent: Boolean)
 
             var sceneHasContent = false
+            var clipSourceRoute = false
             val layerStack = java.util.ArrayDeque<SceneTargetFrame>()
             var layerOrdinal = 0
             val clearTransparent = GPUClearColor(0.0, 0.0, 0.0, 0.0)
@@ -192,6 +195,7 @@ internal fun renderViaGpu(
             }
 
             fun renderMaskBlur(command: NormalizedDrawCommand, plan: MaskBlurPlan.Ready): Boolean {
+                val routedCommand = if (clipSourceRoute) command.copyForClipSource(width, height) else command
                 plan.diagnostics.forEach { diagnostic ->
                     diagnostics.degrade(
                         "degrade:${command.diagnosticName}:${command.commandId.value}:${diagnostic.code}",
@@ -201,40 +205,53 @@ internal fun renderViaGpu(
                 }
                 return t.renderMaskBlurCommand(
                     sceneLabel,
-                    command,
+                    routedCommand,
                     plan,
                     sceneClear(),
                     dispatched,
                     diagnostics,
                     texFormat,
+                    recordResult = !clipSourceRoute,
                 ).rendered
             }
 
             fun dispatchRectDirect(command: NormalizedDrawCommand.FillRect): Boolean {
-                if (command.blend.requiresDestinationRead) {
-                    renderAdvancedBlend(command)
+                val routedCommand = if (clipSourceRoute) command.copyForClipSource(width, height) else command
+                if (routedCommand.blend.requiresDestinationRead) {
+                    renderAdvancedBlend(routedCommand)
                 } else {
                     t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
-                        dispatchFillRect(command, dispatched, diagnostics, width, height, config)
+                        dispatchFillRect(
+                            routedCommand, dispatched, diagnostics, width, height, config,
+                            recordResult = !clipSourceRoute,
+                        )
                     }
                 }
                 return true
             }
 
             fun dispatchPathDirect(command: NormalizedDrawCommand.FillPath): Boolean {
-                if (command.blend.requiresDestinationRead) {
-                    diagnostics.fatal("refuse:drawPath:${command.commandId.value}", "drawPath", "unsupported_blend:advanced")
+                val routedCommand = if (clipSourceRoute) command.copyForClipSource(width, height) else command
+                if (routedCommand.blend.requiresDestinationRead) {
+                    diagnostics.fatal("refuse:drawPath:${routedCommand.commandId.value}", "drawPath", "unsupported_blend:advanced")
                     return false
                 }
                 t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
-                    dispatchFillPath(command, dispatched, diagnostics, width, height, config)
+                    dispatchFillPath(
+                        routedCommand, dispatched, diagnostics, width, height, config,
+                        recordResult = !clipSourceRoute,
+                    )
                 }
                 return true
             }
 
             fun dispatchRRectDirect(command: NormalizedDrawCommand.FillRRect): Boolean {
+                val routedCommand = if (clipSourceRoute) command.copyForClipSource(width, height) else command
                 t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
-                    dispatchFillRRect(command, dispatched, diagnostics, width, height, config)
+                    dispatchFillRRect(
+                        routedCommand, dispatched, diagnostics, width, height, config,
+                        recordResult = !clipSourceRoute,
+                    )
                 }
                 return true
             }
@@ -560,28 +577,36 @@ internal fun renderViaGpu(
             }
             scanImages(ops)
 
-            fun renderImageCommand(cmd: NormalizedDrawCommand.DrawImageRect) {
-                when (val plan = cmd.imageFilterPlan) {
+            fun renderImageCommand(cmd: NormalizedDrawCommand.DrawImageRect): Boolean {
+                val routedCommand = if (clipSourceRoute) cmd.copyForClipSource(width, height) else cmd
+                val fatalBefore = diagnostics.fatalCount
+                val plan = routedCommand.imageFilterPlan
+                when (plan) {
                     GPUImageFilterPlan.None, GPUImageFilterPlan.Identity -> {
                         t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
-                            dispatchImageRect(cmd, textureCache, dispatched, diagnostics, width, height, config)
+                            dispatchImageRect(
+                                routedCommand, textureCache, dispatched, diagnostics, width, height, config,
+                                recordResult = !clipSourceRoute,
+                            )
                         }
                     }
                     is GPUImageFilterPlan.Refused -> {
-                        diagnostics.fatal("refuse:${cmd.diagnosticName}", cmd.diagnosticName, plan.code)
+                        diagnostics.fatal("refuse:${routedCommand.diagnosticName}", routedCommand.diagnosticName, plan.code)
                     }
                     is GPUImageFilterPlan.Blur -> {
                         t.renderImageCommand(
                             sceneTextureLabel = sceneLabel,
-                            command = cmd,
+                            command = routedCommand,
                             textureCache = textureCache,
                             sceneClearColor = sceneClear(),
                             dispatched = dispatched,
                             diagnostics = diagnostics,
                             colorFormat = texFormat,
+                            recordResult = !clipSourceRoute,
                         )
                     }
                 }
+                return diagnostics.fatalCount == fatalBefore && plan !is GPUImageFilterPlan.Refused
             }
 
             val clipFrameCache = GPUClipCoverageFrameCache(config.maxClipIntermediateBytes.toLong())
@@ -592,18 +617,311 @@ internal fun renderViaGpu(
                 maxTextureDimension2D = t.maxTextureDimension2D,
                 cache = clipFrameCache,
             )
-            fun acquireClipMaskOrRefuse(
-                plan: GPUClipCoveragePlan.Mask,
-                cmdId: GPUDrawCommandID,
-            ): ClipMaskLease? = try {
-                t.acquireClipMask(plan, clipFrameCache, diagnostics, config)
-            } catch (_: GPUClipCoverageFrameBudgetExceededException) {
-                diagnostics.fatal(
-                    "refuse:clip-mask:${cmdId.value}",
-                    "clipMask",
-                    "unsupported.clip.frame_budget",
-                )
-                null
+
+            /** Executes the normalized core routes in either the scene or the transparent full-target source. */
+            fun executeCoreClipRoute(op: DisplayOp, cmdId: GPUDrawCommandID, source: Boolean): Boolean {
+                val savedSceneLabel = sceneLabel
+                val savedSceneHasContent = sceneHasContent
+                if (source) {
+                    sceneLabel = srcLabel
+                    sceneHasContent = false
+                    clipSourceRoute = true
+                }
+                val fatalBefore = diagnostics.fatalCount
+                var rendered = false
+                try {
+                    rendered = when (op) {
+                        is DisplayOp.DrawRect -> {
+                            if (op.paint.isStroke()) {
+                                val command = op.toStrokePathCommand(cmdId, targets)
+                                if (command.maskFilter == null) {
+                                    dispatchPathDirect(command)
+                                } else when (val blurPlan = planMaskBlur(
+                                    if (source) command.copyForClipSource(width, height) else command,
+                                )) {
+                                    is MaskBlurPlan.Ready -> renderMaskBlur(command, blurPlan)
+                                    is MaskBlurPlan.Refused -> {
+                                        refuseMaskBlur(command, blurPlan)
+                                        false
+                                    }
+                                    MaskBlurPlan.Identity -> dispatchPathDirect(command)
+                                }
+                            } else {
+                                val command = op.toNormalizedCommand(cmdId, targets)
+                                if (command.maskFilter == null) {
+                                    dispatchRectDirect(command)
+                                } else when (val blurPlan = planMaskBlur(
+                                    if (source) command.copyForClipSource(width, height) else command,
+                                )) {
+                                    is MaskBlurPlan.Ready -> renderMaskBlur(command, blurPlan)
+                                    is MaskBlurPlan.Refused -> {
+                                        refuseMaskBlur(command, blurPlan)
+                                        false
+                                    }
+                                    MaskBlurPlan.Identity -> dispatchRectDirect(command)
+                                }
+                            }
+                        }
+                        is DisplayOp.DrawPath -> {
+                            val paint = op.paint
+                            val isStroke = paint.isStroke()
+                            val pathRect = Rect(0f, 0f, 0f, 0f)
+                            if (!isStroke &&
+                                op.transform == Matrix33.identity() &&
+                                op.path.fillType in setOf(FillType.WINDING, FillType.EVEN_ODD) &&
+                                op.path.isRect(pathRect)
+                            ) {
+                                val command = DisplayOp.DrawRect(pathRect, paint, op.transform, op.clip)
+                                    .toNormalizedCommand(cmdId, targets)
+                                if (command.maskFilter == null) {
+                                    dispatchRectDirect(command)
+                                } else when (val blurPlan = planMaskBlur(
+                                    if (source) command.copyForClipSource(width, height) else command,
+                                )) {
+                                    is MaskBlurPlan.Ready -> renderMaskBlur(command, blurPlan)
+                                    is MaskBlurPlan.Refused -> {
+                                        refuseMaskBlur(command, blurPlan)
+                                        false
+                                    }
+                                    MaskBlurPlan.Identity -> dispatchRectDirect(command)
+                                }
+                            } else {
+                                val flattened = PathTessellator(
+                                    tolerance = config.curveTolerance,
+                                    maxVertices = config.maxPathVertices.toInt(),
+                                ).flattenWithContours(op.path.toPathTessellatorData())
+                                val points = flattened.points
+                                val allowsDegenerateRoundStroke =
+                                    isStroke && paint.strokeCap.name.lowercase() == "round"
+                                val minimumVertices = if (isStroke) {
+                                    if (allowsDegenerateRoundStroke) 1 else 2
+                                } else {
+                                    3
+                                }
+                                if (points.size < minimumVertices) {
+                                    diagnostics.fatal(
+                                        "refuse:${op.hashCode()}",
+                                        "drawPath",
+                                        "insufficient_vertices:${points.size}",
+                                    )
+                                    false
+                                } else {
+                                    val vertices = selectPathVerticesForCommand(
+                                        isStroke = isStroke,
+                                        flattened = points,
+                                        triangulated = points,
+                                    ).flatMap { listOf(it.x, it.y) }
+                                    val command = op.toNormalizedCommand(
+                                        cmdId,
+                                        targets,
+                                        vertices,
+                                        flattened.contourStarts.ifEmpty { listOf(0) },
+                                        points.size,
+                                    )
+                                    if (command.maskFilter == null) {
+                                        dispatchPathDirect(command)
+                                    } else when (val blurPlan = planMaskBlur(
+                                        if (source) command.copyForClipSource(width, height) else command,
+                                    )) {
+                                        is MaskBlurPlan.Ready -> renderMaskBlur(command, blurPlan)
+                                        is MaskBlurPlan.Refused -> {
+                                            refuseMaskBlur(command, blurPlan)
+                                            false
+                                        }
+                                        MaskBlurPlan.Identity -> dispatchPathDirect(command)
+                                    }
+                                }
+                            }
+                        }
+                        is DisplayOp.DrawRRect -> {
+                            if (op.paint.isStroke()) {
+                                diagnostics.fatal(
+                                    "refuse:drawRRect:${cmdId.value}",
+                                    "drawRRect",
+                                    "stroke_rrect_unimplemented",
+                                )
+                                false
+                            } else {
+                                val command = op.toNormalizedCommand(cmdId, targets)
+                                if (command.maskFilter == null) {
+                                    dispatchRRectDirect(command)
+                                } else when (val blurPlan = planMaskBlur(
+                                    if (source) command.copyForClipSource(width, height) else command,
+                                )) {
+                                    is MaskBlurPlan.Ready -> renderMaskBlur(command, blurPlan)
+                                    is MaskBlurPlan.Refused -> {
+                                        refuseMaskBlur(command, blurPlan)
+                                        false
+                                    }
+                                    MaskBlurPlan.Identity -> dispatchRRectDirect(command)
+                                }
+                            }
+                        }
+                        is DisplayOp.DrawImage -> renderImageCommand(op.toImageRectCommand(cmdId, targets))
+                        is DisplayOp.DrawColor -> dispatchRectDirect(op.toNormalizedCommand(cmdId, targets))
+                        is DisplayOp.Clear -> dispatchRectDirect(op.toNormalizedCommand(cmdId, targets))
+                        is DisplayOp.DrawPoint -> {
+                            if (op.paint.isStroke()) {
+                                diagnostics.fatal(
+                                    "refuse:drawPoint:${cmdId.value}",
+                                    "drawPoint",
+                                    "stroke_point_unimplemented",
+                                )
+                                false
+                            } else {
+                                dispatchRectDirect(op.toNormalizedCommand(cmdId, targets))
+                            }
+                        }
+                        is DisplayOp.DrawPoints -> when (op.mode) {
+                            PointMode.POINTS -> {
+                                var allRendered = op.points.isNotEmpty()
+                                for (point in op.points) {
+                                    val command = DisplayOp.DrawPoint(
+                                        point.x,
+                                        point.y,
+                                        op.paint,
+                                        op.transform,
+                                        op.clip,
+                                    ).toNormalizedCommand(GPUDrawCommandID(dispatched.size), targets)
+                                    allRendered = dispatchRectDirect(command) && allRendered
+                                }
+                                allRendered
+                            }
+                            else -> {
+                                val path = op.toPath()
+                                val flattened = PathTessellator(
+                                    tolerance = config.curveTolerance,
+                                    maxVertices = config.maxPathVertices.toInt(),
+                                ).flattenWithContours(path.toPathTessellatorData())
+                                val points = flattened.points
+                                if (points.size < 3) {
+                                    diagnostics.fatal(
+                                        "refuse:drawPoints:${cmdId.value}",
+                                        "drawPoints",
+                                        "insufficient_vertices:${points.size}",
+                                    )
+                                    false
+                                } else {
+                                    val command = DisplayOp.DrawPath(path, op.paint, op.transform, op.clip)
+                                        .toNormalizedCommand(
+                                            cmdId,
+                                            targets,
+                                            points.flatMap { listOf(it.x, it.y) },
+                                            flattened.contourStarts.ifEmpty { listOf(0) },
+                                            points.size,
+                                        )
+                                        .copy(stroke = op.mode == PointMode.LINES)
+                                    dispatchPathDirect(command)
+                                }
+                            }
+                        }
+                        is DisplayOp.DrawDRRect -> {
+                            if (op.paint.isStroke()) {
+                                diagnostics.fatal(
+                                    "refuse:drawDRRect:${cmdId.value}",
+                                    "drawDRRect",
+                                    "stroke_drrect_unimplemented",
+                                )
+                                false
+                            } else {
+                                val path = op.toPath()
+                                val flattened = PathTessellator(
+                                    tolerance = config.curveTolerance,
+                                    maxVertices = config.maxPathVertices.toInt(),
+                                ).flattenWithContours(path.toPathTessellatorData())
+                                val points = flattened.points
+                                if (points.size < 3) {
+                                    diagnostics.fatal(
+                                        "refuse:drawDRRect:${cmdId.value}",
+                                        "drawDRRect",
+                                        "insufficient_vertices:${points.size}",
+                                    )
+                                    false
+                                } else {
+                                    val command = DisplayOp.DrawPath(path, op.paint, op.transform, op.clip)
+                                        .toNormalizedCommand(
+                                            cmdId,
+                                            targets,
+                                            points.flatMap { listOf(it.x, it.y) },
+                                            flattened.contourStarts.ifEmpty { listOf(0) },
+                                            points.size,
+                                        )
+                                    dispatchPathDirect(command)
+                                }
+                            }
+                        }
+                        is DisplayOp.DrawImageNine -> {
+                            var allRendered = true
+                            for (cell in op.decompose()) {
+                                val command = DisplayOp.DrawImage(
+                                    op.image,
+                                    cell.src,
+                                    cell.dst,
+                                    op.paint,
+                                    op.transform,
+                                    op.clip,
+                                ).toImageRectCommand(GPUDrawCommandID(dispatched.size), targets)
+                                allRendered = renderImageCommand(command) && allRendered
+                            }
+                            allRendered
+                        }
+                        is DisplayOp.DrawImageLattice -> {
+                            var allRendered = true
+                            for (cell in op.decompose()) {
+                                val paint = if (cell.color != null) {
+                                    (op.paint ?: Paint()).copy(
+                                        color = cell.color,
+                                        blendMode = op.paint?.blendMode ?: org.graphiks.kanvas.paint.BlendMode.SRC_OVER,
+                                    )
+                                } else {
+                                    op.paint
+                                }
+                                val command = DisplayOp.DrawImage(
+                                    op.image,
+                                    cell.src,
+                                    cell.dst,
+                                    paint,
+                                    op.transform,
+                                    op.clip,
+                                ).toImageRectCommand(GPUDrawCommandID(dispatched.size), targets)
+                                allRendered = renderImageCommand(command) && allRendered
+                            }
+                            allRendered
+                        }
+                        is DisplayOp.DrawAtlas -> {
+                            var allRendered = true
+                            for (index in 0 until minOf(op.transforms.size, op.texRects.size)) {
+                                val tint = op.colors?.getOrNull(index)
+                                val paint = when {
+                                    tint != null && op.paint != null -> op.paint.copy(color = tint)
+                                    tint != null -> Paint.fill(tint)
+                                    else -> op.paint
+                                }
+                                val command = DisplayOp.DrawImage(
+                                    op.atlas,
+                                    op.texRects[index],
+                                    computeAtlasDst(op.texRects[index], op.transform * op.transforms[index]),
+                                    paint,
+                                    Matrix33.identity(),
+                                    op.clip,
+                                ).toImageRectCommand(GPUDrawCommandID(dispatched.size), targets)
+                                allRendered = renderImageCommand(command) && allRendered
+                            }
+                            allRendered
+                        }
+                        else -> error("Core clip route received ${op.javaClass.simpleName}")
+                    }
+                    rendered = rendered && diagnostics.fatalCount == fatalBefore
+                    if (rendered) sceneHasContent = true
+                } finally {
+                    if (source) {
+                        rendered = rendered && sceneHasContent
+                        sceneLabel = savedSceneLabel
+                        sceneHasContent = savedSceneHasContent
+                        clipSourceRoute = false
+                    }
+                }
+                return rendered
             }
 
             var suppressedLayerDepth = 0
@@ -689,33 +1007,74 @@ internal fun renderViaGpu(
                 }
                 if (suppressedLayerDepth > 0) continue
                 if (refusePerspectiveCapture(op, cmdId)) continue
-                val clipPlan = op.gpuClipCoveragePlanOrNull(targets, config, t.maxTextureDimension2D)
-                if (clipPlan is GPUClipCoveragePlan.Refused) {
-                    diagnostics.fatal("refuse:${op.javaClass.simpleName}:${cmdId.value}", "clip", clipPlan.code)
+                val requestedClipPlan = op.gpuClipCoveragePlanOrNull(targets, config, t.maxTextureDimension2D)
+                if (requestedClipPlan is GPUClipCoveragePlan.Refused) {
+                    diagnostics.fatal("refuse:${op.javaClass.simpleName}:${cmdId.value}", "clip", requestedClipPlan.code)
                     continue
                 }
-                val finalBlendMode = op.clipCompositeBlendMode()
-                if (clipPlan is GPUClipCoveragePlan.Mask && finalBlendMode != GPUBlendMode.SRC_OVER) {
-                    // A source texture does not retain independent geometric coverage for transparent
-                    // source colors. Refuse non-SrcOver until that extra coverage channel is explicit.
-                    val discardedLease = acquireClipMaskOrRefuse(clipPlan, cmdId) ?: continue
-                    discardedLease.close()
-                    diagnostics.fatal(
-                        "refuse:clip-mask:${cmdId.value}",
-                        "clipMask",
-                        "unsupported.clip.mask.blend_mode:${finalBlendMode.gpuLabel}",
+                val clipPlan = requestedClipPlan ?: GPUClipCoveragePlan.NoClip
+                val blend = op.clipCompositeBlendFacts()
+                val routeContext = GPUClipRouteContext(
+                    sceneLabel = sceneLabel,
+                    sourceLabel = srcLabel,
+                    sourceLabelForDiagnostics = "${op.javaClass.simpleName}:${cmdId.value}",
+                    targetWidth = width,
+                    targetHeight = height,
+                    colorFormat = texFormat,
+                    config = config,
+                    frameCache = clipFrameCache,
+                )
+                if (blend.requiresDestinationRead) {
+                    t.renderWithClip(
+                        context = routeContext,
+                        clipPlan = clipPlan,
+                        blend = blend,
+                        diagnostics = diagnostics,
+                        encodeDirect = { false },
+                        encodeSource = { false },
                     )
                     continue
                 }
-                val clipLease = (clipPlan as? GPUClipCoveragePlan.Mask)?.let { plan ->
-                    acquireClipMaskOrRefuse(plan, cmdId)
+                if (
+                    op is DisplayOp.DrawRect ||
+                    op is DisplayOp.DrawPath ||
+                    op is DisplayOp.DrawRRect ||
+                    op is DisplayOp.DrawImage ||
+                    op is DisplayOp.DrawColor ||
+                    op is DisplayOp.Clear ||
+                    op is DisplayOp.DrawPoint ||
+                    op is DisplayOp.DrawPoints ||
+                    op is DisplayOp.DrawDRRect ||
+                    op is DisplayOp.DrawImageNine ||
+                    op is DisplayOp.DrawImageLattice ||
+                    op is DisplayOp.DrawAtlas
+                ) {
+                    val rendered = t.renderWithClip(
+                        context = routeContext,
+                        clipPlan = clipPlan,
+                        blend = blend,
+                        diagnostics = diagnostics,
+                        encodeDirect = { executeCoreClipRoute(op, cmdId, source = false) },
+                        encodeSource = { executeCoreClipRoute(op, cmdId, source = true) },
+                    )
+                    if (rendered && clipPlan is GPUClipCoveragePlan.Mask) {
+                        sceneHasContent = true
+                        dispatched.add(cmdId.toString())
+                        diagnostics.degrade(
+                            "dispatch:${op.javaClass.simpleName}:${cmdId.value}",
+                            op.javaClass.simpleName,
+                            "dispatched",
+                        )
+                    }
+                    continue
                 }
-                if (clipPlan is GPUClipCoveragePlan.Mask && clipLease == null) continue
+                val sourceThenComposite = clipPlan is GPUClipCoveragePlan.Mask
                 val destinationLabel = sceneLabel
                 val destinationHasContent = sceneHasContent
-                if (clipLease != null) {
+                if (sourceThenComposite) {
                     sceneLabel = srcLabel
                     sceneHasContent = false
+                    clipSourceRoute = true
                 }
                 try {
                     when (op) {
@@ -895,16 +1254,12 @@ internal fun renderViaGpu(
                             diagnostics.fatal("refuse:drawColor:${cmdId.value}", "drawColor", "unsupported_blend:advanced")
                             continue
                         }
-                        t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
-                            dispatchFillRect(cmd, dispatched, diagnostics, width, height, config)
-                        }
+                        dispatchRectDirect(cmd)
                         sceneHasContent = true
                     }
                     is DisplayOp.Clear -> {
                         val cmd = op.toNormalizedCommand(cmdId, targets)
-                        t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
-                            dispatchFillRect(cmd, dispatched, diagnostics, width, height, config)
-                        }
+                        dispatchRectDirect(cmd)
                         sceneHasContent = true
                     }
                     is DisplayOp.DrawPoint -> {
@@ -917,9 +1272,7 @@ internal fun renderViaGpu(
                             diagnostics.fatal("refuse:drawPoint:${cmdId.value}", "drawPoint", "unsupported_blend:advanced")
                             continue
                         }
-                        t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
-                            dispatchFillRect(cmd, dispatched, diagnostics, width, height, config)
-                        }
+                        dispatchRectDirect(cmd)
                         sceneHasContent = true
                     }
                     is DisplayOp.DrawPoints -> {
@@ -929,9 +1282,7 @@ internal fun renderViaGpu(
                                     val subCmdId = GPUDrawCommandID(dispatched.size)
                                     val subOp = DisplayOp.DrawPoint(pt.x, pt.y, op.paint, op.transform, op.clip)
                                     val cmd = subOp.toNormalizedCommand(subCmdId, targets)
-                                    t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
-                                        dispatchFillRect(cmd, dispatched, diagnostics, width, height, config)
-                                    }
+                                    dispatchRectDirect(cmd)
                                     sceneHasContent = true
                                 }
                             }
@@ -959,9 +1310,7 @@ internal fun renderViaGpu(
                                     diagnostics.fatal("refuse:drawPoints:${cmdId.value}", "drawPoints", "unsupported_blend:advanced")
                                     continue
                                 }
-                                t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
-                                    dispatchFillPath(cmd, dispatched, diagnostics, width, height, config)
-                                }
+                                dispatchPathDirect(cmd)
                                 sceneHasContent = true
                             }
                         }
@@ -991,9 +1340,7 @@ internal fun renderViaGpu(
                             diagnostics.fatal("refuse:drawDRRect:${cmdId.value}", "drawDRRect", "unsupported_blend:advanced")
                             continue
                         }
-                        t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
-                            dispatchFillPath(cmd, dispatched, diagnostics, width, height, config)
-                        }
+                        dispatchPathDirect(cmd)
                         sceneHasContent = true
                     }
                     is DisplayOp.DrawImageNine -> {
@@ -1067,23 +1414,17 @@ internal fun renderViaGpu(
                                 is DisplayOp.DrawRect -> {
                                     if (nestedOp.paint.isStroke()) {
                                         val cmd = nestedOp.toStrokePathCommand(nestedCmdId, targets)
-                                        t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
-                                            dispatchFillPath(cmd, dispatched, diagnostics, width, height, config)
-                                        }
+                                        dispatchPathDirect(cmd)
                                     } else {
                                         val cmd = nestedOp.toNormalizedCommand(nestedCmdId, targets)
-                                        t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
-                                            dispatchFillRect(cmd, dispatched, diagnostics, width, height, config)
-                                        }
+                                        dispatchRectDirect(cmd)
                                     }
                                     sceneHasContent = true
                                 }
                                 is DisplayOp.DrawRRect -> {
                                     if (!nestedOp.paint.isStroke()) {
                                         val cmd = nestedOp.toNormalizedCommand(nestedCmdId, targets)
-                                        t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
-                                            dispatchFillRRect(cmd, dispatched, diagnostics, width, height, config)
-                                        }
+                                        dispatchRRectDirect(cmd)
                                         sceneHasContent = true
                                     }
                                 }
@@ -1108,31 +1449,23 @@ internal fun renderViaGpu(
                                         ).flatMap { listOf(it.x, it.y) }
                                         val contourStarts = flattened.contourStarts.ifEmpty { listOf(0) }
                                         val cmd = nestedOp.toNormalizedCommand(nestedCmdId, targets, verts, contourStarts, fl.size)
-                                        t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
-                                            dispatchFillPath(cmd, dispatched, diagnostics, width, height, config)
-                                        }
+                                        dispatchPathDirect(cmd)
                                         sceneHasContent = true
                                     }
                                 }
                                 is DisplayOp.DrawColor -> {
                                     val cmd = nestedOp.toNormalizedCommand(nestedCmdId, targets)
-                                    t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
-                                        dispatchFillRect(cmd, dispatched, diagnostics, width, height, config)
-                                    }
+                                    dispatchRectDirect(cmd)
                                     sceneHasContent = true
                                 }
                                 is DisplayOp.Clear -> {
                                     val cmd = nestedOp.toNormalizedCommand(nestedCmdId, targets)
-                                    t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
-                                        dispatchFillRect(cmd, dispatched, diagnostics, width, height, config)
-                                    }
+                                    dispatchRectDirect(cmd)
                                     sceneHasContent = true
                                 }
                                 is DisplayOp.DrawPoint -> {
                                     val cmd = nestedOp.toNormalizedCommand(nestedCmdId, targets)
-                                    t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
-                                        dispatchFillRect(cmd, dispatched, diagnostics, width, height, config)
-                                    }
+                                    dispatchRectDirect(cmd)
                                     sceneHasContent = true
                                 }
                                 is DisplayOp.DrawPoints -> {
@@ -1147,9 +1480,7 @@ internal fun renderViaGpu(
                                         val dpOp = DisplayOp.DrawPath(p, nestedOp.paint, nestedOp.transform, nestedOp.clip)
                                         val contourStarts = flattened.contourStarts.ifEmpty { listOf(0) }
                                         val cmd = dpOp.toNormalizedCommand(nestedCmdId, targets, verts, contourStarts, fl.size).copy(stroke = isStroke)
-                                        t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
-                                            dispatchFillPath(cmd, dispatched, diagnostics, width, height, config)
-                                        }
+                                        dispatchPathDirect(cmd)
                                         sceneHasContent = true
                                     }
                                 }
@@ -1164,9 +1495,7 @@ internal fun renderViaGpu(
                                         val dpOp = DisplayOp.DrawPath(p, nestedOp.paint, nestedOp.transform, nestedOp.clip)
                                         val contourStarts = flattened.contourStarts.ifEmpty { listOf(0) }
                                         val cmd = dpOp.toNormalizedCommand(nestedCmdId, targets, verts, contourStarts, fl.size)
-                                        t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
-                                            dispatchFillPath(cmd, dispatched, diagnostics, width, height, config)
-                                        }
+                                        dispatchPathDirect(cmd)
                                         sceneHasContent = true
                                     }
                                 }
@@ -1388,9 +1717,7 @@ internal fun renderViaGpu(
                                 val contourStarts = flattened.contourStarts.ifEmpty { listOf(0) }
                                 val drawPathOp = DisplayOp.DrawPath(path, op.paint, op.transform, op.clip)
                                 val cmd = drawPathOp.toNormalizedCommand(cmdId, targets, vertices, contourStarts, flat.size)
-                                t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
-                                    dispatchFillPath(cmd, dispatched, diagnostics, width, height, config)
-                                }
+                                dispatchPathDirect(cmd)
                                 sceneHasContent = true
                             } else {
                                 diagnostics.degrade("unimplemented:drawVertices:insufficient:${cmdId.value}", "drawVertices", "insufficient_vertices:${flat.size}")
@@ -1480,9 +1807,7 @@ internal fun renderViaGpu(
                                 val contourStarts = flattened.contourStarts.ifEmpty { listOf(0) }
                                 val drawPathOp = DisplayOp.DrawPath(path, op.paint, op.transform, op.clip)
                                 val cmd = drawPathOp.toNormalizedCommand(cmdId, targets, vertices, contourStarts, flat.size)
-                                t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
-                                    dispatchFillPath(cmd, dispatched, diagnostics, width, height, config)
-                                }
+                                dispatchPathDirect(cmd)
                                 sceneHasContent = true
                             } else {
                                 diagnostics.degrade("unimplemented:drawMesh:insufficient:${cmdId.value}", "drawMesh", "insufficient_vertices:${flat.size}")
@@ -1519,26 +1844,27 @@ internal fun renderViaGpu(
                     is DisplayOp.FlushAndSnapshot -> { /* deferred to render-backend; no-op in CPU path */ }
                     }
                 } finally {
-                    if (clipLease != null) {
+                    if (sourceThenComposite) {
                         val sourceHasContent = sceneHasContent
                         sceneLabel = destinationLabel
                         sceneHasContent = destinationHasContent
-                        try {
-                            if (sourceHasContent) {
-                                t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
-                                    drawTwoTexturePass(
-                                        wgsl = CLIP_MASK_COMPOSITE_WGSL,
-                                        colorFormat = texFormat,
-                                        firstTextureLabel = srcLabel,
-                                        secondTextureLabel = clipLease.mask.sampleLabel,
-                                        draws = listOf(clipMaskCompositeUniformDraw(width, height)),
-                                        blendMode = finalBlendMode,
-                                    )
-                                }
-                                sceneHasContent = true
-                            }
-                        } finally {
-                            clipLease.close()
+                        clipSourceRoute = false
+                        if (sourceHasContent && t.renderWithClip(
+                                context = routeContext,
+                                clipPlan = clipPlan,
+                                blend = blend,
+                                diagnostics = diagnostics,
+                                encodeDirect = { false },
+                                encodeSource = { true },
+                            )
+                        ) {
+                            sceneHasContent = true
+                            dispatched.add(cmdId.toString())
+                            diagnostics.degrade(
+                                "dispatch:${op.javaClass.simpleName}:${cmdId.value}",
+                                op.javaClass.simpleName,
+                                "dispatched",
+                            )
                         }
                     }
                 }
@@ -1614,23 +1940,23 @@ private fun computeAtlasDst(texRect: Rect, xform: Matrix33): Rect {
     return Rect.fromLTRB(l, t, r, b)
 }
 
-/** The blend state applied once when a logical source is composited through a clip AlphaMask. */
-private fun DisplayOp.clipCompositeBlendMode(): GPUBlendMode = when (this) {
-    is DisplayOp.DrawRect -> paint.blendMode.toGpuBlendFacts().blendMode
-    is DisplayOp.DrawRRect -> paint.blendMode.toGpuBlendFacts().blendMode
-    is DisplayOp.DrawPath -> paint.blendMode.toGpuBlendFacts().blendMode
-    is DisplayOp.DrawImage -> paint?.blendMode?.toGpuBlendFacts()?.blendMode ?: GPUBlendMode.SRC_OVER
-    is DisplayOp.DrawText -> paint.blendMode.toGpuBlendFacts().blendMode
-    is DisplayOp.DrawColor -> mode.toGpuBlendFacts().blendMode
-    is DisplayOp.DrawPoint -> paint.blendMode.toGpuBlendFacts().blendMode
-    is DisplayOp.DrawPoints -> paint.blendMode.toGpuBlendFacts().blendMode
-    is DisplayOp.DrawDRRect -> paint.blendMode.toGpuBlendFacts().blendMode
-    is DisplayOp.DrawImageNine -> paint?.blendMode?.toGpuBlendFacts()?.blendMode ?: GPUBlendMode.SRC_OVER
-    is DisplayOp.DrawImageLattice -> paint?.blendMode?.toGpuBlendFacts()?.blendMode ?: GPUBlendMode.SRC_OVER
-    is DisplayOp.DrawPicture -> paint?.blendMode?.toGpuBlendFacts()?.blendMode ?: GPUBlendMode.SRC_OVER
-    is DisplayOp.DrawVertices -> paint.blendMode.toGpuBlendFacts().blendMode
-    is DisplayOp.DrawMesh -> (blendMode ?: paint.blendMode).toGpuBlendFacts().blendMode
-    is DisplayOp.DrawAtlas -> (paint?.blendMode ?: blendMode).toGpuBlendFacts().blendMode
+/** The original blend facts restored only at the logical source-to-scene boundary. */
+private fun DisplayOp.clipCompositeBlendFacts(): GPUBlendFacts = when (this) {
+    is DisplayOp.DrawRect -> paint.blendMode.toGpuBlendFacts()
+    is DisplayOp.DrawRRect -> paint.blendMode.toGpuBlendFacts()
+    is DisplayOp.DrawPath -> paint.blendMode.toGpuBlendFacts()
+    is DisplayOp.DrawImage -> paint?.blendMode?.toGpuBlendFacts() ?: GPUBlendFacts.srcOver()
+    is DisplayOp.DrawText -> paint.blendMode.toGpuBlendFacts()
+    is DisplayOp.DrawColor -> mode.toGpuBlendFacts()
+    is DisplayOp.DrawPoint -> paint.blendMode.toGpuBlendFacts()
+    is DisplayOp.DrawPoints -> paint.blendMode.toGpuBlendFacts()
+    is DisplayOp.DrawDRRect -> paint.blendMode.toGpuBlendFacts()
+    is DisplayOp.DrawImageNine -> paint?.blendMode?.toGpuBlendFacts() ?: GPUBlendFacts.srcOver()
+    is DisplayOp.DrawImageLattice -> paint?.blendMode?.toGpuBlendFacts() ?: GPUBlendFacts.srcOver()
+    is DisplayOp.DrawPicture -> paint?.blendMode?.toGpuBlendFacts() ?: GPUBlendFacts.srcOver()
+    is DisplayOp.DrawVertices -> paint.blendMode.toGpuBlendFacts()
+    is DisplayOp.DrawMesh -> (blendMode ?: paint.blendMode).toGpuBlendFacts()
+    is DisplayOp.DrawAtlas -> (paint?.blendMode ?: blendMode).toGpuBlendFacts()
     is DisplayOp.SetTransform,
     is DisplayOp.SetClip,
     is DisplayOp.BeginLayer,
@@ -1638,8 +1964,8 @@ private fun DisplayOp.clipCompositeBlendMode(): GPUBlendMode = when (this) {
     is DisplayOp.Clear,
     is DisplayOp.Annotation,
     is DisplayOp.FlushAndSnapshot,
-    -> GPUBlendMode.SRC_OVER
-} ?: GPUBlendMode.SRC_OVER
+    -> GPUBlendFacts.srcOver()
+}
 
 private fun hasColorGlyphs(blob: TextBlob): Boolean {
     val tf = blob.typeface as? FontTypeface ?: return false

@@ -521,7 +521,9 @@ private fun DisplayOp.DrawImage.toImageFilterPlan(
     val clipBounds = when (clip.kind) {
         GPUClipKind.WideOpen -> targetBounds
         GPUClipKind.DeviceRect -> intersect(clip.bounds.toRect(), targetBounds)
-        GPUClipKind.ComplexStack -> return GPUImageFilterPlan.Refused("unsupported.image-filter.blur.clip")
+        // A complex clip is applied once at the shared source-to-scene composite.
+        // The filter source must therefore retain its full target-space halo.
+        GPUClipKind.ComplexStack -> targetBounds
     }
     val outputBounds = intersect(
         GPURect(

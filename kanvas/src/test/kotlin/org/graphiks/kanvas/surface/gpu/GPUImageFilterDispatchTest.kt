@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.surface.gpu
 
 import org.graphiks.kanvas.canvas.ClipStack
+import org.graphiks.kanvas.canvas.ClipStackOp
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
 import org.graphiks.kanvas.gpu.renderer.commands.GPUImageFilterPlan
@@ -25,6 +26,8 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.paint.ImageFilter
+import org.graphiks.kanvas.pipeline.ClipOp
 import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.types.Rect
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -34,6 +37,54 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
 class GPUImageFilterDispatchTest {
+    @Test
+    fun `complex clip blur stays renderable as an unclipped source`() {
+        val command = DisplayOp.DrawImage(
+            image = Image.fromPixels(4, 4, fixtureRgba, ColorType.RGBA_8888, "fixture"),
+            src = Rect(0f, 0f, 4f, 4f),
+            dst = Rect(20f, 30f, 24f, 34f),
+            paint = Paint(imageFilter = ImageFilter.Blur(2f, 3f)),
+            transform = Matrix33.identity(),
+            clip = ClipStack.Complex(
+                listOf(
+                    ClipStackOp.RectOp(Rect(8f, 8f, 40f, 48f), ClipOp.INTERSECT),
+                    ClipStackOp.RectOp(Rect(16f, 16f, 24f, 24f), ClipOp.DIFFERENCE),
+                ),
+            ),
+        ).toImageRectCommand(
+            GPUDrawCommandID(1),
+            GPUTargetFacts(width = 64, height = 64, colorFormat = "rgba8unorm"),
+        )
+
+        assertTrue(command.imageFilterPlan is GPUImageFilterPlan.Blur, command.imageFilterPlan.toString())
+    }
+
+    @Test
+    fun `clip source image blur restores the full target halo before the mask composite`() {
+        val command = DisplayOp.DrawImage(
+            image = Image.fromPixels(4, 4, fixtureRgba, ColorType.RGBA_8888, "fixture"),
+            src = Rect(0f, 0f, 4f, 4f),
+            dst = Rect(20f, 30f, 24f, 34f),
+            paint = Paint(imageFilter = ImageFilter.Blur(2f, 3f)),
+            transform = Matrix33.identity(),
+            clip = ClipStack.DeviceRect(Rect(21f, 31f, 23f, 33f), antiAlias = true),
+        ).toImageRectCommand(
+            GPUDrawCommandID(1),
+            GPUTargetFacts(width = 64, height = 64, colorFormat = "rgba8unorm"),
+        )
+
+        val source = command.copyForClipSource(targetWidth = 64, targetHeight = 64)
+        val blur = source.imageFilterPlan as GPUImageFilterPlan.Blur
+
+        assertEquals(14f, blur.outputBounds.left)
+        assertEquals(21f, blur.outputBounds.top)
+        assertEquals(30f, blur.outputBounds.right)
+        assertEquals(43f, blur.outputBounds.bottom)
+        assertEquals(0f, source.clip.bounds.left)
+        assertEquals(64f, source.clip.bounds.right)
+        assertTrue(!source.blend.requiresDestinationRead)
+    }
+
     @Test
     fun `accepted blur records source horizontal vertical and scene composite passes`() {
         val target = CapturingOffscreenTarget()

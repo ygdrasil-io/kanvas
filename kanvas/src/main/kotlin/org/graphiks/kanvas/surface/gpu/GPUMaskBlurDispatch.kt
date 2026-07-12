@@ -40,6 +40,7 @@ internal fun GPUBackendOffscreenTarget.renderMaskBlurCommand(
     dispatched: MutableList<String>,
     diagnostics: Diagnostics,
     colorFormat: String,
+    recordResult: Boolean = true,
 ): GPUMaskBlurDispatchResult {
     command.maskBlurPreflightRefusalReasonOrNull()?.let { reason ->
         diagnostics.fatal("refuse:${command.diagnosticName}", command.diagnosticName, reason)
@@ -150,8 +151,10 @@ internal fun GPUBackendOffscreenTarget.renderMaskBlurCommand(
         )
     }
 
-    dispatched.add(command.commandId.value.toString())
-    diagnostics.degrade("dispatch:${command.diagnosticName}", command.diagnosticName, "dispatched")
+    if (recordResult) {
+        dispatched.add(command.commandId.value.toString())
+        diagnostics.degrade("dispatch:${command.diagnosticName}", command.diagnosticName, "dispatched")
+    }
     return GPUMaskBlurDispatchResult(rendered = true)
 }
 

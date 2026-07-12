@@ -37,6 +37,7 @@ internal fun GPUBackendOffscreenTarget.renderImageCommand(
     dispatched: MutableList<String> = mutableListOf(),
     diagnostics: Diagnostics = Diagnostics(),
     colorFormat: String = "rgba8unorm",
+    recordResult: Boolean = true,
 ): GPUImageFilterDispatchResult {
     val plan = command.imageFilterPlan as? GPUImageFilterPlan.Blur
         ?: return GPUImageFilterDispatchResult(rendered = false)
@@ -146,7 +147,7 @@ internal fun GPUBackendOffscreenTarget.renderImageCommand(
         )
     }
     if (diagnostics.fatalCount != fatalBeforeSource) return GPUImageFilterDispatchResult(rendered = false)
-    dispatched.add(command.commandId.toString())
+    if (recordResult) dispatched.add(command.commandId.toString())
     return GPUImageFilterDispatchResult(rendered = true)
 }
 
