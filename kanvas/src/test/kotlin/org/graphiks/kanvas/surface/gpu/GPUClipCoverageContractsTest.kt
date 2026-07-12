@@ -223,6 +223,38 @@ class GPUClipCoverageContractsTest {
     }
 
     @Test
+    fun `path clip mapper retains even odd holes and inverse difference coverage semantics`() {
+        val evenOddHole = Path().apply {
+            fillType = FillType.EVEN_ODD
+            addRect(Rect.fromLTRB(3.5f, 3.5f, 28.5f, 28.5f))
+            addRect(Rect.fromLTRB(11.5f, 11.5f, 20.5f, 20.5f))
+        }
+        val inverseRect = Path().apply {
+            fillType = FillType.INVERSE_EVEN_ODD
+            addRect(Rect.fromLTRB(8.5f, 8.5f, 23.5f, 23.5f))
+        }
+        val request = requireNotNull(
+            ClipStack.Complex(
+                listOf(
+                    ClipStackOp.PathOp(evenOddHole, ClipOp.INTERSECT, antiAlias = true),
+                    ClipStackOp.PathOp(inverseRect, ClipOp.DIFFERENCE, antiAlias = true),
+                ),
+            ).toGPUClipFacts(target()).coverageRequest,
+        )
+
+        assertEquals(
+            listOf(GPUClipCoverageOperation.Intersect, GPUClipCoverageOperation.Difference),
+            request.elements.map(GPUClipCoverageElement::operation),
+        )
+        assertEquals(GPUClipFillRule.EvenOdd, request.elements[0].fillRule)
+        assertTrue(!request.elements[0].inverseFill)
+        assertTrue(request.elements[0].antiAlias)
+        assertEquals(GPUClipFillRule.EvenOdd, request.elements[1].fillRule)
+        assertTrue(request.elements[1].inverseFill)
+        assertTrue(request.elements[1].antiAlias)
+    }
+
+    @Test
     fun `clip mapper keeps coverage requests only for non wide open clips`() {
         val hardRect = ClipStack.DeviceRect(Rect.fromLTRB(2f, 3f, 10f, 11f), antiAlias = false)
         val fractionalRect = ClipStack.DeviceRect(Rect.fromLTRB(2.5f, 3f, 10f, 11f), antiAlias = false)

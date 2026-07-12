@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.surface.gpu
 
 import org.graphiks.kanvas.geometry.Path
+import org.graphiks.kanvas.geometry.FillType
 import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.canvas.ClipStackOp
 import org.graphiks.kanvas.canvas.DisplayListBuffer
@@ -45,6 +46,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import kotlin.test.assertFailsWith
 
 @OptIn(ExperimentalUnsignedTypes::class)
 class GPUClipCoverageSurfaceTest {
@@ -71,10 +73,10 @@ class GPUClipCoverageSurfaceTest {
         }
 
         val result = surface.render()
-        assertPixel(result.pixels, 4, 4, Color.RED)
-        assertTransparent(result.pixels, 16, 16)
-        assertPixel(result.pixels, 28, 16, Color.BLUE)
-        assertPixel(result.pixels, 14, 22, Color.RED)
+        assertRgbaNear(result.pixels, 32, 4, 4, Color.RED)
+        assertRgbaNear(result.pixels, 32, 16, 16, Color.TRANSPARENT)
+        assertRgbaNear(result.pixels, 32, 28, 16, Color.BLUE)
+        assertRgbaNear(result.pixels, 32, 14, 22, Color.RED)
         assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
         assertTrue(
             result.diagnostics.entries.any { entry ->
@@ -96,11 +98,86 @@ class GPUClipCoverageSurfaceTest {
         }
 
         val result = surface.render()
-        assertTrue(alphaAt(result.pixels, 3, 8) in 1..254)
+        // The target is RGBA8_UNORM_SRGB: 50% linear red is stored as sRGB 188 while alpha remains 128.
+        assertRgbaNear(result.pixels, 16, 3, 8, Color.fromArgb(128, 188, 0, 0))
+        assertRgbaNear(result.pixels, 16, 8, 8, Color.RED)
+        assertRgbaNear(result.pixels, 16, 2, 8, Color.TRANSPARENT)
         assertTrue(
             result.diagnostics.entries.any { entry ->
                 entry.facts.any { fact -> fact.key == "clip.strategy" && fact.value == "alpha-mask" }
             },
+        )
+    }
+
+    @Test
+    fun `exact RGBA evidence rejects white as red or blue`() {
+        val white = UByteArray(4) { 0xff.toUByte() }
+
+        assertFailsWith<AssertionError> {
+            assertRgbaNear(white, width = 1, x = 0, y = 0, expected = Color.RED)
+        }
+        assertFailsWith<AssertionError> {
+            assertRgbaNear(white, width = 1, x = 0, y = 0, expected = Color.BLUE)
+        }
+    }
+
+    @Test
+    fun `adapter backed even odd clip mask preserves fill hole exterior and AA edge`() {
+        requireWebGpu()
+        val evenOddHole = Path().apply {
+            fillType = FillType.EVEN_ODD
+            addRect(Rect(3.5f, 3.5f, 28.5f, 28.5f))
+            addRect(Rect(11.5f, 11.5f, 20.5f, 20.5f))
+        }
+        val surface = Surface(32, 32)
+        surface.canvas {
+            save()
+            clipPath(evenOddHole, ClipOp.INTERSECT, antiAlias = true)
+            drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.RED))
+            restore()
+        }
+
+        val result = surface.render()
+
+        assertRgbaNear(result.pixels, 32, 6, 6, Color.RED)
+        assertRgbaNear(result.pixels, 32, 16, 16, Color.TRANSPARENT)
+        assertRgbaNear(result.pixels, 32, 1, 16, Color.TRANSPARENT)
+        assertRgbaNear(result.pixels, 32, 3, 8, Color.fromArgb(128, 188, 0, 0))
+        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertTrue(
+            result.diagnostics.entries.any { entry ->
+                entry.facts.any { fact -> fact.key == "clip.strategy" && fact.value == "alpha-mask" }
+            },
+            result.diagnostics.entries.toString(),
+        )
+    }
+
+    @Test
+    fun `adapter backed inverse difference clip preserves fill exterior and AA edge`() {
+        requireWebGpu()
+        val inverseRect = Path().apply {
+            fillType = FillType.INVERSE_EVEN_ODD
+            addRect(Rect(8.5f, 8.5f, 23.5f, 23.5f))
+        }
+        val surface = Surface(32, 32)
+        surface.canvas {
+            save()
+            clipPath(inverseRect, ClipOp.DIFFERENCE, antiAlias = true)
+            drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.BLUE))
+            restore()
+        }
+
+        val result = surface.render()
+
+        assertRgbaNear(result.pixels, 32, 16, 16, Color.BLUE)
+        assertRgbaNear(result.pixels, 32, 4, 16, Color.TRANSPARENT)
+        assertRgbaNear(result.pixels, 32, 8, 16, Color.fromArgb(128, 0, 0, 188))
+        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertTrue(
+            result.diagnostics.entries.any { entry ->
+                entry.facts.any { fact -> fact.key == "clip.strategy" && fact.value == "alpha-mask" }
+            },
+            result.diagnostics.entries.toString(),
         )
     }
 
@@ -325,7 +402,7 @@ class GPUClipCoverageSurfaceTest {
         assertEquals(2, trace.logicalDrawCount)
         assertEquals(2, trace.sourceThenCompositeCount)
         assertEquals(0, trace.directComplexClipDispatches)
-        assertPixel(result.pixels, 21, 21, Color.BLUE)
+        assertRgbaNear(result.pixels, 32, 21, 21, Color.BLUE)
     }
 
     @Test
@@ -1004,23 +1081,28 @@ class GPUClipCoverageSurfaceTest {
         runtime!!.close()
     }
 
-    private fun assertPixel(pixels: UByteArray, x: Int, y: Int, expected: Color) {
-        val offset = (y * 32 + x) * 4
-        val actual = listOf(
+    private fun assertRgbaNear(
+        pixels: UByteArray,
+        width: Int,
+        x: Int,
+        y: Int,
+        expected: Color,
+        tolerance: Int = 8,
+    ) {
+        val offset = (y * width + x) * 4
+        val actual = intArrayOf(
             pixels[offset].toInt() and 0xff,
             pixels[offset + 1].toInt() and 0xff,
             pixels[offset + 2].toInt() and 0xff,
             pixels[offset + 3].toInt() and 0xff,
         )
-        assertTrue((pixels[offset].toInt() and 0xff) >= expected.redByte * 200 / 255)
-        assertTrue((pixels[offset + 1].toInt() and 0xff) >= expected.greenByte * 200 / 255)
-        assertTrue((pixels[offset + 2].toInt() and 0xff) >= expected.blueByte * 200 / 255, "actual=$actual")
-        assertTrue((pixels[offset + 3].toInt() and 0xff) >= expected.alphaByte * 200 / 255)
-    }
-
-    private fun assertTransparent(pixels: UByteArray, x: Int, y: Int) {
-        val offset = (y * 32 + x) * 4
-        assertEquals(0, pixels[offset + 3].toInt() and 0xff)
+        val wanted = intArrayOf(expected.redByte, expected.greenByte, expected.blueByte, expected.alphaByte)
+        actual.indices.forEach { channel ->
+            assertTrue(
+                kotlin.math.abs(actual[channel] - wanted[channel]) <= tolerance,
+                "pixel=($x,$y) channel=$channel expected=${wanted[channel]} actual=${actual[channel]} tolerance=$tolerance",
+            )
+        }
     }
 
     private fun assertVisibleAt(pixels: UByteArray, width: Int, x: Int, y: Int) {

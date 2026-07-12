@@ -575,7 +575,7 @@ class GPUBackendRuntimeNativeSmokeTest {
     }
 
     @Test
-    fun `coverage masks run stencil cover at one and four samples and release after submission`() {
+    fun `coverage masks sample actual x1 and x4 stencil cover output before release`() {
         GPUBackendRuntimeFactory.createOrNull().use { session ->
             assumeTrue(session != null, "GPU backend unavailable in current environment")
             val runtimeSession = session!!
@@ -583,9 +583,14 @@ class GPUBackendRuntimeNativeSmokeTest {
             runtimeSession.createOffscreenTarget(
                 GPUOffscreenTargetRequest(width = 16, height = 16, colorFormat = "rgba8unorm"),
             ).use { target ->
-                val triangle = GPUBackendTriangleData(
-                    vertices = floatArrayOf(-1f, -1f, 1f, -1f, -1f, 1f),
-                    indices = intArrayOf(0, 1, 2),
+                val halfPixelEdgeRect = GPUBackendTriangleData(
+                    vertices = floatArrayOf(
+                        -1f, -1f,
+                        0.0625f, -1f,
+                        -1f, 1f,
+                        0.0625f, 1f,
+                    ),
+                    indices = intArrayOf(0, 1, 2, 2, 1, 3),
                 )
                 val coverDraw = GPUBackendRawUniformDraw(
                     uniformBytes = solidColorUniformBytes(0f, 1f, 0f, 1f),
@@ -603,10 +608,9 @@ class GPUBackendRuntimeNativeSmokeTest {
                         wgsl = stencilWriteWgsl(),
                         colorFormat = "rgba8unorm",
                         stencilMode = GPUBackendStencilMode.Write,
-                        triangleData = triangle,
+                        triangleData = halfPixelEdgeRect,
                         draws = emptyList(),
                     )
-                    target.releaseCoverageMask(msaaMask)
                     drawFullscreenStencilPass(
                         wgsl = stencilTestWgsl(),
                         colorFormat = "rgba8unorm",
@@ -615,6 +619,39 @@ class GPUBackendRuntimeNativeSmokeTest {
                         draws = listOf(coverDraw),
                     )
                 }
+                target.encode(GPUClearColor(0.0, 0.0, 0.0, 0.0)) {
+                    drawCompositePass(
+                        wgsl = singleTextureWgsl(),
+                        colorFormat = "rgba8unorm",
+                        textureLabel = msaaMask.sampleLabel,
+                        draws = listOf(
+                            GPUBackendRawUniformDraw(
+                                uniformBytes = solidColorUniformBytes(0f, 0f, 0f, 0f),
+                                scissorX = 0,
+                                scissorY = 0,
+                                scissorWidth = 16,
+                                scissorHeight = 16,
+                            ),
+                        ),
+                        blendMode = GPUBlendMode.SRC,
+                    )
+                }
+                val x4Pixels = target.readRgba()
+                assertContentEquals(
+                    byteArrayOf(0, 0xff.toByte(), 0, 0xff.toByte()),
+                    pixelAt(x4Pixels, width = 16, x = 4, y = 8),
+                )
+                assertContentEquals(
+                    byteArrayOf(0, 0, 0, 0),
+                    pixelAt(x4Pixels, width = 16, x = 12, y = 8),
+                )
+                val x4Edge = pixelAt(x4Pixels, width = 16, x = 8, y = 8)
+                val x4EdgeAlpha = x4Edge[3].toInt() and 0xff
+                assertTrue(x4EdgeAlpha in 1..254, "expected partially covered x4 edge, actual=${x4Edge.toList()}")
+                assertTrue(kotlin.math.abs(x4EdgeAlpha - 128) <= 1, "expected half-covered x4 edge, actual=${x4Edge.toList()}")
+                assertEquals(0, x4Edge[0].toInt() and 0xff)
+                assertTrue(kotlin.math.abs((x4Edge[1].toInt() and 0xff) - x4EdgeAlpha) <= 1)
+                assertEquals(0, x4Edge[2].toInt() and 0xff)
                 target.releaseCoverageMask(msaaMask)
                 assertFailsWith<IllegalStateException> {
                     target.encodeOffscreenTexture(msaaMask.sampleLabel, GPUClearColor(0.0, 0.0, 0.0, 0.0)) {}
@@ -628,7 +665,7 @@ class GPUBackendRuntimeNativeSmokeTest {
                         wgsl = stencilWriteWgsl(),
                         colorFormat = "rgba8unorm",
                         stencilMode = GPUBackendStencilMode.Write,
-                        triangleData = triangle,
+                        triangleData = halfPixelEdgeRect,
                         draws = emptyList(),
                     )
                     drawFullscreenStencilPass(
@@ -639,6 +676,32 @@ class GPUBackendRuntimeNativeSmokeTest {
                         draws = listOf(coverDraw),
                     )
                 }
+                target.encode(GPUClearColor(0.0, 0.0, 0.0, 0.0)) {
+                    drawCompositePass(
+                        wgsl = singleTextureWgsl(),
+                        colorFormat = "rgba8unorm",
+                        textureLabel = singleSampleMask.sampleLabel,
+                        draws = listOf(
+                            GPUBackendRawUniformDraw(
+                                uniformBytes = solidColorUniformBytes(0f, 0f, 0f, 0f),
+                                scissorX = 0,
+                                scissorY = 0,
+                                scissorWidth = 16,
+                                scissorHeight = 16,
+                            ),
+                        ),
+                        blendMode = GPUBlendMode.SRC,
+                    )
+                }
+                val x1Pixels = target.readRgba()
+                assertContentEquals(
+                    byteArrayOf(0, 0xff.toByte(), 0, 0xff.toByte()),
+                    pixelAt(x1Pixels, width = 16, x = 4, y = 8),
+                )
+                assertContentEquals(
+                    byteArrayOf(0, 0, 0, 0),
+                    pixelAt(x1Pixels, width = 16, x = 12, y = 8),
+                )
                 target.releaseCoverageMask(singleSampleMask)
                 val unknownMask = GPUBackendCoverageMask(
                     renderLabel = "unknown-mask:render",

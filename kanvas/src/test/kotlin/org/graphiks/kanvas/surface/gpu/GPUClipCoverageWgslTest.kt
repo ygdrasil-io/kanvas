@@ -4,6 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.geometry.FillType
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendStencilCoverConfig
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendStencilFillRule
 import org.graphiks.kanvas.gpu.renderer.wgsl.reflectWgslModule
 import org.graphiks.wgsl.parser.Lowerer
@@ -51,8 +52,14 @@ class GPUClipCoverageWgslTest {
 
     @Test
     fun `even odd hole and inverse cover use their own stencil states`() {
-        assertEquals(GPUBackendStencilFillRule.EvenOdd, stencilConfig(FillType.EVEN_ODD).fillRule)
-        assertTrue(stencilConfig(FillType.INVERSE_WINDING).inverse)
+        assertEquals(
+            GPUBackendStencilCoverConfig(GPUBackendStencilFillRule.EvenOdd, inverse = false),
+            stencilConfig(FillType.EVEN_ODD),
+        )
+        assertEquals(
+            GPUBackendStencilCoverConfig(GPUBackendStencilFillRule.EvenOdd, inverse = true),
+            stencilConfig(FillType.INVERSE_EVEN_ODD),
+        )
     }
 
     private fun lower(wgsl: String) = parseWgslResult(wgsl).let { parsed ->
