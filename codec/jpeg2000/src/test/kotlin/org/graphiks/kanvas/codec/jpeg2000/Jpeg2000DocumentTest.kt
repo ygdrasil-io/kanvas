@@ -13,6 +13,18 @@ import org.skia.foundation.SkEncodedImageFormat
 class Jpeg2000DocumentTest {
 
     @Test
+    fun `OpenJPEG reversible lossless J2K fixture is owned structurally before entropy decode`() {
+        val codestream = Jpeg2000TestFixtures.openJpegLossless5x3()
+
+        val document = requireNotNull(Jpeg2000Document.open(codestream).document)
+
+        assertEquals(Jpeg2000Container.J2K, document.container)
+        assertEquals(Jpeg2000FrameInfo(5, 3, 1, 8), document.frame)
+        assertEquals("jpeg2000.entropy.unimplemented", document.decode().diagnostic?.code)
+        assertEquals(Codec.Result.kUnimplemented, requireNotNull(Codec.MakeFromData(codestream)).getImage().second)
+    }
+
+    @Test
     fun `raw J2K is owned by the JPEG 2000 provider and exposes a bounded document`() {
         val codestream = narrowLosslessCodestream()
 
@@ -244,7 +256,7 @@ class Jpeg2000DocumentTest {
             siz.write(byteArrayOf(7, 1, 1)) // 8-bit unsigned, no subsampling
         }.toByteArray())
         output.writeSegment(0x52, narrowCodPayload())
-        output.writeSegment(0x5C, byteArrayOf(0, 0)) // no quantization
+        output.writeSegment(0x5C, byteArrayOf(0x40, 0x40)) // reversible 5/3, no quantization
         output.writeMarker(0x90)
         output.writeU16(10)
         output.writeU16(0) // Isot

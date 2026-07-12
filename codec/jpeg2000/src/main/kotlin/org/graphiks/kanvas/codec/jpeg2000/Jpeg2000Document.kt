@@ -400,7 +400,16 @@ private class J2kCodestreamParser(
     private fun parseQcd(markerOffset: Int) {
         if (sawQcd) j2kFailure("jpeg2000.qcd.duplicate", markerOffset)
         val segment = readSegment(markerOffset)
-        if (segment.payloadSize != 2 || data[segment.payloadOffset].u8() != 0 || data[segment.payloadOffset + 1].u8() != 0) {
+        // A reversible 8-bit Part 1 codestream has no quantization
+        // (Sqcd style 0), two guard bits and the single LL exponent 8:
+        // Sqcd=0x40, SPqcd=0x40.  This is the form emitted by OpenJPEG for
+        // the declared one-resolution 5/3 profile; 00 00 is not a valid
+        // substitute for it.
+        if (
+            segment.payloadSize != 2 ||
+            data[segment.payloadOffset].u8() != 0x40 ||
+            data[segment.payloadOffset + 1].u8() != 0x40
+        ) {
             j2kFailure("jpeg2000.qcd.profile.unsupported", markerOffset, Codec.Result.kUnimplemented)
         }
         sawQcd = true
