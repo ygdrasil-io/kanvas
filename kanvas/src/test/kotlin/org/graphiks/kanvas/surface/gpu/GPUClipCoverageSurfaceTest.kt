@@ -42,6 +42,7 @@ import org.graphiks.kanvas.types.redByte
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
@@ -105,7 +106,13 @@ class GPUClipCoverageSurfaceTest {
 
     @Test
     fun `complex clip blur has no bounds fallback or unblurred dispatch`() {
+        val session = GPUBackendRuntimeFactory.createOrNull()
+        assumeTrue(session != null, "GPU backend unavailable in current environment")
+        session!!
+        val destination = renderPartialAlphaDestination()
+        val telemetryBefore = session.runtimeTelemetry
         val result = renderBlurredDifferenceClipScene()
+        val telemetryAfter = session.runtimeTelemetry
 
         assertEquals(0, result.stats.opsRefused, result.diagnostics.entries.toString())
         assertTrue(
@@ -118,7 +125,28 @@ class GPUClipCoverageSurfaceTest {
             },
             result.diagnostics.entries.toString(),
         )
-        assertTrue(alphaAt(result.pixels, 7, 12) > 0)
+        assertTrue(
+            result.diagnostics.entries.any { entry ->
+                entry.reason == "gpu-copy-then-formula" &&
+                    entry.facts.any { it.key == "clip.strategy" && it.value == "alpha-mask" }
+            },
+            result.diagnostics.entries.toString(),
+        )
+        assertTrue(telemetryAfter.destinationCopies > telemetryBefore.destinationCopies)
+        assertEquals(
+            telemetryBefore.destinationReadbackSnapshots,
+            telemetryAfter.destinationReadbackSnapshots,
+        )
+        assertNotEquals(
+            pixelAt(destination.pixels, 3, 10),
+            pixelAt(result.pixels, 3, 10),
+            "blur halo must alter the destination outside the unblurred source rect",
+        )
+        assertEquals(
+            pixelAt(destination.pixels, 7, 10),
+            pixelAt(result.pixels, 7, 10),
+            "the concave DIFFERENCE interior must preserve the destination",
+        )
     }
 
     @Test
@@ -1009,6 +1037,18 @@ class GPUClipCoverageSurfaceTest {
 
     private fun alphaAt(pixels: UByteArray, x: Int, y: Int): Int =
         pixels[(y * 16 + x) * 4 + 3].toInt() and 0xff
+
+    private fun pixelAt(pixels: UByteArray, x: Int, y: Int): List<Int> {
+        val offset = (y * 16 + x) * 4
+        return List(4) { channel -> pixels[offset + channel].toInt() and 0xff }
+    }
+
+    private fun renderPartialAlphaDestination() = Surface(16, 16).run {
+        canvas {
+            drawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.fromArgb(128, 32, 64, 192)))
+        }
+        render()
+    }
 
     private fun renderBlurredDifferenceClipScene(
         sigma: Float = 2f,
