@@ -56,7 +56,10 @@ internal val RECT_AA_WGSL: String = """
 
     @fragment
     fn fs_main(@builtin(position) coord: vec4f) -> @location(0) vec4f {
-        let cov = select(rect_cov(coord.xy, uniforms.bounds), 1.0, uniforms.antiAlias == 0u);
+        let hardCov = select(0.0, 1.0,
+            coord.x >= uniforms.bounds.x && coord.x < uniforms.bounds.z &&
+            coord.y >= uniforms.bounds.y && coord.y < uniforms.bounds.w);
+        let cov = select(rect_cov(coord.xy, uniforms.bounds), hardCov, uniforms.antiAlias == 0u);
         return vec4f(uniforms.color.rgb * srgb_to_linear(cov), uniforms.color.a * cov);
     }
 """.trimIndent()
@@ -135,7 +138,9 @@ internal val RRECT_WGSL: String = """
 
     @fragment
     fn fs_main(@builtin(position) coord: vec4f) -> @location(0) vec4f {
-        let cov = select(rrect_cov(coord.xy, uniforms.bounds, uniforms.radii.x, uniforms.radii.y), 1.0, uniforms.antiAlias == 0u);
+        let aaCov = rrect_cov(coord.xy, uniforms.bounds, uniforms.radii.x, uniforms.radii.y);
+        let hardCov = step(0.5, aaCov);
+        let cov = select(aaCov, hardCov, uniforms.antiAlias == 0u);
         return vec4f(uniforms.color.rgb * cov, uniforms.color.a * cov);
     }
 """.trimIndent()
@@ -602,6 +607,59 @@ fn vs_main(in: VertexInput) -> @builtin(position) vec4f {
 @fragment
 fn fs_main() -> @location(0) vec4f {
     return vec4f(0.0, 0.0, 0.0, 0.0);
+}
+""".trimIndent()
+
+/**
+ * Static white-source shader used by the stencil-tested AlphaMask composition.
+ * Its single vec4 uniform has a reflected 16-byte layout and is deliberately
+ * independent of a clip stack's values, which remain draw data rather than
+ * shader identity.
+ */
+internal val CLIP_MASK_COVER_WGSL: String = """
+struct ClipMaskUniforms {
+    color: vec4f,
+};
+
+@group(0) @binding(0) var<uniform> uniforms: ClipMaskUniforms;
+
+@vertex
+fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
+    let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
+    let y = f32(idx & 2u) * 2.0 - 1.0;
+    return vec4f(x, y, 0.0, 1.0);
+}
+
+@fragment
+fn fs_main() -> @location(0) vec4f {
+    return uniforms.color;
+}
+""".trimIndent()
+
+/** Static source-times-mask compositor with two parser-reflected texture pairs. */
+internal val CLIP_MASK_COMPOSITE_WGSL: String = """
+struct ClipMaskCompositeUniforms {
+    _pad: vec4f,
+};
+
+@group(0) @binding(0) var<uniform> uniforms: ClipMaskCompositeUniforms;
+@group(1) @binding(1) var sourceTexture: texture_2d<f32>;
+@group(1) @binding(2) var sourceSampler: sampler;
+@group(1) @binding(3) var maskTexture: texture_2d<f32>;
+@group(1) @binding(4) var maskSampler: sampler;
+
+@vertex
+fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
+    let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
+    let y = f32(idx & 2u) * 2.0 - 1.0;
+    return vec4f(x, y, 0.0, 1.0);
+}
+
+@fragment
+fn fs_main(@builtin(position) coord: vec4f) -> @location(0) vec4f {
+    let dims = textureDimensions(sourceTexture);
+    let uv = vec2f(coord.x / f32(dims.x), coord.y / f32(dims.y));
+    return textureSample(sourceTexture, sourceSampler, uv) * textureSample(maskTexture, maskSampler, uv).a;
 }
 """.trimIndent()
 

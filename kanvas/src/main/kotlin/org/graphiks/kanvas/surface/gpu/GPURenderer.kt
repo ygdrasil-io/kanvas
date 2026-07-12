@@ -10,6 +10,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
 import org.graphiks.kanvas.gpu.renderer.commands.GPUImageFilterPlan
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendOffscreenTexture
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRawUniformDraw
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRenderRecorder
@@ -583,6 +584,28 @@ internal fun renderViaGpu(
                 }
             }
 
+            val clipFrameCache = GPUClipCoverageFrameCache(config.maxClipIntermediateBytes.toLong())
+            GPUClipUsePrepass.register(
+                operations = ops,
+                target = targets,
+                config = config,
+                maxTextureDimension2D = t.maxTextureDimension2D,
+                cache = clipFrameCache,
+            )
+            fun acquireClipMaskOrRefuse(
+                plan: GPUClipCoveragePlan.Mask,
+                cmdId: GPUDrawCommandID,
+            ): ClipMaskLease? = try {
+                t.acquireClipMask(plan, clipFrameCache, diagnostics, config)
+            } catch (_: GPUClipCoverageFrameBudgetExceededException) {
+                diagnostics.fatal(
+                    "refuse:clip-mask:${cmdId.value}",
+                    "clipMask",
+                    "unsupported.clip.frame_budget",
+                )
+                null
+            }
+
             var suppressedLayerDepth = 0
             val trivialLayerPaint = Paint()
             fun refusePerspectiveCapture(op: DisplayOp, cmdId: GPUDrawCommandID): Boolean {
@@ -666,7 +689,36 @@ internal fun renderViaGpu(
                 }
                 if (suppressedLayerDepth > 0) continue
                 if (refusePerspectiveCapture(op, cmdId)) continue
-                when (op) {
+                val clipPlan = op.gpuClipCoveragePlanOrNull(targets, config, t.maxTextureDimension2D)
+                if (clipPlan is GPUClipCoveragePlan.Refused) {
+                    diagnostics.fatal("refuse:${op.javaClass.simpleName}:${cmdId.value}", "clip", clipPlan.code)
+                    continue
+                }
+                val finalBlendMode = op.clipCompositeBlendMode()
+                if (clipPlan is GPUClipCoveragePlan.Mask && finalBlendMode != GPUBlendMode.SRC_OVER) {
+                    // A source texture does not retain independent geometric coverage for transparent
+                    // source colors. Refuse non-SrcOver until that extra coverage channel is explicit.
+                    val discardedLease = acquireClipMaskOrRefuse(clipPlan, cmdId) ?: continue
+                    discardedLease.close()
+                    diagnostics.fatal(
+                        "refuse:clip-mask:${cmdId.value}",
+                        "clipMask",
+                        "unsupported.clip.mask.blend_mode:${finalBlendMode.gpuLabel}",
+                    )
+                    continue
+                }
+                val clipLease = (clipPlan as? GPUClipCoveragePlan.Mask)?.let { plan ->
+                    acquireClipMaskOrRefuse(plan, cmdId)
+                }
+                if (clipPlan is GPUClipCoveragePlan.Mask && clipLease == null) continue
+                val destinationLabel = sceneLabel
+                val destinationHasContent = sceneHasContent
+                if (clipLease != null) {
+                    sceneLabel = srcLabel
+                    sceneHasContent = false
+                }
+                try {
+                    when (op) {
                     is DisplayOp.DrawRect -> {
                         val rendered = if (op.paint.isStroke()) {
                             val cmd = op.toStrokePathCommand(cmdId, targets)
@@ -1465,6 +1517,30 @@ internal fun renderViaGpu(
                     }
                     is DisplayOp.Annotation -> { /* no visual output */ }
                     is DisplayOp.FlushAndSnapshot -> { /* deferred to render-backend; no-op in CPU path */ }
+                    }
+                } finally {
+                    if (clipLease != null) {
+                        val sourceHasContent = sceneHasContent
+                        sceneLabel = destinationLabel
+                        sceneHasContent = destinationHasContent
+                        try {
+                            if (sourceHasContent) {
+                                t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
+                                    drawTwoTexturePass(
+                                        wgsl = CLIP_MASK_COMPOSITE_WGSL,
+                                        colorFormat = texFormat,
+                                        firstTextureLabel = srcLabel,
+                                        secondTextureLabel = clipLease.mask.sampleLabel,
+                                        draws = listOf(clipMaskCompositeUniformDraw(width, height)),
+                                        blendMode = finalBlendMode,
+                                    )
+                                }
+                                sceneHasContent = true
+                            }
+                        } finally {
+                            clipLease.close()
+                        }
+                    }
                 }
             }
 
@@ -1537,6 +1613,33 @@ private fun computeAtlasDst(texRect: Rect, xform: Matrix33): Rect {
     val b = maxOf(y0, y1, y2, y3)
     return Rect.fromLTRB(l, t, r, b)
 }
+
+/** The blend state applied once when a logical source is composited through a clip AlphaMask. */
+private fun DisplayOp.clipCompositeBlendMode(): GPUBlendMode = when (this) {
+    is DisplayOp.DrawRect -> paint.blendMode.toGpuBlendFacts().blendMode
+    is DisplayOp.DrawRRect -> paint.blendMode.toGpuBlendFacts().blendMode
+    is DisplayOp.DrawPath -> paint.blendMode.toGpuBlendFacts().blendMode
+    is DisplayOp.DrawImage -> paint?.blendMode?.toGpuBlendFacts()?.blendMode ?: GPUBlendMode.SRC_OVER
+    is DisplayOp.DrawText -> paint.blendMode.toGpuBlendFacts().blendMode
+    is DisplayOp.DrawColor -> mode.toGpuBlendFacts().blendMode
+    is DisplayOp.DrawPoint -> paint.blendMode.toGpuBlendFacts().blendMode
+    is DisplayOp.DrawPoints -> paint.blendMode.toGpuBlendFacts().blendMode
+    is DisplayOp.DrawDRRect -> paint.blendMode.toGpuBlendFacts().blendMode
+    is DisplayOp.DrawImageNine -> paint?.blendMode?.toGpuBlendFacts()?.blendMode ?: GPUBlendMode.SRC_OVER
+    is DisplayOp.DrawImageLattice -> paint?.blendMode?.toGpuBlendFacts()?.blendMode ?: GPUBlendMode.SRC_OVER
+    is DisplayOp.DrawPicture -> paint?.blendMode?.toGpuBlendFacts()?.blendMode ?: GPUBlendMode.SRC_OVER
+    is DisplayOp.DrawVertices -> paint.blendMode.toGpuBlendFacts().blendMode
+    is DisplayOp.DrawMesh -> (blendMode ?: paint.blendMode).toGpuBlendFacts().blendMode
+    is DisplayOp.DrawAtlas -> (paint?.blendMode ?: blendMode).toGpuBlendFacts().blendMode
+    is DisplayOp.SetTransform,
+    is DisplayOp.SetClip,
+    is DisplayOp.BeginLayer,
+    DisplayOp.EndLayer,
+    is DisplayOp.Clear,
+    is DisplayOp.Annotation,
+    is DisplayOp.FlushAndSnapshot,
+    -> GPUBlendMode.SRC_OVER
+} ?: GPUBlendMode.SRC_OVER
 
 private fun hasColorGlyphs(blob: TextBlob): Boolean {
     val tf = blob.typeface as? FontTypeface ?: return false

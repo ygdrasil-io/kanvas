@@ -18,6 +18,28 @@ class GPUClipCoverageWgslTest {
     }
 
     @Test
+    fun `clip mask composite WGSL is static and parser validated`() {
+        val parsed = parseWgslResult(CLIP_MASK_COMPOSITE_WGSL)
+
+        assertTrue(parsed.isSuccess)
+        assertTrue(Lowerer().lower(parsed.translationUnit).entryPoints.isNotEmpty())
+    }
+
+    @Test
+    fun `clip mask cover WGSL is static and parser validated`() {
+        val parsed = parseWgslResult(CLIP_MASK_COVER_WGSL)
+
+        assertTrue(parsed.isSuccess)
+        assertTrue(Lowerer().lower(parsed.translationUnit).entryPoints.isNotEmpty())
+    }
+
+    @Test
+    fun `non AA shape shaders evaluate hard geometry rather than filling a conservative scissor`() {
+        assertTrue(RECT_AA_WGSL.contains("let hardCov"))
+        assertTrue(RRECT_WGSL.contains("let hardCov"))
+    }
+
+    @Test
     fun `even odd hole and inverse cover use their own stencil states`() {
         assertEquals(GPUBackendStencilFillRule.EvenOdd, stencilConfig(FillType.EVEN_ODD).fillRule)
         assertTrue(stencilConfig(FillType.INVERSE_WINDING).inverse)

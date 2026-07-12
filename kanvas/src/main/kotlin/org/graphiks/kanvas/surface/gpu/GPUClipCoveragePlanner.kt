@@ -104,7 +104,11 @@ object GPUClipCoveragePlanner {
     )
 }
 
-/** Thread-safe cache for immutable mask plans; WebGPU resources are added by later tasks. */
+/**
+ * Legacy immutable-plan deduplication kept for callers that only inspect plans.
+ * Materialized WebGPU masks must use [GPUClipCoverageFrameCache], whose scope
+ * is one frame and whose releases are driven by the use prepass.
+ */
 class GPUClipCoverageCache {
     private val masks = ConcurrentHashMap<String, GPUClipCoveragePlan.Mask>()
 
