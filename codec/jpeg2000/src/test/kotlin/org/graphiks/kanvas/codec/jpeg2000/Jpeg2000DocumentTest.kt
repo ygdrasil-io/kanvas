@@ -4,6 +4,7 @@ import java.io.ByteArrayOutputStream
 import java.security.MessageDigest
 import org.graphiks.kanvas.codec.Codec
 import org.junit.jupiter.api.Assertions.assertArrayEquals
+import org.junit.jupiter.api.Assertions.assertDoesNotThrow
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -11,6 +12,160 @@ import org.junit.jupiter.api.Test
 import org.skia.foundation.SkEncodedImageFormat
 
 class Jpeg2000DocumentTest {
+
+    @Test
+    fun `reversible 53 inverse reconstructs an odd length lifting vector`() {
+        assertArrayEquals(
+            intArrayOf(-3, 2, 7, -1, 4),
+            inverseReversible53(low = intArrayOf(-3, 6, 1), high = intArrayOf(0, -6), length = 5),
+        )
+    }
+
+    @Test
+    fun `zero coding contexts use the directional JPEG 2000 subband tables`() {
+        assertEquals(5, j2kZeroCodingContext(0, 1, 0, J2kSubbandOrientation.HL))
+        assertEquals(3, j2kZeroCodingContext(1, 0, 0, J2kSubbandOrientation.HL))
+        assertEquals(5, j2kZeroCodingContext(1, 0, 0, J2kSubbandOrientation.LH))
+        assertEquals(6, j2kZeroCodingContext(0, 0, 2, J2kSubbandOrientation.HH))
+        assertEquals(7, j2kZeroCodingContext(1, 0, 2, J2kSubbandOrientation.HH))
+        assertEquals(8, j2kZeroCodingContext(0, 0, 3, J2kSubbandOrientation.HH))
+    }
+
+    @Test
+    fun `pinned OpenJPEG Ndecomp one J2K fixture has its documented SHA-256`() {
+        val actual = MessageDigest.getInstance("SHA-256")
+            .digest(Jpeg2000TestFixtures.openJpegLosslessNdecomp1_96x17())
+            .joinToString(separator = "") { byte ->
+                byte.toInt().and(0xff).toString(16).padStart(2, '0')
+            }
+
+        assertEquals(
+            "d3c85260b35e0e9a955abd66326a4dde05867e4f752176030f7a4f962eba0b31",
+            actual,
+        )
+    }
+
+    @Test
+    fun `pinned OpenJPEG odd Ndecomp one J2K fixture has its documented SHA-256`() {
+        val actual = MessageDigest.getInstance("SHA-256")
+            .digest(Jpeg2000TestFixtures.openJpegLosslessNdecomp1_5x3())
+            .joinToString(separator = "") { byte ->
+                byte.toInt().and(0xff).toString(16).padStart(2, '0')
+            }
+
+        assertEquals(
+            "a2c33040c14e8d0cece4ac9ee69a3ed3cbb437b8e46a3e787c5318b587ef612c",
+            actual,
+        )
+    }
+
+    @Test
+    fun `Ndecomp one raw J2K reaches the bounded image facade`() {
+        val codec = Codec.MakeFromData(Jpeg2000TestFixtures.openJpegLosslessNdecomp1_96x17())
+
+        assertTrue(codec != null, "Ndecomp one must be recognized before the bounded entropy path runs")
+    }
+
+    @Test
+    fun `OpenJPEG Ndecomp one reversible J2K fixture decodes pixels exactly`() {
+        val codestream = Jpeg2000TestFixtures.openJpegLosslessNdecomp1_96x17()
+        val codec = requireNotNull(Codec.MakeFromData(codestream))
+        val document = requireNotNull(Jpeg2000Document.open(codestream).document)
+
+        val (bitmap, result) = codec.getImage()
+
+        assertEquals(Codec.Result.kSuccess, result, "document diagnostic=${document.decode().diagnostic}")
+        val decoded = requireNotNull(bitmap)
+        val expected = sourcePgmPixels(
+            resource = "/jpeg2000-openjpeg/source-two-codeblocks-96x17.pgm",
+            width = 96,
+            height = 17,
+        )
+        for (y in 0 until decoded.height) {
+            for (x in 0 until decoded.width) {
+                val sample = expected[y * decoded.width + x].toInt() and 0xFF
+                assertEquals(
+                    0xFF000000.toInt() or (sample shl 16) or (sample shl 8) or sample,
+                    decoded.getPixel(x, y),
+                    "x=$x y=$y",
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `OpenJPEG Ndecomp one odd frame reconstructs both 53 symmetric edges`() {
+        val codec = requireNotNull(Codec.MakeFromData(Jpeg2000TestFixtures.openJpegLosslessNdecomp1_5x3()))
+
+        val (bitmap, result) = codec.getImage()
+
+        assertEquals(Codec.Result.kSuccess, result)
+        val decoded = requireNotNull(bitmap)
+        val expected = sourcePgmPixels()
+        assertEquals(5, decoded.width)
+        assertEquals(3, decoded.height)
+        for (y in 0 until decoded.height) {
+            for (x in 0 until decoded.width) {
+                val sample = expected[y * decoded.width + x].toInt() and 0xFF
+                assertEquals(
+                    0xFF000000.toInt() or (sample shl 16) or (sample shl 8) or sample,
+                    decoded.getPixel(x, y),
+                    "x=$x y=$y",
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `Ndecomp one packet stream separates LL and HL LH HH codeblock bodies`() {
+        val codestream = Jpeg2000TestFixtures.openJpegLosslessNdecomp1_96x17()
+        val sod = (0 until codestream.size - 1).single { index ->
+            codestream[index] == 0xFF.toByte() && codestream[index + 1] == 0x93.toByte()
+        }
+        val packetOffset = sod + 2
+        val spans = readNdecompOnePacketSpans(
+            packet = codestream.copyOfRange(packetOffset, codestream.size - 2),
+            absoluteOffset = packetOffset,
+        )
+
+        assertEquals(2, spans.size)
+        assertEquals(3, spans[0].bodyOffset - spans[0].packetOffset)
+        assertEquals(listOf(J2kPacketCodeblock(4, 10, 9)), spans[0].header.codeblocks)
+        assertEquals(10, spans[1].bodyOffset - spans[1].packetOffset)
+        assertEquals(
+            listOf(
+                J2kPacketCodeblock(8, 22, 278),
+                J2kPacketCodeblock(3, 7, 8),
+                J2kPacketCodeblock(7, 19, 29),
+            ),
+            spans[1].header.codeblocks,
+        )
+        assertEquals(codestream.size - 2, spans[1].bodyEnd)
+    }
+
+    @Test
+    fun `Ndecomp one HL block accepts normative MQ marker padding`() {
+        val codestream = Jpeg2000TestFixtures.openJpegLosslessNdecomp1_96x17()
+        val packetOffset = (0 until codestream.size - 1).single { index ->
+            codestream[index] == 0xFF.toByte() && codestream[index + 1] == 0x93.toByte()
+        } + 2
+        val spans = readNdecompOnePacketSpans(
+            packet = codestream.copyOfRange(packetOffset, codestream.size - 2),
+            absoluteOffset = packetOffset,
+        )
+        val entry = spans[1].header.codeblocks[0]
+        assertDoesNotThrow {
+            J2kTier1Decoder(
+                width = 48,
+                height = 9,
+                numBitPlanes = entry.numBitPlanes,
+                passes = entry.passes,
+                codeblock = codestream.copyOfRange(spans[1].bodyOffset, spans[1].bodyOffset + entry.bodyLength),
+                codeblockOffset = spans[1].bodyOffset,
+                orientation = J2kSubbandOrientation.HL,
+            ).decode()
+        }
+    }
 
     @Test
     fun `pinned OpenJPEG two-codeblock source PGM has its documented SHA-256`() {

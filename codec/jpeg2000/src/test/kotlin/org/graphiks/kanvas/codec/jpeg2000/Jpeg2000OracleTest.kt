@@ -34,6 +34,26 @@ class Jpeg2000OracleTest {
         )
     }
 
+    @Test
+    fun `explicit OpenJPEG oracle decodes pinned Ndecomp one fixture exactly`() {
+        assertArrayEquals(
+            sourceP2Pixels(
+                "/jpeg2000-openjpeg/source-two-codeblocks-96x17.pgm",
+                width = 96,
+                height = 17,
+            ),
+            decodeWithOracle(Jpeg2000TestFixtures.openJpegLosslessNdecomp1_96x17(), width = 96, height = 17),
+        )
+    }
+
+    @Test
+    fun `explicit OpenJPEG oracle decodes pinned odd Ndecomp one fixture exactly`() {
+        assertArrayEquals(
+            expectedPixels,
+            decodeWithOracle(Jpeg2000TestFixtures.openJpegLosslessNdecomp1_5x3(), width = 5, height = 3),
+        )
+    }
+
     private fun decodeWithOracle(j2k: ByteArray, width: Int, height: Int): ByteArray {
         val configuredOracle = System.getProperty("kanvas.jpeg2000.oracle.openjpeg").orEmpty()
         assumeTrue(

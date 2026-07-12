@@ -67,10 +67,11 @@ public class Jpeg2000Box internal constructor(
  * The parser deliberately accepts only the declared narrow Part 1 profile:
  * raw J2K with `SIZ` directly after `SOC`, or a strictly ordered JP2 core
  * (`jP  `, `ftyp`, `jp2h`/`ihdr`, then `jp2c`), one unsigned 8-bit grayscale
- * component, one tile, one resolution, one layer, reversible 5/3 transform
- * and no quantization. Raw codestreams in that profile may additionally use
- * the bounded one-packet Tier-2/MQ/EBCOT path with up to two horizontal
- * codeblocks; JP2 remains structural only.
+ * component, one tile, one layer, reversible 5/3 transform and no
+ * quantization. Raw codestreams in that profile may use either `Ndecomp=0`
+ * with one packet and up to two horizontal codeblocks, or the bounded
+ * `Ndecomp=1` two-resolution path with one LL packet and one HL/LH/HH packet;
+ * JP2 remains structural only.
  */
 public class Jpeg2000Document private constructor(
     private val source: ByteArray,
@@ -90,7 +91,7 @@ public class Jpeg2000Document private constructor(
     /** Returns an independent copy of the encoded J2K or JP2 bytes. */
     public fun copyEncodedBytes(): ByteArray = source.copyOf()
 
-    /** Decodes only the proven raw one-packet profile; containers stay explicit refusals. */
+    /** Decodes only the proven bounded raw J2K profiles; containers stay explicit refusals. */
     public fun decode(): Jpeg2000DecodeResult {
         if (container != Jpeg2000Container.J2K || entropy == null) {
             return Jpeg2000DecodeResult(
@@ -333,6 +334,7 @@ private class J2kCodestreamParser(
     private var frame: Jpeg2000FrameInfo? = null
     private var sawCod: Boolean = false
     private var sawQcd: Boolean = false
+    private var decompositions: Int? = null
 
     fun parse(): ParsedRawJ2k {
         if (end - start < 2 || data[start].u8() != 0xFF || data[start + 1].u8() != SOC) {
@@ -408,27 +410,24 @@ private class J2kCodestreamParser(
         val transform = data[p + 9].u8()
         if (
             scod != 0 || progression != 0 || layers != 1 || multiComponentTransform != 0 ||
-            decompositions != 0 || codeBlockWidth != 4 || codeBlockHeight != 4 ||
+            decompositions !in 0..1 || codeBlockWidth != 4 || codeBlockHeight != 4 ||
             codeBlockStyle != 0 || transform != 1
         ) {
             j2kFailure("jpeg2000.cod.profile.unsupported", markerOffset, Codec.Result.kUnimplemented)
         }
+        this.decompositions = decompositions
         sawCod = true
     }
 
     private fun parseQcd(markerOffset: Int) {
         if (sawQcd) j2kFailure("jpeg2000.qcd.duplicate", markerOffset)
         val segment = readSegment(markerOffset)
-        // A reversible 8-bit Part 1 codestream has no quantization
-        // (Sqcd style 0), two guard bits and the single LL exponent 8:
-        // Sqcd=0x40, SPqcd=0x40.  This is the form emitted by OpenJPEG for
-        // the declared one-resolution 5/3 profile; 00 00 is not a valid
-        // substitute for it.
-        if (
-            segment.payloadSize != 2 ||
-            data[segment.payloadOffset].u8() != 0x40 ||
-            data[segment.payloadOffset + 1].u8() != 0x40
-        ) {
+        val expected = when (decompositions) {
+            0 -> byteArrayOf(0x40, 0x40)
+            1 -> byteArrayOf(0x40, 0x40, 0x48, 0x48, 0x50)
+            else -> j2kFailure("jpeg2000.cod.missing", markerOffset)
+        }
+        if (segment.payloadSize != expected.size || !data.rangeEquals(segment.payloadOffset, expected, 0, expected.size)) {
             j2kFailure("jpeg2000.qcd.profile.unsupported", markerOffset, Codec.Result.kUnimplemented)
         }
         sawQcd = true
@@ -438,6 +437,7 @@ private class J2kCodestreamParser(
         val currentFrame = frame ?: j2kFailure("jpeg2000.siz.missing", markerOffset)
         if (!sawCod) j2kFailure("jpeg2000.cod.missing", markerOffset)
         if (!sawQcd) j2kFailure("jpeg2000.qcd.missing", markerOffset)
+        val currentDecompositions = decompositions ?: j2kFailure("jpeg2000.cod.missing", markerOffset)
         val segment = readSegment(markerOffset)
         if (segment.payloadSize != 8) j2kFailure("jpeg2000.sot.invalid", markerOffset)
         val p = segment.payloadOffset
@@ -457,7 +457,7 @@ private class J2kCodestreamParser(
         if (position != end) j2kFailure("jpeg2000.eoc.trailing", position)
         return ParsedRawJ2k(
             frame = currentFrame,
-            entropy = J2kEntropyInput(packetOffset, tilePartEnd.toInt() - packetOffset),
+            entropy = J2kEntropyInput(packetOffset, tilePartEnd.toInt() - packetOffset, currentDecompositions),
         )
     }
 
