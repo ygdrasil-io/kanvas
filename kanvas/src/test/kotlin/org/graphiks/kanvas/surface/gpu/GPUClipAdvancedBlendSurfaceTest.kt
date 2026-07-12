@@ -6,6 +6,7 @@ import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.MaskFilter
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.pipeline.ClipOp
+import org.graphiks.kanvas.picture.PictureRecorder
 import org.graphiks.kanvas.pipeline.BlurStyle
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
@@ -17,6 +18,7 @@ import org.graphiks.kanvas.types.redByte
 import org.graphiks.kanvas.types.withAlphaByte
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assumptions.assumeTrue
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -113,6 +115,42 @@ class GPUClipAdvancedBlendSurfaceTest {
         assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
         assertTrue(result.diagnostics.entries.any { it.reason == "gpu-copy-then-formula" })
         assertTrue(alphaAt(result.pixels, 16, 16) > 0)
+    }
+
+    @Test
+    fun `clipped DrawPicture recursively refuses overlay before source routing`() {
+        val runtime = GPUBackendRuntimeFactory.createOrNull()
+        assumeTrue(runtime != null, "GPU backend unavailable in current environment")
+
+        val childRecorder = PictureRecorder()
+        val childCanvas = childRecorder.beginRecording(Rect(0f, 0f, 32f, 32f))
+        childCanvas.drawRect(
+            Rect(4f, 4f, 28f, 28f),
+            Paint.fill(Color.BLACK).copy(antiAlias = false, blendMode = BlendMode.OVERLAY),
+        )
+        val child = childRecorder.finishRecordingAsPicture()
+
+        val parentRecorder = PictureRecorder()
+        val parentCanvas = parentRecorder.beginRecording(Rect(0f, 0f, 32f, 32f))
+        parentCanvas.drawPicture(child)
+        val picture = parentRecorder.finishRecordingAsPicture()
+
+        val result = Surface(width = 32, height = 32).run {
+            canvas {
+                drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE))
+                save()
+                clipRect(Rect(8f, 8f, 24f, 24f), ClipOp.INTERSECT, antiAlias = true)
+                drawPicture(picture)
+                restore()
+            }
+            render()
+        }
+
+        assertEquals(1, result.stats.opsRefused)
+        assertTrue(result.diagnostics.entries.any {
+            it.reason == "unsupported.picture.nested_destination_read_blend:overlay"
+        })
+        assertFalse(result.diagnostics.entries.any { it.reason == "dispatched" && it.operation == "drawPicture" })
     }
 
     private fun renderClippedBlend(destination: Color, source: Color, mode: BlendMode) =

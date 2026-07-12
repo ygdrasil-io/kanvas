@@ -1058,6 +1058,11 @@ internal fun renderViaGpu(
                     return null
                 }
 
+                val destinationRead = op.pictureContainsDestinationReadBlend()
+                if (destinationRead != null) {
+                    return "unsupported.picture.nested_destination_read_blend:${destinationRead.modeLabel.lowercase()}"
+                }
+
                 return validatePicture(op.picture)
             }
 
@@ -2685,6 +2690,14 @@ private fun DisplayOp.clipCompositeBlendFacts(): GPUBlendFacts = when (this) {
     is DisplayOp.Annotation,
     is DisplayOp.FlushAndSnapshot,
     -> GPUBlendFacts.srcOver()
+}
+
+/** Returns the first destination-reading blend in this picture tree, in display-list order. */
+private fun DisplayOp.pictureContainsDestinationReadBlend(): GPUBlendFacts? = when (this) {
+    is DisplayOp.DrawPicture -> picture.ops.firstNotNullOfOrNull { nested ->
+        nested.pictureContainsDestinationReadBlend()
+    }
+    else -> clipCompositeBlendFacts().takeIf(GPUBlendFacts::requiresDestinationRead)
 }
 
 private fun hasColorGlyphs(blob: TextBlob): Boolean {

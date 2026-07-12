@@ -3,12 +3,14 @@ package org.graphiks.kanvas.surface.gpu
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.pipeline.ClipOp
 import org.graphiks.kanvas.picture.PictureRecorder
 import org.graphiks.kanvas.surface.DiagnosticLevel
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
 import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Assumptions.assumeTrue
@@ -218,6 +220,36 @@ class GPUSaveLayerCompositeRegressionTest {
             "unsupported.picture.save_layer",
             result.diagnostics.entries.single { it.level == DiagnosticLevel.FATAL }.reason,
         )
+    }
+
+    @Test
+    fun `clipped DrawPicture refuses a nested multiply before source routing`() {
+        requireWebGpu()
+
+        val recorder = PictureRecorder()
+        val pictureCanvas = recorder.beginRecording(Rect(0f, 0f, 8f, 8f))
+        pictureCanvas.drawRect(
+            Rect(0f, 0f, 8f, 8f),
+            Paint(color = translucentRed.toColor(), antiAlias = false, blendMode = BlendMode.MULTIPLY),
+        )
+        val picture = recorder.finishRecordingAsPicture()
+
+        val result = Surface(width = 8, height = 8).run {
+            canvas {
+                drawRect(Rect(0f, 0f, 8f, 8f), Paint(color = white.toColor(), antiAlias = false))
+                save()
+                clipRect(Rect(1f, 1f, 7f, 7f), ClipOp.INTERSECT, antiAlias = true)
+                drawPicture(picture)
+                restore()
+            }
+            render()
+        }
+
+        assertEquals(1, result.stats.opsRefused)
+        assertTrue(result.diagnostics.entries.any {
+            it.reason == "unsupported.picture.nested_destination_read_blend:multiply"
+        })
+        assertFalse(result.diagnostics.entries.any { it.reason == "dispatched" && it.operation == "drawPicture" })
     }
 
     @Test
