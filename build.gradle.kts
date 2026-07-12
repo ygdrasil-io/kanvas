@@ -2329,9 +2329,13 @@ tasks.register("checkJpegClassicComplete") {
 
     dependsOn(
         ":codec:jpeg:test",
+        ":codec:jpeg:jpegPerformanceEvidence",
         "checkSupportedCodecsDoc",
         "checkRealImageFixtureDocumentation",
+        "checkProductionCodecRuntimeNoAwt",
         "checkPureKotlinCodecNoAwt",
+        "checkProductionImageEncodeNoAwt",
+        "checkImageEncodeTestsNoAwt",
     )
 }
 

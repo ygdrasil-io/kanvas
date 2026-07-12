@@ -60,13 +60,19 @@ gaps or as out-of-scope behavior.
 
 ### JPEG release evidence
 
-`checkJpegClassicComplete` runs the Kotlin-only `:codec:jpeg:test` suite plus
-the codec support, fixture-provenance, and AWT/ImageIO guardrails. Its
+`checkJpegClassicComplete` runs the Kotlin-only `:codec:jpeg:test` suite, the
+separate non-cacheable `:codec:jpeg:jpegPerformanceEvidence` task, and the
+codec support, fixture-provenance, production and test AWT/ImageIO guardrails.
+Its
 `JpegConformanceTest` enumerates every non-reserved JPEG SOF as either an
-evidenced decode/encode route or an asserted stable refusal; `JpegFuzzTest`
+evidenced decode/encode route or an asserted stable refusal. A bare SOF6 is
+refused because it has no reference state, while the pinned DHP/EXP SOF6 corpus
+is separately exercised as a valid hierarchy route. `JpegFuzzTest`
 deterministically mutates marker lengths, entropy, segment order, DRI/DAC and
-truncation while requiring bounded document handling. `JpegPerformanceEvidenceTest`
-has no timing threshold: it writes warm-up plus ten-decode median evidence to
+truncation while requiring bounded document handling and a bitmap or stable
+diagnostic result from every opened document. `jpegPerformanceEvidence` has no
+timing threshold: it deletes any previous report, runs the dedicated test, and
+writes warm-up plus ten-decode median evidence to
 `codec/jpeg/build/reports/jpeg-performance.json` for photo, graphic, CMYK,
 12-bit, and large-image fixture classes.
 

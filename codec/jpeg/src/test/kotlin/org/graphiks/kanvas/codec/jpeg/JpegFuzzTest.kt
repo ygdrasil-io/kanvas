@@ -1,6 +1,9 @@
 package org.graphiks.kanvas.codec.jpeg
 
+import org.graphiks.kanvas.codec.Codec
 import org.junit.jupiter.api.Assertions.assertDoesNotThrow
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.function.ThrowingSupplier
@@ -14,6 +17,13 @@ import java.util.Random
  * the exact mutation class in the JUnit report.
  */
 class JpegFuzzTest {
+
+    @Test
+    fun `fuzz outcome assertion rejects a result without bitmap or diagnostic`() {
+        assertThrows(AssertionError::class.java) {
+            assertDecodeOutcome(JpegDecodeResult(bitmap = null, diagnostic = null), "synthetic")
+        }
+    }
 
     @Test
     fun `fixed seed mutations never escape bounded JPEG diagnostics`() {
@@ -30,11 +40,20 @@ class JpegFuzzTest {
             )
             assertTrue(opened.document != null || opened.diagnostic != null, name)
             opened.document?.let { document ->
-                assertDoesNotThrow(
-                    { document.decode(JpegDecodeRequest(SkColorType.kRGBA_8888, null)) },
+                val decoded = assertDoesNotThrow(
+                    ThrowingSupplier { document.decode(JpegDecodeRequest(SkColorType.kRGBA_8888, null)) },
                     name,
                 )
+                assertDecodeOutcome(decoded, name)
             }
+        }
+    }
+
+    private fun assertDecodeOutcome(decoded: JpegDecodeResult, name: String) {
+        assertTrue(decoded.bitmap != null || decoded.diagnostic != null, name)
+        decoded.diagnostic?.let { diagnostic ->
+            assertTrue(diagnostic.code.isNotBlank(), "$name must report a diagnostic code")
+            assertFalse(diagnostic.result == Codec.Result.kSuccess, "$name must not diagnose success")
         }
     }
 

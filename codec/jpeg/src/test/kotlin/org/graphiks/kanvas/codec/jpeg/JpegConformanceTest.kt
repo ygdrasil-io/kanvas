@@ -62,6 +62,18 @@ class JpegConformanceTest {
     }
 
     @Test
+    fun `DHP SOF6 corpus is an evidenced hierarchy route distinct from bare refusal`() {
+        val stream = JpegConformanceFixtures.streams().single { it.name == "DHP SOF6 progressive Huffman corpus" }
+        assertEquals(setOf(0xC2, 0xC6), stream.sofMarkers)
+
+        val document = requireNotNull(JpegDocument.open(stream.bytes).document)
+        assertNotNull(document.hierarchy)
+        val decoded = document.decode(JpegDecodeRequest(SkColorType.kRGBA_8888, null))
+        assertNull(decoded.diagnostic)
+        assertNotNull(decoded.bitmap)
+    }
+
+    @Test
     fun `unsupported static encode requests are refused without a process fallback`() {
         val source = JpegConformanceFixtures.grayscale(16, 12)
 
@@ -216,6 +228,13 @@ internal object JpegConformanceFixtures {
                     hierarchy = listOf(JpegHierarchyLevel(1, 2, JpegEncodeProcess.DifferentialSequentialHuffman)),
                 ),
                 setOf(0xC0, 0xC5),
+            ),
+            Stream(
+                name = "DHP SOF6 progressive Huffman corpus",
+                bytes = resource("/jpeg-hierarchy/sof6-huffman-progressive-exp11.jpg"),
+                sofMarkers = setOf(0xC2, 0xC6),
+                width = 4,
+                height = 4,
             ),
             generated(
                 "DHP SOF7 lossless Huffman",
