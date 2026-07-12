@@ -351,12 +351,12 @@ public abstract class Codec protected constructor() {
             "jpeg-ls",
             "jpeg",
             "jpeg2000",
+            "jpegxl",
             "gif",
             "bmp",
             "webp",
             "wbmp",
             "avif",
-            "jpegxl",
             "ico",
             "raw",
         ).withIndex().associate { it.value to it.index }

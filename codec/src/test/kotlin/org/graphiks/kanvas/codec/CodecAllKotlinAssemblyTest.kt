@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.codec
 
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Test
@@ -13,6 +14,11 @@ import java.util.Base64
 
 class CodecAllKotlinAssemblyTest {
     @Test
+    fun `extended stubs do not claim JPEG XL now owned by the pure Kotlin module`() {
+        assertFalse(ExtendedCodecDecoderProvider().decoders().any { it.name == "jpegxl" })
+    }
+
+    @Test
     fun `registers pure kotlin decoders in dispatch order`() {
         val decoders = Codec.Decoders.all()
 
@@ -22,12 +28,12 @@ class CodecAllKotlinAssemblyTest {
                 "jpeg-ls",
                 "jpeg",
                 "jpeg2000",
+                "jpegxl",
                 "gif",
                 "bmp",
                 "webp",
                 "wbmp",
                 "avif",
-                "jpegxl",
                 "ico",
                 "raw",
             ),
@@ -51,6 +57,7 @@ class CodecAllKotlinAssemblyTest {
                 "org.graphiks.kanvas.codec.jpeg.JpegKotlinDecoderProvider",
                 "org.graphiks.kanvas.codec.jpeg2000.Jpeg2000KotlinDecoderProvider",
                 "org.graphiks.kanvas.codec.jpegls.JpegLsKotlinDecoderProvider",
+                "org.graphiks.kanvas.codec.jpegxl.JpegXlKotlinDecoderProvider",
                 "org.graphiks.kanvas.codec.png.PngKotlinDecoderProvider",
                 "org.graphiks.kanvas.codec.wbmp.WbmpKotlinDecoderProvider",
                 "org.graphiks.kanvas.codec.webp.WebpKotlinDecoderProvider",

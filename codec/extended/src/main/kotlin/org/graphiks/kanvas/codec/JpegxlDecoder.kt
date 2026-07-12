@@ -71,9 +71,11 @@ public object JpegxlDecoder {
     )
 
     /**
-     * R-suivi.47 — [Codec.Decoder] registration record for JPEG-XL.
-     * Auto-installed into [Codec.Decoders] at class-init time. `make`
-     * returns `null` until R-suivi.28 wires up libjxl.
+     * Legacy [Codec.Decoder] record retained for source compatibility.
+     *
+     * It is intentionally not published by [ExtendedCodecDecoderProvider]:
+     * `codec:jpegxl` is the sole dispatcher owner for JPEG XL signatures.
+     * `make` remains a stub for callers of this legacy surface.
      */
     internal val RegistryEntry: Codec.Decoder = object : Codec.Decoder {
         override val name: String = "jpegxl"
