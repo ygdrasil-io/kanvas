@@ -149,6 +149,13 @@ empêche tout retour implicite à SrcOver. Les modes qui ne possèdent ni état 
 blend fixe validé ni formule validée restent des refus explicites ; ils ne
 produisent pas de pixels approximatifs.
 
+Le snapshot est une copie GPU-à-GPU : le target source possède l'usage CopySrc,
+la texture de snapshot possède CopyDst et TextureBinding, et le command encoder
+encode copyTextureToTexture avant le pass de composite. Aucun readback CPU ni
+upload de pixels ne participe au chemin de destination read. La télémétrie
+enregistre la copie et doit rester à zéro pour destinationReadbackSnapshot sur
+ce chemin.
+
 ## Budgets et durée de vie
 
 RenderConfig reçoit maxClipIntermediateBytes, avec la même valeur par défaut
@@ -229,7 +236,9 @@ Les tests WebGPU réels vérifient que chaque route GPU prise en charge applique
 la même couverture exacte et qu'aucun pixel hors clip n'est modifié. Ils
 couvrent les blends avec destination non opaque, les snapshots, les mask blurs
 à sigma 0, 0,1, 0,5, normale et grande, ainsi que les budgets par défaut,
-augmentés et matériels.
+augmentés et matériels. Les tests de blend affirment aussi que le snapshot
+utilise une copie GPU-à-GPU et que le compteur de readback de destination est
+nul.
 
 Les tests WGSL parsèrent et abaissent tous les modules touchés, puis comparent
 la réflexion au packer. Les tests de cache rendent plusieurs sigmas et piles
