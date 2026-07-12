@@ -52,7 +52,8 @@ public data class JpegLsDecodeResult(
 
 /**
  * Immutable, bounded JPEG-LS frame description for the supported static
- * baseline: a one-component, 8-bit, NEAR=0 LOCO-I scan.
+ * baseline: a one-component, 8-bit LOCO-I scan. Its [nearLossless] bound is
+ * validated against the supported `MAXVAL=255` profile before entropy allocation.
  */
 public class JpegLsDocument private constructor(
     private val source: ByteArray,
@@ -143,7 +144,32 @@ internal data class JpegLsFrame(
     val width: Int,
     val height: Int,
     val nearLossless: Int,
+    val parameters: JpegLsCodingParameters,
 )
+
+/** Effective default JPEG-LS coding parameters for the supported `MAXVAL=255` profile. */
+internal data class JpegLsCodingParameters(
+    val maximumSampleValue: Int,
+    val threshold1: Int,
+    val threshold2: Int,
+    val threshold3: Int,
+    val reset: Int,
+) {
+    companion object {
+        fun defaults(nearLossless: Int): JpegLsCodingParameters {
+            require(nearLossless in 0..127)
+            val threshold1 = defaultThreshold(3 + 3 * nearLossless, nearLossless + 1)
+            val threshold2 = defaultThreshold(7 + 5 * nearLossless, threshold1)
+            val threshold3 = defaultThreshold(21 + 7 * nearLossless, threshold2)
+            return JpegLsCodingParameters(255, threshold1, threshold2, threshold3, 64)
+        }
+
+        const val maximumNearLossless: Int = 127
+
+        private fun defaultThreshold(candidate: Int, lowerBound: Int): Int =
+            if (candidate !in lowerBound..255) lowerBound else candidate
+    }
+}
 
 internal data class ParsedJpegLs(
     val frame: JpegLsFrame,
@@ -163,9 +189,10 @@ private class JpegLsParser(
     private val limits: JpegLsLimits,
 ) {
     private var position: Int = 0
-    private var frame: JpegLsFrame? = null
+    private var frameDimensions: FrameDimensions? = null
     private var sawSof: Boolean = false
     private var sawLse: Boolean = false
+    private var lse: LseParameters? = null
     private val metadata = ArrayList<JpegLsMetadataSegment>()
 
     fun parse(): ParsedJpegLs {
@@ -227,7 +254,7 @@ private class JpegLsParser(
         if (data[component].u8() != 1 || data[component + 1].u8() != 0x11 || data[component + 2].u8() != 0) {
             jpeglsFailure("jpeg-ls.frame.unsupported", markerOffset, Codec.Result.kUnimplemented)
         }
-        frame = JpegLsFrame(width, height, 0)
+        frameDimensions = FrameDimensions(width, height)
         sawSof = true
     }
 
@@ -238,11 +265,13 @@ private class JpegLsParser(
             jpeglsFailure("jpeg-ls.lse.unsupported", markerOffset, Codec.Result.kUnimplemented)
         }
         val start = segment.payloadOffset
-        if (u16(start + 1) != 255 || u16(start + 3) != 3 || u16(start + 5) != 7 ||
-            u16(start + 7) != 21 || u16(start + 9) != 64
-        ) {
-            jpeglsFailure("jpeg-ls.lse.unsupported", markerOffset, Codec.Result.kUnimplemented)
-        }
+        lse = LseParameters(
+            maximumSampleValue = u16(start + 1),
+            threshold1 = u16(start + 3),
+            threshold2 = u16(start + 5),
+            threshold3 = u16(start + 7),
+            reset = u16(start + 9),
+        )
         sawLse = true
     }
 
@@ -252,22 +281,57 @@ private class JpegLsParser(
     }
 
     private fun parseSos(markerOffset: Int): ParsedJpegLs {
-        val currentFrame = frame ?: jpeglsFailure("jpeg-ls.sof.missing", markerOffset)
+        val dimensions = frameDimensions ?: jpeglsFailure("jpeg-ls.sof.missing", markerOffset)
         val segment = segment(markerOffset, "jpeg-ls.sos.truncated")
         if (segment.payloadSize != 6) jpeglsFailure("jpeg-ls.sos.invalid", markerOffset)
         val start = segment.payloadOffset
         if (
             data[start].u8() != 1 || data[start + 1].u8() != 1 || data[start + 2].u8() != 0 ||
-            data[start + 3].u8() != currentFrame.nearLossless || data[start + 4].u8() != 0 || data[start + 5].u8() != 0
+            data[start + 4].u8() != 0 || data[start + 5].u8() != 0
         ) {
             jpeglsFailure("jpeg-ls.scan.unsupported", markerOffset, Codec.Result.kUnimplemented)
         }
-        return ParsedJpegLs(currentFrame, position, metadata.toList())
+        val nearLossless = data[start + 3].u8()
+        val parameters = effectiveParameters(nearLossless, markerOffset)
+        return ParsedJpegLs(
+            JpegLsFrame(dimensions.width, dimensions.height, nearLossless, parameters),
+            position,
+            metadata.toList(),
+        )
+    }
+
+    private fun effectiveParameters(nearLossless: Int, markerOffset: Int): JpegLsCodingParameters {
+        val raw = lse
+        if (raw != null && raw.maximumSampleValue != 0 && raw.maximumSampleValue != 255) {
+            jpeglsFailure("jpeg-ls.lse.unsupported", markerOffset, Codec.Result.kUnimplemented)
+        }
+        if (nearLossless > JpegLsCodingParameters.maximumNearLossless) {
+            jpeglsFailure("jpeg-ls.scan.near.invalid", markerOffset)
+        }
+        val defaults = JpegLsCodingParameters.defaults(nearLossless)
+        if (raw == null) return defaults
+        if (
+            (raw.threshold1 != 0 && raw.threshold1 != defaults.threshold1) ||
+            (raw.threshold2 != 0 && raw.threshold2 != defaults.threshold2) ||
+            (raw.threshold3 != 0 && raw.threshold3 != defaults.threshold3) ||
+            (raw.reset != 0 && raw.reset != defaults.reset)
+        ) {
+            jpeglsFailure("jpeg-ls.lse.unsupported", markerOffset, Codec.Result.kUnimplemented)
+        }
+        return defaults
     }
 
     private fun u16(offset: Int): Int = (data[offset].u8() shl 8) or data[offset + 1].u8()
 
     private data class SegmentBounds(val payloadOffset: Int, val payloadSize: Int)
+    private data class FrameDimensions(val width: Int, val height: Int)
+    private data class LseParameters(
+        val maximumSampleValue: Int,
+        val threshold1: Int,
+        val threshold2: Int,
+        val threshold3: Int,
+        val reset: Int,
+    )
 }
 
 internal fun Byte.u8(): Int = toInt() and 0xFF

@@ -3,7 +3,7 @@ package org.graphiks.kanvas.codec.jpegls
 import java.io.ByteArrayOutputStream
 import kotlin.math.abs
 
-/** Clean-room LOCO-I regular/run mode implementation for the 8-bit lossless profile. */
+/** Clean-room LOCO-I regular/run mode implementation for the supported 8-bit JPEG-LS profile. */
 internal object JpegLsEntropy {
     private val runJ: IntArray = intArrayOf(
         0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3,
@@ -18,7 +18,7 @@ internal object JpegLsEntropy {
 
     private fun decodeScan(source: ByteArray, entropyOffset: Int, frame: JpegLsFrame): IntArray {
         val reader = JpegLsBitReader(source, entropyOffset)
-        val state = LocoState()
+        val state = LocoState(frame)
         var previous = IntArray(frame.width + 2)
         var current = IntArray(frame.width + 2)
         val output = IntArray(frame.width * frame.height)
@@ -57,10 +57,10 @@ internal object JpegLsEntropy {
         return output
     }
 
-    fun encode(width: Int, height: Int, samples: IntArray): ByteArray {
+    fun encode(width: Int, height: Int, samples: IntArray, frame: JpegLsFrame): ByteArray {
         require(samples.size == width * height)
         val writer = JpegLsBitWriter()
-        val state = LocoState()
+        val state = LocoState(frame)
         var previous = IntArray(width + 2)
         var current = IntArray(width + 2)
 
@@ -80,7 +80,12 @@ internal object JpegLsEntropy {
                     index++
                 } else {
                     var run = 0
-                    while (run < width - index + 1 && samples[y * width + index - 1 + run] == ra) run++
+                    while (
+                        run < width - index + 1 &&
+                        state.isNear(samples[y * width + index - 1 + run], ra)
+                    ) {
+                        run++
+                    }
                     state.encodeRun(writer, run, run == width - index + 1)
                     repeat(run) { offset -> current[index + offset] = ra }
                     index += run
@@ -105,15 +110,22 @@ internal object JpegLsEntropy {
         else -> ra + rb - rc
     }
 
-    private class LocoState {
-        private val regular = Array(365) { RegularContext() }
-        private val run = arrayOf(RunContext(0), RunContext(1))
+    private class LocoState(
+        private val frame: JpegLsFrame,
+    ) {
+        private val parameters = frame.parameters
+        private val nearLossless = frame.nearLossless
+        private val range = (parameters.maximumSampleValue + 2 * nearLossless) / (2 * nearLossless + 1) + 1
+        private val qbpp = ceilLog2(range)
+        private val initialA = maxOf(2, (range + 32) / 64)
+        private val regular = Array(365) { RegularContext(initialA) }
+        private val run = arrayOf(RunContext(0, initialA), RunContext(1, initialA))
         private var runIndex: Int = 0
 
         fun context(d1: Int, d2: Int, d3: Int): Context {
-            var q1 = quantize(d1)
-            var q2 = quantize(d2)
-            var q3 = quantize(d3)
+            var q1 = quantizeGradient(d1)
+            var q2 = quantizeGradient(d2)
+            var q3 = quantizeGradient(d3)
             val negative = q1 < 0 || (q1 == 0 && q2 < 0) || (q1 == 0 && q2 == 0 && q3 < 0)
             if (negative) {
                 q1 = -q1
@@ -125,21 +137,22 @@ internal object JpegLsEntropy {
 
         fun decodeRegular(reader: JpegLsBitReader, context: Context, predicted: Int): Int {
             val stats = regular[context.index]
-            val corrected = clamp(predicted + context.sign * stats.c)
+            val corrected = correctPrediction(predicted + context.sign * stats.c)
             val k = stats.golombK()
-            var error = unmap(readMapped(reader, k, LIMIT))
-            if (k == 0) error = error xor stats.errorCorrection()
-            stats.update(error)
+            var error = unmap(readMapped(reader, k, LIMIT, qbpp))
+            if (k == 0) error = error xor stats.errorCorrection(nearLossless)
+            stats.update(error, nearLossless, parameters.reset)
             return reconstruct(corrected, context.sign * error)
         }
 
         fun encodeRegular(writer: JpegLsBitWriter, context: Context, predicted: Int, sample: Int): Int {
             val stats = regular[context.index]
-            val corrected = clamp(predicted + context.sign * stats.c)
+            val corrected = correctPrediction(predicted + context.sign * stats.c)
             val k = stats.golombK()
-            val error = signed8(context.sign * (sample - corrected))
-            writeMapped(writer, map(error xor stats.errorCorrection(k)), k, LIMIT)
-            stats.update(error)
+            val error = computeError(context.sign * (sample - corrected))
+            val correctedError = if (k == 0) error xor stats.errorCorrection(nearLossless) else error
+            writeMapped(writer, map(correctedError), k, LIMIT, qbpp)
+            stats.update(error, nearLossless, parameters.reset)
             return reconstruct(corrected, context.sign * error)
         }
 
@@ -171,27 +184,27 @@ internal object JpegLsEntropy {
         }
 
         fun decodeRunInterruption(reader: JpegLsBitReader, ra: Int, rb: Int): Int {
-            val type = if (ra == rb) 1 else 0
+            val type = if (isNear(ra, rb)) 1 else 0
             val stats = run[type]
             val k = stats.golombK()
-            val mapped = readMapped(reader, k, LIMIT - runJ[runIndex] - 1)
+            val mapped = readMapped(reader, k, LIMIT - runJ[runIndex] - 1, qbpp)
             val error = stats.unmap(mapped + type, k)
-            stats.update(error, mapped)
+            stats.update(error, mapped, parameters.reset)
             val prediction = if (type == 1) ra else rb
             val sign = if (type == 1) 1 else sign(rb - ra)
             return reconstruct(prediction, sign * error)
         }
 
         fun encodeRunInterruption(writer: JpegLsBitWriter, sample: Int, ra: Int, rb: Int): Int {
-            val type = if (ra == rb) 1 else 0
+            val type = if (isNear(ra, rb)) 1 else 0
             val stats = run[type]
             val prediction = if (type == 1) ra else rb
             val direction = if (type == 1) 1 else sign(rb - ra)
-            val error = signed8(direction * (sample - prediction))
+            val error = computeError(direction * (sample - prediction))
             val k = stats.golombK()
             val mapped = stats.map(error, k)
-            writeMapped(writer, mapped, k, LIMIT - runJ[runIndex] - 1)
-            stats.update(error, mapped)
+            writeMapped(writer, mapped, k, LIMIT - runJ[runIndex] - 1, qbpp)
+            stats.update(error, mapped, parameters.reset)
             return reconstruct(prediction, direction * error)
         }
 
@@ -202,12 +215,52 @@ internal object JpegLsEntropy {
         private fun incrementRunIndex() {
             if (runIndex < 31) runIndex++
         }
+
+        fun isNear(first: Int, second: Int): Boolean = abs(first - second) <= nearLossless
+
+        private fun quantizeGradient(delta: Int): Int = when {
+            delta <= -parameters.threshold3 -> -4
+            delta <= -parameters.threshold2 -> -3
+            delta <= -parameters.threshold1 -> -2
+            delta < -nearLossless -> -1
+            delta <= nearLossless -> 0
+            delta < parameters.threshold1 -> 1
+            delta < parameters.threshold2 -> 2
+            delta < parameters.threshold3 -> 3
+            else -> 4
+        }
+
+        private fun computeError(error: Int): Int {
+            val step = 2 * nearLossless + 1
+            val quantized = if (error > 0) (error + nearLossless) / step else -(nearLossless - error) / step
+            return moduloRange(quantized)
+        }
+
+        private fun moduloRange(error: Int): Int {
+            var value = error
+            if (value < 0) value += range
+            if (value >= (range + 1) / 2) value -= range
+            return value
+        }
+
+        private fun correctPrediction(predicted: Int): Int = predicted.coerceIn(0, parameters.maximumSampleValue)
+
+        private fun reconstruct(predicted: Int, error: Int): Int {
+            val step = 2 * nearLossless + 1
+            var value = predicted + error * step
+            if (value < -nearLossless) {
+                value += range * step
+            } else if (value > parameters.maximumSampleValue + nearLossless) {
+                value -= range * step
+            }
+            return correctPrediction(value)
+        }
     }
 
     private data class Context(val index: Int, val sign: Int)
 
-    private class RegularContext {
-        var a: Int = INITIAL_A
+    private class RegularContext(initialA: Int) {
+        var a: Int = initialA
         var b: Int = 0
         var c: Int = 0
         var n: Int = 1
@@ -218,12 +271,13 @@ internal object JpegLsEntropy {
             return k
         }
 
-        fun errorCorrection(k: Int = 0): Int = if (k == 0 && 2 * b + n - 1 < 0) -1 else 0
+        fun errorCorrection(nearLossless: Int): Int =
+            if (nearLossless == 0 && 2 * b + n - 1 < 0) -1 else 0
 
-        fun update(error: Int) {
+        fun update(error: Int, nearLossless: Int, reset: Int) {
             a += abs(error)
-            b += error
-            if (n == RESET) {
+            b += error * (2 * nearLossless + 1)
+            if (n == reset) {
                 a = a shr 1
                 b = b shr 1
                 n = n shr 1
@@ -241,8 +295,8 @@ internal object JpegLsEntropy {
         }
     }
 
-    private class RunContext(private val type: Int) {
-        private var a: Int = INITIAL_A
+    private class RunContext(private val type: Int, initialA: Int) {
+        private var a: Int = initialA
         private var n: Int = 1
         private var nn: Int = 0
 
@@ -265,10 +319,10 @@ internal object JpegLsEntropy {
             return if ((k != 0 || 2 * nn >= n) == map) -magnitude else magnitude
         }
 
-        fun update(error: Int, mapped: Int) {
+        fun update(error: Int, mapped: Int, reset: Int) {
             if (error < 0) nn++
             a += (mapped + 1 - type) shr 1
-            if (n == RESET) {
+            if (n == reset) {
                 a = a shr 1
                 n = n shr 1
                 nn = nn shr 1
@@ -277,28 +331,19 @@ internal object JpegLsEntropy {
         }
     }
 
-    private fun quantize(delta: Int): Int = when {
-        delta <= -21 -> -4
-        delta <= -7 -> -3
-        delta <= -3 -> -2
-        delta < 0 -> -1
-        delta == 0 -> 0
-        delta < 3 -> 1
-        delta < 7 -> 2
-        delta < 21 -> 3
-        else -> 4
-    }
-
-    private fun clamp(value: Int): Int = value.coerceIn(0, 255)
-    private fun signed8(value: Int): Int = (value and 0xFF).let { if (it >= 128) it - 256 else it }
-    private fun reconstruct(predicted: Int, error: Int): Int = (predicted + error) and 0xFF
     private fun sign(value: Int): Int = if (value < 0) -1 else 1
     private fun map(error: Int): Int = if (error >= 0) error * 2 else -error * 2 - 1
     private fun unmap(value: Int): Int = if ((value and 1) == 0) value / 2 else -(value / 2) - 1
 
-    private fun writeMapped(writer: JpegLsBitWriter, value: Int, k: Int, limit: Int) {
+    private fun ceilLog2(value: Int): Int {
+        var result = 0
+        while (value > (1 shl result)) result++
+        return result
+    }
+
+    private fun writeMapped(writer: JpegLsBitWriter, value: Int, k: Int, limit: Int, qbpp: Int) {
         val quotient = value shr k
-        val escape = limit - QBPP - 1
+        val escape = limit - qbpp - 1
         if (quotient < escape) {
             repeat(quotient) { writer.writeBit(0) }
             writer.writeBit(1)
@@ -306,21 +351,21 @@ internal object JpegLsEntropy {
         } else {
             repeat(escape) { writer.writeBit(0) }
             writer.writeBit(1)
-            writer.writeBits(value - 1, QBPP)
+            writer.writeBits(value - 1, qbpp)
         }
     }
 
-    private fun readMapped(reader: JpegLsBitReader, k: Int, limit: Int): Int {
+    private fun readMapped(reader: JpegLsBitReader, k: Int, limit: Int, qbpp: Int): Int {
         var unary = 0
         while (reader.readBit() == 0) {
             unary++
             if (unary > limit) jpeglsFailure("jpeg-ls.golomb.invalid", reader.offset)
         }
-        val escape = limit - QBPP - 1
+        val escape = limit - qbpp - 1
         return if (unary < escape) {
             (unary shl k) + if (k > 0) reader.readBits(k) else 0
         } else {
-            reader.readBits(QBPP) + 1
+            reader.readBits(qbpp) + 1
         }
     }
 
@@ -417,8 +462,5 @@ internal object JpegLsEntropy {
         }
     }
 
-    private const val QBPP: Int = 8
     private const val LIMIT: Int = 32
-    private const val RESET: Int = 64
-    private const val INITIAL_A: Int = 4
 }

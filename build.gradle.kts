@@ -1860,7 +1860,7 @@ tasks.register("checkSupportedCodecsDoc") {
             "| WBMP |",
             "| ICO / CUR |",
             "| WebP |",
-            "| AVIF / JPEG XL / RAW / video |",
+            "| AVIF / RAW / video |",
             "| GIF |",
             "| ICO / CUR |",
             "| AVIF / HEIF / JPEG XL / RAW / video |",
