@@ -305,11 +305,12 @@ internal class ArithmeticEncoder(
         coefficient: Int,
         dcLower: Int,
         dcUpper: Int,
+        differential: Boolean = false,
     ) {
         require(component in previousDc.indices)
         require(dcTable in dcStats.indices)
         require(dcLower in 0..15 && dcUpper in dcLower..15)
-        encodeDcDifference(component, dcTable, coefficient, dcLower, dcUpper)
+        encodeDcDifference(component, dcTable, coefficient, dcLower, dcUpper, differential)
     }
 
     /**

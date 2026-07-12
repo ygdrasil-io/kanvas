@@ -141,11 +141,12 @@ public class JpegEncodeMetadata(
 /**
  * Declares one differential hierarchy level relative to the final image size.
  *
- * The current writer accepts exactly one `1/2` grayscale sequential level:
+ * The current writer accepts exactly one `1/2` grayscale level:
  * [JpegEncodeProcess.DifferentialSequentialHuffman] after a matching Huffman
  * base or [JpegEncodeProcess.DifferentialSequentialArithmetic] after a
- * matching arithmetic base. Other ratios and process intersections remain
- * explicit refusals until they have independent encoder evidence.
+ * matching arithmetic base, or [JpegEncodeProcess.DifferentialProgressiveArithmetic]
+ * after a matching initial-scan SOF10 base. Other ratios and process
+ * intersections remain explicit refusals until they have independent encoder evidence.
  */
 public data class JpegHierarchyLevel(
     val scaleNumerator: Int,

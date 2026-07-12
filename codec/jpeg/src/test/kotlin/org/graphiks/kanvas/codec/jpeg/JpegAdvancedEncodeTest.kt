@@ -573,6 +573,164 @@ class JpegAdvancedEncodeTest {
     }
 
     @Test
+    fun `two level grayscale arithmetic progressive hierarchy writes SOF10 EXP and differential SOF14 without fallback`() {
+        val source = grayscale(16, 12)
+        val scans = listOf(
+            JpegProgressiveScan(componentIds = listOf(1), spectralStart = 0, spectralEnd = 0),
+            JpegProgressiveScan(componentIds = listOf(1), spectralStart = 1, spectralEnd = 63),
+        )
+
+        val bytes = JpegEncoder.encode(
+            source,
+            JpegEncoder.Options(
+                quality = 100,
+                process = JpegEncodeProcess.ProgressiveArithmetic,
+                colorModel = JpegEncodeColorModel.Grayscale,
+                sampling = JpegSampling.S444,
+                restartInterval = 1,
+                progressiveScans = scans,
+                hierarchy = listOf(
+                    JpegHierarchyLevel(1, 2, JpegEncodeProcess.DifferentialProgressiveArithmetic),
+                ),
+            ),
+        )
+
+        assertNotNull(bytes)
+        val document = requireNotNull(JpegDocument.open(bytes!!).document)
+        assertEquals(listOf(0xDE, 0xCA, 0xDF, 0xCE), document.segments.filter {
+            it.marker in setOf(0xDE, 0xCA, 0xDF, 0xCE)
+        }.map { it.marker })
+        assertEquals(4, document.segments.count { it.marker == 0xDA }, "base and residual each write DC plus AC")
+        assertTrue(document.segments.any { it.marker == 0xCC }, "arithmetic hierarchy requires DAC")
+        assertTrue(document.segments.any { it.marker == 0xDD }, "arithmetic hierarchy requires DRI")
+        assertTrue(document.segments.none { it.marker == 0xC4 }, "arithmetic hierarchy must not write DHT")
+        assertEquals(6, restartMarkers(bytes).size, "the four-MCU SOF14 DC and AC scans each restart")
+        assertEquals(0xCE, requireNotNull(document.hierarchy).frames[1].sofMarker)
+
+        // The public facade must route through the DHP graph; a base-frame
+        // fallback would have 8x6 dimensions and cannot satisfy this check.
+        assertReasonableHierarchyRoundTrip(source, bytes, "two-level SOF14 hierarchy")
+    }
+
+    @Test
+    fun `opt in hierarchy reference decodes generated SOF14 pixels`() {
+        val configuredOracle = System.getProperty("kanvas.jpeg.oracle.hierarchy").orEmpty()
+        assumeTrue(
+            configuredOracle.isNotBlank(),
+            "Set -PjpegOracleHierarchy=/absolute/path/to/jpeg to enable the DHP SOF14 external oracle",
+        )
+        val oracle = Path.of(configuredOracle)
+        assumeTrue(Files.isExecutable(oracle), "hierarchy reference is not executable: $oracle")
+        val source = grayscale(16, 12)
+        val encoded = JpegEncoder.encode(
+            source,
+            JpegEncoder.Options(
+                quality = 100,
+                process = JpegEncodeProcess.ProgressiveArithmetic,
+                colorModel = JpegEncodeColorModel.Grayscale,
+                sampling = JpegSampling.S444,
+                restartInterval = 1,
+                progressiveScans = listOf(
+                    JpegProgressiveScan(componentIds = listOf(1), spectralStart = 0, spectralEnd = 0),
+                    JpegProgressiveScan(componentIds = listOf(1), spectralStart = 1, spectralEnd = 63),
+                ),
+                hierarchy = listOf(
+                    JpegHierarchyLevel(1, 2, JpegEncodeProcess.DifferentialProgressiveArithmetic),
+                ),
+            ),
+        )
+
+        assertNotNull(encoded)
+        val external = decodeHierarchyReferencePnm(oracle, encoded!!, "kanvas-sof14-hierarchy-oracle-")
+        assertPnmMatchesBitmap(external, source, maxError = 1, label = "SOF14 hierarchy reference")
+    }
+
+    @Test
+    fun `hierarchical arithmetic progressive refuses modes outside the SOF14 intersection`() {
+        val source = grayscale(16, 12)
+        val initialScans = listOf(
+            JpegProgressiveScan(componentIds = listOf(1), spectralStart = 0, spectralEnd = 0),
+            JpegProgressiveScan(componentIds = listOf(1), spectralStart = 1, spectralEnd = 63),
+        )
+        val level = JpegHierarchyLevel(1, 2, JpegEncodeProcess.DifferentialProgressiveArithmetic)
+
+        assertNull(
+            JpegEncoder.encode(
+                source,
+                JpegEncoder.Options(
+                    process = JpegEncodeProcess.ProgressiveArithmetic,
+                    colorModel = JpegEncodeColorModel.Grayscale,
+                    sampling = JpegSampling.S444,
+                    progressiveScans = listOf(initialScans.first()),
+                    hierarchy = listOf(level),
+                ),
+            ),
+            "the hierarchy path must require the complete initial DC plus AC script",
+        )
+        assertNull(
+            JpegEncoder.encode(
+                source,
+                JpegEncoder.Options(
+                    process = JpegEncodeProcess.ProgressiveArithmetic,
+                    colorModel = JpegEncodeColorModel.Grayscale,
+                    sampling = JpegSampling.S444,
+                    progressiveScans = listOf(
+                        initialScans.first(),
+                        JpegProgressiveScan(
+                            componentIds = listOf(1),
+                            spectralStart = 1,
+                            spectralEnd = 63,
+                            successiveHigh = 1,
+                            successiveLow = 0,
+                        ),
+                    ),
+                    hierarchy = listOf(level),
+                ),
+            ),
+            "the hierarchy path must refuse refinement",
+        )
+        assertNull(
+            JpegEncoder.encode(
+                color(16, 12),
+                JpegEncoder.Options(
+                    process = JpegEncodeProcess.ProgressiveArithmetic,
+                    colorModel = JpegEncodeColorModel.YCbCr,
+                    sampling = JpegSampling.S444,
+                    progressiveScans = initialScans,
+                    hierarchy = listOf(level),
+                ),
+            ),
+            "the hierarchy path must refuse color layouts",
+        )
+        assertNull(
+            JpegEncoder.encode(
+                source,
+                JpegEncoder.Options(
+                    process = JpegEncodeProcess.ProgressiveArithmetic,
+                    colorModel = JpegEncodeColorModel.Grayscale,
+                    sampling = JpegSampling.S444,
+                    progressiveScans = initialScans,
+                    hierarchy = listOf(level, level),
+                ),
+            ),
+            "the hierarchy path must refuse multiple levels",
+        )
+        assertNull(
+            JpegEncoder.encode(
+                source,
+                JpegEncoder.Options(
+                    process = JpegEncodeProcess.ProgressiveHuffman,
+                    colorModel = JpegEncodeColorModel.Grayscale,
+                    sampling = JpegSampling.S444,
+                    progressiveScans = initialScans,
+                    hierarchy = listOf(JpegHierarchyLevel(1, 2, JpegEncodeProcess.DifferentialProgressiveHuffman)),
+                ),
+            ),
+            "the hierarchy path must refuse unproven Huffman progressive output",
+        )
+    }
+
+    @Test
     fun `advanced unsupported configurations refuse rather than falling back to sequential`() {
         val source = color(8, 8)
 

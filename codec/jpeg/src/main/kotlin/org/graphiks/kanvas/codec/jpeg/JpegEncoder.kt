@@ -142,9 +142,9 @@ public object JpegEncoder {
 
 /**
  * Emits the evidence-backed grayscale hierarchy intersections: a one-half
- * SOF0/SOF9 reference and a SOF5/SOF13 residual after a two-axis EXP. This is
- * deliberately a container writer, not a marker patcher: both SOF frames are
- * independently serialized by [JpegWriter].
+ * SOF0/SOF9/SOF10 reference and a SOF5/SOF13/SOF14 residual after a two-axis
+ * EXP. This is deliberately a container writer, not a marker patcher: both
+ * SOF frames are independently serialized by [JpegWriter].
  */
 private class JpegHierarchyWriter(
     private val out: OutputStream,
@@ -169,6 +169,7 @@ private class JpegHierarchyWriter(
         val baseSamples = when (options.process) {
             JpegEncodeProcess.SequentialHuffman -> decodeSequentialDct(baseFrame)
             JpegEncodeProcess.SequentialArithmetic -> decodeArithmeticSequentialDct(baseFrame)
+            JpegEncodeProcess.ProgressiveArithmetic -> decodeArithmeticProgressiveDct(baseFrame)
             else -> error("hierarchy base process is invalid")
         }
         require(baseSamples.planes.size == 1) { "hierarchy base must be grayscale" }
@@ -180,6 +181,7 @@ private class JpegHierarchyWriter(
         val baseSofMarker = when (options.process) {
             JpegEncodeProcess.SequentialHuffman -> SOF0
             JpegEncodeProcess.SequentialArithmetic -> SOF9
+            JpegEncodeProcess.ProgressiveArithmetic -> SOF10
         }
         val baseSofOffset = baseDocument.segments.firstOrNull { it.marker == baseSofMarker }?.offset?.toInt()
             ?: error("hierarchy base SOF is missing")
@@ -195,23 +197,35 @@ private class JpegHierarchyWriter(
         writeDhp()
         out.write(baseBytes, baseSofOffset, baseBytes.size - baseSofOffset - 2)
         writeSegment(EXP, byteArrayOf(0x11))
-        JpegWriter(out, bitmap, options, residual).writeDifferentialSequentialFrame()
+        val residualWriter = JpegWriter(out, bitmap, options, residual)
+        when (options.process) {
+            JpegEncodeProcess.ProgressiveArithmetic -> residualWriter.writeDifferentialProgressiveFrame()
+            else -> residualWriter.writeDifferentialSequentialFrame()
+        }
         writeMarker(EOI)
     }
 
     private fun validateRequest() {
         val level = options.hierarchy.singleOrNull()
             ?: error("hierarchy encoding requires exactly one expansion level")
-        require(options.process in setOf(JpegEncodeProcess.SequentialHuffman, JpegEncodeProcess.SequentialArithmetic)) {
-            "hierarchy base frame must use sequential Huffman or arithmetic coding"
+        require(
+            options.process in setOf(
+                JpegEncodeProcess.SequentialHuffman,
+                JpegEncodeProcess.SequentialArithmetic,
+                JpegEncodeProcess.ProgressiveArithmetic,
+            ),
+        ) {
+            "hierarchy base frame must use sequential Huffman, sequential arithmetic, or progressive arithmetic coding"
         }
         require(
             (options.process == JpegEncodeProcess.SequentialHuffman &&
                 level.process == JpegEncodeProcess.DifferentialSequentialHuffman) ||
                 (options.process == JpegEncodeProcess.SequentialArithmetic &&
-                    level.process == JpegEncodeProcess.DifferentialSequentialArithmetic),
+                    level.process == JpegEncodeProcess.DifferentialSequentialArithmetic) ||
+                (options.process == JpegEncodeProcess.ProgressiveArithmetic &&
+                    level.process == JpegEncodeProcess.DifferentialProgressiveArithmetic),
         ) {
-            "hierarchy residual coding must match its sequential base coding"
+            "hierarchy residual coding must match its base coding"
         }
         require(level.scaleNumerator == 1 && level.scaleDenominator == 2) {
             "hierarchy supports exactly a one-half reference followed by EXP 0x11"
@@ -221,7 +235,13 @@ private class JpegHierarchyWriter(
         require(options.effectiveSampling().components.all { it.horizontal == 1 && it.vertical == 1 }) {
             "hierarchy grayscale output requires 1x1 sampling"
         }
-        require(options.progressiveScans.isEmpty()) { "hierarchy does not accept a progressive scan script" }
+        if (options.process == JpegEncodeProcess.ProgressiveArithmetic) {
+            require(options.progressiveScans == HIERARCHY_INITIAL_DC_AC_SCANS) {
+                "hierarchical progressive arithmetic supports only an initial grayscale DC plus AC script"
+            }
+        } else {
+            require(options.progressiveScans.isEmpty()) { "sequential hierarchy does not accept a progressive scan script" }
+        }
         require(options.losslessParameters == null) { "hierarchy does not accept lossless parameters" }
         require(bitmap.width >= 2 && bitmap.height >= 2 && bitmap.width % 2 == 0 && bitmap.height % 2 == 0) {
             "hierarchy requires even dimensions of at least 2x2"
@@ -288,6 +308,13 @@ private class JpegHierarchyWriter(
         out.write(0xFF)
         out.write(marker)
     }
+
+    private companion object {
+        val HIERARCHY_INITIAL_DC_AC_SCANS: List<JpegProgressiveScan> = listOf(
+            JpegProgressiveScan(componentIds = listOf(1), spectralStart = 0, spectralEnd = 0),
+            JpegProgressiveScan(componentIds = listOf(1), spectralStart = 1, spectralEnd = 63),
+        )
+    }
 }
 
 @Suppress("DEPRECATION")
@@ -295,7 +322,7 @@ private class JpegWriter(
     private val out: OutputStream,
     private val bitmap: SkBitmap,
     private val options: JpegEncoder.Options,
-    /** Signed target-minus-EXP(reference) samples for the SOF5/SOF13 hierarchy path. */
+    /** Signed target-minus-EXP(reference) samples for the SOF5/SOF13/SOF14 hierarchy paths. */
     private val differentialResidual: IntArray? = null,
 ) {
     private val sampling = Sampling.from(options.effectiveSampling())
@@ -419,8 +446,20 @@ private class JpegWriter(
         require(options.precision == 8 && componentCount == 1 && differentialResidual != null) {
             "differential sequential writer requires signed 8-bit grayscale residuals"
         }
-        writeSof(differentialSequential = true)
+        writeSof(differential = true)
         writeSequentialEntropy(differential = true)
+    }
+
+    /** Serializes a differential SOF14 initial DC-plus-AC frame from signed hierarchy residuals. */
+    fun writeDifferentialProgressiveFrame() {
+        require(options.process == JpegEncodeProcess.ProgressiveArithmetic) {
+            "differential progressive writer requires an arithmetic progressive base process"
+        }
+        require(options.precision == 8 && componentCount == 1 && differentialResidual != null) {
+            "differential progressive writer requires signed 8-bit grayscale residuals"
+        }
+        writeSof(differential = true)
+        writeProgressiveEntropy(differential = true)
     }
 
     private fun writeArithmeticSequentialEntropy(differential: Boolean = false) {
@@ -672,7 +711,7 @@ private class JpegWriter(
         writeSegment(DQT, payload)
     }
 
-    private fun writeSof(differentialSequential: Boolean = false) {
+    private fun writeSof(differential: Boolean = false) {
         val payload = ByteArrayOutputStream()
         payload.write(options.precision)
         writeU16BE(payload, bitmap.height)
@@ -684,11 +723,12 @@ private class JpegWriter(
             payload.write((factor.horizontal shl 4) or factor.vertical)
             payload.write(if (options.process == JpegEncodeProcess.LosslessHuffman || component == COMPONENT_Y) 0 else 1)
         }
-        val marker = if (differentialSequential) {
+        val marker = if (differential) {
             when (options.process) {
                 JpegEncodeProcess.SequentialHuffman -> SOF5
                 JpegEncodeProcess.SequentialArithmetic -> SOF13
-                else -> error("differential sequential frame process is invalid")
+                JpegEncodeProcess.ProgressiveArithmetic -> SOF14
+                else -> error("differential frame process is invalid")
             }
         } else when (options.process) {
             JpegEncodeProcess.SequentialHuffman -> if (options.precision == 8) SOF0 else SOF1
@@ -812,10 +852,10 @@ private class JpegWriter(
         }
     }
 
-    private fun writeProgressiveEntropy() {
+    private fun writeProgressiveEntropy(differential: Boolean = false) {
         val planes = buildDctPlanes()
         if (options.process == JpegEncodeProcess.ProgressiveArithmetic) {
-            writeArithmeticProgressiveEntropy(planes)
+            writeArithmeticProgressiveEntropy(planes, differential)
             return
         }
         for (scan in validatedProgressiveScans()) {
@@ -831,12 +871,15 @@ private class JpegWriter(
     }
 
     /** Writes only progressive initial scans (`Ah = Al = 0`) using Annex D's QM coder. */
-    private fun writeArithmeticProgressiveEntropy(planes: List<EncodedDctPlane>) {
+    private fun writeArithmeticProgressiveEntropy(
+        planes: List<EncodedDctPlane>,
+        differential: Boolean = false,
+    ) {
         for (scan in validatedProgressiveScans()) {
             writeSos(scan.componentIds, scan.spectralStart, scan.spectralEnd, successiveApprox = 0)
             val arithmetic = ArithmeticEncoder(out, componentCount)
             if (scan.spectralStart == 0) {
-                writeArithmeticProgressiveDcScan(arithmetic, scan, planes)
+                writeArithmeticProgressiveDcScan(arithmetic, scan, planes, differential)
             } else {
                 writeArithmeticProgressiveAcScan(arithmetic, scan, planes)
             }
@@ -848,6 +891,7 @@ private class JpegWriter(
         arithmetic: ArithmeticEncoder,
         scan: JpegProgressiveScan,
         planes: List<EncodedDctPlane>,
+        differential: Boolean,
     ) {
         val components = scan.componentIds.map { it - 1 }
         val nonInterleaved = components.size == 1
@@ -874,6 +918,7 @@ private class JpegWriter(
                                 coefficient = planes[component].block(baseX + blockX, baseY + blockY)[0],
                                 dcLower = ARITHMETIC_DC_LOWER,
                                 dcUpper = ARITHMETIC_DC_UPPER,
+                                differential = differential,
                             )
                         }
                     }
@@ -1269,6 +1314,7 @@ private const val SOF9 = 0xC9
 private const val SOF10 = 0xCA
 private const val DAC = 0xCC
 private const val SOF13 = 0xCD
+private const val SOF14 = 0xCE
 private const val SOS = 0xDA
 private const val DRI = 0xDD
 private const val COM = 0xFE
