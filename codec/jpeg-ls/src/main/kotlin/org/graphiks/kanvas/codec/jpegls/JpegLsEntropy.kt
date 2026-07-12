@@ -10,19 +10,22 @@ internal object JpegLsEntropy {
         4, 4, 5, 5, 6, 6, 7, 7, 8, 9, 10, 11, 12, 13, 14, 15,
     )
 
-    fun decode(source: ByteArray, entropyOffset: Int, frame: JpegLsFrame): IntArray = try {
-        when (frame.interleaveMode) {
-            0 -> decodeMonochromeScan(source, entropyOffset, frame)
-            1 -> decodeRgbLineInterleavedScan(source, entropyOffset, frame)
-            2 -> decodeRgbSampleInterleavedScan(source, entropyOffset, frame)
-            else -> jpeglsFailure("jpeg-ls.scan.unsupported", entropyOffset, org.graphiks.kanvas.codec.Codec.Result.kUnimplemented)
+    fun decode(source: ByteArray, scans: List<JpegLsScan>, frame: JpegLsFrame): IntArray {
+        if (frame.components.size == 3 && frame.interleaveMode == 0) {
+            return decodeRgbNonInterleavedScans(source, scans, frame)
         }
-    } catch (marker: EntropyMarker) {
-        jpeglsFailure("jpeg-ls.entropy.marker", marker.offset)
+        val scan = scans.singleOrNull()
+            ?: jpeglsFailure("jpeg-ls.scan.unsupported", scans.firstOrNull()?.markerOffset ?: 0, org.graphiks.kanvas.codec.Codec.Result.kUnimplemented)
+        return when (frame.interleaveMode) {
+            0 -> decodeMonochromeScan(source, scan.entropyOffset, scan.entropyEnd, frame)
+            1 -> decodeRgbLineInterleavedScan(source, scan.entropyOffset, scan.entropyEnd, frame)
+            2 -> decodeRgbSampleInterleavedScan(source, scan.entropyOffset, scan.entropyEnd, frame)
+            else -> jpeglsFailure("jpeg-ls.scan.unsupported", scan.markerOffset, org.graphiks.kanvas.codec.Codec.Result.kUnimplemented)
+        }
     }
 
-    private fun decodeMonochromeScan(source: ByteArray, entropyOffset: Int, frame: JpegLsFrame): IntArray {
-        val reader = JpegLsBitReader(source, entropyOffset)
+    private fun decodeMonochromeScan(source: ByteArray, entropyOffset: Int, entropyEnd: Int, frame: JpegLsFrame): IntArray {
+        val reader = JpegLsBitReader(source, entropyOffset, entropyEnd)
         val state = LocoState(frame)
         var previous = IntArray(frame.width + 2)
         var current = IntArray(frame.width + 2)
@@ -58,7 +61,19 @@ internal object JpegLsEntropy {
             previous = current
             current = swap
         }
-        reader.finishAtEoi()
+        reader.finishAtEntropyEnd()
+        return output
+    }
+
+    /** Decode three independent ILV=0 planes and normalize them to interleaved RGB output. */
+    private fun decodeRgbNonInterleavedScans(source: ByteArray, scans: List<JpegLsScan>, frame: JpegLsFrame): IntArray {
+        check(scans.size == 3)
+        val output = IntArray(frame.width * frame.height * 3)
+        scans.forEachIndexed { component, scan ->
+            val planeFrame = frame.copy(components = listOf(JpegLsComponent(component + 1)), interleaveMode = 0)
+            val plane = decodeMonochromeScan(source, scan.entropyOffset, scan.entropyEnd, planeFrame)
+            plane.forEachIndexed { index, sample -> output[index * 3 + component] = sample }
+        }
         return output
     }
 
@@ -67,8 +82,8 @@ internal object JpegLsEntropy {
      * the scan, while each component owns its line history and run index. The
      * coded order is R-line, G-line, B-line for every image row.
      */
-    private fun decodeRgbLineInterleavedScan(source: ByteArray, entropyOffset: Int, frame: JpegLsFrame): IntArray {
-        val reader = JpegLsBitReader(source, entropyOffset)
+    private fun decodeRgbLineInterleavedScan(source: ByteArray, entropyOffset: Int, entropyEnd: Int, frame: JpegLsFrame): IntArray {
+        val reader = JpegLsBitReader(source, entropyOffset, entropyEnd)
         val state = LocoState(frame)
         val components = frame.components.size
         check(components == 3)
@@ -94,7 +109,7 @@ internal object JpegLsEntropy {
             previous = current
             current = swap
         }
-        reader.finishAtEoi()
+        reader.finishAtEntropyEnd()
         return output
     }
 
@@ -104,8 +119,8 @@ internal object JpegLsEntropy {
      * when all three gradients quantify to zero and its interruption uses run
      * context 0 independently for each member of the triplet.
      */
-    private fun decodeRgbSampleInterleavedScan(source: ByteArray, entropyOffset: Int, frame: JpegLsFrame): IntArray {
-        val reader = JpegLsBitReader(source, entropyOffset)
+    private fun decodeRgbSampleInterleavedScan(source: ByteArray, entropyOffset: Int, entropyEnd: Int, frame: JpegLsFrame): IntArray {
+        val reader = JpegLsBitReader(source, entropyOffset, entropyEnd)
         val state = LocoState(frame)
         val components = frame.components.size
         check(components == 3)
@@ -166,7 +181,7 @@ internal object JpegLsEntropy {
             previous = current
             current = swap
         }
-        reader.finishAtEoi()
+        reader.finishAtEntropyEnd()
         return output
     }
 
@@ -707,6 +722,7 @@ internal object JpegLsEntropy {
     private class JpegLsBitReader(
         private val source: ByteArray,
         start: Int,
+        private val end: Int,
     ) {
         private var position: Int = start
         private var current: Int = 0
@@ -727,34 +743,21 @@ internal object JpegLsEntropy {
             return value
         }
 
-        fun finishAtEoi() {
-            try {
-                // T.87 allows the encoder to complete its coded data segment
-                // at a byte boundary. Those residual alignment bits are not
-                // image samples, so consume them only to locate the required
-                // marker; do not assign a made-up zero/one padding policy.
-                while (true) {
-                    readBit()
-                }
-            } catch (marker: EntropyMarker) {
-                if (marker.code != EOI) jpeglsFailure("jpeg-ls.entropy.marker", marker.offset)
-                if (position != source.size) jpeglsFailure("jpeg-ls.trailing-data", position)
-            }
+        fun finishAtEntropyEnd() {
+            // T.87 permits residual alignment bits after the final sample. The
+            // parser has already located the next marker, so consume only the
+            // bounded entropy span rather than inventing a padding bit value.
+            while (remaining != 0 || position < end) readBit()
         }
 
         private fun loadByte() {
-            if (position >= source.size) jpeglsFailure("jpeg-ls.entropy.truncated", position)
+            if (position >= end) jpeglsFailure("jpeg-ls.entropy.truncated", position)
             val value = source[position++].u8()
-            if (previousWasFf && (value and 0x80) != 0) {
-                throw EntropyMarker(value, position - 2)
-            }
             current = value
             remaining = if (previousWasFf) 7 else 8
             previousWasFf = value == MARKER_PREFIX
         }
     }
-
-    private class EntropyMarker(val code: Int, val offset: Int) : RuntimeException()
 
     private class JpegLsBitWriter {
         private val out = ByteArrayOutputStream()

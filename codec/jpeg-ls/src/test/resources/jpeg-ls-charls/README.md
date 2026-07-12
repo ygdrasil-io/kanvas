@@ -33,5 +33,11 @@ sample-interleaved run and run interruption. Their SHA-256 values are
 `9ab6f360d63d15651ec76416abe003002964496df2797fd7ce67226d10ea1aee` and
 `6b06b88a6ae4da9727bb010042dc3b9bcaa0e65f39d5c21e098a41825dc034a4`.
 
+`non-interleaved-6x4` is a project-owned 8-bit RGB `ILV=0` stream generated
+by CharLS 2.4.4 (`9930a2a2fa75f516c4a08708180c9907fa501a97`), BSD-3-Clause.
+It contains three scans in component order R/G/B: a constant R plane, a
+varying G plane, and a patterned B plane. Its SHA-256 is
+`11ea017239cd8a89353c412326ab0d84d938096c1444cb70203c5574d810cae6`.
+
 CharLS is development evidence only. The Kanvas runtime does not invoke a
 native, JNI, AWT, ImageIO, or external JPEG-LS implementation.

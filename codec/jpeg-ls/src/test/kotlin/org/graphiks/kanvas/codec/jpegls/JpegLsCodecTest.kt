@@ -177,6 +177,54 @@ class JpegLsCodecTest {
     }
 
     @Test
+    fun `decodes CharLS RGB non-interleaved scans exactly`() {
+        val fixture = charlsResource("non-interleaved-6x4.jls.base64")
+        val document = requireNotNull(JpegLsDocument.open(fixture).document)
+        val (bitmap, result) = requireNotNull(Codec.MakeFromData(fixture)).getImage()
+
+        assertEquals(Codec.Result.kSuccess, result, decodeDiagnostic(fixture))
+        assertEquals(3, document.componentCount)
+        assertEquals(0, document.interleaveMode)
+        assertNotNull(bitmap)
+        repeat(24) { index ->
+            val x = index % 6
+            val y = index / 6
+            val green = 0x50 + x * 3 + y
+            val blue = 0x42 + ((x * y) and 3)
+            assertEquals(
+                0xFF000000.toInt() or (0x41 shl 16) or (green shl 8) or blue,
+                bitmap!!.getPixel(x, y),
+                "x=$x y=$y",
+            )
+        }
+    }
+
+    @Test
+    fun `refuses non-interleaved RGB scans outside the proven ordering and NEAR profile`() {
+        val fixture = charlsResource("non-interleaved-6x4.jls.base64")
+        val scanOffsets = buildList {
+            for (index in 0 until fixture.size - 1) {
+                if (fixture[index].u8() == 0xFF && fixture[index + 1].u8() == 0xDA) add(index)
+            }
+        }
+        assertEquals(3, scanOffsets.size)
+        val reordered = fixture.copyOf().also { data ->
+            data[scanOffsets[1] + 5] = 3
+            data[scanOffsets[2] + 5] = 2
+        }
+        val nearLossless = fixture.copyOf().also { data ->
+            scanOffsets.forEach { offset -> data[offset + 7] = 1 }
+        }
+
+        listOf(reordered, nearLossless).forEach { encoded ->
+            val opened = JpegLsDocument.open(encoded)
+            assertNull(opened.document)
+            assertEquals("jpeg-ls.scan.unsupported", opened.diagnostic?.code)
+            assertEquals(Codec.Result.kUnimplemented, opened.diagnostic?.result)
+        }
+    }
+
+    @Test
     fun `decodes CharLS RGB line data with independent component run indexes`() {
         val codec = requireNotNull(Codec.MakeFromData(CHARLS_RGB_LINE_RUN_FIXTURE))
         val (bitmap, result) = codec.getImage()
@@ -264,6 +312,14 @@ class JpegLsCodecTest {
         assertEquals(
             "6b06b88a6ae4da9727bb010042dc3b9bcaa0e65f39d5c21e098a41825dc034a4",
             sha256(charlsResource("sample-run-lossless-6x4.jls.base64")),
+        )
+    }
+
+    @Test
+    fun `pinned CharLS RGB non-interleave fixture matches its documented SHA-256`() {
+        assertEquals(
+            "11ea017239cd8a89353c412326ab0d84d938096c1444cb70203c5574d810cae6",
+            sha256(charlsResource("non-interleaved-6x4.jls.base64")),
         )
     }
 
@@ -553,12 +609,11 @@ class JpegLsCodecTest {
     }
 
     @Test
-    fun `decode refuses an entropy stream without EOI`() {
-        val codec = requireNotNull(Codec.MakeFromData(CHARLS_RUN_FIXTURE.copyOf(CHARLS_RUN_FIXTURE.size - 2)))
+    fun `open refuses an entropy stream without EOI`() {
+        val opened = JpegLsDocument.open(CHARLS_RUN_FIXTURE.copyOf(CHARLS_RUN_FIXTURE.size - 2))
 
-        val (_, result) = codec.getImage()
-
-        assertEquals(Codec.Result.kErrorInInput, result)
+        assertNull(opened.document)
+        assertEquals("jpeg-ls.entropy.truncated", opened.diagnostic?.code)
     }
 
     @Test

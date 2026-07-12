@@ -52,16 +52,16 @@ public data class JpegLsDecodeResult(
 
 /**
  * Immutable, bounded JPEG-LS frame description for the supported static
- * baseline: 8-bit grayscale or RGB LOCO-I scans. RGB supports `ILV=1` (line
- * interleave) and `ILV=2` (sample interleave), unit sampling, and either no
- * `mrfx` APP8 marker or `mrfx` transform zero. HP1/HP2/HP3 colour transforms
- * are explicitly refused; its [nearLossless] bound is validated before
- * entropy allocation.
+ * baseline: 8-bit grayscale or RGB LOCO-I scans. RGB supports `ILV=0`
+ * (non-interleaved R/G/B scans), `ILV=1` (line interleave), and `ILV=2`
+ * (sample interleave), unit sampling, and either no `mrfx` APP8 marker or
+ * `mrfx` transform zero. HP1/HP2/HP3 colour transforms are explicitly
+ * refused; its [nearLossless] bound is validated before entropy allocation.
  */
 public class JpegLsDocument private constructor(
     private val source: ByteArray,
     internal val frame: JpegLsFrame,
-    internal val entropyOffset: Int,
+    internal val scans: List<JpegLsScan>,
     metadata: List<JpegLsMetadataSegment>,
 ) {
     public val width: Int get() = frame.width
@@ -69,7 +69,7 @@ public class JpegLsDocument private constructor(
     public val nearLossless: Int get() = frame.nearLossless
     /** Number of image components in the validated SOF55 frame (one or three). */
     public val componentCount: Int get() = frame.components.size
-    /** JPEG-LS SOS ILV value: `0` for grayscale, `1` line or `2` sample RGB interleave. */
+    /** JPEG-LS SOS ILV value: `0` grayscale/non-interleaved, `1` line or `2` sample RGB interleave. */
     public val interleaveMode: Int get() = frame.interleaveMode
     public val metadataSegments: List<JpegLsMetadataSegment> =
         Collections.unmodifiableList(ArrayList(metadata))
@@ -83,10 +83,10 @@ public class JpegLsDocument private constructor(
     /** Returns an independent copy of the original structurally preserved stream. */
     public fun copyEncodedBytes(): ByteArray = source.copyOf()
 
-    /** Decode the supported grayscale or line-interleaved RGB LOCO-I scan without a fallback. */
+    /** Decode the supported LOCO-I scan sequence without a fallback. */
     public fun decode(): JpegLsDecodeResult {
         return try {
-            val samples = JpegLsEntropy.decode(source, entropyOffset, frame)
+            val samples = JpegLsEntropy.decode(source, scans, frame)
             val bitmap = SkBitmap(width, height)
             val components = frame.components.size
             repeat(width * height) { index ->
@@ -118,7 +118,7 @@ public class JpegLsDocument private constructor(
             return try {
                 val parsed = JpegLsParser(data, limits).parse()
                 JpegLsOpenResult(
-                    JpegLsDocument(data.copyOf(), parsed.frame, parsed.entropyOffset, parsed.metadataSegments),
+                    JpegLsDocument(data.copyOf(), parsed.frame, parsed.scans, parsed.metadataSegments),
                     null,
                 )
             } catch (failure: JpegLsFailure) {
@@ -161,6 +161,16 @@ internal data class JpegLsFrame(
     val interleaveMode: Int,
 )
 
+/** A bounded entropy span and SOS contract, retained in image scan order. */
+internal data class JpegLsScan(
+    val markerOffset: Int,
+    val componentIds: List<Int>,
+    val nearLossless: Int,
+    val interleaveMode: Int,
+    val entropyOffset: Int,
+    val entropyEnd: Int,
+)
+
 /** SOF55 component identity retained to keep SOS routing strict. */
 internal data class JpegLsComponent(val id: Int)
 
@@ -191,7 +201,7 @@ internal data class JpegLsCodingParameters(
 
 internal data class ParsedJpegLs(
     val frame: JpegLsFrame,
-    val entropyOffset: Int,
+    val scans: List<JpegLsScan>,
     val metadataSegments: List<JpegLsMetadataSegment>,
 )
 
@@ -224,7 +234,7 @@ private class JpegLsParser(
             when (marker) {
                 SOF55 -> parseSof55(markerOffset)
                 LSE -> parseLse(markerOffset)
-                SOS -> return parseSos(markerOffset)
+                SOS -> return parseScanSequence(markerOffset)
                 EOI -> jpeglsFailure("jpeg-ls.sos.missing", markerOffset)
                 DRI -> jpeglsFailure("jpeg-ls.restart.unsupported", markerOffset, Codec.Result.kUnimplemented)
                 in APP_MIN..APP_MAX, COM -> retainMetadata(marker, markerOffset)
@@ -320,40 +330,120 @@ private class JpegLsParser(
             data[segment.payloadOffset + 2].u8() == 'f'.code &&
             data[segment.payloadOffset + 3].u8() == 'x'.code
 
-    private fun parseSos(markerOffset: Int): ParsedJpegLs {
-        val layout = frameLayout ?: jpeglsFailure("jpeg-ls.sof.missing", markerOffset)
-        val segment = segment(markerOffset, "jpeg-ls.sos.truncated")
-        val components = layout.components
-        if (segment.payloadSize != 4 + components.size * 2) jpeglsFailure("jpeg-ls.sos.invalid", markerOffset)
-        val start = segment.payloadOffset
-        if (data[start].u8() != components.size) {
-            jpeglsFailure("jpeg-ls.scan.unsupported", markerOffset, Codec.Result.kUnimplemented)
-        }
-        components.forEachIndexed { index, component ->
-            val offset = start + 1 + index * 2
-            if (data[offset].u8() != component.id || data[offset + 1].u8() != 0) {
-                jpeglsFailure("jpeg-ls.scan.unsupported", markerOffset, Codec.Result.kUnimplemented)
+    private fun parseScanSequence(firstMarkerOffset: Int): ParsedJpegLs {
+        val layout = frameLayout ?: jpeglsFailure("jpeg-ls.sof.missing", firstMarkerOffset)
+        val scans = ArrayList<JpegLsScan>(layout.components.size)
+        scans += parseSos(firstMarkerOffset)
+        while (true) {
+            val last = scans.lastIndex
+            val entropyEnd = findEntropyEnd()
+            scans[last] = scans[last].copy(entropyEnd = entropyEnd)
+            position = entropyEnd
+            val markerOffset = position
+            when (val marker = readMarker()) {
+                SOS -> scans += parseSos(markerOffset)
+                EOI -> {
+                    if (position != data.size) jpeglsFailure("jpeg-ls.trailing-data", position)
+                    return parsedScans(layout, scans)
+                }
+                DRI -> jpeglsFailure("jpeg-ls.restart.unsupported", markerOffset, Codec.Result.kUnimplemented)
+                else -> jpeglsFailure("jpeg-ls.marker.unsupported", markerOffset, Codec.Result.kUnimplemented)
             }
         }
-        val parameterOffset = start + 1 + components.size * 2
+    }
+
+    private fun parseSos(markerOffset: Int): JpegLsScan {
+        val layout = frameLayout ?: jpeglsFailure("jpeg-ls.sof.missing", markerOffset)
+        val segment = segment(markerOffset, "jpeg-ls.sos.truncated")
+        if (segment.payloadSize < 6) jpeglsFailure("jpeg-ls.sos.invalid", markerOffset)
+        val start = segment.payloadOffset
+        val componentCount = data[start].u8()
+        if (componentCount !in 1..layout.components.size || segment.payloadSize != 4 + componentCount * 2) {
+            jpeglsFailure("jpeg-ls.scan.unsupported", markerOffset, Codec.Result.kUnimplemented)
+        }
+        val componentIds = ArrayList<Int>(componentCount)
+        repeat(componentCount) { index ->
+            val offset = start + 1 + index * 2
+            val componentId = data[offset].u8()
+            if (
+                componentId !in layout.components.map(JpegLsComponent::id) ||
+                componentId in componentIds ||
+                data[offset + 1].u8() != 0
+            ) {
+                jpeglsFailure("jpeg-ls.scan.unsupported", markerOffset, Codec.Result.kUnimplemented)
+            }
+            componentIds += componentId
+        }
+        val parameterOffset = start + 1 + componentCount * 2
         val nearLossless = data[parameterOffset].u8()
         val interleaveMode = data[parameterOffset + 1].u8()
         if (
-            (components.size == 1 && interleaveMode != 0) ||
-            (components.size == 3 && interleaveMode !in 1..2) ||
+            (componentCount == 1 && interleaveMode != 0) ||
+            (componentCount == layout.components.size && layout.components.size == 3 && interleaveMode !in 1..2) ||
             data[parameterOffset + 2].u8() != 0
         ) {
             jpeglsFailure("jpeg-ls.scan.unsupported", markerOffset, Codec.Result.kUnimplemented)
         }
-        if (components.size == 3 && interleaveMode == 2 && nearLossless != 0) {
+        if (componentCount == layout.components.size && interleaveMode == 2 && nearLossless != 0) {
             jpeglsFailure("jpeg-ls.scan.unsupported", markerOffset, Codec.Result.kUnimplemented)
         }
-        val parameters = effectiveParameters(nearLossless, markerOffset)
+        if (nearLossless > JpegLsCodingParameters.maximumNearLossless) {
+            jpeglsFailure("jpeg-ls.scan.near.invalid", markerOffset)
+        }
+        return JpegLsScan(markerOffset, componentIds, nearLossless, interleaveMode, position, -1)
+    }
+
+    private fun parsedScans(layout: FrameLayout, scans: List<JpegLsScan>): ParsedJpegLs {
+        val first = scans.first()
+        if (scans.any { it.nearLossless != first.nearLossless }) {
+            jpeglsFailure("jpeg-ls.scan.unsupported", scans.first { it.nearLossless != first.nearLossless }.markerOffset, Codec.Result.kUnimplemented)
+        }
+        when (layout.components.size) {
+            1 -> if (scans.size != 1 || scans.single().componentIds != listOf(1) || first.interleaveMode != 0) {
+                jpeglsFailure("jpeg-ls.scan.unsupported", first.markerOffset, Codec.Result.kUnimplemented)
+            }
+            3 -> if (scans.size == 1) {
+                if (first.componentIds != listOf(1, 2, 3) || first.interleaveMode !in 1..2) {
+                    jpeglsFailure("jpeg-ls.scan.unsupported", first.markerOffset, Codec.Result.kUnimplemented)
+                }
+            } else if (
+                scans.size != 3 ||
+                scans.any { it.interleaveMode != 0 } ||
+                scans.map { it.componentIds.singleOrNull() } != listOf(1, 2, 3) ||
+                first.nearLossless != 0
+            ) {
+                jpeglsFailure("jpeg-ls.scan.unsupported", first.markerOffset, Codec.Result.kUnimplemented)
+            }
+            else -> error("validated JPEG-LS component count")
+        }
+        val parameters = effectiveParameters(first.nearLossless, first.markerOffset)
         return ParsedJpegLs(
-            JpegLsFrame(layout.width, layout.height, components, nearLossless, parameters, interleaveMode),
-            position,
+            JpegLsFrame(layout.width, layout.height, layout.components, first.nearLossless, parameters, first.interleaveMode),
+            scans.toList(),
             metadata.toList(),
         )
+    }
+
+    private fun findEntropyEnd(): Int {
+        var cursor = position
+        while (cursor < data.size) {
+            if (data[cursor].u8() != MARKER_PREFIX) {
+                cursor++
+                continue
+            }
+            var marker = cursor + 1
+            while (marker < data.size && data[marker].u8() == MARKER_PREFIX) marker++
+            if (marker >= data.size) jpeglsFailure("jpeg-ls.entropy.truncated", data.size)
+            // JPEG-LS bit-stuffs one leading zero bit after 0xFF. The rest of
+            // that byte remains entropy payload, so every value below 0x80 is
+            // data; marker codes have the high bit set.
+            if (data[marker].u8() < 0x80) {
+                cursor = marker + 1
+            } else {
+                return cursor
+            }
+        }
+        jpeglsFailure("jpeg-ls.entropy.truncated", data.size)
     }
 
     private fun effectiveParameters(nearLossless: Int, markerOffset: Int): JpegLsCodingParameters {
