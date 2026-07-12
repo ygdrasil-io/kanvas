@@ -13,12 +13,13 @@ class SimilarityTrackerTest {
 
     @Test
     fun `record replaces a prior comparable similarity with the latest measurement`() {
-        val store = SimilarityScoreStore(File(tempDir, "scores.properties"))
+        val scoresFile = File(tempDir, "scores.properties")
+        val store = SimilarityScoreStore(scoresFile)
 
         store.record("blur2rects", 96.44)
         store.record("blur2rects", 96.14)
 
-        assertEquals(96.14, store.get("blur2rects"))
+        assertEquals(96.14, SimilarityScoreStore(scoresFile).get("blur2rects"))
     }
 
     @Test
