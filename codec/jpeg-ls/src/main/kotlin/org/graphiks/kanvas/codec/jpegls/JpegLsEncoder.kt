@@ -5,6 +5,9 @@ import org.skia.foundation.SkBitmap
 
 /** Interleave modes exposed for the RGB JPEG-LS encoder. */
 public enum class JpegLsRgbInterleaveMode {
+    /** One R, one G, and one B scan in component order. */
+    NonInterleaved,
+
     /** One component line after another; the established encoder default. */
     Line,
 
@@ -14,8 +17,9 @@ public enum class JpegLsRgbInterleaveMode {
 
 /**
  * Static JPEG-LS encoder for verified 8-bit LOCO-I data. It emits grayscale
- * scans with `ILV=0`, or RGB scans with `ILV=1` (line) or `ILV=2` (sample)
- * interleave, preserving opaque source channels without a colour transform.
+ * scans with `ILV=0`, or RGB scans with `ILV=0` (non-interleaved), `ILV=1`
+ * (line), or `ILV=2` (sample) interleave, preserving opaque source channels
+ * without a colour transform.
  */
 public object JpegLsEncoder {
     public data class Options(
@@ -50,7 +54,7 @@ public object JpegLsEncoder {
         )
         if (
             components.size == 3 &&
-            options.rgbInterleaveMode == JpegLsRgbInterleaveMode.Sample &&
+            options.rgbInterleaveMode != JpegLsRgbInterleaveMode.Line &&
             options.nearLossless != 0
         ) {
             return null
@@ -75,8 +79,8 @@ public object JpegLsEncoder {
             JpegLsCodingParameters.defaults(options.nearLossless),
             if (components.size == 1) 0 else options.rgbInterleaveMode.markerValue,
         )
-        val entropy = JpegLsEntropy.encode(source.width, source.height, samples, frame)
-        return ByteArrayOutputStream(entropy.size + 32).also { output ->
+        val entropyScans = JpegLsEntropy.encodeScans(source.width, source.height, samples, frame)
+        return ByteArrayOutputStream(entropyScans.sumOf(ByteArray::size) + 32 + components.size * 10).also { output ->
             output.write(byteArrayOf(0xFF.toByte(), 0xD8.toByte()))
             output.write(byteArrayOf(0xFF.toByte(), 0xF7.toByte()))
             writeU16(output, 8 + components.size * 3)
@@ -89,19 +93,30 @@ public object JpegLsEncoder {
                 output.write(0x11)
                 output.write(0x00)
             }
-            output.write(byteArrayOf(0xFF.toByte(), 0xDA.toByte()))
-            writeU16(output, 6 + components.size * 2)
-            output.write(components.size)
-            components.forEach { component ->
-                output.write(component.id)
-                output.write(0x00)
+            if (frame.interleaveMode == 0 && components.size == 3) {
+                components.forEachIndexed { index, component ->
+                    writeSos(output, listOf(component), frame)
+                    output.write(entropyScans[index])
+                }
+            } else {
+                writeSos(output, components, frame)
+                output.write(entropyScans.single())
             }
-            output.write(options.nearLossless)
-            output.write(frame.interleaveMode)
-            output.write(0x00)
-            output.write(entropy)
             output.write(byteArrayOf(0xFF.toByte(), 0xD9.toByte()))
         }.toByteArray()
+    }
+
+    private fun writeSos(output: ByteArrayOutputStream, components: List<JpegLsComponent>, frame: JpegLsFrame) {
+        output.write(byteArrayOf(0xFF.toByte(), 0xDA.toByte()))
+        writeU16(output, 6 + components.size * 2)
+        output.write(components.size)
+        components.forEach { component ->
+            output.write(component.id)
+            output.write(0x00)
+        }
+        output.write(frame.nearLossless)
+        output.write(frame.interleaveMode)
+        output.write(0x00)
     }
 
     private fun writeU16(output: ByteArrayOutputStream, value: Int) {
@@ -111,6 +126,7 @@ public object JpegLsEncoder {
 
     private val JpegLsRgbInterleaveMode.markerValue: Int
         get() = when (this) {
+            JpegLsRgbInterleaveMode.NonInterleaved -> 0
             JpegLsRgbInterleaveMode.Line -> 1
             JpegLsRgbInterleaveMode.Sample -> 2
         }

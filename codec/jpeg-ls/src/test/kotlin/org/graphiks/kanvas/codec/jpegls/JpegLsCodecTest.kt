@@ -352,6 +352,16 @@ class JpegLsCodecTest {
     }
 
     @Test
+    fun `encoder refuses unproven near-lossless RGB non-interleave`() {
+        assertNull(
+            JpegLsEncoder.encode(
+                rgbBitmap(1, 1, arrayOf(intArrayOf(0x41, 0x50, 0x42))),
+                JpegLsEncoder.Options(nearLossless = 1, rgbInterleaveMode = JpegLsRgbInterleaveMode.NonInterleaved),
+            ),
+        )
+    }
+
+    @Test
     fun `refuses non-RGB component identities and sampling in a color SOF55`() {
         val invalidIdentity = CHARLS_RGB_LINE_FIXTURE.copyOf().also { it[12] = 2 }
         val invalidSampling = CHARLS_RGB_LINE_FIXTURE.copyOf().also { it[13] = 0x21 }
@@ -709,6 +719,33 @@ class JpegLsCodecTest {
     }
 
     @Test
+    fun `encoder writes RGB non-interleaved JPEG-LS that decodes exactly`() {
+        val samples = Array(24) { index ->
+            val x = index % 6
+            val y = index / 6
+            intArrayOf(0x41, 0x50 + x * 3 + y, 0x42 + ((x * y) and 3))
+        }
+        val encoded = requireNotNull(
+            JpegLsEncoder.encode(
+                rgbBitmap(6, 4, samples),
+                JpegLsEncoder.Options(rgbInterleaveMode = JpegLsRgbInterleaveMode.NonInterleaved),
+            ),
+        )
+        val document = requireNotNull(JpegLsDocument.open(encoded).document)
+        val (bitmap, result) = requireNotNull(Codec.MakeFromData(encoded)).getImage()
+
+        assertEquals(0, document.interleaveMode)
+        assertEquals(Codec.Result.kSuccess, result)
+        samples.forEachIndexed { index, sample ->
+            assertEquals(
+                0xFF000000.toInt() or (sample[0] shl 16) or (sample[1] shl 8) or sample[2],
+                bitmap!!.getPixel(index % 6, index / 6),
+                "index=$index",
+            )
+        }
+    }
+
+    @Test
     fun `encoder writes RGB ILV1 NEAR 1 JPEG-LS within its declared error bound`() {
         val sourceSamples = ppmRgb(charlsResource("line-run-source.ppm.base64"))
         val source = rgbBitmap(8, 4, sourceSamples)
@@ -921,6 +958,43 @@ class JpegLsCodecTest {
                 samples.flatMap { it.asIterable() }.map(Int::toByte).toByteArray(),
                 decoded.copyOfRange(decoded.size - samples.size * 3, decoded.size),
             )
+        } finally {
+            Files.deleteIfExists(directory.resolve("encoded.jls"))
+            Files.deleteIfExists(directory.resolve("decoded.ppm"))
+            Files.deleteIfExists(directory)
+        }
+    }
+
+    @Test
+    fun `optional CharLS oracle decodes encoded RGB non-interleaved planes exactly`() {
+        val oracle = System.getProperty("kanvas.jpeg-ls.oracle.charls").orEmpty()
+        if (oracle.isBlank()) return
+        val samples = Array(24) { index ->
+            val x = index % 6
+            val y = index / 6
+            intArrayOf(0x41, 0x50 + x * 3 + y, 0x42 + ((x * y) and 3))
+        }
+        val encoded = requireNotNull(
+            JpegLsEncoder.encode(
+                rgbBitmap(6, 4, samples),
+                JpegLsEncoder.Options(rgbInterleaveMode = JpegLsRgbInterleaveMode.NonInterleaved),
+            ),
+        )
+        val directory = Files.createTempDirectory("kanvas-jpeg-ls-rgb-none-oracle-")
+        try {
+            val input = directory.resolve("encoded.jls")
+            val output = directory.resolve("decoded.ppm")
+            Files.write(input, encoded)
+            val process = ProcessBuilder(oracle, "decode", input.toString(), output.toString())
+                .redirectErrorStream(true)
+                .start()
+            val processOutput = process.inputStream.bufferedReader().readText()
+            assertEquals(0, process.waitFor(), processOutput)
+            val decoded = Files.readAllBytes(output)
+            val expectedPlanes = (0 until 3).flatMap { component ->
+                samples.map { sample -> sample[component].toByte() }
+            }.toByteArray()
+            assertArrayEquals(expectedPlanes, decoded.copyOfRange(decoded.size - expectedPlanes.size, decoded.size))
         } finally {
             Files.deleteIfExists(directory.resolve("encoded.jls"))
             Files.deleteIfExists(directory.resolve("decoded.ppm"))

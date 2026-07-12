@@ -226,6 +226,19 @@ internal object JpegLsEntropy {
         }
     }
 
+    /** Encode one entropy segment per JPEG-LS scan in the validated frame layout. */
+    fun encodeScans(width: Int, height: Int, samples: IntArray, frame: JpegLsFrame): List<ByteArray> {
+        require(samples.size == width * height * frame.components.size)
+        if (frame.components.size == 3 && frame.interleaveMode == 0) {
+            return List(3) { component ->
+                val plane = IntArray(width * height) { index -> samples[index * 3 + component] }
+                val planeFrame = frame.copy(components = listOf(JpegLsComponent(component + 1)), interleaveMode = 0)
+                encodeMonochrome(width, height, plane, planeFrame)
+            }
+        }
+        return listOf(encode(width, height, samples, frame))
+    }
+
     private fun encodeMonochrome(width: Int, height: Int, samples: IntArray, frame: JpegLsFrame): ByteArray {
         val writer = JpegLsBitWriter()
         val state = LocoState(frame)
