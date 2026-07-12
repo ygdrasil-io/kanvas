@@ -65,10 +65,12 @@ public class Jpeg2000Box internal constructor(
  * Immutable, bounded JPEG 2000 document.
  *
  * The parser deliberately accepts only the declared narrow Part 1 profile:
- * raw J2K or JP2, one unsigned 8-bit grayscale component, one tile, one
- * resolution, one layer, reversible 5/3 transform and no quantization. The
- * entropy payload remains explicitly unimplemented until EBCOT/MQ is backed
- * by independent fixtures; no decode result is fabricated in the meantime.
+ * raw J2K with `SIZ` directly after `SOC`, or a strictly ordered JP2 core
+ * (`jP  `, `ftyp`, `jp2h`/`ihdr`, then `jp2c`), one unsigned 8-bit grayscale
+ * component, one tile, one resolution, one layer, reversible 5/3 transform
+ * and no quantization. The entropy payload remains explicitly unimplemented
+ * until EBCOT/MQ is backed by independent fixtures; no decode result is
+ * fabricated in the meantime.
  */
 public class Jpeg2000Document private constructor(
     private val source: ByteArray,
@@ -159,29 +161,45 @@ private fun parseRaw(data: ByteArray, limits: Jpeg2000Limits): ParsedJpeg2000 = 
 
 private fun parseJp2(data: ByteArray, limits: Jpeg2000Limits): ParsedJpeg2000 {
     val boxes = Jp2BoxParser(data, 0, data.size, limits.maxBoxes).parseTopLevel()
-    val signature = boxes.firstOrNull()
-        ?: j2kFailure("jpeg2000.jp2.signature.missing", 0)
-    if (signature.type != "jP  " || signature.payloadSize != JP2_SIGNATURE_PAYLOAD.size ||
+    val signature = requireSingleBox(
+        boxes = boxes,
+        type = "jP  ",
+        missingCode = "jpeg2000.jp2.signature.missing",
+        duplicateCode = "jpeg2000.jp2.signature.duplicate",
+        missingOffset = 0,
+    )
+    if (boxes.firstOrNull() !== signature) j2kFailure("jpeg2000.jp2.signature.order", signature.offset.toInt())
+    if (signature.payloadSize != JP2_SIGNATURE_PAYLOAD.size ||
         !data.rangeEquals(signature.payloadOffset, JP2_SIGNATURE_PAYLOAD, 0, JP2_SIGNATURE_PAYLOAD.size)
     ) {
         j2kFailure("jpeg2000.jp2.signature.missing", signature.offset.toInt())
     }
-    val ftyp = boxes.getOrNull(1) ?: j2kFailure("jpeg2000.jp2.ftyp.missing", data.size)
-    if (ftyp.type != "ftyp") j2kFailure("jpeg2000.jp2.ftyp.missing", ftyp.offset.toInt())
+    val ftyp = requireSingleBox(
+        boxes = boxes,
+        type = "ftyp",
+        missingCode = "jpeg2000.jp2.ftyp.missing",
+        duplicateCode = "jpeg2000.jp2.ftyp.duplicate",
+        missingOffset = data.size,
+    )
+    if (boxes.getOrNull(1) !== ftyp) j2kFailure("jpeg2000.jp2.ftyp.order", ftyp.offset.toInt())
     validateFtyp(data, ftyp)
-    val headers = boxes.filter { it.type == "jp2h" }
-    val header = when (headers.size) {
-        0 -> j2kFailure("jpeg2000.jp2.jp2h.missing", ftyp.offset.toInt())
-        1 -> headers.single()
-        else -> j2kFailure("jpeg2000.jp2.jp2h.duplicate", headers[1].offset.toInt())
-    }
-    val codestreams = boxes.filter { it.type == "jp2c" }
-    val jp2c = when (codestreams.size) {
-        0 -> j2kFailure("jpeg2000.jp2.jp2c.missing", header.offset.toInt())
-        1 -> codestreams.single()
-        else -> j2kFailure("jpeg2000.jp2.jp2c.duplicate", codestreams[1].offset.toInt())
-    }
+    val header = requireSingleBox(
+        boxes = boxes,
+        type = "jp2h",
+        missingCode = "jpeg2000.jp2.jp2h.missing",
+        duplicateCode = "jpeg2000.jp2.jp2h.duplicate",
+        missingOffset = ftyp.offset.toInt(),
+    )
+    val jp2c = requireSingleBox(
+        boxes = boxes,
+        type = "jp2c",
+        missingCode = "jpeg2000.jp2.jp2c.missing",
+        duplicateCode = "jpeg2000.jp2.jp2c.duplicate",
+        missingOffset = header.offset.toInt(),
+    )
     if (jp2c.offset < header.offset) j2kFailure("jpeg2000.jp2.jp2c.order", jp2c.offset.toInt())
+    if (boxes.getOrNull(2) !== header) j2kFailure("jpeg2000.jp2.jp2h.order", header.offset.toInt())
+    if (boxes.getOrNull(3) !== jp2c) j2kFailure("jpeg2000.jp2.jp2c.order", jp2c.offset.toInt())
     val imageHeader = parseJp2Header(data, header)
     val frame = J2kCodestreamParser(
         data,
@@ -196,6 +214,21 @@ private fun parseJp2(data: ByteArray, limits: Jpeg2000Limits): ParsedJpeg2000 {
         j2kFailure("jpeg2000.jp2.ihdr.mismatch", header.offset.toInt())
     }
     return ParsedJpeg2000(Jpeg2000Container.JP2, frame, boxes)
+}
+
+private fun requireSingleBox(
+    boxes: List<Jpeg2000Box>,
+    type: String,
+    missingCode: String,
+    duplicateCode: String,
+    missingOffset: Int,
+): Jpeg2000Box {
+    val matches = boxes.filter { it.type == type }
+    return when (matches.size) {
+        0 -> j2kFailure(missingCode, missingOffset)
+        1 -> matches.single()
+        else -> j2kFailure(duplicateCode, matches[1].offset.toInt())
+    }
 }
 
 private fun validateFtyp(data: ByteArray, box: Jpeg2000Box) {
@@ -217,8 +250,14 @@ private fun parseJp2Header(data: ByteArray, header: Jpeg2000Box): Jpeg2000FrameI
         header.payloadOffset + header.payloadSize,
         MAX_JP2_HEADER_BOXES,
     ).parseNested()
-    val ihdr = children.firstOrNull() ?: j2kFailure("jpeg2000.jp2.ihdr.missing", header.offset.toInt())
-    if (ihdr.type != "ihdr") j2kFailure("jpeg2000.jp2.ihdr.missing", header.offset.toInt())
+    val ihdr = requireSingleBox(
+        boxes = children,
+        type = "ihdr",
+        missingCode = "jpeg2000.jp2.ihdr.missing",
+        duplicateCode = "jpeg2000.jp2.ihdr.duplicate",
+        missingOffset = header.offset.toInt(),
+    )
+    if (children.firstOrNull() !== ihdr) j2kFailure("jpeg2000.jp2.ihdr.order", ihdr.offset.toInt())
     if (ihdr.payloadSize != 14) j2kFailure("jpeg2000.jp2.ihdr.invalid", ihdr.offset.toInt())
     val height = data.u32(ihdr.payloadOffset).toInt()
     val width = data.u32(ihdr.payloadOffset + 4).toInt()
@@ -281,6 +320,9 @@ private class J2kCodestreamParser(
             j2kFailure("jpeg2000.soc.missing", start)
         }
         position += 2
+        val sizOffset = position
+        if (readMarker() != SIZ) j2kFailure("jpeg2000.siz.order", sizOffset)
+        parseSiz(sizOffset)
         while (position < end) {
             val markerOffset = position
             when (readMarker()) {

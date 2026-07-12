@@ -75,6 +75,163 @@ class Jpeg2000DocumentTest {
         assertEquals("jpeg2000.jp2.jp2c.duplicate", opened.diagnostic?.code)
     }
 
+    @Test
+    fun `raw J2K requires SIZ immediately after SOC`() {
+        val canonical = narrowLosslessCodestream()
+        val forbiddenFirstMarkers = listOf(
+            0x52 to narrowCodPayload(),
+            0x5C to byteArrayOf(0, 0),
+            0x64 to byteArrayOf(),
+        )
+
+        forbiddenFirstMarkers.forEach { (marker, payload) ->
+            val reordered = ByteArrayOutputStream().also { output ->
+                output.writeMarker(0x4F)
+                output.writeSegment(marker, payload)
+                output.write(canonical, 2, canonical.size - 2)
+            }.toByteArray()
+
+            val opened = Jpeg2000Document.open(reordered)
+
+            assertNull(opened.document)
+            assertEquals("jpeg2000.siz.order", opened.diagnostic?.code)
+            assertEquals(Codec.Result.kErrorInInput, opened.diagnostic?.result)
+        }
+    }
+
+    @Test
+    fun `JP2 refuses duplicate signature rather than retaining an ambiguous container`() {
+        val duplicate = jp2(narrowLosslessCodestream()) + boxed("jP  ", jp2SignaturePayload())
+
+        val opened = Jpeg2000Document.open(duplicate)
+
+        assertNull(opened.document)
+        assertEquals("jpeg2000.jp2.signature.duplicate", opened.diagnostic?.code)
+        assertEquals(Codec.Result.kErrorInInput, opened.diagnostic?.result)
+    }
+
+    @Test
+    fun `JP2 refuses duplicate ftyp rather than accepting ambiguous brands`() {
+        val duplicate = jp2(narrowLosslessCodestream()) + boxed("ftyp", fileTypePayload())
+
+        val opened = Jpeg2000Document.open(duplicate)
+
+        assertNull(opened.document)
+        assertEquals("jpeg2000.jp2.ftyp.duplicate", opened.diagnostic?.code)
+        assertEquals(Codec.Result.kErrorInInput, opened.diagnostic?.result)
+    }
+
+    @Test
+    fun `JP2 requires ftyp directly after its signature`() {
+        val codestream = narrowLosslessCodestream()
+        val misplaced = ByteArrayOutputStream().also { output ->
+            output.writeBox("jP  ", jp2SignaturePayload())
+            output.writeBox("free", byteArrayOf())
+            output.writeBox("ftyp", fileTypePayload())
+            output.writeBox("jp2h", imageHeaderPayload())
+            output.writeBox("jp2c", codestream)
+        }.toByteArray()
+
+        val opened = Jpeg2000Document.open(misplaced)
+
+        assertNull(opened.document)
+        assertEquals("jpeg2000.jp2.ftyp.order", opened.diagnostic?.code)
+        assertEquals(Codec.Result.kErrorInInput, opened.diagnostic?.result)
+    }
+
+    @Test
+    fun `JP2 requires its signature at byte zero`() {
+        val codestream = narrowLosslessCodestream()
+        val misplaced = ByteArrayOutputStream().also { output ->
+            output.writeBox("free", byteArrayOf())
+            output.writeBox("jP  ", jp2SignaturePayload())
+            output.writeBox("ftyp", fileTypePayload())
+            output.writeBox("jp2h", imageHeaderPayload())
+            output.writeBox("jp2c", codestream)
+        }.toByteArray()
+
+        val opened = Jpeg2000Document.open(misplaced)
+
+        assertNull(opened.document)
+        assertEquals("jpeg2000.signature.missing", opened.diagnostic?.code)
+        assertEquals(Codec.Result.kErrorInInput, opened.diagnostic?.result)
+    }
+
+    @Test
+    fun `JP2 requires jp2h before its sole jp2c codestream`() {
+        val codestream = narrowLosslessCodestream()
+        val misplaced = ByteArrayOutputStream().also { output ->
+            output.writeBox("jP  ", jp2SignaturePayload())
+            output.writeBox("ftyp", fileTypePayload())
+            output.writeBox("jp2c", codestream)
+            output.writeBox("jp2h", imageHeaderPayload())
+        }.toByteArray()
+
+        val opened = Jpeg2000Document.open(misplaced)
+
+        assertNull(opened.document)
+        assertEquals("jpeg2000.jp2.jp2c.order", opened.diagnostic?.code)
+        assertEquals(Codec.Result.kErrorInInput, opened.diagnostic?.result)
+    }
+
+    @Test
+    fun `JP2 requires jp2h directly after ftyp`() {
+        val codestream = narrowLosslessCodestream()
+        val misplaced = ByteArrayOutputStream().also { output ->
+            output.writeBox("jP  ", jp2SignaturePayload())
+            output.writeBox("ftyp", fileTypePayload())
+            output.writeBox("free", byteArrayOf())
+            output.writeBox("jp2h", imageHeaderPayload())
+            output.writeBox("jp2c", codestream)
+        }.toByteArray()
+
+        val opened = Jpeg2000Document.open(misplaced)
+
+        assertNull(opened.document)
+        assertEquals("jpeg2000.jp2.jp2h.order", opened.diagnostic?.code)
+        assertEquals(Codec.Result.kErrorInInput, opened.diagnostic?.result)
+    }
+
+    @Test
+    fun `JP2 requires jp2c directly after jp2h`() {
+        val codestream = narrowLosslessCodestream()
+        val misplaced = ByteArrayOutputStream().also { output ->
+            output.writeBox("jP  ", jp2SignaturePayload())
+            output.writeBox("ftyp", fileTypePayload())
+            output.writeBox("jp2h", imageHeaderPayload())
+            output.writeBox("free", byteArrayOf())
+            output.writeBox("jp2c", codestream)
+        }.toByteArray()
+
+        val opened = Jpeg2000Document.open(misplaced)
+
+        assertNull(opened.document)
+        assertEquals("jpeg2000.jp2.jp2c.order", opened.diagnostic?.code)
+        assertEquals(Codec.Result.kErrorInInput, opened.diagnostic?.result)
+    }
+
+    @Test
+    fun `JP2 refuses duplicate jp2h rather than choosing a header`() {
+        val duplicate = jp2(narrowLosslessCodestream()) + boxed("jp2h", imageHeaderPayload())
+
+        val opened = Jpeg2000Document.open(duplicate)
+
+        assertNull(opened.document)
+        assertEquals("jpeg2000.jp2.jp2h.duplicate", opened.diagnostic?.code)
+        assertEquals(Codec.Result.kErrorInInput, opened.diagnostic?.result)
+    }
+
+    @Test
+    fun `JP2 refuses duplicate ihdr inside jp2h`() {
+        val duplicateHeader = imageHeaderBox() + imageHeaderBox()
+
+        val opened = Jpeg2000Document.open(jp2(narrowLosslessCodestream(), duplicateHeader))
+
+        assertNull(opened.document)
+        assertEquals("jpeg2000.jp2.ihdr.duplicate", opened.diagnostic?.code)
+        assertEquals(Codec.Result.kErrorInInput, opened.diagnostic?.result)
+    }
+
     private fun narrowLosslessCodestream(): ByteArray = ByteArrayOutputStream().also { output ->
         output.writeMarker(0x4F) // SOC
         output.writeSegment(0x51, ByteArrayOutputStream().also { siz ->
@@ -86,16 +243,7 @@ class Jpeg2000DocumentTest {
             siz.writeU16(1) // Csiz
             siz.write(byteArrayOf(7, 1, 1)) // 8-bit unsigned, no subsampling
         }.toByteArray())
-        output.writeSegment(0x52, byteArrayOf(
-            0, // Scod: no precinct partitioning
-            0, // LRCP
-            0, 1, // one layer
-            0, // no MCT
-            0, // one resolution
-            4, 4, // 64x64 code-block
-            0, // no code-block style flags
-            1, // reversible 5/3
-        ))
+        output.writeSegment(0x52, narrowCodPayload())
         output.writeSegment(0x5C, byteArrayOf(0, 0)) // no quantization
         output.writeMarker(0x90)
         output.writeU16(10)
@@ -107,21 +255,42 @@ class Jpeg2000DocumentTest {
         output.writeMarker(0xD9) // EOC
     }.toByteArray()
 
-    private fun jp2(codestream: ByteArray): ByteArray = ByteArrayOutputStream().also { output ->
-        output.writeBox("jP  ", byteArrayOf(0x0D, 0x0A, 0x87.toByte(), 0x0A))
-        output.writeBox("ftyp", byteArrayOf(
+    private fun jp2(codestream: ByteArray, headerPayload: ByteArray = imageHeaderPayload()): ByteArray = ByteArrayOutputStream().also { output ->
+        output.writeBox("jP  ", jp2SignaturePayload())
+        output.writeBox("ftyp", fileTypePayload())
+        output.writeBox("jp2h", headerPayload)
+        output.writeBox("jp2c", codestream)
+    }.toByteArray()
+
+    private fun jp2SignaturePayload(): ByteArray = byteArrayOf(0x0D, 0x0A, 0x87.toByte(), 0x0A)
+
+    private fun fileTypePayload(): ByteArray = byteArrayOf(
             'j'.code.toByte(), 'p'.code.toByte(), '2'.code.toByte(), ' '.code.toByte(),
             0, 0, 0, 0,
             'j'.code.toByte(), 'p'.code.toByte(), '2'.code.toByte(), ' '.code.toByte(),
-        ))
-        output.writeBox("jp2h", ByteArrayOutputStream().also { header ->
-            header.writeBox("ihdr", ByteArrayOutputStream().also { ihdr ->
-                ihdr.writeU32(1); ihdr.writeU32(1)
-                ihdr.writeU16(1)
-                ihdr.write(byteArrayOf(7, 7, 0, 0))
-            }.toByteArray())
-        }.toByteArray())
-        output.writeBox("jp2c", codestream)
+    )
+
+    private fun imageHeaderPayload(): ByteArray = imageHeaderBox()
+
+    private fun imageHeaderBox(): ByteArray = boxed("ihdr", ByteArrayOutputStream().also { ihdr ->
+        ihdr.writeU32(1); ihdr.writeU32(1)
+        ihdr.writeU16(1)
+        ihdr.write(byteArrayOf(7, 7, 0, 0))
+    }.toByteArray())
+
+    private fun narrowCodPayload(): ByteArray = byteArrayOf(
+        0, // Scod: no precinct partitioning
+        0, // LRCP
+        0, 1, // one layer
+        0, // no MCT
+        0, // one resolution
+        4, 4, // 64x64 code-block
+        0, // no code-block style flags
+        1, // reversible 5/3
+    )
+
+    private fun boxed(type: String, payload: ByteArray): ByteArray = ByteArrayOutputStream().also {
+        it.writeBox(type, payload)
     }.toByteArray()
 
     private fun ByteArrayOutputStream.writeMarker(marker: Int) {
