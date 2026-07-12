@@ -29,7 +29,7 @@ FEEE
 ERROR: test_prefix_family_is_reported_as_variant (__main__.CheckMissingGmsClassificationTest.test_prefix_family_is_reported_as_variant)
 ----------------------------------------------------------------------
 Traceback (most recent call last):
-  File "/Users/chaos/.codex/worktrees/a13d/kanvas/scripts/test_check_missing_gms.py", line 42, in test_prefix_family_is_reported_as_variant
+  File "REPO/scripts/test_check_missing_gms.py", line 42, in test_prefix_family_is_reported_as_variant
     result = checker.classify_reference(
              ^^^^^^^^^^^^^^^^^^^^^^^^^^
 AttributeError: module 'check_missing_gms' has no attribute 'classify_reference'
@@ -38,7 +38,7 @@ AttributeError: module 'check_missing_gms' has no attribute 'classify_reference'
 ERROR: test_separator_alias_is_reported_without_being_direct_match (__main__.CheckMissingGmsClassificationTest.test_separator_alias_is_reported_without_being_direct_match)
 ----------------------------------------------------------------------
 Traceback (most recent call last):
-  File "/Users/chaos/.codex/worktrees/a13d/kanvas/scripts/test_check_missing_gms.py", line 34, in test_separator_alias_is_reported_without_being_direct_match
+  File "REPO/scripts/test_check_missing_gms.py", line 34, in test_separator_alias_is_reported_without_being_direct_match
     result = checker.classify_reference("lineargradientrt", {"linear_gradient_rt"}, None)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^
 AttributeError: module 'check_missing_gms' has no attribute 'classify_reference'
@@ -47,7 +47,7 @@ AttributeError: module 'check_missing_gms' has no attribute 'classify_reference'
 ERROR: test_unmatched_name_is_actionable_missing (__main__.CheckMissingGmsClassificationTest.test_unmatched_name_is_actionable_missing)
 ----------------------------------------------------------------------
 Traceback (most recent call last):
-  File "/Users/chaos/.codex/worktrees/a13d/kanvas/scripts/test_check_missing_gms.py", line 53, in test_unmatched_name_is_actionable_missing
+  File "REPO/scripts/test_check_missing_gms.py", line 53, in test_unmatched_name_is_actionable_missing
     result = checker.classify_reference(
              ^^^^^^^^^^^^^^^^^^^^^^^^^^
 AttributeError: module 'check_missing_gms' has no attribute 'classify_reference'
@@ -56,7 +56,7 @@ AttributeError: module 'check_missing_gms' has no attribute 'classify_reference'
 FAIL: test_cli_fixture_reports_source_aware_headings (__main__.CheckMissingGmsClassificationTest.test_cli_fixture_reports_source_aware_headings)
 ----------------------------------------------------------------------
 Traceback (most recent call last):
-  File "/Users/chaos/.codex/worktrees/a13d/kanvas/scripts/test_check_missing_gms.py", line 120, in test_cli_fixture_reports_source_aware_headings
+  File "REPO/scripts/test_check_missing_gms.py", line 120, in test_cli_fixture_reports_source_aware_headings
     self.assertIn("--- Normalized aliases ---", output)
     ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 AssertionError: '--- Normalized aliases ---' not found in 'Reference PNGs:     4\nGM names extracted: 3\nMatched: 0 (0 direct + 0 parameterized)\n\n=== REFERENCE PNGs WITHOUT Kotlin GM (4) ===\n\n  aarectmodes.png\n  clipped-bitmap-shaders-clamp.png\n  clipped-bitmap-shaders-tile.png\n  linear_gradient_rt.png\n\n=== GM names WITHOUT reference PNG (3) ===\n\n  aa_rect_effect.png\n  clippedbitmapshaders.png\n  lineargradientrt.png\n'
@@ -148,7 +148,7 @@ Command:
 
 ```bash
 rtk python3 scripts/check_missing_gms.py \
-  --cpp-gm-dir /Users/chaos/workspace/kanvas-forge/skia-main/gm
+  --cpp-gm-dir <external-skia-gm-dir>
 ```
 
 Exact leading output:
@@ -158,7 +158,7 @@ Reference PNGs:     998
 GM names extracted: 891
 Matched: 890 (788 direct + 4 normalized-alias + 98 variant-family)
 
-source-evidence: cpp-gm-dir=/Users/chaos/workspace/kanvas-forge/skia-main/gm
+source-evidence: cpp-gm-dir=<external-skia-gm-dir>
 
 --- Normalized aliases ---
 count: 4
@@ -216,7 +216,7 @@ Tests run:
 
 - `rtk python3 scripts/test_check_missing_gms.py`
 - `rtk python3 scripts/check_missing_gms.py`
-- `rtk python3 scripts/check_missing_gms.py --cpp-gm-dir /Users/chaos/workspace/kanvas-forge/skia-main/gm`
+- `rtk python3 scripts/check_missing_gms.py --cpp-gm-dir <external-skia-gm-dir>`
 
 Observed verification:
 
@@ -250,7 +250,7 @@ Key corrections:
   - `ClipSuperRRect` constructor literal pass-through
 - stopped treating placeholder names like `<unresolved:...>` as authoritative API or compare output
 - ignored commented-out `DEF_GM(...)` registrations instead of inventing disabled names
-- removed the checked-in `/Users/chaos/...` path from `compare_skia_vs_kanvas_gms.py`
+- removed the checked-in `<developer-path>` example from `compare_skia_vs_kanvas_gms.py`
 - added explicit `--cpp-gm-dir` plus `KANVAS_SKIA_GM_DIR` / extractor-default resolution
 
 Fresh verification:
@@ -258,8 +258,8 @@ Fresh verification:
 - `rtk python3 scripts/test_extract_skia_gm_names.py` → `OK (5 tests)`
 - `rtk python3 scripts/test_compare_skia_vs_kanvas_gms.py` → `OK (5 tests)`
 - `rtk python3 scripts/test_check_missing_gms.py` → `OK (7 tests)`
-- `rtk python3 scripts/check_missing_gms.py --cpp-gm-dir /Users/chaos/workspace/kanvas-forge/skia-main/gm`
-- `rtk python3 scripts/compare_skia_vs_kanvas_gms.py --cpp-gm-dir /Users/chaos/workspace/kanvas-forge/skia-main/gm | rg -n "<unresolved:|runtime_shader|threshold_rt|spiral_rt|clipped-bitmap-shaders|clip_super_rrect|anisotropic_image_scale" -S`
+- `rtk python3 scripts/check_missing_gms.py --cpp-gm-dir <external-skia-gm-dir>`
+- `rtk python3 scripts/compare_skia_vs_kanvas_gms.py --cpp-gm-dir <external-skia-gm-dir> | rg -n "<unresolved:|runtime_shader|threshold_rt|spiral_rt|clipped-bitmap-shaders|clip_super_rrect|anisotropic_image_scale" -S`
 
 Actual-source evidence summary from the fresh extractor run:
 
@@ -286,4 +286,4 @@ Follow-up (2026-07-12):
   `clipped-bitmap-shaders-{tile,mirror,clamp}` and the `-hq` variants from
   `integration-tests/skia/.../ClippedBitmapShadersGm.kt`
 - fresh script verification no longer flags those six names as missing/not
-  ported against `/Users/chaos/workspace/kanvas-forge/skia-main/gm`
+  ported against `<external-skia-gm-dir>`
