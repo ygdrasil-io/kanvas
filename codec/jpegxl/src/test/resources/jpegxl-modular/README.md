@@ -41,6 +41,7 @@ djxl flower-510x532-8bit-lossless-jxlc.jxl oracle.pgm --num_threads=0 -v
 | `rgb-direct-4x3-8bit-source.png.base64` | `b98eaa8020820be4f64a6fd5f679aa48deabef384090c8aca3bb07c877f54879` (PNG décodé) | Source compacte RGB sRGB 4×3 dont les pixels ARGB sont explicitement vérifiés dans le test Kotlin |
 | `rgb-direct-4x3-8bit-lossless.jxl.base64` | `49b779382b5bd1402aa1a1b928fe1d205fced3032176964e3d2bfbf52e8af033` (codestream décodé) | Encodeur libjxl v0.13.0 `-d 0 -m 1`, Modular RGB direct sans transform; même flux vérifié raw, `jxlc` et `jxlp` |
 | `rgb-direct-4x3-all-default-color.jxl.base64` | `352a29dbb0718733fabdfb6251099c41049a3c38fad72b1850c51d280bd7b730` (codestream décodé) | Même image RGB avec `ColorEncoding.all_default`, donc profil RGB sRGB/D65 implicite |
+| `rgb-direct-510x532-multigroup.jxl.base64` | `ccd4464ec90aa113fea4627bda792ebb3a4e870af2f26e7d6b21ef531fa9f3ae` (codestream décodé) | Même palette RGB sRGB/D65 répartie par libjxl sur six groupes TOC, avec échantillons aux frontières de groupe vérifiés contre l’oracle `djxl` |
 
 Pour rejouer l’oracle explicitement :
 

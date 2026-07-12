@@ -118,6 +118,33 @@ class JpegXlModularDecodeTest {
     }
 
     @Test
+    fun `public codec decodes direct sRGB modular RGB across every TOC group`() {
+        val encoded = Base64.getMimeDecoder().decode(fixture("rgb-direct-510x532-multigroup.jxl.base64"))
+        assertEquals("ccd4464ec90aa113fea4627bda792ebb3a4e870af2f26e7d6b21ef531fa9f3ae", sha256(encoded))
+
+        val (actual, result) = requireNotNull(Codec.MakeFromData(encoded)).getImage()
+
+        val diagnostic = requireNotNull(JpegXlDocument.open(encoded).document).decode().diagnostic
+        assertEquals(Codec.Result.kSuccess, result, "diagnostic=$diagnostic")
+        val bitmap = requireNotNull(actual)
+        assertEquals(510, bitmap.width)
+        assertEquals(532, bitmap.height)
+        mapOf(
+            0 to 0xFFFF0000.toInt(),
+            255 to 0xFF007F80.toInt(),
+            256 to 0xFF007F80.toInt(),
+            255 * 510 to 0xFF000000.toInt(),
+            256 * 510 to 0xFF000000.toInt(),
+            255 * 510 + 255 to 0xFF7FFF80.toInt(),
+            255 * 510 + 256 to 0xFF7FFF80.toInt(),
+            531 * 510 to 0xFF4080C0.toInt(),
+            531 * 510 + 509 to 0xFFFA8001.toInt(),
+        ).forEach { (index, expected) ->
+            assertEquals(expected, bitmap.pixels[index], "pixel=$index")
+        }
+    }
+
+    @Test
     fun `opened raw and jxlc documents retain their encoded bytes independently of the caller`() {
         val raw = Base64.getMimeDecoder().decode(fixture("single-group-4x3-8bit-lossless.jxl.base64"))
         val encodedInputs = listOf(raw, exactJxlcContainer(raw))
