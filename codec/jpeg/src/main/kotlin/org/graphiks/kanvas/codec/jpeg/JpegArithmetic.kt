@@ -287,13 +287,14 @@ internal class ArithmeticEncoder(
         dcLower: Int,
         dcUpper: Int,
         acK: Int,
+        differential: Boolean = false,
     ) {
         require(coefficients.size == 64)
         require(component in previousDc.indices)
         require(dcTable in dcStats.indices && acTable in acStats.indices)
         require(dcLower in 0..15 && dcUpper in dcLower..15 && acK in 0..63)
 
-        encodeDcDifference(component, dcTable, coefficients[0], dcLower, dcUpper)
+        encodeDcDifference(component, dcTable, coefficients[0], dcLower, dcUpper, differential)
         encodeAcCoefficients(acTable, coefficients, acK)
     }
 
@@ -415,17 +416,22 @@ internal class ArithmeticEncoder(
         current: Int,
         lower: Int,
         upper: Int,
+        differential: Boolean = false,
     ) {
         val stats = dcStats[table]
         var index = dcContexts[component]
-        val difference = current - previousDc[component]
+        // Differential DCT frames transmit every DC coefficient relative to
+        // the inter-frame prediction, not to the preceding block. The
+        // arithmetic contexts still evolve across blocks exactly as Annex D
+        // specifies, so only the within-frame DC predictor is bypassed.
+        val difference = if (differential) current else current - previousDc[component]
         if (difference == 0) {
             encode(stats, index, 0)
             dcContexts[component] = 0
             return
         }
 
-        previousDc[component] = current
+        if (!differential) previousDc[component] = current
         encode(stats, index, 1)
         val positive = difference > 0
         val absolute = if (positive) difference else -difference

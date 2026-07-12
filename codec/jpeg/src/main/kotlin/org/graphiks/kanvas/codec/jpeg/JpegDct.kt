@@ -751,7 +751,13 @@ private fun decodeArithmeticSequentialBlock(
         (previousDc[component.frameIndex] + dc.value) and 0xFFFF
     }
     val coefficients = IntArray(64)
-    coefficients[0] = signedArithmeticDc(previousDc[component.frameIndex]) * quant[0]
+    // `decodeDcDifference` already returns a signed residual for SOF13.
+    // Ordinary SOF9 DC predictors are kept modulo 2^16 and therefore need
+    // conversion back to a signed coefficient; applying that conversion to a
+    // negative residual would subtract another 65,536 and corrupt every
+    // non-zero differential block.
+    val dcCoefficient = if (differential) dc.value else signedArithmeticDc(previousDc[component.frameIndex])
+    coefficients[0] = dcCoefficient * quant[0]
     decoder.decodeAcInitial(
         component.acTable,
         startCoefficient = 1,
@@ -968,7 +974,8 @@ private fun decodeArithmeticProgressiveDcInitial(
     previousDc[component.frameIndex] = if (differential) dc.value else {
         (previousDc[component.frameIndex] + dc.value) and 0xFFFF
     }
-    coefficients[0] = signedArithmeticDc(previousDc[component.frameIndex]) * (1 shl successiveLow) * quant[0]
+    val dcCoefficient = if (differential) dc.value else signedArithmeticDc(previousDc[component.frameIndex])
+    coefficients[0] = dcCoefficient * (1 shl successiveLow) * quant[0]
 }
 
 private fun signedArithmeticDc(value: Int): Int =

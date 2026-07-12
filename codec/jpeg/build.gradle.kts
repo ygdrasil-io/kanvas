@@ -28,4 +28,8 @@ tasks.withType<Test>().configureEach {
         "kanvas.jpeg.oracle.djpeg",
         providers.gradleProperty("jpegOracleDjpeg").orNull.orEmpty(),
     )
+    systemProperty(
+        "kanvas.jpeg.oracle.hierarchy",
+        providers.gradleProperty("jpegOracleHierarchy").orNull.orEmpty(),
+    )
 }

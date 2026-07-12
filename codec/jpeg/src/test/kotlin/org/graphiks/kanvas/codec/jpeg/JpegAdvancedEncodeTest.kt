@@ -501,6 +501,78 @@ class JpegAdvancedEncodeTest {
     }
 
     @Test
+    fun `two level grayscale arithmetic hierarchy writes SOF9 and differential SOF13 without fallback`() {
+        val source = grayscale(16, 12)
+
+        val bytes = JpegEncoder.encode(
+            source,
+            JpegEncoder.Options(
+                quality = 100,
+                process = JpegEncodeProcess.SequentialArithmetic,
+                colorModel = JpegEncodeColorModel.Grayscale,
+                sampling = JpegSampling.S444,
+                restartInterval = 1,
+                metadata = JpegEncodeMetadata(comment = "arithmetic hierarchy metadata".encodeToByteArray()),
+                hierarchy = listOf(
+                    JpegHierarchyLevel(
+                        scaleNumerator = 1,
+                        scaleDenominator = 2,
+                        process = JpegEncodeProcess.DifferentialSequentialArithmetic,
+                    ),
+                ),
+            ),
+        )
+
+        assertNotNull(bytes)
+        val document = requireNotNull(JpegDocument.open(bytes!!).document)
+        assertEquals(listOf(0xDE, 0xC9, 0xDF, 0xCD), document.segments.filter {
+            it.marker in setOf(0xDE, 0xC9, 0xDF, 0xCD)
+        }.map { it.marker })
+        assertTrue(document.segments.any { it.marker == 0xCC }, "arithmetic hierarchy requires DAC")
+        assertTrue(document.segments.any { it.marker == 0xDD }, "arithmetic hierarchy requires DRI")
+        assertTrue(document.segments.none { it.marker == 0xC4 }, "arithmetic hierarchy must not write DHT")
+        assertEquals(3, restartMarkers(bytes).size, "only the four-MCU SOF13 scan needs RST")
+        assertEquals(
+            "arithmetic hierarchy metadata",
+            document.copyPayload(document.segments.single { it.marker == 0xFE }).decodeToString(),
+        )
+        assertEquals(0xCD, requireNotNull(document.hierarchy).frames[1].sofMarker)
+
+        // Go through the public SkCodec-compatible entry point; a base-frame
+        // fallback would be the wrong size and cannot satisfy this round trip.
+        assertReasonableHierarchyRoundTrip(source, bytes, "two-level SOF13 hierarchy")
+    }
+
+    @Test
+    fun `opt in hierarchy reference decodes generated SOF13 pixels`() {
+        val configuredOracle = System.getProperty("kanvas.jpeg.oracle.hierarchy").orEmpty()
+        assumeTrue(
+            configuredOracle.isNotBlank(),
+            "Set -PjpegOracleHierarchy=/absolute/path/to/jpeg to enable the DHP SOF13 external oracle",
+        )
+        val oracle = Path.of(configuredOracle)
+        assumeTrue(Files.isExecutable(oracle), "hierarchy reference is not executable: $oracle")
+        val source = grayscale(16, 12)
+        val encoded = JpegEncoder.encode(
+            source,
+            JpegEncoder.Options(
+                quality = 100,
+                process = JpegEncodeProcess.SequentialArithmetic,
+                colorModel = JpegEncodeColorModel.Grayscale,
+                sampling = JpegSampling.S444,
+                restartInterval = 1,
+                hierarchy = listOf(
+                    JpegHierarchyLevel(1, 2, JpegEncodeProcess.DifferentialSequentialArithmetic),
+                ),
+            ),
+        )
+
+        assertNotNull(encoded)
+        val external = decodeHierarchyReferencePnm(oracle, encoded!!, "kanvas-sof13-hierarchy-oracle-")
+        assertPnmMatchesBitmap(external, source, maxError = 1, label = "SOF13 hierarchy reference")
+    }
+
+    @Test
     fun `advanced unsupported configurations refuse rather than falling back to sequential`() {
         val source = color(8, 8)
 
@@ -795,6 +867,22 @@ class JpegAdvancedEncodeTest {
             return parsePnm(output)
         } finally {
             Files.deleteIfExists(jpeg)
+        }
+    }
+
+    /** Runs the ISO/IEC 10918-7 hierarchy reference; it writes PNM to a path, unlike `djpeg`. */
+    private fun decodeHierarchyReferencePnm(oracle: Path, encoded: ByteArray, prefix: String): PnmImage {
+        val jpeg = Files.createTempFile(prefix, ".jpg")
+        val pnm = Files.createTempFile(prefix, ".pgm")
+        try {
+            Files.write(jpeg, encoded)
+            val process = ProcessBuilder(oracle.toString(), jpeg.toString(), pnm.toString()).start()
+            val error = process.errorStream.readBytes()
+            assertEquals(0, process.waitFor(), error.decodeToString())
+            return parsePnm(Files.readAllBytes(pnm))
+        } finally {
+            Files.deleteIfExists(jpeg)
+            Files.deleteIfExists(pnm)
         }
     }
 

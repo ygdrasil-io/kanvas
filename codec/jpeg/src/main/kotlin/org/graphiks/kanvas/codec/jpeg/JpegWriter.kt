@@ -141,9 +141,10 @@ public class JpegEncodeMetadata(
 /**
  * Declares one differential hierarchy level relative to the final image size.
  *
- * The current writer accepts exactly one `1/2`
- * [JpegEncodeProcess.DifferentialSequentialHuffman] level after a grayscale
- * sequential-Huffman reference; other ratios and process intersections remain
+ * The current writer accepts exactly one `1/2` grayscale sequential level:
+ * [JpegEncodeProcess.DifferentialSequentialHuffman] after a matching Huffman
+ * base or [JpegEncodeProcess.DifferentialSequentialArithmetic] after a
+ * matching arithmetic base. Other ratios and process intersections remain
  * explicit refusals until they have independent encoder evidence.
  */
 public data class JpegHierarchyLevel(
