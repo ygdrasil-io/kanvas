@@ -59,6 +59,28 @@ class ExtractSkiaGmNamesTest(unittest.TestCase):
 
         self.assertEqual(completed.stdout.splitlines(), ["baz-gm", "foo_bar"])
 
+    def test_summary_keeps_using_fallback_wording(self) -> None:
+        gm_dir = self.make_gm_dir()
+        (gm_dir / "unresolved.cpp").write_text(
+            textwrap.dedent(
+                """\
+                class MysteryGM : public GM {};
+
+                DEF_GM(return new MysteryGM;)
+                """
+            ),
+            encoding="utf-8",
+        )
+
+        completed = subprocess.run(
+            [sys.executable, str(SCRIPT), "--gm-dir", str(gm_dir)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertIn("Unresolved (1 entries, using fallback):", completed.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()

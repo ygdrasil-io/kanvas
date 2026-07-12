@@ -464,7 +464,7 @@ def main():
 
     unresolved_actual = inventory['unresolved']
     if unresolved_actual:
-        print(f"Unresolved ({len(unresolved_actual)} entries, explicit placeholder name kept):")
+        print(f"Unresolved ({len(unresolved_actual)} entries, using fallback):")
         for f, cls, kind, reason in unresolved_actual:
             print(f"  {cls} in {f}: {reason} (kind={kind})")
         print()

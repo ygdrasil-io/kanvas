@@ -88,7 +88,7 @@ def extract_skia_gm_names():
     import subprocess
     script = REPO / "scripts" / "extract_skia_gm_names.py"
     result = subprocess.run(
-        [sys.executable, str(script), "--names"],
+        [sys.executable, str(script), "--gm-dir", str(SKIA_GM_DIR), "--names"],
         capture_output=True, text=True, timeout=60,
     )
     names = set()
