@@ -5,12 +5,65 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Test
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkColorType
+import java.io.ByteArrayOutputStream
+import java.nio.file.Files
+import java.nio.file.Path
 
 class JpegAdvancedEncodeTest {
+
+    @Test
+    fun `arithmetic sequential entropy round trips DC and AC decisions`() {
+        val coefficients = IntArray(64).also {
+            it[0] = -5
+            it[1] = 3
+            it[4] = -7
+        }
+        val encoded = encodeArithmeticEntropy(coefficients)
+
+        val decoder = ArithmeticDecoder(encoded)
+        assertEquals(-5, decoder.decodeDcDifference(0, 0, 0, 1).value)
+        val decodedAc = IntArray(64)
+        decoder.decodeAcInitial(0, 1, 63, 5) { coefficient, value -> decodedAc[coefficient] = value }
+        assertArrayEquals(coefficients.copyOfRange(1, 64), decodedAc.copyOfRange(1, 64))
+    }
+
+    @Test
+    fun `arithmetic sequential entropy preserves DC magnitudes two three and four`() {
+        for (expected in listOf(2, 3, 4)) {
+            val decoded = ArithmeticDecoder(encodeArithmeticEntropy(IntArray(64).also { it[0] = expected }))
+                .decodeDcDifference(0, 0, 0, 1)
+            assertEquals(expected, decoded.value, "DC=$expected")
+        }
+    }
+
+    @Test
+    fun `arithmetic sequential entropy stuffs ff data bytes`() {
+        val stuffingCandidate = (-4_096..4_096).firstNotNullOfOrNull { dc ->
+            val bytes = encodeArithmeticEntropy(IntArray(64).also {
+                it[0] = dc
+                it[1] = (dc * 29) % 1_021
+                it[4] = -((dc * 17) % 509)
+            })
+            bytes.takeIf { entropyData ->
+                (0 until entropyData.size - 1).any { index ->
+                    entropyData[index] == 0xFF.toByte() && entropyData[index + 1] == 0.toByte()
+                }
+            }
+        }
+
+        assertNotNull(stuffingCandidate)
+        for (index in stuffingCandidate!!.indices) {
+            if (stuffingCandidate[index] == 0xFF.toByte()) {
+                assertTrue(index + 1 < stuffingCandidate.size)
+                assertEquals(0, stuffingCandidate[index + 1].toInt() and 0xFF)
+            }
+        }
+    }
 
     @Test
     fun `progressive grayscale DC plus AC script emits SOF2 and decodes`() {
@@ -192,6 +245,73 @@ class JpegAdvancedEncodeTest {
     }
 
     @Test
+    fun `arithmetic sequential writes SOF9 DAC DRI and restart markers for grayscale and color at 8 and 12 bit`() {
+        val cases = listOf(
+            Triple(grayscale(17, 9), JpegEncodeColorModel.Grayscale, JpegSampling.S444),
+            Triple(color(17, 9), JpegEncodeColorModel.YCbCr, JpegSampling.S420),
+        )
+
+        for ((source, colorModel, sampling) in cases) {
+            for (precision in listOf(8, 12)) {
+                val bytes = JpegEncoder.encode(
+                    source,
+                    JpegEncoder.Options(
+                        process = JpegEncodeProcess.SequentialArithmetic,
+                        precision = precision,
+                        colorModel = colorModel,
+                        sampling = sampling,
+                        restartInterval = 1,
+                    ),
+                )
+
+                assertNotNull(bytes, "$colorModel precision=$precision")
+                val document = JpegDocument.open(bytes!!).document!!
+                assertEquals(0xC9, firstMarker(bytes, setOf(0xC9)))
+                assertTrue(document.segments.any { it.marker == 0xCC }, "$colorModel precision=$precision")
+                assertTrue(document.segments.any { it.marker == 0xDD }, "$colorModel precision=$precision")
+                assertTrue(document.segments.none { it.marker == 0xC4 }, "$colorModel precision=$precision")
+                assertTrue(restartMarkers(bytes).isNotEmpty(), "$colorModel precision=$precision")
+                assertReasonableRoundTrip(source, bytes, "$colorModel precision=$precision")
+            }
+        }
+    }
+
+    @Test
+    fun `opt in djpeg oracle decodes generated SOF9`() {
+        val configuredOracle = System.getProperty("kanvas.jpeg.oracle.djpeg").orEmpty()
+        assumeTrue(
+            configuredOracle.isNotBlank(),
+            "Set -PjpegOracleDjpeg=/absolute/path/to/djpeg to enable the external SOF9 oracle",
+        )
+        val oracle = Path.of(configuredOracle)
+        assumeTrue(Files.isExecutable(oracle), "djpeg oracle is not executable: $oracle")
+        val source = grayscale(17, 9)
+        val encoded = JpegEncoder.encode(
+            source,
+            JpegEncoder.Options(
+                process = JpegEncodeProcess.SequentialArithmetic,
+                colorModel = JpegEncodeColorModel.Grayscale,
+                sampling = JpegSampling.S444,
+                restartInterval = 1,
+            ),
+        )!!
+        val jpeg = Files.createTempFile("kanvas-sof9-oracle-", ".jpg")
+        try {
+            Files.write(jpeg, encoded)
+            val process = ProcessBuilder(oracle.toString(), "-pnm", jpeg.toString())
+                .redirectErrorStream(true)
+                .start()
+            val output = process.inputStream.readBytes()
+            assertEquals(0, process.waitFor(), output.decodeToString())
+            assertTrue(output.size > 16)
+            assertEquals('P'.code, output[0].toInt() and 0xFF)
+            assertEquals('5'.code, output[1].toInt() and 0xFF)
+        } finally {
+            Files.deleteIfExists(jpeg)
+        }
+    }
+
+    @Test
     fun `advanced unsupported configurations refuse rather than falling back to sequential`() {
         val source = color(8, 8)
 
@@ -285,7 +405,6 @@ class JpegAdvancedEncodeTest {
                 ),
             ),
         )
-        assertNull(JpegEncoder.encode(source, JpegEncoder.Options(process = JpegEncodeProcess.SequentialArithmetic)))
         assertNull(JpegEncoder.encode(source, JpegEncoder.Options(process = JpegEncodeProcess.DifferentialLosslessHuffman)))
         assertNull(
             JpegEncoder.encode(
@@ -325,7 +444,24 @@ class JpegAdvancedEncodeTest {
         (scaled ushr pointTransform) shl pointTransform
     }
 
-    private fun assertReasonableRoundTrip(source: SkBitmap, bytes: ByteArray) {
+    private fun encodeArithmeticEntropy(coefficients: IntArray): ByteArray {
+        val encoded = ByteArrayOutputStream()
+        ArithmeticEncoder(encoded, componentCount = 1).apply {
+            encodeSequentialBlock(
+                coefficients = coefficients,
+                component = 0,
+                dcTable = 0,
+                acTable = 0,
+                dcLower = 0,
+                dcUpper = 1,
+                acK = 5,
+            )
+            finish()
+        }
+        return encoded.toByteArray()
+    }
+
+    private fun assertReasonableRoundTrip(source: SkBitmap, bytes: ByteArray, label: String = "") {
         val (decoded, result) = JpegCodec.Decoder.make(bytes)!!.getImage()
         assertEquals(org.graphiks.kanvas.codec.Codec.Result.kSuccess, result)
         var absoluteError = 0L
@@ -336,7 +472,7 @@ class JpegAdvancedEncodeTest {
             absoluteError += kotlin.math.abs((expected ushr 8 and 0xFF) - (actual ushr 8 and 0xFF))
             absoluteError += kotlin.math.abs((expected and 0xFF) - (actual and 0xFF))
         }
-        assertTrue(absoluteError / (source.width * source.height * 3) < 45, "mean RGB error: $absoluteError")
+        assertTrue(absoluteError / (source.width * source.height * 3) < 45, "$label mean RGB error: $absoluteError")
     }
 
     private fun firstMarker(bytes: ByteArray, markers: Set<Int>): Int {

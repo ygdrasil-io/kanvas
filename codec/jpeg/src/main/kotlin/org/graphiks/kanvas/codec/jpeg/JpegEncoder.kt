@@ -77,9 +77,10 @@ public object JpegEncoder {
             AlphaOption.kBlendOnBlack -> JpegAlphaPolicy.BlendOnBlack
         }
 
-        internal fun isSupportedHuffmanRequest(): Boolean =
+        internal fun isSupportedRequest(): Boolean =
             process in setOf(
                 JpegEncodeProcess.SequentialHuffman,
+                JpegEncodeProcess.SequentialArithmetic,
                 JpegEncodeProcess.ProgressiveHuffman,
                 JpegEncodeProcess.LosslessHuffman,
             ) && hierarchy.isEmpty()
@@ -94,7 +95,7 @@ public object JpegEncoder {
 
     public fun encode(dst: OutputStream, src: SkBitmap, options: Options = defaultOptions): Boolean {
         return try {
-            if (src.width !in 1..0xFFFF || src.height !in 1..0xFFFF || !options.isSupportedHuffmanRequest()) return false
+            if (src.width !in 1..0xFFFF || src.height !in 1..0xFFFF || !options.isSupportedRequest()) return false
             JpegWriter(dst, src, options).write()
             true
         } catch (_: Throwable) {
@@ -171,10 +172,14 @@ private class JpegWriter(
         writeMetadata()
         if (isDct) writeDqt()
         writeSof()
-        writeHuffmanTables()
+        when (options.process) {
+            JpegEncodeProcess.SequentialArithmetic -> writeArithmeticConditioning()
+            else -> writeHuffmanTables()
+        }
         if (options.restartInterval > 0) writeDri()
         when (options.process) {
             JpegEncodeProcess.SequentialHuffman -> writeSequentialEntropy()
+            JpegEncodeProcess.SequentialArithmetic -> writeSequentialEntropy()
             JpegEncodeProcess.ProgressiveHuffman -> writeProgressiveEntropy()
             JpegEncodeProcess.LosslessHuffman -> writeLosslessEntropy()
             else -> error("unsupported JPEG process")
@@ -185,6 +190,11 @@ private class JpegWriter(
     private fun validateRequest() {
         when (options.process) {
             JpegEncodeProcess.SequentialHuffman -> {
+                require(options.colorModel != JpegEncodeColorModel.Rgb) { "sequential RGB output is not implemented" }
+                require(options.progressiveScans.isEmpty()) { "sequential output does not accept a progressive scan script" }
+                require(options.losslessParameters == null) { "sequential output does not accept lossless parameters" }
+            }
+            JpegEncodeProcess.SequentialArithmetic -> {
                 require(options.colorModel != JpegEncodeColorModel.Rgb) { "sequential RGB output is not implemented" }
                 require(options.progressiveScans.isEmpty()) { "sequential output does not accept a progressive scan script" }
                 require(options.losslessParameters == null) { "sequential output does not accept lossless parameters" }
@@ -214,6 +224,10 @@ private class JpegWriter(
 
     private fun writeSequentialEntropy() {
         writeSos(componentIds(), spectralStart = 0, spectralEnd = 63, successiveApprox = 0)
+        if (options.process == JpegEncodeProcess.SequentialArithmetic) {
+            writeArithmeticSequentialEntropy()
+            return
+        }
         val bits = EntropyBitWriter(out)
         val mcusX = ceilDiv(bitmap.width, maxH * 8)
         val mcusY = ceilDiv(bitmap.height, maxV * 8)
@@ -231,6 +245,44 @@ private class JpegWriter(
             }
         }
         bits.flush()
+    }
+
+    private fun writeArithmeticSequentialEntropy() {
+        val arithmetic = ArithmeticEncoder(out, componentCount)
+        val dcTables = IntArray(componentCount) { if (it == COMPONENT_Y) 0 else 1 }
+        val acTables = IntArray(componentCount) { if (it == COMPONENT_Y) 0 else 1 }
+        val mcusX = ceilDiv(bitmap.width, maxH * 8)
+        val mcusY = ceilDiv(bitmap.height, maxV * 8)
+        var mcu = 0
+        for (mcuY in 0 until mcusY) {
+            for (mcuX in 0 until mcusX) {
+                for (component in 0 until componentCount) {
+                    val factor = componentSampling[component]
+                    for (blockY in 0 until factor.vertical) {
+                        for (blockX in 0 until factor.horizontal) {
+                            arithmetic.encodeSequentialBlock(
+                                coefficients = dctBlockCoefficients(
+                                    component,
+                                    mcuX * factor.horizontal + blockX,
+                                    mcuY * factor.vertical + blockY,
+                                ),
+                                component = component,
+                                dcTable = dcTables[component],
+                                acTable = acTables[component],
+                                dcLower = ARITHMETIC_DC_LOWER,
+                                dcUpper = ARITHMETIC_DC_UPPER,
+                                acK = ARITHMETIC_AC_K,
+                            )
+                        }
+                    }
+                }
+                mcu++
+                if (atRestartBoundary(mcu, mcusX * mcusY)) {
+                    arithmetic.writeRestart(dcTables, acTables)
+                }
+            }
+        }
+        arithmetic.finish()
     }
 
     private fun atRestartBoundary(mcu: Int, totalMcus: Int): Boolean =
@@ -445,6 +497,7 @@ private class JpegWriter(
         }
         val marker = when (options.process) {
             JpegEncodeProcess.SequentialHuffman -> if (options.precision == 8) SOF0 else SOF1
+            JpegEncodeProcess.SequentialArithmetic -> SOF9
             JpegEncodeProcess.ProgressiveHuffman -> SOF2
             JpegEncodeProcess.LosslessHuffman -> SOF3
             else -> error("unsupported JPEG process")
@@ -459,6 +512,25 @@ private class JpegWriter(
             writeDht(0, 1, dcChromaBits, dcChromaValues)
             if (isDct) writeDht(1, 1, acChromaBits, acChromaValues)
         }
+    }
+
+    /**
+     * Emit the default Annex F arithmetic conditioning explicitly.  The DAC
+     * marker makes the selected table ids self-describing and avoids relying
+     * on a decoder's implicit defaults.
+     */
+    private fun writeArithmeticConditioning() {
+        val tables = if (componentCount == 1) intArrayOf(0) else intArrayOf(0, 1)
+        val payload = ByteArrayOutputStream()
+        for (table in tables) {
+            payload.write(table)
+            payload.write((ARITHMETIC_DC_UPPER shl 4) or ARITHMETIC_DC_LOWER)
+        }
+        for (table in tables) {
+            payload.write(0x10 or table)
+            payload.write(ARITHMETIC_AC_K)
+        }
+        writeSegment(DAC, payload.toByteArray())
     }
 
     private fun writeDht(tableClass: Int, tableId: Int, bits: IntArray, values: IntArray) {
@@ -910,11 +982,16 @@ private const val SOF1 = 0xC1
 private const val SOF2 = 0xC2
 private const val SOF3 = 0xC3
 private const val DHT = 0xC4
+private const val SOF9 = 0xC9
+private const val DAC = 0xCC
 private const val SOS = 0xDA
 private const val DRI = 0xDD
 private const val COM = 0xFE
 
 private const val INV_SQRT2 = 0.7071067811865476
+private const val ARITHMETIC_DC_LOWER = 0
+private const val ARITHMETIC_DC_UPPER = 1
+private const val ARITHMETIC_AC_K = 5
 
 private val EXIF_IDENTIFIER = byteArrayOf(0x45, 0x78, 0x69, 0x66, 0x00, 0x00)
 private val XMP_IDENTIFIER = "http://ns.adobe.com/xap/1.0/\u0000".encodeToByteArray()

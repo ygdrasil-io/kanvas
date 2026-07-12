@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.codec.jpeg
 
+import java.io.OutputStream
+
 /** Stable failure reported when an arithmetic JPEG scan is malformed. */
 internal class ArithmeticJpegException(
     val diagnosticCode: String,
@@ -244,6 +246,323 @@ internal class ArithmeticDecoder(private val bytes: ByteArray) {
     }
 
     internal data class ArithmeticDcDifference(val value: Int, val nextContext: Int)
+
+    private companion object {
+        const val FIXED_PROBABILITY_STATE = 113
+    }
+}
+
+/**
+ * JPEG's QM binary arithmetic encoder (ITU-T T.81, Annex D).
+ *
+ * The encoder keeps entropy state separate from the image writer so the
+ * writer can select SOF9 without sharing any Huffman path.  It emits one
+ * complete arithmetic scan at a time; [writeRestart] terminates the current
+ * sub-scan before writing an unstuffed RST marker and resetting the contexts
+ * required by sequential DCT coding.
+ */
+internal class ArithmeticEncoder(
+    private val output: OutputStream,
+    componentCount: Int,
+) {
+    private var c = 0L
+    private var a = 0x10000L
+    private var stackedFf = 0
+    private var pendingZeros = 0
+    private var bitCount = 11
+    private var buffer = -1
+    private var nextRestartMarker = 0
+
+    private val previousDc = IntArray(componentCount)
+    private val dcContexts = IntArray(componentCount)
+    private val dcStats = Array(16) { ByteArray(64) }
+    private val acStats = Array(16) { ByteArray(256) }
+    private val fixedBin = ByteArray(1) { FIXED_PROBABILITY_STATE.toByte() }
+
+    fun encodeSequentialBlock(
+        coefficients: IntArray,
+        component: Int,
+        dcTable: Int,
+        acTable: Int,
+        dcLower: Int,
+        dcUpper: Int,
+        acK: Int,
+    ) {
+        require(coefficients.size == 64)
+        require(component in previousDc.indices)
+        require(dcTable in dcStats.indices && acTable in acStats.indices)
+        require(dcLower in 0..15 && dcUpper in dcLower..15 && acK in 0..63)
+
+        encodeDcDifference(component, dcTable, coefficients[0], dcLower, dcUpper)
+        encodeAcCoefficients(acTable, coefficients, acK)
+    }
+
+    fun writeRestart(dcTables: IntArray, acTables: IntArray) {
+        finish()
+        output.write(0xFF)
+        output.write(0xD0 + nextRestartMarker)
+        nextRestartMarker = (nextRestartMarker + 1) and 7
+        dcTables.forEach { table ->
+            require(table in dcStats.indices)
+            dcStats[table].fill(0)
+        }
+        acTables.forEach { table ->
+            require(table in acStats.indices)
+            acStats[table].fill(0)
+        }
+        previousDc.fill(0)
+        dcContexts.fill(0)
+        resetCodingInterval()
+    }
+
+    /** Terminates the current scan or restart interval according to Annex D. */
+    fun finish() {
+        val terminal = (a - 1 + c) and 0xFFFF0000L
+        c = if (terminal < c) terminal + 0x8000L else terminal
+        c = c shl bitCount
+        if ((c and 0xF8000000L) != 0L) {
+            if (buffer >= 0) {
+                emitPendingZeros()
+                emitDataByte(buffer + 1)
+            }
+            pendingZeros += stackedFf
+            stackedFf = 0
+        } else {
+            if (buffer == 0) {
+                pendingZeros++
+            } else if (buffer >= 0) {
+                emitPendingZeros()
+                emitDataByte(buffer)
+            }
+            if (stackedFf > 0) {
+                emitPendingZeros()
+                repeat(stackedFf) { emitDataByte(0xFF) }
+                stackedFf = 0
+            }
+        }
+        if ((c and 0x07FFF800L) != 0L) {
+            emitPendingZeros()
+            val first = ((c ushr 19) and 0xFF).toInt()
+            emitDataByte(first)
+            if ((c and 0x0007F800L) != 0L) {
+                emitDataByte(((c ushr 11) and 0xFF).toInt())
+            }
+        }
+    }
+
+    private fun encodeDcDifference(
+        component: Int,
+        table: Int,
+        current: Int,
+        lower: Int,
+        upper: Int,
+    ) {
+        val stats = dcStats[table]
+        var index = dcContexts[component]
+        val difference = current - previousDc[component]
+        if (difference == 0) {
+            encode(stats, index, 0)
+            dcContexts[component] = 0
+            return
+        }
+
+        previousDc[component] = current
+        encode(stats, index, 1)
+        val positive = difference > 0
+        val absolute = if (positive) difference else -difference
+        if (positive) {
+            encode(stats, index + 1, 0)
+            index += 2
+            dcContexts[component] = 4
+        } else {
+            encode(stats, index + 1, 1)
+            index += 3
+            dcContexts[component] = 8
+        }
+        val magnitudeMask = encodeDcMagnitude(stats, index, absolute)
+        if (magnitudeMask < ((1 shl lower) ushr 1)) {
+            dcContexts[component] = 0
+        } else if (magnitudeMask > ((1 shl upper) ushr 1)) {
+            dcContexts[component] += 8
+        }
+    }
+
+    private fun encodeAcCoefficients(table: Int, coefficients: IntArray, conditioningK: Int) {
+        val stats = acStats[table]
+        var last = 63
+        while (last > 0 && coefficients[last] == 0) last--
+
+        var coefficient = 1
+        while (coefficient <= last) {
+            var index = 3 * (coefficient - 1)
+            encode(stats, index, 0)
+            var value = coefficients[coefficient]
+            while (value == 0) {
+                encode(stats, index + 1, 0)
+                index += 3
+                coefficient++
+                value = coefficients[coefficient]
+            }
+            encode(stats, index + 1, 1)
+            val positive = value > 0
+            encode(fixedBin, 0, if (positive) 0 else 1)
+            val absolute = if (positive) value else -value
+            encodeAcMagnitude(
+                stats,
+                index + 2,
+                absolute,
+                magnitudeStart = if (coefficient <= conditioningK) 189 else 217,
+            )
+            coefficient++
+        }
+        if (coefficient <= 63) {
+            encode(stats, 3 * (coefficient - 1), 1)
+        }
+    }
+
+    /** Returns the highest DC magnitude-category bit used for conditioning. */
+    private fun encodeDcMagnitude(stats: ByteArray, initialIndex: Int, absolute: Int): Int {
+        require(absolute > 0)
+        var index = initialIndex
+        val value = absolute - 1
+        var magnitudeMask = 0
+        if (value != 0) {
+            encode(stats, index, 1)
+            magnitudeMask = 1
+            var probe = value
+            index = 20
+            while (true) {
+                probe = probe ushr 1
+                if (probe == 0) break
+                encode(stats, index, 1)
+                magnitudeMask = magnitudeMask shl 1
+                index++
+            }
+        }
+        encode(stats, index, 0)
+        index += 14
+        var patternMask = magnitudeMask
+        while (patternMask > 1) {
+            patternMask = patternMask ushr 1
+            encode(stats, index, if ((patternMask and value) == 0) 0 else 1)
+        }
+        return magnitudeMask
+    }
+
+    private fun encodeAcMagnitude(stats: ByteArray, initialIndex: Int, absolute: Int, magnitudeStart: Int): Int {
+        require(absolute > 0)
+        var index = initialIndex
+        var value = absolute - 1
+        var magnitudeMask = 0
+        if (value != 0) {
+            encode(stats, index, 1)
+            magnitudeMask = 1
+            var probe = value ushr 1
+            if (probe != 0) {
+                encode(stats, index, 1)
+                magnitudeMask = magnitudeMask shl 1
+                index = magnitudeStart
+                while (true) {
+                    probe = probe ushr 1
+                    if (probe == 0) break
+                    encode(stats, index, 1)
+                    magnitudeMask = magnitudeMask shl 1
+                    index++
+                }
+            }
+        }
+        encode(stats, index, 0)
+        index += 14
+        var patternMask = magnitudeMask
+        while (patternMask > 1) {
+            patternMask = patternMask ushr 1
+            encode(stats, index, if ((patternMask and value) == 0) 0 else 1)
+        }
+        return magnitudeMask
+    }
+
+    private fun encode(stats: ByteArray, index: Int, value: Int) {
+        require(index in stats.indices && value in 0..1)
+        val state = stats[index].toInt() and 0xFF
+        val stateIndex = state and 0x7F
+        val qe = Qe[stateIndex].toLong()
+        val mps = state ushr 7
+        a -= qe
+        if (value != mps) {
+            if (a >= qe) {
+                c += a
+                a = qe
+            }
+            stats[index] = ((state and 0x80) xor nextLpsState(stateIndex)).toByte()
+        } else {
+            if (a >= 0x8000L) return
+            if (a < qe) {
+                c += a
+                a = qe
+            }
+            stats[index] = ((state and 0x80) xor NEXT_MPS[stateIndex]).toByte()
+        }
+        do {
+            a = a shl 1
+            c = c shl 1
+            bitCount--
+            if (bitCount == 0) emitReadyByte()
+        } while (a < 0x8000L)
+    }
+
+    private fun nextLpsState(stateIndex: Int): Int =
+        NEXT_LPS[stateIndex] or if (SWITCH_MPS[stateIndex] != 0) 0x80 else 0
+
+    private fun emitReadyByte() {
+        val value = c ushr 19
+        when {
+            value > 0xFF -> {
+                if (buffer >= 0) {
+                    emitPendingZeros()
+                    emitDataByte(buffer + 1)
+                }
+                pendingZeros += stackedFf
+                stackedFf = 0
+                buffer = (value and 0xFF).toInt()
+            }
+            value == 0xFFL -> stackedFf++
+            else -> {
+                if (buffer == 0) {
+                    pendingZeros++
+                } else if (buffer >= 0) {
+                    emitPendingZeros()
+                    emitDataByte(buffer)
+                }
+                if (stackedFf > 0) {
+                    emitPendingZeros()
+                    repeat(stackedFf) { emitDataByte(0xFF) }
+                    stackedFf = 0
+                }
+                buffer = value.toInt()
+            }
+        }
+        c = c and 0x7FFFFL
+        bitCount += 8
+    }
+
+    private fun emitPendingZeros() {
+        repeat(pendingZeros) { emitDataByte(0) }
+        pendingZeros = 0
+    }
+
+    private fun emitDataByte(value: Int) {
+        output.write(value and 0xFF)
+        if ((value and 0xFF) == 0xFF) output.write(0)
+    }
+
+    private fun resetCodingInterval() {
+        c = 0L
+        a = 0x10000L
+        stackedFf = 0
+        pendingZeros = 0
+        bitCount = 11
+        buffer = -1
+    }
 
     private companion object {
         const val FIXED_PROBABILITY_STATE = 113
