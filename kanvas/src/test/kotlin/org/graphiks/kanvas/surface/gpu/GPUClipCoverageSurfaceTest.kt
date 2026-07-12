@@ -364,6 +364,97 @@ class GPUClipCoverageSurfaceTest {
     }
 
     @Test
+    fun `empty scissor destination read DrawText keeps destination intact`() {
+        requireWebGpu()
+        val clip = ClipStack.DeviceRect(Rect(20f, 20f, 24f, 24f), antiAlias = false)
+        val typeface = FontTypeface(
+            javaClass.classLoader
+                .getResourceAsStream("fonts/liberation/LiberationSans-Regular.ttf")!!
+                .readBytes(),
+            fontName = "LiberationSans-Regular",
+        )
+        val result = renderViaGpu(
+            StaticDisplayListBuffer(
+                listOf(
+                    DisplayOp.DrawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE), Matrix33.identity(), ClipStack.WideOpen),
+                    DisplayOp.DrawText(
+                        blob = Font(typeface, 20f).toTextBlob("W", 0f, 15f),
+                        x = 0f,
+                        y = 0f,
+                        paint = Paint.fill(Color.BLACK).copy(blendMode = BlendMode.DARKEN),
+                        transform = Matrix33.identity(),
+                        clip = clip,
+                    ),
+                ),
+            ),
+            16,
+            16,
+            PixelFormat.RGBA8,
+            RenderConfig.DEFAULT,
+        )
+
+        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertEquals(1, result.stats.opsDispatched, result.diagnostics.entries.toString())
+        assertWhiteOutsideClip(result.pixels, 16, clip.rect)
+    }
+
+    @Test
+    fun `empty scissor destination read DrawVertices keeps destination intact`() {
+        requireWebGpu()
+        val clip = ClipStack.DeviceRect(Rect(20f, 20f, 24f, 24f), antiAlias = false)
+        val result = renderViaGpu(
+            StaticDisplayListBuffer(
+                listOf(
+                    DisplayOp.DrawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE), Matrix33.identity(), ClipStack.WideOpen),
+                    DisplayOp.DrawVertices(
+                        vertices = texturedScissorTriangle(),
+                        paint = advancedBlackImagePaint(),
+                        transform = Matrix33.identity(),
+                        clip = clip,
+                    ),
+                ),
+            ),
+            16,
+            16,
+            PixelFormat.RGBA8,
+            RenderConfig.DEFAULT,
+        )
+
+        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertEquals(1, result.stats.opsDispatched, result.diagnostics.entries.toString())
+        assertWhiteOutsideClip(result.pixels, 16, clip.rect)
+    }
+
+    @Test
+    fun `empty scissor destination read DrawMesh keeps destination intact`() {
+        requireWebGpu()
+        val clip = ClipStack.DeviceRect(Rect(20f, 20f, 24f, 24f), antiAlias = false)
+        val mesh = Mesh(texturedScissorTriangle(), bounds = Rect(1f, 1f, 15f, 15f))
+        val result = renderViaGpu(
+            StaticDisplayListBuffer(
+                listOf(
+                    DisplayOp.DrawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE), Matrix33.identity(), ClipStack.WideOpen),
+                    DisplayOp.DrawMesh(
+                        mesh = mesh,
+                        paint = advancedBlackImagePaint(),
+                        blendMode = null,
+                        transform = Matrix33.identity(),
+                        clip = clip,
+                    ),
+                ),
+            ),
+            16,
+            16,
+            PixelFormat.RGBA8,
+            RenderConfig.DEFAULT,
+        )
+
+        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertEquals(1, result.stats.opsDispatched, result.diagnostics.entries.toString())
+        assertWhiteOutsideClip(result.pixels, 16, clip.rect)
+    }
+
+    @Test
     fun `outlined multi glyph text preserves every source glyph under a complex clip`() {
         requireWebGpu()
         val typeface = FontTypeface(

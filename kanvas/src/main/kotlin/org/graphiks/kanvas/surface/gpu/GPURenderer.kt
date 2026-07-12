@@ -224,6 +224,16 @@ internal fun renderViaGpu(
                 )
             }
 
+            /**
+             * `null` is normally the no-scissor default for a dispatcher. During a preserved
+             * scissor source, however, it can also mean that the device rect has no target
+             * intersection. Do not let that empty source fall back to a full-target dispatch.
+             */
+            fun destinationReadSourceClipIsEmpty(clip: ClipStack): Boolean =
+                clipSourcePreservesClip &&
+                    clip is ClipStack.DeviceRect &&
+                    destinationReadSourceScissor(clip) == null
+
             /** Keeps multi-part clip sources transparent only until their first successful sub-pass. */
             fun recordSourcePart(rendered: Boolean): Boolean {
                 if (clipSourceRoute && rendered) sourceHasContent = true
@@ -707,6 +717,7 @@ internal fun renderViaGpu(
 
             /** Encodes the whole text operation into the current target; a clip source is always SrcOver. */
             fun renderTextCommand(op: DisplayOp.DrawText, cmdId: GPUDrawCommandID): Boolean {
+                if (destinationReadSourceClipIsEmpty(op.clip)) return false
                 val fatalBefore = diagnostics.fatalCount
                 val rendered = when {
                     op.paint.shader != null && extractSolidShaderColor(op.paint.shader) == null ->
@@ -760,6 +771,7 @@ internal fun renderViaGpu(
                 cmdId: GPUDrawCommandID,
                 operationName: String,
             ): Boolean {
+                if (destinationReadSourceClipIsEmpty(clip)) return false
                 if (!transform.isAffine()) {
                     diagnostics.fatal(
                         "refuse:$operationName:${cmdId.value}",
