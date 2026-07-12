@@ -525,6 +525,76 @@ private val DESTINATION_READ_BLEND_FORMULA_WGSL: String = """
         return color.rgb / color.a;
     }
 
+    fn lum(c: vec3f) -> f32 { return dot(c, vec3f(0.3, 0.59, 0.11)); }
+    fn sat(c: vec3f) -> f32 {
+        return max(max(c.r, c.g), c.b) - min(min(c.r, c.g), c.b);
+    }
+    fn colorDodge(cb: vec3f, cs: vec3f) -> vec3f {
+        return select(min(vec3f(1.0), cb / (vec3f(1.0) - cs)), vec3f(1.0), cs == vec3f(1.0));
+    }
+    fn colorBurn(cb: vec3f, cs: vec3f) -> vec3f {
+        return select(vec3f(1.0) - min(vec3f(1.0), (vec3f(1.0) - cb) / cs), vec3f(0.0), cs == vec3f(0.0));
+    }
+
+    fn hardLight(cb: vec3f, cs: vec3f) -> vec3f {
+        let multiply = 2.0 * cs * cb;
+        let screen = 1.0 - 2.0 * (1.0 - cs) * (1.0 - cb);
+        return select(screen, multiply, cs <= vec3f(0.5));
+    }
+
+    fn softLight(cb: vec3f, cs: vec3f) -> vec3f {
+        let d = select(
+            sqrt(cb),
+            ((16.0 * cb - 12.0) * cb + 4.0) * cb,
+            cb <= vec3f(0.25),
+        );
+        let low = cb - (1.0 - 2.0 * cs) * cb * (1.0 - cb);
+        let high = cb + (2.0 * cs - 1.0) * (d - cb);
+        return select(high, low, cs <= vec3f(0.5));
+    }
+
+    fn clipColor(c: vec3f) -> vec3f {
+        let l = lum(c);
+        let n = min(min(c.r, c.g), c.b);
+        let x = max(max(c.r, c.g), c.b);
+        var result = c;
+        if (n < 0.0) {
+            result = vec3f(l) + (result - vec3f(l)) * l / (l - n);
+        }
+        if (x > 1.0) {
+            result = vec3f(l) + (result - vec3f(l)) * (1.0 - l) / (x - l);
+        }
+        return result;
+    }
+
+    fn setLum(c: vec3f, l: f32) -> vec3f {
+        return clipColor(c + vec3f(l - lum(c)));
+    }
+
+    fn setSat(c: vec3f, s: f32) -> vec3f {
+        let n = min(min(c.r, c.g), c.b);
+        let x = max(max(c.r, c.g), c.b);
+        let range = x - n;
+        let scaled = (c - vec3f(n)) * s / max(range, 1.0e-10);
+        return select(vec3f(0.0), scaled, range > 0.0);
+    }
+
+    fn blendHue(cb: vec3f, cs: vec3f) -> vec3f {
+        return setLum(setSat(cs, sat(cb)), lum(cb));
+    }
+
+    fn blendSaturation(cb: vec3f, cs: vec3f) -> vec3f {
+        return setLum(setSat(cb, sat(cs)), lum(cb));
+    }
+
+    fn blendColorMode(cb: vec3f, cs: vec3f) -> vec3f {
+        return setLum(cs, lum(cb));
+    }
+
+    fn blendLuminosity(cb: vec3f, cs: vec3f) -> vec3f {
+        return setLum(cb, lum(cs));
+    }
+
     fn blendColor(src: vec3f, dst: vec3f, blendMode: u32) -> vec3f {
         switch blendMode {
             case 0u: { return src * dst; }
@@ -538,6 +608,14 @@ private val DESTINATION_READ_BLEND_FORMULA_WGSL: String = """
             case 4u: { return max(src, dst); }
             case 5u: { return abs(dst - src); }
             case 6u: { return src + dst - 2.0 * src * dst; }
+            case 7u: { return colorDodge(dst, src); }
+            case 8u: { return colorBurn(dst, src); }
+            case 9u: { return hardLight(dst, src); }
+            case 10u: { return softLight(dst, src); }
+            case 11u: { return blendHue(dst, src); }
+            case 12u: { return blendSaturation(dst, src); }
+            case 13u: { return blendColorMode(dst, src); }
+            case 14u: { return blendLuminosity(dst, src); }
             default: { return src; }
         }
     }

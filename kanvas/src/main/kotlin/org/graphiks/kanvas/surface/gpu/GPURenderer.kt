@@ -124,6 +124,14 @@ internal fun destinationReadBlendModeIndex(mode: GPUBlendMode): Int? = when (mod
     GPUBlendMode.LIGHTEN -> 4
     GPUBlendMode.DIFFERENCE -> 5
     GPUBlendMode.EXCLUSION -> 6
+    GPUBlendMode.COLOR_DODGE -> 7
+    GPUBlendMode.COLOR_BURN -> 8
+    GPUBlendMode.HARD_LIGHT -> 9
+    GPUBlendMode.SOFT_LIGHT -> 10
+    GPUBlendMode.HUE -> 11
+    GPUBlendMode.SATURATION -> 12
+    GPUBlendMode.COLOR -> 13
+    GPUBlendMode.LUMINOSITY -> 14
     else -> null
 }
 
