@@ -124,8 +124,8 @@ class GPUBlendFormulaSurfaceTest {
                 BlendMode.OVERLAY -> if (dst <= 0.5f) 2f * src * dst else 1f - 2f * (1f - src) * (1f - dst)
                 BlendMode.DARKEN -> min(src, dst)
                 BlendMode.LIGHTEN -> max(src, dst)
-                BlendMode.COLOR_DODGE -> if (src == 1f) 1f else min(1f, dst / (1f - src))
-                BlendMode.COLOR_BURN -> if (src == 0f) 0f else 1f - min(1f, (1f - dst) / src)
+                BlendMode.COLOR_DODGE -> if (dst == 0f) 0f else if (src == 1f) 1f else min(1f, dst / (1f - src))
+                BlendMode.COLOR_BURN -> if (dst == 1f) 1f else if (src == 0f) 0f else 1f - min(1f, (1f - dst) / src)
                 BlendMode.HARD_LIGHT -> if (src <= 0.5f) 2f * src * dst else 1f - 2f * (1f - src) * (1f - dst)
                 BlendMode.SOFT_LIGHT -> softLight(dst, src)
                 BlendMode.DIFFERENCE -> abs(dst - src)
@@ -259,6 +259,16 @@ class GPUBlendFormulaSurfaceTest {
                 "opaque source and destination",
                 Color.fromArgb(255, 192, 64, 32),
                 Color.fromArgb(255, 64, 128, 192),
+            ),
+            SourceDestinationCase(
+                "W3C color dodge prioritizes a black backdrop",
+                Color.WHITE,
+                Color.BLACK,
+            ),
+            SourceDestinationCase(
+                "W3C color burn prioritizes a white backdrop",
+                Color.BLACK,
+                Color.WHITE,
             ),
             SourceDestinationCase(
                 "transparent source",

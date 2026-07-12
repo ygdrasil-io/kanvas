@@ -530,10 +530,20 @@ private val DESTINATION_READ_BLEND_FORMULA_WGSL: String = """
         return max(max(c.r, c.g), c.b) - min(min(c.r, c.g), c.b);
     }
     fn colorDodge(cb: vec3f, cs: vec3f) -> vec3f {
-        return select(min(vec3f(1.0), cb / (vec3f(1.0) - cs)), vec3f(1.0), cs == vec3f(1.0));
+        let dodged = select(
+            min(vec3f(1.0), cb / (vec3f(1.0) - cs)),
+            vec3f(1.0),
+            cs == vec3f(1.0),
+        );
+        return select(dodged, vec3f(0.0), cb == vec3f(0.0));
     }
     fn colorBurn(cb: vec3f, cs: vec3f) -> vec3f {
-        return select(vec3f(1.0) - min(vec3f(1.0), (vec3f(1.0) - cb) / cs), vec3f(0.0), cs == vec3f(0.0));
+        let burned = select(
+            vec3f(1.0) - min(vec3f(1.0), (vec3f(1.0) - cb) / cs),
+            vec3f(0.0),
+            cs == vec3f(0.0),
+        );
+        return select(burned, vec3f(1.0), cb == vec3f(1.0));
     }
 
     fn hardLight(cb: vec3f, cs: vec3f) -> vec3f {
