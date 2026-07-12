@@ -61,6 +61,13 @@ ClipStack avant la normalisation du draw. GPUClipFacts garde sa classification
 rapide et référence la requête complète ; il ne remplace jamais cette requête
 par ses bounds.
 
+Canvas fige la transform active au moment de chaque appel clipRect, clipRRect
+ou clipPath. Un rect reste un rect seulement si la transform le conserve
+axis-aligned ; sinon il est capturé comme un path en espace device. Un rrect
+non axis-aligned est également capturé comme un path device. Un path conserve
+son fill type puis est transformé avant son insertion dans ClipStack. Le moteur
+ne relit donc jamais une CTM ambiante pour reconstruire un clip historique.
+
 Une requête de clip contient :
 
 - l'identité de contenu canonique de la pile ;
