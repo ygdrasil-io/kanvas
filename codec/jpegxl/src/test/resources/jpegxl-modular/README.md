@@ -2,9 +2,12 @@
 
 Ces fixtures documentent le premier profil JPEG XL dont le décodeur Kotlin doit
 restituer les pixels, sans dépendance native au runtime : un codestream brut
-`FF 0A` ou son enveloppe ISO-BMFF exacte `JXL `/`ftyp`/`jxlc`, image fixe
-grayscale 8-bit, lossless, Modular, sans alpha, palette, transform, animation
-ni métadonnée de conteneur.
+`FF 0A`, son enveloppe ISO-BMFF exacte `JXL `/`ftyp`/`jxlc`, ou des fragments
+`jxlp` version 0 strictement ordonnés, image fixe grayscale 8-bit, lossless,
+Modular, sans alpha, palette, transform, animation ni métadonnée de conteneur.
+Le cas `jxlp` est une enveloppe synthétique créée dans le test à partir du petit
+codestream raw ci-dessous : ce n’est pas une fixture distincte, ni une promesse
+de prise en charge de `jxlp` version 1 ou hors ordre.
 
 ## Provenance reproductible
 

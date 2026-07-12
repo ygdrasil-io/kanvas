@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Assertions.assertDoesNotThrow
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Test
 
@@ -72,6 +73,23 @@ class JpegXlModularDecodeTest {
     }
 
     @Test
+    fun `opened raw and jxlc documents retain their encoded bytes independently of the caller`() {
+        val raw = Base64.getMimeDecoder().decode(fixture("single-group-4x3-8bit-lossless.jxl.base64"))
+        val encodedInputs = listOf(raw, exactJxlcContainer(raw))
+
+        encodedInputs.forEach { encoded ->
+            val document = requireNotNull(JpegXlDocument.open(encoded).document)
+            encoded.fill(0)
+
+            val decoded = document.decode()
+
+            assertNull(decoded.diagnostic)
+            assertEquals(4, decoded.bitmap?.width)
+            assertEquals(3, decoded.bitmap?.height)
+        }
+    }
+
+    @Test
     fun `public codec decodes an exact jxlc envelope around the proven raw modular profile`() {
         val raw = fixture("flower-510x532-8bit-lossless.jxl")
         val expected = p5(fixture("flower-510x532-8bit-lossless.pgm"))
@@ -88,6 +106,43 @@ class JpegXlModularDecodeTest {
             ((bitmap.pixels[index] ushr 16) and 0xFF).toByte()
         }
         assertArrayEquals(expected.samples, grayscale)
+    }
+
+    @Test
+    fun `public codec decodes ordered jxlp fragments around proven modular pixels`() {
+        val raw = Base64.getMimeDecoder().decode(fixture("single-group-4x3-8bit-lossless.jxl.base64"))
+        val encoded = jxlpContainer(raw, listOf(2, raw.size - 2))
+        val expected = byteArrayOf(103, 101, 100, 99, 98, 99, 100, 101, 97, 99, 101, 101)
+
+        val (actual, result) = requireNotNull(Codec.MakeFromData(encoded)).getImage()
+
+        assertEquals(Codec.Result.kSuccess, result)
+        val bitmap = requireNotNull(actual)
+        assertArrayEquals(expected, ByteArray(expected.size) { index -> (bitmap.pixels[index] ushr 16).toByte() })
+    }
+
+    @Test
+    fun `jxlp requires a complete unique fragment sequence with one last marker`() {
+        val raw = Base64.getMimeDecoder().decode(fixture("single-group-4x3-8bit-lossless.jxl.base64"))
+        val missingLast = jxlpContainer(raw, listOf(2, raw.size - 2), markLast = false)
+        val duplicateIndex = jxlpContainer(raw, listOf(2, raw.size - 2), indexes = listOf(0, 0))
+
+        listOf(missingLast, duplicateIndex).forEach { encoded ->
+            val opened = JpegXlDocument.open(encoded)
+            assertNull(opened.document)
+            assertTrue(opened.diagnostic?.code?.startsWith("jpegxl.container.jxlp.") == true)
+        }
+    }
+
+    @Test
+    fun `jxlp version one is explicitly unsupported`() {
+        val raw = Base64.getMimeDecoder().decode(fixture("single-group-4x3-8bit-lossless.jxl.base64"))
+
+        val opened = JpegXlDocument.open(jxlpContainer(raw, listOf(2, raw.size - 2), fileTypeVersion = 1))
+
+        assertNull(opened.document)
+        assertEquals(Codec.Result.kUnimplemented, opened.diagnostic?.result)
+        assertEquals("jpegxl.container.jxlp.version.unimplemented", opened.diagnostic?.code)
     }
 
     @Test
@@ -244,6 +299,38 @@ class JpegXlModularDecodeTest {
             output.writeBox("jxlc", raw)
             extraBox?.let { (type, payload) -> output.writeBox(type, payload) }
         }.toByteArray()
+
+    private fun jxlpContainer(
+        raw: ByteArray,
+        fragmentSizes: List<Int>,
+        indexes: List<Int> = fragmentSizes.indices.toList(),
+        markLast: Boolean = true,
+        fileTypeVersion: Int = 0,
+    ): ByteArray {
+        require(fragmentSizes.sum() == raw.size)
+        require(indexes.size == fragmentSizes.size)
+        return ByteArrayOutputStream().also { output ->
+            output.writeBox("JXL ", byteArrayOf(0x0D, 0x0A, 0x87.toByte(), 0x0A))
+            output.writeBox(
+                "ftyp",
+                byteArrayOf(
+                    'j'.code.toByte(), 'x'.code.toByte(), 'l'.code.toByte(), ' '.code.toByte(),
+                    0, 0, 0, fileTypeVersion.toByte(),
+                    'j'.code.toByte(), 'x'.code.toByte(), 'l'.code.toByte(), ' '.code.toByte(),
+                ),
+            )
+            var offset = 0
+            fragmentSizes.forEachIndexed { index, size ->
+                val counter = indexes[index] or if (markLast && index == fragmentSizes.lastIndex) Int.MIN_VALUE else 0
+                val payload = ByteArrayOutputStream().also { fragment ->
+                    fragment.writeU32(counter)
+                    fragment.write(raw, offset, size)
+                }.toByteArray()
+                output.writeBox("jxlp", payload)
+                offset += size
+            }
+        }.toByteArray()
+    }
 
     private fun ByteArrayOutputStream.writeBox(type: String, payload: ByteArray) {
         require(type.length == 4)

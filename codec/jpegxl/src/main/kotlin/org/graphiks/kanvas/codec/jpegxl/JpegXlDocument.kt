@@ -64,13 +64,15 @@ public class JpegXlBox internal constructor(
 /**
  * Immutable, bounded JPEG XL document containing a validated SizeHeader.
  *
- * Raw codestreams and an exact `JXL `/`ftyp`/`jxlc` envelope may decode
- * through the deliberately narrow direct grayscale Modular profile. Other
- * JPEG XL image features return explicit `kUnimplemented` results instead of
- * manufacturing pixels or silently falling through to another provider.
+ * Raw codestreams, an exact `JXL `/`ftyp`/`jxlc` envelope, and ordered
+ * version-0 `jxlp` fragments may decode through the deliberately narrow direct
+ * grayscale Modular profile. Other JPEG XL image features return explicit
+ * `kUnimplemented` results instead of manufacturing pixels or silently falling
+ * through to another provider.
  */
 public class JpegXlDocument private constructor(
     private val source: ByteArray,
+    private val decodeSource: ByteArray,
     public val container: JpegXlContainer,
     public val frame: JpegXlFrameInfo,
     private val codestreamStart: Int,
@@ -103,7 +105,7 @@ public class JpegXlDocument private constructor(
             )
         }
         return decodeNarrowJpegXlModular(
-            source = source,
+            source = decodeSource,
             codestreamStart = codestreamStart,
             codestreamEndExclusive = codestreamEndExclusive,
             frame = frame,
@@ -111,11 +113,14 @@ public class JpegXlDocument private constructor(
         )
     }
 
-    private fun isNarrowPixelContainer(): Boolean =
-        boxes.size == 3 && boxes.map(JpegXlBox::type) == listOf("JXL ", "ftyp", "jxlc")
+    private fun isNarrowPixelContainer(): Boolean {
+        val types = boxes.map(JpegXlBox::type)
+        return types == listOf("JXL ", "ftyp", "jxlc") ||
+            (types.size >= 3 && types.take(2) == listOf("JXL ", "ftyp") && types.drop(2).all { it == "jxlp" })
+    }
 
     public companion object {
-        /** Opens a raw JPEG XL codestream after validating its SizeHeader. */
+        /** Opens a JPEG XL codestream or ISO-BMFF container after validating its SizeHeader. */
         public fun open(data: ByteArray, limits: JpegXlLimits = JpegXlLimits()): JpegXlOpenResult {
             if (data.size.toLong() > limits.maxEncodedBytes) {
                 return JpegXlOpenResult(
@@ -128,9 +133,11 @@ public class JpegXlDocument private constructor(
                 )
             }
             return try {
+                val source = data.copyOf()
                 val parsed = when {
-                    isRawCodestream(data) -> parseRawCodestream(data, limits).let { raw ->
+                    isRawCodestream(source) -> parseRawCodestream(source, limits).let { raw ->
                         ParsedDocument(
+                            decodeSource = null,
                             container = JpegXlContainer.CODESTREAM,
                             frame = raw.frame,
                             codestreamStart = raw.codestreamStart,
@@ -139,12 +146,13 @@ public class JpegXlDocument private constructor(
                             boxes = emptyList(),
                         )
                     }
-                    isContainerSignature(data) -> parseContainer(data, limits)
+                    isContainerSignature(source) -> parseContainer(source, limits)
                     else -> jxlFailure("jpegxl.signature.missing", 0)
                 }
                 JpegXlOpenResult(
                     document = JpegXlDocument(
-                        source = data.copyOf(),
+                        source = source,
+                        decodeSource = parsed.decodeSource ?: source,
                         container = parsed.container,
                         frame = parsed.frame,
                         codestreamStart = parsed.codestreamStart,
@@ -173,6 +181,7 @@ private data class ParsedCodestream(
 )
 
 private data class ParsedDocument(
+    val decodeSource: ByteArray?,
     val container: JpegXlContainer,
     val frame: JpegXlFrameInfo,
     val codestreamStart: Int,
@@ -227,27 +236,39 @@ private fun parseContainer(data: ByteArray, limits: JpegXlLimits): ParsedDocumen
     }
     val ftyp = boxes.getOrNull(1) ?: jxlFailure("jpegxl.container.ftyp.missing", data.size)
     if (ftyp.type != "ftyp") jxlFailure("jpegxl.container.ftyp.missing", ftyp.offset.toInt())
-    validateFileType(data, ftyp)
+    val fileTypeVersion = validateFileType(data, ftyp)
     boxes.drop(2).firstOrNull { it.type == "ftyp" }?.let { duplicate ->
         jxlFailure("jpegxl.container.ftyp.duplicate", duplicate.offset.toInt())
     }
     val codestreamBoxes = boxes.filter { it.type == "jxlc" }
     val partialCodestreamBoxes = boxes.filter { it.type == "jxlp" }
+    if (codestreamBoxes.isNotEmpty() && partialCodestreamBoxes.isNotEmpty()) {
+        jxlFailure("jpegxl.container.codestream.mixed", partialCodestreamBoxes.first().offset.toInt(), Codec.Result.kUnimplemented)
+    }
+    val decodedSource: ByteArray?
+    val parsed: ParsedCodestream
     if (partialCodestreamBoxes.isNotEmpty()) {
-        jxlFailure("jpegxl.container.jxlp.unimplemented", partialCodestreamBoxes.first().offset.toInt(), Codec.Result.kUnimplemented)
+        if (fileTypeVersion != 0) {
+            jxlFailure("jpegxl.container.jxlp.version.unimplemented", ftyp.offset.toInt(), Codec.Result.kUnimplemented)
+        }
+        decodedSource = reassembleJxlp(data, partialCodestreamBoxes)
+        parsed = parseRawCodestream(decodedSource, limits)
+    } else {
+        val codestream = when (codestreamBoxes.size) {
+            0 -> jxlFailure("jpegxl.container.jxlc.missing", data.size)
+            1 -> codestreamBoxes.single()
+            else -> jxlFailure("jpegxl.container.jxlc.duplicate", codestreamBoxes[1].offset.toInt())
+        }
+        decodedSource = null
+        parsed = parseRawCodestream(
+            data,
+            limits,
+            start = codestream.payloadOffset,
+            endExclusive = codestream.payloadOffset + codestream.payloadSize,
+        )
     }
-    val codestream = when (codestreamBoxes.size) {
-        0 -> jxlFailure("jpegxl.container.jxlc.missing", data.size)
-        1 -> codestreamBoxes.single()
-        else -> jxlFailure("jpegxl.container.jxlc.duplicate", codestreamBoxes[1].offset.toInt())
-    }
-    val parsed = parseRawCodestream(
-        data,
-        limits,
-        start = codestream.payloadOffset,
-        endExclusive = codestream.payloadOffset + codestream.payloadSize,
-    )
     return ParsedDocument(
+        decodeSource = decodedSource,
         container = JpegXlContainer.CONTAINER,
         frame = parsed.frame,
         codestreamStart = parsed.codestreamStart,
@@ -257,15 +278,50 @@ private fun parseContainer(data: ByteArray, limits: JpegXlLimits): ParsedDocumen
     )
 }
 
-private fun validateFileType(data: ByteArray, box: JpegXlBox) {
+private fun validateFileType(data: ByteArray, box: JpegXlBox): Int {
     if (
         box.payloadSize < 12 || (box.payloadSize - FILE_TYPE_HEADER_SIZE) % COMPATIBLE_BRAND_SIZE != 0 ||
         data.ascii4(box.payloadOffset) != "jxl "
     ) {
         jxlFailure("jpegxl.container.ftyp.invalid", box.offset.toInt())
     }
-    if (data.u32(box.payloadOffset + 4) > 1L) {
+    val version = data.u32(box.payloadOffset + 4)
+    if (version > 1L) {
         jxlFailure("jpegxl.container.ftyp.version", box.offset.toInt(), Codec.Result.kUnimplemented)
+    }
+    return version.toInt()
+}
+
+private fun reassembleJxlp(data: ByteArray, boxes: List<JpegXlBox>): ByteArray {
+    val fragments = HashMap<Int, JpegXlBox>()
+    var lastIndex: Int? = null
+    boxes.forEach { box ->
+        if (box.payloadSize < 4) jxlFailure("jpegxl.container.jxlp.invalid", box.offset.toInt())
+        val counter = data.u32(box.payloadOffset)
+        val index = (counter and 0x7FFF_FFFFL).toInt()
+        if (fragments.put(index, box) != null) jxlFailure("jpegxl.container.jxlp.duplicate", box.offset.toInt())
+        if ((counter and 0x8000_0000L) != 0L) {
+            if (lastIndex != null) jxlFailure("jpegxl.container.jxlp.last.duplicate", box.offset.toInt())
+            lastIndex = index
+        }
+    }
+    val terminal = lastIndex ?: jxlFailure("jpegxl.container.jxlp.last.missing", boxes.last().offset.toInt())
+    if (fragments.size != terminal + 1 || (0..terminal).any { it !in fragments }) {
+        jxlFailure("jpegxl.container.jxlp.sequence", boxes.first().offset.toInt())
+    }
+    if (boxes.map { (data.u32(it.payloadOffset) and 0x7FFF_FFFFL).toInt() } != (0..terminal).toList()) {
+        jxlFailure("jpegxl.container.jxlp.order", boxes.first().offset.toInt(), Codec.Result.kUnimplemented)
+    }
+    val size = fragments.values.sumOf { it.payloadSize - 4 }
+    return ByteArray(size).also { output ->
+        var offset = 0
+        for (index in 0..terminal) {
+            val fragment = requireNotNull(fragments[index])
+            val payloadOffset = fragment.payloadOffset + 4
+            val payloadSize = fragment.payloadSize - 4
+            data.copyInto(output, offset, payloadOffset, payloadOffset + payloadSize)
+            offset += payloadSize
+        }
     }
 }
 
