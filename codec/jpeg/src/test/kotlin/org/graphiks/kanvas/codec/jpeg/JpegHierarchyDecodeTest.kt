@@ -1,8 +1,10 @@
 package org.graphiks.kanvas.codec.jpeg
 
+import org.graphiks.kanvas.codec.Codec
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -181,6 +183,7 @@ class JpegHierarchyDecodeTest {
         val document = requireNotNull(JpegDocument.open(data).document)
         val decoded = document.decode(JpegDecodeRequest(SkColorType.kRGBA_8888, null))
         assertEquals(expected, decoded.diagnostic?.code)
+        assertNull(Codec.MakeFromData(data), "a malformed hierarchy must not decode only its base frame")
     }
 
     private fun ByteArray.insertSegment(offset: Int, marker: Int, payload: ByteArray): ByteArray {

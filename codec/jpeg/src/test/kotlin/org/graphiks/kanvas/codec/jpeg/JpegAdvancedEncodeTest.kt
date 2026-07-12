@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.codec.jpeg
 
+import org.graphiks.kanvas.codec.Codec
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
@@ -460,6 +461,46 @@ class JpegAdvancedEncodeTest {
     }
 
     @Test
+    fun `two level grayscale hierarchy writes DHP EXP and differential SOF5 without fallback`() {
+        val source = grayscale(16, 12)
+
+        val bytes = JpegEncoder.encode(
+            source,
+            JpegEncoder.Options(
+                quality = 100,
+                process = JpegEncodeProcess.SequentialHuffman,
+                colorModel = JpegEncodeColorModel.Grayscale,
+                sampling = JpegSampling.S444,
+                restartInterval = 1,
+                metadata = JpegEncodeMetadata(comment = "hierarchy metadata".encodeToByteArray()),
+                hierarchy = listOf(
+                    JpegHierarchyLevel(
+                        scaleNumerator = 1,
+                        scaleDenominator = 2,
+                        process = JpegEncodeProcess.DifferentialSequentialHuffman,
+                    ),
+                ),
+            ),
+        )
+
+        assertNotNull(bytes)
+        val document = JpegDocument.open(bytes!!).document
+        assertNotNull(document)
+        assertEquals(listOf(0xDE, 0xC0, 0xDF, 0xC5), document!!.segments.filter {
+            it.marker in setOf(0xDE, 0xC0, 0xDF, 0xC5)
+        }.map { it.marker })
+        val hierarchy = requireNotNull(document.hierarchy)
+        assertEquals(2, hierarchy.frames.size)
+        assertEquals(0xC5, hierarchy.frames[1].sofMarker)
+        val comment = document.segments.single { it.marker == 0xFE }
+        assertEquals("hierarchy metadata", document.copyPayload(comment).decodeToString())
+        assertTrue(document.segments.indexOf(comment) < document.segments.indexOfFirst { it.marker == 0xDE })
+        assertEquals(1, document.segments.count { it.marker == 0xDD })
+        assertEquals(3, restartMarkers(bytes).size, "only the four-MCU SOF5 scan needs RST")
+        assertReasonableHierarchyRoundTrip(source, bytes, "two-level SOF5 hierarchy")
+    }
+
+    @Test
     fun `advanced unsupported configurations refuse rather than falling back to sequential`() {
         val source = color(8, 8)
 
@@ -644,6 +685,26 @@ class JpegAdvancedEncodeTest {
             absoluteError += kotlin.math.abs((expected and 0xFF) - (actual and 0xFF))
         }
         assertTrue(absoluteError / (source.width * source.height * 3) < 45, "$label mean RGB error: $absoluteError")
+    }
+
+    private fun assertReasonableHierarchyRoundTrip(source: SkBitmap, bytes: ByteArray, label: String) {
+        val codec = requireNotNull(Codec.MakeFromData(bytes))
+        val (decoded, result) = codec.getImage()
+        assertEquals(org.graphiks.kanvas.codec.Codec.Result.kSuccess, result)
+        val resolved = requireNotNull(decoded)
+        var absoluteError = 0L
+        var maxChannelError = 0
+        for (index in source.pixels.indices) {
+            val expected = source.pixels[index]
+            val actual = resolved.pixels[index]
+            val redError = kotlin.math.abs((expected ushr 16 and 0xFF) - (actual ushr 16 and 0xFF))
+            val greenError = kotlin.math.abs((expected ushr 8 and 0xFF) - (actual ushr 8 and 0xFF))
+            val blueError = kotlin.math.abs((expected and 0xFF) - (actual and 0xFF))
+            absoluteError += redError + greenError + blueError
+            maxChannelError = maxOf(maxChannelError, redError, greenError, blueError)
+        }
+        assertTrue(maxChannelError <= 1, "$label max RGB channel error: $maxChannelError")
+        assertTrue(absoluteError / (source.width * source.height * 3) <= 1, "$label mean RGB error: $absoluteError")
     }
 
     private fun assertPnmMatchesBitmap(

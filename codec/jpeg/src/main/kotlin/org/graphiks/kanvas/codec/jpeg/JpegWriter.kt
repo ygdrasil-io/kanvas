@@ -138,7 +138,14 @@ public class JpegEncodeMetadata(
     }
 }
 
-/** Reserved Task 9 hierarchy declaration. Task 8 accepts it only to refuse encoding explicitly. */
+/**
+ * Declares one differential hierarchy level relative to the final image size.
+ *
+ * The current writer accepts exactly one `1/2`
+ * [JpegEncodeProcess.DifferentialSequentialHuffman] level after a grayscale
+ * sequential-Huffman reference; other ratios and process intersections remain
+ * explicit refusals until they have independent encoder evidence.
+ */
 public data class JpegHierarchyLevel(
     val scaleNumerator: Int,
     val scaleDenominator: Int,

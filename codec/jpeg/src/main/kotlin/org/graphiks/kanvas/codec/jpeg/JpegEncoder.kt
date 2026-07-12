@@ -96,8 +96,13 @@ public object JpegEncoder {
 
     public fun encode(dst: OutputStream, src: SkBitmap, options: Options = defaultOptions): Boolean {
         return try {
-            if (src.width !in 1..0xFFFF || src.height !in 1..0xFFFF || !options.isSupportedRequest()) return false
-            JpegWriter(dst, src, options).write()
+            if (src.width !in 1..0xFFFF || src.height !in 1..0xFFFF) return false
+            if (options.hierarchy.isEmpty()) {
+                if (!options.isSupportedRequest()) return false
+                JpegWriter(dst, src, options).write()
+            } else {
+                JpegHierarchyWriter(dst, src, options).write()
+            }
             true
         } catch (_: Throwable) {
             false
@@ -135,11 +140,151 @@ public object JpegEncoder {
     }
 }
 
+/**
+ * Emits the single hierarchy intersection for which both sides have local,
+ * pixel-level evidence: a grayscale SOF0 reference at one half resolution and
+ * a SOF5 Huffman residual after a two-axis EXP.  This is deliberately a
+ * container writer, not a marker patcher: both SOF frames are independently
+ * serialized by [JpegWriter].
+ */
+private class JpegHierarchyWriter(
+    private val out: OutputStream,
+    private val bitmap: SkBitmap,
+    private val options: JpegEncoder.Options,
+) {
+    fun write() {
+        validateRequest()
+        val baseWidth = bitmap.width / 2
+        val baseHeight = bitmap.height / 2
+        val baseBitmap = SkBitmap(baseWidth, baseHeight, bitmap.colorSpace, SkColorType.kRGBA_8888)
+        for (y in 0 until baseHeight) {
+            for (x in 0 until baseWidth) {
+                baseBitmap.setPixel(x, y, bitmap.getPixel(x * 2, y * 2))
+            }
+        }
+
+        val baseOptions = options.copy(hierarchy = emptyList())
+        val baseBytes = ByteArrayOutputStream().also { JpegWriter(it, baseBitmap, baseOptions).write() }.toByteArray()
+        val baseDocument = requireNotNull(JpegDocument.open(baseBytes).document) { "hierarchy base document is invalid" }
+        val baseFrame = requireNotNull(parseJpeg(baseBytes, baseDocument.metadata)) { "hierarchy base frame is invalid" }
+        val baseSamples = decodeSequentialDct(baseFrame)
+        require(baseSamples.planes.size == 1) { "hierarchy base must be grayscale" }
+        val expandedReference = expandReference(baseSamples.planes.single(), baseWidth, baseHeight)
+        val residual = IntArray(bitmap.width * bitmap.height) { index ->
+            grayscaleSample(bitmap.getPixel(index % bitmap.width, index / bitmap.width)) - expandedReference[index]
+        }
+
+        val baseSofOffset = baseDocument.segments.firstOrNull { it.marker == SOF0 }?.offset?.toInt()
+            ?: error("hierarchy base SOF is missing")
+        require(baseSofOffset in 2 until baseBytes.size - 2) { "hierarchy base SOF offset is invalid" }
+        require(baseBytes[0] == 0xFF.toByte() && (baseBytes[1].toInt() and 0xFF) == SOI) {
+            "hierarchy base SOI is invalid"
+        }
+        require(baseBytes[baseBytes.size - 2] == 0xFF.toByte() && (baseBytes.last().toInt() and 0xFF) == EOI) {
+            "hierarchy base EOI is invalid"
+        }
+
+        out.write(baseBytes, 0, baseSofOffset)
+        writeDhp()
+        out.write(baseBytes, baseSofOffset, baseBytes.size - baseSofOffset - 2)
+        writeSegment(EXP, byteArrayOf(0x11))
+        JpegWriter(out, bitmap, options, residual).writeDifferentialSequentialFrame()
+        writeMarker(EOI)
+    }
+
+    private fun validateRequest() {
+        val level = options.hierarchy.singleOrNull()
+            ?: error("hierarchy encoding requires exactly one expansion level")
+        require(options.process == JpegEncodeProcess.SequentialHuffman) {
+            "hierarchy base frame must use sequential Huffman coding"
+        }
+        require(level.process == JpegEncodeProcess.DifferentialSequentialHuffman) {
+            "hierarchy residual must use differential sequential Huffman coding"
+        }
+        require(level.scaleNumerator == 1 && level.scaleDenominator == 2) {
+            "hierarchy supports exactly a one-half reference followed by EXP 0x11"
+        }
+        require(options.precision == 8) { "hierarchy supports only 8-bit precision" }
+        require(options.colorModel == JpegEncodeColorModel.Grayscale) { "hierarchy supports only grayscale samples" }
+        require(options.effectiveSampling().components.all { it.horizontal == 1 && it.vertical == 1 }) {
+            "hierarchy grayscale output requires 1x1 sampling"
+        }
+        require(options.progressiveScans.isEmpty()) { "hierarchy does not accept a progressive scan script" }
+        require(options.losslessParameters == null) { "hierarchy does not accept lossless parameters" }
+        require(bitmap.width >= 2 && bitmap.height >= 2 && bitmap.width % 2 == 0 && bitmap.height % 2 == 0) {
+            "hierarchy requires even dimensions of at least 2x2"
+        }
+    }
+
+    private fun writeDhp() {
+        val payload = ByteArrayOutputStream().apply {
+            write(options.precision)
+            writeU16BE(this, bitmap.height)
+            writeU16BE(this, bitmap.width)
+            write(1)
+            write(1)
+            write(0x11)
+            write(0)
+        }.toByteArray()
+        writeSegment(DHP, payload)
+    }
+
+    /** Mirrors the decoder's required EXP horizontal-then-vertical interpolation exactly. */
+    private fun expandReference(base: IntArray, baseWidth: Int, baseHeight: Int): IntArray {
+        val horizontallyExpandedWidth = baseWidth * 2
+        val horizontal = IntArray(horizontallyExpandedWidth * baseHeight)
+        for (y in 0 until baseHeight) {
+            for (x in 0 until baseWidth) {
+                val value = base[y * baseWidth + x]
+                horizontal[y * horizontallyExpandedWidth + x * 2] = value
+                horizontal[y * horizontallyExpandedWidth + x * 2 + 1] =
+                    (value + base[y * baseWidth + (x + 1).coerceAtMost(baseWidth - 1)]) shr 1
+            }
+        }
+        val expanded = IntArray(horizontallyExpandedWidth * baseHeight * 2)
+        for (y in 0 until baseHeight) {
+            for (x in 0 until horizontallyExpandedWidth) {
+                val value = horizontal[y * horizontallyExpandedWidth + x]
+                expanded[y * 2 * horizontallyExpandedWidth + x] = value
+                expanded[(y * 2 + 1) * horizontallyExpandedWidth + x] =
+                    (value + horizontal[(y + 1).coerceAtMost(baseHeight - 1) * horizontallyExpandedWidth + x]) shr 1
+            }
+        }
+        return expanded
+    }
+
+    private fun grayscaleSample(argb: Int): Int {
+        var r = SkColorGetR(argb)
+        var g = SkColorGetG(argb)
+        var b = SkColorGetB(argb)
+        if (options.effectiveAlphaPolicy() == JpegAlphaPolicy.BlendOnBlack) {
+            val alpha = SkColorGetA(argb)
+            r = (r * alpha + 127) / 255
+            g = (g * alpha + 127) / 255
+            b = (b * alpha + 127) / 255
+        }
+        return (0.299 * r + 0.587 * g + 0.114 * b).roundToInt()
+    }
+
+    private fun writeSegment(marker: Int, payload: ByteArray) {
+        writeMarker(marker)
+        writeU16BE(out, payload.size + 2)
+        out.write(payload)
+    }
+
+    private fun writeMarker(marker: Int) {
+        out.write(0xFF)
+        out.write(marker)
+    }
+}
+
 @Suppress("DEPRECATION")
 private class JpegWriter(
     private val out: OutputStream,
     private val bitmap: SkBitmap,
     private val options: JpegEncoder.Options,
+    /** Signed target-minus-EXP(reference) samples for the one supported SOF5 writer path. */
+    private val differentialResidual: IntArray? = null,
 ) {
     private val sampling = Sampling.from(options.effectiveSampling())
     private val componentCount = if (options.colorModel == JpegEncodeColorModel.Grayscale) 1 else 3
@@ -228,9 +373,11 @@ private class JpegWriter(
         }
     }
 
-    private fun writeSequentialEntropy() {
+    /** Emits a normal SOF0/SOF1 scan or the signed-residual SOF5 scan used by [JpegHierarchyWriter]. */
+    private fun writeSequentialEntropy(differential: Boolean = false) {
         writeSos(componentIds(), spectralStart = 0, spectralEnd = 63, successiveApprox = 0)
         if (options.process == JpegEncodeProcess.SequentialArithmetic) {
+            require(!differential) { "arithmetic differential encoding is not implemented" }
             writeArithmeticSequentialEntropy()
             return
         }
@@ -241,7 +388,7 @@ private class JpegWriter(
         var restartMarker = 0
         for (my in 0 until mcusY) {
             for (mx in 0 until mcusX) {
-                encodeMcu(bits, mx, my)
+                encodeMcu(bits, mx, my, differential)
                 mcu++
                 if (atRestartBoundary(mcu, mcusX * mcusY)) {
                     bits.writeRestart(restartMarker)
@@ -251,6 +398,18 @@ private class JpegWriter(
             }
         }
         bits.flush()
+    }
+
+    /** Serializes the differential SOF5 frame without duplicating container, metadata, or tables. */
+    fun writeDifferentialSequentialFrame() {
+        require(options.process == JpegEncodeProcess.SequentialHuffman) {
+            "SOF5 is defined only for the hierarchy writer's Huffman base options"
+        }
+        require(options.precision == 8 && componentCount == 1 && differentialResidual != null) {
+            "SOF5 writer requires signed 8-bit grayscale residuals"
+        }
+        writeSof(differentialSequential = true)
+        writeSequentialEntropy(differential = true)
     }
 
     private fun writeArithmeticSequentialEntropy() {
@@ -317,12 +476,12 @@ private class JpegWriter(
         }
     }
 
-    private fun encodeMcu(bits: EntropyBitWriter, mcuX: Int, mcuY: Int) {
+    private fun encodeMcu(bits: EntropyBitWriter, mcuX: Int, mcuY: Int, differential: Boolean) {
         for (component in 0 until componentCount) {
             val factor = componentSampling[component]
             for (blockY in 0 until factor.vertical) {
                 for (blockX in 0 until factor.horizontal) {
-                    encodeBlock(bits, component, mcuX, mcuY, blockX, blockY)
+                    encodeBlock(bits, component, mcuX, mcuY, blockX, blockY, differential)
                 }
             }
         }
@@ -335,6 +494,7 @@ private class JpegWriter(
         mcuY: Int,
         blockX: Int,
         blockY: Int,
+        differential: Boolean,
     ) {
         val factor = componentSampling[component]
         val coeffs = dctBlockCoefficients(
@@ -344,7 +504,7 @@ private class JpegWriter(
         )
         val dcTable = if (component == COMPONENT_Y) dcLuma else dcChroma
         val acTable = if (component == COMPONENT_Y) acLuma else acChroma
-        writeCoefficients(bits, coeffs, component, dcTable, acTable)
+        writeCoefficients(bits, coeffs, component, dcTable, acTable, differential)
     }
 
     private fun dctBlockCoefficients(component: Int, globalBlockX: Int, globalBlockY: Int): IntArray {
@@ -354,10 +514,20 @@ private class JpegWriter(
                 samples[sy * 8 + sx] = componentSample(component, globalBlockX * 8 + sx, globalBlockY * 8 + sy)
             }
         }
-        return fdctQuantize(samples, if (component == COMPONENT_Y) qLuma else qChroma)
+        return fdctQuantize(
+            samples,
+            if (component == COMPONENT_Y) qLuma else qChroma,
+            residual = differentialResidual != null,
+        )
     }
 
     private fun componentSample(component: Int, sampleX: Int, sampleY: Int): Double {
+        differentialResidual?.let { residual ->
+            require(component == COMPONENT_Y && componentCount == 1) { "SOF5 residual layout is invalid" }
+            val x = clamp(sampleX, 0, bitmap.width - 1)
+            val y = clamp(sampleY, 0, bitmap.height - 1)
+            return residual[y * bitmap.width + x].toDouble()
+        }
         val factor = componentSampling[component]
         return areaAverage(
             left = sampleX.toDouble() * maxH / factor.horizontal,
@@ -382,14 +552,14 @@ private class JpegWriter(
         }
     }
 
-    private fun fdctQuantize(samples: DoubleArray, quant: IntArray): IntArray {
+    private fun fdctQuantize(samples: DoubleArray, quant: IntArray, residual: Boolean = false): IntArray {
         val out = IntArray(64)
         for (v in 0 until 8) {
             for (u in 0 until 8) {
                 var sum = 0.0
                 for (y in 0 until 8) {
                     for (x in 0 until 8) {
-                        sum += (samples[y * 8 + x] - (1 shl (options.precision - 1))) *
+                        sum += (samples[y * 8 + x] - if (residual) 0 else (1 shl (options.precision - 1))) *
                             COS_TABLE[u * 8 + x] *
                             COS_TABLE[v * 8 + y]
                     }
@@ -410,9 +580,10 @@ private class JpegWriter(
         component: Int,
         dcTable: EncoderHuffmanTable,
         acTable: EncoderHuffmanTable,
+        differential: Boolean = false,
     ) {
-        val diff = coeffs[0] - previousDc[component]
-        previousDc[component] = coeffs[0]
+        val diff = if (differential) coeffs[0] else coeffs[0] - previousDc[component]
+        if (!differential) previousDc[component] = coeffs[0]
         val dcSize = coefficientSize(diff)
         bits.write(dcTable.code(dcSize), dcTable.length(dcSize))
         if (dcSize > 0) bits.write(amplitudeBits(diff, dcSize), dcSize)
@@ -489,7 +660,7 @@ private class JpegWriter(
         writeSegment(DQT, payload)
     }
 
-    private fun writeSof() {
+    private fun writeSof(differentialSequential: Boolean = false) {
         val payload = ByteArrayOutputStream()
         payload.write(options.precision)
         writeU16BE(payload, bitmap.height)
@@ -501,7 +672,9 @@ private class JpegWriter(
             payload.write((factor.horizontal shl 4) or factor.vertical)
             payload.write(if (options.process == JpegEncodeProcess.LosslessHuffman || component == COMPONENT_Y) 0 else 1)
         }
-        val marker = when (options.process) {
+        val marker = if (differentialSequential) {
+            SOF5
+        } else when (options.process) {
             JpegEncodeProcess.SequentialHuffman -> if (options.precision == 8) SOF0 else SOF1
             JpegEncodeProcess.SequentialArithmetic -> SOF9
             JpegEncodeProcess.ProgressiveHuffman -> SOF2
@@ -1074,6 +1247,7 @@ private const val SOF0 = 0xC0
 private const val SOF1 = 0xC1
 private const val SOF2 = 0xC2
 private const val SOF3 = 0xC3
+private const val SOF5 = 0xC5
 private const val DHT = 0xC4
 private const val SOF9 = 0xC9
 private const val SOF10 = 0xCA
@@ -1081,6 +1255,8 @@ private const val DAC = 0xCC
 private const val SOS = 0xDA
 private const val DRI = 0xDD
 private const val COM = 0xFE
+private const val DHP = 0xDE
+private const val EXP = 0xDF
 
 private const val INV_SQRT2 = 0.7071067811865476
 private const val ARITHMETIC_DC_LOWER = 0

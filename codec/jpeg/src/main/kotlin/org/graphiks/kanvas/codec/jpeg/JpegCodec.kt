@@ -147,6 +147,11 @@ public class JpegCodec private constructor(
         override fun make(data: ByteArray): Codec? {
             if (!matches(data)) return null
             val document = JpegDocument.open(data).document ?: return null
+            document.hierarchy?.let { return JpegHierarchyCodec(document, it) }
+            // A document that declares an invalid hierarchy or a bare
+            // differential frame must not fall through to the first ordinary
+            // SOF: that would silently decode only the reference image.
+            if (document.hierarchyDiagnostic != null || document.differentialSofOffset != null) return null
             return document.makeCodec()
         }
 
@@ -221,6 +226,69 @@ public class JpegCodec private constructor(
             } ?: return null
             return JpegCodec(parsed)
         }
+    }
+}
+
+/**
+ * Adapts a validated DHP/EXP document to the ordinary static [Codec] facade.
+ *
+ * The regular [JpegCodec] stores one [ParsedJpeg], whereas a hierarchy owns a
+ * frame graph and must route every decode through [JpegDocument.decode].
+ * Keeping that graph in the document prevents a first-frame fallback.
+ */
+private class JpegHierarchyCodec(
+    private val document: JpegDocument,
+    hierarchy: JpegHierarchy,
+) : Codec() {
+    private val hierarchy = hierarchy
+    private val metadata = document.metadata
+    private val cachedInfo: SkImageInfo by lazy {
+        SkImageInfo.Make(
+            width = if (metadata.origin.swapsWidthHeight()) hierarchy.definition.height else hierarchy.definition.width,
+            height = if (metadata.origin.swapsWidthHeight()) hierarchy.definition.width else hierarchy.definition.height,
+            colorType = SkColorType.kRGBA_8888,
+            alphaType = SkAlphaType.kUnpremul,
+            colorSpace = metadata.iccProfile?.let(SkColorSpace::makeProfileAware) ?: SkColorSpace.makeSRGB(),
+        )
+    }
+
+    override fun getInfo(): SkImageInfo = cachedInfo
+
+    override fun getEncodedFormat(): SkEncodedImageFormat = SkEncodedImageFormat.kJPEG
+
+    override fun getICCProfile(): SkcmsICCProfile? = metadata.iccProfile
+
+    override fun getOrigin(): SkEncodedOrigin = metadata.origin
+
+    override fun getPixels(info: SkImageInfo, dst: SkBitmap): Codec.Result {
+        if (dst.width != info.width || dst.height != info.height || dst.colorType != info.colorType) {
+            return Codec.Result.kInvalidParameters
+        }
+        if (
+            info.width != cachedInfo.width ||
+            info.height != cachedInfo.height ||
+            info.alphaType != SkAlphaType.kUnpremul
+        ) {
+            return Codec.Result.kInvalidParameters
+        }
+        if (info.colorType !in setOf(SkColorType.kRGBA_8888, SkColorType.kRGBA_F16Norm)) {
+            return Codec.Result.kInvalidConversion
+        }
+        val decoded = document.decode(JpegDecodeRequest(info.colorType, info.colorSpace))
+        val source = decoded.bitmap ?: return decoded.diagnostic?.result ?: Codec.Result.kErrorInInput
+        if (
+            source.width != dst.width ||
+            source.height != dst.height ||
+            source.colorType != dst.colorType
+        ) {
+            return Codec.Result.kInternalError
+        }
+        when (info.colorType) {
+            SkColorType.kRGBA_8888 -> System.arraycopy(source.pixels8888, 0, dst.pixels8888, 0, source.pixels8888.size)
+            SkColorType.kRGBA_F16Norm -> System.arraycopy(source.pixelsF16, 0, dst.pixelsF16, 0, source.pixelsF16.size)
+            else -> return Codec.Result.kInvalidConversion
+        }
+        return Codec.Result.kSuccess
     }
 }
 
