@@ -707,6 +707,87 @@ internal val CLIP_BLEND_FORMULA_WGSL: String = """
     }
 """.trimIndent()
 
+/**
+ * Coverage-correct clip composition for every mapped blend mode.
+ *
+ * The source texture carries geometry coverage, while [clipTexture] carries
+ * clip coverage. A transparent source texel is outside geometry and must not
+ * invoke modes such as Clear or Src. Every non-transparent texel computes its
+ * complete blend first, then the clip interpolates that result with the
+ * snapshot destination.
+ */
+internal val CLIP_COVERAGE_BLEND_WGSL: String = """
+    struct Uniforms {
+        blendMode: u32,
+    };
+
+    @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+    @group(1) @binding(1) var srcTexture: texture_2d<f32>;
+    @group(1) @binding(2) var srcSampler: sampler;
+    @group(1) @binding(3) var dstTexture: texture_2d<f32>;
+    @group(1) @binding(4) var dstSampler: sampler;
+    @group(1) @binding(5) var clipTexture: texture_2d<f32>;
+    @group(1) @binding(6) var clipSampler: sampler;
+
+    @vertex
+    fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
+        let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
+        let y = f32(idx & 2u) * 2.0 - 1.0;
+        return vec4f(x, y, 0.0, 1.0);
+    }
+
+    $DESTINATION_READ_BLEND_FORMULA_WGSL
+
+    fn porterDuffPremul(src: vec4f, dst: vec4f, blendMode: u32) -> vec4f {
+        switch blendMode {
+            case 0u: { return vec4f(0.0); }
+            case 1u: { return src + dst * (1.0 - src.a); }
+            case 2u: { return src; }
+            case 3u: { return dst; }
+            case 4u: { return dst + src * (1.0 - dst.a); }
+            case 5u: { return src * dst.a; }
+            case 6u: { return dst * src.a; }
+            case 7u: { return src * (1.0 - dst.a); }
+            case 8u: { return dst * (1.0 - src.a); }
+            case 9u: { return src * dst.a + dst * (1.0 - src.a); }
+            case 10u: { return dst * src.a + src * (1.0 - dst.a); }
+            case 11u: { return src * (1.0 - dst.a) + dst * (1.0 - src.a); }
+            case 12u: { return min(vec4f(1.0), src + dst); }
+            case 13u: { return vec4f(src.rgb * dst.rgb, src.a * dst.a); }
+            case 14u: { return blendPremul(src, dst, 0u); }
+            case 15u: { return blendPremul(src, dst, 1u); }
+            case 16u: { return blendPremul(src, dst, 2u); }
+            case 17u: { return blendPremul(src, dst, 3u); }
+            case 18u: { return blendPremul(src, dst, 4u); }
+            case 19u: { return blendPremul(src, dst, 7u); }
+            case 20u: { return blendPremul(src, dst, 8u); }
+            case 21u: { return blendPremul(src, dst, 9u); }
+            case 22u: { return blendPremul(src, dst, 10u); }
+            case 23u: { return blendPremul(src, dst, 5u); }
+            case 24u: { return blendPremul(src, dst, 6u); }
+            case 25u: { return blendPremul(src, dst, 11u); }
+            case 26u: { return blendPremul(src, dst, 12u); }
+            case 27u: { return blendPremul(src, dst, 13u); }
+            case 28u: { return blendPremul(src, dst, 14u); }
+            default: { return src; }
+        }
+    }
+
+    @fragment
+    fn fs_main(@builtin(position) coord: vec4f) -> @location(0) vec4f {
+        let dims = textureDimensions(srcTexture);
+        let uv = coord.xy / vec2f(dims);
+        let src = textureSample(srcTexture, srcSampler, uv);
+        let dst = textureSample(dstTexture, dstSampler, uv);
+        if (src.a == 0.0) {
+            return dst;
+        }
+        let clipAlpha = textureSample(clipTexture, clipSampler, uv).a;
+        let blended = porterDuffPremul(src, dst, uniforms.blendMode);
+        return dst + clipAlpha * (blended - dst);
+    }
+""".trimIndent()
+
 /** Destination-read blend formula with a device-rect clip applied at final composition. */
 internal val SCISSOR_CLIP_BLEND_FORMULA_WGSL: String = """
     struct Uniforms {

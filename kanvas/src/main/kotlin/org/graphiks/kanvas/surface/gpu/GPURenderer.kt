@@ -12,6 +12,7 @@ import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
 import org.graphiks.kanvas.gpu.renderer.commands.GPUImageFilterPlan
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBlendFacts
+import org.graphiks.kanvas.gpu.renderer.commands.GPUBlendKind
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.commands.GPUClipKind
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
@@ -135,6 +136,39 @@ internal fun destinationReadBlendModeIndex(mode: GPUBlendMode): Int? = when (mod
     else -> null
 }
 
+/** Stable uniform indices for every mapped blend mode in [CLIP_COVERAGE_BLEND_WGSL]. */
+internal fun clipCoverageBlendModeIndex(mode: GPUBlendMode): Int = when (mode) {
+    GPUBlendMode.CLEAR -> 0
+    GPUBlendMode.SRC_OVER -> 1
+    GPUBlendMode.SRC -> 2
+    GPUBlendMode.DST -> 3
+    GPUBlendMode.DST_OVER -> 4
+    GPUBlendMode.SRC_IN -> 5
+    GPUBlendMode.DST_IN -> 6
+    GPUBlendMode.SRC_OUT -> 7
+    GPUBlendMode.DST_OUT -> 8
+    GPUBlendMode.SRC_ATOP -> 9
+    GPUBlendMode.DST_ATOP -> 10
+    GPUBlendMode.XOR -> 11
+    GPUBlendMode.PLUS -> 12
+    GPUBlendMode.MODULATE -> 13
+    GPUBlendMode.MULTIPLY -> 14
+    GPUBlendMode.SCREEN -> 15
+    GPUBlendMode.OVERLAY -> 16
+    GPUBlendMode.DARKEN -> 17
+    GPUBlendMode.LIGHTEN -> 18
+    GPUBlendMode.COLOR_DODGE -> 19
+    GPUBlendMode.COLOR_BURN -> 20
+    GPUBlendMode.HARD_LIGHT -> 21
+    GPUBlendMode.SOFT_LIGHT -> 22
+    GPUBlendMode.DIFFERENCE -> 23
+    GPUBlendMode.EXCLUSION -> 24
+    GPUBlendMode.HUE -> 25
+    GPUBlendMode.SATURATION -> 26
+    GPUBlendMode.COLOR -> 27
+    GPUBlendMode.LUMINOSITY -> 28
+}
+
 internal fun destinationReadBlendUniformDraw(
     mode: GPUBlendMode,
     width: Int,
@@ -143,6 +177,23 @@ internal fun destinationReadBlendUniformDraw(
     val index = destinationReadBlendModeIndex(mode) ?: return null
     val bytes = java.nio.ByteBuffer.allocate(16).order(java.nio.ByteOrder.nativeOrder())
     bytes.putInt(index)
+    return GPUBackendRawUniformDraw(
+        uniformBytes = bytes.array(),
+        scissorX = 0,
+        scissorY = 0,
+        scissorWidth = width,
+        scissorHeight = height,
+    )
+}
+
+/** Packs the reflected 16-byte mode block for coverage-correct alpha-mask composition. */
+internal fun clipCoverageBlendUniformDraw(
+    mode: GPUBlendMode,
+    width: Int,
+    height: Int,
+): GPUBackendRawUniformDraw {
+    val bytes = java.nio.ByteBuffer.allocate(16).order(java.nio.ByteOrder.nativeOrder())
+    bytes.putInt(clipCoverageBlendModeIndex(mode))
     return GPUBackendRawUniformDraw(
         uniformBytes = bytes.array(),
         scissorX = 0,
@@ -194,10 +245,14 @@ internal fun GPUBackendOffscreenTarget.renderDestinationReadBlend(
     width: Int,
     height: Int,
 ): Boolean {
-    val draw = if (clipScissor == null) {
+    val draw = when {
+    clipMaskLabel != null -> clipCoverageBlendUniformDraw(mode, width, height)
+    clipScissor == null -> {
         destinationReadBlendUniformDraw(mode, width, height)
-    } else {
+    }
+    else -> {
         destinationReadScissorBlendUniformDraw(mode, clipScissor, width, height)
+    }
     } ?: return false
     val transparent = GPUClearColor(0.0, 0.0, 0.0, 0.0)
     if (sceneHasContent) {
@@ -208,7 +263,7 @@ internal fun GPUBackendOffscreenTarget.renderDestinationReadBlend(
     encodeOffscreenTexture(sceneLabel, transparent) {
         if (clipMaskLabel != null) {
             drawThreeTexturePass(
-                wgsl = CLIP_BLEND_FORMULA_WGSL,
+                wgsl = CLIP_COVERAGE_BLEND_WGSL,
                 colorFormat = colorFormat,
                 firstTextureLabel = sourceLabel,
                 secondTextureLabel = snapshotLabel,
@@ -582,7 +637,6 @@ internal fun renderViaGpu(
             var clipSourcePreservesClip = false
             var sourceHasContent = false
             var maskBlurSourceBounds: GPUBounds? = null
-            var sourceCompositeBounds: GPUBounds? = null
             val layerStack = java.util.ArrayDeque<SceneTargetFrame>()
             var layerOrdinal = 0
             val clearTransparent = GPUClearColor(0.0, 0.0, 0.0, 0.0)
@@ -658,20 +712,8 @@ internal fun renderViaGpu(
                     destinationReadSourceScissor(clip) == null
 
             /** Keeps multi-part clip sources transparent only until their first successful sub-pass. */
-            fun recordSourcePart(rendered: Boolean, bounds: GPUBounds? = null): Boolean {
-                if (clipSourceRoute && rendered) {
-                    sourceHasContent = true
-                    if (bounds != null) {
-                        sourceCompositeBounds = sourceCompositeBounds?.let { current ->
-                            GPUBounds(
-                                left = minOf(current.left, bounds.left),
-                                top = minOf(current.top, bounds.top),
-                                right = maxOf(current.right, bounds.right),
-                                bottom = maxOf(current.bottom, bounds.bottom),
-                            )
-                        } ?: bounds
-                    }
-                }
+            fun recordSourcePart(rendered: Boolean): Boolean {
+                if (clipSourceRoute && rendered) sourceHasContent = true
                 return rendered
             }
 
@@ -718,7 +760,7 @@ internal fun renderViaGpu(
                     diagnostics,
                     texFormat,
                     recordResult = !clipSourceRoute,
-                ).rendered, plan.deviceBounds)
+                ).rendered)
             }
 
             fun dispatchRectDirect(command: NormalizedDrawCommand.FillRect): Boolean {
@@ -742,7 +784,7 @@ internal fun renderViaGpu(
                         )
                     }
                 }
-                return recordSourcePart(true, routedCommand.bounds)
+                return recordSourcePart(true)
             }
 
             fun dispatchPathDirect(command: NormalizedDrawCommand.FillPath): Boolean {
@@ -761,7 +803,7 @@ internal fun renderViaGpu(
                         recordResult = !clipSourceRoute,
                     )
                 }
-                return recordSourcePart(true, routedCommand.bounds)
+                return recordSourcePart(true)
             }
 
             fun dispatchRRectDirect(command: NormalizedDrawCommand.FillRRect): Boolean {
@@ -776,7 +818,7 @@ internal fun renderViaGpu(
                         recordResult = !clipSourceRoute,
                     )
                 }
-                return recordSourcePart(true, routedCommand.bounds)
+                return recordSourcePart(true)
             }
 
             fun drawGlyphPath(
@@ -1145,19 +1187,7 @@ internal fun renderViaGpu(
                         )
                     }
                 }
-                val sourceBounds = when (plan) {
-                    is GPUImageFilterPlan.Blur -> GPUBounds(
-                        plan.outputBounds.left,
-                        plan.outputBounds.top,
-                        plan.outputBounds.right,
-                        plan.outputBounds.bottom,
-                    )
-                    else -> routedCommand.bounds
-                }
-                return recordSourcePart(
-                    diagnostics.fatalCount == fatalBefore && plan !is GPUImageFilterPlan.Refused,
-                    sourceBounds,
-                )
+                return recordSourcePart(diagnostics.fatalCount == fatalBefore && plan !is GPUImageFilterPlan.Refused)
             }
 
             val clipFrameCache = GPUClipCoverageFrameCache(config.maxClipIntermediateBytes.toLong())
@@ -1334,19 +1364,7 @@ internal fun renderViaGpu(
                             scissor = destinationReadSourceScissor(clip),
                         )
                     }
-                    val sourceBounds = vertices.positions.map { point ->
-                        val deviceX = transform.scaleX * point.x + transform.skewX * point.y + transform.transX
-                        val deviceY = transform.skewY * point.x + transform.scaleY * point.y + transform.transY
-                        Point(deviceX, deviceY)
-                    }.let { points ->
-                        GPUBounds(
-                            points.minOf(Point::x),
-                            points.minOf(Point::y),
-                            points.maxOf(Point::x),
-                            points.maxOf(Point::y),
-                        )
-                    }
-                    return recordSourcePart(encoded, sourceBounds)
+                    return recordSourcePart(encoded)
                 }
 
                 if (vertices.positions.size < 3) return false
@@ -1900,7 +1918,9 @@ internal fun renderViaGpu(
                     encodeSource,
                 ->
                 val mode = blend.blendMode
-                if (mode == null || destinationReadBlendModeIndex(mode) == null) {
+                    ?: if (blend.kind == GPUBlendKind.SrcOver) GPUBlendMode.SRC_OVER else null
+                val coverageMaskRoute = clipMaskLabel != null
+                if (mode == null || (!coverageMaskRoute && destinationReadBlendModeIndex(mode) == null)) {
                     composerDiagnostics.fatal(
                         code = "refuse:destination-read:${context.sourceLabelForDiagnostics}",
                         operation = context.sourceLabelForDiagnostics,
@@ -1955,7 +1975,6 @@ internal fun renderViaGpu(
             for (op in ops) {
                 val cmdId = GPUDrawCommandID(dispatched.size)
                 maskBlurSourceBounds = null
-                sourceCompositeBounds = null
                 if (op is DisplayOp.BeginLayer) {
                     if (suppressedLayerDepth > 0) {
                         suppressedLayerDepth++
@@ -2051,7 +2070,7 @@ internal fun renderViaGpu(
                     destinationReadComposer = destinationReadComposer,
                     trace = routeTrace,
                     forceSourceComposition = op.hasActiveMaskBlur(),
-                    sourceCompositeBounds = { maskBlurSourceBounds ?: sourceCompositeBounds },
+                    sourceCompositeBounds = { maskBlurSourceBounds },
                 )
                 if (blend.requiresDestinationRead) {
                     val rendered = t.renderWithClip(

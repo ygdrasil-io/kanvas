@@ -270,6 +270,70 @@ class GPUClipCoverageSurfaceTest {
     }
 
     @Test
+    fun `coverage alpha mask preserves difference holes for clear and src`() {
+        requireWebGpu()
+
+        listOf(BlendMode.CLEAR, BlendMode.SRC).forEach { blendMode ->
+            val result = Surface(16, 16).run {
+                canvas {
+                    drawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE))
+                    save()
+                    clipRect(Rect(1f, 1f, 15f, 15f), ClipOp.INTERSECT, antiAlias = true)
+                    clipRect(Rect(6f, 6f, 10f, 10f), ClipOp.DIFFERENCE, antiAlias = true)
+                    drawRect(
+                        Rect(2f, 2f, 14f, 14f),
+                        Paint.fill(Color.RED).copy(blendMode = blendMode),
+                    )
+                    restore()
+                }
+                render()
+            }
+
+            assertEquals(0, result.diagnostics.fatalCount, "$blendMode ${result.diagnostics.entries}")
+            assertRgbaNear(result.pixels, 16, 7, 7, Color.WHITE)
+            assertRgbaNear(
+                result.pixels,
+                16,
+                3,
+                3,
+                if (blendMode == BlendMode.CLEAR) Color.TRANSPARENT else Color.RED,
+            )
+        }
+    }
+
+    @Test
+    fun `coverage alpha mask preserves destination outside text glyphs for clear and src`() {
+        requireWebGpu()
+        val typeface = FontTypeface(
+            javaClass.classLoader
+                .getResourceAsStream("fonts/liberation/LiberationSans-Regular.ttf")!!
+                .readBytes(),
+            fontName = "LiberationSans-Regular",
+        )
+
+        listOf(BlendMode.CLEAR, BlendMode.SRC).forEach { blendMode ->
+            val result = Surface(16, 16).run {
+                canvas {
+                    drawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE))
+                    save()
+                    clipRect(Rect(1f, 1f, 15f, 15f), ClipOp.INTERSECT, antiAlias = true)
+                    drawText(
+                        Font(typeface, 12f).toTextBlob("I", 7f, 12f),
+                        0f,
+                        0f,
+                        Paint.fill(Color.RED).copy(blendMode = blendMode),
+                    )
+                    restore()
+                }
+                render()
+            }
+
+            assertEquals(0, result.diagnostics.fatalCount, "$blendMode ${result.diagnostics.entries}")
+            assertRgbaNear(result.pixels, 16, 2, 8, Color.WHITE)
+        }
+    }
+
+    @Test
     fun `mask composes destination read blend through the source snapshot formula`() {
         requireWebGpu()
 

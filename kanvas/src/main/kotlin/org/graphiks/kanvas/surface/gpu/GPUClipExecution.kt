@@ -7,7 +7,6 @@ import kotlin.math.floor
 import org.graphiks.kanvas.gpu.renderer.clips.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBlendFacts
-import org.graphiks.kanvas.gpu.renderer.commands.GPUBlendKind
 import org.graphiks.kanvas.gpu.renderer.commands.GPUClipFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUImageFilterPlan
 import org.graphiks.kanvas.gpu.renderer.commands.GPURect
@@ -162,46 +161,20 @@ internal fun GPUBackendOffscreenTarget.renderWithClip(
     is GPUClipCoveragePlan.Mask -> {
         try {
             acquireClipMask(clipPlan, context.frameCache, diagnostics, context.config).use { lease ->
-                val rendered = if (blend.requiresDestinationRead) {
-                    context.destinationReadComposer.compose(
-                        context,
-                        lease.mask.sampleLabel,
-                        null,
-                        blend,
-                        diagnostics,
-                        encodeSource,
-                    )
-                } else {
-                    if (!encodeSource()) return@use false
-                    val fixedBlendMode = blend.blendMode
-                        ?: if (blend.kind == GPUBlendKind.SrcOver) GPUBlendMode.SRC_OVER else return@use false
-                    val draw = sourceCompositeUniformDraw(
-                        context,
-                        GPUClipCoveragePlan.NoClip,
-                        if (fixedBlendMode.requiresSourceBounds()) context.sourceCompositeBounds() else null,
-                    ) ?: return@use true
-                    encodeOffscreenTexture(context.sceneLabel, null) {
-                        drawTwoTexturePass(
-                            wgsl = CLIP_MASK_COMPOSITE_WGSL,
-                            colorFormat = context.colorFormat,
-                            firstTextureLabel = context.sourceLabel,
-                            secondTextureLabel = lease.mask.sampleLabel,
-                            draws = listOf(draw),
-                            blendMode = fixedBlendMode,
-                        )
-                    }
-                    true
-                }
+                val rendered = context.destinationReadComposer.compose(
+                    context,
+                    lease.mask.sampleLabel,
+                    null,
+                    blend,
+                    diagnostics,
+                    encodeSource,
+                )
                 if (!rendered) return@use false
                 context.trace?.sourceThenComposite()
                 diagnostics.degrade(
                     code = "route:clip:${context.sourceLabelForDiagnostics}",
                     operation = context.sourceLabelForDiagnostics,
-                    reason = if (blend.requiresDestinationRead) {
-                        "clip-source-snapshot-formula"
-                    } else {
-                        "clip-source-then-composite"
-                    },
+                    reason = "clip-source-snapshot-formula",
                     facts = listOf(DiagnosticFact("clip.strategy", "alpha-mask")),
                 )
                 true
@@ -217,19 +190,6 @@ internal fun GPUBackendOffscreenTarget.renderWithClip(
     }
     is GPUClipCoveragePlan.Refused -> false
     }
-}
-
-/** A transparent premultiplied source is not a no-op for every fixed-function blend. */
-private fun GPUBlendMode.requiresSourceBounds(): Boolean = when (this) {
-    GPUBlendMode.SRC_OVER,
-    GPUBlendMode.DST,
-    GPUBlendMode.DST_OVER,
-    GPUBlendMode.DST_OUT,
-    GPUBlendMode.SRC_ATOP,
-    GPUBlendMode.XOR,
-    GPUBlendMode.PLUS,
-    -> false
-    else -> true
 }
 
 /** Applies a source texture at the final composition boundary, including a device-rect scissor. */
