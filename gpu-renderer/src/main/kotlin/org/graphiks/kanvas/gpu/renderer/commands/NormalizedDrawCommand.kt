@@ -8,6 +8,7 @@ import org.graphiks.kanvas.gpu.renderer.filters.GPUSimpleFilterBounds
 import org.graphiks.kanvas.gpu.renderer.filters.GPUFilterCropPlan
 import org.graphiks.kanvas.gpu.renderer.filters.GPUFilterSamplingPlan
 import org.graphiks.kanvas.gpu.renderer.filters.NormalizedMaskFilter
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoverageRequest
 import org.graphiks.kanvas.gpu.renderer.text.GPUTextDiagnostic
 import org.graphiks.kanvas.gpu.renderer.text.GPUTextArtifactRef
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
@@ -172,13 +173,8 @@ data class GPURRect(
     )
 }
 
-/** Conservative command bounds in the coordinate space selected by the caller. */
-data class GPUBounds(
-    val left: Float,
-    val top: Float,
-    val right: Float,
-    val bottom: Float,
-)
+/** Source-compatible alias for the clip-owned scalar bounds transport. */
+typealias GPUBounds = org.graphiks.kanvas.gpu.renderer.clips.GPUBounds
 
 /** M15 path-fill facts captured from the legacy path fill before tessellation. */
 data class GPUPathFacts(
@@ -255,6 +251,7 @@ data class GPUTransformFacts(
 data class GPUClipFacts(
     val kind: GPUClipKind,
     val bounds: GPUBounds,
+    val coverageRequest: GPUClipCoverageRequest? = null,
 ) {
     /** Constructors for common clip fact records. */
     companion object {

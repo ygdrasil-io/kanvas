@@ -32,24 +32,61 @@ class Diagnostics {
      * Record a fatal diagnostic.
      * @see Diagnostic
      */
-    fun fatal(code: String, operation: String, reason: String, suggestion: String? = null) {
-        _entries.add(Diagnostic(DiagnosticLevel.FATAL, code, operation, reason, suggestion, _entries.size))
-    }
+    fun fatal(
+        code: String,
+        operation: String,
+        reason: String,
+        suggestion: String? = null,
+        facts: List<DiagnosticFact> = emptyList(),
+    ) = add(DiagnosticLevel.FATAL, code, operation, reason, suggestion, facts)
 
     /**
      * Record a degrade diagnostic.
      * @see Diagnostic
      */
-    fun degrade(code: String, operation: String, reason: String, suggestion: String? = null) {
-        _entries.add(Diagnostic(DiagnosticLevel.DEGRADE, code, operation, reason, suggestion, _entries.size))
-    }
+    fun degrade(
+        code: String,
+        operation: String,
+        reason: String,
+        suggestion: String? = null,
+        facts: List<DiagnosticFact> = emptyList(),
+    ) = add(DiagnosticLevel.DEGRADE, code, operation, reason, suggestion, facts)
 
     /**
      * Record a warning diagnostic.
      * @see Diagnostic
      */
-    fun warn(code: String, operation: String, reason: String, suggestion: String? = null) {
-        _entries.add(Diagnostic(DiagnosticLevel.WARN, code, operation, reason, suggestion, _entries.size))
+    fun warn(
+        code: String,
+        operation: String,
+        reason: String,
+        suggestion: String? = null,
+        facts: List<DiagnosticFact> = emptyList(),
+    ) = add(DiagnosticLevel.WARN, code, operation, reason, suggestion, facts)
+
+    private fun add(
+        level: DiagnosticLevel,
+        code: String,
+        operation: String,
+        reason: String,
+        suggestion: String?,
+        facts: List<DiagnosticFact>,
+    ) {
+        val sortedFacts = facts.sortedBy(DiagnosticFact::key)
+        require(sortedFacts.zipWithNext().none { (left, right) -> left.key == right.key }) {
+            "Diagnostic facts must not contain duplicate keys"
+        }
+        _entries.add(
+            Diagnostic(
+                level = level,
+                code = code,
+                operation = operation,
+                reason = reason,
+                suggestion = suggestion,
+                index = _entries.size,
+                facts = sortedFacts,
+            ),
+        )
     }
 
     /**
