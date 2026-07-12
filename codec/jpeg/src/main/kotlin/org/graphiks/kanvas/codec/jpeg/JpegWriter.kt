@@ -143,8 +143,9 @@ public class JpegEncodeMetadata(
  *
  * The current writer accepts exactly one `1/2` grayscale level:
  * [JpegEncodeProcess.DifferentialSequentialHuffman] after a matching Huffman
- * base or [JpegEncodeProcess.DifferentialSequentialArithmetic] after a
- * matching arithmetic base, or [JpegEncodeProcess.DifferentialProgressiveArithmetic]
+ * base, [JpegEncodeProcess.DifferentialLosslessHuffman] after a same-size
+ * `1/1` Huffman DCT base and explicit `EXP=00`, [JpegEncodeProcess.DifferentialSequentialArithmetic]
+ * after a matching arithmetic base, or [JpegEncodeProcess.DifferentialProgressiveArithmetic]
  * after a matching initial-scan SOF10 base. Other ratios and process
  * intersections remain explicit refusals until they have independent encoder evidence.
  */

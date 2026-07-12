@@ -544,6 +544,88 @@ class JpegAdvancedEncodeTest {
     }
 
     @Test
+    fun `grayscale hierarchy writes an EXP00 SOF7 residual from its decoded DCT base`() {
+        val source = grayscale(17, 9)
+
+        val bytes = JpegEncoder.encode(
+            source,
+            JpegEncoder.Options(
+                quality = 100,
+                process = JpegEncodeProcess.SequentialHuffman,
+                colorModel = JpegEncodeColorModel.Grayscale,
+                sampling = JpegSampling.S444,
+                restartInterval = 64,
+                hierarchy = listOf(
+                    JpegHierarchyLevel(
+                        scaleNumerator = 1,
+                        scaleDenominator = 1,
+                        process = JpegEncodeProcess.DifferentialLosslessHuffman,
+                    ),
+                ),
+            ),
+        )
+
+        assertNotNull(bytes)
+        val document = requireNotNull(JpegDocument.open(bytes!!).document)
+        assertEquals(listOf(0xDE, 0xC0, 0xDF, 0xC7), document.segments.filter {
+            it.marker in setOf(0xDE, 0xC0, 0xDF, 0xC7)
+        }.map { it.marker })
+        assertArrayEquals(byteArrayOf(0), document.copyPayload(document.segments.single { it.marker == 0xDF }))
+        assertTrue(document.segments.any { it.marker == 0xDD }, "SOF7 hierarchy retains DRI")
+        assertEquals(2, restartMarkers(bytes).size, "only the 153-sample SOF7 scan restarts at 64 samples")
+
+        val hierarchy = requireNotNull(document.hierarchy)
+        assertEquals(0xC7, hierarchy.frames[1].sofMarker)
+        assertEquals(JpegExpansion(horizontal = false, vertical = false), hierarchy.frames[1].expansion)
+        val base = decodeSequentialDct(hierarchy.parsedFrames[0]).planes.single()
+        val residual = decodeDifferentialLossless(hierarchy.parsedFrames[1]).planes.single()
+        assertArrayEquals(
+            IntArray(source.width * source.height) { index ->
+                (source.pixels[index] and 0xFF) - base[index]
+            },
+            residual,
+            "SOF7 carries target-minus-decoded-base samples, without a marker-patched fallback",
+        )
+
+        val codec = requireNotNull(Codec.MakeFromData(bytes))
+        val (decoded, result) = codec.getImage()
+        assertEquals(org.graphiks.kanvas.codec.Codec.Result.kSuccess, result)
+        assertArrayEquals(source.pixels, requireNotNull(decoded).pixels, "lossless residual restores the source exactly")
+    }
+
+    @Test
+    fun `opt in hierarchy reference decodes generated SOF7 pixels`() {
+        val configuredOracle = System.getProperty("kanvas.jpeg.oracle.hierarchy").orEmpty()
+        assumeTrue(
+            configuredOracle.isNotBlank(),
+            "Set -PjpegOracleHierarchy=/absolute/path/to/jpeg to enable the DHP SOF7 external oracle",
+        )
+        val oracle = Path.of(configuredOracle)
+        assumeTrue(Files.isExecutable(oracle), "hierarchy reference is not executable: $oracle")
+        val source = grayscale(17, 9)
+        val encoded = JpegEncoder.encode(
+            source,
+            JpegEncoder.Options(
+                quality = 100,
+                process = JpegEncodeProcess.SequentialHuffman,
+                colorModel = JpegEncodeColorModel.Grayscale,
+                sampling = JpegSampling.S444,
+                restartInterval = 64,
+                hierarchy = listOf(JpegHierarchyLevel(1, 1, JpegEncodeProcess.DifferentialLosslessHuffman)),
+            ),
+        )
+
+        assertNotNull(encoded)
+        val external = decodeHierarchyReferencePnm(oracle, encoded!!, "kanvas-sof7-hierarchy-oracle-")
+        // SOF7 carries the exact residual relative to the base samples decoded
+        // by Kanvas. The independently implemented DCT base has the same
+        // one-sample floating/fixed-point IDCT latitude as the checked-in
+        // hierarchy corpus, so the external final composition is bounded to
+        // that base-only rounding difference.
+        assertPnmMatchesBitmap(external, source, maxError = 1, label = "SOF7 hierarchy reference")
+    }
+
+    @Test
     fun `opt in hierarchy reference decodes generated SOF13 pixels`() {
         val configuredOracle = System.getProperty("kanvas.jpeg.oracle.hierarchy").orEmpty()
         assumeTrue(
@@ -848,6 +930,18 @@ class JpegAdvancedEncodeTest {
             ),
         )
         assertNull(JpegEncoder.encode(source, JpegEncoder.Options(process = JpegEncodeProcess.DifferentialLosslessHuffman)))
+        assertNull(
+            JpegEncoder.encode(
+                grayscale(8, 8),
+                JpegEncoder.Options(
+                    process = JpegEncodeProcess.SequentialHuffman,
+                    colorModel = JpegEncodeColorModel.Grayscale,
+                    sampling = JpegSampling.S444,
+                    hierarchy = listOf(JpegHierarchyLevel(1, 2, JpegEncodeProcess.DifferentialLosslessHuffman)),
+                ),
+            ),
+            "SOF7 uses a same-size 1/1 reference; 1/2 would require EXP and a different residual geometry",
+        )
         assertNull(
             JpegEncoder.encode(
                 source,

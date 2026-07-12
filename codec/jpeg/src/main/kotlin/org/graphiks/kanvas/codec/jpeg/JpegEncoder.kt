@@ -143,8 +143,9 @@ public object JpegEncoder {
 /**
  * Emits the evidence-backed grayscale hierarchy intersections: a one-half
  * SOF0/SOF9/SOF10 reference and a SOF5/SOF13/SOF14 residual after a two-axis
- * EXP. This is deliberately a container writer, not a marker patcher: both
- * SOF frames are independently serialized by [JpegWriter].
+ * EXP, or a same-size SOF0 reference and a SOF7 lossless residual after an
+ * explicit no-op EXP. This is deliberately a container writer, not a marker
+ * patcher: both SOF frames are independently serialized by [JpegWriter].
  */
 private class JpegHierarchyWriter(
     private val out: OutputStream,
@@ -153,12 +154,17 @@ private class JpegHierarchyWriter(
 ) {
     fun write() {
         validateRequest()
-        val baseWidth = bitmap.width / 2
-        val baseHeight = bitmap.height / 2
+        val losslessResidual = options.hierarchy.single().process == JpegEncodeProcess.DifferentialLosslessHuffman
+        val baseWidth = if (losslessResidual) bitmap.width else bitmap.width / 2
+        val baseHeight = if (losslessResidual) bitmap.height else bitmap.height / 2
         val baseBitmap = SkBitmap(baseWidth, baseHeight, bitmap.colorSpace, SkColorType.kRGBA_8888)
         for (y in 0 until baseHeight) {
             for (x in 0 until baseWidth) {
-                baseBitmap.setPixel(x, y, bitmap.getPixel(x * 2, y * 2))
+                baseBitmap.setPixel(
+                    x,
+                    y,
+                    bitmap.getPixel(if (losslessResidual) x else x * 2, if (losslessResidual) y else y * 2),
+                )
             }
         }
 
@@ -173,7 +179,11 @@ private class JpegHierarchyWriter(
             else -> error("hierarchy base process is invalid")
         }
         require(baseSamples.planes.size == 1) { "hierarchy base must be grayscale" }
-        val expandedReference = expandReference(baseSamples.planes.single(), baseWidth, baseHeight)
+        val expandedReference = if (losslessResidual) {
+            baseSamples.planes.single()
+        } else {
+            expandReference(baseSamples.planes.single(), baseWidth, baseHeight)
+        }
         val residual = IntArray(bitmap.width * bitmap.height) { index ->
             grayscaleSample(bitmap.getPixel(index % bitmap.width, index / bitmap.width)) - expandedReference[index]
         }
@@ -196,11 +206,22 @@ private class JpegHierarchyWriter(
         out.write(baseBytes, 0, baseSofOffset)
         writeDhp()
         out.write(baseBytes, baseSofOffset, baseBytes.size - baseSofOffset - 2)
-        writeSegment(EXP, byteArrayOf(0x11))
-        val residualWriter = JpegWriter(out, bitmap, options, residual)
-        when (options.process) {
-            JpegEncodeProcess.ProgressiveArithmetic -> residualWriter.writeDifferentialProgressiveFrame()
-            else -> residualWriter.writeDifferentialSequentialFrame()
+        writeSegment(EXP, byteArrayOf(if (losslessResidual) 0 else 0x11))
+        if (losslessResidual) {
+            val losslessOptions = options.copy(
+                process = JpegEncodeProcess.LosslessHuffman,
+                hierarchy = emptyList(),
+                progressiveScans = emptyList(),
+                losslessParameters = JpegLosslessParameters(predictor = 1, pointTransform = 0),
+            )
+            JpegWriter(out, bitmap, losslessOptions, differentialLosslessResidual = residual)
+                .writeDifferentialLosslessFrame()
+        } else {
+            val residualWriter = JpegWriter(out, bitmap, options, residual)
+            when (options.process) {
+                JpegEncodeProcess.ProgressiveArithmetic -> residualWriter.writeDifferentialProgressiveFrame()
+                else -> residualWriter.writeDifferentialSequentialFrame()
+            }
         }
         writeMarker(EOI)
     }
@@ -219,16 +240,16 @@ private class JpegHierarchyWriter(
         }
         require(
             (options.process == JpegEncodeProcess.SequentialHuffman &&
-                level.process == JpegEncodeProcess.DifferentialSequentialHuffman) ||
+                level.process in setOf(
+                    JpegEncodeProcess.DifferentialSequentialHuffman,
+                    JpegEncodeProcess.DifferentialLosslessHuffman,
+                )) ||
                 (options.process == JpegEncodeProcess.SequentialArithmetic &&
                     level.process == JpegEncodeProcess.DifferentialSequentialArithmetic) ||
                 (options.process == JpegEncodeProcess.ProgressiveArithmetic &&
                     level.process == JpegEncodeProcess.DifferentialProgressiveArithmetic),
         ) {
             "hierarchy residual coding must match its base coding"
-        }
-        require(level.scaleNumerator == 1 && level.scaleDenominator == 2) {
-            "hierarchy supports exactly a one-half reference followed by EXP 0x11"
         }
         require(options.precision == 8) { "hierarchy supports only 8-bit precision" }
         require(options.colorModel == JpegEncodeColorModel.Grayscale) { "hierarchy supports only grayscale samples" }
@@ -242,9 +263,21 @@ private class JpegHierarchyWriter(
         } else {
             require(options.progressiveScans.isEmpty()) { "sequential hierarchy does not accept a progressive scan script" }
         }
-        require(options.losslessParameters == null) { "hierarchy does not accept lossless parameters" }
-        require(bitmap.width >= 2 && bitmap.height >= 2 && bitmap.width % 2 == 0 && bitmap.height % 2 == 0) {
-            "hierarchy requires even dimensions of at least 2x2"
+        require(options.losslessParameters == null) { "hierarchy base does not accept lossless parameters" }
+        if (level.process == JpegEncodeProcess.DifferentialLosslessHuffman) {
+            require(level.scaleNumerator == 1 && level.scaleDenominator == 1) {
+                "SOF7 hierarchy requires a same-size 1/1 DCT reference and EXP 0x00"
+            }
+            require(options.process == JpegEncodeProcess.SequentialHuffman) {
+                "SOF7 hierarchy requires a sequential Huffman DCT base"
+            }
+        } else {
+            require(level.scaleNumerator == 1 && level.scaleDenominator == 2) {
+                "expanded hierarchy requires a one-half 1/2 reference and EXP 0x11"
+            }
+            require(bitmap.width >= 2 && bitmap.height >= 2 && bitmap.width % 2 == 0 && bitmap.height % 2 == 0) {
+                "expanded hierarchy requires even dimensions of at least 2x2"
+            }
         }
     }
 
@@ -324,6 +357,8 @@ private class JpegWriter(
     private val options: JpegEncoder.Options,
     /** Signed target-minus-EXP(reference) samples for the SOF5/SOF13/SOF14 hierarchy paths. */
     private val differentialResidual: IntArray? = null,
+    /** Signed target-minus-decoded-base samples for the SOF7 hierarchy path. */
+    private val differentialLosslessResidual: IntArray? = null,
 ) {
     private val sampling = Sampling.from(options.effectiveSampling())
     private val componentCount = if (options.colorModel == JpegEncodeColorModel.Grayscale) 1 else 3
@@ -460,6 +495,23 @@ private class JpegWriter(
         }
         writeSof(differential = true)
         writeProgressiveEntropy(differential = true)
+    }
+
+    /** Serializes a SOF7 zero-predictor residual without adding a second container or base frame. */
+    fun writeDifferentialLosslessFrame() {
+        require(options.process == JpegEncodeProcess.LosslessHuffman) {
+            "differential lossless frame requires a Huffman lossless process"
+        }
+        require(
+            options.precision == 8 &&
+                componentCount == 1 &&
+                differentialLosslessResidual?.size == bitmap.width * bitmap.height &&
+                options.losslessParameters == JpegLosslessParameters(predictor = 1, pointTransform = 0),
+        ) {
+            "SOF7 writer requires signed 8-bit grayscale zero-point residuals"
+        }
+        writeSof(differential = true)
+        writeLosslessEntropy(differential = true)
     }
 
     private fun writeArithmeticSequentialEntropy(differential: Boolean = false) {
@@ -728,6 +780,7 @@ private class JpegWriter(
                 JpegEncodeProcess.SequentialHuffman -> SOF5
                 JpegEncodeProcess.SequentialArithmetic -> SOF13
                 JpegEncodeProcess.ProgressiveArithmetic -> SOF14
+                JpegEncodeProcess.LosslessHuffman -> SOF7
                 else -> error("differential frame process is invalid")
             }
         } else when (options.process) {
@@ -1048,10 +1101,19 @@ private class JpegWriter(
         if (zeroRun > 0) bits.write(table.code(0), table.length(0))
     }
 
-    private fun writeLosslessEntropy() {
+    private fun writeLosslessEntropy(differential: Boolean = false) {
         val parameters = requireNotNull(options.losslessParameters)
-        val planes = buildLosslessPlanes(parameters.pointTransform)
-        writeSos(componentIds(), parameters.predictor, spectralEnd = 0, successiveApprox = parameters.pointTransform)
+        val planes = if (differential) {
+            listOf(requireNotNull(differentialLosslessResidual))
+        } else {
+            buildLosslessPlanes(parameters.pointTransform)
+        }
+        writeSos(
+            componentIds(),
+            spectralStart = if (differential) 0 else parameters.predictor,
+            spectralEnd = 0,
+            successiveApprox = parameters.pointTransform,
+        )
         val bits = EntropyBitWriter(out)
         var mcu = 0
         var restartMarker = 0
@@ -1061,14 +1123,18 @@ private class JpegWriter(
                 val intervalStart = mcu == 0 || (options.restartInterval > 0 && mcu % options.restartInterval == 0)
                 for (component in 0 until componentCount) {
                     val value = planes[component][y * bitmap.width + x]
-                    val predicted = losslessPrediction(
-                        plane = planes[component],
-                        x = x,
-                        y = y,
-                        predictor = parameters.predictor,
-                        pointTransform = parameters.pointTransform,
-                        initialPredictor = intervalStart,
-                    )
+                    val predicted = if (differential) {
+                        0
+                    } else {
+                        losslessPrediction(
+                            plane = planes[component],
+                            x = x,
+                            y = y,
+                            predictor = parameters.predictor,
+                            pointTransform = parameters.pointTransform,
+                            initialPredictor = intervalStart,
+                        )
+                    }
                     val difference = (value - predicted) shr parameters.pointTransform
                     writeHuffmanValue(bits, if (component == COMPONENT_Y) dcLuma else dcChroma, difference)
                 }
@@ -1309,6 +1375,7 @@ private const val SOF1 = 0xC1
 private const val SOF2 = 0xC2
 private const val SOF3 = 0xC3
 private const val SOF5 = 0xC5
+private const val SOF7 = 0xC7
 private const val DHT = 0xC4
 private const val SOF9 = 0xC9
 private const val SOF10 = 0xCA
