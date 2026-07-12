@@ -7,6 +7,7 @@ import kotlin.math.floor
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBlendFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.commands.GPUClipFacts
+import org.graphiks.kanvas.gpu.renderer.commands.GPUClipKind
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.GPURRect
 import org.graphiks.kanvas.gpu.renderer.commands.GPURRectCornerRadii
@@ -35,6 +36,13 @@ internal const val MASK_BLUR_VERTICAL_MODULE_KEY = "mask-blur.vertical.v1"
 internal data class GPUMaskBlurDispatchResult(
     val rendered: Boolean,
 )
+
+internal fun GPUClipFacts.maskBlurClipBounds(targetWidth: Int, targetHeight: Int): GPUBounds =
+    if (kind == GPUClipKind.DeviceRect) {
+        bounds
+    } else {
+        GPUBounds(0f, 0f, targetWidth.toFloat(), targetHeight.toFloat())
+    }
 
 internal fun GPUBackendOffscreenTarget.renderMaskBlurCommand(
     sourceTextureLabel: String,
@@ -170,7 +178,7 @@ internal fun NormalizedDrawCommand.toMaskBlurRequest(
         ?: error("Mask blur request requires a normalized blur mask filter")
     return MaskBlurRequest(
         bounds = bounds,
-        clipBounds = GPUBounds(0f, 0f, targetWidth.toFloat(), targetHeight.toFloat()),
+        clipBounds = clip.maskBlurClipBounds(targetWidth, targetHeight),
         targetWidth = targetWidth,
         targetHeight = targetHeight,
         style = blur.style,

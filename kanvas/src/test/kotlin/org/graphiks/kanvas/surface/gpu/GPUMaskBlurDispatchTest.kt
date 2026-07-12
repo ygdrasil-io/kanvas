@@ -146,6 +146,33 @@ class GPUMaskBlurDispatchTest {
     }
 
     @Test
+    fun `only an exact device rect clip can satisfy the mask blur budget`() {
+        val bounds = GPUBounds(0f, 0f, 32f, 32f)
+        val budget = RenderConfig(maxMaskBlurIntermediateBytes = 1_024u)
+        val clipped = solidRectCommand().copy(
+            rect = GPURect(0f, 0f, 32f, 32f),
+            bounds = bounds,
+            clip = GPUClipFacts.deviceRect(GPUBounds(14f, 14f, 18f, 18f)),
+            maskFilter = NormalizedMaskFilter.Blur(NormalizedBlurStyle.NORMAL, sigma = 2f),
+        )
+
+        val clippedPlan = MaskBlurPlanner.plan(clipped.toMaskBlurRequest(32, 32, 4096, budget))
+        val wideOpenPlan = MaskBlurPlanner.plan(
+            clipped.copy(clip = GPUClipFacts.wideOpen(bounds)).toMaskBlurRequest(32, 32, 4096, budget),
+        )
+        val complexPlan = MaskBlurPlanner.plan(
+            clipped.copy(clip = GPUClipFacts.complexStack(GPUBounds(14f, 14f, 18f, 18f)))
+                .toMaskBlurRequest(32, 32, 4096, budget),
+        )
+
+        assertTrue(clippedPlan is MaskBlurPlan.Ready)
+        assertEquals(GPUBounds(14f, 14f, 18f, 18f), (clippedPlan as MaskBlurPlan.Ready).deviceBounds)
+        assertEquals(1f, clippedPlan.scale)
+        assertTrue(wideOpenPlan is MaskBlurPlan.Refused)
+        assertTrue(complexPlan is MaskBlurPlan.Refused)
+    }
+
+    @Test
     fun `local path mask scales dash intervals and phase`() {
         val target = CapturingMaskBlurTarget()
         val plan = readyPlan(NormalizedBlurStyle.NORMAL).copy(

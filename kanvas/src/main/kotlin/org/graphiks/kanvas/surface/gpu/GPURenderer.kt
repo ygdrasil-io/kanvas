@@ -12,6 +12,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
 import org.graphiks.kanvas.gpu.renderer.commands.GPUImageFilterPlan
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBlendFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBounds
+import org.graphiks.kanvas.gpu.renderer.commands.GPUClipKind
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
@@ -1090,6 +1091,9 @@ internal fun renderViaGpu(
                 source: Boolean,
             ): NormalizedDrawCommand = when {
                 !source -> command
+                // The mask source pass itself remains wide-open in renderMaskBlur, but an exact
+                // captured device rect is required to bound its intermediate allocation plan.
+                command.clip.kind == GPUClipKind.DeviceRect -> command
                 clipSourcePreservesClip -> command.copyForDestinationReadSource()
                 else -> command.copyForClipSource(width, height)
             }

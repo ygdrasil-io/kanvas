@@ -372,6 +372,13 @@ internal val MASK_BLUR_HORIZONTAL_WGSL: String = """
     @group(1) @binding(1) var inputTex: texture_2d<f32>;
     @group(1) @binding(2) var inputSam: sampler;
 
+    fn sampleMaskDecal(uv: vec2f) -> vec4f {
+        if (any(uv < vec2f(0.0)) || any(uv >= vec2f(1.0))) {
+            return vec4f(0.0);
+        }
+        return textureSample(inputTex, inputSam, uv);
+    }
+
     @vertex
     fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
         let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
@@ -392,7 +399,7 @@ internal val MASK_BLUR_HORIZONTAL_WGSL: String = """
             let packedWeights = u.weights[i / 4u];
             let weight = packedWeights[i % 4u];
             let sampleOffset = vec2f(f32(i) - f32(half), 0.0) / size;
-            result += weight * textureSample(inputTex, inputSam, uv + sampleOffset);
+            result += weight * sampleMaskDecal(uv + sampleOffset);
         }
         return result;
     }
@@ -416,6 +423,13 @@ internal val MASK_BLUR_VERTICAL_WGSL: String = """
     @group(1) @binding(1) var inputTex: texture_2d<f32>;
     @group(1) @binding(2) var inputSam: sampler;
 
+    fn sampleMaskDecal(uv: vec2f) -> vec4f {
+        if (any(uv < vec2f(0.0)) || any(uv >= vec2f(1.0))) {
+            return vec4f(0.0);
+        }
+        return textureSample(inputTex, inputSam, uv);
+    }
+
     @vertex
     fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
         let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
@@ -436,7 +450,7 @@ internal val MASK_BLUR_VERTICAL_WGSL: String = """
             let packedWeights = u.weights[i / 4u];
             let weight = packedWeights[i % 4u];
             let sampleOffset = vec2f(0.0, f32(i) - f32(half)) / size;
-            result += weight * textureSample(inputTex, inputSam, uv + sampleOffset);
+            result += weight * sampleMaskDecal(uv + sampleOffset);
         }
         return result;
     }

@@ -41,6 +41,15 @@ class GPUMaskBlurWgslTest {
     }
 
     @Test
+    fun `static blur shaders sample masks with decal semantics`() {
+        listOf(MASK_BLUR_HORIZONTAL_WGSL, MASK_BLUR_VERTICAL_WGSL).forEach { wgsl ->
+            assertTrue(wgsl.contains("fn sampleMaskDecal"))
+            assertTrue(wgsl.contains("any(uv < vec2f(0.0))"))
+            assertTrue(wgsl.contains("any(uv >= vec2f(1.0))"))
+        }
+    }
+
+    @Test
     fun `style shader samples two mask textures`() {
         assertTrue(MASK_BLUR_STYLE_WGSL.contains("@binding(1) var srcTexture"))
         assertTrue(MASK_BLUR_STYLE_WGSL.contains("@binding(3) var dstTexture"))
