@@ -52,8 +52,32 @@ class GPUClipCoverageContractsTest {
         assertEquals(request.contentKey, mask.contentKey)
         assertEquals(4, mask.sampleCount)
         assertEquals(4_194_304L, mask.resolvedBytes)
-        assertEquals(20_971_520L, mask.requiredBytes)
+        assertEquals(37_748_736L, mask.requiredBytes)
         assertTrue(mask.requiredBytes > mask.resolvedBytes)
+    }
+
+    @Test
+    fun `AA mask accounts for color resolve and depth stencil allocations before allocation`() {
+        val request = request(width = 16, height = 16, elements = listOf(element(antiAlias = true)))
+        val pixels = 16L * 16L
+        val requiredBytes = pixels * (4L * 4L + 4L + 4L * 4L)
+
+        val plan = GPUClipCoveragePlanner.plan(
+            request = request,
+            config = RenderConfig(maxClipIntermediateBytes = requiredBytes.toUInt()),
+            maxTextureDimension2D = 4096,
+        )
+
+        assertEquals(requiredBytes, assertIs<GPUClipCoveragePlan.Mask>(plan).requiredBytes)
+        val refusal = GPUClipCoveragePlanner.plan(
+            request = request,
+            config = RenderConfig(maxClipIntermediateBytes = (requiredBytes - 1L).toUInt()),
+            maxTextureDimension2D = 4096,
+        )
+        assertEquals(
+            "unsupported.clip.intermediate_budget",
+            assertIs<GPUClipCoveragePlan.Refused>(refusal).code,
+        )
     }
 
     @Test

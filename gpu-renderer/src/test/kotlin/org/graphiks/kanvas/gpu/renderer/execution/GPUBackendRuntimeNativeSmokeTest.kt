@@ -416,7 +416,9 @@ class GPUBackendRuntimeNativeSmokeTest {
     fun `coverage masks run stencil cover at one and four samples and release after submission`() {
         GPUBackendRuntimeFactory.createOrNull().use { session ->
             assumeTrue(session != null, "GPU backend unavailable in current environment")
-            session!!.createOffscreenTarget(
+            val runtimeSession = session!!
+            val telemetryBefore = runtimeSession.runtimeTelemetry
+            runtimeSession.createOffscreenTarget(
                 GPUOffscreenTargetRequest(width = 16, height = 16, colorFormat = "rgba8unorm"),
             ).use { target ->
                 val triangle = GPUBackendTriangleData(
@@ -486,6 +488,9 @@ class GPUBackendRuntimeNativeSmokeTest {
                 target.releaseCoverageMask(unknownMask)
                 target.releaseCoverageMask(unknownMask)
             }
+            val telemetryAfter = runtimeSession.runtimeTelemetry
+            assertEquals(telemetryBefore.msaaTargets + 1L, telemetryAfter.msaaTargets)
+            assertEquals(telemetryBefore.msaaResolves + 1L, telemetryAfter.msaaResolves)
         }
     }
 

@@ -12,7 +12,8 @@ import org.graphiks.kanvas.surface.RenderConfig
 
 /** Chooses the immutable coverage strategy before any GPU intermediate allocation. */
 object GPUClipCoveragePlanner {
-    private const val BYTES_PER_PIXEL = 4L
+    private const val RGBA8_BYTES_PER_PIXEL = 4L
+    private const val DEPTH24_STENCIL8_BYTES_PER_PIXEL = 4L
     private const val AA_SAMPLE_COUNT = 4
     private const val NON_AA_SAMPLE_COUNT = 1
 
@@ -67,9 +68,17 @@ object GPUClipCoveragePlanner {
 
     private fun intermediateBytes(width: Int, height: Int, sampleCount: Int): IntermediateBytes? = try {
         val pixelCount = Math.multiplyExact(width.toLong(), height.toLong())
-        val resolved = Math.multiplyExact(pixelCount, BYTES_PER_PIXEL)
-        val attachment = Math.multiplyExact(resolved, sampleCount.toLong())
-        IntermediateBytes(resolved = resolved, required = Math.addExact(attachment, resolved))
+        val resolved = Math.multiplyExact(pixelCount, RGBA8_BYTES_PER_PIXEL)
+        val colorRender = Math.multiplyExact(resolved, sampleCount.toLong())
+        val resolve = if (sampleCount == 1) 0L else resolved
+        val depthStencil = Math.multiplyExact(
+            Math.multiplyExact(pixelCount, DEPTH24_STENCIL8_BYTES_PER_PIXEL),
+            sampleCount.toLong(),
+        )
+        IntermediateBytes(
+            resolved = resolved,
+            required = Math.addExact(Math.addExact(colorRender, resolve), depthStencil),
+        )
     } catch (_: ArithmeticException) {
         null
     }
