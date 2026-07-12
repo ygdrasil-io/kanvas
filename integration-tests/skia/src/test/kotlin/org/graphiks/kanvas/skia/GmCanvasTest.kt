@@ -65,4 +65,18 @@ class GmCanvasTest {
         assertTrue(pathOp.path.contains(Point(13f, 24f)))
         assertFalse(pathOp.path.contains(Point(3f, 4f)))
     }
+
+    @Test
+    fun `rotated clip rect is captured as a device path`() {
+        val surface = Surface(width = 32, height = 32)
+
+        surface.canvas {
+            rotate(45f)
+            clipRect(Rect(2f, 2f, 10f, 10f), antiAlias = true)
+        }
+
+        val clip = surface.snapshotOps().filterIsInstance<DisplayOp.SetClip>().single().clip
+        val element = (clip as ClipStack.Complex).ops.single()
+        assertTrue(element is ClipStackOp.PathOp)
+    }
 }

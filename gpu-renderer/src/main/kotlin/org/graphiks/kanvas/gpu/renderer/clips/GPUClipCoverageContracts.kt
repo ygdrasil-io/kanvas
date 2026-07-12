@@ -38,11 +38,33 @@ class GPUClipCoverageElement(
     val kind: GPUClipCoverageElementKind,
     values: List<Float>,
     val vertexCount: Int,
+    val antiAlias: Boolean,
+    val fillRule: GPUClipFillRule,
+    val inverseFill: Boolean,
 ) {
     val values: List<Float> = values.toList()
 
     init {
         require(vertexCount >= 0) { "GPUClipCoverageElement.vertexCount must be non-negative" }
+        when (kind) {
+            GPUClipCoverageElementKind.Rect -> {
+                require(values.size == 4) { "Rect clips require [left, top, right, bottom]" }
+                require(vertexCount == 0) { "Rect clips must not carry path vertices" }
+                require(fillRule == GPUClipFillRule.Winding && !inverseFill) {
+                    "Rect clips are winding and non-inverse"
+                }
+            }
+            GPUClipCoverageElementKind.RRect -> {
+                require(values.size == 12) {
+                    "RRect clips require bounds followed by four corner radii"
+                }
+                require(vertexCount == 0) { "RRect clips must not carry path vertices" }
+                require(fillRule == GPUClipFillRule.Winding && !inverseFill) {
+                    "RRect clips are winding and non-inverse"
+                }
+            }
+            GPUClipCoverageElementKind.Path -> validatePathPayload(values, vertexCount)
+        }
     }
 
     override fun equals(other: Any?): Boolean =
@@ -51,10 +73,37 @@ class GPUClipCoverageElement(
             operation == other.operation &&
             kind == other.kind &&
             values == other.values &&
-            vertexCount == other.vertexCount
+            vertexCount == other.vertexCount &&
+            antiAlias == other.antiAlias &&
+            fillRule == other.fillRule &&
+            inverseFill == other.inverseFill
 
     override fun hashCode(): Int =
-        listOf(operation, kind, values, vertexCount).hashCode()
+        listOf(operation, kind, values, vertexCount, antiAlias, fillRule, inverseFill).hashCode()
+
+    private fun validatePathPayload(values: List<Float>, vertexCount: Int) {
+        require(values.isNotEmpty()) { "Path clips require a contour count" }
+        val contourCount = values.first().toCanonicalIndex("Path contour count")
+        val coordinateStart = 1 + contourCount
+        require(values.size == coordinateStart + vertexCount * 2) {
+            "Path clips require contour starts followed by exactly two values per vertex"
+        }
+        var previousStart = -1
+        for (index in 0 until contourCount) {
+            val start = values[1 + index].toCanonicalIndex("Path contour start")
+            require(start in 0 until vertexCount && start > previousStart) {
+                "Path contour starts must be strictly increasing vertex indices"
+            }
+            previousStart = start
+        }
+    }
+
+    private fun Float.toCanonicalIndex(label: String): Int {
+        require(isFinite() && this >= 0f && this <= Int.MAX_VALUE.toFloat() && this == toInt().toFloat()) {
+            "$label must be a finite non-negative integer"
+        }
+        return toInt()
+    }
 }
 
 /**
@@ -67,9 +116,8 @@ class GPUClipCoverageRequest(
     val targetWidth: Int,
     val targetHeight: Int,
     elements: List<GPUClipCoverageElement>,
-    val fillRule: GPUClipFillRule,
-    val inverseFill: Boolean,
-    val antiAlias: Boolean,
+    /** True only for a captured device rectangle eligible for a native scissor. */
+    val scissorEligible: Boolean = false,
 ) {
     val elements: List<GPUClipCoverageElement> = elements.toList()
 
@@ -83,13 +131,14 @@ class GPUClipCoverageRequest(
         append("gpu-clip-coverage-v1")
         append('|').append(targetWidth)
         append('|').append(targetHeight)
-        append('|').append(fillRule.name)
-        append('|').append(inverseFill)
-        append('|').append(antiAlias)
+        append('|').append(scissorEligible)
         elements.forEach { element ->
             append('|').append(element.operation.name)
             append('|').append(element.kind.name)
             append('|').append(element.vertexCount)
+            append('|').append(element.antiAlias)
+            append('|').append(element.fillRule.name)
+            append('|').append(element.inverseFill)
             element.values.forEach { value ->
                 append('|').append(value.toRawBits().toUInt().toString(16))
             }
@@ -102,12 +151,10 @@ class GPUClipCoverageRequest(
             targetWidth == other.targetWidth &&
             targetHeight == other.targetHeight &&
             elements == other.elements &&
-            fillRule == other.fillRule &&
-            inverseFill == other.inverseFill &&
-            antiAlias == other.antiAlias
+            scissorEligible == other.scissorEligible
 
     override fun hashCode(): Int =
-        listOf(targetWidth, targetHeight, elements, fillRule, inverseFill, antiAlias).hashCode()
+        listOf(targetWidth, targetHeight, elements, scissorEligible).hashCode()
 }
 
 /** Stable refusal reasons emitted by both clip planning and clip routes. */

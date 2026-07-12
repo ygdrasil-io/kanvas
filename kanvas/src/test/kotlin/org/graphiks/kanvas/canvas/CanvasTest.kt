@@ -6,6 +6,7 @@ import org.graphiks.kanvas.types.*
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
+import kotlin.test.assertIs
 
 class TestBuffer : DisplayListBuffer {
     private val ops = mutableListOf<DisplayOp>()
@@ -21,5 +22,32 @@ class CanvasTest {
     @Test fun `Canvas translate`() { val b = TestBuffer(); val c = Canvas(b); c.translate(10f, 20f); assertEquals(10f, c.matrix.transX); assertEquals(20f, c.matrix.transY) }
     @Test fun `Canvas draws bake transform`() { val b = TestBuffer(); val c = Canvas(b); c.translate(10f, 0f); c.drawRect(Rect.fromLTRB(0f,0f,100f,80f), Paint.fill(Color.RED)); assertEquals(10f, (b.ops().filterIsInstance<DisplayOp.DrawRect>().first()).transform.transX) }
     @Test fun `Canvas clipRect`() { val b = TestBuffer(); val c = Canvas(b); c.clipRect(Rect.fromLTRB(0f,0f,50f,50f)); assertEquals(Rect.fromLTRB(0f,0f,50f,50f), c.localClipBounds) }
+    @Test
+    fun `clip geometry is frozen when captured not when a later draw occurs`() {
+        val buffer = TestBuffer()
+        val canvas = Canvas(buffer)
+        canvas.translate(10f, 5f)
+        canvas.clipRect(Rect.fromXYWH(0f, 0f, 4f, 6f), antiAlias = false)
+        canvas.translate(100f, 100f)
+
+        val clip = buffer.ops().filterIsInstance<DisplayOp.SetClip>().last().clip
+        assertEquals(
+            Rect.fromXYWH(10f, 5f, 4f, 6f),
+            assertIs<ClipStack.DeviceRect>(clip).rect,
+        )
+    }
+
+    @Test
+    fun `rotated clip rect is captured as a device path`() {
+        val buffer = TestBuffer()
+        val canvas = Canvas(buffer)
+        canvas.rotate(45f)
+        canvas.clipRect(Rect(2f, 2f, 10f, 10f), antiAlias = true)
+
+        val clip = buffer.ops().filterIsInstance<DisplayOp.SetClip>().single().clip
+        val element = assertIs<ClipStack.Complex>(clip).ops.single()
+        assertIs<ClipStackOp.PathOp>(element)
+    }
+
     @Test fun `Canvas resetMatrix`() { val b = TestBuffer(); val c = Canvas(b); c.translate(100f, 200f); c.resetMatrix(); assertEquals(Matrix33.identity(), c.matrix) }
 }

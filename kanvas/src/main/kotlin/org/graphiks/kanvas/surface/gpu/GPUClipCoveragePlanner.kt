@@ -38,7 +38,11 @@ object GPUClipCoveragePlanner {
 
         scissorFor(request)?.let { return it }
 
-        val sampleCount = if (request.antiAlias) AA_SAMPLE_COUNT else NON_AA_SAMPLE_COUNT
+        val sampleCount = if (request.elements.any(GPUClipCoverageElement::antiAlias)) {
+            AA_SAMPLE_COUNT
+        } else {
+            NON_AA_SAMPLE_COUNT
+        }
         val intermediateBytes = intermediateBytes(
             width = request.targetWidth,
             height = request.targetHeight,
@@ -71,9 +75,15 @@ object GPUClipCoveragePlanner {
     }
 
     private fun scissorFor(request: GPUClipCoverageRequest): GPUClipCoveragePlan.Scissor? {
-        if (request.antiAlias || request.inverseFill || request.elements.size != 1) return null
+        if (!request.scissorEligible || request.elements.size != 1) return null
         val element = request.elements.single()
-        if (element.operation != GPUClipCoverageOperation.Intersect || element.kind != GPUClipCoverageElementKind.Rect) {
+        if (
+            element.operation != GPUClipCoverageOperation.Intersect ||
+            element.kind != GPUClipCoverageElementKind.Rect ||
+            element.antiAlias ||
+            element.inverseFill ||
+            element.values.any { it != it.toInt().toFloat() }
+        ) {
             return null
         }
         if (element.values.size != 4) return null

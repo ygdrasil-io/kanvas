@@ -2,6 +2,8 @@ package org.graphiks.kanvas.types
 
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertTrue
 
 class Matrix33Test {
     @Test
@@ -63,5 +65,33 @@ class Matrix33Test {
         val p = m * Point(5f, 5f)
         assertEquals(20f, p.x)
         assertEquals(10f, p.y)
+    }
+
+    @Test
+    fun `axis aligned affine mapping keeps bounds ordered under negative scale`() {
+        val matrix = Matrix33.translate(10f, 5f) * Matrix33.scale(-2f, 3f)
+        val rrect = RRect(
+            rect = Rect.fromLTRB(1f, 2f, 4f, 6f),
+            topLeft = CornerRadii(1f, 2f),
+            topRight = CornerRadii(2f, 3f),
+            bottomRight = CornerRadii(3f, 4f),
+            bottomLeft = CornerRadii(4f, 5f),
+        )
+
+        assertTrue(matrix.isAffine())
+        assertTrue(matrix.isAxisAlignedAffine())
+        assertEquals(Rect.fromLTRB(2f, 11f, 8f, 23f), matrix.mapAxisAlignedRect(rrect.rect))
+        assertEquals(
+            RRect(
+                rect = Rect.fromLTRB(2f, 11f, 8f, 23f),
+                topLeft = CornerRadii(2f, 6f),
+                topRight = CornerRadii(4f, 9f),
+                bottomRight = CornerRadii(6f, 12f),
+                bottomLeft = CornerRadii(8f, 15f),
+            ),
+            rrect.mapAxisAligned(matrix),
+        )
+        assertFalse(Matrix33.rotate(45f).isAxisAlignedAffine())
+        assertFalse(Matrix33.makeAll(1f, 0f, 0f, 0f, 1f, 0f, 0.1f, 0f, 1f).isAffine())
     }
 }

@@ -1,14 +1,26 @@
 package org.graphiks.kanvas.surface.gpu
 
+import org.graphiks.kanvas.canvas.ClipStack
+import org.graphiks.kanvas.canvas.ClipStackOp
+import org.graphiks.kanvas.canvas.DisplayOp
+import org.graphiks.kanvas.geometry.FillType
+import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoverageElement
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoverageElementKind
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoverageOperation
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoverageRequest
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipFillRule
+import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
+import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
+import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.pipeline.ClipOp
 import org.graphiks.kanvas.surface.DiagnosticFact
 import org.graphiks.kanvas.surface.Diagnostics
 import org.graphiks.kanvas.surface.RenderConfig
+import org.graphiks.kanvas.types.Rect
+import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.kanvas.types.Color
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotEquals
@@ -16,6 +28,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
+import kotlin.test.assertNull
 import kotlin.test.assertSame
 
 class GPUClipCoverageContractsTest {
@@ -58,12 +71,13 @@ class GPUClipCoverageContractsTest {
         )
         val scissor = GPUClipCoveragePlanner.plan(
             request = request(
-                antiAlias = false,
+                scissorEligible = true,
                 elements = listOf(
                     element(
                         kind = GPUClipCoverageElementKind.Rect,
                         values = listOf(2f, 3f, 10f, 11f),
-                        vertexCount = 4,
+                        vertexCount = 0,
+                        antiAlias = false,
                     ),
                 ),
             ),
@@ -151,6 +165,73 @@ class GPUClipCoverageContractsTest {
         assertEquals(1024u, RenderConfig.fromEnvironment().maxClipIntermediateBytes)
     }
 
+    @Test
+    fun `complex clip mapper preserves order difference and inverse fill`() {
+        val path = Path().apply {
+            fillType = FillType.INVERSE_EVEN_ODD
+            addRect(Rect.fromLTRB(8f, 8f, 32f, 32f))
+        }
+        val clip = ClipStack.Complex(
+            listOf(
+                ClipStackOp.RectOp(Rect.fromLTRB(2f, 3f, 60f, 61f), ClipOp.INTERSECT, antiAlias = false),
+                ClipStackOp.PathOp(path, ClipOp.DIFFERENCE, antiAlias = true),
+            ),
+        )
+
+        val facts = clip.toGPUClipFacts(target())
+        val request = requireNotNull(facts.coverageRequest)
+
+        assertEquals(
+            listOf(GPUClipCoverageOperation.Intersect, GPUClipCoverageOperation.Difference),
+            request.elements.map(GPUClipCoverageElement::operation),
+        )
+        val pathElement = request.elements.last()
+        assertEquals(GPUClipCoverageElementKind.Path, pathElement.kind)
+        assertEquals(GPUClipFillRule.EvenOdd, pathElement.fillRule)
+        assertTrue(pathElement.inverseFill)
+        assertTrue(pathElement.antiAlias)
+        assertEquals(1f, pathElement.values.first())
+        assertEquals(0f, pathElement.values[1])
+    }
+
+    @Test
+    fun `clip mapper keeps coverage requests only for non wide open clips`() {
+        val hardRect = ClipStack.DeviceRect(Rect.fromLTRB(2f, 3f, 10f, 11f), antiAlias = false)
+        val fractionalRect = ClipStack.DeviceRect(Rect.fromLTRB(2.5f, 3f, 10f, 11f), antiAlias = false)
+        val aaRect = ClipStack.DeviceRect(Rect.fromLTRB(2f, 3f, 10f, 11f), antiAlias = true)
+        val complex = ClipStack.Complex(
+            listOf(ClipStackOp.RectOp(Rect.fromLTRB(2f, 3f, 10f, 11f), ClipOp.INTERSECT, antiAlias = false)),
+        )
+        val config = RenderConfig()
+
+        assertNull(ClipStack.WideOpen.toGPUClipFacts(target()).coverageRequest)
+        assertIs<GPUClipCoveragePlan.Scissor>(
+            GPUClipCoveragePlanner.plan(requireNotNull(hardRect.toGPUClipFacts(target()).coverageRequest), config, 4096),
+        )
+        assertIs<GPUClipCoveragePlan.Mask>(
+            GPUClipCoveragePlanner.plan(requireNotNull(fractionalRect.toGPUClipFacts(target()).coverageRequest), config, 4096),
+        )
+        assertIs<GPUClipCoveragePlan.Mask>(
+            GPUClipCoveragePlanner.plan(requireNotNull(aaRect.toGPUClipFacts(target()).coverageRequest), config, 4096),
+        )
+        assertIs<GPUClipCoveragePlan.Mask>(
+            GPUClipCoveragePlanner.plan(requireNotNull(complex.toGPUClipFacts(target()).coverageRequest), config, 4096),
+        )
+    }
+
+    @Test
+    fun `perspective is refused before clip coverage planning`() {
+        val command = DisplayOp.DrawRect(
+            rect = Rect.fromLTRB(2f, 3f, 10f, 11f),
+            paint = Paint.fill(Color.RED),
+            transform = Matrix33.makeAll(1f, 0f, 0f, 0f, 1f, 0f, 0.1f, 0f, 1f),
+            clip = ClipStack.DeviceRect(Rect.fromLTRB(2f, 3f, 10f, 11f), antiAlias = false),
+        ).toNormalizedCommand(cmdId = org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID(0), target = target())
+
+        assertEquals(GPUTransformType.Perspective, command.transform.type)
+        assertEquals("unsupported_transform:Perspective", command.fillGuardRefusalReasonOrNull())
+    }
+
     private fun refusalFor(request: GPUClipCoverageRequest): String {
         val plan = GPUClipCoveragePlanner.plan(
             request = request,
@@ -161,18 +242,19 @@ class GPUClipCoverageContractsTest {
     }
 
     private fun complexRequest(antiAlias: Boolean): GPUClipCoverageRequest = request(
-        antiAlias = antiAlias,
         elements = listOf(
             element(
                 kind = GPUClipCoverageElementKind.Path,
-                values = listOf(0f, 0f, 1024f, 0f, 1024f, 1024f, 0f, 1024f),
+                values = listOf(1f, 0f, 0f, 0f, 1024f, 0f, 1024f, 1024f, 0f, 1024f),
                 vertexCount = 4,
+                antiAlias = antiAlias,
             ),
             element(
                 operation = GPUClipCoverageOperation.Difference,
                 kind = GPUClipCoverageElementKind.RRect,
-                values = listOf(32f, 32f, 992f, 992f, 24f, 24f),
-                vertexCount = 8,
+                values = listOf(32f, 32f, 992f, 992f, 24f, 24f, 24f, 24f, 24f, 24f, 24f, 24f),
+                vertexCount = 0,
+                antiAlias = antiAlias,
             ),
         ),
     )
@@ -181,8 +263,8 @@ class GPUClipCoverageContractsTest {
         elements = listOf(
             element(
                 kind = GPUClipCoverageElementKind.Path,
-                values = listOf(0f, Float.NaN, 1f, 1f),
-                vertexCount = 4,
+                values = listOf(1f, 0f, 0f, Float.NaN, 1f, 1f),
+                vertexCount = 2,
             ),
         ),
     )
@@ -208,28 +290,37 @@ class GPUClipCoverageContractsTest {
     private fun request(
         width: Int = 1024,
         height: Int = 1024,
-        antiAlias: Boolean = true,
         elements: List<GPUClipCoverageElement>,
+        scissorEligible: Boolean = false,
     ): GPUClipCoverageRequest = GPUClipCoverageRequest(
         targetWidth = width,
         targetHeight = height,
         elements = elements,
-        fillRule = GPUClipFillRule.Winding,
-        inverseFill = false,
-        antiAlias = antiAlias,
+        scissorEligible = scissorEligible,
     )
 
     private fun element(
         operation: GPUClipCoverageOperation = GPUClipCoverageOperation.Intersect,
         kind: GPUClipCoverageElementKind = GPUClipCoverageElementKind.Path,
-        values: List<Float> = listOf(0f, 0f, 1f, 1f),
-        vertexCount: Int = 4,
+        vertexCount: Int = 2,
+        values: List<Float> = pathValues(vertexCount),
+        antiAlias: Boolean = true,
+        fillRule: GPUClipFillRule = GPUClipFillRule.Winding,
+        inverseFill: Boolean = false,
     ): GPUClipCoverageElement = GPUClipCoverageElement(
         operation = operation,
         kind = kind,
         values = values,
         vertexCount = vertexCount,
+        antiAlias = antiAlias,
+        fillRule = fillRule,
+        inverseFill = inverseFill,
     )
+
+    private fun pathValues(vertexCount: Int): List<Float> =
+        listOf(1f, 0f) + List(vertexCount * 2) { it.toFloat() }
+
+    private fun target(): GPUTargetFacts = GPUTargetFacts(64, 64, "rgba8unorm")
 
     private companion object {
         const val MAX_CLIP_INTERMEDIATE_BYTES_PROPERTY = "kanvas.render.maxClipIntermediateBytes"

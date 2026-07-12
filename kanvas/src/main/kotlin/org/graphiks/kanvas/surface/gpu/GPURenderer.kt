@@ -4,7 +4,6 @@ import org.graphiks.kanvas.canvas.DisplayListBuffer
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.geometry.FillType
 import org.graphiks.kanvas.geometry.Path
-import org.graphiks.kanvas.geometry.PathVerb
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
@@ -49,14 +48,7 @@ import org.graphiks.kanvas.text.GpuTextBlob
 import org.graphiks.kanvas.text.MappedGlyph
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.text.TextBridge
-import kotlin.math.PI
 import kotlin.math.abs
-import kotlin.math.acos
-import kotlin.math.atan2
-import kotlin.math.ceil
-import kotlin.math.cos
-import kotlin.math.sin
-import kotlin.math.sqrt
 
 internal fun productIntermediatePlannerScopeDiagnostics(): List<String> =
     listOf(
@@ -1515,181 +1507,6 @@ internal fun renderViaGpu(
             )
         }
     }
-}
-
-internal fun org.graphiks.kanvas.geometry.Path.toPathTessellatorData(): PathData {
-    val verbs = mutableListOf<GpuPathVerb>()
-    val points = mutableListOf<Point>()
-    val kanvasVerbs = this.verbs()
-    val kanvasPoints = this.points()
-    var pi = 0
-    var currentPoint = Point(0f, 0f)
-    var contourStart = currentPoint
-    for (verb in kanvasVerbs) {
-        when (verb) {
-            PathVerb.MOVE -> {
-                val p = kanvasPoints[pi++]
-                currentPoint = Point(p.x, p.y)
-                contourStart = currentPoint
-                verbs.add(GpuPathVerb.MoveTo(currentPoint))
-            }
-            PathVerb.LINE -> {
-                val p = kanvasPoints[pi++]
-                currentPoint = Point(p.x, p.y)
-                verbs.add(GpuPathVerb.LineTo(currentPoint))
-            }
-            PathVerb.QUAD -> {
-                val c = kanvasPoints[pi++]; val p = kanvasPoints[pi++]
-                currentPoint = Point(p.x, p.y)
-                verbs.add(
-                    GpuPathVerb.QuadTo(
-                        Point(c.x, c.y), currentPoint,
-                    ),
-                )
-            }
-            PathVerb.CUBIC -> {
-                val c1 = kanvasPoints[pi++]; val c2 = kanvasPoints[pi++]; val p = kanvasPoints[pi++]
-                currentPoint = Point(p.x, p.y)
-                verbs.add(
-                    GpuPathVerb.CubicTo(
-                        Point(c1.x, c1.y), Point(c2.x, c2.y), currentPoint,
-                    ),
-                )
-            }
-            PathVerb.ARC_TO -> {
-                val radius = kanvasPoints[pi++]
-                val rotationAndLargeArc = kanvasPoints[pi++]
-                val sweep = kanvasPoints[pi++]
-                val endpoint = kanvasPoints[pi++]
-                val arcEndpoint = Point(endpoint.x, endpoint.y)
-                flattenSvgArc(
-                    start = currentPoint,
-                    radius = Point(radius.x, radius.y),
-                    xAxisRotation = rotationAndLargeArc.x,
-                    largeArc = rotationAndLargeArc.y > 0f,
-                    sweep = sweep.x > 0f,
-                    endpoint = arcEndpoint,
-                ).forEach { verbs.add(GpuPathVerb.LineTo(it)) }
-                currentPoint = arcEndpoint
-            }
-            PathVerb.CLOSE -> {
-                verbs.add(GpuPathVerb.Close)
-                currentPoint = contourStart
-            }
-        }
-    }
-    return PathData(verbs = verbs, points = points)
-}
-
-private fun flattenSvgArc(
-    start: Point,
-    radius: Point,
-    xAxisRotation: Float,
-    largeArc: Boolean,
-    sweep: Boolean,
-    endpoint: Point,
-): List<Point> {
-    if (!endpoint.x.isFinite() || !endpoint.y.isFinite()) return emptyList()
-    if (
-        !start.x.isFinite() || !start.y.isFinite() ||
-        !radius.x.isFinite() || !radius.y.isFinite() ||
-        !xAxisRotation.isFinite()
-    ) {
-        return listOf(endpoint)
-    }
-
-    val startX = start.x.toDouble()
-    val startY = start.y.toDouble()
-    val endX = endpoint.x.toDouble()
-    val endY = endpoint.y.toDouble()
-    var rx = abs(radius.x.toDouble())
-    var ry = abs(radius.y.toDouble())
-    if (rx == 0.0 || ry == 0.0 || (startX == endX && startY == endY)) {
-        return listOf(endpoint)
-    }
-
-    val rotation = (xAxisRotation.toDouble() % 360.0) * PI / 180.0
-    val cosRotation = cos(rotation)
-    val sinRotation = sin(rotation)
-    val halfDx = (startX - endX) / 2.0
-    val halfDy = (startY - endY) / 2.0
-    val transformedX = cosRotation * halfDx + sinRotation * halfDy
-    val transformedY = -sinRotation * halfDx + cosRotation * halfDy
-
-    val radiiScale = transformedX * transformedX / (rx * rx) +
-        transformedY * transformedY / (ry * ry)
-    if (!radiiScale.isFinite()) return listOf(endpoint)
-    if (radiiScale > 1.0) {
-        val scale = sqrt(radiiScale)
-        rx *= scale
-        ry *= scale
-    }
-
-    val rxSquared = rx * rx
-    val rySquared = ry * ry
-    val transformedXSquared = transformedX * transformedX
-    val transformedYSquared = transformedY * transformedY
-    val centerDenominator = rxSquared * transformedYSquared + rySquared * transformedXSquared
-    if (centerDenominator <= 0.0 || !centerDenominator.isFinite()) return listOf(endpoint)
-    val centerNumerator = maxOf(
-        0.0,
-        rxSquared * rySquared - rxSquared * transformedYSquared - rySquared * transformedXSquared,
-    )
-    val centerSign = if (largeArc == sweep) -1.0 else 1.0
-    val centerScale = centerSign * sqrt(centerNumerator / centerDenominator)
-    if (!centerScale.isFinite()) return listOf(endpoint)
-
-    val centerTransformedX = centerScale * rx * transformedY / ry
-    val centerTransformedY = -centerScale * ry * transformedX / rx
-    val centerX = cosRotation * centerTransformedX - sinRotation * centerTransformedY +
-        (startX + endX) / 2.0
-    val centerY = sinRotation * centerTransformedX + cosRotation * centerTransformedY +
-        (startY + endY) / 2.0
-
-    val startVectorX = (transformedX - centerTransformedX) / rx
-    val startVectorY = (transformedY - centerTransformedY) / ry
-    val endVectorX = (-transformedX - centerTransformedX) / rx
-    val endVectorY = (-transformedY - centerTransformedY) / ry
-    val startAngle = atan2(startVectorY, startVectorX)
-    var sweepAngle = atan2(
-        startVectorX * endVectorY - startVectorY * endVectorX,
-        startVectorX * endVectorX + startVectorY * endVectorY,
-    )
-    if (!sweep && sweepAngle > 0.0) sweepAngle -= 2.0 * PI
-    if (sweep && sweepAngle < 0.0) sweepAngle += 2.0 * PI
-    if (!startAngle.isFinite() || !sweepAngle.isFinite()) return listOf(endpoint)
-
-    val flatnessTolerance = 0.25
-    val subdivisionRadius = maxOf(rx, ry)
-    val maxSegmentAngle = if (subdivisionRadius <= flatnessTolerance) {
-        PI
-    } else {
-        val cosine = ((subdivisionRadius - flatnessTolerance).coerceAtLeast(0.0) / subdivisionRadius)
-            .coerceIn(0.0, 1.0)
-        2.0 * acos(cosine)
-    }
-    val segmentCount = if (maxSegmentAngle.isFinite() && maxSegmentAngle > 0.0) {
-        ceil(abs(sweepAngle) / maxSegmentAngle).coerceIn(1.0, 64.0).toInt()
-    } else {
-        64
-    }
-    val flattened = ArrayList<Point>(segmentCount)
-    for (segment in 1..segmentCount) {
-        if (segment == segmentCount) {
-            flattened.add(endpoint)
-            continue
-        }
-        val angle = startAngle + sweepAngle * segment / segmentCount
-        val ellipseX = rx * cos(angle)
-        val ellipseY = ry * sin(angle)
-        val x = centerX + cosRotation * ellipseX - sinRotation * ellipseY
-        val y = centerY + sinRotation * ellipseX + cosRotation * ellipseY
-        val floatX = x.toFloat()
-        val floatY = y.toFloat()
-        if (!floatX.isFinite() || !floatY.isFinite()) return listOf(endpoint)
-        flattened.add(Point(floatX, floatY))
-    }
-    return flattened
 }
 
 /** Transform a source rectangle through an affine matrix to obtain screen-space destination bounds. */
