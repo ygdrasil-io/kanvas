@@ -25,6 +25,13 @@ sealed interface ClipStack {
     }
 
     val isRect: Boolean get() = this is DeviceRect
+
+    /** True when a clip was captured under perspective and must refuse the affine GPU route. */
+    val perspectiveCaptureRefusal: Boolean get() = when (this) {
+        WideOpen,
+        is DeviceRect -> false
+        is Complex -> ops.any(ClipStackOp::perspectiveCaptureRefusal)
+    }
 }
 
 /**
@@ -35,12 +42,29 @@ sealed interface ClipStack {
  */
 sealed interface ClipStackOp {
     val antiAlias: Boolean
+    /** Preserves the capture-time perspective refusal after later CTM changes. */
+    val perspectiveCaptureRefusal: Boolean
     /** Axis-aligned rectangle clip operation. */
-    data class RectOp(val rect: org.graphiks.kanvas.types.Rect, val op: ClipOp, override val antiAlias: Boolean = true) : ClipStackOp
+    data class RectOp(
+        val rect: org.graphiks.kanvas.types.Rect,
+        val op: ClipOp,
+        override val antiAlias: Boolean = true,
+        override val perspectiveCaptureRefusal: Boolean = false,
+    ) : ClipStackOp
 
     /** Rounded-rectangle clip operation. */
-    data class RRectOp(val rrect: org.graphiks.kanvas.types.RRect, val op: ClipOp, override val antiAlias: Boolean = true) : ClipStackOp
+    data class RRectOp(
+        val rrect: org.graphiks.kanvas.types.RRect,
+        val op: ClipOp,
+        override val antiAlias: Boolean = true,
+        override val perspectiveCaptureRefusal: Boolean = false,
+    ) : ClipStackOp
 
     /** Arbitrary path clip operation. */
-    data class PathOp(val path: org.graphiks.kanvas.geometry.Path, val op: ClipOp, override val antiAlias: Boolean = true) : ClipStackOp
+    data class PathOp(
+        val path: org.graphiks.kanvas.geometry.Path,
+        val op: ClipOp,
+        override val antiAlias: Boolean = true,
+        override val perspectiveCaptureRefusal: Boolean = false,
+    ) : ClipStackOp
 }

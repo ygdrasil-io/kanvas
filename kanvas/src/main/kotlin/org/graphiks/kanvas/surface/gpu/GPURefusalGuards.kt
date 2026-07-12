@@ -57,6 +57,9 @@ internal fun NormalizedDrawCommand.fillGuardRefusalReasonOrNull(): String? {
     ) {
         return "unsupported_material:${material.kind.name}"
     }
+    if (clip.perspectiveCaptureRefusal) {
+        return "unsupported_transform:Perspective"
+    }
     if (transform.type != GPUTransformType.Identity) {
         return "unsupported_transform:${transform.type.name}"
     }

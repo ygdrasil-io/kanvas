@@ -94,11 +94,21 @@ fun Matrix33.mapAxisAlignedRect(rect: Rect): Rect {
 fun RRect.mapAxisAligned(matrix: Matrix33): RRect {
     require(matrix.isAxisAlignedAffine()) { "mapAxisAligned requires an axis-aligned affine matrix" }
     fun CornerRadii.map(): CornerRadii = CornerRadii(abs(x * matrix.scaleX), abs(y * matrix.scaleY))
+    fun sourceCorner(deviceLeft: Boolean, deviceTop: Boolean): CornerRadii {
+        val sourceLeft = if (matrix.scaleX < 0f) !deviceLeft else deviceLeft
+        val sourceTop = if (matrix.scaleY < 0f) !deviceTop else deviceTop
+        return when {
+            sourceLeft && sourceTop -> topLeft
+            !sourceLeft && sourceTop -> topRight
+            !sourceLeft -> bottomRight
+            else -> bottomLeft
+        }
+    }
     return RRect(
         rect = matrix.mapAxisAlignedRect(rect),
-        topLeft = topLeft.map(),
-        topRight = topRight.map(),
-        bottomRight = bottomRight.map(),
-        bottomLeft = bottomLeft.map(),
+        topLeft = sourceCorner(deviceLeft = true, deviceTop = true).map(),
+        topRight = sourceCorner(deviceLeft = false, deviceTop = true).map(),
+        bottomRight = sourceCorner(deviceLeft = false, deviceTop = false).map(),
+        bottomLeft = sourceCorner(deviceLeft = true, deviceTop = false).map(),
     )
 }

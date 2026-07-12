@@ -2,7 +2,9 @@ package org.graphiks.kanvas.surface.gpu
 
 import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.canvas.ClipStackOp
+import org.graphiks.kanvas.canvas.Canvas
 import org.graphiks.kanvas.canvas.DisplayOp
+import org.graphiks.kanvas.canvas.TestBuffer
 import org.graphiks.kanvas.geometry.FillType
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoverageElement
@@ -230,6 +232,59 @@ class GPUClipCoverageContractsTest {
 
         assertEquals(GPUTransformType.Perspective, command.transform.type)
         assertEquals("unsupported_transform:Perspective", command.fillGuardRefusalReasonOrNull())
+    }
+
+    @Test
+    fun `perspective clip remains refused after reset matrix`() {
+        val buffer = TestBuffer()
+        val canvas = Canvas(buffer)
+        canvas.setMatrix(Matrix33.makeAll(1f, 0f, 0f, 0f, 1f, 0f, 0.1f, 0f, 1f))
+        canvas.clipRect(Rect.fromLTRB(2f, 3f, 10f, 11f), antiAlias = false)
+        canvas.resetMatrix()
+        canvas.clipRect(Rect.fromLTRB(3f, 4f, 9f, 10f), antiAlias = false)
+        canvas.drawRect(Rect.fromLTRB(0f, 0f, 16f, 16f), Paint.fill(Color.RED))
+
+        val draw = buffer.ops().filterIsInstance<DisplayOp.DrawRect>().single()
+        val command = draw.toNormalizedCommand(
+            cmdId = org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID(0),
+            target = target(),
+        )
+
+        assertEquals(GPUTransformType.Identity, command.transform.type)
+        assertTrue(command.clip.perspectiveCaptureRefusal)
+        assertEquals("unsupported_transform:Perspective", command.fillGuardRefusalReasonOrNull())
+    }
+
+    @Test
+    fun `clip path defers over budget vertices to planner`() {
+        val path = Path().apply {
+            moveTo(0f, 0f)
+            repeat(300) { index -> lineTo(index + 1f, if (index % 2 == 0) 1f else -1f) }
+            close()
+        }
+        val request = requireNotNull(
+            ClipStack.Complex(listOf(ClipStackOp.PathOp(path, ClipOp.INTERSECT, antiAlias = false)))
+                .toGPUClipFacts(target())
+                .coverageRequest,
+        )
+
+        assertTrue(request.elements.single().vertexCount > 256)
+        assertEquals(
+            "unsupported.clip.vertex_budget",
+            assertIs<GPUClipCoveragePlan.Refused>(
+                GPUClipCoveragePlanner.plan(request, RenderConfig(maxPathVertices = 256u), maxTextureDimension2D = 4096),
+            ).code,
+        )
+    }
+
+    @Test
+    fun `path payload requires contours to match vertices and start at zero`() {
+        assertFailsWith<IllegalArgumentException> {
+            element(vertexCount = 1, values = listOf(0f, 0f, 0f))
+        }
+        assertFailsWith<IllegalArgumentException> {
+            element(vertexCount = 2, values = listOf(1f, 1f, 0f, 0f, 1f, 1f))
+        }
     }
 
     private fun refusalFor(request: GPUClipCoverageRequest): String {

@@ -252,6 +252,8 @@ data class GPUClipFacts(
     val kind: GPUClipKind,
     val bounds: GPUBounds,
     val coverageRequest: GPUClipCoverageRequest? = null,
+    /** A Canvas clip captured under perspective, which the affine GPU route must refuse. */
+    val perspectiveCaptureRefusal: Boolean = false,
 ) {
     /** Constructors for common clip fact records. */
     companion object {

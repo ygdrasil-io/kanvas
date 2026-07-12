@@ -84,6 +84,9 @@ class GPUClipCoverageElement(
     private fun validatePathPayload(values: List<Float>, vertexCount: Int) {
         require(values.isNotEmpty()) { "Path clips require a contour count" }
         val contourCount = values.first().toCanonicalIndex("Path contour count")
+        require((contourCount == 0) == (vertexCount == 0)) {
+            "Path clips require contours if and only if they carry vertices"
+        }
         val coordinateStart = 1 + contourCount
         require(values.size == coordinateStart + vertexCount * 2) {
             "Path clips require contour starts followed by exactly two values per vertex"
@@ -91,7 +94,7 @@ class GPUClipCoverageElement(
         var previousStart = -1
         for (index in 0 until contourCount) {
             val start = values[1 + index].toCanonicalIndex("Path contour start")
-            require(start in 0 until vertexCount && start > previousStart) {
+            require(start in 0 until vertexCount && start > previousStart && (index != 0 || start == 0)) {
                 "Path contour starts must be strictly increasing vertex indices"
             }
             previousStart = start

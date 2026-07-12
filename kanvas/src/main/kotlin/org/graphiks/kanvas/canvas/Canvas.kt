@@ -337,7 +337,7 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
         currentTransform.isAffine() ->
             ClipStackOp.PathOp(Path().addRect(rect).transform(currentTransform), op, antiAlias)
         else ->
-            ClipStackOp.PathOp(Path().addRect(rect), op, antiAlias)
+            ClipStackOp.PathOp(Path().addRect(rect), op, antiAlias, perspectiveCaptureRefusal = true)
     }
 
     private fun captureClipRRect(rrect: RRect, op: ClipOp, antiAlias: Boolean): ClipStackOp = when {
@@ -346,7 +346,7 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
         currentTransform.isAffine() ->
             ClipStackOp.PathOp(Path().addRRect(rrect).transform(currentTransform), op, antiAlias)
         else ->
-            ClipStackOp.PathOp(Path().addRRect(rrect), op, antiAlias)
+            ClipStackOp.PathOp(Path().addRRect(rrect), op, antiAlias, perspectiveCaptureRefusal = true)
     }
 
     private fun captureClipPath(path: Path, op: ClipOp, antiAlias: Boolean): ClipStackOp =
@@ -354,6 +354,7 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
             if (currentTransform.isAffine()) path.transform(currentTransform) else path,
             op,
             antiAlias,
+            perspectiveCaptureRefusal = !currentTransform.isAffine(),
         )
 
     private data class CanvasState(val transform: Matrix33, val clip: ClipStack)

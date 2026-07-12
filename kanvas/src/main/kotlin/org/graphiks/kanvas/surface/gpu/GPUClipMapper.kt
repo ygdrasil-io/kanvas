@@ -42,6 +42,7 @@ internal fun ClipStack.toGPUClipFacts(target: GPUTargetFacts): GPUClipFacts = wh
                 elements = listOf(element),
                 scissorEligible = !antiAlias && rect.isIntegerAligned(),
             ),
+            perspectiveCaptureRefusal = perspectiveCaptureRefusal,
         )
     }
     is ClipStack.Complex -> GPUClipFacts(
@@ -52,6 +53,7 @@ internal fun ClipStack.toGPUClipFacts(target: GPUTargetFacts): GPUClipFacts = wh
             targetHeight = target.height,
             elements = ops.map(ClipStackOp::toClipElement),
         ),
+        perspectiveCaptureRefusal = perspectiveCaptureRefusal,
     )
 }
 
@@ -89,7 +91,10 @@ private fun ClipStackOp.toClipElement(): GPUClipCoverageElement = when (this) {
         inverseFill = false,
     )
     is ClipStackOp.PathOp -> {
-        val flattened = PathTessellator(tolerance = 0.25f).flattenWithContours(path.toPathTessellatorData())
+        val flattened = PathTessellator(
+            tolerance = 0.25f,
+            maxVertices = Int.MAX_VALUE,
+        ).flattenWithContours(path.toPathTessellatorData())
         val fill = path.fillType.toClipFill()
         GPUClipCoverageElement(
             operation = op.toCoverageOperation(),

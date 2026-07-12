@@ -84,14 +84,56 @@ class Matrix33Test {
         assertEquals(
             RRect(
                 rect = Rect.fromLTRB(2f, 11f, 8f, 23f),
-                topLeft = CornerRadii(2f, 6f),
-                topRight = CornerRadii(4f, 9f),
-                bottomRight = CornerRadii(6f, 12f),
-                bottomLeft = CornerRadii(8f, 15f),
+                topLeft = CornerRadii(4f, 9f),
+                topRight = CornerRadii(2f, 6f),
+                bottomRight = CornerRadii(8f, 15f),
+                bottomLeft = CornerRadii(6f, 12f),
             ),
             rrect.mapAxisAligned(matrix),
         )
         assertFalse(Matrix33.rotate(45f).isAxisAlignedAffine())
         assertFalse(Matrix33.makeAll(1f, 0f, 0f, 0f, 1f, 0f, 0.1f, 0f, 1f).isAffine())
+    }
+
+    @Test
+    fun `axis aligned rrect mirrors permute asymmetric corner radii`() {
+        val rrect = RRect(
+            rect = Rect.fromLTRB(1f, 2f, 4f, 6f),
+            topLeft = CornerRadii(1f, 2f),
+            topRight = CornerRadii(2f, 3f),
+            bottomRight = CornerRadii(3f, 4f),
+            bottomLeft = CornerRadii(4f, 5f),
+        )
+
+        assertEquals(
+            RRect(
+                Rect.fromLTRB(-4f, 2f, -1f, 6f),
+                topLeft = CornerRadii(2f, 3f),
+                topRight = CornerRadii(1f, 2f),
+                bottomRight = CornerRadii(4f, 5f),
+                bottomLeft = CornerRadii(3f, 4f),
+            ),
+            rrect.mapAxisAligned(Matrix33.scale(-1f, 1f)),
+        )
+        assertEquals(
+            RRect(
+                Rect.fromLTRB(1f, -6f, 4f, -2f),
+                topLeft = CornerRadii(4f, 5f),
+                topRight = CornerRadii(3f, 4f),
+                bottomRight = CornerRadii(2f, 3f),
+                bottomLeft = CornerRadii(1f, 2f),
+            ),
+            rrect.mapAxisAligned(Matrix33.scale(1f, -1f)),
+        )
+        assertEquals(
+            RRect(
+                Rect.fromLTRB(-4f, -6f, -1f, -2f),
+                topLeft = CornerRadii(3f, 4f),
+                topRight = CornerRadii(4f, 5f),
+                bottomRight = CornerRadii(1f, 2f),
+                bottomLeft = CornerRadii(2f, 3f),
+            ),
+            rrect.mapAxisAligned(Matrix33.scale(-1f, -1f)),
+        )
     }
 }
