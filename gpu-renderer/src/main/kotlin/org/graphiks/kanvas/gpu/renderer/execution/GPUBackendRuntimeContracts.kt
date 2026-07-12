@@ -258,6 +258,20 @@ enum class GPUBackendStencilMode {
     Test,
 }
 
+/** Fill rules supported by the native stencil-cover pipeline. */
+enum class GPUBackendStencilFillRule {
+    /** Accumulate signed winding with increment/decrement operations. */
+    NonZero,
+    /** Toggle stencil parity for every covered edge. */
+    EvenOdd,
+}
+
+/** Pipeline-state facts that determine stencil write and cover behavior. */
+data class GPUBackendStencilCoverConfig(
+    val fillRule: GPUBackendStencilFillRule,
+    val inverse: Boolean,
+)
+
 /** Describes a secondary offscreen texture that can be bound as a texture source. */
 data class GPUBackendOffscreenTexture(
     val label: String,
@@ -423,6 +437,10 @@ interface GPUBackendRenderRecorder {
         triangleData: GPUBackendTriangleData?,
         draws: List<GPUBackendRawUniformDraw>,
         blendMode: GPUBlendMode? = null,
+        stencilConfig: GPUBackendStencilCoverConfig = GPUBackendStencilCoverConfig(
+            fillRule = GPUBackendStencilFillRule.NonZero,
+            inverse = false,
+        ),
     )
 
     /** Creates a GPU vertex buffer from interleaved position + color float data. Returns a stable label. */

@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.geometry
 
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendTriangleData
+
 /** 2D point with float coordinates. */
 data class Point(val x: Float, val y: Float)
 
@@ -189,6 +191,37 @@ class PathTessellator(
         }
 
         return TriangleList(vertices = points, indices = indices)
+    }
+
+    /**
+     * Produces one triangle from an exterior anchor to each contour edge for a
+     * stencil write pass. Unlike [triangulate], contour boundaries are retained.
+     */
+    fun stencilEdgeFan(flattened: FlattenedPath): GPUBackendTriangleData {
+        val anchor = Point(
+            minOf(-1f, flattened.points.minOf { it.x } - 1f),
+            minOf(-1f, flattened.points.minOf { it.y } - 1f),
+        )
+        val vertices = mutableListOf<Float>()
+        val indices = mutableListOf<Int>()
+
+        flattened.contourStarts.forEachIndexed { contourIndex, start ->
+            val end = flattened.contourStarts.getOrElse(contourIndex + 1) { flattened.points.size }
+            for (index in start until end) {
+                val next = if (index + 1 == end) start else index + 1
+                val base = vertices.size / 2
+                vertices += listOf(
+                    anchor.x,
+                    anchor.y,
+                    flattened.points[index].x,
+                    flattened.points[index].y,
+                    flattened.points[next].x,
+                    flattened.points[next].y,
+                )
+                indices += listOf(base, base + 1, base + 2)
+            }
+        }
+        return GPUBackendTriangleData(vertices.toFloatArray(), indices.toIntArray())
     }
 
     private fun quadraticStepCount(p0: Point, p1: Point, p2: Point): Int {

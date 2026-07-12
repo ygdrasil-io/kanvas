@@ -1,5 +1,9 @@
 package org.graphiks.kanvas.surface.gpu
 
+import org.graphiks.kanvas.geometry.FillType
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendStencilCoverConfig
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendStencilFillRule
+
 internal val SOLID_RECT_WGSL: String = """
     struct Uniforms {
         color: vec4f,
@@ -572,16 +576,27 @@ internal val FILTERED_IMAGE_COMPOSITE_WGSL: String = """
     }
 """.trimIndent()
 
-internal fun stencilWriteWgsl(width: Int, height: Int): String = """
+/** Static stencil-write module. Target dimensions are supplied as a reflected uniform. */
+internal val CLIP_STENCIL_WRITE_WGSL: String = """
+struct StencilUniforms {
+    targetSize: vec2f,
+};
+
+@group(0) @binding(0) var<uniform> uniforms: StencilUniforms;
+
 struct VertexInput {
     @location(0) position: vec2f,
 };
 
 @vertex
 fn vs_main(in: VertexInput) -> @builtin(position) vec4f {
-    let hw = f32($width) / 2.0;
-    let hh = f32($height) / 2.0;
-    return vec4f(in.position.x / hw - 1.0, 1.0 - in.position.y / hh, 0.0, 1.0);
+    let safeTargetSize = max(uniforms.targetSize, vec2f(1.0, 1.0));
+    return vec4f(
+        in.position.x / safeTargetSize.x * 2.0 - 1.0,
+        1.0 - in.position.y / safeTargetSize.y * 2.0,
+        0.0,
+        1.0,
+    );
 }
 
 @fragment
@@ -589,3 +604,11 @@ fn fs_main() -> @location(0) vec4f {
     return vec4f(0.0, 0.0, 0.0, 0.0);
 }
 """.trimIndent()
+
+/** Converts the compatibility [FillType] to explicit native stencil pipeline state. */
+internal fun stencilConfig(fillType: FillType): GPUBackendStencilCoverConfig = when (fillType) {
+    FillType.WINDING -> GPUBackendStencilCoverConfig(GPUBackendStencilFillRule.NonZero, inverse = false)
+    FillType.INVERSE_WINDING -> GPUBackendStencilCoverConfig(GPUBackendStencilFillRule.NonZero, inverse = true)
+    FillType.EVEN_ODD -> GPUBackendStencilCoverConfig(GPUBackendStencilFillRule.EvenOdd, inverse = false)
+    FillType.INVERSE_EVEN_ODD -> GPUBackendStencilCoverConfig(GPUBackendStencilFillRule.EvenOdd, inverse = true)
+}

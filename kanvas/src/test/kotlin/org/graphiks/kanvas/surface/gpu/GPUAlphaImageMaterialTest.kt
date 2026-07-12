@@ -477,6 +477,7 @@ class GPUAlphaImageMaterialTest {
             triangleData: GPUBackendTriangleData?,
             draws: List<GPUBackendRawUniformDraw>,
             blendMode: GPUBlendMode?,
+            stencilConfig: org.graphiks.kanvas.gpu.renderer.execution.GPUBackendStencilCoverConfig,
         ) = Unit
 
         override fun createVertexColorBuffer(data: GPUBackendVertexColorData): String = unsupported()

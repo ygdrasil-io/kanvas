@@ -123,10 +123,8 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
     val sw = (minOf(pathBounds.right, clipBounds.right).toInt() - sx).coerceIn(1, surfaceWidth - sx)
     val sh = (minOf(pathBounds.bottom, clipBounds.bottom).toInt() - sy).coerceIn(1, surfaceHeight - sy)
 
-    val writeWgsl = stencilWriteWgsl(surfaceWidth, surfaceHeight)
-
     drawFullscreenStencilPass(
-        wgsl = writeWgsl,
+        wgsl = CLIP_STENCIL_WRITE_WGSL,
         colorFormat = config.gpuColorFormat.gpuLabel,
         stencilMode = GPUBackendStencilMode.Write,
         triangleData = triangleData,

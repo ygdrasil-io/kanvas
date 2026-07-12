@@ -342,6 +342,22 @@ class PathTessellatorTest {
         assertEquals(6, tri.indices.size)
     }
 
+    @Test
+    fun `edge fan keeps every contour instead of triangulating from contour zero`() {
+        val flat = FlattenedPath(
+            points = listOf(
+                Point(2f, 2f), Point(14f, 2f), Point(14f, 14f), Point(2f, 14f),
+                Point(5f, 5f), Point(11f, 5f), Point(11f, 11f), Point(5f, 11f),
+            ),
+            contourStarts = listOf(0, 4),
+        )
+
+        val triangles = PathTessellator().stencilEdgeFan(flat)
+
+        assertEquals(8, triangles.triangleCount)
+        assertEquals(24, triangles.indices.size)
+    }
+
     private fun makeCircle(centerX: Float, centerY: Float, radius: Float): PathData {
         val n = 64
         val pts = (0 until n).map { i ->
