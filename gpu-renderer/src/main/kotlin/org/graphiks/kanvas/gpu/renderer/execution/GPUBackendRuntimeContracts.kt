@@ -72,6 +72,7 @@ data class GPUBackendRuntimeTelemetry(
     val buffersCreated: Long = 0L,
     val texturesCreated: Long = 0L,
     val intermediateTexturesCreated: Long = 0L,
+    val coverageMasksDestroyed: Long = 0L,
     val destinationCopies: Long = 0L,
     val destinationReadbackSnapshots: Long = 0L,
     val msaaTargets: Long = 0L,
@@ -97,6 +98,9 @@ data class GPUBackendRuntimeTelemetry(
         require(texturesCreated >= 0L) { "GPUBackendRuntimeTelemetry.texturesCreated must be non-negative" }
         require(intermediateTexturesCreated >= 0L) {
             "GPUBackendRuntimeTelemetry.intermediateTexturesCreated must be non-negative"
+        }
+        require(coverageMasksDestroyed >= 0L) {
+            "GPUBackendRuntimeTelemetry.coverageMasksDestroyed must be non-negative"
         }
         require(destinationCopies >= 0L) {
             "GPUBackendRuntimeTelemetry.destinationCopies must be non-negative"
@@ -126,7 +130,8 @@ data class GPUBackendRuntimeTelemetry(
             "gpu-runtime.telemetry renderPasses=$renderPasses offscreenPasses=$offscreenPasses " +
                 "windowPasses=$windowPasses submissions=$submissions commandBuffers=$commandBuffers " +
                 "buffersCreated=$buffersCreated texturesCreated=$texturesCreated " +
-                "intermediateTexturesCreated=$intermediateTexturesCreated destinationCopies=$destinationCopies " +
+                "intermediateTexturesCreated=$intermediateTexturesCreated coverageMasksDestroyed=$coverageMasksDestroyed " +
+                "destinationCopies=$destinationCopies " +
                 "destinationReadbackSnapshots=$destinationReadbackSnapshots " +
                 "msaaTargets=$msaaTargets msaaResolves=$msaaResolves " +
                 "bindGroupsCreated=$bindGroupsCreated samplersCreated=$samplersCreated " +
@@ -191,6 +196,10 @@ val GPUBackendSession.phase0EvidenceDumpLines: List<String>
 interface GPUBackendOffscreenTarget : AutoCloseable {
     val target: GPUSurfaceTarget
 
+    /** Largest 2D texture accepted by this target before offscreen allocation. */
+    val maxTextureDimension2D: Int
+        get() = Int.MAX_VALUE
+
     /** Records one fullscreen render pass into the target with the provided clear color. */
     fun encode(
         clearColor: GPUClearColor,
@@ -203,8 +212,14 @@ interface GPUBackendOffscreenTarget : AutoCloseable {
     /** Creates a secondary offscreen texture that can be bound as a texture source during a subsequent [encode]. */
     fun createOffscreenTexture(texture: GPUBackendOffscreenTexture): String
 
+    /** Requests release of an unshared transient texture after its last submitted GPU use. */
+    fun releaseOffscreenTexture(textureLabel: String) = Unit
+
     /** Readback-snapshots the most recently encoded primary target into a previously-created offscreen texture. */
     fun snapshotTargetToOffscreenTexture(textureLabel: String)
+
+    /** Copies the primary render target into an existing secondary texture entirely on the GPU. */
+    fun copyTargetToOffscreenTexture(destinationTextureLabel: String)
 
     /** Renders into a previously-created offscreen texture via a separate render pass. When [clearColor] is null the pass preserves existing texture content via [GPULoadOp.Load]. */
     fun encodeOffscreenTexture(
@@ -212,6 +227,22 @@ interface GPUBackendOffscreenTarget : AutoCloseable {
         clearColor: GPUClearColor?,
         block: GPUBackendRenderRecorder.() -> Unit,
     )
+
+    /** Allocates a stencil-capable coverage mask whose sample texture is exposed by [GPUBackendCoverageMask.sampleLabel]. */
+    fun createCoverageMask(request: GPUBackendCoverageMaskRequest): GPUBackendCoverageMask
+
+    /** Encodes the stencil-cover work for a previously-created coverage [mask]. */
+    fun encodeCoverageMask(
+        mask: GPUBackendCoverageMask,
+        clearColor: GPUClearColor?,
+        block: GPUBackendRenderRecorder.() -> Unit,
+    )
+
+    /** Releases a coverage mask after its queued GPU work has been submitted. Releasing an unknown mask is a no-op. */
+    fun releaseCoverageMask(mask: GPUBackendCoverageMask)
+
+    /** Copies a secondary offscreen texture directly on the GPU without destination readback or upload. */
+    fun copyOffscreenTexture(sourceTextureLabel: String, destinationTextureLabel: String)
 }
 
 /** Represents a native surface that can be resized and presented to screen. */
@@ -238,6 +269,20 @@ enum class GPUBackendStencilMode {
     Test,
 }
 
+/** Fill rules supported by the native stencil-cover pipeline. */
+enum class GPUBackendStencilFillRule {
+    /** Accumulate signed winding with increment/decrement operations. */
+    NonZero,
+    /** Toggle stencil parity for every covered edge. */
+    EvenOdd,
+}
+
+/** Pipeline-state facts that determine stencil write and cover behavior. */
+data class GPUBackendStencilCoverConfig(
+    val fillRule: GPUBackendStencilFillRule,
+    val inverse: Boolean,
+)
+
 /** Describes a secondary offscreen texture that can be bound as a texture source. */
 data class GPUBackendOffscreenTexture(
     val label: String,
@@ -250,6 +295,42 @@ data class GPUBackendOffscreenTexture(
         require(width > 0) { "GPUBackendOffscreenTexture.width must be positive" }
         require(height > 0) { "GPUBackendOffscreenTexture.height must be positive" }
         require(format.isNotBlank()) { "GPUBackendOffscreenTexture.format must not be blank" }
+    }
+}
+
+/** Describes a stencil-capable coverage texture allocation for the low-level GPU backend runtime. */
+data class GPUBackendCoverageMaskRequest(
+    val label: String,
+    val width: Int,
+    val height: Int,
+    val sampleCount: Int,
+    val format: String = "rgba8unorm",
+) {
+    init {
+        require(label.isNotBlank()) { "GPUBackendCoverageMaskRequest.label must not be blank" }
+        require(width > 0) { "GPUBackendCoverageMaskRequest.width must be positive" }
+        require(height > 0) { "GPUBackendCoverageMaskRequest.height must be positive" }
+        require(sampleCount in setOf(1, 4)) {
+            "GPUBackendCoverageMaskRequest.sampleCount must be 1 or 4"
+        }
+        require(format.isNotBlank()) { "GPUBackendCoverageMaskRequest.format must not be blank" }
+    }
+}
+
+/** Identifies the render and one-sample texture labels owned by a coverage-mask allocation. */
+data class GPUBackendCoverageMask(
+    val renderLabel: String,
+    val sampleLabel: String,
+    val width: Int,
+    val height: Int,
+    val sampleCount: Int,
+) {
+    init {
+        require(renderLabel.isNotBlank()) { "GPUBackendCoverageMask.renderLabel must not be blank" }
+        require(sampleLabel.isNotBlank()) { "GPUBackendCoverageMask.sampleLabel must not be blank" }
+        require(width > 0) { "GPUBackendCoverageMask.width must be positive" }
+        require(height > 0) { "GPUBackendCoverageMask.height must be positive" }
+        require(sampleCount > 0) { "GPUBackendCoverageMask.sampleCount must be positive" }
     }
 }
 
@@ -357,6 +438,10 @@ interface GPUBackendRenderRecorder {
         draws: List<GPUBackendRawUniformDraw>,
         blendMode: GPUBlendMode? = null,
         stencilMode: GPUBackendStencilMode? = null,
+        stencilConfig: GPUBackendStencilCoverConfig = GPUBackendStencilCoverConfig(
+            fillRule = GPUBackendStencilFillRule.NonZero,
+            inverse = false,
+        ),
     )
 
     /** Draws a two-pass stencil-cover fill with triangle geometry (write) and fullscreen cover (test). */
@@ -367,6 +452,10 @@ interface GPUBackendRenderRecorder {
         triangleData: GPUBackendTriangleData?,
         draws: List<GPUBackendRawUniformDraw>,
         blendMode: GPUBlendMode? = null,
+        stencilConfig: GPUBackendStencilCoverConfig = GPUBackendStencilCoverConfig(
+            fillRule = GPUBackendStencilFillRule.NonZero,
+            inverse = false,
+        ),
     )
 
     /** Creates a GPU vertex buffer from interleaved position + color float data. Returns a stable label. */
@@ -423,6 +512,27 @@ interface GPUBackendRenderRecorder {
         wgsl: String,
         colorFormat: String,
         textureLabel: String,
+        draws: List<GPUBackendRawUniformDraw>,
+        blendMode: GPUBlendMode? = null,
+    )
+
+    /** Draws a fullscreen pass with two previously-created texture and sampler pairs. */
+    fun drawTwoTexturePass(
+        wgsl: String,
+        colorFormat: String,
+        firstTextureLabel: String,
+        secondTextureLabel: String,
+        draws: List<GPUBackendRawUniformDraw>,
+        blendMode: GPUBlendMode? = null,
+    )
+
+    /** Draws a fullscreen pass with three previously-created texture and sampler pairs. */
+    fun drawThreeTexturePass(
+        wgsl: String,
+        colorFormat: String,
+        firstTextureLabel: String,
+        secondTextureLabel: String,
+        thirdTextureLabel: String,
         draws: List<GPUBackendRawUniformDraw>,
         blendMode: GPUBlendMode? = null,
     )

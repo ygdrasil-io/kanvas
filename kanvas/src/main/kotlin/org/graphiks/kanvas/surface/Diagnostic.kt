@@ -1,5 +1,13 @@
 package org.graphiks.kanvas.surface
 
+/** Structured machine-readable context attached to a [Diagnostic]. */
+data class DiagnosticFact(val key: String, val value: String) {
+    init {
+        require(key.matches(Regex("[a-z0-9_.-]+"))) { "DiagnosticFact.key has an invalid format" }
+        require(value.isNotBlank()) { "DiagnosticFact.value must not be blank" }
+    }
+}
+
 /**
  * A single diagnostic entry produced during rendering.
  *
@@ -17,4 +25,5 @@ data class Diagnostic(
     val reason: String,
     val suggestion: String? = null,
     val index: Int = -1,
+    val facts: List<DiagnosticFact> = emptyList(),
 )

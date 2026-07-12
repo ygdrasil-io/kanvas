@@ -2,6 +2,8 @@ package org.graphiks.kanvas.types
 
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertTrue
 
 class Matrix33Test {
     @Test
@@ -63,5 +65,75 @@ class Matrix33Test {
         val p = m * Point(5f, 5f)
         assertEquals(20f, p.x)
         assertEquals(10f, p.y)
+    }
+
+    @Test
+    fun `axis aligned affine mapping keeps bounds ordered under negative scale`() {
+        val matrix = Matrix33.translate(10f, 5f) * Matrix33.scale(-2f, 3f)
+        val rrect = RRect(
+            rect = Rect.fromLTRB(1f, 2f, 4f, 6f),
+            topLeft = CornerRadii(1f, 2f),
+            topRight = CornerRadii(2f, 3f),
+            bottomRight = CornerRadii(3f, 4f),
+            bottomLeft = CornerRadii(4f, 5f),
+        )
+
+        assertTrue(matrix.isAffine())
+        assertTrue(matrix.isAxisAlignedAffine())
+        assertEquals(Rect.fromLTRB(2f, 11f, 8f, 23f), matrix.mapAxisAlignedRect(rrect.rect))
+        assertEquals(
+            RRect(
+                rect = Rect.fromLTRB(2f, 11f, 8f, 23f),
+                topLeft = CornerRadii(4f, 9f),
+                topRight = CornerRadii(2f, 6f),
+                bottomRight = CornerRadii(8f, 15f),
+                bottomLeft = CornerRadii(6f, 12f),
+            ),
+            rrect.mapAxisAligned(matrix),
+        )
+        assertFalse(Matrix33.rotate(45f).isAxisAlignedAffine())
+        assertFalse(Matrix33.makeAll(1f, 0f, 0f, 0f, 1f, 0f, 0.1f, 0f, 1f).isAffine())
+    }
+
+    @Test
+    fun `axis aligned rrect mirrors permute asymmetric corner radii`() {
+        val rrect = RRect(
+            rect = Rect.fromLTRB(1f, 2f, 4f, 6f),
+            topLeft = CornerRadii(1f, 2f),
+            topRight = CornerRadii(2f, 3f),
+            bottomRight = CornerRadii(3f, 4f),
+            bottomLeft = CornerRadii(4f, 5f),
+        )
+
+        assertEquals(
+            RRect(
+                Rect.fromLTRB(-4f, 2f, -1f, 6f),
+                topLeft = CornerRadii(2f, 3f),
+                topRight = CornerRadii(1f, 2f),
+                bottomRight = CornerRadii(4f, 5f),
+                bottomLeft = CornerRadii(3f, 4f),
+            ),
+            rrect.mapAxisAligned(Matrix33.scale(-1f, 1f)),
+        )
+        assertEquals(
+            RRect(
+                Rect.fromLTRB(1f, -6f, 4f, -2f),
+                topLeft = CornerRadii(4f, 5f),
+                topRight = CornerRadii(3f, 4f),
+                bottomRight = CornerRadii(2f, 3f),
+                bottomLeft = CornerRadii(1f, 2f),
+            ),
+            rrect.mapAxisAligned(Matrix33.scale(1f, -1f)),
+        )
+        assertEquals(
+            RRect(
+                Rect.fromLTRB(-4f, -6f, -1f, -2f),
+                topLeft = CornerRadii(3f, 4f),
+                topRight = CornerRadii(4f, 5f),
+                bottomRight = CornerRadii(1f, 2f),
+                bottomLeft = CornerRadii(2f, 3f),
+            ),
+            rrect.mapAxisAligned(Matrix33.scale(-1f, -1f)),
+        )
     }
 }

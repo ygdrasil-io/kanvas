@@ -15,6 +15,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillRRect(
     surfaceWidth: Int,
     surfaceHeight: Int,
     config: RenderConfig,
+    recordResult: Boolean = true,
 ) {
     fun refuse(reason: String) {
         diagnostics.fatal("refuse:${cmd.diagnosticName}", cmd.diagnosticName, reason)
@@ -69,6 +70,8 @@ internal fun GPUBackendRenderRecorder.dispatchFillRRect(
         ),
         blendMode = blendMode,
     )
-    dispatched.add(cmd.commandId.toString())
-    diagnostics.degrade("dispatch:${cmd.diagnosticName}", cmd.diagnosticName, "dispatched")
+    if (recordResult) {
+        dispatched.add(cmd.commandId.toString())
+        diagnostics.degrade("dispatch:${cmd.diagnosticName}", cmd.diagnosticName, "dispatched")
+    }
 }

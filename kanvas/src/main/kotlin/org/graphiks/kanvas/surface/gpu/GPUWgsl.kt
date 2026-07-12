@@ -1,5 +1,9 @@
 package org.graphiks.kanvas.surface.gpu
 
+import org.graphiks.kanvas.geometry.FillType
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendStencilCoverConfig
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendStencilFillRule
+
 internal val SOLID_RECT_WGSL: String = """
     struct Uniforms {
         color: vec4f,
@@ -52,7 +56,10 @@ internal val RECT_AA_WGSL: String = """
 
     @fragment
     fn fs_main(@builtin(position) coord: vec4f) -> @location(0) vec4f {
-        let cov = select(rect_cov(coord.xy, uniforms.bounds), 1.0, uniforms.antiAlias == 0u);
+        let hardCov = select(0.0, 1.0,
+            coord.x >= uniforms.bounds.x && coord.x < uniforms.bounds.z &&
+            coord.y >= uniforms.bounds.y && coord.y < uniforms.bounds.w);
+        let cov = select(rect_cov(coord.xy, uniforms.bounds), hardCov, uniforms.antiAlias == 0u);
         return vec4f(uniforms.color.rgb * srgb_to_linear(cov), uniforms.color.a * cov);
     }
 """.trimIndent()
@@ -131,7 +138,9 @@ internal val RRECT_WGSL: String = """
 
     @fragment
     fn fs_main(@builtin(position) coord: vec4f) -> @location(0) vec4f {
-        let cov = select(rrect_cov(coord.xy, uniforms.bounds, uniforms.radii.x, uniforms.radii.y), 1.0, uniforms.antiAlias == 0u);
+        let aaCov = rrect_cov(coord.xy, uniforms.bounds, uniforms.radii.x, uniforms.radii.y);
+        let hardCov = step(0.5, aaCov);
+        let cov = select(aaCov, hardCov, uniforms.antiAlias == 0u);
         return vec4f(uniforms.color.rgb * cov, uniforms.color.a * cov);
     }
 """.trimIndent()
@@ -345,6 +354,208 @@ internal val COPY_WGSL: String = """
     }
 """.trimIndent()
 
+/**
+ * Static horizontal mask-blur pass. Sigma controls only the reflected uniform
+ * payload: a fixed loop ignores padded weights after `tapCount`.
+ */
+internal val MASK_BLUR_HORIZONTAL_WGSL: String = """
+    struct MaskBlurUniforms {
+        tapCount: u32,
+        _pad0: u32,
+        targetSize: vec2f,
+        _pad1: vec2f,
+        _pad2: vec2f,
+        weights: array<vec4f, 7>,
+    };
+
+    @group(0) @binding(0) var<uniform> u: MaskBlurUniforms;
+    @group(1) @binding(1) var inputTex: texture_2d<f32>;
+    @group(1) @binding(2) var inputSam: sampler;
+
+    fn sampleMaskDecal(uv: vec2f) -> vec4f {
+        if (any(uv < vec2f(0.0)) || any(uv >= vec2f(1.0))) {
+            return vec4f(0.0);
+        }
+        return textureSample(inputTex, inputSam, uv);
+    }
+
+    @vertex
+    fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
+        let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
+        let y = f32(idx & 2u) * 2.0 - 1.0;
+        return vec4f(x, y, 0.0, 1.0);
+    }
+
+    @fragment
+    fn fs_main(@builtin(position) coord: vec4f) -> @location(0) vec4f {
+        let size = max(u.targetSize, vec2f(1.0, 1.0));
+        let uv = coord.xy / size;
+        let half = u.tapCount / 2u;
+        var result = vec4f(0.0);
+        for (var i = 0u; i < 25u; i = i + 1u) {
+            if (i >= u.tapCount) {
+                break;
+            }
+            let packedWeights = u.weights[i / 4u];
+            let weight = packedWeights[i % 4u];
+            let sampleOffset = vec2f(f32(i) - f32(half), 0.0) / size;
+            result += weight * sampleMaskDecal(uv + sampleOffset);
+        }
+        return result;
+    }
+""".trimIndent()
+
+/**
+ * Static vertical mask-blur pass. Its uniform layout exactly matches
+ * [MASK_BLUR_HORIZONTAL_WGSL] so pipeline topology is independent of sigma.
+ */
+internal val MASK_BLUR_VERTICAL_WGSL: String = """
+    struct MaskBlurUniforms {
+        tapCount: u32,
+        _pad0: u32,
+        targetSize: vec2f,
+        _pad1: vec2f,
+        _pad2: vec2f,
+        weights: array<vec4f, 7>,
+    };
+
+    @group(0) @binding(0) var<uniform> u: MaskBlurUniforms;
+    @group(1) @binding(1) var inputTex: texture_2d<f32>;
+    @group(1) @binding(2) var inputSam: sampler;
+
+    fn sampleMaskDecal(uv: vec2f) -> vec4f {
+        if (any(uv < vec2f(0.0)) || any(uv >= vec2f(1.0))) {
+            return vec4f(0.0);
+        }
+        return textureSample(inputTex, inputSam, uv);
+    }
+
+    @vertex
+    fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
+        let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
+        let y = f32(idx & 2u) * 2.0 - 1.0;
+        return vec4f(x, y, 0.0, 1.0);
+    }
+
+    @fragment
+    fn fs_main(@builtin(position) coord: vec4f) -> @location(0) vec4f {
+        let size = max(u.targetSize, vec2f(1.0, 1.0));
+        let uv = coord.xy / size;
+        let half = u.tapCount / 2u;
+        var result = vec4f(0.0);
+        for (var i = 0u; i < 25u; i = i + 1u) {
+            if (i >= u.tapCount) {
+                break;
+            }
+            let packedWeights = u.weights[i / 4u];
+            let weight = packedWeights[i % 4u];
+            let sampleOffset = vec2f(0.0, f32(i) - f32(half)) / size;
+            result += weight * sampleMaskDecal(uv + sampleOffset);
+        }
+        return result;
+    }
+""".trimIndent()
+
+internal val MASK_BLUR_STYLE_WGSL: String = """
+    struct Uniforms {
+        style: u32,
+    };
+
+    @group(0) @binding(0) var<uniform> u: Uniforms;
+    @group(1) @binding(1) var srcTexture: texture_2d<f32>;
+    @group(1) @binding(2) var srcSampler: sampler;
+    @group(1) @binding(3) var dstTexture: texture_2d<f32>;
+    @group(1) @binding(4) var dstSampler: sampler;
+
+    @vertex
+    fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
+        let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
+        let y = f32(idx & 2u) * 2.0 - 1.0;
+        return vec4f(x, y, 0.0, 1.0);
+    }
+
+    @fragment
+    fn fs_main(@builtin(position) coord: vec4f) -> @location(0) vec4f {
+        let dims = textureDimensions(srcTexture);
+        let uv = vec2f(coord.x / f32(dims.x), coord.y / f32(dims.y));
+        let blurred = textureSample(srcTexture, srcSampler, uv).a;
+        let original = textureSample(dstTexture, dstSampler, uv).a;
+        var coverage = blurred;
+        switch (u.style) {
+            case 0u: { coverage = blurred; }
+            case 1u: { coverage = max(original, blurred); }
+            case 2u: { coverage = blurred * (1.0 - original); }
+            default: { coverage = blurred * original; }
+        }
+        return vec4f(coverage, coverage, coverage, coverage);
+    }
+""".trimIndent()
+
+internal val MASK_BLUR_SOLID_COMPOSITE_WGSL: String = """
+    struct Uniforms {
+        deviceBounds: vec4f,
+        color: vec4f,
+    };
+
+    @group(0) @binding(0) var<uniform> u: Uniforms;
+    @group(1) @binding(1) var maskTexture: texture_2d<f32>;
+    @group(1) @binding(2) var maskSampler: sampler;
+
+    @vertex
+    fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
+        let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
+        let y = f32(idx & 2u) * 2.0 - 1.0;
+        return vec4f(x, y, 0.0, 1.0);
+    }
+
+    @fragment
+    fn fs_main(@builtin(position) coord: vec4f) -> @location(0) vec4f {
+        let localSize = max(u.deviceBounds.zw - u.deviceBounds.xy, vec2f(1.0, 1.0));
+        let uv = (coord.xy - u.deviceBounds.xy) / localSize;
+        let coverage = textureSample(maskTexture, maskSampler, uv).a;
+        return u.color * coverage;
+    }
+""".trimIndent()
+
+private val DESTINATION_READ_BLEND_FORMULA_WGSL: String = """
+    fn unpremul(color: vec4f) -> vec3f {
+        if (color.a == 0.0) {
+            return vec3f(0.0);
+        }
+        return color.rgb / color.a;
+    }
+
+    fn blendColor(src: vec3f, dst: vec3f, blendMode: u32) -> vec3f {
+        switch blendMode {
+            case 0u: { return src * dst; }
+            case 1u: { return src + dst - src * dst; }
+            case 2u: {
+                let multiply = 2.0 * src * dst;
+                let screen = 1.0 - 2.0 * (1.0 - src) * (1.0 - dst);
+                return select(screen, multiply, dst <= vec3f(0.5));
+            }
+            case 3u: { return min(src, dst); }
+            case 4u: { return max(src, dst); }
+            case 5u: { return abs(dst - src); }
+            case 6u: { return src + dst - 2.0 * src * dst; }
+            default: { return src; }
+        }
+    }
+
+    fn blendPremul(src: vec4f, dst: vec4f, blendMode: u32) -> vec4f {
+        if (src.a == 0.0) {
+            return dst;
+        }
+        let srcColor = unpremul(src);
+        let dstColor = unpremul(dst);
+        let blended = blendColor(srcColor, dstColor, blendMode);
+        let rgb = src.rgb * (1.0 - dst.a) +
+            dst.rgb * (1.0 - src.a) +
+            src.a * dst.a * blended;
+        return vec4f(rgb, src.a + dst.a * (1.0 - src.a));
+    }
+""".trimIndent()
+
 internal val BLEND_FORMULA_WGSL: String = """
     struct Uniforms {
         blendMode: u32,
@@ -363,36 +574,7 @@ internal val BLEND_FORMULA_WGSL: String = """
         return vec4f(x, y, 0.0, 1.0);
     }
 
-    fn blendMultiply(src: vec4f, dst: vec4f) -> vec4f {
-        return vec4f(src.rgb * dst.rgb + dst.rgb * (1.0 - src.a) + src.rgb * (1.0 - dst.a), src.a + dst.a * (1.0 - src.a));
-    }
-
-    fn blendScreen(src: vec4f, dst: vec4f) -> vec4f {
-        return vec4f(src.rgb + dst.rgb - src.rgb * dst.rgb, src.a + dst.a * (1.0 - src.a));
-    }
-
-    fn blendOverlay(src: vec4f, dst: vec4f) -> vec4f {
-        let mul = 2.0 * src.rgb * dst.rgb;
-        let scrn = 1.0 - 2.0 * (1.0 - src.rgb) * (1.0 - dst.rgb);
-        let cond = step(dst.rgb, vec3f(0.5));
-        return vec4f(mix(scrn, mul, cond), src.a + dst.a * (1.0 - src.a));
-    }
-
-    fn blendDarken(src: vec4f, dst: vec4f) -> vec4f {
-        return vec4f(min(src.rgb, dst.rgb), src.a + dst.a * (1.0 - src.a));
-    }
-
-    fn blendLighten(src: vec4f, dst: vec4f) -> vec4f {
-        return vec4f(max(src.rgb, dst.rgb), src.a + dst.a * (1.0 - src.a));
-    }
-
-    fn blendDifference(src: vec4f, dst: vec4f) -> vec4f {
-        return vec4f(abs(dst.rgb - src.rgb), src.a + dst.a * (1.0 - src.a));
-    }
-
-    fn blendExclusion(src: vec4f, dst: vec4f) -> vec4f {
-        return vec4f(src.rgb + dst.rgb - 2.0 * src.rgb * dst.rgb, src.a + dst.a * (1.0 - src.a));
-    }
+    $DESTINATION_READ_BLEND_FORMULA_WGSL
 
     @fragment
     fn fs_main(@builtin(position) coord: vec4f) -> @location(0) vec4f {
@@ -400,22 +582,77 @@ internal val BLEND_FORMULA_WGSL: String = """
         let uv = vec2f(coord.x / f32(srcDims.x), coord.y / f32(srcDims.y));
         let src = textureSample(srcTexture, srcSampler, uv);
         let dst = textureSample(dstTexture, dstSampler, uv);
-        // The source intermediate is transparent outside the drawn geometry.
-        // Preserve the destination there instead of evaluating a blend formula
-        // against zero (DARKEN would otherwise turn the whole target black).
-        if (src.a == 0.0) {
-            return dst;
-        }
-        switch uniforms.blendMode {
-            case 0u: { return blendMultiply(src, dst); }
-            case 1u: { return blendScreen(src, dst); }
-            case 2u: { return blendOverlay(src, dst); }
-            case 3u: { return blendDarken(src, dst); }
-            case 4u: { return blendLighten(src, dst); }
-            case 5u: { return blendDifference(src, dst); }
-            case 6u: { return blendExclusion(src, dst); }
-            default: { return src; }
-        }
+        return blendPremul(src, dst, uniforms.blendMode);
+    }
+""".trimIndent()
+
+internal val CLIP_BLEND_FORMULA_WGSL: String = """
+    struct Uniforms {
+        blendMode: u32,
+    };
+
+    @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+    @group(1) @binding(1) var srcTexture: texture_2d<f32>;
+    @group(1) @binding(2) var srcSampler: sampler;
+    @group(1) @binding(3) var dstTexture: texture_2d<f32>;
+    @group(1) @binding(4) var dstSampler: sampler;
+    @group(1) @binding(5) var clipTexture: texture_2d<f32>;
+    @group(1) @binding(6) var clipSampler: sampler;
+
+    @vertex
+    fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
+        let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
+        let y = f32(idx & 2u) * 2.0 - 1.0;
+        return vec4f(x, y, 0.0, 1.0);
+    }
+
+    $DESTINATION_READ_BLEND_FORMULA_WGSL
+
+    @fragment
+    fn fs_main(@builtin(position) coord: vec4f) -> @location(0) vec4f {
+        let srcDims = textureDimensions(srcTexture);
+        let uv = vec2f(coord.x / f32(srcDims.x), coord.y / f32(srcDims.y));
+        let clipAlpha = textureSample(clipTexture, clipSampler, uv).a;
+        let src = textureSample(srcTexture, srcSampler, uv) * clipAlpha;
+        let dst = textureSample(dstTexture, dstSampler, uv);
+        return blendPremul(src, dst, uniforms.blendMode);
+    }
+""".trimIndent()
+
+/** Destination-read blend formula with a device-rect clip applied at final composition. */
+internal val SCISSOR_CLIP_BLEND_FORMULA_WGSL: String = """
+    struct Uniforms {
+        blendMode: u32,
+        _pad0: u32,
+        _pad1: vec2u,
+        clipBounds: vec4f,
+    };
+
+    @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+    @group(1) @binding(1) var srcTexture: texture_2d<f32>;
+    @group(1) @binding(2) var srcSampler: sampler;
+    @group(1) @binding(3) var dstTexture: texture_2d<f32>;
+    @group(1) @binding(4) var dstSampler: sampler;
+
+    @vertex
+    fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
+        let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
+        let y = f32(idx & 2u) * 2.0 - 1.0;
+        return vec4f(x, y, 0.0, 1.0);
+    }
+
+    $DESTINATION_READ_BLEND_FORMULA_WGSL
+
+    @fragment
+    fn fs_main(@builtin(position) coord: vec4f) -> @location(0) vec4f {
+        let dims = textureDimensions(srcTexture);
+        let uv = coord.xy / vec2f(dims);
+        let inside = coord.x >= uniforms.clipBounds.x && coord.x < uniforms.clipBounds.z &&
+            coord.y >= uniforms.clipBounds.y && coord.y < uniforms.clipBounds.w;
+        let clipAlpha = select(0.0, 1.0, inside);
+        let src = textureSample(srcTexture, srcSampler, uv) * clipAlpha;
+        let dst = textureSample(dstTexture, dstSampler, uv);
+        return blendPremul(src, dst, uniforms.blendMode);
     }
 """.trimIndent()
 
@@ -511,16 +748,27 @@ internal val FILTERED_IMAGE_COMPOSITE_WGSL: String = """
     }
 """.trimIndent()
 
-internal fun stencilWriteWgsl(width: Int, height: Int): String = """
+/** Static stencil-write module. Target dimensions are supplied as a reflected uniform. */
+internal val CLIP_STENCIL_WRITE_WGSL: String = """
+struct StencilUniforms {
+    targetSize: vec2f,
+};
+
+@group(0) @binding(0) var<uniform> uniforms: StencilUniforms;
+
 struct VertexInput {
     @location(0) position: vec2f,
 };
 
 @vertex
 fn vs_main(in: VertexInput) -> @builtin(position) vec4f {
-    let hw = f32($width) / 2.0;
-    let hh = f32($height) / 2.0;
-    return vec4f(in.position.x / hw - 1.0, 1.0 - in.position.y / hh, 0.0, 1.0);
+    let safeTargetSize = max(uniforms.targetSize, vec2f(1.0, 1.0));
+    return vec4f(
+        in.position.x / safeTargetSize.x * 2.0 - 1.0,
+        1.0 - in.position.y / safeTargetSize.y * 2.0,
+        0.0,
+        1.0,
+    );
 }
 
 @fragment
@@ -528,3 +776,64 @@ fn fs_main() -> @location(0) vec4f {
     return vec4f(0.0, 0.0, 0.0, 0.0);
 }
 """.trimIndent()
+
+/**
+ * Static white-source shader used by the stencil-tested AlphaMask composition.
+ * Its single vec4 uniform has a reflected 16-byte layout and is deliberately
+ * independent of a clip stack's values, which remain draw data rather than
+ * shader identity.
+ */
+internal val CLIP_MASK_COVER_WGSL: String = """
+struct ClipMaskUniforms {
+    color: vec4f,
+};
+
+@group(0) @binding(0) var<uniform> uniforms: ClipMaskUniforms;
+
+@vertex
+fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
+    let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
+    let y = f32(idx & 2u) * 2.0 - 1.0;
+    return vec4f(x, y, 0.0, 1.0);
+}
+
+@fragment
+fn fs_main() -> @location(0) vec4f {
+    return uniforms.color;
+}
+""".trimIndent()
+
+/** Static source-times-mask compositor with two parser-reflected texture pairs. */
+internal val CLIP_MASK_COMPOSITE_WGSL: String = """
+struct ClipMaskCompositeUniforms {
+    _pad: vec4f,
+};
+
+@group(0) @binding(0) var<uniform> uniforms: ClipMaskCompositeUniforms;
+@group(1) @binding(1) var sourceTexture: texture_2d<f32>;
+@group(1) @binding(2) var sourceSampler: sampler;
+@group(1) @binding(3) var maskTexture: texture_2d<f32>;
+@group(1) @binding(4) var maskSampler: sampler;
+
+@vertex
+fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
+    let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
+    let y = f32(idx & 2u) * 2.0 - 1.0;
+    return vec4f(x, y, 0.0, 1.0);
+}
+
+@fragment
+fn fs_main(@builtin(position) coord: vec4f) -> @location(0) vec4f {
+    let dims = textureDimensions(sourceTexture);
+    let uv = vec2f(coord.x / f32(dims.x), coord.y / f32(dims.y));
+    return textureSample(sourceTexture, sourceSampler, uv) * textureSample(maskTexture, maskSampler, uv).a;
+}
+""".trimIndent()
+
+/** Converts the compatibility [FillType] to explicit native stencil pipeline state. */
+internal fun stencilConfig(fillType: FillType): GPUBackendStencilCoverConfig = when (fillType) {
+    FillType.WINDING -> GPUBackendStencilCoverConfig(GPUBackendStencilFillRule.NonZero, inverse = false)
+    FillType.INVERSE_WINDING -> GPUBackendStencilCoverConfig(GPUBackendStencilFillRule.NonZero, inverse = true)
+    FillType.EVEN_ODD -> GPUBackendStencilCoverConfig(GPUBackendStencilFillRule.EvenOdd, inverse = false)
+    FillType.INVERSE_EVEN_ODD -> GPUBackendStencilCoverConfig(GPUBackendStencilFillRule.EvenOdd, inverse = true)
+}

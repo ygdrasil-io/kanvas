@@ -5,6 +5,8 @@ data class RenderConfig(
     val maxPathVertices: UInt = 131072u,
     val curveTolerance: Float = 0.25f,
     val maxImagePixels: UInt = 67_108_864u,
+    val maxMaskBlurIntermediateBytes: UInt = 67_108_864u,
+    val maxClipIntermediateBytes: UInt = 67_108_864u,
     val diagnosticLevel: DiagnosticLevel = DiagnosticLevel.WARN,
     val debugLevel: DebugLevel = DebugLevel.OFF,
 ) {
@@ -23,6 +25,10 @@ data class RenderConfig(
                     ?.toFloatOrNull() ?: DEFAULT.curveTolerance,
                 maxImagePixels = p.getProperty("kanvas.render.maxImagePixels")
                     ?.toUIntOrNull() ?: DEFAULT.maxImagePixels,
+                maxMaskBlurIntermediateBytes = p.getProperty("kanvas.render.maxMaskBlurIntermediateBytes")
+                    ?.toUIntOrNull() ?: DEFAULT.maxMaskBlurIntermediateBytes,
+                maxClipIntermediateBytes = p.getProperty("kanvas.render.maxClipIntermediateBytes")
+                    ?.toUIntOrNull() ?: DEFAULT.maxClipIntermediateBytes,
                 diagnosticLevel = p.getProperty("kanvas.render.diagnosticLevel")
                     ?.let { runCatching { DiagnosticLevel.valueOf(it) }.getOrNull() }
                     ?: DEFAULT.diagnosticLevel,

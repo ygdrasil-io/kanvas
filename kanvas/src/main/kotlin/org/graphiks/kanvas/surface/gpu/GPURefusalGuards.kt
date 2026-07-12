@@ -1,6 +1,9 @@
 package org.graphiks.kanvas.surface.gpu
 
+import org.graphiks.kanvas.canvas.ClipStack
+import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBlendKind
+import org.graphiks.kanvas.gpu.renderer.commands.GPUClipFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUClipKind
 import org.graphiks.kanvas.gpu.renderer.commands.GPULayerScopeKind
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
@@ -8,6 +11,42 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialKind
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRenderRecorder
+import org.graphiks.kanvas.gpu.renderer.filters.NormalizedMaskFilter
+
+private const val PERSPECTIVE_CAPTURE_REFUSAL = "unsupported_transform:Perspective"
+
+/** Returns the stable refusal for any command whose clip was captured under perspective. */
+internal fun GPUClipFacts.perspectiveCaptureRefusalReasonOrNull(): String? =
+    perspectiveCaptureRefusal.takeIf { it }?.let { PERSPECTIVE_CAPTURE_REFUSAL }
+
+/** Returns the same stable refusal before a [DisplayOp] reaches any GPU encoding route. */
+internal fun DisplayOp.perspectiveCaptureRefusalReasonOrNull(): String? =
+    clipOrNull()?.perspectiveCaptureRefusal?.takeIf { it }?.let { PERSPECTIVE_CAPTURE_REFUSAL }
+
+private fun DisplayOp.clipOrNull(): ClipStack? = when (this) {
+    is DisplayOp.DrawRect -> clip
+    is DisplayOp.DrawRRect -> clip
+    is DisplayOp.DrawPath -> clip
+    is DisplayOp.DrawImage -> clip
+    is DisplayOp.DrawText -> clip
+    is DisplayOp.DrawColor -> clip
+    is DisplayOp.DrawPoint -> clip
+    is DisplayOp.DrawPoints -> clip
+    is DisplayOp.DrawDRRect -> clip
+    is DisplayOp.DrawImageNine -> clip
+    is DisplayOp.DrawImageLattice -> clip
+    is DisplayOp.DrawPicture -> clip
+    is DisplayOp.DrawVertices -> clip
+    is DisplayOp.DrawMesh -> clip
+    is DisplayOp.DrawAtlas -> clip
+    is DisplayOp.SetTransform,
+    is DisplayOp.SetClip,
+    is DisplayOp.BeginLayer,
+    DisplayOp.EndLayer,
+    is DisplayOp.Clear,
+    is DisplayOp.Annotation,
+    is DisplayOp.FlushAndSnapshot -> null
+}
 
 internal fun GPUBackendRenderRecorder.textureDimensionsRefusalReasonOrNull(
     width: Int,
@@ -26,9 +65,23 @@ internal fun NormalizedDrawCommand.strokeRefusalReasonOrNull(): String? {
 }
 
 internal fun NormalizedDrawCommand.fillGuardRefusalReasonOrNull(): String? {
+    clip.perspectiveCaptureRefusalReasonOrNull()?.let { return it }
     strokeRefusalReasonOrNull()?.let { return it }
     if (this is NormalizedDrawCommand.DrawTextRun) return null
     val material = this.material
+    val maskBlur = when (this) {
+        is NormalizedDrawCommand.FillRect -> maskFilter as? NormalizedMaskFilter.Blur
+        is NormalizedDrawCommand.FillRRect -> maskFilter as? NormalizedMaskFilter.Blur
+        is NormalizedDrawCommand.FillPath -> maskFilter as? NormalizedMaskFilter.Blur
+        else -> null
+    }
+    if (maskBlur != null && maskBlur.sigma != 0f) {
+        return if (material is GPUMaterialDescriptor.SolidColor) {
+            "unsupported.mask-filter.blur.executor_unavailable"
+        } else {
+            "unsupported.mask-filter.blur.material.${material.kind.name}"
+        }
+    }
     val acceptedByDispatch = this is NormalizedDrawCommand.FillRect ||
         this is NormalizedDrawCommand.FillPath
     if (material !is GPUMaterialDescriptor.SolidColor &&

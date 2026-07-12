@@ -40,6 +40,23 @@ data class TriangleList(
     val triangleCount: Int get() = indices.size / 3
 }
 
+/** Backend-neutral indexed position data emitted by geometry lowering. */
+data class GeometryTriangleData(
+    val vertices: FloatArray,
+    val indices: IntArray,
+) {
+    val vertexCount: Int get() = vertices.size / 2
+    val triangleCount: Int get() = indices.size / 3
+
+    init {
+        require(vertices.size >= 6) { "GeometryTriangleData.vertices must have at least 6 floats (3 positions)" }
+        require(vertices.size % 2 == 0) { "GeometryTriangleData.vertices must contain pairs of floats" }
+        require(indices.size >= 3) { "GeometryTriangleData.indices must have at least 3 indices" }
+        require(indices.size % 3 == 0) { "GeometryTriangleData.indices must be a multiple of 3" }
+        require(indices.all { it in 0 until vertexCount }) { "GeometryTriangleData.indices out of range" }
+    }
+}
+
 /** Flattened path points and the point index where each contour begins. */
 data class FlattenedPath(
     val points: List<Point>,
@@ -189,6 +206,37 @@ class PathTessellator(
         }
 
         return TriangleList(vertices = points, indices = indices)
+    }
+
+    /**
+     * Produces one triangle from an exterior anchor to each contour edge for a
+     * stencil write pass. Unlike [triangulate], contour boundaries are retained.
+     */
+    fun stencilEdgeFan(flattened: FlattenedPath): GeometryTriangleData {
+        val anchor = Point(
+            minOf(-1f, flattened.points.minOf { it.x } - 1f),
+            minOf(-1f, flattened.points.minOf { it.y } - 1f),
+        )
+        val vertices = mutableListOf<Float>()
+        val indices = mutableListOf<Int>()
+
+        flattened.contourStarts.forEachIndexed { contourIndex, start ->
+            val end = flattened.contourStarts.getOrElse(contourIndex + 1) { flattened.points.size }
+            for (index in start until end) {
+                val next = if (index + 1 == end) start else index + 1
+                val base = vertices.size / 2
+                vertices += listOf(
+                    anchor.x,
+                    anchor.y,
+                    flattened.points[index].x,
+                    flattened.points[index].y,
+                    flattened.points[next].x,
+                    flattened.points[next].y,
+                )
+                indices += listOf(base, base + 1, base + 2)
+            }
+        }
+        return GeometryTriangleData(vertices.toFloatArray(), indices.toIntArray())
     }
 
     private fun quadraticStepCount(p0: Point, p1: Point, p2: Point): Int {

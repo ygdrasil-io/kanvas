@@ -1,6 +1,5 @@
 package org.graphiks.kanvas.surface.gpu
 
-import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBounds
@@ -31,6 +30,7 @@ import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.ImageFilter
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.kanvas.types.isAffine
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.types.PointMode
 import org.graphiks.kanvas.types.Point
@@ -49,7 +49,7 @@ internal fun DisplayOp.DrawRect.toNormalizedCommand(
     val material = paint.toMaterial()
     val gpRect = GPURect(this.rect.left, this.rect.top, this.rect.right, this.rect.bottom)
     val bounds = GPUBounds(gpRect.left, gpRect.top, gpRect.right, gpRect.bottom)
-    val clip = this.clip.toGPUClipFacts(bounds)
+    val clip = this.clip.toGPUClipFacts(target)
     val transform = this.transform.toGPUTransformFacts()
     return NormalizedDrawCommand.FillRect(
         commandId = cmdId,
@@ -68,6 +68,7 @@ internal fun DisplayOp.DrawRect.toNormalizedCommand(
         stroke = paint.isStroke(),
         antiAlias = paint.antiAlias,
         blend = paint.blendMode.toGpuBlendFacts(),
+        maskFilter = paint.maskFilter.toNormalizedMaskFilter(),
     )
 }
 
@@ -81,9 +82,10 @@ internal fun DisplayOp.DrawPath.toNormalizedCommand(
     val paint = this.paint
     val material = paint.toMaterial()
     val bounds = computeBounds(tessellatedVertices)
-    val clip = this.clip.toGPUClipFacts(bounds)
+    val clip = this.clip.toGPUClipFacts(target)
     val transform = this.transform.toGPUTransformFacts()
     val maskFilter = paint.maskFilter.toNormalizedMaskFilter()
+    val pathStencilConfig = stencilConfig(path.fillType)
     return NormalizedDrawCommand.FillPath(
         commandId = cmdId,
         pathKey = "path-${cmdId.value}",
@@ -91,9 +93,9 @@ internal fun DisplayOp.DrawPath.toNormalizedCommand(
             pathKey = "path-${cmdId.value}",
             verbCount = 0,
             pointCount = tessellatedVertices.size / 2,
-            fillRule = "winding",
-            inverseFill = false,
-            finiteProof = "all_finite",
+            fillRule = pathStencilConfig.fillRule.name,
+            inverseFill = pathStencilConfig.inverse,
+            finiteProof = if (tessellatedVertices.all(Float::isFinite)) "all_finite" else "non_finite",
             volatility = "static",
             transformClass = "identity",
             edgeCount = edgeCount,
@@ -141,7 +143,7 @@ internal fun DisplayOp.DrawRect.toStrokePathCommand(
     val vertices = listOf(r.left, r.top, r.right, r.top, r.right, r.bottom, r.left, r.bottom)
     val edges = 4
     val bounds = computeBounds(vertices)
-    val clip = this.clip.toGPUClipFacts(bounds)
+    val clip = this.clip.toGPUClipFacts(target)
     val transform = this.transform.toGPUTransformFacts()
     val paint = this.paint
     return NormalizedDrawCommand.FillPath(
@@ -202,7 +204,7 @@ internal fun DisplayOp.DrawRRect.toNormalizedCommand(
         bottomLeft = GPURRectCornerRadii(this.rrect.bottomLeft.x, this.rrect.bottomLeft.y),
     )
     val bounds = GPUBounds(gpRect.left, gpRect.top, gpRect.right, gpRect.bottom)
-    val clip = this.clip.toGPUClipFacts(bounds)
+    val clip = this.clip.toGPUClipFacts(target)
     val transform = this.transform.toGPUTransformFacts()
     return NormalizedDrawCommand.FillRRect(
         commandId = cmdId,
@@ -221,6 +223,7 @@ internal fun DisplayOp.DrawRRect.toNormalizedCommand(
         stroke = paint.isStroke(),
         antiAlias = paint.antiAlias,
         blend = paint.blendMode.toGpuBlendFacts(),
+        maskFilter = paint.maskFilter.toNormalizedMaskFilter(),
     )
 }
 
@@ -255,15 +258,8 @@ internal fun BlendMode.toGpuBlendFacts(): GPUBlendFacts {
     )
 }
 
-internal fun ClipStack.toGPUClipFacts(bounds: GPUBounds): GPUClipFacts = when (this) {
-    ClipStack.WideOpen -> GPUClipFacts.wideOpen(bounds)
-    is ClipStack.DeviceRect -> GPUClipFacts.deviceRect(
-        GPUBounds(rect.left, rect.top, rect.right, rect.bottom),
-    )
-    is ClipStack.Complex -> GPUClipFacts.complexStack(bounds)
-}
-
 internal fun Matrix33.toGPUTransformFacts(): GPUTransformFacts {
+    if (!isAffine()) return GPUTransformFacts.perspective()
     if (this == Matrix33.identity()) return GPUTransformFacts.identity()
     return GPUTransformFacts.affine(
         scaleX = this.scaleX,
@@ -316,7 +312,7 @@ internal fun DisplayOp.DrawColor.toNormalizedCommand(
     val h = target.height.toFloat()
     val gpRect = GPURect(0f, 0f, w, h)
     val bounds = GPUBounds(0f, 0f, w, h)
-    val clip = this.clip.toGPUClipFacts(bounds)
+    val clip = this.clip.toGPUClipFacts(target)
     val transform = this.transform.toGPUTransformFacts()
     return NormalizedDrawCommand.FillRect(
         commandId = cmdId,
@@ -371,7 +367,7 @@ internal fun DisplayOp.DrawPoint.toNormalizedCommand(
     val paint = this.paint
     val gpRect = GPURect(this.x, this.y, this.x + 1f, this.y + 1f)
     val bounds = GPUBounds(this.x, this.y, this.x + 1f, this.y + 1f)
-    val clip = this.clip.toGPUClipFacts(bounds)
+    val clip = this.clip.toGPUClipFacts(target)
     val transform = this.transform.toGPUTransformFacts()
     return NormalizedDrawCommand.FillRect(
         commandId = cmdId,
@@ -467,7 +463,7 @@ internal fun DisplayOp.DrawImage.toImageRectCommand(
     val src = GPURect(this.src.left, this.src.top, this.src.right, this.src.bottom)
     val dst = GPURect(this.dst.left, this.dst.top, this.dst.right, this.dst.bottom)
     val bounds = GPUBounds(dst.left, dst.top, dst.right, dst.bottom)
-    val clip = this.clip.toGPUClipFacts(bounds)
+    val clip = this.clip.toGPUClipFacts(target)
     val transform = this.transform.toGPUTransformFacts()
     return NormalizedDrawCommand.DrawImageRect(
         commandId = cmdId,
@@ -525,7 +521,9 @@ private fun DisplayOp.DrawImage.toImageFilterPlan(
     val clipBounds = when (clip.kind) {
         GPUClipKind.WideOpen -> targetBounds
         GPUClipKind.DeviceRect -> intersect(clip.bounds.toRect(), targetBounds)
-        GPUClipKind.ComplexStack -> return GPUImageFilterPlan.Refused("unsupported.image-filter.blur.clip")
+        // A complex clip is applied once at the shared source-to-scene composite.
+        // The filter source must therefore retain its full target-space halo.
+        GPUClipKind.ComplexStack -> targetBounds
     }
     val outputBounds = intersect(
         GPURect(
@@ -708,7 +706,7 @@ internal fun DisplayOp.DrawText.toNormalizedCommand(
 ): NormalizedDrawCommand.DrawTextRun {
     val material = this.paint.toMaterial()
     val bounds = GPUBounds(this.x, this.y, this.x + this.blob.fontSize * 10f, this.y + this.blob.fontSize)
-    val clip = this.clip.toGPUClipFacts(bounds)
+    val clip = this.clip.toGPUClipFacts(target)
     val transform = this.transform.toGPUTransformFacts()
     val blobId = "textblob-${this.blob.hashCode()}"
     return NormalizedDrawCommand.DrawTextRun(

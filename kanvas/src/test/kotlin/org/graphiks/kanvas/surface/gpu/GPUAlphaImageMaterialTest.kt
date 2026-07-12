@@ -2,6 +2,7 @@ package org.graphiks.kanvas.surface.gpu
 
 import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.canvas.DisplayOp
+import org.graphiks.kanvas.geometry.FillType
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
 import org.graphiks.kanvas.gpu.renderer.commands.GPUImageFilterPlan
@@ -16,6 +17,8 @@ import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRectDraw
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRenderRecorder
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendSimplePassBatchKind
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendStencilMode
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendStencilFillRule
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendStencilCoverConfig
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendTriangleData
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendUniformPayloadDraw
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendVertexColorData
@@ -39,6 +42,7 @@ import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -292,8 +296,12 @@ class GPUAlphaImageMaterialTest {
             color = Color.fromRGBA(0.2f, 0.4f, 0.6f, 0.7f),
             shader = Shader.Image(alphaImage),
         )
+        val path = Path().apply {
+            addRect(Rect(2f, 3f, 6f, 5f))
+            fillType = FillType.INVERSE_EVEN_ODD
+        }
         val op = DisplayOp.DrawPath(
-            path = Path().addRect(Rect(2f, 3f, 6f, 5f)),
+            path = path,
             paint = paint,
             transform = Matrix33.identity(),
             clip = ClipStack.WideOpen,
@@ -325,6 +333,10 @@ class GPUAlphaImageMaterialTest {
         assertEquals(1, pass.textureHeight)
         assertEquals("rgba8unorm", pass.textureFormat)
         assertEquals(GPUBackendStencilMode.Test, pass.stencilMode)
+        assertEquals(
+            GPUBackendStencilCoverConfig(GPUBackendStencilFillRule.EvenOdd, inverse = true),
+            pass.stencilConfig,
+        )
 
         val draw = pass.draws.single()
         assertEquals(2, draw.scissorX)
@@ -338,6 +350,85 @@ class GPUAlphaImageMaterialTest {
             0f, 0f,
             paint.color.r, paint.color.g, paint.color.b, paint.color.a,
         )
+    }
+
+    @Test
+    fun `path fill preserves contours and inverse even odd stencil configuration`() {
+        val path = Path().apply {
+            addRect(Rect(2f, 2f, 14f, 14f))
+            addRect(Rect(5f, 5f, 11f, 11f))
+            fillType = FillType.INVERSE_EVEN_ODD
+        }
+        val command = DisplayOp.DrawPath(
+            path = path,
+            paint = Paint.fill(Color.RED),
+            transform = Matrix33.identity(),
+            clip = ClipStack.WideOpen,
+        ).toNormalizedCommand(
+            GPUDrawCommandID(15),
+            GPUTargetFacts(width = 16, height = 16, colorFormat = "bgra8unorm"),
+            tessellatedVertices = listOf(
+                2f, 2f, 14f, 2f, 14f, 14f, 2f, 14f,
+                5f, 5f, 11f, 5f, 11f, 11f, 5f, 11f,
+            ),
+            contourStarts = listOf(0, 4),
+            edgeCount = 8,
+        )
+        val recorder = CapturingRenderRecorder()
+        val diagnostics = Diagnostics()
+
+        recorder.dispatchFillPath(
+            cmd = command,
+            dispatched = mutableListOf(),
+            diagnostics = diagnostics,
+            surfaceWidth = 16,
+            surfaceHeight = 16,
+            config = RenderConfig.DEFAULT,
+        )
+
+        assertFalse(diagnostics.hasFatal)
+        assertEquals("EvenOdd", command.pathDescriptor.fillRule)
+        assertTrue(command.pathDescriptor.inverseFill)
+        val write = recorder.stencilPasses.single { it.stencilMode == GPUBackendStencilMode.Write }
+        val triangleData = requireNotNull(write.triangleData)
+        assertEquals(8, triangleData.triangleCount)
+        assertEquals(48, triangleData.vertices.size)
+        assertEquals((0 until 24).toList(), triangleData.indices.toList())
+        assertEquals(GPUBackendStencilFillRule.EvenOdd, write.stencilConfig.fillRule)
+        assertTrue(write.stencilConfig.inverse)
+        val cover = recorder.stencilPasses.single { it.stencilMode == GPUBackendStencilMode.Test }
+        assertEquals(write.stencilConfig, cover.stencilConfig)
+    }
+
+    @Test
+    fun `path fill rejects non finite vertices before stencil fan creation`() {
+        val command = DisplayOp.DrawPath(
+            path = Path().addRect(Rect(2f, 2f, 6f, 5f)),
+            paint = Paint.fill(Color.RED),
+            transform = Matrix33.identity(),
+            clip = ClipStack.WideOpen,
+        ).toNormalizedCommand(
+            GPUDrawCommandID(16),
+            GPUTargetFacts(width = 16, height = 16, colorFormat = "bgra8unorm"),
+            tessellatedVertices = listOf(2f, 2f, Float.NaN, 2f, 6f, 5f, 2f, 5f),
+            contourStarts = listOf(0),
+            edgeCount = 4,
+        )
+        val recorder = CapturingRenderRecorder()
+        val diagnostics = Diagnostics()
+
+        recorder.dispatchFillPath(
+            cmd = command,
+            dispatched = mutableListOf(),
+            diagnostics = diagnostics,
+            surfaceWidth = 16,
+            surfaceHeight = 16,
+            config = RenderConfig.DEFAULT,
+        )
+
+        assertEquals(1, diagnostics.fatalCount)
+        assertEquals("non_finite_vertices", diagnostics.entries.single().reason)
+        assertEquals(emptyList<StencilPass>(), recorder.stencilPasses)
     }
 
     @Test
@@ -413,6 +504,7 @@ class GPUAlphaImageMaterialTest {
         override val maxTextureDimension2D: Int = Int.MAX_VALUE,
     ) : GPUBackendRenderRecorder {
         private val texturePasses = mutableListOf<TexturePass>()
+        val stencilPasses = mutableListOf<StencilPass>()
 
         val texturePassCount: Int get() = texturePasses.size
 
@@ -431,6 +523,7 @@ class GPUAlphaImageMaterialTest {
             draws: List<GPUBackendRawUniformDraw>,
             blendMode: GPUBlendMode?,
             stencilMode: GPUBackendStencilMode?,
+            stencilConfig: GPUBackendStencilCoverConfig,
         ) {
             texturePasses.add(
                 TexturePass(
@@ -441,6 +534,7 @@ class GPUAlphaImageMaterialTest {
                     draws = draws,
                     blendMode = blendMode,
                     stencilMode = stencilMode,
+                    stencilConfig = stencilConfig,
                 ),
             )
         }
@@ -477,7 +571,10 @@ class GPUAlphaImageMaterialTest {
             triangleData: GPUBackendTriangleData?,
             draws: List<GPUBackendRawUniformDraw>,
             blendMode: GPUBlendMode?,
-        ) = Unit
+            stencilConfig: org.graphiks.kanvas.gpu.renderer.execution.GPUBackendStencilCoverConfig,
+        ) {
+            stencilPasses += StencilPass(stencilMode, triangleData, stencilConfig)
+        }
 
         override fun createVertexColorBuffer(data: GPUBackendVertexColorData): String = unsupported()
 
@@ -531,6 +628,25 @@ class GPUAlphaImageMaterialTest {
             blendMode: GPUBlendMode?,
         ) = unsupported()
 
+        override fun drawTwoTexturePass(
+            wgsl: String,
+            colorFormat: String,
+            firstTextureLabel: String,
+            secondTextureLabel: String,
+            draws: List<GPUBackendRawUniformDraw>,
+            blendMode: GPUBlendMode?,
+        ) = unsupported()
+
+        override fun drawThreeTexturePass(
+            wgsl: String,
+            colorFormat: String,
+            firstTextureLabel: String,
+            secondTextureLabel: String,
+            thirdTextureLabel: String,
+            draws: List<GPUBackendRawUniformDraw>,
+            blendMode: GPUBlendMode?,
+        ) = unsupported()
+
         override fun drawBlendPass(
             wgsl: String,
             colorFormat: String,
@@ -572,5 +688,12 @@ class GPUAlphaImageMaterialTest {
         val draws: List<GPUBackendRawUniformDraw>,
         val blendMode: GPUBlendMode?,
         val stencilMode: GPUBackendStencilMode?,
+        val stencilConfig: GPUBackendStencilCoverConfig,
+    )
+
+    private data class StencilPass(
+        val stencilMode: GPUBackendStencilMode,
+        val triangleData: GPUBackendTriangleData?,
+        val stencilConfig: org.graphiks.kanvas.gpu.renderer.execution.GPUBackendStencilCoverConfig,
     )
 }

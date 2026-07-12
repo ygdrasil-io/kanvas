@@ -87,6 +87,30 @@ class GPUPathClipRegressionTest {
         assertPixelAtLeast(pixels, 2, 2, red = 200, green = 200, blue = 200, alpha = 200)
     }
 
+    @Test
+    fun `advanced path blend renders through the destination snapshot formula`() {
+        requireWebGpu()
+
+        val surface = Surface(width = 32, height = 32)
+        surface.canvas {
+            drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE))
+            drawPath(
+                Path {
+                    moveTo(8f, 8f)
+                    lineTo(24f, 8f)
+                    lineTo(16f, 24f)
+                    close()
+                },
+                Paint.fill(Color.RED).copy(antiAlias = false, blendMode = BlendMode.DIFFERENCE),
+            )
+        }
+
+        val result = surface.render()
+        val pixels = result.pixels.toByteArray()
+        assertPixelAtLeast(pixels, 16, 12, red = 0, green = 200, blue = 200, alpha = 200)
+        assertTrue(result.diagnostics.entries.any { it.reason == "gpu-copy-then-formula" })
+    }
+
     private fun requireWebGpu() {
         val runtime = GPUBackendRuntimeFactory.createOrNull()
         assumeTrue(runtime != null, "GPU backend unavailable in current environment")

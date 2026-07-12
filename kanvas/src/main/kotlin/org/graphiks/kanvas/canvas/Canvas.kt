@@ -285,10 +285,14 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
      * @param antiAlias Whether the clip edges should be anti-aliased.
      */
     fun clipRect(rect: Rect, op: ClipOp = ClipOp.INTERSECT, antiAlias: Boolean = true) {
-        val newOp = ClipStackOp.RectOp(rect, op, antiAlias)
+        val newOp = captureClipRect(rect, op, antiAlias)
         val prevClip = currentClip
         currentClip = when (prevClip) {
-            ClipStack.WideOpen -> if (op == ClipOp.INTERSECT) ClipStack.DeviceRect(rect, antiAlias) else ClipStack.Complex(listOf(newOp))
+            ClipStack.WideOpen -> if (op == ClipOp.INTERSECT && newOp is ClipStackOp.RectOp) {
+                ClipStack.DeviceRect(newOp.rect, antiAlias)
+            } else {
+                ClipStack.Complex(listOf(newOp))
+            }
             is ClipStack.DeviceRect -> ClipStack.Complex(listOf(ClipStackOp.RectOp(prevClip.rect, ClipOp.INTERSECT, prevClip.antiAlias), newOp))
             is ClipStack.Complex -> ClipStack.Complex(prevClip.ops + newOp)
         }
@@ -301,7 +305,7 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
      * @param antiAlias Whether the clip edges should be anti-aliased.
      */
     fun clipRRect(rrect: RRect, op: ClipOp = ClipOp.INTERSECT, antiAlias: Boolean = true) {
-        val newOp = ClipStackOp.RRectOp(rrect, op, antiAlias)
+        val newOp = captureClipRRect(rrect, op, antiAlias)
         val prevClip = currentClip
         currentClip = when (prevClip) {
             ClipStack.WideOpen -> ClipStack.Complex(listOf(newOp))
@@ -317,7 +321,7 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
      * @param antiAlias Whether the clip edges should be anti-aliased.
      */
     fun clipPath(path: Path, op: ClipOp = ClipOp.INTERSECT, antiAlias: Boolean = true) {
-        val newOp = ClipStackOp.PathOp(path, op, antiAlias)
+        val newOp = captureClipPath(path, op, antiAlias)
         val prevClip = currentClip
         currentClip = when (prevClip) {
             ClipStack.WideOpen -> ClipStack.Complex(listOf(newOp))
@@ -326,6 +330,32 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
         }
         buffer.append(DisplayOp.SetClip(currentClip))
     }
+
+    private fun captureClipRect(rect: Rect, op: ClipOp, antiAlias: Boolean): ClipStackOp = when {
+        currentTransform.isAxisAlignedAffine() ->
+            ClipStackOp.RectOp(currentTransform.mapAxisAlignedRect(rect), op, antiAlias)
+        currentTransform.isAffine() ->
+            ClipStackOp.PathOp(Path().addRect(rect).transform(currentTransform), op, antiAlias)
+        else ->
+            ClipStackOp.PathOp(Path().addRect(rect), op, antiAlias, perspectiveCaptureRefusal = true)
+    }
+
+    private fun captureClipRRect(rrect: RRect, op: ClipOp, antiAlias: Boolean): ClipStackOp = when {
+        currentTransform.isAxisAlignedAffine() ->
+            ClipStackOp.RRectOp(rrect.mapAxisAligned(currentTransform), op, antiAlias)
+        currentTransform.isAffine() ->
+            ClipStackOp.PathOp(Path().addRRect(rrect).transform(currentTransform), op, antiAlias)
+        else ->
+            ClipStackOp.PathOp(Path().addRRect(rrect), op, antiAlias, perspectiveCaptureRefusal = true)
+    }
+
+    private fun captureClipPath(path: Path, op: ClipOp, antiAlias: Boolean): ClipStackOp =
+        ClipStackOp.PathOp(
+            if (currentTransform.isAffine()) path.transform(currentTransform) else path,
+            op,
+            antiAlias,
+            perspectiveCaptureRefusal = !currentTransform.isAffine(),
+        )
 
     private data class CanvasState(val transform: Matrix33, val clip: ClipStack)
 }

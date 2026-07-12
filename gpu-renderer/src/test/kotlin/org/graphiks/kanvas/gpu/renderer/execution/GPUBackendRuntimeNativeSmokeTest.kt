@@ -9,6 +9,7 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUResourceBindingBlock
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUResourceBindingSlot
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUUniformPayloadBlock
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUUniformPayloadSlot
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.resources.GPUPayloadMaterializationRequest
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceLease
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceLeaseCacheResult
@@ -24,6 +25,7 @@ import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
@@ -112,6 +114,54 @@ class GPUBackendRuntimeNativeSmokeTest {
         assertEquals(0, unmapCalls)
         assertTrue(dump.contains("submitted=1 completed=1 released=1 pending=0 waits=0 unknownCompletions=0"))
         assertTrue(dump.contains("completion=readback-failed"))
+    }
+
+    @Test
+    fun `failed readback keeps released transient pending until target close`() {
+        val manager = GPUQueueManager()
+        val submission = manager.submit(
+            label = "offscreen-pass:released-transient",
+            retainedResources = listOf(GPUQueuedResourceRef("target:released-transient")),
+        )
+        var transientDestroyed = false
+
+        assertFailsWith<IllegalStateException> {
+            gpuRuntimeWithReadbackCleanup(
+                mapAction = { error("map failed") },
+                readAction = { byteArrayOf() },
+                unmapAction = {},
+                completeAction = { completion ->
+                    if (gpuRuntimeHasCompletedReadback(completion)) {
+                        manager.markCompleted(submission.id, completion)
+                        manager.releaseCompleted()
+                        transientDestroyed = true
+                    }
+                },
+            )
+        }
+
+        assertFalse(transientDestroyed)
+        assertEquals(1L, manager.telemetry.pending)
+        manager.markCompleted(submission.id, GPU_QUEUE_COMPLETION_TARGET_CLOSE)
+        manager.releaseCompleted()
+        transientDestroyed = true
+        assertTrue(transientDestroyed)
+        assertEquals(0L, manager.telemetry.pending)
+    }
+
+    @Test
+    fun `resolved offscreen texture records sampled label`() {
+        val sampledLabels = mutableListOf<String>()
+
+        assertEquals(
+            "texture-a",
+            gpuRuntimeResolveAndRecordOffscreenTexture(
+                label = "texture-a",
+                resolve = { label -> label.takeIf { it == "texture-a" } },
+                recordUse = sampledLabels::add,
+            ),
+        )
+        assertEquals(listOf("texture-a"), sampledLabels)
     }
 
     @Test
@@ -248,7 +298,7 @@ class GPUBackendRuntimeNativeSmokeTest {
     }
 
     @Test
-    fun `backend runtime exposes conservative GPU capabilities when backend is available`() {
+    fun `backend runtime exposes adapter backed GPU capabilities when backend is available`() {
         val runtime = GPUBackendRuntimeFactory.createOrNull()
         assumeTrue(runtime != null, "GPU backend unavailable in current environment")
 
@@ -264,7 +314,7 @@ class GPUBackendRuntimeNativeSmokeTest {
             assertEquals(8192L, limits.maxTextureDimension2D)
             assertEquals(256L, limits.copyBytesPerRowAlignment)
             assertEquals(256L, limits.minUniformBufferOffsetAlignment)
-            assertEquals("runtime.conservative", limits.source)
+            assertEquals("adapter.limits", limits.source)
             assertEquals(
                 listOf("maxTextureDimension2D", "copyBytesPerRowAlignment", "minUniformBufferOffsetAlignment"),
                 facts.map { it.name },
@@ -355,6 +405,526 @@ class GPUBackendRuntimeNativeSmokeTest {
             assertTrue(baselineDump.contains("gpu-phase0.baseline"))
             assertTrue(baselineDump.contains("uniformSlabsCreated="))
             assertTrue(!dump.contains("@"))
+        }
+    }
+
+    @Test
+    fun `released offscreen texture is no longer bindable after composite submission`() {
+        val runtime = GPUBackendRuntimeFactory.createOrNull()
+        assumeTrue(runtime != null, "GPU backend unavailable in current environment")
+
+        runtime!!.use { session ->
+            session.createOffscreenTarget(
+                GPUOffscreenTargetRequest(width = 4, height = 4, colorFormat = "rgba8unorm"),
+            ).use { target ->
+                val source = target.createOffscreenTexture(
+                    GPUBackendOffscreenTexture("released-source", 4, 4, "rgba8unorm"),
+                )
+                target.encodeOffscreenTexture(
+                    textureLabel = source,
+                    clearColor = GPUClearColor(0.0, 0.0, 0.0, 1.0),
+                ) {
+                    drawFullscreenPass(
+                        wgsl = solidColorFullscreenWgsl(),
+                        colorFormat = "rgba8unorm",
+                        draws = listOf(
+                            GPUBackendRectDraw(floatArrayOf(1f, 0f, 0f, 1f), 0, 0, 4, 4),
+                        ),
+                    )
+                }
+                target.encode(GPUClearColor(0.0, 0.0, 0.0, 1.0)) {
+                    drawCompositePass(
+                        wgsl = singleTextureWgsl(),
+                        colorFormat = "rgba8unorm",
+                        textureLabel = source,
+                        draws = listOf(
+                            GPUBackendRawUniformDraw(
+                                uniformBytes = solidColorUniformBytes(0f, 0f, 0f, 0f),
+                                scissorX = 0,
+                                scissorY = 0,
+                                scissorWidth = 4,
+                                scissorHeight = 4,
+                            ),
+                        ),
+                        blendMode = GPUBlendMode.SRC,
+                    )
+                }
+
+                target.releaseOffscreenTexture("unknown-offscreen-texture")
+                target.releaseOffscreenTexture(source)
+
+                assertFailsWith<IllegalStateException> {
+                    target.encodeOffscreenTexture(source, GPUClearColor(0.0, 0.0, 0.0, 0.0)) {}
+                }
+                assertContentEquals(
+                    byteArrayOf(0xFF.toByte(), 0, 0, 0xFF.toByte()),
+                    target.readRgba().copyOfRange(0, 4),
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `released multi texture sources remain valid through their final sampled submission`() {
+        val runtime = GPUBackendRuntimeFactory.createOrNull()
+        assumeTrue(runtime != null, "GPU backend unavailable in current environment")
+
+        runtime!!.use { session ->
+            session.createOffscreenTarget(
+                GPUOffscreenTargetRequest(width = 4, height = 4, colorFormat = "rgba8unorm"),
+            ).use { target ->
+                val first = target.createOffscreenTexture(
+                    GPUBackendOffscreenTexture("released-multi-first", 4, 4, "rgba8unorm"),
+                )
+                val second = target.createOffscreenTexture(
+                    GPUBackendOffscreenTexture("released-multi-second", 4, 4, "rgba8unorm"),
+                )
+                listOf(first, second).forEach { source ->
+                    target.encodeOffscreenTexture(source, GPUClearColor(0.0, 0.0, 0.0, 1.0)) {
+                        drawFullscreenPass(
+                            wgsl = solidColorFullscreenWgsl(),
+                            colorFormat = "rgba8unorm",
+                            draws = listOf(GPUBackendRectDraw(floatArrayOf(1f, 0f, 0f, 1f), 0, 0, 4, 4)),
+                        )
+                    }
+                }
+                target.encode(GPUClearColor(0.0, 0.0, 0.0, 1.0)) {
+                    drawTwoTexturePass(
+                        wgsl = multiTextureWgsl(textureCount = 2),
+                        colorFormat = "rgba8unorm",
+                        firstTextureLabel = first,
+                        secondTextureLabel = second,
+                        draws = listOf(
+                            GPUBackendRawUniformDraw(
+                                uniformBytes = solidColorUniformBytes(0f, 0f, 0f, 0f),
+                                scissorX = 0,
+                                scissorY = 0,
+                                scissorWidth = 4,
+                                scissorHeight = 4,
+                            ),
+                        ),
+                        blendMode = GPUBlendMode.SRC,
+                    )
+                }
+
+                target.releaseOffscreenTexture(first)
+                target.releaseOffscreenTexture(second)
+
+                assertFailsWith<IllegalStateException> {
+                    target.encodeOffscreenTexture(first, GPUClearColor(0.0, 0.0, 0.0, 0.0)) {}
+                }
+                assertContentEquals(
+                    byteArrayOf(0xFF.toByte(), 0, 0, 0xFF.toByte()),
+                    target.readRgba().copyOfRange(0, 4),
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `coverage mask resolves four samples and copy stays on GPU`() {
+        GPUBackendRuntimeFactory.createOrNull().use { session ->
+            assumeTrue(session != null, "GPU backend unavailable in current environment")
+            val target = session!!.createOffscreenTarget(
+                GPUOffscreenTargetRequest(width = 16, height = 16, colorFormat = "rgba8unorm"),
+            )
+            target.use {
+                val mask = it.createCoverageMask(
+                    GPUBackendCoverageMaskRequest("clip", 16, 16, sampleCount = 4),
+                )
+                val source = it.createOffscreenTexture(
+                    GPUBackendOffscreenTexture("source", 16, 16, "rgba8unorm"),
+                )
+                val snapshot = it.createOffscreenTexture(
+                    GPUBackendOffscreenTexture("snapshot", 16, 16, "rgba8unorm"),
+                )
+
+                it.encodeCoverageMask(mask, GPUClearColor(0.0, 0.0, 0.0, 0.0)) {}
+                it.copyOffscreenTexture(source, snapshot)
+                it.releaseCoverageMask(mask)
+
+                assertEquals(4, mask.sampleCount)
+            }
+            assertEquals(0L, session.runtimeTelemetry.destinationReadbackSnapshots)
+            assertTrue(session.runtimeTelemetry.destinationCopies >= 1L)
+            assertTrue(session.runtimeTelemetry.msaaResolves >= 1L)
+        }
+    }
+
+    @Test
+    fun `released sampled coverage mask remains physically allocated until final readback`() {
+        GPUBackendRuntimeFactory.createOrNull().use { session ->
+            assumeTrue(session != null, "GPU backend unavailable in current environment")
+            val runtimeSession = session!!
+            val destroyedBefore = runtimeSession.runtimeTelemetry.coverageMasksDestroyed
+
+            runtimeSession.createOffscreenTarget(
+                GPUOffscreenTargetRequest(width = 4, height = 4, colorFormat = "rgba8unorm"),
+            ).use { target ->
+                val mask = target.createCoverageMask(
+                    GPUBackendCoverageMaskRequest("released-sampled-mask", 4, 4, sampleCount = 1),
+                )
+                target.encodeCoverageMask(mask, GPUClearColor(0.0, 0.0, 0.0, 0.0)) {
+                    drawFullscreenPass(
+                        wgsl = solidColorFullscreenWgsl(),
+                        colorFormat = "rgba8unorm",
+                        draws = listOf(
+                            GPUBackendRectDraw(floatArrayOf(1f, 0f, 0f, 1f), 0, 0, 4, 4),
+                        ),
+                    )
+                }
+                target.encode(GPUClearColor(0.0, 0.0, 0.0, 0.0)) {
+                    drawCompositePass(
+                        wgsl = singleTextureWgsl(),
+                        colorFormat = "rgba8unorm",
+                        textureLabel = mask.sampleLabel,
+                        draws = listOf(
+                            GPUBackendRawUniformDraw(
+                                uniformBytes = solidColorUniformBytes(0f, 0f, 0f, 0f),
+                                scissorX = 0,
+                                scissorY = 0,
+                                scissorWidth = 4,
+                                scissorHeight = 4,
+                            ),
+                        ),
+                        blendMode = GPUBlendMode.SRC,
+                    )
+                }
+
+                target.releaseCoverageMask(mask)
+
+                assertEquals(destroyedBefore, runtimeSession.runtimeTelemetry.coverageMasksDestroyed)
+                assertFailsWith<IllegalStateException> {
+                    target.encodeOffscreenTexture(mask.sampleLabel, GPUClearColor(0.0, 0.0, 0.0, 0.0)) {}
+                }
+                assertContentEquals(
+                    byteArrayOf(0xFF.toByte(), 0, 0, 0xFF.toByte()),
+                    target.readRgba().copyOfRange(0, 4),
+                )
+                assertEquals(destroyedBefore + 1L, runtimeSession.runtimeTelemetry.coverageMasksDestroyed)
+            }
+        }
+    }
+
+    @Test
+    fun `released coverage mask is physically destroyed when its target closes`() {
+        GPUBackendRuntimeFactory.createOrNull().use { session ->
+            assumeTrue(session != null, "GPU backend unavailable in current environment")
+            val runtimeSession = session!!
+            val destroyedBefore = runtimeSession.runtimeTelemetry.coverageMasksDestroyed
+
+            runtimeSession.createOffscreenTarget(
+                GPUOffscreenTargetRequest(width = 4, height = 4, colorFormat = "rgba8unorm"),
+            ).use { target ->
+                val mask = target.createCoverageMask(
+                    GPUBackendCoverageMaskRequest("released-mask-target-close", 4, 4, sampleCount = 1),
+                )
+                target.encodeCoverageMask(mask, GPUClearColor(0.0, 0.0, 0.0, 0.0)) {}
+                target.releaseCoverageMask(mask)
+
+                assertEquals(destroyedBefore, runtimeSession.runtimeTelemetry.coverageMasksDestroyed)
+                assertFailsWith<IllegalStateException> {
+                    target.encodeOffscreenTexture(mask.sampleLabel, GPUClearColor(0.0, 0.0, 0.0, 0.0)) {}
+                }
+            }
+
+            assertEquals(destroyedBefore + 1L, runtimeSession.runtimeTelemetry.coverageMasksDestroyed)
+        }
+    }
+
+    @Test
+    fun `primary target copy stays on GPU`() {
+        GPUBackendRuntimeFactory.createOrNull().use { session ->
+            assumeTrue(session != null, "GPU backend unavailable in current environment")
+            val runtimeSession = session!!
+            runtimeSession.createOffscreenTarget(
+                GPUOffscreenTargetRequest(width = 16, height = 16, colorFormat = "rgba8unorm"),
+            ).use { target ->
+                val destination = target.createOffscreenTexture(
+                    GPUBackendOffscreenTexture("primary-copy", 16, 16, "rgba8unorm"),
+                )
+                val copiesBefore = runtimeSession.runtimeTelemetry.destinationCopies
+                val readbacksBefore = runtimeSession.runtimeTelemetry.destinationReadbackSnapshots
+
+                target.copyTargetToOffscreenTexture(destination)
+
+                val telemetry = runtimeSession.runtimeTelemetry
+                assertTrue(telemetry.destinationCopies > copiesBefore)
+                assertEquals(readbacksBefore, telemetry.destinationReadbackSnapshots)
+            }
+        }
+    }
+
+    @Test
+    fun `coverage masks sample actual x1 and x4 stencil cover output before release`() {
+        GPUBackendRuntimeFactory.createOrNull().use { session ->
+            assumeTrue(session != null, "GPU backend unavailable in current environment")
+            val runtimeSession = session!!
+            val telemetryBefore = runtimeSession.runtimeTelemetry
+            runtimeSession.createOffscreenTarget(
+                GPUOffscreenTargetRequest(width = 16, height = 16, colorFormat = "rgba8unorm"),
+            ).use { target ->
+                val halfPixelEdgeRect = GPUBackendTriangleData(
+                    vertices = floatArrayOf(
+                        -1f, -1f,
+                        0.0625f, -1f,
+                        -1f, 1f,
+                        0.0625f, 1f,
+                    ),
+                    indices = intArrayOf(0, 1, 2, 2, 1, 3),
+                )
+                val coverDraw = GPUBackendRawUniformDraw(
+                    uniformBytes = solidColorUniformBytes(0f, 1f, 0f, 1f),
+                    scissorX = 0,
+                    scissorY = 0,
+                    scissorWidth = 16,
+                    scissorHeight = 16,
+                )
+                val msaaMask = target.createCoverageMask(
+                    GPUBackendCoverageMaskRequest("stencil-x4", 16, 16, sampleCount = 4),
+                )
+
+                target.encodeCoverageMask(msaaMask, GPUClearColor(0.0, 0.0, 0.0, 0.0)) {
+                    drawFullscreenStencilPass(
+                        wgsl = stencilWriteWgsl(),
+                        colorFormat = "rgba8unorm",
+                        stencilMode = GPUBackendStencilMode.Write,
+                        triangleData = halfPixelEdgeRect,
+                        draws = emptyList(),
+                    )
+                    drawFullscreenStencilPass(
+                        wgsl = stencilTestWgsl(),
+                        colorFormat = "rgba8unorm",
+                        stencilMode = GPUBackendStencilMode.Test,
+                        triangleData = null,
+                        draws = listOf(coverDraw),
+                    )
+                }
+                target.encode(GPUClearColor(0.0, 0.0, 0.0, 0.0)) {
+                    drawCompositePass(
+                        wgsl = singleTextureWgsl(),
+                        colorFormat = "rgba8unorm",
+                        textureLabel = msaaMask.sampleLabel,
+                        draws = listOf(
+                            GPUBackendRawUniformDraw(
+                                uniformBytes = solidColorUniformBytes(0f, 0f, 0f, 0f),
+                                scissorX = 0,
+                                scissorY = 0,
+                                scissorWidth = 16,
+                                scissorHeight = 16,
+                            ),
+                        ),
+                        blendMode = GPUBlendMode.SRC,
+                    )
+                }
+                val x4Pixels = target.readRgba()
+                assertContentEquals(
+                    byteArrayOf(0, 0xff.toByte(), 0, 0xff.toByte()),
+                    pixelAt(x4Pixels, width = 16, x = 4, y = 8),
+                )
+                assertContentEquals(
+                    byteArrayOf(0, 0, 0, 0),
+                    pixelAt(x4Pixels, width = 16, x = 12, y = 8),
+                )
+                val x4Edge = pixelAt(x4Pixels, width = 16, x = 8, y = 8)
+                val x4EdgeAlpha = x4Edge[3].toInt() and 0xff
+                assertTrue(x4EdgeAlpha in 1..254, "expected partially covered x4 edge, actual=${x4Edge.toList()}")
+                assertTrue(kotlin.math.abs(x4EdgeAlpha - 128) <= 1, "expected half-covered x4 edge, actual=${x4Edge.toList()}")
+                assertEquals(0, x4Edge[0].toInt() and 0xff)
+                assertTrue(kotlin.math.abs((x4Edge[1].toInt() and 0xff) - x4EdgeAlpha) <= 1)
+                assertEquals(0, x4Edge[2].toInt() and 0xff)
+                target.releaseCoverageMask(msaaMask)
+                assertFailsWith<IllegalStateException> {
+                    target.encodeOffscreenTexture(msaaMask.sampleLabel, GPUClearColor(0.0, 0.0, 0.0, 0.0)) {}
+                }
+
+                val singleSampleMask = target.createCoverageMask(
+                    GPUBackendCoverageMaskRequest("stencil-x1", 16, 16, sampleCount = 1),
+                )
+                target.encodeCoverageMask(singleSampleMask, GPUClearColor(0.0, 0.0, 0.0, 0.0)) {
+                    drawFullscreenStencilPass(
+                        wgsl = stencilWriteWgsl(),
+                        colorFormat = "rgba8unorm",
+                        stencilMode = GPUBackendStencilMode.Write,
+                        triangleData = halfPixelEdgeRect,
+                        draws = emptyList(),
+                    )
+                    drawFullscreenStencilPass(
+                        wgsl = stencilTestWgsl(),
+                        colorFormat = "rgba8unorm",
+                        stencilMode = GPUBackendStencilMode.Test,
+                        triangleData = null,
+                        draws = listOf(coverDraw),
+                    )
+                }
+                target.encode(GPUClearColor(0.0, 0.0, 0.0, 0.0)) {
+                    drawCompositePass(
+                        wgsl = singleTextureWgsl(),
+                        colorFormat = "rgba8unorm",
+                        textureLabel = singleSampleMask.sampleLabel,
+                        draws = listOf(
+                            GPUBackendRawUniformDraw(
+                                uniformBytes = solidColorUniformBytes(0f, 0f, 0f, 0f),
+                                scissorX = 0,
+                                scissorY = 0,
+                                scissorWidth = 16,
+                                scissorHeight = 16,
+                            ),
+                        ),
+                        blendMode = GPUBlendMode.SRC,
+                    )
+                }
+                val x1Pixels = target.readRgba()
+                assertContentEquals(
+                    byteArrayOf(0, 0xff.toByte(), 0, 0xff.toByte()),
+                    pixelAt(x1Pixels, width = 16, x = 4, y = 8),
+                )
+                assertContentEquals(
+                    byteArrayOf(0, 0, 0, 0),
+                    pixelAt(x1Pixels, width = 16, x = 12, y = 8),
+                )
+                target.releaseCoverageMask(singleSampleMask)
+                val unknownMask = GPUBackendCoverageMask(
+                    renderLabel = "unknown-mask:render",
+                    sampleLabel = "unknown-mask:sample",
+                    width = 16,
+                    height = 16,
+                    sampleCount = 1,
+                )
+                target.releaseCoverageMask(unknownMask)
+                target.releaseCoverageMask(unknownMask)
+            }
+            val telemetryAfter = runtimeSession.runtimeTelemetry
+            assertEquals(telemetryBefore.msaaTargets + 1L, telemetryAfter.msaaTargets)
+            assertEquals(telemetryBefore.msaaResolves + 1L, telemetryAfter.msaaResolves)
+        }
+    }
+
+    @Test
+    fun `coverage mask runs textured vertex and dual UV pipelines at four samples`() {
+        GPUBackendRuntimeFactory.createOrNull().use { session ->
+            assumeTrue(session != null, "GPU backend unavailable in current environment")
+            session!!.createOffscreenTarget(
+                GPUOffscreenTargetRequest(width = 4, height = 4, colorFormat = "rgba8unorm"),
+            ).use { target ->
+                val mask = target.createCoverageMask(
+                    GPUBackendCoverageMaskRequest("vertex-msaa", 4, 4, sampleCount = 4),
+                )
+                val uniform = GPUBackendRawUniformDraw(
+                    uniformBytes = ByteBuffer.allocate(16).order(ByteOrder.LITTLE_ENDIAN).apply {
+                        putFloat(1f)
+                        putInt(0)
+                    }.array(),
+                    scissorX = 0,
+                    scissorY = 0,
+                    scissorWidth = 4,
+                    scissorHeight = 4,
+                )
+                val rgba = byteArrayOf(
+                    0xff.toByte(), 0, 0, 0xff.toByte(),
+                    0, 0xff.toByte(), 0, 0xff.toByte(),
+                    0, 0, 0xff.toByte(), 0xff.toByte(),
+                    0xff.toByte(), 0xff.toByte(), 0xff.toByte(), 0xff.toByte(),
+                )
+
+                target.encodeCoverageMask(mask, GPUClearColor(0.0, 0.0, 0.0, 0.0)) {
+                    val texturedVertexBuffer = createVertexPositionUVBuffer(
+                        GPUBackendVertexPositionUVData(
+                            vertexData = floatArrayOf(
+                                -1f, -1f, 0f, 1f,
+                                1f, -1f, 1f, 1f,
+                                -1f, 1f, 0f, 0f,
+                                1f, 1f, 1f, 0f,
+                            ),
+                            indices = intArrayOf(0, 1, 2, 2, 1, 3),
+                        ),
+                    )
+                    drawVertexPositionUVIndexed(
+                        vertexBufferLabel = texturedVertexBuffer,
+                        indexCount = 6,
+                        uniformDraw = uniform,
+                        textureRgba = rgba,
+                        textureWidth = 2,
+                        textureHeight = 2,
+                        textureFormat = "rgba8unorm",
+                    )
+
+                    val dualVertexBuffer = createVertexPositionUVBuffer(
+                        GPUBackendVertexPositionUVData(
+                            vertexData = floatArrayOf(
+                                -1f, -1f, 0f, 1f, 0f, 1f,
+                                1f, -1f, 1f, 1f, 1f, 1f,
+                                -1f, 1f, 0f, 0f, 0f, 0f,
+                                1f, 1f, 1f, 0f, 1f, 0f,
+                            ),
+                            indices = intArrayOf(0, 1, 2, 2, 1, 3),
+                        ),
+                    )
+                    drawVertexPositionDualUVIndexed(
+                        vertexBufferLabel = dualVertexBuffer,
+                        indexCount = 6,
+                        uniformDraw = uniform,
+                        texture1Rgba = rgba,
+                        texture1Width = 2,
+                        texture1Height = 2,
+                        texture2Rgba = rgba,
+                        texture2Width = 2,
+                        texture2Height = 2,
+                        textureFormat = "rgba8unorm",
+                    )
+                }
+                target.releaseCoverageMask(mask)
+            }
+        }
+    }
+
+    @Test
+    fun `multi texture passes cache layout topology without texture labels`() {
+        GPUBackendRuntimeFactory.createOrNull().use { session ->
+            assumeTrue(session != null, "GPU backend unavailable in current environment")
+            session!!.createOffscreenTarget(
+                GPUOffscreenTargetRequest(width = 4, height = 4, colorFormat = "rgba8unorm"),
+            ).use { target ->
+                val first = target.createOffscreenTexture(GPUBackendOffscreenTexture("first", 4, 4, "rgba8unorm"))
+                val second = target.createOffscreenTexture(GPUBackendOffscreenTexture("second", 4, 4, "rgba8unorm"))
+                val third = target.createOffscreenTexture(GPUBackendOffscreenTexture("third", 4, 4, "rgba8unorm"))
+                val draw = GPUBackendRawUniformDraw(
+                    uniformBytes = solidColorUniformBytes(0f, 0f, 0f, 0f),
+                    scissorX = 0,
+                    scissorY = 0,
+                    scissorWidth = 4,
+                    scissorHeight = 4,
+                )
+
+                target.encode(GPUClearColor(0.0, 0.0, 0.0, 1.0)) {
+                    drawTwoTexturePass(
+                        wgsl = multiTextureWgsl(textureCount = 2),
+                        colorFormat = "rgba8unorm",
+                        firstTextureLabel = first,
+                        secondTextureLabel = second,
+                        draws = listOf(draw),
+                        blendMode = GPUBlendMode.SRC,
+                    )
+                }
+                target.encode(GPUClearColor(0.0, 0.0, 0.0, 1.0)) {
+                    drawThreeTexturePass(
+                        wgsl = multiTextureWgsl(textureCount = 3),
+                        colorFormat = "rgba8unorm",
+                        firstTextureLabel = first,
+                        secondTextureLabel = second,
+                        thirdTextureLabel = third,
+                        draws = listOf(draw),
+                        blendMode = GPUBlendMode.SRC,
+                    )
+                }
+            }
+
+            val preimages = session.executionCacheDumpLines.joinToString("\n")
+            assertTrue(preimages.contains("topology=2-texture-sampler-pairs"), preimages)
+            assertTrue(preimages.contains("topology=3-texture-sampler-pairs"), preimages)
+            assertTrue(!preimages.contains("offscreenTex:first"), preimages)
+            assertTrue(!preimages.contains("offscreenTex:second"), preimages)
+            assertTrue(!preimages.contains("offscreenTex:third"), preimages)
         }
     }
 
@@ -1752,6 +2322,98 @@ class GPUBackendRuntimeNativeSmokeTest {
             fn fs_main(in: VertexOut) -> @location(0) vec4f {
                 let tint = select(0.35, 1.0, in.position.x >= 0.0);
                 return vec4f(uniforms.color.rgb * tint, uniforms.color.a);
+            }
+        """.trimIndent()
+
+    private fun singleTextureWgsl(): String =
+        """
+            struct Uniforms {
+                color: vec4f,
+            };
+
+            @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+            @group(1) @binding(1) var source: texture_2d<f32>;
+            @group(1) @binding(2) var sourceSampler: sampler;
+
+            @vertex
+            fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
+                let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
+                let y = f32(idx & 2u) * 2.0 - 1.0;
+                return vec4f(x, y, 0.0, 1.0);
+            }
+
+            @fragment
+            fn fs_main(@builtin(position) coord: vec4f) -> @location(0) vec4f {
+                let dimensions = textureDimensions(source);
+                let uv = vec2f(coord.x / f32(dimensions.x), coord.y / f32(dimensions.y));
+                return textureSample(source, sourceSampler, uv) + uniforms.color * 0.0;
+            }
+        """.trimIndent()
+
+    private fun multiTextureWgsl(textureCount: Int): String {
+        require(textureCount in 2..3)
+        val textureDeclarations = (1..textureCount).joinToString("\n") { index ->
+            "@group(1) @binding(${index * 2 - 1}) var texture$index: texture_2d<f32>;\n" +
+                "@group(1) @binding(${index * 2}) var sampler$index: sampler;"
+        }
+        val samples = (1..textureCount).joinToString(" + ") { index ->
+            "textureSample(texture$index, sampler$index, uv)"
+        }
+        return """
+            struct Uniforms {
+                color: vec4f,
+            };
+
+            @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+            $textureDeclarations
+
+            @vertex
+            fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
+                let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
+                let y = f32(idx & 2u) * 2.0 - 1.0;
+                return vec4f(x, y, 0.0, 1.0);
+            }
+
+            @fragment
+            fn fs_main(@builtin(position) coord: vec4f) -> @location(0) vec4f {
+                let dims = textureDimensions(texture1);
+                let uv = vec2f(coord.x / f32(dims.x), coord.y / f32(dims.y));
+                return ($samples) / ${textureCount.toFloat()} + uniforms.color * 0.0;
+            }
+        """.trimIndent()
+    }
+
+    private fun stencilWriteWgsl(): String =
+        """
+            @vertex
+            fn vs_main(@location(0) position: vec2f) -> @builtin(position) vec4f {
+                return vec4f(position, 0.0, 1.0);
+            }
+
+            @fragment
+            fn fs_main() -> @location(0) vec4f {
+                return vec4f(0.0);
+            }
+        """.trimIndent()
+
+    private fun stencilTestWgsl(): String =
+        """
+            struct Uniforms {
+                color: vec4f,
+            };
+
+            @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+
+            @vertex
+            fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
+                let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
+                let y = f32(idx & 2u) * 2.0 - 1.0;
+                return vec4f(x, y, 0.0, 1.0);
+            }
+
+            @fragment
+            fn fs_main() -> @location(0) vec4f {
+                return uniforms.color;
             }
         """.trimIndent()
 
