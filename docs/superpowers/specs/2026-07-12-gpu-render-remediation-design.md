@@ -19,6 +19,7 @@ Make the active WebGPU paths correct and bounded, then prove their pixel behavio
 ### Clip and blur correctness
 
 - A mask-blur plan uses the precise captured device-rect clip when available. Complex clips retain their conservative full-target policy unless a separate semantic bound is proved.
+- Blur resolution reduction is a sigma-quality decision only: retain the existing scale that caps the effective execution sigma at 12. It must not keep halving to satisfy memory. After that scale, a plan whose four RGBA8 intermediates exceed `maxMaskBlurIntermediateBytes` returns `unsupported.mask-filter.blur.intermediate-budget`.
 - Blur sampling outside its source mask is transparent (decal behaviour), not edge-clamped.
 - The clip-mask budget includes every allocation that the native runtime makes: color render attachment, resolve attachment when MSAA is enabled, and depth/stencil attachment at the actual sample count.
 - Blur intermediate textures are transient. They are released after their last GPU submission completes; a frame-level accounting guard prevents unbounded accumulation across many blur draws.
@@ -65,5 +66,6 @@ The GPU clip planner remains the single source of budget truth. Its byte estimat
 - Nested picture destination-read blends are refused rather than rendered as `SrcOver`.
 - Corrected budgets account for the native depth/stencil allocation.
 - A blur touching an edge fades against transparent coverage, and a small device clip affects blur planning.
+- With one budget strictly between the clipped and full-target intermediate costs, the clipped blur is accepted and the full-target blur returns the stable intermediate-budget refusal.
 - Tests would fail if the mask is all-zero, the mask is all-white, or an expected red/blue pixel becomes white.
 - The score file reflects the most recent comparable measurement.
