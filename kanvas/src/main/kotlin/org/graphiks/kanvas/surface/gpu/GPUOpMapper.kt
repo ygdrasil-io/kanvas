@@ -229,9 +229,11 @@ internal fun DisplayOp.DrawRRect.toNormalizedCommand(
 
 internal fun BlendMode.toGpuBlendFacts(): GPUBlendFacts {
     val mode = when (this) {
+        BlendMode.CLEAR -> GPUBlendMode.CLEAR
         BlendMode.SRC_OVER -> GPUBlendMode.SRC_OVER
         BlendMode.SRC -> GPUBlendMode.SRC
         BlendMode.DST -> GPUBlendMode.DST
+        BlendMode.DST_OVER -> GPUBlendMode.DST_OVER
         BlendMode.SRC_IN -> GPUBlendMode.SRC_IN
         BlendMode.DST_IN -> GPUBlendMode.DST_IN
         BlendMode.SRC_OUT -> GPUBlendMode.SRC_OUT
@@ -246,9 +248,16 @@ internal fun BlendMode.toGpuBlendFacts(): GPUBlendFacts {
         BlendMode.OVERLAY -> GPUBlendMode.OVERLAY
         BlendMode.DARKEN -> GPUBlendMode.DARKEN
         BlendMode.LIGHTEN -> GPUBlendMode.LIGHTEN
+        BlendMode.COLOR_DODGE -> GPUBlendMode.COLOR_DODGE
+        BlendMode.COLOR_BURN -> GPUBlendMode.COLOR_BURN
+        BlendMode.HARD_LIGHT -> GPUBlendMode.HARD_LIGHT
+        BlendMode.SOFT_LIGHT -> GPUBlendMode.SOFT_LIGHT
         BlendMode.DIFFERENCE -> GPUBlendMode.DIFFERENCE
         BlendMode.EXCLUSION -> GPUBlendMode.EXCLUSION
-        else -> return GPUBlendFacts.unsupported(this.name)
+        BlendMode.HUE -> GPUBlendMode.HUE
+        BlendMode.SATURATION -> GPUBlendMode.SATURATION
+        BlendMode.COLOR -> GPUBlendMode.COLOR
+        BlendMode.LUMINOSITY -> GPUBlendMode.LUMINOSITY
     }
     return GPUBlendFacts(
         kind = GPUBlendKind.Custom,
