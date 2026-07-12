@@ -10,10 +10,10 @@ encoded bytes are therefore byte-for-byte the fixture described below.
   2.5.4, distributed by the OpenJPEG project under the 2-clause BSD licence.
   Neither executable, library nor JNI binding is included in or used by the
   Kanvas production runtime.
-* **Source P2 PGM SHA-256:**
+* **Source P2 PGM:** [`source.pgm`](source.pgm), SHA-256
   `2bdf55049e85c305eb510df45d10ce0150d92bac8663cf55e8e8d8b550fbd702`.
-  Its 5×3 unsigned samples are, row-major:
-  `0, 1, 127, 254, 255, 16, 32, 64, 128, 240, 17, 34, 68, 136, 238`.
+  It is the exact file passed to `opj_compress`; its 5×3 unsigned samples are,
+  row-major: `0, 1, 127, 254, 255, 16, 32, 64, 128, 240, 17, 34, 68, 136, 238`.
 * **Raw J2K SHA-256:**
   `078395a38f631ae8eb94476d01fe54a1d002a706ca7ad86849b15917cae937b4`.
 * **Profile:** one unsigned 8-bit grayscale component; origin `(0,0)`; one

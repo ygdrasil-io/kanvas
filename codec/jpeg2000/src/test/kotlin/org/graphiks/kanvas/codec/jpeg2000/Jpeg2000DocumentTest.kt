@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.codec.jpeg2000
 
 import java.io.ByteArrayOutputStream
+import java.security.MessageDigest
 import org.graphiks.kanvas.codec.Codec
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -11,6 +12,20 @@ import org.junit.jupiter.api.Test
 import org.skia.foundation.SkEncodedImageFormat
 
 class Jpeg2000DocumentTest {
+
+    @Test
+    fun `pinned OpenJPEG J2K fixture has its documented SHA-256`() {
+        val actual = MessageDigest.getInstance("SHA-256")
+            .digest(Jpeg2000TestFixtures.openJpegLossless5x3())
+            .joinToString(separator = "") { byte ->
+                byte.toInt().and(0xff).toString(16).padStart(2, '0')
+            }
+
+        assertEquals(
+            "078395a38f631ae8eb94476d01fe54a1d002a706ca7ad86849b15917cae937b4",
+            actual,
+        )
+    }
 
     @Test
     fun `OpenJPEG reversible lossless J2K fixture is owned structurally before entropy decode`() {
