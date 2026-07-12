@@ -56,20 +56,22 @@ overrides `referenceName`.
 `referenceName` is used only when loading the reference PNG and when reporting
 the reference asset selected by the runner or dashboard.
 
-The current registry does not receive a concrete alias in this PR. The names
-`colorcubert`, `colorcubecolorfilterrt`, and `lineargradientrt` are reused by
-multiple Kotlin classes, including approximate ports with different canvas
-dimensions. Assigning `color_cube_rt`, `color_cube_cf_rt`, or
-`linear_gradient_rt` to those classes would attach a reference to the wrong
-rendering. The already source-aligned concrete ports keep their existing names
-(`runtime_effect.ColorCubeRTGm` uses `color_cube_rt` and
-`gradient.LinearGradientRTGm` uses `linear_gradient_rt`).
+This PR applies only two concrete aliases, both verified against
+`/Users/chaos/workspace/kanvas-forge/skia-main/gm/convex_all_line_paths.cpp`:
+`ConvexLineOnlyPathsGm.referenceName = "convex-lineonly-paths"` and
+`ConvexLineOnlyPathsStrokeAndFillGm.referenceName =
+"convex-lineonly-paths-stroke-and-fill"`. Those Kotlin ports already match the
+upstream 512×512 registrations one-to-one in semantics and dimensions.
 
-The `referenceName` contract is still covered by a synthetic aliased GM test
-fixture, so a future one-to-one mapping can be added without changing the
-runner contract. No alias is assigned when the C++ source registers multiple
-variants and the Kotlin port does not identify one concrete variant. This
-applies to the
+The `referenceName` contract remains covered by synthetic alias fixtures for
+the generic runner/dashboard behavior, but no broader alias sweep is part of
+this PR. The names `colorcubert`, `colorcubecolorfilterrt`, and
+`lineargradientrt` are reused by multiple Kotlin classes, including
+approximate ports with different canvas dimensions. Assigning
+`color_cube_rt`, `color_cube_cf_rt`, or `linear_gradient_rt` to those classes
+would attach a reference to the wrong rendering. No alias is assigned when the
+C++ source registers multiple variants and the Kotlin port does not identify
+one concrete variant. This applies to the
 anisotropic, clipped-bitmap-shader, circular-arc, encode-sRGB, perspective-
 shader, preserve-fill-rule, shallow-gradient, and varied-text families.
 

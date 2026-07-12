@@ -20,6 +20,24 @@ class SkiaGmRegistryTest {
     }
 
     @Test
+    fun `convex line-only path ports keep logical names and explicit reference aliases`() {
+        val gmsByName = SkiaGmRegistry.all().associateBy { it.name }
+
+        val convexLineOnly = requireNotNull(gmsByName["convex_lineonly_paths"])
+        assertEquals("convex_lineonly_paths", convexLineOnly.name)
+        assertEquals("convex-lineonly-paths", convexLineOnly.referenceName)
+
+        val strokeAndFill = requireNotNull(
+            gmsByName["convex_lineonly_paths_stroke_and_fill"],
+        )
+        assertEquals("convex_lineonly_paths_stroke_and_fill", strokeAndFill.name)
+        assertEquals(
+            "convex-lineonly-paths-stroke-and-fill",
+            strokeAndFill.referenceName,
+        )
+    }
+
+    @Test
     fun `all service entries load Skia GM classes`() {
         val resourceName = "META-INF/services/${SkiaGm::class.qualifiedName}"
         val classLoader = SkiaGm::class.java.classLoader

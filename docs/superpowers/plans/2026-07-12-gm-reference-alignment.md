@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make Skia GM reference lookup source-aware without assigning an upstream PNG to an ambiguous or approximate Kotlin port.
+**Goal:** Make Skia GM reference lookup source-aware while applying only the two source-verified `convex_all_line_paths.cpp` one-to-one aliases and avoiding ambiguous or approximate Kotlin ports.
 
-**Architecture:** Keep `SkiaGm.name` as the logical registry identity and add a defaulted `referenceName` used only for reference lookup. Refactor the C++ GM inventory scanner so the missing-reference checker can consume an explicit source directory, classify normalized aliases and generated variant families, and remain useful when no CPP checkout is available.
+**Architecture:** Keep `SkiaGm.name` as the logical registry identity and use `referenceName` only for reference lookup. Apply explicit aliases only for `ConvexLineOnlyPathsGm -> convex-lineonly-paths` and `ConvexLineOnlyPathsStrokeAndFillGm -> convex-lineonly-paths-stroke-and-fill`, then keep the checker work focused on classification so ambiguous names and variant families stay diagnostic-only.
 
 **Tech Stack:** Kotlin/JVM, JUnit 5, Python 3 `unittest`, Gradle, Skia C++ GM source inventory, checked-in PNG references.
 
@@ -13,6 +13,7 @@
 - Do not add, remove, copy, rename, or regenerate files under `integration-tests/skia/src/test/resources/reference/`.
 - Keep `SkiaGm.name` unchanged for existing approximate, duplicate, `No-op`, `STUB`, and `Best-effort` ports.
 - Assign no concrete `referenceName` override unless the CPP registration is one-to-one and the Kotlin render is compatible with the reference dimensions and semantics.
+- In this PR, apply concrete overrides only for `convex_lineonly_paths` and `convex_lineonly_paths_stroke_and_fill`; keep `lineargradientrt`, `colorcubert`, `colorcubecolorfilterrt`, and multi-variant families on the no-alias path.
 - Do not hard-code developer-specific absolute paths in checked-in code; `--cpp-gm-dir` must be optional and explicit.
 - Do not port Ganesh or Graphite, rebuild SkSL, change the renderer, or alter similarity thresholds.
 - Keep native Kadre execution and `external/poc-koreos` out of this headless validation.

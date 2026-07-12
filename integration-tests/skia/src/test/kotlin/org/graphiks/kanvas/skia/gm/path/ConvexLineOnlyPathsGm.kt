@@ -234,6 +234,7 @@ private class ConvexLineOnlyPathsRenderer(private val doStrokeAndFill: Boolean) 
 
 class ConvexLineOnlyPathsGm : SkiaGm {
     override val name = "convex_lineonly_paths"
+    override val referenceName = "convex-lineonly-paths"
     override val renderFamily = RenderFamily.PATH
     override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
@@ -249,6 +250,7 @@ class ConvexLineOnlyPathsGm : SkiaGm {
 
 class ConvexLineOnlyPathsStrokeAndFillGm : SkiaGm {
     override val name = "convex_lineonly_paths_stroke_and_fill"
+    override val referenceName = "convex-lineonly-paths-stroke-and-fill"
     override val renderFamily = RenderFamily.PATH
     override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
