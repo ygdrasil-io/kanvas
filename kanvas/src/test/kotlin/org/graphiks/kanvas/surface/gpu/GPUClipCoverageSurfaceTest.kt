@@ -43,7 +43,6 @@ import org.graphiks.kanvas.types.redByte
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import kotlin.test.assertFailsWith
@@ -56,7 +55,7 @@ class GPUClipCoverageSurfaceTest {
     }
 
     @Test
-    fun `complex difference clip masks rect rrect path and image without changing exterior`() {
+    fun `complex difference clip renders core shapes and refuses image without source encoding`() {
         requireWebGpu()
         val surface = Surface(32, 32)
         surface.canvas {
@@ -75,9 +74,17 @@ class GPUClipCoverageSurfaceTest {
         val result = surface.render()
         assertRgbaNear(result.pixels, 32, 4, 4, Color.RED)
         assertRgbaNear(result.pixels, 32, 16, 16, Color.TRANSPARENT)
-        assertRgbaNear(result.pixels, 32, 28, 16, Color.BLUE)
+        assertRgbaNear(result.pixels, 32, 28, 16, Color.WHITE)
         assertRgbaNear(result.pixels, 32, 14, 22, Color.RED)
-        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertEquals(1, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertTrue(
+            result.diagnostics.entries.any { it.reason == "unsupported.coverage_plane.draw_image" },
+            result.diagnostics.entries.toString(),
+        )
+        assertTrue(
+            result.diagnostics.entries.none { it.code.startsWith("route:clip:DrawImage") },
+            result.diagnostics.entries.toString(),
+        )
         assertTrue(
             result.diagnostics.entries.any { entry ->
                 entry.facts.any { fact -> fact.key == "clip.strategy" && fact.value == "alpha-mask" }
@@ -182,7 +189,7 @@ class GPUClipCoverageSurfaceTest {
     }
 
     @Test
-    fun `complex clip blur has no bounds fallback or unblurred dispatch`() {
+    fun `complex clip blur refuses without changing the destination or encoding a source`() {
         val session = GPUBackendRuntimeFactory.createOrNull()
         assumeTrue(session != null, "GPU backend unavailable in current environment")
         session!!
@@ -191,46 +198,36 @@ class GPUClipCoverageSurfaceTest {
         val result = renderBlurredDifferenceClipScene()
         val telemetryAfter = session.runtimeTelemetry
 
-        assertEquals(0, result.stats.opsRefused, result.diagnostics.entries.toString())
+        assertEquals(1, result.stats.opsRefused, result.diagnostics.entries.toString())
         assertTrue(
-            result.diagnostics.entries.none { it.reason.contains("complex_stack") },
+            result.diagnostics.entries.any { it.reason == "unsupported.coverage_plane.mask_blur" },
             result.diagnostics.entries.toString(),
         )
         assertTrue(
-            result.diagnostics.entries.any { entry ->
-                entry.facts.any { it.key == "blur.tap_count" && it.value != "1" }
+            result.diagnostics.entries.none { entry ->
+                entry.code == "route:mask-blur:DrawRect:1" || entry.code == "dispatch:DrawRect:1"
             },
             result.diagnostics.entries.toString(),
         )
         assertTrue(
-            result.diagnostics.entries.any { entry ->
-                entry.reason == "gpu-copy-then-formula" &&
-                    entry.facts.any { it.key == "clip.strategy" && it.value == "alpha-mask" }
+            result.diagnostics.entries.none { entry ->
+                entry.facts.any { it.key == "mask.blur.module-keys" }
             },
             result.diagnostics.entries.toString(),
         )
-        assertTrue(telemetryAfter.destinationCopies > telemetryBefore.destinationCopies)
+        assertEquals(telemetryBefore.destinationCopies, telemetryAfter.destinationCopies)
         assertEquals(
             telemetryBefore.destinationReadbackSnapshots,
             telemetryAfter.destinationReadbackSnapshots,
         )
-        assertNotEquals(
-            pixelAt(destination.pixels, 3, 10),
-            pixelAt(result.pixels, 3, 10),
-            "blur halo must alter the destination outside the unblurred source rect",
-        )
-        assertEquals(
-            pixelAt(destination.pixels, 7, 10),
-            pixelAt(result.pixels, 7, 10),
-            "the concave DIFFERENCE interior must preserve the destination",
-        )
+        assertEquals(destination.pixels.toList(), result.pixels.toList())
     }
 
     @Test
-    fun `one hundred twenty frames vary sigma and clips without cache growth by content`() {
+    fun `one hundred twenty complex mask blur frames refuse stably without cache growth`() {
         val result = renderAlternatingClipAndSigmaFrames(frameCount = 120)
 
-        assertEquals(setOf(MASK_BLUR_HORIZONTAL_WGSL, MASK_BLUR_VERTICAL_WGSL), result.blurModules)
+        assertEquals(setOf("unsupported.coverage_plane.mask_blur"), result.refusalReasons)
         assertEquals(result.pipelineCountAfterWarmup, result.pipelineCountAtEnd)
         assertEquals(0L, result.destinationReadbackSnapshots)
     }
@@ -270,10 +267,10 @@ class GPUClipCoverageSurfaceTest {
     }
 
     @Test
-    fun `coverage alpha mask preserves difference holes for clear and src`() {
+    fun `coverage alpha mask preserves difference holes for clear src and dst in`() {
         requireWebGpu()
 
-        listOf(BlendMode.CLEAR, BlendMode.SRC).forEach { blendMode ->
+        listOf(BlendMode.CLEAR, BlendMode.SRC, BlendMode.DST_IN).forEach { blendMode ->
             val result = Surface(16, 16).run {
                 canvas {
                     drawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE))
@@ -296,13 +293,18 @@ class GPUClipCoverageSurfaceTest {
                 16,
                 3,
                 3,
-                if (blendMode == BlendMode.CLEAR) Color.TRANSPARENT else Color.RED,
+                when (blendMode) {
+                    BlendMode.CLEAR -> Color.TRANSPARENT
+                    BlendMode.SRC -> Color.RED
+                    BlendMode.DST_IN -> Color.WHITE
+                    else -> error("unexpected test mode: $blendMode")
+                },
             )
         }
     }
 
     @Test
-    fun `coverage alpha mask preserves destination outside text glyphs for clear and src`() {
+    fun `coverage alpha mask preserves destination outside text glyphs for clear src and dst in`() {
         requireWebGpu()
         val typeface = FontTypeface(
             javaClass.classLoader
@@ -311,7 +313,7 @@ class GPUClipCoverageSurfaceTest {
             fontName = "LiberationSans-Regular",
         )
 
-        listOf(BlendMode.CLEAR, BlendMode.SRC).forEach { blendMode ->
+        listOf(BlendMode.CLEAR, BlendMode.SRC, BlendMode.DST_IN).forEach { blendMode ->
             val result = Surface(16, 16).run {
                 canvas {
                     drawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE))
@@ -331,6 +333,125 @@ class GPUClipCoverageSurfaceTest {
             assertEquals(0, result.diagnostics.fatalCount, "$blendMode ${result.diagnostics.entries}")
             assertRgbaNear(result.pixels, 16, 2, 8, Color.WHITE)
         }
+    }
+
+    @Test
+    fun `alpha mask retains geometric coverage for zero alpha paint`() {
+        requireWebGpu()
+
+        listOf(BlendMode.CLEAR, BlendMode.SRC, BlendMode.DST_IN).forEach { blendMode ->
+            val result = Surface(16, 16).run {
+                canvas {
+                    drawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE))
+                    save()
+                    clipRect(Rect(1f, 1f, 15f, 15f), ClipOp.INTERSECT, antiAlias = true)
+                    clipRect(Rect(6f, 6f, 10f, 10f), ClipOp.DIFFERENCE, antiAlias = true)
+                    drawRect(
+                        Rect(2f, 2f, 14f, 14f),
+                        Paint.fill(Color.fromRGBA(1f, 0f, 0f, 0f)).copy(blendMode = blendMode),
+                    )
+                    restore()
+                }
+                render()
+            }
+
+            assertEquals(0, result.diagnostics.fatalCount, "$blendMode ${result.diagnostics.entries}")
+            assertRgbaNear(result.pixels, 16, 3, 3, Color.TRANSPARENT)
+            assertRgbaNear(result.pixels, 16, 7, 7, Color.WHITE)
+        }
+    }
+
+    @Test
+    fun `AA geometry coverage blends after clear src and dst in`() {
+        requireWebGpu()
+
+        listOf(BlendMode.CLEAR, BlendMode.SRC, BlendMode.DST_IN).forEach { blendMode ->
+            val result = Surface(16, 16).run {
+                canvas {
+                    drawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE))
+                    drawRect(
+                        Rect(3.5f, 2f, 14f, 14f),
+                        Paint.fill(Color.RED).copy(blendMode = blendMode, antiAlias = true),
+                    )
+                }
+                render()
+            }
+
+            assertEquals(0, result.diagnostics.fatalCount, "$blendMode ${result.diagnostics.entries}")
+            assertRgbaNear(
+                result.pixels,
+                16,
+                3,
+                8,
+                when (blendMode) {
+                    BlendMode.CLEAR -> Color.fromArgb(128, 188, 188, 188)
+                    BlendMode.SRC -> Color.fromArgb(255, 255, 188, 188)
+                    BlendMode.DST_IN -> Color.WHITE
+                    else -> error("unexpected test mode: $blendMode")
+                },
+            )
+        }
+    }
+
+    @Test
+    fun `AA scissor preserves destination outside clear src and dst in`() {
+        requireWebGpu()
+
+        listOf(BlendMode.CLEAR, BlendMode.SRC, BlendMode.DST_IN).forEach { blendMode ->
+            val result = Surface(16, 16).run {
+                canvas {
+                    drawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE))
+                    save()
+                    clipRect(Rect(4f, 2f, 12f, 14f), ClipOp.INTERSECT, antiAlias = false)
+                    drawRect(
+                        Rect(3.5f, 2f, 13.5f, 14f),
+                        Paint.fill(Color.RED).copy(blendMode = blendMode, antiAlias = true),
+                    )
+                    restore()
+                }
+                render()
+            }
+
+            assertEquals(0, result.diagnostics.fatalCount, "$blendMode ${result.diagnostics.entries}")
+            assertRgbaNear(result.pixels, 16, 3, 8, Color.WHITE)
+        }
+    }
+
+    @Test
+    fun `alpha mask refuses image without an independent geometry coverage plane`() {
+        requireWebGpu()
+        val transparentImage = Image.fromPixels(
+            width = 1,
+            height = 1,
+            pixels = byteArrayOf(0, 0, 0, 0),
+            colorType = ColorType.RGBA_8888,
+            sourceId = "coverage-plane-transparent-image",
+        )
+        val result = Surface(16, 16).run {
+            canvas {
+                drawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE))
+                save()
+                clipRect(Rect(1f, 1f, 15f, 15f), ClipOp.INTERSECT, antiAlias = true)
+                clipRect(Rect(6f, 6f, 10f, 10f), ClipOp.DIFFERENCE, antiAlias = true)
+                drawImage(
+                    transparentImage,
+                    Rect(2f, 2f, 14f, 14f),
+                    Paint.fill(Color.RED).copy(blendMode = BlendMode.CLEAR),
+                )
+                restore()
+            }
+            render()
+        }
+
+        assertEquals(1, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertTrue(
+            result.diagnostics.entries.any { it.reason == "unsupported.coverage_plane.draw_image" },
+            result.diagnostics.entries.toString(),
+        )
+        assertTrue(
+            result.diagnostics.entries.none { it.code.startsWith("route:clip:DrawImage") },
+            result.diagnostics.entries.toString(),
+        )
     }
 
     @Test
@@ -388,7 +509,7 @@ class GPUClipCoverageSurfaceTest {
     }
 
     @Test
-    fun `core complex clip routes use source then composite without a direct bypass`() {
+    fun `core complex clip routes render while image refuses before source encoding`() {
         requireWebGpu()
         val clip = ClipStack.Complex(
             listOf(
@@ -425,14 +546,16 @@ class GPUClipCoverageSurfaceTest {
             routeTrace = trace,
         )
 
-        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
-        assertEquals(4, trace.logicalDrawCount)
-        assertEquals(4, trace.sourceThenCompositeCount)
+        assertEquals(1, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertTrue(result.diagnostics.entries.any { it.reason == "unsupported.coverage_plane.draw_image" })
+        assertEquals(3, trace.logicalDrawCount)
+        assertEquals(3, trace.sourceThenCompositeCount)
         assertEquals(0, trace.directComplexClipDispatches)
+        assertRgbaNear(result.pixels, 32, 24, 24, Color.TRANSPARENT)
     }
 
     @Test
-    fun `text atlas and textured vertices each use one complex clip source composite`() {
+    fun `text atlas renders while textured vertices refuse before source encoding`() {
         requireWebGpu()
         val clip = ClipStack.Complex(
             listOf(
@@ -478,11 +601,12 @@ class GPUClipCoverageSurfaceTest {
             routeTrace = trace,
         )
 
-        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
-        assertEquals(2, trace.logicalDrawCount)
-        assertEquals(2, trace.sourceThenCompositeCount)
+        assertEquals(1, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertTrue(result.diagnostics.entries.any { it.reason == "unsupported.coverage_plane.draw_vertices_textured" })
+        assertEquals(1, trace.logicalDrawCount)
+        assertEquals(1, trace.sourceThenCompositeCount)
         assertEquals(0, trace.directComplexClipDispatches)
-        assertRgbaNear(result.pixels, 32, 21, 21, Color.BLUE)
+        assertRgbaNear(result.pixels, 32, 21, 21, Color.TRANSPARENT)
     }
 
     @Test
@@ -521,7 +645,7 @@ class GPUClipCoverageSurfaceTest {
     }
 
     @Test
-    fun `scissor destination read DrawVertices keeps exterior intact`() {
+    fun `scissor destination read textured vertices refuse without changing destination`() {
         requireWebGpu()
         val clip = ClipStack.DeviceRect(Rect(6f, 6f, 14f, 14f), antiAlias = false)
         val vertices = texturedScissorTriangle()
@@ -543,13 +667,15 @@ class GPUClipCoverageSurfaceTest {
             RenderConfig.DEFAULT,
         )
 
-        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertEquals(1, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertTrue(result.diagnostics.entries.any { it.reason == "unsupported.coverage_plane.draw_vertices_textured" })
+        assertTrue(result.diagnostics.entries.none { it.code.startsWith("route:clip:DrawVertices") })
         assertWhiteOutsideClip(result.pixels, 16, clip.rect)
-        assertDarkenedInsideClip(result.pixels, 16, clip.rect)
+        assertRgbaNear(result.pixels, 16, 8, 8, Color.WHITE, tolerance = 0)
     }
 
     @Test
-    fun `scissor destination read DrawMesh keeps exterior intact`() {
+    fun `scissor destination read textured mesh refuses without changing destination`() {
         requireWebGpu()
         val clip = ClipStack.DeviceRect(Rect(6f, 6f, 14f, 14f), antiAlias = false)
         val mesh = Mesh(texturedScissorTriangle(), bounds = Rect(1f, 1f, 15f, 15f))
@@ -572,9 +698,11 @@ class GPUClipCoverageSurfaceTest {
             RenderConfig.DEFAULT,
         )
 
-        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertEquals(1, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertTrue(result.diagnostics.entries.any { it.reason == "unsupported.coverage_plane.draw_mesh_textured" })
+        assertTrue(result.diagnostics.entries.none { it.code.startsWith("route:clip:DrawMesh") })
         assertWhiteOutsideClip(result.pixels, 16, clip.rect)
-        assertDarkenedInsideClip(result.pixels, 16, clip.rect)
+        assertRgbaNear(result.pixels, 16, 8, 8, Color.WHITE, tolerance = 0)
     }
 
     @Test
@@ -613,7 +741,7 @@ class GPUClipCoverageSurfaceTest {
     }
 
     @Test
-    fun `empty scissor destination read DrawVertices keeps destination intact`() {
+    fun `empty scissor textured vertices refuse before source encoding`() {
         requireWebGpu()
         val clip = ClipStack.DeviceRect(Rect(20f, 20f, 24f, 24f), antiAlias = false)
         val result = renderViaGpu(
@@ -634,13 +762,15 @@ class GPUClipCoverageSurfaceTest {
             RenderConfig.DEFAULT,
         )
 
-        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertEquals(1, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
         assertEquals(1, result.stats.opsDispatched, result.diagnostics.entries.toString())
+        assertTrue(result.diagnostics.entries.any { it.reason == "unsupported.coverage_plane.draw_vertices_textured" })
+        assertTrue(result.diagnostics.entries.none { it.code.startsWith("route:clip:DrawVertices") })
         assertWhiteOutsideClip(result.pixels, 16, clip.rect)
     }
 
     @Test
-    fun `empty scissor destination read DrawMesh keeps destination intact`() {
+    fun `empty scissor textured mesh refuses before source encoding`() {
         requireWebGpu()
         val clip = ClipStack.DeviceRect(Rect(20f, 20f, 24f, 24f), antiAlias = false)
         val mesh = Mesh(texturedScissorTriangle(), bounds = Rect(1f, 1f, 15f, 15f))
@@ -663,8 +793,10 @@ class GPUClipCoverageSurfaceTest {
             RenderConfig.DEFAULT,
         )
 
-        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertEquals(1, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
         assertEquals(1, result.stats.opsDispatched, result.diagnostics.entries.toString())
+        assertTrue(result.diagnostics.entries.any { it.reason == "unsupported.coverage_plane.draw_mesh_textured" })
+        assertTrue(result.diagnostics.entries.none { it.code.startsWith("route:clip:DrawMesh") })
         assertWhiteOutsideClip(result.pixels, 16, clip.rect)
     }
 
@@ -728,7 +860,7 @@ class GPUClipCoverageSurfaceTest {
     }
 
     @Test
-    fun `complex clip source retains every image cell subpass`() {
+    fun `complex clip image nine refuses before source encoding`() {
         requireWebGpu()
         val image = opaqueImage(size = 3)
 
@@ -751,12 +883,15 @@ class GPUClipCoverageSurfaceTest {
             RenderConfig.DEFAULT,
         )
 
-        assertVisibleAt(result.pixels, 32, 3, 3)
-        assertVisibleAt(result.pixels, 32, 12, 12)
+        assertEquals(1, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertTrue(result.diagnostics.entries.any { it.reason == "unsupported.coverage_plane.draw_image_nine" })
+        assertTrue(result.diagnostics.entries.none { it.code.startsWith("route:clip:DrawImageNine") })
+        assertRgbaNear(result.pixels, 32, 3, 3, Color.TRANSPARENT)
+        assertRgbaNear(result.pixels, 32, 12, 12, Color.TRANSPARENT)
     }
 
     @Test
-    fun `complex clip source retains every atlas sprite subpass`() {
+    fun `complex clip atlas refuses before source encoding`() {
         requireWebGpu()
         val image = opaqueImage(size = 3)
 
@@ -781,8 +916,11 @@ class GPUClipCoverageSurfaceTest {
             RenderConfig.DEFAULT,
         )
 
-        assertVisibleAt(result.pixels, 32, 3, 21)
-        assertVisibleAt(result.pixels, 32, 19, 21)
+        assertEquals(1, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertTrue(result.diagnostics.entries.any { it.reason == "unsupported.coverage_plane.draw_atlas" })
+        assertTrue(result.diagnostics.entries.none { it.code.startsWith("route:clip:DrawAtlas") })
+        assertRgbaNear(result.pixels, 32, 3, 21, Color.TRANSPARENT)
+        assertRgbaNear(result.pixels, 32, 19, 21, Color.TRANSPARENT)
     }
 
     @Test
@@ -858,7 +996,7 @@ class GPUClipCoverageSurfaceTest {
     }
 
     @Test
-    fun `vertices diagnostics retain their logical operation name`() {
+    fun `textured vertices diagnostics retain their coverage plane refusal operation`() {
         requireWebGpu()
         val vertices = Vertices(
             VertexMode.TRIANGLES,
@@ -866,17 +1004,19 @@ class GPUClipCoverageSurfaceTest {
             texCoords = listOf(Point(0f, 0f), Point(1f, 0f), Point(0f, 1f)),
         )
         val expectedOperations = listOf(
-            DisplayOp.DrawVertices(vertices, Paint.fill(Color.WHITE), Matrix33.identity(), complexFullClip()) to "drawVertices",
+            DisplayOp.DrawVertices(vertices, Paint.fill(Color.WHITE), Matrix33.identity(), complexFullClip()) to
+                ("DrawVertices" to "unsupported.coverage_plane.draw_vertices_textured"),
             DisplayOp.DrawMesh(
                 Mesh(vertices, bounds = Rect(2f, 2f, 8f, 8f)),
                 Paint.fill(Color.WHITE),
                 null,
                 Matrix33.identity(),
                 complexFullClip(),
-            ) to "drawMesh",
+            ) to ("DrawMesh" to "unsupported.coverage_plane.draw_mesh_textured"),
         )
 
-        expectedOperations.forEach { (op, expectedOperation) ->
+        expectedOperations.forEach { (op, expectation) ->
+            val (expectedOperation, expectedReason) = expectation
             val result = renderViaGpu(
                 StaticDisplayListBuffer(listOf(op)),
                 32,
@@ -887,7 +1027,7 @@ class GPUClipCoverageSurfaceTest {
 
             assertTrue(
                 result.diagnostics.entries.any {
-                    it.operation == expectedOperation && it.reason == "gpu_textured_vertices_no_image_shader"
+                    it.operation == expectedOperation && it.reason == expectedReason
                 },
                 result.diagnostics.entries.toString(),
             )
@@ -895,7 +1035,7 @@ class GPUClipCoverageSurfaceTest {
     }
 
     @Test
-    fun `textured vertices refuse perspective and non triangle list source encoders`() {
+    fun `textured vertices refuse before perspective and mode source encoders`() {
         requireWebGpu()
         val clip = ClipStack.Complex(
             listOf(ClipStackOp.RectOp(Rect(1f, 1f, 15f, 15f), ClipOp.INTERSECT, antiAlias = true)),
@@ -920,7 +1060,11 @@ class GPUClipCoverageSurfaceTest {
             PixelFormat.RGBA8,
             RenderConfig.DEFAULT,
         )
-        assertTrue(perspective.diagnostics.entries.any { it.reason == "unsupported.vertices.perspective_transform" })
+        assertTrue(
+            perspective.diagnostics.entries.any { it.reason == "unsupported.coverage_plane.draw_vertices_textured" },
+            perspective.diagnostics.entries.toString(),
+        )
+        assertTrue(perspective.diagnostics.entries.none { it.code.startsWith("route:clip:DrawVertices") })
 
         val strip = renderViaGpu(
             StaticDisplayListBuffer(
@@ -938,7 +1082,11 @@ class GPUClipCoverageSurfaceTest {
             PixelFormat.RGBA8,
             RenderConfig.DEFAULT,
         )
-        assertTrue(strip.diagnostics.entries.any { it.reason == "unsupported.vertices.textured_mode" })
+        assertTrue(
+            strip.diagnostics.entries.any { it.reason == "unsupported.coverage_plane.draw_vertices_textured" },
+            strip.diagnostics.entries.toString(),
+        )
+        assertTrue(strip.diagnostics.entries.none { it.code.startsWith("route:clip:DrawVertices") })
     }
 
     @Test
@@ -968,7 +1116,7 @@ class GPUClipCoverageSurfaceTest {
     }
 
     @Test
-    fun `textured vertices with invalid indices are refused before the backend buffer`() {
+    fun `textured vertices with invalid indices refuse before coverage source encoding`() {
         requireWebGpu()
         val clip = ClipStack.Complex(
             listOf(ClipStackOp.RectOp(Rect(1f, 1f, 15f, 15f), ClipOp.INTERSECT, antiAlias = true)),
@@ -997,7 +1145,11 @@ class GPUClipCoverageSurfaceTest {
             RenderConfig.DEFAULT,
         )
 
-        assertTrue(result.diagnostics.entries.any { it.reason == "unsupported.vertices.indices" })
+        assertTrue(
+            result.diagnostics.entries.any { it.reason == "unsupported.coverage_plane.draw_vertices_textured" },
+            result.diagnostics.entries.toString(),
+        )
+        assertTrue(result.diagnostics.entries.none { it.code.startsWith("route:clip:DrawVertices") })
     }
 
     @Test
@@ -1086,7 +1238,7 @@ class GPUClipCoverageSurfaceTest {
     }
 
     @Test
-    fun `remaining high level GPU routes use one source composite or a stable refusal`() {
+    fun `remaining high level GPU routes render supported sources and refuse coverage gaps`() {
         requireWebGpu()
         val clip = ClipStack.Complex(
             listOf(
@@ -1145,10 +1297,21 @@ class GPUClipCoverageSurfaceTest {
             routeTrace = trace,
         )
 
-        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
-        assertEquals(7, trace.logicalDrawCount, result.diagnostics.entries.toString())
-        assertEquals(7, trace.sourceThenCompositeCount, result.diagnostics.entries.toString())
+        assertEquals(3, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertEquals(4, trace.logicalDrawCount, result.diagnostics.entries.toString())
+        assertEquals(4, trace.sourceThenCompositeCount, result.diagnostics.entries.toString())
         assertEquals(0, trace.directComplexClipDispatches)
+        assertEquals(
+            setOf(
+                "unsupported.coverage_plane.draw_image_nine",
+                "unsupported.coverage_plane.draw_image_lattice",
+                "unsupported.coverage_plane.draw_atlas",
+            ),
+            result.diagnostics.entries
+                .map { it.reason }
+                .filter { it.startsWith("unsupported.coverage_plane.") }
+                .toSet(),
+        )
         assertTrue(
             result.diagnostics.entries.none { it.reason.startsWith("unsupported.gpu.route.unclassified") },
             result.diagnostics.entries.toString(),
@@ -1251,8 +1414,8 @@ class GPUClipCoverageSurfaceTest {
         session!!
 
         val warmup = renderBlurredDifferenceClipScene(sigma = 1.5f, clipOffset = 0f)
-        assertEquals(0, warmup.stats.opsRefused, warmup.diagnostics.entries.toString())
-        val blurModules = blurModules(warmup).toMutableSet()
+        assertEquals(1, warmup.stats.opsRefused, warmup.diagnostics.entries.toString())
+        val refusalReasons = coveragePlaneRefusals(warmup).toMutableSet()
         val pipelineCountAfterWarmup = session.executionCacheTelemetry
             .filter { it.cacheName == "pipeline" }
             .sumOf { it.creations }
@@ -1263,8 +1426,8 @@ class GPUClipCoverageSurfaceTest {
                 sigma = 0.5f + (frame % 7),
                 clipOffset = (frame % 3).toFloat() * 0.25f,
             )
-            assertEquals(0, frameResult.stats.opsRefused, frameResult.diagnostics.entries.toString())
-            blurModules += blurModules(frameResult)
+            assertEquals(1, frameResult.stats.opsRefused, frameResult.diagnostics.entries.toString())
+            refusalReasons += coveragePlaneRefusals(frameResult)
         }
 
         val pipelineCountAtEnd = session.executionCacheTelemetry
@@ -1272,7 +1435,7 @@ class GPUClipCoverageSurfaceTest {
             .sumOf { it.creations }
         val telemetryAfterFrames = session.runtimeTelemetry
         return AlternatingBlurFramesResult(
-            blurModules = blurModules,
+            refusalReasons = refusalReasons,
             pipelineCountAfterWarmup = pipelineCountAfterWarmup,
             pipelineCountAtEnd = pipelineCountAtEnd,
             destinationReadbackSnapshots =
@@ -1280,22 +1443,14 @@ class GPUClipCoverageSurfaceTest {
         )
     }
 
-    private fun blurModules(result: org.graphiks.kanvas.surface.RenderResult): Set<String> =
+    private fun coveragePlaneRefusals(result: org.graphiks.kanvas.surface.RenderResult): Set<String> =
         result.diagnostics.entries
-            .flatMap { entry -> entry.facts }
-            .filter { it.key == "mask.blur.module-keys" }
-            .flatMap { it.value.split(',') }
-            .map { key ->
-                when (key) {
-                    MASK_BLUR_HORIZONTAL_MODULE_KEY -> MASK_BLUR_HORIZONTAL_WGSL
-                    MASK_BLUR_VERTICAL_MODULE_KEY -> MASK_BLUR_VERTICAL_WGSL
-                    else -> error("Unexpected mask blur module key: $key")
-                }
-            }
+            .map { it.reason }
+            .filter { it.startsWith("unsupported.coverage_plane.") }
             .toSet()
 
     private data class AlternatingBlurFramesResult(
-        val blurModules: Set<String>,
+        val refusalReasons: Set<String>,
         val pipelineCountAfterWarmup: Long,
         val pipelineCountAtEnd: Long,
         val destinationReadbackSnapshots: Long,

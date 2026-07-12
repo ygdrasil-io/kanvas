@@ -256,7 +256,7 @@ class GPUClipCoverageDispatchTest {
     }
 
     @Test
-    fun `use prepass skips complex clipped SRC before same mask src over use is released`() {
+    fun `use prepass counts complex clipped SRC and src over uses`() {
         val clip = ClipStack.Complex(
             listOf(
                 ClipStackOp.RectOp(Rect.fromLTRB(0f, 0f, 8f, 8f), ClipOp.INTERSECT, antiAlias = true),
@@ -284,8 +284,9 @@ class GPUClipCoverageDispatchTest {
             cache = cache,
         )
 
-        assertEquals(mapOf(plan.contentKey to 1), result.registeredUsesByKey)
-        assertEquals(listOf("unsupported.clip.mask.blend_mode:src"), result.refusalCodes)
+        assertEquals(mapOf(plan.contentKey to 2), result.registeredUsesByKey)
+        assertEquals(emptyList(), result.refusalCodes)
+        cache.acquire(plan) { "shared-mask" }.close()
         cache.acquire(plan) { "shared-mask" }.close()
         assertFalse(cache.contains(plan.contentKey))
         assertEquals(0L, cache.bytesInUse)
@@ -305,7 +306,10 @@ class GPUClipCoverageDispatchTest {
         val rendered = target.renderWithClip(
             context = GPUClipRouteContext(
                 sceneLabel = "scene",
-                sourceLabel = "source",
+                sourceSurface = GPUClipSourceSurface(
+                    colorLabel = "source-color",
+                    geometryCoverageLabel = "source-coverage",
+                ),
                 sourceLabelForDiagnostics = "drawRect:budget",
                 targetWidth = 8,
                 targetHeight = 8,

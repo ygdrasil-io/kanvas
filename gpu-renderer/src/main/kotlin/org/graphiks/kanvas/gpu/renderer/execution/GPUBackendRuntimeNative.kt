@@ -4405,6 +4405,8 @@ struct Uniforms {
     targetWidth: f32,
     targetHeight: f32,
     color: vec4f,
+    sourcePlane: u32,
+    _pad0: vec3u,
 };
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
@@ -4438,6 +4440,15 @@ fn vs_main(in: VertexInput) -> VertexOutput {
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let a8 = textureSample(a8_atlas_texture, a8_atlas_sampler, in.texcoord).r;
+    if (a8 == 0.0) {
+        discard;
+    }
+    if (uniforms.sourcePlane == 1u) {
+        return vec4f(uniforms.color.rgb * uniforms.color.a, uniforms.color.a);
+    }
+    if (uniforms.sourcePlane == 2u) {
+        return vec4f(0.0, 0.0, 0.0, a8);
+    }
     return vec4<f32>(uniforms.color.rgb, a8 * uniforms.color.a);
 }
 """.trimIndent()

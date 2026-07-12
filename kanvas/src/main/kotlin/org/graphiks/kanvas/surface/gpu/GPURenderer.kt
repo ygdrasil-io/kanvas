@@ -101,6 +101,35 @@ private fun DisplayOp.hasActiveMaskBlur(): Boolean = when (this) {
 private fun Paint.hasActiveMaskBlur(): Boolean =
     (maskFilter as? MaskFilter.Blur)?.let { it.sigma != 0f } ?: false
 
+/** The two source products required before a coverage-correct final blend. */
+private enum class GPUClipSourcePlane {
+    Color,
+    GeometryCoverage,
+}
+
+internal fun DisplayOp.requiresSeparateGeometryCoverage(): Boolean = when (this) {
+    is DisplayOp.DrawRect -> paint.antiAlias
+    is DisplayOp.DrawRRect -> paint.antiAlias
+    is DisplayOp.DrawPath -> paint.antiAlias
+    is DisplayOp.DrawText -> true
+    is DisplayOp.DrawPoint -> paint.antiAlias
+    is DisplayOp.DrawPoints -> paint.antiAlias
+    is DisplayOp.DrawDRRect -> paint.antiAlias
+    else -> false
+}
+
+private val geometryCoverageMaterial =
+    org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor.SolidColor(1f, 1f, 1f, 1f)
+
+private fun NormalizedDrawCommand.FillRect.forGeometryCoverage(): NormalizedDrawCommand.FillRect =
+    copy(material = geometryCoverageMaterial)
+
+private fun NormalizedDrawCommand.FillRRect.forGeometryCoverage(): NormalizedDrawCommand.FillRRect =
+    copy(material = geometryCoverageMaterial)
+
+private fun NormalizedDrawCommand.FillPath.forGeometryCoverage(): NormalizedDrawCommand.FillPath =
+    copy(material = geometryCoverageMaterial)
+
 private fun MaskBlurPlan.Ready.maskBlurDiagnosticFacts(): List<DiagnosticFact> {
     val kernel = blurKernelUniform(this)
     return listOf(
@@ -203,6 +232,15 @@ internal fun clipCoverageBlendUniformDraw(
     )
 }
 
+private fun coverageCombineUniformDraw(width: Int, height: Int): GPUBackendRawUniformDraw =
+    GPUBackendRawUniformDraw(
+        uniformBytes = ByteArray(16),
+        scissorX = 0,
+        scissorY = 0,
+        scissorWidth = width,
+        scissorHeight = height,
+    )
+
 /** Packs the scissor-aware destination-read formula uniform block. */
 internal fun destinationReadScissorBlendUniformDraw(
     mode: GPUBlendMode,
@@ -231,65 +269,53 @@ internal fun destinationReadScissorBlendUniformDraw(
 /**
  * Replaces the scene with the destination-read blend result. The destination texture is never
  * mapped to the CPU: an existing scene is copied GPU-to-GPU, while an empty scene gets a
- * transparent snapshot before the two- or three-texture formula pass.
+ * transparent snapshot before the three-texture formula pass. A device scissor is encoded into
+ * the source coverage texture, so final coverage remains zero outside that clip.
  */
 internal fun GPUBackendOffscreenTarget.renderDestinationReadBlend(
     sceneLabel: String,
     sceneHasContent: Boolean,
-    sourceLabel: String,
+    sourceSurface: GPUClipSourceSurface,
     snapshotLabel: String,
+    combinedCoverageLabel: String,
     clipMaskLabel: String?,
-    clipScissor: GPUBounds? = null,
     mode: GPUBlendMode,
     colorFormat: String,
     width: Int,
     height: Int,
 ): Boolean {
-    val draw = when {
-    clipMaskLabel != null -> clipCoverageBlendUniformDraw(mode, width, height)
-    clipScissor == null -> {
-        destinationReadBlendUniformDraw(mode, width, height)
-    }
-    else -> {
-        destinationReadScissorBlendUniformDraw(mode, clipScissor, width, height)
-    }
-    } ?: return false
+    val draw = clipCoverageBlendUniformDraw(mode, width, height)
     val transparent = GPUClearColor(0.0, 0.0, 0.0, 0.0)
+    val finalCoverageLabel = if (clipMaskLabel == null) {
+        sourceSurface.geometryCoverageLabel
+    } else {
+        encodeOffscreenTexture(combinedCoverageLabel, transparent) {
+            drawTwoTexturePass(
+                wgsl = COMBINE_COVERAGE_WGSL,
+                colorFormat = colorFormat,
+                firstTextureLabel = sourceSurface.geometryCoverageLabel,
+                secondTextureLabel = clipMaskLabel,
+                draws = listOf(coverageCombineUniformDraw(width, height)),
+                blendMode = GPUBlendMode.SRC,
+            )
+        }
+        combinedCoverageLabel
+    }
     if (sceneHasContent) {
         copyOffscreenTexture(sceneLabel, snapshotLabel)
     } else {
         encodeOffscreenTexture(snapshotLabel, transparent) {}
     }
     encodeOffscreenTexture(sceneLabel, transparent) {
-        if (clipMaskLabel != null) {
-            drawThreeTexturePass(
-                wgsl = CLIP_COVERAGE_BLEND_WGSL,
-                colorFormat = colorFormat,
-                firstTextureLabel = sourceLabel,
-                secondTextureLabel = snapshotLabel,
-                thirdTextureLabel = clipMaskLabel,
-                draws = listOf(draw),
-                blendMode = GPUBlendMode.SRC,
-            )
-        } else if (clipScissor != null) {
-            drawTwoTexturePass(
-                wgsl = SCISSOR_CLIP_BLEND_FORMULA_WGSL,
-                colorFormat = colorFormat,
-                firstTextureLabel = sourceLabel,
-                secondTextureLabel = snapshotLabel,
-                draws = listOf(draw),
-                blendMode = GPUBlendMode.SRC,
-            )
-        } else {
-            drawTwoTexturePass(
-                wgsl = BLEND_FORMULA_WGSL,
-                colorFormat = colorFormat,
-                firstTextureLabel = sourceLabel,
-                secondTextureLabel = snapshotLabel,
-                draws = listOf(draw),
-                blendMode = GPUBlendMode.SRC,
-            )
-        }
+        drawThreeTexturePass(
+            wgsl = CLIP_COVERAGE_BLEND_WGSL,
+            colorFormat = colorFormat,
+            firstTextureLabel = sourceSurface.colorLabel,
+            secondTextureLabel = snapshotLabel,
+            thirdTextureLabel = finalCoverageLabel,
+            draws = listOf(draw),
+            blendMode = GPUBlendMode.SRC,
+        )
     }
     return true
 }
@@ -628,6 +654,12 @@ internal fun renderViaGpu(
             val srcLabel = t.createOffscreenTexture(
                 GPUBackendOffscreenTexture(label = "kanvas:src", width = width, height = height, format = texFormat),
             )
+            val geometryCoverageLabel = t.createOffscreenTexture(
+                GPUBackendOffscreenTexture(label = "kanvas:geometry-coverage", width = width, height = height, format = texFormat),
+            )
+            val combinedCoverageLabel = t.createOffscreenTexture(
+                GPUBackendOffscreenTexture(label = "kanvas:combined-coverage", width = width, height = height, format = texFormat),
+            )
             val snapLabel = t.createOffscreenTexture(
                 GPUBackendOffscreenTexture(label = "kanvas:snap", width = width, height = height, format = texFormat),
             )
@@ -635,6 +667,7 @@ internal fun renderViaGpu(
             var sceneHasContent = false
             var clipSourceRoute = false
             var clipSourcePreservesClip = false
+            var clipSourcePlane: GPUClipSourcePlane? = null
             var sourceHasContent = false
             var maskBlurSourceBounds: GPUBounds? = null
             val layerStack = java.util.ArrayDeque<SceneTargetFrame>()
@@ -769,18 +802,24 @@ internal fun renderViaGpu(
                     clipSourcePreservesClip -> command.copy(blend = GPUBlendFacts.srcOver())
                     else -> command.copyForClipSource(width, height)
                 }
-                if (routedCommand.blend.requiresDestinationRead) {
+                val sourceCommand = if (clipSourcePlane == GPUClipSourcePlane.GeometryCoverage) {
+                    routedCommand.forGeometryCoverage()
+                } else {
+                    routedCommand
+                }
+                if (sourceCommand.blend.requiresDestinationRead) {
                     diagnostics.fatal(
-                        "refuse:${routedCommand.diagnosticName}",
-                        routedCommand.diagnosticName,
+                        "refuse:${sourceCommand.diagnosticName}",
+                        sourceCommand.diagnosticName,
                         "unsupported.destination_read.source_recursion",
                     )
                     return false
                 } else {
                     t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
                         dispatchFillRect(
-                            routedCommand, dispatched, diagnostics, width, height, config,
+                            sourceCommand, dispatched, diagnostics, width, height, config,
                             recordResult = !clipSourceRoute,
+                            uncoveredSourceColor = clipSourcePlane == GPUClipSourcePlane.Color,
                         )
                     }
                 }
@@ -793,13 +832,18 @@ internal fun renderViaGpu(
                     clipSourcePreservesClip -> command.copy(blend = GPUBlendFacts.srcOver())
                     else -> command.copyForClipSource(width, height)
                 }
-                if (routedCommand.blend.requiresDestinationRead) {
-                    diagnostics.fatal("refuse:drawPath:${routedCommand.commandId.value}", "drawPath", "unsupported_blend:advanced")
+                val sourceCommand = if (clipSourcePlane == GPUClipSourcePlane.GeometryCoverage) {
+                    routedCommand.forGeometryCoverage()
+                } else {
+                    routedCommand
+                }
+                if (sourceCommand.blend.requiresDestinationRead) {
+                    diagnostics.fatal("refuse:drawPath:${sourceCommand.commandId.value}", "drawPath", "unsupported_blend:advanced")
                     return false
                 }
                 t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
                     dispatchFillPath(
-                        routedCommand, dispatched, diagnostics, width, height, config,
+                        sourceCommand, dispatched, diagnostics, width, height, config,
                         recordResult = !clipSourceRoute,
                     )
                 }
@@ -812,10 +856,16 @@ internal fun renderViaGpu(
                     clipSourcePreservesClip -> command.copy(blend = GPUBlendFacts.srcOver())
                     else -> command.copyForClipSource(width, height)
                 }
+                val sourceCommand = if (clipSourcePlane == GPUClipSourcePlane.GeometryCoverage) {
+                    routedCommand.forGeometryCoverage()
+                } else {
+                    routedCommand
+                }
                 t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
                     dispatchFillRRect(
-                        routedCommand, dispatched, diagnostics, width, height, config,
+                        sourceCommand, dispatched, diagnostics, width, height, config,
                         recordResult = !clipSourceRoute,
+                        uncoveredSourceColor = clipSourcePlane == GPUClipSourcePlane.Color,
                     )
                 }
                 return recordSourcePart(true)
@@ -1228,7 +1278,11 @@ internal fun renderViaGpu(
                                         blendMode = if (clipSourceRoute) GPUBlendMode.SRC_OVER else cmd.blend.blendMode,
                                         dispatched = dispatched,
                                         diagnostics = diagnostics,
-                                        textColor = resolveTextColor(op.paint),
+                                        textColor = if (clipSourcePlane == GPUClipSourcePlane.GeometryCoverage) {
+                                            Color.WHITE
+                                        } else {
+                                            resolveTextColor(op.paint)
+                                        },
                                         targetWidth = width,
                                         targetHeight = height,
                                         drawOriginX = op.x,
@@ -1236,6 +1290,7 @@ internal fun renderViaGpu(
                                         transform = op.transform,
                                         recordResult = !clipSourceRoute,
                                         scissor = destinationReadSourceScissor(op.clip),
+                                        sourcePlane = clipSourcePlane,
                                     )
                                 }
                                 true
@@ -1453,17 +1508,24 @@ internal fun renderViaGpu(
                 cmdId: GPUDrawCommandID,
                 source: Boolean,
                 preserveClipInSource: Boolean = false,
+                sourcePlane: GPUClipSourcePlane? = null,
             ): Boolean {
                 val savedSceneLabel = sceneLabel
                 val savedSceneHasContent = sceneHasContent
                 val savedSourceHasContent = sourceHasContent
                 val savedClipSourceRoute = clipSourceRoute
                 val savedClipSourcePreservesClip = clipSourcePreservesClip
+                val savedClipSourcePlane = clipSourcePlane
                 if (source) {
-                    sceneLabel = srcLabel
+                    sceneLabel = when (sourcePlane) {
+                        GPUClipSourcePlane.Color -> srcLabel
+                        GPUClipSourcePlane.GeometryCoverage -> geometryCoverageLabel
+                        null -> error("source plane required for a clip source")
+                    }
                     sceneHasContent = false
                     clipSourceRoute = true
                     clipSourcePreservesClip = preserveClipInSource
+                    clipSourcePlane = sourcePlane
                     sourceHasContent = false
                 }
                 val fatalBefore = diagnostics.fatalCount
@@ -1894,6 +1956,7 @@ internal fun renderViaGpu(
                         sourceHasContent = savedSourceHasContent
                         clipSourceRoute = savedClipSourceRoute
                         clipSourcePreservesClip = savedClipSourcePreservesClip
+                        clipSourcePlane = savedClipSourcePlane
                     }
                 }
                 return rendered
@@ -1919,8 +1982,7 @@ internal fun renderViaGpu(
                 ->
                 val mode = blend.blendMode
                     ?: if (blend.kind == GPUBlendKind.SrcOver) GPUBlendMode.SRC_OVER else null
-                val coverageMaskRoute = clipMaskLabel != null
-                if (mode == null || (!coverageMaskRoute && destinationReadBlendModeIndex(mode) == null)) {
+                if (mode == null) {
                     composerDiagnostics.fatal(
                         code = "refuse:destination-read:${context.sourceLabelForDiagnostics}",
                         operation = context.sourceLabelForDiagnostics,
@@ -1943,10 +2005,10 @@ internal fun renderViaGpu(
                     val rendered = t.renderDestinationReadBlend(
                         sceneLabel = context.sceneLabel,
                         sceneHasContent = sceneHasContent,
-                        sourceLabel = context.sourceLabel,
+                        sourceSurface = context.sourceSurface,
                         snapshotLabel = snapLabel,
+                        combinedCoverageLabel = combinedCoverageLabel,
                         clipMaskLabel = clipMaskLabel,
-                        clipScissor = clipScissor,
                         mode = mode,
                         colorFormat = context.colorFormat,
                         width = context.targetWidth,
@@ -2058,9 +2120,25 @@ internal fun renderViaGpu(
                 }
                 val clipPlan = requestedClipPlan ?: GPUClipCoveragePlan.NoClip
                 val blend = op.clipCompositeBlendFacts()
+                val hasActiveMaskBlur = op.hasActiveMaskBlur()
+                val requiresSgComposition =
+                    blend.requiresDestinationRead ||
+                        clipPlan is GPUClipCoveragePlan.Mask ||
+                        (op.requiresSeparateGeometryCoverage() && !hasActiveMaskBlur)
+                op.coveragePlaneTask4RefusalOrNull()?.takeIf { requiresSgComposition }?.let { refusal ->
+                    diagnostics.fatal(
+                        code = "refuse:coverage-plane:${op.javaClass.simpleName}:${cmdId.value}",
+                        operation = op.javaClass.simpleName,
+                        reason = refusal,
+                    )
+                    continue
+                }
                 val routeContext = GPUClipRouteContext(
                     sceneLabel = sceneLabel,
-                    sourceLabel = srcLabel,
+                    sourceSurface = GPUClipSourceSurface(
+                        colorLabel = srcLabel,
+                        geometryCoverageLabel = geometryCoverageLabel,
+                    ),
                     sourceLabelForDiagnostics = "${op.javaClass.simpleName}:${cmdId.value}",
                     targetWidth = width,
                     targetHeight = height,
@@ -2069,7 +2147,8 @@ internal fun renderViaGpu(
                     frameCache = clipFrameCache,
                     destinationReadComposer = destinationReadComposer,
                     trace = routeTrace,
-                    forceSourceComposition = op.hasActiveMaskBlur(),
+                    forceSourceComposition = hasActiveMaskBlur,
+                    coverageCompositionRequired = op.requiresSeparateGeometryCoverage() && !hasActiveMaskBlur,
                     sourceCompositeBounds = { maskBlurSourceBounds },
                 )
                 if (blend.requiresDestinationRead) {
@@ -2085,6 +2164,13 @@ internal fun renderViaGpu(
                                 cmdId,
                                 source = true,
                                 preserveClipInSource = clipPlan is GPUClipCoveragePlan.Scissor,
+                                sourcePlane = GPUClipSourcePlane.Color,
+                            ) && executeCoreClipRoute(
+                                op,
+                                cmdId,
+                                source = true,
+                                preserveClipInSource = clipPlan is GPUClipCoveragePlan.Scissor,
+                                sourcePlane = GPUClipSourcePlane.GeometryCoverage,
                             )
                         },
                     )
@@ -2123,10 +2209,28 @@ internal fun renderViaGpu(
                         blend = blend,
                         diagnostics = diagnostics,
                         encodeDirect = { executeCoreClipRoute(op, cmdId, source = false) },
-                        encodeSource = { executeCoreClipRoute(op, cmdId, source = true) },
+                        encodeSource = {
+                            executeCoreClipRoute(
+                                op,
+                                cmdId,
+                                source = true,
+                                preserveClipInSource = clipPlan is GPUClipCoveragePlan.Scissor,
+                                sourcePlane = GPUClipSourcePlane.Color,
+                            ) && executeCoreClipRoute(
+                                op,
+                                cmdId,
+                                source = true,
+                                preserveClipInSource = clipPlan is GPUClipCoveragePlan.Scissor,
+                                sourcePlane = GPUClipSourcePlane.GeometryCoverage,
+                            )
+                        },
                     )
                     if (rendered &&
-                        (clipPlan is GPUClipCoveragePlan.Mask || routeContext.forceSourceComposition)
+                        (
+                            clipPlan is GPUClipCoveragePlan.Mask ||
+                                routeContext.forceSourceComposition ||
+                                routeContext.coverageCompositionRequired
+                            )
                     ) {
                         sceneHasContent = true
                         dispatched.add(cmdId.toString())
@@ -3024,7 +3128,7 @@ private fun computeAtlasDst(texRect: Rect, xform: Matrix33): Rect {
     return Rect.fromLTRB(l, t, r, b)
 }
 
-private fun hasColorGlyphs(blob: TextBlob): Boolean {
+internal fun hasColorGlyphs(blob: TextBlob): Boolean {
     val tf = blob.typeface as? FontTypeface ?: return false
     val scaler = tf.scaler ?: return false
     // Shortcut: check table presence instead of scaling every glyph
@@ -3118,6 +3222,7 @@ private fun GPUBackendRenderRecorder.drawTextAtlasPass(
     transform: Matrix33? = null,
     recordResult: Boolean = true,
     scissor: GPUCoverageScissor? = null,
+    sourcePlane: GPUClipSourcePlane? = null,
 ) {
     val blob = gpuBlob.textBlob
     val mesh = buildTextAtlasMesh(gpuBlob, drawOriginX, drawOriginY, transform)
@@ -3136,10 +3241,11 @@ private fun GPUBackendRenderRecorder.drawTextAtlasPass(
     //       targetWidth: f32,     // offset 0,  size 4
     //       targetHeight: f32,    // offset 4,  size 4
     //       color: vec4<f32>,     // offset 16, size 16 (vec4 requires 16-byte alignment)
-    //   };  // total size: 32 bytes
+    //       sourcePlane: u32,     // offset 32, S/G encoding selector
+    //   };  // total size: 64 bytes after WGSL struct alignment padding
     val tw = if (targetWidth > 0) targetWidth.toFloat() else gpuBlob.atlasWidth.toFloat()
     val th = if (targetHeight > 0) targetHeight.toFloat() else gpuBlob.atlasHeight.toFloat()
-    val uniformBytes = java.nio.ByteBuffer.allocate(32).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+    val uniformBytes = java.nio.ByteBuffer.allocate(64).order(java.nio.ByteOrder.LITTLE_ENDIAN)
     uniformBytes.putFloat(tw)           // targetWidth
     uniformBytes.putFloat(th)           // targetHeight
     uniformBytes.putFloat(0f)           // padding (vec4 alignment)
@@ -3152,6 +3258,14 @@ private fun GPUBackendRenderRecorder.drawTextAtlasPass(
     uniformBytes.putFloat(cg)           // color.g
     uniformBytes.putFloat(cb)           // color.b
     uniformBytes.putFloat(ca)           // color.a
+    uniformBytes.putInt(
+        when (sourcePlane) {
+            GPUClipSourcePlane.Color -> 1
+            GPUClipSourcePlane.GeometryCoverage -> 2
+            null -> 0
+        },
+    )
+    uniformBytes.putInt(0); uniformBytes.putInt(0); uniformBytes.putInt(0)
 
     drawTextAtlasPass(
         atlasRgba = gpuBlob.atlasRgba,

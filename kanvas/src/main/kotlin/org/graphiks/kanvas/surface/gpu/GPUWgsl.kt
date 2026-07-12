@@ -64,6 +64,13 @@ internal val RECT_AA_WGSL: String = """
     }
 """.trimIndent()
 
+/** Writes unmodulated source color S while discarding pixels whose geometric coverage is zero. */
+internal val RECT_AA_SOURCE_COLOR_WGSL: String = RECT_AA_WGSL
+    .replace(
+        "return vec4f(uniforms.color.rgb * srgb_to_linear(cov), uniforms.color.a * cov);",
+        "if (cov == 0.0) { discard; }\n        return uniforms.color;",
+    )
+
 internal val LINEAR_GRADIENT_WGSL: String = """
     struct Uniforms {
         start: vec2f,
@@ -144,6 +151,13 @@ internal val RRECT_WGSL: String = """
         return vec4f(uniforms.color.rgb * cov, uniforms.color.a * cov);
     }
 """.trimIndent()
+
+/** Writes unmodulated source color S while discarding pixels whose geometric coverage is zero. */
+internal val RRECT_SOURCE_COLOR_WGSL: String = RRECT_WGSL
+    .replace(
+        "return vec4f(uniforms.color.rgb * cov, uniforms.color.a * cov);",
+        "if (cov == 0.0) { discard; }\n        return uniforms.color;",
+    )
 
 internal val RADIAL_GRADIENT_WGSL: String = """
     struct Uniforms {
@@ -710,11 +724,10 @@ internal val CLIP_BLEND_FORMULA_WGSL: String = """
 /**
  * Coverage-correct clip composition for every mapped blend mode.
  *
- * The source texture carries geometry coverage, while [clipTexture] carries
- * clip coverage. A transparent source texel is outside geometry and must not
- * invoke modes such as Clear or Src. Every non-transparent texel computes its
- * complete blend first, then the clip interpolates that result with the
- * snapshot destination.
+ * The source color texture [S] and geometry-coverage texture [G] are separate
+ * products. Every covered texel computes its complete blend first, then [G]
+ * interpolates that result with the snapshot destination. Paint/image alpha
+ * must never stand in for geometry coverage.
  */
 internal val CLIP_COVERAGE_BLEND_WGSL: String = """
     struct Uniforms {
@@ -726,8 +739,8 @@ internal val CLIP_COVERAGE_BLEND_WGSL: String = """
     @group(1) @binding(2) var srcSampler: sampler;
     @group(1) @binding(3) var dstTexture: texture_2d<f32>;
     @group(1) @binding(4) var dstSampler: sampler;
-    @group(1) @binding(5) var clipTexture: texture_2d<f32>;
-    @group(1) @binding(6) var clipSampler: sampler;
+    @group(1) @binding(5) var geometryCoverageTexture: texture_2d<f32>;
+    @group(1) @binding(6) var geometryCoverageSampler: sampler;
 
     @vertex
     fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
@@ -779,12 +792,38 @@ internal val CLIP_COVERAGE_BLEND_WGSL: String = """
         let uv = coord.xy / vec2f(dims);
         let src = textureSample(srcTexture, srcSampler, uv);
         let dst = textureSample(dstTexture, dstSampler, uv);
-        if (src.a == 0.0) {
-            return dst;
-        }
-        let clipAlpha = textureSample(clipTexture, clipSampler, uv).a;
+        let coverage = textureSample(geometryCoverageTexture, geometryCoverageSampler, uv).a;
         let blended = porterDuffPremul(src, dst, uniforms.blendMode);
-        return dst + clipAlpha * (blended - dst);
+        return dst + coverage * (blended - dst);
+    }
+""".trimIndent()
+
+/** Materializes final coverage F = geometric coverage G times alpha-mask coverage C. */
+internal val COMBINE_COVERAGE_WGSL: String = """
+    struct Uniforms {
+        _pad: vec4u,
+    };
+
+    @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+    @group(1) @binding(1) var geometryCoverageTexture: texture_2d<f32>;
+    @group(1) @binding(2) var geometryCoverageSampler: sampler;
+    @group(1) @binding(3) var clipCoverageTexture: texture_2d<f32>;
+    @group(1) @binding(4) var clipCoverageSampler: sampler;
+
+    @vertex
+    fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
+        let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
+        let y = f32(idx & 2u) * 2.0 - 1.0;
+        return vec4f(x, y, 0.0, 1.0);
+    }
+
+    @fragment
+    fn fs_main(@builtin(position) coord: vec4f) -> @location(0) vec4f {
+        let dims = textureDimensions(geometryCoverageTexture);
+        let uv = coord.xy / vec2f(dims);
+        let coverage = textureSample(geometryCoverageTexture, geometryCoverageSampler, uv).a;
+        let clipCoverage = textureSample(clipCoverageTexture, clipCoverageSampler, uv).a;
+        return vec4f(0.0, 0.0, 0.0, coverage * clipCoverage);
     }
 """.trimIndent()
 

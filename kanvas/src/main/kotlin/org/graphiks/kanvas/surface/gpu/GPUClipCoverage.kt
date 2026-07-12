@@ -8,6 +8,7 @@ import kotlin.math.cos
 import kotlin.math.sin
 import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.canvas.DisplayOp
+import org.graphiks.kanvas.paint.MaskFilter
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.picture.Picture
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoverageElement
@@ -273,6 +274,10 @@ internal object GPUClipUsePrepass {
             }
             when (val plan = operation.gpuClipCoveragePlanOrNull(target, config, maxTextureDimension2D)) {
                 is GPUClipCoveragePlan.Mask -> {
+                    operation.coveragePlaneTask4RefusalOrNull()?.let { refusal ->
+                        refusals += refusal
+                        return
+                    }
                     plan.preAcquireRefusalOrNull(operation.clipCompositeBlendFacts())?.let { refusal ->
                         refusals += refusal.reason
                         return
@@ -309,6 +314,31 @@ internal fun DisplayOp.coreRoutePreflightRefusalReason(): String? = when (this) 
     is DisplayOp.DrawPicture -> picturePreflightRefusalReason()
     else -> null
 }
+
+/** Coverage producers deferred to Task 4 must refuse before any S/G source encoding occurs. */
+internal fun DisplayOp.coveragePlaneTask4RefusalOrNull(): String? = when (this) {
+    is DisplayOp.DrawImage -> "unsupported.coverage_plane.draw_image"
+    is DisplayOp.DrawImageNine -> "unsupported.coverage_plane.draw_image_nine"
+    is DisplayOp.DrawImageLattice -> "unsupported.coverage_plane.draw_image_lattice"
+    is DisplayOp.DrawAtlas -> "unsupported.coverage_plane.draw_atlas"
+    is DisplayOp.DrawVertices -> vertices.texCoords?.let { "unsupported.coverage_plane.draw_vertices_textured" }
+    is DisplayOp.DrawMesh -> mesh.vertices.texCoords?.let { "unsupported.coverage_plane.draw_mesh_textured" }
+    is DisplayOp.DrawText -> if (hasColorGlyphs(blob)) "unsupported.coverage_plane.color_glyph" else null
+    is DisplayOp.DrawRect -> paint.maskFilter.coveragePlaneMaskBlurRefusalOrNull()
+    is DisplayOp.DrawRRect -> paint.maskFilter.coveragePlaneMaskBlurRefusalOrNull()
+    is DisplayOp.DrawPath -> paint.maskFilter.coveragePlaneMaskBlurRefusalOrNull()
+    is DisplayOp.DrawPicture -> picture.ops.firstNotNullOfOrNull { nested ->
+        nested.coveragePlaneTask4RefusalOrNull()
+    }?.let { nestedReason ->
+        "unsupported.coverage_plane.draw_picture.${nestedReason.removePrefix("unsupported.coverage_plane.")}"
+    }
+    else -> null
+}
+
+private fun MaskFilter?.coveragePlaneMaskBlurRefusalOrNull(): String? =
+    (this as? MaskFilter.Blur)
+        ?.takeIf { it.sigma != 0f }
+        ?.let { "unsupported.coverage_plane.mask_blur" }
 
 private fun DisplayOp.DrawPicture.picturePreflightRefusalReason(): String? {
     if (paint != null) return "unsupported.picture.paint"

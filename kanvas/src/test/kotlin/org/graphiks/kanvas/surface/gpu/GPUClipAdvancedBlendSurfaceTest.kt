@@ -93,7 +93,7 @@ class GPUClipAdvancedBlendSurfaceTest {
     }
 
     @Test
-    fun `mask blur destination read uses the shared source snapshot formula`() {
+    fun `destination read mask blur refuses without encoding a source`() {
         val runtime = GPUBackendRuntimeFactory.createOrNull()
         assumeTrue(runtime != null, "GPU backend unavailable in current environment")
 
@@ -112,9 +112,18 @@ class GPUClipAdvancedBlendSurfaceTest {
             render()
         }
 
-        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
-        assertTrue(result.diagnostics.entries.any { it.reason == "gpu-copy-then-formula" })
-        assertTrue(alphaAt(result.pixels, 16, 16) > 0)
+        assertEquals(1, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertTrue(
+            result.diagnostics.entries.any { it.reason == "unsupported.coverage_plane.mask_blur" },
+            result.diagnostics.entries.toString(),
+        )
+        assertTrue(
+            result.diagnostics.entries.none {
+                it.code == "route:mask-blur:DrawRect:1" || it.code == "dispatch:DrawRect:1"
+            },
+            result.diagnostics.entries.toString(),
+        )
+        assertPixelNear(result.pixels, 16, 16, Color.WHITE, tolerance = 0)
     }
 
     @Test

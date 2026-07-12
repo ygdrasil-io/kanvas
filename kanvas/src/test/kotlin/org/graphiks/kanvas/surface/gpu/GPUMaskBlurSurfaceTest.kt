@@ -114,7 +114,7 @@ class GPUMaskBlurSurfaceTest {
     }
 
     @Test
-    fun `source-composited blur plans an exact device clip before its wide-open source pass`() {
+    fun `source-composited complex mask blur refuses without encoding a source`() {
         val config = RenderConfig(maxMaskBlurIntermediateBytes = 1_024u)
         val deviceRect = renderSourceCompositedBlur(config) {
             clipRect(Rect(14f, 14f, 18f, 18f), ClipOp.INTERSECT, antiAlias = true)
@@ -125,19 +125,26 @@ class GPUMaskBlurSurfaceTest {
             clipRect(Rect(14f, 14f, 18f, 18f), ClipOp.INTERSECT, antiAlias = false)
         }
 
-        assertEquals(1, deviceRect.stats.opsDispatched, deviceRect.diagnostics.entries.toString())
-        assertEquals(0, deviceRect.stats.opsRefused, deviceRect.diagnostics.entries.toString())
-        listOf(wideOpen, complex).forEach { result ->
+        listOf(deviceRect, complex).forEach { result ->
             assertEquals(0, result.stats.opsDispatched, result.diagnostics.entries.toString())
             assertEquals(1, result.stats.opsRefused, result.diagnostics.entries.toString())
             assertTrue(result.diagnostics.entries.any { entry ->
-                entry.reason == "unsupported.mask-filter.blur.intermediate-budget"
+                entry.reason == "unsupported.coverage_plane.mask_blur"
             })
+            assertTrue(result.diagnostics.entries.none { entry ->
+                entry.code == "route:mask-blur:DrawRect:0" || entry.code == "dispatch:DrawRect:0"
+            })
+            assertEquals(0, alphaAt(result.pixels.toByteArray(), 16, 16, 32))
         }
+        assertEquals(0, wideOpen.stats.opsDispatched, wideOpen.diagnostics.entries.toString())
+        assertEquals(1, wideOpen.stats.opsRefused, wideOpen.diagnostics.entries.toString())
+        assertTrue(wideOpen.diagnostics.entries.any { entry ->
+            entry.reason == "unsupported.mask-filter.blur.intermediate-budget"
+        })
     }
 
     @Test
-    fun `destination-read blur applies a device clip only at final composite`() {
+    fun `destination-read blur with a device clip refuses without changing destination`() {
         val result = Surface(width = 32, height = 32).run {
             requireWebGpu()
             canvas {
@@ -154,8 +161,15 @@ class GPUMaskBlurSurfaceTest {
         }
 
         assertEquals(255, result.pixels[(4 * 32 + 4) * 4].toInt())
-        assertTrue(result.pixels[(16 * 32 + 16) * 4].toInt() < 255)
-        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertEquals(255, result.pixels[(16 * 32 + 16) * 4].toInt())
+        assertEquals(1, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertTrue(result.diagnostics.entries.any { it.reason == "unsupported.coverage_plane.mask_blur" })
+        assertTrue(
+            result.diagnostics.entries.none {
+                it.code == "route:mask-blur:DrawRect:1" || it.code == "dispatch:DrawRect:1"
+            },
+            result.diagnostics.entries.toString(),
+        )
     }
 
     @Test

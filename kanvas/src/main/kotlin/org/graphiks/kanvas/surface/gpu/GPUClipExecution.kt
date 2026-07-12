@@ -18,10 +18,16 @@ import org.graphiks.kanvas.surface.DiagnosticFact
 import org.graphiks.kanvas.surface.Diagnostics
 import org.graphiks.kanvas.surface.RenderConfig
 
+/** GPU-resident source products: unmodulated premultiplied color [S] and geometric coverage [G]. */
+internal data class GPUClipSourceSurface(
+    val colorLabel: String,
+    val geometryCoverageLabel: String,
+)
+
 /** Per-logical-draw ownership for source-then-clip composition. */
 internal data class GPUClipRouteContext(
     val sceneLabel: String,
-    val sourceLabel: String,
+    val sourceSurface: GPUClipSourceSurface,
     val sourceLabelForDiagnostics: String,
     val targetWidth: Int,
     val targetHeight: Int,
@@ -32,9 +38,13 @@ internal data class GPUClipRouteContext(
     val trace: GPUClipRouteTrace? = null,
     /** Forces a source texture even for fixed-function no-clip/scissor composites. */
     val forceSourceComposition: Boolean = false,
+    /** Fractional geometry coverage requires the S/G final compositor even for fixed-function modes. */
+    val coverageCompositionRequired: Boolean = false,
     /** Bounds that contain the source's non-transparent content for fixed-function composition. */
     val sourceCompositeBounds: () -> GPUBounds? = { null },
-)
+) {
+    val sourceLabel: String get() = sourceSurface.colorLabel
+}
 
 /** Test-visible accounting that prevents a ComplexStack draw from reaching a direct route. */
 internal class GPUClipRouteTrace {
@@ -120,7 +130,7 @@ internal fun GPUBackendOffscreenTarget.renderWithClip(
     GPUClipCoveragePlan.NoClip,
     is GPUClipCoveragePlan.Scissor,
     -> {
-        if (blend.requiresDestinationRead) {
+        if (blend.requiresDestinationRead || context.coverageCompositionRequired) {
             context.destinationReadComposer.compose(
                 context,
                 null,

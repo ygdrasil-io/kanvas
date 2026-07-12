@@ -39,14 +39,21 @@ class GPUClipCoverageWgslTest {
     fun `destination blend WGSL parses lowers and reflects all clip routes`() {
         val blend = lower(BLEND_FORMULA_WGSL)
         val clippedBlend = lower(CLIP_BLEND_FORMULA_WGSL)
+        val combinedCoverage = lower(COMBINE_COVERAGE_WGSL)
         val coverageBlend = lower(CLIP_COVERAGE_BLEND_WGSL)
         val scissorBlend = lower(SCISSOR_CLIP_BLEND_FORMULA_WGSL)
+        val rectSource = lower(RECT_AA_SOURCE_COLOR_WGSL)
+        val rrectSource = lower(RRECT_SOURCE_COLOR_WGSL)
 
         assertEquals(2, blend.reflectWgslModule("destination-blend").bindings.count { it.resourceKind == "sampledTexture" })
         assertEquals(3, clippedBlend.reflectWgslModule("destination-clip-blend").bindings.count { it.resourceKind == "sampledTexture" })
+        assertEquals(2, combinedCoverage.reflectWgslModule("combined-coverage").bindings.count { it.resourceKind == "sampledTexture" })
         assertEquals(3, coverageBlend.reflectWgslModule("coverage-clip-blend").bindings.count { it.resourceKind == "sampledTexture" })
         assertEquals(2, scissorBlend.reflectWgslModule("destination-scissor-blend").bindings.count { it.resourceKind == "sampledTexture" })
-        assertTrue(CLIP_COVERAGE_BLEND_WGSL.contains("dst + clipAlpha * (blended - dst)"))
+        assertEquals(1, rectSource.reflectWgslModule("rect-source").bindings.count { it.resourceKind == "uniformBuffer" })
+        assertEquals(1, rrectSource.reflectWgslModule("rrect-source").bindings.count { it.resourceKind == "uniformBuffer" })
+        assertTrue(CLIP_COVERAGE_BLEND_WGSL.contains("dst + coverage * (blended - dst)"))
+        assertTrue(CLIP_COVERAGE_BLEND_WGSL.contains("geometryCoverageTexture"))
     }
 
     @Test
