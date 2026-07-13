@@ -69,6 +69,49 @@ class Jpeg2000DocumentTest {
     }
 
     @Test
+    fun `pinned OpenJPEG JP2 pixel fixture has its documented SHA-256`() {
+        val actual = MessageDigest.getInstance("SHA-256")
+            .digest(Jpeg2000TestFixtures.openJpegLosslessNdecomp0_5x5Jp2())
+            .joinToString(separator = "") { byte ->
+                byte.toInt().and(0xff).toString(16).padStart(2, '0')
+            }
+
+        assertEquals(
+            "b4472ef2e88573ff29f3b1813e10b1ec413d1591532fcb7aa0a88af42f77ac45",
+            actual,
+        )
+    }
+
+    @Test
+    fun `OpenJPEG lossless JP2 pixel fixture decodes source dimensions and opaque grayscale RGBA pixels`() {
+        val jp2 = Jpeg2000TestFixtures.openJpegLosslessNdecomp0_5x5Jp2()
+        val document = requireNotNull(Jpeg2000Document.open(jp2).document)
+
+        val documentResult = document.decode()
+
+        assertNull(documentResult.diagnostic)
+        val documentBitmap = requireNotNull(documentResult.bitmap)
+        assertEquals(5, documentBitmap.width)
+        assertEquals(5, documentBitmap.height)
+        assertArrayEquals(
+            intArrayOf(
+                0xFF000000.toInt(), 0xFFFFFFFF.toInt(), 0xFF010101.toInt(), 0xFF808080.toInt(), 0xFF404040.toInt(),
+                0xFF101010.toInt(), 0xFFE0E0E0.toInt(), 0xFF3F3F3F.toInt(), 0xFFC0C0C0.toInt(), 0xFFAAAAAA.toInt(),
+                0xFF555555.toInt(), 0xFF090909.toInt(), 0xFF808080.toInt(), 0xFFFEFEFE.toInt(), 0xFF7F7F7F.toInt(),
+                0xFF202020.toInt(), 0xFFF0F0F0.toInt(), 0xFF2D2D2D.toInt(), 0xFFD1D1D1.toInt(), 0xFF424242.toInt(),
+                0xFFBEBEBE.toInt(), 0xFF0C0C0C.toInt(), 0xFF636363.toInt(), 0xFF999999.toInt(), 0xFFC9C9C9.toInt(),
+            ),
+            documentBitmap.pixels8888,
+        )
+
+        val codec = requireNotNull(Codec.MakeFromData(jp2))
+        val (codecBitmap, codecResult) = codec.getImage()
+
+        assertEquals(Codec.Result.kSuccess, codecResult)
+        assertArrayEquals(documentBitmap.pixels8888, requireNotNull(codecBitmap).pixels8888)
+    }
+
+    @Test
     fun `pinned OpenJPEG random odd Ndecomp one J2K fixture has its documented SHA-256`() {
         val actual = MessageDigest.getInstance("SHA-256")
             .digest(Jpeg2000TestFixtures.openJpegLosslessNdecomp1_5x5())
@@ -680,7 +723,7 @@ class Jpeg2000DocumentTest {
         assertEquals(Jpeg2000Container.JP2, document.container)
         assertEquals(listOf("jP  ", "ftyp", "jp2h", "jp2c"), document.boxes.map { it.type })
         assertArrayEquals(codestream, document.copyPayload(jp2c))
-        assertNull(Codec.MakeFromData(jp2))
+        assertTrue(Codec.MakeFromData(jp2) != null)
     }
 
     @Test

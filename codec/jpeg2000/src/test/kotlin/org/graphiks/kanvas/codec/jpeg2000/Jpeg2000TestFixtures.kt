@@ -17,6 +17,8 @@ internal object Jpeg2000TestFixtures {
         "/jpeg2000-openjpeg/openjpeg-2.5.4-lossless-ndecomp2-8x8.j2k.base64"
     private const val OPENJPEG_NDECOMP_TWO_ODD_FIXTURE =
         "/jpeg2000-openjpeg/openjpeg-2.5.4-lossless-ndecomp2-5x5-random.j2k.base64"
+    private const val OPENJPEG_NDECOMP_ZERO_JP2_FIXTURE =
+        "/jpeg2000-openjpeg/openjpeg-2.5.4-lossless-ndecomp0-5x5.jp2.base64"
 
     fun openJpegLossless5x3(): ByteArray = Base64.getDecoder().decode(
         requireNotNull(Jpeg2000TestFixtures::class.java.getResourceAsStream(OPENJPEG_FIXTURE)) {
@@ -57,6 +59,12 @@ internal object Jpeg2000TestFixtures {
     fun openJpegLosslessNdecomp2_5x5(): ByteArray = Base64.getDecoder().decode(
         requireNotNull(Jpeg2000TestFixtures::class.java.getResourceAsStream(OPENJPEG_NDECOMP_TWO_ODD_FIXTURE)) {
             "missing $OPENJPEG_NDECOMP_TWO_ODD_FIXTURE"
+        }.use { input -> input.readBytes().decodeToString().trim() },
+    )
+
+    fun openJpegLosslessNdecomp0_5x5Jp2(): ByteArray = Base64.getDecoder().decode(
+        requireNotNull(Jpeg2000TestFixtures::class.java.getResourceAsStream(OPENJPEG_NDECOMP_ZERO_JP2_FIXTURE)) {
+            "missing $OPENJPEG_NDECOMP_ZERO_JP2_FIXTURE"
         }.use { input -> input.readBytes().decodeToString().trim() },
     )
 }

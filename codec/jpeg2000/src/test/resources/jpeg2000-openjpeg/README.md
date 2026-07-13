@@ -73,6 +73,19 @@ byte-for-byte the pinned fixtures described below.
   constraints as above, with two resolutions (`Ndecomp=1`). It has an odd
   5×5 frame and one LL plus one HL/LH/HH packet.
 
+### JP2 wrapper pixel route: 5×5
+
+* **Source P5 PGM:** generated with the 25 nonuniform unsigned grayscale
+  samples, row-major: `0, 255, 1, 128, 64, 16, 224, 63, 192, 170, 85, 9,
+  128, 254, 127, 32, 240, 45, 209, 66, 190, 12, 99, 153, 201`. The exact
+  generated PGM SHA-256 was
+  `cc0ac2eedf419fe48476315fd61535af5f26a37dd19dd51f25d76f16298b79f1`.
+* **JP2 SHA-256:**
+  `b4472ef2e88573ff29f3b1813e10b1ec413d1591532fcb7aa0a88af42f77ac45`.
+* **Profile:** OpenJPEG 2.5.4; one 5×5 tile; LRCP; one layer; one resolution
+  (`Ndecomp=0`); 64×64 codeblock; reversible 5/3 transform; no quantization.
+  `opj_decompress` 2.5.4 reproduced the source PGM payload byte-for-byte.
+
 ## Reproduction
 
 ```text
@@ -99,6 +112,11 @@ opj_compress -i source-ndecomp2-5x5-random.pgm \
   -o openjpeg-2.5.4-lossless-ndecomp1-5x5-random.j2k \
   -n 2 -b 64,64 -r 1 -p LRCP
 opj_decompress -i openjpeg-2.5.4-lossless-ndecomp1-5x5-random.j2k -o decoded.pgm
+
+opj_compress -i source-5x5.pgm \
+  -o openjpeg-2.5.4-lossless-ndecomp0-5x5.jp2 \
+  -n 1 -b 64,64 -r 1 -p LRCP
+opj_decompress -i openjpeg-2.5.4-lossless-ndecomp0-5x5.jp2 -o decoded.pgm
 ```
 
 The optional `Jpeg2000OracleTest` requires the explicit Gradle property

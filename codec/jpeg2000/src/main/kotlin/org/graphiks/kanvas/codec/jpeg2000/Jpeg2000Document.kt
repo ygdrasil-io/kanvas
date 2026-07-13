@@ -72,7 +72,8 @@ public class Jpeg2000Box internal constructor(
  * with one packet and up to two horizontal codeblocks, or the bounded
  * `Ndecomp=1` two-resolution path with one LL packet and one HL/LH/HH packet,
  * or the bounded `Ndecomp=2` three-resolution path with LL2, coarse
- * HL2/LH2/HH2 and fine HL1/LH1/HH1 packets; JP2 remains structural only.
+ * HL2/LH2/HH2 and fine HL1/LH1/HH1 packets. A JP2 wrapper is pixel-decodable
+ * only when its embedded codestream satisfies that same proven profile.
  */
 public class Jpeg2000Document private constructor(
     private val source: ByteArray,
@@ -92,9 +93,12 @@ public class Jpeg2000Document private constructor(
     /** Returns an independent copy of the encoded J2K or JP2 bytes. */
     public fun copyEncodedBytes(): ByteArray = source.copyOf()
 
-    /** Decodes only the proven bounded raw J2K profiles; containers stay explicit refusals. */
+    /** Decodes only the proven bounded J2K profile, raw or in a validated JP2 wrapper. */
     public fun decode(): Jpeg2000DecodeResult {
-        if (container != Jpeg2000Container.J2K || entropy == null) {
+        if (
+            (container != Jpeg2000Container.J2K && container != Jpeg2000Container.JP2) ||
+            entropy == null
+        ) {
             return Jpeg2000DecodeResult(
                 bitmap = null,
                 diagnostic = Jpeg2000Diagnostic(
@@ -109,7 +113,7 @@ public class Jpeg2000Document private constructor(
 
     /** Whether this document can safely back the bounded [Codec] image facade. */
     internal fun supportsImageCodec(): Boolean =
-        container == Jpeg2000Container.J2K && entropy != null &&
+        (container == Jpeg2000Container.J2K || container == Jpeg2000Container.JP2) && entropy != null &&
             frame.width in 1..NARROW_RAW_J2K_MAX_WIDTH &&
             frame.height in 1..NARROW_RAW_J2K_MAX_HEIGHT
 
@@ -234,7 +238,7 @@ private fun parseJp2(data: ByteArray, limits: Jpeg2000Limits): ParsedJpeg2000 {
     ) {
         j2kFailure("jpeg2000.jp2.ihdr.mismatch", header.offset.toInt())
     }
-    return ParsedJpeg2000(Jpeg2000Container.JP2, frame, null, boxes)
+    return ParsedJpeg2000(Jpeg2000Container.JP2, frame, raw.entropy, boxes)
 }
 
 private fun requireSingleBox(
