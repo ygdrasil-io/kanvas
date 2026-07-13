@@ -695,8 +695,11 @@ class Jpeg2000DocumentTest {
 
     @Test
     fun `general J2K syntax never widens the current pixel facade`() {
-        val document = Jpeg2000Document.open(generalMainHeaderWithOneTilePart()).document!!
+        val codestream = generalMainHeaderWithOneTilePart()
+        val header = J2kMainHeaderParser(codestream, 0, codestream.size, Jpeg2000Limits()).parse()
+        val document = Jpeg2000Document.open(codestream).document!!
 
+        assertEquals(1L, header.geometry.tileGrid.tileCount)
         assertNull(Codec.MakeFromData(document.copyEncodedBytes()))
         assertEquals("jpeg2000.container.pixel.unimplemented", document.decode().diagnostic?.code)
     }
@@ -1061,7 +1064,7 @@ class Jpeg2000DocumentTest {
             siz.writeU16(0) // Rsiz
             siz.writeU32(33); siz.writeU32(17) // Xsiz, Ysiz
             siz.writeU32(0); siz.writeU32(0) // XOsiz, YOsiz
-            siz.writeU32(16); siz.writeU32(8) // XTsiz, YTsiz
+            siz.writeU32(33); siz.writeU32(17) // XTsiz, YTsiz: one tile
             siz.writeU32(0); siz.writeU32(0) // XTOsiz, YTOsiz
             siz.writeU16(2) // Csiz
             siz.write(byteArrayOf(0x8B.toByte(), 2, 1)) // 12-bit signed, x-subsampled
