@@ -958,7 +958,30 @@ internal fun renderViaGpu(
                     )
                     false
                 }
-                if (rendered) sceneHasContent = true
+                if (rendered) {
+                    sceneHasContent = true
+                    if (layerBlend.requiresDestinationRead) {
+                        diagnostics.degrade(
+                            code = "route:destination-read:saveLayer:${cmdId.value}",
+                            operation = "saveLayer:${cmdId.value}",
+                            reason = "gpu-copy-then-formula",
+                            facts = listOf(
+                                DiagnosticFact("destination-read.source", layerSourceLabel),
+                                DiagnosticFact("destination-read.snapshot", snapLabel),
+                                DiagnosticFact("destination-read.mode", layerBlend.modeLabel),
+                                DiagnosticFact(
+                                    "clip.strategy",
+                                    when (compositeClipPlan) {
+                                        is GPUClipCoveragePlan.Mask -> "alpha-mask"
+                                        is GPUClipCoveragePlan.Scissor -> "scissor"
+                                        else -> "direct"
+                                    },
+                                ),
+                                DiagnosticFact("destination-read.action", "copy-then-formula"),
+                            ),
+                        )
+                    }
+                }
                 return rendered
             }
 

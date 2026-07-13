@@ -134,10 +134,13 @@ class GPUAllApiBlendSurfaceTest {
                             )
                             assertTrue(
                                 gpu.result.diagnostics.entries.any { entry ->
-                                    entry.code.startsWith("route:destination-read:") &&
+                                    api.destinationReadRouteOperations.any { routeOperation ->
+                                        entry.code.startsWith("route:destination-read:$routeOperation:")
+                                    } &&
                                         entry.reason == "gpu-copy-then-formula"
                                 },
-                                "${api.name}/${mode.name}/${context.name} did not emit the GPU destination-read formula route: " +
+                                "${api.name}/${mode.name}/${context.name} did not emit the GPU destination-read formula route " +
+                                    "${api.destinationReadRouteOperations.joinToString()}: " +
                                     gpu.result.diagnostics.entries,
                             )
                         }
@@ -302,7 +305,14 @@ class GPUAllApiBlendSurfaceTest {
             BlendCase("DrawVertices", Point(16f, 16f), Point(10f, 10f), Point(16f, 12f)) { mode ->
                 drawVertices(triangle, shapePaint(mode))
             },
-            BlendCase("DrawMesh(program=null)", Point(16f, 16f), Point(10f, 10f), Point(16f, 12f)) { mode ->
+            BlendCase(
+                name = "DrawMesh(program=null)",
+                sample = Point(16f, 16f),
+                clipExcludedSample = Point(10f, 10f),
+                alphaMaskEdgeSample = Point(16f, 12f),
+                // The public no-program form is intentionally normalized to the DrawVertices adapter.
+                destinationReadRouteOperations = setOf("DrawVertices"),
+            ) { mode ->
                 drawMesh(
                     Mesh(triangle, program = null, bounds = SOURCE_RECT),
                     Paint.fill(SOURCE).copy(antiAlias = false),
@@ -329,7 +339,14 @@ class GPUAllApiBlendSurfaceTest {
     }
 
     private fun drawPictureCase(): BlendCase =
-        BlendCase("DrawPicture", Point(16f, 16f), Point(10f, 16f), ALPHA_MASK_EDGE) { mode ->
+        BlendCase(
+            name = "DrawPicture",
+            sample = Point(16f, 16f),
+            clipExcludedSample = Point(10f, 16f),
+            alphaMaskEdgeSample = ALPHA_MASK_EDGE,
+            // The public DrawPicture paint is rendered atomically at synthetic-layer restore.
+            destinationReadRouteOperations = setOf("saveLayer"),
+        ) { mode ->
             val recorder = PictureRecorder()
             recorder.beginRecording(SURFACE_RECT).drawRect(
                 SOURCE_RECT,
@@ -592,6 +609,8 @@ class GPUAllApiBlendSurfaceTest {
         val clipExcludedSample: Point? = null,
         val alphaMaskEdgeSample: Point? = null,
         val composition: Composition = Composition.BLEND,
+        /** Exact route operations allowed to emit this API's advanced-blend formula diagnostic. */
+        val destinationReadRouteOperations: Set<String> = setOf(name),
         val draw: Canvas.(BlendMode) -> Unit,
     )
 

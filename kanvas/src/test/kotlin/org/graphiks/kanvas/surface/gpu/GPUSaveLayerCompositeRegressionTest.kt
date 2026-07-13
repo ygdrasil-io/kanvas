@@ -50,6 +50,16 @@ class GPUSaveLayerCompositeRegressionTest {
             }
 
             assertEquals(0, result.diagnostics.fatalCount, "$mode ${result.diagnostics.entries}")
+            if (mode.ordinal >= BlendMode.MULTIPLY.ordinal) {
+                assertTrue(
+                    result.diagnostics.entries.any { entry ->
+                        entry.code.startsWith("route:destination-read:saveLayer:") &&
+                            entry.reason == "gpu-copy-then-formula"
+                    },
+                    "$mode saveLayer restore did not report its GPU destination-read formula route: " +
+                        result.diagnostics.entries,
+                )
+            }
         }
     }
 
