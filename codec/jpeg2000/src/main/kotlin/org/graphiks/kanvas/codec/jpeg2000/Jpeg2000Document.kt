@@ -353,11 +353,24 @@ private fun isJp2GrayscalePixelColor(data: ByteArray, color: Jpeg2000Box): Boole
                 data.u32(color.payloadOffset + 3) == JP2_ENUMERATED_GRAYSCALE
         }
         2, 3 -> {
-            if (color.payloadSize == 3) j2kFailure("jpeg2000.jp2.colr.invalid", color.offset.toInt())
+            validateJp2IccProfile(data, color)
             false
         }
         else -> j2kFailure("jpeg2000.jp2.colr.invalid", color.offset.toInt())
     }
+}
+
+private fun validateJp2IccProfile(data: ByteArray, color: Jpeg2000Box) {
+    val profileOffset = color.payloadOffset + 3
+    val availableBytes = color.payloadSize - 3
+    if (availableBytes < MIN_ICC_PROFILE_HEADER_BYTES) {
+        j2kFailure("jpeg2000.jp2.colr.invalid", color.offset.toInt())
+    }
+    val declaredBytes = data.u32(profileOffset)
+    if (
+        declaredBytes !in MIN_ICC_PROFILE_HEADER_BYTES.toLong()..availableBytes.toLong() ||
+        data.ascii4(profileOffset + ICC_PROFILE_SIGNATURE_OFFSET) != ICC_PROFILE_SIGNATURE
+    ) j2kFailure("jpeg2000.jp2.colr.invalid", color.offset.toInt())
 }
 
 private class Jp2BoxParser(
@@ -527,6 +540,9 @@ private const val SOD: Int = 0x93
 private const val EOC: Int = 0xD9
 private const val MAX_JP2_HEADER_BOXES: Int = 128
 private const val JP2_ENUMERATED_GRAYSCALE: Long = 17L
+private const val MIN_ICC_PROFILE_HEADER_BYTES: Int = 128
+private const val ICC_PROFILE_SIGNATURE_OFFSET: Int = 36
+private const val ICC_PROFILE_SIGNATURE: String = "acsp"
 internal const val RAW_J2K_CODEBLOCK_WIDTH: Int = 64
 internal const val NARROW_RAW_J2K_MAX_WIDTH: Int = 128
 internal const val NARROW_RAW_J2K_MAX_HEIGHT: Int = 64

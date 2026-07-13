@@ -855,10 +855,9 @@ class Jpeg2000DocumentTest {
     }
 
     @Test
-    fun `JP2 color declarations remain structural and outside the pixel facade`() {
+    fun `JP2 non grayscale enumerated color remains structural and outside the pixel facade`() {
         val codestream = narrowLosslessCodestream()
         val colorHeaders = listOf(
-            "ICC color profile" to (imageHeaderBox() + boxed("colr", byteArrayOf(2, 0, 0, 'I'.code.toByte(), 'C'.code.toByte(), 'C'.code.toByte()))),
             "non-grayscale enumerated color" to (imageHeaderBox() + boxed("colr", byteArrayOf(1, 0, 0, 0, 0, 0, 16))),
         )
 
@@ -872,10 +871,8 @@ class Jpeg2000DocumentTest {
     }
 
     @Test
-    fun `JP2 retains multiple well formed color declarations outside the pixel facade`() {
-        val headerPayload = imageHeaderBox() +
-            boxed("colr", byteArrayOf(1, 0, 0, 0, 0, 0, 17)) +
-            boxed("colr", byteArrayOf(1, 0, 0, 0, 0, 0, 16))
+    fun `JP2 retains structurally valid ICC color profile outside the pixel facade`() {
+        val headerPayload = imageHeaderBox() + boxed("colr", byteArrayOf(2, 0, 0) + minimalIccProfile())
         val jp2 = jp2(narrowLosslessCodestream(), headerPayload)
 
         val document = requireNotNull(Jpeg2000Document.open(jp2).document)
@@ -885,6 +882,44 @@ class Jpeg2000DocumentTest {
         assertNull(Codec.MakeFromData(jp2))
         assertEquals("jpeg2000.container.pixel.unimplemented", document.decode().diagnostic?.code)
         assertEquals(Codec.Result.kUnimplemented, document.decode().diagnostic?.result)
+    }
+
+    @Test
+    fun `JP2 retains multiple well formed color declarations outside the pixel facade`() {
+        val headerPayload = imageHeaderBox() +
+            boxed("colr", byteArrayOf(1, 0, 0, 0, 0, 0, 17)) +
+            boxed("colr", byteArrayOf(1, 0, 0, 0, 0, 0, 17))
+        val jp2 = jp2(narrowLosslessCodestream(), headerPayload)
+
+        val document = requireNotNull(Jpeg2000Document.open(jp2).document)
+        val header = document.boxes.single { it.type == "jp2h" }
+
+        assertArrayEquals(headerPayload, document.copyPayload(header))
+        assertNull(Codec.MakeFromData(jp2))
+        assertEquals("jpeg2000.container.pixel.unimplemented", document.decode().diagnostic?.code)
+        assertEquals(Codec.Result.kUnimplemented, document.decode().diagnostic?.result)
+    }
+
+    @Test
+    fun `JP2 rejects truncated or invalid ICC color profiles structurally`() {
+        val invalidProfiles = listOf(
+            "truncated" to minimalIccProfile().copyOf(127),
+            "declared size exceeds payload" to minimalIccProfile().also { it[3] = 129.toByte() },
+            "invalid signature" to minimalIccProfile().also { it[36] = 'x'.code.toByte() },
+        )
+
+        invalidProfiles.forEach { (label, profile) ->
+            val opened = Jpeg2000Document.open(
+                jp2(
+                    narrowLosslessCodestream(),
+                    imageHeaderBox() + boxed("colr", byteArrayOf(2, 0, 0) + profile),
+                ),
+            )
+
+            assertNull(opened.document, label)
+            assertEquals("jpeg2000.jp2.colr.invalid", opened.diagnostic?.code, label)
+            assertEquals(Codec.Result.kErrorInInput, opened.diagnostic?.result, label)
+        }
     }
 
     @Test
@@ -1437,6 +1472,14 @@ class Jpeg2000DocumentTest {
         ihdr.writeU16(components)
         ihdr.write(byteArrayOf(bitsPerComponent.toByte(), 7, 0, 0))
     }.toByteArray()) + color
+
+    private fun minimalIccProfile(): ByteArray = ByteArray(128).also { profile ->
+        profile[3] = 128.toByte()
+        profile[36] = 'a'.code.toByte()
+        profile[37] = 'c'.code.toByte()
+        profile[38] = 's'.code.toByte()
+        profile[39] = 'p'.code.toByte()
+    }
 
     private fun narrowCodPayload(codeBlockWidth: Int = 4, codeBlockHeight: Int = 4): ByteArray = byteArrayOf(
         0, // Scod: no precinct partitioning

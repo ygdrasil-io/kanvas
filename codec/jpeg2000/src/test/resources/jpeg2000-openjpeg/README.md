@@ -165,8 +165,11 @@ implementation.
 
 The JP2 fixture is pixel-decodable only for the same bounded grayscale
 profile, with no `colr` or one exact enumerated grayscale `colr` documented
-above. Well-formed `colr` declarations, including ICC, non-grayscale and
-multiple declarations, are retained structurally but never enable the pixel
+above. An ICC `colr` is retained only after its profile header has passed
+minimal structural validation: at least 128 bytes, a declared profile size
+within the box payload, and `acsp` at the normalized signature offset. No ICC
+tags or color transform are parsed. Valid non-grayscale and multiple `colr`
+declarations are likewise retained structurally but never enable the pixel
 facade or an ICC/color pipeline; malformed `colr` remains a structural error.
 Palette (`pclr`), component mapping (`cmap`), channel definition (`cdef`,
 including alpha), and multi-component JP2 profiles remain outside the pixel
