@@ -137,9 +137,11 @@ internal class J2kMainHeaderParser(
         val style = data[p + 8].u8()
         val transform = data[p + 9].u8()
         val precinctsPresent = scod and 1 != 0
+        val usesSopMarkers = scod and 0x02 != 0
+        val usesEphMarkers = scod and 0x04 != 0
         val precinctCount = if (precinctsPresent) decompositions + 1 else 0
         if (
-            scod and 0xFE != 0 || progression !in 0..4 || layers == 0 ||
+            scod and 0xF8 != 0 || progression !in 0..4 || layers == 0 || decompositions > 32 ||
             multiComponentTransform !in 0..1 || codeBlockWidth !in 0..8 ||
             codeBlockHeight !in 0..8 || codeBlockWidth + codeBlockHeight > 8 ||
             style and 0xC0 != 0 || transform !in 0..1 ||
@@ -159,6 +161,8 @@ internal class J2kMainHeaderParser(
             progression = J2kProgressionOrder.entries[progression],
             layers = layers,
             multiComponentTransform = multiComponentTransform,
+            usesSopMarkers = usesSopMarkers,
+            usesEphMarkers = usesEphMarkers,
             decompositions = decompositions,
             codeBlockWidth = codeBlockWidth,
             codeBlockHeight = codeBlockHeight,
@@ -187,7 +191,9 @@ internal class J2kMainHeaderParser(
         for (index in 0 until entryCount) {
             val entryOffset = p + 1 + (index * entrySize)
             if (style == 0) {
-                exponents[index] = data[entryOffset].u8() ushr 3
+                val entry = data[entryOffset].u8()
+                if (entry and 0x07 != 0) j2kFailure("jpeg2000.qcd.invalid", markerOffset)
+                exponents[index] = entry ushr 3
             } else {
                 val entry = data.u16(entryOffset)
                 exponents[index] = entry ushr 11

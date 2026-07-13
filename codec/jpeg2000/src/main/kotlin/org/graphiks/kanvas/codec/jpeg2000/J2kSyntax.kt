@@ -42,6 +42,8 @@ internal data class J2kCodingStyle(
     val progression: J2kProgressionOrder,
     val layers: Int,
     val multiComponentTransform: Int,
+    val usesSopMarkers: Boolean,
+    val usesEphMarkers: Boolean,
     val decompositions: Int,
     val codeBlockWidth: Int,
     val codeBlockHeight: Int,

@@ -35,6 +35,71 @@ class J2kSyntaxTest {
     }
 
     @Test
+    fun `main header retains precinct SOP and EPH COD flags`() {
+        val bytes = mainHeader(
+            width = 1,
+            height = 1,
+            tileWidth = 16,
+            tileHeight = 8,
+            components = listOf(ComponentInput(8, false, 1, 1)),
+            progression = 0,
+            layers = 1,
+            decompositions = 1,
+            scod = 0x07,
+        )
+        val header = J2kMainHeaderParser(
+            data = bytes,
+            start = 0,
+            end = bytes.size,
+            limits = Jpeg2000Limits(),
+        ).parse()
+
+        assertTrue(header.coding.usesSopMarkers)
+        assertTrue(header.coding.usesEphMarkers)
+    }
+
+    @Test
+    fun `main header rejects more than 32 COD decompositions`() {
+        val bytes = mainHeader(
+            width = 1,
+            height = 1,
+            tileWidth = 16,
+            tileHeight = 8,
+            components = listOf(ComponentInput(8, false, 1, 1)),
+            progression = 0,
+            layers = 1,
+            decompositions = 33,
+        )
+
+        val failure = assertThrows(Jpeg2000Failure::class.java) {
+            J2kMainHeaderParser(bytes, 0, bytes.size, Jpeg2000Limits()).parse()
+        }
+
+        assertEquals("jpeg2000.cod.invalid", failure.diagnostic.code)
+    }
+
+    @Test
+    fun `main header rejects reserved QCD bits for no quantization`() {
+        val bytes = mainHeader(
+            width = 1,
+            height = 1,
+            tileWidth = 16,
+            tileHeight = 8,
+            components = listOf(ComponentInput(8, false, 1, 1)),
+            progression = 0,
+            layers = 1,
+            decompositions = 0,
+            qcdEntry = 0x41,
+        )
+
+        val failure = assertThrows(Jpeg2000Failure::class.java) {
+            J2kMainHeaderParser(bytes, 0, bytes.size, Jpeg2000Limits()).parse()
+        }
+
+        assertEquals("jpeg2000.qcd.invalid", failure.diagnostic.code)
+    }
+
+    @Test
     fun `main header rejects SIZ coordinates outside the geometry model range`() {
         val bytes = mainHeader(
             width = 1,
@@ -177,6 +242,8 @@ internal fun mainHeader(
     progression: Int,
     layers: Int,
     decompositions: Int,
+    scod: Int = 0,
+    qcdEntry: Int = 0x40,
 ): ByteArray = ByteArrayOutputStream().also { output ->
     output.writeMarker(0x4F)
     output.writeSegment(0x51, ByteArrayOutputStream().also { siz ->
@@ -193,7 +260,7 @@ internal fun mainHeader(
         }
     }.toByteArray())
     output.writeSegment(0x52, ByteArrayOutputStream().also { cod ->
-        cod.write(0)
+        cod.write(scod)
         cod.write(progression)
         cod.writeU16(layers)
         cod.write(0)
@@ -202,8 +269,11 @@ internal fun mainHeader(
         cod.write(4)
         cod.write(0)
         cod.write(1)
+        if (scod and 1 != 0) repeat(decompositions + 1) { cod.write(0xFF) }
     }.toByteArray())
-    output.writeSegment(0x5C, ByteArray(2 + (3 * decompositions)) { 0x40.toByte() })
+    output.writeSegment(0x5C, ByteArray(2 + (3 * decompositions)) { index ->
+        if (index == 0) 0x40.toByte() else qcdEntry.toByte()
+    })
     output.writeMarker(0x90)
 }.toByteArray()
 
