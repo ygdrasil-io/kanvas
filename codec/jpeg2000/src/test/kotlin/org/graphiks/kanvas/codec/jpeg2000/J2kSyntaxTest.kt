@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.codec.jpeg2000
 
+import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -14,7 +15,34 @@ class J2kSyntaxTest {
 
         assertEquals(12, component.precision)
         assertTrue(component.signed)
+        assertEquals(2, component.xSampling)
+        assertEquals(1, component.ySampling)
         assertEquals(9L, grid.tileCount)
+    }
+
+    @Test
+    fun `quantization style isolates input and exposed arrays`() {
+        val inputExponents = intArrayOf(5, 6)
+        val inputMantissas = intArrayOf(12, 13)
+        val quantization = J2kQuantizationStyle(
+            guardBits = 2,
+            style = 1,
+            reversible = false,
+            exponents = inputExponents,
+            mantissas = inputMantissas,
+        )
+
+        inputExponents[0] = 99
+        inputMantissas[0] = 99
+
+        assertArrayEquals(intArrayOf(5, 6), quantization.exponents)
+        assertArrayEquals(intArrayOf(12, 13), requireNotNull(quantization.mantissas))
+
+        quantization.exponents[1] = 99
+        requireNotNull(quantization.mantissas)[1] = 99
+
+        assertArrayEquals(intArrayOf(5, 6), quantization.exponents)
+        assertArrayEquals(intArrayOf(12, 13), requireNotNull(quantization.mantissas))
     }
 
     @Test

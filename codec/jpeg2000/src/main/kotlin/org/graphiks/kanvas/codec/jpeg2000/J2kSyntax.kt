@@ -42,10 +42,16 @@ internal data class J2kCodingStyle(
     val precinctExponents: List<Pair<Int, Int>>,
 )
 
-internal data class J2kQuantizationStyle(
+internal class J2kQuantizationStyle(
     val guardBits: Int,
     val style: Int,
     val reversible: Boolean,
-    val exponents: IntArray,
-    val mantissas: IntArray?,
-)
+    exponents: IntArray,
+    mantissas: IntArray?,
+) {
+    private val storedExponents: IntArray = exponents.copyOf()
+    private val storedMantissas: IntArray? = mantissas?.copyOf()
+
+    val exponents: IntArray get() = storedExponents.copyOf()
+    val mantissas: IntArray? get() = storedMantissas?.copyOf()
+}
