@@ -1534,7 +1534,12 @@ internal fun renderViaGpu(
             /** Image geometry ignores sampled alpha; a blur expands it to the filtered output bounds. */
             fun renderImageGeometryCoverage(op: DisplayOp.DrawImage, cmdId: GPUDrawCommandID): Boolean {
                 val imageCommand = op.toImageRectCommand(cmdId, targets)
-                val geometryBounds = (imageCommand.imageFilterPlan as? GPUImageFilterPlan.Blur)
+                val routedImageCommand = when {
+                    clipSourceRoute && !clipSourcePreservesClip -> imageCommand.copyForClipSource(width, height)
+                    clipSourceRoute -> imageCommand.copy(blend = GPUBlendFacts.srcOver())
+                    else -> imageCommand
+                }
+                val geometryBounds = (routedImageCommand.imageFilterPlan as? GPUImageFilterPlan.Blur)
                     ?.outputBounds
                 val geometryRect = geometryBounds?.let { bounds ->
                     Rect(bounds.left, bounds.top, bounds.right, bounds.bottom)
@@ -1543,7 +1548,7 @@ internal fun renderViaGpu(
                     rect = geometryRect,
                     paint = Paint.fill(Color.WHITE).copy(antiAlias = op.paint?.antiAlias ?: true),
                     transform = op.transform,
-                    clip = op.clip,
+                    clip = if (clipSourceRoute && !clipSourcePreservesClip) ClipStack.WideOpen else op.clip,
                 ).toNormalizedCommand(cmdId, targets)
                 return dispatchRectDirect(coverage)
             }

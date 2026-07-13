@@ -1,13 +1,17 @@
 package org.graphiks.kanvas.surface.gpu
 
 import kotlin.math.abs
+import kotlin.math.pow
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
 import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.Image
+import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.ImageFilter
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.TileMode
+import org.graphiks.kanvas.pipeline.ClipOp
 import org.graphiks.kanvas.surface.Surface
+import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assumptions.assumeTrue
@@ -87,6 +91,54 @@ class GPUImageFilterSurfaceTest {
         assertRgbaWithin(expected, actual, tolerance = 2)
         // One pixel left of dst: CLAMP replicates the opaque left edge there.
         assertTrue(alphaAt(actual, 7, 12, 32) >= 200)
+    }
+
+    @Test
+    fun `fractional AA device clip applies one coverage factor to an image blur halo`() {
+        requireWebGpu()
+
+        listOf(BlendMode.SRC_OVER, BlendMode.SRC).forEach { blendMode ->
+            fun render(clip: Boolean): ByteArray = Surface(width = 32, height = 32).run {
+                canvas {
+                    drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE).copy(antiAlias = false))
+                    if (clip) {
+                        save()
+                        clipRect(Rect(7.5f, 0f, 24f, 32f), ClipOp.INTERSECT, antiAlias = true)
+                    }
+                    drawImage(
+                        opaqueRedLeftEdge(width = 9, height = 9),
+                        Rect.fromXYWH(8f, 8f, 9f, 9f),
+                        Paint(imageFilter = ImageFilter.Blur(2f, 2f, TileMode.CLAMP), blendMode = blendMode),
+                    )
+                    if (clip) restore()
+                }
+                render().pixels.toByteArray()
+            }
+
+            val offset = (12 * 32 + 7) * 4
+            val fullPixels = render(clip = false)
+            val clippedPixels = render(clip = true)
+            val full = IntArray(4) { channel -> fullPixels[offset + channel].toInt() and 0xff }
+            val actual = IntArray(4) { channel -> clippedPixels[offset + channel].toInt() and 0xff }
+            fun expected(coverage: Float, channel: Int): Int = if (channel == 3) {
+                (255f + coverage * (full[channel] - 255)).toInt()
+            } else {
+                (linearToSrgb((1f - coverage) + coverage * srgbToLinear(full[channel] / 255f)) * 255f).toInt()
+            }
+
+            // The fractional DeviceRect coverage F=0.5 is applied after the blur exactly once.
+            // The old route produced the distinguishable F² result at this halo edge.
+            (0 until 4).forEach { channel ->
+                assertTrue(
+                    abs(actual[channel] - expected(.5f, channel)) <= 3,
+                    "$blendMode channel=$channel actual=${actual[channel]} full=${full[channel]}",
+                )
+            }
+            assertTrue(
+                abs(actual[1] - expected(.25f, 1)) > 10,
+                "$blendMode must not apply AA coverage twice: actual=${actual[1]} full=${full[1]}",
+            )
+        }
     }
 
     @Test
@@ -276,4 +328,10 @@ class GPUImageFilterSurfaceTest {
 
     private fun alphaAt(pixels: ByteArray, x: Int, y: Int, width: Int): Int =
         pixels[(y * width + x) * 4 + 3].toInt() and 0xff
+
+    private fun srgbToLinear(value: Float): Float =
+        if (value <= 0.04045f) value / 12.92f else ((value + 0.055f) / 1.055f).pow(2.4f)
+
+    private fun linearToSrgb(value: Float): Float =
+        if (value <= 0.0031308f) value * 12.92f else 1.055f * value.pow(1f / 2.4f) - 0.055f
 }
