@@ -131,6 +131,31 @@ class GPURendererPackageBoundaryTest {
                         "(?i)\\bencoded\\s+(?:by|through)\\s+" +
                             "(?:`GPUResourceProvider`|`GPUTaskList`)",
                     ),
+                "late destination-read products flowing back to semantic planning stages" to
+                    Regex(
+                        "(?is)(?:" +
+                            "(?:`GPUDestinationReadAction`|\\bActions?\\b)" +
+                            "[^.]{0,320}\\b(?:consum(?:e|es|ed)|carr(?:y|ies|ied)|" +
+                            "feed(?:s|ing)?|fed|pass(?:es|ed)?|return(?:s|ed)?|" +
+                            "send(?:s|ing)?|sent)\\b" +
+                            "[^.]{0,240}(?:`GPUTaskList`|`GPUDrawLayerPlanner`)|" +
+                            "(?:`GPUDestinationReadPlan`|`GPUDestinationReadAction`|" +
+                            "`GPUDestinationReadBinding`|`GPUDestinationCopyPlan`|" +
+                            "`GPUDestinationCopyTextureDescriptor`|" +
+                            "`GPUResourceMaterializationDecision`|`GPUCommandEncoderPlan`)" +
+                            "[^.]{0,320}\\b(?:consum(?:e|es|ed)|carr(?:y|ies|ied)|" +
+                            "flow(?:s|ed|ing)?|feed(?:s|ing)?|fed|pass(?:es|ed)?|" +
+                            "return(?:s|ed)?|send(?:s|ing)?|sent)\\b[^.]{0,240}" +
+                            "(?:`GPUTaskList`|`GPUDrawLayerPlanner`)|" +
+                            "(?:`GPUTaskList`|`GPUDrawLayerPlanner`)" +
+                            "[^.]{0,240}\\b(?:consum(?:e|es|ed)|receive(?:s|d)|" +
+                            "accept(?:s|ed)|carr(?:y|ies|ied))\\b[^.]{0,320}" +
+                            "(?:`GPUDestinationReadPlan`|`GPUDestinationReadAction`|" +
+                            "`GPUDestinationReadBinding`|`GPUDestinationCopyPlan`|" +
+                            "`GPUDestinationCopyTextureDescriptor`|" +
+                            "`GPUResourceMaterializationDecision`|`GPUCommandEncoderPlan`)" +
+                            ")",
+                    ),
             )
             forbiddenAuthority.forEach { (description, pattern) ->
                 specs.forEach { (fileName, text) ->

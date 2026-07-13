@@ -216,7 +216,9 @@ key and cannot change blend semantics.
 
 ### `GPUDestinationReadAction`
 
-Records the concrete task/list consequence of an accepted or refused plan:
+Records the concrete preflight/encoder consequence selected after final
+`GPUFramePlan` order for destination-read intent whose semantics, conservative
+bounds, target/resource roles, and dependencies are already fixed:
 
 | Action | Meaning |
 |---|---|
@@ -224,11 +226,19 @@ Records the concrete task/list consequence of an accepted or refused plan:
 | `UseFixedFunctionBlend` | Use attachment blend state and no sampled destination. |
 | `SplitPassAndCopyTarget` | Close pending writes, copy target bounds, then sample the copy. |
 | `UseExistingIntermediate` | Bind a separate validated intermediate texture. |
-| `CreateIsolatedLayer` | Allocate/render an isolated layer or backdrop input. |
-| `CompositeIsolatedLayer` | Composite an isolated result into the parent target. |
+| `CreateIsolatedLayer` | Materialize and render the isolated target already declared by the semantic layer plan. |
+| `CompositeIsolatedLayer` | Encode the composite required by the already-declared child/parent target roles and dependency. |
 | `Refuse` | Return a stable refusal diagnostic. |
 
-Actions are consumed by `GPUTaskList` and `GPUDrawLayerPlanner`. They must be
+`GPUTaskList` and `GPUDrawLayerPlanner` carry only semantic destination-read
+intent, conservative bounds, target/resource roles, and dependency tokens.
+Neither consumes this action nor accepts any late materialization product.
+After final `GPUFramePlan` order, `GPUFramePreflighter` produces and consumes
+`GPUDestinationReadAction` while building the prepared
+`GPUCommandEncoderPlan`; `GPUFrameExecutor` exclusively records the resulting
+commands. Layer action variants instantiate roles already declared by semantic
+layer plans; they do not introduce isolation, change blend/filter/layer
+semantics, or reroute the command stream after final ordering. Actions remain
 dumpable so pass splits and copies are visible in evidence.
 
 ### `GPUDestinationCopyTextureDescriptor`
