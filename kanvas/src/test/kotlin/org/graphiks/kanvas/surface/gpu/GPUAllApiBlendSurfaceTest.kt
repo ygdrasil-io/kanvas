@@ -124,11 +124,21 @@ class GPUAllApiBlendSurfaceTest {
                             },
                             gpu.result.diagnostics.entries.toString(),
                         )
-                        if (mode.requiresDestinationRead()) {
+                        // Clear has no public BlendMode argument. Its repeated rows document that
+                        // inventory exception, but they do not request the selected matrix mode.
+                        if (api.composition != Composition.CLEAR && mode.requiresDestinationRead()) {
                             assertEquals(
                                 readbacksBefore,
                                 session.runtimeTelemetry.destinationReadbackSnapshots,
                                 "${api.name}/${mode.name}/${context.name} performed a GPU-to-CPU destination readback",
+                            )
+                            assertTrue(
+                                gpu.result.diagnostics.entries.any { entry ->
+                                    entry.code.startsWith("route:destination-read:") &&
+                                        entry.reason == "gpu-copy-then-formula"
+                                },
+                                "${api.name}/${mode.name}/${context.name} did not emit the GPU destination-read formula route: " +
+                                    gpu.result.diagnostics.entries,
                             )
                         }
                     }
