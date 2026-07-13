@@ -11,6 +11,10 @@ public data class Jpeg2000Limits(
     val maxHeight: Int = 32_768,
     val maxPixels: Long = 64L * 1024L * 1024L,
     val maxBoxes: Int = 4_096,
+    val maxComponents: Int = 16,
+    val maxTiles: Int = 16_384,
+    val maxTileParts: Int = 65_536,
+    val maxCodeblocks: Long = 16L * 1024L * 1024L,
 ) {
     init {
         require(maxEncodedBytes >= 2)
@@ -18,6 +22,10 @@ public data class Jpeg2000Limits(
         require(maxHeight > 0)
         require(maxPixels > 0)
         require(maxBoxes > 0)
+        require(maxComponents > 0)
+        require(maxTiles > 0)
+        require(maxTileParts > 0)
+        require(maxCodeblocks > 0)
     }
 }
 
@@ -163,11 +171,11 @@ private data class ParsedRawJ2k(
     val entropy: J2kEntropyInput,
 )
 
-private class Jpeg2000Failure(
+internal class Jpeg2000Failure(
     val diagnostic: Jpeg2000Diagnostic,
 ) : RuntimeException(diagnostic.code)
 
-private fun j2kFailure(
+internal fun j2kFailure(
     code: String,
     offset: Int,
     result: Codec.Result = Codec.Result.kErrorInInput,
