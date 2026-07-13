@@ -15,6 +15,7 @@ data class WgslModuleAbiBinding(
     val binding: Int,
     val name: String,
     val resourceKind: String,
+    val visibilityState: WgslBindingVisibility,
     val access: String?,
     val sampleType: String?,
     val viewDimension: String?,
@@ -109,6 +110,7 @@ object GPUBlendFormulaModuleAbi {
             binding = binding,
             name = name,
             resourceKind = "uniformBuffer",
+            visibilityState = WgslBindingVisibility.Unavailable,
             access = "read",
             sampleType = null,
             viewDimension = null,
@@ -122,6 +124,7 @@ object GPUBlendFormulaModuleAbi {
             binding = binding,
             name = name,
             resourceKind = "sampledTexture",
+            visibilityState = WgslBindingVisibility.Unavailable,
             access = "read",
             sampleType = "float",
             viewDimension = "2d",
@@ -135,6 +138,7 @@ object GPUBlendFormulaModuleAbi {
             binding = binding,
             name = name,
             resourceKind = "sampler",
+            visibilityState = WgslBindingVisibility.Unavailable,
             access = "read",
             sampleType = null,
             viewDimension = null,
@@ -179,6 +183,7 @@ private fun WgslReflectionReport.toModuleAbi(moduleId: String): WgslModuleAbi =
                 binding = binding.binding,
                 name = binding.name,
                 resourceKind = binding.resourceKind,
+                visibilityState = binding.visibilityState,
                 access = binding.access,
                 sampleType = binding.sampleType,
                 viewDimension = binding.viewDimension,
@@ -259,6 +264,9 @@ private fun bindingFieldMismatches(
     if (declared.name != actual.name) add("name declared=${declared.name} reflected=${actual.name}")
     if (declared.resourceKind != actual.resourceKind) {
         add("resourceKind declared=${declared.resourceKind} reflected=${actual.resourceKind}")
+    }
+    if (declared.visibilityState != actual.visibilityState) {
+        add("visibilityState declared=${declared.visibilityState} reflected=${actual.visibilityState}")
     }
     if (declared.access != actual.access) add("access declared=${declared.access} reflected=${actual.access}")
     if (declared.sampleType != actual.sampleType) {

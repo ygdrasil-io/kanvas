@@ -42,6 +42,32 @@ class WGSLModuleAbiTest {
     }
 
     @Test
+    fun `blend formula ABI validator rejects a visibility availability mismatch`() {
+        val coverageKind = GPUBlendCoverageKind.Scalar
+        val formula = requireNotNull(
+            GPUBlendFormulaLibrary.formulaFor(GPUBlendMode.SRC_OVER, coverageKind),
+        )
+        val parsed = parseWgslResult(GPUBlendFormulaLibrary.assembleValidationModule(formula))
+        assertTrue(parsed.isSuccess, parsed.errors.joinToString { it.message })
+        val reflected = Lowerer().lower(parsed.translationUnit).reflectWgslModule(formula.formulaId)
+        val visibilityChanged = reflected.copy(
+            bindings = reflected.bindings.map { binding ->
+                if (binding.group == 1 && binding.binding == 1) {
+                    binding.copy(visibility = listOf(WgslShaderVisibility.Fragment.wireName))
+                } else {
+                    binding
+                }
+            },
+        )
+
+        val result = validateWgslModuleAbi(GPUBlendFormulaModuleAbi.declaredFor(coverageKind), visibilityChanged)
+
+        val rejected = assertIs<WgslModuleAbiValidationResult.Mismatch>(result)
+        assertContains(rejected.diagnostics.joinToString(), "visibilityState")
+        assertContains(rejected.diagnostics.joinToString(), "group=1,binding=1")
+    }
+
+    @Test
     fun `blend formula modules match complete declared full scalar and LCD ABI`() {
         GPUBlendCoverageKind.entries.forEach { coverageKind ->
             val formula = requireNotNull(
