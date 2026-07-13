@@ -746,6 +746,30 @@ class Jpeg2000DocumentTest {
     }
 
     @Test
+    fun `JP2 refuses invalid ihdr payloads dimensions and components with a stable diagnostic`() {
+        val validPayload = byteArrayOf(
+            0, 0, 0, 1, // height
+            0, 0, 0, 1, // width
+            0, 1, // one component
+            7, 7, 0, 0, // 8-bit unsigned, JPEG 2000 compression, no optional flags
+        )
+        val invalidPayloads = listOf(
+            "payload size" to ByteArray(13),
+            "zero height" to validPayload.copyOf().also { it[3] = 0 },
+            "zero width" to validPayload.copyOf().also { it[7] = 0 },
+            "zero components" to validPayload.copyOf().also { it[8] = 0; it[9] = 0 },
+        )
+
+        invalidPayloads.forEach { (label, payload) ->
+            val opened = Jpeg2000Document.open(jp2(narrowLosslessCodestream(), boxed("ihdr", payload)))
+
+            assertNull(opened.document, label)
+            assertEquals("jpeg2000.jp2.ihdr.invalid", opened.diagnostic?.code, label)
+            assertEquals(Codec.Result.kErrorInInput, opened.diagnostic?.result, label)
+        }
+    }
+
+    @Test
     fun `JP2 refuses unsupported color profile palette mapping and alpha metadata`() {
         val codestream = narrowLosslessCodestream()
         val unsupportedHeaders = listOf(
