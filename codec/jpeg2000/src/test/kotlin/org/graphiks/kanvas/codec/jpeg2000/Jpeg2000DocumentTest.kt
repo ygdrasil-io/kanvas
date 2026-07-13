@@ -727,6 +727,28 @@ class Jpeg2000DocumentTest {
     }
 
     @Test
+    fun `JP2 refuses unsupported color profile palette mapping and alpha metadata`() {
+        val codestream = narrowLosslessCodestream()
+        val unsupportedHeaders = listOf(
+            "ICC color profile" to (imageHeaderBox() + boxed("colr", byteArrayOf(2, 0, 0, 'I'.code.toByte(), 'C'.code.toByte(), 'C'.code.toByte()))),
+            "non-grayscale enumerated color" to (imageHeaderBox() + boxed("colr", byteArrayOf(1, 0, 0, 0, 0, 0, 16))),
+            "palette" to (imageHeaderBox() + boxed("pclr", byteArrayOf(0, 2, 1, 7, 0, 0xFF.toByte()))),
+            "component mapping" to (imageHeaderBox() + boxed("cmap", byteArrayOf(0, 0, 0, 0))),
+            "alpha channel definition" to (imageHeaderBox() + boxed("cdef", byteArrayOf(0, 1, 0, 0, 0, 1, 0, 0))),
+        )
+
+        unsupportedHeaders.forEach { (label, headerPayload) ->
+            val unsupported = jp2(codestream, headerPayload)
+            val opened = Jpeg2000Document.open(unsupported)
+
+            assertNull(opened.document, label)
+            assertEquals("jpeg2000.jp2.profile.unsupported", opened.diagnostic?.code, label)
+            assertEquals(Codec.Result.kUnimplemented, opened.diagnostic?.result, label)
+            assertNull(Codec.MakeFromData(unsupported), label)
+        }
+    }
+
+    @Test
     fun `bounded open refuses an oversized J2K before parsing its codestream`() {
         val codestream = narrowLosslessCodestream()
 

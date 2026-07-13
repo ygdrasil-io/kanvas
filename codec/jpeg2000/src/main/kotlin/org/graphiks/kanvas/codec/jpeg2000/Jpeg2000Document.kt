@@ -295,7 +295,30 @@ private fun parseJp2Header(data: ByteArray, header: Jpeg2000Box): Jpeg2000FrameI
     if (components != 1 || bitsPerComponent != 7 || compression != 7 || unknownColorSpace != 0 || intellectualProperty != 0) {
         j2kFailure("jpeg2000.jp2.profile.unsupported", ihdr.offset.toInt(), Codec.Result.kUnimplemented)
     }
+    val colorBoxes = children.filter { it.type == "colr" }
+    if (colorBoxes.size > 1) {
+        j2kFailure("jpeg2000.jp2.profile.unsupported", colorBoxes[1].offset.toInt(), Codec.Result.kUnimplemented)
+    }
+    children.forEach { child ->
+        when (child.type) {
+            "ihdr" -> Unit
+            "colr" -> validateJp2GrayscaleColor(data, child)
+            else -> j2kFailure("jpeg2000.jp2.profile.unsupported", child.offset.toInt(), Codec.Result.kUnimplemented)
+        }
+    }
     return Jpeg2000FrameInfo(width, height, components, bitsPerComponent + 1)
+}
+
+private fun validateJp2GrayscaleColor(data: ByteArray, color: Jpeg2000Box) {
+    if (
+        color.payloadSize != 7 ||
+        data[color.payloadOffset].u8() != 1 ||
+        data[color.payloadOffset + 1].u8() != 0 ||
+        data[color.payloadOffset + 2].u8() != 0 ||
+        data.u32(color.payloadOffset + 3) != JP2_ENUMERATED_GRAYSCALE
+    ) {
+        j2kFailure("jpeg2000.jp2.profile.unsupported", color.offset.toInt(), Codec.Result.kUnimplemented)
+    }
 }
 
 private class Jp2BoxParser(
@@ -521,6 +544,7 @@ private const val SOT: Int = 0x90
 private const val SOD: Int = 0x93
 private const val EOC: Int = 0xD9
 private const val MAX_JP2_HEADER_BOXES: Int = 128
+private const val JP2_ENUMERATED_GRAYSCALE: Long = 17L
 internal const val RAW_J2K_CODEBLOCK_WIDTH: Int = 64
 internal const val NARROW_RAW_J2K_MAX_WIDTH: Int = 128
 internal const val NARROW_RAW_J2K_MAX_HEIGHT: Int = 64
