@@ -388,6 +388,14 @@ internal fun offscreenTargetId(
         "${request.width}x${request.height}-${request.colorFormat.normalizedColorFormat()}"
 }
 
+/**
+ * Returns the exact WGSL module consumed by [WgpuRenderRecorder.drawTextAtlasPass].
+ *
+ * It is internal solely so parser-backed tests validate the source submitted to WebGPU rather
+ * than a declarative snippet or a resource that the native execution path does not consume.
+ */
+internal fun nativeTextAtlasA8WgslSource(): String = WgpuRenderRecorder.TEXT_ATLAS_A8_WGSL
+
 internal fun gpuRuntimeRetainedResourceRefs(
     targetRef: GPUQueuedResourceRef,
     leases: List<GPUResourceLease>,
@@ -2474,7 +2482,7 @@ private class WgpuRenderRecorder(
         require(indexData.isNotEmpty()) { "indexData must not be empty" }
         if (draws.isEmpty()) return
 
-        val wgsl = TEXT_ATLAS_A8_WGSL
+        val wgsl = nativeTextAtlasA8WgslSource()
         val textureFormat = atlasFormat.toWgpuTextureFormat()
         val keys = textAtlasExecutionCacheKeys(
             wgsl = wgsl,

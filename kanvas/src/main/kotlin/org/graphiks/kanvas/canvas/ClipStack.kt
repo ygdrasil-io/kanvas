@@ -68,3 +68,41 @@ sealed interface ClipStackOp {
         override val perspectiveCaptureRefusal: Boolean = false,
     ) : ClipStackOp
 }
+
+/**
+ * Returns the exact intersection of this stack followed by [other].
+ *
+ * Two device rectangles retain their compact representation. Any path, rounded-rectangle, or
+ * difference operation remains ordered in a complex stack so callers do not reduce
+ * non-rectangular geometry to a bounding rectangle while replaying or restoring a layer.
+ */
+internal fun ClipStack.intersectWith(other: ClipStack?): ClipStack = when (other) {
+    null,
+    ClipStack.WideOpen,
+    -> this
+    else -> when (this) {
+        ClipStack.WideOpen -> other
+        is ClipStack.DeviceRect -> when (other) {
+            is ClipStack.DeviceRect -> ClipStack.DeviceRect(
+                org.graphiks.kanvas.types.Rect.fromLTRB(
+                    maxOf(rect.left, other.rect.left),
+                    maxOf(rect.top, other.rect.top),
+                    minOf(rect.right, other.rect.right),
+                    minOf(rect.bottom, other.rect.bottom),
+                ),
+                antiAlias || other.antiAlias,
+            )
+            is ClipStack.Complex -> ClipStack.Complex(
+                listOf(ClipStackOp.RectOp(rect, ClipOp.INTERSECT, antiAlias)) + other.asIntersectionOps(),
+            )
+            ClipStack.WideOpen -> this
+        }
+        is ClipStack.Complex -> ClipStack.Complex(ops + other.asIntersectionOps())
+    }
+}
+
+private fun ClipStack.asIntersectionOps(): List<ClipStackOp> = when (this) {
+    ClipStack.WideOpen -> emptyList()
+    is ClipStack.DeviceRect -> listOf(ClipStackOp.RectOp(rect, ClipOp.INTERSECT, antiAlias))
+    is ClipStack.Complex -> ops
+}

@@ -123,6 +123,106 @@ class GPUSaveLayerCompositeRegressionTest {
     }
 
     @Test
+    fun `picture saveLayer intersects an outer scissor or AA clip at its restore`() {
+        requireWebGpu()
+
+        listOf(BlendMode.SRC, BlendMode.DST_IN, BlendMode.MULTIPLY).forEach { mode ->
+            val recorder = PictureRecorder()
+            recorder.beginRecording(Rect(0f, 0f, 32f, 32f)).apply {
+                saveLayer(paint = Paint(color = translucentRed.toColor(), blendMode = mode))
+                drawRect(Rect(6f, 6f, 26f, 26f), Paint.fill(Color.RED).copy(antiAlias = false))
+                restore()
+            }
+            val picture = recorder.finishRecordingAsPicture()
+
+            listOf(
+                OuterClip("scissor", Rect(12f, 12f, 24f, 24f), antiAlias = false, edge = null),
+                OuterClip("alpha-mask", Rect(12.5f, 12.5f, 23.5f, 23.5f), antiAlias = true, edge = Point(12f, 16f)),
+            ).forEach { outerClip ->
+                val result = Surface(width = 32, height = 32).run {
+                    canvas {
+                        drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE).copy(antiAlias = false))
+                        clipRect(outerClip.rect, ClipOp.INTERSECT, outerClip.antiAlias)
+                        drawPicture(picture)
+                    }
+                    render()
+                }
+
+                assertPixelNearAt(
+                    result.pixels,
+                    width = 32,
+                    x = 16,
+                    y = 16,
+                    expected = publicLayerExpected(mode, coverage = 1f),
+                    tolerance = 2,
+                )
+                assertPixelNearAt(result.pixels, width = 32, x = 10, y = 16, expected = white, tolerance = 2)
+                outerClip.edge?.let { edge ->
+                    assertPixelNearAt(
+                        result.pixels,
+                        width = 32,
+                        x = edge.x.toInt(),
+                        y = edge.y.toInt(),
+                        expected = publicLayerExpected(mode, coverage = .5f),
+                        tolerance = 2,
+                    )
+                }
+                if (mode == BlendMode.MULTIPLY) {
+                    assertTrue(
+                        result.diagnostics.entries.any { entry ->
+                            entry.code.startsWith("route:destination-read:saveLayer:") &&
+                                entry.reason == "gpu-copy-then-formula"
+                        },
+                        "$mode/${outerClip.name} ${result.diagnostics.entries}",
+                    )
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `picture playback keeps its layer clip and applies the host AA clip once`() {
+        requireWebGpu()
+
+        listOf(BlendMode.SRC, BlendMode.DST_IN).forEach { mode ->
+            val recorder = PictureRecorder()
+            recorder.beginRecording(Rect(0f, 0f, 32f, 32f)).apply {
+                clipRect(Rect(8f, 8f, 24f, 24f), ClipOp.INTERSECT, antiAlias = false)
+                saveLayer(paint = Paint(color = translucentRed.toColor(), blendMode = mode))
+                drawRect(Rect(6f, 6f, 26f, 26f), Paint.fill(Color.RED).copy(antiAlias = false))
+                restore()
+            }
+            val picture = recorder.finishRecordingAsPicture()
+            val result = Surface(width = 32, height = 32).run {
+                canvas {
+                    drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE).copy(antiAlias = false))
+                    clipRect(Rect(12.5f, 12.5f, 23.5f, 23.5f), ClipOp.INTERSECT, antiAlias = true)
+                    picture.playback(this)
+                }
+                render()
+            }
+
+            assertPixelNearAt(
+                result.pixels,
+                width = 32,
+                x = 16,
+                y = 16,
+                expected = publicLayerExpected(mode, coverage = 1f),
+                tolerance = 2,
+            )
+            assertPixelNearAt(result.pixels, width = 32, x = 10, y = 16, expected = white, tolerance = 2)
+            assertPixelNearAt(
+                result.pixels,
+                width = 32,
+                x = 12,
+                y = 16,
+                expected = publicLayerExpected(mode, coverage = .5f),
+                tolerance = 2,
+            )
+        }
+    }
+
+    @Test
     fun `ordinary saveLayer composites SRC content over its opaque checkerboard parent`() {
         requireWebGpu()
 

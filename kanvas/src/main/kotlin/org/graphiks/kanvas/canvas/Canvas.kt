@@ -215,9 +215,10 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
 
     /** Save state and begin a layer described by [rec], including an optional backdrop filter. */
     fun saveLayer(rec: SaveLayerRec): Int {
-        val layerRec = currentRecordedClip.takeUnless { it == ClipStack.WideOpen }
-            ?.let { rec.copy(compositeClip = it) }
-            ?: rec
+        val compositeClip = (rec.compositeClip ?: ClipStack.WideOpen)
+            .intersectWith(currentRecordedClip)
+            .takeUnless { it == ClipStack.WideOpen }
+        val layerRec = if (compositeClip == rec.compositeClip) rec else rec.copy(compositeClip = compositeClip)
         buffer.append(DisplayOp.BeginLayer(layerRec, currentTransform))
         saveStack.add(CanvasState(currentTransform, currentClip, currentRecordedClip) to true)
         // Keep the semantic clip visible to Canvas APIs, but defer it from children to the layer

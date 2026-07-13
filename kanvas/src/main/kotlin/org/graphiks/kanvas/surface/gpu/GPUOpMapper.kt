@@ -5,6 +5,7 @@ import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.canvas.ClipStackOp
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.canvas.SaveLayerRec
+import org.graphiks.kanvas.canvas.intersectWith
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.commands.GPUClipFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUClipKind
@@ -723,7 +724,7 @@ internal fun DisplayOp.withPictureReplayState(
     outerTransform: Matrix33,
     enclosingClip: ClipStack,
 ): DisplayOp {
-    val replayClip = enclosingClip.intersectForPictureReplay(clipForPictureReplay(this)?.transformForPictureReplay(outerTransform))
+    val replayClip = enclosingClip.intersectWith(clipForPictureReplay(this)?.transformForPictureReplay(outerTransform))
     return when (val transformed = withCombinedTransform(outerTransform)) {
         is DisplayOp.DrawRect -> transformed.copy(clip = replayClip)
         is DisplayOp.DrawRRect -> transformed.copy(clip = replayClip)
@@ -740,6 +741,12 @@ internal fun DisplayOp.withPictureReplayState(
         is DisplayOp.DrawVertices -> transformed.copy(clip = replayClip)
         is DisplayOp.DrawMesh -> transformed.copy(clip = replayClip)
         is DisplayOp.DrawAtlas -> transformed.copy(clip = replayClip)
+        is DisplayOp.BeginLayer -> {
+            val compositeClip = enclosingClip
+                .intersectWith(transformed.rec.compositeClip?.transformForPictureReplay(outerTransform))
+                .takeUnless { it == ClipStack.WideOpen }
+            transformed.copy(rec = transformed.rec.copy(compositeClip = compositeClip))
+        }
         else -> transformed
     }
 }
@@ -776,25 +783,39 @@ internal fun Iterable<DisplayOp>.expandPicturesForGpuReplay(): List<DisplayOp> {
     }
 
     expandPicture = { picture, outerTransform, enclosingClip ->
+        var deferredLayerDepth = 0
         for (nested in picture.ops) {
-            if (nested is DisplayOp.DrawPicture) {
-                // Retain an explicitly unsupported Picture as one operation so its existing
-                // preflight refusal remains atomic: no preceding picture child is encoded.
-                if (nested.coreRoutePreflightRefusalReason() != null) {
-                    expanded += nested.withPictureReplayState(outerTransform, enclosingClip)
-                } else {
-                    val nestedClip = enclosingClip.intersectForPictureReplay(
-                        nested.clip.transformForPictureReplay(outerTransform),
-                    )
-                    replayPicture(
-                        nested.picture,
-                        outerTransform * nested.transform,
-                        nestedClip,
-                        nested.paint,
-                    )
+            // A public saveLayer captured in the Picture owns the enclosing clip at its final
+            // restore. Its children must not receive that same clip or fractional coverage would
+            // be applied twice and transparent layer pixels could corrupt the parent.
+            val childEnclosingClip = if (deferredLayerDepth == 0) enclosingClip else ClipStack.WideOpen
+            when (nested) {
+                is DisplayOp.BeginLayer -> {
+                    expanded += nested.withPictureReplayState(outerTransform, childEnclosingClip)
+                    deferredLayerDepth++
                 }
-            } else {
-                expanded += nested.withPictureReplayState(outerTransform, enclosingClip)
+                DisplayOp.EndLayer -> {
+                    expanded += nested
+                    if (deferredLayerDepth > 0) deferredLayerDepth--
+                }
+                is DisplayOp.DrawPicture -> {
+                    // Retain an explicitly unsupported Picture as one operation so its existing
+                    // preflight refusal remains atomic: no preceding picture child is encoded.
+                    if (nested.coreRoutePreflightRefusalReason() != null) {
+                        expanded += nested.withPictureReplayState(outerTransform, childEnclosingClip)
+                    } else {
+                        val nestedClip = childEnclosingClip.intersectWith(
+                            nested.clip.transformForPictureReplay(outerTransform),
+                        )
+                        replayPicture(
+                            nested.picture,
+                            outerTransform * nested.transform,
+                            nestedClip,
+                            nested.paint,
+                        )
+                    }
+                }
+                else -> expanded += nested.withPictureReplayState(outerTransform, childEnclosingClip)
             }
         }
     }
@@ -881,36 +902,6 @@ private fun ClipStackOp.transformForPictureReplay(matrix: Matrix33): ClipStackOp
         path = if (matrix.isAffine()) path.transform(matrix) else path,
         perspectiveCaptureRefusal = perspectiveCaptureRefusal || !matrix.isAffine(),
     )
-}
-
-private fun ClipStack.intersectForPictureReplay(other: ClipStack?): ClipStack = when (other) {
-    null,
-    ClipStack.WideOpen -> this
-    else -> when (this) {
-        ClipStack.WideOpen -> other
-        is ClipStack.DeviceRect -> when (other) {
-            is ClipStack.DeviceRect -> ClipStack.DeviceRect(
-                Rect.fromLTRB(
-                    maxOf(rect.left, other.rect.left),
-                    maxOf(rect.top, other.rect.top),
-                    minOf(rect.right, other.rect.right),
-                    minOf(rect.bottom, other.rect.bottom),
-                ),
-                antiAlias || other.antiAlias,
-            )
-            is ClipStack.Complex -> ClipStack.Complex(
-                listOf(ClipStackOp.RectOp(rect, org.graphiks.kanvas.pipeline.ClipOp.INTERSECT, antiAlias)) + other.ops,
-            )
-            ClipStack.WideOpen -> this
-        }
-        is ClipStack.Complex -> ClipStack.Complex(ops + other.asPictureReplayOps())
-    }
-}
-
-private fun ClipStack.asPictureReplayOps(): List<ClipStackOp> = when (this) {
-    ClipStack.WideOpen -> emptyList()
-    is ClipStack.DeviceRect -> listOf(ClipStackOp.RectOp(rect, org.graphiks.kanvas.pipeline.ClipOp.INTERSECT, antiAlias))
-    is ClipStack.Complex -> ops
 }
 
 // ────────────────────────────────────────────────────────────────────────────
