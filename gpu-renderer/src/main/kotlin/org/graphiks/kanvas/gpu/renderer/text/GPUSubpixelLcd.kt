@@ -1,6 +1,15 @@
 package org.graphiks.kanvas.gpu.renderer.text
 
 import org.graphiks.kanvas.gpu.renderer.geometry.GPUAtlasEntryRef
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendDestinationReadRequirement
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlanner
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendSpecializationRequest
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCoverageConsumption
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceAlphaClassification
+import org.graphiks.kanvas.gpu.renderer.passes.GPUTargetBlendFacts
 
 enum class GPUPixelGeometry {
     RGBHorizontal,
@@ -31,6 +40,7 @@ data class GPUSubpixelLCDPlan(
     val pixelGeometry: GPUPixelGeometry,
     val perComponentMask: GPUSubpixelCoverageMask,
     val renderStep: GPUSubpixelLCDRenderStep,
+    val blendPlan: GPUBlendPlan,
 ) {
     companion object {
         fun create(
@@ -62,6 +72,10 @@ data class GPUSubpixelLCDPlan(
                         entryPoint = "subpixel_lcd_main",
                     ),
                 ),
+                blendPlan = lcdBlendPlan(
+                    targetFormat = "rgba8unorm",
+                    samplePlan = GPUSamplePlan.SingleSampleFrame,
+                ),
             )
         }
     }
@@ -78,6 +92,7 @@ data class GPUSubpixelLCDRouteContext(
     val pixelGeometryKnown: Boolean,
     val destinationOpaque: Boolean,
     val destinationReadAvailable: Boolean,
+    val samplePlan: GPUSamplePlan = GPUSamplePlan.SingleSampleFrame,
 ) {
     companion object {
         fun decide(
@@ -102,16 +117,44 @@ data class GPUSubpixelLCDRouteContext(
                     ),
                 )
             }
-            if (!ctx.destinationOpaque && !ctx.destinationReadAvailable) {
+            val blendPlan = lcdBlendPlan(ctx.targetFormat, ctx.samplePlan)
+            if (blendPlan is GPUBlendPlan.UnsupportedBlend) {
+                return GPUSubpixelLCDRouteDecision.Refused(
+                    GPUTextDiagnostic(
+                        code = blendPlan.diagnostic.code,
+                        message = blendPlan.diagnostic.message,
+                        terminal = blendPlan.diagnostic.terminal,
+                    ),
+                )
+            }
+            if (
+                blendPlan.destinationReadRequirement == GPUBlendDestinationReadRequirement.DestinationTextureRequired &&
+                !ctx.destinationReadAvailable
+            ) {
                 return GPUSubpixelLCDRouteDecision.Refused(
                     GPUTextDiagnostic(
                         code = GPUTextDiagnosticCodes.DESTINATION_READ_UNACCEPTED,
-                        message = "Translucent destination without destination-read is not supported for subpixel LCD",
+                        message = "Destination-read is required for exact vector LCD coverage",
                         terminal = true,
                     ),
                 )
             }
-            return GPUSubpixelLCDRouteDecision.Accepted(plan)
+            return GPUSubpixelLCDRouteDecision.Accepted(plan.copy(blendPlan = blendPlan))
         }
     }
 }
+
+private fun lcdBlendPlan(targetFormat: String, samplePlan: GPUSamplePlan): GPUBlendPlan =
+    GPUBlendPlanner().plan(
+        GPUBlendSpecializationRequest(
+            mode = GPUBlendMode.SRC_OVER,
+            coverage = GPUCoverageConsumption.LCDCoverage,
+            sourceAlpha = GPUSourceAlphaClassification.Translucent,
+            target = GPUTargetBlendFacts(
+                formatClass = targetFormat,
+                clampsNormalizedColorWrites = targetFormat.endsWith("unorm"),
+                premultipliedAlpha = true,
+            ),
+            samplePlan = samplePlan,
+        ),
+    )

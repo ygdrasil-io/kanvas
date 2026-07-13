@@ -6,9 +6,38 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.test.fail
+import org.graphiks.kanvas.gpu.renderer.materials.GPUBlendCoverageKind
+import org.graphiks.kanvas.gpu.renderer.materials.GPUBlendFormulaLibrary
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 
 /** Verifies generic WGSL render module assembly, ABI dumps, reflection fixtures, and rejection diagnostics. */
 class WGSLModuleAbiTest {
+    @Test
+    fun `blend formula binding ABI matches full scalar and LCD topology declarations`() {
+        val expectedBindings = mapOf(
+            GPUBlendCoverageKind.Full to listOf(0 to 0, 1 to 1, 1 to 2, 1 to 3, 1 to 4),
+            GPUBlendCoverageKind.Scalar to listOf(0 to 0, 1 to 1, 1 to 2, 1 to 3, 1 to 4, 1 to 5, 1 to 6),
+            GPUBlendCoverageKind.LCD to listOf(0 to 0, 1 to 1, 1 to 2, 1 to 3, 1 to 4, 1 to 5, 1 to 6),
+        )
+
+        expectedBindings.forEach { (coverageKind, bindings) ->
+            val formula = requireNotNull(
+                GPUBlendFormulaLibrary.formulaFor(GPUBlendMode.SRC_OVER, coverageKind),
+            )
+            val source = GPUBlendFormulaLibrary.assembleValidationModule(formula)
+            bindings.forEach { (group, binding) ->
+                assertContains(source, "@group($group) @binding($binding)")
+            }
+            val unexpected = if (coverageKind == GPUBlendCoverageKind.Full) listOf(1 to 5, 1 to 6) else emptyList()
+            unexpected.forEach { (group, binding) ->
+                assertFalse(source.contains("@group($group) @binding($binding)"))
+            }
+            assertContains(source, "fn vs_main")
+            assertContains(source, "fn fs_main")
+            assertContains(source, "fn kanvasBlendPremul")
+        }
+    }
+
     /** The first ABI fixture exposes group zero draw data and group one solid material data deterministically. */
     @Test
     fun `solid render module fixture exposes group zero and group one ABI`() {

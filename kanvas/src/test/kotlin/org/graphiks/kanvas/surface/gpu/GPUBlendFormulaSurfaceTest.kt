@@ -9,6 +9,7 @@ import kotlin.math.sqrt
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
+import org.graphiks.kanvas.gpu.renderer.materials.GPUBlendFormulaLibrary
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.Paint
@@ -47,6 +48,17 @@ class GPUBlendFormulaSurfaceTest {
         assertEquals(6, destinationReadBlendModeIndex(GPUBlendMode.EXCLUSION))
         assertEquals(7, destinationReadBlendModeIndex(GPUBlendMode.COLOR_DODGE))
         assertEquals(14, destinationReadBlendModeIndex(GPUBlendMode.LUMINOSITY))
+    }
+
+    @org.junit.jupiter.api.Test
+    fun `Kanvas compatibility programs assemble formula bodies from the gpu-renderer registry`() {
+        val destinationRead = GPUBlendFormulaLibrary.advancedBlendDispatcherWgsl()
+        val allModes = GPUBlendFormulaLibrary.allModeBlendDispatcherWgsl()
+
+        assertTrue(BLEND_FORMULA_WGSL.contains(destinationRead))
+        assertTrue(CLIP_BLEND_FORMULA_WGSL.contains(destinationRead))
+        assertTrue(SCISSOR_CLIP_BLEND_FORMULA_WGSL.contains(destinationRead))
+        assertTrue(CLIP_COVERAGE_BLEND_WGSL.contains(allModes))
     }
 
     @ParameterizedTest(name = "{0}")
