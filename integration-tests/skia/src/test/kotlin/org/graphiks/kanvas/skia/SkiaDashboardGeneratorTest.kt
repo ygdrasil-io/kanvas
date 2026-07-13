@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.skia
 
 import org.graphiks.kanvas.test.ComparisonUtils
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
@@ -172,6 +173,33 @@ class SkiaDashboardGeneratorTest {
         assertTrue(json.contains("\"name\": \"dashboard_score_probe\""))
         assertTrue(!json.contains("blocking_dashboard_score_probe"))
     }
+
+    @Test
+    fun `scores dashboard entry using reference name while preserving logical name`() {
+        val refDir = File(tempDir, "reference").apply { mkdirs() }
+        val genDir = File(tempDir, "generated/text").apply { mkdirs() }
+        val scoresFile = File(tempDir, "scores.properties")
+        val outputDir = File(tempDir, "dashboard")
+        val image = byteArrayOf(
+            255.toByte(), 0, 0, 255.toByte(),
+            0, 255.toByte(), 0, 255.toByte(),
+        )
+        ComparisonUtils.saveRgbaAsPng(image, 2, 1, refDir.resolve("cpp-gm.png"))
+        ComparisonUtils.saveRgbaAsPng(image, 2, 1, genDir.resolve("logical-gm.png"))
+
+        val args = arrayOf(
+            "--ref-dir", refDir.absolutePath,
+            "--gen-dir", File(tempDir, "generated").absolutePath,
+            "--scores", scoresFile.absolutePath,
+            "--output-dir", outputDir.absolutePath,
+        )
+        generateSkiaDashboard(args, gms = listOf(AliasDashboardScoreProbeGm()))
+
+        val json = outputDir.resolve("data/gms.json").readText()
+        assertTrue(json.contains("\"name\": \"logical-gm\""))
+        assertTrue(json.contains("\"similarity\": 100.0,"))
+        assertFalse(json.contains("\"noScoreCause\": \"reference-missing\""))
+    }
 }
 
 private class DashboardScoreProbeGm : SkiaGm {
@@ -204,6 +232,18 @@ private class BlockingDashboardScoreProbeGm : SkiaGm {
     override val name = "blocking_dashboard_score_probe"
     override val renderFamily = RenderFamily.IMAGE
     override val renderCost = RenderCost.BLOCKING
+    override val minSimilarity = 0.0
+    override val width = 2
+    override val height = 1
+
+    override fun draw(canvas: GmCanvas, width: Int, height: Int) = Unit
+}
+
+private class AliasDashboardScoreProbeGm : SkiaGm {
+    override val name = "logical-gm"
+    override val referenceName = "cpp-gm"
+    override val renderFamily = RenderFamily.TEXT
+    override val renderCost = RenderCost.FAST
     override val minSimilarity = 0.0
     override val width = 2
     override val height = 1

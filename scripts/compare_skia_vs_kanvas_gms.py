@@ -1,102 +1,88 @@
 #!/usr/bin/env python3
 """Compare Skia C++ GMs against Kanvas Kotlin GMs to find what's left to port.
 
-Usage: python3 scripts/compare_skia_vs_kanvas_gms.py
+Usage:
+  python3 scripts/compare_skia_vs_kanvas_gms.py [--cpp-gm-dir PATH]
+
+Resolution order for the Skia C++ gm/ source directory:
+  1. --cpp-gm-dir PATH
+  2. KANVAS_SKIA_GM_DIR
+  3. extractor defaults from scripts/extract_skia_gm_names.py
+
+If none of those resolve to a directory, the script exits with an error.
 """
 
-import re
+import argparse
+import os
 import sys
 from pathlib import Path
+
+from extract_kanvas_gm_names import extract_kanvas_gm_names as extract_shared_kanvas_gm_names
+from extract_skia_gm_names import (
+    extract_gm_names as extract_cpp_gm_names,
+    resolve_default_gm_dir,
+)
 
 REPO = Path(__file__).resolve().parent.parent
 REF_DIR = REPO / "integration-tests" / "skia" / "src" / "test" / "resources" / "reference"
 GM_DIR = REPO / "integration-tests" / "skia" / "src" / "test" / "kotlin" / "org" / "graphiks" / "kanvas" / "skia" / "gm"
-SKIA_GM_DIR = Path("/Users/chaos/workspace/kanvas-forge/skia-main/gm")
-
-
-# ---------------------------------------------------------------------------
-# 1. Extract Kanvas GM names (reuse logic from check_missing_gms.py)
-# ---------------------------------------------------------------------------
-
-def extract_subclass_names(text, parent_class):
-    names = set()
-    for m in re.finditer(
-        r'(?:class|object)\s+\w+\s*(?:\([^)]*\))?\s*:\s*'
-        + re.escape(parent_class)
-        + r'\s*\(\s*"([^"]+)"',
-        text,
-    ):
-        names.add(m.group(1))
-    return names
 
 
 def extract_kanvas_gm_names():
-    names = set()
-    for kt_file in sorted(GM_DIR.rglob("*Gm.kt")):
-        text = kt_file.read_text()
-        for m in re.finditer(r'override\s+val\s+name\s*=\s*"([^"]+)"', text):
-            names.add(m.group(1))
-        for m in re.finditer(
-            r'override\s+val\s+name(?:\s*:\s*String)?\s*=\s*if\s*\([^)]*\)\s*"([^"]+)"\s*else\s*"([^"]+)"',
-            text,
-        ):
-            names.add(m.group(1)); names.add(m.group(2))
-        for m in re.finditer(
-            r'override\s+val\s+name\s*:\s*String\s+get\s*\(\s*\)\s*=\s*if\s*\([^)]*\)\s*"([^"]+)"\s*else\s*"([^"]+)"',
-            text,
-        ):
-            names.add(m.group(1)); names.add(m.group(2))
-        m = re.search(
-            r'override\s+val\s+name\s*:\s*String\s+get\s*\(\s*\)\s*=\s*"([^"]*)\$', text
-        )
-        if m:
-            class_m = re.search(r'(?:class|object)\s+(\w+)\s*(?:\([^)]*\))?\s*[:\{]', text)
-            if class_m:
-                names.update(extract_subclass_names(text, class_m.group(1)))
-        for m in re.finditer(
-            r'class\s+(\w+)\s*\([^)]*override\s+val\s+name\s*:\s*String', text,
-        ):
-            names.update(extract_subclass_names(text, m.group(1)))
-        for m in re.finditer(r'gmName\s*=\s*"([^"]+)"', text):
-            names.add(m.group(1))
-        for m in re.finditer(r'variantName\s*=\s*"([^"]+)"', text):
-            names.add(m.group(1))
-        for m in re.finditer(r'return\s+"([^"]+)"', text):
-            names.add(m.group(1))
-        for m in re.finditer(
-            r'override\s+val\s+name\s*:\s*String\s+get\s*\(\s*\)\s*=\s*"([^"]+)"', text,
-        ):
-            names.add(m.group(1))
-        for m in re.finditer(r'return "([^"]+)"', text):
-            names.add(m.group(1))
-        for m in re.finditer(r'name\s*=\s*"([^"]+)"', text):
-            start = m.start()
-            prefix = text[max(0, start - 40):start]
-            if "override val" not in prefix and "kanvas.skia.gm" not in prefix:
-                names.add(m.group(1))
-        for m in re.finditer(r':\s*\w+\s*\(\s*"([a-z][a-z0-9_]+)"', text):
-            names.add(m.group(1))
-    return names
+    return extract_shared_kanvas_gm_names(GM_DIR)
 
 
 # ---------------------------------------------------------------------------
 # 2. Extract Skia GM names from C++ source
 # ---------------------------------------------------------------------------
 
-def extract_skia_gm_names():
-    """Extract GM names from C++ source using the extract_skia_gm_names.py script."""
-    import subprocess
-    script = REPO / "scripts" / "extract_skia_gm_names.py"
-    result = subprocess.run(
-        [sys.executable, str(script), "--names"],
-        capture_output=True, text=True, timeout=60,
+CPP_GM_DIR_ENV = "KANVAS_SKIA_GM_DIR"
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--cpp-gm-dir",
+        type=Path,
+        help=(
+            "path to the Skia C++ gm/ directory; if omitted, the script uses "
+            f"${CPP_GM_DIR_ENV} or the extractor defaults when available"
+        ),
     )
-    names = set()
-    for line in result.stdout.strip().split("\n"):
-        line = line.strip()
-        if line:
-            names.add(line)
-    return names
+    args = parser.parse_args()
+    if args.cpp_gm_dir is not None and not args.cpp_gm_dir.is_dir():
+        parser.error(f"--cpp-gm-dir is not a directory: {args.cpp_gm_dir}")
+    return args
+
+
+def resolve_cpp_gm_dir(cpp_gm_dir: Path | None, env: dict[str, str] | None = None) -> Path:
+    if cpp_gm_dir is not None:
+        return cpp_gm_dir
+
+    if env is None:
+        env = os.environ
+    env_value = env.get(CPP_GM_DIR_ENV)
+    if env_value:
+        env_path = Path(env_value)
+        if not env_path.is_dir():
+            raise ValueError(f"{CPP_GM_DIR_ENV} is not a directory: {env_path}")
+        return env_path
+
+    default_gm_dir = resolve_default_gm_dir()
+    if default_gm_dir is not None:
+        return default_gm_dir
+
+    raise ValueError(
+        f"provide --cpp-gm-dir or {CPP_GM_DIR_ENV}, or make an extractor default available"
+    )
+
+
+def extract_skia_gm_names(cpp_gm_dir: Path):
+    """Extract authoritative GM names from a caller-provided C++ gm directory."""
+    return {
+        name for name in extract_cpp_gm_names(cpp_gm_dir)
+        if not name.startswith("<")
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -111,11 +97,17 @@ def normalize(name):
 
 
 def main():
+    args = parse_args()
+    try:
+        cpp_gm_dir = resolve_cpp_gm_dir(args.cpp_gm_dir)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+
     print("Extracting Kanvas GM names...", file=sys.stderr)
     kanvas_names = extract_kanvas_gm_names()
 
     print("Extracting Skia GM names from C++ sources...", file=sys.stderr)
-    skia_names = extract_skia_gm_names()
+    skia_names = extract_skia_gm_names(cpp_gm_dir)
 
     # Get reference PNG base names
     ref_names = set()

@@ -64,7 +64,7 @@ class SkiaGmRunner {
         val result = SkiaGmRenderer.render(gm, config = config)
         val elapsedMs = (System.nanoTime() - t0) / 1_000_000
 
-        val refPath = "/reference/${gm.name}.png"
+        val refPath = referenceResourcePath(gm)
         val refStatus = gm.referenceStatus
 
         if (refStatus.untrustable) {
@@ -75,7 +75,7 @@ class SkiaGmRunner {
         }
 
         if (!ReferenceManager.hasReference(refPath)) {
-            error("Reference PNG not found at $refPath. Run: cp <skia-native-reference> src/test/resources/reference/${gm.name}.png")
+            error(missingReferenceMessage(refPath))
         }
 
         val reference = ReferenceManager.loadReference(refPath)
@@ -147,6 +147,12 @@ class SkiaGmRunner {
         }
     }
 }
+
+internal fun referenceResourcePath(gm: SkiaGm): String =
+    "/reference/${gm.referenceName}.png"
+
+internal fun missingReferenceMessage(refPath: String): String =
+    "Reference PNG not found at $refPath. Run: cp <skia-native-reference> src/test/resources$refPath"
 
 internal fun selectSkiaGmsForRunner(gms: List<SkiaGm>, name: String?): List<SkiaGm> =
     if (name == null) gms else gms.filter { it.name == name }
