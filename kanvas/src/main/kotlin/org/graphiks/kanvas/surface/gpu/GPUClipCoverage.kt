@@ -320,7 +320,9 @@ internal fun DisplayOp.coreRoutePreflightRefusalReason(): String? = when (this) 
 internal fun DisplayOp.coveragePlaneTask4RefusalOrNull(): String? = null
 
 private fun DisplayOp.DrawPicture.picturePreflightRefusalReason(): String? {
-    if (paint != null) return "unsupported.picture.paint"
+    if (paint != null && SaveLayerRec(paint = paint).gpuCompositePreflightRefusalOrNull() != null) {
+        return "unsupported.picture.paint"
+    }
     if (transform != Matrix33.identity() && picture.containsLayer()) {
         // Fill dispatch intentionally accepts identity transforms only. Refuse before
         // expanding the picture so no partially transformed layer/clip is encoded.
@@ -331,7 +333,11 @@ private fun DisplayOp.DrawPicture.picturePreflightRefusalReason(): String? {
         for (nested in picture.ops) {
             when (nested) {
                 is DisplayOp.DrawPicture -> {
-                    if (nested.paint != null) return "unsupported.picture.nested_paint"
+                    if (nested.paint != null &&
+                        SaveLayerRec(paint = nested.paint).gpuCompositePreflightRefusalOrNull() != null
+                    ) {
+                        return "unsupported.picture.nested_paint"
+                    }
                     if (nested.transform != Matrix33.identity() && nested.picture.containsLayer()) {
                         return "unsupported.picture.transformed_layer"
                     }

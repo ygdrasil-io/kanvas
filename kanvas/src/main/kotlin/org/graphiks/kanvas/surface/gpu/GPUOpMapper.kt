@@ -4,6 +4,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.canvas.ClipStackOp
 import org.graphiks.kanvas.canvas.DisplayOp
+import org.graphiks.kanvas.canvas.SaveLayerRec
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.commands.GPUClipFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUClipKind
@@ -746,12 +747,23 @@ internal fun DisplayOp.withPictureReplayState(
 /** Expands supported Pictures before clip-use accounting so every child gets its own S/G route. */
 internal fun Iterable<DisplayOp>.expandPicturesForGpuReplay(): List<DisplayOp> {
     val expanded = mutableListOf<DisplayOp>()
+    lateinit var expandPicture: (org.graphiks.kanvas.picture.Picture, Matrix33, ClipStack) -> Unit
 
-    fun expandPicture(
+    fun replayPicture(
         picture: org.graphiks.kanvas.picture.Picture,
         outerTransform: Matrix33,
         enclosingClip: ClipStack,
+        paint: org.graphiks.kanvas.paint.Paint?,
     ) {
+        // A supported picture paint is group compositing. Reuse the existing saveLayer
+        // compositor so its opacity and standard BlendMode are applied once to the recorded
+        // child result, rather than incorrectly to each child operation.
+        if (paint != null) expanded += DisplayOp.BeginLayer(SaveLayerRec(paint = paint), Matrix33.identity())
+        expandPicture(picture, outerTransform, enclosingClip)
+        if (paint != null) expanded += DisplayOp.EndLayer
+    }
+
+    expandPicture = { picture, outerTransform, enclosingClip ->
         for (nested in picture.ops) {
             if (nested is DisplayOp.DrawPicture) {
                 // Retain an explicitly unsupported Picture as one operation so its existing
@@ -762,7 +774,12 @@ internal fun Iterable<DisplayOp>.expandPicturesForGpuReplay(): List<DisplayOp> {
                     val nestedClip = enclosingClip.intersectForPictureReplay(
                         nested.clip.transformForPictureReplay(outerTransform),
                     )
-                    expandPicture(nested.picture, outerTransform * nested.transform, nestedClip)
+                    replayPicture(
+                        nested.picture,
+                        outerTransform * nested.transform,
+                        nestedClip,
+                        nested.paint,
+                    )
                 }
             } else {
                 expanded += nested.withPictureReplayState(outerTransform, enclosingClip)
@@ -772,7 +789,7 @@ internal fun Iterable<DisplayOp>.expandPicturesForGpuReplay(): List<DisplayOp> {
 
     for (operation in this) {
         if (operation is DisplayOp.DrawPicture && operation.coreRoutePreflightRefusalReason() == null) {
-            expandPicture(operation.picture, operation.transform, operation.clip)
+            replayPicture(operation.picture, operation.transform, operation.clip, operation.paint)
         } else {
             expanded += operation
         }

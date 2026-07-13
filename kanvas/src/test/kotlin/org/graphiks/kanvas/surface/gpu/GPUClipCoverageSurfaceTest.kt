@@ -927,7 +927,7 @@ class GPUClipCoverageSurfaceTest {
     }
 
     @Test
-    fun `nested picture paint stays refused while captured child clips propagate through S G routing`() {
+    fun `nested picture with unsupported paint stays refused while captured child clips propagate through S G routing`() {
         requireWebGpu()
         val child = Picture(
             Rect(0f, 0f, 8f, 8f),
@@ -936,7 +936,7 @@ class GPUClipCoverageSurfaceTest {
         val outerClip = complexFullClip()
         val painted = Picture(
             Rect(0f, 0f, 8f, 8f),
-            listOf(DisplayOp.DrawPicture(child, Paint.fill(Color.RED), Matrix33.identity(), ClipStack.WideOpen)),
+            listOf(DisplayOp.DrawPicture(child, Paint.stroke(Color.RED, 1f), Matrix33.identity(), ClipStack.WideOpen)),
         )
         val paintResult = renderViaGpu(
             StaticDisplayListBuffer(listOf(DisplayOp.DrawPicture(painted, null, Matrix33.identity(), outerClip))),
@@ -1114,7 +1114,7 @@ class GPUClipCoverageSurfaceTest {
     }
 
     @Test
-    fun `picture paint is refused while its captured child clip uses the picture source route`() {
+    fun `picture with unsupported paint is refused while its captured child clip uses the picture source route`() {
         requireWebGpu()
         val outerClip = ClipStack.Complex(
             listOf(ClipStackOp.RectOp(Rect(1f, 1f, 15f, 15f), ClipOp.INTERSECT, antiAlias = true)),
@@ -1123,7 +1123,7 @@ class GPUClipCoverageSurfaceTest {
         recorder.beginRecording(Rect(0f, 0f, 8f, 8f)).drawRect(Rect(1f, 1f, 7f, 7f), Paint.fill(Color.RED))
         val picture = recorder.finishRecordingAsPicture()
 
-        val paintResult = renderPictureWithClip(picture, Paint.fill(Color.RED), outerClip)
+        val paintResult = renderPictureWithClip(picture, Paint.stroke(Color.RED, 1f), outerClip)
         assertTrue(paintResult.diagnostics.entries.any { it.reason == "unsupported.picture.paint" })
 
         val childClipResult = renderPictureWithClip(picture, null, outerClip)

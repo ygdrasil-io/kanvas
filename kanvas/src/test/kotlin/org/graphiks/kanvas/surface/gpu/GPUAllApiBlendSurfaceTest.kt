@@ -46,8 +46,9 @@ import org.junit.jupiter.api.TestFactory
  * fixture. The CPU side is deliberately a small, pure-Kotlin pixel oracle: Surface has no public
  * CPU renderer, so re-rendering the command stream would only compare WebGPU with itself.
  *
- * Each fixture samples a fully covered interior pixel. That keeps this matrix focused on the
- * API-to-S/G adapter and blend route; AA edge coverage is covered by the dedicated surface tests.
+ * Each fixture samples a fully covered interior pixel, a source pixel excluded by a clip, and a
+ * half-covered alpha-mask edge when that geometry can supply one. This keeps the matrix focused
+ * on the API-to-S/G adapter and blend route while retaining dedicated tests for complex AA edges.
  */
 @OptIn(ExperimentalUnsignedTypes::class)
 class GPUAllApiBlendSurfaceTest {
@@ -113,20 +114,47 @@ class GPUAllApiBlendSurfaceTest {
                 }
             }
             val result = render()
-            GpuPixel(readPixel(result, api.sample), result)
+            GpuPixel(readPixels(result, api, context), result)
         }
 
     private fun renderCpu(api: BlendCase, mode: BlendMode, context: BlendContext): CpuPixel {
-        val direct = when (api.composition) {
-            Composition.BLEND -> blend(SOURCE, DESTINATION, mode)
-            Composition.CLEAR -> SOURCE
+        val sourceOnTransparent = blendPremultiplied(SOURCE, Color.TRANSPARENT, BlendMode.SRC)
+        val direct = if (api.composition == Composition.CLEAR) sourceOnTransparent.toColor() else blend(SOURCE, DESTINATION, mode)
+        val color = when (context) {
+            BlendContext.SAVE_LAYER -> when (api.composition) {
+                Composition.BLEND -> sourceOver(
+                    blendPremultiplied(SOURCE, Color.TRANSPARENT, mode),
+                    DESTINATION.toPremultipliedLinear(),
+                ).toColor()
+                Composition.CLEAR -> sourceOver(
+                    sourceOnTransparent,
+                    DESTINATION.toPremultipliedLinear(),
+                ).toColor()
+            }
+            else -> direct
         }
-        val color = when {
-            api.composition == Composition.CLEAR -> SOURCE
-            context != BlendContext.SAVE_LAYER -> direct
-            else -> sourceOver(blend(SOURCE, Color.TRANSPARENT, mode), DESTINATION)
+        val clipExcludedColor = when (context) {
+            BlendContext.SCISSOR,
+            BlendContext.ALPHA_MASK,
+            -> destinationAfterInitialDraw()
+            BlendContext.UNCLIPPED,
+            BlendContext.SAVE_LAYER,
+            -> color
         }
-        return CpuPixel(color.toRgbaBytes())
+        val alphaEdgeColor = when {
+            context == BlendContext.ALPHA_MASK && api.alphaMaskEdgeSample != null && api.composition == Composition.BLEND ->
+                blendWithCoverage(SOURCE, DESTINATION, mode, coverage = .5f)
+            else -> color
+        }
+        return CpuPixel(
+            buildList {
+                addAll(color.toRgbaBytes().toList())
+                api.clipExcludedSample?.let { addAll(clipExcludedColor.toRgbaBytes().toList()) }
+                if (context == BlendContext.ALPHA_MASK) {
+                    api.alphaMaskEdgeSample?.let { addAll(alphaEdgeColor.toRgbaBytes().toList()) }
+                }
+            }.toUByteArray(),
+        )
     }
 
     private fun apiCases(): List<BlendCase> {
@@ -155,49 +183,55 @@ class GPUAllApiBlendSurfaceTest {
         val textBlob = Font(textTypeface, 24f).toTextBlob("I", 14f, 24f)
 
         return listOf(
-            BlendCase("DrawRect", Point(16f, 16f)) { mode ->
+            BlendCase("DrawRect", Point(16f, 16f), Point(7f, 16f), Point(12f, 16f)) { mode ->
                 drawRect(SOURCE_RECT, shapePaint(mode))
             },
-            BlendCase("DrawRRect", Point(16f, 16f)) { mode ->
+            BlendCase("DrawRRect", Point(16f, 16f), Point(7f, 16f), Point(12f, 16f)) { mode ->
                 drawRRect(RRect(SOURCE_RECT, radius = 3f), shapePaint(mode))
             },
-            BlendCase("DrawPath", Point(16f, 16f)) { mode ->
+            BlendCase("DrawPath", Point(16f, 16f), Point(10f, 10f), Point(16f, 12f)) { mode ->
                 drawPath(
                     Path { moveTo(6f, 6f); lineTo(26f, 6f); lineTo(16f, 26f); close() },
                     shapePaint(mode),
                 )
             },
-            BlendCase("DrawImage", Point(16f, 16f)) { mode ->
+            BlendCase("DrawImage", Point(16f, 16f), Point(7f, 16f), Point(12f, 16f)) { mode ->
                 drawImage(image, SOURCE_RECT, imagePaint(mode))
             },
-            BlendCase("DrawText", Point(17f, 14f)) { mode ->
+            BlendCase("DrawText", Point(17f, 14f), Point(17f, 10f), Point(17f, 12f)) { mode ->
                 drawText(textBlob, 0f, 0f, textPaint(mode))
             },
-            BlendCase("DrawColor", Point(16f, 16f)) { mode ->
+            BlendCase("DrawColor", Point(16f, 16f), Point(4f, 16f), Point(12f, 16f)) { mode ->
                 drawColor(SOURCE, mode)
             },
             // Canvas.clear has no BlendMode parameter. It is still instantiated for every mode so
             // the inventory cannot silently omit this visual API; the mode is intentionally ignored.
-            BlendCase("Clear", Point(16f, 16f), Composition.CLEAR) { _ ->
+            BlendCase("Clear", Point(16f, 16f), composition = Composition.CLEAR) { _ ->
                 clear(SOURCE)
             },
-            BlendCase("DrawPoint", Point(16f, 16f)) { mode ->
+            BlendCase("DrawPoint", Point(16f, 16f), Point(10f, 16f), Point(12f, 16f)) { mode ->
                 drawPoint(16f, 16f, shapePaint(mode))
+                drawPoint(10f, 16f, shapePaint(mode))
+                drawPoint(12f, 16f, shapePaint(mode))
             },
-            BlendCase("DrawPoints", Point(16f, 16f)) { mode ->
-                drawPoints(PointMode.POINTS, listOf(Point(16f, 16f)), shapePaint(mode))
+            BlendCase("DrawPoints", Point(16f, 16f), Point(10f, 16f), Point(12f, 16f)) { mode ->
+                drawPoints(
+                    PointMode.POINTS,
+                    listOf(Point(16f, 16f), Point(10f, 16f), Point(12f, 16f)),
+                    shapePaint(mode),
+                )
             },
-            BlendCase("DrawDRRect", Point(6f, 16f)) { mode ->
+            BlendCase("DrawDRRect", Point(22f, 16f), Point(7f, 16f), Point(22f, 12f)) { mode ->
                 drawDRRect(
                     RRect(Rect(4f, 4f, 28f, 28f), radius = 2f),
                     RRect(Rect(10f, 10f, 22f, 22f), radius = 2f),
                     shapePaint(mode),
                 )
             },
-            BlendCase("DrawImageNine", Point(16f, 16f)) { mode ->
+            BlendCase("DrawImageNine", Point(16f, 16f), Point(7f, 16f), Point(16f, 12f)) { mode ->
                 drawImageNine(image, Rect(1f, 1f, 3f, 3f), SOURCE_RECT, imagePaint(mode))
             },
-            BlendCase("DrawImageLattice", Point(16f, 16f)) { mode ->
+            BlendCase("DrawImageLattice", Point(16f, 16f), Point(7f, 16f), Point(16f, 12f)) { mode ->
                 drawImageLattice(
                     image,
                     Lattice(xDivs = listOf(1, 3), yDivs = listOf(1, 3)),
@@ -207,21 +241,40 @@ class GPUAllApiBlendSurfaceTest {
             },
             BlendCase("DrawPicture", Point(16f, 16f)) { mode ->
                 val recorder = PictureRecorder()
-                recorder.beginRecording(SURFACE_RECT).drawRect(SOURCE_RECT, shapePaint(mode))
-                drawPicture(recorder.finishRecordingAsPicture())
+                recorder.beginRecording(SURFACE_RECT).drawRect(
+                    SOURCE_RECT,
+                    Paint.fill(Color.fromArgb(255, SOURCE.redByte, SOURCE.greenByte, SOURCE.blueByte))
+                        .copy(antiAlias = false),
+                )
+                drawPicture(
+                    recorder.finishRecordingAsPicture(),
+                    Paint.fill(Color.fromArgb(SOURCE.alphaByte, 255, 255, 255)).copy(blendMode = mode),
+                )
             },
-            BlendCase("DrawVertices", Point(16f, 16f)) { mode ->
+            BlendCase("DrawVertices", Point(16f, 16f), Point(10f, 10f), Point(16f, 12f)) { mode ->
                 drawVertices(triangle, shapePaint(mode))
             },
-            BlendCase("DrawMesh(program=null)", Point(16f, 16f)) { mode ->
-                drawMesh(Mesh(triangle, program = null, bounds = SOURCE_RECT), shapePaint(mode))
+            BlendCase("DrawMesh(program=null)", Point(16f, 16f), Point(10f, 10f), Point(16f, 12f)) { mode ->
+                drawMesh(
+                    Mesh(triangle, program = null, bounds = SOURCE_RECT),
+                    Paint.fill(SOURCE).copy(antiAlias = false),
+                    blendMode = mode,
+                )
             },
-            BlendCase("DrawAtlas", Point(15f, 15f)) { mode ->
+            BlendCase("DrawAtlas", Point(17f, 17f), Point(9f, 17f), Point(17f, 12f)) { mode ->
                 drawAtlas(
                     atlas = image,
-                    transforms = listOf(Matrix33.translate(14f, 14f)),
-                    texRects = listOf(Rect(0f, 0f, 4f, 4f)),
-                    paint = imagePaint(mode),
+                    transforms = listOf(
+                        Matrix33.translate(14f, 14f),
+                        Matrix33.translate(8f, 14f),
+                        Matrix33.translate(14f, 12f),
+                    ),
+                    texRects = listOf(
+                        Rect(0f, 0f, 4f, 4f),
+                        Rect(0f, 0f, 4f, 4f),
+                        Rect(0f, 0f, 4f, 4f),
+                    ),
+                    blendMode = mode,
                 )
             },
         )
@@ -241,6 +294,14 @@ class GPUAllApiBlendSurfaceTest {
         colorType = ColorType.RGBA_8888,
         sourceId = "all-api-blend-source",
     )
+
+    private fun readPixels(result: RenderResult, api: BlendCase, context: BlendContext): UByteArray = buildList {
+        addAll(readPixel(result, api.sample).toList())
+        api.clipExcludedSample?.let { addAll(readPixel(result, it).toList()) }
+        if (context == BlendContext.ALPHA_MASK) {
+            api.alphaMaskEdgeSample?.let { addAll(readPixel(result, it).toList()) }
+        }
+    }.toUByteArray()
 
     private fun readPixel(result: RenderResult, sample: Point): UByteArray {
         val offset = (sample.y.toInt() * SURFACE_SIZE + sample.x.toInt()) * 4
@@ -262,7 +323,12 @@ class GPUAllApiBlendSurfaceTest {
     )
 
     private fun linearByte(srgbByte: Int): Byte =
-        (srgbToLinear(srgbByte / 255f) * 255f + .5f).toInt().coerceIn(0, 255).toByte()
+        (srgbToLinear(srgbByte / 255f) * SOURCE.alphaByte / 255f * 255f + .5f)
+            .toInt()
+            .coerceIn(0, 255)
+            .toByte()
+
+    private fun destinationAfterInitialDraw(): Color = blend(Color.TRANSPARENT, DESTINATION, BlendMode.DST)
 
     private fun assertPixelsNear(expected: UByteArray, actual: UByteArray, tolerance: Int) {
         expected.indices.forEach { channel ->
@@ -274,7 +340,22 @@ class GPUAllApiBlendSurfaceTest {
     }
 
     /** Pure Kotlin Porter-Duff and W3C blend oracle; no GPU/WGSL helper is used here. */
-    private fun blend(source: Color, destination: Color, mode: BlendMode): Color {
+    private fun blend(source: Color, destination: Color, mode: BlendMode): Color =
+        blendPremultiplied(source, destination, mode).toColor()
+
+    /** Implements `D + F * (blend(S, D) - D)` for an independently generated coverage F. */
+    private fun blendWithCoverage(source: Color, destination: Color, mode: BlendMode, coverage: Float): Color {
+        val blended = blendPremultiplied(source, destination, mode)
+        val destinationPremul = destination.toPremultipliedLinear()
+        return PremultipliedLinear(
+            red = destinationPremul.red + coverage * (blended.red - destinationPremul.red),
+            green = destinationPremul.green + coverage * (blended.green - destinationPremul.green),
+            blue = destinationPremul.blue + coverage * (blended.blue - destinationPremul.blue),
+            alpha = destinationPremul.alpha + coverage * (blended.alpha - destinationPremul.alpha),
+        ).toColor()
+    }
+
+    private fun blendPremultiplied(source: Color, destination: Color, mode: BlendMode): PremultipliedLinear {
         val s = source.toLinear()
         val d = destination.toLinear()
         val sa = source.alphaByte / 255f
@@ -282,7 +363,7 @@ class GPUAllApiBlendSurfaceTest {
         if (mode in ARTISTIC_MODES) {
             val mixed = blendColor(s, d, mode)
             val alpha = sa + da * (1f - sa)
-            return fromPremultipliedLinear(
+            return PremultipliedLinear(
                 red = s[0] * sa * (1f - da) + d[0] * da * (1f - sa) + mixed[0] * sa * da,
                 green = s[1] * sa * (1f - da) + d[1] * da * (1f - sa) + mixed[1] * sa * da,
                 blue = s[2] * sa * (1f - da) + d[2] * da * (1f - sa) + mixed[2] * sa * da,
@@ -290,7 +371,7 @@ class GPUAllApiBlendSurfaceTest {
             )
         }
         if (mode == BlendMode.MODULATE) {
-            return fromPremultipliedLinear(
+            return PremultipliedLinear(
                 red = s[0] * sa * d[0] * da,
                 green = s[1] * sa * d[1] * da,
                 blue = s[2] * sa * d[2] * da,
@@ -298,16 +379,23 @@ class GPUAllApiBlendSurfaceTest {
             )
         }
         val (fs, fd) = porterDuffFactors(mode, sa, da)
-        return fromPremultipliedLinear(
+        return PremultipliedLinear(
             red = s[0] * sa * fs + d[0] * da * fd,
             green = s[1] * sa * fs + d[1] * da * fd,
             blue = s[2] * sa * fs + d[2] * da * fd,
             alpha = sa * fs + da * fd,
-            clamp = mode == BlendMode.PLUS,
-        )
+        ).let { if (mode == BlendMode.PLUS) it.clamped() else it }
     }
 
     private fun sourceOver(source: Color, destination: Color): Color = blend(source, destination, BlendMode.SRC_OVER)
+
+    private fun sourceOver(source: PremultipliedLinear, destination: PremultipliedLinear): PremultipliedLinear =
+        PremultipliedLinear(
+            red = source.red + destination.red * (1f - source.alpha),
+            green = source.green + destination.green * (1f - source.alpha),
+            blue = source.blue + destination.blue * (1f - source.alpha),
+            alpha = source.alpha + destination.alpha * (1f - source.alpha),
+        )
 
     private fun porterDuffFactors(mode: BlendMode, sa: Float, da: Float): Pair<Float, Float> = when (mode) {
         BlendMode.CLEAR -> 0f to 0f
@@ -407,16 +495,16 @@ class GPUAllApiBlendSurfaceTest {
         srgbToLinear(blueByte / 255f),
     )
 
-    private fun fromPremultipliedLinear(
-        red: Float,
-        green: Float,
-        blue: Float,
-        alpha: Float,
-        clamp: Boolean = false,
-    ): Color = Color.fromRGBA(
-        linearToSrgb(if (clamp) red.coerceIn(0f, 1f) else red),
-        linearToSrgb(if (clamp) green.coerceIn(0f, 1f) else green),
-        linearToSrgb(if (clamp) blue.coerceIn(0f, 1f) else blue),
+    private fun Color.toPremultipliedLinear(): PremultipliedLinear {
+        val alpha = alphaByte / 255f
+        val rgb = toLinear()
+        return PremultipliedLinear(rgb[0] * alpha, rgb[1] * alpha, rgb[2] * alpha, alpha)
+    }
+
+    private fun PremultipliedLinear.toColor(): Color = Color.fromRGBA(
+        linearToSrgb(red),
+        linearToSrgb(green),
+        linearToSrgb(blue),
         alpha.coerceIn(0f, 1f),
     )
 
@@ -433,9 +521,26 @@ class GPUAllApiBlendSurfaceTest {
     private data class BlendCase(
         val name: String,
         val sample: Point,
+        val clipExcludedSample: Point? = null,
+        val alphaMaskEdgeSample: Point? = null,
         val composition: Composition = Composition.BLEND,
         val draw: Canvas.(BlendMode) -> Unit,
     )
+
+    private data class PremultipliedLinear(
+        val red: Float,
+        val green: Float,
+        val blue: Float,
+        val alpha: Float,
+    ) {
+        fun clamped(): PremultipliedLinear = PremultipliedLinear(
+            red.coerceIn(0f, 1f),
+            green.coerceIn(0f, 1f),
+            blue.coerceIn(0f, 1f),
+            alpha.coerceIn(0f, 1f),
+        )
+
+    }
 
     private data class CpuPixel(val pixels: UByteArray)
 
@@ -449,9 +554,9 @@ class GPUAllApiBlendSurfaceTest {
         const val SURFACE_SIZE = 32
         val SURFACE_RECT = Rect(0f, 0f, SURFACE_SIZE.toFloat(), SURFACE_SIZE.toFloat())
         val SOURCE_RECT = Rect(6f, 6f, 26f, 26f)
-        val CLIP_RECT = Rect(2f, 2f, 30f, 30f)
-        val ALPHA_MASK_RECT = Rect(2.5f, 2.5f, 29.5f, 29.5f)
-        val SOURCE = Color.fromArgb(255, 208, 80, 32)
+        val CLIP_RECT = Rect(12f, 12f, 24f, 24f)
+        val ALPHA_MASK_RECT = Rect(12.5f, 12.5f, 23.5f, 23.5f)
+        val SOURCE = Color.fromArgb(192, 208, 80, 32)
         val DESTINATION = Color.fromArgb(160, 40, 120, 208)
         val ARTISTIC_MODES = BlendMode.entries.filter { it.ordinal >= BlendMode.MULTIPLY.ordinal }.toSet()
 

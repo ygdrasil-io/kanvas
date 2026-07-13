@@ -215,7 +215,7 @@ class GPUClipCoverageDispatchTest {
     }
 
     @Test
-    fun `use prepass skips refused picture before later shared mask use is released`() {
+    fun `use prepass skips picture with unsupported paint before later shared mask use is released`() {
         val clip = ClipStack.Complex(
             listOf(
                 ClipStackOp.RectOp(Rect.fromLTRB(0f, 0f, 8f, 8f), ClipOp.INTERSECT, antiAlias = true),
@@ -223,7 +223,7 @@ class GPUClipCoverageDispatchTest {
         )
         val refused = DisplayOp.DrawPicture(
             picture = Picture(Rect.fromLTRB(0f, 0f, 8f, 8f), emptyList()),
-            paint = Paint.fill(Color.RED),
+            paint = Paint.stroke(Color.RED, 1f),
             transform = Matrix33.identity(),
             clip = clip,
         )

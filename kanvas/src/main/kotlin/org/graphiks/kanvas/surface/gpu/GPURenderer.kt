@@ -951,9 +951,17 @@ internal fun renderViaGpu(
                     clip is ClipStack.DeviceRect &&
                     destinationReadSourceScissor(clip) == null
 
-            /** Keeps multi-part clip sources transparent only until their first successful sub-pass. */
+            /**
+             * Keeps a render target transparent only until its first successful sub-pass.
+             *
+             * A single DisplayOp can encode several passes (points, nine-patch cells, atlas
+             * sprites, color-glyph layers). Marking only after the outer operation returns makes
+             * every sub-pass clear the same target, so only the final sub-pass survives.
+             */
             fun recordSourcePart(rendered: Boolean): Boolean {
-                if (clipSourceRoute && rendered) sourceHasContent = true
+                if (rendered) {
+                    if (clipSourceRoute) sourceHasContent = true else sceneHasContent = true
+                }
                 return rendered
             }
 
@@ -2216,8 +2224,8 @@ internal fun renderViaGpu(
                                 val tint = op.colors?.getOrNull(index)
                                 val paint = when {
                                     tint != null && op.paint != null -> op.paint.copy(color = tint)
-                                    tint != null -> Paint.fill(tint)
-                                    else -> op.paint
+                                    tint != null -> Paint.fill(tint).copy(blendMode = op.blendMode)
+                                    else -> op.paint ?: Paint().copy(blendMode = op.blendMode)
                                 }
                                 val imageCell = DisplayOp.DrawImage(
                                     op.atlas,
@@ -2965,7 +2973,9 @@ internal fun renderViaGpu(
                                         val subPaint = when {
                                             tint != null && nestedOp.paint != null -> nestedOp.paint.copy(color = tint)
                                             tint != null -> org.graphiks.kanvas.paint.Paint.fill(tint)
-                                            else -> nestedOp.paint
+                                                .copy(blendMode = nestedOp.blendMode)
+                                            else -> nestedOp.paint ?: org.graphiks.kanvas.paint.Paint()
+                                                .copy(blendMode = nestedOp.blendMode)
                                         }
                                         val screenDst = computeAtlasDst(texRect, spriteXform)
                                         val subOp = DisplayOp.DrawImage(
@@ -3233,8 +3243,8 @@ internal fun renderViaGpu(
                             val tint = op.colors?.getOrNull(i)
                             val subPaint = when {
                                 tint != null && op.paint != null -> op.paint.copy(color = tint)
-                                tint != null -> org.graphiks.kanvas.paint.Paint.fill(tint)
-                                else -> op.paint
+                                tint != null -> org.graphiks.kanvas.paint.Paint.fill(tint).copy(blendMode = op.blendMode)
+                                else -> op.paint ?: org.graphiks.kanvas.paint.Paint().copy(blendMode = op.blendMode)
                             }
                             val screenDst = computeAtlasDst(texRect, spriteXform)
                             val subOp = DisplayOp.DrawImage(

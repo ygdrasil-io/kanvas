@@ -175,7 +175,7 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
         if (mesh.program != null) {
             buffer.append(DisplayOp.DrawMesh(mesh, paint, blendMode, currentTransform, currentClip))
         } else {
-            drawVertices(mesh.vertices, paint)
+            drawVertices(mesh.vertices, paint.copy(blendMode = blendMode ?: paint.blendMode))
         }
     }
 
