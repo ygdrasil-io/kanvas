@@ -46,6 +46,48 @@ class J2kSyntaxTest {
     }
 
     @Test
+    fun `quantization styles use structural equality`() {
+        val first = J2kQuantizationStyle(
+            guardBits = 2,
+            style = 1,
+            reversible = false,
+            exponents = intArrayOf(5, 6),
+            mantissas = intArrayOf(12, 13),
+        )
+        val second = J2kQuantizationStyle(
+            guardBits = 2,
+            style = 1,
+            reversible = false,
+            exponents = intArrayOf(5, 6),
+            mantissas = intArrayOf(12, 13),
+        )
+
+        assertEquals(first, second)
+        assertEquals(first.hashCode(), second.hashCode())
+    }
+
+    @Test
+    fun `quantization style copy preserves array isolation`() {
+        val original = J2kQuantizationStyle(
+            guardBits = 2,
+            style = 1,
+            reversible = false,
+            exponents = intArrayOf(5, 6),
+            mantissas = intArrayOf(12, 13),
+        )
+
+        val copied = original.copy()
+        copied.exponents[0] = 99
+        requireNotNull(copied.mantissas)[0] = 99
+
+        assertEquals(original, copied)
+        assertArrayEquals(intArrayOf(5, 6), original.exponents)
+        assertArrayEquals(intArrayOf(12, 13), requireNotNull(original.mantissas))
+        assertArrayEquals(intArrayOf(5, 6), copied.exponents)
+        assertArrayEquals(intArrayOf(12, 13), requireNotNull(copied.mantissas))
+    }
+
+    @Test
     fun `limits reject nonpositive general J2K budgets`() {
         assertThrows(IllegalArgumentException::class.java) { Jpeg2000Limits(maxComponents = 0) }
         assertThrows(IllegalArgumentException::class.java) { Jpeg2000Limits(maxTiles = 0) }

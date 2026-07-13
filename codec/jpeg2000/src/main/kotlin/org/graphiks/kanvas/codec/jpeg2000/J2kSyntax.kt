@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.codec.jpeg2000
 
+import kotlin.ExposedCopyVisibility
+
 internal data class J2kComponentSpec(
     val precision: Int,
     val signed: Boolean,
@@ -42,16 +44,44 @@ internal data class J2kCodingStyle(
     val precinctExponents: List<Pair<Int, Int>>,
 )
 
-internal class J2kQuantizationStyle(
+@ExposedCopyVisibility
+internal data class J2kQuantizationStyle private constructor(
     val guardBits: Int,
     val style: Int,
     val reversible: Boolean,
+    private val arrays: J2kQuantizationArrays,
+) {
+    constructor(
+        guardBits: Int,
+        style: Int,
+        reversible: Boolean,
+        exponents: IntArray,
+        mantissas: IntArray?,
+    ) : this(guardBits, style, reversible, J2kQuantizationArrays(exponents, mantissas))
+
+    val exponents: IntArray get() = arrays.copyExponents()
+    val mantissas: IntArray? get() = arrays.copyMantissas()
+}
+
+internal class J2kQuantizationArrays(
     exponents: IntArray,
     mantissas: IntArray?,
 ) {
-    private val storedExponents: IntArray = exponents.copyOf()
-    private val storedMantissas: IntArray? = mantissas?.copyOf()
+    private val storedExponents = exponents.copyOf()
+    private val storedMantissas = mantissas?.copyOf()
 
-    val exponents: IntArray get() = storedExponents.copyOf()
-    val mantissas: IntArray? get() = storedMantissas?.copyOf()
+    fun copyExponents(): IntArray = storedExponents.copyOf()
+    fun copyMantissas(): IntArray? = storedMantissas?.copyOf()
+
+    override fun equals(other: Any?): Boolean =
+        other is J2kQuantizationArrays &&
+            storedExponents.contentEquals(other.storedExponents) &&
+            when {
+                storedMantissas == null -> other.storedMantissas == null
+                other.storedMantissas == null -> false
+                else -> storedMantissas.contentEquals(other.storedMantissas)
+            }
+
+    override fun hashCode(): Int =
+        31 * storedExponents.contentHashCode() + (storedMantissas?.contentHashCode() ?: 0)
 }
