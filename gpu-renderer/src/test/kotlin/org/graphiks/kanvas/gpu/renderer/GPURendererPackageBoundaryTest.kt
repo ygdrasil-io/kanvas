@@ -74,7 +74,7 @@ class GPURendererPackageBoundaryTest {
             authoritySpecRoot.resolve(fileName).readText()
         }
         val violations = buildList {
-            canonicalAuthorityConcepts.forEach { concept ->
+            canonicalAuthorityOwners.forEach { (concept, expectedOwner) ->
                 val authorityRows = specs.flatMap { (fileName, text) ->
                     text.lineSequence()
                         .filter { line -> line.startsWith("| `$concept` |") }
@@ -85,6 +85,11 @@ class GPURendererPackageBoundaryTest {
                     add(
                         "$concept must have exactly one normative authority row; " +
                             "found ${authorityRows.size}: ${authorityRows.joinToString()}",
+                    )
+                } else if ("| `$concept` | `$expectedOwner` owns" !in authorityRows.single()) {
+                    add(
+                        "$concept must be owned by $expectedOwner; " +
+                            "found: ${authorityRows.single()}",
                     )
                 }
             }
@@ -120,6 +125,11 @@ class GPURendererPackageBoundaryTest {
                             "(?:GPU|queue) completion|" +
                             "treat[^\\n]{0,40}present[^\\n]{0,40}as[^\\n]{0,20}" +
                             "(?:GPU|queue) completion)",
+                    ),
+                "GPUTaskList or GPUResourceProvider encoding GPU work" to
+                    Regex(
+                        "(?i)\\bencoded\\s+(?:by|through)\\s+" +
+                            "(?:`GPUResourceProvider`|`GPUTaskList`)",
                     ),
             )
             forbiddenAuthority.forEach { (description, pattern) ->
@@ -353,17 +363,17 @@ class GPURendererPackageBoundaryTest {
             "37-draw-packet-command-stream.md",
         )
 
-        /** Concepts that must have one and only one normative authority registry row. */
-        val canonicalAuthorityConcepts = listOf(
-            "GPUBlendPlan",
-            "GPUFramePlan",
-            "GPUFrameCoordinator",
-            "GPUFramePreflighter",
-            "PreparedGPUFrame",
-            "GPUSceneTarget",
-            "GPUQueueCompletionTicket",
-            "LCDCoverage",
-            "RefusedCompositeCommand",
+        /** Concepts that must have one normative authority row with this exact owner. */
+        val canonicalAuthorityOwners = mapOf(
+            "GPUBlendPlan" to "passes",
+            "GPUFramePlan" to "recording",
+            "GPUFrameCoordinator" to "execution",
+            "GPUFramePreflighter" to "execution",
+            "PreparedGPUFrame" to "execution",
+            "GPUSceneTarget" to "resources",
+            "GPUQueueCompletionTicket" to "execution",
+            "LCDCoverage" to "passes",
+            "RefusedCompositeCommand" to "recording",
         )
     }
 }

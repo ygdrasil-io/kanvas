@@ -266,9 +266,12 @@ Records copy work:
 - budget decision;
 - failure and refusal behavior.
 
-The copy plan is materialized by `GPUResourceProvider` and encoded by
-`GPUTaskList`. The draw that samples the copied destination must depend on the
-copy plan.
+After final `GPUFramePlan` order, `GPUFramePreflighter` asks
+`GPUResourceProvider` to materialize the copy resources and includes the copy
+in the prepared `GPUCommandEncoderPlan`. `GPUFrameExecutor` exclusively records
+that planned copy into the frame's one encoder. `GPUTaskList` remains
+handle-free dependency authority, and the draw that samples the copied
+destination must depend on the copy plan.
 
 ### `GPUDestinationReadBudgetPolicy`
 

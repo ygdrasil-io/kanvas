@@ -351,8 +351,12 @@ GPU upload plan for atlas pages or bitmap glyph resources:
 - budget decision;
 - failure behavior.
 
-Uploads are encoded through `GPUResourceProvider` and `GPUTaskList`. They are
-not performed by `GPUPayloadGatherer`.
+After final `GPUFramePlan` order, `GPUFramePreflighter` asks
+`GPUResourceProvider` to materialize upload resources and includes upload
+commands in the prepared `GPUCommandEncoderPlan`. `GPUFrameExecutor`
+exclusively records those commands into the frame's one encoder. `GPUTaskList`
+remains handle-free dependency authority, and `GPUPayloadGatherer` performs no
+upload or encoding.
 
 ### `GPUTextResourcePlan`
 
