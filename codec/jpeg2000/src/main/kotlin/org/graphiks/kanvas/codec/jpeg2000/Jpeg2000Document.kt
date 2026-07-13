@@ -414,21 +414,51 @@ private class J2kCodestreamParser(
         val tilePartCount = data[p + 7].u8()
         if (
             tileIndex.toLong() >= mainHeader.geometry.tileGrid.tileCount ||
-            tilePartCount == 0 || tilePartIndex >= tilePartCount || tilePartLength < 14L
+            tilePartCount != 0 && tilePartIndex >= tilePartCount ||
+            tilePartLength != 0L && tilePartLength < 14L
         ) j2kFailure("jpeg2000.sot.invalid", markerOffset)
-        val tilePartEnd = markerOffset.toLong() + tilePartLength
-        if (tilePartEnd > end.toLong() || tilePartEnd < position + 2L) j2kFailure("jpeg2000.sot.invalid", markerOffset)
+        val declaredTilePartEnd = if (tilePartLength == 0L) null else markerOffset.toLong() + tilePartLength
+        if (
+            declaredTilePartEnd != null &&
+            (declaredTilePartEnd > end.toLong() || declaredTilePartEnd < position + 2L)
+        ) j2kFailure("jpeg2000.sot.invalid", markerOffset)
         if (readMarker() != SOD) j2kFailure("jpeg2000.sod.missing", position - 2)
         val dataOffset = position
-        position = tilePartEnd.toInt()
+        val tilePartEnd = declaredTilePartEnd?.toInt() ?: openEndedTilePartEnd(dataOffset, markerOffset)
+        position = tilePartEnd
         tileParts += J2kTilePart(
             tileIndex = tileIndex,
             partIndex = tilePartIndex,
             partCount = tilePartCount,
             headerOffset = markerOffset,
             dataOffset = dataOffset,
-            dataLength = tilePartEnd.toInt() - dataOffset,
+            dataLength = tilePartEnd - dataOffset,
+            isOpenEndedLength = declaredTilePartEnd == null,
         )
+    }
+
+    private fun openEndedTilePartEnd(dataOffset: Int, markerOffset: Int): Int {
+        val finalEocOffset = end - 2
+        if (
+            finalEocOffset < dataOffset || data[finalEocOffset].u8() != 0xFF ||
+            data[finalEocOffset + 1].u8() != EOC ||
+            containsNestedSotOrEoc(dataOffset, finalEocOffset)
+        ) {
+            j2kFailure("jpeg2000.sot.invalid", markerOffset)
+        }
+        return finalEocOffset
+    }
+
+    private fun containsNestedSotOrEoc(start: Int, endExclusive: Int): Boolean {
+        var cursor = start
+        while (endExclusive - cursor >= 2) {
+            if (
+                data[cursor].u8() == 0xFF &&
+                (data[cursor + 1].u8() == SOT || data[cursor + 1].u8() == EOC)
+            ) return true
+            cursor++
+        }
+        return false
     }
 
     private fun readMarker(): Int {

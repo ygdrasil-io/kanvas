@@ -16,13 +16,19 @@ internal data class J2kDecodePlan(
 
             orderedByTile.forEach { (_, partsForTile) ->
                 val first = partsForTile.first()
-                val expected = first.partCount
-                if (
-                    first.tileIndex < 0 || expected <= 0 ||
-                    partsForTile.any { it.partCount != expected || it.partIndex < 0 || it.partIndex >= expected } ||
-                    partsForTile.size != expected ||
-                    partsForTile.map(J2kTilePart::partIndex) != (0 until expected).toList()
-                ) {
+                val allCountsUnknown = partsForTile.all { it.partCount == 0 }
+                val allCountsDeclared = partsForTile.all { it.partCount > 0 }
+                val orderedIndexes = partsForTile.map(J2kTilePart::partIndex)
+                val invalidSequence = when {
+                    allCountsUnknown -> orderedIndexes != (0 until partsForTile.size).toList()
+                    allCountsDeclared -> {
+                        val expected = first.partCount
+                        partsForTile.any { it.partCount != expected || it.partIndex < 0 || it.partIndex >= expected } ||
+                            partsForTile.size != expected || orderedIndexes != (0 until expected).toList()
+                    }
+                    else -> true
+                }
+                if (first.tileIndex < 0 || invalidSequence) {
                     j2kFailure("jpeg2000.sot.sequence.invalid", first.headerOffset)
                 }
             }
@@ -71,7 +77,7 @@ internal fun narrowEntropyInputOrNull(
         coding.style != 0 || coding.transform != 1 ||
         quantization.guardBits != 2 || quantization.style != 0 || !quantization.reversible ||
         !quantization.exponents.contentEquals(expectedExponents) || quantization.mantissas != null ||
-        part.tileIndex != 0 || part.partIndex != 0 || part.partCount != 1 ||
+        part.tileIndex != 0 || part.partIndex != 0 || part.partCount != 1 || part.isOpenEndedLength ||
         part.dataOffset < 0 || part.dataLength < 0 || dataEnd > data.size.toLong()
     ) {
         return null

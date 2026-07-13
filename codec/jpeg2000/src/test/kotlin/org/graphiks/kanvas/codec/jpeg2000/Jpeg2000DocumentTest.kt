@@ -713,6 +713,44 @@ class Jpeg2000DocumentTest {
     }
 
     @Test
+    fun `terminal Psot zero remains structural without an image codec`() {
+        val codestream = narrowLosslessCodestream().also { it.writeU32At(it.sotOffset() + 6, 0) }
+        val document = requireNotNull(Jpeg2000Document.open(codestream).document)
+
+        assertNull(Codec.MakeFromData(codestream))
+        assertEquals("jpeg2000.container.pixel.unimplemented", document.decode().diagnostic?.code)
+        assertEquals(Codec.Result.kUnimplemented, document.decode().diagnostic?.result)
+    }
+
+    @Test
+    fun `Psot zero before another tile part is refused as invalid SOT`() {
+        val opened = Jpeg2000Document.open(nonterminalPsotZeroCodestream())
+
+        assertNull(opened.document)
+        assertEquals("jpeg2000.sot.invalid", opened.diagnostic?.code)
+        assertEquals(Codec.Result.kErrorInInput, opened.diagnostic?.result)
+    }
+
+    @Test
+    fun `ordered TNsot zero tile parts remain structural without an image codec`() {
+        val codestream = unknownTilePartCountCodestream()
+        val document = requireNotNull(Jpeg2000Document.open(codestream).document)
+
+        assertNull(Codec.MakeFromData(codestream))
+        assertEquals("jpeg2000.container.pixel.unimplemented", document.decode().diagnostic?.code)
+        assertEquals(Codec.Result.kUnimplemented, document.decode().diagnostic?.result)
+    }
+
+    @Test
+    fun `single TNsot zero tile part remains outside the image codec`() {
+        val codestream = narrowLosslessCodestream().also { it[it.sotOffset() + 11] = 0 }
+        val document = requireNotNull(Jpeg2000Document.open(codestream).document)
+
+        assertNull(Codec.MakeFromData(codestream))
+        assertEquals("jpeg2000.container.pixel.unimplemented", document.decode().diagnostic?.code)
+    }
+
+    @Test
     fun `JP2 retains top level boxes and routes its sole valid jp2c codestream`() {
         val codestream = narrowLosslessCodestream()
         val jp2 = jp2(codestream)
@@ -1008,6 +1046,53 @@ class Jpeg2000DocumentTest {
         output.writeMarker(0x93) // SOD, deliberately no EBCOT body
         output.writeMarker(0xD9) // EOC
     }.toByteArray()
+
+    private fun nonterminalPsotZeroCodestream(): ByteArray {
+        val original = narrowLosslessCodestream()
+        val first = original.copyOf(original.size - 2)
+        val firstSot = first.sotOffset()
+        first.writeU32At(firstSot + 6, 0)
+        first[firstSot + 11] = 2
+        return ByteArrayOutputStream().also { output ->
+            output.write(first)
+            output.writeMarker(0x90)
+            output.writeU16(10)
+            output.writeU16(0)
+            output.writeU32(14)
+            output.write(1)
+            output.write(2)
+            output.writeMarker(0x93)
+            output.writeMarker(0xD9)
+        }.toByteArray()
+    }
+
+    private fun unknownTilePartCountCodestream(): ByteArray {
+        val original = narrowLosslessCodestream()
+        val first = original.copyOf(original.size - 2)
+        first[first.sotOffset() + 11] = 0
+        return ByteArrayOutputStream().also { output ->
+            output.write(first)
+            output.writeMarker(0x90)
+            output.writeU16(10)
+            output.writeU16(0)
+            output.writeU32(14)
+            output.write(1)
+            output.write(0)
+            output.writeMarker(0x93)
+            output.writeMarker(0xD9)
+        }.toByteArray()
+    }
+
+    private fun ByteArray.sotOffset(): Int = (0 until size - 1).single { index ->
+        this[index] == 0xFF.toByte() && this[index + 1] == 0x90.toByte()
+    }
+
+    private fun ByteArray.writeU32At(offset: Int, value: Int) {
+        this[offset] = (value ushr 24).toByte()
+        this[offset + 1] = (value ushr 16).toByte()
+        this[offset + 2] = (value ushr 8).toByte()
+        this[offset + 3] = value.toByte()
+    }
 
     private fun sourcePgmPixels(
         resource: String = "/jpeg2000-openjpeg/source.pgm",

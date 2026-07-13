@@ -22,12 +22,36 @@ class J2kDecodePlanTest {
 
     @Test
     fun `decode plan rejects an upper codeblock bound above its budget`() {
-        assertThrows(Jpeg2000Failure::class.java) {
+        val failure = assertThrows(Jpeg2000Failure::class.java) {
             J2kDecodePlan.create(
-                syntax(tileParts = listOf(tilePart(0, 0, 1), tilePart(0, 1, 2))),
+                syntax(tileParts = listOf(tilePart(0, 0, 1))),
                 Jpeg2000Limits(maxCodeblocks = 1),
             )
         }
+
+        assertEquals("jpeg2000.limit.codeblocks", failure.diagnostic.code)
+    }
+
+    @Test
+    fun `decode plan rejects mixed declared and unknown tile part counts`() {
+        val failure = assertThrows(Jpeg2000Failure::class.java) {
+            J2kDecodePlan.create(
+                syntax(tileParts = listOf(tilePart(0, 0, 0), tilePart(0, 1, 2))),
+                Jpeg2000Limits(),
+            )
+        }
+
+        assertEquals("jpeg2000.sot.sequence.invalid", failure.diagnostic.code)
+    }
+
+    @Test
+    fun `decode plan orders unknown tile part counts without duplicates`() {
+        val plan = J2kDecodePlan.create(
+            syntax(tileParts = listOf(tilePart(0, 1, 0), tilePart(0, 0, 0))),
+            Jpeg2000Limits(),
+        )
+
+        assertEquals(listOf(0, 1), plan.tilePartsByTile[0].map(J2kTilePart::partIndex))
     }
 
     private fun tilePart(tileIndex: Int, partIndex: Int, partCount: Int): J2kTilePart = J2kTilePart(

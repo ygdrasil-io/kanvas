@@ -87,6 +87,7 @@ internal data class J2kTilePart(
     val headerOffset: Int,
     val dataOffset: Int,
     val dataLength: Int,
+    val isOpenEndedLength: Boolean = false,
 )
 
 internal data class J2kSyntaxModel(
