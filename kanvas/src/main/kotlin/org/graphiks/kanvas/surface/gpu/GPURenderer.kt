@@ -1531,10 +1531,16 @@ internal fun renderViaGpu(
             }
             scanImages(ops)
 
-            /** Image geometry is its transformed destination rect, never the sampled alpha texture. */
+            /** Image geometry ignores sampled alpha; a blur expands it to the filtered output bounds. */
             fun renderImageGeometryCoverage(op: DisplayOp.DrawImage, cmdId: GPUDrawCommandID): Boolean {
+                val imageCommand = op.toImageRectCommand(cmdId, targets)
+                val geometryBounds = (imageCommand.imageFilterPlan as? GPUImageFilterPlan.Blur)
+                    ?.outputBounds
+                val geometryRect = geometryBounds?.let { bounds ->
+                    Rect(bounds.left, bounds.top, bounds.right, bounds.bottom)
+                } ?: op.dst
                 val coverage = DisplayOp.DrawRect(
-                    rect = op.dst,
+                    rect = geometryRect,
                     paint = Paint.fill(Color.WHITE).copy(antiAlias = op.paint?.antiAlias ?: true),
                     transform = op.transform,
                     clip = op.clip,
@@ -2374,7 +2380,7 @@ internal fun renderViaGpu(
                         width = context.targetWidth,
                         height = context.targetHeight,
                     )
-                    if (rendered) {
+                    if (rendered && (blend.requiresDestinationRead || context.forceSourceComposition)) {
                         composerDiagnostics.degrade(
                             code = "route:destination-read:${context.sourceLabelForDiagnostics}",
                             operation = context.sourceLabelForDiagnostics,
@@ -2529,11 +2535,13 @@ internal fun renderViaGpu(
                     ) {
                         sceneHasContent = true
                         dispatched.add(cmdId.toString())
-                        diagnostics.degrade(
-                            "dispatch:${op.javaClass.simpleName}:${cmdId.value}",
-                            op.javaClass.simpleName,
-                            "dispatched",
-                        )
+                        if (blend.requiresDestinationRead || routeContext.forceSourceComposition) {
+                            diagnostics.degrade(
+                                "dispatch:${op.javaClass.simpleName}:${cmdId.value}",
+                                op.javaClass.simpleName,
+                                "dispatched",
+                            )
+                        }
                     }
                     continue
                 }

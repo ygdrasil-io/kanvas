@@ -136,6 +136,7 @@ class GPUImageFilterSurfaceTest {
         assertEquals(1, result.stats.opsDispatched)
         assertEquals(1, result.stats.opsRefused)
         assertEquals(1, result.diagnostics.fatalCount)
+        assertEquals(1, result.diagnostics.entries.size, result.diagnostics.entries.toString())
         assertEquals(
             "unsupported.image-filter.blur.tile-mode",
             result.diagnostics.entries.single().reason,
