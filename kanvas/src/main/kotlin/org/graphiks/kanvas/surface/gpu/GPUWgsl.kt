@@ -64,6 +64,13 @@ internal val RECT_AA_WGSL: String = """
     }
 """.trimIndent()
 
+/** Writes unmodulated source color S while discarding pixels whose geometric coverage is zero. */
+internal val RECT_AA_SOURCE_COLOR_WGSL: String = RECT_AA_WGSL
+    .replace(
+        "return vec4f(uniforms.color.rgb * srgb_to_linear(cov), uniforms.color.a * cov);",
+        "if (cov == 0.0) { discard; }\n        return uniforms.color;",
+    )
+
 internal val LINEAR_GRADIENT_WGSL: String = """
     struct Uniforms {
         start: vec2f,
@@ -144,6 +151,13 @@ internal val RRECT_WGSL: String = """
         return vec4f(uniforms.color.rgb * cov, uniforms.color.a * cov);
     }
 """.trimIndent()
+
+/** Writes unmodulated source color S while discarding pixels whose geometric coverage is zero. */
+internal val RRECT_SOURCE_COLOR_WGSL: String = RRECT_WGSL
+    .replace(
+        "return vec4f(uniforms.color.rgb * cov, uniforms.color.a * cov);",
+        "if (cov == 0.0) { discard; }\n        return uniforms.color;",
+    )
 
 internal val RADIAL_GRADIENT_WGSL: String = """
     struct Uniforms {
@@ -525,6 +539,86 @@ private val DESTINATION_READ_BLEND_FORMULA_WGSL: String = """
         return color.rgb / color.a;
     }
 
+    fn lum(c: vec3f) -> f32 { return dot(c, vec3f(0.3, 0.59, 0.11)); }
+    fn sat(c: vec3f) -> f32 {
+        return max(max(c.r, c.g), c.b) - min(min(c.r, c.g), c.b);
+    }
+    fn colorDodge(cb: vec3f, cs: vec3f) -> vec3f {
+        let dodged = select(
+            min(vec3f(1.0), cb / (vec3f(1.0) - cs)),
+            vec3f(1.0),
+            cs == vec3f(1.0),
+        );
+        return select(dodged, vec3f(0.0), cb == vec3f(0.0));
+    }
+    fn colorBurn(cb: vec3f, cs: vec3f) -> vec3f {
+        let burned = select(
+            vec3f(1.0) - min(vec3f(1.0), (vec3f(1.0) - cb) / cs),
+            vec3f(0.0),
+            cs == vec3f(0.0),
+        );
+        return select(burned, vec3f(1.0), cb == vec3f(1.0));
+    }
+
+    fn hardLight(cb: vec3f, cs: vec3f) -> vec3f {
+        let multiply = 2.0 * cs * cb;
+        let screen = 1.0 - 2.0 * (1.0 - cs) * (1.0 - cb);
+        return select(screen, multiply, cs <= vec3f(0.5));
+    }
+
+    fn softLight(cb: vec3f, cs: vec3f) -> vec3f {
+        let d = select(
+            sqrt(cb),
+            ((16.0 * cb - 12.0) * cb + 4.0) * cb,
+            cb <= vec3f(0.25),
+        );
+        let low = cb - (1.0 - 2.0 * cs) * cb * (1.0 - cb);
+        let high = cb + (2.0 * cs - 1.0) * (d - cb);
+        return select(high, low, cs <= vec3f(0.5));
+    }
+
+    fn clipColor(c: vec3f) -> vec3f {
+        let l = lum(c);
+        let n = min(min(c.r, c.g), c.b);
+        let x = max(max(c.r, c.g), c.b);
+        var result = c;
+        if (n < 0.0) {
+            result = vec3f(l) + (result - vec3f(l)) * l / (l - n);
+        }
+        if (x > 1.0) {
+            result = vec3f(l) + (result - vec3f(l)) * (1.0 - l) / (x - l);
+        }
+        return result;
+    }
+
+    fn setLum(c: vec3f, l: f32) -> vec3f {
+        return clipColor(c + vec3f(l - lum(c)));
+    }
+
+    fn setSat(c: vec3f, s: f32) -> vec3f {
+        let n = min(min(c.r, c.g), c.b);
+        let x = max(max(c.r, c.g), c.b);
+        let range = x - n;
+        let scaled = (c - vec3f(n)) * s / max(range, 1.0e-10);
+        return select(vec3f(0.0), scaled, range > 0.0);
+    }
+
+    fn blendHue(cb: vec3f, cs: vec3f) -> vec3f {
+        return setLum(setSat(cs, sat(cb)), lum(cb));
+    }
+
+    fn blendSaturation(cb: vec3f, cs: vec3f) -> vec3f {
+        return setLum(setSat(cb, sat(cs)), lum(cb));
+    }
+
+    fn blendColorMode(cb: vec3f, cs: vec3f) -> vec3f {
+        return setLum(cs, lum(cb));
+    }
+
+    fn blendLuminosity(cb: vec3f, cs: vec3f) -> vec3f {
+        return setLum(cb, lum(cs));
+    }
+
     fn blendColor(src: vec3f, dst: vec3f, blendMode: u32) -> vec3f {
         switch blendMode {
             case 0u: { return src * dst; }
@@ -538,6 +632,14 @@ private val DESTINATION_READ_BLEND_FORMULA_WGSL: String = """
             case 4u: { return max(src, dst); }
             case 5u: { return abs(dst - src); }
             case 6u: { return src + dst - 2.0 * src * dst; }
+            case 7u: { return colorDodge(dst, src); }
+            case 8u: { return colorBurn(dst, src); }
+            case 9u: { return hardLight(dst, src); }
+            case 10u: { return softLight(dst, src); }
+            case 11u: { return blendHue(dst, src); }
+            case 12u: { return blendSaturation(dst, src); }
+            case 13u: { return blendColorMode(dst, src); }
+            case 14u: { return blendLuminosity(dst, src); }
             default: { return src; }
         }
     }
@@ -616,6 +718,112 @@ internal val CLIP_BLEND_FORMULA_WGSL: String = """
         let src = textureSample(srcTexture, srcSampler, uv) * clipAlpha;
         let dst = textureSample(dstTexture, dstSampler, uv);
         return blendPremul(src, dst, uniforms.blendMode);
+    }
+""".trimIndent()
+
+/**
+ * Coverage-correct clip composition for every mapped blend mode.
+ *
+ * The source color texture [S] and geometry-coverage texture [G] are separate
+ * products. Every covered texel computes its complete blend first, then [G]
+ * interpolates that result with the snapshot destination. Paint/image alpha
+ * must never stand in for geometry coverage.
+ */
+internal val CLIP_COVERAGE_BLEND_WGSL: String = """
+    struct Uniforms {
+        blendMode: u32,
+    };
+
+    @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+    @group(1) @binding(1) var srcTexture: texture_2d<f32>;
+    @group(1) @binding(2) var srcSampler: sampler;
+    @group(1) @binding(3) var dstTexture: texture_2d<f32>;
+    @group(1) @binding(4) var dstSampler: sampler;
+    @group(1) @binding(5) var geometryCoverageTexture: texture_2d<f32>;
+    @group(1) @binding(6) var geometryCoverageSampler: sampler;
+
+    @vertex
+    fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
+        let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
+        let y = f32(idx & 2u) * 2.0 - 1.0;
+        return vec4f(x, y, 0.0, 1.0);
+    }
+
+    $DESTINATION_READ_BLEND_FORMULA_WGSL
+
+    fn porterDuffPremul(src: vec4f, dst: vec4f, blendMode: u32) -> vec4f {
+        switch blendMode {
+            case 0u: { return vec4f(0.0); }
+            case 1u: { return src + dst * (1.0 - src.a); }
+            case 2u: { return src; }
+            case 3u: { return dst; }
+            case 4u: { return dst + src * (1.0 - dst.a); }
+            case 5u: { return src * dst.a; }
+            case 6u: { return dst * src.a; }
+            case 7u: { return src * (1.0 - dst.a); }
+            case 8u: { return dst * (1.0 - src.a); }
+            case 9u: { return src * dst.a + dst * (1.0 - src.a); }
+            case 10u: { return dst * src.a + src * (1.0 - dst.a); }
+            case 11u: { return src * (1.0 - dst.a) + dst * (1.0 - src.a); }
+            case 12u: { return min(vec4f(1.0), src + dst); }
+            case 13u: { return vec4f(src.rgb * dst.rgb, src.a * dst.a); }
+            case 14u: { return blendPremul(src, dst, 0u); }
+            case 15u: { return blendPremul(src, dst, 1u); }
+            case 16u: { return blendPremul(src, dst, 2u); }
+            case 17u: { return blendPremul(src, dst, 3u); }
+            case 18u: { return blendPremul(src, dst, 4u); }
+            case 19u: { return blendPremul(src, dst, 7u); }
+            case 20u: { return blendPremul(src, dst, 8u); }
+            case 21u: { return blendPremul(src, dst, 9u); }
+            case 22u: { return blendPremul(src, dst, 10u); }
+            case 23u: { return blendPremul(src, dst, 5u); }
+            case 24u: { return blendPremul(src, dst, 6u); }
+            case 25u: { return blendPremul(src, dst, 11u); }
+            case 26u: { return blendPremul(src, dst, 12u); }
+            case 27u: { return blendPremul(src, dst, 13u); }
+            case 28u: { return blendPremul(src, dst, 14u); }
+            default: { return src; }
+        }
+    }
+
+    @fragment
+    fn fs_main(@builtin(position) coord: vec4f) -> @location(0) vec4f {
+        let dims = textureDimensions(srcTexture);
+        let uv = coord.xy / vec2f(dims);
+        let src = textureSample(srcTexture, srcSampler, uv);
+        let dst = textureSample(dstTexture, dstSampler, uv);
+        let coverage = textureSample(geometryCoverageTexture, geometryCoverageSampler, uv).a;
+        let blended = porterDuffPremul(src, dst, uniforms.blendMode);
+        return dst + coverage * (blended - dst);
+    }
+""".trimIndent()
+
+/** Materializes final coverage F = geometric coverage G times alpha-mask coverage C. */
+internal val COMBINE_COVERAGE_WGSL: String = """
+    struct Uniforms {
+        _pad: vec4u,
+    };
+
+    @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+    @group(1) @binding(1) var geometryCoverageTexture: texture_2d<f32>;
+    @group(1) @binding(2) var geometryCoverageSampler: sampler;
+    @group(1) @binding(3) var clipCoverageTexture: texture_2d<f32>;
+    @group(1) @binding(4) var clipCoverageSampler: sampler;
+
+    @vertex
+    fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
+        let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
+        let y = f32(idx & 2u) * 2.0 - 1.0;
+        return vec4f(x, y, 0.0, 1.0);
+    }
+
+    @fragment
+    fn fs_main(@builtin(position) coord: vec4f) -> @location(0) vec4f {
+        let dims = textureDimensions(geometryCoverageTexture);
+        let uv = coord.xy / vec2f(dims);
+        let coverage = textureSample(geometryCoverageTexture, geometryCoverageSampler, uv).a;
+        let clipCoverage = textureSample(clipCoverageTexture, clipCoverageSampler, uv).a;
+        return vec4f(0.0, 0.0, 0.0, coverage * clipCoverage);
     }
 """.trimIndent()
 

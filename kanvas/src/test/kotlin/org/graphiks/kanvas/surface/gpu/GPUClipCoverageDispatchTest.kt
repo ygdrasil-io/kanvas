@@ -215,7 +215,7 @@ class GPUClipCoverageDispatchTest {
     }
 
     @Test
-    fun `use prepass skips refused picture before later shared mask use is released`() {
+    fun `use prepass skips picture with unsupported paint before later shared mask use is released`() {
         val clip = ClipStack.Complex(
             listOf(
                 ClipStackOp.RectOp(Rect.fromLTRB(0f, 0f, 8f, 8f), ClipOp.INTERSECT, antiAlias = true),
@@ -223,7 +223,7 @@ class GPUClipCoverageDispatchTest {
         )
         val refused = DisplayOp.DrawPicture(
             picture = Picture(Rect.fromLTRB(0f, 0f, 8f, 8f), emptyList()),
-            paint = Paint.fill(Color.RED),
+            paint = Paint.stroke(Color.RED, 1f),
             transform = Matrix33.identity(),
             clip = clip,
         )
@@ -256,7 +256,7 @@ class GPUClipCoverageDispatchTest {
     }
 
     @Test
-    fun `use prepass skips complex clipped SRC before same mask src over use is released`() {
+    fun `use prepass counts complex clipped SRC and src over uses`() {
         val clip = ClipStack.Complex(
             listOf(
                 ClipStackOp.RectOp(Rect.fromLTRB(0f, 0f, 8f, 8f), ClipOp.INTERSECT, antiAlias = true),
@@ -284,8 +284,9 @@ class GPUClipCoverageDispatchTest {
             cache = cache,
         )
 
-        assertEquals(mapOf(plan.contentKey to 1), result.registeredUsesByKey)
-        assertEquals(listOf("unsupported.clip.mask.blend_mode:src"), result.refusalCodes)
+        assertEquals(mapOf(plan.contentKey to 2), result.registeredUsesByKey)
+        assertEquals(emptyList(), result.refusalCodes)
+        cache.acquire(plan) { "shared-mask" }.close()
         cache.acquire(plan) { "shared-mask" }.close()
         assertFalse(cache.contains(plan.contentKey))
         assertEquals(0L, cache.bytesInUse)
@@ -305,7 +306,10 @@ class GPUClipCoverageDispatchTest {
         val rendered = target.renderWithClip(
             context = GPUClipRouteContext(
                 sceneLabel = "scene",
-                sourceLabel = "source",
+                sourceSurface = GPUClipSourceSurface(
+                    colorLabel = "source-color",
+                    geometryCoverageLabel = "source-coverage",
+                ),
                 sourceLabelForDiagnostics = "drawRect:budget",
                 targetWidth = 8,
                 targetHeight = 8,

@@ -18,10 +18,16 @@ import org.graphiks.kanvas.surface.DiagnosticFact
 import org.graphiks.kanvas.surface.Diagnostics
 import org.graphiks.kanvas.surface.RenderConfig
 
+/** GPU-resident source products: unmodulated premultiplied color [S] and geometric coverage [G]. */
+internal data class GPUClipSourceSurface(
+    val colorLabel: String,
+    val geometryCoverageLabel: String,
+)
+
 /** Per-logical-draw ownership for source-then-clip composition. */
 internal data class GPUClipRouteContext(
     val sceneLabel: String,
-    val sourceLabel: String,
+    val sourceSurface: GPUClipSourceSurface,
     val sourceLabelForDiagnostics: String,
     val targetWidth: Int,
     val targetHeight: Int,
@@ -32,9 +38,13 @@ internal data class GPUClipRouteContext(
     val trace: GPUClipRouteTrace? = null,
     /** Forces a source texture even for fixed-function no-clip/scissor composites. */
     val forceSourceComposition: Boolean = false,
+    /** Fractional geometry coverage requires the S/G final compositor even for fixed-function modes. */
+    val coverageCompositionRequired: Boolean = false,
     /** Bounds that contain the source's non-transparent content for fixed-function composition. */
     val sourceCompositeBounds: () -> GPUBounds? = { null },
-)
+) {
+    val sourceLabel: String get() = sourceSurface.colorLabel
+}
 
 /** Test-visible accounting that prevents a ComplexStack draw from reaching a direct route. */
 internal class GPUClipRouteTrace {
@@ -120,7 +130,7 @@ internal fun GPUBackendOffscreenTarget.renderWithClip(
     GPUClipCoveragePlan.NoClip,
     is GPUClipCoveragePlan.Scissor,
     -> {
-        if (blend.requiresDestinationRead) {
+        if (blend.requiresDestinationRead || context.coverageCompositionRequired) {
             context.destinationReadComposer.compose(
                 context,
                 null,
@@ -161,39 +171,20 @@ internal fun GPUBackendOffscreenTarget.renderWithClip(
     is GPUClipCoveragePlan.Mask -> {
         try {
             acquireClipMask(clipPlan, context.frameCache, diagnostics, context.config).use { lease ->
-                val rendered = if (blend.requiresDestinationRead) {
-                    context.destinationReadComposer.compose(
-                        context,
-                        lease.mask.sampleLabel,
-                        null,
-                        blend,
-                        diagnostics,
-                        encodeSource,
-                    )
-                } else {
-                    if (!encodeSource()) return@use false
-                    encodeOffscreenTexture(context.sceneLabel, null) {
-                        drawTwoTexturePass(
-                            wgsl = CLIP_MASK_COMPOSITE_WGSL,
-                            colorFormat = context.colorFormat,
-                            firstTextureLabel = context.sourceLabel,
-                            secondTextureLabel = lease.mask.sampleLabel,
-                            draws = listOf(clipMaskCompositeUniformDraw(context.targetWidth, context.targetHeight)),
-                            blendMode = GPUBlendMode.SRC_OVER,
-                        )
-                    }
-                    true
-                }
+                val rendered = context.destinationReadComposer.compose(
+                    context,
+                    lease.mask.sampleLabel,
+                    null,
+                    blend,
+                    diagnostics,
+                    encodeSource,
+                )
                 if (!rendered) return@use false
                 context.trace?.sourceThenComposite()
                 diagnostics.degrade(
                     code = "route:clip:${context.sourceLabelForDiagnostics}",
                     operation = context.sourceLabelForDiagnostics,
-                    reason = if (blend.requiresDestinationRead) {
-                        "clip-source-snapshot-formula"
-                    } else {
-                        "clip-source-then-composite"
-                    },
+                    reason = "clip-source-snapshot-formula",
                     facts = listOf(DiagnosticFact("clip.strategy", "alpha-mask")),
                 )
                 true
@@ -208,7 +199,7 @@ internal fun GPUBackendOffscreenTarget.renderWithClip(
         }
     }
     is GPUClipCoveragePlan.Refused -> false
-}
+    }
 }
 
 /** Applies a source texture at the final composition boundary, including a device-rect scissor. */

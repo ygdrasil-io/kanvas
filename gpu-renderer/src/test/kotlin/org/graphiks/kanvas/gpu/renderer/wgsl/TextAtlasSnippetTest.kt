@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.gpu.renderer.wgsl
 
+import org.graphiks.wgsl.parser.parseWgslResult
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
@@ -39,5 +40,24 @@ class TextAtlasSnippetTest {
     @Test
     fun `entry point matches function name`() {
         assertTrue(TextAtlasA8Wgsl.contains("fn ${TextAtlasA8EntryPoint}"))
+    }
+
+    @Test
+    fun `A8 atlas WGSL sources parse through wgsl4k`() {
+        val resourceSource = checkNotNull(javaClass.getResource("/wgsl/text/a8_text_mask.wgsl")) {
+            "Missing A8 atlas WGSL resource"
+        }.readText()
+
+        mapOf(
+            "TextAtlasA8Wgsl" to TextAtlasA8Wgsl,
+            "text/a8_text_mask.wgsl" to resourceSource,
+        ).forEach { (sourceId, source) ->
+            val parsed = parseWgslResult(source)
+
+            assertTrue(
+                parsed.isSuccess,
+                "wgsl4k rejected $sourceId: ${parsed.errors.joinToString { it.message }}",
+            )
+        }
     }
 }

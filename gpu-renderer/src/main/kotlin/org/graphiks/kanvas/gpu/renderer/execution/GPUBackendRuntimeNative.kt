@@ -388,6 +388,14 @@ internal fun offscreenTargetId(
         "${request.width}x${request.height}-${request.colorFormat.normalizedColorFormat()}"
 }
 
+/**
+ * Returns the exact WGSL module consumed by [WgpuRenderRecorder.drawTextAtlasPass].
+ *
+ * It is internal solely so parser-backed tests validate the source submitted to WebGPU rather
+ * than a declarative snippet or a resource that the native execution path does not consume.
+ */
+internal fun nativeTextAtlasA8WgslSource(): String = WgpuRenderRecorder.TEXT_ATLAS_A8_WGSL
+
 internal fun gpuRuntimeRetainedResourceRefs(
     targetRef: GPUQueuedResourceRef,
     leases: List<GPUResourceLease>,
@@ -2474,7 +2482,7 @@ private class WgpuRenderRecorder(
         require(indexData.isNotEmpty()) { "indexData must not be empty" }
         if (draws.isEmpty()) return
 
-        val wgsl = TEXT_ATLAS_A8_WGSL
+        val wgsl = nativeTextAtlasA8WgslSource()
         val textureFormat = atlasFormat.toWgpuTextureFormat()
         val keys = textAtlasExecutionCacheKeys(
             wgsl = wgsl,
@@ -4405,6 +4413,8 @@ struct Uniforms {
     targetWidth: f32,
     targetHeight: f32,
     color: vec4f,
+    sourcePlane: u32,
+    _pad0: vec3u,
 };
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
@@ -4438,6 +4448,15 @@ fn vs_main(in: VertexInput) -> VertexOutput {
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let a8 = textureSample(a8_atlas_texture, a8_atlas_sampler, in.texcoord).r;
+    if (a8 == 0.0) {
+        discard;
+    }
+    if (uniforms.sourcePlane == 1u) {
+        return vec4f(uniforms.color.rgb * uniforms.color.a, uniforms.color.a);
+    }
+    if (uniforms.sourcePlane == 2u) {
+        return vec4f(0.0, 0.0, 0.0, a8);
+    }
     return vec4<f32>(uniforms.color.rgb, a8 * uniforms.color.a);
 }
 """.trimIndent()

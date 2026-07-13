@@ -9,14 +9,19 @@ import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendCoverageMaskRequest
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendStencilMode
 import org.graphiks.kanvas.gpu.renderer.execution.GPUClearColor
 import org.graphiks.kanvas.gpu.renderer.execution.GPUSurfaceTarget
+import org.graphiks.kanvas.canvas.Canvas
+import org.graphiks.kanvas.canvas.DisplayListBuffer
+import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.pipeline.ClipOp
+import org.graphiks.kanvas.picture.Picture
 import org.graphiks.kanvas.picture.PictureRecorder
 import org.graphiks.kanvas.surface.DiagnosticLevel
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -32,6 +37,306 @@ class GPUSaveLayerCompositeRegressionTest {
     @AfterEach
     fun disposeRuntime() {
         GPUBackendRuntimeFactory.dispose()
+    }
+
+    @Test
+    fun layerRestoreAcceptsEveryBlendMode() {
+        requireWebGpu()
+
+        BlendMode.entries.forEach { mode ->
+            val result = Surface(width = 8, height = 8).run {
+                canvas {
+                    drawRect(Rect(0f, 0f, 8f, 8f), Paint(color = white.toColor(), antiAlias = false))
+                    saveLayer(paint = Paint(color = translucentRed.toColor(), blendMode = mode))
+                    drawRect(Rect(2f, 2f, 6f, 6f), Paint(color = translucentBlue.toColor(), antiAlias = false))
+                    restore()
+                }
+                render()
+            }
+
+            assertEquals(0, result.diagnostics.fatalCount, "$mode ${result.diagnostics.entries}")
+            if (mode.ordinal >= BlendMode.MULTIPLY.ordinal) {
+                assertTrue(
+                    result.diagnostics.entries.any { entry ->
+                        entry.code.startsWith("route:destination-read:saveLayer:") &&
+                            entry.reason == "gpu-copy-then-formula"
+                    },
+                    "$mode saveLayer restore did not report its GPU destination-read formula route: " +
+                        result.diagnostics.entries,
+                )
+            }
+        }
+    }
+
+    /**
+     * An outer Canvas clip constrains the group restore, not every child draw in the temporary
+     * layer. Otherwise transparent layer pixels outside the clip corrupt the parent for SRC and
+     * DST_IN, and an AA clip's F is applied twice.
+     */
+    @Test
+    fun `public saveLayer defers outer scissor and AA clips to one group restore`() {
+        requireWebGpu()
+
+        listOf(BlendMode.SRC, BlendMode.DST_IN, BlendMode.MULTIPLY).forEach { mode ->
+            listOf(
+                OuterClip("scissor", Rect(12f, 12f, 24f, 24f), antiAlias = false, edge = null),
+                OuterClip("alpha-mask", Rect(12.5f, 12.5f, 23.5f, 23.5f), antiAlias = true, edge = Point(12f, 16f)),
+            ).forEach { outerClip ->
+                val result = Surface(width = 32, height = 32).run {
+                    canvas {
+                        drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE).copy(antiAlias = false))
+                        clipRect(outerClip.rect, ClipOp.INTERSECT, outerClip.antiAlias)
+                        saveLayer(paint = Paint(color = translucentRed.toColor(), blendMode = mode))
+                        drawRect(Rect(6f, 6f, 26f, 26f), Paint.fill(Color.RED).copy(antiAlias = false))
+                        restore()
+                    }
+                    render()
+                }
+
+                assertPixelNearAt(
+                    result.pixels,
+                    width = 32,
+                    x = 16,
+                    y = 16,
+                    expected = publicLayerExpected(mode, coverage = 1f),
+                    tolerance = 2,
+                )
+                // (10,16) is inside the child rect but outside the outer clip. It must leave D intact.
+                assertPixelNearAt(result.pixels, width = 32, x = 10, y = 16, expected = white, tolerance = 2)
+                outerClip.edge?.let { edge ->
+                    assertPixelNearAt(
+                        result.pixels,
+                        width = 32,
+                        x = edge.x.toInt(),
+                        y = edge.y.toInt(),
+                        expected = publicLayerExpected(mode, coverage = .5f),
+                        tolerance = 2,
+                    )
+                }
+                if (mode == BlendMode.MULTIPLY) {
+                    assertTrue(
+                        result.diagnostics.entries.any { entry ->
+                            entry.code.startsWith("route:destination-read:saveLayer:") &&
+                                entry.reason == "gpu-copy-then-formula"
+                        },
+                        "$mode/${outerClip.name} ${result.diagnostics.entries}",
+                    )
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `picture saveLayer intersects an outer scissor or AA clip at its restore`() {
+        requireWebGpu()
+
+        listOf(BlendMode.SRC, BlendMode.DST_IN, BlendMode.MULTIPLY).forEach { mode ->
+            val recorder = PictureRecorder()
+            recorder.beginRecording(Rect(0f, 0f, 32f, 32f)).apply {
+                saveLayer(paint = Paint(color = translucentRed.toColor(), blendMode = mode))
+                drawRect(Rect(6f, 6f, 26f, 26f), Paint.fill(Color.RED).copy(antiAlias = false))
+                restore()
+            }
+            val picture = recorder.finishRecordingAsPicture()
+
+            listOf(
+                OuterClip("scissor", Rect(12f, 12f, 24f, 24f), antiAlias = false, edge = null),
+                OuterClip("alpha-mask", Rect(12.5f, 12.5f, 23.5f, 23.5f), antiAlias = true, edge = Point(12f, 16f)),
+            ).forEach { outerClip ->
+                val result = Surface(width = 32, height = 32).run {
+                    canvas {
+                        drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE).copy(antiAlias = false))
+                        clipRect(outerClip.rect, ClipOp.INTERSECT, outerClip.antiAlias)
+                        drawPicture(picture)
+                    }
+                    render()
+                }
+
+                assertPixelNearAt(
+                    result.pixels,
+                    width = 32,
+                    x = 16,
+                    y = 16,
+                    expected = publicLayerExpected(mode, coverage = 1f),
+                    tolerance = 2,
+                )
+                assertPixelNearAt(result.pixels, width = 32, x = 10, y = 16, expected = white, tolerance = 2)
+                outerClip.edge?.let { edge ->
+                    assertPixelNearAt(
+                        result.pixels,
+                        width = 32,
+                        x = edge.x.toInt(),
+                        y = edge.y.toInt(),
+                        expected = publicLayerExpected(mode, coverage = .5f),
+                        tolerance = 2,
+                    )
+                }
+                if (mode == BlendMode.MULTIPLY) {
+                    assertTrue(
+                        result.diagnostics.entries.any { entry ->
+                            entry.code.startsWith("route:destination-read:saveLayer:") &&
+                                entry.reason == "gpu-copy-then-formula"
+                        },
+                        "$mode/${outerClip.name} ${result.diagnostics.entries}",
+                    )
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `picture playback keeps its layer clip and applies the host AA clip once`() {
+        requireWebGpu()
+
+        listOf(BlendMode.SRC, BlendMode.DST_IN).forEach { mode ->
+            val recorder = PictureRecorder()
+            recorder.beginRecording(Rect(0f, 0f, 32f, 32f)).apply {
+                clipRect(Rect(8f, 8f, 24f, 24f), ClipOp.INTERSECT, antiAlias = false)
+                saveLayer(paint = Paint(color = translucentRed.toColor(), blendMode = mode))
+                drawRect(Rect(6f, 6f, 26f, 26f), Paint.fill(Color.RED).copy(antiAlias = false))
+                restore()
+            }
+            val picture = recorder.finishRecordingAsPicture()
+            val result = Surface(width = 32, height = 32).run {
+                canvas {
+                    drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE).copy(antiAlias = false))
+                    clipRect(Rect(12.5f, 12.5f, 23.5f, 23.5f), ClipOp.INTERSECT, antiAlias = true)
+                    picture.playback(this)
+                }
+                render()
+            }
+
+            assertPixelNearAt(
+                result.pixels,
+                width = 32,
+                x = 16,
+                y = 16,
+                expected = publicLayerExpected(mode, coverage = 1f),
+                tolerance = 2,
+            )
+            assertPixelNearAt(result.pixels, width = 32, x = 10, y = 16, expected = white, tolerance = 2)
+            assertPixelNearAt(
+                result.pixels,
+                width = 32,
+                x = 12,
+                y = 16,
+                expected = publicLayerExpected(mode, coverage = .5f),
+                tolerance = 2,
+            )
+        }
+    }
+
+    @Test
+    fun `picture deferred layer preserves mixed AA and hard clip edges`() {
+        requireWebGpu()
+
+        listOf(
+            MixedClipFixture(
+                name = "outer-AA-inner-hard",
+                pictureClip = Rect(8f, 8f, 23.5f, 24f),
+                pictureClipAntiAlias = false,
+                hostClip = Rect(8.5f, 8f, 24f, 24f),
+                hostClipAntiAlias = true,
+            ),
+            MixedClipFixture(
+                name = "outer-hard-inner-AA",
+                pictureClip = Rect(8.5f, 8f, 24f, 24f),
+                pictureClipAntiAlias = true,
+                hostClip = Rect(8f, 8f, 23.5f, 24f),
+                hostClipAntiAlias = false,
+            ),
+        ).forEach { fixture ->
+            listOf(BlendMode.SRC, BlendMode.DST_IN, BlendMode.MULTIPLY).forEach { mode ->
+                val picture = deferredLayerPicture(fixture, mode)
+                val result = Surface(width = 32, height = 32).run {
+                    canvas {
+                        drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE).copy(antiAlias = false))
+                        clipRect(fixture.hostClip, ClipOp.INTERSECT, fixture.hostClipAntiAlias)
+                        picture.playback(this)
+                    }
+                    render()
+                }
+
+                // The AA edge is retained at x=8, while the hard edge at x=23.5 excludes x=23.
+                assertPixelNearAt(
+                    result.pixels,
+                    width = 32,
+                    x = 8,
+                    y = 16,
+                    expected = publicLayerExpected(mode, coverage = .5f),
+                    tolerance = 2,
+                )
+                assertPixelNearAt(
+                    result.pixels,
+                    width = 32,
+                    x = 22,
+                    y = 16,
+                    expected = publicLayerExpected(mode, coverage = 1f),
+                    tolerance = 2,
+                )
+                assertPixelNearAt(result.pixels, width = 32, x = 23, y = 16, expected = white, tolerance = 2)
+            }
+        }
+    }
+
+    @Test
+    fun `drawPicture preserves mixed AA and hard deferred layer clip edges`() {
+        requireWebGpu()
+
+        listOf(
+            RecordedClipFixture(
+                name = "outer-AA-inner-hard",
+                clips = listOf(
+                    RecordedClip(Rect(8.5f, 8f, 24f, 24f), antiAlias = true),
+                    RecordedClip(Rect(8f, 8f, 23.5f, 24f), antiAlias = false),
+                ),
+            ),
+            RecordedClipFixture(
+                name = "outer-hard-inner-AA",
+                clips = listOf(
+                    RecordedClip(Rect(8f, 8f, 23.5f, 24f), antiAlias = false),
+                    RecordedClip(Rect(8.5f, 8f, 24f, 24f), antiAlias = true),
+                ),
+            ),
+        ).forEach { fixture ->
+            listOf(BlendMode.SRC, BlendMode.DST_IN, BlendMode.MULTIPLY).forEach { mode ->
+                val recorder = PictureRecorder()
+                recorder.beginRecording(Rect(0f, 0f, 32f, 32f)).apply {
+                    fixture.clips.forEach { clip ->
+                        clipRect(clip.rect, ClipOp.INTERSECT, clip.antiAlias)
+                    }
+                    saveLayer(paint = Paint(color = translucentRed.toColor(), blendMode = mode))
+                    drawRect(Rect(6f, 6f, 26f, 26f), Paint.fill(Color.RED).copy(antiAlias = false))
+                    restore()
+                }
+                val picture = recorder.finishRecordingAsPicture()
+                val result = Surface(width = 32, height = 32).run {
+                    canvas {
+                        drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE).copy(antiAlias = false))
+                        drawPicture(picture)
+                    }
+                    render()
+                }
+
+                assertPixelNearAt(
+                    result.pixels,
+                    width = 32,
+                    x = 8,
+                    y = 16,
+                    expected = publicLayerExpected(mode, coverage = .5f),
+                    tolerance = 2,
+                )
+                assertPixelNearAt(
+                    result.pixels,
+                    width = 32,
+                    x = 22,
+                    y = 16,
+                    expected = publicLayerExpected(mode, coverage = 1f),
+                    tolerance = 2,
+                )
+                assertPixelNearAt(result.pixels, width = 32, x = 23, y = 16, expected = white, tolerance = 2)
+            }
+        }
     }
 
     @Test
@@ -100,7 +405,7 @@ class GPUSaveLayerCompositeRegressionTest {
     }
 
     @Test
-    fun `ordinary saveLayer refuses clipped DrawColor SRC before it reaches its parent`() {
+    fun `ordinary saveLayer composes clipped DrawColor SRC before restore`() {
         requireWebGpu()
 
         val surface = Surface(width = 8, height = 8)
@@ -120,18 +425,14 @@ class GPUSaveLayerCompositeRegressionTest {
             result.pixels,
             x = 2,
             y = 2,
-            expected = checkerGray,
-            tolerance = 0,
+            expected = sourceOverSrgb(translucentBackground, checkerGray),
+            tolerance = 2,
         )
-        assertEquals(1, result.diagnostics.fatalCount)
-        assertEquals(
-            "unsupported.clip.mask.blend_mode:src",
-            result.diagnostics.entries.single { it.level == DiagnosticLevel.FATAL }.reason,
-        )
+        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
     }
 
     @Test
-    fun `advanced blend composes after a preceding clipped DrawColor SRC refusal`() {
+    fun `advanced blend composes after a preceding clipped DrawColor SRC`() {
         requireWebGpu()
 
         val surface = Surface(width = 8, height = 8)
@@ -155,18 +456,10 @@ class GPUSaveLayerCompositeRegressionTest {
             result.pixels,
             x = 2,
             y = 2,
-            expected = checkerGray,
-            tolerance = 0,
+            expected = sourceOverSrgb(translucentBackground, checkerGray),
+            tolerance = 2,
         )
-        assertEquals(1, result.diagnostics.fatalCount)
-        assertEquals(
-            listOf(
-                "unsupported.clip.mask.blend_mode:src",
-            ),
-            result.diagnostics.entries
-                .filter { it.level == DiagnosticLevel.FATAL }
-                .map { it.reason },
-        )
+        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
     }
 
     @Test
@@ -205,7 +498,7 @@ class GPUSaveLayerCompositeRegressionTest {
     }
 
     @Test
-    fun `DrawPicture containing saveLayer is refused before any child reaches its parent`() {
+    fun `DrawPicture containing saveLayer restores the nested layer`() {
         requireWebGpu()
 
         val recorder = PictureRecorder()
@@ -224,16 +517,52 @@ class GPUSaveLayerCompositeRegressionTest {
 
         val result = surface.render()
 
-        assertPixelNear(result.pixels, x = 2, y = 2, expected = white, tolerance = 0)
-        assertEquals(1, result.diagnostics.fatalCount)
-        assertEquals(
-            "unsupported.picture.save_layer",
-            result.diagnostics.entries.single { it.level == DiagnosticLevel.FATAL }.reason,
+        assertPixelNear(
+            result.pixels,
+            x = 2,
+            y = 2,
+            expected = sourceOverSrgb(translucentBlue, sourceOverSrgb(translucentRed, white)),
+            tolerance = 2,
         )
+        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
     }
 
     @Test
-    fun `clipped DrawPicture refuses a nested multiply before source routing`() {
+    fun `translated DrawPicture with captured clip and bounded saveLayer refuses before encoding`() {
+        requireWebGpu()
+
+        val recorder = PictureRecorder()
+        recorder.beginRecording(Rect(0f, 0f, 8f, 8f)).apply {
+            saveLayer(Rect(0f, 0f, 4f, 4f))
+            save()
+            clipRect(Rect(1f, 1f, 4f, 4f), ClipOp.INTERSECT, antiAlias = false)
+            drawRect(Rect(0f, 0f, 4f, 4f), Paint(color = translucentRed.toColor(), antiAlias = false))
+            restore()
+            restore()
+        }
+        val picture = recorder.finishRecordingAsPicture()
+
+        val result = Surface(width = 8, height = 8).run {
+            canvas {
+                drawRect(Rect(0f, 0f, 8f, 8f), Paint(color = white.toColor(), antiAlias = false))
+                translate(2f, 1f)
+                drawPicture(picture)
+            }
+            render()
+        }
+
+        assertEquals(1, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertTrue(
+            result.diagnostics.entries.any { it.reason == "unsupported.picture.transformed_layer" },
+            result.diagnostics.entries.toString(),
+        )
+        assertPixelNear(result.pixels, x = 2, y = 2, expected = white, tolerance = 0)
+        assertPixelNear(result.pixels, x = 4, y = 3, expected = white, tolerance = 0)
+        assertPixelNear(result.pixels, x = 6, y = 3, expected = white, tolerance = 0)
+    }
+
+    @Test
+    fun `clipped DrawPicture composes a nested multiply through the source formula`() {
         requireWebGpu()
 
         val recorder = PictureRecorder()
@@ -255,11 +584,8 @@ class GPUSaveLayerCompositeRegressionTest {
             render()
         }
 
-        assertEquals(1, result.stats.opsRefused)
-        assertTrue(result.diagnostics.entries.any {
-            it.reason == "unsupported.picture.nested_destination_read_blend:multiply"
-        })
-        assertFalse(result.diagnostics.entries.any { it.reason == "dispatched" && it.operation == "drawPicture" })
+        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertTrue(result.diagnostics.entries.any { it.reason == "gpu-copy-then-formula" })
     }
 
     @Test
@@ -691,6 +1017,43 @@ class GPUSaveLayerCompositeRegressionTest {
         }
     }
 
+    private fun assertPixelNearAt(
+        pixels: UByteArray,
+        width: Int,
+        x: Int,
+        y: Int,
+        expected: Rgba,
+        tolerance: Int,
+    ) {
+        val offset = (y * width + x) * 4
+        val actual = IntArray(4) { channel -> pixels[offset + channel].toInt() and 0xff }
+        actual.zip(expected.toIntArray()).forEachIndexed { channel, (actualByte, expectedByte) ->
+            assertTrue(
+                kotlin.math.abs(actualByte - expectedByte) <= tolerance,
+                "channel=$channel at ($x,$y): expected=$expectedByte +/- $tolerance, actual=$actualByte",
+            )
+        }
+    }
+
+    private fun publicLayerExpected(mode: BlendMode, coverage: Float): Rgba = when (mode) {
+        BlendMode.SRC -> when (coverage) {
+            1f -> Rgba(red = 188, green = 0, blue = 0, alpha = 128)
+            .5f -> Rgba(red = 225, green = 188, blue = 188, alpha = 191)
+            else -> error("unsupported coverage $coverage")
+        }
+        BlendMode.DST_IN -> when (coverage) {
+            1f -> Rgba(red = 188, green = 188, blue = 188, alpha = 128)
+            .5f -> Rgba(red = 225, green = 225, blue = 225, alpha = 191)
+            else -> error("unsupported coverage $coverage")
+        }
+        BlendMode.MULTIPLY -> when (coverage) {
+            1f -> Rgba(red = 255, green = 188, blue = 188, alpha = 255)
+            .5f -> Rgba(red = 255, green = 225, blue = 225, alpha = 255)
+            else -> error("unsupported coverage $coverage")
+        }
+        else -> error("fixture only defines SRC, DST_IN, and MULTIPLY")
+    }
+
     private fun assertPixelNearPixels(
         actual: UByteArray,
         expected: UByteArray,
@@ -749,6 +1112,52 @@ class GPUSaveLayerCompositeRegressionTest {
         fun toColor(): Color = Color.fromRGBA(red / 255f, green / 255f, blue / 255f, alpha / 255f)
 
         fun toIntArray(): IntArray = intArrayOf(red, green, blue, alpha)
+    }
+
+    private data class OuterClip(
+        val name: String,
+        val rect: Rect,
+        val antiAlias: Boolean,
+        val edge: Point?,
+    )
+
+    private data class MixedClipFixture(
+        val name: String,
+        val pictureClip: Rect,
+        val pictureClipAntiAlias: Boolean,
+        val hostClip: Rect,
+        val hostClipAntiAlias: Boolean,
+    )
+
+    private data class RecordedClipFixture(
+        val name: String,
+        val clips: List<RecordedClip>,
+    )
+
+    private data class RecordedClip(
+        val rect: Rect,
+        val antiAlias: Boolean,
+    )
+
+    private fun deferredLayerPicture(fixture: MixedClipFixture, mode: BlendMode): Picture {
+        val buffer = DeferredPictureBuffer()
+        Canvas(buffer).apply {
+            clipRect(fixture.pictureClip, ClipOp.INTERSECT, fixture.pictureClipAntiAlias)
+            saveLayer(paint = Paint(color = translucentRed.toColor(), blendMode = mode))
+            drawRect(Rect(6f, 6f, 26f, 26f), Paint.fill(Color.RED).copy(antiAlias = false))
+            restore()
+        }
+        return Picture(Rect(0f, 0f, 32f, 32f), buffer.ops())
+    }
+
+    private class DeferredPictureBuffer : DisplayListBuffer {
+        private val recordedOps = mutableListOf<DisplayOp>()
+
+        override fun append(op: DisplayOp) {
+            recordedOps += op
+        }
+
+        override fun ops(): List<DisplayOp> = recordedOps.toList()
     }
 
     private companion object {

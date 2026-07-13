@@ -21,9 +21,17 @@ enum class GPUBlendMode(
     val requiresDestinationRead: Boolean = false,
 ) {
     // Porter-Duff modes: exact GPU fixed-function blend.
+    CLEAR("clear", GPUBlendFactor.Zero, GPUBlendFactor.Zero, GPUBlendFactor.Zero, GPUBlendFactor.Zero),
     SRC_OVER("src_over", GPUBlendFactor.One, GPUBlendFactor.OneMinusSrcAlpha, GPUBlendFactor.One, GPUBlendFactor.OneMinusSrcAlpha),
     SRC("src", GPUBlendFactor.One, GPUBlendFactor.Zero, GPUBlendFactor.One, GPUBlendFactor.Zero),
     DST("dst", GPUBlendFactor.Zero, GPUBlendFactor.One, GPUBlendFactor.Zero, GPUBlendFactor.One),
+    DST_OVER(
+        "dst_over",
+        GPUBlendFactor.OneMinusDstAlpha,
+        GPUBlendFactor.One,
+        GPUBlendFactor.OneMinusDstAlpha,
+        GPUBlendFactor.One,
+    ),
     SRC_IN("src_in", GPUBlendFactor.DstAlpha, GPUBlendFactor.Zero, GPUBlendFactor.DstAlpha, GPUBlendFactor.Zero),
     DST_IN("dst_in", GPUBlendFactor.Zero, GPUBlendFactor.SrcAlpha, GPUBlendFactor.Zero, GPUBlendFactor.SrcAlpha),
     SRC_OUT("src_out", GPUBlendFactor.OneMinusDstAlpha, GPUBlendFactor.Zero, GPUBlendFactor.OneMinusDstAlpha, GPUBlendFactor.Zero),
@@ -39,6 +47,14 @@ enum class GPUBlendMode(
     OVERLAY("overlay", GPUBlendFactor.Dst, GPUBlendFactor.OneMinusSrcAlpha, GPUBlendFactor.One, GPUBlendFactor.OneMinusSrcAlpha, requiresDestinationRead = true),
     DARKEN("darken", GPUBlendFactor.OneMinusDst, GPUBlendFactor.OneMinusSrcAlpha, GPUBlendFactor.One, GPUBlendFactor.OneMinusSrcAlpha, requiresDestinationRead = true),
     LIGHTEN("lighten", GPUBlendFactor.One, GPUBlendFactor.OneMinusSrcAlpha, GPUBlendFactor.One, GPUBlendFactor.OneMinusSrcAlpha, requiresDestinationRead = true),
+    COLOR_DODGE("color_dodge", GPUBlendFactor.One, GPUBlendFactor.OneMinusSrcAlpha, GPUBlendFactor.One, GPUBlendFactor.OneMinusSrcAlpha, requiresDestinationRead = true),
+    COLOR_BURN("color_burn", GPUBlendFactor.One, GPUBlendFactor.OneMinusSrcAlpha, GPUBlendFactor.One, GPUBlendFactor.OneMinusSrcAlpha, requiresDestinationRead = true),
+    HARD_LIGHT("hard_light", GPUBlendFactor.One, GPUBlendFactor.OneMinusSrcAlpha, GPUBlendFactor.One, GPUBlendFactor.OneMinusSrcAlpha, requiresDestinationRead = true),
+    SOFT_LIGHT("soft_light", GPUBlendFactor.One, GPUBlendFactor.OneMinusSrcAlpha, GPUBlendFactor.One, GPUBlendFactor.OneMinusSrcAlpha, requiresDestinationRead = true),
     DIFFERENCE("difference", GPUBlendFactor.One, GPUBlendFactor.OneMinusSrcAlpha, GPUBlendFactor.One, GPUBlendFactor.OneMinusSrcAlpha, requiresDestinationRead = true),
     EXCLUSION("exclusion", GPUBlendFactor.One, GPUBlendFactor.OneMinusSrcAlpha, GPUBlendFactor.One, GPUBlendFactor.OneMinusSrcAlpha, requiresDestinationRead = true),
+    HUE("hue", GPUBlendFactor.One, GPUBlendFactor.OneMinusSrcAlpha, GPUBlendFactor.One, GPUBlendFactor.OneMinusSrcAlpha, requiresDestinationRead = true),
+    SATURATION("saturation", GPUBlendFactor.One, GPUBlendFactor.OneMinusSrcAlpha, GPUBlendFactor.One, GPUBlendFactor.OneMinusSrcAlpha, requiresDestinationRead = true),
+    COLOR("color", GPUBlendFactor.One, GPUBlendFactor.OneMinusSrcAlpha, GPUBlendFactor.One, GPUBlendFactor.OneMinusSrcAlpha, requiresDestinationRead = true),
+    LUMINOSITY("luminosity", GPUBlendFactor.One, GPUBlendFactor.OneMinusSrcAlpha, GPUBlendFactor.One, GPUBlendFactor.OneMinusSrcAlpha, requiresDestinationRead = true),
 }

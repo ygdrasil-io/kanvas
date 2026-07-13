@@ -16,6 +16,8 @@ internal fun GPUBackendRenderRecorder.dispatchFillRRect(
     surfaceHeight: Int,
     config: RenderConfig,
     recordResult: Boolean = true,
+    /** Emits unmodulated S while the sibling coverage pass emits G. */
+    uncoveredSourceColor: Boolean = false,
 ) {
     fun refuse(reason: String) {
         diagnostics.fatal("refuse:${cmd.diagnosticName}", cmd.diagnosticName, reason)
@@ -59,7 +61,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillRRect(
     bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f)
 
     drawFullscreenRawUniformPass(
-        wgsl = RRECT_WGSL,
+        wgsl = if (uncoveredSourceColor) RRECT_SOURCE_COLOR_WGSL else RRECT_WGSL,
         colorFormat = config.gpuColorFormat.gpuLabel,
         draws = listOf(
             GPUBackendRawUniformDraw(

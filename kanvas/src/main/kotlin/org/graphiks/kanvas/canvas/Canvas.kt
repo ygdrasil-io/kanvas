@@ -20,7 +20,10 @@ import org.graphiks.kanvas.paint.BlendMode
  */
 class Canvas internal constructor(private val buffer: DisplayListBuffer) {
     private var currentTransform = Matrix33.identity()
+    /** Clip exposed to Canvas queries such as [quickReject] and [localClipBounds]. */
     private var currentClip: ClipStack = ClipStack.WideOpen
+    /** Clip recorded on child DisplayOps; an outer saveLayer clip is deferred to its restore. */
+    private var currentRecordedClip: ClipStack = ClipStack.WideOpen
     private var saveStack = mutableListOf<Pair<CanvasState, Boolean>>() // (state, isLayer)
 
     /** The current transform matrix. */
@@ -78,17 +81,17 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
 
     /** Draw an axis-aligned rectangle filled/stroked with [paint]. */
     fun drawRect(rect: Rect, paint: Paint) {
-        buffer.append(DisplayOp.DrawRect(rect, paint, currentTransform, currentClip))
+        buffer.append(DisplayOp.DrawRect(rect, paint, currentTransform, currentRecordedClip))
     }
 
     /** Draw a rounded rectangle filled/stroked with [paint]. */
     fun drawRRect(rrect: RRect, paint: Paint) {
-        buffer.append(DisplayOp.DrawRRect(rrect, paint, currentTransform, currentClip))
+        buffer.append(DisplayOp.DrawRRect(rrect, paint, currentTransform, currentRecordedClip))
     }
 
     /** Draw an arbitrary [path] filled/stroked with [paint]. */
     fun drawPath(path: Path, paint: Paint) {
-        buffer.append(DisplayOp.DrawPath(path, paint, currentTransform, currentClip))
+        buffer.append(DisplayOp.DrawPath(path, paint, currentTransform, currentRecordedClip))
     }
 
     /**
@@ -98,7 +101,7 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
      */
     fun drawImage(image: Image, dst: Rect, paint: Paint? = null) {
         val src = Rect.fromLTRB(0f, 0f, image.width.toFloat(), image.height.toFloat())
-        buffer.append(DisplayOp.DrawImage(image, src, dst, paint, currentTransform, currentClip))
+        buffer.append(DisplayOp.DrawImage(image, src, dst, paint, currentTransform, currentRecordedClip))
     }
 
     /**
@@ -107,12 +110,12 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
      * @param paint Optional [Paint] for alpha modulation or color filtering.
      */
     fun drawImageRect(image: Image, src: Rect, dst: Rect, paint: Paint? = null) {
-        buffer.append(DisplayOp.DrawImage(image, src, dst, paint, currentTransform, currentClip))
+        buffer.append(DisplayOp.DrawImage(image, src, dst, paint, currentTransform, currentRecordedClip))
     }
 
     /** Draw a [TextBlob] at the given position with [paint]. */
     fun drawText(blob: TextBlob, x: Float, y: Float, paint: Paint) {
-        buffer.append(DisplayOp.DrawText(blob, x, y, paint, currentTransform, currentClip))
+        buffer.append(DisplayOp.DrawText(blob, x, y, paint, currentTransform, currentRecordedClip))
     }
 
     /** Draw a string at (x, y) using [font], rendered with [paint]. */
@@ -128,7 +131,7 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
 
     /** Fill the entire canvas with [color] using optional [mode] (default: SRC_OVER). */
     fun drawColor(color: Color, mode: BlendMode = BlendMode.SRC_OVER) {
-        buffer.append(DisplayOp.DrawColor(color, mode, currentTransform, currentClip))
+        buffer.append(DisplayOp.DrawColor(color, mode, currentTransform, currentRecordedClip))
     }
 
     /** Overwrite the entire canvas with [color]. */
@@ -138,50 +141,50 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
 
     /** Draw a single point at (x, y). */
     fun drawPoint(x: Float, y: Float, paint: Paint) {
-        buffer.append(DisplayOp.DrawPoint(x, y, paint, currentTransform, currentClip))
+        buffer.append(DisplayOp.DrawPoint(x, y, paint, currentTransform, currentRecordedClip))
     }
 
     /** Draw a list of [points] with the given point [mode]. */
     fun drawPoints(mode: PointMode, points: List<Point>, paint: Paint) {
-        buffer.append(DisplayOp.DrawPoints(mode, points, paint, currentTransform, currentClip))
+        buffer.append(DisplayOp.DrawPoints(mode, points, paint, currentTransform, currentRecordedClip))
     }
 
     /** Draw a double rounded rectangle (outer fill, inner hole). */
     fun drawDRRect(outer: RRect, inner: RRect, paint: Paint) {
-        buffer.append(DisplayOp.DrawDRRect(outer, inner, paint, currentTransform, currentClip))
+        buffer.append(DisplayOp.DrawDRRect(outer, inner, paint, currentTransform, currentRecordedClip))
     }
 
     /** Draw a 9-patch [image] with [center] defining corner sizes, scaled to [dst]. */
     fun drawImageNine(image: Image, center: Rect, dst: Rect, paint: Paint? = null) {
-        buffer.append(DisplayOp.DrawImageNine(image, center, dst, paint, currentTransform, currentClip))
+        buffer.append(DisplayOp.DrawImageNine(image, center, dst, paint, currentTransform, currentRecordedClip))
     }
 
     /** Draw a lattice [image] over a grid defined by [lattice], scaled to [dst]. */
     fun drawImageLattice(image: Image, lattice: Lattice, dst: Rect, paint: Paint? = null) {
-        buffer.append(DisplayOp.DrawImageLattice(image, lattice, dst, paint, currentTransform, currentClip))
+        buffer.append(DisplayOp.DrawImageLattice(image, lattice, dst, paint, currentTransform, currentRecordedClip))
     }
 
     /** Draw a pre-recorded [picture] with optional [paint] modulation. */
     fun drawPicture(picture: Picture, paint: Paint? = null) {
-        buffer.append(DisplayOp.DrawPicture(picture, paint, currentTransform, currentClip))
+        buffer.append(DisplayOp.DrawPicture(picture, paint, currentTransform, currentRecordedClip))
     }
 
     /** Draw a triangle mesh from [vertices]. */
     fun drawVertices(vertices: Vertices, paint: Paint) {
-        buffer.append(DisplayOp.DrawVertices(vertices, paint, currentTransform, currentClip))
+        buffer.append(DisplayOp.DrawVertices(vertices, paint, currentTransform, currentRecordedClip))
     }
 
     fun drawMesh(mesh: Mesh, paint: Paint, blendMode: BlendMode? = null) {
         if (mesh.program != null) {
-            buffer.append(DisplayOp.DrawMesh(mesh, paint, blendMode, currentTransform, currentClip))
+            buffer.append(DisplayOp.DrawMesh(mesh, paint, blendMode, currentTransform, currentRecordedClip))
         } else {
-            drawVertices(mesh.vertices, paint)
+            drawVertices(mesh.vertices, paint.copy(blendMode = blendMode ?: paint.blendMode))
         }
     }
 
     /** Batch-draw sprites from [atlas] texture. */
     fun drawAtlas(atlas: Image, transforms: List<Matrix33>, texRects: List<Rect>, colors: List<Color>? = null, blendMode: BlendMode = BlendMode.SRC_OVER, paint: Paint? = null) {
-        buffer.append(DisplayOp.DrawAtlas(atlas, transforms, texRects, colors, blendMode, paint, currentTransform, currentClip))
+        buffer.append(DisplayOp.DrawAtlas(atlas, transforms, texRects, colors, blendMode, paint, currentTransform, currentRecordedClip))
     }
 
     /** Add a metadata annotation (no visual output). */
@@ -195,7 +198,7 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
      * @return The new save count (depth of the save stack).
      */
     fun save(): Int {
-        saveStack.add(CanvasState(currentTransform, currentClip) to false)
+        saveStack.add(CanvasState(currentTransform, currentClip, currentRecordedClip) to false)
         return saveStack.size
     }
 
@@ -212,8 +215,15 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
 
     /** Save state and begin a layer described by [rec], including an optional backdrop filter. */
     fun saveLayer(rec: SaveLayerRec): Int {
-        buffer.append(DisplayOp.BeginLayer(rec, currentTransform))
-        saveStack.add(CanvasState(currentTransform, currentClip) to true)
+        val compositeClip = (rec.compositeClip ?: ClipStack.WideOpen)
+            .intersectWith(currentRecordedClip)
+            .takeUnless { it == ClipStack.WideOpen }
+        val layerRec = if (compositeClip == rec.compositeClip) rec else rec.copy(compositeClip = compositeClip)
+        buffer.append(DisplayOp.BeginLayer(layerRec, currentTransform))
+        saveStack.add(CanvasState(currentTransform, currentClip, currentRecordedClip) to true)
+        // Keep the semantic clip visible to Canvas APIs, but defer it from children to the layer
+        // restore. This applies an AA coverage F exactly once and preserves parent pixels outside.
+        currentRecordedClip = ClipStack.WideOpen
         return saveStack.size
     }
 
@@ -223,6 +233,7 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
             val (state, isLayer) = saveStack.removeLast()
             currentTransform = state.transform
             currentClip = state.clip
+            currentRecordedClip = state.recordedClip
             if (isLayer) buffer.append(DisplayOp.EndLayer)
         }
     }
@@ -286,17 +297,9 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
      */
     fun clipRect(rect: Rect, op: ClipOp = ClipOp.INTERSECT, antiAlias: Boolean = true) {
         val newOp = captureClipRect(rect, op, antiAlias)
-        val prevClip = currentClip
-        currentClip = when (prevClip) {
-            ClipStack.WideOpen -> if (op == ClipOp.INTERSECT && newOp is ClipStackOp.RectOp) {
-                ClipStack.DeviceRect(newOp.rect, antiAlias)
-            } else {
-                ClipStack.Complex(listOf(newOp))
-            }
-            is ClipStack.DeviceRect -> ClipStack.Complex(listOf(ClipStackOp.RectOp(prevClip.rect, ClipOp.INTERSECT, prevClip.antiAlias), newOp))
-            is ClipStack.Complex -> ClipStack.Complex(prevClip.ops + newOp)
-        }
-        buffer.append(DisplayOp.SetClip(currentClip))
+        currentClip = appendClip(currentClip, newOp, allowDeviceRect = true)
+        currentRecordedClip = appendClip(currentRecordedClip, newOp, allowDeviceRect = true)
+        buffer.append(DisplayOp.SetClip(currentRecordedClip))
     }
 
     /**
@@ -306,13 +309,9 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
      */
     fun clipRRect(rrect: RRect, op: ClipOp = ClipOp.INTERSECT, antiAlias: Boolean = true) {
         val newOp = captureClipRRect(rrect, op, antiAlias)
-        val prevClip = currentClip
-        currentClip = when (prevClip) {
-            ClipStack.WideOpen -> ClipStack.Complex(listOf(newOp))
-            is ClipStack.DeviceRect -> ClipStack.Complex(listOf(ClipStackOp.RectOp(prevClip.rect, ClipOp.INTERSECT, prevClip.antiAlias), newOp))
-            is ClipStack.Complex -> ClipStack.Complex(prevClip.ops + newOp)
-        }
-        buffer.append(DisplayOp.SetClip(currentClip))
+        currentClip = appendClip(currentClip, newOp, allowDeviceRect = false)
+        currentRecordedClip = appendClip(currentRecordedClip, newOp, allowDeviceRect = false)
+        buffer.append(DisplayOp.SetClip(currentRecordedClip))
     }
 
     /**
@@ -322,13 +321,9 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
      */
     fun clipPath(path: Path, op: ClipOp = ClipOp.INTERSECT, antiAlias: Boolean = true) {
         val newOp = captureClipPath(path, op, antiAlias)
-        val prevClip = currentClip
-        currentClip = when (prevClip) {
-            ClipStack.WideOpen -> ClipStack.Complex(listOf(newOp))
-            is ClipStack.DeviceRect -> ClipStack.Complex(listOf(ClipStackOp.RectOp(prevClip.rect, ClipOp.INTERSECT, prevClip.antiAlias), newOp))
-            is ClipStack.Complex -> ClipStack.Complex(prevClip.ops + newOp)
-        }
-        buffer.append(DisplayOp.SetClip(currentClip))
+        currentClip = appendClip(currentClip, newOp, allowDeviceRect = false)
+        currentRecordedClip = appendClip(currentRecordedClip, newOp, allowDeviceRect = false)
+        buffer.append(DisplayOp.SetClip(currentRecordedClip))
     }
 
     private fun captureClipRect(rect: Rect, op: ClipOp, antiAlias: Boolean): ClipStackOp = when {
@@ -357,5 +352,25 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
             perspectiveCaptureRefusal = !currentTransform.isAffine(),
         )
 
-    private data class CanvasState(val transform: Matrix33, val clip: ClipStack)
+    private fun appendClip(
+        previous: ClipStack,
+        newOp: ClipStackOp,
+        allowDeviceRect: Boolean,
+    ): ClipStack = when (previous) {
+        ClipStack.WideOpen -> if (allowDeviceRect && newOp is ClipStackOp.RectOp && newOp.op == ClipOp.INTERSECT) {
+            ClipStack.DeviceRect(newOp.rect, newOp.antiAlias)
+        } else {
+            ClipStack.Complex(listOf(newOp))
+        }
+        is ClipStack.DeviceRect -> ClipStack.Complex(
+            listOf(ClipStackOp.RectOp(previous.rect, ClipOp.INTERSECT, previous.antiAlias), newOp),
+        )
+        is ClipStack.Complex -> ClipStack.Complex(previous.ops + newOp)
+    }
+
+    private data class CanvasState(
+        val transform: Matrix33,
+        val clip: ClipStack,
+        val recordedClip: ClipStack,
+    )
 }

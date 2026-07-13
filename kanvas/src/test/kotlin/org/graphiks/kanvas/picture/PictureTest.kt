@@ -1,6 +1,8 @@
 package org.graphiks.kanvas.picture
 
 import org.graphiks.kanvas.canvas.Canvas
+import org.graphiks.kanvas.canvas.ClipStack
+import org.graphiks.kanvas.canvas.ClipStackOp
 import org.graphiks.kanvas.canvas.DisplayListBuffer
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.canvas.SaveLayerRec
@@ -18,6 +20,7 @@ import org.graphiks.kanvas.types.Rect
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -98,6 +101,73 @@ class PictureTest {
         val restored = requireNotNull(Picture.fromByteArray(original.toByteArray()))
 
         assertEquals(original.ops, restored.ops)
+    }
+
+    @Test
+    fun `roundtrip preserves deferred outer clip on a save layer`() {
+        val outerClip = Rect.fromLTRB(10f, 10f, 90f, 90f)
+        val recorder = PictureRecorder()
+        val canvas = recorder.beginRecording(Rect.fromLTRB(0f, 0f, 100f, 100f))
+        canvas.clipRect(outerClip, antiAlias = false)
+        canvas.saveLayer()
+        canvas.drawRect(Rect.fromLTRB(0f, 0f, 100f, 100f), Paint.fill(Color.RED))
+        canvas.restore()
+        val original = recorder.finishRecordingAsPicture()
+
+        val restored = requireNotNull(Picture.fromByteArray(original.toByteArray()))
+
+        assertEquals(original.ops, restored.ops)
+    }
+
+    @Test
+    fun `decodes fixed version 1 picture layer fixture`() {
+        val picture = requireNotNull(Picture.fromByteArray(V1_LAYER_PICTURE_FIXTURE))
+
+        assertEquals(Rect.fromLTRB(0f, 0f, 10f, 10f), picture.cullRect)
+        assertEquals(listOf(DisplayOp.BeginLayer(SaveLayerRec()), DisplayOp.EndLayer), picture.ops)
+    }
+
+    @Test
+    fun `decodes fixed version 2 picture layer fixture`() {
+        val picture = requireNotNull(Picture.fromByteArray(V2_LAYER_PICTURE_FIXTURE))
+
+        assertEquals(Rect.fromLTRB(0f, 0f, 10f, 10f), picture.cullRect)
+        assertEquals(listOf(DisplayOp.BeginLayer(SaveLayerRec()), DisplayOp.EndLayer), picture.ops)
+    }
+
+    @Test
+    fun `playback intersects serialized layer clip with the host clip and defers it from children`() {
+        val pictureClip = Rect.fromLTRB(10f, 10f, 50f, 50f)
+        val hostClip = Rect.fromLTRB(30f, 30f, 70f, 70f)
+        val recorder = PictureRecorder()
+        val recordingCanvas = recorder.beginRecording(Rect.fromLTRB(0f, 0f, 100f, 100f))
+        recordingCanvas.clipRect(pictureClip, antiAlias = true)
+        recordingCanvas.saveLayer()
+        recordingCanvas.drawRect(Rect.fromLTRB(0f, 0f, 100f, 100f), Paint.fill(Color.RED))
+        recordingCanvas.restore()
+        val picture = recorder.finishRecordingAsPicture()
+
+        val targetBuffer = TestBuffer()
+        val targetCanvas = Canvas(targetBuffer)
+        targetCanvas.clipRect(hostClip, antiAlias = true)
+        picture.playback(targetCanvas)
+
+        val begin = targetBuffer.ops().filterIsInstance<DisplayOp.BeginLayer>().single()
+        val compositeClip = assertIs<ClipStack.Complex>(begin.rec.compositeClip)
+        val rectOps = compositeClip.ops.filterIsInstance<ClipStackOp.RectOp>()
+        assertEquals(
+            listOf(
+                Rect.fromLTRB(0f, 0f, 100f, 100f),
+                pictureClip,
+                hostClip,
+            ),
+            rectOps.map(ClipStackOp.RectOp::rect),
+        )
+        assertTrue(rectOps.all(ClipStackOp.RectOp::antiAlias))
+        assertEquals(
+            ClipStack.WideOpen,
+            targetBuffer.ops().filterIsInstance<DisplayOp.DrawRect>().single().clip,
+        )
     }
 
     @Test
@@ -252,6 +322,35 @@ class PictureTest {
         assertTrue(collected.any { it is DisplayOp.DrawPicture })
     }
 }
+
+private val V1_LAYER_PICTURE_FIXTURE = byteArrayOf(
+    0x4B, 0x50, 0x49, 0x43, // KPIC
+    0x00, 0x00, 0x00, 0x01, // format version 1
+    0x00, 0x00, 0x00, 0x00, // cull left
+    0x00, 0x00, 0x00, 0x00, // cull top
+    0x41, 0x20, 0x00, 0x00, // cull right = 10f
+    0x41, 0x20, 0x00, 0x00, // cull bottom = 10f
+    0x00, 0x00, 0x00, 0x02, // op count
+    0x11, // BeginLayer
+    0x00, // bounds absent
+    0x00, // paint absent
+    0x12, // EndLayer
+)
+
+private val V2_LAYER_PICTURE_FIXTURE = byteArrayOf(
+    0x4B, 0x50, 0x49, 0x43, // KPIC
+    0x00, 0x00, 0x00, 0x02, // format version 2
+    0x00, 0x00, 0x00, 0x00, // cull left
+    0x00, 0x00, 0x00, 0x00, // cull top
+    0x41, 0x20, 0x00, 0x00, // cull right = 10f
+    0x41, 0x20, 0x00, 0x00, // cull bottom = 10f
+    0x00, 0x00, 0x00, 0x02, // op count
+    0x11, // BeginLayer
+    0x00, // bounds absent
+    0x00, // paint absent
+    0xFF.toByte(), // null v2 backdrop filter
+    0x12, // EndLayer
+)
 
 private class TestBuffer : DisplayListBuffer {
     private val ops = mutableListOf<DisplayOp>()

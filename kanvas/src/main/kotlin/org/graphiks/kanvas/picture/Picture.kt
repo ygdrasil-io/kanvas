@@ -244,7 +244,7 @@ class Picture internal constructor(
 // ---- Binary serialization helpers ------------------------------------------
 
 private val MAGIC = byteArrayOf(0x4B, 0x50, 0x49, 0x43)
-private const val FORMAT_VERSION = 2
+private const val FORMAT_VERSION = 3
 
 // type discriminators
 private const val OP_DRAW_RECT: Byte = 0
@@ -738,6 +738,10 @@ private class Writer {
                 if (bounds != null) { bool(true); rect(bounds) } else bool(false)
                 if (paint != null) { bool(true); paint(paint) } else bool(false)
                 imageFilter(op.rec.backdrop)
+                op.rec.compositeClip?.let { clip ->
+                    bool(true)
+                    clipStack(clip)
+                } ?: bool(false)
             }
             DisplayOp.EndLayer -> byte(OP_END_LAYER)
             is DisplayOp.Annotation -> { byte(OP_ANNOTATION); rect(op.rect); string(op.key); string(op.value) }
@@ -1186,7 +1190,8 @@ private class Reader(private val data: ByteArray) {
                 val bounds = if (bool()) rect() else null
                 val p = if (bool()) paint() else null
                 val backdrop = if (formatVersion >= 2) imageFilter() else null
-                DisplayOp.BeginLayer(SaveLayerRec(bounds, p, backdrop))
+                val compositeClip = if (formatVersion >= 3 && bool()) clipStack() else null
+                DisplayOp.BeginLayer(SaveLayerRec(bounds, p, backdrop, compositeClip))
             }
             OP_END_LAYER.toInt() -> DisplayOp.EndLayer
             OP_ANNOTATION.toInt() -> DisplayOp.Annotation(rect(), string(), string())
