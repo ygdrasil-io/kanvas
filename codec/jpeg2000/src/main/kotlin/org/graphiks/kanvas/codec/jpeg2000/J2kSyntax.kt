@@ -28,6 +28,7 @@ internal data class J2kGeometryModel(
     val frame: Jpeg2000FrameInfo,
     val components: List<J2kComponentSpec>,
     val tileGrid: J2kTileGrid,
+    val rsiz: Int = 0,
 )
 
 internal enum class J2kProgressionOrder {
@@ -44,6 +45,7 @@ internal data class J2kCodingStyle(
     val multiComponentTransform: Int,
     val usesSopMarkers: Boolean,
     val usesEphMarkers: Boolean,
+    val usesPrecinctPartitions: Boolean = false,
     val decompositions: Int,
     val codeBlockWidth: Int,
     val codeBlockHeight: Int,
@@ -76,6 +78,20 @@ internal data class J2kMainHeader(
     val coding: J2kCodingStyle,
     val quantization: J2kQuantizationStyle,
     val nextMarkerOffset: Int,
+)
+
+internal data class J2kTilePart(
+    val tileIndex: Int,
+    val partIndex: Int,
+    val partCount: Int,
+    val headerOffset: Int,
+    val dataOffset: Int,
+    val dataLength: Int,
+)
+
+internal data class J2kSyntaxModel(
+    val mainHeader: J2kMainHeader,
+    val tileParts: List<J2kTilePart>,
 )
 
 internal class J2kQuantizationArrays(

@@ -168,7 +168,9 @@ private data class ParsedJpeg2000(
 
 private data class ParsedRawJ2k(
     val frame: Jpeg2000FrameInfo,
-    val entropy: J2kEntropyInput,
+    val syntax: J2kSyntaxModel,
+    val plan: J2kDecodePlan,
+    val entropy: J2kEntropyInput?,
 )
 
 internal class Jpeg2000Failure(
@@ -367,157 +369,74 @@ private class J2kCodestreamParser(
     private val limits: Jpeg2000Limits,
 ) {
     private var position: Int = start
-    private var frame: Jpeg2000FrameInfo? = null
-    private var sawCod: Boolean = false
-    private var sawQcd: Boolean = false
-    private var decompositions: Int? = null
 
     fun parse(): ParsedRawJ2k {
-        if (end - start < 2 || data[start].u8() != 0xFF || data[start + 1].u8() != SOC) {
-            j2kFailure("jpeg2000.soc.missing", start)
-        }
-        position += 2
-        val sizOffset = position
-        if (readMarker() != SIZ) j2kFailure("jpeg2000.siz.order", sizOffset)
-        parseSiz(sizOffset)
+        val mainHeader = J2kMainHeaderParser(data, start, end, limits).parse()
+        position = mainHeader.nextMarkerOffset
+        val tileParts = ArrayList<J2kTilePart>()
         while (position < end) {
             val markerOffset = position
             when (readMarker()) {
-                SIZ -> parseSiz(markerOffset)
-                COD -> parseCod(markerOffset)
-                QCD -> parseQcd(markerOffset)
-                COM -> skipSegment(markerOffset)
-                SOT -> return parseTilePart(markerOffset)
-                else -> j2kFailure("jpeg2000.marker.unsupported", markerOffset, Codec.Result.kUnimplemented)
+                SOT -> parseTilePart(markerOffset, mainHeader, tileParts)
+                EOC -> {
+                    if (position != end) j2kFailure("jpeg2000.eoc.trailing", position)
+                    val syntax = J2kSyntaxModel(mainHeader, tileParts)
+                    val plan = J2kDecodePlan.create(syntax, limits)
+                    return ParsedRawJ2k(
+                        frame = mainHeader.geometry.frame,
+                        syntax = syntax,
+                        plan = plan,
+                        entropy = narrowEntropyInputOrNull(mainHeader, tileParts, data),
+                    )
+                }
+                else -> j2kFailure("jpeg2000.eoc.missing", markerOffset)
             }
         }
-        j2kFailure("jpeg2000.sot.missing", end)
+        j2kFailure("jpeg2000.eoc.missing", end)
     }
 
-    private fun parseSiz(markerOffset: Int) {
-        if (frame != null) j2kFailure("jpeg2000.siz.duplicate", markerOffset)
-        val segment = readSegment(markerOffset)
-        if (segment.payloadSize < 39) j2kFailure("jpeg2000.siz.invalid", markerOffset)
-        val p = segment.payloadOffset
-        val components = data.u16(p + 34)
-        if (components <= 0 || segment.payloadSize != 36 + components * 3) j2kFailure("jpeg2000.siz.invalid", markerOffset)
-        val rsiz = data.u16(p)
-        val xSize = data.u32(p + 2)
-        val ySize = data.u32(p + 6)
-        val xOrigin = data.u32(p + 10)
-        val yOrigin = data.u32(p + 14)
-        val xTile = data.u32(p + 18)
-        val yTile = data.u32(p + 22)
-        val xTileOrigin = data.u32(p + 26)
-        val yTileOrigin = data.u32(p + 30)
-        val width = xSize - xOrigin
-        val height = ySize - yOrigin
-        if (width !in 1..limits.maxWidth.toLong() || height !in 1..limits.maxHeight.toLong()) {
-            j2kFailure("jpeg2000.limit.pixels", markerOffset, Codec.Result.kOutOfMemory)
+    private fun parseTilePart(
+        markerOffset: Int,
+        mainHeader: J2kMainHeader,
+        tileParts: MutableList<J2kTilePart>,
+    ) {
+        if (tileParts.size >= limits.maxTileParts) {
+            j2kFailure("jpeg2000.limit.tile-parts", markerOffset, Codec.Result.kOutOfMemory)
         }
-        if (width * height > limits.maxPixels) j2kFailure("jpeg2000.limit.pixels", markerOffset, Codec.Result.kOutOfMemory)
-        val component = p + 36
-        val ssiz = data[component].u8()
-        val xSampling = data[component + 1].u8()
-        val ySampling = data[component + 2].u8()
-        if (
-            rsiz != 0 || components != 1 || ssiz != 7 || xSampling != 1 || ySampling != 1 ||
-            xOrigin != 0L || yOrigin != 0L || xTileOrigin != 0L || yTileOrigin != 0L ||
-            xTile != width || yTile != height
-        ) {
-            j2kFailure("jpeg2000.frame.unsupported", markerOffset, Codec.Result.kUnimplemented)
-        }
-        frame = Jpeg2000FrameInfo(width.toInt(), height.toInt(), components, 8)
-    }
-
-    private fun parseCod(markerOffset: Int) {
-        if (sawCod) j2kFailure("jpeg2000.cod.duplicate", markerOffset)
-        val segment = readSegment(markerOffset)
-        if (segment.payloadSize != 10) j2kFailure("jpeg2000.cod.invalid", markerOffset)
-        val p = segment.payloadOffset
-        val scod = data[p].u8()
-        val progression = data[p + 1].u8()
-        val layers = data.u16(p + 2)
-        val multiComponentTransform = data[p + 4].u8()
-        val decompositions = data[p + 5].u8()
-        val codeBlockWidth = data[p + 6].u8()
-        val codeBlockHeight = data[p + 7].u8()
-        val codeBlockStyle = data[p + 8].u8()
-        val transform = data[p + 9].u8()
-        if (
-            scod != 0 || progression != 0 || layers != 1 || multiComponentTransform != 0 ||
-            decompositions !in 0..2 || codeBlockWidth != 4 || codeBlockHeight != 4 ||
-            codeBlockStyle != 0 || transform != 1
-        ) {
-            j2kFailure("jpeg2000.cod.profile.unsupported", markerOffset, Codec.Result.kUnimplemented)
-        }
-        this.decompositions = decompositions
-        sawCod = true
-    }
-
-    private fun parseQcd(markerOffset: Int) {
-        if (sawQcd) j2kFailure("jpeg2000.qcd.duplicate", markerOffset)
-        val segment = readSegment(markerOffset)
-        val expected = when (decompositions) {
-            0 -> byteArrayOf(0x40, 0x40)
-            1 -> byteArrayOf(0x40, 0x40, 0x48, 0x48, 0x50)
-            2 -> byteArrayOf(0x40, 0x40, 0x48, 0x48, 0x50, 0x48, 0x48, 0x50)
-            else -> j2kFailure("jpeg2000.cod.missing", markerOffset)
-        }
-        if (segment.payloadSize != expected.size || !data.rangeEquals(segment.payloadOffset, expected, 0, expected.size)) {
-            j2kFailure("jpeg2000.qcd.profile.unsupported", markerOffset, Codec.Result.kUnimplemented)
-        }
-        sawQcd = true
-    }
-
-    private fun parseTilePart(markerOffset: Int): ParsedRawJ2k {
-        val currentFrame = frame ?: j2kFailure("jpeg2000.siz.missing", markerOffset)
-        if (!sawCod) j2kFailure("jpeg2000.cod.missing", markerOffset)
-        if (!sawQcd) j2kFailure("jpeg2000.qcd.missing", markerOffset)
-        val currentDecompositions = decompositions ?: j2kFailure("jpeg2000.cod.missing", markerOffset)
-        val segment = readSegment(markerOffset)
-        if (segment.payloadSize != 8) j2kFailure("jpeg2000.sot.invalid", markerOffset)
-        val p = segment.payloadOffset
+        if (end - position < 2) j2kFailure("jpeg2000.sot.invalid", markerOffset)
+        val length = data.u16(position)
+        if (length != 10 || length > end - position) j2kFailure("jpeg2000.sot.invalid", markerOffset)
+        val p = position + 2
+        position += length
         val tileIndex = data.u16(p)
         val tilePartLength = data.u32(p + 2)
         val tilePartIndex = data[p + 6].u8()
         val tilePartCount = data[p + 7].u8()
-        if (tileIndex != 0 || tilePartIndex != 0 || tilePartCount != 1 || tilePartLength < 14L) {
-            j2kFailure("jpeg2000.sot.profile.unsupported", markerOffset, Codec.Result.kUnimplemented)
-        }
+        if (
+            tileIndex.toLong() >= mainHeader.geometry.tileGrid.tileCount ||
+            tilePartCount == 0 || tilePartIndex >= tilePartCount || tilePartLength < 14L
+        ) j2kFailure("jpeg2000.sot.invalid", markerOffset)
         val tilePartEnd = markerOffset.toLong() + tilePartLength
-        if (tilePartEnd > end || tilePartEnd < position + 2L) j2kFailure("jpeg2000.sot.invalid", markerOffset)
+        if (tilePartEnd > end.toLong() || tilePartEnd < position + 2L) j2kFailure("jpeg2000.sot.invalid", markerOffset)
         if (readMarker() != SOD) j2kFailure("jpeg2000.sod.missing", position - 2)
-        val packetOffset = position
+        val dataOffset = position
         position = tilePartEnd.toInt()
-        if (readMarker() != EOC) j2kFailure("jpeg2000.eoc.missing", position - 2)
-        if (position != end) j2kFailure("jpeg2000.eoc.trailing", position)
-        return ParsedRawJ2k(
-            frame = currentFrame,
-            entropy = J2kEntropyInput(packetOffset, tilePartEnd.toInt() - packetOffset, currentDecompositions),
+        tileParts += J2kTilePart(
+            tileIndex = tileIndex,
+            partIndex = tilePartIndex,
+            partCount = tilePartCount,
+            headerOffset = markerOffset,
+            dataOffset = dataOffset,
+            dataLength = tilePartEnd.toInt() - dataOffset,
         )
     }
 
-    private fun skipSegment(markerOffset: Int) {
-        readSegment(markerOffset)
-    }
-
     private fun readMarker(): Int {
-        if (position + 2 > end || data[position].u8() != 0xFF) j2kFailure("jpeg2000.marker.truncated", position)
+        if (end - position < 2 || data[position].u8() != 0xFF) j2kFailure("jpeg2000.marker.truncated", position)
         return data[position + 1].u8().also { position += 2 }
     }
 
-    private fun readSegment(markerOffset: Int): SegmentBounds {
-        if (position + 2 > end) j2kFailure("jpeg2000.marker.length.truncated", markerOffset)
-        val length = data.u16(position)
-        if (length < 2 || position + length > end) j2kFailure("jpeg2000.marker.length.invalid", markerOffset)
-        val result = SegmentBounds(position + 2, length - 2)
-        position += length
-        return result
-    }
 }
-
-private data class SegmentBounds(val payloadOffset: Int, val payloadSize: Int)
 
 private fun Byte.u8(): Int = toInt() and 0xFF
 
@@ -544,10 +463,6 @@ private fun isJp2Signature(data: ByteArray): Boolean =
     data.size >= 12 && data.rangeEquals(0, JP2_SIGNATURE_BOX, 0, JP2_SIGNATURE_BOX.size)
 
 private const val SOC: Int = 0x4F
-private const val SIZ: Int = 0x51
-private const val COD: Int = 0x52
-private const val QCD: Int = 0x5C
-private const val COM: Int = 0x64
 private const val SOT: Int = 0x90
 private const val SOD: Int = 0x93
 private const val EOC: Int = 0xD9

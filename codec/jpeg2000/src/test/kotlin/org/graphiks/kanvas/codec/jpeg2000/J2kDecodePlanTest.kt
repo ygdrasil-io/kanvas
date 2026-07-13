@@ -1,0 +1,73 @@
+package org.graphiks.kanvas.codec.jpeg2000
+
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertThrows
+import org.junit.jupiter.api.Test
+
+class J2kDecodePlanTest {
+
+    @Test
+    fun `decode plan orders tile parts and rejects a missing part`() {
+        val ordered = J2kDecodePlan.create(
+            syntax(tileParts = listOf(tilePart(1, 1, 2), tilePart(1, 0, 2))),
+            Jpeg2000Limits(),
+        )
+
+        assertEquals(listOf(0, 1), ordered.tilePartsByTile[1].map(J2kTilePart::partIndex))
+
+        assertThrows(Jpeg2000Failure::class.java) {
+            J2kDecodePlan.create(syntax(tileParts = listOf(tilePart(0, 1, 2))), Jpeg2000Limits())
+        }
+    }
+
+    @Test
+    fun `decode plan rejects an upper codeblock bound above its budget`() {
+        assertThrows(Jpeg2000Failure::class.java) {
+            J2kDecodePlan.create(
+                syntax(tileParts = listOf(tilePart(0, 0, 1), tilePart(0, 1, 2))),
+                Jpeg2000Limits(maxCodeblocks = 1),
+            )
+        }
+    }
+
+    private fun tilePart(tileIndex: Int, partIndex: Int, partCount: Int): J2kTilePart = J2kTilePart(
+        tileIndex = tileIndex,
+        partIndex = partIndex,
+        partCount = partCount,
+        headerOffset = 0,
+        dataOffset = 0,
+        dataLength = 1,
+    )
+
+    private fun syntax(tileParts: List<J2kTilePart>): J2kSyntaxModel = J2kSyntaxModel(
+        mainHeader = J2kMainHeader(
+            geometry = J2kGeometryModel(
+                frame = Jpeg2000FrameInfo(width = 32, height = 32, components = 1, precision = 8),
+                components = listOf(J2kComponentSpec(precision = 8, signed = false, xSampling = 1, ySampling = 1)),
+                tileGrid = J2kTileGrid(0, 0, 32, 32, 0, 0, 32, 32, columns = 1, rows = 1),
+            ),
+            coding = J2kCodingStyle(
+                progression = J2kProgressionOrder.LRCP,
+                layers = 1,
+                multiComponentTransform = 0,
+                usesSopMarkers = false,
+                usesEphMarkers = false,
+                decompositions = 1,
+                codeBlockWidth = 3,
+                codeBlockHeight = 3,
+                style = 0,
+                transform = 1,
+                precinctExponents = listOf(15 to 15, 15 to 15),
+            ),
+            quantization = J2kQuantizationStyle(
+                guardBits = 2,
+                style = 0,
+                reversible = true,
+                exponents = intArrayOf(8, 9, 9, 10),
+                mantissas = null,
+            ),
+            nextMarkerOffset = 0,
+        ),
+        tileParts = tileParts,
+    )
+}

@@ -703,12 +703,13 @@ class Jpeg2000DocumentTest {
     }
 
     @Test
-    fun `raw J2K refuses a codeblock size other than the proven 64 by 64 profile`() {
-        val opened = Jpeg2000Document.open(narrowLosslessCodestream(codeBlockWidth = 3, codeBlockHeight = 4))
+    fun `raw J2K outside the proven codeblock profile remains structural without an image codec`() {
+        val codestream = narrowLosslessCodestream(codeBlockWidth = 3, codeBlockHeight = 4)
+        val document = requireNotNull(Jpeg2000Document.open(codestream).document)
 
-        assertNull(opened.document)
-        assertEquals("jpeg2000.cod.profile.unsupported", opened.diagnostic?.code)
-        assertEquals(Codec.Result.kUnimplemented, opened.diagnostic?.result)
+        assertNull(Codec.MakeFromData(codestream))
+        assertEquals("jpeg2000.container.pixel.unimplemented", document.decode().diagnostic?.code)
+        assertEquals(Codec.Result.kUnimplemented, document.decode().diagnostic?.result)
     }
 
     @Test

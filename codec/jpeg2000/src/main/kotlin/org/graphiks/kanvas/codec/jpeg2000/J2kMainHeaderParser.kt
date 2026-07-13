@@ -60,6 +60,7 @@ internal class J2kMainHeaderParser(
             j2kFailure("jpeg2000.limit.components", markerOffset, Codec.Result.kOutOfMemory)
         }
 
+        val rsiz = data.u16(p)
         val imageX1 = data.u32(p + 2)
         val imageY1 = data.u32(p + 6)
         val imageX0 = data.u32(p + 10)
@@ -119,6 +120,7 @@ internal class J2kMainHeaderParser(
                 columns = columns.toInt(),
                 rows = rows.toInt(),
             ),
+            rsiz = rsiz,
         )
     }
 
@@ -163,6 +165,7 @@ internal class J2kMainHeaderParser(
             multiComponentTransform = multiComponentTransform,
             usesSopMarkers = usesSopMarkers,
             usesEphMarkers = usesEphMarkers,
+            usesPrecinctPartitions = precinctsPresent,
             decompositions = decompositions,
             codeBlockWidth = codeBlockWidth,
             codeBlockHeight = codeBlockHeight,
