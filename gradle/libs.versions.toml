@@ -8,6 +8,7 @@ kotlinxDatetime = "0.7.1"
 kotlinxSerializationJSON = "1.9.0"
 kotlinxCoroutines = "1.10.2"
 kotlinxBenchmark = "0.4.17"
+wgsl4k = "1.0.0-20260629.231604-1"
 
 [libraries]
 kotlinGradlePlugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlin" }
@@ -15,6 +16,8 @@ kotlinxDatetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.r
 kotlinxSerialization = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinxSerializationJSON" }
 kotlinxCoroutines = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinxCoroutines" }
 kotlinxBenchmarkRuntime = { module = "org.jetbrains.kotlinx:kotlinx-benchmark-runtime", version.ref = "kotlinxBenchmark" }
+wgslCoreJvm = { module = "org.graphiks:wgsl-core-jvm", version.ref = "wgsl4k" }
+wgslParserJvm = { module = "org.graphiks:wgsl-parser-jvm", version.ref = "wgsl4k" }
 
 # Libraries can be bundled together for easier import
 [bundles]

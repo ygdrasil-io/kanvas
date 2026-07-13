@@ -12,11 +12,11 @@ dependencies {
     implementation(kotlin("stdlib"))
     implementation("io.ygdrasil:wgpu4k-toolkit:0.2.0-SNAPSHOT")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
-    compileOnly("org.graphiks:wgsl-core-jvm:1.0.0-SNAPSHOT")
-    compileOnly("org.graphiks:wgsl-parser-jvm:1.0.0-SNAPSHOT")
+    compileOnly(libs.wgslCoreJvm)
+    compileOnly(libs.wgslParserJvm)
     testImplementation(kotlin("test"))
-    testImplementation("org.graphiks:wgsl-core-jvm:1.0.0-SNAPSHOT")
-    testImplementation("org.graphiks:wgsl-parser-jvm:1.0.0-SNAPSHOT")
+    testImplementation(libs.wgslCoreJvm)
+    testImplementation(libs.wgslParserJvm)
 }
 
 tasks.withType<Test> {
