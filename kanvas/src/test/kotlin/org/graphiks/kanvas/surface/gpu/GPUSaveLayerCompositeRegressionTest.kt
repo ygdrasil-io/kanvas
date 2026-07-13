@@ -17,6 +17,7 @@ import org.graphiks.kanvas.surface.DiagnosticLevel
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -59,6 +60,64 @@ class GPUSaveLayerCompositeRegressionTest {
                     "$mode saveLayer restore did not report its GPU destination-read formula route: " +
                         result.diagnostics.entries,
                 )
+            }
+        }
+    }
+
+    /**
+     * An outer Canvas clip constrains the group restore, not every child draw in the temporary
+     * layer. Otherwise transparent layer pixels outside the clip corrupt the parent for SRC and
+     * DST_IN, and an AA clip's F is applied twice.
+     */
+    @Test
+    fun `public saveLayer defers outer scissor and AA clips to one group restore`() {
+        requireWebGpu()
+
+        listOf(BlendMode.SRC, BlendMode.DST_IN, BlendMode.MULTIPLY).forEach { mode ->
+            listOf(
+                OuterClip("scissor", Rect(12f, 12f, 24f, 24f), antiAlias = false, edge = null),
+                OuterClip("alpha-mask", Rect(12.5f, 12.5f, 23.5f, 23.5f), antiAlias = true, edge = Point(12f, 16f)),
+            ).forEach { outerClip ->
+                val result = Surface(width = 32, height = 32).run {
+                    canvas {
+                        drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE).copy(antiAlias = false))
+                        clipRect(outerClip.rect, ClipOp.INTERSECT, outerClip.antiAlias)
+                        saveLayer(paint = Paint(color = translucentRed.toColor(), blendMode = mode))
+                        drawRect(Rect(6f, 6f, 26f, 26f), Paint.fill(Color.RED).copy(antiAlias = false))
+                        restore()
+                    }
+                    render()
+                }
+
+                assertPixelNearAt(
+                    result.pixels,
+                    width = 32,
+                    x = 16,
+                    y = 16,
+                    expected = publicLayerExpected(mode, coverage = 1f),
+                    tolerance = 2,
+                )
+                // (10,16) is inside the child rect but outside the outer clip. It must leave D intact.
+                assertPixelNearAt(result.pixels, width = 32, x = 10, y = 16, expected = white, tolerance = 2)
+                outerClip.edge?.let { edge ->
+                    assertPixelNearAt(
+                        result.pixels,
+                        width = 32,
+                        x = edge.x.toInt(),
+                        y = edge.y.toInt(),
+                        expected = publicLayerExpected(mode, coverage = .5f),
+                        tolerance = 2,
+                    )
+                }
+                if (mode == BlendMode.MULTIPLY) {
+                    assertTrue(
+                        result.diagnostics.entries.any { entry ->
+                            entry.code.startsWith("route:destination-read:saveLayer:") &&
+                                entry.reason == "gpu-copy-then-formula"
+                        },
+                        "$mode/${outerClip.name} ${result.diagnostics.entries}",
+                    )
+                }
             }
         }
     }
@@ -741,6 +800,43 @@ class GPUSaveLayerCompositeRegressionTest {
         }
     }
 
+    private fun assertPixelNearAt(
+        pixels: UByteArray,
+        width: Int,
+        x: Int,
+        y: Int,
+        expected: Rgba,
+        tolerance: Int,
+    ) {
+        val offset = (y * width + x) * 4
+        val actual = IntArray(4) { channel -> pixels[offset + channel].toInt() and 0xff }
+        actual.zip(expected.toIntArray()).forEachIndexed { channel, (actualByte, expectedByte) ->
+            assertTrue(
+                kotlin.math.abs(actualByte - expectedByte) <= tolerance,
+                "channel=$channel at ($x,$y): expected=$expectedByte +/- $tolerance, actual=$actualByte",
+            )
+        }
+    }
+
+    private fun publicLayerExpected(mode: BlendMode, coverage: Float): Rgba = when (mode) {
+        BlendMode.SRC -> when (coverage) {
+            1f -> Rgba(red = 188, green = 0, blue = 0, alpha = 128)
+            .5f -> Rgba(red = 225, green = 188, blue = 188, alpha = 191)
+            else -> error("unsupported coverage $coverage")
+        }
+        BlendMode.DST_IN -> when (coverage) {
+            1f -> Rgba(red = 188, green = 188, blue = 188, alpha = 128)
+            .5f -> Rgba(red = 225, green = 225, blue = 225, alpha = 191)
+            else -> error("unsupported coverage $coverage")
+        }
+        BlendMode.MULTIPLY -> when (coverage) {
+            1f -> Rgba(red = 255, green = 188, blue = 188, alpha = 255)
+            .5f -> Rgba(red = 255, green = 225, blue = 225, alpha = 255)
+            else -> error("unsupported coverage $coverage")
+        }
+        else -> error("fixture only defines SRC, DST_IN, and MULTIPLY")
+    }
+
     private fun assertPixelNearPixels(
         actual: UByteArray,
         expected: UByteArray,
@@ -800,6 +896,13 @@ class GPUSaveLayerCompositeRegressionTest {
 
         fun toIntArray(): IntArray = intArrayOf(red, green, blue, alpha)
     }
+
+    private data class OuterClip(
+        val name: String,
+        val rect: Rect,
+        val antiAlias: Boolean,
+        val edge: Point?,
+    )
 
     private companion object {
         val white = Rgba(red = 255, green = 255, blue = 255, alpha = 255)

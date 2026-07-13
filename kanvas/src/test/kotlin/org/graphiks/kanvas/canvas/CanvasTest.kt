@@ -49,5 +49,37 @@ class CanvasTest {
         assertIs<ClipStackOp.PathOp>(element)
     }
 
+    @Test
+    fun `saveLayer defers outer clip while nested layer records only inner clip`() {
+        val buffer = TestBuffer()
+        val canvas = Canvas(buffer)
+        val outer = Rect(2f, 2f, 14f, 14f)
+        val inner = Rect(4f, 4f, 12f, 12f)
+        val draw = Rect(0f, 0f, 16f, 16f)
+
+        canvas.clipRect(outer, antiAlias = false)
+        canvas.saveLayer()
+        // Canvas queries retain the semantic outer clip while the first layer child is unclipped.
+        assertEquals(outer, canvas.localClipBounds)
+        canvas.clipRect(inner, antiAlias = false)
+        canvas.drawRect(draw, Paint.fill(Color.RED))
+        canvas.saveLayer()
+        canvas.drawRect(draw, Paint.fill(Color.GREEN))
+        canvas.restore()
+        canvas.drawRect(draw, Paint.fill(Color.BLUE))
+        canvas.restore()
+        canvas.drawRect(draw, Paint.fill(Color.WHITE))
+
+        val begins = buffer.ops().filterIsInstance<DisplayOp.BeginLayer>()
+        assertEquals(outer, assertIs<ClipStack.DeviceRect>(begins[0].rec.compositeClip).rect)
+        assertEquals(inner, assertIs<ClipStack.DeviceRect>(begins[1].rec.compositeClip).rect)
+
+        val draws = buffer.ops().filterIsInstance<DisplayOp.DrawRect>()
+        assertEquals(inner, assertIs<ClipStack.DeviceRect>(draws[0].clip).rect)
+        assertEquals(ClipStack.WideOpen, draws[1].clip)
+        assertEquals(inner, assertIs<ClipStack.DeviceRect>(draws[2].clip).rect)
+        assertEquals(outer, assertIs<ClipStack.DeviceRect>(draws[3].clip).rect)
+    }
+
     @Test fun `Canvas resetMatrix`() { val b = TestBuffer(); val c = Canvas(b); c.translate(100f, 200f); c.resetMatrix(); assertEquals(Matrix33.identity(), c.matrix) }
 }

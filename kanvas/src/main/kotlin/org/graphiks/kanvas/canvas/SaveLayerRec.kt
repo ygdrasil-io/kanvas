@@ -10,11 +10,12 @@ data class SaveLayerRec(
     val paint: Paint? = null,
     val backdrop: ImageFilter? = null,
     /**
-     * GPU replay detail for a synthetic picture group: its final composite must retain the
-     * DrawPicture clip even though the group's children have already been expanded.
+     * GPU replay detail for a group restore: its final composite must retain the deferred outer
+     * clip even though the layer children are rendered without that clip.
      *
-     * Ordinary Canvas saveLayer calls leave this null. It is intentionally not serialized as part
-     * of the public Picture stream because it is derived from the replay context.
+     * Canvas recording sets this for a public saveLayer under a clip; picture replay does the
+     * same for a painted DrawPicture. It is serialized with a Picture so a roundtrip retains the
+     * group-composite semantics, but remains internal because Canvas derives it from state.
      */
     internal val compositeClip: ClipStack? = null,
 )

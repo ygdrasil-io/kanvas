@@ -101,6 +101,22 @@ class PictureTest {
     }
 
     @Test
+    fun `roundtrip preserves deferred outer clip on a save layer`() {
+        val outerClip = Rect.fromLTRB(10f, 10f, 90f, 90f)
+        val recorder = PictureRecorder()
+        val canvas = recorder.beginRecording(Rect.fromLTRB(0f, 0f, 100f, 100f))
+        canvas.clipRect(outerClip, antiAlias = false)
+        canvas.saveLayer()
+        canvas.drawRect(Rect.fromLTRB(0f, 0f, 100f, 100f), Paint.fill(Color.RED))
+        canvas.restore()
+        val original = recorder.finishRecordingAsPicture()
+
+        val restored = requireNotNull(Picture.fromByteArray(original.toByteArray()))
+
+        assertEquals(original.ops, restored.ops)
+    }
+
+    @Test
     fun `fromByteArray returns null for invalid data`() {
         assertNull(Picture.fromByteArray(byteArrayOf(0, 1, 2, 3)))
     }
