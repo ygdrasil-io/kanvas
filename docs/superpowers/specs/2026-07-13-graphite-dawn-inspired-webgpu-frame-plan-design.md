@@ -40,17 +40,18 @@ DisplayList / DisplayOp sequence
   -> canonical GPUBlendPlan/GPUColorPlan/GPUTargetState specialization
   -> GPURecording
   -> GPUTaskList
-  -> GPUFramePlanner finalization
-       -> render-pass segments
-       -> bounded destination-snapshot groups
-       -> layer/filter/target transitions
-       -> readback or surface-blit output
-  -> GPUFramePreflighter
-  -> PreparedGPUFrame
-  -> GPUFrameExecutor
-       -> one command encoder
-       -> one command buffer
-       -> one queue submission
+  -> GPUFrameCoordinator
+       -> GPUFramePlanner finalization
+            -> render-pass segments
+            -> bounded destination-snapshot groups
+            -> layer/filter/target transitions
+            -> readback or surface-blit output
+       -> GPUFramePreflighter
+       -> PreparedGPUFrame
+       -> GPUFrameExecutor
+            -> one command encoder
+            -> one command buffer
+            -> one queue submission
   -> asynchronous GPU completion
 ```
 
@@ -68,6 +69,9 @@ create a third blend authority:
 
 - the existing `GPUBlendPlan` is evolved to cover all 29 current blend modes
   and the exact coverage-dependent route;
+- its `GPUBlendDestinationReadRequirement` is purely semantic and closed to
+  `None`, `DestinationTextureRequired`, or `Refused`; it never names a copy,
+  intermediate, layer, or fixed-function execution strategy;
 - `GPUDestinationReadPlan` remains the owner of snapshot/intermediate/refusal
   strategy after `GPUBlendPlan` declares the need;
 - `GPUGeometryPlan`/`GPUGeometryRoute` and `GPUClipPlan` remain the active GPU
@@ -77,6 +81,9 @@ create a third blend authority:
 - `GPURecording` and `GPUTaskList` remain the immutable recording and ordered
   task authorities; `GPUFramePlan` is their executable projection, not a
   parallel task model;
+- `GPUFrameCoordinator` is the sole product entry point across planning,
+  preflight, and execution; it adds no route decision and preserves early
+  planning/preflight refusals as frame outcomes;
 - `GPUOpMapper` does not reconstruct blend or coverage semantics;
 - the duplicate blend-mode enums and boolean routing authorities are removed
   after migration.
@@ -84,6 +91,13 @@ create a third blend authority:
 The stricter reference, CPU/GPU evidence, WGSL validation, route diagnostic,
 and fallback requirements from the older WGSL and geometry-coverage packs
 remain applicable.
+
+The exact resolved wgsl4k parser/core snapshots are a version-scoped input.
+Their artifact checksums and source revision are recorded before formula work,
+and the complete generated modules pass parser/reflection ABI plus native
+shader-module tests. Any ambiguous parser, IR, reflection, or generator
+behavior stops dependent work and is reported to the wgsl4k maintainer with a
+minimized reproducer; Kanvas does not add a hidden compatibility workaround.
 
 ## Context and current problem
 
@@ -154,7 +168,8 @@ The following are deliberate Kanvas decisions, not claims about Graphite:
 
 - one command buffer and one `queue.submit()` per scene render;
 - a linear frame plan instead of Graphite's task DAG;
-- safe sharing of a destination snapshot across proven-disjoint draws;
+- optional future sharing of a destination snapshot across proven-disjoint
+  draws, disabled until a checked-in cost calibration exists;
 - a persistent frame-local MSAA attachment instead of Dawn's load-resolve
   extensions or emulation;
 - exact partial-coverage `Plus` instead of Graphite's allowed approximation on
@@ -162,8 +177,9 @@ The following are deliberate Kanvas decisions, not claims about Graphite:
 - one WebGPU capability lane instead of Graphite's backend hierarchy.
 
 Graphite's texture-copy route commonly flushes before each destination-reading
-draw. Snapshot sharing is therefore a Kanvas optimization inspired by deferred
-recording, not observed Graphite behavior.
+draw. The initial Kanvas policy likewise creates one bounded copy per
+destination-reading draw. Snapshot sharing is only a later Kanvas optimization
+inspired by deferred recording, not observed Graphite behavior.
 
 ## Decisions
 
@@ -311,7 +327,10 @@ exhaustive fixed-function, shader, no-op, or refusal decisions. It cannot
 introduce a private layer-only formula.
 
 `GPUDestinationReadPlan` then selects snapshot, existing intermediate, layer
-isolation, or refusal. It does not re-decide blend semantics.
+isolation, or refusal. It is the only owner of those concrete strategies and
+does not re-decide blend semantics. Native recording consumes the exact
+fixed-function state already produced by `GPUBlendPlan`; it never recalculates
+attachment factors from `GPUBlendMode`.
 
 Coverage consumption forms are:
 
@@ -489,7 +508,7 @@ ComputePassStep(target, resources, dispatches)
 CopyDestinationStep(source, snapshot, logicalBounds, copyLayout)
 CopyAsDrawMaterializationStep(source, snapshot, logicalBounds)
 TargetTransitionStep(parent, child, transitionKind)
-ReadbackCopyStep(source, staging, ReadbackLayout)
+ReadbackCopyStep(source, staging, GPUFrameReadbackRequest)
 AcquireSurfaceOutput(outputDescriptor)
 SurfaceBlitRenderPassStep(scene, surfaceOutput)
 PostSubmitPresentAction(surfaceOutput)
@@ -680,10 +699,12 @@ Rules:
 - immediately after `queue.submit()`, retain the submission resources and arm
   the prepared completion ticket before invoking any fallible present action;
 - `Presented` may occur before `GPUCompleted`; neither implies the other.
-- only `GPUCompleted` releases, reuses, or evicts resources referenced by the
-  submission;
+- only `GPUCompleted` releases, reuses, or evicts ordinary resources referenced
+  by the submission;
 - window rendering pumps completion away from the render thread;
-- readback awaits the same submission, then maps its staging buffer;
+- readback awaits the same submission, then maps its staging buffer. That
+  output-owned staging lease remains exclusively retained through delayed map,
+  unmap, and depadding rather than becoming reusable at `GPUCompleted`;
 - a failed completion callback or device loss moves to `FailedAfterSubmit` and
   conservatively quarantines resources until explicit device teardown;
 - target close is not fabricated as successful GPU completion.
@@ -704,6 +725,88 @@ The selected facade capability currently reports the WebGPU alignment of 256
 bytes, but the plan consumes the capability value rather than hard-coding it.
 After mapping, rows are depadded into the logical output. Overflow, invalid
 alignment, excessive buffer size, or generation mismatch fails preflight.
+
+The readback staging lifecycle is explicit:
+
+```text
+Reserved -> Submitted -> GPUCompletedMappingPending
+  -> Mapped -> Depadded -> Releasable
+  -> MapFailed -> Releasable | Quarantined
+```
+
+Queue completion may release the frame's other submission resources, but it
+cannot release, destroy, evict, or repool the output-owned staging lease. The
+exact-frame completed stage for `ReadbackRgba` resolves only after terminal
+depadding or map failure and the required unmap/release action. A delayed
+mapping callback therefore cannot observe a buffer reused by a concurrent
+frame.
+
+### Reusable prepared surface session
+
+`GPUPreparedSurfaceSession` is the production boundary for repeated offscreen
+or real-time frames. `Surface.prepareGpuRenderSession()` prepares and retains
+the device, canonical `GPUSceneTarget`, target/device generation, and reusable
+caches once; callers do not receive native handles or mapper/planner internals.
+
+Each `renderFrame(output, record)` call owns a fresh frame-local recording
+canvas, invokes `record` exactly once, seals that recording, maps it through
+`GPUOpMapper`, and enters the sole `GPUFrameCoordinator` once. Operations from
+an earlier frame are never appended to a later frame. It returns a typed
+`GPUPreparedSurfaceFrameHandle`, not a falsely completed result. The handle
+contains the stable attempt ID, the immediate submit/presentation outcome, and
+one `CompletionStage<GPUPreparedSurfaceCompletedFrameResult>` for the exact
+frame. The three closed output
+choices are:
+
+```text
+ReadbackRgba                   // planned texture-to-buffer copy, completion, map, depad
+CurrentFrameCompletionOnly    // exact submitted-frame completion, no copy/map/readback
+PresentToWindow(output)       // late acquire, scene blit, submit, present, exact completion
+```
+
+`PresentToWindow` accepts one opaque production `GPUPreparedWindowOutput`
+created from the host surface binding during window setup. It exposes no raw
+native handle to Canvas/GM code. Acquisition remains late in preflight, and
+resize/reconfiguration/presentation use the same independent output and GPU
+completion lifecycles defined above. `GPUPreparedSceneFrameSession` consumes
+the corresponding lower-level output request for recorded task lists;
+`GPUPreparedSurfaceSession` is its Canvas-recording facade. Kadre and any other
+window host must use these two layers, not a rect-only shader runner or a
+private mapper/executor.
+
+Offscreen callers and benchmarks explicitly await the handle's completed-frame
+stage. The normal Kadre render loop never waits on the render thread: it
+observes the immediate presentation outcome, then attaches completion handling
+on the dedicated completion context before requesting/reusing the next frame.
+The completed-frame result is the only object that claims queue completion,
+readback pixels, final failure, or final telemetry.
+
+The session retains reusable resources only across compatible surface, device,
+format, color-interpretation, and sample-plan generations. A resize,
+configuration mismatch, stale generation, device loss, or close invalidates
+the affected state through the typed lifecycle; a concurrent `renderFrame`
+call is refused instead of sharing mutable frame-local recording state. An
+exception thrown by the recording callback before submission seals no partial
+frame, is captured as a typed frame failure, and leaves the session reusable
+when its generation remains valid.
+
+Every coordinator attempt owns one frame-scoped telemetry recorder. Planning,
+preflight, execution, presentation, and completion append observational facts
+to that recorder. Only the completion callback (or a terminal pre-submit
+failure) seals exactly one immutable
+`GPUFrameStructuralTelemetrySnapshot` into the completed-frame result, including for recording,
+planning, or preflight failure before submission and present/completion failure
+after submission. `GPUPreparedSceneCompletedFrameResult` carries that snapshot, and the
+Canvas facade forwards the identical object in
+`GPUPreparedSurfaceCompletedFrameResult.telemetry`. There is no global mutable “last
+frame”, ambient sink, log reconstruction, or test-only backdoor. Consequently,
+real GM tests can use the public prepared session and deterministically inspect
+the telemetry belonging to that exact attempted frame.
+
+`Surface.render()` remains source-compatible and delegates to an internal
+single-use prepared session with `ReadbackRgba`, awaits that exact completed
+frame, and preserves its current pixel result. The reusable API is therefore the measured production path rather than
+a benchmark-only executor or a second route authority.
 
 ## Component ownership
 
@@ -751,6 +854,16 @@ transitions, output, and lifetime order.
 `Barrier`, and `Refused` variants are evolved with the typed facts needed for
 the frame. `GPUFramePlan` keeps their identities and produces the single legal
 linear order consumed by preflight; it does not replace recording evidence.
+
+The package dependency is one-way: `recording` consumes the handle-free frame
+resource references, roles, usages, lifetimes, preparation requests, and
+copy/upload descriptors owned by `resources/ResourceContracts.kt`.
+`resources` never imports `recording` or `execution`; its concrete provider
+materializes its own descriptors when preflight supplies them. Frame IDs,
+recording seals, task/provenance tokens, frame steps, surface-output references,
+and logical readback requests remain owned by `recording`. This prevents a
+`recording -> resources -> recording` cycle while keeping native handles out of
+both semantic plans and durable resource identities.
 
 `GPUPassCommandStream` remains the pass-local lowering format.
 `GPUCommandEncoderPlan` becomes the one-to-one preflight description of the
@@ -803,6 +916,18 @@ cancel an already-armed completion. Presentation and GPU completion/failure
 update independent lifecycle states.
 
 It never submits an intermediate encoder.
+
+### Frame-scoped telemetry
+
+`telemetry` owns only observational, handle-free contracts:
+`GPUFrameAttemptID`, closed `GPUFrameTelemetryPhase` and
+`GPUFrameTelemetryOutcome`, typed counter/event kinds, the attempt-scoped event
+sink, and `GPUFrameStructuralTelemetrySnapshot`. These types do not import
+`execution`, `resources`, `recording`, or native APIs. Planning, resource,
+preflight, and execution packages depend one-way on the telemetry contracts and
+emit facts after their own decisions; telemetry never routes or materializes
+work. Stable refusal details reuse foundation `GPUDiagnostic` identity/code
+rather than importing an execution result type.
 
 ## Drawing API inventory
 
@@ -1004,18 +1129,37 @@ Adapter-backed and native tests compare all RGBA channels against the CPU
 reference at interiors, exteriors, AA edges, and clip edges. They cover all
 blend families and representative drawing APIs. `aaxfermodes`, `hairmodes`,
 and `xfermodes` remain the primary visual and performance regression GMs.
+Before any Graphite ratio is published, a versioned workload manifest proves
+that the Kanvas and pinned Skia GMs are operationally equivalent: dimensions,
+ordered draw fingerprint, source-type matrix, layers, shaders, images/masks,
+format, alpha type, color space, and sample plan. Same-name but structurally
+different GMs are informational only.
 
 ## Performance measurement protocol
 
 Structural completion and performance promotion are separate gates.
 
-The reproducible benchmark protocol is:
+The reproducible benchmark uses two separate protocols:
 
-- same host, power mode, adapter, device, driver, JDK, dimensions, target
-  format, color space, sample plan, and scene implementation;
+1. `end-to-end-regression` compares the exact pre-change and candidate Kanvas
+   commits through the same stable `SkiaGmRenderer.render()` lifecycle. It is
+   labeled `offscreen-readback` and is the only source for improvement and
+   regression gates.
+2. `steady-frame-cross-engine` compares candidate Kanvas with Graphite/Dawn.
+   Both prepare the device, reusable target, scene, and `onOnceBeforeDraw`
+   outside timing. Each sample times exactly one frame recording, one submit,
+   and a barrier proving completion of that same frame, without readback. It is
+   labeled `offscreen-current-frame-completion` and is the only source for
+   Kanvas/Graphite ratios.
+
+The common controls are:
+
+- same host, power mode, adapter, device, driver, JDK, dimensions, physical
+  RGBA8Unorm format, premultiplied alpha, sRGB color interpretation, sample plan, and
+  structurally verified scene implementation;
 - separate offscreen/readback and window/present results; never compare one to
   the other;
-- same GPU-completion boundary for timed samples;
+- never divide an end-to-end sample by a steady-frame sample;
 - VSync/present mode explicitly controlled and recorded;
 - warm-cache gate run: 120 untimed warmup frames followed immediately by 300
   measured frames per case;
@@ -1027,13 +1171,23 @@ The reproducible benchmark protocol is:
   median absolute deviation and outlier labels are diagnostic only;
 - benchmark script version, metric definitions, and diagnostic outlier labels
   fixed and committed before baseline or candidate runs;
-- Graphite nanobench uses one checked-in, SHA-256-recorded driver-only patch
-  against the pinned source commit: it removes the assignment that forces
-  `FLAGS_samples = 1` for explicit loops, and changes no renderer, Graphite,
-  Dawn, GM, or timing code. This permits `--loops 1 --samples 420` without
-  auto-calibration or multi-draw samples;
+- Graphite nanobench uses one checked-in, SHA-256-recorded two-hunk driver-only
+  patch against the pinned source commit: it removes the assignment that
+  forces `FLAGS_samples = 1` for explicit loops and calls
+  `GraphiteTestContext::syncedSubmit()` immediately after submitting the
+  current recording. The ordinary frame-lag tracker waits an older reused
+  slot and is not current-frame completion evidence. The patch changes no
+  renderer, Graphite, Dawn, GM, or timed draw code and permits
+  `--loops 1 --samples 420` with one completed draw per sample;
 - Graphite+Dawn, pre-change Kanvas, and post-change Kanvas runs include exact
   commits and commands.
+- pre-change and candidate Kanvas resolve the same tagged wgpu4k/wgpu-native
+  coordinates, timestamped modules, native revision, and artifact SHA-256s;
+  any mismatch makes regression results informational rather than a gate.
+
+Cold initialization uses 30 independent processes and is a third,
+informational-only lane. It never supplies warm percentiles or a cross-engine
+steady-frame ratio.
 
 The approximate 10.2 s/2.4 s/1.35 s motivating measurements are context only.
 The gate baseline is a fresh run of the exact pre-change Kanvas commit on the
@@ -1060,18 +1214,48 @@ and the result is informational, not a promotion gate.
   command buffers, submissions, presentation, completion, waits,
   `peakFrameTransientBytes`, and `targetResidentBytes` including MSAA.
 
+For the four performance controls, `direct-draw-dominated` is a frozen binary
+classification, not a post-run judgment. The denominator is every accepted
+visual draw packet with `gm-content` provenance; the harness-owned background
+packet and final readback/surface-blit output packets are excluded. A direct
+packet writes the canonical final target and uses its already-planned
+fixed-function target blend. A material fragment shader (for example a linear
+gradient) does not make the packet indirect when its target blend remains
+fixed-function. The verdict is true only when:
+
+```text
+acceptedGmContentDrawPackets > 0
+directFinalTargetFixedFunctionPackets == acceptedGmContentDrawPackets
+destinationReadShaderPackets == 0
+destinationSnapshotGroups == 0
+destinationCopiedPixels == 0
+refusedGmContentPackets == 0
+auxiliaryGmContentPasses == 0
+```
+
+The benchmark manifest serializes every numerator/denominator counter,
+`directDrawRatio` (therefore exactly `1.0` when accepted), the boolean verdict,
+and a stable reason code. Missing provenance or counters yields
+`direct_draw.unproven`, never an inferred pass.
+
 ### Performance promotion gates
 
 On the exact protocol:
 
 - `hairmodes`, `aaxfermodes`, and `xfermodes` p50 must each be at least 2x
-  faster than the exact pre-change Kanvas rerun;
+  faster than the exact pre-change Kanvas rerun in `end-to-end-regression`;
 - their p95 must be lower than that same pre-change rerun;
-- direct-draw GMs outside those targets must regress by no more than 10% p50
-  and 15% p95;
-- publish the Kanvas/Graphite+Dawn p50 and p95 ratios;
-- direct-draw-dominated scenes target no more than 2x Graphite+Dawn p50 on the
-  same host.
+- the explicitly sampled controls `rect`, `thinrects`, `linear_gradient`, and
+  `manycircles` must first be proven direct-draw-dominated by structural
+  telemetry, then may regress by no more than 10% p50 and 15% p95 against the
+  fresh pre-change Kanvas run;
+- publish Kanvas/Graphite+Dawn p50 and p95 ratios only from
+  `steady-frame-cross-engine` and only for manifest-equivalent workloads;
+- the manifest-equivalent controls `thinrects` and `manycircles` target no
+  more than 2x Graphite+Dawn p50 on the same host in the steady-frame lane;
+  `rect` has no pinned upstream `GM_rect`, and `linear_gradient` cannot claim
+  equality while dithering is not a real Kanvas paint capability, so both
+  remain Kanvas-only regression controls.
 
 Failing a performance gate does not make structural completion true by
 explanation. It blocks performance promotion and requires a profile naming the

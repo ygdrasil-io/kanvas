@@ -12,6 +12,7 @@
 
 - The approved design is `docs/superpowers/specs/2026-07-13-graphite-dawn-inspired-webgpu-frame-plan-design.md`; if code pressure contradicts it, stop and amend the design before changing semantics.
 - Read `.upstream/specs/gpu-renderer/README.md` and the authority files changed by Task 1 before each implementation slice. The synchronized active specs win over historical tickets and Git-history plans.
+- Before Tasks 2, 4, and 12 change geometry or coverage, read `.upstream/specs/geometry-coverage/README.md`. Before Task 3 changes WGSL parsing/reflection/generated shaders, read `.upstream/target/high-performance-wgsl-pipeline-target.md` and `.upstream/specs/wgsl-pipeline/README.md`. Before Tasks 11, 12, and 14 change real-time rendering, GMs, Kadre, performance tiers, or release evidence, read `.upstream/target/skia-like-realtime-renderer-target.md` and `.upstream/specs/skia-like-realtime/README.md`. Record these reads in the task ledger; if any active authority conflicts with this design/plan, stop and amend the design plus plan before code.
 - Do not port Ganesh or Graphite, add a SkSL compiler, revive `KanvasPipelineIR`, add a general render DAG, or add a second GPU backend.
 - Keep `passes.GPUBlendMode` as the only 29-mode identity. Remove the smaller `state.GPUBlendMode` and all route-driving blend booleans.
 - No product destination-read route may call `readRgba()`, `mapAsync`, upload CPU-produced destination pixels, or invoke a hidden CPU renderer before later GPU drawing.
@@ -51,7 +52,7 @@
 
 - [ ] **Step 1: Add an authority-coherence test**
 
-Extend `GPURendererPackageBoundaryTest` so it reads the active spec files and asserts the synchronized vocabulary is present exactly once as authority: `GPUBlendPlan`, `GPUFramePlan`, `GPUFramePreflighter`, `PreparedGPUFrame`, `GPUSceneTarget`, `GPUQueueCompletionTicket`, `LCDCoverage`, and `RefusedCompositeCommand`. Assert that active specs do not authorize CPU destination snapshots, presentation-as-completion, a second blend-mode enum, or materialization decisions before the final `GPUTaskList`/`GPUFramePlan` order is known.
+Extend `GPURendererPackageBoundaryTest` so it reads the active spec files and asserts the synchronized vocabulary is present exactly once as authority: `GPUBlendPlan`, `GPUFramePlan`, `GPUFrameCoordinator`, `GPUFramePreflighter`, `PreparedGPUFrame`, `GPUSceneTarget`, `GPUQueueCompletionTicket`, `LCDCoverage`, and `RefusedCompositeCommand`. Assert that active specs do not authorize CPU destination snapshots, presentation-as-completion, a second blend-mode enum, or materialization decisions before the final `GPUTaskList`/`GPUFramePlan` order is known.
 
 - [ ] **Step 2: Run the test and confirm the authority is currently inconsistent**
 
@@ -68,6 +69,7 @@ Expected: FAIL because the existing active specifications still contain the old 
 Make these ownership statements normative:
 
 - `GPUTaskList` is dependency authority; `GPUFramePlan` is its deterministic linear execution schedule.
+- `GPUFrameCoordinator` is the sole product entry across planner finalization, preflight, and execution. It performs no route decision and preserves planning/preflight refusals as terminal frame outcomes; no scene or surface product entry may bypass it.
 - analysis and recording remain handle-free; `GPUResourceMaterializationDecision`, pass command streams, and concrete handles are produced only in preflight after frame order is finalized.
 - `GPUBlendPlan` owns all 29 modes, fixed-function state, shader formula identity, coverage encoding, opacity specialization, and destination-read requirement.
 - the canonical mode, blend planner, and semantic `GPUBlendDestinationReadRequirement` live together in `passes`; foundation `state` does not import late-planning packages. `destination` consumes that semantic requirement and alone chooses its concrete strategy, so `passes` never imports `destination`. Handle-free device generation lives in `capabilities`, while color format/interpretation live in `color`.
@@ -114,11 +116,16 @@ rtk git commit -m 'docs: align GPU renderer frame planning authority'
 - Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/intermediates/GPUIntermediatePlanner.kt`
 - Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/paintblend/PaintBlendExecutionContracts.kt`
 - Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/vertices/VerticesContracts.kt`
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeContracts.kt`
 - Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeNative.kt`
 - Modify: `gpu-renderer-scenes/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/scenes/offscreen/SceneIntermediatePlanAdapter.kt`
 - Modify: `gpu-renderer-scenes/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/scenes/offscreen/SceneIntermediatePlanAdapterTest.kt`
 - Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUOpMapper.kt`
 - Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUClipExecution.kt`
+- Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUClipCoverage.kt`
+- Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUDispatchVertices.kt`
+- Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUImageFilterDispatch.kt`
+- Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUMaskBlurDispatch.kt`
 - Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPURenderer.kt`
 - Create: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/passes/GPUBlendCoveragePlannerTest.kt`
 - Delete: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/state/BlendAllowlistGateTest.kt`
@@ -131,8 +138,13 @@ rtk git commit -m 'docs: align GPU renderer frame planning authority'
 - Test: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/intermediates/GPUIntermediatePlannerTest.kt`
 - Test: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/paintblend/PaintBlendExecutionBoundaryTest.kt`
 - Test: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/vertices/VerticesRouteDecisionTest.kt`
+- Test: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeContractsTest.kt`
 - Test: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeNativeSmokeTest.kt`
 - Test: `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUBlendPlanTest.kt`
+- Test: `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUAlphaImageMaterialTest.kt`
+- Test: `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUClipCoverageDispatchTest.kt`
+- Test: `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUImageFilterDispatchTest.kt`
+- Test: `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUMaskBlurDispatchTest.kt`
 
 **Interfaces:**
 
@@ -169,8 +181,10 @@ sealed interface GPUBlendPlan {
         override val mode: GPUBlendMode,
         val formulaId: String,
         override val sourceCoverageEncoding: GPUSourceCoverageEncoding,
-        override val destinationReadRequirement: GPUBlendDestinationReadRequirement,
-    ) : GPUBlendPlan
+    ) : GPUBlendPlan {
+        override val destinationReadRequirement =
+            GPUBlendDestinationReadRequirement.DestinationTextureRequired
+    }
 
     data class LayerCompositeBlend(
         override val mode: GPUBlendMode,
@@ -188,15 +202,14 @@ sealed interface GPUBlendPlan {
         override val mode: GPUBlendMode,
         val diagnostic: GPUBlendDiagnostic,
         val refusalScope: GPURefusalScope,
-    ) : GPUBlendPlan
+    ) : GPUBlendPlan {
+        override val destinationReadRequirement = GPUBlendDestinationReadRequirement.Refused
+    }
 }
 
 enum class GPUBlendDestinationReadRequirement {
     None,
-    FixedFunctionBlend,
-    TargetCopy,
-    ExistingIntermediate,
-    LayerIsolation,
+    DestinationTextureRequired,
     Refused,
 }
 
@@ -236,7 +249,7 @@ Expected: FAIL to compile because the exhaustive plan and coverage types do not 
 
 - [ ] **Step 3: Make `passes.GPUBlendMode` identity-only and implement the pure planner**
 
-Keep the 29 enum constants and `gpuLabel`; remove `colorSrcFactor`, `colorDstFactor`, alpha factors, and `requiresDestinationRead`. Move exact attachment operations, factors, fragment-output encoding, target-format gates, formula IDs, and refusal codes into `GPUBlendPlanning.kt`. Model color and alpha operations independently. Include formula identity and coverage topology in the pipeline-key input; exclude concrete texture identity, snapshot origin, and logical bounds. Change native fixed-function state conversion to consume `GPUBlendPlan.FixedFunctionBlend.state`; it must never infer attachment state from the enum.
+Keep the 29 enum constants and `gpuLabel`; remove `colorSrcFactor`, `colorDstFactor`, alpha factors, and `requiresDestinationRead`. Move exact attachment operations, factors, fragment-output encoding, target-format gates, formula IDs, and refusal codes into `GPUBlendPlanning.kt`. Model color and alpha operations independently. Include formula identity and coverage topology in the pipeline-key input; exclude concrete texture identity, snapshot origin, and logical bounds. Change every runtime recording contract that currently accepts `GPUBlendMode?` to accept the already prepared `GPUFixedFunctionBlendState?` from `GPUBlendPlan.FixedFunctionBlend.state`. Migrate all current callers in the same task: vertex position draws in `GPUDispatchVertices`, filter and blur composite passes in `GPUImageFilterDispatch`/`GPUMaskBlurDispatch`, and DST_IN/DST_OUT mask/stencil passes in `GPUClipCoverage`. Each caller receives the state selected by the canonical plan, or an explicitly prepared canonical fixed-state constant for an internal composite whose semantics are already fixed; none passes a `GPUBlendMode` to runtime. Shader and destination-read plans pass no attachment blend state. Native conversion may translate the supplied operations/factors to wgpu4k values, but it must delete `blendStateFor(GPUBlendMode?)` and never infer attachment state from the enum.
 
 - [ ] **Step 4: Remove the smaller enum and route-driving booleans**
 
@@ -249,28 +262,30 @@ data class GPUBlendFacts(
 )
 ```
 
-Migrate every production consumer in `analysis`, `paintblend`, `vertices`, native state conversion, and the current Kanvas mapper/clip/renderer bridge in this task. `GPUPrimitiveBlendPlan` stores the canonical primitive blend plan rather than its own boolean. Kanvas may keep an explicit temporary function that asks the canonical plan for `destinationReadRequirement`, but it may not recreate a mode table or cache a boolean. Keep compatibility constructors only inside this commit and delete them before committing so downstream modules compile at every task boundary.
+Migrate every production consumer in `analysis`, `paintblend`, `vertices`, `GPUBackendRuntimeContracts`, native state conversion, and the current Kanvas mapper/clip/renderer bridge in this task. `GPUPrimitiveBlendPlan` stores the canonical primitive blend plan rather than its own boolean. Kanvas may keep an explicit temporary function that asks the canonical plan for `destinationReadRequirement`, but it may not recreate a mode table or cache a boolean. Keep compatibility constructors only inside this commit and delete them before committing so downstream modules compile at every task boundary.
 
 - [ ] **Step 5: Update allowlist/intermediate evidence to consume `GPUBlendPlan`**
 
-`GPUBlendAllowlistPlanner` becomes an evidence adapter over `GPUBlendPlanner`, not a second decision table. `GPUIntermediatePlanner` and `GPUDestinationReadStrategyPlanner` consume `plan.destinationReadRequirement`; only the latter maps that semantic requirement to destination materialization actions. Preserve stable diagnostics and hashes where semantics are unchanged; intentionally update snapshots where `Screen`, `Plus`, or coverage routing changes. Run `GPURendererPackageBoundaryTest` in this task and require zero package-cycle violations.
+`GPUBlendAllowlistPlanner` becomes an evidence adapter over `GPUBlendPlanner`, not a second decision table. Make `GPUIntermediatePlanner` independent of the `destination` package: it produces typed eligible-intermediate facts and identities from the canonical blend requirement but never imports a destination plan or chooses a destination strategy. `GPUDestinationReadStrategyPlanner` consumes those facts and is the only owner that chooses `TargetCopy`, `ExistingIntermediate`, `LayerIsolation`, or refusal. It may not reinterpret the formula or blend mode. This fixes the dependency direction to `destination -> intermediates` only, which is required before Task 5 imports `GPUIntermediateIdentity`. Preserve stable diagnostics and hashes where semantics are unchanged; intentionally update snapshots where `Screen`, `Plus`, or coverage routing changes. Run `GPURendererPackageBoundaryTest` in this task and require zero package-cycle violations.
 
 - [ ] **Step 6: Run focused and module tests**
 
 ```bash
 rtk ./gradlew :gpu-renderer:test --tests 'org.graphiks.kanvas.gpu.renderer.GPURendererPackageBoundaryTest' --tests 'org.graphiks.kanvas.gpu.renderer.passes.GPUBlendCoveragePlannerTest' --tests 'org.graphiks.kanvas.gpu.renderer.passes.GPUBlendAllowlistPlannerTest' --tests 'org.graphiks.kanvas.gpu.renderer.analysis.FirstRoutePlannerTest' --tests 'org.graphiks.kanvas.gpu.renderer.destination.DestinationReadStrategyGateTest' --tests 'org.graphiks.kanvas.gpu.renderer.intermediates.GPUIntermediatePlannerTest' --tests 'org.graphiks.kanvas.gpu.renderer.paintblend.PaintBlendExecutionBoundaryTest' --tests 'org.graphiks.kanvas.gpu.renderer.vertices.VerticesRouteDecisionTest' --tests 'org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeNativeSmokeTest'
 rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.gpu.GPUBlendPlanTest'
+rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.gpu.GPUAlphaImageMaterialTest' --tests 'org.graphiks.kanvas.surface.gpu.GPUClipCoverageDispatchTest' --tests 'org.graphiks.kanvas.surface.gpu.GPUImageFilterDispatchTest' --tests 'org.graphiks.kanvas.surface.gpu.GPUMaskBlurDispatchTest'
 rtk ./gradlew :gpu-renderer:test :gpu-renderer-scenes:test :kanvas:test
 rtk proxy rg -n 'blend\.requiresDestinationRead|mode\.requiresDestinationRead|plan\.requiresDestinationRead|colorSrcFactor|colorDstFactor|alphaSrcFactor|alphaDstFactor' gpu-renderer/src/main/kotlin gpu-renderer-scenes/src/main/kotlin kanvas/src/main/kotlin
 rtk proxy rg -n 'enum class GPUBlendMode' gpu-renderer/src/main/kotlin gpu-renderer-scenes/src/main/kotlin kanvas/src/main/kotlin
+rtk proxy rg -n '^import org\.graphiks\.kanvas\.gpu\.renderer\.destination\.' gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/intermediates
 ```
 
-Expected: tests pass. The first scan has no matches. The second scan shows exactly one enum declaration in `passes/GPUBlendMode.kt`; unrelated layer-isolation facts named `requiresDestinationRead` are not blend-routing authorities and may remain until layer contracts are typed in Task 12.
+Expected: tests pass. The first and third scans have no matches. The second scan shows exactly one enum declaration in `passes/GPUBlendMode.kt`; unrelated layer-isolation facts named `requiresDestinationRead` are not blend-routing authorities and may remain until layer contracts are typed in Task 12.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-rtk git add gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/passes/GPUBlendPlanning.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/state/StateContracts.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/passes/GPUBlendMode.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/passes/GPUMsaa.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/commands/NormalizedDrawCommand.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/analysis/AnalysisContracts.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/destination/DestinationContracts.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/intermediates/GPUIntermediatePlanner.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/paintblend/PaintBlendExecutionContracts.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/vertices/VerticesContracts.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeNative.kt gpu-renderer-scenes/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/scenes/offscreen/SceneIntermediatePlanAdapter.kt gpu-renderer-scenes/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/scenes/offscreen/SceneIntermediatePlanAdapterTest.kt kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUOpMapper.kt kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUClipExecution.kt kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPURenderer.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/GPURendererLayoutSurfaceTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/destination/DestinationReadLiveMaterializationTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/destination/DestinationReadMaterializationPreimageTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/destination/DestinationReadStrategyGateTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/passes/GPUBlendCoveragePlannerTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/state/BlendAllowlistGateTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/passes/GPUBlendAllowlistPlannerTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/analysis/FirstRoutePlannerTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/intermediates/GPUIntermediatePlannerTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/paintblend/PaintBlendExecutionBoundaryTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/vertices/VerticesRouteDecisionTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeNativeSmokeTest.kt kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUBlendPlanTest.kt
+rtk git add gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/passes/GPUBlendPlanning.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/state/StateContracts.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/passes/GPUBlendMode.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/passes/GPUMsaa.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/commands/NormalizedDrawCommand.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/analysis/AnalysisContracts.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/destination/DestinationContracts.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/intermediates/GPUIntermediatePlanner.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/paintblend/PaintBlendExecutionContracts.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/vertices/VerticesContracts.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeContracts.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeNative.kt gpu-renderer-scenes/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/scenes/offscreen/SceneIntermediatePlanAdapter.kt gpu-renderer-scenes/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/scenes/offscreen/SceneIntermediatePlanAdapterTest.kt kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUOpMapper.kt kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUClipExecution.kt kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUClipCoverage.kt kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUDispatchVertices.kt kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUImageFilterDispatch.kt kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUMaskBlurDispatch.kt kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPURenderer.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/GPURendererLayoutSurfaceTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/destination/DestinationReadLiveMaterializationTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/destination/DestinationReadMaterializationPreimageTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/destination/DestinationReadStrategyGateTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/passes/GPUBlendCoveragePlannerTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/state/BlendAllowlistGateTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/passes/GPUBlendAllowlistPlannerTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/analysis/FirstRoutePlannerTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/intermediates/GPUIntermediatePlannerTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/paintblend/PaintBlendExecutionBoundaryTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/vertices/VerticesRouteDecisionTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeContractsTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeNativeSmokeTest.kt kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUBlendPlanTest.kt kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUAlphaImageMaterialTest.kt kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUClipCoverageDispatchTest.kt kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUImageFilterDispatchTest.kt kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUMaskBlurDispatchTest.kt
 rtk git commit -m 'refactor: make blend planning exhaustive and canonical'
 ```
 
@@ -287,15 +302,43 @@ rtk git commit -m 'refactor: make blend planning exhaustive and canonical'
 - Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/wgsl/WGSLParserBackedReflectionTest.kt`
 - Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/wgsl/WGSLModuleAbiTest.kt`
 - Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeNativeWgslValidationTest.kt`
+- Modify: `gradle/libs.versions.toml`
+- Create: `gradle/verification-metadata.xml`
+- Modify: `gpu-renderer/build.gradle.kts`
+- Modify: `kanvas/build.gradle.kts`
 - Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUWgsl.kt`
 - Test: `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUBlendFormulaSurfaceTest.kt`
+- Create: `reports/upstream-rebaseline/graphite-dawn-frame-plan/wgsl4k-conformance.json`
 
 **Interfaces:**
 
 - Consumes: the stable `formulaId` and scalar/vector coverage topology selected by `GPUBlendPlan`.
 - Produces: one production formula registry consumed by `BlendWgslBuilder`, plus the independent test-only `GPUBlendCpuOracle` used for RGBA acceptance.
 
-- [ ] **Step 1: Add CPU-oracle and generated-WGSL tests for every formula ID**
+- [ ] **Step 1: Freeze and validate the exact wgsl4k input before implementation**
+
+Move both hard-coded wgsl4k coordinates in `gpu-renderer` and `kanvas` to shared version-catalog aliases. Resolve the exact `wgsl-core-jvm` and `wgsl-parser-jvm` snapshot artifacts used by Gradle and record their versions, timestamped module metadata, repository provenance, checksums, and the exact corresponding wgsl4k source revision in `wgsl4k-conformance.json`. Correlation to a source revision is mandatory for mutable snapshots; if it cannot be proven from resolved metadata and published provenance, the stop/go gate stays closed and the minimized dependency report is the only output.
+
+Create dependency verification metadata immediately, before any formula implementation, by resolving both affected module suites:
+
+```bash
+rtk ./gradlew --write-verification-metadata sha256 :gpu-renderer:test :kanvas:test
+rtk ./gradlew :gpu-renderer:test :kanvas:test
+```
+
+Inspect the metadata diff and require the exact resolved wgsl4k artifacts/checksums. From this point Tasks 3–8 run under dependency verification, so a mutable snapshot replacement fails closed instead of silently changing the accepted parser. Run the existing parser/reflection ABI tests and native shader-module validation against those exact artifacts before changing formula generation. Task 9 extends this same global metadata file to the complete headless test graph; it does not recreate it.
+
+Commit and tag this dependency-only gate separately so isolated baseline worktrees can reproduce the same verified build inputs without receiving formula or renderer changes:
+
+```bash
+rtk git add gradle/libs.versions.toml gradle/verification-metadata.xml gpu-renderer/build.gradle.kts kanvas/build.gradle.kts reports/upstream-rebaseline/graphite-dawn-frame-plan/wgsl4k-conformance.json
+rtk git commit -m 'build: pin WGSL parser inputs for frame planning'
+rtk git tag kanvas-frame-plan-wgsl4k-dependency-2026-07-13 HEAD
+```
+
+This is a stop/go gate symmetric with the wgpu4k gate in Task 9. If parsing, reflection, IR, or generation is ambiguous or surprising, stop Task 3 and every dependent task, preserve a minimized shader/module reproducer, and report it as a wgsl4k issue to the maintainer. Do not add a Kanvas-only parser workaround or silently infer behavior.
+
+- [ ] **Step 2: Add CPU-oracle and generated-WGSL tests for every formula ID**
 
 For all 29 modes, compare premultiplied CPU reference results at coverage `0f`, `0.25f`, `0.5f`, and `1f` for transparent, translucent, and opaque destinations. Add unequal LCD coverage vectors such as `(0.15, 0.55, 0.9)` and assert per-channel `D + F * (Blend(S,D) - D)` plus alpha equal to the maximum of the three interpolated alpha values. Assert `Dst` emits no shader route and LCD never accepts scalar encoding.
 
@@ -303,7 +346,7 @@ Implement `GPUBlendCpuOracle` only in test source, independently of production f
 
 For each fixed-function/shader/coverage topology, assemble the complete production WGSL module, parse and reflect it through wgsl4k, compare reflected bindings/entry points/layout to the declared ABI, and create the native shader module/pipeline in the existing validation harness. Snippet-only string assertions do not count as acceptance.
 
-- [ ] **Step 2: Run tests and confirm formula ownership is still split**
+- [ ] **Step 3: Run tests and confirm formula ownership is still split**
 
 ```bash
 rtk ./gradlew :gpu-renderer:test --tests 'org.graphiks.kanvas.gpu.renderer.materials.GPUBlendFormulaLibraryTest' --tests 'org.graphiks.kanvas.gpu.renderer.text.GPUSubpixelLcdTest'
@@ -311,15 +354,15 @@ rtk ./gradlew :gpu-renderer:test --tests 'org.graphiks.kanvas.gpu.renderer.mater
 
 Expected: FAIL because `GPUBlendFormulaLibrary` does not exist and LCD is not connected to the canonical plan.
 
-- [ ] **Step 3: Implement one formula registry**
+- [ ] **Step 4: Implement one formula registry**
 
 Expose stable formula IDs, WGSL function bodies, binding topology, and scalar/vector coverage kind from one production registry. Make `BlendWgslBuilder` assemble the selected formula rather than switch on blend mode. Move the destination formula body out of `kanvas/GPUWgsl.kt`; keep only complete shader programs assembled from gpu-renderer-provided snippets until Task 12 removes that compatibility host. Do not expose production CPU expected-color logic from this registry.
 
-- [ ] **Step 4: Bind `GPUSubpixelLCDPlan` to canonical vector coverage**
+- [ ] **Step 5: Bind `GPUSubpixelLCDPlan` to canonical vector coverage**
 
 Translate accepted LCD text facts into `GPUCoverageConsumption.LCDCoverage`; keep the existing refusal until the target is single-sample and the plan has a destination strategy. Do not normalize RGB coverage to one scalar.
 
-- [ ] **Step 5: Run focused and cross-module tests**
+- [ ] **Step 6: Run focused and cross-module tests**
 
 ```bash
 rtk ./gradlew :gpu-renderer:test --tests 'org.graphiks.kanvas.gpu.renderer.materials.GPUBlendFormulaLibraryTest' --tests 'org.graphiks.kanvas.gpu.renderer.text.GPUSubpixelLcdTest'
@@ -330,7 +373,7 @@ rtk ./gradlew :gpu-renderer:test :kanvas:test
 
 Expected: all pass with all RGBA channels checked.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 rtk git add gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/materials/GPUBlendFormulaLibrary.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/materials/BlendWgslBuilder.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/text/GPUSubpixelLcd.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/materials/GPUBlendFormulaLibraryTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/materials/GPUBlendCpuOracle.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/text/GPUSubpixelLcdTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/wgsl/WGSLParserBackedReflectionTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/wgsl/WGSLModuleAbiTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeNativeWgslValidationTest.kt kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUWgsl.kt kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUBlendFormulaSurfaceTest.kt
@@ -346,6 +389,9 @@ rtk git commit -m 'feat: centralize exact GPU blend formulas'
 - Create: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/resources/GPUFrameMemoryBudget.kt`
 - Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/capabilities/CapabilityContracts.kt`
 - Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/color/ColorContracts.kt`
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/coordinates/CoordinateContracts.kt`
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/state/StateContracts.kt`
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/intermediates/IntermediateContracts.kt`
 - Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/passes/GPUBlendPlanning.kt`
 - Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/intermediates/GPUIntermediatePlanner.kt`
 - Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/passes/GPUMsaaTest.kt`
@@ -353,12 +399,31 @@ rtk git commit -m 'feat: centralize exact GPU blend formulas'
 - Create: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/resources/GPUFrameMemoryBudgetTest.kt`
 - Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/capabilities/GPUCapabilityContractsTest.kt`
 - Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/color/SDRColorBoundaryTest.kt`
+- Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/intermediates/GPUIntermediatePlanContractsTest.kt`
 - Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/passes/GPUBlendCoveragePlannerTest.kt`
 
 **Interfaces:**
 
 - Consumes: the minimal `GPUSamplePlan`, typed target/device generation, color format/interpretation, and blend destination-read facts.
 - Produces: `GPUSampleContinuationKey`, explicit load/resolve/discard transitions, and `GPUFrameMemoryBudgetPlan` consumed by destination grouping, resources, preflight, and telemetry.
+
+Canonical ownership is fixed before Tasks 5–8 so implementers do not invent duplicate identities or package cycles:
+
+| Type family | Canonical owner | Creation task |
+|---|---|---|
+| `GPUPixelBounds` | `coordinates/CoordinateContracts.kt` | Task 4 |
+| `GPUTargetIdentity` | `state/StateContracts.kt` | Task 4 |
+| `GPUIntermediateIdentity` | `intermediates/IntermediateContracts.kt` | Task 4 |
+| `GPUDeviceGenerationID` | `capabilities/CapabilityContracts.kt` | Task 4 |
+| `GPUColorFormat`, `GPUColorInterpretation` | `color/ColorContracts.kt` | Task 4 |
+| `GPUTargetAccess`, `GPUDestinationReadMember`, snapshot group/key/result, and `SnapshotGroupingCostModel` | `destination/GPUDestinationSnapshotGrouping.kt` | Task 5 |
+| Frame resource/texture/buffer/target refs, resource roles/usages/lifetimes/uses, preparation requests, and upload/copy layouts and regions | `resources/ResourceContracts.kt` | Task 6 |
+| Frame IDs, task/use/provenance tokens, recording seals, frame/output refs, compute dispatch descriptors, target-transition kinds, surface-output descriptors, and readback request IDs | `recording/GPUFramePlan.kt` | Task 6 |
+| `GPUDrawCommandID`, `GPUDrawPacket`, `GPULoadStorePlan` | Existing `commands`, `passes`, and `state` owners | Reused; not redefined |
+| `PreparedGPUFrame`, prepared generation/resource/rollback types, completion ticket/provider, and preflight result | `execution/PreparedGPUFrame.kt` plus `execution/GPUQueueCompletionAdapter.kt` | Task 8 |
+| Diagnostics for frame refusal/preflight/execution | existing `diagnostics.GPUDiagnostic` | Reused; no new `GPUFrameDiagnostic` |
+
+All identities and references are validated, handle-free value objects. Bounds and cross-frame target/intermediate identities live in earlier domain packages because destination grouping needs them before frame-plan finalization. The package edge is strictly `recording -> resources`: handle-free resource references/descriptors live in `resources/ResourceContracts.kt`, where the concrete provider can consume them without importing `recording`; frame-order and output concepts remain in `recording`. Neither package may leak native wgpu4k handles.
 
 - [ ] **Step 1: Add continuation and budget failures first**
 
@@ -376,7 +441,7 @@ Expected: FAIL because continuation and aggregate budget types do not exist.
 
 - [ ] **Step 3: Implement explicit continuation**
 
-Evolve the minimal `GPUSamplePlan` from Task 2 with fresh-clear, retained-load, resolve, and discard transitions in a pure plan. Put target identity and generation in a typed continuation key. Define handle-free `GPUDeviceGenerationID` in `capabilities/CapabilityContracts.kt`, plus `GPUColorFormat` and `GPUColorInterpretation` in `color/ColorContracts.kt`; semantic planning packages use these foundation types and never import `execution.GPUDeviceGeneration`. Make ordinary single-sample plans explicit so `GPUBlendPlanner` and `GPUIntermediatePlanner` distinguish an exact single-sample frame from a local resolve approximation; neither planner may inspect sample-count integers independently.
+Evolve the minimal `GPUSamplePlan` from Task 2 with fresh-clear, retained-load, resolve, and discard transitions in a pure plan. Put target identity and generation in a typed continuation key. Define handle-free `GPUDeviceGenerationID` in `capabilities/CapabilityContracts.kt`, `GPUColorFormat` and `GPUColorInterpretation` in `color/ColorContracts.kt`, `GPUPixelBounds` in `coordinates/CoordinateContracts.kt`, `GPUTargetIdentity` in `state/StateContracts.kt`, and `GPUIntermediateIdentity` in `intermediates/IntermediateContracts.kt`. Their focused contract tests validate non-empty/stable identities and checked bounds. Semantic planning packages use these foundation types and never import `execution.GPUDeviceGeneration`. Make ordinary single-sample plans explicit so `GPUBlendPlanner` and `GPUIntermediatePlanner` distinguish an exact single-sample frame from a local resolve approximation; neither planner may inspect sample-count integers independently.
 
 - [ ] **Step 4: Implement checked aggregate accounting**
 
@@ -392,7 +457,7 @@ rtk ./gradlew :gpu-renderer:test
 - [ ] **Step 6: Commit**
 
 ```bash
-rtk git add gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/passes/GPUMsaa.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/passes/GPUMsaaContinuation.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/resources/GPUFrameMemoryBudget.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/capabilities/CapabilityContracts.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/color/ColorContracts.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/passes/GPUBlendPlanning.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/intermediates/GPUIntermediatePlanner.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/passes/GPUMsaaTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/passes/GPUMsaaContinuationTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/resources/GPUFrameMemoryBudgetTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/capabilities/GPUCapabilityContractsTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/color/SDRColorBoundaryTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/passes/GPUBlendCoveragePlannerTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/intermediates/GPUIntermediateMsaaPlanTest.kt
+rtk git add gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/passes/GPUMsaa.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/passes/GPUMsaaContinuation.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/resources/GPUFrameMemoryBudget.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/capabilities/CapabilityContracts.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/color/ColorContracts.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/coordinates/CoordinateContracts.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/state/StateContracts.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/intermediates/IntermediateContracts.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/passes/GPUBlendPlanning.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/intermediates/GPUIntermediatePlanner.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/passes/GPUMsaaTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/passes/GPUMsaaContinuationTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/resources/GPUFrameMemoryBudgetTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/capabilities/GPUCapabilityContractsTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/color/SDRColorBoundaryTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/intermediates/GPUIntermediatePlanContractsTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/passes/GPUBlendCoveragePlannerTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/intermediates/GPUIntermediateMsaaPlanTest.kt
 rtk git commit -m 'feat: preserve MSAA state across pass breaks'
 ```
 
@@ -453,11 +518,11 @@ Expected: FAIL to compile because grouping contracts do not exist.
 
 - [ ] **Step 3: Separate semantic requirement, strategy, and materialization**
 
-Keep `None`, fixed-function, target snapshot, existing intermediate, layer isolation, and refusal as semantic/strategy outcomes. Model `CopyAsDrawMaterialization` only as a materialization of a target snapshot when a future real source is texturable but lacks `CopySrc`; do not expose it as a seventh blend strategy. Require canonical scene/layer targets to include `CopySrc`.
+Keep the blend planner's semantic result limited to `None`, `DestinationTextureRequired`, or `Refused`. `GPUDestinationReadStrategyPlanner` is the sole owner that maps `DestinationTextureRequired` to a target snapshot, existing intermediate, layer isolation, or typed refusal using target/order/layer facts. Model `CopyAsDrawMaterialization` only as a materialization of a target snapshot when a future real source is texturable but lacks `CopySrc`; do not expose it as another blend strategy. Require canonical scene/layer targets to include `CopySrc`.
 
 - [ ] **Step 4: Implement deterministic grouping and dumps**
 
-Use checked arithmetic for pixel area and aligned byte cost. Reject union inflation above `2.0`, aggregate frame-budget overflow, or missing calibration. Store logical copy origin/extent independently of later backing allocation. Never use wall time or allocation identity in a decision.
+Use checked arithmetic for pixel area and aligned byte cost. Reject union inflation above `2.0` and aggregate frame-budget overflow. Until a checked-in microbenchmark provides versioned copy/pass-break/scratch cost constants, select the conservative Graphite-like policy of one bounded copy per destination-reading draw and disable cross-draw snapshot sharing; missing calibration is not a draw refusal. Store logical copy origin/extent independently of later backing allocation. Never use wall time or allocation identity in a decision.
 
 - [ ] **Step 5: Run destination and module tests**
 
@@ -482,10 +547,12 @@ rtk git commit -m 'feat: plan bounded destination snapshot groups'
 - Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/recording/RecordingContracts.kt`
 - Create: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/recording/GPUFramePlan.kt`
 - Create: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/recording/GPUFramePlanner.kt`
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/resources/ResourceContracts.kt`
 - Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/passes/GPUPassBatcher.kt`
 - Create: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/recording/GPUFramePlannerTest.kt`
 - Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/recording/GPURecorderTest.kt`
 - Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/passes/GPUPassBatcherTest.kt`
+- Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/GPURendererPackageBoundaryTest.kt`
 
 **Interfaces:**
 
@@ -494,7 +561,7 @@ rtk git commit -m 'feat: plan bounded destination snapshot groups'
 
 - [ ] **Step 1: Write deterministic frame-plan tests**
 
-Cover compatible recording insertion, preserved task IDs/dependencies/phase order, cycle rejection, replay-key mismatch, pass/destination-copy/pass sequencing, layer transitions, readback/output steps, direct draw batching, target hazards, and repeatable dump/hash output. Add refusal cases for isolated leaf, whole composite command with child provenance consumed, and atomic escalation when order cannot be preserved. Assert `CopyAsDrawMaterializationStep` is emitted only when the capability record says the implementation is present; canonical `CopySrc` targets never need it, and an otherwise requested route refuses with `unsupported.destination_read.copy_unavailable` before preflight.
+Cover compatible recording insertion, preserved task IDs/dependencies/phase order, cycle rejection, replay-key mismatch, pass/destination-copy/pass sequencing, layer transitions, readback/output steps, direct draw batching, target hazards, and repeatable dump/hash output. Add refusal cases for isolated leaf, whole composite command with child provenance consumed, and atomic escalation when order cannot be preserved. Assert `CopyAsDrawMaterializationStep` is emitted only when the capability record says the implementation is present; canonical `CopySrc` targets never need it, and an otherwise requested route refuses with `unsupported.destination_read.copy_unavailable` before preflight. Extend `GPURendererPackageBoundaryTest` to prove `resources` imports neither `recording` nor `execution`, `recording` imports only handle-free resource contracts rather than the concrete provider/materialized handles, and the complete package graph remains acyclic.
 
 Use this closed step algebra:
 
@@ -616,7 +683,7 @@ sealed interface GPUFrameStep {
 
     data class RefusedLeafDrawStep(
         val commandId: GPUDrawCommandID,
-        val diagnostic: GPUFrameDiagnostic,
+        val diagnostic: GPUDiagnostic,
         override val sourceTaskIds: List<GPUTaskID>,
     ) : GPUFrameStep {
         override val executionKind = GPUFrameStepExecutionKind.RefusalEvidence
@@ -625,7 +692,7 @@ sealed interface GPUFrameStep {
     data class RefusedCompositeCommandStep(
         val commandId: GPUDrawCommandID,
         val provenanceTokens: List<GPUCompositeProvenanceToken>,
-        val diagnostic: GPUFrameDiagnostic,
+        val diagnostic: GPUDiagnostic,
         override val sourceTaskIds: List<GPUTaskID>,
     ) : GPUFrameStep {
         override val executionKind = GPUFrameStepExecutionKind.RefusalEvidence
@@ -645,7 +712,7 @@ data class GPUFramePlan(
     val recordingSeals: List<GPURecordingSeal>,
     val steps: List<GPUFrameStep>,
     val memoryBudget: GPUFrameMemoryBudgetPlan,
-    val diagnostics: List<GPUFrameDiagnostic>,
+    val diagnostics: List<GPUDiagnostic>,
 )
 
 data class GPUFrameReadbackRequest(
@@ -662,14 +729,16 @@ data class GPUFrameReadbackRequest(
 @JvmInline value class GPUCompositeProvenanceToken(val value: String)
 
 enum class GPUReadbackPixelFormat { Rgba8Unorm }
-
-data class GPUResourcePreparationRequest(
-    val resource: GPUFrameResourceRef,
-    val role: GPUFrameResourceRole,
-    val usage: List<GPUFrameResourceUsage>,
-    val lifetime: GPUFrameResourceLifetime,
-)
 ```
+
+Define the referenced handle-free resource algebra in
+`resources/ResourceContracts.kt`, including `GPUFrameResourceRef` and its
+texture/buffer/target refinements, `GPUFrameResourceRole`,
+`GPUFrameResourceUsage`, `GPUFrameResourceLifetime`, `GPUFrameResourceUse`,
+`GPUResourcePreparationRequest`, `GPUUploadLayout`, `GPUTextureCopyLayout`, and
+`GPUResourceCopyRegion`. `GPUResourcePreparationRequest.resource` uses that
+same resource-owned `GPUFrameResourceRef`. Do not define any of them in
+`recording`, and do not let `resources` import frame steps or recording seals.
 
 - [ ] **Step 2: Run the planner test**
 
@@ -691,13 +760,20 @@ Keep `GPUPassBatcher` responsible only for adjacent compatible `GPUDrawPacket` v
 
 ```bash
 rtk ./gradlew :gpu-renderer:test --tests 'org.graphiks.kanvas.gpu.renderer.recording.*' --tests 'org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatcherTest' --tests 'org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchCommandStreamTest' --tests 'org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketCommandStreamTest'
+rtk ./gradlew :gpu-renderer:test --tests 'org.graphiks.kanvas.gpu.renderer.GPURendererPackageBoundaryTest'
+rtk proxy rg -n '^import org\.graphiks\.kanvas\.gpu\.renderer\.(recording|execution)\.' gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/resources
+rtk proxy rg -n '^import org\.graphiks\.kanvas\.gpu\.renderer\.resources\.(GPUConcreteResourceProvider|GPUMaterialized|GPUPrepared)' gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/recording
 rtk ./gradlew :gpu-renderer:test
 ```
+
+Expected: both scans have no matches and the package-boundary test proves the
+only frame-plan/resource edge is `recording -> resources` through handle-free
+contracts.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-rtk git add gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/recording/RecordingContracts.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/recording/GPUFramePlan.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/recording/GPUFramePlanner.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/passes/GPUPassBatcher.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/recording/GPUFramePlannerTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/recording/GPURecorderTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/passes/GPUPassBatcherTest.kt
+rtk git add gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/recording/RecordingContracts.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/recording/GPUFramePlan.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/recording/GPUFramePlanner.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/resources/ResourceContracts.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/passes/GPUPassBatcher.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/recording/GPUFramePlannerTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/recording/GPURecorderTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/passes/GPUPassBatcherTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/GPURendererPackageBoundaryTest.kt
 rtk git commit -m 'feat: finalize recordings into a linear GPU frame plan'
 ```
 
@@ -715,8 +791,8 @@ rtk git commit -m 'feat: finalize recordings into a linear GPU frame plan'
 
 **Interfaces:**
 
-- Consumes: `GPUFrameMemoryBudgetPlan`, typed scratch descriptors, completion ownership, `GPUReadbackRequest`, and `GPUCapabilities`.
-- Produces: completion-safe opaque scratch leases and `GPUReadbackLayoutPlanner.plan(request: GPUReadbackRequest, capabilities: GPUCapabilities): GPUReadbackLayout`.
+- Consumes: `GPUFrameMemoryBudgetPlan`, typed scratch descriptors, completion ownership, canonical handle-free `GPUFrameReadbackRequest`, and `GPUCapabilities`.
+- Produces: completion-safe opaque scratch leases, a distinct output-owned readback staging lease, and `GPUReadbackLayoutPlanner.plan(request: GPUFrameReadbackRequest, capabilities: GPUCapabilities): GPUReadbackLayout`.
 
 - [ ] **Step 1: Test logical/backing separation and completion-safe reuse**
 
@@ -724,7 +800,7 @@ Request non-power-of-two logical textures, verify deterministic size classes, in
 
 - [ ] **Step 2: Test WebGPU readback layout arithmetic**
 
-Cover widths whose unpadded rows are and are not multiples of the facade-provided `copyBytesPerRowAlignment`, non-zero offsets, rows-per-image, checked overflow, total padded size, and row depadding back to tightly packed RGBA. Test the observed WebGPU value `256` and a fake capability value `512` so the implementation cannot hard-code 256. Use `Long` for intermediate arithmetic and reject non-positive/non-power-of-two capability values and results that cannot fit facade buffer sizes.
+Cover widths whose unpadded rows are and are not multiples of the facade-provided `copyBytesPerRowAlignment`, non-zero offsets, rows-per-image, checked overflow, total padded size, and row depadding back to tightly packed RGBA. Test the observed WebGPU value `256` and a fake capability value `512` so the implementation cannot hard-code 256. Use `Long` for intermediate arithmetic and reject non-positive/non-power-of-two capability values and results that cannot fit facade buffer sizes. Model the staging lease lifecycle as `Reserved -> Submitted -> GPUCompletedMappingPending -> Mapped -> Depadded -> Releasable`, plus `MapFailed -> Releasable|Quarantined`. Delay mapping after accepted queue completion, request an identical staging buffer from another frame, and prove there is no reuse until map/unmap/depad terminates.
 
 ```kotlin
 data class GPUReadbackLayout(
@@ -740,7 +816,7 @@ data class GPUReadbackLayout(
 )
 
 class GPUReadbackLayoutPlanner {
-    fun plan(request: GPUReadbackRequest, capabilities: GPUCapabilities): GPUReadbackLayout
+    fun plan(request: GPUFrameReadbackRequest, capabilities: GPUCapabilities): GPUReadbackLayout
 }
 ```
 
@@ -758,7 +834,7 @@ Return opaque resource references and lease metadata; never expose raw wgpu hand
 
 - [ ] **Step 5: Implement readback packing/depacking**
 
-Keep map/copy completion in the output path only. Readback may observe a completed scene but cannot provide destination pixels for subsequent GPU drawing.
+Keep map/copy completion in the output path only. Readback may observe a completed scene but cannot provide destination pixels for subsequent GPU drawing. Queue completion releases ordinary submission resources but transfers the output-owned staging lease to `GPUCompletedMappingPending`; only terminal depadding/map failure plus unmap makes it reusable, and device-loss failure quarantines it when safe release cannot be proven.
 
 - [ ] **Step 6: Run resource/execution tests and commit**
 
@@ -782,15 +858,21 @@ rtk git commit -m 'feat: pool frame scratch and validate readback layout'
 - Create: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUFramePreflighterTest.kt`
 - Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUExecutionContextTest.kt`
 - Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUExecutionCacheContractsTest.kt`
+- Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/GPURendererLayoutSurfaceTest.kt`
+- Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/destination/DestinationReadLiveMaterializationTest.kt`
+- Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/geometry/StencilCoverLiveMaterializationTest.kt`
+- Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/layers/SaveLayerLiveMaterializationTest.kt`
+- Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/resources/GPUTextureSamplerMaterializationProviderTest.kt`
+- Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/validation/FirstRoutePMEvidenceBundleTest.kt`
 
 **Interfaces:**
 
-- Consumes: immutable `GPUFramePlan`, resource providers, generation seals, surface acquisition, and a deterministic `GPUQueueCompletionTicketProvider` fake/adapter contract.
-- Produces: `GPUFramePreflighter.preflight(framePlan: GPUFramePlan): GPUFramePreflightResult`, with `Ready(PreparedGPUFrame)` or typed refusal/failure and full rollback.
+- Consumes: immutable `GPUFramePlan`, resource providers, generation seals, surface acquisition, and one deterministic `GPUQueueCompletionProvider` fake/adapter contract.
+- Produces: `GPUFramePreflighter.preflight(framePlan: GPUFramePlan): GPUFramePreflightResult`, with `Prepared(PreparedGPUFrame)` or typed refusal/failure and full rollback.
 
 - [ ] **Step 1: Write transactional preflight tests**
 
-Assert full success, pipeline failure, bind-group failure, scratch-budget failure, stale target/device/resource generation, readback-layout failure, and surface acquisition statuses. Every failure before encoding must run rollback in reverse acquisition order, leave no durable native references, create no encoder, and submit nothing. Missing queue-completion proof must refuse before surface acquisition.
+Assert full success, pipeline failure, bind-group failure, scratch-budget failure, stale target/device/resource generation, readback-layout failure, and surface acquisition statuses. Every failure before encoding must run rollback in reverse acquisition order, leave no durable native references, create no encoder, and submit nothing. Missing queue-completion proof must refuse before surface acquisition. For a readback frame, prepared ownership marks the staging lease as output-owned and transfers it to the completed-frame path; ordinary post-submit completion release cannot repool it. Re-run the Task 6 package-boundary assertions: `GPUConcreteResourceProvider` consumes resource-owned preparation requests directly, `resources` still imports neither `recording` nor `execution`, and preflight in `execution` is the only layer that joins a `GPUFramePlan` to materialized resource results.
 
 - [ ] **Step 2: Define prepared-frame ownership**
 
@@ -807,11 +889,11 @@ data class PreparedGPUFrame(
 
 sealed interface GPUFramePreflightResult {
     data class Prepared(val frame: PreparedGPUFrame) : GPUFramePreflightResult
-    data class Refused(val diagnostic: GPUFrameDiagnostic) : GPUFramePreflightResult
+    data class Refused(val diagnostic: GPUDiagnostic) : GPUFramePreflightResult
 }
 ```
 
-Define the handle-free `GPUQueueCompletionTicket` and `GPUQueueCompletionProvider.reserveTicket()` interfaces here so preflight can depend on them; tests use a deterministic fake provider. The corrected wgpu4k-backed implementation arrives in Task 9.
+Delete the legacy string-based `execution.GPUReadbackRequest` and migrate every listed consumer to Task 6's canonical `GPUFrameReadbackRequest`; no adapter or parallel request type remains. Define the handle-free `GPUQueueCompletionTicket` and sole `GPUQueueCompletionProvider.reserveTicket()` interface here so preflight can depend on it; tests use a deterministic fake provider. The corrected wgpu4k-backed implementation arrives in Task 9.
 
 Change `GPUCommandEncoderPlan` from one pass-local scope to an ordered list that maps one-to-one to every GPU-encodable `GPUFrameStep`. During preflight, lower each `GPUDrawPacket` to a materialized `GPUPassCommandStream`, compute `GPUReadbackLayout` from the logical request and facade capabilities, and retain the one-to-one source-task mapping. Keep surface acquisition and post-submit presentation as explicit host-action evidence outside encoder scopes. Include operation class, source task IDs, target/resource generation labels, and evidence counts. Do not include native handles.
 
@@ -831,13 +913,15 @@ Materialize reusable resources first, reserve the completion ticket, and acquire
 
 ```bash
 rtk ./gradlew :gpu-renderer:test --tests 'org.graphiks.kanvas.gpu.renderer.execution.GPUFramePreflighterTest' --tests 'org.graphiks.kanvas.gpu.renderer.execution.GPUExecutionContextTest' --tests 'org.graphiks.kanvas.gpu.renderer.execution.GPUExecutionCacheContractsTest'
+rtk ./gradlew :gpu-renderer:test --tests 'org.graphiks.kanvas.gpu.renderer.GPURendererPackageBoundaryTest'
+rtk proxy rg -n '^import org\.graphiks\.kanvas\.gpu\.renderer\.(recording|execution)\.' gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/resources
 rtk ./gradlew :gpu-renderer:test
 ```
 
 - [ ] **Step 6: Commit**
 
 ```bash
-rtk git add gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/ExecutionContracts.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUQueueCompletionAdapter.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUFramePreflighter.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/PreparedGPUFrame.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/passes/PassContracts.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/resources/GPUConcreteResourceProvider.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUFramePreflighterTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUExecutionContextTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUExecutionCacheContractsTest.kt
+rtk git add gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/ExecutionContracts.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUQueueCompletionAdapter.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUFramePreflighter.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/PreparedGPUFrame.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/passes/PassContracts.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/resources/GPUConcreteResourceProvider.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUFramePreflighterTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUExecutionContextTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUExecutionCacheContractsTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/GPURendererLayoutSurfaceTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/destination/DestinationReadLiveMaterializationTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/geometry/StencilCoverLiveMaterializationTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/layers/SaveLayerLiveMaterializationTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/resources/GPUTextureSamplerMaterializationProviderTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/validation/FirstRoutePMEvidenceBundleTest.kt
 rtk git commit -m 'feat: preflight GPU frames transactionally'
 ```
 
@@ -848,7 +932,7 @@ rtk git commit -m 'feat: preflight GPU frames transactionally'
 - Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUQueueCompletionAdapter.kt`
 - Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUQueueManager.kt`
 - Modify: `gradle/libs.versions.toml`
-- Create: `gradle/verification-metadata.xml`
+- Modify: `gradle/verification-metadata.xml`
 - Modify: `gpu-renderer/build.gradle.kts`
 - Modify: `gpu-renderer-scenes/build.gradle.kts`
 - Modify: `integration-tests/test-utils/build.gradle.kts`
@@ -890,13 +974,21 @@ Expected: FAIL because current tests and constants treat `presented`, `present-f
 
 - [ ] **Step 4: Pin the exact resolved wgpu4k artifact**
 
-Move the shared `0.2.0-SNAPSHOT` coordinate to one `libs.versions.toml` version/library alias and use it from all five current consumers. Generate Gradle SHA-256 dependency verification metadata for the resolved corrected artifact:
+Move the shared `0.2.0-SNAPSHOT` coordinate to one `libs.versions.toml` version/library alias and use it from all five current consumers. Generate Gradle SHA-256 dependency verification metadata over the complete ordinary headless test graph, not only `:gpu-renderer:test`:
 
 ```bash
-rtk ./gradlew --write-verification-metadata sha256 :gpu-renderer:test --tests 'org.graphiks.kanvas.gpu.renderer.execution.GPUQueueCompletionAdapterTest' --tests 'org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeNativeSmokeTest'
+rtk ./gradlew --write-verification-metadata sha256 test
 ```
 
-Inspect `gradle/verification-metadata.xml` and require checksums for the resolved `wgpu4k-toolkit` artifact plus every platform/native runtime variant loaded by the conformance test. The conformance JSON records the declared coordinate, resolved timestamped snapshot/module metadata, every relevant artifact SHA-256, wgpu-native revision, callback mode, host/architecture, and test command. A mutable coordinate without verification checksums and resolved metadata is not accepted.
+Inspect the metadata diff and require coverage for every artifact resolved by the final headless `test` graph, including `wgpu4k-toolkit`, all platform/native runtime variants used by conformance, serialization/test dependencies in integration modules, and transitive plugins. Rerun `rtk ./gradlew test` under verification before committing. The conformance JSON records the declared coordinate, resolved timestamped snapshot/module metadata, every relevant artifact SHA-256, wgpu-native revision, callback mode, host/architecture, and test command. A mutable coordinate without verification checksums and resolved metadata is not accepted.
+
+Commit this dependency-only, baseline-compatible pin separately and tag it so the later benchmark baseline can use the exact same wgpu4k/wgpu-native artifacts without receiving renderer changes:
+
+```bash
+rtk git add gradle/libs.versions.toml gradle/verification-metadata.xml gpu-renderer/build.gradle.kts gpu-renderer-scenes/build.gradle.kts integration-tests/test-utils/build.gradle.kts integration-tests/skia/build.gradle.kts integration-tests/svg/build.gradle.kts
+rtk git commit -m 'build: pin WebGPU runtime for frame comparison'
+rtk git tag kanvas-frame-plan-wgpu4k-dependency-2026-07-13 HEAD
+```
 
 - [ ] **Step 5: Add native conformance evidence for corrected wgpu4k**
 
@@ -918,7 +1010,7 @@ Proceed to Tasks 10–14 only when the exact pinned artifact passes the native c
 - [ ] **Step 8: Commit the accepted completion boundary**
 
 ```bash
-rtk git add gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUQueueCompletionAdapter.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUQueueManager.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUQueueManagerTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUQueueCompletionAdapterTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeNativeSmokeTest.kt gradle/libs.versions.toml gradle/verification-metadata.xml gpu-renderer/build.gradle.kts gpu-renderer-scenes/build.gradle.kts integration-tests/test-utils/build.gradle.kts integration-tests/skia/build.gradle.kts integration-tests/svg/build.gradle.kts reports/upstream-rebaseline/graphite-dawn-frame-plan/wgpu4k-completion-conformance.json
+rtk git add gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUQueueCompletionAdapter.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUQueueManager.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUQueueManagerTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUQueueCompletionAdapterTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeNativeSmokeTest.kt reports/upstream-rebaseline/graphite-dawn-frame-plan/wgpu4k-completion-conformance.json
 rtk git commit -m 'fix: release GPU resources on real completion'
 ```
 
@@ -930,28 +1022,46 @@ rtk git commit -m 'fix: release GPU resources on real completion'
 
 - Create: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUSceneTarget.kt`
 - Create: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUFrameExecutor.kt`
+- Create: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUFrameCoordinator.kt`
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/telemetry/TelemetryContracts.kt`
 - Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeContracts.kt`
 - Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeNative.kt`
+- Modify: `gpu-renderer-scenes/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/scenes/offscreen/SceneIntermediatePlanExecutor.kt`
+- Modify: `gpu-renderer-scenes/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/scenes/offscreen/RectOnlyOffscreenRenderer.kt`
+- Modify: `gpu-renderer-scenes/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/scenes/offscreen/OffscreenFrameSampler.kt`
+- Modify: `gpu-renderer-scenes/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/scenes/offscreen/PerFamilyBenchmark.kt`
 - Create: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUFrameExecutorTest.kt`
+- Create: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUFrameCoordinatorTest.kt`
+- Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/GPURendererPackageBoundaryTest.kt`
 - Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeNativeSmokeTest.kt`
+- Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUColorGlyphRenderSmokeTest.kt`
+- Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUColorGlyphReferenceParityTest.kt`
+- Modify: `gpu-renderer-scenes/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/scenes/offscreen/M25ExecutorWiringTest.kt`
+- Modify: `gpu-renderer-scenes/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/scenes/offscreen/OffscreenScenePngParityTest.kt`
+- Create: `gpu-renderer-scenes/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/scenes/offscreen/OffscreenFrameSamplerTest.kt`
+- Modify: `gpu-renderer-scenes/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/scenes/offscreen/PerFamilyBenchmarkTest.kt`
 
 **Interfaces:**
 
 - Consumes: accepted `PreparedGPUFrame`, `GPUSceneTarget`, prepared resources, and reserved completion ticket.
-- Produces: `GPUFrameExecutor.execute(preparedFrame: PreparedGPUFrame): GPUFrameExecutionResult` with one encoder, one command buffer, one submit, then guarded host output actions.
+- Produces: `GPUFrameExecutor.execute(preparedFrame: PreparedGPUFrame): GPUFrameExecutionHandle` with one encoder, one command buffer, one submit, then guarded host output actions; `GPUFrameCoordinator.submit(taskList)` is the sole end-to-end planner → preflight → executor entry point and returns a two-phase `GPUPreparedSceneFrameHandle`. Its completion stage yields the only final result and immutable frame-scoped `GPUFrameStructuralTelemetrySnapshot`; early refusals use an already-completed stage.
 
 - [ ] **Step 1: Add an instrumented executor test**
 
 Prepare a frame containing render, bounded destination copy, render, compute/filter, target transition, and optional readback. Assert exactly one encoder creation, ordered GPU scopes matching `GPUCommandEncoderPlan`, separately ordered host actions, one finish, one command buffer, one submit, exact retained resource registration, completion arm immediately after submit, and no intermediate submission. Add stale-seal, synchronous encode failure, post-submit completion-arm failure, and callback failure paths.
 
+Add coordinator cases for recording/planning refusal, preflight refusal, successful readback/completion-only execution, and completion failure. Task 10 has no presentation output; Task 11 adds and tests presentation failure when it extends the closed algebra. Early refusal must never call the executor and returns an already-completed handle. Submitted work first returns a handle with attempt ID and immediate submit/output state; only its exact completion stage seals one immutable `GPUFrameStructuralTelemetrySnapshot` with furthest phase, final outcome/diagnostic, and the counters observed so far. Define `GPUFrameAttemptID`, closed telemetry phase/outcome/event kinds, attempt-scoped sink, and snapshot in `telemetry/TelemetryContracts.kt` without imports from `execution`, `resources`, or `recording`; those later packages depend one-way on telemetry and emit facts after decisions. Assert the package-boundary test remains acyclic, a pending handle cannot expose final telemetry, and completion never blocks the render thread. No global mutable last-frame state or log reconstruction is allowed.
+
 - [ ] **Step 2: Add native pixel tests for copy and MSAA pass breaks**
 
-Verify bounded copy extents and origin math, no CPU upload between passes, untouched old pixels after a partial MSAA draw and pass break, several breaks on retained attachments, logical snapshots backed by larger pooled textures, and aligned readback output.
+Verify bounded copy extents and origin math, no CPU upload between passes, untouched old pixels after a partial MSAA draw and pass break, several breaks on retained attachments, logical snapshots backed by larger pooled textures, and aligned readback output. Delay readback mapping after accepted queue completion, request a same-sized staging buffer from a concurrent frame, and prove the first output-owned staging lease is neither released nor reused until map/unmap/depad completes. Cover map failure and device-loss quarantine without leaking the lease.
+
+Migrate the existing color-glyph native smoke/parity tests from direct `createOffscreenTarget`/`target.encode`/`readRgba` calls to a recorded frame plus final planned readback through `GPUFrameCoordinator`. They remain pixel tests, but no test keeps a removed immediate contract alive.
 
 - [ ] **Step 3: Run failing executor tests**
 
 ```bash
-rtk ./gradlew :gpu-renderer:test --tests 'org.graphiks.kanvas.gpu.renderer.execution.GPUFrameExecutorTest' --tests 'org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeNativeSmokeTest'
+rtk ./gradlew :gpu-renderer:test --tests 'org.graphiks.kanvas.gpu.renderer.execution.GPUFrameExecutorTest' --tests 'org.graphiks.kanvas.gpu.renderer.execution.GPUFrameCoordinatorTest' --tests 'org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeNativeSmokeTest' --tests 'org.graphiks.kanvas.gpu.renderer.GPURendererPackageBoundaryTest'
 ```
 
 Expected: FAIL because the current runtime exposes immediate per-operation encoding/submission and CPU-backed `snapshotTargetToOffscreenTexture()`.
@@ -960,6 +1070,10 @@ Expected: FAIL because the current runtime exposes immediate per-operation encod
 
 Own the canonical resolved texture, optional retained MSAA attachments, dimensions, format/color facts, usage, sample plan, and generation. `GPUFrameExecutor.execute(preparedFrame)` validates the seal, creates one encoder, visits each planned scope, finishes once, submits once, registers resources, arms completion, then performs guarded output actions. It cannot allocate or choose new routes.
 
+`GPUFrameCoordinator` performs no routing of its own: it invokes the canonical planner, preflight, then executor once. `submit()` returns a sealed `GPUPreparedSceneFrameHandle` containing the stable attempt ID, immediate pre-submit/submit outcome, and `CompletionStage<GPUPreparedSceneCompletedFrameResult>`. Pre-submit failures complete the stage immediately; submitted completion-only work completes it from the exact queue-completion path. `ReadbackRgba` keeps its output-owned staging lease beyond queue completion and completes only after terminal map/unmap/depad or typed map failure. The final result contains the furthest reached phase, final diagnostic/result, and exact immutable telemetry snapshot. It exposes a production `GPUPreparedSceneFrameSession` that retains a valid canonical target/device/resource context across repeated frames and initially accepts recorded task lists plus terminal RGBA readback or exact current-frame completion without readback. Task 11 extends this closed output algebra with window presentation in the same session; no Task 10 type references the not-yet-created window contract. Drawing API callers and scene runners use this boundary rather than invoking backend target creation, preflight, or executor independently.
+
+Migrate all existing `gpu-renderer-scenes` offscreen consumers in this task. `SceneIntermediatePlanExecutor` records its scene/intermediate work into the canonical task/frame route instead of calling `encodeOffscreenTexture` per operation. `RectOnlyOffscreenRenderer` records direct and destination-reading draws into the same coordinator instead of calling `target.encode` or `copyTargetToOffscreenTexture`; its PNG bytes come only from the final planned output readback after the single submission. `OffscreenFrameSampler` and `PerFamilyBenchmark` reuse `GPUPreparedSceneFrameSession` rather than creating backend offscreen targets. No scene runner or benchmark may remain a second immediate executor.
+
 - [ ] **Step 5: Make destination snapshots native texture-to-texture copies**
 
 Replace the product use of `snapshotTargetToOffscreenTexture()` with planned `copyTextureToTexture` on the active encoder. Encode destination shader draws against the snapshot texture and logical-origin uniforms. Keep output readback as a final planned buffer copy.
@@ -967,14 +1081,16 @@ Replace the product use of `snapshotTargetToOffscreenTexture()` with planned `co
 - [ ] **Step 6: Run native and module suites**
 
 ```bash
-rtk ./gradlew :gpu-renderer:test --tests 'org.graphiks.kanvas.gpu.renderer.execution.GPUFrameExecutorTest' --tests 'org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeNativeSmokeTest' --tests 'org.graphiks.kanvas.gpu.renderer.passes.GPUMsaaContinuationTest'
+rtk ./gradlew :gpu-renderer:test --tests 'org.graphiks.kanvas.gpu.renderer.execution.GPUFrameExecutorTest' --tests 'org.graphiks.kanvas.gpu.renderer.execution.GPUFrameCoordinatorTest' --tests 'org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeNativeSmokeTest' --tests 'org.graphiks.kanvas.gpu.renderer.execution.GPUColorGlyphRenderSmokeTest' --tests 'org.graphiks.kanvas.gpu.renderer.execution.GPUColorGlyphReferenceParityTest' --tests 'org.graphiks.kanvas.gpu.renderer.passes.GPUMsaaContinuationTest'
+rtk ./gradlew :gpu-renderer-scenes:test --tests 'org.graphiks.kanvas.gpu.renderer.scenes.offscreen.M25ExecutorWiringTest' --tests 'org.graphiks.kanvas.gpu.renderer.scenes.offscreen.OffscreenScenePngParityTest' --tests 'org.graphiks.kanvas.gpu.renderer.scenes.offscreen.OffscreenFrameSamplerTest' --tests 'org.graphiks.kanvas.gpu.renderer.scenes.offscreen.PerFamilyBenchmarkTest'
 rtk ./gradlew :gpu-renderer:test
+rtk ./gradlew :gpu-renderer-scenes:test
 ```
 
 - [ ] **Step 7: Commit**
 
 ```bash
-rtk git add gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUSceneTarget.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUFrameExecutor.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeContracts.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeNative.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUFrameExecutorTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeNativeSmokeTest.kt
+rtk git add gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUSceneTarget.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUFrameExecutor.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUFrameCoordinator.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeContracts.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeNative.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/telemetry/TelemetryContracts.kt gpu-renderer-scenes/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/scenes/offscreen/SceneIntermediatePlanExecutor.kt gpu-renderer-scenes/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/scenes/offscreen/RectOnlyOffscreenRenderer.kt gpu-renderer-scenes/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/scenes/offscreen/OffscreenFrameSampler.kt gpu-renderer-scenes/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/scenes/offscreen/PerFamilyBenchmark.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUFrameExecutorTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUFrameCoordinatorTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/GPURendererPackageBoundaryTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeNativeSmokeTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUColorGlyphRenderSmokeTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUColorGlyphReferenceParityTest.kt gpu-renderer-scenes/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/scenes/offscreen/M25ExecutorWiringTest.kt gpu-renderer-scenes/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/scenes/offscreen/OffscreenScenePngParityTest.kt gpu-renderer-scenes/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/scenes/offscreen/OffscreenFrameSamplerTest.kt gpu-renderer-scenes/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/scenes/offscreen/PerFamilyBenchmarkTest.kt
 rtk git commit -m 'feat: execute offscreen scenes in one GPU submission'
 ```
 
@@ -984,17 +1100,24 @@ rtk git commit -m 'feat: execute offscreen scenes in one GPU submission'
 
 - Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeContracts.kt`
 - Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeNative.kt`
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUFrameCoordinator.kt`
+- Create: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUPreparedWindowOutput.kt`
+- Modify: `gpu-renderer-scenes/src/kadre/kotlin/org/graphiks/kanvas/gpu/renderer/scenes/windowed/KadreWindowedSceneRunner.kt`
+- Modify: `gpu-renderer-scenes/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/scenes/windowed/RunGpuRendererSceneKadreMain.kt`
+- Delete: `gpu-renderer-scenes/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/scenes/windowed/WindowedRectOnlySceneShader.kt`
+- Modify: `gpu-renderer-scenes/build.gradle.kts`
 - Create: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUWindowFrameLifecycleTest.kt`
 - Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeNativeSmokeTest.kt`
+- Modify: `gpu-renderer-scenes/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/scenes/windowed/RunGpuRendererSceneKadreMainTest.kt`
 
 **Interfaces:**
 
 - Consumes: the canonical `GPUSceneTarget`, preflight's late surface acquisition, executor output, and independent completion state.
-- Produces: a final surface-blit encoder scope plus `PostSubmitPresentAction`; presentation never completes resource lifetime.
+- Produces: opaque `GPUPreparedWindowOutput`, extends `GPUSceneFrameOutputRequest`/`GPUPreparedSceneFrameSession` with `PresentToWindow`, and adds a final surface-blit encoder scope plus `PostSubmitPresentAction`; presentation never completes resource lifetime. The prepared output is the only window binding accepted by the prepared scene session and the later Canvas facade.
 
 - [ ] **Step 1: Test late acquire, surface blit, present, and completion independently**
 
-Instrument success, lost, outdated, genuine timeout, out-of-memory, device loss, resize/generation change, throwing present, and completion failure. Assert surface acquisition is the final preflight resource action, scene rendering never targets the surface texture directly, the surface blit is the final encoded render pass, completion is armed before present, and present failure cannot release or cancel completion.
+Instrument success, lost, outdated, genuine timeout, out-of-memory, device loss, resize/generation change, throwing present, and completion failure. Add the coordinator presentation-failure case here, after `PresentToWindow` exists. Assert surface acquisition is the final preflight resource action, scene rendering never targets the surface texture directly, the surface blit is the final encoded render pass, completion is armed before present, and present failure cannot release or cancel completion. Exercise a generic recorded task list through `GPUPreparedSceneFrameSession.renderFrame(..., PresentToWindow(preparedOutput))`; it returns immediately after guarded submit/present with a pending completion stage, and the test drives completion on a dedicated context. It must not depend on `GPURendererScene`, rect-only WGSL, or a private window encoder.
 
 - [ ] **Step 2: Run the test against current window behavior**
 
@@ -1006,14 +1129,17 @@ Expected: FAIL because `WgpuWindowSurface.encodeAndPresent` combines responsibil
 
 - [ ] **Step 3: Split window lifecycle operations**
 
-Expose acquire/reconfigure normalization to preflight, surface-blit encoding to `GPUFrameExecutor`, and a non-throwing captured `PostSubmitPresentAction`. On present failure, complete required surface discard/cleanup handling while leaving submitted resources retained or quarantined until real completion/device teardown.
+Expose acquire/reconfigure normalization to preflight, surface-blit encoding to `GPUFrameExecutor`, and a non-throwing captured `PostSubmitPresentAction`. Add `GPUPreparedWindowOutput` as an opaque, reusable wrapper created from the host's native surface binding during setup; it owns configuration/generation/resize/close but exposes neither native surface nor acquired texture. In this task, modify `GPUFrameCoordinator.kt` to add `GPUSceneFrameOutputRequest.PresentToWindow` to the closed algebra and make `GPUPreparedSceneFrameSession` accept it; the Task 10 commit remains independently compilable with only readback/completion outputs. Migrate the real `KadreWindowedSceneRunner` consumer from `encodeAndPresent` and rect-only `WindowedRectOnlySceneShader` execution to the same common scene-to-task recording used by Task 10 → prepared scene session → late acquire → canonical scene blit → one submit → present → independent completion. The redraw callback never waits: it attaches lifecycle/reuse handling to the frame handle's completion stage on the dedicated completion context. Delete `WindowedRectOnlySceneShader` and the rect-only preflight refusal/reflective checks in `RunGpuRendererSceneKadreMain`; update its tests to assert arbitrary registry scene families reach the common task recorder. On present failure, complete required surface discard/cleanup handling while leaving submitted resources retained or quarantined until real completion/device teardown.
+
+Add an explicit opt-in `kadreFrameLifecycleCheck` Gradle verification task that compiles the `kadre` source set and runs the focused lifecycle contract when `external/poc-koreos` is initialized. Keep it outside ordinary headless `check`/CI dependencies so unpublished Kadre artifacts are never resolved accidentally.
 
 - [ ] **Step 4: Run window/native tests and commit**
 
 ```bash
 rtk ./gradlew :gpu-renderer:test --tests 'org.graphiks.kanvas.gpu.renderer.execution.GPUWindowFrameLifecycleTest' --tests 'org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeNativeSmokeTest'
 rtk ./gradlew :gpu-renderer:test
-rtk git add gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeContracts.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeNative.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUWindowFrameLifecycleTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeNativeSmokeTest.kt
+rtk ./gradlew :gpu-renderer-scenes:kadreFrameLifecycleCheck
+rtk git add gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeContracts.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeNative.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUFrameCoordinator.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUPreparedWindowOutput.kt gpu-renderer-scenes/src/kadre/kotlin/org/graphiks/kanvas/gpu/renderer/scenes/windowed/KadreWindowedSceneRunner.kt gpu-renderer-scenes/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/scenes/windowed/RunGpuRendererSceneKadreMain.kt gpu-renderer-scenes/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/scenes/windowed/WindowedRectOnlySceneShader.kt gpu-renderer-scenes/build.gradle.kts gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUWindowFrameLifecycleTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeNativeSmokeTest.kt gpu-renderer-scenes/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/scenes/windowed/RunGpuRendererSceneKadreMainTest.kt
 rtk git commit -m 'feat: present canonical GPU scene targets'
 ```
 
@@ -1025,7 +1151,14 @@ rtk git commit -m 'feat: present canonical GPU scene targets'
 - Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPURenderer.kt`
 - Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUClipExecution.kt`
 - Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUDispatchVertices.kt`
+- Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUClipCoverage.kt`
+- Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUImageFilterDispatch.kt`
+- Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUMaskBlurDispatch.kt`
 - Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUWgsl.kt`
+- Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/Surface.kt`
+- Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/GPUColorFormat.kt`
+- Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/RenderConfig.kt`
+- Create: `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedSurfaceSession.kt`
 - Create: `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPULegacyImmediatePathAdapter.kt`
 - Modify: `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUAllApiBlendSurfaceTest.kt`
 - Modify: `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUBlendPlanTest.kt`
@@ -1039,15 +1172,20 @@ rtk git commit -m 'feat: present canonical GPU scene targets'
 - Modify: `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUMaskBlurDispatchTest.kt`
 - Modify: `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUSaveLayerCompositeRegressionTest.kt`
 - Create: `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUFramePathApiInventoryTest.kt`
+- Create: `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedSurfaceSessionTest.kt`
+- Create: `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedSurfaceWindowOutputTest.kt`
+- Create: `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUColorConfigMappingTest.kt`
 
 **Interfaces:**
 
-- Consumes: Canvas `DisplayOp` families, `GPUOpMapper`, canonical blend/coverage plans, recording, preflight, and `GPUFrameExecutor`.
-- Produces: one normalized task/frame route for every drawing API; the temporary `GPULegacyImmediatePathAdapter` allowlist shrinks to empty and is deleted in Slice 12E.
+- Consumes: Canvas `DisplayOp` families, `GPUOpMapper`, canonical blend/coverage plans, recording, and the sole `GPUFrameCoordinator` entry point.
+- Produces: one normalized task/frame route for every drawing API; a production-owned reusable `GPUPreparedSurfaceSession` for offscreen completion/readback and window presentation through Task 11's opaque prepared output; the temporary `GPULegacyImmediatePathAdapter` allowlist shrinks to empty and is deleted in Slice 12E.
 
 - [ ] **Step 1: Introduce the migration boundary without changing pixels**
 
 Make `GPUOpMapper` the only Canvas-state translator. Add `GPULegacyImmediatePathAdapter` as an explicit temporary boundary for families not yet moved: it may call the existing renderer entry points, but cannot classify blend/coverage/destination routing, create CPU snapshots, or be reachable from a migrated family. Give it a closed `LegacyDisplayOpFamily` allowlist and a dump counter so each slice proves its allowlist shrinks. Delete it in Slice 12E in the same commit that removes its final consumer.
+
+Reserve the non-visual `Canvas.drawAnnotation` key `kanvas.frame.provenance` with values `harness-background`, `gm-content`, and `none`. `GPUOpMapper` treats these annotations only as ordered metadata context: the current value is copied into every subsequent normalized command/task until the next marker, and the annotation itself produces no draw, route, resource, or submission. Unknown annotations remain ordinary inert metadata. This is the sole production provenance channel used by Task 14; telemetry must not guess from draw position.
 
 Translate Canvas state exactly once into normalized draw/composite commands. Map all 29 blend identities without a destination-read boolean. Consume active geometry and clip planners' coverage results. Resolve save/restore into composite command tokens before renderer-core entry; do not add `save`, `restore`, matrix, or clip-stack mutation APIs to `GPUFramePlanner`.
 
@@ -1055,7 +1193,7 @@ Translate Canvas state exactly once into normalized draw/composite commands. Map
 
 - [ ] **Step 2: Add failing primitive/clip inventory cases**
 
-Create `GPUFramePathApiInventoryTest` with color/clear, points/lines, rect/rrect/DRRect/path, transform metadata, scissor, analytic/mask/stencil clip coverage, and flush/snapshot ordering. For each visual operation, assert normalized provenance, target-space bounds, geometry/clip coverage, canonical `GPUBlendPlan`, frame-step provenance, and one executor submission. Assert transforms, clips, and annotations create state/metadata only. Exercise all 29 modes through the shared matrix on these core families.
+Create `GPUFramePathApiInventoryTest` with color/clear, points/lines, rect/rrect/DRRect/path, transform metadata, scissor, analytic/mask/stencil clip coverage, and flush/snapshot ordering. For each visual operation, assert normalized provenance, target-space bounds, geometry/clip coverage, canonical `GPUBlendPlan`, frame-step provenance, and one executor submission. Assert transforms, clips, and annotations create state/metadata only. Place reserved provenance annotations around three unique draws and prove exact background/content/none partitioning through normalized commands, tasks, frame steps, and telemetry inputs without any extra visual packet; unknown annotation values cannot activate a reserved provenance. Exercise all 29 modes through the shared matrix on these core families.
 
 - [ ] **Step 3: Run the focused red test**
 
@@ -1068,7 +1206,7 @@ Expected: FAIL because primitive and clip commands still dispatch through immedi
 
 - [ ] **Step 4: Migrate primitives and clips, then commit**
 
-Route these families through recording, finalization, preflight, and `GPUFrameExecutor`. Remove them from the legacy adapter allowlist. Ordinary scalar-AA `SrcOver` must remain a direct fixed-function draw without destination snapshot or fullscreen coverage-combine pass.
+Route these families through recording and `GPUFrameCoordinator`, which alone performs finalization, preflight, and execution. Remove them from the legacy adapter allowlist. Ordinary scalar-AA `SrcOver` must remain a direct fixed-function draw without destination snapshot or fullscreen coverage-combine pass.
 
 ```bash
 rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.gpu.GPUFramePathApiInventoryTest' --tests 'org.graphiks.kanvas.surface.gpu.GPUAllApiBlendSurfaceTest' --tests 'org.graphiks.kanvas.surface.gpu.GPUClipCoverageDispatchTest' --tests 'org.graphiks.kanvas.surface.gpu.GPUPathClipRegressionTest'
@@ -1145,18 +1283,76 @@ Expected: FAIL because composite families still contain immediate target and ref
 
 - [ ] **Step 9: Migrate composites and prove the legacy allowlist is empty**
 
-Move layer/filter/mask/picture task payloads to the common frame path. Resolve save/restore entirely in the mapper. Assert the temporary adapter's family allowlist and invocation count are both empty across the complete inventory, then delete `GPULegacyImmediatePathAdapter.kt` before the slice commit.
+Move layer/filter/mask/picture task payloads to the common frame path. Convert `GPUClipCoverage`, `GPUImageFilterDispatch`, and `GPUMaskBlurDispatch` to emit normalized/task payloads; delete their calls to `encodeCoverageMask` and `encodeOffscreenTexture` instead of leaving dead immediate helpers for Task 13. Resolve save/restore entirely in the mapper. Assert the temporary adapter's family allowlist and invocation count are both empty across the complete inventory, then delete `GPULegacyImmediatePathAdapter.kt` before the slice commit.
 
 - [ ] **Step 10: Run the complete Kanvas GPU surface suite and commit**
 
 ```bash
 rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.gpu.*'
 rtk ./gradlew :kanvas:test
-rtk git add kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUOpMapper.kt kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPURenderer.kt kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUClipExecution.kt kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUWgsl.kt kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPULegacyImmediatePathAdapter.kt kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUFramePathApiInventoryTest.kt kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUAllApiBlendSurfaceTest.kt kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUImageFilterDispatchTest.kt kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUMaskBlurDispatchTest.kt kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUSaveLayerCompositeRegressionTest.kt
+rtk git add kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUOpMapper.kt kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPURenderer.kt kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUClipExecution.kt kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUClipCoverage.kt kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUImageFilterDispatch.kt kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUMaskBlurDispatch.kt kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUWgsl.kt kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPULegacyImmediatePathAdapter.kt kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUFramePathApiInventoryTest.kt kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUAllApiBlendSurfaceTest.kt kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUImageFilterDispatchTest.kt kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUMaskBlurDispatchTest.kt kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUSaveLayerCompositeRegressionTest.kt
 rtk git commit -m 'refactor: route GPU composites through frame plans'
 ```
 
 Expected: all Kanvas GPU surface tests pass, including interiors, exteriors, AA edges, clip edges, all RGBA channels, all inventory families, and the exhaustive canonical 29-mode tests. No legacy-adapter source or consumer remains.
+
+### Slice 12F: Reusable prepared surface session
+
+- [ ] **Step 11: Add the reusable-session contract test**
+
+Create `GPUColorConfigMappingTest` first. `surface.GPUColorFormat` remains only a source-compatible public facade and is mapped exactly once to Task 4's canonical `gpu.renderer.color.GPUColorFormat` plus `GPUColorInterpretation`; it never enters planning. Make physical format and color interpretation distinct in `RenderConfig`: the default effective pair is physical `RGBA8Unorm` plus `Srgb`. Keep `RGBA8_UNORM_SRGB` only as a deprecated compatibility input that maps to that same pair and rejects an incompatible explicit interpretation. Test RGBA/BGRA physical support, legacy mapping, invalid combinations, runtime capability refusal, and the effective facts exposed by the prepared session. No second canonical color enum or transfer decision is allowed.
+
+Create `GPUPreparedSurfaceSessionTest` around a public production-owned boundary:
+
+```kotlin
+sealed interface GPUPreparedSurfaceOutput {
+    data object ReadbackRgba : GPUPreparedSurfaceOutput
+    data object CurrentFrameCompletionOnly : GPUPreparedSurfaceOutput
+    data class PresentToWindow(
+        val output: GPUPreparedWindowOutput,
+    ) : GPUPreparedSurfaceOutput
+}
+
+interface GPUPreparedSurfaceSession : AutoCloseable {
+    fun renderFrame(
+        output: GPUPreparedSurfaceOutput,
+        record: (Canvas) -> Unit,
+    ): GPUPreparedSurfaceFrameHandle
+}
+
+data class GPUPreparedSurfaceFrameHandle(
+    val attemptId: GPUFrameAttemptID,
+    val immediateOutcome: GPUPreparedSurfaceImmediateOutcome,
+    val completed: CompletionStage<GPUPreparedSurfaceCompletedFrameResult>,
+)
+
+data class GPUPreparedSurfaceCompletedFrameResult(
+    val attemptId: GPUFrameAttemptID,
+    val outcome: GPUPreparedSurfaceFrameOutcome,
+    val telemetry: GPUFrameStructuralTelemetrySnapshot,
+)
+```
+
+`Surface.prepareGpuRenderSession()` prepares and retains the device, canonical scene target, generation, and reusable caches once. Each `renderFrame` creates a fresh frame-local recording canvas, invokes the caller's recording block exactly once, seals that frame without appending any operation from an earlier frame, maps it internally through `GPUOpMapper`, invokes `GPUFrameCoordinator` once, and returns a non-blocking two-phase handle. Recording-block and pre-submit failures return an already-completed handle rather than escaping without evidence. `ReadbackRgba` adds the final planned readback; its completed result exposes pixels only after queue completion and mapping. `CurrentFrameCompletionOnly` performs no readback and its stage completes on exact-frame queue completion. `PresentToWindow` consumes Task 11's opaque `GPUPreparedWindowOutput`, performs late acquisition and the planned final blit/present, exposes immediate presentation separately, then completes asynchronously on exact GPU completion. `GPUPreparedSurfaceCompletedFrameResult.telemetry` is the identical immutable snapshot from `GPUPreparedSceneCompletedFrameResult`, including early and post-submit failure outcomes; a pending handle exposes no final snapshot. The API exposes neither mapper internals nor native handles, and it has no global telemetry singleton. An internal adapter may submit the existing `Surface` display-list snapshot for backward-compatible `Surface.render()`, then await its exact `ReadbackRgba` completed result; repeated prepared-session frames never reuse an append-only list.
+
+Test two or more frames reuse the same valid device/target/cache generations, create one submission each, and never reuse resources before completion. Give each recording block a unique draw and prove frame N+1 contains no operation from frame N. Cover an empty frame, thrown recording block before submit, resize/config mismatch, device loss, close, concurrent call refusal, completion failure, and stale surface generation. A pending handle cannot expose final telemetry; awaiting its completion yields exactly one immutable snapshot with the same attempt ID and object/value identity as the lower prepared-scene completed result. The thrown-block, preflight-refusal, success, present-failure, and completion-failure snapshots name the correct furthest phase without reading global state. Prove the ordinary Kadre-style caller attaches completion work without blocking its render thread. Assert the completion-only path has zero texture-to-buffer copy/map/readback while the readback path preserves current `Surface.render()` pixels. In `GPUPreparedSurfaceWindowOutputTest`, record representative primitive, image, text, and layer/filter Canvas operations and prove `PresentToWindow` sends their exact mapped task list through the same `GPUPreparedSceneFrameSession`, adds one final surface blit, submits once, presents once, and never invokes `WindowedRectOnlySceneShader` or another GM/Canvas mapper.
+
+- [ ] **Step 12: Run red, implement, and prove ordinary render delegates**
+
+```bash
+rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.gpu.GPUColorConfigMappingTest' --tests 'org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceSessionTest' --tests 'org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceWindowOutputTest'
+```
+
+Expected before implementation: FAIL because the public format label conflates physical format/transfer, and `Surface.render()` recreates the GPU session/target and always reads RGBA. Implement the one-time color mapper and two-phase session without duplicating planning; make the existing GPU branch of `Surface.render()` delegate through a single-use `GPUPreparedSurfaceSession` with `ReadbackRgba` and await the exact completed result so public pixel behavior remains unchanged.
+
+- [ ] **Step 13: Run and commit the prepared-session slice**
+
+```bash
+rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.gpu.GPUColorConfigMappingTest' --tests 'org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceSessionTest' --tests 'org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceWindowOutputTest' --tests 'org.graphiks.kanvas.surface.gpu.GPUFramePathApiInventoryTest'
+rtk ./gradlew :kanvas:test
+rtk git add kanvas/src/main/kotlin/org/graphiks/kanvas/surface/Surface.kt kanvas/src/main/kotlin/org/graphiks/kanvas/surface/GPUColorFormat.kt kanvas/src/main/kotlin/org/graphiks/kanvas/surface/RenderConfig.kt kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedSurfaceSession.kt kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPURenderer.kt kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUColorConfigMappingTest.kt kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedSurfaceSessionTest.kt kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedSurfaceWindowOutputTest.kt kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUFramePathApiInventoryTest.kt
+rtk git commit -m 'feat: reuse prepared WebGPU surface sessions'
+```
 
 ## Task 13: Remove superseded immediate and CPU-snapshot paths
 
@@ -1166,6 +1362,9 @@ Expected: all Kanvas GPU surface tests pass, including interiors, exteriors, AA 
 - Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeNative.kt`
 - Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPURenderer.kt`
 - Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUClipExecution.kt`
+- Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUClipCoverage.kt`
+- Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUImageFilterDispatch.kt`
+- Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUMaskBlurDispatch.kt`
 - Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUWgsl.kt`
 - Delete: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/destination/GPUDestinationReadExecutor.kt`
 - Delete: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/destination/GPUDestinationReadExecutorTest.kt`
@@ -1180,7 +1379,7 @@ Expected: all Kanvas GPU surface tests pass, including interiors, exteriors, AA 
 
 - [ ] **Step 1: Add negative architecture assertions**
 
-Assert production source contains no `snapshotTargetToOffscreenTexture`, destination-read call to `readRgba`, CPU snapshot upload, immediate per-operation submit, `destinationReadBlendModeIndex`, `clipCoverageBlendModeIndex`, `GPUDestinationReadExecutor`, legacy destination composer, coverage route boolean, or second blend planner. Permit `readRgba` only as the explicit terminal readback/output API until it is renamed to make that boundary obvious.
+Assert production source contains no `snapshotTargetToOffscreenTexture`, destination-read call to `readRgba`, CPU snapshot upload, immediate per-operation submit, high-level `GPUBackendOffscreenTarget.encode(...)`, `copyOffscreenTexture`, `encodeCoverageMask`, `destinationReadBlendModeIndex`, `clipCoverageBlendModeIndex`, `GPUDestinationReadExecutor`, legacy destination composer, coverage route boolean, or second blend planner. Permit `readRgba` only as the explicit terminal readback/output API until it is renamed to make that boundary obvious. Require every remaining native encode/copy primitive to receive the active frame encoder and already-prepared resources; no primitive may create, finish, or submit an encoder.
 
 - [ ] **Step 2: Run the boundary test and observe legacy symbols**
 
@@ -1192,21 +1391,21 @@ Expected: FAIL while legacy contracts and immediate helpers remain.
 
 - [ ] **Step 3: Delete superseded contracts and implementations**
 
-Remove `snapshotTargetToOffscreenTexture()` and its CPU read/upload implementation, `GPUDestinationReadExecutor` and its evidence-only test, immediate destination composer/executor branches in `GPUClipExecution`/`GPURenderer`, duplicate blend index switches, common-path fullscreen coverage combine shader, presentation-completion constants, evidence-only encoder plans, and adapters whose last consumers moved in Task 12. Rename terminal readback APIs if needed so production search cannot confuse output readback with a continuation path.
+Remove `snapshotTargetToOffscreenTexture()` and its CPU read/upload implementation, the high-level `GPUBackendOffscreenTarget.encode(...)`, `copyOffscreenTexture(...)`, `encodeCoverageMask(...)`, `GPUDestinationReadExecutor` and its evidence-only test, immediate destination composer/executor branches in `GPUClipExecution`/`GPURenderer`, duplicate blend index switches, common-path fullscreen coverage combine shader, presentation-completion constants, evidence-only encoder plans, and adapters whose last consumers moved in Task 12. Recheck `GPUClipCoverage`, `GPUImageFilterDispatch`, and `GPUMaskBlurDispatch`: after Slice 12E they may retain only common frame payload/recording code; delete any obsolete class or dead helper wrapper whose last immediate caller moved. Keep only low-level native recording primitives whose signatures require the active frame encoder and prepared resources. Rename terminal readback APIs if needed so production search cannot confuse output readback with a continuation path.
 
 - [ ] **Step 4: Run architecture scan and module tests**
 
 ```bash
-rtk proxy rg -n 'snapshotTargetToOffscreenTexture|destinationReadBlendModeIndex|clipCoverageBlendModeIndex|GPUDestinationReadExecutor|DestinationReadComposer|GPU_QUEUE_COMPLETION_PRESENTED|GPU_QUEUE_COMPLETION_PRESENT_FAILED|GPU_QUEUE_COMPLETION_TARGET_CLOSE' gpu-renderer/src/main/kotlin kanvas/src/main/kotlin
-rtk ./gradlew :gpu-renderer:test :kanvas:test
+rtk proxy rg -n 'snapshotTargetToOffscreenTexture|copyTargetToOffscreenTexture|copyOffscreenTexture|encodeOffscreenTexture|encodeCoverageMask|destinationReadBlendModeIndex|clipCoverageBlendModeIndex|GPUDestinationReadExecutor|DestinationReadComposer|GPU_QUEUE_COMPLETION_PRESENTED|GPU_QUEUE_COMPLETION_PRESENT_FAILED|GPU_QUEUE_COMPLETION_TARGET_CLOSE' gpu-renderer/src/main/kotlin gpu-renderer-scenes/src/main/kotlin kanvas/src/main/kotlin
+rtk ./gradlew :gpu-renderer:test :gpu-renderer-scenes:test :kanvas:test
 ```
 
-Expected: scan has no matches; both module suites pass.
+Expected: scan has no matches; all three module suites pass. Terminal output readback remains only through the planned `GPUFrameReadbackRequest` path and cannot be confused with a destination continuation snapshot.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-rtk git add gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeContracts.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeNative.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/destination/GPUDestinationReadExecutor.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/destination/GPUDestinationReadExecutorTest.kt kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPURenderer.kt kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUClipExecution.kt kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUWgsl.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeContractsTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeNativeSmokeTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/GPURendererPackageBoundaryTest.kt
+rtk git add gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeContracts.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeNative.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/destination/GPUDestinationReadExecutor.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/destination/GPUDestinationReadExecutorTest.kt kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPURenderer.kt kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUClipExecution.kt kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUClipCoverage.kt kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUImageFilterDispatch.kt kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUMaskBlurDispatch.kt kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUWgsl.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeContractsTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeNativeSmokeTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/GPURendererPackageBoundaryTest.kt
 rtk git commit -m 'refactor: remove immediate GPU destination snapshots'
 ```
 
@@ -1216,18 +1415,40 @@ rtk git commit -m 'refactor: remove immediate GPU destination snapshots'
 
 - Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/telemetry/TelemetryContracts.kt`
 - Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUFrameExecutor.kt`
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUFrameCoordinator.kt`
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUFramePreflighter.kt`
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/resources/GPUScratchTexturePool.kt`
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/resources/GPUConcreteResourceProvider.kt`
+- Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedSurfaceSession.kt`
 - Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/telemetry/PerformanceBudgetTest.kt`
 - Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/telemetry/FrameGateM23BaselineTest.kt`
 - Create: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/telemetry/GPUFrameStructuralTelemetryTest.kt`
+- Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUFramePreflighterTest.kt`
+- Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/resources/GPUScratchTexturePoolTest.kt`
+- Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/resources/GPUConcreteResourceProviderTest.kt`
+- Create: `integration-tests/skia/src/test/kotlin/org/graphiks/kanvas/skia/SkiaGmFrameStructuralTelemetryTest.kt`
+- Modify: `integration-tests/skia/src/test/kotlin/org/graphiks/kanvas/skia/GmCanvas.kt`
+- Modify: `integration-tests/skia/src/test/kotlin/org/graphiks/kanvas/skia/GmCanvasTest.kt`
+- Modify: `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedSurfaceSessionTest.kt`
 - Modify: `integration-tests/skia/build.gradle.kts`
 - Create: `integration-tests/skia/src/test/kotlin/org/graphiks/kanvas/skia/SkiaGmBenchmarkSceneSelection.kt`
 - Create: `integration-tests/skia/src/test/kotlin/org/graphiks/kanvas/skia/SkiaGmBenchmarkRunner.kt`
 - Create: `integration-tests/skia/src/test/kotlin/org/graphiks/kanvas/skia/SkiaGmBenchmarkRunnerTest.kt`
+- Create: `integration-tests/skia/src/test/kotlin/org/graphiks/kanvas/skia/SkiaGmSteadyFrameBenchmarkRunner.kt`
+- Create: `integration-tests/skia/src/test/kotlin/org/graphiks/kanvas/skia/SkiaGmBenchmarkWorkloadManifest.kt`
+- Create: `integration-tests/skia/src/test/kotlin/org/graphiks/kanvas/skia/SkiaGmBenchmarkWorkloadManifestTest.kt`
+- Modify: `integration-tests/skia/src/test/kotlin/org/graphiks/kanvas/skia/gm/composite/AAXfermodesGm.kt`
+- Modify: `integration-tests/skia/src/test/kotlin/org/graphiks/kanvas/skia/gm/composite/HairModesGm.kt`
+- Modify: `integration-tests/skia/src/test/kotlin/org/graphiks/kanvas/skia/gm/composite/XfermodesGm.kt`
+- Modify: `integration-tests/skia/src/test/kotlin/org/graphiks/kanvas/skia/gm/path/ThinRectsGm.kt`
+- Modify: `integration-tests/skia/src/test/kotlin/org/graphiks/kanvas/skia/gm/gradient/LinearGradientGm.kt`
+- Modify: `integration-tests/skia/src/test/kotlin/org/graphiks/kanvas/skia/gm/path/ManyCirclesGm.kt`
 - Create: `integration-tests/skia/src/test/kotlin/org/graphiks/kanvas/skia/FramePlanWindowBenchmarkOptions.kt`
 - Create: `integration-tests/skia/src/test/kotlin/org/graphiks/kanvas/skia/FramePlanWindowBenchmarkOptionsTest.kt`
 - Create: `integration-tests/skia/src/kadreBenchmark/kotlin/org/graphiks/kanvas/skia/KadreFramePlanBenchmark.kt`
 - Create: `tools/performance/run-frame-plan-benchmarks.sh`
 - Create: `tools/performance/frame-plan-benchmark.schema.json`
+- Create: `tools/performance/fixtures/frame-plan-gates/` schema-valid positive and negative raw-sample fixtures
 - Create: `tools/performance/skia-nanobench-fixed-loop-multi-sample.patch`
 - Modify: `integration-tests/skia/test-similarity-scores.properties`
 - Modify: `integration-tests/skia/src/test/resources/generated-renders/`
@@ -1238,28 +1459,31 @@ rtk git commit -m 'refactor: remove immediate GPU destination snapshots'
 
 **Interfaces:**
 
-- Consumes: completed frame telemetry, stable `SkiaGmRenderer.render()` readback completion, the shared GM registry/draw implementation, and pinned Graphite/Dawn source plus the one-line driver patch.
+- Consumes: completed frame telemetry, the shared GM registry/draw implementation, stable `SkiaGmRenderer.render()` for end-to-end regression, Task 12's production `GPUPreparedSurfaceSession` completion-only boundary for steady frames, and pinned Graphite/Dawn source plus a strictly allowlisted driver patch.
 - Produces: immutable structural telemetry snapshots, schema-validated raw samples, current generated renders/scores, benchmark manifest, hashes, p50/p95 report, and promotion verdicts.
 
 - [ ] **Step 1: Add failing structural telemetry assertions**
 
-Count direct draws, shader draws, refusals, pass breaks, snapshot groups, copied pixels/bytes, scratch allocation/reuse/eviction, encoders, command buffers, submissions, presentation, completion, waits, `peakFrameTransientBytes`, and `targetResidentBytes`. Assert per-scene one encoder/command-buffer/submission, zero CPU destination snapshots, zero AA-only `SrcOver` copies in `hairmodes`, bounded copy area, and completion-based resource release.
+In `:gpu-renderer`, use synthetic task lists to count direct draws, shader draws, planning/preflight/execution refusals, pass breaks, snapshot groups, copied pixels/bytes, scratch allocation/reuse/eviction, encoders, command buffers, submissions, presentation, completion, waits, `peakFrameTransientBytes`, and `targetResidentBytes`. Cover a planning refusal and preflight refusal that never reach the executor, plus success and post-submit failure. Exercise typed pool/provider events for reuse hit, create, eviction, allocation refusal with rollback, and two concurrent frame attempts; every event must carry and land in only its originating attempt ID. Freeze `direct-draw-dominated` as: denominator = accepted packets with `gm-content` provenance (exclude harness background and output readback/blit); numerator = those packets writing the canonical final target with an already-planned fixed-function target blend. Require denominator > 0, numerator == denominator, zero destination-read shader packet/snapshot/copied pixel/refused content packet/auxiliary content pass. A gradient material shader remains direct when its target blend meets this definition.
+
+In `:integration-tests:skia`, add one shared `GmCanvas.drawBackgroundAndGmContent(gm)` helper. It emits `drawAnnotation(fullBounds, "kanvas.frame.provenance", "harness-background")`, draws the same white background used by `SkiaGmRenderer`, emits the `gm-content` marker, invokes the registry-owned GM's exact `draw`, then emits `none`; `onOnceBeforeDraw` remains caller-controlled outside timed work. `GmCanvasTest` proves annotations add no pixels/draw packets and preserve the exact background/content partition. `SkiaGmFrameStructuralTelemetryTest` selects the real registry-owned primary/control GMs, records them through public `Surface.prepareGpuRenderSession().renderFrame(...)` and this helper, awaits that handle's exact completed-frame stage, and reads only `GPUPreparedSurfaceCompletedFrameResult.telemetry`. It asserts per-scene one encoder/command-buffer/submission, zero CPU destination snapshots, zero AA-only `SrcOver` copies in `hairmodes`, bounded copy area, completion-based resource release, and the frozen direct-draw classification later consumed by performance gates. The lower module never imports integration-test GMs. A mutable global recorder, positional/background guess, “last snapshot”, log parse, or direct coordinator/mapper access fails the test.
 
 - [ ] **Step 2: Run the telemetry test red**
 
 ```bash
 rtk ./gradlew :gpu-renderer:test --tests 'org.graphiks.kanvas.gpu.renderer.telemetry.GPUFrameStructuralTelemetryTest'
+rtk ./gradlew :integration-tests:skia:test --tests 'org.graphiks.kanvas.skia.SkiaGmFrameStructuralTelemetryTest'
 ```
 
-Expected: FAIL because the executor does not yet publish the full structural counter record.
+Expected: FAIL because the shared telemetry recorder/coordinator integration and real-GM structural test do not yet exist.
 
 - [ ] **Step 3: Implement, verify, and commit telemetry before benchmarking**
 
-Publish one immutable counter snapshot per completed/failed frame from `GPUFrameExecutor`; do not reconstruct counters from logs. Keep presentation and completion counters independent and include refusal/error status. Run focused plus affected suites:
+Use one frame-scoped telemetry recorder shared by `GPUFrameCoordinator`, `GPUFramePreflighter`, `GPUConcreteResourceProvider`, `GPUScratchTexturePool`, and `GPUFrameExecutor`. Pass a typed attempt-scoped event sink/recorder through preflight and provider calls; the pool/provider emit typed hit/create/evict/refusal/rollback facts at the point they occur. A terminal pre-submit failure or the exact completion callback seals one immutable snapshot into `GPUPreparedSceneCompletedFrameResult`; `GPUPreparedSurfaceCompletedFrameResult` forwards that exact snapshot. The earlier handles expose only attempt/immediate state, never mutable or supposedly final telemetry, and there is no publish-to-global side channel. Do not infer runtime allocation events from plan steps or reconstruct counters from dumps/logs. Keep presentation and completion counters independent and include phase/refusal/error status. Extend the prepared-session test for refusal-before-submit, success, present failure, completion failure, concurrent sessions, non-blocking window callbacks, and exact snapshot association. Run focused plus affected suites:
 
 ```bash
 rtk ./gradlew :gpu-renderer:test :gpu-renderer-scenes:test :kanvas:test
-rtk git add gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/telemetry/TelemetryContracts.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUFrameExecutor.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/telemetry/GPUFrameStructuralTelemetryTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/telemetry/PerformanceBudgetTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/telemetry/FrameGateM23BaselineTest.kt
+rtk git add gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/telemetry/TelemetryContracts.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUFrameExecutor.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUFrameCoordinator.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUFramePreflighter.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/resources/GPUScratchTexturePool.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/resources/GPUConcreteResourceProvider.kt kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedSurfaceSession.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/telemetry/GPUFrameStructuralTelemetryTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUFramePreflighterTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/resources/GPUScratchTexturePoolTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/resources/GPUConcreteResourceProviderTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/telemetry/PerformanceBudgetTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/telemetry/FrameGateM23BaselineTest.kt kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedSurfaceSessionTest.kt integration-tests/skia/src/test/kotlin/org/graphiks/kanvas/skia/GmCanvas.kt integration-tests/skia/src/test/kotlin/org/graphiks/kanvas/skia/GmCanvasTest.kt integration-tests/skia/src/test/kotlin/org/graphiks/kanvas/skia/SkiaGmFrameStructuralTelemetryTest.kt
 rtk git commit -m 'feat: record structural GPU frame telemetry'
 ```
 
@@ -1267,7 +1491,16 @@ Expected: BUILD SUCCESSFUL with no quarantined unexpected resource, hidden fallb
 
 - [ ] **Step 4: Add the benchmark runner test before the runner**
 
-Test command parsing, the fixed GM set `aaxfermodes,hairmodes,xfermodes`, the offscreen/readback runner, the separate opt-in Kadre window options, 120 warmups, exactly 300 retained measured samples, 30 cold process records, completion-boundary enforcement, nanosecond monotonic durations, p50/p95 calculation over all samples, manifest revision matching, and NDJSON rows validated against `frame-plan-benchmark.schema.json`. Add a scene-identity test proving both lanes select the same `SkiaGm` objects from `SkiaGmRegistry`, invoke the same `onOnceBeforeDraw`/`draw` implementation through `GmCanvas`, and carry the same GM class name and scene fingerprint; a same-name reimplementation must fail.
+Test command parsing and a versioned fixed set containing primary GMs `aaxfermodes,hairmodes,xfermodes` plus registry-backed direct-draw controls `rect,thinrects,linear_gradient,manycircles`. The control set participates in baseline/candidate 120-warmup/300-sample runs and the 10%/15% regression gates only after structural telemetry proves it is direct-draw-dominated under the frozen formula above. The schema/manifest contains all numerator/denominator counters, exact `directDrawRatio`, verdict, and stable reason. Test 30 cold process records, completion-boundary enforcement, nanosecond monotonic durations, p50/p95 calculation over every retained sample, manifest revision matching, and NDJSON schema validation.
+
+Add schema-valid synthetic raw-sample fixtures for a passing case and independent failures of: primary p50 improvement below 2x, primary p95 not improved, control p50 regression above 10%, control p95 regression above 15%, candidate/Graphite p50 ratio above 2x, and direct-draw classification false/unproven. The script self-test must return non-zero with the exact stable gate reason for each negative fixture and prove the recorded baseline fixture hashes are unchanged before/after evaluation. These gates become release-blocking only for frame-plan performance promotion after all negative-fixture tests pass; until then they are reporting-only and cannot claim release enforcement.
+
+Add `SkiaGmBenchmarkWorkloadManifestTest` against a checked-in manifest generated from pinned Skia revision `defc3a5a92966c32cb2a6a901e2fa3036a13bb8a`. The ordinary headless test validates the frozen revision, source hashes, and expected structural facts without requiring an external Skia checkout. The local benchmark script receives `--skia-root`, recomputes those hashes/facts from the pinned checkout, and refuses a mismatch. For every GM used in a Graphite ratio, verify operational equivalence rather than name equality: canvas dimensions, ordered draw count/fingerprint, source-type matrix, layer count, shader count, image/mask paths, sample plan, format, premultiplied alpha, and color space. Port the selected Kanvas GMs where required: `hairmodes` preserves Skia's per-cell `saveLayer` and checkerboard shader; `xfermodes` preserves all eight source types and image/layer/mask paths; `linear_gradient` moves its 100 shader constructions to `onOnceBeforeDraw`; `thinrects` preserves the ordered background/transforms/rect matrix; `manycircles` preserves Skia's seeded RNG sequence, white background, RGB565 color quantization, and 10,000 ordered oval draws. Record `gm/manypaths.cpp` as the pinned upstream source path for `manycircles` and update `ManyCirclesGm.kt` KDoc to that same path; do not cite the nonexistent `gm/manycircles.cpp`. `rect` has no pinned upstream `GM_rect`; `linear_gradient` cannot claim upstream equivalence while dithering is not a real Kanvas paint capability. Both remain Kanvas-only regression controls and are never requested from nanobench or used in a Graphite ratio. Any other same-name structural mismatch fails and may appear only as informational evidence without a ratio.
+
+Prove all lanes select the same registry-owned `SkiaGm` objects and invoke their exact `onOnceBeforeDraw`/`draw` implementation through `GmCanvas`; a copied scene or alternate Kadre scene table fails. Test two distinct timing protocols:
+
+1. `end-to-end-regression`: baseline versus candidate through the stable `SkiaGmRenderer.render()` boundary, including its existing lifecycle, for trustworthy regression deltas.
+2. `steady-frame-cross-engine`: candidate versus Graphite with device/target and GM preparation performed once, `onOnceBeforeDraw` outside timing, then exactly one frame recording, one submit, and an exact current-frame GPU completion wait per sample. Cold initialization remains a separate informational lane and is never mixed into warm percentiles.
 
 ```bash
 rtk ./gradlew :integration-tests:skia:test --tests 'org.graphiks.kanvas.skia.SkiaGmBenchmarkRunnerTest'
@@ -1281,8 +1514,9 @@ Expected: FAIL because the runner, Gradle task, script, and schema do not exist.
 Add `benchmarkSkiaGms` as a `JavaExec` task whose properties are:
 
 ```text
-kanvasGmBenchNames=aaxfermodes,hairmodes,xfermodes
-kanvasGmBenchLane=offscreen-readback
+kanvasGmBenchNames=aaxfermodes,hairmodes,xfermodes,rect,thinrects,linear_gradient,manycircles
+kanvasGmBenchLane=end-to-end-regression|steady-frame-cross-engine
+kanvasGmBenchTarget=offscreen-readback|offscreen-current-frame-completion
 kanvasGmBenchCacheState=warm|cold
 kanvasGmBenchProcessIndex=0..29
 kanvasGmBenchWarmup=120
@@ -1290,16 +1524,28 @@ kanvasGmBenchSamples=300
 kanvasGmBenchOutput=/Users/chaos/.codex/worktrees/da7e/kanvas/reports/upstream-rebaseline/graphite-dawn-frame-plan/raw
 ```
 
-The offscreen runner emits one schema-validated NDJSON row per measured frame. For compatibility with the exact pre-implementation baseline, it starts timing immediately before the stable `SkiaGmRenderer.render()` call and stops only after that call returns its completed `SkiaRenderResult.rgba` readback. The test makes this boundary explicit: returned pixels are unavailable until GPU copy/map completion, while the candidate's `GPUQueueCompletionTicket` remains an internal implementation detail of `Surface.render()` and is never referenced by the cherry-pickable harness. The shell script, not the runner, launches 30 independent Gradle processes per GM with exactly one name (`aaxfermodes`, `hairmodes`, or `xfermodes`), `cacheState=cold`, `warmup=0`, `samples=1`, and distinct process indices. Each cold process creates its own device and caches before its only completed frame.
+The baseline-compatible offscreen runner emits one schema-validated NDJSON row per measured frame for the `end-to-end-regression` lane. It starts timing immediately before the stable `SkiaGmRenderer.render()` call and stops only after that call returns its completed `SkiaRenderResult.rgba` readback. The test makes this boundary explicit: returned pixels are unavailable until GPU copy/map completion, while the candidate's `GPUQueueCompletionTicket` remains an internal implementation detail and is never referenced by the cherry-pickable harness. The shell script launches 30 independent Gradle processes per primary GM with one exact name, `cacheState=cold`, `warmup=0`, `samples=1`, and distinct indices. Each cold process creates its own device and caches before its only completed frame. The harness self-test evaluates every positive/negative gate fixture, checks non-zero failure exits and stable reasons, and verifies baseline fixture hashes before and after evaluation.
 
-Keep window/present measurement separate in an opt-in `kadreBenchmark` source set and `runFramePlanKadreNativeBenchmark` task inside `integration-tests/skia`. Configure that source set to consume the exact compiled output of `sourceSets["test"]`, including `SkiaGmRegistry`, `SkiaGmBenchmarkSceneSelection`, `GmCanvas`, and every selected GM class; do not copy or recreate scenes in `kadreBenchmark`. Both runners must call the shared selector, receive the same registry-owned GM implementation, and execute its `onOnceBeforeDraw`/`draw` methods. The script self-test rejects GM class declarations or alternate scene tables under `src/kadreBenchmark`. The lane may resolve Kadre only when `-PenableKadreFrameBenchmark=true` and `external/poc-koreos` is initialized. The task uses `-XstartOnFirstThread` and `--enable-native-access=ALL-UNNAMED`; ordinary headless tests, `benchmarkSkiaGms`, and CI validation never resolve Kadre or require the submodule. If the submodule/native window is unavailable, the manifest records the window lane as informational with an explicit deviation rather than substituting offscreen results.
+The schema validates the exact lane/target pair: `end-to-end-regression` requires `offscreen-readback`, while `steady-frame-cross-engine` requires `offscreen-current-frame-completion`. The candidate steady adapter runs all primary and control scenes so its structural telemetry can prove or reject direct-draw dominance; Graphite ratios are still emitted only for the manifest-equivalent subset. A target label may not hide a readback or claim one that is absent.
 
-Check in this exact driver-only patch against Skia revision `defc3a5a92966c32cb2a6a901e2fa3036a13bb8a`:
+Port and freeze the structurally equivalent primary GM workloads plus the four control selections in this same baseline-compatible harness commit. The manifest records the pinned upstream source paths/revision and the operational fingerprints. It also fixes the common render contract to physical RGBA8Unorm, premultiplied alpha, sRGB color interpretation, identical dimensions, and the same sample count; a runtime surface that reports different effective facts refuses comparison.
+
+Keep the tagged harness baseline-compatible: `FramePlanWindowBenchmarkOptions` and its test validate only pure command/schema values. Step 5 does not create a `kadreBenchmark` source set, resolve Kadre, compile `KadreFramePlanBenchmark`, or reference `GPUPreparedWindowOutput`, `GPUPreparedSurfaceSession`, `PresentToWindow`, queue tickets, or frame telemetry. The actual window runner and Gradle wiring are added only in the candidate-only post-tag commit below.
+
+Check in this exact two-hunk driver-only patch against Skia revision `defc3a5a92966c32cb2a6a901e2fa3036a13bb8a`:
 
 ```diff
 diff --git a/bench/nanobench.cpp b/bench/nanobench.cpp
 --- a/bench/nanobench.cpp
 +++ b/bench/nanobench.cpp
+@@ -353,6 +353,7 @@ struct GraphiteTarget : public Target {
+             std::unique_ptr<skgpu::graphite::Recording> recording = this->recorder->snap();
+             if (recording) {
+                 this->testContext->submitRecordingAndWaitOnSync(this->context, recording.get());
++                this->testContext->syncedSubmit(this->context);
+             }
+         }
+     }
 @@ -1410,7 +1410,6 @@ int main(int argc, char** argv) {
      grContextOpts.fShaderErrorHandler = &errorHandler;
  
@@ -1309,19 +1555,35 @@ diff --git a/bench/nanobench.cpp b/bench/nanobench.cpp
      }
 ```
 
-The shell script validates clean revisions, host/adapter/driver/JDK/power metadata, exact dimensions/format/color/sample plan, Graphite source and derived commits, the patch SHA-256 and one-line allowed diff, sample counts, hashes, and lane separation. Its `--self-test` uses temporary fixture output and performs no GPU benchmark or Kadre resolution. The self-test rejects a patch touching anything except the one `FLAGS_samples` assignment in `bench/nanobench.cpp`.
+The shell script validates clean revisions, host/adapter/driver/JDK/power metadata, exact dimensions/format/alpha/color-space/sample plan, Graphite source and derived commits, patch SHA-256, sample counts, hashes, and lane separation. Its `--self-test` uses temporary fixture output and performs no GPU benchmark or Kadre resolution. It rejects any Skia patch outside `bench/nanobench.cpp`, any hunk other than removal of the `FLAGS_samples` assignment and insertion of `syncedSubmit()` after the current recording submission, or a measured sample that leaves unfinished Graphite work. The latter assertion is backed by the synchronous current-frame barrier, not by `gpuFrameLag`.
 
 ```bash
 rtk ./gradlew :integration-tests:skia:test --tests 'org.graphiks.kanvas.skia.SkiaGmBenchmarkRunnerTest'
 rtk ./gradlew :integration-tests:skia:test --tests 'org.graphiks.kanvas.skia.FramePlanWindowBenchmarkOptionsTest'
 rtk tools/performance/run-frame-plan-benchmarks.sh --self-test
 rtk ./gradlew :integration-tests:skia:test
-rtk git add integration-tests/skia/build.gradle.kts integration-tests/skia/src/test/kotlin/org/graphiks/kanvas/skia/SkiaGmBenchmarkSceneSelection.kt integration-tests/skia/src/test/kotlin/org/graphiks/kanvas/skia/SkiaGmBenchmarkRunner.kt integration-tests/skia/src/test/kotlin/org/graphiks/kanvas/skia/SkiaGmBenchmarkRunnerTest.kt integration-tests/skia/src/test/kotlin/org/graphiks/kanvas/skia/FramePlanWindowBenchmarkOptions.kt integration-tests/skia/src/test/kotlin/org/graphiks/kanvas/skia/FramePlanWindowBenchmarkOptionsTest.kt integration-tests/skia/src/kadreBenchmark/kotlin/org/graphiks/kanvas/skia/KadreFramePlanBenchmark.kt tools/performance/run-frame-plan-benchmarks.sh tools/performance/frame-plan-benchmark.schema.json tools/performance/skia-nanobench-fixed-loop-multi-sample.patch
+rtk git add integration-tests/skia/build.gradle.kts integration-tests/skia/src/test/kotlin/org/graphiks/kanvas/skia/SkiaGmBenchmarkSceneSelection.kt integration-tests/skia/src/test/kotlin/org/graphiks/kanvas/skia/SkiaGmBenchmarkRunner.kt integration-tests/skia/src/test/kotlin/org/graphiks/kanvas/skia/SkiaGmBenchmarkRunnerTest.kt integration-tests/skia/src/test/kotlin/org/graphiks/kanvas/skia/SkiaGmBenchmarkWorkloadManifest.kt integration-tests/skia/src/test/kotlin/org/graphiks/kanvas/skia/SkiaGmBenchmarkWorkloadManifestTest.kt integration-tests/skia/src/test/kotlin/org/graphiks/kanvas/skia/gm/composite/AAXfermodesGm.kt integration-tests/skia/src/test/kotlin/org/graphiks/kanvas/skia/gm/composite/HairModesGm.kt integration-tests/skia/src/test/kotlin/org/graphiks/kanvas/skia/gm/composite/XfermodesGm.kt integration-tests/skia/src/test/kotlin/org/graphiks/kanvas/skia/gm/path/ThinRectsGm.kt integration-tests/skia/src/test/kotlin/org/graphiks/kanvas/skia/gm/gradient/LinearGradientGm.kt integration-tests/skia/src/test/kotlin/org/graphiks/kanvas/skia/gm/path/ManyCirclesGm.kt integration-tests/skia/src/test/kotlin/org/graphiks/kanvas/skia/FramePlanWindowBenchmarkOptions.kt integration-tests/skia/src/test/kotlin/org/graphiks/kanvas/skia/FramePlanWindowBenchmarkOptionsTest.kt tools/performance/run-frame-plan-benchmarks.sh tools/performance/frame-plan-benchmark.schema.json tools/performance/fixtures/frame-plan-gates tools/performance/skia-nanobench-fixed-loop-multi-sample.patch
 rtk git commit -m 'test: add reproducible GPU frame benchmark harness'
 rtk git tag kanvas-frame-plan-benchmark-harness-2026-07-13 HEAD
 ```
 
-Keep this commit source-compatible with the pre-implementation GM runner: it may depend only on the stable Skia GM registry/render result/readback surface, not new frame-plan, queue-ticket, or telemetry types. The fixed tag lets the exact harness patch be applied to a baseline-derived worktree without moving renderer changes backward.
+Keep this tagged commit source-compatible with the pre-implementation GM runner: it may depend only on the stable Skia GM registry/render result/readback surface, not new frame-plan, queue-ticket, or telemetry types. The fixed tag lets the exact harness/workload patch be applied to a baseline-derived worktree without moving renderer changes backward.
+
+After tagging, add `SkiaGmSteadyFrameBenchmarkRunner` and the actual Kadre window lane in a separate candidate-only commit. The steady runner selects the registry-owned GM, calls `onOnceBeforeDraw`, then obtains one production `Surface.prepareGpuRenderSession()` before timing. Each retained sample performs this exact boundary: start the timer; call `renderFrame(CurrentFrameCompletionOnly) { canvas -> GmCanvas(canvas).drawBackgroundAndGmContent(...) }`; await that returned handle's `completed` stage and verify the completed attempt ID equals the handle's attempt ID; then stop the timer. The block records a fresh frame, including the same background/content work Graphite times, followed by exactly one submit and the exact completion of that same frame. `onOnceBeforeDraw` remains outside timing. The runner asserts no operation accumulation between samples, zero readback/copy-map work, and zero outstanding GPU work before the timer stops. It may not import `GPUOpMapper`, duplicate route logic, use reflection, or create a target itself.
+
+In this same candidate-only commit, configure the opt-in `kadreBenchmark` source set and `runFramePlanKadreNativeBenchmark` task to consume the exact compiled output of `sourceSets["test"]`, including the selector, registry, `GmCanvas`, and selected GM classes. `KadreFramePlanBenchmark` creates one opaque `GPUPreparedWindowOutput`, reuses one production prepared surface session, records the registry-owned GM through `PresentToWindow`, records immediate presentation separately, and awaits the same handle's matching completed attempt on the benchmark worker. The ordinary interactive window callback remains non-blocking. Reject alternate scene tables, rect-only shaders, private mappers/executors, or copied GM classes. Kadre resolves only with `-PenableKadreFrameBenchmark=true`, initialized `external/poc-koreos`, `-XstartOnFirstThread`, and `--enable-native-access=ALL-UNNAMED`; ordinary headless tests never resolve it. Missing native window/submodule is informational, but a broken production prepared-window contract is a hard failure. Do not cherry-pick either candidate adapter into the baseline branch and do not use window results for baseline/candidate or Graphite ratios.
+
+```bash
+rtk ./gradlew :integration-tests:skia:test --tests 'org.graphiks.kanvas.skia.SkiaGmBenchmarkRunnerTest'
+rtk git add integration-tests/skia/src/test/kotlin/org/graphiks/kanvas/skia/SkiaGmSteadyFrameBenchmarkRunner.kt integration-tests/skia/src/test/kotlin/org/graphiks/kanvas/skia/SkiaGmBenchmarkRunnerTest.kt integration-tests/skia/src/kadreBenchmark/kotlin/org/graphiks/kanvas/skia/KadreFramePlanBenchmark.kt integration-tests/skia/build.gradle.kts
+rtk git commit -m 'test: add candidate steady and window frame lanes'
+```
+
+The tagged Step 5 script/schema already define the optional steady/window
+protocol and invoke those tasks only when present; the candidate-only commit
+adds implementations and lazy Gradle wiring but does not modify the tagged
+script, schema, fixtures, or Graphite patch. Their Git blob hashes therefore
+remain identical in baseline, candidate, and the current orchestrator.
 
 - [ ] **Step 6: Run Skia GM tests before rebaseline**
 
@@ -1348,27 +1610,30 @@ Inspect `aaxfermodes`, `hairmodes`, and `xfermodes` at interiors, exteriors, AA 
 
 - [ ] **Step 9: Create isolated benchmark worktrees after both code commits**
 
-On one recorded host/adapter/driver/JDK/power mode, run the same scene, dimensions, format, color space, sample plan, and completion boundary for pre-change Kanvas, candidate Kanvas, and Graphite+Dawn revision `defc3a5a92966c32cb2a6a901e2fa3036a13bb8a`. Use isolated checkouts and independent build directories. The Graphite checkout is derived from the pinned source solely by the checked-in nanobench-driver patch:
+On one recorded host/adapter/driver/JDK/power mode, run two non-interchangeable protocols. The `end-to-end-regression` lane compares pre-change and candidate Kanvas through the same stable API and lifecycle. The `steady-frame-cross-engine` lane compares candidate Kanvas and Graphite/Dawn revision `defc3a5a92966c32cb2a6a901e2fa3036a13bb8a` after identical one-time preparation, using the same structurally verified scene, dimensions, physical RGBA8Unorm, premultiplied alpha, sRGB color interpretation, single-sample plan, and current-frame completion boundary. Never compute a ratio across the two lanes. Use isolated checkouts and independent build directories. The Graphite checkout is derived from the pinned source solely by the checked-in nanobench-driver patch:
 
 ```bash
 rtk git worktree add -b codex/kanvas-frame-benchmark-baseline /Users/chaos/.codex/worktrees/kanvas-frame-baseline bdbab8292a45cc44521d1642714a87feb5a8e8d2
+rtk git -C /Users/chaos/.codex/worktrees/kanvas-frame-baseline cherry-pick kanvas-frame-plan-wgsl4k-dependency-2026-07-13
+rtk git -C /Users/chaos/.codex/worktrees/kanvas-frame-baseline cherry-pick kanvas-frame-plan-wgpu4k-dependency-2026-07-13
 rtk git -C /Users/chaos/.codex/worktrees/kanvas-frame-baseline cherry-pick kanvas-frame-plan-benchmark-harness-2026-07-13
 rtk git worktree add --detach /Users/chaos/.codex/worktrees/kanvas-frame-candidate HEAD
 rtk git -C /Users/chaos/workspace/kanvas-forge/skia-main worktree add -b codex/kanvas-frame-nanobench-driver /Users/chaos/.codex/worktrees/skia-frame-benchmark defc3a5a92966c32cb2a6a901e2fa3036a13bb8a
 rtk git -C /Users/chaos/.codex/worktrees/skia-frame-benchmark apply --check /Users/chaos/.codex/worktrees/da7e/kanvas/tools/performance/skia-nanobench-fixed-loop-multi-sample.patch
 rtk git -C /Users/chaos/.codex/worktrees/skia-frame-benchmark apply /Users/chaos/.codex/worktrees/da7e/kanvas/tools/performance/skia-nanobench-fixed-loop-multi-sample.patch
 rtk git -C /Users/chaos/.codex/worktrees/skia-frame-benchmark add bench/nanobench.cpp
-rtk git -C /Users/chaos/.codex/worktrees/skia-frame-benchmark commit -m 'bench: allow fixed-loop multi-sample runs'
+rtk git -C /Users/chaos/.codex/worktrees/skia-frame-benchmark commit -m 'bench: complete fixed-loop Graphite samples'
 ```
 
-The baseline-derived branch starts from the exact pre-implementation renderer and adds only the tagged benchmark harness commit. Before measuring, the script asserts that its diff from `bdbab8292a45cc44521d1642714a87feb5a8e8d2` contains only the harness/build-script/schema/patch paths listed in Step 5; any renderer or production dependency change refuses the baseline. The manifest records the original renderer commit, derived baseline commit, harness tag/commit, and candidate commit independently. The candidate worktree is created only after the telemetry and harness commits and its resolved commit ID is written to the manifest. The Graphite manifest records the pinned parent commit, derived local commit, exact one-file diff, and patch SHA-256; any other Skia diff refuses measurement. Never checkout, reset, or benchmark another revision inside the user's current worktree or the existing Skia checkout. Keep build directories inside their respective worktrees. Separate offscreen/readback from window/present. For each warm case, collect 120 untimed warmups and 300 measured frames; for cold diagnostics, collect 30 independent process launches. Check in all raw samples and SHA-256 hashes. Compute p50 and p95 over all 300 warm samples without deletion.
+The baseline-derived branch starts from the exact pre-implementation renderer and adds only the tagged wgsl4k pin, wgpu4k pin, and benchmark harness commits. Before measuring, the script asserts that its diff from `bdbab8292a45cc44521d1642714a87feb5a8e8d2` contains only the dependency alias/consumer/verification/report paths from Tasks 3 and 9 plus the harness/workload/build-script/schema/patch paths from Step 5; any renderer change refuses the baseline. Resolve and record the declared coordinate, timestamped module metadata, SHA-256 of every wgpu4k/native artifact, and native revision independently in baseline and candidate, then require exact equality for `end-to-end-regression`. Any difference makes regression results informational rather than a promotion gate. The manifest records the original renderer commit, both dependency tags/commits, derived baseline commit, harness tag/commit, and candidate commit independently. The candidate worktree is created only after the telemetry and harness commits and its resolved commit ID is written to the manifest. The Graphite manifest records the pinned parent commit, derived local commit, exact one-file diff, and patch SHA-256; any other Skia diff refuses measurement. Require the isolated baseline, candidate, and derived Skia worktrees to be clean immediately before measurement (apart from the exact committed one-file Skia driver patch). Do not require the user's current orchestration/output worktree to be clean: verify the script, schema, and patch bytes against their recorded harness-tag Git blob SHA-256s, allow writes only below the declared report output root, and ignore—without reading, modifying, or staging—unrelated user changes outside those inputs/outputs. Never checkout, reset, or benchmark another revision inside the user's current worktree or the existing Skia checkout. Keep build directories inside their respective worktrees. Separate offscreen/readback from window/present. For each warm case, collect 120 untimed warmups and 300 measured frames; for cold diagnostics, collect 30 independent process launches. Check in all raw samples and SHA-256 hashes. Compute p50 and p95 over all 300 warm samples without deletion.
 
 - [ ] **Step 10: Build and run the exact Kanvas and Graphite/Dawn commands**
 
-The checked-in script runs these Kanvas commands in both isolated worktrees for each lane, with absolute output directories under the current worktree's report directory:
+The checked-in script runs the regression command in both isolated Kanvas worktrees and the steady-frame command only in the candidate worktree, with absolute output directories under the current worktree's report directory:
 
 ```bash
-rtk ./gradlew :integration-tests:skia:benchmarkSkiaGms -PkanvasGmBenchNames=aaxfermodes,hairmodes,xfermodes -PkanvasGmBenchLane=offscreen-readback -PkanvasGmBenchCacheState=warm -PkanvasGmBenchProcessIndex=0 -PkanvasGmBenchWarmup=120 -PkanvasGmBenchSamples=300 -PkanvasGmBenchOutput=/Users/chaos/.codex/worktrees/da7e/kanvas/reports/upstream-rebaseline/graphite-dawn-frame-plan/raw
+rtk ./gradlew :integration-tests:skia:benchmarkSkiaGms -PkanvasGmBenchNames=aaxfermodes,hairmodes,xfermodes,rect,thinrects,linear_gradient,manycircles -PkanvasGmBenchLane=end-to-end-regression -PkanvasGmBenchTarget=offscreen-readback -PkanvasGmBenchCacheState=warm -PkanvasGmBenchProcessIndex=0 -PkanvasGmBenchWarmup=120 -PkanvasGmBenchSamples=300 -PkanvasGmBenchOutput=/Users/chaos/.codex/worktrees/da7e/kanvas/reports/upstream-rebaseline/graphite-dawn-frame-plan/raw
+rtk ./gradlew :integration-tests:skia:benchmarkSkiaGms -PkanvasGmBenchNames=aaxfermodes,hairmodes,xfermodes,rect,thinrects,linear_gradient,manycircles -PkanvasGmBenchLane=steady-frame-cross-engine -PkanvasGmBenchTarget=offscreen-current-frame-completion -PkanvasGmBenchCacheState=warm -PkanvasGmBenchProcessIndex=0 -PkanvasGmBenchWarmup=120 -PkanvasGmBenchSamples=300 -PkanvasGmBenchOutput=/Users/chaos/.codex/worktrees/da7e/kanvas/reports/upstream-rebaseline/graphite-dawn-frame-plan/raw
 rtk ./gradlew :integration-tests:skia:runFramePlanKadreNativeBenchmark -PenableKadreFrameBenchmark=true -PkadreFrameBenchNames=aaxfermodes,hairmodes,xfermodes -PkadreFrameBenchWarmup=120 -PkadreFrameBenchSamples=300 -PkadreFrameBenchOutput=/Users/chaos/.codex/worktrees/da7e/kanvas/reports/upstream-rebaseline/graphite-dawn-frame-plan/raw
 ```
 
@@ -1377,8 +1642,8 @@ For Graphite/Dawn on macOS Metal, the script verifies the pinned source revision
 ```bash
 rtk bin/gn gen out/KanvasFramePlanRelease --args='is_debug=false skia_enable_graphite=true skia_use_dawn=true skia_use_metal=true'
 rtk ninja -C out/KanvasFramePlanRelease nanobench
-rtk out/KanvasFramePlanRelease/nanobench --config grdawn_mtl --match '^GM_aaxfermodes$' '^GM_hairmodes$' '^GM_xfermodes$' --loops 1 --samples 420 --outResultsFile /Users/chaos/.codex/worktrees/da7e/kanvas/reports/upstream-rebaseline/graphite-dawn-frame-plan/raw/graphite-warm-and-measured.json
-rtk out/KanvasFramePlanRelease/nanobench --config grdawn_mtl --match '^GM_aaxfermodes$' --loops 1 --samples 1 --outResultsFile /Users/chaos/.codex/worktrees/da7e/kanvas/reports/upstream-rebaseline/graphite-dawn-frame-plan/raw/graphite-aaxfermodes-cold-process-00.json
+rtk out/KanvasFramePlanRelease/nanobench --config 'srgb-graphite[api=dawn_mtl,color=8888]' --match '^GM_aaxfermodes$' '^GM_hairmodes$' '^GM_xfermodes$' '^GM_thinrects$' '^GM_manycircles$' --loops 1 --samples 420 --outResultsFile /Users/chaos/.codex/worktrees/da7e/kanvas/reports/upstream-rebaseline/graphite-dawn-frame-plan/raw/graphite-warm-and-measured.json
+rtk out/KanvasFramePlanRelease/nanobench --config 'srgb-graphite[api=dawn_mtl,color=8888]' --match '^GM_aaxfermodes$' --loops 1 --samples 1 --outResultsFile /Users/chaos/.codex/worktrees/da7e/kanvas/reports/upstream-rebaseline/graphite-dawn-frame-plan/raw/graphite-aaxfermodes-cold-process-00.json
 ```
 
 Execute the orchestrator from the current worktree:
@@ -1387,11 +1652,11 @@ Execute the orchestrator from the current worktree:
 rtk tools/performance/run-frame-plan-benchmarks.sh --baseline-root /Users/chaos/.codex/worktrees/kanvas-frame-baseline --candidate-root /Users/chaos/.codex/worktrees/kanvas-frame-candidate --skia-root /Users/chaos/.codex/worktrees/skia-frame-benchmark --output-root /Users/chaos/.codex/worktrees/da7e/kanvas/reports/upstream-rebaseline/graphite-dawn-frame-plan
 ```
 
-Graphite's `GMBench.getUniqueName()` prefixes every selected GM with `GM_`, and `--match` consumes separate arguments; the script asserts exactly those three benchmark names were emitted. Stock nanobench forces `FLAGS_samples = 1` for explicit loops, so the versioned driver-only patch removes exactly that assignment. `--loops 1` is then required for warm and cold runs so nanobench neither auto-calibrates nor batches multiple `drawContent()` calls into one reported sample; the script requires exactly 420 samples per warm GM before splitting indices 0–119 as untimed warmup and 120–419 as measured. The displayed cold command is `aaxfermodes`, process index 00. The script repeats it with one exact prefixed `--match` at a time for `GM_aaxfermodes`, `GM_hairmodes`, and `GM_xfermodes`, each in 30 new nanobench processes with zero-padded indices 00 through 29. Each cold process reports its first and only sample. The script validates exactly 30 cold records per GM. It similarly launches 30 independent Gradle/Java processes per GM for baseline and candidate cold results. The script refuses dirty benchmark worktrees, wrong revisions, an unexpected Skia patch, missing GPU completion, sample-count mismatch, mixed lanes, unsupported window claims, or schema-invalid output. It writes raw hashes, exact commands, resolved candidate/Graphite commits, environment, p50/p95, and deviations to the manifest/report. Graphite nanobench is an offscreen comparison only; window-present results stay in their separate opt-in Kanvas/Kadre lane and are never compared to it.
+Graphite's `GMBench.getUniqueName()` prefixes every selected GM with `GM_`, and `--match` consumes separate arguments; the script asserts exactly the manifest-approved names were emitted. `srgb-graphite[api=dawn_mtl,color=8888]` explicitly fixes Dawn/Metal, physical RGBA8Unorm, premultiplied alpha, and sRGB color interpretation; the manifest checks the effective target facts against Kanvas. Stock nanobench forces `FLAGS_samples = 1` for explicit loops, so the versioned driver patch removes that assignment. The second hunk calls `syncedSubmit()` after submitting the current recording, because Graphite's ordinary frame-lag tracker waits an older reusable slot and does not prove completion of the current sample. `--loops 1` prevents batching several `drawContent()` calls into one report. Exactly 420 samples per warm GM are required, indices 0–119 are excluded warmups, and 120–419 are the 300 measured samples. The steady-frame Kanvas adapter likewise performs one frame and waits its exact ticket; both runners assert no unfinished work after every sample. The script launches 30 independent cold processes only as informational initialization evidence. It refuses dirty baseline/candidate/derived-Skia measurement worktrees, wrong revisions, unverified harness input blobs, outputs outside the declared report root, a structurally inequivalent GM, unexpected Skia diff, format/alpha/color-space mismatch, missing current-frame completion, sample-count mismatch, mixed lanes, unsupported window claims, or schema-invalid output. It does not reject or mutate unrelated user-owned changes in the current orchestration worktree. Graphite remains an offscreen steady-frame comparison only; window-present results stay in their separate opt-in Kanvas/Kadre lane.
 
 - [ ] **Step 11: Apply promotion gates**
 
-Require each primary GM to improve at least 2x at p50 and improve p95 against the fresh pre-change run. Direct-draw GMs may regress by at most 10% p50 and 15% p95. Publish candidate/Graphite ratios and target at most 2x Graphite p50 for direct-draw-dominated scenes. A failed performance gate keeps structural correctness intact but blocks performance promotion and requires a profile naming the next dominant cost.
+From the `end-to-end-regression` lane only, require each primary GM to improve at least 2x at p50 and improve p95 against the fresh pre-change run. For the explicitly sampled controls `rect`, `thinrects`, `linear_gradient`, and `manycircles`, require the frozen direct-draw verdict and then allow at most 10% p50 and 15% p95 regression. From the `steady-frame-cross-engine` lane only, publish candidate/Graphite ratios for manifest-equivalent workloads and target at most 2x Graphite p50 for `thinrects` and `manycircles`; `rect` and `linear_gradient` remain Kanvas-only. Never divide an end-to-end value by a steady-frame value. A failed performance gate keeps structural correctness intact but blocks frame-plan performance promotion and requires a profile naming the next dominant cost. Mark these gates release-blocking for that promotion only when the checked-in negative-fixture suite has just passed without mutating any baseline; otherwise emit `reporting-only`.
 
 - [ ] **Step 12: Run final full verification**
 
