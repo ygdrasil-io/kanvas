@@ -23,7 +23,8 @@ dependency boundaries, and validation
 expectations that future
 implementation tickets must follow. It also defines the draw packet and command
 stream materialization bridge so planner output, payload slots, resource
-materialization, and `GPUExecutionContext.submit()` have one explicit contract.
+materialization, and coordinated `PreparedGPUFrame` execution have one explicit
+contract.
 It also defines the `DrawVertices` and mesh-like target so
 user-provided vertex geometry has a clear GPU route/refusal contract before
 implementation slicing, and the registered runtime-effect registry so
@@ -123,8 +124,9 @@ critical-path order, and parallel implementation lanes are centralized in
   out of durable keys.
 - Materialize accepted invocations through `GPUDrawPacket`,
   `GPUDrawPacketStream`, `GPUPassCommand`, `GPUPassCommandStream`, and
-  `GPUCommandEncoderPlan` before submission. Packet streams are scoped pass
-  artifacts, not durable keys or public APIs.
+  `GPUCommandEncoderPlan` during preflight after final frame order and before
+  submission. Packet streams are scoped pass artifacts, not durable keys or
+  public APIs.
 - Resolve image and texture sources through explicit `GPUTextureOwnershipPlan`,
   `GPUTextureDescriptor`, `GPUTextureViewDescriptor`, `GPUSamplerDescriptor`,
   `GPUImageSourceDescriptor`, and `GPUSampledTextureBinding` contracts.
@@ -203,6 +205,33 @@ critical-path order, and parallel implementation lanes are centralized in
   support claim.
 - Use explicit `GPUBlendPlan`, `GPUColorPlan`, and `GPUTargetState` contracts
   for blend, color, alpha, premul, and target behavior.
+- Keep the canonical 29-mode identity, blend planner, fixed-function state,
+  shader formula identity, coverage encoding, opacity specialization, and
+  semantic `GPUBlendDestinationReadRequirement` together in `passes`.
+  `destination` consumes that requirement and chooses only concrete
+  materialization; `passes` never imports `destination`, while foundation
+  `state` owns neither a second blend enum nor late-planning semantics.
+- Keep `LCDCoverage` as vector RGB coverage with channel-wise interpolation
+  and maximum channel alpha. `Dst` is a no-op, every other canonical mode uses
+  an exact destination shader, and unproven MSAA exactness refuses rather than
+  scalarizing coverage.
+- Keep `GPUTaskList` as dependency authority and `GPUFramePlan` as its
+  deterministic linear execution schedule. Analysis, recording, and frame
+  plans are handle-free; resource materialization and pass command streams are
+  created only by `GPUFramePreflighter` after final order is known.
+- Use `GPUFrameCoordinator` as the sole product entry across frame finalization,
+  preflight, and execution. It makes no route decision, preserves planning and
+  preflight refusals as terminal outcomes, and cannot be bypassed by scene or
+  surface entries.
+- Render offscreen and window output through one canonical `GPUSceneTarget`,
+  persistent MSAA continuation, bounded destination-snapshot grouping, an
+  aggregate scratch budget, transactional preflight, one encoder/command
+  buffer/submission, late surface acquisition, post-submit presentation, and
+  real queue completion.
+- Use the unchanged wgpu4k completion facade API only after its corrected
+  revision passes native callback-lifetime and event-pump conformance. Do not
+  add a Kanvas native workaround, and never release resources because
+  presentation occurred.
 - Resolve complete color-management behavior through
   `GPUColorManagementPlan`, `GPUColorValueSpec`,
   `GPUColorSpaceDescriptor`, `GPUColorConversionPlan`,
@@ -328,6 +357,8 @@ flowchart TD
     clipplan --> recorder
     recorder --> recording["GPURecording"]
     recording --> tasks["GPUTaskList"]
+    tasks --> frameplan["GPUFramePlan"]
+    frameplan --> coordinator["GPUFrameCoordinator"]
     tasks --> drawpass["GPUDrawPass"]
     drawpass --> step["GPURenderStep"]
     command --> paintsource["GPUPaintPipelinePlan / GPUMaterialSourcePlan"]
@@ -340,7 +371,7 @@ flowchart TD
     command --> blend["GPUBlendPlan / GPUColorPlan"]
     command --> color["GPUColorManagementPlan / GPUColorValueSpec"]
     command --> coords["GPUCoordinateSpace / GPUTransformPlan / GPUBoundsPlan"]
-    command --> dstread["GPUDestinationReadPlan"]
+    command --> dstread["semantic destination-read requirement / bounds"]
     color --> blend
     color --> paintsource
     color --> material
@@ -398,7 +429,7 @@ flowchart TD
     rte --> pipeline
     abi --> pipeline
     wgsl --> pipeline
-    drawpass --> packet["GPUDrawPacketStream / GPUPassCommandStream"]
+    drawpass --> packet["GPUDrawPacketStream"]
     step --> packet
     payload --> packet
     pipeline --> packet
@@ -413,8 +444,14 @@ flowchart TD
     dstread --> resources
     filterdetail --> resources
     pipeline --> resources["GPUResourceProvider"]
-    resources --> execution["GPUExecutionContext / submission"]
-    packet --> execution
+    coordinator --> preflight["GPUFramePreflighter"]
+    preflight --> resources
+    packet --> preflight
+    preflight --> commandstream["GPUPassCommandStream / GPUCommandEncoderPlan"]
+    resources --> prepared["PreparedGPUFrame"]
+    preflight --> prepared
+    commandstream --> prepared
+    prepared --> execution["GPUFrameExecutor / one submission"]
     occlusion["GPUHiZPyramid + GPUHiZOcclusionTest"] --> recorder
     tile["GPUTileGridPlan / GPUTileBin / GPUTilePass"] --> drawpass
     tile --> composite["GPUTileCompositePass"]

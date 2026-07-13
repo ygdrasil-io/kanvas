@@ -67,6 +67,76 @@ class GPURendererPackageBoundaryTest {
         )
     }
 
+    /** Ensures active specs expose one frame-planning authority without legacy contradictions. */
+    @Test
+    fun `active gpu renderer specs expose one coherent frame planning authority`() {
+        val specs = authoritySpecFiles.associateWith { fileName ->
+            authoritySpecRoot.resolve(fileName).readText()
+        }
+        val violations = buildList {
+            canonicalAuthorityConcepts.forEach { concept ->
+                val authorityRows = specs.flatMap { (fileName, text) ->
+                    text.lineSequence()
+                        .filter { line -> line.startsWith("| `$concept` |") }
+                        .map { line -> "$fileName:$line" }
+                        .toList()
+                }
+                if (authorityRows.size != 1) {
+                    add(
+                        "$concept must have exactly one normative authority row; " +
+                            "found ${authorityRows.size}: ${authorityRows.joinToString()}",
+                    )
+                }
+            }
+
+            val forbiddenAuthority = listOf(
+                "a second blend-mode enum in state" to
+                    Regex(
+                        "(?ms)^### `state`\\s*$.*?" +
+                            "^- `GPUBlendMode`\\s*$.*?^### `color`\\s*$",
+                    ),
+                "an unconditional LCD product refusal" to
+                    Regex(
+                        "(?im)^(?:LCD subpixel masks are not a target representation\\.|" +
+                            "\\| LCD subpixel text \\| Future research; stable refusal\\. \\||" +
+                            "- Do not support LCD subpixel text as part of this target\\.)$",
+                    ),
+                "materialization before final task and frame order" to
+                    Regex(
+                        "GPUResourceMaterializationDecision\\s*" +
+                            "-> GPUTaskList finalization",
+                    ),
+                "a direct submission entry that bypasses GPUFrameCoordinator" to
+                    Regex("`GPUExecutionContext\\.submit\\(\\)`"),
+                "a CPU destination snapshot product route" to
+                    Regex(
+                        "(?i)(?:allow|accept|create|upload|use)[^\\n]{0,80}" +
+                            "CPU[^\\n]{0,40}destination snapshot",
+                    ),
+                "presentation as GPU completion" to
+                    Regex(
+                        "(?i)(?:present(?:ation)?\\s+" +
+                            "(?:is|means|constitutes|completes)\\s+" +
+                            "(?:GPU|queue) completion|" +
+                            "treat[^\\n]{0,40}present[^\\n]{0,40}as[^\\n]{0,20}" +
+                            "(?:GPU|queue) completion)",
+                    ),
+            )
+            forbiddenAuthority.forEach { (description, pattern) ->
+                specs.forEach { (fileName, text) ->
+                    pattern.findAll(text).forEach { match ->
+                        add("$fileName authorizes $description: ${match.value}")
+                    }
+                }
+            }
+        }
+
+        assertTrue(
+            actual = violations.isEmpty(),
+            message = "GPU renderer authority conflicts:\n${violations.joinToString("\n")}",
+        )
+    }
+
     /** Ensures GPU capabilities do not reintroduce stringly typed GPU spec concepts. */
     @Test
     fun `gpu capabilities do not reintroduce stringly typed GPU spec concepts`() {
@@ -264,5 +334,36 @@ class GPURendererPackageBoundaryTest {
     private companion object {
         /** Main Kotlin source root for the gpu-renderer module under Gradle test execution. */
         val mainSourceRoot = File("src/main/kotlin")
+
+        /** Active authority pack root relative to the gpu-renderer Gradle project. */
+        val authoritySpecRoot = File("../.upstream/specs/gpu-renderer")
+
+        /** Active authority files synchronized by the frame-planning amendment. */
+        val authoritySpecFiles = listOf(
+            "README.md",
+            "02-gpu-recording-task-graph.md",
+            "10-gpu-execution-context-submission.md",
+            "12-blend-color-target-state.md",
+            "20-destination-read-strategy.md",
+            "21-text-glyph-pipeline.md",
+            "24-clip-stencil-mask-pipeline.md",
+            "32-target-authority-taxonomy-diagnostics.md",
+            "34-analysis-materialization-recording.md",
+            "35-package-class-layout.md",
+            "37-draw-packet-command-stream.md",
+        )
+
+        /** Concepts that must have one and only one normative authority registry row. */
+        val canonicalAuthorityConcepts = listOf(
+            "GPUBlendPlan",
+            "GPUFramePlan",
+            "GPUFrameCoordinator",
+            "GPUFramePreflighter",
+            "PreparedGPUFrame",
+            "GPUSceneTarget",
+            "GPUQueueCompletionTicket",
+            "LCDCoverage",
+            "RefusedCompositeCommand",
+        )
     }
 }

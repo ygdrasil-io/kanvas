@@ -218,6 +218,29 @@ only when they affect executable validity.
 These objects live under `org.graphiks.kanvas.gpu.renderer` package
 responsibilities. Public names keep `GPU`, `CPU`, and `WGSL` uppercase.
 
+## Coverage And Frame Handoff
+
+Clip planning is handle-free and produces only coverage topology, bounds,
+resource roles, atomic groups, and dependency tokens. `GPUTaskList` preserves
+those dependencies, `GPUFramePlan` fixes their one legal linear order, and
+only `GPUFramePreflighter` may materialize stencil attachments, masks, atlas
+bindings, and pass command streams. A preflight refusal rolls back without
+submission.
+
+The final `GPUBlendPlan` remains the sole blend/coverage authority. Scalar clip
+coverage multiplies scalar geometry coverage. When a text route supplies
+`LCDCoverage`, scalar clip coverage multiplies each RGB channel without
+reducing the vector to `max(F.rgb)`; color channels interpolate independently
+and stored alpha uses the maximum of the three channel-wise alpha
+interpolations. An MSAA route without proven exact single-sample lowering
+refuses with `unsupported.blend.lcd_msaa_exactness`.
+
+Clip, layer, filter, and picture composite boundaries use
+`RefusedCompositeCommand` when unsupported child work cannot be isolated as a
+legal leaf refusal. The refusal retains child provenance and ordering tokens,
+and no child task may leak into the parent target. If isolation or painter
+order cannot be preserved, frame planning escalates to atomic failure.
+
 ## Captured Clip Descriptor
 
 `GPUClipStackDescriptor` records:

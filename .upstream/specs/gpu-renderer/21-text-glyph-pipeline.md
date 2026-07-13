@@ -92,7 +92,7 @@ Kanvas intentionally does not copy:
 
 - Graphite classes, C++ ownership, packed bit layouts, or Skia cache identity;
 - SkSL text shader code;
-- LCD subpixel text as a complete Kanvas target;
+- Graphite's backend-specific LCD implementation or dual-source assumptions;
 - Graphite's silent early return when atlas allocation fails;
 - Ganesh/Graphite text op or glyph op machinery;
 - native font engine behavior as a correctness oracle.
@@ -206,11 +206,14 @@ Representation consumed by the renderer:
 | `COLRColorGlyph` | `ColorGlyphPlan` with COLR/CPAL paint graph facts. |
 | `BitmapGlyph` | `BitmapGlyphPlan` with decoded PNG-backed glyph image facts. |
 | `SVGGlyph` | `SVGGlyphPlan` with pure Kotlin glyph-scoped SVG plan facts. |
+| `LCDCoverageMask` | Typed three-channel subpixel coverage accepted by `GPUSubpixelLCDPlan`. |
 | `RefusedText` | Stable refusal from text stack or GPU route selection. |
 
-LCD subpixel masks are not a target representation. Requests for LCD text
-diagnose through `unsupported.text.lcd_future_research` or a narrower text-stack
-reason.
+LCD masks remain vector RGB coverage through final `GPUBlendPlan`
+specialization. Unknown pixel geometry, unsupported target format, an
+unvalidated destination-read route, or unproven MSAA exactness refuses with a
+specific stable diagnostic; the renderer never reduces the mask to scalar
+coverage.
 
 ### `GPUTextRoute`
 
@@ -612,8 +615,10 @@ Rules:
 - SDF params are uniform per compatible subrun or indexed per instance;
 - cache reuse is not correctness evidence without generation and key checks.
 
-LCD SDF is not part of this target. Any request that requires LCD-specific
-subpixel reconstruction refuses.
+LCD SDF is accepted only when the text stack emits the same typed RGB coverage
+and the subpixel reconstruction has CPU/GPU evidence. Otherwise that narrower
+representation refuses without disabling accepted atlas or inline
+`LCDCoverage` routes.
 
 ## Outline Glyph Route
 
@@ -648,8 +653,8 @@ Rules:
 - GPU renderer owns lowering the plan into fills, gradients, clips,
   composites, layers, and destination-read plans;
 - every paint primitive must map to an accepted renderer material or refuse;
-- composite operations that need prior destination color use
-  `GPUDestinationReadPlan`;
+- composite operations that need prior destination color declare a semantic
+  requirement and conservative bounds for later preflight;
 - intermediate targets use `GPUTargetTextureDescriptor`;
 - unsupported COLRv1 paint operations refuse with stable diagnostics;
 - monochrome fallback is allowed only when the text-stack plan declares it.
@@ -738,7 +743,8 @@ Text color and materials flow through existing material contracts:
   text-stack plan and color glyph plan declare the rule;
 - A8/SDF coverage modifies alpha/coverage, not material identity;
 - blend state comes from `GPUBlendPlan`;
-- destination-dependent blend routes use `GPUDestinationReadPlan`;
+- destination-dependent blend routes use the semantic requirement from their
+  canonical `GPUBlendPlan`; preflight produces `GPUDestinationReadPlan`;
 - color-space and premul facts come from `GPUColorPlan`.
 
 Text material keys must not include atlas coordinates, glyph IDs, atlas
@@ -755,7 +761,8 @@ Text draws participate in the same planning rules as other draws:
 - layer isolation and saveLayer restore behavior use `GPULayerPlan`;
 - color glyph composites may create layer/intermediate work;
 - shader text blends and color glyph composites that observe destination color
-  use `GPUDestinationReadPlan`;
+  declare semantic requirements and bounds consumed by the preflight
+  destination planner;
 - text route selection must not sample the active target unless
   `20-destination-read-strategy.md` accepts the route.
 
@@ -900,7 +907,8 @@ Stable reason-code examples:
 - `unsupported.text.color_composite_unsupported`
 - `unsupported.text.bitmap_route_unsupported`
 - `unsupported.text.svg_plan_unsupported`
-- `unsupported.text.lcd_future_research`
+- `unsupported.text.lcd_pixel_geometry_unknown`
+- `unsupported.blend.lcd_msaa_exactness`
 - `unsupported.text.instance_buffer_budget_exceeded`
 - `unsupported.text.binding_layout_unavailable`
 - `unsupported.text.destination_read_unaccepted`
@@ -956,7 +964,7 @@ uses Kanvas-owned fixtures and artifacts.
 | PNG bitmap glyphs | `BitmapGlyphTextureRoute` through texture ownership. |
 | SVG-in-OpenType glyphs | `SVGGlyphVectorRoute` through accepted vector/material routes. |
 | Emoji sequences | Supported only when text stack emits accepted color/bitmap/SVG/outline artifacts. |
-| LCD subpixel text | Future research; stable refusal. |
+| LCD subpixel text | `GPUSubpixelLCDPlan` produces `LCDCoverage`; `Dst` is no-op, other modes use an exact destination shader, and unproven MSAA exactness refuses. |
 | CPU-rendered full text texture | Forbidden. |
 
 ## Non-Goals
@@ -966,7 +974,7 @@ uses Kanvas-owned fixtures and artifacts.
 - Do not port Graphite text classes, `SubRunContainer`, `TextAtlasManager`, or
   render-step code.
 - Do not use SkSL.
-- Do not support LCD subpixel text as part of this target.
+- Do not scalarize LCD coverage or approximate it through backend-specific dual-source behavior.
 - Do not CPU-render complete unsupported text runs into textures.
 - Do not hide atlas uploads or pass splits inside payload gathering.
 - Do not put atlas coordinates, glyph IDs, live handles, or upload tokens in
@@ -979,6 +987,17 @@ uses Kanvas-owned fixtures and artifacts.
 Kanvas targets subpixel LCD text rendering for horizontal RGB/BGR stripe layouts
 on known target pixel geometries. This is a `GPUNative` route when the adapter
 and target accept it.
+
+`GPUSubpixelLCDPlan` hands the final target blend one `LCDCoverage` value; it
+does not own a text-only blend implementation. For each channel `c`, the exact
+premultiplied result is
+`R.c = D.c + F.c * (Blend(S,D).c - D.c)`. Alpha is the maximum of
+`mix(D.a, Blend(S,D).a, F.r)`, `mix(D.a, Blend(S,D).a, F.g)`, and
+`mix(D.a, Blend(S,D).a, F.b)`. `Dst` is `NoOp`; every other one of the 29
+canonical modes uses `ShaderBlendWithDstRead(lcd.<mode>@v1)` and the ordinary
+bounded destination-snapshot strategy. If the target cannot prove an exact
+single-sample lowering, it refuses with
+`unsupported.blend.lcd_msaa_exactness`.
 
 ### Contracts
 
@@ -993,9 +1012,11 @@ and target accept it.
 
 - Adapter reports target surface pixel geometry (via `GPU` facade or explicit config).
 - Target format supports subpixel write (e.g., `rgba8unorm` with known layout).
-- Destination read is available or the route proves opaque-only coverage.
+- The canonical destination-read planner accepts a bounded GPU-only snapshot.
 - At least one A8 glyph run promoted to RGB subpixel with CPU oracle parity.
-- Stable refusal for rotated displays, unknown pixel geometry, and translucent destination.
+- All 29 modes have unequal-channel vector-coverage oracle tests, including
+  maximum-channel alpha, `Dst` no-op, and MSAA exactness refusal.
+- Stable refusal for rotated displays and unknown pixel geometry.
 
 ## Color Font Pipeline
 

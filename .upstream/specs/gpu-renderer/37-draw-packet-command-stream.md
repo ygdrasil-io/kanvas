@@ -5,8 +5,8 @@ Date: 2026-06-16
 
 ## Purpose
 
-Define the bridge between the `GPUDrawLayerPlanner` output and concrete
-`GPUExecutionContext.submit()` work.
+Define the bridge between the `GPUDrawLayerPlanner` output and one coordinated,
+preflighted `PreparedGPUFrame` execution.
 
 The gap this closes is not a missing Graphite class name. It is the executable
 stream boundary: accepted draw invocations must become stable, materialized draw
@@ -36,10 +36,13 @@ GPUDrawAnalysis
   -> GPUDrawInvocation
   -> GPUDrawLayerPlanner / SortKey
   -> GPUDrawPacketStream
-  -> GPUResourceProvider materialization
-  -> GPUPassCommandStream
-  -> GPUCommandEncoderPlan
-  -> GPUCommandSubmission
+  -> GPUTaskList / GPUFramePlan final order
+  -> GPUFramePreflighter
+       -> GPUResourceProvider materialization
+       -> GPUPassCommandStream
+       -> GPUCommandEncoderPlan
+       -> PreparedGPUFrame
+  -> GPUFrameExecutor / one GPUCommandSubmission
 ```
 
 The stream is a renderer contract, not a new public graphics API.
@@ -62,6 +65,8 @@ The stream is a renderer contract, not a new public graphics API.
 
 `execution` owns:
 
+- `GPUFrameCoordinator`, `GPUFramePreflighter`, `PreparedGPUFrame`, and
+  `GPUFrameExecutor`;
 - `GPUCommandEncoderPlan`;
 - facade command encoding;
 - queue submission and completion diagnostics.
@@ -69,12 +74,14 @@ The stream is a renderer contract, not a new public graphics API.
 No package outside `execution` may call command-submission APIs on the `GPU`
 facade. No package outside `resources` may treat concrete GPU handles as durable
 resource identity.
+No scene or surface product entry may bypass `GPUFrameCoordinator`, and the
+coordinator may not introduce a new route decision.
 
 ## `GPUDrawPacket`
 
-`GPUDrawPacket` is the materialized draw-unit record produced from one
-`GPUDrawInvocation` after payload slots, pipeline key preimages, binding-layout
-facts, and resource-binding slots are known.
+`GPUDrawPacket` is the handle-free draw-unit record produced from one
+`GPUDrawInvocation` after payload slot plans, pipeline key preimages,
+binding-layout facts, and logical resource-binding slots are known.
 
 One normalized command may produce multiple packets. A stencil-cover path, clip
 producer/consumer sequence, text subrun split, layer composite, or filter node
@@ -131,14 +138,20 @@ Rules:
   addresses are forbidden packet ordering axes.
 - A refused or culled command must remain visible through packet-stream
   diagnostics even when it emits no executable packet.
+- `RefusedCompositeCommand` consumes one normalized layer, picture, or filter
+  composite plus child provenance and ordering tokens; no child packet enters
+  the parent stream. If the scope cannot be isolated, frame planning records an
+  atomic failure instead of leaking a partial composite.
 
 The stream is valid only for the context, target, device generation, and
 materialization assumptions that created it.
 
 ## Resource Materialization Handoff
 
-The packet stream still references logical descriptors and scoped slots. Before
-execution, `GPUResourceProvider` must resolve or refuse:
+The packet stream still references logical descriptors and scoped slots.
+`GPUTaskList` first records dependencies and `GPUFramePlanner` fixes their
+deterministic linear `GPUFramePlan` order. Only then may
+`GPUFramePreflighter` ask `GPUResourceProvider` to resolve or refuse:
 
 - render pipelines from `GPURenderPipelineKey`;
 - compute pipelines from `GPUComputePipelineKey`;
@@ -150,8 +163,10 @@ execution, `GPUResourceProvider` must resolve or refuse:
 - destination-copy snapshots and readback resources;
 - atlas, clip mask, glyph atlas, image upload, filter, and layer resources.
 
-The materialization product must expose stable references that command streams
-can consume without exposing raw backend object addresses in public dumps.
+The materialization product exposes stable references that command streams can
+consume without exposing raw backend object addresses in public dumps.
+Materialization decisions, concrete handles, and `GPUPassCommandStream` values
+therefore exist only inside preflight after final frame order is known.
 
 Late materialization failure must not silently change route kind. It must return
 one of:
@@ -167,8 +182,9 @@ texture for GPU composition.
 
 ## `GPUPassCommandStream`
 
-`GPUPassCommandStream` is the backend-near stream emitted after materialization.
-It is still Kanvas-owned and dumpable; it is not a raw Dawn/WebGPU command buffer.
+`GPUPassCommandStream` is the backend-near stream emitted by preflight after
+materialization. It is still Kanvas-owned and dumpable; it is not a raw
+Dawn/WebGPU command buffer.
 
 Command classes:
 
@@ -198,6 +214,11 @@ if every packet emits a full state setup.
 `GPUCommandEncoderPlan` maps `GPUPassCommandStream` to the selected `GPU` facade
 implementation.
 
+There is exactly one `GPUCommandEncoderPlan` for one `PreparedGPUFrame`. It
+covers the mixed render, compute, bounded destination-copy, layer/filter,
+readback, and surface-blit sequence in `GPUFramePlan` order. It is evidence for
+the commands the one executor will encode, never an evidence-only shadow plan.
+
 The plan records:
 
 - context implementation identity and device/queue generation;
@@ -206,7 +227,7 @@ The plan records:
 - pass command count and packet count;
 - bound pipeline, bind group, buffer, texture, sampler, and target generations;
 - unsupported facade operations before they reach queue submission;
-- queue-submission result and asynchronous completion status when available.
+- pre-reserved queue-completion ticket identity and retained-resource set.
 
 Encoding rules:
 
@@ -222,6 +243,11 @@ Encoding rules:
 - The encoder must not create shader modules, pipelines, bind group layouts, or
   buffers opportunistically in a way that bypasses `GPUResourceProvider`
   accounting.
+- The executor creates one encoder, finishes one command buffer, and submits it
+  once. Pass, copy, blend, filter, and output code cannot submit independently.
+- Surface acquisition is the final ephemeral preflight operation;
+  the post-submit host output handoff is independent from the terminal queue
+  callback.
 
 This keeps the existing WGPU helper useful as smoke infrastructure while making
 the production path cache, resource, and submission aware.

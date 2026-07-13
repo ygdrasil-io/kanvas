@@ -1,7 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.filters
 
 import kotlin.math.ceil
-import org.graphiks.kanvas.gpu.renderer.commands.GPUBounds
+import org.graphiks.kanvas.gpu.renderer.clips.GPUBounds
 
 sealed interface MaskBlurPlan {
     data object Identity : MaskBlurPlan
