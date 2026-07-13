@@ -9,9 +9,13 @@ import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendCoverageMaskRequest
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendStencilMode
 import org.graphiks.kanvas.gpu.renderer.execution.GPUClearColor
 import org.graphiks.kanvas.gpu.renderer.execution.GPUSurfaceTarget
+import org.graphiks.kanvas.canvas.Canvas
+import org.graphiks.kanvas.canvas.DisplayListBuffer
+import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.pipeline.ClipOp
+import org.graphiks.kanvas.picture.Picture
 import org.graphiks.kanvas.picture.PictureRecorder
 import org.graphiks.kanvas.surface.DiagnosticLevel
 import org.graphiks.kanvas.surface.Surface
@@ -219,6 +223,59 @@ class GPUSaveLayerCompositeRegressionTest {
                 expected = publicLayerExpected(mode, coverage = .5f),
                 tolerance = 2,
             )
+        }
+    }
+
+    @Test
+    fun `picture deferred layer preserves mixed AA and hard clip edges`() {
+        requireWebGpu()
+
+        listOf(
+            MixedClipFixture(
+                name = "outer-AA-inner-hard",
+                pictureClip = Rect(8f, 8f, 23.5f, 24f),
+                pictureClipAntiAlias = false,
+                hostClip = Rect(8.5f, 8f, 24f, 24f),
+                hostClipAntiAlias = true,
+            ),
+            MixedClipFixture(
+                name = "outer-hard-inner-AA",
+                pictureClip = Rect(8.5f, 8f, 24f, 24f),
+                pictureClipAntiAlias = true,
+                hostClip = Rect(8f, 8f, 23.5f, 24f),
+                hostClipAntiAlias = false,
+            ),
+        ).forEach { fixture ->
+            listOf(BlendMode.SRC, BlendMode.DST_IN, BlendMode.MULTIPLY).forEach { mode ->
+                val picture = deferredLayerPicture(fixture, mode)
+                val result = Surface(width = 32, height = 32).run {
+                    canvas {
+                        drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE).copy(antiAlias = false))
+                        clipRect(fixture.hostClip, ClipOp.INTERSECT, fixture.hostClipAntiAlias)
+                        picture.playback(this)
+                    }
+                    render()
+                }
+
+                // The AA edge is retained at x=8, while the hard edge at x=23.5 excludes x=23.
+                assertPixelNearAt(
+                    result.pixels,
+                    width = 32,
+                    x = 8,
+                    y = 16,
+                    expected = publicLayerExpected(mode, coverage = .5f),
+                    tolerance = 2,
+                )
+                assertPixelNearAt(
+                    result.pixels,
+                    width = 32,
+                    x = 22,
+                    y = 16,
+                    expected = publicLayerExpected(mode, coverage = 1f),
+                    tolerance = 2,
+                )
+                assertPixelNearAt(result.pixels, width = 32, x = 23, y = 16, expected = white, tolerance = 2)
+            }
         }
     }
 
@@ -1003,6 +1060,35 @@ class GPUSaveLayerCompositeRegressionTest {
         val antiAlias: Boolean,
         val edge: Point?,
     )
+
+    private data class MixedClipFixture(
+        val name: String,
+        val pictureClip: Rect,
+        val pictureClipAntiAlias: Boolean,
+        val hostClip: Rect,
+        val hostClipAntiAlias: Boolean,
+    )
+
+    private fun deferredLayerPicture(fixture: MixedClipFixture, mode: BlendMode): Picture {
+        val buffer = DeferredPictureBuffer()
+        Canvas(buffer).apply {
+            clipRect(fixture.pictureClip, ClipOp.INTERSECT, fixture.pictureClipAntiAlias)
+            saveLayer(paint = Paint(color = translucentRed.toColor(), blendMode = mode))
+            drawRect(Rect(6f, 6f, 26f, 26f), Paint.fill(Color.RED).copy(antiAlias = false))
+            restore()
+        }
+        return Picture(Rect(0f, 0f, 32f, 32f), buffer.ops())
+    }
+
+    private class DeferredPictureBuffer : DisplayListBuffer {
+        private val recordedOps = mutableListOf<DisplayOp>()
+
+        override fun append(op: DisplayOp) {
+            recordedOps += op
+        }
+
+        override fun ops(): List<DisplayOp> = recordedOps.toList()
+    }
 
     private companion object {
         val white = Rgba(red = 255, green = 255, blue = 255, alpha = 255)

@@ -34,13 +34,29 @@ class ClipStackTest {
     }
 
     @Test
-    fun `intersection keeps overlapping device rectangles compact`() {
+    fun `intersection compacts overlapping device rectangles with matching AA`() {
         val combined = ClipStack.DeviceRect(Rect.fromLTRB(0f, 0f, 50f, 50f), antiAlias = false)
-            .intersectWith(ClipStack.DeviceRect(Rect.fromLTRB(20f, 20f, 80f, 80f), antiAlias = true))
+            .intersectWith(ClipStack.DeviceRect(Rect.fromLTRB(20f, 20f, 80f, 80f), antiAlias = false))
 
         assertEquals(
-            ClipStack.DeviceRect(Rect.fromLTRB(20f, 20f, 50f, 50f), antiAlias = true),
+            ClipStack.DeviceRect(Rect.fromLTRB(20f, 20f, 50f, 50f), antiAlias = false),
             combined,
+        )
+    }
+
+    @Test
+    fun `intersection keeps mixed AA device rectangles as ordered operations`() {
+        val outer = ClipStack.DeviceRect(Rect.fromLTRB(0f, 0f, 50f, 50f), antiAlias = true)
+        val inner = ClipStack.DeviceRect(Rect.fromLTRB(20f, 20f, 80f, 80f), antiAlias = false)
+
+        val combined = outer.intersectWith(inner)
+
+        assertEquals(
+            listOf(
+                ClipStackOp.RectOp(outer.rect, ClipOp.INTERSECT, antiAlias = true),
+                ClipStackOp.RectOp(inner.rect, ClipOp.INTERSECT, antiAlias = false),
+            ),
+            assertIs<ClipStack.Complex>(combined).ops,
         )
     }
 }
