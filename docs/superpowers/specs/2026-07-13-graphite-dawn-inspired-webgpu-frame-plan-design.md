@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-13
 
-**Status:** Draft — independently validated; awaiting user approval
+**Status:** Approved for implementation planning — independently validated
 
 **Scope:** Replace immediate per-operation GPU composition with one measured,
 linear WebGPU frame path for offscreen and window rendering. Prefer exact
@@ -300,7 +300,7 @@ It produces one of:
 ```text
 FixedFunctionBlend(stateId, sourceCoverageEncoding)
 ShaderBlendNoDstRead(formulaId)
-ShaderBlendWithDstRead(formulaId, GPUDestinationReadRequirement)
+ShaderBlendWithDstRead(formulaId, GPUBlendDestinationReadRequirement)
 LayerCompositeBlend(childBlendPlan, layerOrderingToken)
 NoOp(reason)
 UnsupportedBlend(diagnostic, refusalScope)
@@ -647,10 +647,18 @@ that proves:
 - device-loss, adapter-close, timeout, and cancellation behavior;
 - compatibility with the exact wgpu4k/wgpu-native revision.
 
-The preferred fix is an upstream wgpu4k facade implementation with those
-guarantees. A temporary Kanvas native adapter is allowed only when it is
-explicit, revision-gated, separately tested, and scheduled for removal after
-the facade fix; it must not be a hidden backend workaround.
+The required fix is an upstream wgpu4k facade implementation with those
+guarantees. This design does not authorize a temporary Kanvas native callback
+implementation. If the facade revision fails conformance, product activation
+stays closed and Kanvas reports minimized evidence to wgpu4k instead of
+bypassing its public API.
+
+That upstream correction is in progress and is expected to preserve the
+existing `GPUQueue.onSubmittedWorkDone()` API. The Kanvas implementation plan
+therefore assumes no private native workaround: its adapter remains a thin
+lifecycle and evidence boundary around that API. Product activation still
+waits for the corrected wgpu4k revision and the native conformance evidence
+listed below.
 
 Without an accepted adapter, product preflight refuses before submission with
 `dependency.resource.queue_completion_unavailable`. A post-submit ticket-arm
@@ -723,10 +731,14 @@ The current `GPUBlendPlan` and `GPUBlendPlanKind` are evolved rather than
 wrapped in a competing `BlendCoveragePlan`. The current small
 `state.GPUBlendMode`, the 29-mode `passes.GPUBlendMode`, and any route-driving
 booleans converge into one canonical mode identity and one exhaustive planner.
+The final mode, planner, and semantic `GPUBlendDestinationReadRequirement` are
+owned by `passes`; `passes` never imports `destination`.
 
 The planner produces exact fixed-function state or stable WGSL formula IDs.
-`GPUDestinationReadStrategyPlanner` consumes its destination-read requirement;
-it does not reinterpret the mode.
+The `destination` package depends on those pass products.
+`GPUDestinationReadStrategyPlanner` consumes the semantic destination-read
+requirement and maps it to materialization actions; it does not reinterpret the
+mode.
 
 ### Existing batching and command contracts
 
@@ -1015,6 +1027,11 @@ The reproducible benchmark protocol is:
   median absolute deviation and outlier labels are diagnostic only;
 - benchmark script version, metric definitions, and diagnostic outlier labels
   fixed and committed before baseline or candidate runs;
+- Graphite nanobench uses one checked-in, SHA-256-recorded driver-only patch
+  against the pinned source commit: it removes the assignment that forces
+  `FLAGS_samples = 1` for explicit loops, and changes no renderer, Graphite,
+  Dawn, GM, or timing code. This permits `--loops 1 --samples 420` without
+  auto-calibration or multi-draw samples;
 - Graphite+Dawn, pre-change Kanvas, and post-change Kanvas runs include exact
   commits and commands.
 
