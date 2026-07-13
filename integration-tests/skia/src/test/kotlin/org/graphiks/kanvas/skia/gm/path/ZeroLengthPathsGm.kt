@@ -112,9 +112,10 @@ private fun zeroLengthPath(verb: ZeroLengthPathVerb, anchor: Point): Path = Path
             cubicTo(anchor.x, anchor.y, anchor.x, anchor.y, anchor.x, anchor.y)
             close()
         }
-        ZeroLengthPathVerb.ARC -> arcTo(0f, 0f, 0f, false, false, anchor.x, anchor.y)
+        // Skia canonicalizes SVG arcs with a zero radius to lineTo(endPt).
+        ZeroLengthPathVerb.ARC -> lineTo(anchor.x, anchor.y)
         ZeroLengthPathVerb.ARC_CLOSE -> {
-            arcTo(0f, 0f, 0f, false, false, anchor.x, anchor.y)
+            lineTo(anchor.x, anchor.y)
             close()
         }
     }
