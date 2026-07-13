@@ -1,7 +1,6 @@
 package org.graphiks.kanvas.gpu.renderer.wgsl
 
 import kotlin.test.Test
-import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
@@ -13,7 +12,7 @@ import org.graphiks.wgsl.parser.parseWgslResult
 
 class WGSLParserBackedReflectionTest {
     @Test
-    fun `generated blend formula modules lower entry points and resource bindings through wgsl4k`() {
+    fun `generated blend formula modules exactly match declared full scalar and LCD ABI through wgsl4k`() {
         GPUBlendCoverageKind.entries.forEach { coverageKind ->
             val formula = requireNotNull(
                 GPUBlendFormulaLibrary.formulaFor(GPUBlendMode.MULTIPLY, coverageKind),
@@ -23,18 +22,13 @@ class WGSLParserBackedReflectionTest {
             assertTrue(parsed.isSuccess, "${formula.formulaId}: ${parsed.errors.joinToString { it.message }}")
 
             val module = Lowerer().lower(parsed.translationUnit)
-            assertEquals(setOf("vs_main", "fs_main"), module.entryPoints.map { it.name }.toSet())
-            val bindings = module.globalVariables.mapNotNull { variable ->
-                variable.binding?.let { binding -> binding.group to binding.index }
-            }.toSet()
-            val expected = buildSet {
-                add(0 to 0)
-                addAll(setOf(1 to 1, 1 to 2, 1 to 3, 1 to 4))
-                if (coverageKind != GPUBlendCoverageKind.Full) {
-                    addAll(setOf(1 to 5, 1 to 6))
-                }
-            }
-            assertEquals(expected, bindings, "${formula.formulaId}/$coverageKind")
+            val reflected = module.reflectWgslModule(sourceId = formula.formulaId)
+            val result = validateWgslModuleAbi(GPUBlendFormulaModuleAbi.declaredFor(coverageKind), reflected)
+
+            assertIs<WgslModuleAbiValidationResult.Match>(
+                result,
+                (result as? WgslModuleAbiValidationResult.Mismatch)?.diagnostics?.joinToString("\n"),
+            )
         }
     }
 

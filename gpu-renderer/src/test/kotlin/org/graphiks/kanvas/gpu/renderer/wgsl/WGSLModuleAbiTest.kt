@@ -3,38 +3,59 @@ package org.graphiks.kanvas.gpu.renderer.wgsl
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import kotlin.test.fail
 import org.graphiks.kanvas.gpu.renderer.materials.GPUBlendCoverageKind
 import org.graphiks.kanvas.gpu.renderer.materials.GPUBlendFormulaLibrary
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
+import org.graphiks.wgsl.parser.Lowerer
+import org.graphiks.wgsl.parser.parseWgslResult
 
 /** Verifies generic WGSL render module assembly, ABI dumps, reflection fixtures, and rejection diagnostics. */
 class WGSLModuleAbiTest {
     @Test
-    fun `blend formula binding ABI matches full scalar and LCD topology declarations`() {
-        val expectedBindings = mapOf(
-            GPUBlendCoverageKind.Full to listOf(0 to 0, 1 to 1, 1 to 2, 1 to 3, 1 to 4),
-            GPUBlendCoverageKind.Scalar to listOf(0 to 0, 1 to 1, 1 to 2, 1 to 3, 1 to 4, 1 to 5, 1 to 6),
-            GPUBlendCoverageKind.LCD to listOf(0 to 0, 1 to 1, 1 to 2, 1 to 3, 1 to 4, 1 to 5, 1 to 6),
+    fun `blend formula ABI validator rejects a reflected sample type mismatch`() {
+        val coverageKind = GPUBlendCoverageKind.Scalar
+        val formula = requireNotNull(
+            GPUBlendFormulaLibrary.formulaFor(GPUBlendMode.SRC_OVER, coverageKind),
+        )
+        val parsed = parseWgslResult(GPUBlendFormulaLibrary.assembleValidationModule(formula))
+        assertTrue(parsed.isSuccess, parsed.errors.joinToString { it.message })
+        val reflected = Lowerer().lower(parsed.translationUnit).reflectWgslModule(formula.formulaId)
+        val declared = GPUBlendFormulaModuleAbi.declaredFor(coverageKind)
+        val mismatched = declared.copy(
+            bindings = declared.bindings.map { binding ->
+                if (binding.group == 1 && binding.binding == 1) {
+                    binding.copy(sampleType = "sint")
+                } else {
+                    binding
+                }
+            },
         )
 
-        expectedBindings.forEach { (coverageKind, bindings) ->
+        val result = validateWgslModuleAbi(mismatched, reflected)
+
+        val rejected = assertIs<WgslModuleAbiValidationResult.Mismatch>(result)
+        assertContains(rejected.diagnostics.joinToString(), "sampleType")
+        assertContains(rejected.diagnostics.joinToString(), "group=1,binding=1")
+    }
+
+    @Test
+    fun `blend formula modules match complete declared full scalar and LCD ABI`() {
+        GPUBlendCoverageKind.entries.forEach { coverageKind ->
             val formula = requireNotNull(
                 GPUBlendFormulaLibrary.formulaFor(GPUBlendMode.SRC_OVER, coverageKind),
             )
-            val source = GPUBlendFormulaLibrary.assembleValidationModule(formula)
-            bindings.forEach { (group, binding) ->
-                assertContains(source, "@group($group) @binding($binding)")
-            }
-            val unexpected = if (coverageKind == GPUBlendCoverageKind.Full) listOf(1 to 5, 1 to 6) else emptyList()
-            unexpected.forEach { (group, binding) ->
-                assertFalse(source.contains("@group($group) @binding($binding)"))
-            }
-            assertContains(source, "fn vs_main")
-            assertContains(source, "fn fs_main")
-            assertContains(source, "fn kanvasBlendPremul")
+            val parsed = parseWgslResult(GPUBlendFormulaLibrary.assembleValidationModule(formula))
+            assertTrue(parsed.isSuccess, "${formula.formulaId}: ${parsed.errors.joinToString { it.message }}")
+            val reflected = Lowerer().lower(parsed.translationUnit).reflectWgslModule(formula.formulaId)
+            val result = validateWgslModuleAbi(GPUBlendFormulaModuleAbi.declaredFor(coverageKind), reflected)
+
+            assertIs<WgslModuleAbiValidationResult.Match>(
+                result,
+                (result as? WgslModuleAbiValidationResult.Mismatch)?.diagnostics?.joinToString("\n"),
+            )
         }
     }
 

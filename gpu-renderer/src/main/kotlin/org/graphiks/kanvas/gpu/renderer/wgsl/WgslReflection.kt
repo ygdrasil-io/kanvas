@@ -265,7 +265,7 @@ private fun Module.reflectStructLayout(
     }
     val layout = layouter[handle]
     return WgslLayoutReflection(
-        structName = "struct_${handle.index}",
+        structName = type.name ?: "struct_${handle.index}",
         addressSpace = addressSpace,
         size = layout.size,
         alignment = layout.alignment.value,
