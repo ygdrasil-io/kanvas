@@ -38,6 +38,21 @@ class SkiaGmRegistryTest {
     }
 
     @Test
+    fun `faithful portable GM ports remain discoverable through the registry`() {
+        val names = SkiaGmRegistry.all().map { it.name }.toSet()
+
+        assertTrue(
+            setOf(
+                "lattice2",
+                "not_native32_bitmap_config",
+                "stroketext_native",
+                "typefacerendering",
+                "user_typeface",
+            ).all(names::contains),
+        ) { "Missing faithful GM ports: ${names.sorted()}" }
+    }
+
+    @Test
     fun `all service entries load Skia GM classes`() {
         val resourceName = "META-INF/services/${SkiaGm::class.qualifiedName}"
         val classLoader = SkiaGm::class.java.classLoader

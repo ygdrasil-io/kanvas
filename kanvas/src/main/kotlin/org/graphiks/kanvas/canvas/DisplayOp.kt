@@ -4,6 +4,7 @@ import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.paint.SamplingOptions
 import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.types.RRect
 import org.graphiks.kanvas.types.Rect
@@ -93,7 +94,16 @@ sealed interface DisplayOp {
     data class DrawImageNine(val image: Image, val center: Rect, val dst: Rect, val paint: Paint?, val transform: Matrix33, val clip: ClipStack) : DisplayOp
 
     /** Draw a lattice image. */
-    data class DrawImageLattice(val image: Image, val lattice: Lattice, val dst: Rect, val paint: Paint?, val transform: Matrix33, val clip: ClipStack) : DisplayOp
+    data class DrawImageLattice(
+        val image: Image,
+        val lattice: Lattice,
+        val dst: Rect,
+        val paint: Paint?,
+        val transform: Matrix33,
+        val clip: ClipStack,
+        /** Sampling applies to the image-backed lattice cells. */
+        val sampling: SamplingOptions = SamplingOptions.LINEAR,
+    ) : DisplayOp
 
     /** Draw a pre-recorded Picture. */
     data class DrawPicture(val picture: Picture, val paint: Paint?, val transform: Matrix33, val clip: ClipStack) : DisplayOp

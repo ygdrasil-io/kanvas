@@ -1,10 +1,13 @@
 package org.graphiks.kanvas.canvas
 
 import org.graphiks.kanvas.text.Font
+import org.graphiks.kanvas.text.FontTypeface
+import org.graphiks.kanvas.text.GlyphPaintProvider
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.paint.SamplingOptions
 import org.graphiks.kanvas.pipeline.ClipOp
 import org.graphiks.kanvas.types.*
 import org.graphiks.kanvas.picture.Picture
@@ -115,6 +118,48 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
 
     /** Draw a [TextBlob] at the given position with [paint]. */
     fun drawText(blob: TextBlob, x: Float, y: Float, paint: Paint) {
+        val typeface = blob.typeface
+        if (
+            typeface != null && (
+                typeface is GlyphPaintProvider ||
+                    (typeface as? FontTypeface)?.usesCffOutlines == true ||
+                    blob.variationCoordinates.isNotEmpty()
+                )
+        ) {
+            val outlinedGlyphs = mutableListOf<DisplayOp.DrawPath>()
+            var unresolvedGlyph = false
+            blob.glyphRuns.forEach { run ->
+                run.glyphs.indices.forEach { index ->
+                    val glyphId = run.glyphs[index].toInt()
+                    val position = run.positions[index]
+                    val path = typeface.getGlyphPath(
+                        glyphId,
+                        run.fontSize,
+                        blob.variationCoordinates,
+                    )
+                    if (path == null) {
+                        if ((typeface as? FontTypeface)?.isCffGlyphWithoutOutline(
+                                glyphId,
+                                blob.variationCoordinates,
+                            ) != true
+                        ) unresolvedGlyph = true
+                        return@forEach
+                    }
+                    val glyphPaint = (typeface as? GlyphPaintProvider)?.paintForGlyph(glyphId) ?: paint
+                    outlinedGlyphs +=
+                        DisplayOp.DrawPath(
+                            path.transform(x + position.x, y + position.y, 1f, 1f),
+                            glyphPaint,
+                            currentTransform,
+                            currentRecordedClip,
+                        )
+                }
+            }
+            if (!unresolvedGlyph) {
+                outlinedGlyphs.forEach(buffer::append)
+                return
+            }
+        }
         buffer.append(DisplayOp.DrawText(blob, x, y, paint, currentTransform, currentRecordedClip))
     }
 
@@ -160,8 +205,14 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
     }
 
     /** Draw a lattice [image] over a grid defined by [lattice], scaled to [dst]. */
-    fun drawImageLattice(image: Image, lattice: Lattice, dst: Rect, paint: Paint? = null) {
-        buffer.append(DisplayOp.DrawImageLattice(image, lattice, dst, paint, currentTransform, currentRecordedClip))
+    fun drawImageLattice(
+        image: Image,
+        lattice: Lattice,
+        dst: Rect,
+        paint: Paint? = null,
+        sampling: SamplingOptions = SamplingOptions.LINEAR,
+    ) {
+        buffer.append(DisplayOp.DrawImageLattice(image, lattice, dst, paint, currentTransform, currentRecordedClip, sampling))
     }
 
     /** Draw a pre-recorded [picture] with optional [paint] modulation. */

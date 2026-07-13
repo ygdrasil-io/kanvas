@@ -10,7 +10,16 @@ import org.graphiks.kanvas.types.r
 
 internal fun Image.expandToRgbaForGpu(): ByteArray {
     val sourcePixels = pixels ?: return byteArrayOf()
-    if (colorType == ColorType.RGBA_8888 || colorType == ColorType.BGRA_8888) return sourcePixels
+    if (colorType == ColorType.RGBA_8888) return sourcePixels
+    if (colorType == ColorType.BGRA_8888) {
+        return sourcePixels.copyOf().also { rgba ->
+            for (offset in rgba.indices step 4) {
+                val blue = rgba[offset]
+                rgba[offset] = rgba[offset + 2]
+                rgba[offset + 2] = blue
+            }
+        }
+    }
 
     if (colorType == ColorType.ALPHA_8) {
         val rgba = ByteArray(width * height * 4)

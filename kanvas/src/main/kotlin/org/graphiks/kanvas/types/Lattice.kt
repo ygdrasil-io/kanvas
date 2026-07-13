@@ -8,4 +8,12 @@ data class Lattice(
     val flags: List<LatticeFlags>? = null,
 )
 
-enum class LatticeFlags { DEFAULT, TRANSPARENT }
+/** Per-cell rendering behavior for [Lattice]. */
+enum class LatticeFlags {
+    /** Sample the corresponding source cell from the image. */
+    DEFAULT,
+    /** Leave the corresponding destination cell untouched. */
+    TRANSPARENT,
+    /** Fill the corresponding destination cell with its [Lattice.colors] entry. */
+    FIXED_COLOR,
+}

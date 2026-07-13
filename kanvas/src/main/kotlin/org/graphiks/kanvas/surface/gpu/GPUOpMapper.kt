@@ -13,6 +13,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUImageFilterPlan
 import org.graphiks.kanvas.gpu.renderer.filters.NormalizedBlurStyle
 import org.graphiks.kanvas.gpu.renderer.filters.NormalizedMaskFilter
 import org.graphiks.kanvas.paint.MaskFilter
+import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PathEffect
 import org.graphiks.kanvas.pipeline.BlurStyle
 import org.graphiks.kanvas.gpu.renderer.commands.GPUCommandSource
@@ -453,18 +454,20 @@ internal fun DisplayOp.DrawDRRect.toPath(): Path {
 internal fun DisplayOp.DrawImage.toImageRectCommand(
     cmdId: GPUDrawCommandID,
     target: GPUTargetFacts,
+    sampling: org.graphiks.kanvas.paint.SamplingOptions? = null,
 ): NormalizedDrawCommand.DrawImageRect {
     val image = this.image
-    val samplingFilterMode = this.paint?.let { p ->
+    val requestedSampling = sampling ?: this.paint?.let { p ->
         val sh = p.shader
-        if (sh is org.graphiks.kanvas.paint.Shader.Image) {
-            when (sh.sampling) {
-                org.graphiks.kanvas.paint.SamplingOptions.NEAREST -> "nearest"
-                org.graphiks.kanvas.paint.SamplingOptions.LINEAR -> "linear"
-                is org.graphiks.kanvas.paint.SamplingOptions.Cubic -> "linear"
-            }
-        } else null
-    } ?: "linear"
+        (sh as? org.graphiks.kanvas.paint.Shader.Image)?.sampling
+    }
+    val samplingFilterMode = when (requestedSampling) {
+        org.graphiks.kanvas.paint.SamplingOptions.NEAREST -> "nearest"
+        org.graphiks.kanvas.paint.SamplingOptions.LINEAR,
+        is org.graphiks.kanvas.paint.SamplingOptions.Cubic,
+        null,
+        -> "linear"
+    }
     val material = GPUMaterialDescriptor.ImageDraw(
         imageSourceId = image.sourceId,
         imageWidth = image.width,
@@ -648,6 +651,8 @@ internal fun DisplayOp.DrawImageLattice.decompose(): List<ImageCell> {
 
     val numCols = cols.size - 1
     val numRows = rows.size - 1
+    val dstColumns = latticeDestinationBoundaries(cols, d.left, d.right)
+    val dstRows = latticeDestinationBoundaries(rows, d.top, d.bottom)
     val cells = mutableListOf<ImageCell>()
     var cellIndex = 0
 
@@ -661,16 +666,24 @@ internal fun DisplayOp.DrawImageLattice.decompose(): List<ImageCell> {
             val dstRect = if (lat.rects != null && cellIndex < lat.rects.size) {
                 lat.rects[cellIndex]
             } else {
-                // Proportional stretch to fill dst
                 Rect.fromLTRB(
-                    d.left + (srcLeft / iw) * d.width,
-                    d.top + (srcTop / ih) * d.height,
-                    d.left + (srcRight / iw) * d.width,
-                    d.top + (srcBottom / ih) * d.height,
+                    dstColumns[c],
+                    dstRows[r],
+                    dstColumns[c + 1],
+                    dstRows[r + 1],
                 )
             }
 
-            val color = lat.colors?.getOrNull(cellIndex)
+            val flag = lat.flags?.getOrNull(cellIndex) ?: org.graphiks.kanvas.types.LatticeFlags.DEFAULT
+            if (flag == org.graphiks.kanvas.types.LatticeFlags.TRANSPARENT) {
+                cellIndex++
+                continue
+            }
+            val color = if (flag == org.graphiks.kanvas.types.LatticeFlags.FIXED_COLOR) {
+                lat.colors?.getOrNull(cellIndex)
+            } else {
+                null
+            }
             cells.add(ImageCell(
                 src = Rect.fromLTRB(srcLeft, srcTop, srcRight, srcBottom),
                 dst = dstRect,
@@ -680,6 +693,47 @@ internal fun DisplayOp.DrawImageLattice.decompose(): List<ImageCell> {
         }
     }
     return cells
+}
+
+/**
+ * Skia lattices alternate fixed and scalable bands: the outer band is fixed,
+ * each odd band stretches, and fixed bands retain their source extent while
+ * there is room.  This is the geometry used by a nine-patch lattice, not a
+ * proportional resampling of every source cell.
+ */
+private fun latticeDestinationBoundaries(
+    sourceBoundaries: List<Float>,
+    destinationStart: Float,
+    destinationEnd: Float,
+): List<Float> {
+    val segmentCount = sourceBoundaries.size - 1
+    if (segmentCount <= 0) return listOf(destinationStart, destinationEnd)
+    val segmentLengths = List(segmentCount) { sourceBoundaries[it + 1] - sourceBoundaries[it] }
+    val fixedTotal = segmentLengths.filterIndexed { index, _ -> index % 2 == 0 }.sum()
+    val scalableTotal = segmentLengths.filterIndexed { index, _ -> index % 2 != 0 }.sum()
+    val destinationLength = destinationEnd - destinationStart
+    val fixedScale = if (fixedTotal <= 0f) 0f else minOf(1f, destinationLength / fixedTotal)
+    val scalableLength = (destinationLength - fixedTotal * fixedScale).coerceAtLeast(0f)
+    val result = ArrayList<Float>(sourceBoundaries.size)
+    result += destinationStart
+    var current = destinationStart
+    for (index in 0 until segmentCount) {
+        val length = when {
+            index % 2 == 0 -> segmentLengths[index] * fixedScale
+            scalableTotal > 0f -> scalableLength * segmentLengths[index] / scalableTotal
+            else -> 0f
+        }
+        current += length
+        result += current
+    }
+    result[result.lastIndex] = destinationEnd
+    return result
+}
+
+/** Applies the caller's alpha and blend mode without tinting a lattice fixed color. */
+internal fun fixedLatticeColorPaint(color: Color, paint: Paint?): Paint {
+    val base = paint ?: Paint()
+    return base.copy(color = Color.fromRGBA(color.r, color.g, color.b, color.a * base.color.a))
 }
 
 // ────────────────────────────────────────────────────────────────────────────

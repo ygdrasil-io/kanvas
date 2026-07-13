@@ -141,6 +141,12 @@ class SkiaGmRunner {
         )
         result.diagnostics.forEach { d -> println("  ${d}") }
 
+        if (gm.requiresZeroRefusals) {
+            assertTrue(result.refusedCount == 0) {
+                "${gm.name}: expected no GPU refusals, got ${result.refusedCount}: ${result.diagnostics}"
+            }
+        }
+
         assertTrue(comparison.isPassing) {
             "${gm.name}: similarity=${"%.2f".format(comparison.similarity)}% " +
             "(threshold: ${comparison.minSimilarity}%)"

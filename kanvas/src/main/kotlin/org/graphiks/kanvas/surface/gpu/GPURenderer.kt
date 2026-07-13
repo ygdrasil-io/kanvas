@@ -1589,11 +1589,15 @@ internal fun renderViaGpu(
                 return recordSourcePart(diagnostics.fatalCount == fatalBefore && plan !is GPUImageFilterPlan.Refused)
             }
 
-            fun renderImageCommand(op: DisplayOp.DrawImage, cmdId: GPUDrawCommandID): Boolean =
+            fun renderImageCommand(
+                op: DisplayOp.DrawImage,
+                cmdId: GPUDrawCommandID,
+                sampling: org.graphiks.kanvas.paint.SamplingOptions? = null,
+            ): Boolean =
                 if (clipSourceRoute && clipSourcePlane == GPUClipSourcePlane.GeometryCoverage) {
                     renderImageGeometryCoverage(op, cmdId)
                 } else {
-                    renderImageColorCommand(op.toImageRectCommand(cmdId, targets))
+                    renderImageColorCommand(op.toImageRectCommand(cmdId, targets, sampling))
                 }
 
             GPUClipUsePrepass.register(
@@ -1769,19 +1773,7 @@ internal fun renderViaGpu(
                         )
                         return false
                     }
-                    val textureBytes = image.expandToRgbaForGpu().let { expanded ->
-                        if (image.colorType != ColorType.BGRA_8888) {
-                            expanded
-                        } else {
-                            expanded.copyOf().also { rgba ->
-                                for (offset in rgba.indices step 4) {
-                                    val blue = rgba[offset]
-                                    rgba[offset] = rgba[offset + 2]
-                                    rgba[offset + 2] = blue
-                                }
-                            }
-                        }
-                    }
+                    val textureBytes = image.expandToRgbaForGpu()
                     val positions = FloatArray(vertices.positions.size * 2) { index ->
                         val point = vertices.positions[index / 2]
                         val deviceX = transform.scaleX * point.x + transform.skewX * point.y + transform.transX
@@ -2273,23 +2265,32 @@ internal fun renderViaGpu(
                         is DisplayOp.DrawImageLattice -> {
                             var allRendered = true
                             for (cell in op.decompose()) {
-                                val paint = if (cell.color != null) {
-                                    (op.paint ?: Paint()).copy(
-                                        color = cell.color,
-                                        blendMode = op.paint?.blendMode ?: org.graphiks.kanvas.paint.BlendMode.SRC_OVER,
+                                val fixedColor = cell.color
+                                if (fixedColor != null) {
+                                    val rectCell = DisplayOp.DrawRect(
+                                        cell.dst,
+                                        fixedLatticeColorPaint(fixedColor, op.paint),
+                                        op.transform,
+                                        op.clip,
                                     )
+                                    allRendered = dispatchRectDirect(
+                                        rectCell.toNormalizedCommand(GPUDrawCommandID(dispatched.size), targets),
+                                    ) && allRendered
                                 } else {
-                                    op.paint
+                                    val imageCell = DisplayOp.DrawImage(
+                                        op.image,
+                                        cell.src,
+                                        cell.dst,
+                                        op.paint,
+                                        op.transform,
+                                        op.clip,
+                                    )
+                                    allRendered = renderImageCommand(
+                                        imageCell,
+                                        GPUDrawCommandID(dispatched.size),
+                                        op.sampling,
+                                    ) && allRendered
                                 }
-                                val imageCell = DisplayOp.DrawImage(
-                                    op.image,
-                                    cell.src,
-                                    cell.dst,
-                                    paint,
-                                    op.transform,
-                                    op.clip,
-                                )
-                                allRendered = renderImageCommand(imageCell, GPUDrawCommandID(dispatched.size)) && allRendered
                             }
                             allRendered
                         }
@@ -2859,23 +2860,26 @@ internal fun renderViaGpu(
                         val cells = op.decompose()
                         for (cell in cells) {
                             val subCmdId = GPUDrawCommandID(dispatched.size)
-                            val subPaint = if (cell.color != null) {
-                                val c = cell.color
-                                (op.paint ?: org.graphiks.kanvas.paint.Paint()).copy(
-                                    color = c,
-                                    blendMode = op.paint?.blendMode ?: org.graphiks.kanvas.paint.BlendMode.SRC_OVER,
+                            val fixedColor = cell.color
+                            if (fixedColor != null) {
+                                val rectOp = DisplayOp.DrawRect(
+                                    cell.dst,
+                                    fixedLatticeColorPaint(fixedColor, op.paint),
+                                    op.transform,
+                                    op.clip,
                                 )
-                            } else op.paint
-                            val subOp = DisplayOp.DrawImage(
-                                image = op.image,
-                                src = cell.src,
-                                dst = cell.dst,
-                                paint = subPaint,
-                                transform = op.transform,
-                                clip = op.clip,
-                            )
-                            val cmd = subOp.toImageRectCommand(subCmdId, targets)
-                            renderImageColorCommand(cmd)
+                                dispatchRectDirect(rectOp.toNormalizedCommand(subCmdId, targets))
+                            } else {
+                                val subOp = DisplayOp.DrawImage(
+                                    image = op.image,
+                                    src = cell.src,
+                                    dst = cell.dst,
+                                    paint = op.paint,
+                                    transform = op.transform,
+                                    clip = op.clip,
+                                )
+                                renderImageColorCommand(subOp.toImageRectCommand(subCmdId, targets, op.sampling))
+                            }
                             sceneHasContent = true
                         }
                     }
@@ -3020,23 +3024,28 @@ internal fun renderViaGpu(
                                     val cells = nestedOp.decompose()
                                     for (cell in cells) {
                                         val subCmdId = GPUDrawCommandID(dispatched.size)
-                                        val subPaint = if (cell.color != null) {
-                                            val c = cell.color
-                                            (nestedOp.paint ?: org.graphiks.kanvas.paint.Paint()).copy(
-                                                color = c,
-                                                blendMode = nestedOp.paint?.blendMode ?: org.graphiks.kanvas.paint.BlendMode.SRC_OVER,
+                                        val fixedColor = cell.color
+                                        if (fixedColor != null) {
+                                            val rectOp = DisplayOp.DrawRect(
+                                                cell.dst,
+                                                fixedLatticeColorPaint(fixedColor, nestedOp.paint),
+                                                nestedOp.transform,
+                                                nestedOp.clip,
                                             )
-                                        } else nestedOp.paint
-                                        val subOp = DisplayOp.DrawImage(
-                                            image = nestedOp.image,
-                                            src = cell.src,
-                                            dst = cell.dst,
-                                            paint = subPaint,
-                                            transform = nestedOp.transform,
-                                            clip = nestedOp.clip,
-                                        )
-                                        val imgCmd = subOp.toImageRectCommand(subCmdId, targets)
-                                        renderImageColorCommand(imgCmd)
+                                            dispatchRectDirect(rectOp.toNormalizedCommand(subCmdId, targets))
+                                        } else {
+                                            val subOp = DisplayOp.DrawImage(
+                                                image = nestedOp.image,
+                                                src = cell.src,
+                                                dst = cell.dst,
+                                                paint = nestedOp.paint,
+                                                transform = nestedOp.transform,
+                                                clip = nestedOp.clip,
+                                            )
+                                            renderImageColorCommand(
+                                                subOp.toImageRectCommand(subCmdId, targets, nestedOp.sampling),
+                                            )
+                                        }
                                         sceneHasContent = true
                                     }
                                 }
