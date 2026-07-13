@@ -43,6 +43,13 @@ internal object ZeroLengthPathLayout {
         if (cap == StrokeCap.BUTT) return 0
         return listOfNotNull(first, second).count(ZeroLengthPathVerb::hasVerb)
     }
+
+    fun validationCellSourceId(
+        cap: StrokeCap,
+        strokeWidthIndex: Int,
+        first: ZeroLengthPathVerb,
+        second: ZeroLengthPathVerb? = null,
+    ): String = "zero-length-path-cell:${cap.name}:$strokeWidthIndex:${first.name}:${second?.name ?: "none"}"
 }
 
 abstract class ZeroLengthPathsGm(
@@ -60,8 +67,9 @@ abstract class ZeroLengthPathsGm(
         canvas.drawColor(r = 0f, g = 0f, b = 0f)
         canvas.translate(ZeroLengthPathLayout.cellPad, ZeroLengthPathLayout.cellPad)
         val verbs = if (doubleContour) ZeroLengthPathVerb.entries.take(6) else ZeroLengthPathVerb.entries
+        val strokeWidths = listOf(0f, 0.9f, 1f, 1.1f, 15f, 25f)
         for (cap in listOf(StrokeCap.BUTT, StrokeCap.ROUND, StrokeCap.SQUARE)) {
-            for (strokeWidth in listOf(0f, 0.9f, 1f, 1.1f, 15f, 25f)) {
+            for ((strokeWidthIndex, strokeWidth) in strokeWidths.withIndex()) {
                 val paint = Paint(
                     color = Color.WHITE,
                     antiAlias = antiAlias,
@@ -81,7 +89,13 @@ abstract class ZeroLengthPathsGm(
                                 addPath(zeroLengthPath(second, ZeroLengthPathLayout.secondContourAnchor))
                             }
                         }
-                        drawValidationCell(canvas, path, paint, ZeroLengthPathLayout.expectedCaps(cap, first, second))
+                        drawValidationCell(
+                            canvas,
+                            path,
+                            paint,
+                            ZeroLengthPathLayout.expectedCaps(cap, first, second),
+                            ZeroLengthPathLayout.validationCellSourceId(cap, strokeWidthIndex, first, second),
+                        )
                         canvas.translate(52f, 0f)
                     }
                 }
@@ -136,7 +150,13 @@ private fun countMiddleRowBlobs(result: RenderResult): Int {
     return blobs
 }
 
-private fun drawValidationCell(canvas: GmCanvas, path: Path, paint: Paint, expectedCaps: Int) {
+private fun drawValidationCell(
+    canvas: GmCanvas,
+    path: Path,
+    paint: Paint,
+    expectedCaps: Int,
+    sourceId: String,
+) {
     val surface = Surface(ZeroLengthPathLayout.cellWidth, ZeroLengthPathLayout.cellHeight)
     surface.canvas {
         clear(Color.TRANSPARENT)
@@ -150,7 +170,7 @@ private fun drawValidationCell(canvas: GmCanvas, path: Path, paint: Paint, expec
         else -> Color(0x7F7F0000u)
     }
     canvas.drawImage(
-        result.toImage("zero-length-path-cell"),
+        result.toImage(sourceId),
         Rect.fromXYWH(0f, 0f, 50f, 20f),
     )
     canvas.drawRect(

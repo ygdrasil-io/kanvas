@@ -64,6 +64,54 @@ class ZeroLengthPathLayoutTest {
         assertEquals(RenderCost.BLOCKING, ZeroLengthPathsDblBwGm().renderCost)
     }
 
+    @Test
+    fun `validation cells have unique deterministic source ids across both matrices`() {
+        val simpleSourceIds = validationCellSourceIds(
+            firstVerbs = ZeroLengthPathVerb.entries,
+            secondVerbs = listOf(null),
+        )
+        assertEquals(180, simpleSourceIds.size)
+        assertEquals(180, simpleSourceIds.distinct().size)
+
+        val doubleSourceIds = validationCellSourceIds(
+            firstVerbs = ZeroLengthPathVerb.entries.take(6),
+            secondVerbs = ZeroLengthPathVerb.entries.take(6),
+        )
+        assertEquals(648, doubleSourceIds.size)
+        assertEquals(648, doubleSourceIds.distinct().size)
+
+        val tuple = ZeroLengthPathLayout.validationCellSourceId(
+            StrokeCap.ROUND,
+            strokeWidthIndex = 3,
+            first = ZeroLengthPathVerb.LINE,
+            second = ZeroLengthPathVerb.QUAD_CLOSE,
+        )
+        assertEquals(
+            tuple,
+            ZeroLengthPathLayout.validationCellSourceId(
+                StrokeCap.ROUND,
+                strokeWidthIndex = 3,
+                first = ZeroLengthPathVerb.LINE,
+                second = ZeroLengthPathVerb.QUAD_CLOSE,
+            ),
+        )
+    }
+
+    private fun validationCellSourceIds(
+        firstVerbs: List<ZeroLengthPathVerb>,
+        secondVerbs: List<ZeroLengthPathVerb?>,
+    ): List<String> = buildList {
+        for (cap in listOf(StrokeCap.BUTT, StrokeCap.ROUND, StrokeCap.SQUARE)) {
+            for (strokeWidthIndex in 0 until 6) {
+                for (first in firstVerbs) {
+                    for (second in secondVerbs) {
+                        add(ZeroLengthPathLayout.validationCellSourceId(cap, strokeWidthIndex, first, second))
+                    }
+                }
+            }
+        }
+    }
+
     private fun buildZeroLengthPath(verb: ZeroLengthPathVerb, anchor: Point): Path {
         val method = Class.forName("org.graphiks.kanvas.skia.gm.path.ZeroLengthPathsGmKt")
             .getDeclaredMethod("zeroLengthPath", ZeroLengthPathVerb::class.java, Point::class.java)
