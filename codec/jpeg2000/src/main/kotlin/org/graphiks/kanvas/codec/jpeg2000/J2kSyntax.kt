@@ -1,6 +1,6 @@
 package org.graphiks.kanvas.codec.jpeg2000
 
-import kotlin.ExposedCopyVisibility
+import kotlin.ConsistentCopyVisibility
 
 internal data class J2kComponentSpec(
     val precision: Int,
@@ -44,8 +44,8 @@ internal data class J2kCodingStyle(
     val precinctExponents: List<Pair<Int, Int>>,
 )
 
-@ExposedCopyVisibility
-internal data class J2kQuantizationStyle private constructor(
+@ConsistentCopyVisibility
+internal data class J2kQuantizationStyle internal constructor(
     val guardBits: Int,
     val style: Int,
     val reversible: Boolean,

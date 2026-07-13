@@ -88,6 +88,22 @@ class J2kSyntaxTest {
     }
 
     @Test
+    fun `quantization primary constructor is internal and copyable`() {
+        val original = J2kQuantizationStyle(
+            2,
+            1,
+            false,
+            J2kQuantizationArrays(intArrayOf(5, 6), intArrayOf(12, 13)),
+        )
+
+        val copied = original.copy()
+
+        assertEquals(original, copied)
+        assertArrayEquals(intArrayOf(5, 6), copied.exponents)
+        assertArrayEquals(intArrayOf(12, 13), requireNotNull(copied.mantissas))
+    }
+
+    @Test
     fun `limits reject nonpositive general J2K budgets`() {
         assertThrows(IllegalArgumentException::class.java) { Jpeg2000Limits(maxComponents = 0) }
         assertThrows(IllegalArgumentException::class.java) { Jpeg2000Limits(maxTiles = 0) }
