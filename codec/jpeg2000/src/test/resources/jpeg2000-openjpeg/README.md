@@ -8,8 +8,9 @@ byte-for-byte the pinned fixtures described below.
 
 * **Generator / pixel oracle:** OpenJPEG `opj_compress` and `opj_decompress`
   2.5.4, distributed by the OpenJPEG project under the 2-clause BSD licence.
-  Neither executable, library nor JNI binding is included in or used by the
-  Kanvas production runtime.
+  The optional executable is validation evidence only: neither executable,
+  library nor JNI binding is included in or used by the Kanvas production
+  runtime or normal Kotlin-only CI.
 
 ## Pinned fixtures
 
@@ -78,13 +79,33 @@ byte-for-byte the pinned fixtures described below.
 * **Source P5 PGM:** generated with the 25 nonuniform unsigned grayscale
   samples, row-major: `0, 255, 1, 128, 64, 16, 224, 63, 192, 170, 85, 9,
   128, 254, 127, 32, 240, 45, 209, 66, 190, 12, 99, 153, 201`. The exact
-  generated PGM SHA-256 was
+  generated 5×5 PGM SHA-256 was
   `cc0ac2eedf419fe48476315fd61535af5f26a37dd19dd51f25d76f16298b79f1`.
+  Its exact 25-byte pixel payload SHA-256 is
+  `60b8e4ad938a578733ca6b1584abd17ead3583b7e00466b3578d2091e4d30323`.
 * **JP2 SHA-256:**
   `b4472ef2e88573ff29f3b1813e10b1ec413d1591532fcb7aa0a88af42f77ac45`.
 * **Profile:** OpenJPEG 2.5.4; one 5×5 tile; LRCP; one layer; one resolution
-  (`Ndecomp=0`); 64×64 codeblock; reversible 5/3 transform; no quantization.
-  `opj_decompress` 2.5.4 reproduced the source PGM payload byte-for-byte.
+  (`Ndecomp=0`); one unsigned 8-bit grayscale component; 64×64 codeblock;
+  reversible 5/3 transform; no quantization. Its `jp2h` contains the matching
+  `ihdr` and one safe `colr` declaration only: method 1, precedence 0,
+  approximation 0, enumerated colorspace 17 (grayscale).
+* **Expected Kanvas pixels:** the 5×5 JP2 opens through `Codec.MakeFromData`
+  and decodes to opaque `RGBA_8888`; for each source sample `v`, the output
+  word is `0xFFvvvvvv` (`A=255`, `R=G=B=v`).
+* **OpenJPEG generation and validation:**
+
+  ```text
+  opj_compress -i source-5x5.pgm \
+    -o openjpeg-2.5.4-lossless-ndecomp0-5x5.jp2 \
+    -n 1 -b 64,64 -r 1 -p LRCP
+  opj_decompress -i openjpeg-2.5.4-lossless-ndecomp0-5x5.jp2 \
+    -o decoded-5x5.pgm
+  ```
+
+  OpenJPEG 2.5.4 reproduced the source pixel payload byte-for-byte, with the
+  payload checksum above. This executable is opt-in validation evidence, not
+  a runtime dependency or a normal-CI requirement.
 
 ## Reproduction
 
@@ -113,16 +134,14 @@ opj_compress -i source-ndecomp2-5x5-random.pgm \
   -n 2 -b 64,64 -r 1 -p LRCP
 opj_decompress -i openjpeg-2.5.4-lossless-ndecomp1-5x5-random.j2k -o decoded.pgm
 
-opj_compress -i source-5x5.pgm \
-  -o openjpeg-2.5.4-lossless-ndecomp0-5x5.jp2 \
-  -n 1 -b 64,64 -r 1 -p LRCP
-opj_decompress -i openjpeg-2.5.4-lossless-ndecomp0-5x5.jp2 -o decoded.pgm
 ```
 
 The optional `Jpeg2000OracleTest` requires the explicit Gradle property
 `-Pjpeg2000OracleOpenJpeg=/absolute/path/to/opj_decompress`. It writes this
 fixture set to temporary files, invokes only that supplied path, and compares
-each P5 output exactly with its source PGM. Normal CI is Kotlin-only.
+each P5 output exactly with its source PGM. The JP2 oracle additionally checks
+the 5×5 source payload against Kanvas's opaque grayscale RGBA output. Normal
+CI is Kotlin-only; OpenJPEG is validation evidence only.
 
 ## Current boundary
 
@@ -133,5 +152,9 @@ per-codeblock coding-pass and segment-length syntax, separately bounded
 EBCOT bodies, MQ arithmetic decoding, and style-0 Tier-1 EBCOT bit-plane
 passes. The Ndecomp=2 fixture further validates three adjacent LRCP packet
 headers, the seven subband order, and two inverse reversible 5/3 synthesis
-stages. General JPEG 2000 profiles remain outside this fixture scope. No pixel
-fallback to OpenJPEG is allowed.
+stages. The JP2 fixture is pixel-decodable only for the same bounded grayscale
+profile; its sole accepted color declaration is the enumerated grayscale
+`colr` documented above. ICC/color declarations, palette (`pclr`), component
+mapping (`cmap`), channel definition (`cdef`, including alpha), and
+multi-component JP2 profiles are refused. General JPEG 2000 profiles remain
+outside this fixture scope. No pixel fallback to OpenJPEG is allowed.
