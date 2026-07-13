@@ -19,7 +19,6 @@ import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipFillRule
 import org.graphiks.kanvas.gpu.renderer.clips.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBlendFacts
-import org.graphiks.kanvas.gpu.renderer.commands.GPUBlendKind
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendCoverageMask
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendCoverageMaskRequest
@@ -35,6 +34,7 @@ import org.graphiks.kanvas.gpu.renderer.geometry.FlattenedPath
 import org.graphiks.kanvas.gpu.renderer.geometry.PathTessellator
 import org.graphiks.kanvas.gpu.renderer.geometry.Point
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.surface.DiagnosticFact
 import org.graphiks.kanvas.surface.Diagnostics
 import org.graphiks.kanvas.surface.RenderConfig
@@ -223,12 +223,11 @@ internal data class GPUClipPreAcquireRefusal(
 internal fun GPUClipCoveragePlan.preAcquireRefusalOrNull(
     blend: GPUBlendFacts,
 ): GPUClipPreAcquireRefusal? {
-    if (blend.kind == GPUBlendKind.Unsupported ||
-        (blend.kind != GPUBlendKind.SrcOver && blend.blendMode == null)
-    ) {
+    val plan = blend.canonicalBlendPlan()
+    if (plan is GPUBlendPlan.UnsupportedBlend) {
         return GPUClipPreAcquireRefusal(
             diagnosticCode = "refuse:clip-blend",
-            reason = "unsupported.clip.blend_unsupported:${blend.modeLabel.lowercase()}",
+            reason = "unsupported.clip.blend_unsupported:${blend.mode.gpuLabel}",
         )
     }
     return null
@@ -290,6 +289,7 @@ internal object GPUClipUsePrepass {
                 refusals += refusal
                 return
             }
+            if (operation.clipCompositeBlendFacts().canonicalBlendPlan() is GPUBlendPlan.NoOp) return
             when (val plan = operation.gpuClipCoveragePlanOrNull(target, config, maxTextureDimension2D)) {
                 is GPUClipCoveragePlan.Mask -> {
                     operation.coveragePlaneTask4RefusalOrNull()?.let { refusal ->
@@ -399,9 +399,8 @@ internal fun SaveLayerRec.gpuCompositePreflightRefusalOrNull(): String? {
     ) {
         return "unsupported.layer.paint"
     }
-    return layerPaint.blendMode.toGpuBlendFacts()
-        .takeIf { it.kind == GPUBlendKind.Unsupported }
-        ?.let { "unsupported.layer.blend:${it.modeLabel.lowercase()}" }
+    return (layerPaint.blendMode.toGpuBlendFacts().canonicalBlendPlan() as? GPUBlendPlan.UnsupportedBlend)
+        ?.let { "unsupported.layer.blend:${it.mode.gpuLabel}" }
 }
 
 internal fun DisplayOp.clipCompositeBlendFacts(): GPUBlendFacts = when (this) {
@@ -592,7 +591,7 @@ private fun GPUBackendRenderRecorder.renderClipElement(
                 wgsl = RECT_AA_WGSL,
                 colorFormat = config.gpuColorFormat.gpuLabel,
                 draws = listOf(rectCoverageDraw(shape.bounds, element.antiAlias, mask)),
-                blendMode = blendMode,
+                blendMode = blendMode.canonicalFixedFunctionState(),
             )
             "rect"
         }
@@ -601,7 +600,7 @@ private fun GPUBackendRenderRecorder.renderClipElement(
                 wgsl = RRECT_WGSL,
                 colorFormat = config.gpuColorFormat.gpuLabel,
                 draws = listOf(rrectCoverageDraw(shape.values, element.antiAlias, mask)),
-                blendMode = blendMode,
+                blendMode = blendMode.canonicalFixedFunctionState(),
             )
             "rrect"
         }
@@ -637,7 +636,7 @@ private fun GPUBackendRenderRecorder.renderClipElement(
                 stencilMode = GPUBackendStencilMode.Test,
                 triangleData = null,
                 draws = listOf(fullMaskDraw(mask)),
-                blendMode = blendMode,
+                blendMode = blendMode.canonicalFixedFunctionState(),
                 stencilConfig = stencilConfig,
             )
             if (element.operation == GPUClipCoverageOperation.Intersect) {
@@ -649,7 +648,7 @@ private fun GPUBackendRenderRecorder.renderClipElement(
                     stencilMode = GPUBackendStencilMode.Test,
                     triangleData = null,
                     draws = listOf(fullMaskDraw(mask, alpha = 0f)),
-                    blendMode = GPUBlendMode.DST_IN,
+                    blendMode = GPUBlendMode.DST_IN.canonicalFixedFunctionState(),
                     stencilConfig = stencilConfig.copy(inverse = !stencilConfig.inverse),
                 )
             }
@@ -673,7 +672,7 @@ private fun GPUBackendRenderRecorder.applyConstantCoverage(
         wgsl = CLIP_MASK_COVER_WGSL,
         colorFormat = config.gpuColorFormat.gpuLabel,
         draws = listOf(fullMaskDraw(mask, alpha = 0f)),
-        blendMode = GPUBlendMode.DST_IN,
+        blendMode = GPUBlendMode.DST_IN.canonicalFixedFunctionState(),
     )
     return "constant-clear"
 }

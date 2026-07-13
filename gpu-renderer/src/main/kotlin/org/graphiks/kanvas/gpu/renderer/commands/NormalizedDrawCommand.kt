@@ -12,6 +12,7 @@ import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoverageRequest
 import org.graphiks.kanvas.gpu.renderer.text.GPUTextDiagnostic
 import org.graphiks.kanvas.gpu.renderer.text.GPUTextArtifactRef
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceAlphaClassification
 
 /** Canonical command identifier name used by the package layout target. */
 @JvmInline
@@ -310,36 +311,18 @@ data class GPULayerFacts(
     }
 }
 
-/** Blend classification captured before fixed-function blend planning and destination-read strategy selection. */
-enum class GPUBlendKind {
-    /** Source-over fixed-function blend accepted by the first route. */
-    SrcOver,
-    /** Custom blend mode mapped from BlendMode. */
-    Custom,
-    /** Unsupported blend mode that must refuse deterministically. */
-    Unsupported,
-}
-
-/** Captured blend facts; unsupported or destination-reading blends are refused before pass construction. */
+/** Non-routing facts captured before canonical blend specialization. */
 data class GPUBlendFacts(
-    val kind: GPUBlendKind,
-    val modeLabel: String,
-    val requiresDestinationRead: Boolean,
-    val blendMode: GPUBlendMode? = null,
+    val mode: GPUBlendMode,
+    val sourceAlpha: GPUSourceAlphaClassification,
 ) {
-    /** Constructors for first-route blend fact records. */
     companion object {
-        /** Returns accepted source-over fixed-function blend facts. */
+        /** Returns the standard translucent source-over facts. */
         fun srcOver(): GPUBlendFacts =
-            GPUBlendFacts(kind = GPUBlendKind.SrcOver, modeLabel = "src_over", requiresDestinationRead = false)
-
-        /** Returns an unsupported blend mode fact record. */
-        fun unsupported(modeLabel: String): GPUBlendFacts =
-            GPUBlendFacts(kind = GPUBlendKind.Unsupported, modeLabel = modeLabel, requiresDestinationRead = false)
-
-        /** Returns a blend fact record that requires destination-read planning. */
-        fun destinationReadRequired(): GPUBlendFacts =
-            GPUBlendFacts(kind = GPUBlendKind.SrcOver, modeLabel = "dst_read", requiresDestinationRead = true)
+            GPUBlendFacts(
+                mode = GPUBlendMode.SRC_OVER,
+                sourceAlpha = GPUSourceAlphaClassification.Translucent,
+            )
     }
 }
 

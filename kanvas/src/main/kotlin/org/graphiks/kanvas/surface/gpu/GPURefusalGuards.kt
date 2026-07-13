@@ -2,7 +2,6 @@ package org.graphiks.kanvas.surface.gpu
 
 import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.canvas.DisplayOp
-import org.graphiks.kanvas.gpu.renderer.commands.GPUBlendKind
 import org.graphiks.kanvas.gpu.renderer.commands.GPUClipFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUClipKind
 import org.graphiks.kanvas.gpu.renderer.commands.GPULayerScopeKind
@@ -104,9 +103,6 @@ internal fun NormalizedDrawCommand.fillGuardRefusalReasonOrNull(): String? {
     }
     if (layer.scopeKind != GPULayerScopeKind.Root) {
         return "unsupported_layer:${layer.scopeKind.name}"
-    }
-    if (blend.kind == GPUBlendKind.Unsupported) {
-        return "unsupported_blend:${blend.modeLabel}"
     }
     return null
 }

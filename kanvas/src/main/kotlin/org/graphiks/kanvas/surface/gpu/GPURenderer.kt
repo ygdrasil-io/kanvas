@@ -12,7 +12,6 @@ import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
 import org.graphiks.kanvas.gpu.renderer.commands.GPUImageFilterPlan
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBlendFacts
-import org.graphiks.kanvas.gpu.renderer.commands.GPUBlendKind
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.commands.GPUClipKind
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
@@ -47,6 +46,8 @@ import org.graphiks.kanvas.gpu.renderer.geometry.PathTessellator
 import org.graphiks.kanvas.gpu.renderer.geometry.PathVerb as GpuPathVerb
 import org.graphiks.kanvas.gpu.renderer.geometry.Point
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
+import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendState
 import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.surface.Diagnostics
 import org.graphiks.kanvas.surface.DiagnosticFact
@@ -367,7 +368,7 @@ internal fun GPUBackendOffscreenTarget.renderDestinationReadBlend(
                 firstTextureLabel = sourceSurface.geometryCoverageLabel,
                 secondTextureLabel = clipMaskLabel,
                 draws = listOf(coverageCombineUniformDraw(width, height)),
-                blendMode = GPUBlendMode.SRC,
+                blendMode = GPUBlendMode.SRC.canonicalFixedFunctionState(),
             )
         }
         combinedCoverageLabel
@@ -385,7 +386,7 @@ internal fun GPUBackendOffscreenTarget.renderDestinationReadBlend(
             secondTextureLabel = snapshotLabel,
             thirdTextureLabel = finalCoverageLabel,
             draws = listOf(draw),
-            blendMode = GPUBlendMode.SRC,
+            blendMode = GPUBlendMode.SRC.canonicalFixedFunctionState(),
         )
     }
     return true
@@ -447,7 +448,7 @@ private class LayerScissorRenderRecorder(
         wgsl: String,
         colorFormat: String,
         draws: List<GPUBackendRectDraw>,
-        blendMode: GPUBlendMode?,
+        blendMode: GPUFixedFunctionBlendState?,
         passBatchKind: GPUBackendSimplePassBatchKind?,
     ) {
         delegate.drawFullscreenPass(wgsl, colorFormat, draws.mapNotNull { it.intersectLayerScissor(layerBounds) }, blendMode, passBatchKind)
@@ -457,7 +458,7 @@ private class LayerScissorRenderRecorder(
         wgsl: String,
         colorFormat: String,
         draws: List<GPUBackendUniformPayloadDraw>,
-        blendMode: GPUBlendMode?,
+        blendMode: GPUFixedFunctionBlendState?,
         sourceLabel: String,
         passBatchKind: GPUBackendSimplePassBatchKind?,
     ) {
@@ -475,7 +476,7 @@ private class LayerScissorRenderRecorder(
         wgsl: String,
         colorFormat: String,
         draws: List<GPUBackendRawUniformDraw>,
-        blendMode: GPUBlendMode?,
+        blendMode: GPUFixedFunctionBlendState?,
         passBatchKind: GPUBackendSimplePassBatchKind?,
     ) {
         delegate.drawFullscreenRawUniformPass(wgsl, colorFormat, draws.mapNotNull { it.intersectLayerScissor(layerBounds) }, blendMode, passBatchKind)
@@ -489,7 +490,7 @@ private class LayerScissorRenderRecorder(
         textureHeight: Int,
         textureFormat: String,
         draws: List<GPUBackendRawUniformDraw>,
-        blendMode: GPUBlendMode?,
+        blendMode: GPUFixedFunctionBlendState?,
         stencilMode: GPUBackendStencilMode?,
         stencilConfig: GPUBackendStencilCoverConfig,
     ) {
@@ -513,7 +514,7 @@ private class LayerScissorRenderRecorder(
         stencilMode: GPUBackendStencilMode,
         triangleData: GPUBackendTriangleData?,
         draws: List<GPUBackendRawUniformDraw>,
-        blendMode: GPUBlendMode?,
+        blendMode: GPUFixedFunctionBlendState?,
         stencilConfig: GPUBackendStencilCoverConfig,
     ) {
         val scopedDraws = draws.mapNotNull { it.intersectLayerScissor(layerBounds) }
@@ -533,7 +534,7 @@ private class LayerScissorRenderRecorder(
         vertexBufferLabel: String,
         indexCount: Int,
         uniformDraw: GPUBackendRawUniformDraw,
-        blendMode: GPUBlendMode?,
+        blendMode: GPUFixedFunctionBlendState?,
     ) {
         uniformDraw.intersectLayerScissor(layerBounds)?.let {
             delegate.drawVertexColorIndexed(vertexBufferLabel, indexCount, it, blendMode)
@@ -548,7 +549,7 @@ private class LayerScissorRenderRecorder(
         textureWidth: Int,
         textureHeight: Int,
         textureFormat: String,
-        blendMode: GPUBlendMode?,
+        blendMode: GPUFixedFunctionBlendState?,
     ) {
         uniformDraw.intersectLayerScissor(layerBounds)?.let {
             delegate.drawVertexPositionUVIndexed(
@@ -575,7 +576,7 @@ private class LayerScissorRenderRecorder(
         texture2Width: Int,
         texture2Height: Int,
         textureFormat: String,
-        blendMode: GPUBlendMode?,
+        blendMode: GPUFixedFunctionBlendState?,
     ) {
         uniformDraw.intersectLayerScissor(layerBounds)?.let {
             delegate.drawVertexPositionDualUVIndexed(
@@ -599,7 +600,7 @@ private class LayerScissorRenderRecorder(
         colorFormat: String,
         textureLabel: String,
         draws: List<GPUBackendRawUniformDraw>,
-        blendMode: GPUBlendMode?,
+        blendMode: GPUFixedFunctionBlendState?,
     ) {
         delegate.drawCompositePass(wgsl, colorFormat, textureLabel, draws.mapNotNull { it.intersectLayerScissor(layerBounds) }, blendMode)
     }
@@ -622,7 +623,7 @@ private class LayerScissorRenderRecorder(
         vertexData: FloatArray,
         indexData: IntArray,
         draws: List<GPUBackendRawUniformDraw>,
-        blendMode: GPUBlendMode?,
+        blendMode: GPUFixedFunctionBlendState?,
     ) {
         delegate.drawTextAtlasPass(
             atlasRgba,
@@ -644,7 +645,7 @@ private class LayerScissorRenderRecorder(
         vertexData: FloatArray,
         indexData: IntArray,
         draws: List<GPUBackendRawUniformDraw>,
-        blendMode: GPUBlendMode?,
+        blendMode: GPUFixedFunctionBlendState?,
     ) {
         delegate.drawColorGlyphPass(
             atlasRgba,
@@ -844,6 +845,7 @@ internal fun renderViaGpu(
                 sceneLabel = parent.label
                 sceneHasContent = parent.hasContent
                 scenePlan = parent.plan
+                if (childPlan.composite.blend.canonicalBlendPlan() is GPUBlendPlan.NoOp) return true
                 val bounds = layerScissor(childPlan)
                 if (bounds.width == 0 || bounds.height == 0) return true
 
@@ -856,7 +858,7 @@ internal fun renderViaGpu(
                             colorFormat = texFormat,
                             textureLabel = childLabel,
                             draws = listOf(layerOpacityUniformDraw(1f, bounds)),
-                            blendMode = GPUBlendMode.SRC_OVER,
+                            blendMode = GPUBlendMode.SRC_OVER.canonicalFixedFunctionState(),
                         )
                     }
                     sceneHasContent = true
@@ -873,7 +875,7 @@ internal fun renderViaGpu(
                             colorFormat = texFormat,
                             textureLabel = childLabel,
                             draws = listOf(layerOpacityUniformDraw(childPlan.composite.opacity, bounds)),
-                            blendMode = GPUBlendMode.SRC,
+                            blendMode = GPUBlendMode.SRC.canonicalFixedFunctionState(),
                         )
                     }
                     opacityLabel
@@ -920,16 +922,7 @@ internal fun renderViaGpu(
                     )
                 }
                 val layerBlend = childPlan.composite.blend
-                val mode = when (layerBlend.kind) {
-                    GPUBlendKind.SrcOver -> GPUBlendMode.SRC_OVER
-                    else -> layerBlend.blendMode
-                } ?: return false.also {
-                        diagnostics.fatal(
-                            "refuse:saveLayer:${cmdId.value}",
-                            "saveLayer",
-                            "unsupported.layer.blend:${layerBlend.modeLabel.lowercase()}",
-                        )
-                    }
+                val mode = layerBlend.mode
                 val rendered = try {
                     val clipMaskLease = when (compositeClipPlan) {
                         is GPUClipCoveragePlan.Mask ->
@@ -960,7 +953,7 @@ internal fun renderViaGpu(
                 }
                 if (rendered) {
                     sceneHasContent = true
-                    if (layerBlend.requiresDestinationRead) {
+                    if (layerBlend.needsDestinationTexture()) {
                         diagnostics.degrade(
                             code = "route:destination-read:saveLayer:${cmdId.value}",
                             operation = "saveLayer:${cmdId.value}",
@@ -968,7 +961,7 @@ internal fun renderViaGpu(
                             facts = listOf(
                                 DiagnosticFact("destination-read.source", layerSourceLabel),
                                 DiagnosticFact("destination-read.snapshot", snapLabel),
-                                DiagnosticFact("destination-read.mode", layerBlend.modeLabel),
+                                DiagnosticFact("destination-read.mode", layerBlend.mode.gpuLabel),
                                 DiagnosticFact(
                                     "clip.strategy",
                                     when (compositeClipPlan) {
@@ -1123,7 +1116,7 @@ internal fun renderViaGpu(
                 } else {
                     routedCommand
                 }
-                if (sourceCommand.blend.requiresDestinationRead) {
+                if (sourceCommand.blend.needsDestinationTexture()) {
                     diagnostics.fatal(
                         "refuse:${sourceCommand.diagnosticName}",
                         sourceCommand.diagnosticName,
@@ -1153,7 +1146,7 @@ internal fun renderViaGpu(
                 } else {
                     routedCommand
                 }
-                if (sourceCommand.blend.requiresDestinationRead) {
+                if (sourceCommand.blend.needsDestinationTexture()) {
                     diagnostics.fatal("refuse:drawPath:${sourceCommand.commandId.value}", "drawPath", "unsupported_blend:advanced")
                     return false
                 }
@@ -1340,7 +1333,7 @@ internal fun renderViaGpu(
                         val glyphCmdId = GPUDrawCommandID(dispatched.size)
                         val contourStarts = flattened.contourStarts.ifEmpty { listOf(0) }
                         val cmd = syntheticOp.toNormalizedCommand(glyphCmdId, targets, vertices, contourStarts, flat.size)
-                        if (!clipSourceRoute && cmd.blend.requiresDestinationRead) {
+                        if (!clipSourceRoute && cmd.blend.needsDestinationTexture()) {
                             diagnostics.fatal("refuse:drawText:shader:${glyphCmdId.value}", "drawText", "unsupported_blend:advanced")
                             continue
                         }
@@ -1615,7 +1608,7 @@ internal fun renderViaGpu(
                     op.paint.isStroke() -> renderShaderText(op, cmdId)
                     else -> {
                         val cmd = op.toNormalizedCommand(cmdId, targets)
-                        if (!clipSourceRoute && cmd.blend.requiresDestinationRead) {
+                        if (!clipSourceRoute && cmd.blend.needsDestinationTexture()) {
                             diagnostics.fatal("refuse:drawText:${cmdId.value}", "drawText", "unsupported_blend:advanced")
                             false
                         } else {
@@ -1630,7 +1623,7 @@ internal fun renderViaGpu(
                                 t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
                                     drawTextAtlasPass(
                                         gpuBlob = gpuBlob,
-                                        blendMode = if (clipSourceRoute) GPUBlendMode.SRC_OVER else cmd.blend.blendMode,
+                                        blendMode = if (clipSourceRoute) GPUBlendMode.SRC_OVER else cmd.blend.mode,
                                         dispatched = dispatched,
                                         diagnostics = diagnostics,
                                         textColor = if (clipSourcePlane == GPUClipSourcePlane.GeometryCoverage) {
@@ -2351,26 +2344,8 @@ internal fun renderViaGpu(
                     composerDiagnostics,
                     encodeSource,
                 ->
-                val mode = blend.blendMode
-                    ?: if (blend.kind == GPUBlendKind.SrcOver) GPUBlendMode.SRC_OVER else null
-                if (mode == null) {
-                    composerDiagnostics.fatal(
-                        code = "refuse:destination-read:${context.sourceLabelForDiagnostics}",
-                        operation = context.sourceLabelForDiagnostics,
-                        reason = "unsupported.destination_read.gpu_formula:${blend.modeLabel}",
-                        facts = listOf(
-                            DiagnosticFact("destination-read.source", context.sourceLabel),
-                            DiagnosticFact("destination-read.snapshot", snapLabel),
-                            DiagnosticFact("destination-read.mode", blend.modeLabel),
-                            DiagnosticFact(
-                                "clip.strategy",
-                                if (clipMaskLabel == null) "direct" else "alpha-mask",
-                            ),
-                            DiagnosticFact("destination-read.action", "refuse-before-source"),
-                        ),
-                    )
-                    false
-                } else if (!encodeSource()) {
+                val mode = blend.mode
+                if (!encodeSource()) {
                     false
                 } else {
                     val rendered = t.renderDestinationReadBlend(
@@ -2385,7 +2360,7 @@ internal fun renderViaGpu(
                         width = context.targetWidth,
                         height = context.targetHeight,
                     )
-                    if (rendered && (blend.requiresDestinationRead || context.forceSourceComposition)) {
+                    if (rendered && (blend.needsDestinationTexture() || context.forceSourceComposition)) {
                         composerDiagnostics.degrade(
                             code = "route:destination-read:${context.sourceLabelForDiagnostics}",
                             operation = context.sourceLabelForDiagnostics,
@@ -2393,7 +2368,7 @@ internal fun renderViaGpu(
                             facts = listOf(
                                 DiagnosticFact("destination-read.source", context.sourceLabel),
                                 DiagnosticFact("destination-read.snapshot", snapLabel),
-                                DiagnosticFact("destination-read.mode", blend.modeLabel),
+                                DiagnosticFact("destination-read.mode", blend.mode.gpuLabel),
                                 DiagnosticFact(
                                     "clip.strategy",
                                     if (clipMaskLabel == null) "direct" else "alpha-mask",
@@ -2419,16 +2394,17 @@ internal fun renderViaGpu(
                 if (suppressedLayerDepth > 0) continue
                 if (refusePerspectiveCapture(op, cmdId)) continue
                 if (refuseCoreRoutePreflight(op, cmdId)) continue
+                val blend = op.clipCompositeBlendFacts()
+                if (blend.canonicalBlendPlan() is GPUBlendPlan.NoOp) continue
                 val requestedClipPlan = op.gpuClipCoveragePlanOrNull(targets, config, t.maxTextureDimension2D)
                 if (requestedClipPlan is GPUClipCoveragePlan.Refused) {
                     diagnostics.fatal("refuse:${op.javaClass.simpleName}:${cmdId.value}", "clip", requestedClipPlan.code)
                     continue
                 }
                 val clipPlan = requestedClipPlan ?: GPUClipCoveragePlan.NoClip
-                val blend = op.clipCompositeBlendFacts()
                 val hasActiveMaskBlur = op.hasActiveMaskBlur()
                 val requiresSgComposition =
-                    blend.requiresDestinationRead ||
+                    blend.needsDestinationTexture() ||
                         clipPlan is GPUClipCoveragePlan.Mask ||
                         (op.requiresSeparateGeometryCoverage() && !hasActiveMaskBlur)
                 op.coveragePlaneTask4RefusalOrNull()?.takeIf { requiresSgComposition }?.let { refusal ->
@@ -2457,7 +2433,7 @@ internal fun renderViaGpu(
                     coverageCompositionRequired = op.requiresSeparateGeometryCoverage() || hasActiveMaskBlur,
                     sourceCompositeBounds = { maskBlurSourceBounds },
                 )
-                if (blend.requiresDestinationRead) {
+                if (blend.needsDestinationTexture()) {
                     val rendered = t.renderWithClip(
                         context = routeContext,
                         clipPlan = clipPlan,
@@ -2540,7 +2516,7 @@ internal fun renderViaGpu(
                     ) {
                         sceneHasContent = true
                         dispatched.add(cmdId.toString())
-                        if (blend.requiresDestinationRead || routeContext.forceSourceComposition) {
+                        if (blend.needsDestinationTexture() || routeContext.forceSourceComposition) {
                             diagnostics.degrade(
                                 "dispatch:${op.javaClass.simpleName}:${cmdId.value}",
                                 op.javaClass.simpleName,
@@ -2577,7 +2553,7 @@ internal fun renderViaGpu(
                         val rendered = if (op.paint.isStroke()) {
                             val cmd = op.toStrokePathCommand(cmdId, targets)
                             if (cmd.maskFilter == null) {
-                                if (cmd.blend.requiresDestinationRead) {
+                                if (cmd.blend.needsDestinationTexture()) {
                                     diagnostics.fatal("refuse:drawRect:${cmdId.value}", "drawRect", "unsupported_blend:advanced")
                                     false
                                 } else {
@@ -2590,7 +2566,7 @@ internal fun renderViaGpu(
                                     false
                                 }
                                 MaskBlurPlan.Identity -> {
-                                    if (cmd.blend.requiresDestinationRead) {
+                                    if (cmd.blend.needsDestinationTexture()) {
                                         diagnostics.fatal("refuse:drawRect:${cmdId.value}", "drawRect", "unsupported_blend:advanced")
                                         false
                                     } else {
@@ -2713,7 +2689,7 @@ internal fun renderViaGpu(
                             continue
                         }
                         val cmd = op.toNormalizedCommand(cmdId, targets)
-                        if (cmd.blend.requiresDestinationRead) {
+                        if (cmd.blend.needsDestinationTexture()) {
                             diagnostics.fatal("refuse:drawText:${cmdId.value}", "drawText", "unsupported_blend:advanced")
                             continue
                         }
@@ -2725,7 +2701,7 @@ internal fun renderViaGpu(
                             t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
                                 drawTextAtlasPass(
                                     gpuBlob,
-                                    cmd.blend.blendMode,
+                                    cmd.blend.mode,
                                     dispatched,
                                     diagnostics,
                                     textColor = resolveTextColor(op.paint),
@@ -2745,7 +2721,7 @@ internal fun renderViaGpu(
                     is DisplayOp.SetClip -> { /* state ops */ }
                     is DisplayOp.DrawColor -> {
                         val cmd = op.toNormalizedCommand(cmdId, targets)
-                        if (cmd.blend.requiresDestinationRead) {
+                        if (cmd.blend.needsDestinationTexture()) {
                             diagnostics.fatal("refuse:drawColor:${cmdId.value}", "drawColor", "unsupported_blend:advanced")
                             continue
                         }
@@ -2763,7 +2739,7 @@ internal fun renderViaGpu(
                             continue
                         }
                         val cmd = op.toNormalizedCommand(cmdId, targets)
-                        if (cmd.blend.requiresDestinationRead) {
+                        if (cmd.blend.needsDestinationTexture()) {
                             diagnostics.fatal("refuse:drawPoint:${cmdId.value}", "drawPoint", "unsupported_blend:advanced")
                             continue
                         }
@@ -2801,7 +2777,7 @@ internal fun renderViaGpu(
                                 val cmd = drawPathOp.toNormalizedCommand(
                                     cmdId, targets, vertices, contourStarts, flat.size,
                                 ).copy(stroke = isStroke)
-                                if (cmd.blend.requiresDestinationRead) {
+                        if (cmd.blend.needsDestinationTexture()) {
                                     diagnostics.fatal("refuse:drawPoints:${cmdId.value}", "drawPoints", "unsupported_blend:advanced")
                                     continue
                                 }
@@ -2831,7 +2807,7 @@ internal fun renderViaGpu(
                         val contourStarts = flattened.contourStarts.ifEmpty { listOf(0) }
                         val drawPathOp = DisplayOp.DrawPath(path, op.paint, op.transform, op.clip)
                         val cmd = drawPathOp.toNormalizedCommand(cmdId, targets, vertices, contourStarts, flat.size)
-                        if (cmd.blend.requiresDestinationRead) {
+                        if (cmd.blend.needsDestinationTexture()) {
                             diagnostics.fatal("refuse:drawDRRect:${cmdId.value}", "drawDRRect", "unsupported_blend:advanced")
                             continue
                         }
@@ -3091,7 +3067,7 @@ internal fun renderViaGpu(
                                         continue
                                     }
                                     val cmd = nestedOp.toNormalizedCommand(nestedCmdId, targets)
-                                    if (cmd.blend.requiresDestinationRead) {
+                        if (cmd.blend.needsDestinationTexture()) {
                                         diagnostics.fatal("refuse:drawPicture:nested:${nestedCmdId.value}", "drawPicture", "unsupported_blend:advanced")
                                         continue
                                     }
@@ -3103,7 +3079,7 @@ internal fun renderViaGpu(
                                         t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
                                             drawTextAtlasPass(
                                                 gpuBlob,
-                                                cmd.blend.blendMode,
+                                                cmd.blend.mode,
                                                 dispatched,
                                                 diagnostics,
                                                 textColor = resolveTextColor(nestedOp.paint),
@@ -3593,7 +3569,7 @@ private fun GPUBackendRenderRecorder.drawTextAtlasPass(
                 scissorHeight = scissor?.height ?: th.toInt(),
             ),
         ),
-        blendMode = blendMode,
+        blendMode = blendMode?.canonicalFixedFunctionState(),
     )
     if (recordResult) dispatched.add("text:${blob.hashCode()}")
 }

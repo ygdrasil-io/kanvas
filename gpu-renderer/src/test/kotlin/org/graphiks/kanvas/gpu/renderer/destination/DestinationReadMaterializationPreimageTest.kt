@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.gpu.renderer.destination
 
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendDestinationReadRequirement
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -32,7 +33,7 @@ class DestinationReadMaterializationPreimageTest {
     fun `validated intermediate strategy derives existing intermediate materialization preimage`() {
         val gate = GPUDestinationReadStrategyPlanner().plan(
             destinationPreimageRequest(
-                requirement = GPUDestinationReadRequirement.ExistingIntermediate,
+                requirement = GPUBlendDestinationReadRequirement.DestinationTextureRequired,
                 strategy = GPUDestinationReadStrategy.BindIntermediate,
                 action = GPUDestinationReadAction.UseExistingIntermediate,
                 intermediateLabel = "intermediate:layer-card",
@@ -73,7 +74,7 @@ class DestinationReadMaterializationPreimageTest {
 }
 
 private fun destinationPreimageRequest(
-    requirement: GPUDestinationReadRequirement = GPUDestinationReadRequirement.TargetCopy,
+    requirement: GPUBlendDestinationReadRequirement = GPUBlendDestinationReadRequirement.DestinationTextureRequired,
     strategy: GPUDestinationReadStrategy = GPUDestinationReadStrategy.CopyTarget,
     action: GPUDestinationReadAction = GPUDestinationReadAction.SplitPassAndCopyTarget,
     activeAttachmentSampled: Boolean = false,

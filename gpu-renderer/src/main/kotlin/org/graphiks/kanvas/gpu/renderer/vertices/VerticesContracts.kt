@@ -1,6 +1,15 @@
 package org.graphiks.kanvas.gpu.renderer.vertices
 
 import java.security.MessageDigest
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendDestinationReadRequirement
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlanner
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendSpecializationRequest
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCoverageConsumption
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceAlphaClassification
+import org.graphiks.kanvas.gpu.renderer.passes.GPUTargetBlendFacts
 
 /** Typed DrawVertices topology captured before route selection. */
 sealed interface GPUVertexMode {
@@ -93,8 +102,7 @@ data class GPUVertexTexCoordPlan(
 
 /** Primitive blend plan for drawVertices-style input. */
 data class GPUPrimitiveBlendPlan(
-    val blendModeLabel: String,
-    val requiresDestinationRead: Boolean,
+    val plan: GPUBlendPlan,
 )
 
 /** Index buffer plan. */
@@ -471,8 +479,6 @@ data class GPUVerticesRouteDecisionRequest(
     val acceptedPositionFormats: Set<String> = setOf("f32x2"),
     val acceptedColorFormats: Set<String> = setOf("rgba8unorm-premul"),
     val acceptedTexCoordFormats: Set<String> = setOf("f32x2"),
-    val acceptedPrimitiveBlenders: Set<String> = setOf("none", "SrcOver"),
-    val destinationReadPrimitiveBlenders: Set<String> = setOf("Multiply", "Screen"),
 ) {
     init {
         require(commandId.isNotBlank()) { "GPUVerticesRouteDecisionRequest.commandId must not be blank" }
@@ -485,9 +491,6 @@ data class GPUVerticesRouteDecisionRequest(
         }
         require(acceptedPositionFormats.isNotEmpty()) {
             "GPUVerticesRouteDecisionRequest.acceptedPositionFormats must not be empty"
-        }
-        require(acceptedPrimitiveBlenders.isNotEmpty()) {
-            "GPUVerticesRouteDecisionRequest.acceptedPrimitiveBlenders must not be empty"
         }
     }
 }
@@ -1020,9 +1023,10 @@ private fun GPUVerticesRouteDecisionRequest.refusalCode(): String? =
             "unsupported.vertices.attribute_format"
         descriptor.hasTexCoords && descriptor.materialLocalCoordinatePolicy != "texcoord" ->
             "unsupported.vertices.local_coords_unproven"
-        descriptor.primitiveBlendMode in destinationReadPrimitiveBlenders ->
+        primitiveBlendPlan()?.destinationReadRequirement ==
+            GPUBlendDestinationReadRequirement.DestinationTextureRequired ->
             "unsupported.vertices.primitive_blend_destination_read"
-        descriptor.primitiveBlendMode !in acceptedPrimitiveBlenders ->
+        descriptor.primitiveBlendMode != "none" && primitiveBlendPlan() == null ->
             "unsupported.vertices.primitive_blender_unregistered"
         adapterEvidenceLabel.isNullOrBlank() || wgslLayoutEvidenceLabel.isNullOrBlank() ->
             "unsupported.vertices.wgsl_abi_unvalidated"
@@ -1040,13 +1044,39 @@ private fun GPUVerticesRouteDecisionRequest.refusalFacts(reasonCode: String): Ma
         "texCoordFormat" to (descriptor.texCoordFormat ?: "none"),
         "primitiveBlend" to descriptor.primitiveBlendMode,
         "primitiveBlendDestinationRead" to
-            (descriptor.primitiveBlendMode in destinationReadPrimitiveBlenders).toString(),
+            (primitiveBlendPlan()?.destinationReadRequirement ==
+                GPUBlendDestinationReadRequirement.DestinationTextureRequired).toString(),
         "localCoords" to descriptor.materialLocalCoordinatePolicy,
         "sourceMutable" to descriptor.sourceMutable.toString(),
         "finitePositions" to descriptor.finitePositions.toString(),
         "adapterEvidence" to (adapterEvidenceLabel ?: "missing"),
         "wgslEvidence" to (wgslLayoutEvidenceLabel ?: "missing"),
     )
+
+private fun GPUVerticesRouteDecisionRequest.primitiveBlendPlan(): GPUBlendPlan? {
+    if (descriptor.primitiveBlendMode == "none") return null
+    val normalizedLabel = descriptor.primitiveBlendMode
+        .replace('-', '_')
+        .replace(' ', '_')
+        .lowercase()
+    val mode = GPUBlendMode.entries.firstOrNull { candidate ->
+        candidate.gpuLabel == normalizedLabel ||
+            candidate.gpuLabel.replace("_", "") == normalizedLabel.replace("_", "")
+    } ?: return null
+    return GPUBlendPlanner().plan(
+        GPUBlendSpecializationRequest(
+            mode = mode,
+            coverage = GPUCoverageConsumption.FullOrScissor,
+            sourceAlpha = GPUSourceAlphaClassification.Translucent,
+            target = GPUTargetBlendFacts(
+                formatClass = targetFormatClass,
+                clampsNormalizedColorWrites = targetFormatClass.endsWith("unorm"),
+                premultipliedAlpha = true,
+            ),
+            samplePlan = GPUSamplePlan.SingleSampleFrame,
+        ),
+    )
+}
 
 private fun GPUVerticesBufferPlanRequest.refusalCode(
     vertexBytes: Long,

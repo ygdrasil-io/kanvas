@@ -1033,7 +1033,6 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
 
 internal fun composeSceneDestinationReadBlendWgsl(routeLabel: String): String {
     val blendExpression = when (routeLabel) {
-        "shader-blend:Screen" -> "src.rgb + dst.rgb - (src.rgb * dst.rgb)"
         "shader-blend:Multiply" -> "(src.rgb * dst.rgb) + (src.rgb * (1.0 - dst.a)) + (dst.rgb * (1.0 - src.a))"
         else -> error("unsupported destination-read blend route: $routeLabel")
     }

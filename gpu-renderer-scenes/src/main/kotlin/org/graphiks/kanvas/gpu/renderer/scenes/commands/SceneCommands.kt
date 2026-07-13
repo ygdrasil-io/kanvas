@@ -94,6 +94,7 @@ enum class SceneFilterKind(val wireName: String) {
 enum class SceneBlendMode {
     SrcOver,
     Screen,
+    Multiply,
 }
 
 sealed interface SceneCommand {

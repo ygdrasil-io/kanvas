@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.gpu.renderer.destination
 
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendDestinationReadRequirement
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -16,7 +17,7 @@ class DestinationReadStrategyGateTest {
         assertFalse(result.promoted)
         assertTrue(result.productActivation)
         assertFalse(result.materialized)
-        assertAcceptedDiagnostic(result, GPUDestinationReadRequirement.TargetCopy)
+        assertAcceptedDiagnostic(result, GPUBlendDestinationReadRequirement.DestinationTextureRequired)
         assertEquals(GPUDestinationReadStrategy.CopyTarget, result.plan.strategy)
         assertEquals(GPUDestinationReadAction.SplitPassAndCopyTarget, result.action)
         assertFalse(result.bindingInMaterialKey)
@@ -39,7 +40,7 @@ class DestinationReadStrategyGateTest {
     fun validatedIntermediateProducesBindingWithoutCopyDump() {
         val result = GPUDestinationReadStrategyPlanner().plan(
             targetCopyRequest(
-                requirement = GPUDestinationReadRequirement.ExistingIntermediate,
+                requirement = GPUBlendDestinationReadRequirement.DestinationTextureRequired,
                 strategy = GPUDestinationReadStrategy.BindIntermediate,
                 action = GPUDestinationReadAction.UseExistingIntermediate,
                 intermediateLabel = "intermediate:layer-card",
@@ -49,10 +50,10 @@ class DestinationReadStrategyGateTest {
 
         assertEquals(GPUDestinationReadStrategy.BindIntermediate, result.plan.strategy)
         assertEquals(GPUDestinationReadAction.UseExistingIntermediate, result.action)
-        assertAcceptedDiagnostic(result, GPUDestinationReadRequirement.ExistingIntermediate)
+        assertAcceptedDiagnostic(result, GPUBlendDestinationReadRequirement.DestinationTextureRequired)
         assertEquals(
             listOf(
-                "destination-read:strategy row=gpu-renderer.destination-read.strategy routeKind=GPUNative classification=TargetNative promoted=false productActivation=true materialized=false requirement=ExistingIntermediate strategy=SampleExistingIntermediate action=UseExistingIntermediate source=intermediate:layer-card generation=42",
+                "destination-read:strategy row=gpu-renderer.destination-read.strategy routeKind=GPUNative classification=TargetNative promoted=false productActivation=true materialized=false requirement=ShaderBlend strategy=SampleExistingIntermediate action=UseExistingIntermediate source=intermediate:layer-card generation=42",
                 "destination-read:bounds command=blend:screen requested=shape-local unclipped=0,0,80,40 clipped=4,8,64,32 copy=4,8,64,32 finite=true pixelAligned=true conservative=true target=128x96",
                 "destination-read:intermediate label=intermediate:layer-card descriptor=${result.copyDescriptorHash} separateAttachment=true generation=42 bounds=4,8,64,32 lifetime=layer-local",
                 "destination-read:binding label=dst-read:blend-screen layout=${result.bindingLayoutHash} textureView=${result.textureViewHash} sampler=${result.samplerHash} bounds=4,8,64,32 generation=42 slot=group1.binding3 materialKey=false",
@@ -87,14 +88,14 @@ class DestinationReadStrategyGateTest {
             ),
             refusalCase(
                 "none-strategy-unaccepted",
-                requirement = GPUDestinationReadRequirement.None,
+                requirement = GPUBlendDestinationReadRequirement.None,
                 strategy = GPUDestinationReadStrategy.None,
                 action = GPUDestinationReadAction.KeepInPass,
                 reason = "unsupported.destination_read.strategy_unaccepted",
             ),
             refusalCase(
                 "fixed-function-strategy-unaccepted",
-                requirement = GPUDestinationReadRequirement.FixedFunctionBlend,
+                requirement = GPUBlendDestinationReadRequirement.None,
                 strategy = GPUDestinationReadStrategy.FixedFunction,
                 action = GPUDestinationReadAction.UseFixedFunctionBlend,
                 reason = "unsupported.destination_read.strategy_unaccepted",
@@ -116,28 +117,28 @@ class DestinationReadStrategyGateTest {
             ),
             refusalCase(
                 "intermediate-action-mismatch",
-                requirement = GPUDestinationReadRequirement.ExistingIntermediate,
+                requirement = GPUBlendDestinationReadRequirement.DestinationTextureRequired,
                 strategy = GPUDestinationReadStrategy.BindIntermediate,
                 action = GPUDestinationReadAction.SplitPassAndCopyTarget,
                 reason = "unsupported.destination_read.strategy_action_mismatch",
             ),
             refusalCase(
                 "layer-strategy-unaccepted",
-                requirement = GPUDestinationReadRequirement.LayerIsolation,
+                requirement = GPUBlendDestinationReadRequirement.DestinationTextureRequired,
                 strategy = GPUDestinationReadStrategy.IsolateLayer,
                 action = GPUDestinationReadAction.CreateIsolatedLayer,
                 reason = "unsupported.destination_read.strategy_unaccepted",
             ),
             refusalCase(
                 "refuse-strategy-unaccepted",
-                requirement = GPUDestinationReadRequirement.Refused,
+                requirement = GPUBlendDestinationReadRequirement.Refused,
                 strategy = GPUDestinationReadStrategy.Refuse,
                 action = GPUDestinationReadAction.Refuse,
                 reason = "unsupported.destination_read.strategy_unaccepted",
             ),
             refusalCase(
                 "intermediate-unvalidated",
-                requirement = GPUDestinationReadRequirement.ExistingIntermediate,
+                requirement = GPUBlendDestinationReadRequirement.DestinationTextureRequired,
                 strategy = GPUDestinationReadStrategy.BindIntermediate,
                 action = GPUDestinationReadAction.UseExistingIntermediate,
                 intermediateValidated = false,
@@ -188,7 +189,7 @@ class DestinationReadStrategyGateTest {
 
 private fun assertAcceptedDiagnostic(
     result: GPUDestinationReadStrategyGatePlan,
-    requirement: GPUDestinationReadRequirement,
+    requirement: GPUBlendDestinationReadRequirement,
 ) {
     val diagnostic = result.diagnostics.single()
 
@@ -206,7 +207,7 @@ private data class RefusalCase(
 private fun refusalCase(
     label: String,
     reason: String,
-    requirement: GPUDestinationReadRequirement = GPUDestinationReadRequirement.TargetCopy,
+    requirement: GPUBlendDestinationReadRequirement = GPUBlendDestinationReadRequirement.DestinationTextureRequired,
     strategy: GPUDestinationReadStrategy = GPUDestinationReadStrategy.CopyTarget,
     action: GPUDestinationReadAction = GPUDestinationReadAction.SplitPassAndCopyTarget,
     bounds: GPUDestinationReadBounds = destinationBounds(),
@@ -242,7 +243,7 @@ private fun refusalCase(
 
 private fun targetCopyRequest(
     label: String = "accepted",
-    requirement: GPUDestinationReadRequirement = GPUDestinationReadRequirement.TargetCopy,
+    requirement: GPUBlendDestinationReadRequirement = GPUBlendDestinationReadRequirement.DestinationTextureRequired,
     strategy: GPUDestinationReadStrategy = GPUDestinationReadStrategy.CopyTarget,
     action: GPUDestinationReadAction = GPUDestinationReadAction.SplitPassAndCopyTarget,
     bounds: GPUDestinationReadBounds = destinationBounds(),

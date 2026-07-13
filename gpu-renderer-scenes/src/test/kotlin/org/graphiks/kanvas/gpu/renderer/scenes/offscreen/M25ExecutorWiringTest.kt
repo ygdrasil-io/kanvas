@@ -34,7 +34,7 @@ import org.graphiks.kanvas.gpu.renderer.intermediates.GPUIntermediatePlanStep
 import org.graphiks.kanvas.gpu.renderer.intermediates.GPUIntermediatePurpose
 import org.graphiks.kanvas.gpu.renderer.intermediates.GPUIntermediateTextureDescriptor
 import org.graphiks.kanvas.gpu.renderer.intermediates.dumpLines
-import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
+import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendState
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererSceneRegistry
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneColor
 import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTEntryPoint
@@ -300,7 +300,7 @@ class M25ExecutorWiringTest {
                 GPUIntermediatePlanStep.RenderToTarget(
                     commandId = "foreground",
                     targetLabel = "surface:destination-copy-scene",
-                    routeLabel = "shader-blend:Screen",
+                    routeLabel = "shader-blend:Multiply",
                     orderingToken = "order:foreground",
                 ),
             ),
@@ -597,7 +597,7 @@ class M25ExecutorWiringTest {
             wgsl: String,
             colorFormat: String,
             draws: List<GPUBackendRectDraw>,
-            blendMode: GPUBlendMode?,
+            blendMode: GPUFixedFunctionBlendState?,
             passBatchKind: org.graphiks.kanvas.gpu.renderer.execution.GPUBackendSimplePassBatchKind?,
         ) = Unit
 
@@ -605,7 +605,7 @@ class M25ExecutorWiringTest {
             wgsl: String,
             colorFormat: String,
             draws: List<org.graphiks.kanvas.gpu.renderer.execution.GPUBackendUniformPayloadDraw>,
-            blendMode: GPUBlendMode?,
+            blendMode: GPUFixedFunctionBlendState?,
             sourceLabel: String,
             passBatchKind: org.graphiks.kanvas.gpu.renderer.execution.GPUBackendSimplePassBatchKind?,
         ) = Unit
@@ -614,7 +614,7 @@ class M25ExecutorWiringTest {
             wgsl: String,
             colorFormat: String,
             draws: List<GPUBackendRawUniformDraw>,
-            blendMode: GPUBlendMode?,
+            blendMode: GPUFixedFunctionBlendState?,
             passBatchKind: org.graphiks.kanvas.gpu.renderer.execution.GPUBackendSimplePassBatchKind?,
         ) = Unit
 
@@ -626,7 +626,7 @@ class M25ExecutorWiringTest {
             textureHeight: Int,
             textureFormat: String,
             draws: List<GPUBackendRawUniformDraw>,
-            blendMode: GPUBlendMode?,
+            blendMode: GPUFixedFunctionBlendState?,
             stencilMode: GPUBackendStencilMode?,
             stencilConfig: GPUBackendStencilCoverConfig,
         ) = Unit
@@ -637,7 +637,7 @@ class M25ExecutorWiringTest {
             stencilMode: GPUBackendStencilMode,
             triangleData: GPUBackendTriangleData?,
             draws: List<GPUBackendRawUniformDraw>,
-            blendMode: GPUBlendMode?,
+            blendMode: GPUFixedFunctionBlendState?,
             stencilConfig: GPUBackendStencilCoverConfig,
         ) = Unit
 
@@ -647,7 +647,7 @@ class M25ExecutorWiringTest {
             vertexBufferLabel: String,
             indexCount: Int,
             uniformDraw: GPUBackendRawUniformDraw,
-            blendMode: GPUBlendMode?,
+            blendMode: GPUFixedFunctionBlendState?,
         ) = Unit
 
         override fun createVertexPositionUVBuffer(data: GPUBackendVertexPositionUVData): String = "vertex-uv"
@@ -660,7 +660,7 @@ class M25ExecutorWiringTest {
             textureWidth: Int,
             textureHeight: Int,
             textureFormat: String,
-            blendMode: GPUBlendMode?,
+            blendMode: GPUFixedFunctionBlendState?,
         ) = Unit
 
         override fun drawVertexPositionDualUVIndexed(
@@ -674,7 +674,7 @@ class M25ExecutorWiringTest {
             texture2Width: Int,
             texture2Height: Int,
             textureFormat: String,
-            blendMode: GPUBlendMode?,
+            blendMode: GPUFixedFunctionBlendState?,
         ) = Unit
 
         override fun createOffscreenTexture(texture: GPUBackendOffscreenTexture): String = "texture"
@@ -690,7 +690,7 @@ class M25ExecutorWiringTest {
             colorFormat: String,
             textureLabel: String,
             draws: List<GPUBackendRawUniformDraw>,
-            blendMode: GPUBlendMode?,
+            blendMode: GPUFixedFunctionBlendState?,
         ) {
             compositeTextureLabels += textureLabel
         }
@@ -701,7 +701,7 @@ class M25ExecutorWiringTest {
             firstTextureLabel: String,
             secondTextureLabel: String,
             draws: List<GPUBackendRawUniformDraw>,
-            blendMode: GPUBlendMode?,
+            blendMode: GPUFixedFunctionBlendState?,
         ) = Unit
 
         override fun drawThreeTexturePass(
@@ -711,7 +711,7 @@ class M25ExecutorWiringTest {
             secondTextureLabel: String,
             thirdTextureLabel: String,
             draws: List<GPUBackendRawUniformDraw>,
-            blendMode: GPUBlendMode?,
+            blendMode: GPUFixedFunctionBlendState?,
         ) = Unit
 
         override fun drawBlendPass(
@@ -730,7 +730,7 @@ class M25ExecutorWiringTest {
             vertexData: FloatArray,
             indexData: IntArray,
             draws: List<GPUBackendRawUniformDraw>,
-            blendMode: GPUBlendMode?,
+            blendMode: GPUFixedFunctionBlendState?,
         ) = Unit
 
         override fun drawColorGlyphPass(
@@ -741,7 +741,7 @@ class M25ExecutorWiringTest {
             vertexData: FloatArray,
             indexData: IntArray,
             draws: List<GPUBackendRawUniformDraw>,
-            blendMode: GPUBlendMode?,
+            blendMode: GPUFixedFunctionBlendState?,
         ) = Unit
     }
 }

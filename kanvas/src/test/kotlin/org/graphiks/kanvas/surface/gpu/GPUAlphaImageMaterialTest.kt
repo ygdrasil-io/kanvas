@@ -23,7 +23,7 @@ import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendTriangleData
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendUniformPayloadDraw
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendVertexColorData
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendVertexPositionUVData
-import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
+import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendState
 import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.BlendMode
@@ -219,7 +219,7 @@ class GPUAlphaImageMaterialTest {
         assertEquals(2, pass.textureWidth)
         assertEquals(1, pass.textureHeight)
         assertEquals("rgba8unorm", pass.textureFormat)
-        assertEquals(GPUBlendMode.SRC_OVER, pass.blendMode)
+        assertEquals("one_isa", pass.blendMode?.stateId)
         assertNull(pass.stencilMode)
 
         val draw = pass.draws.single()
@@ -521,7 +521,7 @@ class GPUAlphaImageMaterialTest {
             textureHeight: Int,
             textureFormat: String,
             draws: List<GPUBackendRawUniformDraw>,
-            blendMode: GPUBlendMode?,
+            blendMode: GPUFixedFunctionBlendState?,
             stencilMode: GPUBackendStencilMode?,
             stencilConfig: GPUBackendStencilCoverConfig,
         ) {
@@ -543,7 +543,7 @@ class GPUAlphaImageMaterialTest {
             wgsl: String,
             colorFormat: String,
             draws: List<GPUBackendRectDraw>,
-            blendMode: GPUBlendMode?,
+            blendMode: GPUFixedFunctionBlendState?,
             passBatchKind: GPUBackendSimplePassBatchKind?,
         ) = unsupported()
 
@@ -551,7 +551,7 @@ class GPUAlphaImageMaterialTest {
             wgsl: String,
             colorFormat: String,
             draws: List<GPUBackendUniformPayloadDraw>,
-            blendMode: GPUBlendMode?,
+            blendMode: GPUFixedFunctionBlendState?,
             sourceLabel: String,
             passBatchKind: GPUBackendSimplePassBatchKind?,
         ) = unsupported()
@@ -560,7 +560,7 @@ class GPUAlphaImageMaterialTest {
             wgsl: String,
             colorFormat: String,
             draws: List<GPUBackendRawUniformDraw>,
-            blendMode: GPUBlendMode?,
+            blendMode: GPUFixedFunctionBlendState?,
             passBatchKind: GPUBackendSimplePassBatchKind?,
         ) = unsupported()
 
@@ -570,7 +570,7 @@ class GPUAlphaImageMaterialTest {
             stencilMode: GPUBackendStencilMode,
             triangleData: GPUBackendTriangleData?,
             draws: List<GPUBackendRawUniformDraw>,
-            blendMode: GPUBlendMode?,
+            blendMode: GPUFixedFunctionBlendState?,
             stencilConfig: org.graphiks.kanvas.gpu.renderer.execution.GPUBackendStencilCoverConfig,
         ) {
             stencilPasses += StencilPass(stencilMode, triangleData, stencilConfig)
@@ -582,7 +582,7 @@ class GPUAlphaImageMaterialTest {
             vertexBufferLabel: String,
             indexCount: Int,
             uniformDraw: GPUBackendRawUniformDraw,
-            blendMode: GPUBlendMode?,
+            blendMode: GPUFixedFunctionBlendState?,
         ) = unsupported()
 
         override fun createVertexPositionUVBuffer(data: GPUBackendVertexPositionUVData): String = unsupported()
@@ -595,7 +595,7 @@ class GPUAlphaImageMaterialTest {
             textureWidth: Int,
             textureHeight: Int,
             textureFormat: String,
-            blendMode: GPUBlendMode?,
+            blendMode: GPUFixedFunctionBlendState?,
         ) = unsupported()
 
         override fun drawVertexPositionDualUVIndexed(
@@ -609,7 +609,7 @@ class GPUAlphaImageMaterialTest {
             texture2Width: Int,
             texture2Height: Int,
             textureFormat: String,
-            blendMode: GPUBlendMode?,
+            blendMode: GPUFixedFunctionBlendState?,
         ) = unsupported()
 
         override fun createOffscreenTexture(texture: GPUBackendOffscreenTexture): String = unsupported()
@@ -625,7 +625,7 @@ class GPUAlphaImageMaterialTest {
             colorFormat: String,
             textureLabel: String,
             draws: List<GPUBackendRawUniformDraw>,
-            blendMode: GPUBlendMode?,
+            blendMode: GPUFixedFunctionBlendState?,
         ) = unsupported()
 
         override fun drawTwoTexturePass(
@@ -634,7 +634,7 @@ class GPUAlphaImageMaterialTest {
             firstTextureLabel: String,
             secondTextureLabel: String,
             draws: List<GPUBackendRawUniformDraw>,
-            blendMode: GPUBlendMode?,
+            blendMode: GPUFixedFunctionBlendState?,
         ) = unsupported()
 
         override fun drawThreeTexturePass(
@@ -644,7 +644,7 @@ class GPUAlphaImageMaterialTest {
             secondTextureLabel: String,
             thirdTextureLabel: String,
             draws: List<GPUBackendRawUniformDraw>,
-            blendMode: GPUBlendMode?,
+            blendMode: GPUFixedFunctionBlendState?,
         ) = unsupported()
 
         override fun drawBlendPass(
@@ -663,7 +663,7 @@ class GPUAlphaImageMaterialTest {
             vertexData: FloatArray,
             indexData: IntArray,
             draws: List<GPUBackendRawUniformDraw>,
-            blendMode: GPUBlendMode?,
+            blendMode: GPUFixedFunctionBlendState?,
         ) = unsupported()
 
         override fun drawColorGlyphPass(
@@ -674,7 +674,7 @@ class GPUAlphaImageMaterialTest {
             vertexData: FloatArray,
             indexData: IntArray,
             draws: List<GPUBackendRawUniformDraw>,
-            blendMode: GPUBlendMode?,
+            blendMode: GPUFixedFunctionBlendState?,
         ) = unsupported()
 
         private fun unsupported(): Nothing = error("Unexpected recorder call")
@@ -686,7 +686,7 @@ class GPUAlphaImageMaterialTest {
         val textureHeight: Int,
         val textureFormat: String,
         val draws: List<GPUBackendRawUniformDraw>,
-        val blendMode: GPUBlendMode?,
+        val blendMode: GPUFixedFunctionBlendState?,
         val stencilMode: GPUBackendStencilMode?,
         val stencilConfig: GPUBackendStencilCoverConfig,
     )

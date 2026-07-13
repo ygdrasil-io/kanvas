@@ -7,7 +7,7 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.destination.GPUDestinationReadBounds
 import org.graphiks.kanvas.gpu.renderer.passes.GPUMsaaAdapterCapability
-import org.graphiks.kanvas.gpu.renderer.state.GPUBlendMode
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 
 class GPUIntermediateMsaaPlanTest {
     @Test
@@ -105,7 +105,7 @@ class GPUIntermediateMsaaPlanTest {
                     targetWidth = 320,
                     targetHeight = 200,
                 ),
-                blendMode = GPUBlendMode.SrcOver,
+                blendMode = GPUBlendMode.SRC_OVER,
                 materialKeyHash = "material:solid",
                 renderStepIdentity = "rect-fill",
             ),

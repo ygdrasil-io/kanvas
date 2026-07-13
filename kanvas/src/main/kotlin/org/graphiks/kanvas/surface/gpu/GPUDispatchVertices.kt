@@ -112,8 +112,8 @@ internal fun GPUBackendRenderRecorder.dispatchTexturedVertices(
         scissorHeight = scissor?.height ?: surfaceHeight,
     )
 
-    val blend = blendModeOverride ?: org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode.values()
-        .firstOrNull { it.ordinal == paint.blendMode.ordinal }
+    val blend = (blendModeOverride ?: paint.blendMode.toGpuBlendFacts().mode)
+        .canonicalFixedFunctionState()
 
     if (hasDualUV) {
         drawVertexPositionDualUVIndexed(

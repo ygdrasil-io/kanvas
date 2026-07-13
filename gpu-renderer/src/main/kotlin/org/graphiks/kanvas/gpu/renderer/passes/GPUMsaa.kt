@@ -2,6 +2,23 @@ package org.graphiks.kanvas.gpu.renderer.passes
 
 import org.graphiks.kanvas.gpu.renderer.routing.RefuseDiagnostic
 
+/** Handle-free sample topology consumed by blend specialization. */
+sealed interface GPUSamplePlan {
+    val sampleCount: Int
+
+    /** The frame writes a single-sample attachment. */
+    data object SingleSampleFrame : GPUSamplePlan {
+        override val sampleCount: Int = 1
+    }
+
+    /** The frame writes a persistent multisample attachment. */
+    data class MultisampleFrame(override val sampleCount: Int) : GPUSamplePlan {
+        init {
+            require(sampleCount > 1) { "GPUSamplePlan.MultisampleFrame.sampleCount must be greater than one" }
+        }
+    }
+}
+
 enum class GPUMsaaCoverageMode {
     Standard,
     AlphaToCoverage,

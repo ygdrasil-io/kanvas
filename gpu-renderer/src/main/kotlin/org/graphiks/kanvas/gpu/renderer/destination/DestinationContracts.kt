@@ -1,6 +1,8 @@
 package org.graphiks.kanvas.gpu.renderer.destination
 
 import java.security.MessageDigest
+import org.graphiks.kanvas.gpu.renderer.intermediates.GPUIntermediateBoundsFacts
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendDestinationReadRequirement
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketStream
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommand
@@ -27,22 +29,6 @@ value class GPUDestinationReadToken(val value: String) {
     }
 }
 
-/** Destination-read requirement. */
-enum class GPUDestinationReadRequirement {
-    /** No destination read is required. */
-    None,
-    /** Fixed-function blend is enough. */
-    FixedFunctionBlend,
-    /** A copy of the current target is required. */
-    TargetCopy,
-    /** Existing intermediate can satisfy the read. */
-    ExistingIntermediate,
-    /** Layer isolation is required. */
-    LayerIsolation,
-    /** Requirement cannot be represented and must refuse. */
-    Refused,
-}
-
 /** Destination-read strategy. */
 enum class GPUDestinationReadStrategy {
     /** No strategy needed. */
@@ -62,20 +48,20 @@ enum class GPUDestinationReadStrategy {
 /** Destination read bounds. */
 data class GPUDestinationReadBounds(
     val boundsLabel: String,
-    val conservative: Boolean,
+    override val conservative: Boolean,
     val pixelAligned: Boolean,
-    val finite: Boolean = true,
-    val requestedBoundsLabel: String = boundsLabel,
+    override val finite: Boolean = true,
+    override val requestedBoundsLabel: String = boundsLabel,
     val unclippedBoundsLabel: String = boundsLabel,
-    val clippedBoundsLabel: String = boundsLabel,
-    val copyBoundsLabel: String = clippedBoundsLabel,
-    val originX: Int = 0,
-    val originY: Int = 0,
-    val width: Int = 0,
-    val height: Int = 0,
+    override val clippedBoundsLabel: String = boundsLabel,
+    override val copyBoundsLabel: String = clippedBoundsLabel,
+    override val originX: Int = 0,
+    override val originY: Int = 0,
+    override val width: Int = 0,
+    override val height: Int = 0,
     val targetWidth: Int = 0,
     val targetHeight: Int = 0,
-)
+) : GPUIntermediateBoundsFacts
 
 /** Destination read binding. */
 data class GPUDestinationReadBinding(
@@ -144,7 +130,7 @@ data class GPUDestinationReadBudgetPolicy(
 
 /** Destination read plan. */
 data class GPUDestinationReadPlan(
-    val requirement: GPUDestinationReadRequirement,
+    val requirement: GPUBlendDestinationReadRequirement,
     val strategy: GPUDestinationReadStrategy,
     val bounds: GPUDestinationReadBounds,
     val sourceTargetFacts: List<String>,
@@ -159,7 +145,7 @@ data class GPUDestinationReadPlan(
 data class GPUDestinationReadStrategyRequest(
     val label: String = "accepted",
     val commandId: String,
-    val requirement: GPUDestinationReadRequirement,
+    val requirement: GPUBlendDestinationReadRequirement,
     val strategy: GPUDestinationReadStrategy,
     val action: GPUDestinationReadAction,
     val bounds: GPUDestinationReadBounds,
@@ -620,7 +606,7 @@ class GPUDestinationReadStrategyPlanner {
 /** Destination read diagnostic. */
 data class GPUDestinationReadDiagnostic(
     val code: String,
-    val requirement: GPUDestinationReadRequirement,
+    val requirement: GPUBlendDestinationReadRequirement,
     val message: String,
     val terminal: Boolean,
 )
@@ -1082,14 +1068,11 @@ private fun Set<String>.canonicalUsageLabels(): List<String> =
         ),
     )
 
-private fun GPUDestinationReadRequirement.dumpLabel(): String =
+private fun GPUBlendDestinationReadRequirement.dumpLabel(): String =
     when (this) {
-        GPUDestinationReadRequirement.None -> "None"
-        GPUDestinationReadRequirement.FixedFunctionBlend -> "FixedFunctionOnly"
-        GPUDestinationReadRequirement.TargetCopy -> "ShaderBlend"
-        GPUDestinationReadRequirement.ExistingIntermediate -> "ExistingIntermediate"
-        GPUDestinationReadRequirement.LayerIsolation -> "LayerComposite"
-        GPUDestinationReadRequirement.Refused -> "Unknown"
+        GPUBlendDestinationReadRequirement.None -> "None"
+        GPUBlendDestinationReadRequirement.DestinationTextureRequired -> "ShaderBlend"
+        GPUBlendDestinationReadRequirement.Refused -> "Refused"
     }
 
 private fun GPUDestinationReadStrategy.dumpLabel(): String =

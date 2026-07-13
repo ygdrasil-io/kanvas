@@ -1,7 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.analysis
 
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
-import org.graphiks.kanvas.gpu.renderer.commands.GPUBlendKind
+import org.graphiks.kanvas.gpu.renderer.commands.GPUBlendFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.commands.GPUClipKind
 import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawKind
@@ -34,6 +34,13 @@ import org.graphiks.kanvas.gpu.renderer.images.GPUDecodedImageSamplingPlan
 import org.graphiks.kanvas.gpu.renderer.images.GPUDecodedImageShaderPreparedPlanner
 import org.graphiks.kanvas.gpu.renderer.images.GPUImageDecodePlanner
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPass
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendDestinationReadRequirement
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlanner
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendSpecializationRequest
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCoverageConsumption
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
+import org.graphiks.kanvas.gpu.renderer.passes.GPUTargetBlendFacts
 import org.graphiks.kanvas.gpu.renderer.passes.GPUFirstRoutePassBuilder
 import org.graphiks.kanvas.gpu.renderer.routing.GPUFirstRouteDecisionBuilder
 import org.graphiks.kanvas.gpu.renderer.routing.GPURouteDecision
@@ -967,10 +974,11 @@ class GPUFirstRoutePlanner(
             clip.kind !in acceptedClipKinds -> "unsupported.clip.analytic_unsupported"
             clip.kind == GPUClipKind.DeviceRect && !capabilities.hasFact(firstScissorCapabilityName) ->
                 "unsupported.clip.scissor_capability_missing"
-            blend.kind != GPUBlendKind.SrcOver -> "unsupported.blend.mode_unimplemented"
+            blend.canonicalRefusalCode(layer.target.colorFormat) != null ->
+                blend.canonicalRefusalCode(layer.target.colorFormat)
             layer.scopeKind != GPULayerScopeKind.Root -> "unsupported.layer.elision_proof_missing"
             layer.requiresFilter -> "unsupported.layer.filter_chain"
-            layer.requiresDestinationRead || ordering.dependsOnDestination || blend.requiresDestinationRead ->
+            layer.requiresDestinationRead || ordering.dependsOnDestination ->
                 "unsupported.destination_read.required"
             layer.target.colorFormat != firstRouteTargetFormat -> "unsupported.target.format_blend_incompatible"
             else -> null
@@ -1159,7 +1167,8 @@ class GPUFirstRoutePlanner(
             clip.kind == GPUClipKind.DeviceRect && !capabilities.hasFact(firstScissorCapabilityName) ->
                 "unsupported.clip.scissor_capability_missing"
             material.kind !in acceptedMaterialKinds -> "unsupported.material.source_unimplemented"
-            blend.kind != GPUBlendKind.SrcOver -> "unsupported.blend.mode_unimplemented"
+            blend.canonicalRefusalCode(layer.target.colorFormat) != null ->
+                blend.canonicalRefusalCode(layer.target.colorFormat)
             backdropRequired -> "unsupported.layer.backdrop_filter"
             initWithPrevious -> "unsupported.layer.init_previous_unaccepted"
             sourceFilterCount > 0 -> "unsupported.layer.filter_chain"
@@ -1328,10 +1337,11 @@ class GPUFirstRoutePlanner(
                 "unsupported.material.sweep_gradient_capability_missing"
             clip.kind == GPUClipKind.DeviceRect && !capabilities.hasFact(firstScissorCapabilityName) ->
                 "unsupported.clip.scissor_capability_missing"
-            blend.kind != GPUBlendKind.SrcOver -> "unsupported.blend.mode_unimplemented"
+            blend.canonicalRefusalCode(layer.target.colorFormat) != null ->
+                blend.canonicalRefusalCode(layer.target.colorFormat)
             layer.scopeKind != GPULayerScopeKind.Root -> "unsupported.layer.elision_proof_missing"
             layer.requiresFilter -> "unsupported.layer.filter_chain"
-            layer.requiresDestinationRead || ordering.dependsOnDestination || blend.requiresDestinationRead ->
+            layer.requiresDestinationRead || ordering.dependsOnDestination ->
                 "unsupported.destination_read.required"
             layer.target.colorFormat != firstRouteTargetFormat -> "unsupported.target.format_blend_incompatible"
             !capabilities.hasFact(firstRouteCapabilityName) -> "unsupported.pipeline.capability_missing"
@@ -1361,10 +1371,11 @@ class GPUFirstRoutePlanner(
             material is GPUMaterialDescriptor.LinearGradient &&
                 !capabilities.hasFact(firstLinearGradientCapabilityName) ->
                 "unsupported.material.linear_gradient_capability_missing"
-            blend.kind != GPUBlendKind.SrcOver -> "unsupported.blend.mode_unimplemented"
+            blend.canonicalRefusalCode(layer.target.colorFormat) != null ->
+                blend.canonicalRefusalCode(layer.target.colorFormat)
             layer.scopeKind != GPULayerScopeKind.Root -> "unsupported.layer.elision_proof_missing"
             layer.requiresFilter -> "unsupported.layer.filter_chain"
-            layer.requiresDestinationRead || ordering.dependsOnDestination || blend.requiresDestinationRead ->
+            layer.requiresDestinationRead || ordering.dependsOnDestination ->
                 "unsupported.destination_read.required"
             layer.target.colorFormat != firstRouteTargetFormat -> "unsupported.target.format_blend_incompatible"
             !capabilities.hasFact(firstRRectRouteCapabilityName) -> "unsupported.pipeline.capability_missing"
@@ -1426,10 +1437,11 @@ class GPUFirstRoutePlanner(
             material is GPUMaterialDescriptor.LinearGradient &&
                 !capabilities.hasFact(firstLinearGradientCapabilityName) ->
                 "unsupported.material.linear_gradient_capability_missing"
-            blend.kind != GPUBlendKind.SrcOver -> "unsupported.blend.mode_unimplemented"
+            blend.canonicalRefusalCode(layer.target.colorFormat) != null ->
+                blend.canonicalRefusalCode(layer.target.colorFormat)
             layer.scopeKind != GPULayerScopeKind.Root -> "unsupported.layer.elision_proof_missing"
             layer.requiresFilter -> "unsupported.layer.filter_chain"
-            layer.requiresDestinationRead || ordering.dependsOnDestination || blend.requiresDestinationRead ->
+            layer.requiresDestinationRead || ordering.dependsOnDestination ->
                 "unsupported.destination_read.required"
             layer.target.colorFormat != firstRouteTargetFormat -> "unsupported.target.format_blend_incompatible"
             !capabilities.hasFact(firstPathFillCapabilityName) -> "unsupported.pipeline.capability_missing"
@@ -1656,11 +1668,12 @@ class GPUFirstRoutePlanner(
             transform.type !in acceptedApplyFilterTransformTypes -> "unsupported.transform.class_downgrade"
             clip.kind == GPUClipKind.ComplexStack -> "unsupported.clip.complex_stack"
             clip.kind !in acceptedClipKinds -> "unsupported.clip.analytic_unsupported"
-            blend.kind != GPUBlendKind.SrcOver -> "unsupported.blend.mode_unimplemented"
+            blend.canonicalRefusalCode(layer.target.colorFormat) != null ->
+                blend.canonicalRefusalCode(layer.target.colorFormat)
             layer.scopeKind != GPULayerScopeKind.Root -> "unsupported.layer.elision_proof_missing"
             layer.requiresFilter -> "unsupported.layer.filter_chain"
-            layer.requiresDestinationRead || ordering.dependsOnDestination ||
-                blend.requiresDestinationRead -> "unsupported.destination_read.required"
+            layer.requiresDestinationRead || ordering.dependsOnDestination ->
+                "unsupported.destination_read.required"
             layer.target.colorFormat != firstRouteTargetFormat -> "unsupported.target.format_blend_incompatible"
             !filterBounds.finite -> "unsupported.filter.bounds_unbounded"
             filterBounds.width <= 0 || filterBounds.height <= 0 -> "unsupported.filter.bounds_invalid"
@@ -1974,6 +1987,28 @@ private fun String.allowsStableAnalysisLocalMatrix(): Boolean =
         all { char ->
             char in 'a'..'z' || char in 'A'..'Z' || char in '0'..'9' || char == '.' || char == '_' || char == '-'
         }
+
+private fun GPUBlendFacts.canonicalRefusalCode(targetFormatClass: String): String? {
+    val plan = GPUBlendPlanner().plan(
+        GPUBlendSpecializationRequest(
+            mode = mode,
+            coverage = GPUCoverageConsumption.FullOrScissor,
+            sourceAlpha = sourceAlpha,
+            target = GPUTargetBlendFacts(
+                formatClass = targetFormatClass,
+                clampsNormalizedColorWrites = targetFormatClass.endsWith("unorm"),
+                premultipliedAlpha = true,
+            ),
+            samplePlan = GPUSamplePlan.SingleSampleFrame,
+        ),
+    )
+    return when {
+        plan is GPUBlendPlan.UnsupportedBlend -> plan.diagnostic.code
+        plan.destinationReadRequirement == GPUBlendDestinationReadRequirement.DestinationTextureRequired ->
+            "unsupported.destination_read.required"
+        else -> null
+    }
+}
 
 private const val maxStableAnalysisLocalMatrixLength = 64
 

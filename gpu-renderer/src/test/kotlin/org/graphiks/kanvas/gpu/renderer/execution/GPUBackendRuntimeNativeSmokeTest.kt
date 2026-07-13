@@ -10,6 +10,14 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUResourceBindingSlot
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUUniformPayloadBlock
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUUniformPayloadSlot
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlanner
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendSpecializationRequest
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCoverageConsumption
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceAlphaClassification
+import org.graphiks.kanvas.gpu.renderer.passes.GPUTargetBlendFacts
+import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendState
 import org.graphiks.kanvas.gpu.renderer.resources.GPUPayloadMaterializationRequest
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceLease
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceLeaseCacheResult
@@ -29,6 +37,19 @@ import kotlin.test.assertFalse
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
+
+private fun canonicalFixedState(mode: GPUBlendMode): GPUFixedFunctionBlendState {
+    val plan = GPUBlendPlanner().plan(
+        GPUBlendSpecializationRequest(
+            mode = mode,
+            coverage = GPUCoverageConsumption.FullOrScissor,
+            sourceAlpha = GPUSourceAlphaClassification.Translucent,
+            target = GPUTargetBlendFacts("rgba8unorm", true, true),
+            samplePlan = GPUSamplePlan.SingleSampleFrame,
+        ),
+    )
+    return (plan as GPUBlendPlan.FixedFunctionBlend).state
+}
 
 class GPUBackendRuntimeNativeSmokeTest {
     @AfterEach
@@ -446,7 +467,7 @@ class GPUBackendRuntimeNativeSmokeTest {
                                 scissorHeight = 4,
                             ),
                         ),
-                        blendMode = GPUBlendMode.SRC,
+                        blendMode = canonicalFixedState(GPUBlendMode.SRC),
                     )
                 }
 
@@ -503,7 +524,7 @@ class GPUBackendRuntimeNativeSmokeTest {
                                 scissorHeight = 4,
                             ),
                         ),
-                        blendMode = GPUBlendMode.SRC,
+                        blendMode = canonicalFixedState(GPUBlendMode.SRC),
                     )
                 }
 
@@ -587,7 +608,7 @@ class GPUBackendRuntimeNativeSmokeTest {
                                 scissorHeight = 4,
                             ),
                         ),
-                        blendMode = GPUBlendMode.SRC,
+                        blendMode = canonicalFixedState(GPUBlendMode.SRC),
                     )
                 }
 
@@ -714,7 +735,7 @@ class GPUBackendRuntimeNativeSmokeTest {
                                 scissorHeight = 16,
                             ),
                         ),
-                        blendMode = GPUBlendMode.SRC,
+                        blendMode = canonicalFixedState(GPUBlendMode.SRC),
                     )
                 }
                 val x4Pixels = target.readRgba()
@@ -771,7 +792,7 @@ class GPUBackendRuntimeNativeSmokeTest {
                                 scissorHeight = 16,
                             ),
                         ),
-                        blendMode = GPUBlendMode.SRC,
+                        blendMode = canonicalFixedState(GPUBlendMode.SRC),
                     )
                 }
                 val x1Pixels = target.readRgba()
@@ -903,7 +924,7 @@ class GPUBackendRuntimeNativeSmokeTest {
                         firstTextureLabel = first,
                         secondTextureLabel = second,
                         draws = listOf(draw),
-                        blendMode = GPUBlendMode.SRC,
+                        blendMode = canonicalFixedState(GPUBlendMode.SRC),
                     )
                 }
                 target.encode(GPUClearColor(0.0, 0.0, 0.0, 1.0)) {
@@ -914,7 +935,7 @@ class GPUBackendRuntimeNativeSmokeTest {
                         secondTextureLabel = second,
                         thirdTextureLabel = third,
                         draws = listOf(draw),
-                        blendMode = GPUBlendMode.SRC,
+                        blendMode = canonicalFixedState(GPUBlendMode.SRC),
                     )
                 }
             }

@@ -3,7 +3,7 @@ package org.graphiks.kanvas.gpu.renderer.execution
 import org.graphiks.kanvas.gpu.renderer.telemetry.GPUCacheTelemetry
 import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandKind
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceMaterializationDecision
-import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
+import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendState
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 
 /** Describes an offscreen surface allocation request for the low-level GPU backend runtime. */
@@ -404,7 +404,7 @@ interface GPUBackendRenderRecorder {
         wgsl: String,
         colorFormat: String,
         draws: List<GPUBackendRectDraw>,
-        blendMode: GPUBlendMode? = null,
+        blendMode: GPUFixedFunctionBlendState? = null,
         passBatchKind: GPUBackendSimplePassBatchKind? = null,
     )
 
@@ -413,7 +413,7 @@ interface GPUBackendRenderRecorder {
         wgsl: String,
         colorFormat: String,
         draws: List<GPUBackendUniformPayloadDraw>,
-        blendMode: GPUBlendMode? = null,
+        blendMode: GPUFixedFunctionBlendState? = null,
         sourceLabel: String = "fullscreen-uniform-pass",
         passBatchKind: GPUBackendSimplePassBatchKind? = null,
     )
@@ -423,7 +423,7 @@ interface GPUBackendRenderRecorder {
         wgsl: String,
         colorFormat: String,
         draws: List<GPUBackendRawUniformDraw>,
-        blendMode: GPUBlendMode? = null,
+        blendMode: GPUFixedFunctionBlendState? = null,
         passBatchKind: GPUBackendSimplePassBatchKind? = null,
     )
 
@@ -436,7 +436,7 @@ interface GPUBackendRenderRecorder {
         textureHeight: Int,
         textureFormat: String,
         draws: List<GPUBackendRawUniformDraw>,
-        blendMode: GPUBlendMode? = null,
+        blendMode: GPUFixedFunctionBlendState? = null,
         stencilMode: GPUBackendStencilMode? = null,
         stencilConfig: GPUBackendStencilCoverConfig = GPUBackendStencilCoverConfig(
             fillRule = GPUBackendStencilFillRule.NonZero,
@@ -451,7 +451,7 @@ interface GPUBackendRenderRecorder {
         stencilMode: GPUBackendStencilMode,
         triangleData: GPUBackendTriangleData?,
         draws: List<GPUBackendRawUniformDraw>,
-        blendMode: GPUBlendMode? = null,
+        blendMode: GPUFixedFunctionBlendState? = null,
         stencilConfig: GPUBackendStencilCoverConfig = GPUBackendStencilCoverConfig(
             fillRule = GPUBackendStencilFillRule.NonZero,
             inverse = false,
@@ -466,7 +466,7 @@ interface GPUBackendRenderRecorder {
         vertexBufferLabel: String,
         indexCount: Int,
         uniformDraw: GPUBackendRawUniformDraw,
-        blendMode: GPUBlendMode? = null,
+        blendMode: GPUFixedFunctionBlendState? = null,
     )
 
     /** Creates a GPU vertex buffer from interleaved position + uv float data. Returns a stable label. */
@@ -481,7 +481,7 @@ interface GPUBackendRenderRecorder {
         textureWidth: Int,
         textureHeight: Int,
         textureFormat: String,
-        blendMode: GPUBlendMode? = null,
+        blendMode: GPUFixedFunctionBlendState? = null,
     )
 
     /** Draws an indexed mesh with dual UV channels and two bound textures. */
@@ -494,7 +494,7 @@ interface GPUBackendRenderRecorder {
         texture2Rgba: ByteArray,
         texture2Width: Int, texture2Height: Int,
         textureFormat: String,
-        blendMode: GPUBlendMode? = null,
+        blendMode: GPUFixedFunctionBlendState? = null,
     )
 
     /** Creates a secondary offscreen texture that can be bound as a texture source. */
@@ -513,7 +513,7 @@ interface GPUBackendRenderRecorder {
         colorFormat: String,
         textureLabel: String,
         draws: List<GPUBackendRawUniformDraw>,
-        blendMode: GPUBlendMode? = null,
+        blendMode: GPUFixedFunctionBlendState? = null,
     )
 
     /** Draws a fullscreen pass with two previously-created texture and sampler pairs. */
@@ -523,7 +523,7 @@ interface GPUBackendRenderRecorder {
         firstTextureLabel: String,
         secondTextureLabel: String,
         draws: List<GPUBackendRawUniformDraw>,
-        blendMode: GPUBlendMode? = null,
+        blendMode: GPUFixedFunctionBlendState? = null,
     )
 
     /** Draws a fullscreen pass with three previously-created texture and sampler pairs. */
@@ -534,7 +534,7 @@ interface GPUBackendRenderRecorder {
         secondTextureLabel: String,
         thirdTextureLabel: String,
         draws: List<GPUBackendRawUniformDraw>,
-        blendMode: GPUBlendMode? = null,
+        blendMode: GPUFixedFunctionBlendState? = null,
     )
 
     /** Dual-texture blend pass: composites source over destination using a shader-based blend formula. */
@@ -555,7 +555,7 @@ interface GPUBackendRenderRecorder {
         vertexData: FloatArray,
         indexData: IntArray,
         draws: List<GPUBackendRawUniformDraw>,
-        blendMode: GPUBlendMode? = null,
+        blendMode: GPUFixedFunctionBlendState? = null,
     )
 
     /** Draws indexed glyph quads for COLRv0 composite color glyphs. Same vertex/index/atlas structure as drawTextAtlasPass with a per-layer composite WGSL shader. */
@@ -567,7 +567,7 @@ interface GPUBackendRenderRecorder {
         vertexData: FloatArray,
         indexData: IntArray,
         draws: List<GPUBackendRawUniformDraw>,
-        blendMode: GPUBlendMode? = null,
+        blendMode: GPUFixedFunctionBlendState? = null,
     )
 }
 

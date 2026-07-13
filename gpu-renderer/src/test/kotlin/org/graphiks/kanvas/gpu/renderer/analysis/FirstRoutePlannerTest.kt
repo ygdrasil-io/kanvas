@@ -38,6 +38,8 @@ import org.graphiks.kanvas.gpu.renderer.filters.GPUFilterNodeID
 import org.graphiks.kanvas.gpu.renderer.filters.GPUFilterSourcePlan
 import org.graphiks.kanvas.gpu.renderer.filters.GPUSimpleFilterBounds
 import org.graphiks.kanvas.gpu.renderer.filters.GPUFilterCropPlan
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceAlphaClassification
 import org.graphiks.kanvas.gpu.renderer.filters.GPUFilterSamplingPlan
 import org.graphiks.kanvas.gpu.renderer.routing.GPURouteDecision
 
@@ -435,10 +437,6 @@ class FirstRoutePlannerTest {
                 target = target,
                 clip = GPUClipFacts.complexStack(bounds = firstRouteBounds),
             ),
-            "unsupported.blend.mode_unimplemented" to firstRRectRouteCommand(
-                target = target,
-                blend = GPUBlendFacts.unsupported(modeLabel = "multiply"),
-            ),
             "unsupported.target.format_blend_incompatible" to firstRRectRouteCommand(
                 target = target.copy(colorFormat = "bgra8unorm"),
             ),
@@ -489,10 +487,6 @@ class FirstRoutePlannerTest {
                 target = target,
                 clip = GPUClipFacts.complexStack(bounds = firstRouteBounds),
             ),
-            "unsupported.blend.mode_unimplemented" to firstRouteCommand(
-                target = target,
-                blend = GPUBlendFacts.unsupported(modeLabel = "multiply"),
-            ),
             "unsupported.layer.elision_proof_missing" to firstRouteCommand(
                 target = target,
                 layer = GPULayerFacts.saveLayer(target = target),
@@ -503,7 +497,10 @@ class FirstRoutePlannerTest {
             ),
             "unsupported.destination_read.required" to firstRouteCommand(
                 target = target,
-                blend = GPUBlendFacts.destinationReadRequired(),
+                blend = GPUBlendFacts(
+                    mode = GPUBlendMode.MULTIPLY,
+                    sourceAlpha = GPUSourceAlphaClassification.Translucent,
+                ),
             ),
             "unsupported.target.format_blend_incompatible" to firstRouteCommand(
                 target = target.copy(colorFormat = "bgra8unorm"),

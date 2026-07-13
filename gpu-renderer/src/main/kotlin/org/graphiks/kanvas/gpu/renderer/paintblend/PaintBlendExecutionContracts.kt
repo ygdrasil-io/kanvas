@@ -10,6 +10,9 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommand
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommandOperandBridge
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommandStream
 import org.graphiks.kanvas.gpu.renderer.passes.dumpLines
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendAllowlistGatePlan
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendDestinationReadRequirement
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlanKind
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPUPipelineKeyPreimage
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPUPipelineKeys
 import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandBinding
@@ -22,8 +25,6 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceProvider
 import org.graphiks.kanvas.gpu.renderer.resources.GPUTargetPreparationContext
 import org.graphiks.kanvas.gpu.renderer.resources.ValidatingPayloadResourceProvider
 import org.graphiks.kanvas.gpu.renderer.resources.dumpLines
-import org.graphiks.kanvas.gpu.renderer.state.GPUBlendAllowlistGatePlan
-import org.graphiks.kanvas.gpu.renderer.state.GPUBlendPlanKind
 
 /** Request for materializing the accepted paint dictionary plus blend-plan execution boundary. */
 data class GPUPaintBlendExecutionRequest(
@@ -183,7 +184,7 @@ object GPUPaintBlendExecutionKeys {
             capabilityFacts = listOf(
                 "blend=${blendGate.plan.mode}",
                 "dictionary=${GPUSolidMaterialDictionary.DictionaryVersion}",
-                "destinationRead=${blendGate.destinationReadStrategy.paintBlendLabel()}",
+                "destinationRead=${blendGate.destinationReadRequirement}",
                 "root=${materialAssembly.rootSet.rootSetId}",
                 "snippets=${materialAssembly.snippetGraph.joinToString(",") { node -> node.snippetId.value }}",
                 "uniformValuesInKey=false",
@@ -347,7 +348,7 @@ private fun GPUPaintBlendExecutionRequest.executionDiagnostics(
         if (blendGate.planKind != GPUBlendPlanKind.FixedFunctionBlend) {
             add(resourceDiagnostic("unsupported.paint_blend.shader_blend_unvalidated"))
         }
-        if (blendGate.plan.requiresDestinationRead) {
+        if (blendGate.destinationReadRequirement != GPUBlendDestinationReadRequirement.None) {
             add(resourceDiagnostic("unsupported.paint_blend.destination_read_required"))
         }
         if (targetStateHash != GPUPaintBlendExecutionKeys.targetStateHash(blendGate)) {
@@ -477,25 +478,10 @@ private fun GPUPaintBlendExecutionResult.destinationReadEvidenceLine(): String =
     "paint-blend:destination-read strategy=${destinationReadLabel ?: NONE_PAINT_BLEND_VALUE}"
 
 private fun GPUBlendAllowlistGatePlan.destinationReadLinkLabel(): String =
-    "${destinationReadStrategy.paintBlendLabel()};" +
-        "plan=${citedDestinationReadPlanRef ?: "missing"};" +
-        "planStrategy=${citedDestinationReadPlanStrategy?.paintBlendLabel() ?: NONE_PAINT_BLEND_VALUE};" +
+    "${destinationReadRequirement};" +
+        "plan=semantic;" +
+        "planStrategy=${destinationReadRequirement};" +
         "activeAttachmentSampled=$activeAttachmentSampled"
-
-private fun org.graphiks.kanvas.gpu.renderer.destination.GPUDestinationReadStrategy.paintBlendLabel(): String =
-    when (this) {
-        org.graphiks.kanvas.gpu.renderer.destination.GPUDestinationReadStrategy.None -> "None"
-        org.graphiks.kanvas.gpu.renderer.destination.GPUDestinationReadStrategy.FixedFunction ->
-            "FixedFunctionAttachmentBlend"
-        org.graphiks.kanvas.gpu.renderer.destination.GPUDestinationReadStrategy.CopyTarget ->
-            "TargetCopySnapshot"
-        org.graphiks.kanvas.gpu.renderer.destination.GPUDestinationReadStrategy.BindIntermediate ->
-            "SampleExistingIntermediate"
-        org.graphiks.kanvas.gpu.renderer.destination.GPUDestinationReadStrategy.IsolateLayer ->
-            "LayerCompositeIsolation"
-        org.graphiks.kanvas.gpu.renderer.destination.GPUDestinationReadStrategy.Refuse ->
-            "RefuseDiagnostic"
-    }
 
 private const val PAINT_BLEND_EXECUTION_ROW = "gpu-renderer.paint-blend.execution-boundary"
 private const val PAINT_BLEND_SOLID_PAYLOAD_PLAN_HASH =

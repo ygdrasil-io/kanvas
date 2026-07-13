@@ -34,12 +34,15 @@ class GPUBlendFormulaSurfaceTest {
 
     @org.junit.jupiter.api.Test
     fun everyDestinationReadModeHasAUniqueIndex() {
-        val modes = GPUBlendMode.entries.filter { it.requiresDestinationRead }
+        val modes = GPUBlendMode.entries.filter { mode ->
+            mode.canonicalBlendPlan().destinationReadRequirement ==
+                org.graphiks.kanvas.gpu.renderer.passes.GPUBlendDestinationReadRequirement.DestinationTextureRequired
+        }
         val indices = modes.map { destinationReadBlendModeIndex(it) }
 
-        assertEquals(15, modes.size)
+        assertEquals(14, modes.size)
         assertTrue(indices.all { it != null })
-        assertEquals(15, indices.filterNotNull().toSet().size)
+        assertEquals(14, indices.filterNotNull().toSet().size)
         assertEquals(0, destinationReadBlendModeIndex(GPUBlendMode.MULTIPLY))
         assertEquals(6, destinationReadBlendModeIndex(GPUBlendMode.EXCLUSION))
         assertEquals(7, destinationReadBlendModeIndex(GPUBlendMode.COLOR_DODGE))

@@ -58,7 +58,7 @@ class SceneIntermediatePlanAdapterTest {
         assertTrue(plan.steps.any { it is GPUIntermediatePlanStep.BindIntermediate }, plan.dumpLines().joinToString("\n"))
         assertTrue(
             plan.steps.any {
-                it is GPUIntermediatePlanStep.RenderToTarget && it.routeLabel == "shader-blend:Screen"
+                it is GPUIntermediatePlanStep.RenderToTarget && it.routeLabel == "shader-blend:Multiply"
             },
             plan.dumpLines().joinToString("\n"),
         )
@@ -84,7 +84,7 @@ class SceneIntermediatePlanAdapterTest {
                     rect = SceneRect(8f, 8f, 56f, 56f),
                     color = SceneColor.amber(0.6f),
                     paintOrder = 2,
-                    blendMode = SceneBlendMode.Screen,
+                    blendMode = SceneBlendMode.Multiply,
                 ),
             ),
             width = 64,
@@ -101,7 +101,7 @@ class SceneIntermediatePlanAdapterTest {
         assertTrue(plan.steps.any { it is GPUIntermediatePlanStep.CopyDestination }, plan.dumpLines().joinToString("\n"))
         assertTrue(
             plan.steps.any {
-                it is GPUIntermediatePlanStep.RenderToTarget && it.routeLabel == "shader-blend:Screen"
+                it is GPUIntermediatePlanStep.RenderToTarget && it.routeLabel == "shader-blend:Multiply"
             },
             plan.dumpLines().joinToString("\n"),
         )

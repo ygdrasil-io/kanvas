@@ -1,6 +1,14 @@
 package org.graphiks.kanvas.surface.gpu
 
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendDestinationReadRequirement
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlanner
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendSpecializationRequest
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCoverageConsumption
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
+import org.graphiks.kanvas.gpu.renderer.passes.GPUTargetBlendFacts
+import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendState
 import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.canvas.ClipStackOp
 import org.graphiks.kanvas.canvas.DisplayOp
@@ -18,7 +26,7 @@ import org.graphiks.kanvas.pipeline.BlurStyle
 import org.graphiks.kanvas.gpu.renderer.commands.GPUCommandSource
 import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBlendFacts
-import org.graphiks.kanvas.gpu.renderer.commands.GPUBlendKind
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceAlphaClassification
 import org.graphiks.kanvas.gpu.renderer.commands.GPULayerFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUOrderingFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUPathFacts
@@ -267,12 +275,49 @@ internal fun BlendMode.toGpuBlendFacts(): GPUBlendFacts {
         BlendMode.LUMINOSITY -> GPUBlendMode.LUMINOSITY
     }
     return GPUBlendFacts(
-        kind = GPUBlendKind.Custom,
-        modeLabel = mode.gpuLabel,
-        requiresDestinationRead = mode.requiresDestinationRead,
-        blendMode = mode,
+        mode = mode,
+        sourceAlpha = GPUSourceAlphaClassification.Translucent,
     )
 }
+
+internal fun GPUBlendFacts.canonicalBlendPlan(
+    coverage: GPUCoverageConsumption = GPUCoverageConsumption.FullOrScissor,
+    targetFormatClass: String = "rgba8unorm",
+    samplePlan: GPUSamplePlan = GPUSamplePlan.SingleSampleFrame,
+): GPUBlendPlan = mode.canonicalBlendPlan(coverage, sourceAlpha, targetFormatClass, samplePlan)
+
+internal fun GPUBlendMode.canonicalBlendPlan(
+    coverage: GPUCoverageConsumption = GPUCoverageConsumption.FullOrScissor,
+    sourceAlpha: GPUSourceAlphaClassification = GPUSourceAlphaClassification.Translucent,
+    targetFormatClass: String = "rgba8unorm",
+    samplePlan: GPUSamplePlan = GPUSamplePlan.SingleSampleFrame,
+): GPUBlendPlan = GPUBlendPlanner().plan(
+    GPUBlendSpecializationRequest(
+        mode = this,
+        coverage = coverage,
+        sourceAlpha = sourceAlpha,
+        target = GPUTargetBlendFacts(
+            formatClass = targetFormatClass,
+            clampsNormalizedColorWrites = "unorm" in targetFormatClass,
+            premultipliedAlpha = true,
+        ),
+        samplePlan = samplePlan,
+    ),
+)
+
+internal fun GPUBlendFacts.needsDestinationTexture(): Boolean =
+    canonicalBlendPlan().destinationReadRequirement ==
+        GPUBlendDestinationReadRequirement.DestinationTextureRequired
+
+internal fun GPUBlendFacts.canonicalFixedFunctionState(
+    coverage: GPUCoverageConsumption = GPUCoverageConsumption.FullOrScissor,
+): GPUFixedFunctionBlendState? =
+    (canonicalBlendPlan(coverage = coverage) as? GPUBlendPlan.FixedFunctionBlend)?.state
+
+internal fun GPUBlendMode.canonicalFixedFunctionState(
+    coverage: GPUCoverageConsumption = GPUCoverageConsumption.FullOrScissor,
+): GPUFixedFunctionBlendState? =
+    (canonicalBlendPlan(coverage = coverage) as? GPUBlendPlan.FixedFunctionBlend)?.state
 
 internal fun Matrix33.toGPUTransformFacts(): GPUTransformFacts {
     if (!isAffine()) return GPUTransformFacts.perspective()
@@ -495,9 +540,7 @@ internal fun DisplayOp.DrawImage.toImageRectCommand(
         ordering = GPUOrderingFacts(paintOrder = 0, dependsOnDestination = false, requiresBarrier = false),
         source = GPUCommandSource(adapter = "kanvas-surface", operation = "drawImage"),
         blend = (this.paint?.blendMode ?: BlendMode.SRC_OVER).toGpuBlendFacts(),
-        samplingFilterMode = when (val mat = material) {
-            is GPUMaterialDescriptor.ImageDraw -> mat.samplingFilterMode
-        },
+        samplingFilterMode = material.samplingFilterMode,
         pixelsWidth = image.width,
         pixelsHeight = image.height,
         pixelsFormat = "RGBA8Unorm",

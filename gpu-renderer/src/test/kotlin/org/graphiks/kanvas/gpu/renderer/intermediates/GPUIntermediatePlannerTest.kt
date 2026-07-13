@@ -4,7 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.destination.GPUDestinationReadBounds
-import org.graphiks.kanvas.gpu.renderer.state.GPUBlendMode
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 
 class GPUIntermediatePlannerTest {
     @Test
@@ -16,7 +16,7 @@ class GPUIntermediatePlannerTest {
                     targetLabel = "surface:main",
                     targetGeneration = 1,
                     bounds = bounds("cmd-1"),
-                    blendMode = GPUBlendMode.SrcOver,
+                    blendMode = GPUBlendMode.SRC_OVER,
                     materialKeyHash = "material:solid",
                     renderStepIdentity = "rect-fill",
                 ),
@@ -28,11 +28,11 @@ class GPUIntermediatePlannerTest {
             plan.steps.map { it::class.simpleName },
         )
         assertEquals(0L, plan.telemetry.destinationReadCopies)
-        assertTrue(plan.dumpLines().any { it.contains("route=fixed-function:SrcOver") })
+        assertTrue(plan.dumpLines().any { it.contains("route=fixed-function:src_over:one_isa") })
     }
 
     @Test
-    fun `screen blend creates destination copy before shader blend render`() {
+    fun `screen blend uses the canonical fixed function route without a destination copy`() {
         val plan = GPUIntermediatePlanner().plan(
             request(
                 GPUIntermediateDrawRequest(
@@ -40,7 +40,7 @@ class GPUIntermediatePlannerTest {
                     targetLabel = "surface:main",
                     targetGeneration = 9,
                     bounds = bounds("cmd-screen"),
-                    blendMode = GPUBlendMode.Screen,
+                    blendMode = GPUBlendMode.SCREEN,
                     materialKeyHash = "material:screen",
                     renderStepIdentity = "rect-fill",
                 ),
@@ -48,17 +48,12 @@ class GPUIntermediatePlannerTest {
         )
 
         assertEquals(
-            listOf(
-                "CreateIntermediate",
-                "CopyDestination",
-                "BindIntermediate",
-                "RenderToTarget",
-            ),
+            listOf("RenderToTarget"),
             plan.steps.map { it::class.simpleName },
         )
-        assertEquals(1L, plan.telemetry.destinationReadCopies)
-        assertEquals(1L, plan.telemetry.passSplits)
-        assertTrue(plan.dumpLines().any { it.contains("shader-blend:Screen") })
+        assertEquals(0L, plan.telemetry.destinationReadCopies)
+        assertEquals(0L, plan.telemetry.passSplits)
+        assertTrue(plan.dumpLines().any { it.contains("fixed-function:screen:one_isc") })
         assertTrue(plan.dumpLines().none { it.contains("unsupported.blend.shader_route_unvalidated") })
     }
 
@@ -71,7 +66,7 @@ class GPUIntermediatePlannerTest {
                     targetLabel = "surface:main",
                     targetGeneration = 2,
                     bounds = bounds("cmd-bad"),
-                    blendMode = GPUBlendMode.Multiply,
+                    blendMode = GPUBlendMode.MULTIPLY,
                     materialKeyHash = "material:multiply",
                     renderStepIdentity = "rect-fill",
                     activeAttachmentSampled = true,

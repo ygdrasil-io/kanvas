@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.gpu.renderer.destination
 
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendDestinationReadRequirement
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
@@ -97,7 +98,7 @@ class DestinationReadLiveMaterializationTest {
     fun `existing intermediate materialization validates and binds separate sampled texture`() {
         val gate = GPUDestinationReadStrategyPlanner().plan(
             destinationRequest(
-                requirement = GPUDestinationReadRequirement.ExistingIntermediate,
+                requirement = GPUBlendDestinationReadRequirement.DestinationTextureRequired,
                 strategy = GPUDestinationReadStrategy.BindIntermediate,
                 action = GPUDestinationReadAction.UseExistingIntermediate,
                 intermediateLabel = "intermediate:layer-card",
@@ -193,7 +194,7 @@ class DestinationReadLiveMaterializationTest {
     fun `existing intermediate materialization refuses stale mismatched or unsampleable intermediate`() {
         val gate = GPUDestinationReadStrategyPlanner().plan(
             destinationRequest(
-                requirement = GPUDestinationReadRequirement.ExistingIntermediate,
+                requirement = GPUBlendDestinationReadRequirement.DestinationTextureRequired,
                 strategy = GPUDestinationReadStrategy.BindIntermediate,
                 action = GPUDestinationReadAction.UseExistingIntermediate,
                 intermediateLabel = "intermediate:layer-card",
@@ -277,7 +278,7 @@ private fun destinationMaterializationRequest(
     )
 
 private fun destinationRequest(
-    requirement: GPUDestinationReadRequirement = GPUDestinationReadRequirement.TargetCopy,
+    requirement: GPUBlendDestinationReadRequirement = GPUBlendDestinationReadRequirement.DestinationTextureRequired,
     strategy: GPUDestinationReadStrategy = GPUDestinationReadStrategy.CopyTarget,
     action: GPUDestinationReadAction = GPUDestinationReadAction.SplitPassAndCopyTarget,
     intermediateLabel: String = "target:main",
