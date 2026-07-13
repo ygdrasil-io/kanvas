@@ -330,10 +330,13 @@ class GlyphScaler private constructor(
         val cpalTable = tables["CPAL"] ?: return null
         val bytes = fontBytes
         val off = cpalTable.offset
-        val numPaletteEntries = u16(bytes, off + 4)
-        val numPalettes = u16(bytes, off + 6)
+        if (off + 12 > bytes.size) return null
+        val numPaletteEntries = u16(bytes, off + 2)
+        val numPalettes = u16(bytes, off + 4)
+        val numColorRecords = u16(bytes, off + 6)
         if (numPalettes == 0 || numPaletteEntries == 0) return null
-        val colorRecordsOffset = u32(bytes, off + 12).toInt()
+        if (numPaletteEntries > numColorRecords) return null
+        val colorRecordsOffset = u32(bytes, off + 8).toInt()
         val colors = IntArray(numPaletteEntries)
         for (i in 0 until numPaletteEntries) {
             val entryOff = cpalTable.offset + colorRecordsOffset + i * 4

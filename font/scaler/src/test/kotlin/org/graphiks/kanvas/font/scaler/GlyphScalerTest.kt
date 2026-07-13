@@ -39,4 +39,23 @@ class GlyphScalerTest {
         assertTrue(result is GlyphScaleResult.Unsupported)
         assertEquals("font.scaler.glyph_id_out_of_range", (result as GlyphScaleResult.Unsupported).code)
     }
+
+    @Test
+    fun `scaler reads COLRv0 CPAL header offsets from Skia fixture`() {
+        val fontBytes = javaClass.getResourceAsStream("/fonts/skia/colr.ttf")!!.readBytes()
+        val scaler = GlyphScaler.fromBytes(fontBytes)
+
+        assertTrue(scaler.hasAnyColorTable)
+        val colorLayers = scaler.getGlyphRepresentation(glyphId = 2, fontSize = 96f)
+            as? GlyphRepresentation.ColorLayers
+        assertNotNull(colorLayers)
+        assertEquals(
+            listOf(
+                ColorLayerEntry(glyphId = 7, paletteColorArgb = 0xFFFF2A2A.toInt()),
+                ColorLayerEntry(glyphId = 8, paletteColorArgb = 0xFF000000.toInt()),
+            ),
+            colorLayers!!.layers,
+        )
+        assertEquals(0xFFFF2A2A.toInt(), scaler.resolveCpalColor(0))
+    }
 }
