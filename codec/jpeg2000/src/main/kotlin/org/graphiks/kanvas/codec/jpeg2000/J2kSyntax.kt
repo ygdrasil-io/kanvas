@@ -24,6 +24,12 @@ internal data class J2kTileGrid(
     val tileCount: Long get() = columns.toLong() * rows.toLong()
 }
 
+internal data class J2kGeometryModel(
+    val frame: Jpeg2000FrameInfo,
+    val components: List<J2kComponentSpec>,
+    val tileGrid: J2kTileGrid,
+)
+
 internal enum class J2kProgressionOrder {
     LRCP,
     RLCP,
@@ -62,6 +68,13 @@ internal data class J2kQuantizationStyle internal constructor(
     val exponents: IntArray get() = arrays.copyExponents()
     val mantissas: IntArray? get() = arrays.copyMantissas()
 }
+
+internal data class J2kMainHeader(
+    val geometry: J2kGeometryModel,
+    val coding: J2kCodingStyle,
+    val quantization: J2kQuantizationStyle,
+    val nextMarkerOffset: Int,
+)
 
 internal class J2kQuantizationArrays(
     exponents: IntArray,
