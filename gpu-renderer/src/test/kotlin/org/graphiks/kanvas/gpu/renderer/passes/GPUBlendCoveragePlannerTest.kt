@@ -33,6 +33,24 @@ class GPUBlendCoveragePlannerTest {
     }
 
     @Test
+    fun `canonical planner refuses active attachment sampling for fixed and destination-reading modes`() {
+        listOf(GPUBlendMode.SRC_OVER, GPUBlendMode.MULTIPLY).forEach { mode ->
+            val plan = planner.plan(
+                request(mode, GPUCoverageConsumption.FullOrScissor).copy(
+                    activeAttachmentSampled = true,
+                ),
+            )
+
+            assertEquals(
+                "unsupported.destination_read.active_attachment_sampled",
+                assertIs<GPUBlendPlan.UnsupportedBlend>(plan).diagnostic.code,
+                mode.gpuLabel,
+            )
+            assertEquals(GPUBlendDestinationReadRequirement.Refused, plan.destinationReadRequirement)
+        }
+    }
+
+    @Test
     fun `every canonical mode follows the exhaustive coverage alpha target and sample matrix`() {
         GPUBlendMode.entries.forEach { mode ->
             coverageCases.forEach { case ->

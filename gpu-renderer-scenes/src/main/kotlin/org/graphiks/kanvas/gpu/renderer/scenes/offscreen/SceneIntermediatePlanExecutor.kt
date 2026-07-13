@@ -352,6 +352,7 @@ internal class SceneIntermediatePlanExecutor(
                         scissorHeight = viewportHeight,
                     ),
                 ),
+                blendMode = SCENE_SRC_OVER_BLEND_STATE,
             )
         }
 

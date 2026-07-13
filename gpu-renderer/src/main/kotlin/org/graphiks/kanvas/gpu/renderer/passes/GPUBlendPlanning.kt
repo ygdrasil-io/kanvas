@@ -124,6 +124,8 @@ data class GPUBlendSpecializationRequest(
     val target: GPUTargetBlendFacts,
     val samplePlan: GPUSamplePlan,
     val layerOrderingToken: String? = null,
+    /** True when the draw would sample the same attachment it is actively writing. */
+    val activeAttachmentSampled: Boolean = false,
 )
 
 /** Pure, exhaustive 29-mode blend-and-coverage specializer. */
@@ -138,6 +140,9 @@ class GPUBlendPlanner {
     }
 
     private fun planChild(request: GPUBlendSpecializationRequest): GPUBlendPlan {
+        if (request.activeAttachmentSampled) {
+            return refused(request.mode, "unsupported.destination_read.active_attachment_sampled")
+        }
         if (request.target.formatClass !in acceptedBlendTargetFormats) {
             return refused(request.mode, "unsupported.target.format_blend_incompatible")
         }
@@ -328,11 +333,9 @@ class GPUBlendAllowlistPlanner(
                 premultipliedAlpha = request.alphaPlan.isAcceptedPremultiplied(),
             ),
             samplePlan = request.samplePlan,
+            activeAttachmentSampled = request.activeAttachmentSampled,
         )
-        var plan = planner.plan(canonicalRequest)
-        if (request.activeAttachmentSampled) {
-            plan = refused(request.mode, "unsupported.destination_read.active_attachment_sampled")
-        }
+        val plan = planner.plan(canonicalRequest)
 
         val planKind = plan.kind()
         val blendStateHash = plan.blendStateHash()

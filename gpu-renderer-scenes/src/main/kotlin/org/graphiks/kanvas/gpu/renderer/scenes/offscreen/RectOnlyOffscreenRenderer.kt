@@ -65,7 +65,16 @@ import org.graphiks.kanvas.gpu.renderer.geometry.PathTessellator
 import org.graphiks.kanvas.gpu.renderer.geometry.StencilCoverExecutor
 import org.graphiks.kanvas.gpu.renderer.geometry.ConvexFanExecutor
 import org.graphiks.kanvas.gpu.renderer.geometry.isPathConvex
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlanner
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendSpecializationRequest
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCoverageConsumption
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceAlphaClassification
+import org.graphiks.kanvas.gpu.renderer.passes.GPUTargetBlendFacts
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.textRunRouteUnavailableReason
+import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendState
 import org.graphiks.kanvas.font.atlas.AtlasRegion
 import org.graphiks.kanvas.font.atlas.GlyphAtlasPlacement
 import java.nio.ByteBuffer
@@ -73,6 +82,24 @@ import java.nio.ByteOrder
 
 private const val BYTES_PER_PIXEL: Int = 4
 internal const val OFFSCREEN_COLOR_FORMAT: String = "rgba8unorm"
+
+/** Canonical attachment state for ordinary premultiplied-alpha scene composition. */
+internal val SCENE_SRC_OVER_BLEND_STATE: GPUFixedFunctionBlendState =
+    requireNotNull(
+        GPUBlendPlanner().plan(
+            GPUBlendSpecializationRequest(
+                mode = GPUBlendMode.SRC_OVER,
+                coverage = GPUCoverageConsumption.FullOrScissor,
+                sourceAlpha = GPUSourceAlphaClassification.Translucent,
+                target = GPUTargetBlendFacts(
+                    formatClass = OFFSCREEN_COLOR_FORMAT,
+                    clampsNormalizedColorWrites = true,
+                    premultipliedAlpha = true,
+                ),
+                samplePlan = GPUSamplePlan.SingleSampleFrame,
+            ),
+        ) as? GPUBlendPlan.FixedFunctionBlend,
+    ).state
 
 private data class GradientWgslInfo(
     val snippet: String,
@@ -200,6 +227,7 @@ class RectOnlyOffscreenRenderer internal constructor(
                     wgsl = SOLID_RECT_WGSL,
                     colorFormat = OFFSCREEN_COLOR_FORMAT,
                     draws = solidDraws,
+                    blendMode = SCENE_SRC_OVER_BLEND_STATE,
                 )
             }
         }) {
@@ -262,6 +290,7 @@ class RectOnlyOffscreenRenderer internal constructor(
                             scissorHeight = fill.scissorHeight,
                         )
                     },
+                    blendMode = SCENE_SRC_OVER_BLEND_STATE,
                     passBatchKind = GPUBackendSimplePassBatchKind.SolidFill,
                 )
             }
@@ -289,6 +318,7 @@ class RectOnlyOffscreenRenderer internal constructor(
                 drawFullscreenRawUniformPass(
                     wgsl = BlurWgsl,
                     colorFormat = OFFSCREEN_COLOR_FORMAT,
+                    blendMode = SCENE_SRC_OVER_BLEND_STATE,
                     draws = blurFills.map { fill ->
                         val cx = (fill.left + fill.right) * 0.5f
                         val cy = (fill.top + fill.bottom) * 0.5f
@@ -310,6 +340,7 @@ class RectOnlyOffscreenRenderer internal constructor(
                 drawFullscreenRawUniformPass(
                     wgsl = ColorMatrixWgsl,
                     colorFormat = OFFSCREEN_COLOR_FORMAT,
+                    blendMode = SCENE_SRC_OVER_BLEND_STATE,
                     draws = cmFills.map { fill ->
                         val kind = fill.paintOrder.toInt()
                         val bytes = UniformPacker.colorMatrixBytes(fill.startColor, kind)
@@ -329,6 +360,7 @@ class RectOnlyOffscreenRenderer internal constructor(
                 drawFullscreenRawUniformPass(
                     wgsl = StrokeWgsl,
                     colorFormat = OFFSCREEN_COLOR_FORMAT,
+                    blendMode = SCENE_SRC_OVER_BLEND_STATE,
                     draws = strokeFills.map { fill ->
                         val cx = (fill.left + fill.right) * 0.5f
                         val cy = (fill.top + fill.bottom) * 0.5f
@@ -354,6 +386,7 @@ class RectOnlyOffscreenRenderer internal constructor(
                 drawFullscreenTextureUniformPass(
                     wgsl = wgsl,
                     colorFormat = OFFSCREEN_COLOR_FORMAT,
+                    blendMode = SCENE_SRC_OVER_BLEND_STATE,
                     textureRgba = decoded?.rgba ?: ByteArray(4),
                     textureWidth = decoded?.width ?: 1,
                     textureHeight = decoded?.height ?: 1,
@@ -380,6 +413,7 @@ class RectOnlyOffscreenRenderer internal constructor(
                 drawFullscreenRawUniformPass(
                     wgsl = wgsl,
                     colorFormat = OFFSCREEN_COLOR_FORMAT,
+                    blendMode = SCENE_SRC_OVER_BLEND_STATE,
                     draws = reFills.map { fill ->
                         val bytes = UniformPacker.simpleRtBytes(fill.startColor)
                         GPUBackendRawUniformDraw(
@@ -400,6 +434,7 @@ class RectOnlyOffscreenRenderer internal constructor(
                     drawFullscreenRawUniformPass(
                         wgsl = composeCustomRuntimeEffectWgsl(wgsl),
                         colorFormat = OFFSCREEN_COLOR_FORMAT,
+                        blendMode = SCENE_SRC_OVER_BLEND_STATE,
                         draws = fills.map { fill ->
                             val bytes = UniformPacker.simpleRtBytes(fill.startColor)
                             GPUBackendRawUniformDraw(
@@ -422,6 +457,7 @@ class RectOnlyOffscreenRenderer internal constructor(
                 drawFullscreenTextureUniformPass(
                     wgsl = wgsl,
                     colorFormat = OFFSCREEN_COLOR_FORMAT,
+                    blendMode = SCENE_SRC_OVER_BLEND_STATE,
                     textureRgba = atlas?.a8Bytes ?: ByteArray(1),
                     textureWidth = atlas?.width ?: 1,
                     textureHeight = atlas?.height ?: 1,
@@ -508,6 +544,7 @@ class RectOnlyOffscreenRenderer internal constructor(
                         atlasFormat = "r8unorm",
                         vertexData = vertexData,
                         indexData = indexData,
+                        blendMode = SCENE_SRC_OVER_BLEND_STATE,
                         draws = listOf(
                             GPUBackendRawUniformDraw(
                                 uniformBytes = uniformBytes,
@@ -545,6 +582,7 @@ class RectOnlyOffscreenRenderer internal constructor(
                 drawFullscreenRawUniformPass(
                     wgsl = wgsl,
                     colorFormat = OFFSCREEN_COLOR_FORMAT,
+                    blendMode = SCENE_SRC_OVER_BLEND_STATE,
                     passBatchKind = if (family == "linear-gradient-rect") {
                         GPUBackendSimplePassBatchKind.SimpleGradient
                     } else {
@@ -626,6 +664,7 @@ class RectOnlyOffscreenRenderer internal constructor(
                                 scissorHeight = fill.scissorHeight,
                             ),
                         ),
+                        blendMode = SCENE_SRC_OVER_BLEND_STATE,
                     )
                 }
             }
@@ -659,6 +698,7 @@ class RectOnlyOffscreenRenderer internal constructor(
                     drawFullscreenStencilPass(
                         wgsl = gradientWgsl,
                         colorFormat = OFFSCREEN_COLOR_FORMAT,
+                        blendMode = SCENE_SRC_OVER_BLEND_STATE,
                         stencilMode = GPUBackendStencilMode.Test,
                         triangleData = null,
                         draws = listOf(
@@ -695,6 +735,7 @@ class RectOnlyOffscreenRenderer internal constructor(
                     drawVertexColorIndexed(
                         vertexBufferLabel = bufferLabel,
                         indexCount = flatIndices.size,
+                        blendMode = SCENE_SRC_OVER_BLEND_STATE,
                         uniformDraw = GPUBackendRawUniformDraw(
                             // VERTEX_COLOR_WGSL multiplies per-vertex color by the uniform
                             // (`in.color * uniforms.color`). The fill color is already carried
@@ -727,6 +768,7 @@ class RectOnlyOffscreenRenderer internal constructor(
                     drawVertexColorIndexed(
                         vertexBufferLabel = bufferLabel,
                         indexCount = indices.size,
+                        blendMode = SCENE_SRC_OVER_BLEND_STATE,
                         uniformDraw = GPUBackendRawUniformDraw(
                             uniformBytes = UniformPacker.bitmapTextureBytes(
                                 fill.startColor, fill.left, fill.top, rectWidth, rectHeight,
@@ -785,6 +827,7 @@ class RectOnlyOffscreenRenderer internal constructor(
                             scissorHeight = fill.scissorHeight,
                         )
                     },
+                    blendMode = SCENE_SRC_OVER_BLEND_STATE,
                     passBatchKind = GPUBackendSimplePassBatchKind.SolidFill,
                 )
             }

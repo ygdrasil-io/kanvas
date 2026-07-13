@@ -1,7 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.scenes.offscreen
 
-import org.graphiks.kanvas.gpu.renderer.destination.GPUDestinationReadAction
 import org.graphiks.kanvas.gpu.renderer.destination.GPUDestinationReadBounds
+import org.graphiks.kanvas.gpu.renderer.destination.GPUDestinationReadEligibleIntermediate
 import org.graphiks.kanvas.gpu.renderer.destination.GPUDestinationReadStrategy
 import org.graphiks.kanvas.gpu.renderer.destination.GPUDestinationReadStrategyGatePlan
 import org.graphiks.kanvas.gpu.renderer.destination.GPUDestinationReadStrategyPlanner
@@ -16,7 +16,6 @@ import org.graphiks.kanvas.gpu.renderer.intermediates.GPUIntermediateTelemetry
 import org.graphiks.kanvas.gpu.renderer.intermediates.GPUIntermediateTextureDescriptor
 import org.graphiks.kanvas.gpu.renderer.layers.GPULayerSaveRecord
 import org.graphiks.kanvas.gpu.renderer.layers.GPULayerScopeID
-import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendDestinationReadRequirement
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneBlendMode
 
@@ -102,6 +101,7 @@ internal class SceneIntermediatePlanAdapter(
     ): GPUIntermediatePlan {
         var telemetry = intermediate.telemetry
         val drawsByCommand = request.drawRequests.associateBy(GPUIntermediateDrawRequest::commandId)
+        val eligibilityByCommand = intermediate.destinationReadEligibilities.associateBy { it.commandId }
         val steps = intermediate.steps.flatMap { step ->
             if (step !is GPUIntermediatePlanStep.RenderToTarget ||
                 !step.routeLabel.startsWith("destination-read-required:")
@@ -110,18 +110,32 @@ internal class SceneIntermediatePlanAdapter(
             }
 
             val draw = requireNotNull(drawsByCommand[step.commandId])
+            val eligibility = eligibilityByCommand[step.commandId]
+                ?: return GPUIntermediatePlan(
+                    planId = intermediate.planId,
+                    targetId = intermediate.targetId,
+                    steps = listOf(
+                        GPUIntermediatePlanStep.Refuse(
+                            draw.commandId,
+                            "unsupported.destination_read.eligibility_missing",
+                        ),
+                    ),
+                    telemetry = telemetry.copy(intermediatesRefused = telemetry.intermediatesRefused + 1),
+                )
             val strategy = planDestinationRead(
                 GPUDestinationReadStrategyRequest(
                     commandId = draw.commandId,
-                    requirement = GPUBlendDestinationReadRequirement.DestinationTextureRequired,
-                    strategy = GPUDestinationReadStrategy.CopyTarget,
-                    action = GPUDestinationReadAction.SplitPassAndCopyTarget,
+                    requirement = eligibility.requirement,
                     bounds = draw.bounds as GPUDestinationReadBounds,
                     sourceTargetLabel = draw.targetLabel,
                     sourceUsageLabels = request.targetUsageLabels,
                     copyUsageLabels = setOf("render_attachment", "copy_dst", "texture_binding"),
                     targetFormatClass = request.targetFormatClass,
                     targetGeneration = draw.targetGeneration,
+                    eligibleIntermediate = eligibility.eligibleIntermediate?.let(
+                        ::GPUDestinationReadEligibleIntermediate,
+                    ),
+                    targetCopyAvailable = "copy_src" in request.targetUsageLabels,
                 ),
             )
             val refusal = strategy.diagnostics.singleOrNull { it.terminal }
@@ -133,50 +147,87 @@ internal class SceneIntermediatePlanAdapter(
                     telemetry = telemetry.copy(intermediatesRefused = telemetry.intermediatesRefused + 1),
                 )
             }
-            val copy = requireNotNull(strategy.copyDescriptor)
-            val descriptor = GPUIntermediateTextureDescriptor(
-                label = copy.label,
-                purpose = GPUIntermediatePurpose.DestinationCopy,
-                descriptorHash = copy.descriptorHash,
-                sourceTargetLabel = copy.sourceTargetLabel,
-                boundsLabel = strategy.plan.bounds.copyBoundsLabel,
-                width = copy.width,
-                height = copy.height,
-                formatClass = copy.formatClass,
-                usageLabels = copy.usageLabels,
-                sampleCount = copy.sampleCount,
-                generation = copy.targetGeneration,
-                lifetimeClass = copy.lifetimeClass,
-                ownerScope = copy.ownerLabel,
-                byteEstimate = copy.byteEstimate,
-            )
-            val binding = requireNotNull(strategy.plan.binding)
-            val copyPlan = requireNotNull(strategy.copyPlan)
-            telemetry = telemetry.copy(
-                destinationReadCopies = telemetry.destinationReadCopies + 1,
-                destinationReadIntermediateBinds = telemetry.destinationReadIntermediateBinds + 1,
-                copiedBytes = telemetry.copiedBytes + descriptor.byteEstimate,
-                passSplits = telemetry.passSplits + 1,
-                intermediatesCreated = telemetry.intermediatesCreated + 1,
-                liveIntermediateBytes = telemetry.liveIntermediateBytes + descriptor.byteEstimate,
-            )
-            listOf(
-                GPUIntermediatePlanStep.CreateIntermediate(descriptor),
-                GPUIntermediatePlanStep.CopyDestination(
-                    sourceLabel = draw.targetLabel,
-                    destination = descriptor,
-                    boundsLabel = strategy.plan.bounds.copyBoundsLabel,
-                    tokenLabel = copyPlan.token.value,
-                    passSplitRequired = copyPlan.passSplitRequired,
-                    copyBeforeSample = copyPlan.copyBeforeSample,
-                ),
-                GPUIntermediatePlanStep.BindIntermediate(
-                    descriptor = descriptor,
-                    bindingLabel = binding.bindingLabel,
-                    layoutHash = binding.layoutHash,
-                ),
-                step.copy(routeLabel = "shader-blend:${draw.blendMode.sceneLabel()}"),
-            )
+            when (strategy.plan.strategy) {
+                GPUDestinationReadStrategy.BindIntermediate -> {
+                    val descriptor = requireNotNull(eligibility.eligibleIntermediate)
+                    val binding = requireNotNull(strategy.plan.binding)
+                    telemetry = telemetry.copy(
+                        destinationReadIntermediateBinds = telemetry.destinationReadIntermediateBinds + 1,
+                        intermediatesReused = telemetry.intermediatesReused + 1,
+                        liveIntermediateBytes = telemetry.liveIntermediateBytes + descriptor.byteEstimate,
+                    )
+                    listOf(
+                        GPUIntermediatePlanStep.ReuseIntermediate(descriptor),
+                        GPUIntermediatePlanStep.BindIntermediate(
+                            descriptor = descriptor,
+                            bindingLabel = binding.bindingLabel,
+                            layoutHash = binding.layoutHash,
+                        ),
+                        step.copy(routeLabel = "shader-blend:${draw.blendMode.sceneLabel()}"),
+                    )
+                }
+                GPUDestinationReadStrategy.CopyTarget -> {
+                    val copy = requireNotNull(strategy.copyDescriptor)
+                    val descriptor = GPUIntermediateTextureDescriptor(
+                        label = copy.label,
+                        purpose = GPUIntermediatePurpose.DestinationCopy,
+                        descriptorHash = copy.descriptorHash,
+                        sourceTargetLabel = copy.sourceTargetLabel,
+                        boundsLabel = strategy.plan.bounds.copyBoundsLabel,
+                        width = copy.width,
+                        height = copy.height,
+                        formatClass = copy.formatClass,
+                        usageLabels = copy.usageLabels,
+                        sampleCount = copy.sampleCount,
+                        generation = copy.targetGeneration,
+                        lifetimeClass = copy.lifetimeClass,
+                        ownerScope = copy.ownerLabel,
+                        byteEstimate = copy.byteEstimate,
+                    )
+                    val binding = requireNotNull(strategy.plan.binding)
+                    val copyPlan = requireNotNull(strategy.copyPlan)
+                    telemetry = telemetry.copy(
+                        destinationReadCopies = telemetry.destinationReadCopies + 1,
+                        destinationReadIntermediateBinds = telemetry.destinationReadIntermediateBinds + 1,
+                        copiedBytes = telemetry.copiedBytes + descriptor.byteEstimate,
+                        passSplits = telemetry.passSplits + 1,
+                        intermediatesCreated = telemetry.intermediatesCreated + 1,
+                        liveIntermediateBytes = telemetry.liveIntermediateBytes + descriptor.byteEstimate,
+                    )
+                    listOf(
+                        GPUIntermediatePlanStep.CreateIntermediate(descriptor),
+                        GPUIntermediatePlanStep.CopyDestination(
+                            sourceLabel = draw.targetLabel,
+                            destination = descriptor,
+                            boundsLabel = strategy.plan.bounds.copyBoundsLabel,
+                            tokenLabel = copyPlan.token.value,
+                            passSplitRequired = copyPlan.passSplitRequired,
+                            copyBeforeSample = copyPlan.copyBeforeSample,
+                        ),
+                        GPUIntermediatePlanStep.BindIntermediate(
+                            descriptor = descriptor,
+                            bindingLabel = binding.bindingLabel,
+                            layoutHash = binding.layoutHash,
+                        ),
+                        step.copy(routeLabel = "shader-blend:${draw.blendMode.sceneLabel()}"),
+                    )
+                }
+                GPUDestinationReadStrategy.None,
+                GPUDestinationReadStrategy.FixedFunction,
+                GPUDestinationReadStrategy.IsolateLayer,
+                GPUDestinationReadStrategy.Refuse,
+                -> return GPUIntermediatePlan(
+                    planId = intermediate.planId,
+                    targetId = intermediate.targetId,
+                    steps = listOf(
+                        GPUIntermediatePlanStep.Refuse(
+                            draw.commandId,
+                            "unsupported.destination_read.selected_strategy_unmaterialized",
+                        ),
+                    ),
+                    telemetry = telemetry.copy(intermediatesRefused = telemetry.intermediatesRefused + 1),
+                )
+            }
         }
         return intermediate.copy(steps = steps, telemetry = telemetry)
     }

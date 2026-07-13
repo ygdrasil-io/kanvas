@@ -5,7 +5,12 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.intermediates.GPUIntermediatePlanStep
+import org.graphiks.kanvas.gpu.renderer.intermediates.GPUIntermediateDestinationReadEligibility
+import org.graphiks.kanvas.gpu.renderer.intermediates.GPUIntermediatePlan
+import org.graphiks.kanvas.gpu.renderer.intermediates.GPUIntermediatePurpose
+import org.graphiks.kanvas.gpu.renderer.intermediates.GPUIntermediateTextureDescriptor
 import org.graphiks.kanvas.gpu.renderer.intermediates.dumpLines
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendDestinationReadRequirement
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererSceneRegistry
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneBlendMode
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneColor
@@ -108,6 +113,49 @@ class SceneIntermediatePlanAdapterTest {
     }
 
     @Test
+    fun `validated existing intermediate is reused only after destination selection and bind`() {
+        val drawPlan = multiplyDrawPlan("existing-intermediate-selection")
+        val eligible = exactSceneIntermediate("existing-intermediate-selection")
+        val intermediate = destinationReadFactPlan(
+            sceneId = "existing-intermediate-selection",
+            eligible = eligible,
+        )
+        val plan = SceneIntermediatePlanAdapter(planIntermediate = { intermediate }).plan(
+            sceneId = "existing-intermediate-selection",
+            drawPlan = drawPlan,
+            width = 64,
+            height = 64,
+        )
+
+        assertEquals(
+            listOf("ReuseIntermediate", "BindIntermediate", "RenderToTarget"),
+            plan.steps.map { it::class.simpleName },
+            plan.dumpLines().joinToString("\n"),
+        )
+        assertEquals(1L, plan.telemetry.intermediatesReused)
+        assertEquals(1L, plan.telemetry.destinationReadIntermediateBinds)
+        assertEquals(0L, plan.telemetry.destinationReadCopies)
+    }
+
+    @Test
+    fun `mismatched existing intermediate falls back to selected copy without reuse`() {
+        val sceneId = "invalid-intermediate-selection"
+        val drawPlan = multiplyDrawPlan(sceneId)
+        val invalid = exactSceneIntermediate(sceneId).copy(generation = 2)
+        val intermediate = destinationReadFactPlan(sceneId, invalid)
+        val plan = SceneIntermediatePlanAdapter(planIntermediate = { intermediate }).plan(
+            sceneId = sceneId,
+            drawPlan = drawPlan,
+            width = 64,
+            height = 64,
+        )
+
+        assertTrue(plan.steps.none { it is GPUIntermediatePlanStep.ReuseIntermediate })
+        assertTrue(plan.steps.any { it is GPUIntermediatePlanStep.CopyDestination })
+        assertTrue(plan.steps.any { it is GPUIntermediatePlanStep.BindIntermediate })
+    }
+
+    @Test
     fun `saveLayer with unsupported child family refuses before preparation`() {
         val drawPlan = prepareRectOnlyDrawPlan(
             sceneId = "unsupported-layer-child",
@@ -145,4 +193,62 @@ class SceneIntermediatePlanAdapterTest {
         assertEquals("layer:layer-a", refusal.scopeLabel)
         assertEquals("unsupported.layer.child_family.linear-gradient-rect", refusal.reasonCode)
     }
+
+    private fun multiplyDrawPlan(sceneId: String): RectOnlyDrawPlan =
+        prepareRectOnlyDrawPlan(
+            sceneId = sceneId,
+            commands = listOf(
+                SceneCommand.Clear(SceneColor(0f, 0f, 0f, 1f)),
+                SceneCommand.FillRect(
+                    label = "foreground",
+                    rect = SceneRect(0f, 0f, 64f, 64f),
+                    color = SceneColor.amber(0.6f),
+                    paintOrder = 1,
+                    blendMode = SceneBlendMode.Multiply,
+                ),
+            ),
+            width = 64,
+            height = 64,
+        )
+
+    private fun destinationReadFactPlan(
+        sceneId: String,
+        eligible: GPUIntermediateTextureDescriptor,
+    ): GPUIntermediatePlan = GPUIntermediatePlan(
+        planId = "scene-intermediate:$sceneId",
+        targetId = "target:$sceneId",
+        steps = listOf(
+            GPUIntermediatePlanStep.RenderToTarget(
+                commandId = "foreground",
+                targetLabel = "surface:$sceneId",
+                routeLabel = "destination-read-required:multiply:multiply@v1",
+                orderingToken = "order:foreground",
+            ),
+        ),
+        destinationReadEligibilities = listOf(
+            GPUIntermediateDestinationReadEligibility(
+                commandId = "foreground",
+                requirement = GPUBlendDestinationReadRequirement.DestinationTextureRequired,
+                eligibleIntermediate = eligible,
+            ),
+        ),
+    )
+
+    private fun exactSceneIntermediate(sceneId: String): GPUIntermediateTextureDescriptor =
+        GPUIntermediateTextureDescriptor(
+            label = "intermediate:foreground",
+            purpose = GPUIntermediatePurpose.ExistingIntermediate,
+            descriptorHash = "descriptor:foreground",
+            sourceTargetLabel = "surface:$sceneId",
+            boundsLabel = "copy:foreground",
+            width = 64,
+            height = 64,
+            formatClass = OFFSCREEN_COLOR_FORMAT,
+            usageLabels = listOf("texture_binding"),
+            sampleCount = 1,
+            generation = 1,
+            lifetimeClass = "layer-local",
+            ownerScope = "layer:foreground",
+            byteEstimate = 64L * 64L * 4L,
+        )
 }

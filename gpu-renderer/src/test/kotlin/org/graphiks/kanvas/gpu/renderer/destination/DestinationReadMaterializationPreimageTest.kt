@@ -6,6 +6,8 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedResourceRole
 import org.graphiks.kanvas.gpu.renderer.resources.dumpLines
+import org.graphiks.kanvas.gpu.renderer.intermediates.GPUIntermediatePurpose
+import org.graphiks.kanvas.gpu.renderer.intermediates.GPUIntermediateTextureDescriptor
 
 class DestinationReadMaterializationPreimageTest {
     @Test
@@ -34,9 +36,7 @@ class DestinationReadMaterializationPreimageTest {
         val gate = GPUDestinationReadStrategyPlanner().plan(
             destinationPreimageRequest(
                 requirement = GPUBlendDestinationReadRequirement.DestinationTextureRequired,
-                strategy = GPUDestinationReadStrategy.BindIntermediate,
-                action = GPUDestinationReadAction.UseExistingIntermediate,
-                intermediateLabel = "intermediate:layer-card",
+                eligibleIntermediate = destinationEligibleIntermediate(),
             ),
         )
 
@@ -75,15 +75,11 @@ class DestinationReadMaterializationPreimageTest {
 
 private fun destinationPreimageRequest(
     requirement: GPUBlendDestinationReadRequirement = GPUBlendDestinationReadRequirement.DestinationTextureRequired,
-    strategy: GPUDestinationReadStrategy = GPUDestinationReadStrategy.CopyTarget,
-    action: GPUDestinationReadAction = GPUDestinationReadAction.SplitPassAndCopyTarget,
     activeAttachmentSampled: Boolean = false,
-    intermediateLabel: String = "target:main",
+    eligibleIntermediate: GPUDestinationReadEligibleIntermediate? = null,
 ): GPUDestinationReadStrategyRequest = GPUDestinationReadStrategyRequest(
     commandId = "blend:screen",
     requirement = requirement,
-    strategy = strategy,
-    action = action,
     bounds = GPUDestinationReadBounds(
         boundsLabel = "shape-local",
         conservative = true,
@@ -105,5 +101,25 @@ private fun destinationPreimageRequest(
     targetFormatClass = "rgba8unorm",
     targetGeneration = 42,
     activeAttachmentSampled = activeAttachmentSampled,
-    intermediateLabel = intermediateLabel,
+    eligibleIntermediate = eligibleIntermediate,
 )
+
+private fun destinationEligibleIntermediate(): GPUDestinationReadEligibleIntermediate =
+    GPUDestinationReadEligibleIntermediate(
+        descriptor = GPUIntermediateTextureDescriptor(
+            label = "intermediate:layer-card",
+            purpose = GPUIntermediatePurpose.ExistingIntermediate,
+            descriptorHash = "descriptor:layer-card",
+            sourceTargetLabel = "target:main",
+            boundsLabel = "4,8,64,32",
+            width = 64,
+            height = 32,
+            formatClass = "rgba8unorm",
+            usageLabels = listOf("texture_binding"),
+            sampleCount = 1,
+            generation = 42,
+            lifetimeClass = "layer-local",
+            ownerScope = "layer:card",
+            byteEstimate = 8192,
+        ),
+    )

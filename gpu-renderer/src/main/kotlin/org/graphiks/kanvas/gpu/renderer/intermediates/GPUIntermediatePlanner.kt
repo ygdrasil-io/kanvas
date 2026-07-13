@@ -86,11 +86,9 @@ class GPUIntermediatePlanner(
         if (msaaRefusal != null) return request.refused(request.targetId, msaaRefusal)
 
         val steps = mutableListOf<GPUIntermediatePlanStep>()
+        val destinationReadEligibilities = mutableListOf<GPUIntermediateDestinationReadEligibility>()
         var telemetry = GPUIntermediateTelemetry()
         for (draw in request.drawRequests) {
-            if (draw.activeAttachmentSampled) {
-                return request.refused(draw.commandId, "unsupported.destination_read.active_attachment_sampled")
-            }
             val saveLayer = draw.saveLayer
             if (saveLayer != null) {
                 val layerSteps = planSaveLayer(request, draw, saveLayer)
@@ -121,32 +119,36 @@ class GPUIntermediatePlanner(
                     } else {
                         GPUSamplePlan.MultisampleFrame(request.requestedSampleCount)
                     },
+                    activeAttachmentSampled = draw.activeAttachmentSampled,
                 ),
             )
             if (blend is GPUBlendPlan.UnsupportedBlend) {
                 return request.refused(draw.commandId, blend.diagnostic.code)
             }
 
-            val eligible = draw.eligibleIntermediate
             if (blend.destinationReadRequirement ==
-                org.graphiks.kanvas.gpu.renderer.passes.GPUBlendDestinationReadRequirement.DestinationTextureRequired &&
-                eligible != null
+                org.graphiks.kanvas.gpu.renderer.passes.GPUBlendDestinationReadRequirement.DestinationTextureRequired
             ) {
-                steps += GPUIntermediatePlanStep.ReuseIntermediate(eligible)
-                telemetry = telemetry.copy(
-                    intermediatesReused = telemetry.intermediatesReused + 1,
-                    destinationReadIntermediateBinds = telemetry.destinationReadIntermediateBinds + 1,
-                    liveIntermediateBytes = telemetry.liveIntermediateBytes + eligible.byteEstimate,
+                destinationReadEligibilities += GPUIntermediateDestinationReadEligibility(
+                    commandId = draw.commandId,
+                    requirement = blend.destinationReadRequirement,
+                    eligibleIntermediate = draw.eligibleIntermediate,
                 )
             }
             steps += GPUIntermediatePlanStep.RenderToTarget(
                 commandId = draw.commandId,
                 targetLabel = draw.targetLabel,
-                routeLabel = blend.routeLabel(eligible != null),
+                routeLabel = blend.routeLabel(),
                 orderingToken = "order:${draw.commandId}",
             )
         }
-        return GPUIntermediatePlan(request.planId, request.targetId, steps, telemetry = telemetry)
+        return GPUIntermediatePlan(
+            planId = request.planId,
+            targetId = request.targetId,
+            steps = steps,
+            telemetry = telemetry,
+            destinationReadEligibilities = destinationReadEligibilities,
+        )
     }
 
     private fun planSaveLayer(
@@ -224,12 +226,12 @@ private fun GPUIntermediatePlannerRequest.msaaRefusal(): String? {
     }
 }
 
-private fun GPUBlendPlan.routeLabel(hasEligibleIntermediate: Boolean): String = when (this) {
+private fun GPUBlendPlan.routeLabel(): String = when (this) {
     is GPUBlendPlan.FixedFunctionBlend -> "fixed-function:${mode.gpuLabel}:${state.stateId}"
     is GPUBlendPlan.ShaderBlendNoDstRead -> "shader:${mode.gpuLabel}:$formulaId"
     is GPUBlendPlan.ShaderBlendWithDstRead ->
-        "destination-read-${if (hasEligibleIntermediate) "eligible" else "required"}:${mode.gpuLabel}:$formulaId"
-    is GPUBlendPlan.LayerCompositeBlend -> "layer:${child.routeLabel(hasEligibleIntermediate)}"
+        "destination-read-required:${mode.gpuLabel}:$formulaId"
+    is GPUBlendPlan.LayerCompositeBlend -> "layer:${child.routeLabel()}"
     is GPUBlendPlan.NoOp -> "no-op:${mode.gpuLabel}"
     is GPUBlendPlan.UnsupportedBlend -> "refused:${diagnostic.code}"
 }

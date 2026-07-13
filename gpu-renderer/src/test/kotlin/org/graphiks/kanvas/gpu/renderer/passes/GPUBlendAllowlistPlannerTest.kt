@@ -35,6 +35,36 @@ class GPUBlendAllowlistPlannerTest {
         assertNotEquals(full.pipelineKeyHash, scalar.pipelineKeyHash)
     }
 
+    @Test
+    fun `adapter is equivalent to canonical planner for fixed and destination-reading facts`() {
+        val canonicalPlanner = GPUBlendPlanner()
+        listOf(GPUBlendMode.SRC_OVER, GPUBlendMode.MULTIPLY).forEach { mode ->
+            listOf(false, true).forEach { activeAttachmentSampled ->
+                val adapterRequest = request(mode).copy(
+                    activeAttachmentSampled = activeAttachmentSampled,
+                )
+                val canonicalRequest = GPUBlendSpecializationRequest(
+                    mode = mode,
+                    coverage = adapterRequest.coverage,
+                    sourceAlpha = adapterRequest.sourceAlpha,
+                    target = GPUTargetBlendFacts(
+                        formatClass = adapterRequest.targetFormatClass,
+                        clampsNormalizedColorWrites = true,
+                        premultipliedAlpha = true,
+                    ),
+                    samplePlan = adapterRequest.samplePlan,
+                    activeAttachmentSampled = activeAttachmentSampled,
+                )
+
+                val direct = canonicalPlanner.plan(canonicalRequest)
+                val adapted = planner.plan(adapterRequest)
+
+                assertEquals(direct, adapted.plan, "$mode activeAttachmentSampled=$activeAttachmentSampled")
+                assertEquals(direct.destinationReadRequirement, adapted.destinationReadRequirement)
+            }
+        }
+    }
+
     private fun request(mode: GPUBlendMode) = GPUBlendAllowlistRequest(
         commandId = "draw:1",
         mode = mode,

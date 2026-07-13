@@ -5,6 +5,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.destination.GPUDestinationReadBounds
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendDestinationReadRequirement
 
 class GPUIntermediatePlannerTest {
     @Test
@@ -79,6 +80,55 @@ class GPUIntermediatePlannerTest {
             "intermediate.refused scope=cmd-bad reason=unsupported.destination_read.active_attachment_sampled",
             plan.dumpLines()[1],
         )
+    }
+
+    @Test
+    fun `destination read emits eligibility facts without selecting reuse or bind strategy`() {
+        val eligible = GPUIntermediateTextureDescriptor(
+            label = "intermediate:exact",
+            purpose = GPUIntermediatePurpose.ExistingIntermediate,
+            descriptorHash = "descriptor:exact",
+            sourceTargetLabel = "surface:main",
+            boundsLabel = "copy:cmd-multiply",
+            width = 32,
+            height = 16,
+            formatClass = "rgba8unorm",
+            usageLabels = listOf("texture_binding"),
+            sampleCount = 1,
+            generation = 1,
+            lifetimeClass = "layer-local",
+            ownerScope = "layer:exact",
+            byteEstimate = 2048,
+        )
+        val plan = GPUIntermediatePlanner().plan(
+            request(
+                GPUIntermediateDrawRequest(
+                    commandId = "cmd-multiply",
+                    targetLabel = "surface:main",
+                    targetGeneration = 1,
+                    bounds = bounds("cmd-multiply"),
+                    blendMode = GPUBlendMode.MULTIPLY,
+                    materialKeyHash = "material:multiply",
+                    renderStepIdentity = "rect-fill",
+                    eligibleIntermediate = eligible,
+                ),
+            ),
+        )
+
+        assertEquals(listOf("RenderToTarget"), plan.steps.map { it::class.simpleName })
+        assertEquals(0L, plan.telemetry.intermediatesReused)
+        assertEquals(0L, plan.telemetry.destinationReadIntermediateBinds)
+        assertEquals(
+            listOf(
+                GPUIntermediateDestinationReadEligibility(
+                    commandId = "cmd-multiply",
+                    requirement = GPUBlendDestinationReadRequirement.DestinationTextureRequired,
+                    eligibleIntermediate = eligible,
+                ),
+            ),
+            plan.destinationReadEligibilities,
+        )
+        assertTrue(plan.dumpLines().any { it.contains("route=destination-read-required:multiply:multiply@v1") })
     }
 
     private fun request(draw: GPUIntermediateDrawRequest): GPUIntermediatePlannerRequest =
