@@ -1,0 +1,8 @@
+P2
+# 12-bit source verifies SOF9 arithmetic DC sign extension before IDCT.
+4 4
+4095
+2049 2049 2049 2049
+2049 2049 2049 2049
+2049 2049 2049 2049
+2049 2049 2049 2049

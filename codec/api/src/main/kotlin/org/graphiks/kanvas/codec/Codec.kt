@@ -8,6 +8,7 @@ import org.skia.foundation.SkImageInfo
 import org.graphiks.math.SkIRect
 import org.graphiks.math.SkISize
 import org.skia.foundation.skcms.SkcmsICCProfile
+import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.util.ServiceLoader
 
@@ -282,6 +283,41 @@ public abstract class Codec protected constructor() {
          */
         public fun MakeFromStream(stream: InputStream): Codec? =
             MakeFromData(stream.readBytes())
+
+        /** Read [stream] up to [maxEncodedBytes] and dispatch to [MakeFromData]. */
+        public fun MakeFromStream(
+            stream: InputStream,
+            maxEncodedBytes: Long,
+        ): Codec? = readStreamWithinLimit(stream, maxEncodedBytes)?.let(::MakeFromData)
+
+        private fun readStreamWithinLimit(stream: InputStream, maxEncodedBytes: Long): ByteArray? {
+            if (maxEncodedBytes !in 0..MAX_STREAM_BYTES_WITH_SENTINEL) return null
+            val readLimit = maxEncodedBytes + 1
+            val output = ByteArrayOutputStream()
+            val buffer = ByteArray(STREAM_READ_BUFFER_SIZE)
+            var readBytes = 0L
+            while (readBytes < readLimit) {
+                val requested = minOf(buffer.size.toLong(), readLimit - readBytes).toInt()
+                val count = stream.read(buffer, 0, requested)
+                if (count < 0) break
+                if (count == 0) {
+                    val byte = stream.read()
+                    if (byte < 0) break
+                    output.write(byte)
+                    readBytes++
+                } else {
+                    output.write(buffer, 0, count)
+                    readBytes += count.toLong()
+                }
+            }
+            return output.toByteArray().takeIf { it.size.toLong() <= maxEncodedBytes }
+        }
+
+        public const val DEFAULT_MAX_STREAM_BYTES: Long = 64L * 1024 * 1024
+
+        private const val STREAM_READ_BUFFER_SIZE: Int = 8 * 1024
+        private const val MAX_MATERIALIZABLE_STREAM_BYTES: Long = Int.MAX_VALUE.toLong() - 8L
+        private const val MAX_STREAM_BYTES_WITH_SENTINEL: Long = MAX_MATERIALIZABLE_STREAM_BYTES - 1L
     }
 
     /**
@@ -313,13 +349,15 @@ public abstract class Codec protected constructor() {
         private var providersLoaded: Boolean = false
         private val defaultOrder: Map<String, Int> = listOf(
             "png",
+            "jpeg-ls",
             "jpeg",
+            "jpeg2000",
+            "jpegxl",
             "gif",
             "bmp",
             "webp",
             "wbmp",
             "avif",
-            "jpegxl",
             "ico",
             "raw",
         ).withIndex().associate { it.value to it.index }

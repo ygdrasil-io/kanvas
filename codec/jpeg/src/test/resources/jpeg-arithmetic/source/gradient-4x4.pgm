@@ -1,0 +1,8 @@
+P2
+# Deterministic source for the arithmetic JPEG regression fixtures.
+4 4
+255
+0 32 96 160
+16 64 128 192
+48 112 176 224
+80 144 208 255

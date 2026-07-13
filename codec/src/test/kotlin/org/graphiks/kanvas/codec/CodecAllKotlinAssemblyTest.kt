@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.codec
 
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Test
@@ -9,8 +10,14 @@ import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.codec.test.CodecTestFixtures
 import org.graphiks.kanvas.codec.test.CodecTestFixtures.decodePixels
 import java.util.ServiceLoader
+import java.util.Base64
 
 class CodecAllKotlinAssemblyTest {
+    @Test
+    fun `extended stubs do not claim JPEG XL now owned by the pure Kotlin module`() {
+        assertFalse(ExtendedCodecDecoderProvider().decoders().any { it.name == "jpegxl" })
+    }
+
     @Test
     fun `registers pure kotlin decoders in dispatch order`() {
         val decoders = Codec.Decoders.all()
@@ -18,13 +25,15 @@ class CodecAllKotlinAssemblyTest {
         assertEquals(
             listOf(
                 "png",
+                "jpeg-ls",
                 "jpeg",
+                "jpeg2000",
+                "jpegxl",
                 "gif",
                 "bmp",
                 "webp",
                 "wbmp",
                 "avif",
-                "jpegxl",
                 "ico",
                 "raw",
             ),
@@ -46,6 +55,9 @@ class CodecAllKotlinAssemblyTest {
                 "org.graphiks.kanvas.codec.bmp.BmpKotlinDecoderProvider",
                 "org.graphiks.kanvas.codec.gif.GifKotlinDecoderProvider",
                 "org.graphiks.kanvas.codec.jpeg.JpegKotlinDecoderProvider",
+                "org.graphiks.kanvas.codec.jpeg2000.Jpeg2000KotlinDecoderProvider",
+                "org.graphiks.kanvas.codec.jpegls.JpegLsKotlinDecoderProvider",
+                "org.graphiks.kanvas.codec.jpegxl.JpegXlKotlinDecoderProvider",
                 "org.graphiks.kanvas.codec.png.PngKotlinDecoderProvider",
                 "org.graphiks.kanvas.codec.wbmp.WbmpKotlinDecoderProvider",
                 "org.graphiks.kanvas.codec.webp.WebpKotlinDecoderProvider",
@@ -64,6 +76,16 @@ class CodecAllKotlinAssemblyTest {
         for (y in CodecTestFixtures.SIMPLE_RGBA_PIXELS.indices) {
             assertArrayEquals(CodecTestFixtures.SIMPLE_RGBA_PIXELS[y], actual[y], "row=$y")
         }
+    }
+
+    @Test
+    fun `routes SOF55 to JPEG-LS before the classic JPEG provider`() {
+        val fixture = Base64.getDecoder().decode("/9j/9wALCAAEAAgBAREA/9oACAEBAAAAAAAAAYCV8/9g/9k=")
+
+        val codec = Codec.MakeFromData(fixture)
+
+        assertNotNull(codec)
+        assertEquals("org.graphiks.kanvas.codec.jpegls.JpegLsCodec", codec!!::class.qualifiedName)
     }
 
     @Test

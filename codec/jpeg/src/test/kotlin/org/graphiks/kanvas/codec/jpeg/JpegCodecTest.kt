@@ -230,10 +230,14 @@ class JpegCodecTest {
     }
 
     @Test
-    fun `rejects unsupported four component jpeg variants`() {
+    fun `rejects unsupported four component jpeg variants and decodes valid CMYK sampling`() {
         assertNull(JpegCodec.Decoder.make(cmykJpeg(width = 8, height = 8, includeAdobe = false)))
         assertNull(JpegCodec.Decoder.make(cmykJpeg(width = 8, height = 8, adobeTransform = 1)))
-        assertNull(JpegCodec.Decoder.make(cmykJpeg(width = 16, height = 8, cSampling = 0x21)))
+        val codec = JpegCodec.Decoder.make(cmykJpeg(width = 16, height = 8, cSampling = 0x21))!!
+        val (bitmap, result) = codec.getImage()
+
+        assertEquals(Codec.Result.kSuccess, result)
+        assertEquals(0xFF404040.toInt(), bitmap!!.getPixel(15, 7))
     }
 
     @Test
@@ -288,9 +292,21 @@ class JpegCodecTest {
     }
 
     @Test
-    fun `rejects exotic color sampling`() {
-        assertNull(JpegCodec.Decoder.make(colorJpeg(width = 8, height = 16, ySampling = 0x12)))
-        assertNull(JpegCodec.Decoder.make(colorJpeg(width = 16, height = 8, ySampling = 0x21, cbSampling = 0x21)))
+    fun `decodes valid 440 color sampling`() {
+        val codec = JpegCodec.Decoder.make(colorJpeg(width = 8, height = 16, ySampling = 0x12))!!
+        val (bitmap, result) = codec.getImage()
+
+        assertEquals(Codec.Result.kSuccess, result)
+        assertEquals(yCbCrToArgb(152, 80, 200), bitmap!!.getPixel(7, 15))
+    }
+
+    @Test
+    fun `reports malformed mixed sampling entropy during decode`() {
+        val codec = JpegCodec.Decoder.make(colorJpeg(width = 16, height = 8, ySampling = 0x21, cbSampling = 0x21))!!
+
+        val (_, result) = codec.getImage()
+
+        assertEquals(Codec.Result.kErrorInInput, result)
     }
 
     @Test
@@ -516,6 +532,26 @@ class JpegCodecTest {
     }
 
     @Test
+    fun `decodes negative Huffman progressive DC refinement toward negative`() {
+        val codec = JpegCodec.Decoder.make(progressiveGrayscaleNegativeDcRefinementJpeg())!!
+        val (bitmap, result) = codec.getImage()
+
+        assertEquals(Codec.Result.kSuccess, result)
+        assertNotNull(bitmap)
+        assertEquals(0xFF7D7D7D.toInt(), bitmap!!.getPixel(0, 0))
+    }
+
+    @Test
+    fun `decodes negative arithmetic progressive DC refinement toward negative`() {
+        val codec = JpegCodec.Decoder.make(arithmeticProgressiveGrayscaleNegativeDcRefinementJpeg())!!
+        val (bitmap, result) = codec.getImage()
+
+        assertEquals(Codec.Result.kSuccess, result)
+        assertNotNull(bitmap)
+        assertEquals(0xFF7D7D7D.toInt(), bitmap!!.getPixel(0, 0))
+    }
+
+    @Test
     fun `decodes progressive grayscale ac successive refinement scan`() {
         val initialCodec = JpegCodec.Decoder.make(progressiveGrayscaleAcRefinementJpeg(refine = false))!!
         val refinedCodec = JpegCodec.Decoder.make(progressiveGrayscaleAcRefinementJpeg(refine = true))!!
@@ -728,6 +764,94 @@ class JpegCodecTest {
         return out.toByteArray()
     }
 
+    private fun progressiveGrayscaleNegativeDcRefinementJpeg(): ByteArray {
+        val out = ByteArrayOutputStream()
+        out.writeMarker(0xD8)
+        out.writeSegment(0xDB) {
+            write(0)
+            repeat(64) { write(8) }
+        }
+        out.writeSegment(0xC2) {
+            write(8)
+            writeU16BE(8)
+            writeU16BE(8)
+            write(1)
+            write(1)
+            write(0x11)
+            write(0)
+        }
+        out.writeSegment(0xC4) {
+            write(0x00)
+            write(1)
+            repeat(15) { write(0) }
+            write(1)
+        }
+        out.writeSegment(0xDA) {
+            write(1)
+            write(1)
+            write(0x00)
+            write(0)
+            write(0)
+            write(0x01)
+        }
+        out.write(entropyBits("00"))
+        out.writeSegment(0xDA) {
+            write(1)
+            write(1)
+            write(0x00)
+            write(0)
+            write(0)
+            write(0x10)
+        }
+        out.write(entropyBits("10"))
+        out.writeMarker(0xD9)
+        return out.toByteArray()
+    }
+
+    private fun arithmeticProgressiveGrayscaleNegativeDcRefinementJpeg(): ByteArray {
+        val out = ByteArrayOutputStream()
+        out.writeMarker(0xD8)
+        out.writeSegment(0xDB) {
+            write(0)
+            repeat(64) { write(8) }
+        }
+        out.writeSegment(0xCA) {
+            write(8)
+            writeU16BE(8)
+            writeU16BE(8)
+            write(1)
+            write(1)
+            write(0x11)
+            write(0)
+        }
+        out.writeSegment(0xCC) {
+            write(0x00)
+            write(0x10)
+            write(0x10)
+            write(5)
+        }
+        out.writeSegment(0xDA) {
+            write(1)
+            write(1)
+            write(0x00)
+            write(0)
+            write(0)
+            write(0x01)
+        }
+        out.write(0xE0)
+        out.writeSegment(0xDA) {
+            write(1)
+            write(1)
+            write(0x00)
+            write(0)
+            write(0)
+            write(0x10)
+        }
+        out.write(0xC0)
+        out.writeMarker(0xD9)
+        return out.toByteArray()
+    }
+
     private fun progressiveGrayscaleAcRefinementJpeg(refine: Boolean): ByteArray {
         val out = ByteArrayOutputStream()
         out.writeMarker(0xD8)
@@ -775,6 +899,14 @@ class JpegCodecTest {
         }
         out.write(entropyBits("0111"))
         if (refine) {
+            // AC refinement emits the EOB Huffman symbol before the correction
+            // bit for the already-significant coefficient.
+            out.writeSegment(0xC4) {
+                write(0x10)
+                write(1)
+                repeat(15) { write(0) }
+                write(0x00)
+            }
             out.writeSegment(0xDA) {
                 write(1)
                 write(1)
@@ -783,7 +915,7 @@ class JpegCodecTest {
                 write(1)
                 write(0x10)
             }
-            out.write(entropyBits("10"))
+            out.write(entropyBits("01"))
         }
         out.writeMarker(0xD9)
         return out.toByteArray()
