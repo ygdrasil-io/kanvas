@@ -872,6 +872,22 @@ class Jpeg2000DocumentTest {
     }
 
     @Test
+    fun `JP2 retains multiple well formed color declarations outside the pixel facade`() {
+        val headerPayload = imageHeaderBox() +
+            boxed("colr", byteArrayOf(1, 0, 0, 0, 0, 0, 17)) +
+            boxed("colr", byteArrayOf(1, 0, 0, 0, 0, 0, 16))
+        val jp2 = jp2(narrowLosslessCodestream(), headerPayload)
+
+        val document = requireNotNull(Jpeg2000Document.open(jp2).document)
+        val header = document.boxes.single { it.type == "jp2h" }
+
+        assertArrayEquals(headerPayload, document.copyPayload(header))
+        assertNull(Codec.MakeFromData(jp2))
+        assertEquals("jpeg2000.container.pixel.unimplemented", document.decode().diagnostic?.code)
+        assertEquals(Codec.Result.kUnimplemented, document.decode().diagnostic?.result)
+    }
+
+    @Test
     fun `JP2 refuses malformed color metadata while retaining structural color declarations`() {
         val opened = Jpeg2000Document.open(
             jp2(narrowLosslessCodestream(), imageHeaderBox() + boxed("colr", byteArrayOf(1, 0, 0))),

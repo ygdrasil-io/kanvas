@@ -164,12 +164,14 @@ this foundation does not claim general pixels or a general Tier-2
 implementation.
 
 The JP2 fixture is pixel-decodable only for the same bounded grayscale
-profile; its sole accepted color declaration is the enumerated grayscale
-`colr` documented above. ICC/color declarations, palette (`pclr`), component
-mapping (`cmap`), channel definition (`cdef`, including alpha), and
-multi-component JP2 profiles are refused. Until independently verified
-follow-on work lands, the pixel facade also refuses multi-component and
-multi-tile J2K, every progression other than LRCP, irreversible 9/7, MCT,
-JP2 color/ICC, JPX, MJ2, HTJ2K, and every encoder route. General JPEG 2000
-pixels remain outside this fixture scope. No pixel fallback to OpenJPEG is
-allowed.
+profile, with no `colr` or one exact enumerated grayscale `colr` documented
+above. Well-formed `colr` declarations, including ICC, non-grayscale and
+multiple declarations, are retained structurally but never enable the pixel
+facade or an ICC/color pipeline; malformed `colr` remains a structural error.
+Palette (`pclr`), component mapping (`cmap`), channel definition (`cdef`,
+including alpha), and multi-component JP2 profiles remain outside the pixel
+facade. Until independently verified follow-on work lands, the pixel facade
+also refuses multi-component and multi-tile J2K, every progression other than
+LRCP, irreversible 9/7, MCT, JPX, MJ2, HTJ2K, and every encoder route. General
+JPEG 2000 pixels remain outside this fixture scope. No pixel fallback to
+OpenJPEG is allowed.

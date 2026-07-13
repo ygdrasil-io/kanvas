@@ -325,15 +325,14 @@ private fun parseJp2Header(data: ByteArray, header: Jpeg2000Box): ParsedJp2Heade
         compression != 7 || unknownColorSpace !in 0..1 || intellectualProperty !in 0..1
     ) j2kFailure("jpeg2000.jp2.ihdr.invalid", ihdr.offset.toInt())
     val colorBoxes = children.filter { it.type == "colr" }
-    if (colorBoxes.size > 1) {
-        j2kFailure("jpeg2000.jp2.profile.unsupported", colorBoxes[1].offset.toInt(), Codec.Result.kUnimplemented)
-    }
-    var supportsPixelFacade =
-        components == 1 && bitsPerComponent == 7 && unknownColorSpace == 0 && intellectualProperty == 0
+    val colorIsExactGrayscale = colorBoxes.map { color -> isJp2GrayscalePixelColor(data, color) }
+    val supportsPixelFacade =
+        components == 1 && bitsPerComponent == 7 && unknownColorSpace == 0 && intellectualProperty == 0 &&
+            (colorBoxes.isEmpty() || (colorBoxes.size == 1 && colorIsExactGrayscale.single()))
     children.forEach { child ->
         when (child.type) {
             "ihdr" -> Unit
-            "colr" -> supportsPixelFacade = supportsPixelFacade && isJp2GrayscalePixelColor(data, child)
+            "colr" -> Unit
             else -> j2kFailure("jpeg2000.jp2.profile.unsupported", child.offset.toInt(), Codec.Result.kUnimplemented)
         }
     }
