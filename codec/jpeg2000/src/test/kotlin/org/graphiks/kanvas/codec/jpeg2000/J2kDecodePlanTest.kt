@@ -9,15 +9,43 @@ class J2kDecodePlanTest {
     @Test
     fun `decode plan orders tile parts and rejects a missing part`() {
         val ordered = J2kDecodePlan.create(
-            syntax(tileParts = listOf(tilePart(1, 1, 2), tilePart(1, 0, 2))),
+            syntax(
+                tileParts = listOf(tilePart(1, 1, 2), tilePart(0, 0, 1), tilePart(1, 0, 2)),
+                columns = 2,
+            ),
             Jpeg2000Limits(),
         )
 
+        assertEquals(2, ordered.tilePartsByTile.size)
         assertEquals(listOf(0, 1), ordered.tilePartsByTile[1].map(J2kTilePart::partIndex))
 
         assertThrows(Jpeg2000Failure::class.java) {
             J2kDecodePlan.create(syntax(tileParts = listOf(tilePart(0, 1, 2))), Jpeg2000Limits())
         }
+    }
+
+    @Test
+    fun `decode plan rejects an Isot outside the declared tile grid`() {
+        val failure = assertThrows(Jpeg2000Failure::class.java) {
+            J2kDecodePlan.create(
+                syntax(tileParts = listOf(tilePart(1, 0, 1))),
+                Jpeg2000Limits(),
+            )
+        }
+
+        assertEquals("jpeg2000.sot.sequence.invalid", failure.diagnostic.code)
+    }
+
+    @Test
+    fun `decode plan rejects a declared grid tile without a complete sequence`() {
+        val failure = assertThrows(Jpeg2000Failure::class.java) {
+            J2kDecodePlan.create(
+                syntax(tileParts = listOf(tilePart(0, 0, 1)), columns = 2),
+                Jpeg2000Limits(),
+            )
+        }
+
+        assertEquals("jpeg2000.sot.sequence.invalid", failure.diagnostic.code)
     }
 
     @Test
@@ -75,12 +103,12 @@ class J2kDecodePlanTest {
         dataLength = 1,
     )
 
-    private fun syntax(tileParts: List<J2kTilePart>): J2kSyntaxModel = J2kSyntaxModel(
+    private fun syntax(tileParts: List<J2kTilePart>, columns: Int = 1): J2kSyntaxModel = J2kSyntaxModel(
         mainHeader = J2kMainHeader(
             geometry = J2kGeometryModel(
-                frame = Jpeg2000FrameInfo(width = 32, height = 32, components = 1, precision = 8),
+                frame = Jpeg2000FrameInfo(width = 32 * columns, height = 32, components = 1, precision = 8),
                 components = listOf(J2kComponentSpec(precision = 8, signed = false, xSampling = 1, ySampling = 1)),
-                tileGrid = J2kTileGrid(0, 0, 32, 32, 0, 0, 32, 32, columns = 1, rows = 1),
+                tileGrid = J2kTileGrid(0, 0, 32 * columns, 32, 0, 0, 32, 32, columns = columns, rows = 1),
             ),
             coding = J2kCodingStyle(
                 progression = J2kProgressionOrder.LRCP,

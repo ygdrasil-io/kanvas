@@ -705,6 +705,41 @@ class Jpeg2000DocumentTest {
     }
 
     @Test
+    fun `structural JP2 with general multi-component precision opens outside the pixel facade`() {
+        val jp2 = jp2(generalMainHeaderWithOneTilePart(), generalImageHeaderPayload())
+
+        val document = requireNotNull(Jpeg2000Document.open(jp2).document)
+
+        assertEquals(Jpeg2000Container.JP2, document.container)
+        assertEquals(Jpeg2000FrameInfo(33, 17, 3, 12), document.frame)
+        assertNull(Codec.MakeFromData(jp2))
+        assertEquals("jpeg2000.container.pixel.unimplemented", document.decode().diagnostic?.code)
+        assertEquals(Codec.Result.kUnimplemented, document.decode().diagnostic?.result)
+    }
+
+    @Test
+    fun `JP2 refuses ihdr BPC that does not describe every SIZ component`() {
+        val mismatchedHeaders = listOf(
+            "signed BPC for unsigned components" to jp2(
+                generalMainHeaderWithOneTilePart(),
+                generalImageHeaderPayload(bitsPerComponent = 0x8B),
+            ),
+            "uniform BPC for mixed precision components" to jp2(
+                generalMainHeaderWithOneTilePart(secondComponentBits = 7),
+                generalImageHeaderPayload(),
+            ),
+        )
+
+        mismatchedHeaders.forEach { (label, jp2) ->
+            val opened = Jpeg2000Document.open(jp2)
+
+            assertNull(opened.document, label)
+            assertEquals("jpeg2000.jp2.ihdr.mismatch", opened.diagnostic?.code, label)
+            assertEquals(Codec.Result.kErrorInInput, opened.diagnostic?.result, label)
+        }
+    }
+
+    @Test
     fun `raw dimensions beyond two codeblocks remain structural but are not exposed as an image codec`() {
         val codestream = narrowLosslessCodestream(width = 129, height = 1)
 
@@ -820,11 +855,37 @@ class Jpeg2000DocumentTest {
     }
 
     @Test
-    fun `JP2 refuses unsupported color profile palette mapping and alpha metadata`() {
+    fun `JP2 color declarations remain structural and outside the pixel facade`() {
         val codestream = narrowLosslessCodestream()
-        val unsupportedHeaders = listOf(
+        val colorHeaders = listOf(
             "ICC color profile" to (imageHeaderBox() + boxed("colr", byteArrayOf(2, 0, 0, 'I'.code.toByte(), 'C'.code.toByte(), 'C'.code.toByte()))),
             "non-grayscale enumerated color" to (imageHeaderBox() + boxed("colr", byteArrayOf(1, 0, 0, 0, 0, 0, 16))),
+        )
+
+        colorHeaders.forEach { (label, headerPayload) ->
+            val document = requireNotNull(Jpeg2000Document.open(jp2(codestream, headerPayload)).document) { label }
+
+            assertNull(Codec.MakeFromData(document.copyEncodedBytes()), label)
+            assertEquals("jpeg2000.container.pixel.unimplemented", document.decode().diagnostic?.code, label)
+            assertEquals(Codec.Result.kUnimplemented, document.decode().diagnostic?.result, label)
+        }
+    }
+
+    @Test
+    fun `JP2 refuses malformed color metadata while retaining structural color declarations`() {
+        val opened = Jpeg2000Document.open(
+            jp2(narrowLosslessCodestream(), imageHeaderBox() + boxed("colr", byteArrayOf(1, 0, 0))),
+        )
+
+        assertNull(opened.document)
+        assertEquals("jpeg2000.jp2.colr.invalid", opened.diagnostic?.code)
+        assertEquals(Codec.Result.kErrorInInput, opened.diagnostic?.result)
+    }
+
+    @Test
+    fun `JP2 refuses unsupported palette mapping and alpha metadata`() {
+        val codestream = narrowLosslessCodestream()
+        val unsupportedHeaders = listOf(
             "palette" to (imageHeaderBox() + boxed("pclr", byteArrayOf(0, 2, 1, 7, 0, 0xFF.toByte()))),
             "component mapping" to (imageHeaderBox() + boxed("cmap", byteArrayOf(0, 0, 0, 0))),
             "alpha channel definition" to (imageHeaderBox() + boxed("cdef", byteArrayOf(0, 1, 0, 0, 0, 1, 0, 0))),
@@ -1058,7 +1119,7 @@ class Jpeg2000DocumentTest {
         output.writeMarker(0xD9) // EOC
     }.toByteArray()
 
-    private fun generalMainHeaderWithOneTilePart(): ByteArray = ByteArrayOutputStream().also { output ->
+    private fun generalMainHeaderWithOneTilePart(secondComponentBits: Int = 0x0B): ByteArray = ByteArrayOutputStream().also { output ->
         output.writeMarker(0x4F) // SOC
         output.writeSegment(0x51, ByteArrayOutputStream().also { siz ->
             siz.writeU16(0) // Rsiz
@@ -1066,9 +1127,10 @@ class Jpeg2000DocumentTest {
             siz.writeU32(0); siz.writeU32(0) // XOsiz, YOsiz
             siz.writeU32(33); siz.writeU32(17) // XTsiz, YTsiz: one tile
             siz.writeU32(0); siz.writeU32(0) // XTOsiz, YTOsiz
-            siz.writeU16(2) // Csiz
-            siz.write(byteArrayOf(0x8B.toByte(), 2, 1)) // 12-bit signed, x-subsampled
-            siz.write(byteArrayOf(7, 1, 1)) // 8-bit unsigned, no subsampling
+            siz.writeU16(3) // Csiz
+            siz.write(byteArrayOf(0x0B, 1, 1)) // 12-bit unsigned, no subsampling
+            siz.write(byteArrayOf(secondComponentBits.toByte(), 1, 1)) // caller selects precision/sign
+            siz.write(byteArrayOf(0x0B, 1, 1)) // 12-bit unsigned, no subsampling
         }.toByteArray())
         output.writeSegment(0x52, byteArrayOf(
             0, // Scod
@@ -1339,6 +1401,26 @@ class Jpeg2000DocumentTest {
         ihdr.writeU16(1)
         ihdr.write(byteArrayOf(7, 7, 0, 0))
     }.toByteArray())
+
+    private fun generalImageHeaderPayload(bitsPerComponent: Int = 0x0B): ByteArray = imageHeaderBox(
+        width = 33,
+        height = 17,
+        components = 3,
+        bitsPerComponent = bitsPerComponent,
+        color = boxed("colr", byteArrayOf(1, 0, 0, 0, 0, 0, 16)),
+    )
+
+    private fun imageHeaderBox(
+        width: Int,
+        height: Int,
+        components: Int,
+        bitsPerComponent: Int,
+        color: ByteArray = ByteArray(0),
+    ): ByteArray = boxed("ihdr", ByteArrayOutputStream().also { ihdr ->
+        ihdr.writeU32(height); ihdr.writeU32(width)
+        ihdr.writeU16(components)
+        ihdr.write(byteArrayOf(bitsPerComponent.toByte(), 7, 0, 0))
+    }.toByteArray()) + color
 
     private fun narrowCodPayload(codeBlockWidth: Int = 4, codeBlockHeight: Int = 4): ByteArray = byteArrayOf(
         0, // Scod: no precinct partitioning

@@ -72,16 +72,15 @@ public class Jpeg2000Box internal constructor(
 /**
  * Immutable, bounded JPEG 2000 document.
  *
- * The parser deliberately accepts only the declared narrow Part 1 profile:
- * raw J2K with `SIZ` directly after `SOC`, or a strictly ordered JP2 core
- * (`jP  `, `ftyp`, `jp2h`/`ihdr`, then `jp2c`), one unsigned 8-bit grayscale
- * component, one tile, one layer, reversible 5/3 transform and no
- * quantization. Raw codestreams in that profile may use either `Ndecomp=0`
- * with one packet and up to two horizontal codeblocks, or the bounded
- * `Ndecomp=1` two-resolution path with one LL packet and one HL/LH/HH packet,
- * or the bounded `Ndecomp=2` three-resolution path with LL2, coarse
- * HL2/LH2/HH2 and fine HL1/LH1/HH1 packets. A JP2 wrapper is pixel-decodable
- * only when its embedded codestream satisfies that same proven profile.
+ * The parser retains bounded Part 1 structure: raw J2K with `SIZ` directly after
+ * `SOC`, or a strictly ordered JP2 core (`jP  `, `ftyp`, `jp2h`/`ihdr`, then
+ * `jp2c`), general bounded main-header syntax, and complete `SOT` tile plans.
+ * Pixels remain restricted to one unsigned 8-bit grayscale component, one tile,
+ * one layer, reversible 5/3 transform and no quantization. Raw codestreams in
+ * that profile may use either `Ndecomp=0` with one packet and up to two horizontal
+ * codeblocks, the bounded `Ndecomp=1` two-resolution path, or the bounded
+ * `Ndecomp=2` three-resolution path. A JP2 wrapper is pixel-decodable only when
+ * its embedded codestream and JP2 color declaration satisfy that same proven profile.
  */
 public class Jpeg2000Document private constructor(
     private val source: ByteArray,
@@ -126,7 +125,13 @@ public class Jpeg2000Document private constructor(
             frame.height in 1..NARROW_RAW_J2K_MAX_HEIGHT
 
     public companion object {
-        /** Opens a bounded raw J2K codestream or JP2 wrapper. */
+        /**
+         * Opens a structurally bounded Part 1 raw J2K codestream or JP2 wrapper.
+         *
+         * Opening retains bounded general `SIZ`/`COD`/`QCD` syntax and `SOT` tile plans.
+         * Pixels and the [Codec] facade remain limited to the strict proven profile; general
+         * pixel decoding and Tier-2 remain unimplemented.
+         */
         public fun open(data: ByteArray, limits: Jpeg2000Limits = Jpeg2000Limits()): Jpeg2000OpenResult {
             if (data.size.toLong() > limits.maxEncodedBytes) {
                 return Jpeg2000OpenResult(
@@ -171,6 +176,12 @@ private data class ParsedRawJ2k(
     val syntax: J2kSyntaxModel,
     val plan: J2kDecodePlan,
     val entropy: J2kEntropyInput?,
+)
+
+private data class ParsedJp2Header(
+    val frame: Jpeg2000FrameInfo,
+    val componentSigned: Boolean,
+    val supportsPixelFacade: Boolean,
 )
 
 internal class Jpeg2000Failure(
@@ -243,12 +254,19 @@ private fun parseJp2(data: ByteArray, limits: Jpeg2000Limits): ParsedJpeg2000 {
     ).parse()
     val frame = raw.frame
     if (
-        imageHeader.width != frame.width || imageHeader.height != frame.height ||
-        imageHeader.components != frame.components || imageHeader.precision != frame.precision
+        imageHeader.frame != frame ||
+        raw.syntax.mainHeader.geometry.components.any { component ->
+            component.precision != imageHeader.frame.precision || component.signed != imageHeader.componentSigned
+        }
     ) {
         j2kFailure("jpeg2000.jp2.ihdr.mismatch", header.offset.toInt())
     }
-    return ParsedJpeg2000(Jpeg2000Container.JP2, frame, raw.entropy, boxes)
+    return ParsedJpeg2000(
+        Jpeg2000Container.JP2,
+        frame,
+        raw.entropy?.takeIf { imageHeader.supportsPixelFacade },
+        boxes,
+    )
 }
 
 private fun requireSingleBox(
@@ -278,7 +296,7 @@ private fun validateFtyp(data: ByteArray, box: Jpeg2000Box) {
     }
 }
 
-private fun parseJp2Header(data: ByteArray, header: Jpeg2000Box): Jpeg2000FrameInfo {
+private fun parseJp2Header(data: ByteArray, header: Jpeg2000Box): ParsedJp2Header {
     val children = Jp2BoxParser(
         data,
         header.payloadOffset,
@@ -301,33 +319,45 @@ private fun parseJp2Header(data: ByteArray, header: Jpeg2000Box): Jpeg2000FrameI
     val compression = data[ihdr.payloadOffset + 11].u8()
     val unknownColorSpace = data[ihdr.payloadOffset + 12].u8()
     val intellectualProperty = data[ihdr.payloadOffset + 13].u8()
-    if (width <= 0 || height <= 0 || components <= 0) j2kFailure("jpeg2000.jp2.ihdr.invalid", ihdr.offset.toInt())
-    if (components != 1 || bitsPerComponent != 7 || compression != 7 || unknownColorSpace != 0 || intellectualProperty != 0) {
-        j2kFailure("jpeg2000.jp2.profile.unsupported", ihdr.offset.toInt(), Codec.Result.kUnimplemented)
-    }
+    val precision = (bitsPerComponent and 0x7F) + 1
+    if (
+        width <= 0 || height <= 0 || components <= 0 || precision !in 1..38 ||
+        compression != 7 || unknownColorSpace !in 0..1 || intellectualProperty !in 0..1
+    ) j2kFailure("jpeg2000.jp2.ihdr.invalid", ihdr.offset.toInt())
     val colorBoxes = children.filter { it.type == "colr" }
     if (colorBoxes.size > 1) {
         j2kFailure("jpeg2000.jp2.profile.unsupported", colorBoxes[1].offset.toInt(), Codec.Result.kUnimplemented)
     }
+    var supportsPixelFacade =
+        components == 1 && bitsPerComponent == 7 && unknownColorSpace == 0 && intellectualProperty == 0
     children.forEach { child ->
         when (child.type) {
             "ihdr" -> Unit
-            "colr" -> validateJp2GrayscaleColor(data, child)
+            "colr" -> supportsPixelFacade = supportsPixelFacade && isJp2GrayscalePixelColor(data, child)
             else -> j2kFailure("jpeg2000.jp2.profile.unsupported", child.offset.toInt(), Codec.Result.kUnimplemented)
         }
     }
-    return Jpeg2000FrameInfo(width, height, components, bitsPerComponent + 1)
+    return ParsedJp2Header(
+        Jpeg2000FrameInfo(width, height, components, precision),
+        bitsPerComponent and 0x80 != 0,
+        supportsPixelFacade,
+    )
 }
 
-private fun validateJp2GrayscaleColor(data: ByteArray, color: Jpeg2000Box) {
-    if (
-        color.payloadSize != 7 ||
-        data[color.payloadOffset].u8() != 1 ||
-        data[color.payloadOffset + 1].u8() != 0 ||
-        data[color.payloadOffset + 2].u8() != 0 ||
-        data.u32(color.payloadOffset + 3) != JP2_ENUMERATED_GRAYSCALE
-    ) {
-        j2kFailure("jpeg2000.jp2.profile.unsupported", color.offset.toInt(), Codec.Result.kUnimplemented)
+private fun isJp2GrayscalePixelColor(data: ByteArray, color: Jpeg2000Box): Boolean {
+    if (color.payloadSize < 3) j2kFailure("jpeg2000.jp2.colr.invalid", color.offset.toInt())
+    return when (data[color.payloadOffset].u8()) {
+        1 -> {
+            if (color.payloadSize != 7) j2kFailure("jpeg2000.jp2.colr.invalid", color.offset.toInt())
+            data[color.payloadOffset + 1].u8() == 0 &&
+                data[color.payloadOffset + 2].u8() == 0 &&
+                data.u32(color.payloadOffset + 3) == JP2_ENUMERATED_GRAYSCALE
+        }
+        2, 3 -> {
+            if (color.payloadSize == 3) j2kFailure("jpeg2000.jp2.colr.invalid", color.offset.toInt())
+            false
+        }
+        else -> j2kFailure("jpeg2000.jp2.colr.invalid", color.offset.toInt())
     }
 }
 

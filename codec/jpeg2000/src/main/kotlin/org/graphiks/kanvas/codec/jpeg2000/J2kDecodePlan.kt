@@ -11,11 +11,15 @@ internal data class J2kDecodePlan(
 ) {
     internal companion object {
         fun create(syntax: J2kSyntaxModel, limits: Jpeg2000Limits): J2kDecodePlan {
+            val tileCount = syntax.mainHeader.geometry.tileGrid.tileCount
+            if (tileCount > limits.maxTiles || tileCount > Int.MAX_VALUE) {
+                j2kFailure("jpeg2000.limit.tiles", syntax.mainHeader.nextMarkerOffset, Codec.Result.kOutOfMemory)
+            }
             val orderedByTile = syntax.tileParts
                 .groupBy(J2kTilePart::tileIndex)
                 .mapValues { (_, parts) -> parts.sortedBy(J2kTilePart::partIndex) }
 
-            orderedByTile.forEach { (_, partsForTile) ->
+            orderedByTile.forEach { (tileIndex, partsForTile) ->
                 val first = partsForTile.first()
                 val allCountsUnknown = partsForTile.all { it.partCount == 0 }
                 val allCountsDeclared = partsForTile.all { it.partCount > 0 }
@@ -32,19 +36,19 @@ internal data class J2kDecodePlan(
                     }
                     else -> true
                 }
-                if (first.tileIndex < 0 || hasOutOfDomainPartIndex || invalidSequence) {
+                if (
+                    tileIndex < 0 || tileIndex.toLong() >= tileCount ||
+                    hasOutOfDomainPartIndex || invalidSequence
+                ) {
                     j2kFailure("jpeg2000.sot.sequence.invalid", first.headerOffset)
                 }
             }
 
             val codeblockUpperBound = codeblockUpperBound(syntax.mainHeader, limits)
-            val largestTileIndex = orderedByTile.keys.maxOrNull() ?: -1
-            val tileListSize = checkedPlanAdd(largestTileIndex.toLong(), 1L, syntax.mainHeader.nextMarkerOffset)
-            if (tileListSize > limits.maxTiles || tileListSize > Int.MAX_VALUE) {
-                j2kFailure("jpeg2000.limit.tiles", syntax.mainHeader.nextMarkerOffset, Codec.Result.kOutOfMemory)
+            val tilePartsByTile = MutableList(tileCount.toInt()) { tileIndex ->
+                orderedByTile[tileIndex]
+                    ?: j2kFailure("jpeg2000.sot.sequence.invalid", syntax.mainHeader.nextMarkerOffset)
             }
-            val tilePartsByTile = MutableList(tileListSize.toInt()) { emptyList<J2kTilePart>() }
-            orderedByTile.forEach { (tileIndex, parts) -> tilePartsByTile[tileIndex] = parts }
             return J2kDecodePlan(syntax, tilePartsByTile, codeblockUpperBound)
         }
     }
