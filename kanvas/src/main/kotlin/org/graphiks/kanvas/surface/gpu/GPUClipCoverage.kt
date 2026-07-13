@@ -251,13 +251,34 @@ internal object GPUClipUsePrepass {
         val refusals = mutableListOf<String>()
         var suppressedLayerDepth = 0
 
+        fun registerLayerCompositeClip(clip: ClipStack?) {
+            val request = clip?.toGPUClipFacts(target)?.coverageRequest ?: return
+            when (val plan = GPUClipCoveragePlanner.plan(request, config, maxTextureDimension2D)) {
+                is GPUClipCoveragePlan.Mask -> {
+                    cache.registerUses(plan.contentKey, count = 1)
+                    registered[plan.contentKey] = (registered[plan.contentKey] ?: 0) + 1
+                }
+                is GPUClipCoveragePlan.Refused -> refusals += plan.code
+                GPUClipCoveragePlan.NoClip,
+                is GPUClipCoveragePlan.Scissor,
+                -> Unit
+            }
+        }
+
         fun registerLogical(operation: DisplayOp) {
             if (operation is DisplayOp.BeginLayer) {
                 if (suppressedLayerDepth > 0) {
                     suppressedLayerDepth++
                     return
                 }
-                if (operation.rec.gpuCompositePreflightRefusalOrNull() != null) suppressedLayerDepth = 1
+                if (operation.rec.gpuCompositePreflightRefusalOrNull() != null) {
+                    suppressedLayerDepth = 1
+                } else {
+                    // A painted DrawPicture lowers to a synthetic layer. Its children consume
+                    // their own clip plans; this one lease is solely for the clip that must also
+                    // constrain the final atomic group composite at EndLayer.
+                    registerLayerCompositeClip(operation.rec.compositeClip)
+                }
                 return
             }
             if (operation is DisplayOp.EndLayer) {

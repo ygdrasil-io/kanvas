@@ -394,7 +394,12 @@ internal fun GPUBackendOffscreenTarget.renderDestinationReadBlend(
 internal data class LayerBounds(val x: Int, val y: Int, val width: Int, val height: Int)
 
 private sealed interface LayerPlan {
-    data class Supported(val bounds: LayerBounds?, val composite: LayerCompositePlan) : LayerPlan
+    data class Supported(
+        val bounds: LayerBounds?,
+        val composite: LayerCompositePlan,
+        /** Clip to apply when a synthetic picture group is restored to its parent. */
+        val compositeClip: ClipStack? = null,
+    ) : LayerPlan
     data class Refused(val reason: String) : LayerPlan
 }
 
@@ -736,6 +741,7 @@ internal fun renderViaGpu(
             val snapLabel = t.createOffscreenTexture(
                 GPUBackendOffscreenTexture(label = "kanvas:snap", width = width, height = height, format = texFormat),
             )
+            val clipFrameCache = GPUClipCoverageFrameCache(config.maxClipIntermediateBytes.toLong())
 
             var sceneHasContent = false
             var clipSourceRoute = false
@@ -762,7 +768,7 @@ internal fun renderViaGpu(
                     blend = layerPaint?.blendMode?.toGpuBlendFacts() ?: GPUBlendFacts.srcOver(),
                 )
 
-                val bounds = rec.bounds ?: return LayerPlan.Supported(null, composite)
+                val bounds = rec.bounds ?: return LayerPlan.Supported(null, composite, rec.compositeClip)
                 val mappedCorners = listOf(
                     transform * org.graphiks.kanvas.types.Point(bounds.left, bounds.top),
                     transform * org.graphiks.kanvas.types.Point(bounds.right, bounds.top),
@@ -784,6 +790,7 @@ internal fun renderViaGpu(
                 return LayerPlan.Supported(
                     bounds = LayerBounds(x, y, endX - x, endY - y),
                     composite = composite,
+                    compositeClip = rec.compositeClip,
                 )
             }
 
@@ -871,6 +878,19 @@ internal fun renderViaGpu(
                     }
                     opacityLabel
                 }
+                val compositeClipPlan = childPlan.compositeClip
+                    ?.toGPUClipFacts(targets)
+                    ?.coverageRequest
+                    ?.let { GPUClipCoveragePlanner.plan(it, config, t.maxTextureDimension2D) }
+                    ?: GPUClipCoveragePlan.NoClip
+                if (compositeClipPlan is GPUClipCoveragePlan.Refused) {
+                    diagnostics.fatal(
+                        "refuse:saveLayer:${cmdId.value}",
+                        "saveLayer",
+                        compositeClipPlan.code,
+                    )
+                    return false
+                }
                 val coverageCommand = DisplayOp.DrawRect(
                     Rect(
                         bounds.x.toFloat(),
@@ -880,7 +900,13 @@ internal fun renderViaGpu(
                     ),
                     Paint.fill(Color.WHITE).copy(antiAlias = false),
                     Matrix33.identity(),
-                    ClipStack.WideOpen,
+                    // Scissors constrain the restore directly; a non-scissor clip is folded into
+                    // the final coverage texture below so the group still composites atomically.
+                    if (compositeClipPlan is GPUClipCoveragePlan.Scissor) {
+                        requireNotNull(childPlan.compositeClip)
+                    } else {
+                        ClipStack.WideOpen
+                    },
                 ).toNormalizedCommand(cmdId, targets)
                 t.encodeOffscreenTexture(geometryCoverageLabel, clearTransparent) {
                     dispatchFillRect(
@@ -904,18 +930,34 @@ internal fun renderViaGpu(
                             "unsupported.layer.blend:${layerBlend.modeLabel.lowercase()}",
                         )
                     }
-                val rendered = t.renderDestinationReadBlend(
-                    sceneLabel = sceneLabel,
-                    sceneHasContent = sceneHasContent || (clipSourceRoute && sourceHasContent),
-                    sourceSurface = GPUClipSourceSurface(layerSourceLabel, geometryCoverageLabel),
-                    snapshotLabel = snapLabel,
-                    combinedCoverageLabel = combinedCoverageLabel,
-                    clipMaskLabel = null,
-                    mode = mode,
-                    colorFormat = texFormat,
-                    width = width,
-                    height = height,
-                )
+                val rendered = try {
+                    val clipMaskLease = when (compositeClipPlan) {
+                        is GPUClipCoveragePlan.Mask ->
+                            t.acquireClipMask(compositeClipPlan, clipFrameCache, diagnostics, config)
+                        else -> null
+                    }
+                    clipMaskLease.use {
+                        t.renderDestinationReadBlend(
+                            sceneLabel = sceneLabel,
+                            sceneHasContent = sceneHasContent || (clipSourceRoute && sourceHasContent),
+                            sourceSurface = GPUClipSourceSurface(layerSourceLabel, geometryCoverageLabel),
+                            snapshotLabel = snapLabel,
+                            combinedCoverageLabel = combinedCoverageLabel,
+                            clipMaskLabel = it?.mask?.sampleLabel,
+                            mode = mode,
+                            colorFormat = texFormat,
+                            width = width,
+                            height = height,
+                        )
+                    }
+                } catch (_: GPUClipCoverageFrameBudgetExceededException) {
+                    diagnostics.fatal(
+                        "refuse:saveLayer:${cmdId.value}",
+                        "saveLayer",
+                        "unsupported.clip.frame_budget",
+                    )
+                    false
+                }
                 if (rendered) sceneHasContent = true
                 return rendered
             }
@@ -1520,7 +1562,6 @@ internal fun renderViaGpu(
                     renderImageColorCommand(op.toImageRectCommand(cmdId, targets))
                 }
 
-            val clipFrameCache = GPUClipCoverageFrameCache(config.maxClipIntermediateBytes.toLong())
             GPUClipUsePrepass.register(
                 operations = ops,
                 target = targets,

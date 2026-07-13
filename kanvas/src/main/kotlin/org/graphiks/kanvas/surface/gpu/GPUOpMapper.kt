@@ -758,8 +758,20 @@ internal fun Iterable<DisplayOp>.expandPicturesForGpuReplay(): List<DisplayOp> {
         // A supported picture paint is group compositing. Reuse the existing saveLayer
         // compositor so its opacity and standard BlendMode are applied once to the recorded
         // child result, rather than incorrectly to each child operation.
-        if (paint != null) expanded += DisplayOp.BeginLayer(SaveLayerRec(paint = paint), Matrix33.identity())
-        expandPicture(picture, outerTransform, enclosingClip)
+        if (paint != null) {
+            expanded += DisplayOp.BeginLayer(
+                SaveLayerRec(paint = paint, compositeClip = enclosingClip),
+                Matrix33.identity(),
+            )
+        }
+        // The outer DrawPicture clip belongs to the atomic group restore. Passing it to children
+        // as well would multiply an AA coverage F twice (once into the temporary layer and again
+        // at restore). Captured child clips continue to be replayed normally.
+        expandPicture(
+            picture,
+            outerTransform,
+            if (paint == null) enclosingClip else ClipStack.WideOpen,
+        )
         if (paint != null) expanded += DisplayOp.EndLayer
     }
 

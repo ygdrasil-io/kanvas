@@ -5,6 +5,7 @@ import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
+import kotlin.math.roundToInt
 import kotlin.math.sqrt
 import org.graphiks.kanvas.canvas.Canvas
 import org.graphiks.kanvas.geometry.Path
@@ -39,6 +40,7 @@ import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.DynamicTest
+import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestFactory
 
 /**
@@ -52,6 +54,53 @@ import org.junit.jupiter.api.TestFactory
  */
 @OptIn(ExperimentalUnsignedTypes::class)
 class GPUAllApiBlendSurfaceTest {
+    /**
+     * Proves that [ALPHA_MASK_EDGE] is a real half-covered pixel for the fixture rather than an
+     * assumed coordinate. The 0.5 F used by the independent blend oracle remains geometric; this
+     * GPU read only validates the sample location and the alpha-mask route's fixture setup.
+     */
+    @Test
+    fun alphaMaskFixtureHasMeasuredHalfCoverage() {
+        val session = GPUBackendRuntimeFactory.createOrNull()
+        assumeTrue(session != null, "GPU backend unavailable in current environment")
+        assertEquals(.5f, axisAlignedRectCoverage(ALPHA_MASK_RECT, ALPHA_MASK_EDGE), 1e-6f)
+
+        val result = Surface(SURFACE_SIZE, SURFACE_SIZE).run {
+            canvas {
+                save()
+                clipRect(ALPHA_MASK_RECT, ClipOp.INTERSECT, antiAlias = true)
+                drawRect(SURFACE_RECT, Paint.fill(Color.WHITE).copy(antiAlias = false))
+                restore()
+            }
+            render()
+        }
+        val actualAlpha = readPixel(result, ALPHA_MASK_EDGE)[3].toInt()
+        assertTrue(
+            abs(actualAlpha - (.5f * 255f).roundToInt()) <= 2,
+            "alpha-mask fixture coverage at $ALPHA_MASK_EDGE must be 0.5, actual alpha=$actualAlpha",
+        )
+    }
+
+    /**
+     * Regression for an outer DrawPicture paint under an AA clip. The temporary picture layer
+     * contributes its geometric coverage G = 1; only the outer clip contributes F = 0.5 at
+     * [ALPHA_MASK_EDGE]. In particular, the excluded sample must preserve the destination rather
+     * than compositing a transparent temporary layer over it.
+     */
+    @Test
+    fun paintedPictureRestoresThroughItsOuterAlphaClipExactlyOnce() {
+        val session = GPUBackendRuntimeFactory.createOrNull()
+        assumeTrue(session != null, "GPU backend unavailable in current environment")
+
+        val api = drawPictureCase()
+        val gpu = renderGpu(api, BlendMode.SRC, BlendContext.ALPHA_MASK)
+        val cpu = renderCpu(api, BlendMode.SRC, BlendContext.ALPHA_MASK)
+
+        assertPixelsNear(cpu.pixels, gpu.pixels, tolerance = 2)
+        assertEquals(0, gpu.result.diagnostics.fatalCount, gpu.result.diagnostics.entries.toString())
+        assertEquals(0, gpu.result.stats.opsRefused, gpu.result.diagnostics.entries.toString())
+    }
+
     @TestFactory
     fun everyVisualApiSupportsEveryBlendModeInEveryRoute(): Stream<DynamicTest> =
         apiCases().flatMap { api ->
@@ -239,18 +288,7 @@ class GPUAllApiBlendSurfaceTest {
                     imagePaint(mode),
                 )
             },
-            BlendCase("DrawPicture", Point(16f, 16f)) { mode ->
-                val recorder = PictureRecorder()
-                recorder.beginRecording(SURFACE_RECT).drawRect(
-                    SOURCE_RECT,
-                    Paint.fill(Color.fromArgb(255, SOURCE.redByte, SOURCE.greenByte, SOURCE.blueByte))
-                        .copy(antiAlias = false),
-                )
-                drawPicture(
-                    recorder.finishRecordingAsPicture(),
-                    Paint.fill(Color.fromArgb(SOURCE.alphaByte, 255, 255, 255)).copy(blendMode = mode),
-                )
-            },
+            drawPictureCase(),
             BlendCase("DrawVertices", Point(16f, 16f), Point(10f, 10f), Point(16f, 12f)) { mode ->
                 drawVertices(triangle, shapePaint(mode))
             },
@@ -280,6 +318,20 @@ class GPUAllApiBlendSurfaceTest {
         )
     }
 
+    private fun drawPictureCase(): BlendCase =
+        BlendCase("DrawPicture", Point(16f, 16f), Point(10f, 16f), ALPHA_MASK_EDGE) { mode ->
+            val recorder = PictureRecorder()
+            recorder.beginRecording(SURFACE_RECT).drawRect(
+                SOURCE_RECT,
+                Paint.fill(Color.fromArgb(255, SOURCE.redByte, SOURCE.greenByte, SOURCE.blueByte))
+                    .copy(antiAlias = false),
+            )
+            drawPicture(
+                recorder.finishRecordingAsPicture(),
+                Paint.fill(Color.fromArgb(SOURCE.alphaByte, 255, 255, 255)).copy(blendMode = mode),
+            )
+        }
+
     private fun sourceImage(): Image = Image.fromPixels(
         width = 4,
         height = 4,
@@ -306,6 +358,12 @@ class GPUAllApiBlendSurfaceTest {
     private fun readPixel(result: RenderResult, sample: Point): UByteArray {
         val offset = (sample.y.toInt() * SURFACE_SIZE + sample.x.toInt()) * 4
         return result.pixels.copyOfRange(offset, offset + 4)
+    }
+
+    private fun axisAlignedRectCoverage(rect: Rect, pixel: Point): Float {
+        val overlapWidth = (min(rect.right, pixel.x + 1f) - max(rect.left, pixel.x)).coerceAtLeast(0f)
+        val overlapHeight = (min(rect.bottom, pixel.y + 1f) - max(rect.top, pixel.y)).coerceAtLeast(0f)
+        return overlapWidth * overlapHeight
     }
 
     private fun Color.toRgbaBytes(): UByteArray = ubyteArrayOf(
@@ -556,6 +614,7 @@ class GPUAllApiBlendSurfaceTest {
         val SOURCE_RECT = Rect(6f, 6f, 26f, 26f)
         val CLIP_RECT = Rect(12f, 12f, 24f, 24f)
         val ALPHA_MASK_RECT = Rect(12.5f, 12.5f, 23.5f, 23.5f)
+        val ALPHA_MASK_EDGE = Point(12f, 16f)
         val SOURCE = Color.fromArgb(192, 208, 80, 32)
         val DESTINATION = Color.fromArgb(160, 40, 120, 208)
         val ARTISTIC_MODES = BlendMode.entries.filter { it.ordinal >= BlendMode.MULTIPLY.ordinal }.toSet()
