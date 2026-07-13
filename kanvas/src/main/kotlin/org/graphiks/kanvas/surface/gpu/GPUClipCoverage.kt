@@ -8,7 +8,7 @@ import kotlin.math.cos
 import kotlin.math.sin
 import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.canvas.DisplayOp
-import org.graphiks.kanvas.paint.MaskFilter
+import org.graphiks.kanvas.canvas.SaveLayerRec
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.picture.Picture
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoverageElement
@@ -249,7 +249,6 @@ internal object GPUClipUsePrepass {
         val registered = linkedMapOf<String, Int>()
         val refusals = mutableListOf<String>()
         var suppressedLayerDepth = 0
-        val trivialLayerPaint = Paint()
 
         fun registerLogical(operation: DisplayOp) {
             if (operation is DisplayOp.BeginLayer) {
@@ -257,10 +256,7 @@ internal object GPUClipUsePrepass {
                     suppressedLayerDepth++
                     return
                 }
-                val refusal = operation.rec.backdrop != null ||
-                    operation.rec.bounds != null ||
-                    (operation.rec.paint != null && operation.rec.paint != trivialLayerPaint)
-                if (refusal) suppressedLayerDepth = 1
+                if (operation.rec.gpuCompositePreflightRefusalOrNull() != null) suppressedLayerDepth = 1
                 return
             }
             if (operation is DisplayOp.EndLayer) {
@@ -315,97 +311,56 @@ internal fun DisplayOp.coreRoutePreflightRefusalReason(): String? = when (this) 
     else -> null
 }
 
-/** Coverage producers deferred to Task 4 must refuse before any S/G source encoding occurs. */
-internal fun DisplayOp.coveragePlaneTask4RefusalOrNull(): String? = when (this) {
-    is DisplayOp.DrawImage -> "unsupported.coverage_plane.draw_image"
-    is DisplayOp.DrawImageNine -> "unsupported.coverage_plane.draw_image_nine"
-    is DisplayOp.DrawImageLattice -> "unsupported.coverage_plane.draw_image_lattice"
-    is DisplayOp.DrawAtlas -> "unsupported.coverage_plane.draw_atlas"
-    is DisplayOp.DrawVertices -> vertices.texCoords?.let { "unsupported.coverage_plane.draw_vertices_textured" }
-    is DisplayOp.DrawMesh -> mesh.vertices.texCoords?.let { "unsupported.coverage_plane.draw_mesh_textured" }
-    is DisplayOp.DrawText -> if (hasColorGlyphs(blob)) "unsupported.coverage_plane.color_glyph" else null
-    is DisplayOp.DrawRect -> paint.maskFilter.coveragePlaneMaskBlurRefusalOrNull()
-    is DisplayOp.DrawRRect -> paint.maskFilter.coveragePlaneMaskBlurRefusalOrNull()
-    is DisplayOp.DrawPath -> paint.maskFilter.coveragePlaneMaskBlurRefusalOrNull()
-    is DisplayOp.DrawPicture -> "unsupported.coverage_plane.draw_picture"
-    else -> null
-}
-
-private fun MaskFilter?.coveragePlaneMaskBlurRefusalOrNull(): String? =
-    (this as? MaskFilter.Blur)
-        ?.takeIf { it.sigma != 0f }
-        ?.let { "unsupported.coverage_plane.mask_blur" }
+/**
+ * Task 4 supplies an S/G adapter for every visual operation accepted by this
+ * renderer. Kept as a named boundary for prepass callers: a future visual
+ * operation must either install its adapter or return a stable refusal here.
+ */
+internal fun DisplayOp.coveragePlaneTask4RefusalOrNull(): String? = null
 
 private fun DisplayOp.DrawPicture.picturePreflightRefusalReason(): String? {
     if (paint != null) return "unsupported.picture.paint"
-
-    fun containsSaveLayer(picture: Picture): Boolean = picture.ops.any { nested ->
-        when (nested) {
-            is DisplayOp.BeginLayer,
-            DisplayOp.EndLayer,
-            -> true
-            is DisplayOp.DrawPicture -> containsSaveLayer(nested.picture)
-            else -> false
-        }
-    }
 
     fun validatePicture(picture: Picture): String? {
         for (nested in picture.ops) {
             when (nested) {
                 is DisplayOp.DrawPicture -> {
                     if (nested.paint != null) return "unsupported.picture.nested_paint"
-                    if (nested.clip != ClipStack.WideOpen) return "unsupported.picture.nested_clip"
                     val nestedRefusal = validatePicture(nested.picture)
                     if (nestedRefusal != null) return nestedRefusal
                 }
-                is DisplayOp.BeginLayer,
-                DisplayOp.EndLayer,
-                -> return "unsupported.picture.save_layer"
-                else -> if (nested.hasCapturedPictureClip()) return "unsupported.picture.nested_clip"
+                else -> Unit
             }
         }
         return null
     }
 
-    val destinationRead = pictureContainsDestinationReadBlend()
-    if (destinationRead != null) {
-        return "unsupported.picture.nested_destination_read_blend:${destinationRead.modeLabel.lowercase()}"
-    }
-    if (containsSaveLayer(picture)) return "unsupported.picture.save_layer"
     return validatePicture(picture)
 }
 
-private fun DisplayOp.hasCapturedPictureClip(): Boolean = when (this) {
-    is DisplayOp.DrawRect -> clip != ClipStack.WideOpen
-    is DisplayOp.DrawRRect -> clip != ClipStack.WideOpen
-    is DisplayOp.DrawPath -> clip != ClipStack.WideOpen
-    is DisplayOp.DrawImage -> clip != ClipStack.WideOpen
-    is DisplayOp.DrawText -> clip != ClipStack.WideOpen
-    is DisplayOp.DrawColor -> clip != ClipStack.WideOpen
-    is DisplayOp.DrawPoint -> clip != ClipStack.WideOpen
-    is DisplayOp.DrawPoints -> clip != ClipStack.WideOpen
-    is DisplayOp.DrawDRRect -> clip != ClipStack.WideOpen
-    is DisplayOp.DrawImageNine -> clip != ClipStack.WideOpen
-    is DisplayOp.DrawImageLattice -> clip != ClipStack.WideOpen
-    is DisplayOp.DrawVertices -> clip != ClipStack.WideOpen
-    is DisplayOp.DrawMesh -> clip != ClipStack.WideOpen
-    is DisplayOp.DrawAtlas -> clip != ClipStack.WideOpen
-    is DisplayOp.DrawPicture -> clip != ClipStack.WideOpen
-    is DisplayOp.Clear,
-    is DisplayOp.SetTransform,
-    is DisplayOp.SetClip,
-    is DisplayOp.BeginLayer,
-    DisplayOp.EndLayer,
-    is DisplayOp.Annotation,
-    is DisplayOp.FlushAndSnapshot,
-    -> false
-}
-
-private fun DisplayOp.pictureContainsDestinationReadBlend(): GPUBlendFacts? = when (this) {
-    is DisplayOp.DrawPicture -> picture.ops.firstNotNullOfOrNull { nested ->
-        nested.pictureContainsDestinationReadBlend()
+/** The layer compositor accepts only alpha and BlendMode from its optional paint. */
+internal fun SaveLayerRec.gpuCompositePreflightRefusalOrNull(): String? {
+    if (backdrop != null) return "unsupported.layer.backdrop_filter"
+    val layerPaint = paint ?: return null
+    if (
+        layerPaint.shader != null ||
+        layerPaint.colorFilter != null ||
+        layerPaint.maskFilter != null ||
+        layerPaint.pathEffect != null ||
+        layerPaint.imageFilter != null ||
+        layerPaint.blender != null ||
+        layerPaint.style != Paint().style ||
+        layerPaint.strokeWidth != 0f ||
+        layerPaint.strokeCap != Paint().strokeCap ||
+        layerPaint.strokeJoin != Paint().strokeJoin ||
+        layerPaint.strokeMiter != Paint().strokeMiter ||
+        layerPaint.antiAlias != Paint().antiAlias
+    ) {
+        return "unsupported.layer.paint"
     }
-    else -> clipCompositeBlendFacts().takeIf(GPUBlendFacts::requiresDestinationRead)
+    return layerPaint.blendMode.toGpuBlendFacts()
+        .takeIf { it.kind == GPUBlendKind.Unsupported }
+        ?.let { "unsupported.layer.blend:${it.modeLabel.lowercase()}" }
 }
 
 internal fun DisplayOp.clipCompositeBlendFacts(): GPUBlendFacts = when (this) {

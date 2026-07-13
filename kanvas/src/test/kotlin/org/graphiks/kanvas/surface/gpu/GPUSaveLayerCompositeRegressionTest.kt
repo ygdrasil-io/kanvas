@@ -35,6 +35,25 @@ class GPUSaveLayerCompositeRegressionTest {
     }
 
     @Test
+    fun layerRestoreAcceptsEveryBlendMode() {
+        requireWebGpu()
+
+        BlendMode.entries.forEach { mode ->
+            val result = Surface(width = 8, height = 8).run {
+                canvas {
+                    drawRect(Rect(0f, 0f, 8f, 8f), Paint(color = white.toColor(), antiAlias = false))
+                    saveLayer(paint = Paint(color = translucentRed.toColor(), blendMode = mode))
+                    drawRect(Rect(2f, 2f, 6f, 6f), Paint(color = translucentBlue.toColor(), antiAlias = false))
+                    restore()
+                }
+                render()
+            }
+
+            assertEquals(0, result.diagnostics.fatalCount, "$mode ${result.diagnostics.entries}")
+        }
+    }
+
+    @Test
     fun `ordinary saveLayer composites SRC content over its opaque checkerboard parent`() {
         requireWebGpu()
 
@@ -100,7 +119,7 @@ class GPUSaveLayerCompositeRegressionTest {
     }
 
     @Test
-    fun `ordinary saveLayer refuses clipped DrawColor SRC before it reaches its parent`() {
+    fun `ordinary saveLayer composes clipped DrawColor SRC before restore`() {
         requireWebGpu()
 
         val surface = Surface(width = 8, height = 8)
@@ -120,18 +139,14 @@ class GPUSaveLayerCompositeRegressionTest {
             result.pixels,
             x = 2,
             y = 2,
-            expected = checkerGray,
-            tolerance = 0,
+            expected = sourceOverSrgb(translucentBackground, checkerGray),
+            tolerance = 2,
         )
-        assertEquals(1, result.diagnostics.fatalCount)
-        assertEquals(
-            "unsupported.clip.mask.blend_mode:src",
-            result.diagnostics.entries.single { it.level == DiagnosticLevel.FATAL }.reason,
-        )
+        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
     }
 
     @Test
-    fun `advanced blend composes after a preceding clipped DrawColor SRC refusal`() {
+    fun `advanced blend composes after a preceding clipped DrawColor SRC`() {
         requireWebGpu()
 
         val surface = Surface(width = 8, height = 8)
@@ -155,18 +170,10 @@ class GPUSaveLayerCompositeRegressionTest {
             result.pixels,
             x = 2,
             y = 2,
-            expected = checkerGray,
-            tolerance = 0,
+            expected = sourceOverSrgb(translucentBackground, checkerGray),
+            tolerance = 2,
         )
-        assertEquals(1, result.diagnostics.fatalCount)
-        assertEquals(
-            listOf(
-                "unsupported.clip.mask.blend_mode:src",
-            ),
-            result.diagnostics.entries
-                .filter { it.level == DiagnosticLevel.FATAL }
-                .map { it.reason },
-        )
+        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
     }
 
     @Test
@@ -205,7 +212,7 @@ class GPUSaveLayerCompositeRegressionTest {
     }
 
     @Test
-    fun `DrawPicture containing saveLayer is refused before any child reaches its parent`() {
+    fun `DrawPicture containing saveLayer restores the nested layer`() {
         requireWebGpu()
 
         val recorder = PictureRecorder()
@@ -224,16 +231,18 @@ class GPUSaveLayerCompositeRegressionTest {
 
         val result = surface.render()
 
-        assertPixelNear(result.pixels, x = 2, y = 2, expected = white, tolerance = 0)
-        assertEquals(1, result.diagnostics.fatalCount)
-        assertEquals(
-            "unsupported.picture.save_layer",
-            result.diagnostics.entries.single { it.level == DiagnosticLevel.FATAL }.reason,
+        assertPixelNear(
+            result.pixels,
+            x = 2,
+            y = 2,
+            expected = sourceOverSrgb(translucentBlue, sourceOverSrgb(translucentRed, white)),
+            tolerance = 2,
         )
+        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
     }
 
     @Test
-    fun `clipped DrawPicture refuses a nested multiply before source routing`() {
+    fun `clipped DrawPicture composes a nested multiply through the source formula`() {
         requireWebGpu()
 
         val recorder = PictureRecorder()
@@ -255,11 +264,8 @@ class GPUSaveLayerCompositeRegressionTest {
             render()
         }
 
-        assertEquals(1, result.stats.opsRefused)
-        assertTrue(result.diagnostics.entries.any {
-            it.reason == "unsupported.picture.nested_destination_read_blend:multiply"
-        })
-        assertFalse(result.diagnostics.entries.any { it.reason == "dispatched" && it.operation == "drawPicture" })
+        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertTrue(result.diagnostics.entries.any { it.reason == "gpu-copy-then-formula" })
     }
 
     @Test

@@ -32,6 +32,7 @@ import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendUniformPayloadDraw
 
 import org.graphiks.kanvas.gpu.renderer.execution.GPUClearColor
 import org.graphiks.kanvas.types.Color
+import org.graphiks.kanvas.types.alphaByte
 
 import org.graphiks.kanvas.gpu.renderer.execution.GPUOffscreenTargetRequest
 import org.graphiks.kanvas.gpu.renderer.filters.MaskBlurPlan
@@ -111,10 +112,21 @@ internal fun DisplayOp.requiresSeparateGeometryCoverage(): Boolean = when (this)
     is DisplayOp.DrawRect -> paint.antiAlias
     is DisplayOp.DrawRRect -> paint.antiAlias
     is DisplayOp.DrawPath -> paint.antiAlias
+    // Image alpha describes S, never the destination-rect geometry G.
+    is DisplayOp.DrawImage,
+    is DisplayOp.DrawImageNine,
+    is DisplayOp.DrawImageLattice,
+    is DisplayOp.DrawAtlas,
+    -> true
+    // Triangle edges and glyph masks are geometric coverage, independent of
+    // their sampled or paint alpha.
+    is DisplayOp.DrawVertices,
+    is DisplayOp.DrawMesh,
     is DisplayOp.DrawText -> true
     is DisplayOp.DrawPoint -> paint.antiAlias
     is DisplayOp.DrawPoints -> paint.antiAlias
     is DisplayOp.DrawDRRect -> paint.antiAlias
+    is DisplayOp.DrawPicture -> true
     else -> false
 }
 
@@ -129,6 +141,53 @@ private fun NormalizedDrawCommand.FillRRect.forGeometryCoverage(): NormalizedDra
 
 private fun NormalizedDrawCommand.FillPath.forGeometryCoverage(): NormalizedDrawCommand.FillPath =
     copy(material = geometryCoverageMaterial)
+
+/** Rebinds a shape source to opaque white without inheriting paint/image alpha into G. */
+private fun NormalizedDrawCommand.forGeometryCoverage(): NormalizedDrawCommand = when (this) {
+    is NormalizedDrawCommand.FillRect -> forGeometryCoverage()
+    is NormalizedDrawCommand.FillRRect -> forGeometryCoverage()
+    is NormalizedDrawCommand.FillPath -> forGeometryCoverage()
+    else -> error("Geometry coverage is not defined for ${javaClass.simpleName}")
+}
+
+/** Layer restore source: premultiplied child color modulated only by layer opacity. */
+private val LAYER_OPACITY_WGSL: String = """
+    struct Uniforms {
+        opacity: vec4f,
+    };
+
+    @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+    @group(1) @binding(1) var inputTex: texture_2d<f32>;
+    @group(1) @binding(2) var inputSam: sampler;
+
+    @vertex
+    fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
+        let x = f32((idx << 1u) & 2u) * 2.0 - 1.0;
+        let y = f32(idx & 2u) * 2.0 - 1.0;
+        return vec4f(x, y, 0.0, 1.0);
+    }
+
+    @fragment
+    fn fs_main(@builtin(position) coord: vec4f) -> @location(0) vec4f {
+        let dims = textureDimensions(inputTex);
+        let uv = vec2f(coord.x / f32(dims.x), coord.y / f32(dims.y));
+        return textureSample(inputTex, inputSam, uv) * uniforms.opacity.x;
+    }
+""".trimIndent()
+
+private fun layerOpacityUniformDraw(opacity: Float, bounds: LayerBounds): GPUBackendRawUniformDraw {
+    val uniformBytes = java.nio.ByteBuffer.allocate(16).order(java.nio.ByteOrder.LITTLE_ENDIAN).apply {
+        putFloat(opacity)
+        putFloat(0f); putFloat(0f); putFloat(0f)
+    }.array()
+    return GPUBackendRawUniformDraw(
+        uniformBytes = uniformBytes,
+        scissorX = bounds.x,
+        scissorY = bounds.y,
+        scissorWidth = bounds.width,
+        scissorHeight = bounds.height,
+    )
+}
 
 private fun MaskBlurPlan.Ready.maskBlurDiagnosticFacts(): List<DiagnosticFact> {
     val kernel = blurKernelUniform(this)
@@ -329,7 +388,7 @@ private sealed interface LayerPlan {
 
 private data class LayerCompositePlan(
     val opacity: Float = 1f,
-    val blendMode: GPUBlendMode = GPUBlendMode.SRC_OVER,
+    val blend: GPUBlendFacts = GPUBlendFacts.srcOver(),
     val backdrop: BackdropPlan? = null,
 )
 
@@ -672,8 +731,8 @@ internal fun renderViaGpu(
             var maskBlurSourceBounds: GPUBounds? = null
             val layerStack = java.util.ArrayDeque<SceneTargetFrame>()
             var layerOrdinal = 0
+            var suppressedLayerDepth = 0
             val clearTransparent = GPUClearColor(0.0, 0.0, 0.0, 0.0)
-            val trivialLayerPaint = Paint()
             fun sceneClear() = when {
                 clipSourceRoute && sourceHasContent -> null
                 clipSourceRoute -> clearTransparent
@@ -682,10 +741,14 @@ internal fun renderViaGpu(
             }
 
             fun classifyLayerRequest(rec: SaveLayerRec, transform: Matrix33): LayerPlan {
-                if (rec.backdrop != null) return LayerPlan.Refused("unsupported.layer.backdrop_filter")
-                if (rec.paint != null && rec.paint != trivialLayerPaint) return LayerPlan.Refused("unsupported.layer.paint")
+                rec.gpuCompositePreflightRefusalOrNull()?.let { return LayerPlan.Refused(it) }
+                val layerPaint = rec.paint
+                val composite = LayerCompositePlan(
+                    opacity = layerPaint?.color?.alphaByte?.toFloat()?.div(255f) ?: 1f,
+                    blend = layerPaint?.blendMode?.toGpuBlendFacts() ?: GPUBlendFacts.srcOver(),
+                )
 
-                val bounds = rec.bounds ?: return LayerPlan.Supported(null, LayerCompositePlan())
+                val bounds = rec.bounds ?: return LayerPlan.Supported(null, composite)
                 val mappedCorners = listOf(
                     transform * org.graphiks.kanvas.types.Point(bounds.left, bounds.top),
                     transform * org.graphiks.kanvas.types.Point(bounds.right, bounds.top),
@@ -706,12 +769,142 @@ internal fun renderViaGpu(
                 val endY = ceil(bottom).toInt().coerceIn(y, height)
                 return LayerPlan.Supported(
                     bounds = LayerBounds(x, y, endX - x, endY - y),
-                    composite = LayerCompositePlan(),
+                    composite = composite,
                 )
             }
 
             fun layerScissor(plan: LayerPlan.Supported): LayerBounds =
                 plan.bounds ?: LayerBounds(x = 0, y = 0, width = width, height = height)
+
+            fun beginLayer(rec: SaveLayerRec, transform: Matrix33, cmdId: GPUDrawCommandID): Boolean {
+                if (suppressedLayerDepth > 0) {
+                    suppressedLayerDepth++
+                    return false
+                }
+                when (val plan = classifyLayerRequest(rec, transform)) {
+                    is LayerPlan.Refused -> {
+                        diagnostics.fatal("refuse:saveLayer:${cmdId.value}", "saveLayer", plan.reason)
+                        suppressedLayerDepth = 1
+                        return false
+                    }
+                    is LayerPlan.Supported -> {
+                        if (plan.bounds?.let { it.width == 0 || it.height == 0 } == true) {
+                            suppressedLayerDepth = 1
+                            return false
+                        }
+                        layerStack.addLast(SceneTargetFrame(sceneLabel, sceneHasContent, scenePlan))
+                        sceneLabel = t.createOffscreenTexture(
+                            GPUBackendOffscreenTexture(
+                                label = "kanvas:saveLayer:${layerOrdinal++}",
+                                width = width,
+                                height = height,
+                                format = texFormat,
+                            ),
+                        )
+                        sceneHasContent = false
+                        scenePlan = plan
+                        return true
+                    }
+                }
+            }
+
+            fun endLayer(cmdId: GPUDrawCommandID): Boolean {
+                if (suppressedLayerDepth > 0) {
+                    suppressedLayerDepth--
+                    return false
+                }
+                if (layerStack.isEmpty()) {
+                    diagnostics.fatal("refuse:saveLayer:${cmdId.value}", "saveLayer", "unsupported.layer.unbalanced_end")
+                    return false
+                }
+                val childLabel = sceneLabel
+                val childPlan = scenePlan
+                val parent = layerStack.removeLast()
+                sceneLabel = parent.label
+                sceneHasContent = parent.hasContent
+                scenePlan = parent.plan
+                val bounds = layerScissor(childPlan)
+                if (bounds.width == 0 || bounds.height == 0) return true
+
+                if (clipSourcePlane == GPUClipSourcePlane.GeometryCoverage) {
+                    // A nested layer in a G pass carries the already-rasterized geometry mask;
+                    // its layer paint must not turn alpha/color into coverage.
+                    t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
+                        drawCompositePass(
+                            wgsl = COPY_WGSL,
+                            colorFormat = texFormat,
+                            textureLabel = childLabel,
+                            draws = listOf(layerOpacityUniformDraw(1f, bounds)),
+                            blendMode = GPUBlendMode.SRC_OVER,
+                        )
+                    }
+                    sceneHasContent = true
+                    return true
+                }
+
+                val layerSourceLabel = if (childPlan.composite.opacity == 1f) {
+                    childLabel
+                } else {
+                    val opacityLabel = if (clipSourceRoute) combinedCoverageLabel else srcLabel
+                    t.encodeOffscreenTexture(opacityLabel, clearTransparent) {
+                        drawCompositePass(
+                            wgsl = LAYER_OPACITY_WGSL,
+                            colorFormat = texFormat,
+                            textureLabel = childLabel,
+                            draws = listOf(layerOpacityUniformDraw(childPlan.composite.opacity, bounds)),
+                            blendMode = GPUBlendMode.SRC,
+                        )
+                    }
+                    opacityLabel
+                }
+                val coverageCommand = DisplayOp.DrawRect(
+                    Rect(
+                        bounds.x.toFloat(),
+                        bounds.y.toFloat(),
+                        (bounds.x + bounds.width).toFloat(),
+                        (bounds.y + bounds.height).toFloat(),
+                    ),
+                    Paint.fill(Color.WHITE).copy(antiAlias = false),
+                    Matrix33.identity(),
+                    ClipStack.WideOpen,
+                ).toNormalizedCommand(cmdId, targets)
+                t.encodeOffscreenTexture(geometryCoverageLabel, clearTransparent) {
+                    dispatchFillRect(
+                        coverageCommand,
+                        dispatched,
+                        diagnostics,
+                        width,
+                        height,
+                        config,
+                        recordResult = false,
+                    )
+                }
+                val layerBlend = childPlan.composite.blend
+                val mode = when (layerBlend.kind) {
+                    GPUBlendKind.SrcOver -> GPUBlendMode.SRC_OVER
+                    else -> layerBlend.blendMode
+                } ?: return false.also {
+                        diagnostics.fatal(
+                            "refuse:saveLayer:${cmdId.value}",
+                            "saveLayer",
+                            "unsupported.layer.blend:${layerBlend.modeLabel.lowercase()}",
+                        )
+                    }
+                val rendered = t.renderDestinationReadBlend(
+                    sceneLabel = sceneLabel,
+                    sceneHasContent = sceneHasContent || (clipSourceRoute && sourceHasContent),
+                    sourceSurface = GPUClipSourceSurface(layerSourceLabel, geometryCoverageLabel),
+                    snapshotLabel = snapLabel,
+                    combinedCoverageLabel = combinedCoverageLabel,
+                    clipMaskLabel = null,
+                    mode = mode,
+                    colorFormat = texFormat,
+                    width = width,
+                    height = height,
+                )
+                if (rendered) sceneHasContent = true
+                return rendered
+            }
 
             /**
              * A scissor clip is represented by the temporary source texture itself during a
@@ -771,6 +964,11 @@ internal fun renderViaGpu(
                     clipSourcePreservesClip -> command.copyForDestinationReadSource()
                     else -> command.copyForClipSource(width, height)
                 }
+                val sourceCommand = if (clipSourcePlane == GPUClipSourcePlane.GeometryCoverage) {
+                    routedCommand.forGeometryCoverage()
+                } else {
+                    routedCommand
+                }
                 plan.diagnostics.forEach { diagnostic ->
                     diagnostics.degrade(
                         "degrade:${command.diagnosticName}:${command.commandId.value}:${diagnostic.code}",
@@ -786,7 +984,7 @@ internal fun renderViaGpu(
                 )
                 return recordSourcePart(t.renderMaskBlurCommand(
                     sceneLabel,
-                    routedCommand,
+                    sourceCommand,
                     plan,
                     sceneClear(),
                     dispatched,
@@ -1204,7 +1402,18 @@ internal fun renderViaGpu(
             }
             scanImages(ops)
 
-            fun renderImageCommand(cmd: NormalizedDrawCommand.DrawImageRect): Boolean {
+            /** Image geometry is its transformed destination rect, never the sampled alpha texture. */
+            fun renderImageGeometryCoverage(op: DisplayOp.DrawImage, cmdId: GPUDrawCommandID): Boolean {
+                val coverage = DisplayOp.DrawRect(
+                    rect = op.dst,
+                    paint = Paint.fill(Color.WHITE).copy(antiAlias = op.paint?.antiAlias ?: true),
+                    transform = op.transform,
+                    clip = op.clip,
+                ).toNormalizedCommand(cmdId, targets)
+                return dispatchRectDirect(coverage)
+            }
+
+            fun renderImageColorCommand(cmd: NormalizedDrawCommand.DrawImageRect): Boolean {
                 val routedCommand = when {
                     !clipSourceRoute -> cmd
                     clipSourcePreservesClip -> cmd.copy(blend = GPUBlendFacts.srcOver())
@@ -1239,6 +1448,13 @@ internal fun renderViaGpu(
                 }
                 return recordSourcePart(diagnostics.fatalCount == fatalBefore && plan !is GPUImageFilterPlan.Refused)
             }
+
+            fun renderImageCommand(op: DisplayOp.DrawImage, cmdId: GPUDrawCommandID): Boolean =
+                if (clipSourceRoute && clipSourcePlane == GPUClipSourcePlane.GeometryCoverage) {
+                    renderImageGeometryCoverage(op, cmdId)
+                } else {
+                    renderImageColorCommand(op.toImageRectCommand(cmdId, targets))
+                }
 
             val clipFrameCache = GPUClipCoverageFrameCache(config.maxClipIntermediateBytes.toLong())
             GPUClipUsePrepass.register(
@@ -1301,6 +1517,62 @@ internal fun renderViaGpu(
                 return recordSourcePart(rendered && diagnostics.fatalCount == fatalBefore)
             }
 
+            /** Triangle coverage for textured vertices/meshes, independent of sampled texel alpha. */
+            fun renderVerticesGeometryCoverage(
+                vertices: org.graphiks.kanvas.types.Vertices,
+                transform: Matrix33,
+                clip: ClipStack,
+                cmdId: GPUDrawCommandID,
+                operationName: String,
+            ): Boolean {
+                val indices = vertices.indices?.toIntArray() ?: IntArray(vertices.positions.size) { it }
+                if (indices.isEmpty() || indices.any { it !in vertices.positions.indices }) {
+                    diagnostics.fatal(
+                        "refuse:$operationName:${cmdId.value}",
+                        operationName,
+                        "unsupported.vertices.indices",
+                    )
+                    return false
+                }
+                val path = Path()
+                fun devicePoint(index: Int): org.graphiks.kanvas.types.Point {
+                    val point = vertices.positions[index]
+                    return org.graphiks.kanvas.types.Point(
+                        transform.scaleX * point.x + transform.skewX * point.y + transform.transX,
+                        transform.skewY * point.x + transform.scaleY * point.y + transform.transY,
+                    )
+                }
+                fun triangle(a: Int, b: Int, c: Int) {
+                    devicePoint(a).let { path.moveTo(it.x, it.y) }
+                    devicePoint(b).let { path.lineTo(it.x, it.y) }
+                    devicePoint(c).let { path.lineTo(it.x, it.y) }
+                    path.close()
+                }
+                when (vertices.mode) {
+                    org.graphiks.kanvas.types.VertexMode.TRIANGLES -> {
+                        if (indices.size % 3 != 0) return false
+                        for (index in indices.indices step 3) triangle(indices[index], indices[index + 1], indices[index + 2])
+                    }
+                    org.graphiks.kanvas.types.VertexMode.TRIANGLE_STRIP ->
+                        for (index in 2 until indices.size) triangle(indices[index - 2], indices[index - 1], indices[index])
+                    org.graphiks.kanvas.types.VertexMode.TRIANGLE_FAN ->
+                        for (index in 2 until indices.size) triangle(indices[0], indices[index - 1], indices[index])
+                }
+                val flattened = PathTessellator(config.curveTolerance, config.maxPathVertices.toInt())
+                    .flattenWithContours(path.toPathTessellatorData())
+                val points = flattened.points
+                if (points.size < 3) return false
+                return dispatchPathDirect(
+                    DisplayOp.DrawPath(path, Paint.fill(Color.WHITE), Matrix33.identity(), clip).toNormalizedCommand(
+                        cmdId,
+                        targets,
+                        points.flatMap { listOf(it.x, it.y) },
+                        flattened.contourStarts.ifEmpty { listOf(0) },
+                        points.size,
+                    ),
+                )
+            }
+
             /** Encodes path-backed or textured vertices into the current target without reapplying the outer clip. */
             fun renderVerticesCommand(
                 vertices: org.graphiks.kanvas.types.Vertices,
@@ -1318,6 +1590,9 @@ internal fun renderViaGpu(
                         "unsupported.vertices.perspective_transform",
                     )
                     return false
+                }
+                if (clipSourceRoute && clipSourcePlane == GPUClipSourcePlane.GeometryCoverage) {
+                    return renderVerticesGeometryCoverage(vertices, transform, clip, cmdId, operationName)
                 }
                 val texCoords = vertices.texCoords
                 if (vertices.colors != null || (texCoords == null && vertices.indices != null)) {
@@ -1648,7 +1923,7 @@ internal fun renderViaGpu(
                                 }
                             }
                         }
-                        is DisplayOp.DrawImage -> renderImageCommand(op.toImageRectCommand(cmdId, targets))
+                        is DisplayOp.DrawImage -> renderImageCommand(op, cmdId)
                         is DisplayOp.DrawText -> renderTextCommand(op, cmdId)
                         is DisplayOp.DrawVertices -> renderVerticesCommand(
                             vertices = op.vertices,
@@ -1701,49 +1976,9 @@ internal fun renderViaGpu(
                                 }
                             }
                             expand(op.picture, op.transform)
-                            fun hasNestedClip(nested: DisplayOp): Boolean = when (nested) {
-                                is DisplayOp.DrawRect -> nested.clip != org.graphiks.kanvas.canvas.ClipStack.WideOpen
-                                is DisplayOp.DrawRRect -> nested.clip != org.graphiks.kanvas.canvas.ClipStack.WideOpen
-                                is DisplayOp.DrawPath -> nested.clip != org.graphiks.kanvas.canvas.ClipStack.WideOpen
-                                is DisplayOp.DrawImage -> nested.clip != org.graphiks.kanvas.canvas.ClipStack.WideOpen
-                                is DisplayOp.DrawText -> nested.clip != org.graphiks.kanvas.canvas.ClipStack.WideOpen
-                                is DisplayOp.DrawColor -> nested.clip != org.graphiks.kanvas.canvas.ClipStack.WideOpen
-                                is DisplayOp.DrawPoint -> nested.clip != org.graphiks.kanvas.canvas.ClipStack.WideOpen
-                                is DisplayOp.DrawPoints -> nested.clip != org.graphiks.kanvas.canvas.ClipStack.WideOpen
-                                is DisplayOp.DrawDRRect -> nested.clip != org.graphiks.kanvas.canvas.ClipStack.WideOpen
-                                is DisplayOp.DrawImageNine -> nested.clip != org.graphiks.kanvas.canvas.ClipStack.WideOpen
-                                is DisplayOp.DrawImageLattice -> nested.clip != org.graphiks.kanvas.canvas.ClipStack.WideOpen
-                                is DisplayOp.DrawPicture -> nested.clip != org.graphiks.kanvas.canvas.ClipStack.WideOpen
-                                is DisplayOp.DrawVertices -> nested.clip != org.graphiks.kanvas.canvas.ClipStack.WideOpen
-                                is DisplayOp.DrawMesh -> nested.clip != org.graphiks.kanvas.canvas.ClipStack.WideOpen
-                                is DisplayOp.DrawAtlas -> nested.clip != org.graphiks.kanvas.canvas.ClipStack.WideOpen
-                                is DisplayOp.Clear,
-                                is DisplayOp.SetTransform,
-                                is DisplayOp.SetClip,
-                                is DisplayOp.BeginLayer,
-                                DisplayOp.EndLayer,
-                                is DisplayOp.Annotation,
-                                is DisplayOp.FlushAndSnapshot,
-                                -> false
-                            }
-                            if (expanded.any { it is DisplayOp.BeginLayer || it is DisplayOp.EndLayer }) {
-                                diagnostics.fatal(
-                                    "refuse:drawPicture:${cmdId.value}",
-                                    "drawPicture",
-                                    "unsupported.picture.save_layer",
-                                )
-                                false
-                            } else if (expanded.any(::hasNestedClip)) {
-                                diagnostics.fatal(
-                                    "refuse:drawPicture:${cmdId.value}",
-                                    "drawPicture",
-                                    "unsupported.picture.nested_clip",
-                                )
-                                false
-                            } else {
-                                var renderedChild = false
-                                var allRendered = true
-                                for (nested in expanded) {
+                            var renderedChild = false
+                            var allRendered = true
+                            for (nested in expanded) {
                                     val nestedCmdId = GPUDrawCommandID(dispatched.size)
                                     val perspectiveRefusal = nested.perspectiveCaptureRefusalReasonOrNull()
                                     if (perspectiveRefusal != null) {
@@ -1778,17 +2013,15 @@ internal fun renderViaGpu(
                                         is DisplayOp.Annotation,
                                         is DisplayOp.FlushAndSnapshot,
                                         -> null
-                                        is DisplayOp.BeginLayer,
-                                        DisplayOp.EndLayer,
-                                        -> error("picture layer preflight should have refused")
+                                        is DisplayOp.BeginLayer -> beginLayer(nested.rec, nested.transform, nestedCmdId)
+                                        DisplayOp.EndLayer -> endLayer(nestedCmdId)
                                     }
                                     if (childRendered != null) {
                                         renderedChild = childRendered || renderedChild
                                         allRendered = childRendered && allRendered
                                     }
-                                }
-                                renderedChild && allRendered
                             }
+                            renderedChild && allRendered
                             }
                         }
                         is DisplayOp.DrawColor -> dispatchRectDirect(op.toNormalizedCommand(cmdId, targets))
@@ -1886,15 +2119,15 @@ internal fun renderViaGpu(
                         is DisplayOp.DrawImageNine -> {
                             var allRendered = true
                             for (cell in op.decompose()) {
-                                val command = DisplayOp.DrawImage(
+                                val imageCell = DisplayOp.DrawImage(
                                     op.image,
                                     cell.src,
                                     cell.dst,
                                     op.paint,
                                     op.transform,
                                     op.clip,
-                                ).toImageRectCommand(GPUDrawCommandID(dispatched.size), targets)
-                                allRendered = renderImageCommand(command) && allRendered
+                                )
+                                allRendered = renderImageCommand(imageCell, GPUDrawCommandID(dispatched.size)) && allRendered
                             }
                             allRendered
                         }
@@ -1909,15 +2142,15 @@ internal fun renderViaGpu(
                                 } else {
                                     op.paint
                                 }
-                                val command = DisplayOp.DrawImage(
+                                val imageCell = DisplayOp.DrawImage(
                                     op.image,
                                     cell.src,
                                     cell.dst,
                                     paint,
                                     op.transform,
                                     op.clip,
-                                ).toImageRectCommand(GPUDrawCommandID(dispatched.size), targets)
-                                allRendered = renderImageCommand(command) && allRendered
+                                )
+                                allRendered = renderImageCommand(imageCell, GPUDrawCommandID(dispatched.size)) && allRendered
                             }
                             allRendered
                         }
@@ -1930,15 +2163,15 @@ internal fun renderViaGpu(
                                     tint != null -> Paint.fill(tint)
                                     else -> op.paint
                                 }
-                                val command = DisplayOp.DrawImage(
+                                val imageCell = DisplayOp.DrawImage(
                                     op.atlas,
                                     op.texRects[index],
                                     computeAtlasDst(op.texRects[index], op.transform * op.transforms[index]),
                                     paint,
                                     Matrix33.identity(),
                                     op.clip,
-                                ).toImageRectCommand(GPUDrawCommandID(dispatched.size), targets)
-                                allRendered = renderImageCommand(command) && allRendered
+                                )
+                                allRendered = renderImageCommand(imageCell, GPUDrawCommandID(dispatched.size)) && allRendered
                             }
                             allRendered
                         }
@@ -1962,7 +2195,6 @@ internal fun renderViaGpu(
                 return rendered
             }
 
-            var suppressedLayerDepth = 0
             fun refusePerspectiveCapture(op: DisplayOp, cmdId: GPUDrawCommandID): Boolean {
                 val reason = op.perspectiveCaptureRefusalReasonOrNull() ?: return false
                 diagnostics.fatal(
@@ -2038,76 +2270,11 @@ internal fun renderViaGpu(
                 val cmdId = GPUDrawCommandID(dispatched.size)
                 maskBlurSourceBounds = null
                 if (op is DisplayOp.BeginLayer) {
-                    if (suppressedLayerDepth > 0) {
-                        suppressedLayerDepth++
-                        continue
-                    }
-                    when (val plan = classifyLayerRequest(op.rec, op.transform)) {
-                        is LayerPlan.Refused -> {
-                            diagnostics.fatal(
-                                "refuse:saveLayer:${cmdId.value}",
-                                "saveLayer",
-                                plan.reason,
-                            )
-                            suppressedLayerDepth = 1
-                        }
-                        is LayerPlan.Supported -> {
-                            if (plan.bounds?.let { it.width == 0 || it.height == 0 } == true) {
-                                suppressedLayerDepth = 1
-                            } else {
-                                layerStack.addLast(SceneTargetFrame(sceneLabel, sceneHasContent, scenePlan))
-                                sceneLabel = t.createOffscreenTexture(
-                                    GPUBackendOffscreenTexture(
-                                        label = "kanvas:saveLayer:${layerOrdinal++}",
-                                        width = width,
-                                        height = height,
-                                        format = texFormat,
-                                    ),
-                                )
-                                sceneHasContent = false
-                                scenePlan = plan
-                            }
-                        }
-                    }
+                    beginLayer(op.rec, op.transform, cmdId)
                     continue
                 }
                 if (op is DisplayOp.EndLayer) {
-                    if (suppressedLayerDepth > 0) {
-                        suppressedLayerDepth--
-                    } else if (layerStack.isEmpty()) {
-                        diagnostics.fatal(
-                            "refuse:saveLayer:${cmdId.value}",
-                            "saveLayer",
-                            "unsupported.layer.unbalanced_end",
-                        )
-                    } else {
-                        val childLabel = sceneLabel
-                        val childHasContent = sceneHasContent
-                        val childPlan = scenePlan
-                        val parent = layerStack.removeLast()
-                        sceneLabel = parent.label
-                        sceneHasContent = parent.hasContent
-                        scenePlan = parent.plan
-                        val scissor = layerScissor(childPlan)
-                        if (childHasContent && scissor.width > 0 && scissor.height > 0) {
-                            t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
-                                drawCompositePass(
-                                    wgsl = COPY_WGSL,
-                                    colorFormat = texFormat,
-                                    textureLabel = childLabel,
-                                    draws = listOf(
-                                        GPUBackendRawUniformDraw(
-                                            uniformBytes = ByteArray(16),
-                                            scissorX = scissor.x, scissorY = scissor.y,
-                                            scissorWidth = scissor.width, scissorHeight = scissor.height,
-                                        ),
-                                    ),
-                                    blendMode = childPlan.composite.blendMode,
-                                )
-                            }
-                            sceneHasContent = true
-                        }
-                    }
+                    endLayer(cmdId)
                     continue
                 }
                 if (suppressedLayerDepth > 0) continue
@@ -2385,7 +2552,7 @@ internal fun renderViaGpu(
                     }
                     is DisplayOp.DrawImage -> {
                         val cmd = op.toImageRectCommand(cmdId, targets)
-                        renderImageCommand(cmd)
+                        renderImageColorCommand(cmd)
                         sceneHasContent = true
                     }
                     is DisplayOp.DrawText -> {
@@ -2543,7 +2710,7 @@ internal fun renderViaGpu(
                                 clip = op.clip,
                             )
                             val cmd = subOp.toImageRectCommand(subCmdId, targets)
-                            renderImageCommand(cmd)
+                            renderImageColorCommand(cmd)
                             sceneHasContent = true
                         }
                     }
@@ -2567,7 +2734,7 @@ internal fun renderViaGpu(
                                 clip = op.clip,
                             )
                             val cmd = subOp.toImageRectCommand(subCmdId, targets)
-                            renderImageCommand(cmd)
+                            renderImageColorCommand(cmd)
                             sceneHasContent = true
                         }
                     }
@@ -2688,7 +2855,7 @@ internal fun renderViaGpu(
                                 }
                                 is DisplayOp.DrawImage -> {
                                     val imgCmd = nestedOp.toImageRectCommand(nestedCmdId, targets)
-                                    renderImageCommand(imgCmd)
+                                    renderImageColorCommand(imgCmd)
                                     sceneHasContent = true
                                 }
                                 is DisplayOp.DrawImageNine -> {
@@ -2704,7 +2871,7 @@ internal fun renderViaGpu(
                                             clip = nestedOp.clip,
                                         )
                                         val imgCmd = subOp.toImageRectCommand(subCmdId, targets)
-                                        renderImageCommand(imgCmd)
+                                        renderImageColorCommand(imgCmd)
                                         sceneHasContent = true
                                     }
                                 }
@@ -2728,7 +2895,7 @@ internal fun renderViaGpu(
                                             clip = nestedOp.clip,
                                         )
                                         val imgCmd = subOp.toImageRectCommand(subCmdId, targets)
-                                        renderImageCommand(imgCmd)
+                                        renderImageColorCommand(imgCmd)
                                         sceneHasContent = true
                                     }
                                 }
@@ -2754,7 +2921,7 @@ internal fun renderViaGpu(
                                             clip = nestedOp.clip,
                                         )
                                         val imgCmd = subOp.toImageRectCommand(subCmdId, targets)
-                                        renderImageCommand(imgCmd)
+                                        renderImageColorCommand(imgCmd)
                                         sceneHasContent = true
                                     }
                                 }
@@ -3023,7 +3190,7 @@ internal fun renderViaGpu(
                                 clip = op.clip,
                             )
                             val cmd = subOp.toImageRectCommand(subCmdId, targets)
-                            renderImageCommand(cmd)
+                            renderImageColorCommand(cmd)
                             sceneHasContent = true
                         }
                     }
