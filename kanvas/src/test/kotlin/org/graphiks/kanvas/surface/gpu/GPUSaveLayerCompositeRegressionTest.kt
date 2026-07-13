@@ -242,6 +242,40 @@ class GPUSaveLayerCompositeRegressionTest {
     }
 
     @Test
+    fun `translated DrawPicture with captured clip and bounded saveLayer refuses before encoding`() {
+        requireWebGpu()
+
+        val recorder = PictureRecorder()
+        recorder.beginRecording(Rect(0f, 0f, 8f, 8f)).apply {
+            saveLayer(Rect(0f, 0f, 4f, 4f))
+            save()
+            clipRect(Rect(1f, 1f, 4f, 4f), ClipOp.INTERSECT, antiAlias = false)
+            drawRect(Rect(0f, 0f, 4f, 4f), Paint(color = translucentRed.toColor(), antiAlias = false))
+            restore()
+            restore()
+        }
+        val picture = recorder.finishRecordingAsPicture()
+
+        val result = Surface(width = 8, height = 8).run {
+            canvas {
+                drawRect(Rect(0f, 0f, 8f, 8f), Paint(color = white.toColor(), antiAlias = false))
+                translate(2f, 1f)
+                drawPicture(picture)
+            }
+            render()
+        }
+
+        assertEquals(1, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertTrue(
+            result.diagnostics.entries.any { it.reason == "unsupported.picture.transformed_layer" },
+            result.diagnostics.entries.toString(),
+        )
+        assertPixelNear(result.pixels, x = 2, y = 2, expected = white, tolerance = 0)
+        assertPixelNear(result.pixels, x = 4, y = 3, expected = white, tolerance = 0)
+        assertPixelNear(result.pixels, x = 6, y = 3, expected = white, tolerance = 0)
+    }
+
+    @Test
     fun `clipped DrawPicture composes a nested multiply through the source formula`() {
         requireWebGpu()
 

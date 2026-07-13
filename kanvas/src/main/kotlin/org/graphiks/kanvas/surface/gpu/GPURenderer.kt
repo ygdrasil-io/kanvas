@@ -32,7 +32,11 @@ import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendUniformPayloadDraw
 
 import org.graphiks.kanvas.gpu.renderer.execution.GPUClearColor
 import org.graphiks.kanvas.types.Color
+import org.graphiks.kanvas.types.a
 import org.graphiks.kanvas.types.alphaByte
+import org.graphiks.kanvas.types.b
+import org.graphiks.kanvas.types.g
+import org.graphiks.kanvas.types.r
 
 import org.graphiks.kanvas.gpu.renderer.execution.GPUOffscreenTargetRequest
 import org.graphiks.kanvas.gpu.renderer.filters.MaskBlurPlan
@@ -76,6 +80,14 @@ import kotlin.math.cos
 import kotlin.math.floor
 import kotlin.math.sin
 import kotlin.math.sqrt
+
+/** Applies DrawText paint alpha to a CPAL color without tinting its palette RGB channels. */
+internal fun modulateCpalLayerAlpha(cpalColor: Color, paintColor: Color): Color =
+    Color.fromRGBA(cpalColor.r, cpalColor.g, cpalColor.b, cpalColor.a * paintColor.a)
+
+/** G records glyph shape coverage only; CPAL/paint alpha belongs exclusively to S. */
+internal fun colorGlyphSourceColor(color: Color, geometryCoverage: Boolean): Color =
+    if (geometryCoverage) Color.WHITE else color
 
 internal fun productIntermediatePlannerScopeDiagnostics(): List<String> =
     listOf(
@@ -683,7 +695,9 @@ internal fun renderViaGpu(
     config: RenderConfig,
     routeTrace: GPUClipRouteTrace? = null,
 ): RenderResult {
-    val ops = buffer.ops()
+    // Expand supported Pictures before the clip prepass. This ensures every captured child
+    // (including advanced blends) reaches the normal per-operation S/G compositor in order.
+    val ops = buffer.ops().expandPicturesForGpuReplay()
     val diagnostics = Diagnostics()
     val dispatched = mutableListOf<String>()
     val targets = GPUTargetFacts(width = width, height = height, colorFormat = config.gpuColorFormat.gpuLabel)
@@ -963,6 +977,37 @@ internal fun renderViaGpu(
                     !clipSourceRoute -> command
                     clipSourcePreservesClip -> command.copyForDestinationReadSource()
                     else -> command.copyForClipSource(width, height)
+                }
+                if (clipSourceRoute && clipSourcePlane == GPUClipSourcePlane.Color) {
+                    // S is the unmodulated paint material over the blur allocation. The blurred
+                    // alpha belongs solely to G, otherwise a halo receives its coverage twice.
+                    val material = routedCommand.material as? org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor.SolidColor
+                        ?: return false
+                    val sourceRect = DisplayOp.DrawRect(
+                        rect = Rect(
+                            plan.deviceBounds.left,
+                            plan.deviceBounds.top,
+                            plan.deviceBounds.right,
+                            plan.deviceBounds.bottom,
+                        ),
+                        paint = Paint.fill(Color.fromRGBA(material.r, material.g, material.b, material.a))
+                            .copy(antiAlias = false),
+                        transform = Matrix33.identity(),
+                        clip = ClipStack.WideOpen,
+                    ).toNormalizedCommand(command.commandId, targets)
+                    t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
+                        dispatchFillRect(
+                            sourceRect,
+                            dispatched,
+                            diagnostics,
+                            width,
+                            height,
+                            config,
+                            recordResult = false,
+                            uncoveredSourceColor = true,
+                        )
+                    }
+                    return recordSourcePart(true)
                 }
                 val sourceCommand = if (clipSourcePlane == GPUClipSourcePlane.GeometryCoverage) {
                     routedCommand.forGeometryCoverage()
@@ -1251,8 +1296,10 @@ internal fun renderViaGpu(
                             false
                         } else {
                             val scaled = scaler.scaleGlyph(refGlyphId, fontSize)
-                            val glyphColor = node.children.firstNotNullOfOrNull { solidColors[it] }
-                                ?: op.paint.color
+                            val glyphColor = colorGlyphSourceColor(
+                                node.children.firstNotNullOfOrNull { solidColors[it] } ?: op.paint.color,
+                                geometryCoverage = clipSourcePlane == GPUClipSourcePlane.GeometryCoverage,
+                            )
                             val mapped = GlyphCoordinateMapper.map(scaled)
                             if (mapped is MappedGlyph.Drawn) {
                                 drawGlyphPath(mapped.outlineCommands, posX + op.x, posY + op.y, glyphColor, op, cmdId)
@@ -1308,11 +1355,14 @@ internal fun renderViaGpu(
                             continue
                         }
                         val argb = scaler.resolveCpalColor(pi) ?: continue
-                        result[n.id] = Color.fromRGBA(
-                            ((argb shr 16) and 0xFF) / 255f,
-                            ((argb shr 8) and 0xFF) / 255f,
-                            (argb and 0xFF) / 255f,
-                            ((argb shr 24) and 0xFF) / 255f,
+                        result[n.id] = modulateCpalLayerAlpha(
+                            Color.fromRGBA(
+                                ((argb shr 16) and 0xFF) / 255f,
+                                ((argb shr 8) and 0xFF) / 255f,
+                                (argb and 0xFF) / 255f,
+                                ((argb shr 24) and 0xFF) / 255f,
+                            ),
+                            foregroundColor,
                         )
                     }
                     return result
@@ -1336,11 +1386,17 @@ internal fun renderViaGpu(
                             is GlyphRepresentation.ColorLayers -> {
                                 for (layer in rep.layers) {
                                     val scaled = scaler.scaleGlyph(layer.glyphId, op.blob.fontSize)
-                                    val color = Color.fromRGBA(
-                                        ((layer.paletteColorArgb shr 16) and 0xFF) / 255f,
-                                        ((layer.paletteColorArgb shr 8) and 0xFF) / 255f,
-                                        (layer.paletteColorArgb and 0xFF) / 255f,
-                                        ((layer.paletteColorArgb shr 24) and 0xFF) / 255f,
+                                    val color = colorGlyphSourceColor(
+                                        modulateCpalLayerAlpha(
+                                            Color.fromRGBA(
+                                                ((layer.paletteColorArgb shr 16) and 0xFF) / 255f,
+                                                ((layer.paletteColorArgb shr 8) and 0xFF) / 255f,
+                                                (layer.paletteColorArgb and 0xFF) / 255f,
+                                                ((layer.paletteColorArgb shr 24) and 0xFF) / 255f,
+                                            ),
+                                            op.paint.color,
+                                        ),
+                                        geometryCoverage = clipSourcePlane == GPUClipSourcePlane.GeometryCoverage,
                                     )
                                     val mapped = GlyphCoordinateMapper.map(scaled)
                                     if (mapped is MappedGlyph.Drawn) {
@@ -2315,7 +2371,7 @@ internal fun renderViaGpu(
                     destinationReadComposer = destinationReadComposer,
                     trace = routeTrace,
                     forceSourceComposition = hasActiveMaskBlur,
-                    coverageCompositionRequired = op.requiresSeparateGeometryCoverage() && !hasActiveMaskBlur,
+                    coverageCompositionRequired = op.requiresSeparateGeometryCoverage() || hasActiveMaskBlur,
                     sourceCompositeBounds = { maskBlurSourceBounds },
                 )
                 if (blend.requiresDestinationRead) {

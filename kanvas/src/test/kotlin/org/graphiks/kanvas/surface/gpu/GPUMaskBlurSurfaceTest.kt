@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.surface.gpu
 
+import kotlin.math.abs
+import kotlin.math.pow
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
 import org.graphiks.kanvas.canvas.Canvas
@@ -35,6 +37,34 @@ class GPUMaskBlurSurfaceTest {
 
         assertTrue(exterior > 0) { "normal exterior alpha=$exterior interior alpha=$interior" }
         assertTrue(interior < 255)
+    }
+
+    @Test
+    fun `source-composited translucent blur applies halo coverage once`() {
+        val opaqueResult = renderBlurredOverOpaqueBlue(Color.RED, sigma = 3f)
+        val translucentResult = renderBlurredOverOpaqueBlue(Color.fromArgb(128, 255, 0, 0), sigma = 3f)
+        assertEquals(0, opaqueResult.diagnostics.fatalCount, opaqueResult.diagnostics.entries.toString())
+        assertEquals(0, translucentResult.diagnostics.fatalCount, translucentResult.diagnostics.entries.toString())
+        val opaque = opaqueResult.pixels.toByteArray()
+        val translucent = translucentResult.pixels.toByteArray()
+        val haloOffset = (12 * 32 + 7) * 4
+        val opaqueHaloRed = opaque[haloOffset].toInt() and 0xFF
+        val translucentHaloRed = translucent[haloOffset].toInt() and 0xFF
+        val translucentHaloBlue = translucent[haloOffset + 2].toInt() and 0xFF
+        val translucentHaloAlpha = translucent[haloOffset + 3].toInt() and 0xFF
+
+        assertTrue(opaqueHaloRed > 0, "opaque halo red=$opaqueHaloRed")
+        // The opaque red halo reveals G in linear light. Halving paint alpha must halve that
+        // material contribution before sRGB encoding; applying G to S as well would be darker.
+        val expectedTranslucentRed = (
+            linearToSrgb(srgbToLinear(opaqueHaloRed / 255f) * (128f / 255f)) * 255f
+        ).toInt()
+        assertTrue(
+            abs(translucentHaloRed - expectedTranslucentRed) <= 3,
+            "translucent halo red=$translucentHaloRed expected=$expectedTranslucentRed opaque halo red=$opaqueHaloRed",
+        )
+        assertTrue(translucentHaloBlue < 255, "halo must alter the opaque blue destination")
+        assertEquals(255, translucentHaloAlpha)
     }
 
     @Test
@@ -114,7 +144,7 @@ class GPUMaskBlurSurfaceTest {
     }
 
     @Test
-    fun `source-composited complex mask blur refuses without encoding a source`() {
+    fun `source-composited mask blur uses an available clip budget and refuses an exhausted one`() {
         val config = RenderConfig(maxMaskBlurIntermediateBytes = 1_024u)
         val deviceRect = renderSourceCompositedBlur(config) {
             clipRect(Rect(14f, 14f, 18f, 18f), ClipOp.INTERSECT, antiAlias = true)
@@ -125,26 +155,22 @@ class GPUMaskBlurSurfaceTest {
             clipRect(Rect(14f, 14f, 18f, 18f), ClipOp.INTERSECT, antiAlias = false)
         }
 
-        listOf(deviceRect, complex).forEach { result ->
+        assertEquals(1, deviceRect.stats.opsDispatched, deviceRect.diagnostics.entries.toString())
+        assertEquals(0, deviceRect.diagnostics.fatalCount, deviceRect.diagnostics.entries.toString())
+        assertTrue(deviceRect.diagnostics.entries.any { it.reason == "gpu-copy-then-formula" })
+        assertTrue(alphaAt(deviceRect.pixels.toByteArray(), 16, 16, 32) > 0)
+
+        listOf(complex, wideOpen).forEach { result ->
             assertEquals(0, result.stats.opsDispatched, result.diagnostics.entries.toString())
             assertEquals(1, result.stats.opsRefused, result.diagnostics.entries.toString())
             assertTrue(result.diagnostics.entries.any { entry ->
-                entry.reason == "unsupported.coverage_plane.mask_blur"
+                entry.reason == "unsupported.mask-filter.blur.intermediate-budget"
             })
-            assertTrue(result.diagnostics.entries.none { entry ->
-                entry.code == "route:mask-blur:DrawRect:0" || entry.code == "dispatch:DrawRect:0"
-            })
-            assertEquals(0, alphaAt(result.pixels.toByteArray(), 16, 16, 32))
         }
-        assertEquals(0, wideOpen.stats.opsDispatched, wideOpen.diagnostics.entries.toString())
-        assertEquals(1, wideOpen.stats.opsRefused, wideOpen.diagnostics.entries.toString())
-        assertTrue(wideOpen.diagnostics.entries.any { entry ->
-            entry.reason == "unsupported.mask-filter.blur.intermediate-budget"
-        })
     }
 
     @Test
-    fun `destination-read blur with a device clip refuses without changing destination`() {
+    fun `destination-read blur with a device clip composes through independent geometry coverage`() {
         val result = Surface(width = 32, height = 32).run {
             requireWebGpu()
             canvas {
@@ -161,15 +187,9 @@ class GPUMaskBlurSurfaceTest {
         }
 
         assertEquals(255, result.pixels[(4 * 32 + 4) * 4].toInt())
-        assertEquals(255, result.pixels[(16 * 32 + 16) * 4].toInt())
-        assertEquals(1, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
-        assertTrue(result.diagnostics.entries.any { it.reason == "unsupported.coverage_plane.mask_blur" })
-        assertTrue(
-            result.diagnostics.entries.none {
-                it.code == "route:mask-blur:DrawRect:1" || it.code == "dispatch:DrawRect:1"
-            },
-            result.diagnostics.entries.toString(),
-        )
+        assertEquals(0, result.pixels[(16 * 32 + 16) * 4].toInt())
+        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertTrue(result.diagnostics.entries.any { it.reason == "gpu-copy-then-formula" })
     }
 
     @Test
@@ -193,6 +213,18 @@ class GPUMaskBlurSurfaceTest {
 
     private fun renderRect(style: BlurStyle, sigma: Float): ByteArray =
         renderRectResult(style, sigma).pixels.toByteArray()
+
+    private fun renderBlurredOverOpaqueBlue(source: Color, sigma: Float) = Surface(width = 32, height = 32).run {
+        requireWebGpu()
+        canvas {
+            drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.BLUE))
+            drawRect(
+                Rect(10f, 10f, 22f, 22f),
+                Paint.fill(source).copy(antiAlias = false, maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, sigma)),
+            )
+        }
+        render()
+    }
 
     private fun renderOrdinaryRect(paint: Paint) = Surface(width = 32, height = 32).run {
         requireWebGpu()
@@ -278,4 +310,10 @@ class GPUMaskBlurSurfaceTest {
 
     private fun alphaAt(pixels: ByteArray, x: Int, y: Int, width: Int): Int =
         pixels[(y * width + x) * 4 + 3].toInt() and 0xff
+
+    private fun srgbToLinear(value: Float): Float =
+        if (value <= 0.04045f) value / 12.92f else ((value + 0.055f) / 1.055f).pow(2.4f)
+
+    private fun linearToSrgb(value: Float): Float =
+        if (value <= 0.0031308f) value * 12.92f else 1.055f * value.pow(1f / 2.4f) - 0.055f
 }

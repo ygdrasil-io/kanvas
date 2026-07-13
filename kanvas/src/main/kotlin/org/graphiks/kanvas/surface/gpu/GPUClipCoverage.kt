@@ -11,6 +11,7 @@ import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.canvas.SaveLayerRec
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.picture.Picture
+import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoverageElement
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoverageElementKind
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoverageOperation
@@ -320,12 +321,20 @@ internal fun DisplayOp.coveragePlaneTask4RefusalOrNull(): String? = null
 
 private fun DisplayOp.DrawPicture.picturePreflightRefusalReason(): String? {
     if (paint != null) return "unsupported.picture.paint"
+    if (transform != Matrix33.identity() && picture.containsLayer()) {
+        // Fill dispatch intentionally accepts identity transforms only. Refuse before
+        // expanding the picture so no partially transformed layer/clip is encoded.
+        return "unsupported.picture.transformed_layer"
+    }
 
     fun validatePicture(picture: Picture): String? {
         for (nested in picture.ops) {
             when (nested) {
                 is DisplayOp.DrawPicture -> {
                     if (nested.paint != null) return "unsupported.picture.nested_paint"
+                    if (nested.transform != Matrix33.identity() && nested.picture.containsLayer()) {
+                        return "unsupported.picture.transformed_layer"
+                    }
                     val nestedRefusal = validatePicture(nested.picture)
                     if (nestedRefusal != null) return nestedRefusal
                 }
@@ -336,6 +345,11 @@ private fun DisplayOp.DrawPicture.picturePreflightRefusalReason(): String? {
     }
 
     return validatePicture(picture)
+}
+
+private fun Picture.containsLayer(): Boolean = ops.any { operation ->
+    operation is DisplayOp.BeginLayer ||
+        (operation as? DisplayOp.DrawPicture)?.picture?.containsLayer() == true
 }
 
 /** The layer compositor accepts only alpha and BlendMode from its optional paint. */

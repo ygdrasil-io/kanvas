@@ -1,6 +1,8 @@
 package org.graphiks.kanvas.surface.gpu
 
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
+import org.graphiks.kanvas.canvas.ClipStack
+import org.graphiks.kanvas.canvas.ClipStackOp
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.commands.GPUClipFacts
@@ -31,6 +33,9 @@ import org.graphiks.kanvas.paint.ImageFilter
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.types.isAffine
+import org.graphiks.kanvas.types.isAxisAlignedAffine
+import org.graphiks.kanvas.types.mapAxisAligned
+import org.graphiks.kanvas.types.mapAxisAlignedRect
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.types.PointMode
 import org.graphiks.kanvas.types.Point
@@ -696,13 +701,187 @@ internal fun DisplayOp.withCombinedTransform(outer: Matrix33): DisplayOp = when 
     is DisplayOp.DrawVertices -> copy(transform = outer * transform)
     is DisplayOp.DrawMesh -> copy(transform = outer * transform)
     is DisplayOp.DrawAtlas -> copy(transform = outer * transform)
+    is DisplayOp.BeginLayer -> copy(transform = outer * transform)
     is DisplayOp.Clear,
     is DisplayOp.SetTransform,
     is DisplayOp.SetClip,
-    is DisplayOp.BeginLayer,
-    is DisplayOp.EndLayer,
+    DisplayOp.EndLayer,
     is DisplayOp.Annotation,
     is DisplayOp.FlushAndSnapshot -> this
+}
+
+/**
+ * Replays an operation captured in a [Picture] under an outer picture transform.
+ *
+ * Display-list clips are already in the picture's device space at capture time, so they
+ * must be transformed independently from the operation transform and then intersected
+ * with the clip captured by each enclosing DrawPicture. This keeps a Picture child on the
+ * same clip/S/G route it would have used if it had been recorded directly on the canvas.
+ */
+internal fun DisplayOp.withPictureReplayState(
+    outerTransform: Matrix33,
+    enclosingClip: ClipStack,
+): DisplayOp {
+    val replayClip = enclosingClip.intersectForPictureReplay(clipForPictureReplay(this)?.transformForPictureReplay(outerTransform))
+    return when (val transformed = withCombinedTransform(outerTransform)) {
+        is DisplayOp.DrawRect -> transformed.copy(clip = replayClip)
+        is DisplayOp.DrawRRect -> transformed.copy(clip = replayClip)
+        is DisplayOp.DrawPath -> transformed.copy(clip = replayClip)
+        is DisplayOp.DrawImage -> transformed.copy(clip = replayClip)
+        is DisplayOp.DrawText -> transformed.copy(clip = replayClip)
+        is DisplayOp.DrawColor -> transformed.copy(clip = replayClip)
+        is DisplayOp.DrawPoint -> transformed.copy(clip = replayClip)
+        is DisplayOp.DrawPoints -> transformed.copy(clip = replayClip)
+        is DisplayOp.DrawDRRect -> transformed.copy(clip = replayClip)
+        is DisplayOp.DrawImageNine -> transformed.copy(clip = replayClip)
+        is DisplayOp.DrawImageLattice -> transformed.copy(clip = replayClip)
+        is DisplayOp.DrawPicture -> transformed.copy(clip = replayClip)
+        is DisplayOp.DrawVertices -> transformed.copy(clip = replayClip)
+        is DisplayOp.DrawMesh -> transformed.copy(clip = replayClip)
+        is DisplayOp.DrawAtlas -> transformed.copy(clip = replayClip)
+        else -> transformed
+    }
+}
+
+/** Expands supported Pictures before clip-use accounting so every child gets its own S/G route. */
+internal fun Iterable<DisplayOp>.expandPicturesForGpuReplay(): List<DisplayOp> {
+    val expanded = mutableListOf<DisplayOp>()
+
+    fun expandPicture(
+        picture: org.graphiks.kanvas.picture.Picture,
+        outerTransform: Matrix33,
+        enclosingClip: ClipStack,
+    ) {
+        for (nested in picture.ops) {
+            if (nested is DisplayOp.DrawPicture) {
+                // Retain an explicitly unsupported Picture as one operation so its existing
+                // preflight refusal remains atomic: no preceding picture child is encoded.
+                if (nested.coreRoutePreflightRefusalReason() != null) {
+                    expanded += nested.withPictureReplayState(outerTransform, enclosingClip)
+                } else {
+                    val nestedClip = enclosingClip.intersectForPictureReplay(
+                        nested.clip.transformForPictureReplay(outerTransform),
+                    )
+                    expandPicture(nested.picture, outerTransform * nested.transform, nestedClip)
+                }
+            } else {
+                expanded += nested.withPictureReplayState(outerTransform, enclosingClip)
+            }
+        }
+    }
+
+    for (operation in this) {
+        if (operation is DisplayOp.DrawPicture && operation.coreRoutePreflightRefusalReason() == null) {
+            expandPicture(operation.picture, operation.transform, operation.clip)
+        } else {
+            expanded += operation
+        }
+    }
+    return expanded
+}
+
+private fun clipForPictureReplay(operation: DisplayOp): ClipStack? = when (operation) {
+    is DisplayOp.DrawRect -> operation.clip
+    is DisplayOp.DrawRRect -> operation.clip
+    is DisplayOp.DrawPath -> operation.clip
+    is DisplayOp.DrawImage -> operation.clip
+    is DisplayOp.DrawText -> operation.clip
+    is DisplayOp.DrawColor -> operation.clip
+    is DisplayOp.DrawPoint -> operation.clip
+    is DisplayOp.DrawPoints -> operation.clip
+    is DisplayOp.DrawDRRect -> operation.clip
+    is DisplayOp.DrawImageNine -> operation.clip
+    is DisplayOp.DrawImageLattice -> operation.clip
+    is DisplayOp.DrawPicture -> operation.clip
+    is DisplayOp.DrawVertices -> operation.clip
+    is DisplayOp.DrawMesh -> operation.clip
+    is DisplayOp.DrawAtlas -> operation.clip
+    else -> null
+}
+
+private fun ClipStack?.transformForPictureReplay(matrix: Matrix33): ClipStack? = this?.let { clip ->
+    when (clip) {
+        ClipStack.WideOpen -> ClipStack.WideOpen
+        is ClipStack.DeviceRect -> clip.rectForPictureReplay(matrix, clip.antiAlias)
+        is ClipStack.Complex -> clip.collapsedIntersectingRectOrNull()?.let {
+            it.rectForPictureReplay(matrix, it.antiAlias)
+        } ?: ClipStack.Complex(clip.ops.map { it.transformForPictureReplay(matrix) })
+    }
+}
+
+/** The recorder's cull rect plus nested rectangular intersects remain a device rect. */
+private fun ClipStack.Complex.collapsedIntersectingRectOrNull(): ClipStack.DeviceRect? {
+    val rectOps = ops.map { it as? ClipStackOp.RectOp ?: return null }
+    if (rectOps.any { it.op != org.graphiks.kanvas.pipeline.ClipOp.INTERSECT }) return null
+    val intersection = rectOps.fold<ClipStackOp.RectOp, Rect?>(null) { current, op ->
+        val rect = op.rect
+        current?.let {
+            Rect.fromLTRB(
+                maxOf(it.left, rect.left),
+                maxOf(it.top, rect.top),
+                minOf(it.right, rect.right),
+                minOf(it.bottom, rect.bottom),
+            )
+        } ?: rect
+    } ?: return null
+    return ClipStack.DeviceRect(intersection, antiAlias = rectOps.any { it.antiAlias })
+}
+
+private fun ClipStack.DeviceRect.rectForPictureReplay(matrix: Matrix33, antiAlias: Boolean): ClipStack = when {
+    matrix.isAxisAlignedAffine() -> ClipStack.DeviceRect(matrix.mapAxisAlignedRect(rect), antiAlias)
+    matrix.isAffine() -> ClipStack.Complex(
+        listOf(ClipStackOp.PathOp(Path().addRect(rect).transform(matrix), org.graphiks.kanvas.pipeline.ClipOp.INTERSECT, antiAlias)),
+    )
+    else -> ClipStack.Complex(
+        listOf(ClipStackOp.PathOp(Path().addRect(rect), org.graphiks.kanvas.pipeline.ClipOp.INTERSECT, antiAlias, perspectiveCaptureRefusal = true)),
+    )
+}
+
+private fun ClipStackOp.transformForPictureReplay(matrix: Matrix33): ClipStackOp = when (this) {
+    is ClipStackOp.RectOp -> when {
+        matrix.isAxisAlignedAffine() -> copy(rect = matrix.mapAxisAlignedRect(rect))
+        matrix.isAffine() -> ClipStackOp.PathOp(Path().addRect(rect).transform(matrix), op, antiAlias, perspectiveCaptureRefusal)
+        else -> ClipStackOp.PathOp(Path().addRect(rect), op, antiAlias, perspectiveCaptureRefusal = true)
+    }
+    is ClipStackOp.RRectOp -> when {
+        matrix.isAxisAlignedAffine() -> copy(rrect = rrect.mapAxisAligned(matrix))
+        matrix.isAffine() -> ClipStackOp.PathOp(Path().addRRect(rrect).transform(matrix), op, antiAlias, perspectiveCaptureRefusal)
+        else -> ClipStackOp.PathOp(Path().addRRect(rrect), op, antiAlias, perspectiveCaptureRefusal = true)
+    }
+    is ClipStackOp.PathOp -> copy(
+        path = if (matrix.isAffine()) path.transform(matrix) else path,
+        perspectiveCaptureRefusal = perspectiveCaptureRefusal || !matrix.isAffine(),
+    )
+}
+
+private fun ClipStack.intersectForPictureReplay(other: ClipStack?): ClipStack = when (other) {
+    null,
+    ClipStack.WideOpen -> this
+    else -> when (this) {
+        ClipStack.WideOpen -> other
+        is ClipStack.DeviceRect -> when (other) {
+            is ClipStack.DeviceRect -> ClipStack.DeviceRect(
+                Rect.fromLTRB(
+                    maxOf(rect.left, other.rect.left),
+                    maxOf(rect.top, other.rect.top),
+                    minOf(rect.right, other.rect.right),
+                    minOf(rect.bottom, other.rect.bottom),
+                ),
+                antiAlias || other.antiAlias,
+            )
+            is ClipStack.Complex -> ClipStack.Complex(
+                listOf(ClipStackOp.RectOp(rect, org.graphiks.kanvas.pipeline.ClipOp.INTERSECT, antiAlias)) + other.ops,
+            )
+            ClipStack.WideOpen -> this
+        }
+        is ClipStack.Complex -> ClipStack.Complex(ops + other.asPictureReplayOps())
+    }
+}
+
+private fun ClipStack.asPictureReplayOps(): List<ClipStackOp> = when (this) {
+    ClipStack.WideOpen -> emptyList()
+    is ClipStack.DeviceRect -> listOf(ClipStackOp.RectOp(rect, org.graphiks.kanvas.pipeline.ClipOp.INTERSECT, antiAlias))
+    is ClipStack.Complex -> ops
 }
 
 // ────────────────────────────────────────────────────────────────────────────

@@ -156,6 +156,55 @@ class GPUClipAdvancedBlendSurfaceTest {
         )
     }
 
+    @Test
+    fun `Picture children keep their own color dodge composer and captured clip`() {
+        val runtime = GPUBackendRuntimeFactory.createOrNull()
+        assumeTrue(runtime != null, "GPU backend unavailable in current environment")
+
+        val blackDodgeRecorder = PictureRecorder()
+        blackDodgeRecorder.beginRecording(Rect(0f, 0f, 32f, 32f)).apply {
+            drawRect(
+                Rect(0f, 0f, 32f, 32f),
+                Paint.fill(Color.BLACK).copy(antiAlias = false, blendMode = BlendMode.COLOR_DODGE),
+            )
+        }
+        val blackDodgePicture = blackDodgeRecorder.finishRecordingAsPicture()
+
+        val blueRecorder = PictureRecorder()
+        blueRecorder.beginRecording(Rect(0f, 0f, 32f, 32f)).apply {
+            drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.BLUE).copy(antiAlias = false))
+        }
+        val bluePicture = blueRecorder.finishRecordingAsPicture()
+
+        val parentRecorder = PictureRecorder()
+        parentRecorder.beginRecording(Rect(0f, 0f, 32f, 32f)).apply {
+            drawPicture(blackDodgePicture)
+            save()
+            clipRect(Rect(8f, 8f, 24f, 24f), ClipOp.INTERSECT, antiAlias = false)
+            drawPicture(bluePicture)
+            restore()
+        }
+        val parentPicture = parentRecorder.finishRecordingAsPicture()
+
+        val result = Surface(width = 32, height = 32).run {
+            canvas {
+                drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE))
+                drawPicture(parentPicture)
+            }
+            render()
+        }
+
+        // Black COLOR_DODGE over white is white. The clipped blue child makes the captured
+        // child clip observable without changing that blend expectation.
+        assertPixelNear(result.pixels, 4, 4, Color.WHITE, tolerance = 0)
+        assertPixelNear(result.pixels, 16, 16, Color.BLUE, tolerance = 0)
+        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertTrue(
+            result.diagnostics.entries.any { it.reason == "gpu-copy-then-formula" },
+            result.diagnostics.entries.toString(),
+        )
+    }
+
     private fun renderClippedBlend(destination: Color, source: Color, mode: BlendMode) =
         Surface(width = 32, height = 32).run {
             canvas {
