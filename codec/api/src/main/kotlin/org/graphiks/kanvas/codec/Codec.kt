@@ -272,7 +272,7 @@ public abstract class Codec protected constructor() {
         }
 
         /**
-         * Read [stream] up to [maxEncodedBytes] and dispatch to [MakeFromData].
+         * Read [stream] to completion and dispatch to [MakeFromData].
          * Mirrors `Codec::MakeFromStream(std::unique_ptr<SkStream>, …)`
          * ; the Kotlin port reads the whole stream eagerly because the
          * D3.1 facade does not yet support incremental decoding.
@@ -282,8 +282,9 @@ public abstract class Codec protected constructor() {
          * upstream which takes a `unique_ptr` and consumes it.
          */
         public fun MakeFromStream(stream: InputStream): Codec? =
-            MakeFromStream(stream, DEFAULT_MAX_STREAM_BYTES)
+            MakeFromData(stream.readBytes())
 
+        /** Read [stream] up to [maxEncodedBytes] and dispatch to [MakeFromData]. */
         public fun MakeFromStream(
             stream: InputStream,
             maxEncodedBytes: Long,

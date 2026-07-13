@@ -429,7 +429,8 @@ private fun decodeProgressiveDcCoefficient(
         previousDc[component.frameIndex] = if (differential) dcValue else previousDc[component.frameIndex] + dcValue
         coefficients[0] = previousDc[component.frameIndex] * (1 shl successiveLow) * quant[0]
     } else if (reader.readBit() != 0) {
-        coefficients[0] += (1 shl successiveLow) * quant[0]
+        val refinement = (1 shl successiveLow) * quant[0]
+        coefficients[0] += if (coefficients[0] < 0) -refinement else refinement
     }
 }
 
@@ -914,7 +915,8 @@ private fun decodeArithmeticProgressiveScan(
                                 if (decoder.fixedBit() != 0) {
                                     val quant = entropyScan.quantTables[component.quantTable]
                                         ?: arithmeticFailure("jpeg.arithmetic.scan.table")
-                                    coefficients[0] += (1 shl successiveLow) * quant[0]
+                                    val refinement = (1 shl successiveLow) * quant[0]
+                                    coefficients[0] += if (coefficients[0] < 0) -refinement else refinement
                                 }
                             }
                             successiveHigh == 0 -> {
