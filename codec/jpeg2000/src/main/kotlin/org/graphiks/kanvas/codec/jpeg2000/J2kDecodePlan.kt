@@ -2,6 +2,8 @@ package org.graphiks.kanvas.codec.jpeg2000
 
 import org.graphiks.kanvas.codec.Codec
 
+private const val MAX_PART_ONE_TILE_PART_INDEX = 254
+
 internal data class J2kDecodePlan(
     val syntax: J2kSyntaxModel,
     val tilePartsByTile: List<List<J2kTilePart>>,
@@ -9,7 +11,6 @@ internal data class J2kDecodePlan(
 ) {
     internal companion object {
         fun create(syntax: J2kSyntaxModel, limits: Jpeg2000Limits): J2kDecodePlan {
-            val codeblockUpperBound = codeblockUpperBound(syntax.mainHeader, limits)
             val orderedByTile = syntax.tileParts
                 .groupBy(J2kTilePart::tileIndex)
                 .mapValues { (_, parts) -> parts.sortedBy(J2kTilePart::partIndex) }
@@ -18,6 +19,9 @@ internal data class J2kDecodePlan(
                 val first = partsForTile.first()
                 val allCountsUnknown = partsForTile.all { it.partCount == 0 }
                 val allCountsDeclared = partsForTile.all { it.partCount > 0 }
+                val hasOutOfDomainPartIndex = partsForTile.any {
+                    it.partIndex !in 0..MAX_PART_ONE_TILE_PART_INDEX
+                }
                 val orderedIndexes = partsForTile.map(J2kTilePart::partIndex)
                 val invalidSequence = when {
                     allCountsUnknown -> orderedIndexes != (0 until partsForTile.size).toList()
@@ -28,11 +32,12 @@ internal data class J2kDecodePlan(
                     }
                     else -> true
                 }
-                if (first.tileIndex < 0 || invalidSequence) {
+                if (first.tileIndex < 0 || hasOutOfDomainPartIndex || invalidSequence) {
                     j2kFailure("jpeg2000.sot.sequence.invalid", first.headerOffset)
                 }
             }
 
+            val codeblockUpperBound = codeblockUpperBound(syntax.mainHeader, limits)
             val largestTileIndex = orderedByTile.keys.maxOrNull() ?: -1
             val tileListSize = checkedPlanAdd(largestTileIndex.toLong(), 1L, syntax.mainHeader.nextMarkerOffset)
             if (tileListSize > limits.maxTiles || tileListSize > Int.MAX_VALUE) {

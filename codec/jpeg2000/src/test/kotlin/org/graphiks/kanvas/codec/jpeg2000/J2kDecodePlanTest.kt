@@ -54,6 +54,18 @@ class J2kDecodePlanTest {
         assertEquals(listOf(0, 1), plan.tilePartsByTile[0].map(J2kTilePart::partIndex))
     }
 
+    @Test
+    fun `decode plan rejects unknown tile part sequence containing TPsot 255`() {
+        val failure = assertThrows(Jpeg2000Failure::class.java) {
+            J2kDecodePlan.create(
+                syntax(tileParts = (0..255).map { partIndex -> tilePart(0, partIndex, 0) }),
+                Jpeg2000Limits(),
+            )
+        }
+
+        assertEquals("jpeg2000.sot.sequence.invalid", failure.diagnostic.code)
+    }
+
     private fun tilePart(tileIndex: Int, partIndex: Int, partCount: Int): J2kTilePart = J2kTilePart(
         tileIndex = tileIndex,
         partIndex = partIndex,
