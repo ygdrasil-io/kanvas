@@ -152,9 +152,24 @@ per-codeblock coding-pass and segment-length syntax, separately bounded
 EBCOT bodies, MQ arithmetic decoding, and style-0 Tier-1 EBCOT bit-plane
 passes. The Ndecomp=2 fixture further validates three adjacent LRCP packet
 headers, the seven subband order, and two inverse reversible 5/3 synthesis
-stages. The JP2 fixture is pixel-decodable only for the same bounded grayscale
+stages.
+
+The bounded Part-1 structural foundation also retains general `SIZ`/`COD`/`QCD`
+main-header syntax and bounded `SOT` tile plans. This structural ownership is
+intentionally separate from public pixels: a general structural document must
+not reach `Codec.MakeFromData` and reports
+`jpeg2000.container.pixel.unimplemented` from `Jpeg2000Document.decode()`.
+Public pixels remain exclusively the raw/JP2 fixture profile documented above;
+this foundation does not claim general pixels or a general Tier-2
+implementation.
+
+The JP2 fixture is pixel-decodable only for the same bounded grayscale
 profile; its sole accepted color declaration is the enumerated grayscale
 `colr` documented above. ICC/color declarations, palette (`pclr`), component
 mapping (`cmap`), channel definition (`cdef`, including alpha), and
-multi-component JP2 profiles are refused. General JPEG 2000 profiles remain
-outside this fixture scope. No pixel fallback to OpenJPEG is allowed.
+multi-component JP2 profiles are refused. Until independently verified
+follow-on work lands, the pixel facade also refuses multi-component and
+multi-tile J2K, every progression other than LRCP, irreversible 9/7, MCT,
+JP2 color/ICC, JPX, MJ2, HTJ2K, and every encoder route. General JPEG 2000
+pixels remain outside this fixture scope. No pixel fallback to OpenJPEG is
+allowed.

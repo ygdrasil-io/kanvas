@@ -694,6 +694,14 @@ class Jpeg2000DocumentTest {
     }
 
     @Test
+    fun `general J2K syntax never widens the current pixel facade`() {
+        val document = Jpeg2000Document.open(generalMainHeaderWithOneTilePart()).document!!
+
+        assertNull(Codec.MakeFromData(document.copyEncodedBytes()))
+        assertEquals("jpeg2000.container.pixel.unimplemented", document.decode().diagnostic?.code)
+    }
+
+    @Test
     fun `raw dimensions beyond two codeblocks remain structural but are not exposed as an image codec`() {
         val codestream = narrowLosslessCodestream(width = 129, height = 1)
 
@@ -1038,6 +1046,39 @@ class Jpeg2000DocumentTest {
         output.writeSegment(0x52, narrowCodPayload(codeBlockWidth, codeBlockHeight))
         output.writeSegment(0x5C, byteArrayOf(0x40, 0x40)) // reversible 5/3, no quantization
         output.writeMarker(0x90)
+        output.writeU16(10)
+        output.writeU16(0) // Isot
+        output.writeU32(14) // Psot: SOT (12 bytes) + SOD (2 bytes)
+        output.write(0) // TPsot
+        output.write(1) // TNsot
+        output.writeMarker(0x93) // SOD, deliberately no EBCOT body
+        output.writeMarker(0xD9) // EOC
+    }.toByteArray()
+
+    private fun generalMainHeaderWithOneTilePart(): ByteArray = ByteArrayOutputStream().also { output ->
+        output.writeMarker(0x4F) // SOC
+        output.writeSegment(0x51, ByteArrayOutputStream().also { siz ->
+            siz.writeU16(0) // Rsiz
+            siz.writeU32(33); siz.writeU32(17) // Xsiz, Ysiz
+            siz.writeU32(0); siz.writeU32(0) // XOsiz, YOsiz
+            siz.writeU32(16); siz.writeU32(8) // XTsiz, YTsiz
+            siz.writeU32(0); siz.writeU32(0) // XTOsiz, YTOsiz
+            siz.writeU16(2) // Csiz
+            siz.write(byteArrayOf(0x8B.toByte(), 2, 1)) // 12-bit signed, x-subsampled
+            siz.write(byteArrayOf(7, 1, 1)) // 8-bit unsigned, no subsampling
+        }.toByteArray())
+        output.writeSegment(0x52, byteArrayOf(
+            0, // Scod
+            1, // RLCP progression
+            0, 3, // three layers
+            0, // no MCT
+            4, // four decompositions
+            4, 4, // 64x64 codeblocks
+            0, // no coding style flags
+            1, // reversible 5/3 transform
+        ))
+        output.writeSegment(0x5C, ByteArray(14) { 0x40 }) // reversible 5/3, no quantization
+        output.writeMarker(0x90) // SOT
         output.writeU16(10)
         output.writeU16(0) // Isot
         output.writeU32(14) // Psot: SOT (12 bytes) + SOD (2 bytes)
