@@ -15,9 +15,10 @@ dependencies {
     testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.10.2")
 }
 
+val jpeg2000OracleOpenJpeg = providers.gradleProperty("jpeg2000OracleOpenJpeg").orNull
+
 tasks.withType<Test>().configureEach {
-    systemProperty(
-        "kanvas.jpeg2000.oracle.openjpeg",
-        providers.gradleProperty("jpeg2000OracleOpenJpeg").orNull.orEmpty(),
-    )
+    if (jpeg2000OracleOpenJpeg != null) {
+        systemProperty("kanvas.jpeg2000.oracle.openjpeg", jpeg2000OracleOpenJpeg)
+    }
 }

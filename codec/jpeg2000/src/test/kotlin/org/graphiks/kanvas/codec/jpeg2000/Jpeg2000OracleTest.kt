@@ -4,15 +4,89 @@ import java.nio.file.Files
 import java.nio.file.Path
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Assumptions.assumeTrue
+import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.parallel.ResourceLock
+import org.junit.jupiter.api.parallel.Resources
 
 /**
  * Opt-in interoperability evidence. The OpenJPEG executable is never
  * discovered through PATH and is not a production or normal-CI dependency.
  */
+@ResourceLock(Resources.SYSTEM_PROPERTIES)
 class Jpeg2000OracleTest {
+
+    @Test
+    fun `configured but blank OpenJPEG oracle fails rather than skips`() {
+        val previousOracle = System.getProperty(OPENJPEG_ORACLE_PROPERTY)
+        System.setProperty(OPENJPEG_ORACLE_PROPERTY, "")
+        try {
+            assertThrows(AssertionError::class.java) {
+                decodeWithOracle(Jpeg2000TestFixtures.openJpegLossless5x3(), width = 5, height = 3)
+            }
+        } finally {
+            if (previousOracle == null) System.clearProperty(OPENJPEG_ORACLE_PROPERTY)
+            else System.setProperty(OPENJPEG_ORACLE_PROPERTY, previousOracle)
+        }
+    }
+
+    @Test
+    fun `configured but non executable OpenJPEG oracle fails rather than skips`() {
+        val previousOracle = System.getProperty(OPENJPEG_ORACLE_PROPERTY)
+        val missingOracle = Files.createTempDirectory("kanvas-jpeg2000-missing-openjpeg-")
+            .resolve("opj_decompress")
+        System.setProperty(
+            OPENJPEG_ORACLE_PROPERTY,
+            missingOracle.toString(),
+        )
+        try {
+            assertThrows(AssertionError::class.java) {
+                decodeWithOracle(Jpeg2000TestFixtures.openJpegLossless5x3(), width = 5, height = 3)
+            }
+        } finally {
+            if (previousOracle == null) System.clearProperty(OPENJPEG_ORACLE_PROPERTY)
+            else System.setProperty(OPENJPEG_ORACLE_PROPERTY, previousOracle)
+            Files.deleteIfExists(missingOracle.parent)
+        }
+    }
+
+    @Test
+    @DisplayName("OpenJPEG oracle fixture=openjpeg-2.5.4-lossless-ndecomp0-5x5.jp2 compares every source and Kanvas pixel")
+    fun `explicit OpenJPEG oracle compares the JP2 source and Kanvas pixels`() {
+        val fixture = Jpeg2000TestFixtures.openJpegLosslessNdecomp0_5x5Jp2()
+        val sourcePixels = decodeWithOracle(
+            fixture,
+            width = 5,
+            height = 5,
+            fixtureFileName = JP2_FIXTURE_ID,
+        )
+        val decoded = requireNotNull(Jpeg2000Document.open(fixture).document).decode()
+        assertNull(decoded.diagnostic, "fixture=$JP2_FIXTURE_ID")
+        val bitmap = requireNotNull(decoded.bitmap) { "fixture=$JP2_FIXTURE_ID" }
+        assertEquals(5, bitmap.width, "fixture=$JP2_FIXTURE_ID")
+        assertEquals(5, bitmap.height, "fixture=$JP2_FIXTURE_ID")
+        val kanvasPixels = ByteArray(bitmap.pixels8888.size) { index ->
+            val pixel = bitmap.pixels8888[index]
+            val sample = pixel and 0xFF
+            assertEquals(0xFF, pixel ushr 24, "fixture=$JP2_FIXTURE_ID pixel=$index alpha")
+            assertEquals(sample, (pixel ushr 16) and 0xFF, "fixture=$JP2_FIXTURE_ID pixel=$index red")
+            assertEquals(sample, (pixel ushr 8) and 0xFF, "fixture=$JP2_FIXTURE_ID pixel=$index green")
+            sample.toByte()
+        }
+
+        assertArrayEquals(sourcePixels, kanvasPixels, "fixture=$JP2_FIXTURE_ID OpenJPEG P5 vs Kanvas")
+    }
+
+    @Test
+    fun `P5 payload preserves a leading whitespace sample`() {
+        val p5 = "P5\n1 1\n255\n".encodeToByteArray() + byteArrayOf('\n'.code.toByte())
+
+        assertArrayEquals(byteArrayOf('\n'.code.toByte()), p5Pixels(p5, width = 1, height = 1))
+    }
 
     @Test
     fun `explicit OpenJPEG oracle decodes pinned reversible lossless fixture exactly`() {
@@ -90,18 +164,23 @@ class Jpeg2000OracleTest {
         )
     }
 
-    private fun decodeWithOracle(j2k: ByteArray, width: Int, height: Int): ByteArray {
-        val configuredOracle = System.getProperty("kanvas.jpeg2000.oracle.openjpeg").orEmpty()
-        assumeTrue(
-            configuredOracle.isNotBlank(),
-            "Set -Pjpeg2000OracleOpenJpeg=/absolute/path/to/opj_decompress to enable",
-        )
+    private fun decodeWithOracle(
+        j2k: ByteArray,
+        width: Int,
+        height: Int,
+        fixtureFileName: String = "fixture.j2k",
+    ): ByteArray {
+        val configuredOracle = System.getProperty(OPENJPEG_ORACLE_PROPERTY) ?: run {
+            assumeTrue(false, "Set -Pjpeg2000OracleOpenJpeg=/absolute/path/to/opj_decompress to enable")
+            error("unreachable")
+        }
+        assertTrue(configuredOracle.isNotBlank(), "OpenJPEG oracle path must not be blank")
         val oracle = Path.of(configuredOracle)
-        assumeTrue(Files.isExecutable(oracle), "OpenJPEG oracle is not executable: $oracle")
+        assertTrue(Files.isExecutable(oracle), "OpenJPEG oracle is not executable: $oracle")
 
         val directory = Files.createTempDirectory("kanvas-jpeg2000-openjpeg-oracle-")
         try {
-            val input = directory.resolve("fixture.j2k")
+            val input = directory.resolve(fixtureFileName)
             val output = directory.resolve("decoded.pgm")
             Files.write(input, j2k)
 
@@ -136,7 +215,12 @@ class Jpeg2000OracleTest {
         assertEquals(width.toString(), token())
         assertEquals(height.toString(), token())
         assertEquals("255", token())
-        while (cursor < pgm.size && pgm[cursor].toInt().toChar().isWhitespace()) cursor++
+        assertTrue(
+            cursor < pgm.size && pgm[cursor].toInt().toChar().isWhitespace(),
+            "P5 header is missing its payload separator",
+        )
+        val separator = pgm[cursor++]
+        if (separator == '\r'.code.toByte() && cursor < pgm.size && pgm[cursor] == '\n'.code.toByte()) cursor++
         val pixels = pgm.copyOfRange(cursor, pgm.size)
         assertTrue(pixels.size == width * height, "P5 payload size=${pixels.size}")
         return pixels
@@ -165,6 +249,9 @@ class Jpeg2000OracleTest {
     }
 
     private companion object {
+        const val OPENJPEG_ORACLE_PROPERTY = "kanvas.jpeg2000.oracle.openjpeg"
+        const val JP2_FIXTURE_ID = "openjpeg-2.5.4-lossless-ndecomp0-5x5.jp2"
+
         val expectedPixels = byteArrayOf(
             0, 1, 127, 254.toByte(), 255.toByte(),
             16, 32, 64, 128.toByte(), 240.toByte(),

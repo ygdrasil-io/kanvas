@@ -727,6 +727,25 @@ class Jpeg2000DocumentTest {
     }
 
     @Test
+    fun `JP2 refuses ihdr dimensions that do not match the codestream`() {
+        val mismatchedImageHeader = boxed(
+            "ihdr",
+            byteArrayOf(
+                0, 0, 0, 1, // height
+                0, 0, 0, 2, // width
+                0, 1, // one component
+                7, 7, 0, 0, // 8-bit unsigned, JPEG 2000 compression, no optional flags
+            ),
+        )
+
+        val opened = Jpeg2000Document.open(jp2(narrowLosslessCodestream(), mismatchedImageHeader))
+
+        assertNull(opened.document)
+        assertEquals("jpeg2000.jp2.ihdr.mismatch", opened.diagnostic?.code)
+        assertEquals(Codec.Result.kErrorInInput, opened.diagnostic?.result)
+    }
+
+    @Test
     fun `JP2 refuses unsupported color profile palette mapping and alpha metadata`() {
         val codestream = narrowLosslessCodestream()
         val unsupportedHeaders = listOf(
