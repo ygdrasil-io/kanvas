@@ -859,10 +859,12 @@ private fun ClipStack?.transformForPictureReplay(matrix: Matrix33): ClipStack? =
     }
 }
 
-/** The recorder's cull rect plus nested rectangular intersects remain a device rect. */
+/** The recorder's rectangular intersects remain a device rect only when their AA rules match. */
 private fun ClipStack.Complex.collapsedIntersectingRectOrNull(): ClipStack.DeviceRect? {
     val rectOps = ops.map { it as? ClipStackOp.RectOp ?: return null }
     if (rectOps.any { it.op != org.graphiks.kanvas.pipeline.ClipOp.INTERSECT }) return null
+    val antiAlias = rectOps.firstOrNull()?.antiAlias ?: return null
+    if (rectOps.any { it.antiAlias != antiAlias }) return null
     val intersection = rectOps.fold<ClipStackOp.RectOp, Rect?>(null) { current, op ->
         val rect = op.rect
         current?.let {
@@ -874,7 +876,7 @@ private fun ClipStack.Complex.collapsedIntersectingRectOrNull(): ClipStack.Devic
             )
         } ?: rect
     } ?: return null
-    return ClipStack.DeviceRect(intersection, antiAlias = rectOps.any { it.antiAlias })
+    return ClipStack.DeviceRect(intersection, antiAlias)
 }
 
 private fun ClipStack.DeviceRect.rectForPictureReplay(matrix: Matrix33, antiAlias: Boolean): ClipStack = when {

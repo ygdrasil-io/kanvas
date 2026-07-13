@@ -280,6 +280,66 @@ class GPUSaveLayerCompositeRegressionTest {
     }
 
     @Test
+    fun `drawPicture preserves mixed AA and hard deferred layer clip edges`() {
+        requireWebGpu()
+
+        listOf(
+            RecordedClipFixture(
+                name = "outer-AA-inner-hard",
+                clips = listOf(
+                    RecordedClip(Rect(8.5f, 8f, 24f, 24f), antiAlias = true),
+                    RecordedClip(Rect(8f, 8f, 23.5f, 24f), antiAlias = false),
+                ),
+            ),
+            RecordedClipFixture(
+                name = "outer-hard-inner-AA",
+                clips = listOf(
+                    RecordedClip(Rect(8f, 8f, 23.5f, 24f), antiAlias = false),
+                    RecordedClip(Rect(8.5f, 8f, 24f, 24f), antiAlias = true),
+                ),
+            ),
+        ).forEach { fixture ->
+            listOf(BlendMode.SRC, BlendMode.DST_IN, BlendMode.MULTIPLY).forEach { mode ->
+                val recorder = PictureRecorder()
+                recorder.beginRecording(Rect(0f, 0f, 32f, 32f)).apply {
+                    fixture.clips.forEach { clip ->
+                        clipRect(clip.rect, ClipOp.INTERSECT, clip.antiAlias)
+                    }
+                    saveLayer(paint = Paint(color = translucentRed.toColor(), blendMode = mode))
+                    drawRect(Rect(6f, 6f, 26f, 26f), Paint.fill(Color.RED).copy(antiAlias = false))
+                    restore()
+                }
+                val picture = recorder.finishRecordingAsPicture()
+                val result = Surface(width = 32, height = 32).run {
+                    canvas {
+                        drawRect(Rect(0f, 0f, 32f, 32f), Paint.fill(Color.WHITE).copy(antiAlias = false))
+                        drawPicture(picture)
+                    }
+                    render()
+                }
+
+                assertPixelNearAt(
+                    result.pixels,
+                    width = 32,
+                    x = 8,
+                    y = 16,
+                    expected = publicLayerExpected(mode, coverage = .5f),
+                    tolerance = 2,
+                )
+                assertPixelNearAt(
+                    result.pixels,
+                    width = 32,
+                    x = 22,
+                    y = 16,
+                    expected = publicLayerExpected(mode, coverage = 1f),
+                    tolerance = 2,
+                )
+                assertPixelNearAt(result.pixels, width = 32, x = 23, y = 16, expected = white, tolerance = 2)
+            }
+        }
+    }
+
+    @Test
     fun `ordinary saveLayer composites SRC content over its opaque checkerboard parent`() {
         requireWebGpu()
 
@@ -1067,6 +1127,16 @@ class GPUSaveLayerCompositeRegressionTest {
         val pictureClipAntiAlias: Boolean,
         val hostClip: Rect,
         val hostClipAntiAlias: Boolean,
+    )
+
+    private data class RecordedClipFixture(
+        val name: String,
+        val clips: List<RecordedClip>,
+    )
+
+    private data class RecordedClip(
+        val rect: Rect,
+        val antiAlias: Boolean,
     )
 
     private fun deferredLayerPicture(fixture: MixedClipFixture, mode: BlendMode): Picture {
