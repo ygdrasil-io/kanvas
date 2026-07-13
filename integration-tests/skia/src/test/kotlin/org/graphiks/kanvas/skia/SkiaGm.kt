@@ -30,6 +30,8 @@ interface SkiaGm {
     val renderFamily: RenderFamily
     val renderCost: RenderCost
     val minSimilarity: Double
+    /** A promoted port has no allowed GPU refusal route. */
+    val requiresZeroRefusals: Boolean get() = false
     val referenceStatus: ReferenceStatusEntry get() = ReferenceStatusEntry()
     val tolerance: Int get() = 2
     val width: Int get() = 800

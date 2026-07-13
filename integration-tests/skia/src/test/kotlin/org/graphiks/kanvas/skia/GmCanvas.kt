@@ -7,6 +7,7 @@ import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
+import org.graphiks.kanvas.paint.SamplingOptions
 import org.graphiks.kanvas.picture.Picture
 import org.graphiks.kanvas.pipeline.ClipOp
 import org.graphiks.kanvas.types.Color
@@ -20,8 +21,10 @@ import org.graphiks.kanvas.types.Mesh
 import org.graphiks.kanvas.types.Vertices
 import org.graphiks.kanvas.types.VertexMode
 import org.graphiks.kanvas.text.Font
+import org.graphiks.kanvas.text.FontEdging
 import org.graphiks.kanvas.text.FontMetrics
 import org.graphiks.kanvas.text.FontMetricsProvider
+import org.graphiks.kanvas.text.GlyphPaintProvider
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.text.Typeface
 import org.graphiks.kanvas.text.Typefaces
@@ -410,15 +413,21 @@ class GmCanvas(
         }
     }
 
-    fun drawImageLattice(image: Image, lattice: Lattice, dst: Rect, paint: Paint? = null) {
+    fun drawImageLattice(
+        image: Image,
+        lattice: Lattice,
+        dst: Rect,
+        paint: Paint? = null,
+        sampling: SamplingOptions = SamplingOptions.LINEAR,
+    ) {
         withClip {
             if (currentTransform.isIdentity()) {
-                inner.drawImageLattice(image, lattice, dst, paint)
+                inner.drawImageLattice(image, lattice, dst, paint, sampling)
             } else {
                 val p0 = currentTransform * Point(dst.left, dst.top)
                 val p1 = currentTransform * Point(dst.right, dst.bottom)
                 val tdst = Rect(min(p0.x, p1.x), min(p0.y, p1.y), max(p0.x, p1.x), max(p0.y, p1.y))
-                inner.drawImageLattice(image, lattice, tdst, paint)
+                inner.drawImageLattice(image, lattice, tdst, paint, sampling)
             }
         }
     }
@@ -479,12 +488,22 @@ class GmCanvas(
      * via the path pipeline; color glyph layers require the GPU text pipeline. */
     fun drawGlyphs(glyphIds: List<Int>, positions: List<Point>, font: Font, paint: Paint) {
         require(glyphIds.size == positions.size)
+        val emboldenWidth = font.size * 0.02f
+        val glyphPaint = when {
+            !font.isEmbolden -> paint
+            paint.style == PaintStyle.FILL -> paint.copy(
+                style = PaintStyle.STROKE_AND_FILL,
+                strokeWidth = maxOf(paint.strokeWidth, emboldenWidth),
+            )
+            else -> paint.copy(strokeWidth = paint.strokeWidth + emboldenWidth)
+        }.copy(antiAlias = font.edging != FontEdging.ALIAS)
         for (i in glyphIds.indices) {
             val gid = glyphIds[i]
             val pos = positions[i]
-            val glyphPath = font.typeface.getGlyphPath(gid, font.size) ?: continue
+            val glyphPath = font.typeface.getGlyphPath(gid, font.size, font.variationCoordinates) ?: continue
             val offsetPath = glyphPath.transform(pos.x, pos.y, 1f, 1f)
-            drawPath(offsetPath, paint)
+            val perGlyphPaint = (font.typeface as? GlyphPaintProvider)?.paintForGlyph(gid) ?: glyphPaint
+            drawPath(offsetPath, perGlyphPaint)
         }
     }
 

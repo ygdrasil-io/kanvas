@@ -28,35 +28,40 @@ data class TextBlob(
     val glyphRuns: List<KanvasGlyphRun>,
     val typeface: Typeface? = null,
     val fontSize: Float = 12f,
+    /** Requested OpenType design coordinates that produced this blob. */
+    val variationCoordinates: Map<String, Float> = emptyMap(),
 ) {
-    /**
-     * Approximate bounding box computed from glyph positions and font metrics.
-     * Uses font-level ascent/descent as a proxy for per-glyph ink bounds,
-     * matching the approach Skia uses in [TextBlob::bounds].
-     */
+    /** Conservative ink bounds computed from the available glyph outlines. */
     fun computeBounds(typeface: Typeface): Rect {
         var minX = Float.MAX_VALUE
         var minY = Float.MAX_VALUE
         var maxX = -Float.MAX_VALUE
         var maxY = -Float.MAX_VALUE
-        val font = Font(typeface, size = fontSize)
-        val metrics = font.getMetrics()
-        val ascent = metrics?.ascent ?: fontSize * 0.8f
-        val descent = metrics?.descent ?: -(fontSize * 0.2f)
         for (run in glyphRuns) {
             for (i in run.positions.indices) {
                 val pos = run.positions[i]
-                val advance = typeface.getAdvance(run.glyphs[i].toInt(), fontSize)
-                val top = pos.y - ascent
-                val bottom = pos.y - descent
-                val left = pos.x
-                val right = pos.x + advance
+                val glyphId = run.glyphs[i].toInt()
+                val pathBounds = typeface
+                    .getGlyphPath(glyphId, run.fontSize, variationCoordinates)
+                    ?.computeBounds()
+                val font = Font(typeface, size = run.fontSize)
+                val metrics = font.getMetrics()
+                val ascent = metrics?.ascent ?: -run.fontSize * 0.8f
+                val descent = metrics?.descent ?: run.fontSize * 0.2f
+                val left = pathBounds?.left?.plus(pos.x) ?: pos.x
+                val right = pathBounds?.right?.plus(pos.x) ?: pos.x + typeface.getAdvance(
+                    glyphId,
+                    run.fontSize,
+                    variationCoordinates,
+                )
+                val top = pathBounds?.top?.plus(pos.y) ?: pos.y + ascent
+                val bottom = pathBounds?.bottom?.plus(pos.y) ?: pos.y + descent
                 if (left < minX) minX = left
                 if (right > maxX) maxX = right
                 if (top < minY) minY = top
                 if (bottom > maxY) maxY = bottom
             }
         }
-        return Rect(minX, minY, maxX, maxY)
+        return if (minX.isFinite()) Rect(minX, minY, maxX, maxY) else Rect.EMPTY
     }
 }
