@@ -6,6 +6,8 @@ import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.destination.GPUDestinationReadBounds
+import org.graphiks.kanvas.gpu.renderer.layers.GPULayerSaveRecord
+import org.graphiks.kanvas.gpu.renderer.layers.GPULayerScopeID
 import org.graphiks.kanvas.gpu.renderer.passes.GPUMsaaAdapterCapability
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
@@ -129,6 +131,41 @@ class GPUIntermediateMsaaPlanTest {
         val refusal = assertIs<GPUIntermediatePlanStep.Refuse>(plan.steps.single())
         assertEquals("unsupported.msaa.sample_count", refusal.reasonCode)
         assertEquals("target:main", refusal.scopeLabel)
+    }
+
+    @Test
+    fun `earlier invalid save layer precedes later multisample blend exactness refusal`() {
+        val base = msaaRequest(
+            samplePlan = GPUSamplePlan.MultisampleFrame(4),
+            msaaAdapter = GPUMsaaAdapterCapability(
+                adapterLabel = "adapter:test",
+                maxSampleCount = 4,
+                supportsAlphaToCoverage = false,
+                supportsNativeResolve = true,
+            ),
+        )
+        val firstLayer = base.drawRequests.single().copy(
+            commandId = "cmd-layer-first",
+            blendMode = GPUBlendMode.SRC_OVER,
+            saveLayer = GPULayerSaveRecord(
+                scopeId = GPULayerScopeID("layer:first"),
+                boundsLabel = "bounds:layer-first",
+                backdropRequired = false,
+                initWithPrevious = true,
+            ),
+        )
+        val laterBlend = base.drawRequests.single().copy(
+            commandId = "cmd-blend-later",
+            blendMode = GPUBlendMode.MULTIPLY,
+        )
+
+        val plan = GPUIntermediatePlanner().plan(
+            base.copy(drawRequests = listOf(firstLayer, laterBlend)),
+        )
+
+        val refusal = assertIs<GPUIntermediatePlanStep.Refuse>(plan.steps.single())
+        assertEquals("unsupported.layer.init_previous_unaccepted", refusal.reasonCode)
+        assertEquals("layer:first", refusal.scopeLabel)
     }
 
     private fun msaaRequest(

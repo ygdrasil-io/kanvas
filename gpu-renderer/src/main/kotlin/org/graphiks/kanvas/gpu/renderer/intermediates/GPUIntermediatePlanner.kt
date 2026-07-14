@@ -5,6 +5,7 @@ import org.graphiks.kanvas.gpu.renderer.layers.GPULayerExecutionPlan
 import org.graphiks.kanvas.gpu.renderer.layers.GPULayerSaveRecord
 import org.graphiks.kanvas.gpu.renderer.layers.GPUSaveLayerIsolatedTargetPlanner
 import org.graphiks.kanvas.gpu.renderer.layers.GPUSaveLayerIsolatedTargetRequest
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendDestinationReadRequirement
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlanner
@@ -86,14 +87,11 @@ class GPUIntermediatePlanner(
             return request.refused(request.targetId, msaaGate.capabilityRefusal)
         }
 
-        val blendPlans = request.drawRequests.map { draw ->
-            if (draw.saveLayer == null) planBlend(request, draw) else null
+        val drawOutcomes = request.drawRequests.map { draw ->
+            planDrawOutcome(request, draw)
         }
-        request.drawRequests.zip(blendPlans).firstOrNull { (_, blend) ->
-            blend is GPUBlendPlan.UnsupportedBlend
-        }?.let { (draw, blend) ->
-            blend as GPUBlendPlan.UnsupportedBlend
-            return request.refused(draw.commandId, blend.diagnostic.code)
+        drawOutcomes.filterIsInstance<GPUIntermediateDrawOutcome.Refusal>().firstOrNull()?.let { refusal ->
+            return request.refused(refusal.scopeLabel, refusal.reasonCode)
         }
 
         if (msaaGate.runtimeRefusal != null) {
@@ -103,39 +101,39 @@ class GPUIntermediatePlanner(
         val steps = mutableListOf<GPUIntermediatePlanStep>()
         val destinationReadEligibilities = mutableListOf<GPUIntermediateDestinationReadEligibility>()
         var telemetry = GPUIntermediateTelemetry()
-        for ((index, draw) in request.drawRequests.withIndex()) {
-            val saveLayer = draw.saveLayer
-            if (saveLayer != null) {
-                val layerSteps = planSaveLayer(request, draw, saveLayer)
-                val refusal = layerSteps.singleOrNull() as? GPUIntermediatePlanStep.Refuse
-                if (refusal != null) return request.refused(refusal.scopeLabel, refusal.reasonCode)
-                steps += layerSteps
-                telemetry = telemetry.copy(
-                    intermediatesCreated = telemetry.intermediatesCreated + 1,
-                    liveIntermediateBytes = telemetry.liveIntermediateBytes + layerSteps.layerBytes(),
-                    layerTargets = telemetry.layerTargets + 1,
-                    layerComposites = telemetry.layerComposites + 1,
+        for ((draw, outcome) in request.drawRequests.zip(drawOutcomes)) {
+            when (outcome) {
+                is GPUIntermediateDrawOutcome.LayerSteps -> {
+                    steps += outcome.steps
+                    telemetry = telemetry.copy(
+                        intermediatesCreated = telemetry.intermediatesCreated + 1,
+                        liveIntermediateBytes = telemetry.liveIntermediateBytes + outcome.steps.layerBytes(),
+                        layerTargets = telemetry.layerTargets + 1,
+                        layerComposites = telemetry.layerComposites + 1,
+                    )
+                }
+                is GPUIntermediateDrawOutcome.BlendPlan -> {
+                    val blend = outcome.plan
+                    if (blend.destinationReadRequirement ==
+                        GPUBlendDestinationReadRequirement.DestinationTextureRequired
+                    ) {
+                        destinationReadEligibilities += GPUIntermediateDestinationReadEligibility(
+                            commandId = draw.commandId,
+                            requirement = blend.destinationReadRequirement,
+                            eligibleIntermediate = draw.eligibleIntermediate,
+                        )
+                    }
+                    steps += GPUIntermediatePlanStep.RenderToTarget(
+                        commandId = draw.commandId,
+                        targetLabel = draw.targetLabel,
+                        routeLabel = blend.routeLabel(),
+                        orderingToken = "order:${draw.commandId}",
+                    )
+                }
+                is GPUIntermediateDrawOutcome.Refusal -> error(
+                    "Semantic draw refusal must be returned before runtime MSAA gating",
                 )
-                continue
             }
-
-            val blend = checkNotNull(blendPlans[index])
-
-            if (blend.destinationReadRequirement ==
-                org.graphiks.kanvas.gpu.renderer.passes.GPUBlendDestinationReadRequirement.DestinationTextureRequired
-            ) {
-                destinationReadEligibilities += GPUIntermediateDestinationReadEligibility(
-                    commandId = draw.commandId,
-                    requirement = blend.destinationReadRequirement,
-                    eligibleIntermediate = draw.eligibleIntermediate,
-                )
-            }
-            steps += GPUIntermediatePlanStep.RenderToTarget(
-                commandId = draw.commandId,
-                targetLabel = draw.targetLabel,
-                routeLabel = blend.routeLabel(),
-                orderingToken = "order:${draw.commandId}",
-            )
         }
         return GPUIntermediatePlan(
             planId = request.planId,
@@ -144,6 +142,29 @@ class GPUIntermediatePlanner(
             telemetry = telemetry,
             destinationReadEligibilities = destinationReadEligibilities,
         )
+    }
+
+    private fun planDrawOutcome(
+        request: GPUIntermediatePlannerRequest,
+        draw: GPUIntermediateDrawRequest,
+    ): GPUIntermediateDrawOutcome {
+        val saveLayer = draw.saveLayer
+        if (saveLayer != null) {
+            val layerSteps = planSaveLayer(request, draw, saveLayer)
+            val refusal = layerSteps.singleOrNull() as? GPUIntermediatePlanStep.Refuse
+            return if (refusal != null) {
+                GPUIntermediateDrawOutcome.Refusal(refusal.scopeLabel, refusal.reasonCode)
+            } else {
+                GPUIntermediateDrawOutcome.LayerSteps(layerSteps)
+            }
+        }
+
+        val blend = planBlend(request, draw)
+        return if (blend is GPUBlendPlan.UnsupportedBlend) {
+            GPUIntermediateDrawOutcome.Refusal(draw.commandId, blend.diagnostic.code)
+        } else {
+            GPUIntermediateDrawOutcome.BlendPlan(blend)
+        }
     }
 
     private fun planBlend(
@@ -226,6 +247,15 @@ class GPUIntermediatePlanner(
             ),
         )
     }
+}
+
+private sealed interface GPUIntermediateDrawOutcome {
+    data class LayerSteps(val steps: List<GPUIntermediatePlanStep>) : GPUIntermediateDrawOutcome
+    data class BlendPlan(val plan: GPUBlendPlan) : GPUIntermediateDrawOutcome
+    data class Refusal(
+        val scopeLabel: String,
+        val reasonCode: String,
+    ) : GPUIntermediateDrawOutcome
 }
 
 private data class GPUIntermediateMsaaGate(
